@@ -12,7 +12,7 @@ import { defineComponent, ref } from "vue";
 import {
   _resetOpenEditorForTests, registerOpenEditor, registerPageNote,
 } from "../../../composables/useOpenEditor";
-import { _resetAiActionsForTests, pointer, registerAiAction } from "../../../composables/useAiActions";
+import { _resetAiActionsForTests, pointers, registerAiAction } from "../../../composables/useAiActions";
 
 vi.mock("../../../utils/chat-image", async (orig) => ({
   ...(await orig<typeof import("../../../utils/chat-image")>()),
@@ -429,11 +429,11 @@ describe("AiChatDrawer", () => {
       expect(results[2]).toEqual({ id: "k3", text: "pointed at Context size" });
       expect(w.findAll('[data-test="ai-chat-reply"]')).toHaveLength(2);
       expect(w.text()).toContain("There it is.");
-      expect(pointer.value?.caption).toBe("Set it here");
+      expect(pointers.value[0]?.caption).toBe("Set it here");
       await flushPromises();
       expect(document.querySelector('[data-test="ai-pointer"]')?.textContent).toContain("Set it here");
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-      expect(pointer.value).toBeNull();
+      expect(pointers.value).toEqual([]);
       // That Esc closed only the pointer.
       expect(useAiChat().open.value).toBe(true);
       w.unmount();

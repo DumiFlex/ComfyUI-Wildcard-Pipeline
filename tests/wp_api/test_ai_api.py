@@ -661,10 +661,10 @@ async def test_chat_nudges_only_once(wp_client, fake_llm):
     ai_config.update({"enabled": True, "provider": "lmstudio",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
     fake_llm.chat_steps.extend(
-        [{"message": "Want me to use your hair wildcard or a new one?", "calls": []}] * 3)
+        [{"message": "Want me to create a hair wildcard?", "calls": []}] * 3)
     resp = await wp_client.post("/wp/api/ai/chat", json={"message": "add hair"})
     body = await resp.json()
-    assert body["message"] == "Want me to use your hair wildcard or a new one?"
+    assert body["message"] == "Want me to create a hair wildcard?"
     assert len(fake_llm.chat_steps) == 1
 
 

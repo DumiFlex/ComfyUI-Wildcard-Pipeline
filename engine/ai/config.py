@@ -34,6 +34,7 @@ is only the shape of what the user configured.
 from __future__ import annotations
 
 import copy
+import ipaddress
 import json
 import os
 import tempfile
@@ -57,32 +58,67 @@ MODEL_SIZES = ("auto", "small", "medium", "large")
 #: Wire format per preset. `ollama` uses Ollama's native API (it is the only
 #: one that takes `keep_alive`, and its `format` accepts a JSON schema);
 #: everything else OpenAI-compatible goes through `openai`.
+#:
+#: Embeddings per preset (`/pr-drafts/ai-embeddings-providers.md`): `embeds`
+#: says whether the chat server itself can embed, `embed_model` is a model to
+#: suggest, `embed_note` what Settings says about running both models.
 PRESETS: dict[str, dict[str, Any]] = {
     "anthropic": {
         "label": "Claude", "api": "anthropic", "local": False, "needs_key": True,
         "base_url": "https://api.anthropic.com", "key_env": "ANTHROPIC_API_KEY",
+        "embeds": False, "embed_model": "",
+        "embed_note": "Claude has no embeddings. For meaning search, put another server "
+                      "above: a local Ollama (http://127.0.0.1:11434, nomic-embed-text) or "
+                      "an OpenAI-style one such as Voyage AI (https://api.voyageai.com/v1) "
+                      "with its own key.",
     },
     "openai": {
         "label": "OpenAI", "api": "openai", "local": False, "needs_key": True,
         "base_url": "https://api.openai.com/v1", "key_env": "OPENAI_API_KEY",
+        "embeds": True, "embed_model": "text-embedding-3-small", "embed_note": "",
+    },
+    "openrouter": {
+        "label": "OpenRouter", "api": "openai", "local": False, "needs_key": True,
+        "base_url": "https://openrouter.ai/api/v1", "key_env": "OPENROUTER_API_KEY",
+        "embeds": True, "embed_model": "openai/text-embedding-3-small",
+        "embed_note": "OpenRouter embeds with the same key; embedding models are billed "
+                      "like others (text-embedding-3-small is about $0.02 per million "
+                      "tokens), and free chat models have daily request limits.",
     },
     "ollama": {
         "label": "Ollama", "api": "ollama", "local": True, "needs_key": False,
         "base_url": "http://127.0.0.1:11434", "key_env": None,
+        "embeds": True, "embed_model": "nomic-embed-text",
+        "embed_note": "Ollama keeps the chat and embedding models loaded together while "
+                      "both fit in memory (up to 3 models, OLLAMA_MAX_LOADED_MODELS); when "
+                      "they don't, it swaps them on every search.",
     },
     "lmstudio": {
         "label": "LM Studio", "api": "openai", "local": True, "needs_key": False,
         "base_url": "http://127.0.0.1:1234/v1", "key_env": None,
+        "embeds": True, "embed_model": "text-embedding-nomic-embed-text-v1.5",
+        "embed_note": "LM Studio keeps only one model it loaded on demand, so each search "
+                      "swaps your chat model out. Load both yourself (lms load <model>, or "
+                      "the Developer tab), or turn off Auto-Evict in Developer › Server "
+                      "Settings.",
     },
     "llamacpp": {
         "label": "llama.cpp", "api": "openai", "local": True, "needs_key": False,
         "base_url": "http://127.0.0.1:8080/v1", "key_env": None,
+        "embeds": False, "embed_model": "",
+        "embed_note": "A llama.cpp server runs one model, and serves embeddings only when "
+                      "started with --embeddings. Start a second one for the embedding "
+                      "model on another port and put its address above.",
     },
     "custom": {
         "label": "Other (OpenAI-compatible)", "api": "openai", "local": True,
         "needs_key": False, "base_url": "", "key_env": None,
+        "embeds": True, "embed_model": "", "embed_note": "",
     },
 }
+#: How the embedding server is spoken to: like the chat server ("auto"
+#: guesses for another address), Ollama's /api/embed or OpenAI's /embeddings.
+EMBED_APIS = ("auto", "ollama", "openai")
 
 DEFAULTS: dict[str, Any] = {
     "enabled": False,
@@ -95,12 +131,17 @@ DEFAULTS: dict[str, Any] = {
     # says the model takes them, else the JSON step format), "native" or
     # "json".
     "tool_format": "auto",
+    # Thinking models (Qwen3, DeepSeek R1, …): "auto" leaves it to the model,
+    # "off" asks the server to skip the reasoning (faster, and it can't use
+    # up the output limit before the answer).
+    "thinking": "auto",
     # Permissions (Settings › AI assistant › Permissions). No tool can read
     # or change these.
     "allow_delete": False,
     "auto_apply": False,
 }
 TOOL_FORMATS = ("auto", "native", "json")
+THINKING = ("auto", "off")
 
 #: Web search engines the user can bring (Settings › AI assistant › Web
 #: search). Off by default. SearXNG runs at the user's own address; the
@@ -196,16 +237,23 @@ def _normalize_slot(raw: Any) -> dict[str, str]:
     size = src.get("model_size") if src.get("model_size") in MODEL_SIZES else "auto"
     embed_model = src.get("embed_model") if isinstance(src.get("embed_model"), str) else ""
     embed_url = src.get("embed_base_url") if isinstance(src.get("embed_base_url"), str) else ""
+    embed_api_ = src.get("embed_api") if src.get("embed_api") in EMBED_APIS else "auto"
     try:
         embed_url = check_base_url(embed_url)
     except ConfigError:
         embed_url = ""
     key_origin = src.get("key_origin") if isinstance(src.get("key_origin"), str) else None
+    embed_key = src.get("embed_api_key") if isinstance(src.get("embed_api_key"), str) else ""
+    embed_origin = src.get("embed_key_origin") \
+        if isinstance(src.get("embed_key_origin"), str) else ""
     return {"base_url": base_url, "model": model.strip()[:200], "api_key": key.strip(),
             # None: a key saved before keys were bound; bound on read.
             "key_origin": key_origin if key.strip() else "",
             "model_size": size, "embed_model": embed_model.strip()[:200],
-            "embed_base_url": embed_url}
+            "embed_base_url": embed_url, "embed_api": embed_api_,
+            # The embedding server's own key, bound to its address the same way.
+            "embed_api_key": embed_key.strip(),
+            "embed_key_origin": embed_origin if embed_key.strip() else ""}
 
 
 def _normalize(raw: Any) -> dict[str, Any]:
@@ -236,6 +284,8 @@ def _normalize(raw: Any) -> dict[str, Any]:
         ),
         "tool_format": src.get("tool_format") if src.get("tool_format") in TOOL_FORMATS
         else DEFAULTS["tool_format"],
+        "thinking": src.get("thinking") if src.get("thinking") in THINKING
+        else DEFAULTS["thinking"],
         "allow_delete": src.get("allow_delete") is True,
         "auto_apply": src.get("auto_apply") is True,
         "providers": slots,
@@ -278,12 +328,16 @@ def _active(cfg: dict[str, Any]) -> dict[str, Any]:
         "context_max": cfg["context_max"],
         "model_size": slot["model_size"],
         "tool_format": cfg["tool_format"],
+        "thinking": cfg["thinking"],
         "allow_delete": cfg["allow_delete"],
         "auto_apply": cfg["auto_apply"],
         "embed_model": slot["embed_model"],
         "embed_base_url": slot["embed_base_url"],
+        "embed_api": slot["embed_api"],
         "api_key": slot["api_key"],
         "key_origin": slot["key_origin"],
+        "embed_api_key": slot["embed_api_key"],
+        "embed_key_origin": slot["embed_key_origin"],
     }
 
 
@@ -337,6 +391,57 @@ def _key_for(cfg: dict[str, Any], url: str) -> str:
     return cfg["api_key"] if cfg["api_key"] and cfg["key_origin"] == org else ""
 
 
+def _embed_key_for(cfg: dict[str, Any], url: str) -> str:
+    """The key to send to the embedding server: the chat key when it is the
+    same address, else the embedding key saved for that address."""
+    key = _key_for(cfg, url)
+    if key:
+        return key
+    org = origin(url)
+    return cfg["embed_api_key"] if org and cfg["embed_api_key"] \
+        and cfg["embed_key_origin"] == org else ""
+
+
+_LOCAL_SUFFIXES = (".local", ".lan", ".home", ".internal", ".localhost", ".home.arpa")
+
+
+def is_local_address(url: str) -> bool:
+    """Whether an address is on this machine or the home network (loopback,
+    private and link-local IPs, `.local`-style names, one-word hostnames).
+    Anything else is a cloud service."""
+    host = (urllib.parse.urlsplit(url.strip()).hostname or "").lower().rstrip(".")
+    if not host:
+        return False
+    if host == "localhost" or host.endswith(_LOCAL_SUFFIXES) or "." not in host and ":" not in host:
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_loopback or ip.is_private or ip.is_link_local
+
+
+def runs_local(provider: str, base_url: str) -> bool:
+    """A local preset runs locally unless its address points at the internet
+    (an "Other" server set to OpenRouter is a cloud service)."""
+    if not PRESETS[provider]["local"]:
+        return False
+    return not base_url or is_local_address(base_url)
+
+
+def embed_api(api: str, chat_url: str, embed_url: str, chosen: str = "auto") -> str:
+    """The API the embedding server speaks: the one the user picked, else
+    the chat server's for the same address; another address is OpenAI-style
+    when it has a path (…/v1, like llama.cpp's --embeddings server or
+    Voyage), Ollama when it is a bare host:port."""
+    if chosen in ("ollama", "openai"):
+        return chosen
+    if embed_url and origin(embed_url) != origin(chat_url):
+        path = urllib.parse.urlsplit(embed_url).path.strip("/")
+        return "openai" if path else "ollama"
+    return api
+
+
 def load_effective() -> dict[str, Any]:
     """The config the client uses, key included. Never send this to a browser.
 
@@ -349,12 +454,16 @@ def load_effective() -> dict[str, Any]:
     out["base_url"] = cfg["base_url"] or preset["base_url"]
     out["api_key"] = _key_for(cfg, out["base_url"])
     out["api"] = preset["api"]
-    out["local"] = preset["local"]
-    if preset["api"] == "anthropic":
-        out["embed_model"] = ""
+    out["local"] = runs_local(cfg["provider"], cfg["base_url"])
     out["embed_base_url"] = cfg["embed_base_url"] or out["base_url"]
-    out["embed_api_key"] = _key_for(cfg, out["embed_base_url"])
+    out["embed_api_key"] = _embed_key_for(cfg, out["embed_base_url"])
+    out["embed_api"] = embed_api(preset["api"], out["base_url"], out["embed_base_url"],
+                                 cfg["embed_api"])
+    if out["embed_api"] == "anthropic":
+        # Claude can't embed; meaning search needs another server.
+        out["embed_model"] = ""
     out.pop("key_origin", None)
+    out.pop("embed_key_origin", None)
     with _lock:
         search = _read()["search"]
     engine = search["engine"]
@@ -378,8 +487,16 @@ def public_view() -> dict[str, Any]:
     cfg = _active(stored)
     env_key = bool(_env_key(cfg["provider"])[0])
     base = cfg["base_url"] or PRESETS[cfg["provider"]]["base_url"]
-    view = {k: v for k, v in cfg.items() if k not in ("api_key", "key_origin")}
+    view = {k: v for k, v in cfg.items()
+            if k not in ("api_key", "key_origin", "embed_api_key", "embed_key_origin")}
     view["key_set"] = bool(_key_for(cfg, base))
+    view["local"] = runs_local(cfg["provider"], cfg["base_url"])
+    embed_base = cfg["embed_base_url"] or base
+    # Whether a key goes to the embedding server: the chat key (same
+    # address) or one saved for it. `embed_key_own`: one saved for it.
+    view["embed_key_set"] = bool(_embed_key_for(cfg, embed_base))
+    view["embed_key_own"] = bool(cfg["embed_api_key"]) \
+        and cfg["embed_key_origin"] == origin(embed_base)
     # A key that is saved (or in the environment) but for another address:
     # Settings says where, and that it isn't sent here.
     elsewhere = cfg["key_origin"] if cfg["api_key"] else ""
@@ -388,7 +505,7 @@ def public_view() -> dict[str, Any]:
     view["key_for_host"] = _host(elsewhere) if elsewhere and not view["key_set"] else None
     # What "auto" means for the chosen model, so Settings can say it.
     view["model_size_auto"] = budget.model_size({
-        "model": cfg["model"], "local": PRESETS[cfg["provider"]]["local"],
+        "model": cfg["model"], "local": view["local"],
     })
     view["key_from_env"] = env_key
     # Which providers already have a key, so Settings can say so before
@@ -406,7 +523,8 @@ def public_view() -> dict[str, Any]:
     view["search_engines"] = {eid: {"label": e["label"], "needs_key": e["needs_key"]}
                               for eid, e in SEARCH_ENGINES.items()}
     view["presets"] = {
-        pid: {k: p[k] for k in ("label", "api", "local", "needs_key", "base_url")}
+        pid: {k: p[k] for k in ("label", "api", "local", "needs_key", "base_url", "embeds",
+                                "embed_model", "embed_note")}
         for pid, p in PRESETS.items()
     }
     return view
@@ -448,14 +566,30 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
         if "embed_model" in patch:
             if not isinstance(patch["embed_model"], str):
                 raise ConfigError("embed_model must be a string")
-            if patch["embed_model"].strip() and PRESETS[cfg["provider"]]["api"] == "anthropic":
-                raise ConfigError("Claude has no embeddings API; meaning search needs a "
-                                  "local server or OpenAI")
+            if patch["embed_model"].strip() and PRESETS[cfg["provider"]]["api"] == "anthropic" \
+                    and not str(patch.get("embed_base_url", slot["embed_base_url"])).strip():
+                raise ConfigError("Claude has no embeddings API; put another server's address "
+                                  "in Embedding server first")
             slot["embed_model"] = patch["embed_model"].strip()[:200]
         if "embed_base_url" in patch:
             if not isinstance(patch["embed_base_url"], str):
                 raise ConfigError("embed_base_url must be a string")
             slot["embed_base_url"] = check_base_url(patch["embed_base_url"])
+        if "embed_api" in patch:
+            if patch["embed_api"] not in EMBED_APIS:
+                raise ConfigError(f"embed_api must be one of {', '.join(EMBED_APIS)}")
+            slot["embed_api"] = patch["embed_api"]
+        if "embed_api_key" in patch:
+            key = patch["embed_api_key"] if patch["embed_api_key"] is not None else ""
+            if not isinstance(key, str):
+                raise ConfigError("embed_api_key must be a string")
+            key = key.strip()
+            if len(key) > 512:
+                raise ConfigError("that key is too long")
+            slot["embed_api_key"] = key
+            where = (slot["embed_base_url"] or slot["base_url"]
+                     or PRESETS[cfg["provider"]]["base_url"])
+            slot["embed_key_origin"] = origin(where) if key else ""
         if "unload_after_s" in patch:
             cfg["unload_after_s"] = _clamp_int(
                 patch["unload_after_s"], UNLOAD_AFTER_MIN, UNLOAD_AFTER_MAX,
@@ -473,6 +607,10 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
             if patch["tool_format"] not in TOOL_FORMATS:
                 raise ConfigError("tool_format must be auto, native or json")
             cfg["tool_format"] = patch["tool_format"]
+        if "thinking" in patch:
+            if patch["thinking"] not in THINKING:
+                raise ConfigError("thinking must be auto or off")
+            cfg["thinking"] = patch["thinking"]
         if "api_key" in patch:
             key = patch["api_key"]
             if key is None:

@@ -466,8 +466,11 @@ export const api = {
         method: "PUT", body: JSON.stringify(patch),
       });
     },
-    models() {
-      return request<{ models: string[] }>("/wp/api/ai/models", { method: "POST" });
+    /** The chat server's models, or with `"embed"` the embedding server's. */
+    models(of: "chat" | "embed" = "chat") {
+      return request<{ models: string[] }>("/wp/api/ai/models", {
+        method: "POST", body: JSON.stringify(of === "embed" ? { for: "embed" } : {}),
+      });
     },
     test() {
       return request<AiTestResult>("/wp/api/ai/test", { method: "POST" });

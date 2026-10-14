@@ -155,7 +155,9 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
   grid-template-columns: 220px minmax(0, 1fr);
   gap: var(--wp-space-8, 32px);
   align-items: start;
-  max-width: 1080px;
+  /* The same frame for every section, so the section list doesn't jump
+     sideways when a wide section (AI assistant) opens. */
+  max-width: none;
 }
 .wp-settings__nav {
   position: sticky;
@@ -202,9 +204,8 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
   color: var(--wp-accent-text);
   font-weight: 600;
 }
-.wp-settings__main { min-width: 0; max-width: 780px; }
-/* A section with a side column (AI assistant) takes the page's full width. */
-.wp-settings[data-wide="true"] { max-width: none; }
+.wp-settings__main { min-width: 0; max-width: 960px; }
+/* A section with a side column (AI assistant) takes the rest of the width. */
 .wp-settings[data-wide="true"] .wp-settings__main { max-width: none; }
 .wp-settings__head { margin-bottom: var(--wp-space-6); }
 .wp-settings__h2 { font-size: 18px; margin: 0; }

@@ -13,8 +13,9 @@ import type { AiChatProposal, AiChatResult, AiConfig } from "../../../api/types"
 const CONFIG = {
   enabled: true, provider: "ollama", base_url: "", model: "m", unload_after_s: 60, context_max: 16384,
   model_size: "auto", model_size_auto: "small", allow_delete: true, auto_apply: false,
+  embed_key_set: false, embed_key_own: false, local: true, thinking: "auto",
   key_set: false, key_from_env: false, keys_saved: [],
-  presets: { ollama: { label: "Ollama", api: "ollama", local: true, needs_key: false, base_url: "" } },
+  presets: { ollama: { label: "Ollama", api: "ollama", local: true, needs_key: false, base_url: "", embeds: true, embed_model: "", embed_note: "" } },
 } as unknown as AiConfig;
 
 vi.mock("../../../api/client", () => {

@@ -559,6 +559,7 @@ def _ollama_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
         for tc in m.get("tool_calls") or []:
             data["message"]["tool_calls"].append(tc)
         if obj.get("done"):
+            data["_done"] = True
             for k in ("done_reason", "prompt_eval_count", "eval_count"):
                 if k in obj:
                     data[k] = obj[k]
@@ -645,7 +646,28 @@ async def _post(cfg: dict[str, Any], path: str, body: dict[str, Any], *, kind: s
     if kind == "openai":
         for c in data["choices"][0]["message"]["tool_calls"]:
             c.pop("_i", None)
+    # A stream that stops without its end marker (no finish_reason, no
+    # `done`, no stop_reason) was cut off: a free tier dropping the
+    # connection, a server restarting. What came is kept, flagged as cut.
+    if ((kind == "openai" and not data["choices"][0]["finish_reason"])
+            or (kind == "ollama" and not data.get("_done"))
+            or (kind == "anthropic" and not data.get("stop_reason"))):
+        data["_early"] = True
+    data.pop("_done", None)
     return data
+
+
+def _no_thinking(cfg: dict[str, Any]) -> dict[str, Any]:
+    """What asks an OpenAI-style server to skip a thinking model's
+    reasoning: OpenRouter's `reasoning` switch, the chat template switch
+    llama.cpp, vLLM and LM Studio pass to Qwen-style templates. OpenAI's own
+    reasoning models can't turn it off."""
+    if cfg.get("provider") == "openai":
+        return {}
+    if client.is_openrouter(str(cfg.get("base_url") or "")):
+        # Documented off switch; models that must reason ignore or refuse it.
+        return {"reasoning": {"effort": "none"}}
+    return {"chat_template_kwargs": {"enable_thinking": False}}
 
 
 def _refused(e: AIError) -> bool:
@@ -713,6 +735,8 @@ async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, 
     usage = _usage_anthropic(data)
     if data.get("stop_reason") == "max_tokens":
         usage["cut"] = True
+    if data.get("_early"):
+        usage["early"] = True
     blocks = [b for b in data.get("content") or [] if isinstance(b, dict)]
     if fmt == "json":
         for block in blocks:
@@ -741,6 +765,8 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
         "options": {"temperature": temperature, "num_ctx": num_ctx, "num_predict": 8192},
         "messages": openai_messages(system, log, fmt, api="ollama"),
     }
+    if cfg.get("thinking") == "off":
+        body["think"] = False
     if fmt == "native":
         body["tools"] = tools
     else:
@@ -752,6 +778,8 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     usage = _usage_ollama(data)
     if data.get("done_reason") == "length":
         usage["cut"] = True
+    if data.get("_early"):
+        usage["early"] = True
     if fmt == "json":
         text = msg.get("content") if isinstance(msg.get("content"), str) else ""
         return _json_step(text, client._parse_text_json(text), usage)
@@ -784,18 +812,34 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     else:
         body["response_format"] = {"type": "json_schema", "json_schema": {
             "name": "chat_step", "schema": schema, "strict": True}}
-    if cfg.get("local"):
+    if cfg.get("provider") != "openai":
+        # Local servers and OpenAI-compatible services (OpenRouter, …): a
+        # server's own default can be short, and replies stopped
+        # mid-sentence.
         body["temperature"] = temperature
-        # A server's own default can be short (replies stopped mid-sentence).
         body["max_tokens"] = max_tokens
+    if cfg.get("thinking") == "off":
+        body.update(_no_thinking(cfg))
+    if cfg.get("local"):
         ttl = int(cfg.get("unload_after_s", 60))
         if ttl > 0:
             body["ttl"] = ttl
     elif cfg.get("provider") == "openai" and cache_key:
         # Routes the chat's requests to the machine that cached its prefix.
         body["prompt_cache_key"] = cache_key
-    data = await _post(cfg, "/chat/completions", body, kind="openai", emit=emit,
-                       show=fmt == "native")
+    try:
+        data = await _post(cfg, "/chat/completions", body, kind="openai", emit=emit,
+                           show=fmt == "native")
+    except AIError as e:
+        # A server or model that won't take the thinking switch (a model that
+        # must reason, a template without enable_thinking): ask again as is.
+        if not (cfg.get("thinking") == "off" and 400 <= (e.upstream or 0) < 500
+                and ("reasoning" in body or "chat_template_kwargs" in body)):
+            raise
+        body.pop("reasoning", None)
+        body.pop("chat_template_kwargs", None)
+        data = await _post(cfg, "/chat/completions", body, kind="openai", emit=emit,
+                           show=fmt == "native")
     choices = data.get("choices") if isinstance(data, dict) else None
     if not choices or not isinstance(choices[0], dict):
         raise AIError("the model didn't return an answer")
@@ -803,8 +847,10 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     if message.get("refusal"):
         raise AIError("the model declined this request", status=422)
     usage = _usage_openai(data)
-    if choices[0].get("finish_reason") == "length":
+    if choices[0].get("finish_reason") in ("length", "error"):
         usage["cut"] = True
+    if data.get("_early"):
+        usage["early"] = True
     if fmt == "json":
         text = message.get("content") if isinstance(message.get("content"), str) else ""
         return _json_step(text, client._parse_text_json(text), usage)

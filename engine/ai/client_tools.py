@@ -19,6 +19,8 @@ MAX_IDS = 200
 MAX_ORGANIZE = 40
 MAX_STACK = 40
 MAX_QUERY = 200
+#: Most parts one highlight call points at.
+MAX_POINTS = 5
 #: Pages the model may send the user to (route names in the manager).
 PAGES = ("dashboard", "all", "wildcards", "fixed-values", "combines", "derivations",
          "constraints", "bundles", "templates", "categories", "tags", "import-export", "test",
@@ -73,22 +75,72 @@ def _open(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
             out["section"] = section
             label += f" › {section}"
         return out, label
+    pid = _proposal(lib, args.get("proposal") or args.get("id"))
+    if pid:
+        title = str((lib.earlier_proposals.get(pid) or {}).get("title") or pid)
+        return {"proposal": pid}, f"Opened {title} in an editor"
     row = _row(lib, args.get("id"))
     return ({"id": row["id"], "type": lib._kind(row)},
             f"Opened {row.get('name') or row['id']}")
 
 
+def _proposal(lib: Any, raw: Any) -> str:
+    """The pid of a proposal the user hasn't applied yet that ``raw`` names
+    (its pid, the id it will get, or words of its title), else ""."""
+    if not isinstance(raw, str) or not raw.strip():
+        return ""
+    key = raw.strip()
+    earlier = getattr(lib, "earlier_proposals", {}) or {}
+    if key in earlier and earlier[key].get("status") not in ("applied", "replaced"):
+        return key
+    row = lib.get(key) or lib._find(key)
+    if row is not None:
+        return str(row.get("_proposed") or "")
+    low = key.lower().lstrip("$")
+    for pid, p in earlier.items():
+        if p.get("status") not in ("applied", "replaced") and low in str(
+                p.get("title") or "").lower():
+            return pid
+    return ""
+
+
 def _read_page(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    within = _anchor(args.get("within"))
+    if within:
+        return {"within": within}, f"Read the page: {within}"
     return {}, "Read the page"
 
 
-def _highlight(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
+def _anchor(raw: Any) -> str:
     # read_page lists parts as "[key] label"; models copy the brackets.
-    anchor = _text(args.get("anchor"), 80).strip().strip("[]").strip()
+    return _text(raw, 80).strip().strip("[]").strip()
+
+
+def _point(raw: Any) -> dict[str, str]:
+    if not isinstance(raw, dict):
+        raise ValueError("each point is {\"anchor\", \"caption\", \"text\"}")
+    anchor = _anchor(raw.get("anchor"))
     if not anchor:
         raise ValueError("highlight needs an anchor from read_page")
-    caption = _text(args.get("caption"), 160)
-    return {"anchor": anchor, "caption": caption}, f"Pointed at {caption or anchor}"
+    out = {"anchor": anchor, "caption": _text(raw.get("caption"), 160)}
+    # A quote to mark inside the part; models often end it with an ellipsis.
+    text = _text(raw.get("text"), 200).strip("…").strip().strip("\"'")
+    if text:
+        out["text"] = text
+    return out
+
+
+def _highlight(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    raw = args.get("points")
+    if isinstance(raw, list) and raw:
+        points = [_point(p) for p in raw[:MAX_POINTS]]
+    else:
+        points = [_point(args)]
+    first = points[0]
+    label = f"Pointed at {first['caption'] or first['anchor']}"
+    if len(points) > 1:
+        label += f" and {len(points) - 1} more"
+    return {"points": points}, label
 
 
 def _ids(lib: Any, raw: Any, cap: int) -> list[dict[str, Any]]:

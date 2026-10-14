@@ -748,7 +748,7 @@ defineExpose({
 
     <!-- Toolbar -->
     <div class="wp-page-toolbar">
-      <div class="wp-page-toolbar__search wp-input-group"> data-ai-anchor="search" data-ai-label="Search the list"
+      <div class="wp-page-toolbar__search wp-input-group" data-ai-anchor="search" data-ai-label="Search the list">
         <span class="wp-input-group__addon"><i class="pi pi-search" aria-hidden="true" /></span>
         <input
           class="wp-input"

@@ -31,16 +31,17 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import { openEditor } from "./useOpenEditor";
+import { openEditor, stageDraft } from "./useOpenEditor";
 import { useAiConfig } from "./useAiConfig";
 import { applyManage, isManageOp, undoManage } from "./aiManageOps";
-import { runCall, type AiActionHost } from "./useAiActions";
+import { EDIT_ROUTES, runCall, type AiActionHost } from "./useAiActions";
+import { cardOptions, draftRoute, withoutOptions } from "./aiCards";
 import { MAX_IMAGES, prepareImage, type ChatImage } from "../utils/chat-image";
 
 /** The user's answer to a web search the model asked for. */
 export type SearchApproval = "once" | "chat" | "deny";
 
-export type ProposalStatus = "applied" | "editor" | "dismissed" | "failed";
+export type ProposalStatus = "applied" | "editor" | "dismissed" | "failed" | "opened" | "replaced";
 
 export interface ChatUserEntry {
   role: "user";
@@ -63,6 +64,9 @@ export interface ChatAssistantEntry {
   approved?: Record<string, SearchApproval>;
   /** Cards auto-apply applied (Settings › AI assistant › Permissions). */
   auto?: Record<string, true>;
+  /** Options the user unticked on a card, by proposal: left out when it is
+   *  applied or opened in an editor. */
+  skip?: Record<string, string[]>;
 }
 
 export type ChatEntry = ChatUserEntry | ChatAssistantEntry;
@@ -109,8 +113,9 @@ const attachments = shallowRef<ChatImage[]>([]);
 const vision = ref<boolean | null>(null);
 const visionModel = ref("");
 
-function record(pid: string, status: AiChatEvent["status"], created?: string): void {
+function record(pid: string, status: AiChatEvent["status"], created?: string, leftOut = 0): void {
   const ev: AiChatEvent = created ? { pid, status, created } : { pid, status };
+  if (leftOut > 0) ev.left_out = leftOut;
   pending = [...pending.filter((e) => e.pid !== pid), ev];
   // Saved now too, so the chat reopens with its cards as they are.
   const id = chatId.value;
@@ -151,7 +156,23 @@ async function pushAnswer(result: AiChatResult, snap?: { id: string; json: strin
     ...(snap ? { editorSnap: snap } : {}),
   };
   entries.value = [...entries.value, entry];
+  markReplaced(result);
   await autoApply(entry);
+}
+
+/** Cards a newer card replaces (the model revised an item they would
+ *  create) can't be applied any more. */
+function markReplaced(result: AiChatResult): void {
+  for (const p of result.proposals) {
+    if (!p.replaces) continue;
+    for (const e of entries.value) {
+      if (e.role !== "assistant" || e.status[p.replaces]) continue;
+      if (!e.result.proposals.some((x) => x.pid === p.replaces)) continue;
+      e.status[p.replaces] = "replaced";
+      record(p.replaces, "replaced");
+    }
+  }
+  touch();
 }
 
 /** Apply the cards the server marked low risk, in order, when the user
@@ -396,7 +417,9 @@ async function answerCalls(
       continue;
     }
     running.value = call.label;
-    const text = host ? await runCall(call, host) : "couldn't: the page isn't ready";
+    const text = !host ? "couldn't: the page isn't ready"
+      : call.tool === "open" && "proposal" in call.args ? await openProposal(entry, call.args.proposal)
+        : await runCall(call, host);
     running.value = "";
     out.push({ id: call.id, text });
   }
@@ -475,9 +498,117 @@ async function categoryId(name: string | undefined): Promise<string | null | und
   return (await cats.create({ name })).id;
 }
 
-async function apply(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void> {
+/** Tick or untick one of a card's new options. */
+function toggleOption(entry: ChatAssistantEntry, p: AiChatProposal, id: string): void {
+  const now = new Set(entry.skip?.[p.pid] ?? []);
+  if (now.has(id)) now.delete(id);
+  else now.add(id);
+  entry.skip = { ...entry.skip, [p.pid]: [...now] };
+  touch();
+}
+
+/** Tick all of a card's new options, or none. */
+function setAllOptions(entry: ChatAssistantEntry, p: AiChatProposal, on: boolean): void {
+  const ids = on ? [] : (cardOptions(p) ?? []).map((o) => o.id);
+  entry.skip = { ...entry.skip, [p.pid]: ids };
+  touch();
+}
+
+function skipped(entry: ChatAssistantEntry, p: AiChatProposal): Set<string> {
+  return new Set(entry.skip?.[p.pid] ?? []);
+}
+
+/** "Open in editor": a proposed new wildcard or derivation opens in a new
+ *  editor, filled and unsaved; added options go into the item's editor.
+ *  Saving there is up to the user. */
+async function openInEditor(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void> {
+  if (!host || entry.status[p.pid]) return;
+  const skip = skipped(entry, p);
+  const op = withoutOptions(p.op, skip);
+  delete entry.errors[p.pid];
+  try {
+    if (op.op === "create" && op.kind === "module") {
+      const route = draftRoute(p);
+      if (!route) return;
+      stageDraft({ type: op.body.type, body: { ...op.body }, newCategory: op.new_category || undefined });
+      if (!(await host.navigate({ name: route }))) {
+        stageDraft({ type: "", body: {} });
+        entry.errors[p.pid] = "Couldn't open the editor: the page you're on has unsaved changes.";
+        touch();
+        return;
+      }
+      entry.status[p.pid] = "opened";
+      record(p.pid, "opened", undefined, skip.size);
+    } else if (op.op === "update" && op.kind === "module") {
+      const route = EDIT_ROUTES[op.type];
+      const ed0 = openEditor();
+      if (!(ed0 && ed0.id === op.id)) {
+        if (!route || !(await host.navigate({ name: route, params: { id: op.id } }))) {
+          entry.errors[p.pid] = "Couldn't open the editor.";
+          touch();
+          return;
+        }
+      }
+      const ed = await waitForEditor(op.id);
+      if (!ed) {
+        entry.errors[p.pid] = "The editor didn't open in time; try again.";
+        touch();
+        return;
+      }
+      const body = { ...op.body };
+      if (op.new_category) body.category_id = (await categoryId(op.new_category)) ?? null;
+      ed.write(body);
+      entry.editorSnap = editorJson();
+      entry.status[p.pid] = "editor";
+      record(p.pid, "editor", undefined, skip.size);
+    }
+  } catch (err) {
+    entry.errors[p.pid] = err instanceof Error ? err.message : String(err);
+  }
+  touch();
+}
+
+/** The chat's `open {"proposal"}`: open a card in its editor, as its
+ *  "Open in editor" button does. */
+async function openProposal(current: ChatAssistantEntry, pid: string): Promise<string> {
+  const all = [current, ...entries.value.filter((e): e is ChatAssistantEntry => e.role === "assistant")];
+  for (const entry of all) {
+    const p = entry.result.proposals.find((x) => x.pid === pid);
+    if (!p) continue;
+    const status = entry.status[pid];
+    if (status && status !== "opened") return `couldn't: that card is already ${status}`;
+    if (p.op.op === "create" && !draftRoute(p)) {
+      return "couldn't: only new wildcards and derivations open unsaved; the user has to apply this card";
+    }
+    if (p.op.op !== "create" && !(p.op.op === "update" && p.op.kind === "module")) {
+      return "couldn't: this card doesn't open in an editor; the user has to apply it";
+    }
+    delete entry.status[pid];
+    await openInEditor(entry, p);
+    const err = entry.errors[pid];
+    return err ? `couldn't: ${err}` : `opened ${p.title} in its editor, unsaved; the user saves it there`;
+  }
+  return `couldn't: no card ${pid} in this chat`;
+}
+
+async function waitForEditor(id: string): Promise<ReturnType<typeof openEditor>> {
+  for (let waited = 0; waited < 5000; waited += 100) {
+    const ed = openEditor();
+    if (ed && ed.id === id) {
+      // Let the editor finish loading its row before writing into it.
+      await new Promise((r) => setTimeout(r, 300));
+      return openEditor()?.id === id ? openEditor() : null;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return null;
+}
+
+async function apply(entry: ChatAssistantEntry, p0: AiChatProposal): Promise<void> {
+  const skip = skipped(entry, p0);
+  const p = skip.size ? { ...p0, op: withoutOptions(p0.op, skip) } : p0;
   const op = p.op;
-  if (op.op === "open" || blockedReason(entry, p)) return;
+  if (op.op === "open" || blockedReason(entry, p0)) return;
   const modules = useModuleStore();
   const bundles = useBundleStore();
   const templates = useTemplateStore();
@@ -493,7 +624,7 @@ async function apply(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void
           : await modules.create({ ...op.body, ...extra });
       entry.created[p.pid] = row.id;
       entry.status[p.pid] = "applied";
-      record(p.pid, "applied", row.id);
+      record(p.pid, "applied", row.id, skip.size);
       touch();
       return;
     } else if (op.op === "update") {
@@ -504,7 +635,7 @@ async function apply(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void
         ed.write(body);
         entry.editorSnap = editorJson();
         entry.status[p.pid] = "editor";
-        record(p.pid, "editor");
+        record(p.pid, "editor", undefined, skip.size);
         touch();
         return;
       }
@@ -513,7 +644,7 @@ async function apply(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void
       else await bundles.update(op.id, body);
     }
     entry.status[p.pid] = "applied";
-    record(p.pid, "applied");
+    record(p.pid, "applied", undefined, skip.size);
   } catch (err) {
     entry.status[p.pid] = "failed";
     entry.errors[p.pid] = err instanceof Error ? err.message : String(err);
@@ -586,6 +717,7 @@ export function useAiChat() {
     open, input, entries, loading, error, started, queued, chatId, asking, running, live,
     context, compacting,
     send, stop, reset, apply, undo, dismiss, blockedReason, ask, answerSearch, attach,
+    toggleOption, setAllOptions, openInEditor,
     retry, retryBlocked, load, compact,
     attachments, vision, visionModel, addFiles, removeAttachment, checkVision,
   };

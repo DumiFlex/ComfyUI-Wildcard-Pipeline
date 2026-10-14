@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent } from "vue";
 import {
-  _resetAiActionsForTests, anchors, pointer, registerAiAction, runCall, type AiActionHost,
+  _resetAiActionsForTests, anchors, pointers, registerAiAction, runCall, type AiActionHost,
 } from "../useAiActions";
 import type { AiPendingCall } from "../../api/types";
 
@@ -40,7 +40,7 @@ describe("useAiActions", () => {
   it("says when there is nothing to point at, and when a part is missing", async () => {
     const call: AiPendingCall = { id: "h", tool: "highlight", label: "", args: { anchor: "nope", caption: "" } };
     expect(await runCall(call, host())).toContain('no part "nope"');
-    expect(pointer.value).toBeNull();
+    expect(pointers.value).toEqual([]);
   });
 
   it("reports when the user stays on a page with unsaved changes", async () => {

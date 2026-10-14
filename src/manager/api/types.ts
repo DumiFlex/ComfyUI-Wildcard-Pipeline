@@ -803,7 +803,10 @@ export interface ServerSettingsPatch {
 
 /* ── AI assistant (/wp/api/ai/*) ──────────────────────────────────────── */
 
-export type AiProviderId = "anthropic" | "openai" | "ollama" | "lmstudio" | "llamacpp" | "custom";
+export type AiProviderId = "anthropic" | "openai" | "openrouter" | "ollama" | "lmstudio" | "llamacpp" | "custom";
+/** How the embedding server is spoken to ("auto": like the chat server, or
+ *  guessed from another address). */
+export type AiEmbedApi = "auto" | "ollama" | "openai";
 
 export interface AiPreset {
   label: string;
@@ -812,6 +815,12 @@ export interface AiPreset {
   local: boolean;
   needs_key: boolean;
   base_url: string;
+  /** The chat server itself can embed (meaning search). */
+  embeds: boolean;
+  /** An embedding model to suggest, or "". */
+  embed_model: string;
+  /** What Settings says about embeddings with this provider, or "". */
+  embed_note: string;
 }
 
 /** The saved AI settings. The key itself is never sent back: `key_set` says
@@ -832,10 +841,21 @@ export interface AiConfig {
   /** How the chat calls tools: native tool calls, the JSON step format, or
    *  automatic (native where the server says the model takes tools). */
   tool_format: AiToolFormat;
+  /** "off" asks the server to skip a thinking model's reasoning. */
+  thinking: "auto" | "off";
   /** Meaning search: the embedding model ("" = off). */
   embed_model: string;
   /** Where the embedding model runs ("" = the server address). */
   embed_base_url: string;
+  embed_api: AiEmbedApi;
+  /** A key goes to the embedding server: the chat key (same address) or
+   *  one saved for it. */
+  embed_key_set: boolean;
+  /** A key is saved for the embedding server itself. */
+  embed_key_own: boolean;
+  /** The chat model runs on this machine or the home network (a local
+   *  preset pointed at an internet address is a cloud service). */
+  local: boolean;
   key_set: boolean;
   key_from_env: boolean;
   /** A key is saved (or set in the environment) for another address, so it
@@ -874,8 +894,12 @@ export interface AiConfigPatch {
   context_max?: number;
   model_size?: "auto" | AiModelSize;
   tool_format?: AiToolFormat;
+  thinking?: "auto" | "off";
   embed_model?: string;
   embed_base_url?: string;
+  embed_api?: AiEmbedApi;
+  /** Write-only, bound to the embedding server's address. `""` removes it. */
+  embed_api_key?: string;
   /** Write-only. `""` removes the saved key. */
   api_key?: string;
   search_engine?: AiSearchEngineId | "off";
@@ -1149,9 +1173,11 @@ export interface AiChatPage {
 /** What the user did with a proposal card since the last message. */
 export interface AiChatEvent {
   pid: string;
-  status: "applied" | "editor" | "dismissed" | "undone" | "failed";
+  status: "applied" | "editor" | "dismissed" | "undone" | "failed" | "opened" | "replaced";
   /** The row an applied create made, so a reopened chat can Open it. */
   created?: string;
+  /** Options the user unticked on the card before applying it. */
+  left_out?: number;
 }
 
 /** One chat turn. The server keeps the chat: send only the new message and
@@ -1192,9 +1218,12 @@ export interface AiChatResume {
  *  search for the user to allow. Args were checked by the server. */
 export type AiPendingCall =
   | { id: string; tool: "open"; label: string;
-      args: { doc: string } | { page: string; section?: string } | { id: string; type: string } }
-  | { id: string; tool: "read_page"; label: string; args: Record<string, never> }
-  | { id: string; tool: "highlight"; label: string; args: { anchor: string; caption: string } }
+      args: { doc: string } | { page: string; section?: string } | { id: string; type: string }
+        | { proposal: string } }
+  | { id: string; tool: "read_page"; label: string; args: { within?: string } }
+  | { id: string; tool: "highlight"; label: string;
+      args: { points: Array<{ anchor: string; caption: string; text?: string }> }
+        | { anchor: string; caption: string } }
   | { id: string; tool: "select_rows"; label: string; args: { ids: string[] } }
   | { id: string; tool: "organize"; label: string; args: { ids: string[]; note: string } }
   | { id: string; tool: "draft_options"; label: string;
@@ -1273,6 +1302,9 @@ export interface AiChatProposal {
   warnings: string[];
   /** The proposal this one builds on (same item); apply that first. */
   after: string | null;
+  /** An earlier answer's unapplied card this one replaces (an edit of an
+   *  item that card would create). */
+  replaces?: string;
   op: AiChatOp;
   /** "low": the server judged it small (descriptions, tags, categories),
    *  so auto-apply may apply it. */
@@ -1352,7 +1384,9 @@ export type AiChatStreamEvent =
   | { type: "error"; status: number; message: string };
 
 /** A library item an assistant message mentions. */
-export interface AiChatRef { id: string; type: string; name: string }
+/** An item an answer mentions. `shared`: that many items have this name
+ *  and the answer didn't say which, so the chip opens nothing. */
+export interface AiChatRef { id: string; type: string; name: string; shared?: string }
 
 /* ── Pack builder ───────────────────────────────────────────────────── */
 

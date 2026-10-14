@@ -102,9 +102,14 @@ UNFINISHED_NUDGE = (
     "colon and nothing follows). Write the whole answer again, this time with "
     "that content."
 )
+#: What a model asks leave to do when it should just propose it.
+_CHANGE_VERB = (r"(?:go ahead|proceed|start|continue|create|build|make|add|apply|propose|"
+                r"set (?:it|them|this|that) up|change|fix|update|edit|remove|delete|rename|"
+                r"retag|tag|write|draft|implement|put)")
 _ASKS_LEAVE = re.compile(
-    r"\b(?:should|shall|may|can) i (?:go ahead|proceed|start|continue|create|build|make|"
-    r"add|set (?:it|them|this) up)\b|\b(?:do you )?want me to\b|\bwould you like me to\b|"
+    r"\b(?:should|shall|may|can) i " + _CHANGE_VERB + r"\b|"
+    r"\b(?:do you )?want me to " + _CHANGE_VERB + r"\b|"
+    r"\bwould you like me to " + _CHANGE_VERB + r"\b|"
     r"\bready (?:for me )?to (?:proceed|start|build)\b|\bshall we (?:proceed|start|begin)\b",
     re.IGNORECASE,
 )
@@ -124,6 +129,51 @@ def unfinished(said: str) -> bool:
     """The answer ends by introducing something that never came
     ("Here's a quick summary of the key concepts:")."""
     return said.rstrip().endswith(":")
+
+
+#: Sent when an answer was cut off (the output limit, a dropped stream, or
+#: it stops mid-sentence): the next step writes the rest.
+CONTINUE_NUDGE = (
+    "Your last answer was cut off mid-way. Continue it from exactly where it "
+    "stopped: don't repeat what you already wrote, don't start over. If it "
+    "was in fact complete, reply with only: (complete)"
+)
+#: The reply to CONTINUE_NUDGE that means nothing was missing.
+COMPLETE_MARK = "(complete)"
+_ENDS = ".!?…)]}\"'`*>_~|"
+_BLOCK_LINE = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|#{1,6}\s|\||>)")
+
+
+def looks_cut(text: str) -> bool:
+    """The answer stops mid-sentence: an unclosed bracket, bold or code span
+    or code block on its last line, or a paragraph that ends without its
+    full stop. List items, headings and table rows may end bare."""
+    t = (text or "").rstrip()
+    if not t:
+        return False
+    if t.count("```") % 2:
+        return True
+    last = t.rsplit("\n", 1)[-1]
+    if (last.count("(") > last.count(")") or last.count("[") > last.count("]")
+            or last.count("**") % 2 or last.replace("```", "").count("`") % 2):
+        return True
+    if _BLOCK_LINE.match(last) or t.endswith(":"):
+        return False
+    return t[-1] not in _ENDS and len(last) > 25
+
+
+def join_continuation(head: str, tail: str) -> str:
+    """The cut answer and the step that continued it. A model that started
+    over instead of continuing gives the new text alone."""
+    tail = tail.strip()
+    if not tail or tail.rstrip(".").lower() == COMPLETE_MARK:
+        return head
+    probe = head.strip()[:60]
+    if probe and tail.startswith(probe):
+        return tail
+    if head.endswith((" ", "\n")) or tail[0] in ".,;:!?)]}*`":
+        return head + tail
+    return head + " " + tail
 
 
 def read_budget(size: str) -> int:
@@ -160,7 +210,7 @@ TOOLS = READ_TOOLS + CHANGE_TOOLS
 MAX_STEPS = 6
 MAX_CALLS_PER_STEP = 8
 MAX_PROPOSALS = 12
-MAX_MESSAGE = 4000
+MAX_MESSAGE = 12000
 #: User messages one chat holds; older turns are shortened or left out first.
 MAX_TURNS = 100
 MAX_TURN_CHARS = 6000
@@ -170,6 +220,9 @@ _FIELD_NAMES = {"name": "name", "var": "variable", "tags": "tags", "desc": "desc
                 "content": "options/content"}
 MAX_READ_OPTIONS = 150
 _REF = re.compile(r"\[\[([^\[\]\n]{1,80})\]\]")
+#: Words a model puts after an item's name ("Character Design bundle").
+_KIND_WORDS = {"", "bundle", "wildcard", "combine", "derivation", "constraint", "template",
+               "fixed values", "module", "item"}
 _IDENT = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$")
 
 STEP_SCHEMA: dict[str, Any] = ai_tools.step_schema(list(TOOLS))
@@ -212,8 +265,10 @@ you'll call next, "message": what you say to the user now, "calls": tools \
 to run}. Each call is {"tool": name, "args": a JSON object written as a \
 string}. Read tools run at once and you get their results in the next \
 message; then continue. When you are done, answer with "calls": [] and a \
-message for the user. Keep messages short and plain. Write every library \
-item you mention as [[its exact name]]: the user sees a chip that opens it. \
+message for the user. Keep messages short and plain. \
+Write every library item you mention as [[its id]] (the id read and search \
+show): the user sees a chip with its name that opens it. Never write an id \
+anywhere else, and never ask the user for one: ids mean nothing to them. \
 Markdown works: **bold**, lists, `code` for $variables, ``` code blocks \
 and | tables. Wherever a tool takes an id you can also give the item's exact \
 name. Use page tools (open, highlight) only when the user asks about the app \
@@ -229,8 +284,10 @@ never write a call, its arguments or its results into your message, and \
 never answer from an item you haven't read. Several calls can go in one \
 step (for example several options in one add_options call, or reads of \
 several items). When you are done, answer the user in plain text without \
-calling a tool. Keep messages short and plain. Write every library item \
-you mention as [[its exact name]]: the user sees a chip that opens it. \
+calling a tool. Keep messages short and plain. \
+Write every library item you mention as [[its id]] (the id read and search \
+show): the user sees a chip with its name that opens it. Never write an id \
+anywhere else, and never ask the user for one: ids mean nothing to them. \
 Markdown works: **bold**, lists, `code` for $variables, ``` code blocks \
 and | tables. Wherever a tool takes an id you can also give the item's \
 exact name. Use page tools (open, highlight) only when the user asks about \
@@ -372,6 +429,12 @@ class Library(MoreTools, ManageTools):
         self._pending: dict[str, tuple[str, dict[str, Any]]] = {}
         #: Id of each module proposed in this answer -> its proposal id.
         self._created: dict[str, str] = {}
+        #: Items this answer's read tools looked at, in order: a name several
+        #: items share links to the one the model read (`link_items`).
+        self.touched: list[str] = []
+        #: Create cards from earlier answers the user hasn't applied, by pid:
+        #: edits to them come back as a card that replaces them.
+        self._earlier_ops: dict[str, dict[str, Any]] = {}
         self._next_pid = 0
         #: Proposals from earlier answers in this chat: pid -> {title, status}.
         self.earlier_proposals: dict[str, dict[str, Any]] = {}
@@ -512,10 +575,12 @@ class Library(MoreTools, ManageTools):
         low = key.lower().lstrip("$")
         if low:
             for pid, p in self.earlier_proposals.items():
-                if low in str(p.get("title") or "").lower() and p.get("status") != "applied":
+                if low in str(p.get("title") or "").lower() and p.get("status") not in (
+                        "applied", "replaced"):
                     return (f"no {what} {key!r}: it is only proposed ({pid}, "
                             f"{'not applied' if not p.get('status') else p['status']}), so it "
-                            "isn't in the library yet. Tell the user it needs applying first; "
+                            "isn't in the library yet. Tell the user it needs applying first "
+                            f"(or open it unsaved with open {{\"proposal\": \"{pid}\"}}); "
                             "don't guess its id")
         return f"no {what} {key!r}; search for it, or check the id"
 
@@ -532,17 +597,169 @@ class Library(MoreTools, ManageTools):
 
     # ── read tools ───────────────────────────────────────────────────────
 
+    def link_items(self, message: str) -> str:
+        """The answer with the items it names made into chips, and no bare
+        ids left for the user (models copy ids from read results, and
+        unmarked names stay plain text). Code blocks are left alone.
+
+        - ``[[Name]] (id)``, ``**Name** (id)``, ``Name kind (id)`` become
+          ``[[id]]`` (the id decides when two items share a name);
+        - a known id anywhere else (``id``, ``(id, id)``) becomes ``[[id]]``;
+        - ``**Name**`` naming an item becomes a chip, and so does ``[[Name]]``
+          when several items have that name: the one with the variable
+          written next to it, else the one this answer read, else the open
+          one (`_pick_named`);
+        - ``**A** → **B**`` becomes the constraint from A to B.
+        """
+        if not message:
+            return message
+        out: list[str] = []
+        fenced = False
+        for line in message.split("\n"):
+            if line.lstrip().startswith("```"):
+                fenced = not fenced
+                out.append(line)
+                continue
+            out.append(line if fenced else self._link_line(line))
+        return "\n".join(out)
+
+    def _known(self, raw: str) -> dict[str, Any] | None:
+        row = self.get(raw)
+        return None if row is None or row.get("_proposed") else row
+
+    def _pick_named(self, name: str, var: str = "") -> dict[str, Any] | None:
+        """The item called ``name`` (case-insensitive). Several share it (a
+        pack imported twice): the one writing ``var``, else the one this
+        answer read last, else the open one; None while still unsure."""
+        low = name.strip().lower()
+        if not low:
+            return None
+        pool = [r for r in (*self.modules.values(), *self.bundles.values(),
+                            *self.templates.values())
+                if str(r.get("name") or "").strip().lower() == low and not r.get("_proposed")]
+        if len(pool) <= 1:
+            return pool[0] if pool else None
+        if var:
+            v = var.lstrip("$").lower()
+            by_var = [r for r in pool if isinstance(r.get("payload"), dict) and v in (
+                str(r["payload"].get("var_binding") or "").lower(),
+                str(r["payload"].get("output_var") or "").lower())]
+            if len(by_var) == 1:
+                return by_var[0]
+            pool = by_var or pool
+        for iid in reversed(self.touched):
+            for r in pool:
+                if r["id"] == iid:
+                    return r
+        for r in pool:
+            if r["id"] == self.editor_id:
+                return r
+        return None
+
+    def _constraint_between(self, a: str, b: str) -> dict[str, Any] | None:
+        """The constraint from the wildcard named ``a`` to the one named ``b``
+        (or named "a to b"); the one this answer read when there are more."""
+        la, lb = a.strip().lower(), b.strip().lower()
+        hits = []
+        for r in self.modules.values():
+            if r.get("type") != "constraint" or r.get("_proposed"):
+                continue
+            p = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+            src = str((self.modules.get(p.get("source_wildcard_id")) or {}).get("name") or "")
+            tgt = str((self.modules.get(p.get("target_wildcard_id")) or {}).get("name") or "")
+            name = str(r.get("name") or "").lower()
+            if (src.lower() == la and tgt.lower() == lb) or name in (
+                    f"{la} to {lb}", f"{la} → {lb}", f"{la} -> {lb}"):
+                hits.append(r)
+        if len(hits) == 1:
+            return hits[0]
+        for iid in reversed(self.touched):
+            for r in hits:
+                if r["id"] == iid:
+                    return r
+        return None
+
+    def _link_line(self, line: str) -> str:
+        def named(m: re.Match[str]) -> str:
+            before, iid = m.group(1), m.group(2)
+            row = self._known(iid)
+            if row is None:
+                return m.group(0)
+            name = str(row.get("name") or "")
+            ref = re.match(r"^(.*?)\[\[[^\[\]\n]+\]\]\s*$", before)
+            if ref:
+                return f"{ref.group(1)}[[{iid}]]"
+            # "**Name**", "Name", "**Name kind**" right before the id.
+            tail = re.match(r"^(.*?)(\*\*|__)?([^*_\n]*?)(\*\*|__)?\s*$", before)
+            if tail and name:
+                lead, words = tail.group(1), tail.group(3)
+                low, nlow = words.lower(), name.lower()
+                at = low.rfind(nlow)
+                if at >= 0 and (at == 0 or not low[at - 1].isalnum()):
+                    rest = words[at + len(name):].strip()
+                    if rest.lower() in _KIND_WORDS:
+                        bit = words[:at]
+                        return f"{lead}{bit}[[{iid}]]" + (f" {rest}" if rest else "")
+            return f"{before.rstrip()} [[{iid}]]" if before.strip() else f"[[{iid}]]"
+
+        # An id in brackets after its name (or after anything).
+        line = re.sub(r"(^|.*?)\s*\(\s*`?([0-9a-f]{8})`?\s*\)", named, line)
+
+        # Any other known id, bare or in code, outside chips.
+        def bare(m: re.Match[str]) -> str:
+            iid = m.group(2)
+            return f"[[{iid}]]" if self._known(iid) is not None else m.group(0)
+        line = re.sub(r"(?<!\[\[)(`?)\b([0-9a-f]{8})\b\1(?!\]\])", bare, line)
+
+        # A chip naming several items: the right one, by id.
+        def chip(m: re.Match[str]) -> str:
+            raw = m.group(1)
+            if self._known(raw.strip()) is not None or self._name_count(raw) <= 1:
+                return m.group(0)
+            row = self._pick_named(raw)
+            return f"[[{row['id']}]]" if row is not None else m.group(0)
+        line = re.sub(r"\[\[([^\[\]\n]{1,80})\]\]", chip, line)
+
+        # "**A** → **B**": the constraint between them.
+        def pair(m: re.Match[str]) -> str:
+            row = self._constraint_between(m.group(2), m.group(4))
+            return f"[[{row['id']}]]" if row is not None else m.group(0)
+        line = re.sub(r"(\*\*|__)([^*_\n]{1,60}?)\1\s*(?:→|->|⟶)\s*(\*\*|__)([^*_\n]{1,60}?)\3",
+                      pair, line)
+
+        # A bold name (the variable after it decides between namesakes).
+        def bold(m: re.Match[str]) -> str:
+            row = self._pick_named(m.group(2), m.group(3) or "")
+            if row is None:
+                return m.group(0)
+            return f"[[{row['id']}]]"
+        return re.sub(r"(\*\*|__)([^*_\n]{2,80}?)\1(?=(?:\s*\(`?(\$[\w.]+)`?\))?)",
+                      bold, line)
+
     def message_refs(self, message: str) -> dict[str, dict[str, str]]:
         """The [[Name]] / [[id]] mentions in an answer that name a real item
         (not one only proposed), so the manager can show them as chips."""
         refs: dict[str, dict[str, str]] = {}
         for raw in _REF.findall(message or "")[:60]:
-            row = self._find(raw)
-            if row is None or row.get("_proposed") or raw in refs:
+            if raw in refs:
+                continue
+            # By id; a name only when it is certain (never by variable:
+            # several items write the same one).
+            row = self._known(raw.strip()) or self._pick_named(raw)
+            if row is None:
+                same = self._name_count(raw)
+                if same > 1:
+                    refs[raw] = {"id": "", "type": "", "name": raw.strip(), "shared": str(same)}
                 continue
             refs[raw] = {"id": row["id"], "type": self._kind(row),
                          "name": str(row.get("name") or raw)}
         return refs
+
+    def _name_count(self, name: str) -> int:
+        low = name.strip().lower()
+        return sum(1 for r in (*self.modules.values(), *self.bundles.values(),
+                               *self.templates.values())
+                   if str(r.get("name") or "").strip().lower() == low and not r.get("_proposed"))
 
     def search(self, args: dict[str, Any]) -> str:
         query = _short(args.get("query"), 100).lower()
@@ -1151,6 +1368,48 @@ class Library(MoreTools, ManageTools):
         elif op["kind"] == "template":
             self.templates[pid] = {**copy.deepcopy(body), "id": pid, "_proposed": pid}
 
+    def adopt_earlier(self, proposal: dict[str, Any]) -> None:
+        """Make a new module an earlier answer proposed (and the user hasn't
+        applied) readable and editable here, at the id its card creates it
+        with. An edit to it comes back as a card that replaces the old one
+        (`run`), so "now add negatives" works before anything is applied."""
+        op = proposal.get("op") or {}
+        body = op.get("body") if isinstance(op.get("body"), dict) else None
+        pid = proposal.get("pid")
+        if (op.get("op") != "create" or op.get("kind") != "module" or body is None
+                or not isinstance(body.get("id"), str) or not isinstance(pid, str)
+                or body["id"] in self.modules):
+            return
+        iid = body["id"]
+        self.modules[iid] = {**copy.deepcopy(body), "_proposed": pid, "_earlier": pid}
+        self.names[iid] = str(body.get("name") or "")
+        self._earlier_ops[pid] = proposal
+        self._catalog = None
+
+    def _replace_earlier(self, proposal: dict[str, Any]) -> None:
+        """Turn an edit of an earlier answer's unapplied new module into a
+        create card that replaces that one, at the same id."""
+        op = proposal["op"]
+        row = self.modules.get(op.get("id")) if op.get("op") == "update" else None
+        if row is None or not row.get("_earlier"):
+            return
+        old_pid = row["_earlier"]
+        old = self._earlier_ops.get(old_pid) or {}
+        body = {k: v for k, v in row.items() if not k.startswith("_")}
+        body.update(copy.deepcopy(op.get("body") or {}))
+        proposal["op"] = {"op": "create", "kind": "module",
+                          "new_category": (old.get("op") or {}).get("new_category", ""),
+                          "body": body}
+        proposal["replaces"] = old_pid
+        proposal["title"] = str(old.get("title") or proposal.get("title") or "")
+        proposal["warnings"] = [f"Replaces the earlier card ({old_pid}), which wasn't applied",
+                                *proposal.get("warnings", [])]
+        pid = proposal["pid"]
+        self.modules[body["id"]] = {**copy.deepcopy(body), "_proposed": pid}
+        self._created[body["id"]] = pid
+        self._pending[body["id"]] = (pid, self.modules[body["id"]])
+        self.earlier_proposals.setdefault(old_pid, {})["status"] = "replaced"
+
     def run(self, tool: str, args: dict[str, Any]) -> str | dict[str, Any]:
         """A read tool's text, or a change tool's proposal (with `pid`, and
         `after` when it builds on an earlier proposal). Raises ValueError."""
@@ -1159,6 +1418,8 @@ class Library(MoreTools, ManageTools):
             raise ValueError(f"unknown tool {tool}")
         args = self._resolve(args, "id", "source_id", "target_id")
         if tool in READ_TOOLS:
+            if isinstance(args.get("id"), str):
+                self.touched.append(args["id"])
             return fn(args)
         item_id = args.get("id") if tool in ITEM_TOOLS else None
         after = self._current(item_id)[1]
@@ -1172,6 +1433,10 @@ class Library(MoreTools, ManageTools):
             op["basis"] = "editor"
         if op["op"] == "create":
             self._adopt(proposal)
+        elif not after:
+            self._replace_earlier(proposal)
+            if proposal.get("replaces"):
+                return proposal
         # A change that points at an item proposed earlier in this answer
         # (a constraint between two new wildcards, a bundle of new modules)
         # waits for that one: its id only exists once it is applied.

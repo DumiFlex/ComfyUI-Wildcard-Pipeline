@@ -361,26 +361,43 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         "open", "client",
-        "Go to an item's editor, a docs page or a manager page in the user's browser.",
-        '{"id"} for an item\'s editor, {"doc": docs page id} for a docs page, or {"page": '
-        'manager page, "section": settings section}: takes the user there now.',
+        "Go to an item's editor, a docs page or a manager page in the user's browser, or "
+        "open a proposed new wildcard or derivation in an editor before it is applied.",
+        '{"id"} for an item\'s editor, {"doc": docs page id} for a docs page, {"page": '
+        'manager page, "section": settings section}, or {"proposal": pid} to open a '
+        'proposal card (a new wildcard or derivation, or a change to an item) in its editor '
+        'unsaved: takes the user there now.',
         obj({"id": s("item id or name"), "doc": s("docs page id"),
-             "page": s("manager page"), "section": s("settings section")}),
+             "page": s("manager page"), "section": s("settings section"),
+             "proposal": s("pid of a proposal card, like p3")}),
         ("core",),
     ),
     Tool(
         "read_page", "client",
-        "List what the user's current page shows and the parts you can point at.",
-        "{}: what the user's page shows now and its parts, each with an anchor for highlight.",
-        obj(),
+        "List what the user's current page shows and the parts you can point at: sections, "
+        "buttons, fields, images; with within, everything inside one part or section "
+        "(paragraphs, list items, code, table rows).",
+        '{"within": an anchor, optional}: what the user\'s page shows now, each part with an '
+        "anchor for highlight: marked parts, sections (headings, with what they hold), "
+        "buttons, fields and images. With within, every part inside that section or part, "
+        "paragraphs, list items, code blocks and table rows included, with their text.",
+        obj({"within": s("anchor of a section or part to list in full")}),
         ("core",),
     ),
     Tool(
         "highlight", "client",
-        "Point at a part of the user's page: scroll to it and outline it with a short caption.",
-        '{"anchor": an anchor from read_page, "caption": a few words}: scrolls to that part '
-        "of the page and outlines it with your caption. Call read_page first for anchors.",
-        obj({"anchor": s("anchor from read_page"), "caption": s("a few words")}, ("anchor",)),
+        "Point at parts of the user's page: scroll to them and outline each with a short "
+        "caption; text marks a quote inside the part (a sentence in a docs paragraph).",
+        '{"anchor": an anchor from read_page, "caption": a few words, "text": optional exact '
+        'quote inside that part to mark} or {"points": [up to 5 of those]}: scrolls to the '
+        "parts and outlines them, numbered, with your captions. Call read_page first for "
+        "anchors.",
+        obj({"anchor": s("anchor from read_page"), "caption": s("a few words"),
+             "text": s("exact words inside that part to mark"),
+             "points": arr(obj({"anchor": s("anchor from read_page"),
+                                "caption": s("a few words"),
+                                "text": s("exact words inside that part to mark")},
+                               ("anchor",)), "several parts at once, up to 5")}),
         ("core",),
     ),
     Tool(

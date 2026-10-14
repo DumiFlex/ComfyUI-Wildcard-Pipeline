@@ -2,9 +2,10 @@
 
 Off unless Settings › AI assistant › Meaning search names a model. Ollama
 uses its native `/api/embed` (a batch `input`); everything else
-OpenAI-compatible uses `/embeddings` (LM Studio, OpenAI, a llama.cpp server
-started with `--embeddings`, which needs its own address). Claude has no
-embeddings API.
+OpenAI-compatible uses `/embeddings` (LM Studio, OpenAI, OpenRouter, Voyage,
+a llama.cpp server started with `--embeddings`, which needs its own
+address). Claude has no embeddings API, so with Claude the embedding server
+is always another address. See `/pr-drafts/ai-embeddings-providers.md`.
 
 Item vectors are filled in the background a batch at a time after the index
 syncs, so a chat never waits for a whole library to embed; until they are
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import urllib.parse
 from collections import OrderedDict
 from typing import Any
 
@@ -27,6 +29,7 @@ log = logging.getLogger(__name__)
 
 BATCH = 32
 _TIMEOUT = aiohttp.ClientTimeout(total=120, sock_connect=10)
+_SHORT = aiohttp.ClientTimeout(total=5, sock_connect=3)
 #: Recent query vectors, so a search repeated in one chat costs nothing.
 _QUERY_CACHE: OrderedDict[tuple[str, str], list[float]] = OrderedDict()
 _QUERY_CACHE_SIZE = 256
@@ -35,7 +38,7 @@ _filling: set[int] = set()
 
 
 def enabled(cfg: dict[str, Any]) -> bool:
-    return bool(cfg.get("embed_model")) and cfg.get("api") != "anthropic"
+    return bool(cfg.get("embed_model")) and (cfg.get("embed_api") or cfg.get("api")) != "anthropic"
 
 
 def _cfg(cfg: dict[str, Any]) -> dict[str, Any]:
@@ -43,7 +46,49 @@ def _cfg(cfg: dict[str, Any]) -> dict[str, Any]:
     out["base_url"] = cfg.get("embed_base_url") or cfg["base_url"]
     # The key goes only where it was given for (engine/ai/config.py).
     out["api_key"] = cfg.get("embed_api_key", "")
+    out["api"] = cfg.get("embed_api") or cfg["api"]
     return out
+
+
+async def list_models(cfg: dict[str, Any]) -> list[str]:
+    """The embedding server's models (the chat server when it has no
+    address of its own), only its embedding models where the server says
+    which those are: OpenRouter's embeddings list, LM Studio's model types.
+    Raises client.AIError."""
+    ecfg = _cfg(cfg)
+    if ecfg["api"] == "anthropic":
+        raise client.AIError("Claude has no embeddings API", status=400)
+    if ecfg["api"] == "openai":
+        host = (urllib.parse.urlsplit(ecfg["base_url"]).hostname or "").lower()
+        if host == "openrouter.ai" or host.endswith(".openrouter.ai"):
+            return await _ids(ecfg, "/models?output_modalities=embeddings")
+        typed = await _lmstudio_embedders(ecfg)
+        if typed is not None:
+            return typed
+    return await client.list_models(ecfg)
+
+
+async def _ids(ecfg: dict[str, Any], path: str) -> list[str]:
+    data = await client._request(ecfg, "GET", path, timeout=_TIMEOUT)
+    items = data.get("data") if isinstance(data, dict) else None
+    return sorted({m["id"] for m in items or [] if isinstance(m, dict)
+                   and isinstance(m.get("id"), str) and m["id"]})
+
+
+async def _lmstudio_embedders(ecfg: dict[str, Any]) -> list[str] | None:
+    """LM Studio's own model list says which models embed (`type`); None
+    when the server isn't LM Studio."""
+    parts = urllib.parse.urlsplit(ecfg["base_url"])
+    native = {**ecfg, "base_url": f"{parts.scheme}://{parts.netloc}"}
+    try:
+        data = await client._request(native, "GET", "/api/v0/models", timeout=_SHORT)
+    except client.AIError:
+        return None
+    items = data.get("data") if isinstance(data, dict) else None
+    if not isinstance(items, list) or not all(isinstance(m, dict) and "type" in m for m in items):
+        return None
+    return sorted({m["id"] for m in items if m.get("type") in ("embeddings", "embedding")
+                   and isinstance(m.get("id"), str)})
 
 
 async def embed(cfg: dict[str, Any], texts: list[str]) -> list[list[float]]:
@@ -51,7 +96,7 @@ async def embed(cfg: dict[str, Any], texts: list[str]) -> list[list[float]]:
     if not enabled(cfg):
         raise client.AIError("meaning search is off", status=400)
     ecfg = _cfg(cfg)
-    if cfg["api"] == "ollama":
+    if ecfg["api"] == "ollama":
         body: dict[str, Any] = {"model": cfg["embed_model"], "input": texts,
                                 "keep_alive": f"{int(cfg.get('unload_after_s') or 0)}s"}
         data = await client._request(ecfg, "POST", "/api/embed", body=body, timeout=_TIMEOUT)

@@ -37,10 +37,45 @@ export interface OpenEditorSpec {
 const editor = shallowRef<OpenEditor | null>(null);
 const pageNote = shallowRef<(() => string) | null>(null);
 
-/** Register the mounted editor's item (call in setup). New items have no id
- *  yet and aren't registered. */
-export function registerOpenEditor(spec: OpenEditorSpec): void {
-  if (!spec.id) return;
+/** A new item the chat proposed, waiting for its editor to open ("Open in
+ *  editor" on a create card): the editor fills itself with it, unsaved. */
+export interface StagedDraft {
+  type: string;
+  body: ModuleUpdateInput;
+  /** A category the card would create; the editor can't pick it until it
+   *  exists, so the editor says so. */
+  newCategory?: string;
+}
+let staged: StagedDraft | null = null;
+
+/** Hand a proposed new item to the editor about to open. */
+export function stageDraft(draft: StagedDraft): void {
+  staged = draft;
+}
+
+function write(spec: OpenEditorSpec, body: ModuleUpdateInput): void {
+  if (body.name !== undefined) spec.name.value = body.name;
+  if (body.description !== undefined) spec.description.value = body.description;
+  if (body.tags !== undefined) spec.tags.value = [...body.tags];
+  if (body.category_id !== undefined) spec.categoryId.value = body.category_id;
+  if (body.content_rating !== undefined) spec.contentRating.value = body.content_rating;
+  if (body.payload !== undefined && spec.setPayload) spec.setPayload(body.payload);
+}
+
+/** Register the mounted editor's item (call in setup). A new item has no
+ *  id yet: it isn't registered, but gets back a function to call once the
+ *  blank editor is ready, which fills it with a draft the chat staged for
+ *  this type (returns that draft, or null). */
+export function registerOpenEditor(spec: OpenEditorSpec): () => StagedDraft | null {
+  if (!spec.id) {
+    return () => {
+      const draft = staged;
+      if (!draft || draft.type !== spec.type) return null;
+      staged = null;
+      write(spec, draft.body);
+      return draft;
+    };
+  }
   const id = spec.id;
   const entry: OpenEditor = {
     id,
@@ -55,19 +90,13 @@ export function registerOpenEditor(spec: OpenEditorSpec): void {
       ...(spec.payload ? { payload: spec.payload() } : {}),
       dirty: spec.dirty(),
     }),
-    write: (body) => {
-      if (body.name !== undefined) spec.name.value = body.name;
-      if (body.description !== undefined) spec.description.value = body.description;
-      if (body.tags !== undefined) spec.tags.value = [...body.tags];
-      if (body.category_id !== undefined) spec.categoryId.value = body.category_id;
-      if (body.content_rating !== undefined) spec.contentRating.value = body.content_rating;
-      if (body.payload !== undefined && spec.setPayload) spec.setPayload(body.payload);
-    },
+    write: (body) => write(spec, body),
   };
   editor.value = entry;
   onBeforeUnmount(() => {
     if (editor.value === entry) editor.value = null;
   });
+  return () => null;
 }
 
 /** Register what the current view shows, as a short line or two. */
@@ -92,6 +121,7 @@ export function currentPageNote(): string {
 
 /** Test seam. */
 export function _resetOpenEditorForTests(): void {
+  staged = null;
   editor.value = null;
   pageNote.value = null;
 }

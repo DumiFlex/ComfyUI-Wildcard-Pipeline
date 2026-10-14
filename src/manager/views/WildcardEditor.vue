@@ -37,7 +37,7 @@ import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
-import { registerOpenEditor } from "../composables/useOpenEditor";
+import { registerOpenEditor, type StagedDraft } from "../composables/useOpenEditor";
 import { registerAiAction } from "../composables/useAiActions";
 import DraftBanner from "../components/DraftBanner.vue";
 import { useReturnTo } from "../composables/useReturnTo";
@@ -242,15 +242,23 @@ const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => bulkPending.value || aiPending.value || snapshot() !== baseline.value,
 );
 
-registerOpenEditor({
+const fillFromChat = registerOpenEditor({
   id: props.id, type: "wildcard", dirty: () => dirty.value,
   name, description, tags, categoryId, contentRating,
   payload: () => currentPayload() as unknown as Record<string, unknown>,
   setPayload: (p) => {
     const next = p as Partial<WildcardPayload>;
-    if (Array.isArray(next.options)) options.value = next.options as typeof options.value;
+    if (Array.isArray(next.options)) {
+      options.value = next.options.map((o) => ({
+        ...o, sub_categories: Array.isArray(o.sub_categories) ? [...o.sub_categories] : [],
+      })) as typeof options.value;
+    }
     if (Array.isArray(next.sub_categories)) subCategories.value = [...next.sub_categories];
-    if (next.tag_groups) tagGroups.value = next.tag_groups;
+    if (next.tag_groups) {
+      tagGroups.value = normalizeTagGroups(next.tag_groups, subCategories.value);
+      tagGroupKinds.value = normalizeTagGroupKinds(next.tag_group_kinds, tagGroups.value);
+    }
+    if (typeof next.var_binding === "string" && next.var_binding) varBinding.value = next.var_binding;
   },
 });
 
@@ -1065,7 +1073,20 @@ onMounted(async () => {
   // sub-category panel to the user's chosen default.
   subcatOpen.value = resolveSubcatDefaultOpen();
   baseline.value = snapshot();
+  // "Open in editor" on a chat card: the proposed wildcard, unsaved.
+  if (!props.id) chatDraftNote(fillFromChat());
 });
+
+function chatDraftNote(d: StagedDraft | null): void {
+  if (!d) return;
+  toast.push({
+    severity: "info",
+    summary: "From the assistant",
+    detail: d.newCategory
+      ? `Check it and Save to keep it. It suggested a new category, "${d.newCategory}": create it from the Category picker if you want it.`
+      : "Check it and Save to keep it.",
+  });
+}
 
 /** Drop a sub-category from local draft state: the registry, every
  *  option's membership, AND any axis that lists it. Mirrors the server
@@ -2511,7 +2532,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
         <p v-if="bulkNote" class="wpc-bulk-note" role="status">{{ bulkNote }}</p>
       </div>
       </template>
-      <table class="wp-table wp-options-table"> data-ai-anchor="options" data-ai-label="Options list"
+      <table class="wp-table wp-options-table" data-ai-anchor="options" data-ai-label="Options list">
         <thead>
           <tr>
             <th v-if="bulkMode" scope="col" class="opt-col-check">

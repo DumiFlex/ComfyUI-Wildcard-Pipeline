@@ -21,6 +21,10 @@ from engine.ai import chatlog
 
 #: Compact once the prompt is estimated past this share of the window.
 TRIGGER = 0.75
+#: Tokens kept free for the answer (a thinking model's reasoning counts):
+#: past window minus this, a local server stops the reply when the context
+#: fills, mid-sentence.
+OUTPUT_RESERVE = 4096
 MAX_SUMMARY = 4000
 MAX_TRANSCRIPT = 60000
 MAX_IDS = 40
@@ -50,20 +54,41 @@ SCHEMA = {
 _ID = re.compile(r"\b[0-9a-f]{8}\b")
 
 
-def split_point(entries: list[dict[str, Any]], meta: dict[str, Any]) -> int | None:
-    """Index of the first entry to keep whole (the start of the last
-    `KEEP_TURNS` user turns), or None when there is nothing new to fold in
-    (too few turns, or already summarised up to there)."""
+def threshold(window: int) -> int:
+    """Prompt tokens past which the chat is compacted: 75% of the window, or
+    less so the answer keeps OUTPUT_RESERVE (never under half the window)."""
+    return int(max(window * 0.5, min(window * TRIGGER, window - OUTPUT_RESERVE)))
+
+
+def split_point(entries: list[dict[str, Any]], meta: dict[str, Any],
+                keep: int = chatlog.KEEP_TURNS) -> int | None:
+    """Index of the first entry to keep whole (the start of the last `keep`
+    user turns), or None when there is nothing new to fold in (too few
+    turns, or already summarised up to there)."""
     starts = [i for i, e in enumerate(entries) if e.get("kind") == "user"]
-    if len(starts) <= chatlog.KEEP_TURNS:
+    if len(starts) <= keep:
         return None
-    cut = starts[-chatlog.KEEP_TURNS]
+    cut = starts[-keep]
     if cut <= int(meta.get("summary_before") or 0):
         return None
     return cut
 
 
-def transcript(entries: list[dict[str, Any]], meta: dict[str, Any], cut: int) -> str:
+def best_split(entries: list[dict[str, Any]], meta: dict[str, Any]) -> int | None:
+    """Where to cut: keep the last few turns whole, or (a chat with few but
+    long turns, the window nearly full) only the last one."""
+    cut = split_point(entries, meta)
+    return cut if cut is not None else split_point(entries, meta, keep=1)
+
+
+def summarised_turns(entries: list[dict[str, Any]], meta: dict[str, Any]) -> int:
+    """How many of the user's turns the summary stands for."""
+    before = int(meta.get("summary_before") or 0)
+    return sum(1 for e in entries[:before] if e.get("kind") == "user")
+
+
+def transcript(entries: list[dict[str, Any]], meta: dict[str, Any], cut: int,
+               limit: int = MAX_TRANSCRIPT) -> str:
     """The turns before `cut` (after any earlier summary) as plain text:
     the user's words, the assistant's replies, each call in one line and
     each result's first line."""
@@ -88,21 +113,22 @@ def transcript(entries: list[dict[str, Any]], meta: dict[str, Any], cut: int) ->
             if msg:
                 lines.append("Assistant: " + msg)
     text = "\n".join(lines)
-    return text if len(text) <= MAX_TRANSCRIPT else "…\n" + text[-MAX_TRANSCRIPT:]
+    return text if len(text) <= limit else "…\n" + text[-limit:]
 
 
-def prompt(entries: list[dict[str, Any]], meta: dict[str, Any], cut: int) -> str:
+def prompt(entries: list[dict[str, Any]], meta: dict[str, Any], cut: int,
+           limit: int = MAX_TRANSCRIPT) -> str:
     old = str(meta.get("summary") or "").strip()
     head = (f"The summary so far:\n{old}\n\nUpdate it with the messages below.\n\n"
             if old else "Summarise the messages below.\n\n")
-    return head + "Messages:\n" + transcript(entries, meta, cut)
+    return head + "Messages:\n" + transcript(entries, meta, cut, limit)
 
 
 def ids_in(entries: list[dict[str, Any]], meta: dict[str, Any], cut: int) -> list[str]:
-    """Item ids the summarised turns used in calls, in order."""
+    """Item ids the summarised turns used in calls, in order (earlier
+    summaries' turns too: a model updating a summary may drop them)."""
     out: list[str] = []
-    start = int(meta.get("summary_before") or 0)
-    for e in entries[start:cut]:
+    for e in entries[:cut]:
         for c in e.get("calls") or [] if e.get("kind") == "step" else []:
             args = c.get("args")
             if not isinstance(args, dict):
@@ -137,4 +163,5 @@ def apply(meta: dict[str, Any], summary: str, cut: int) -> dict[str, Any]:
     # What came before the cut is in the summary now.
     meta["dropped_before"] = max(int(meta.get("dropped_before") or 0), cut)
     meta["compactions"] = int(meta.get("compactions") or 0) + 1
+    meta.pop("compact_failed", None)
     return meta

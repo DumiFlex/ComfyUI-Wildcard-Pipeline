@@ -114,14 +114,15 @@ def test_unapplied_proposals_say_so():
     lib.earlier_proposals = {"p3": {"title": "New wildcard Outfit — Victorian", "status": None}}
     assert "only proposed (p3" in lib.not_found("Outfit — Victorian")
     assert "search for it" in lib.not_found("Hat")
-    with pytest.raises(ValueError, match="only proposed"):
-        client_tools.prepare(lib, "open", {"id": "Outfit — Victorian"})
+    # Opening it opens its card in an editor instead.
+    args, label = client_tools.prepare(lib, "open", {"id": "Outfit — Victorian"})
+    assert args == {"proposal": "p3"} and "in an editor" in label
 
 
 def test_highlight_takes_the_key_with_its_brackets():
     lib = chat.Library([], [], [])
     args, _ = client_tools.prepare(lib, "highlight", {"anchor": "[settings]"})
-    assert args["anchor"] == "settings"
+    assert args["points"] == [{"anchor": "settings", "caption": ""}]
 
 
 def test_step_schema_names_the_offered_tools():

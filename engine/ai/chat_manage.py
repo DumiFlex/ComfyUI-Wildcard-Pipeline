@@ -196,8 +196,9 @@ class ManageTools:
             if row is None:
                 raise ValueError(self.not_found(raw))  # type: ignore[attr-defined]
             if row.get("_proposed"):
-                raise ValueError(f"{row.get('name')} is only proposed in this answer; it isn't "
-                                 "in the library, so there is nothing to delete")
+                raise ValueError(f"{row.get('name')} is only a proposal card; it isn't in the "
+                                 "library, so there is nothing to delete. Tell the user to "
+                                 "dismiss that card instead")
             if row["id"] in gone:
                 continue
             gone.add(row["id"])

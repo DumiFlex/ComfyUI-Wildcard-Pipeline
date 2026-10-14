@@ -38,6 +38,8 @@ import { useAiChatWidth } from "../../composables/useAiChatWidth";
 import type { AiChatPage, AiChatProposal, AiPendingCall } from "../../api/types";
 import { currentPageNote, openEditor } from "../../composables/useOpenEditor";
 import { usePackBuilder } from "../../composables/usePackBuilder";
+import { useCategoryStore } from "../../stores/categoryStore";
+import { cardMeta, cardOptions, draftRoute, otherPreview, type CardOption } from "../../composables/aiCards";
 
 const PREVIEW_LINES = 6;
 const SUGGESTIONS = [
@@ -90,7 +92,7 @@ const size = useAiChatWidth();
 const modelLabel = computed(() => config.value?.model ?? "");
 const isLocal = computed(() => {
   const c = config.value;
-  return c ? c.presets[c.provider].local : true;
+  return c ? c.local ?? c.presets[c.provider].local : true;
 });
 
 /* ── Model picker ── */
@@ -337,12 +339,71 @@ function onKeydown(ev: KeyboardEvent): void {
   }
 }
 
+/** The model that wrote reply `i`, shown on the first reply and whenever
+ *  the model changed since the reply before. */
+function byLine(i: number): string {
+  const entries = chat.entries.value;
+  const here = entries[i];
+  if (here?.role !== "assistant" || !here.result.model) return "";
+  for (let j = i - 1; j >= 0; j--) {
+    const e = entries[j];
+    if (e?.role === "assistant" && e.result.model) {
+      return e.result.model === here.result.model ? "" : here.result.model;
+    }
+  }
+  return here.result.model;
+}
+
 function key(i: number, p: AiChatProposal): string {
   return `${i}:${p.pid}`;
 }
 
 function preview(i: number, p: AiChatProposal): string[] {
   return expanded.value.has(key(i, p)) ? p.preview : p.preview.slice(0, PREVIEW_LINES);
+}
+
+/* ── Cards: meta, pickable options, Open in editor ── */
+
+const categories = useCategoryStore();
+
+function categoryLabel(p: AiChatProposal): string {
+  const m = cardMeta(p);
+  if (!m) return "";
+  if (m.newCategory) return `${m.newCategory} (new)`;
+  return m.categoryId ? categories.items.find((c) => c.id === m.categoryId)?.name ?? m.categoryId : "";
+}
+
+function isSkipped(entry: ChatAssistantEntry, p: AiChatProposal, id: string): boolean {
+  return !!entry.skip?.[p.pid]?.includes(id);
+}
+
+function keptCount(entry: ChatAssistantEntry, p: AiChatProposal): number {
+  const opts = cardOptions(p) ?? [];
+  return opts.filter((o) => !isSkipped(entry, p, o.id)).length;
+}
+
+function shownOptions(i: number, p: AiChatProposal): CardOption[] {
+  const opts = cardOptions(p) ?? [];
+  return expanded.value.has(key(i, p)) ? opts : opts.slice(0, PREVIEW_LINES);
+}
+
+/** Preview lines the structured parts above don't already show. */
+function otherLines(i: number, p: AiChatProposal): string[] {
+  const opts = cardOptions(p);
+  return opts ? otherPreview(p, opts) : preview(i, p);
+}
+
+function canOpenInEditor(p: AiChatProposal): boolean {
+  const op = p.op;
+  if (op.op === "create") return !!draftRoute(p);
+  return op.op === "update" && op.kind === "module" && op.basis !== "editor" && !!cardOptions(p);
+}
+
+function applyLabel(entry: ChatAssistantEntry, p: AiChatProposal): string {
+  const opts = cardOptions(p);
+  if (!opts) return "Apply";
+  const kept = keptCount(entry, p);
+  return kept === opts.length ? "Apply" : `Apply ${kept}`;
 }
 
 function toggle(i: number, p: AiChatProposal): void {
@@ -488,7 +549,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         data-test="ai-chat-list"
         title="Your saved chats"
         @click="showList = !showList"
-      >Chats</Button>
+      ><span class="wp-ai-chat__btn-label">Chats</span></Button>
       <Button
         variant="ghost"
         size="sm"
@@ -497,7 +558,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         data-test="ai-chat-new"
         title="Start a new chat"
         @click="newChat"
-      >New chat</Button>
+      ><span class="wp-ai-chat__btn-label">New chat</span></Button>
       <button
         type="button"
         class="wp-ai-chat__close"
@@ -541,6 +602,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
           <template v-if="entry.text">{{ entry.text }}</template>
         </div>
         <div v-else class="wp-ai-chat__reply" data-test="ai-chat-reply">
+          <p v-if="byLine(i)" class="wp-ai-chat__by" data-test="ai-chat-by" :title="`Answered by ${byLine(i)}`">
+            <i class="pi pi-microchip-ai" aria-hidden="true" /> {{ byLine(i) }}
+          </p>
           <ul v-if="entry.result.steps.length" class="wp-ai-chat__steps" data-test="ai-chat-steps">
             <li v-for="(s, j) in entry.result.steps" :key="j" :data-ok="s.ok ? 'true' : 'false'">
               <i :class="['pi', s.ok ? 'pi-check' : 'pi-exclamation-circle']" aria-hidden="true" />
@@ -583,11 +647,63 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               <span class="wp-ai-chat__card-title">{{ p.title }}</span>
               <span class="wp-ai-chat__card-summary">{{ p.summary }}</span>
             </div>
-            <ul v-if="p.preview.length" class="wp-ai-chat__preview">
-              <li v-for="(line, j) in preview(i, p)" :key="j">{{ line }}</li>
+            <dl v-if="cardMeta(p)" class="wp-ai-chat__meta" data-test="ai-chat-card-meta">
+              <template v-if="cardMeta(p)!.variable">
+                <dt>Variable</dt><dd><code>${{ cardMeta(p)!.variable }}</code></dd>
+              </template>
+              <dt>Description</dt>
+              <dd :data-empty="!cardMeta(p)!.description || undefined" data-test="ai-chat-card-description">{{ cardMeta(p)!.description || "None" }}</dd>
+              <dt>Tags</dt>
+              <dd data-test="ai-chat-card-tags">
+                <span v-for="t in cardMeta(p)!.tags" :key="t" class="wp-ai-chat__chip">#{{ t }}</span>
+                <span v-if="!cardMeta(p)!.tags.length" data-empty="true">None</span>
+              </dd>
+              <dt>Category</dt>
+              <dd data-test="ai-chat-card-category" :data-empty="!categoryLabel(p) || undefined">{{ categoryLabel(p) || "None" }}</dd>
+            </dl>
+            <div v-if="cardOptions(p)" class="wp-ai-chat__opts" data-test="ai-chat-card-options">
+              <div class="wp-ai-chat__opts-head">
+                <span>{{ keptCount(entry, p) }} of {{ cardOptions(p)!.length }} option{{ cardOptions(p)!.length === 1 ? "" : "s" }}{{ entry.status[p.pid] ? "" : " ticked" }}</span>
+                <button
+                  v-if="!entry.status[p.pid] && cardOptions(p)!.length > 1"
+                  type="button"
+                  class="wp-ai-chat__link"
+                  data-test="ai-chat-card-all"
+                  @click="chat.setAllOptions(entry, p, keptCount(entry, p) < cardOptions(p)!.length)"
+                >{{ keptCount(entry, p) < cardOptions(p)!.length ? "Tick all" : "Untick all" }}</button>
+              </div>
+              <ul>
+                <li v-for="o in shownOptions(i, p)" :key="o.id" :data-off="isSkipped(entry, p, o.id) || undefined">
+                  <label>
+                    <input
+                      type="checkbox"
+                      :checked="!isSkipped(entry, p, o.id)"
+                      :disabled="!!entry.status[p.pid]"
+                      :aria-label="`Keep ${o.empty ? 'the empty option' : o.text}`"
+                      data-test="ai-chat-card-option"
+                      @change="chat.toggleOption(entry, p, o.id)"
+                    />
+                    <span class="wp-ai-chat__opt-text">{{ o.empty ? "∅ nothing" : o.text }}</span>
+                    <span v-if="o.weight !== 1" class="wp-ai-chat__opt-weight">×{{ o.weight }}</span>
+                    <span v-if="o.fallback" class="wp-ai-chat__chip" data-tone="accent">fallback</span>
+                    <span v-for="t in o.tags" :key="t" class="wp-ai-chat__chip">#{{ t }}</span>
+                    <span v-if="o.negative" class="wp-ai-chat__opt-neg" :title="`Negative: ${o.negative}`">− {{ o.negative }}</span>
+                  </label>
+                </li>
+              </ul>
+              <button
+                v-if="cardOptions(p)!.length > PREVIEW_LINES"
+                type="button"
+                class="wp-ai-chat__more"
+                data-test="ai-chat-more"
+                @click="toggle(i, p)"
+              >{{ expanded.has(key(i, p)) ? "Show less" : `Show all ${cardOptions(p)!.length}` }}</button>
+            </div>
+            <ul v-if="otherLines(i, p).length" class="wp-ai-chat__preview">
+              <li v-for="(line, j) in otherLines(i, p)" :key="j">{{ line }}</li>
             </ul>
             <button
-              v-if="p.preview.length > PREVIEW_LINES"
+              v-if="!cardOptions(p) && p.preview.length > PREVIEW_LINES"
               type="button"
               class="wp-ai-chat__more"
               data-test="ai-chat-more"
@@ -613,6 +729,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               <template v-else-if="entry.status[p.pid] === 'dismissed'">
                 <span class="wp-ai-chat__dismissed">Dismissed</span>
               </template>
+              <template v-else-if="entry.status[p.pid] === 'replaced'">
+                <span class="wp-ai-chat__dismissed" data-test="ai-chat-replaced">Replaced by a newer card below</span>
+              </template>
+              <template v-else-if="entry.status[p.pid] === 'opened'">
+                <span class="wp-ai-chat__done" data-test="ai-chat-opened"><i class="pi pi-check" aria-hidden="true" /> Opened in a new editor. Save there to keep it.</span>
+              </template>
               <template v-else-if="p.op.op === 'delete' && confirming.has(key(i, p))">
                 <span class="wp-ai-chat__confirm" role="alert" data-test="ai-chat-delete-question">Delete {{ deleteCount(p) === 1 ? "it" : `these ${deleteCount(p)}` }}? Undo brings {{ deleteCount(p) === 1 ? "it" : "them" }} back.</span>
                 <Button variant="ghost" size="sm" data-test="ai-chat-delete-cancel" @click="setConfirm(i, p, false)">Cancel</Button>
@@ -635,13 +757,23 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
                 <span v-else-if="toEditor(p)" class="wp-ai-chat__blocked">Goes into the open editor</span>
                 <Button variant="ghost" size="sm" data-test="ai-chat-dismiss" @click="chat.dismiss(entry, p)">Dismiss</Button>
                 <Button
+                  v-if="canOpenInEditor(p)"
+                  variant="secondary"
+                  size="sm"
+                  icon="pi-pencil"
+                  :disabled="!!chat.blockedReason(entry, p) || (!!cardOptions(p) && keptCount(entry, p) === 0)"
+                  :title="p.op.op === 'create' ? 'Open it in a new editor to check and change it before saving' : 'Put it into the item\'s editor, unsaved'"
+                  data-test="ai-chat-open-editor"
+                  @click="chat.openInEditor(entry, p)"
+                >Open in editor</Button>
+                <Button
                   variant="primary"
                   size="sm"
                   icon="pi-check"
-                  :disabled="!!chat.blockedReason(entry, p)"
+                  :disabled="!!chat.blockedReason(entry, p) || (!!cardOptions(p) && keptCount(entry, p) === 0)"
                   data-test="ai-chat-apply"
                   @click="chat.apply(entry, p)"
-                >Apply</Button>
+                >{{ applyLabel(entry, p) }}</Button>
               </template>
             </div>
           </article>
@@ -764,6 +896,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   width: min(var(--wp-ai-chat-w, 440px), 100vw);
   display: flex;
   flex-direction: column;
+  container: wp-ai-chat / inline-size;
   background: var(--wp-bg-1);
   border-left: 1px solid var(--wp-border);
   box-shadow: -8px 0 24px rgb(0 0 0 / 0.25);
@@ -786,11 +919,16 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   .wp-ai-chat__grip { display: none; }
 }
 .wp-ai-chat__head {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 10px 12px; border-bottom: 1px solid var(--wp-border);
 }
 .wp-ai-chat__title { font-weight: 600; color: var(--wp-accent-text); display: inline-flex; gap: 6px; align-items: center; }
-.wp-ai-chat__model { min-width: 0; flex: 0 1 220px; }
+/* The picker keeps room to read and click; on a narrow drawer the buttons
+   drop their words first. */
+.wp-ai-chat__model { min-width: 150px; flex: 1 1 160px; max-width: 260px; }
+@container wp-ai-chat (max-width: 440px) {
+  .wp-ai-chat__btn-label { display: none; }
+}
 .wp-ai-chat__model :deep(.wp-select) { width: 100%; }
 .wp-ai-chat__model :deep(button) { font-family: var(--wp-font-mono, monospace); font-size: 11px; }
 .wp-ai-chat__model-note {
@@ -798,6 +936,43 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   border-bottom: 1px solid var(--wp-border); background: var(--wp-bg-2);
 }
 .wp-ai-chat__spacer { flex: 1; }
+.wp-ai-chat__meta {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px;
+  margin: 6px 0 8px; font-size: 12px;
+}
+.wp-ai-chat__meta dt { color: var(--wp-text-dim); }
+.wp-ai-chat__meta dd { margin: 0; color: var(--wp-text); overflow-wrap: anywhere; display: flex; flex-wrap: wrap; gap: 4px; }
+.wp-ai-chat__meta [data-empty] { color: var(--wp-text-dim); font-style: italic; }
+.wp-ai-chat__chip {
+  display: inline-block; padding: 0 6px; border-radius: 999px; font-size: 11px; line-height: 18px;
+  background: var(--wp-bg-3); color: var(--wp-text-muted);
+}
+.wp-ai-chat__chip[data-tone="accent"] { background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent); color: var(--wp-accent-text); }
+.wp-ai-chat__opts { margin: 4px 0 6px; border: 1px solid var(--wp-border); border-radius: 6px; background: var(--wp-bg-1, var(--wp-bg-2)); }
+.wp-ai-chat__opts-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 5px 8px; font-size: 11px; color: var(--wp-text-dim); border-bottom: 1px solid var(--wp-border);
+}
+.wp-ai-chat__opts ul { list-style: none; margin: 0; padding: 2px 0; }
+.wp-ai-chat__opts li label {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 3px 8px;
+  font-size: 12px; cursor: pointer;
+}
+.wp-ai-chat__opts li:hover { background: var(--wp-bg-3); }
+.wp-ai-chat__opts li[data-off] .wp-ai-chat__opt-text { color: var(--wp-text-dim); text-decoration: line-through; }
+.wp-ai-chat__opts input { accent-color: var(--wp-accent-500); margin: 0; }
+.wp-ai-chat__opt-text { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; }
+.wp-ai-chat__opt-weight { font-family: var(--wp-font-mono, monospace); font-size: 11px; color: var(--wp-accent-text); }
+.wp-ai-chat__opt-neg { font-size: 11px; color: var(--wp-danger, #f87171); overflow-wrap: anywhere; }
+.wp-ai-chat__link {
+  border: 0; background: none; padding: 0; font: inherit; font-size: 11px; color: var(--wp-accent-text);
+  cursor: pointer; text-decoration: underline;
+}
+.wp-ai-chat__by {
+  display: flex; align-items: center; gap: 5px; margin: 0 0 4px;
+  font-family: var(--wp-font-mono, monospace); font-size: 11px; color: var(--wp-text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .wp-ai-chat__close {
   display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
   border: 0; border-radius: 6px; background: none; color: var(--wp-text-muted); cursor: pointer;
@@ -830,7 +1005,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   background: color-mix(in oklab, var(--wp-accent-500) 4%, var(--wp-bg-2));
 }
 .wp-ai-chat__card[data-status="applied"], .wp-ai-chat__card[data-status="editor"] { border-color: color-mix(in oklab, var(--wp-success) 50%, var(--wp-border)); }
-.wp-ai-chat__card[data-status="dismissed"] { opacity: 0.6; }
+.wp-ai-chat__card[data-status="dismissed"], .wp-ai-chat__card[data-status="replaced"] { opacity: 0.6; }
 .wp-ai-chat__card[data-kind="delete"][data-status="pending"] { border-color: color-mix(in oklab, var(--wp-danger) 40%, var(--wp-border)); }
 .wp-ai-chat__confirm { margin-right: auto; font-size: 12px; color: var(--wp-danger); }
 .wp-ai-chat__card[data-status="failed"] { border-color: color-mix(in oklab, var(--wp-danger) 50%, var(--wp-border)); }

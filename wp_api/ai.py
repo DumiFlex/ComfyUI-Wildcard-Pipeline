@@ -86,6 +86,8 @@ _MAX_BODY_BYTES = 512 * 1024
 #: models get longer: a 27B reading a long prompt takes minutes per step.
 TURN_SECONDS = 600
 TURN_SECONDS_LOCAL = 1200
+#: Times one answer may be continued after it was cut off.
+MAX_CONTINUE = 2
 #: The most one model step may take, a little over the client's own limit.
 STEP_SECONDS = 330
 
@@ -136,10 +138,17 @@ async def put_config(request: web.Request) -> web.Response:
 
 
 async def post_models(request: web.Request) -> web.Response:
+    """Body (optional): {"for": "embed"} lists the embedding server's models
+    instead of the chat server's."""
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
+    body = await _body(request) if request.can_read_body else {}
+    if isinstance(body, web.Response):
+        return body
     try:
+        if body.get("for") == "embed":
+            return json_ok({"models": await _ai_embed.list_models(cfg)})
         return json_ok({"models": await _ai_client.list_models(cfg)})
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
@@ -859,10 +868,18 @@ async def _window(cfg: dict[str, Any], meta: dict[str, Any]) -> int:
     """The tokens this chat's model holds: what a local server loaded the
     model with (asked once per chat), else the context setting (which
     Ollama gets as `num_ctx`); a cloud model's usual size."""
-    if not cfg.get("local"):
-        return CLOUD_WINDOW.get(str(cfg.get("api")), 128000)
     if isinstance(meta.get("window"), int) and meta.get("window_model") == cfg.get("model"):
         return int(meta["window"])
+    if not cfg.get("local"):
+        try:
+            listed = await _ai_client.cloud_context(cfg)
+        except Exception:  # noqa: BLE001 - only a hint for the meter
+            listed = None
+        if not listed:
+            return CLOUD_WINDOW.get(str(cfg.get("api")), 128000)
+        meta["window"] = listed
+        meta["window_model"] = cfg.get("model")
+        return listed
     found = None
     try:
         found = await _ai_client.server_context(cfg)
@@ -881,10 +898,19 @@ def _context(cfg: dict[str, Any], meta: dict[str, Any], entries: list[dict[str, 
     it gave one, else an estimate) against the window."""
     rendered = ai_chatlog.size(ai_chatlog.render(entries, meta)) + system_chars
     estimate = ai_budget.tokens(rendered)
-    reported = int(usage.get("prompt") or 0) + int(usage.get("output") or 0)
-    used = reported or max(estimate, int(usage.get("evaluated") or 0))
-    return {"used": used, "window": window, "estimated": not reported,
-            "about": not cfg.get("local"), "compactions": int(meta.get("compactions") or 0)}
+    output = int(usage.get("output") or 0)
+    if usage.get("prompt"):
+        used, estimated = int(usage["prompt"]) + output, False
+    else:
+        # Ollama counts only the prompt tokens it had to read again (none
+        # of a cached prefix), so its number drops to a few hundred after a
+        # cache hit: estimate the whole prompt instead.
+        used, estimated = max(estimate, int(usage.get("evaluated") or 0)) + output, True
+    return {"used": used, "window": window, "estimated": estimated,
+            "about": not cfg.get("local"), "compactions": int(meta.get("compactions") or 0),
+            # The divider in the chat goes before this user turn.
+            "summarised_turns": ai_compact.summarised_turns(entries, meta),
+            "compact_failed": bool(meta.get("compact_failed"))}
 
 
 async def _maybe_compact(cfg: dict[str, Any], log: list[dict[str, Any]], meta: dict[str, Any],
@@ -893,26 +919,40 @@ async def _maybe_compact(cfg: dict[str, Any], log: list[dict[str, Any]], meta: d
     """Summarise the turns before the last few when the prompt nears the
     window (or when asked). A failed summary changes nothing: the older
     masking and dropping still keep the prompt in budget."""
-    cut = ai_compact.split_point(log, meta)
-    if cut is None:
-        return meta
     if not force:
         need = ai_budget.tokens(ai_chatlog.size(ai_chatlog.render(log, meta)) + fixed_chars)
-        if need < ai_compact.TRIGGER * window:
+        if need < ai_compact.threshold(window):
             return meta
+    cut = ai_compact.best_split(log, meta)
+    if cut is None:
+        return meta
+    if not force and cut <= int(meta.get("compact_failed") or 0):
+        return meta  # failed on these turns already; try again once there's more
     if emit:
         await emit({"type": "status", "v": "Summarizing earlier messages to make room"})
-    try:
-        answer = await _ai_client.complete_json(
-            cfg, system=ai_compact.SYSTEM, user=ai_compact.prompt(log, meta, cut),
-            schema=ai_compact.SCHEMA, schema_name="summary", temperature=0.2,
-            max_tokens=SUMMARY_TOKENS,
-            num_ctx=num_ctx if cfg.get("api") == "ollama" else None)
-    except _ai_client.AIError:
-        return meta
-    summary = answer.get("summary") if isinstance(answer, dict) else None
-    if not isinstance(summary, str) or len(summary.strip()) < 20:
-        return meta
+    summary = None
+    # Small models miss the summary's shape now and then: once more with
+    # less to read before giving up.
+    for limit in (ai_compact.MAX_TRANSCRIPT, ai_compact.MAX_TRANSCRIPT // 3):
+        try:
+            answer = await _ai_client.complete_json(
+                cfg, system=ai_compact.SYSTEM, user=ai_compact.prompt(log, meta, cut, limit),
+                schema=ai_compact.SCHEMA, schema_name="summary", temperature=0.2,
+                max_tokens=SUMMARY_TOKENS,
+                num_ctx=num_ctx if cfg.get("api") == "ollama" else None)
+        except _ai_client.AIError:
+            continue
+        got = answer.get("summary") if isinstance(answer, dict) else None
+        if isinstance(got, str) and len(got.strip()) >= 20:
+            summary = got
+            break
+    if summary is None:
+        # Said, not silent: the meter shows it, and older results are still
+        # trimmed to keep the prompt in budget.
+        if emit:
+            await emit({"type": "status",
+                        "v": "Couldn't summarize; trimming older results instead"})
+        return {**meta, "compact_failed": cut}
     text = ai_safety.strip_invisible(ai_compact.finish(summary, ai_compact.ids_in(log, meta, cut)))
     return ai_compact.apply(meta, text, cut)
 
@@ -1244,6 +1284,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     pids = [int(p[1:]) for p in meta.get("proposals") or {} if p[1:].isdigit()]
     lib._next_pid = max(pids, default=0)
     lib.earlier_proposals = dict(meta.get("proposals") or {})
+    _adopt_earlier(lib, log, meta)
     proposals: list[dict[str, Any]] = []
     steps: list[dict[str, Any]] = first_steps
     pause: list[dict[str, Any]] = []
@@ -1255,6 +1296,12 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     checked = False
     nudged = False
     empty_nudged = False
+    #: The answer a nudge set aside: shown if the nudged step comes back empty.
+    set_aside = ""
+    #: A cut answer waiting for the step that continues it, and how many
+    #: continuations this answer had.
+    carry = ""
+    continued = 0
     out_of_time = False
     reads = 0
     ran = 0
@@ -1321,15 +1368,29 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         said = ai_safety.strip_invisible(st["message"])[:ai_chat.MAX_MESSAGE]
         calls = st["calls"][:ai_chat.MAX_CALLS_PER_STEP]
         dropped = len(st["calls"]) - len(calls)
-        cut = bool(usage.get("cut"))
         new.append(ai_chatlog.step_entry(ai_safety.strip_invisible(st["text"]), calls,
-                                         answer=st["answer"], usage=usage))
+                                         answer=st["answer"], usage=usage,
+                                         model=str(cfg.get("model") or "")))
+        if carry and not calls:
+            said = ai_chat.join_continuation(carry, said)
+            carry = ""
+        # Cut off: the output limit, or a stream that ended early, or (no
+        # signal at all) a reply that stops mid-sentence.
+        cut = bool(said) and not calls and (
+            bool(usage.get("cut")) or ai_chat.looks_cut(said))
+        if cut and continued < MAX_CONTINUE and step < ai_chat.MAX_STEPS \
+                and not out_of_time:
+            # Ask for the rest; the two parts are joined into one answer.
+            continued += 1
+            carry = said
+            new.append(ai_chatlog.note_entry(ai_chat.CONTINUE_NUDGE))
+            continue
         # A message sent along with calls is usually "I'll search…": keep it
         # only as a fallback, so the answer is the step that stops calling.
         if said and not calls:
             message = said
             if cut:
-                message += "\n\n*(Cut off: the model reached its output limit.)*"
+                message += "\n\n*(Cut off: the model stopped before finishing.)*"
         elif said:
             interim = said
         if forced and calls:
@@ -1427,6 +1488,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 proposals.append(out)
                 meta.setdefault("proposals", {})[out["pid"]] = {
                     "title": out["title"], "status": None}
+                if out.get("replaces"):
+                    gone = meta["proposals"].get(out["replaces"])
+                    if gone is not None:
+                        meta["proposals"][out["replaces"]] = {**gone, "status": "replaced"}
                 result(f"{tool}: proposal {out['pid']} shown to the user: {out['title']}"
                        + extra)
                 steps.append({"tool": tool, "note": out["title"], "ok": True})
@@ -1444,6 +1509,11 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             if not calls and not said and not proposals:
                 # An empty answer: thinking models can spend the whole output
                 # allowance before writing anything.
+                cut = bool(usage.get("cut"))
+                if set_aside:
+                    # Nudged, and then nothing: the earlier answer stands.
+                    message = set_aside
+                    break
                 if cut or empty_nudged or step >= ai_chat.MAX_STEPS:
                     message = message or interim or (
                         "(The model used up its output limit before answering; thinking "
@@ -1457,7 +1527,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             if (not calls and not proposals and not nudged and not cut
                     and step < ai_chat.MAX_STEPS and ai_chat.unfinished(said)):
                 nudged = True
-                message = ""
+                set_aside, message = said, ""
                 new.append(ai_chatlog.note_entry(ai_chat.UNFINISHED_NUDGE))
                 continue
             # Asked leave instead of proposing, or met "yes" with more talk:
@@ -1466,7 +1536,9 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     and step < ai_chat.MAX_STEPS
                     and ai_chat.stalls(said, text, last_answer)):
                 nudged = True
-                message = ""  # the stalled question isn't the answer
+                # The stalled question isn't the answer, unless nothing better
+                # comes.
+                set_aside, message = said, ""
                 new.append(ai_chatlog.note_entry(ai_chat.GO_NUDGE))
                 continue
             # Changes were proposed but never tried: ask for one check
@@ -1502,7 +1574,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     else:
         if not message:
             message = interim if interim and proposals else (
-                "Here's what I'd change." if proposals else interim or "Done.")
+                "Here's what I'd change." if proposals else interim or set_aside
+                or _done_line(steps))
         # Every call gets a result and the turn ends on an answer.
         last = new[-1]
         if last.get("kind") == "step" and last.get("calls"):
@@ -1511,6 +1584,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                  for c in last["calls"]], ""))
         if new[-1].get("kind") != "step":
             new.append(_final_step(fmt, message))
+    # Chips for the items it names; no bare ids for the user.
+    message = lib.link_items(message)
     meta["format"] = fmt
     meta["fingerprint"] = fp_now
     meta["model"] = cfg.get("model")
@@ -1582,6 +1657,7 @@ async def get_chat(request: web.Request) -> web.Response:
         "updated_at": chat["updated_at"], "model": meta.get("model"),
         "turns": ai_chatlog.display(log, meta),
         "waiting": bool(meta.get("pending")),
+        "summary": str(meta.get("summary") or ""),
         "context": _context(cfg, meta, log, len(chat.get("snapshot") or "") + 12000, usage,
                             window),
     })
@@ -1615,9 +1691,13 @@ async def patch_chat(request: web.Request) -> web.Response:
             for ev in events[:200]:
                 if not isinstance(ev, dict) or not isinstance(ev.get("pid"), str):
                     continue
-                if ev.get("status") not in ("applied", "editor", "dismissed", "failed", "undone"):
+                if ev.get("status") not in ("applied", "editor", "dismissed", "failed", "undone",
+                                            "opened"):
                     continue
                 entry = {"status": ev["status"]}
+                left = ev.get("left_out")
+                if isinstance(left, int) and not isinstance(left, bool) and 0 < left <= 1000:
+                    entry["left_out"] = left
                 if isinstance(ev.get("created"), str) and len(ev["created"]) <= 40:
                     entry["created"] = ev["created"]
                 seen[ev["pid"][:12]] = entry
@@ -1650,8 +1730,8 @@ async def post_compact(request: web.Request) -> web.Response:
     meta = dict(chat["meta"])
     if meta.get("pending"):
         return json_error("this chat is waiting for an answer", status=409)
-    if ai_compact.split_point(log, meta) is None:
-        return json_error("nothing to summarize yet: the last few turns always stay whole",
+    if ai_compact.best_split(log, meta) is None:
+        return json_error("nothing to summarize yet: your latest message always stays whole",
                           status=409)
     prof = ai_budget.profile(cfg)
     num_ctx = int(cfg.get("context_max") or ai_budget.CONTEXT_DEFAULT)
@@ -1663,8 +1743,34 @@ async def post_compact(request: web.Request) -> web.Response:
     with db_session(request) as conn:
         ChatRepository(conn).set_meta(chat["id"], after)
     usage: dict[str, Any] = {}
-    return json_ok({"compacted": True, "context": _context(
-        cfg, after, log, len(chat.get("snapshot") or "") + 12000, usage, window)})
+    return json_ok({"compacted": True, "summary": str(after.get("summary") or ""),
+                    "context": _context(cfg, after, log, len(chat.get("snapshot") or "") + 12000,
+                                        usage, window)})
+
+
+def _adopt_earlier(lib: Any, log: list[dict[str, Any]], meta: dict[str, Any]) -> None:
+    """New modules from earlier answers' cards the user hasn't applied (nor
+    dismissed): the model can read and revise them (`Library.adopt_earlier`)."""
+    model_status = meta.get("proposals") or {}
+    shown_status = meta.get("shown_status") or {}
+    for e in log:
+        if e.get("kind") != "shown":
+            continue
+        for p in (e.get("view") or {}).get("proposals") or []:
+            pid = p.get("pid") if isinstance(p, dict) else None
+            if not pid or (model_status.get(pid) or {}).get("status") or (
+                    shown_status.get(pid) or {}).get("status"):
+                continue
+            lib.adopt_earlier(p)
+
+
+def _done_line(steps: list[dict[str, Any]]) -> str:
+    """The answer when the model said nothing after acting: what it did,
+    never a bare "Done."."""
+    did = [str(x.get("note")) for x in steps if x.get("ok") and x.get("note")]
+    if did:
+        return "Done: " + "; ".join(did[-3:]) + "."
+    return "(The model gave an empty answer. Try again, or ask another way.)"
 
 
 async def _paused_results(
@@ -1680,8 +1786,8 @@ async def _paused_results(
         if c["tool"] in ai_tools.WEB and answer.get("approve") in ("once", "chat"):
             if answer["approve"] == "chat":
                 meta["web_ok"] = True
+            # Its step line was shown when the turn paused: not again.
             text = await _web_result(cfg, c["args"]["query"])
-            steps.append({"tool": c["tool"], "note": c.get("label") or c["tool"], "ok": True})
         else:
             text = ai_client_tools.result_text(c["tool"], answer)
             if answer.get("denied"):

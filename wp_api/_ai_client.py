@@ -465,6 +465,26 @@ async def server_context(cfg: dict[str, Any]) -> int | None:
     return None
 
 
+def is_openrouter(url: str) -> bool:
+    host = (urllib.parse.urlsplit(url or "").hostname or "").lower()
+    return host == "openrouter.ai" or host.endswith(".openrouter.ai")
+
+
+async def cloud_context(cfg: dict[str, Any]) -> int | None:
+    """A cloud model's window when its provider lists it: OpenRouter's
+    `/models` gives each model's `context_length` (they range from 4k to
+    over 1M, so the usual-size guess is often wrong there)."""
+    if cfg["api"] != "openai" or not is_openrouter(cfg.get("base_url", "")):
+        return None
+    data = await _request(cfg, "GET", "/models", timeout=_LIST_TIMEOUT)
+    for m in (data.get("data") if isinstance(data, dict) else None) or []:
+        if isinstance(m, dict) and m.get("id") == cfg.get("model"):
+            value = m.get("context_length")
+            if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+                return value
+    return None
+
+
 async def probe(cfg: dict[str, Any]) -> dict[str, Any]:
     """Test connection: list models, then (if one is chosen) a tiny JSON call."""
     result: dict[str, Any] = {"ok": False, "models": [], "model_found": None,

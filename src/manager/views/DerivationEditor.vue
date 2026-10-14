@@ -157,7 +157,7 @@ const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => aiPending.value || snapshot() !== baseline.value,
 );
 
-registerOpenEditor({
+const fillFromChat = registerOpenEditor({
   id: props.id, type: "derivation", dirty: () => dirty.value,
   name, description, tags, categoryId, contentRating,
   payload: () => currentPayload() as unknown as Record<string, unknown>,
@@ -363,6 +363,16 @@ onMounted(async () => {
     }
   }
   baseline.value = snapshot();
+  // "Open in editor" on a chat card: the proposed derivation, unsaved.
+  const fromChat = props.id ? null : fillFromChat();
+  if (fromChat) {
+    toast.push({
+      severity: "info", summary: "From the assistant",
+      detail: fromChat.newCategory
+        ? `Check it and Save to keep it. It suggested a new category, "${fromChat.newCategory}": create it from the Category picker if you want it.`
+        : "Check it and Save to keep it.",
+    });
+  }
 });
 
 function addAiRules(incoming: DerivationRule[]): void {

@@ -157,10 +157,19 @@ async def test_compact_now_and_its_refusals(wp_client, fake_llm):
     out409 = await _json(await wp_client.post(f"/wp/api/ai/chats/{chat_id}/compact"), 409)
     assert "nothing to summarize" in out409["error"]
     for word in ("two", "three", "four"):
+        last = await _chat(wp_client, word, chat_id=chat_id)
+    # The fake server loads the model with 4k, so turns already compacted
+    # as they went (down to the newest turn).
+    had = last["context"]["compactions"]
+    assert had >= 1 and last["context"]["summarised_turns"] == had
+    for word in ("five", "six"):
         await _chat(wp_client, word, chat_id=chat_id)
+    meta_before = await _json(await wp_client.get(f"/wp/api/ai/chats/{chat_id}"))
     before = len(fake_llm.seen)
     done = await _json(await wp_client.post(f"/wp/api/ai/chats/{chat_id}/compact"))
-    assert done["compacted"] is True and done["context"]["compactions"] == 1
+    assert done["compacted"] is True
+    assert done["context"]["compactions"] == meta_before["context"]["compactions"] + 1
+    assert "short answers please" in done["summary"]
     assert len(fake_llm.seen) == before + 1
     # Nothing new to fold in until another turn.
     await _json(await wp_client.post(f"/wp/api/ai/chats/{chat_id}/compact"), 409)

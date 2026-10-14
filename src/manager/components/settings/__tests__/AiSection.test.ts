@@ -14,19 +14,21 @@ vi.mock("../../../api/client", () => ({
 }));
 
 const PRESETS: AiConfig["presets"] = {
-  anthropic: { label: "Claude", api: "anthropic", local: false, needs_key: true, base_url: "https://api.anthropic.com" },
-  openai: { label: "OpenAI", api: "openai", local: false, needs_key: true, base_url: "https://api.openai.com/v1" },
-  ollama: { label: "Ollama", api: "ollama", local: true, needs_key: false, base_url: "http://127.0.0.1:11434" },
-  lmstudio: { label: "LM Studio", api: "openai", local: true, needs_key: false, base_url: "http://127.0.0.1:1234/v1" },
-  llamacpp: { label: "llama.cpp", api: "openai", local: true, needs_key: false, base_url: "http://127.0.0.1:8080/v1" },
-  custom: { label: "Other", api: "openai", local: true, needs_key: false, base_url: "" },
+  anthropic: { label: "Claude", api: "anthropic", local: false, needs_key: true, base_url: "https://api.anthropic.com", embeds: false, embed_model: "", embed_note: "Claude has no embeddings." },
+  openai: { label: "OpenAI", api: "openai", local: false, needs_key: true, base_url: "https://api.openai.com/v1", embeds: true, embed_model: "", embed_note: "" },
+  openrouter: { label: "OpenRouter", api: "openai", local: false, needs_key: true, base_url: "https://openrouter.ai/api/v1", embeds: true, embed_model: "", embed_note: "" },
+  ollama: { label: "Ollama", api: "ollama", local: true, needs_key: false, base_url: "http://127.0.0.1:11434", embeds: true, embed_model: "", embed_note: "" },
+  lmstudio: { label: "LM Studio", api: "openai", local: true, needs_key: false, base_url: "http://127.0.0.1:1234/v1", embeds: true, embed_model: "", embed_note: "" },
+  llamacpp: { label: "llama.cpp", api: "openai", local: true, needs_key: false, base_url: "http://127.0.0.1:8080/v1", embeds: false, embed_model: "", embed_note: "" },
+  custom: { label: "Other", api: "openai", local: true, needs_key: false, base_url: "", embeds: true, embed_model: "", embed_note: "" },
 };
 
 function cfg(over: Partial<AiConfig> = {}): AiConfig {
   return {
     enabled: false, provider: "ollama", base_url: "", model: "", unload_after_s: 60,
-    context_max: 16384, model_size: "auto", model_size_auto: "medium", tool_format: "auto", allow_delete: false, auto_apply: false, embed_model: "", embed_base_url: "", search_engine: "off", search_url: "", search_keys_saved: [], search_engines: { searxng: { label: "SearXNG", needs_key: false }, brave: { label: "Brave Search", needs_key: true }, tavily: { label: "Tavily", needs_key: true }, kagi: { label: "Kagi", needs_key: true } }, key_for_host: null,
-    key_set: false, key_from_env: false, keys_saved: [], presets: PRESETS, ...over,
+    context_max: 16384, model_size: "auto", model_size_auto: "medium", tool_format: "auto", thinking: "auto", allow_delete: false, auto_apply: false, embed_model: "", embed_base_url: "", embed_api: "auto", search_engine: "off", search_url: "", search_keys_saved: [], search_engines: { searxng: { label: "SearXNG", needs_key: false }, brave: { label: "Brave Search", needs_key: true }, tavily: { label: "Tavily", needs_key: true }, kagi: { label: "Kagi", needs_key: true } }, key_for_host: null,
+    key_set: false, key_from_env: false, keys_saved: [], presets: PRESETS, embed_key_set: false, embed_key_own: false,
+    local: PRESETS[over.provider ?? "ollama"].local, ...over,
   };
 }
 
@@ -221,7 +223,9 @@ describe("Settings › AI assistant", () => {
     // Only names that look like embedding models are offered.
     const values = (embed.props("options") as Array<{ value: unknown }>).map((o) => o.value);
     expect(values).toEqual(["", "nomic-embed-text:latest", "custom"]);
-    expect(w.find('[data-test="ai-embed-address"]').exists()).toBe(false);
+    // The embedding server row is always there; its type only for another server.
+    expect(w.find('[data-test="ai-embed-address"]').exists()).toBe(true);
+    expect(w.find('[data-test="ai-embed-api"]').exists()).toBe(false);
     vi.mocked(api.ai.index).mockResolvedValue({ ...INDEX, embed_model: "nomic-embed-text:latest", vectors: 32, filling: true });
     embed.vm.$emit("update:modelValue", "nomic-embed-text:latest");
     await flushPromises();
@@ -283,7 +287,25 @@ describe("Settings › AI assistant", () => {
     await flushPromises();
     const embed = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-embed-model")!;
     expect(embed.props("disabled")).toBe(true);
-    expect(w.text()).toContain("Claude has no embeddings API");
+    expect(w.text()).toContain("Claude has no embeddings.");
+  });
+
+  it("embeds on another server with Claude, of the type the user picks", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({
+      enabled: true, provider: "anthropic", model: "c", embed_base_url: "http://127.0.0.1:11434",
+    }));
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg({
+      enabled: true, provider: "anthropic", model: "c", embed_base_url: "http://127.0.0.1:11434", ...p,
+    }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const embed = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-embed-model")!;
+    expect(embed.props("disabled")).toBe(false);
+    expect(api.ai.models).toHaveBeenCalledWith("embed");
+    const kind = w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-embed-api")!;
+    kind.vm.$emit("update:modelValue", "ollama");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ embed_api: "ollama" });
   });
 
   it("shows the index and rebuilds it", async () => {

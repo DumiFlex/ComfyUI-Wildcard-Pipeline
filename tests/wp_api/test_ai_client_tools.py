@@ -40,7 +40,7 @@ async def test_a_page_tool_pauses_the_turn_and_its_answer_continues_it(wp_client
     assert first["message"] == "Let me show you."
     assert [(c["tool"], c["args"]) for c in first["pending"]] == [
         ("open", {"id": tgt, "type": "wildcard"}),
-        ("highlight", {"anchor": "a2", "caption": "the options"}),
+        ("highlight", {"points": [{"anchor": "a2", "caption": "the options"}]}),
     ]
     assert [s["note"] for s in first["steps"]] == [
         "Read Weapon", "Opened Weapon", "Pointed at the options"]

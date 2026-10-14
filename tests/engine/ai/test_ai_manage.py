@@ -69,7 +69,7 @@ def test_delete_limits_and_unknowns():
 def test_an_item_proposed_in_this_answer_cant_be_deleted():
     lib = _lib()
     lib.run("create_wildcard", {"name": "Hat", "var": "hat", "options": [{"text": "cap"}]})
-    with pytest.raises(ValueError, match="only proposed"):
+    with pytest.raises(ValueError, match="only a proposal"):
         lib.run("delete_items", {"items": ["Hat"]})
 
 

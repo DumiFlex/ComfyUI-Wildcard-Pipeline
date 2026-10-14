@@ -15,13 +15,13 @@ import type { SelectOption } from "../../ui/select-types";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { api } from "../../../api/client";
-import type { AiConfigPatch, AiIndexStatus, AiModelSize, AiProviderId, AiTestResult, AiToolFormat } from "../../../api/types";
+import type { AiConfigPatch, AiEmbedApi, AiIndexStatus, AiModelSize, AiProviderId, AiTestResult, AiToolFormat } from "../../../api/types";
 import { useAiConfig } from "../../../composables/useAiConfig";
 import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../ai-models";
 
 const { config, error, save } = useAiConfig();
 
-const PROVIDER_ORDER: AiProviderId[] = ["anthropic", "openai", "ollama", "lmstudio", "llamacpp", "custom"];
+const PROVIDER_ORDER: AiProviderId[] = ["anthropic", "openai", "openrouter", "ollama", "lmstudio", "llamacpp", "custom"];
 
 /** The provider buttons: name, where it runs, and whether a key is saved. */
 const providers = computed(() => {
@@ -30,13 +30,15 @@ const providers = computed(() => {
   return PROVIDER_ORDER.map((id) => ({
     id,
     label: id === "custom" ? "Other (OpenAI-compatible)" : presets[id].label,
-    local: presets[id].local,
+    // The chosen provider shows where it really runs ("Other" set to an
+    // internet address is a cloud service).
+    local: id === config.value?.provider ? config.value.local ?? presets[id].local : presets[id].local,
     keySaved: presets[id].needs_key && !!config.value?.keys_saved?.includes(id),
   }));
 });
 
 const preset = computed(() => (config.value ? config.value.presets[config.value.provider] : null));
-const isLocal = computed(() => preset.value?.local ?? true);
+const isLocal = computed(() => config.value?.local ?? preset.value?.local ?? true);
 
 const saveError = ref("");
 async function patch(p: Parameters<typeof save>[0]): Promise<boolean> {
@@ -56,7 +58,10 @@ watch(() => config.value?.base_url, (v) => { addressDraft.value = v ?? ""; }, { 
 async function commitAddress(): Promise<void> {
   if (!config.value || addressDraft.value.trim() === config.value.base_url) return;
   if (!(await patch({ base_url: addressDraft.value }))) addressDraft.value = config.value.base_url;
-  else void refreshModels();
+  else {
+    void refreshModels();
+    if (!config.value.embed_base_url) void refreshEmbedModels();
+  }
 }
 
 /* ── Key ─────────────────────────────────────────────────────────────── */
@@ -181,23 +186,77 @@ const toolFormatOptions: SelectOption[] = [
   { value: "native", label: "Native tool calls" },
   { value: "json", label: "JSON steps" },
 ];
+const thinkingOptions: SelectOption[] = [
+  { value: "auto", label: "As the model does" },
+  { value: "off", label: "Off: answer straight away" },
+];
+async function setThinking(v: string | number | null): Promise<void> {
+  if ((v !== "auto" && v !== "off") || v === config.value?.thinking) return;
+  await patch({ thinking: v });
+}
 async function setToolFormat(v: string | number | null): Promise<void> {
   if (typeof v !== "string" || v === config.value?.tool_format) return;
   await patch({ tool_format: v as AiToolFormat });
 }
 
 /* ── Meaning search ──────────────────────────────────────────────────── */
-/* Claude has no embeddings API, so meaning search needs another provider. */
-const embedPossible = computed(() => config.value?.provider !== "anthropic");
+/* Some chat servers can't embed (Claude, a llama.cpp chat server): then
+   meaning search needs an embedding server of its own. */
+const embedPossible = computed(() => (preset.value?.embeds ?? true) || embedSeparate.value);
 /** Names that look like embedding models, so the dropdown offers them first. */
 const EMBED_NAME = /embed|bge|minilm|e5-|gte-|nomic|arctic/i;
 const OFF = "";
+const embedModels = ref<string[]>([]);
+const embedModelsError = ref("");
+const loadingEmbedModels = ref(false);
+/** The embedding server's models: its own address (with its own key), or
+ *  the chat server's when it has none. */
+async function refreshEmbedModels(): Promise<void> {
+  if (!config.value?.enabled || !embedPossible.value) return;
+  loadingEmbedModels.value = true;
+  embedModelsError.value = "";
+  try {
+    embedModels.value = (await api.ai.models("embed")).models;
+  } catch (err) {
+    embedModels.value = [];
+    embedModelsError.value = err instanceof Error ? err.message : "Couldn't list models";
+  } finally {
+    loadingEmbedModels.value = false;
+  }
+}
+watch(() => [config.value?.enabled, config.value?.provider] as const, ([on]) => {
+  embedModels.value = [];
+  if (on) void refreshEmbedModels();
+}, { immediate: true });
 const embedOptions = computed<SelectOption[]>(() => {
-  const names = models.value.filter((m) => EMBED_NAME.test(m));
+  let names = embedModels.value.filter((m) => EMBED_NAME.test(m));
+  // A server just for embeddings may name them anything.
+  if (!names.length && embedSeparate.value) names = [...embedModels.value];
   const cur = config.value?.embed_model;
   if (cur && !names.includes(cur)) names.unshift(cur);
   return [{ value: OFF, label: "Off" }, ...names.map((m) => ({ value: m, label: m })), { value: CUSTOM, label: "Type a name…" }];
 });
+const embedHint = computed(() => {
+  const note = !embedSeparate.value ? preset.value?.embed_note ?? "" : "";
+  if (!embedPossible.value) return `${note || "This server can't embed."} Until then the chat searches by words.`;
+  const suggest = !embedSeparate.value && preset.value?.embed_model ? ` ${preset.value.label} suggestion: ${preset.value.embed_model}.` : "";
+  const base = `Meaning search: the chat also finds items by what they mean, so “warm colors” finds amber and crimson. Needs a small embedding model.${suggest} Off keeps search to words.`;
+  const all = note ? `${base} ${note}` : base;
+  if (embedModelsError.value) return `${all} Couldn't list the embedding server's models: ${embedModelsError.value}`;
+  return all;
+});
+const EMBED_APIS: SelectOption[] = [
+  { value: "auto", label: "Guess from the address" },
+  { value: "ollama", label: "Ollama" },
+  { value: "openai", label: "OpenAI-compatible (/embeddings)" },
+];
+async function setEmbedApi(v: string | number | null): Promise<void> {
+  if (typeof v !== "string" || v === config.value?.embed_api) return;
+  if (await patch({ embed_api: v as AiEmbedApi })) {
+    test.value = null;
+    void refreshEmbedModels();
+  }
+}
 const embedTyping = ref(false);
 const embedDraft = ref("");
 watch(() => config.value?.embed_model, (v) => { embedDraft.value = v ?? ""; }, { immediate: true });
@@ -221,7 +280,40 @@ async function commitEmbedAddress(): Promise<void> {
   if (!config.value || embedAddressDraft.value.trim() === config.value.embed_base_url) return;
   if (!(await patch({ embed_base_url: embedAddressDraft.value.trim() }))) {
     embedAddressDraft.value = config.value.embed_base_url;
+  } else {
+    test.value = null;
+    void refreshEmbedModels();
   }
+}
+/** The address and key the chat server uses, for comparing origins. */
+function originOf(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.protocol}//${u.host}`.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+/** The embedding server is another machine (or port) than the chat server,
+ *  so it needs its own key when it asks for one. */
+const embedSeparate = computed(() => {
+  const c = config.value;
+  if (!c?.embed_base_url) return false;
+  return originOf(c.embed_base_url) !== originOf(c.base_url || preset.value?.base_url || "");
+});
+const embedKeyDraft = ref("");
+const embedKeySaved = ref(false);
+async function commitEmbedKey(): Promise<void> {
+  if (!embedKeyDraft.value.trim()) return;
+  if (await patch({ embed_api_key: embedKeyDraft.value.trim() })) {
+    embedKeyDraft.value = "";
+    embedKeySaved.value = true;
+    window.setTimeout(() => { embedKeySaved.value = false; }, 1600);
+    void refreshEmbedModels();
+  }
+}
+async function removeEmbedKey(): Promise<void> {
+  if (await patch({ embed_api_key: "" })) void refreshEmbedModels();
 }
 
 /* ── Library index ───────────────────────────────────────────────────── */
@@ -562,6 +654,23 @@ const off = computed(() => !config.value?.enabled);
           </SettingRow>
 
           <SettingRow
+            form
+            label="Thinking"
+            hint="Thinking models (Qwen3, DeepSeek R1, …) reason before they answer, which takes time and counts against the reply's limit: a long think can leave a cut-off answer. Off asks the server to skip it (Ollama, llama.cpp, LM Studio and OpenRouter understand this)."
+            setting-key="ai-thinking"
+          >
+            <Select
+              :model-value="config.thinking ?? 'auto'"
+              :options="thinkingOptions"
+              :filterable="false"
+              aria-label="Thinking"
+              data-test="ai-thinking"
+              class="wp-ai-set__fill"
+              @update:model-value="setThinking"
+            />
+          </SettingRow>
+
+          <SettingRow
             v-if="isLocal"
             form
             label="Unload the model after"
@@ -597,10 +706,68 @@ const off = computed(() => !config.value?.enabled);
         <SettingGroup title="Search">
           <SettingRow
             form
+            label="Embedding server"
+            hint="Where the embedding model runs. Leave empty to use the chat server above. For another server, type its address: an Ollama address (http://host:11434), or an OpenAI-style one ending in /v1, like llama.cpp started with --embeddings, https://api.openai.com/v1 or https://openrouter.ai/api/v1."
+            setting-key="ai-embed-address"
+            for="ai-embed-address"
+          >
+            <Input
+              id="ai-embed-address"
+              v-model="embedAddressDraft"
+              :placeholder="`Same as the chat server (${config.base_url || preset?.base_url || 'not set'})`"
+              class="wp-ai-set__fill wp-ai-set__mono"
+              aria-label="Embedding server address"
+              data-test="ai-embed-address"
+              @blur="commitEmbedAddress"
+              @keydown.enter="commitEmbedAddress"
+            />
+          </SettingRow>
+
+          <SettingRow
+            v-if="embedSeparate"
+            form
+            label="Embedding server type"
+            hint="How to talk to the embedding server. The guess reads a bare address (host:port) as Ollama and one with a path (…/v1) as OpenAI-compatible."
+            setting-key="ai-embed-api"
+          >
+            <Select
+              :model-value="config.embed_api"
+              :options="EMBED_APIS"
+              aria-label="Embedding server type"
+              data-test="ai-embed-api"
+              class="wp-ai-set__fill"
+              @update:model-value="setEmbedApi"
+            />
+          </SettingRow>
+
+          <SettingRow
+            v-if="embedSeparate"
+            form
+            label="Embedding server key"
+            hint="Only needed if the embedding server asks for one. Saved on the ComfyUI machine, never shown again, and only sent to this embedding address."
+            setting-key="ai-embed-key"
+            for="ai-embed-key"
+          >
+            <Input
+              id="ai-embed-key"
+              v-model="embedKeyDraft"
+              type="password"
+              :placeholder="config.embed_key_own ? 'Paste a new key to replace it' : 'Paste a key if the server needs one'"
+              class="wp-ai-set__fill"
+              aria-label="Embedding server key"
+              data-test="ai-embed-key"
+              @keydown.enter="commitEmbedKey"
+            />
+            <Button size="sm" :disabled="!embedKeyDraft.trim()" data-test="ai-embed-key-save" @click="commitEmbedKey">Save</Button>
+            <Button v-if="config.embed_key_own" size="sm" variant="ghost" data-test="ai-embed-key-remove" @click="removeEmbedKey">Remove</Button>
+            <span v-if="embedKeySaved" class="wp-set-pill" data-tone="ok">Saved</span>
+            <span v-else-if="config.embed_key_own" class="wp-set-pill" data-tone="ok" data-test="ai-embed-key-set">Key saved</span>
+          </SettingRow>
+
+          <SettingRow
+            form
             label="Embedding model"
-            :hint="embedPossible
-              ? 'Meaning search: the chat also finds items by what they mean, so “warm colors” finds amber and crimson. Needs a small embedding model, like nomic-embed-text or embeddinggemma on Ollama, or text-embedding-3-small on OpenAI. Off keeps search to words.'
-              : 'Claude has no embeddings API, so the chat searches by words. Pick a local server or OpenAI for meaning search.'"
+            :hint="embedHint"
             setting-key="ai-embed-model"
             for="ai-embed-model"
           >
@@ -608,7 +775,7 @@ const off = computed(() => !config.value?.enabled);
               v-if="!embedTyping"
               :model-value="embedChoice"
               :options="embedOptions"
-              :filterable="false"
+              :filterable="embedOptions.length > 12"
               :disabled="!embedPossible"
               aria-label="Embedding model"
               data-test="ai-embed-model"
@@ -626,25 +793,16 @@ const off = computed(() => !config.value?.enabled);
               @blur="commitEmbedModel(embedDraft)"
               @keydown.enter="commitEmbedModel(embedDraft)"
             />
-          </SettingRow>
-
-          <SettingRow
-            v-if="embedPossible && config.embed_model"
-            form
-            label="Embedding server"
-            hint="Leave empty to use the server above. llama.cpp serves embeddings from a second server started with --embeddings, so type that one's address."
-            setting-key="ai-embed-address"
-            for="ai-embed-address"
-          >
-            <Input
-              id="ai-embed-address"
-              v-model="embedAddressDraft"
-              :placeholder="config.base_url || preset?.base_url || ''"
-              class="wp-ai-set__fill wp-ai-set__mono"
-              aria-label="Embedding server address"
-              data-test="ai-embed-address"
-              @blur="commitEmbedAddress"
-              @keydown.enter="commitEmbedAddress"
+            <Button
+              v-if="embedPossible"
+              size="sm"
+              variant="ghost"
+              icon="pi-refresh"
+              :loading="loadingEmbedModels"
+              :disabled="off"
+              aria-label="List the embedding server's models again"
+              data-test="ai-embed-models-refresh"
+              @click="refreshEmbedModels"
             />
           </SettingRow>
 

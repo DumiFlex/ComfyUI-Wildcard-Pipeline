@@ -51,7 +51,7 @@ const { config } = useAiConfig();
 const modelLabel = computed(() => config.value?.model ?? "");
 const isLocal = computed(() => {
   const c = config.value;
-  return c ? c.presets[c.provider].local : true;
+  return c ? c.local ?? c.presets[c.provider].local : true;
 });
 
 const editRows = computed(() => {

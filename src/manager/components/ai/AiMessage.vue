@@ -28,6 +28,12 @@ const EDIT_ROUTES: Record<string, string> = {
 
 function chip(label: string): VNode {
   const found = props.refs?.[label];
+  if (found && !found.id) {
+    return h("span", {
+      class: "wp-ai-msg__chip", "data-missing": "true", "data-test": "ai-msg-chip-shared",
+      title: `${found.shared ?? "Several"} items are called ${found.name}; the answer didn't say which`,
+    }, found.name);
+  }
   if (!found) return h("span", { class: "wp-ai-msg__chip", "data-missing": "true" }, label);
   const icon = KIND_ICON_MAP[found.type as keyof typeof KIND_ICON_MAP] ?? "pi pi-circle";
   const route = EDIT_ROUTES[found.type];

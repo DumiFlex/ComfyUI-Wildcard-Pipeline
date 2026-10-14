@@ -100,9 +100,12 @@ def move_images(entries: list[dict[str, Any]], meta: dict[str, Any]) -> dict[str
 
 
 def step_entry(text: str, calls: list[dict[str, Any]], *, answer: Any = None,
-               usage: dict[str, Any] | None = None, synthetic: bool = False) -> dict[str, Any]:
+               usage: dict[str, Any] | None = None, synthetic: bool = False,
+               model: str = "") -> dict[str, Any]:
     out: dict[str, Any] = {"kind": "step", "text": text, "calls": calls, "answer": answer,
                            "usage": usage or {}}
+    if model:
+        out["model"] = model  # which model wrote it (the chat's model can change)
     if synthetic:
         out["synthetic"] = True
     return out
@@ -280,6 +283,9 @@ def library_changes(old: dict[str, list[str]], new: dict[str, list[str]]) -> str
 _STATUS_WORDS = {
     "applied": "applied", "editor": "put into the open editor (not saved yet)",
     "dismissed": "dismissed", "undone": "undone", "failed": "failed to apply",
+    "replaced": "replaced by a newer card",
+    "opened": "opened in a new editor to finish there (not saved yet, and the user may "
+              "change it; it has no id until they save)",
 }
 
 
@@ -300,7 +306,12 @@ def apply_events(meta: dict[str, Any], events: Any) -> tuple[dict[str, Any], str
             continue
         info["status"] = status
         proposals[pid] = info
-        said.append(f"{pid} \"{info.get('title', '')}\" {_STATUS_WORDS[status]}")
+        left = ev.get("left_out")
+        part = ""
+        if isinstance(left, int) and not isinstance(left, bool) and left > 0 \
+                and status in ("applied", "editor", "opened"):
+            part = f" without {left} of its options (the user left them out)"
+        said.append(f"{pid} \"{info.get('title', '')}\" {_STATUS_WORDS[status]}{part}")
     meta["proposals"] = proposals
     line = ("Since your last message the user " + "; ".join(said) + ".") if said else ""
     return meta, line
@@ -350,7 +361,7 @@ def display(entries: list[dict[str, Any]], meta: dict[str, Any]) -> list[dict[st
                 continue
             seen = shown_status.get(pid) or {}
             st = seen.get("status") or (model_status.get(pid) or {}).get("status")
-            if st in ("applied", "editor", "dismissed", "failed"):
+            if st in ("applied", "editor", "dismissed", "failed", "opened"):
                 status[pid] = st
             if isinstance(seen.get("created"), str) and st == "applied":
                 created[pid] = seen["created"]
@@ -361,10 +372,21 @@ def display(entries: list[dict[str, Any]], meta: dict[str, Any]) -> list[dict[st
 
     def close() -> None:
         if span and not any(e.get("kind") == "shown" for e in span):
-            reply = last_reply(span)
+            # A turn from before `shown` entries: its last words, else the
+            # last step that said anything, else say it was empty (never
+            # leave the turn out: the user's message would look unanswered).
+            reply = last_reply(span) or next(
+                (str(e.get("text") or "") for e in reversed(span)
+                 if e.get("kind") == "step" and str(e.get("text") or "").strip()), "")
+            if not reply and any(e.get("kind") == "step" for e in span):
+                reply = "(The model gave an empty answer.)"
             if reply:
+                model = next((str(e["model"]) for e in reversed(span)
+                              if e.get("kind") == "step" and e.get("model")),
+                             str(meta.get("model") or ""))
                 out.append({"role": "assistant", "view": {"message": reply, "steps": [],
-                            "proposals": [], "refs": {}}, "status": {}, "created": {}})
+                            "proposals": [], "refs": {}, "model": model},
+                            "status": {}, "created": {}})
 
     for e in entries:
         kind = e.get("kind")
