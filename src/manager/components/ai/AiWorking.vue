@@ -27,11 +27,11 @@ export function formatElapsed(s: number): string {
  * The "the model is working" line: our logo, animated, with what the model
  * is doing and for how long.
  *
- * The animation: a light runs round the logo's two rings (clipped to their
- * shape, so it dips into the gaps like a signal along a wire), each node
- * lights as it passes, and the three sparkles are drawn one after another
- * like wildcards picked. Its tempo follows the phase: slow while the model
- * reads the prompt, quicker while it thinks, quickest while it writes.
+ * The animation ("comet"): the rings rest dim and a soft glow runs round
+ * them (a blurred stroke used as a mask), the big sparkle breathes and the
+ * two small ones twinkle in turn. Its tempo follows the phase: slow while
+ * the model reads the prompt, quicker while it thinks, quickest while it
+ * writes.
  *
  * The line reads like Claude Code's: a playful word that changes every few
  * seconds ("Shuffling…") and the time so far, then what the model is
@@ -127,9 +127,6 @@ const RING_B = "m933.27,403.16c-13.62-53.14-37.03-102.64-69.77-147.47-37.14-50.8
 const STAR_BIG = "m735.02,517.56c-153.82,30.87-186.59,63.64-217.46,217.46-1.22,6.08-9.9,6.08-11.12,0-30.87-153.82-63.64-186.59-217.46-217.46-6.08-1.22-6.08-9.9,0-11.12,153.82-30.87,186.59-63.64,217.46-217.46,1.22-6.08,9.9-6.08,11.12,0,30.87,153.82,63.64,186.59,217.46,217.46,6.08,1.22,6.08,9.9,0,11.12Z";
 const STAR_A = "m434.06,665.85c-51.08,10.25-61.96,21.13-72.22,72.22-.41,2.02-3.29,2.02-3.69,0-10.25-51.08-21.13-61.96-72.22-72.22-2.02-.41-2.02-3.29,0-3.69,51.08-10.25,61.96-21.13,72.22-72.22.41-2.02,3.29-2.02,3.69,0,10.25,51.08,21.13,61.96,72.22,72.22,2.02.41,2.02,3.29,0,3.69Z";
 const STAR_B = "m738.07,361.84c-51.08,10.25-61.96,21.13-72.22,72.22-.41,2.02-3.29,2.02-3.69,0-10.25-51.08-21.13-61.96-72.22-72.22-2.02-.41-2.02-3.29,0-3.69,51.08-10.25,61.96-21.13,72.22-72.22.41-2.02,3.29-2.02,3.69,0,10.25,51.08,21.13,61.96,72.22,72.22,2.02.41,2.02,3.29,0,3.69Z";
-/** The four nodes in the order the light reaches them (it starts at 3
- *  o'clock and runs clockwise, like an SVG circle's stroke). */
-const NODES = [[911, 512], [512, 911], [113, 512], [512, 113]] as const;
 </script>
 
 <template>
@@ -150,12 +147,11 @@ const NODES = [[911, 512], [512, 911], [113, 512], [512, 113]] as const;
           <stop offset="0" stop-color="#6366f1" />
           <stop offset="1" stop-color="#33d6c6" />
         </linearGradient>
-        <clipPath :id="`${uid}-rings`">
-          <path :d="RING_A" />
-          <path :d="RING_B" />
-        </clipPath>
+        <filter :id="`${uid}-soft`" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="55" />
+        </filter>
         <mask :id="`${uid}-sweep`" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
-          <circle class="wp-aiw__tail" cx="512" cy="512" r="399" pathLength="1000" />
+          <circle class="wp-aiw__tail" cx="512" cy="512" r="399" pathLength="1000" :filter="`url(#${uid}-soft)`" />
         </mask>
       </defs>
       <!-- The rings, dim, then lit where the light is. -->
@@ -167,16 +163,6 @@ const NODES = [[911, 512], [512, 911], [113, 512], [512, 113]] as const;
         <path :fill="`url(#${uid}-a)`" :d="RING_A" />
         <path :fill="`url(#${uid}-b)`" :d="RING_B" />
       </g>
-      <g :clip-path="`url(#${uid}-rings)`">
-        <circle class="wp-aiw__head" cx="512" cy="512" r="399" pathLength="1000" />
-      </g>
-      <circle
-        v-for="([x, y], i) in NODES"
-        :key="i"
-        class="wp-aiw__node"
-        :style="{ '--wp-aiw-k': i }"
-        :cx="x" :cy="y" r="39"
-      />
       <path class="wp-aiw__star wp-aiw__star--big" fill="#a970ff" :d="STAR_BIG" />
       <path class="wp-aiw__star wp-aiw__star--a" fill="#6366f1" :d="STAR_A" />
       <path class="wp-aiw__star wp-aiw__star--b" fill="#33d6c6" :d="STAR_B" />
@@ -204,8 +190,8 @@ const NODES = [[911, 512], [512, 911], [113, 512], [512, 113]] as const;
   color: var(--wp-text-muted);
   font-size: 12px;
 }
-.wp-aiw[data-tempo="mid"] { --wp-aiw-t: 2s; }
-.wp-aiw[data-tempo="fast"] { --wp-aiw-t: 1.3s; }
+.wp-aiw[data-tempo="mid"] { --wp-aiw-t: 2.2s; }
+.wp-aiw[data-tempo="fast"] { --wp-aiw-t: 1.5s; }
 .wp-aiw__logo { flex-shrink: 0; overflow: visible; }
 .wp-aiw__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .wp-aiw__line { display: flex; align-items: baseline; gap: 8px; }
@@ -223,70 +209,31 @@ const NODES = [[911, 512], [512, 911], [113, 512], [512, 113]] as const;
 .wp-aiw-word-enter-from { opacity: 0; transform: translateY(4px); }
 .wp-aiw-word-leave-to { opacity: 0; transform: translateY(-4px); }
 
-.wp-aiw__track { opacity: 0.38; }
-/* Ring circumference as pathLength 1000: a 330-long tail, the head on its
-   front 45. Both run one lap per period. */
+.wp-aiw__track { opacity: 0.4; }
+/* Ring circumference as pathLength 1000: a 420-long glow, blurred so both
+   ends fade, one lap per period. */
 .wp-aiw__tail {
   fill: none;
   stroke: #fff;
-  stroke-width: 150;
-  stroke-linecap: round;
-  stroke-dasharray: 330 670;
+  stroke-width: 170;
+  stroke-dasharray: 420 580;
   animation: wp-aiw-lap var(--wp-aiw-t) linear infinite;
 }
-.wp-aiw__head {
-  fill: none;
-  stroke: #fff;
-  stroke-width: 150;
-  stroke-linecap: round;
-  stroke-dasharray: 45 955;
-  stroke-dashoffset: -285;
-  opacity: 0.5;
-  animation: wp-aiw-lap-head var(--wp-aiw-t) linear infinite;
-}
-@keyframes wp-aiw-lap { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -1000; } }
-@keyframes wp-aiw-lap-head { from { stroke-dashoffset: -285; } to { stroke-dashoffset: -1285; } }
+@keyframes wp-aiw-lap { to { stroke-dashoffset: -1000; } }
 
-/* A node lights as the head passes it: a quarter lap apart. */
-.wp-aiw__node {
-  fill: #fff;
-  opacity: 0;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: wp-aiw-node var(--wp-aiw-t) linear infinite;
-  animation-delay: calc(var(--wp-aiw-t) * (var(--wp-aiw-k) * 0.25 + 0.3) - var(--wp-aiw-t));
-}
-@keyframes wp-aiw-node {
-  0% { opacity: 0; transform: scale(0.4); }
-  6% { opacity: 0.95; transform: scale(1.25); }
-  30% { opacity: 0; transform: scale(1); }
-  100% { opacity: 0; }
-}
-
-/* The sparkles: the big one breathes and turns a quarter (a four-point
-   star looks the same after it, so it reads as a glint); the small ones
-   are drawn one after the other. */
 .wp-aiw__star { transform-box: fill-box; transform-origin: center; }
-.wp-aiw__star--big { animation: wp-aiw-glint calc(var(--wp-aiw-t) * 2) cubic-bezier(0.6, 0, 0.3, 1) infinite; }
-.wp-aiw__star--a { animation: wp-aiw-draw calc(var(--wp-aiw-t) * 2) ease-out infinite; }
-.wp-aiw__star--b { animation: wp-aiw-draw calc(var(--wp-aiw-t) * 2) ease-out infinite; animation-delay: calc(var(--wp-aiw-t) * 0.5); }
-@keyframes wp-aiw-glint {
-  0%, 20% { transform: rotate(0deg) scale(1); }
-  45% { transform: rotate(45deg) scale(0.8); }
-  70%, 100% { transform: rotate(90deg) scale(1); }
-}
-@keyframes wp-aiw-draw {
-  0% { transform: scale(0) rotate(-90deg); opacity: 0; }
-  14% { transform: scale(1.3) rotate(0deg); opacity: 1; }
-  24% { transform: scale(1) rotate(0deg); opacity: 1; }
-  70% { transform: scale(1) rotate(0deg); opacity: 1; }
-  85%, 100% { transform: scale(0) rotate(45deg); opacity: 0; }
+.wp-aiw__star--big { animation: wp-aiw-breathe var(--wp-aiw-t) ease-in-out infinite; }
+.wp-aiw__star--a, .wp-aiw__star--b { animation: wp-aiw-twinkle var(--wp-aiw-t) ease-in-out infinite; }
+.wp-aiw__star--b { animation-delay: calc(var(--wp-aiw-t) * -0.5); }
+@keyframes wp-aiw-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.86); } }
+@keyframes wp-aiw-twinkle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.6); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .wp-aiw__tail, .wp-aiw__head, .wp-aiw__node, .wp-aiw__star { animation: none; }
+  .wp-aiw__tail, .wp-aiw__star { animation: none; }
   .wp-aiw__tail { stroke-dasharray: none; }
-  .wp-aiw__head, .wp-aiw__node { opacity: 0; }
   .wp-aiw__logo { animation: wp-aiw-fade 2.4s ease-in-out infinite; }
   @keyframes wp-aiw-fade { 50% { opacity: 0.55; } }
 }

@@ -19,7 +19,7 @@ describe("AiWorking", () => {
     expect(w.attributes("data-tempo")).toBe("fast");
     // The logo is drawn, not a spinner icon.
     expect(w.findAll(".wp-aiw__star")).toHaveLength(3);
-    expect(w.findAll(".wp-aiw__node")).toHaveLength(4);
+    expect(w.find(".wp-aiw__tail").exists()).toBe(true);
   });
 
   it("polls the newest AI request and says what the model is doing", async () => {
