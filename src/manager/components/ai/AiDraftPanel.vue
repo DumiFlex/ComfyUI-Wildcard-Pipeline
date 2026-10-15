@@ -241,10 +241,7 @@ const skippedSummary = computed(() => {
       </p>
       <ul v-if="groups.length" class="wp-ai-draft__groups" data-test="ai-draft-groups">
         <li v-for="g in groups" :key="g.name">
-          <strong>{{ g.name }}</strong>
-          <span class="wp-ai-draft__group-kind">{{ g.kind === "accepts" ? "accepts group" : "tag group" }}</span>
-          <template v-if="g.tags.length">: {{ g.tags.join(", ") }}</template>
-          <template v-else> (made an accepts group)</template>
+          <strong>{{ g.name }}</strong> <span class="wp-ai-draft__group-kind">{{ g.kind === "accepts" ? "accepts" : "classify" }} group</span>{{ g.tags.length ? `: ${g.tags.join(", ")}` : " (made an accepts group)" }}
         </li>
       </ul>
       <div class="wp-ai-draft__actions">
@@ -303,9 +300,8 @@ const skippedSummary = computed(() => {
 .wp-ai-draft__neg { font-size: 11px; color: var(--wp-danger-text, var(--wp-danger)); }
 .wp-ai-draft__summary, .wp-ai-draft__note { margin: 0; font-size: 12px; color: var(--wp-text-dim); }
 .wp-ai-draft__actions { display: flex; justify-content: flex-end; gap: 8px; }
-.wp-ai-draft__groups { margin: 0; padding-left: 18px; font-size: 12px; color: var(--wp-text-dim); }
+.wp-ai-draft__groups { margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--wp-text-dim); }
 .wp-ai-draft__group-kind {
-  margin-left: 6px;
   padding: 0 6px;
   border-radius: 8px;
   background: var(--wp-surface-2, rgba(127, 127, 127, 0.15));

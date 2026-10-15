@@ -7,6 +7,7 @@ happens inside `_resolve_ref` (Task 9) and brace resolvers (Tasks 10–11).
 from __future__ import annotations
 
 import logging
+from contextlib import nullcontext
 from typing import Any
 
 from engine.syntax.streams import site_label, sub_stream
@@ -47,7 +48,15 @@ def _resolve_tokens(
     empty_refs: list[int] = []
     # Each pick site rolls on its own stream (engine/syntax/streams.py), so
     # one site's draws never move another's.
+    # A context with no stream key (unit tests, previews) skips the site
+    # labels: building one per token was most of a big resolve's time.
     seen: dict[str, int] = {}
+    keyed = bool(getattr(ctx, "stream_key", None))
+
+    def site(i: int) -> Any:
+        return sub_stream(ctx, site_label(tokens[i].raw, _after(tokens, i), seen)) \
+            if keyed else _NO_STREAM
+
     for i, tok in enumerate(tokens):
         if tok.kind == TokenKind.TEXT:
             parts.append(tok.raw)
@@ -56,16 +65,16 @@ def _resolve_tokens(
         elif tok.kind == TokenKind.VAR:
             parts.append(_resolve_var(tok, ctx))
         elif tok.kind == TokenKind.REF:
-            with sub_stream(ctx, site_label(tok.raw, _after(tokens, i), seen)):
+            with site(i):
                 resolved = _resolve_ref(tok, ctx, depth, visited)
             if not resolved:
                 empty_refs.append(len(parts))
             parts.append(resolved)
         elif tok.kind == TokenKind.DP_BRACE:
-            with sub_stream(ctx, site_label(tok.raw, _after(tokens, i), seen)):
+            with site(i):
                 parts.append(_resolve_inline_pick(tok, ctx, depth, visited))
         elif tok.kind == TokenKind.DP_MULTI:
-            with sub_stream(ctx, site_label(tok.raw, _after(tokens, i), seen)):
+            with site(i):
                 parts.append(_resolve_multi_pick(tok, ctx, depth, visited))
         elif tok.kind == TokenKind.DP_PIPE:
             # DP_PIPE is never emitted as a top-level token by the current
@@ -75,6 +84,9 @@ def _resolve_tokens(
         else:
             raise AssertionError(f"unknown token kind: {tok.kind}")
     return _join_tidy(parts, empty_refs)
+
+
+_NO_STREAM = nullcontext()
 
 
 def _after(tokens: list[Token], i: int) -> str:
