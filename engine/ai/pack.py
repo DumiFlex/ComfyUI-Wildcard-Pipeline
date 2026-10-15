@@ -451,6 +451,17 @@ def _side(raw: Any, known: dict[str, str]) -> str:
     return v
 
 
+_ROLE_WORDS = re.compile(r"\b(?:wildcard|selector|options?|list|picks?|types?|pool|set|"
+                         r"choices?|vocabulary|library)\b", re.I)
+
+
+def _concept(name: str) -> str:
+    """What a name is about, without its role words ("Race Wildcard",
+    "Race Selector", "Races" → "race")."""
+    return "_".join(w.rstrip("s") if len(w) > 3 else w for w in
+                    re.findall(r"[a-z]+", _ROLE_WORDS.sub("", name.lower())))
+
+
 def _sides_from_about(x: dict[str, Any], known: dict[str, str]) -> None:
     """A constraint planned with empty sides but "Source: $animal_class,
     Target: $species" (or "$biome → $weather") in its words: the sides come
@@ -762,10 +773,12 @@ def compile_plan(
                 if not var:
                     warnings.append("Left out a library item with no name or variable")
                     continue
+                core = _concept(name) or var.rstrip("s")
                 twin = next((x for x in raw_items if x is not it and x.get("kind") in (
                     "wildcard", "fixed_values") and _var(x.get("var"))
                     and _var(x.get("var")) != var
-                    and _var(x.get("var")).rstrip("s") == var.rstrip("s")), None)
+                    and core in {_var(x.get("var")).rstrip("s"),
+                                 _concept(str(x.get("name") or ""))}), None)
                 if twin is not None:
                     # "Races" next to the pack's own race wildcard: two races
                     # in every prompt.
@@ -1879,7 +1892,7 @@ def _case_rules(raw_items: list[dict[str, Any]],
             items.insert(items.index(w), {
                 "kind": "constraint", "name": f"{src.get('name') or sv} → "
                 f"{w.get('name') or tv}", "source": sv, "target": tv, "about": said,
-                "section": w.get("section") or "", "use": ""})
+                "section": w.get("section") or "", "use": "", "_auto": True})
             warnings.append(f"Added a rule keeping {w.get('name') or tv} to the "
                             f"{src.get('name') or sv} pick: its options are tagged "
                             + ", ".join(f"#{c}" for c in missing))
@@ -1978,6 +1991,14 @@ def _fit_rules(raw_items: list[dict[str, Any]], request: str,
         if tgt is None or src is None or tgt is src:
             continue
         sv, tv = _var(src.get("var")), _var(tgt.get("var"))
+        for x in [x for x in items if x.get("_auto") and _var(x.get("target")) == tv
+                  and _var(x.get("source")) != sv]:
+            # Kept to the race by its tags AND to the class the request
+            # names: no option fits both, so the fallback runs every time.
+            items.remove(x)
+            warnings.append(f"Left out {x.get('name') or 'a rule'}: the request keeps "
+                            f"{tgt.get('name') or tv} to {src.get('name') or sv}, and two "
+                            "keep rules leave nothing that fits both")
         have = next((x for x in items if x.get("kind") == "constraint"
                      and {_var(x.get("source")), _var(x.get("target"))} == {sv, tv}), None)
         if have is not None:
@@ -2825,6 +2846,8 @@ def compile_item(
         payload, said = _drop_double_reads(plan, built, payload)
         text, fixed = _plan_prose(payload["template_string"])
         text, more = _dangling(text, plan, item, built)
+        text, lead = _lead_with_anchor(text, plan, built)
+        more += lead
         if text != payload["template_string"]:
             payload = {**payload, "template_string": text}
         warnings = [*warnings, *said, *fixed, *more]
@@ -2843,6 +2866,26 @@ _PROSE_TAIL = re.compile(r"\s*\(\s*(?:if\s+(?:any|present|set|given|available)|o
                          r"\s*\)", re.I)
 # A phrase that ends on its article ("wielding a,"): the word after it is gone.
 _DANGLING = re.compile(r"\b(?:a|an|the)\s*(?=,|\.|;|$)", re.I)
+
+
+def _lead_with_anchor(text: str, plan: dict[str, Any],
+                      built: dict[str, Any]) -> tuple[str, list[str]]:
+    """The pick the other picks follow (the season every outfit is kept
+    to) shows in the prompt: when nothing the template reads holds it, the
+    template starts with it."""
+    shown = set(text_items.reads(text))
+    for v in list(shown):
+        if any(c["kind"] == "combine" and c["var"] == v for c in plan["items"]):
+            shown |= set(_combine_inputs(plan, built, v))
+    sources = [plan.get("anchor") or "", *(c["source"] for c in plan["items"]
+                                          if c["kind"] == "constraint")]
+    wild = {i["var"]: i for i in plan["items"] if is_wild(i) and i["key"] in built
+            and "internal" not in (i.get("use") or "")}
+    led = next((v for v in dict.fromkeys(sources) if v in wild and v not in shown), "")
+    if not led or not text.strip():
+        return text, []
+    return f"${led}, {text}", [f"Started with ${led} ({wild[led]['name']}): the other picks "
+                               "follow it, but the prompt never showed it"]
 
 
 def _plan_prose(text: str) -> tuple[str, list[str]]:

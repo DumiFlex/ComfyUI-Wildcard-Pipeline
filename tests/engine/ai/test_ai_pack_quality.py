@@ -1178,3 +1178,42 @@ def test_empty_variables_leave_no_edge_commas_or_dangling_words():
     assert tidy_prompt("shadows with, gentle rain") == "shadows, gentle rain"
     assert tidy_prompt("standing in front of the house, rock and roll") == \
         "standing in front of the house, rock and roll"
+
+
+# --- sixteenth real-model run -----------------------------------------------
+
+def test_a_made_new_race_wildcard_next_to_race_is_left_out():
+    raw = _raw(items=[
+        _item(name="Race", var="race", tags=["elf", "orc"]),
+        _item(kind="library", name="Race Wildcard", var=""),
+        _item(kind="template", name="T", about="$race")])
+    plan = pack.compile_plan(raw)
+    assert [i["var"] for i in plan["items"] if i["kind"] != "template"] == ["race"]
+
+
+def test_a_fit_rule_replaces_an_automatic_keep_rule_on_the_same_target():
+    items = [
+        {"kind": "wildcard", "name": "Race", "var": "race", "tags": ["elf"]},
+        {"kind": "wildcard", "name": "Class", "var": "class", "tags": ["mage"]},
+        {"kind": "constraint", "name": "Race → Outfit", "source": "race", "target": "outfit",
+         "about": "#elf gets only #elf", "_auto": True},
+        {"kind": "wildcard", "name": "Outfit", "var": "outfit", "tags": ["elf"]}]
+    warnings: list = []
+    out = pack._fit_rules(items, "an outfit that fits the class", warnings)
+    rules = [(x["source"], x["target"]) for x in out if x["kind"] == "constraint"]
+    assert rules == [("class", "outfit")]
+    assert any("two keep rules" in w for w in warnings)
+
+
+def test_the_template_starts_with_the_pick_the_others_follow_and_double_articles_go():
+    from engine.template import tidy_prompt
+    raw = _raw(anchor="season", items=[
+        _item(name="Season", var="season", tags=["winter", "summer"]),
+        _item(name="Top", var="top", tags=["winter", "summer"]),
+        _item(kind="constraint", name="Season → Top", source="season", target="top",
+              about="#winter gets only #winter"),
+        _item(kind="template", name="T", about="wearing $top")])
+    plan = pack.compile_plan(raw)
+    text, said = pack._lead_with_anchor("wearing $top", plan, _built(plan))
+    assert text == "$season, wearing $top" and said
+    assert tidy_prompt("wearing a a striped shirt") == "wearing a striped shirt"

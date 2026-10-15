@@ -20,6 +20,9 @@ _TRIM_PUNCT = re.compile(r"\s+([,.;:!?])")
 # with, rain", "wearing with,"): it goes, with any article before it.
 _DANGLING = re.compile(r"(?:\s+|^)(?:with|and|or|in|of|on|at|under|by|from|the|a|an)"
                        r"(?=\s*(?:,|$))", re.I)
+# "wearing a a striped shirt": an article the template wrote next to one
+# the value starts with.
+_TWO_ARTICLES = re.compile(r"\b(?:a|an|the)\s+(?=(?:a|an|the)\s)", re.I)
 _EDGE_COMMAS = re.compile(r"^[\s,]+|[\s,]+$")
 
 
@@ -71,6 +74,7 @@ def tidy_prompt(out: str) -> str:
     """Whitespace cleanup post-pass (preserves the original API's behavior
     for templates that drop missing variables)."""
     out = _WS_RUN.sub(" ", out)
+    out = _TWO_ARTICLES.sub("", out)
     while True:
         bare = _DANGLING.sub("", out)
         if bare == out:
