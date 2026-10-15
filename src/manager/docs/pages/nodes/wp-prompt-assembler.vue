@@ -54,6 +54,8 @@ const ports = [
           <VarToken>$varname</VarToken> — replaced with the value from the Context.
           If no binding exists, the placeholder resolves to empty and the canvas preview
           highlights it with an amber underline so you can spot the gap before running.
+          The output is tidied after: commas left at the start or end, and a joining word
+          left with nothing after it ("shadows with, rain"), are dropped.
         </li>
         <li>
           <VarToken kind="inline">$$</VarToken> — a literal dollar sign, in case you need one in the output text.

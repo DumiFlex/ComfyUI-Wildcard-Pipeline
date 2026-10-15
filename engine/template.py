@@ -16,6 +16,11 @@ from engine.syntax import resolve_text
 _WS_RUN = re.compile(r"[ \t]{2,}")
 _COMMA_GAP = re.compile(r",\s*,")
 _TRIM_PUNCT = re.compile(r"\s+([,.;:!?])")
+# A joining word an empty variable left with nothing after it ("shadows
+# with, rain", "wearing with,"): it goes, with any article before it.
+_DANGLING = re.compile(r"(?:\s+|^)(?:with|and|or|in|of|on|at|under|by|from|the|a|an)"
+                       r"(?=\s*(?:,|$))", re.I)
+_EDGE_COMMAS = re.compile(r"^[\s,]+|[\s,]+$")
 
 
 def resolve_variables(
@@ -66,6 +71,14 @@ def tidy_prompt(out: str) -> str:
     """Whitespace cleanup post-pass (preserves the original API's behavior
     for templates that drop missing variables)."""
     out = _WS_RUN.sub(" ", out)
+    while True:
+        bare = _DANGLING.sub("", out)
+        if bare == out:
+            break
+        out = bare
     out = _COMMA_GAP.sub(",", out)
+    while _COMMA_GAP.search(out):
+        out = _COMMA_GAP.sub(",", out)
     out = _TRIM_PUNCT.sub(r"\1", out)
-    return out.strip()
+    # The commas an empty first or last variable leaves ("dawn, cloudy day,").
+    return _EDGE_COMMAS.sub("", out)

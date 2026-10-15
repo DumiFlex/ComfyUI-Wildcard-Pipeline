@@ -1169,3 +1169,12 @@ def test_placeholder_options_go_and_overlapping_combines_are_sent_back():
     problems: dict = {}
     pack.unread_notes(plan, built, problems)
     assert any("already joins" in p for p in problems[keys["hero"]["key"]])
+
+
+def test_empty_variables_leave_no_edge_commas_or_dangling_words():
+    from engine.template import tidy_prompt
+    assert tidy_prompt("dawn, cloudy day, ") == "dawn, cloudy day"
+    assert tidy_prompt(", night, rain") == "night, rain"
+    assert tidy_prompt("shadows with, gentle rain") == "shadows, gentle rain"
+    assert tidy_prompt("standing in front of the house, rock and roll") == \
+        "standing in front of the house, rock and roll"
