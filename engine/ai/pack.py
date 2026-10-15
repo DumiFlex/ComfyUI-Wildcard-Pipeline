@@ -1962,6 +1962,8 @@ _FITS = re.compile(
     r"her\s+|its\s+|each\s+|a\s+)?([a-z]+)", re.I)
 
 
+_GROUPISH = re.compile(r"_(?:class|classes|type|types|category|categories|group|groups|"
+                       r"family|families|kind)$")
 _DECIDES = re.compile(
     r"\b([a-z]{3,})\s+(?:decides|determines|controls|limits|sets|picks|chooses)\s+"
     r"(?:which\s+|what\s+|the\s+|its\s+|their\s+)?([a-z]{3,})", re.I)
@@ -1984,6 +1986,10 @@ def _fit_rules(raw_items: list[dict[str, Any]], request: str,
         if len(hits) > 1:
             # "weapon" next to $weapon and $weapon_material: the plain one.
             hits = [x for x in hits if _var(x.get("var")).rstrip("s") in forms] or hits
+        if len(hits) > 1:
+            # "animal" next to $animal_class and $animal_species: the pick
+            # itself, not its group.
+            hits = [x for x in hits if not _GROUPISH.search(_var(x.get("var")))] or hits
         if not hits:
             # "habitats" for a $biome wildcard whose name or about says habitat.
             hits = [x for x in wild if forms & {
@@ -1996,9 +2002,30 @@ def _fit_rules(raw_items: list[dict[str, Any]], request: str,
     for m in _FITS.finditer(request):
         # "an outfit and a weapon that fit the class": both follow it.
         pairs += [(w, m.group(3)) for w in (m.group(1), m.group(2)) if w]
+    decides = []
     for m in _DECIDES.finditer(request):
         # "the animal decides which habitats are possible".
         pairs.append((m.group(2), m.group(1)))
+        decides.append((m.group(2), m.group(1)))
+    for tw, sw in decides:
+        tgt, src = find(tw), find(sw)
+        if tgt is None or src is None or tgt is src:
+            continue
+        sv, tv = _var(src.get("var")), _var(tgt.get("var"))
+        # The pick decides by the target's own cases: a species tagged
+        # only by class can't say which habitats fit it.
+        t_tags = [t for t in tgt.get("tags") or [] if t]
+        if t_tags and not set(map(str, src.get("tags") or [])) & set(map(str, t_tags)):
+            src["tags"] = [*(src.get("tags") or []), *t_tags][:16]
+            warnings.append(f"Tagged {src.get('name') or sv} by {tgt.get('name') or tv}'s "
+                            f"cases: the request says it decides {tgt.get('name') or tv}")
+        for x in [x for x in items if x.get("kind") == "constraint"
+                  and _var(x.get("target")) == tv and _var(x.get("source")) != sv
+                  and _GROUPISH.search(_var(x.get("source")))
+                  and _var(x.get("source")).split("_")[0] == sv.split("_")[0]]:
+            items.remove(x)
+            warnings.append(f"Left out {x.get('name') or 'a rule'}: {src.get('name') or sv} "
+                            f"decides {tgt.get('name') or tv}, not its group")
     for tw, sw in pairs:
         tgt, src = find(tw), find(sw)
         if tgt is None or src is None or tgt is src:
@@ -2864,6 +2891,8 @@ def compile_item(
                         "\"a a\" or a stray letter")
         text, fixed = _plan_prose(payload["template"])
         text, more = _dangling(text, plan, item, built)
+        text, fold = _fold_case_reads(text, plan, built)
+        more += fold
         if text != payload["template"]:
             payload = {**payload, "template": text}
         said += fixed + more
@@ -2878,6 +2907,8 @@ def compile_item(
         text, more = _dangling(text, plan, item, built)
         text, lead = _lead_with_anchor(text, plan, built)
         more += lead
+        text, fold = _fold_case_reads(text, plan, built)
+        more += fold
         if text != payload["template_string"]:
             payload = {**payload, "template_string": text}
         warnings = [*warnings, *said, *fixed, *more]
@@ -2900,6 +2931,48 @@ _PROSE_TAIL = re.compile(r"\s*\(\s*(?:if\s+(?:any|present|set|given|available)|o
                          r"\s*\)", re.I)
 # A phrase that ends on its article ("wielding a,"): the word after it is gone.
 _DANGLING = re.compile(r"\b(?:a|an|the)\s*(?=,|\.|;|$)", re.I)
+
+
+def _fold_case_reads(text: str, plan: dict[str, Any],
+                     built: dict[str, Any]) -> tuple[str, list[str]]:
+    """Reads of a split that was merged ($outfit_autumn after the outfits
+    became one $outfit tagged by season) read the merged pick, once; and a
+    word the pick's options already end on ("$hair_color hair" for options
+    like "white hair") is dropped."""
+    known = known_vars(plan)
+    wild = {i["var"]: i for i in plan["items"] if is_wild(i)}
+    said: list[str] = []
+    for v in text_items.reads(text):
+        if v in known:
+            continue
+        parts = v.split("_")
+        for n in range(1, len(parts)):
+            for role, case in (("_".join(parts[:n]), "_".join(parts[n:])),
+                               ("_".join(parts[n:]), "_".join(parts[:n]))):
+                w = wild.get(role)
+                if w is not None and case in {str(t).lower() for t in w.get("tags") or []}:
+                    text = _once(re.sub(r"\$" + re.escape(v) + r"\b", "$" + role, text), role)
+                    said.append(f"Read ${role} for ${v}: the cases were merged into one pick")
+                    break
+            else:
+                continue
+            break
+    for v in text_items.reads(text):
+        w = wild.get(v)
+        b = built.get(w["key"]) if w else None
+        if not b:
+            continue
+        opts = [str(o.get("value") or "").strip().lower() for o in b["payload"].get(
+            "options") or [] if isinstance(o, dict)]
+        m = re.search(r"\$" + re.escape(v) + r"\b(?![.\w])\s+([A-Za-z]+)\b", text)
+        if not m or not opts:
+            continue
+        word = m.group(1).lower()
+        if sum(o.endswith(word) for o in opts) * 2 > len(opts):
+            text = text[:m.start(1)].rstrip() + text[m.end(1):]
+            said.append(f"Dropped \"{word}\" after ${v}: its options already end on it "
+                        f"(\"… {word} {word}\")")
+    return text, said
 
 
 def _lead_with_anchor(text: str, plan: dict[str, Any],
@@ -3425,7 +3498,7 @@ _REPAIRABLE = re.compile(r"has no option|No option carries|unknown tag|nothing s
                          r"already rolls|no rule is an only|joins picks with|"
                          r"isn't an option or tag|"
                          r"instead of reading|prints itself|options itself|"
-                         r"line that joins picks|ends on its article|already joins|"
+                         r"line that joins picks|ends on its article|already joins|options at once|"
                          r"isn't set|not a variable|doesn't set|which no", re.I)
 
 
@@ -3849,6 +3922,8 @@ def check_pack(
         for said in _unseen(plan, built, runs, text, neg):
             if not any(said.split(")")[0] in p for p in problems.get(item["key"], [])):
                 problems.setdefault(item["key"], []).append(said)
+        for k, said in _lists_all(plan, built, runs).items():
+            problems.setdefault(k, []).append(said)
         for k, said in _printed_names(plan, built, runs, text, neg).items():
             problems.setdefault(k, []).append(said)
         if braces:
@@ -3862,6 +3937,35 @@ def check_pack(
     return {"runs": report["runs"], "failed": report["failed"], "problems": problems,
             "notes": notes, "variables": variables, "prompts": prompts, "quality": quality,
             "order": order}
+
+
+def _lists_all(plan: dict[str, Any], built: dict[str, Any],
+               runs: list[dict[str, Any]]) -> dict[str, str]:
+    """An item whose text lists most of a wildcard's options (every hair
+    style, every weapon) prints them all in one prompt: ``{key: problem}``."""
+    wild = [(i, [c for o in built[i["key"]]["payload"].get("options") or []
+                 if isinstance(o, dict) for c in sorted(_chunks(str(o.get("value") or "")))[:1]])
+            for i in plan["items"] if is_wild(i) and i["key"] in built]
+    writers = [(i, item_io(i, built[i["key"]]["payload"])[1]) for i in plan["items"]
+               if i["key"] in built and i["kind"] in ("fixed_values", "combine", "derivation",
+                                                      "wildcard", "library")]
+    out: dict[str, str] = {}
+    for w, heads in wild:
+        if len(heads) < 4:
+            continue
+        for i, sets in writers:
+            if i is w or i["key"] in out:
+                continue
+            hit = 0
+            for ctx in runs:
+                low = ", ".join(str(ctx.get(v) or "") for v in sets).lower()
+                named = sum(bool(re.search(r"(?<!\w)" + re.escape(h) + r"(?!\w)", low))
+                            for h in heads)
+                hit += named >= max(4, len(heads) * 3 // 5)
+            if runs and hit * 2 >= len(runs):
+                out[i["key"]] = (f"it lists most of {w['name']}'s options at once, so every "
+                                 f"prompt shows them all; read ${w['var']} instead")
+    return out
 
 
 def _printed_names(plan: dict[str, Any], built: dict[str, Any], runs: list[dict[str, Any]],

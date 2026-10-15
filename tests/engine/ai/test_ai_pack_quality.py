@@ -1246,3 +1246,50 @@ def test_labels_doubled_words_and_list_options_go():
     opts = [{"value": v} for v in ("staff", "wand", "sword", "axe",
                                    "staff, wand, sword, axe, bow")]
     assert pack._list_options(opts) == [opts[-1]]
+
+
+# --- nineteenth real-model run ----------------------------------------------
+
+def test_merged_case_reads_and_doubled_nouns_are_folded():
+    raw = _raw(anchor="", items=[
+        _item(name="Outfit", var="outfit", tags=["summer", "autumn"]),
+        _item(name="Hair Color", var="hair_color"),
+        _item(kind="template", name="T", about="$outfit, $hair_color")])
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    key = next(i["key"] for i in plan["items"] if i["var"] == "hair_color")
+    built[key]["payload"]["options"] = [{"id": "h1", "value": "white hair", "weight": 1},
+                                        {"id": "h2", "value": "red hair", "weight": 1}]
+    text, said = pack._fold_case_reads("$outfit_summer, $outfit_autumn, $hair_color hair",
+                                       plan, built)
+    assert text == "$outfit, $hair_color" and len(said) == 3
+
+
+def test_an_item_that_lists_every_option_is_a_problem():
+    raw = _raw(items=[
+        _item(name="Hair", var="hair"),
+        _item(kind="fixed_values", name="Look", var="look"),
+        _item(kind="template", name="T", about="$look")])
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    keys = {i["var"]: i["key"] for i in plan["items"]}
+    built[keys["look"]] = {"id": "f0f0f0f0", "payload": {"values": [
+        {"id": "v1", "name": "look", "value": "hair 0, hair 1, hair 2, hair 3"}]}}
+    out = pack._lists_all(plan, built, [{"look": "hair 0, hair 1, hair 2, hair 3"}] * 4)
+    assert "options at once" in out[keys["look"]]
+
+
+def test_the_species_decides_the_habitat_not_its_class():
+    items = [
+        {"kind": "wildcard", "name": "Class", "var": "animal_class", "tags": ["mammal"]},
+        {"kind": "wildcard", "name": "Species", "var": "animal_species", "tags": ["mammal"]},
+        {"kind": "constraint", "name": "Class to Habitat", "source": "animal_class",
+         "target": "habitat_type", "about": "#mammal gets only #forest"},
+        {"kind": "wildcard", "name": "Habitat", "var": "habitat_type",
+         "tags": ["forest", "ocean"]}]
+    warnings: list = []
+    out = pack._fit_rules(items, "the animal decides which habitats are possible.", warnings)
+    rules = [(x["source"], x["target"]) for x in out if x["kind"] == "constraint"]
+    assert rules == [("animal_species", "habitat_type")]
+    species = next(x for x in out if x.get("var") == "animal_species")
+    assert {"forest", "ocean"} <= set(species["tags"])
