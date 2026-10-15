@@ -407,6 +407,12 @@ def _compile_actions(
         mode = a.get("mode") if a.get("mode") in _VALID_MODES else "replace"
         value = a.get("value") if isinstance(a.get("value"), str) else ""
         value = re.sub(r"\s+", " ", value).strip()[:MAX_VALUE_LEN]
+        # The engine joins append / prepend text as written: "tie" + "watch"
+        # is "tiewatch". A list piece gets its comma.
+        if value and mode == "append" and not re.match(r"[,;.\s]", value):
+            value = ", " + value
+        elif value and mode == "prepend" and not re.search(r"[,;.]$", value):
+            value = value + ", "
         try:
             value = ai_refs.compile_text(value, surface="action", refs=refs)
         except ValueError as e:

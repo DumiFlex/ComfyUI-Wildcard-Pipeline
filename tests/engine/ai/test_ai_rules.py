@@ -304,3 +304,17 @@ def test_constraint_prompt_shows_tag_groups_and_only_keeps_named_targets():
     assert "CLASSIFY group kind: #dress" in text
     # The prompt agrees with the engine: reduce/boost rules keep their target.
     assert "only, reduce or boost rule" in ai_constraint.SYSTEM_PROMPT
+
+
+def test_append_and_prepend_get_a_list_separator():
+    # The engine joins as written: "tie" + "watch" would print "tiewatch".
+    cat = library_vars.build_catalog(LIBRARY)
+    out = ai_derivation.compile_rules(_drv([{"branches": [
+        {"conditions": [{"var": "class", "op": "equals", "value": "mage"}], "actions": [
+            {"target_var": "look", "mode": "append", "value": "watch"},
+            {"target_var": "look", "mode": "prepend", "value": "hooded"},
+            {"target_var": "look", "mode": "append", "value": ", ring"},
+        ]}]}]), catalog=cat)
+    b = out["rules"][0]["rule"]["branches"][0]
+    assert b["action"]["value"] == ", watch"
+    assert [a["value"] for a in b["extra_actions"]] == ["hooded, ", ", ring"]

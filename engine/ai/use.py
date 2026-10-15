@@ -41,6 +41,7 @@ import math
 import re
 from typing import Any
 
+from engine.ai import refs as ai_refs
 from engine.syntax.subcat_filter import ParseError, parse
 
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
@@ -157,7 +158,7 @@ def _apply(word: str, rest: str, out: dict[str, Any], tags: list[str] | None) ->
         out["pick_separator"] = (m.group(1) if m.group(1) is not None else m.group(2)) \
             if m else rest
     elif word == "filter":
-        expr = " ".join(rest.split())
+        expr = " ".join(ai_refs.bang_not(rest).split())
         try:
             ast = parse(expr)
         except ParseError as e:
