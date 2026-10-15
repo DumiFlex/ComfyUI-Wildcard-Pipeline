@@ -228,6 +228,20 @@ def test_nested_multi_pick_uses_the_fallback_once():
     assert resolve_text(f"{{2$$, $$@{{{_TGT}}}}}", rctx) == "plain"
 
 
+def test_nested_multi_pick_keeps_excluded_options_out():
+    # Only "blue" is excluded: a multi-pick used to read its weight 0 as 1.
+    for seed in range(50):
+        ctx = _nested_ctx(fallback=False)
+        ctx["__wp_rng__"] = random.Random(seed)
+        ctx["__wp_catalog__"][_TGT]["options"].append(
+            {"id": "ok", "value": "green", "weight": 1, "sub_categories": ["good"]})
+        ctx["__wp_catalog__"][_TGT]["options"].append(
+            {"id": "ok2", "value": "white", "weight": 1, "sub_categories": ["good"]})
+        rctx = build_resolve_ctx(ctx, surface="wildcard")
+        out = resolve_text(f"{{2$$, $$@{{{_TGT}}}}}", rctx)
+        assert set(out.split(", ")) == {"green", "white"}, out
+
+
 @pytest.mark.parametrize("bad, msg", [
     ({"id": "x", "value": "x", "fallback": "yes"}, "must be a boolean"),
     ({"id": "x", "value": "", "is_null": True, "fallback": True}, "can't be the fallback"),

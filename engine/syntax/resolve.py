@@ -483,11 +483,14 @@ def _resolve_multi_pick(
         if len(bt) == 1 and bt[0].kind == TokenKind.REF:
             ref_tok = bt[0]
             ref_uuid = ref_tok.meta.get("uuid", "")
-            pool = ref_option_pool(ref_tok, ctx)
+            # Weight 0 is how a constraint (or the user) shuts an option
+            # out: it stays out of the multi-pick too. A missing weight is 1.
+            pool = [o for o in ref_option_pool(ref_tok, ctx)
+                    if float(1 if o.get("weight") is None else o["weight"]) > 0]
             if not pool:
                 return ""
             values = [str(o.get("value", "")) for o in pool]
-            weights = [float(o.get("weight", 1) or 1) for o in pool]
+            weights = [float(1 if o.get("weight") is None else o["weight"]) for o in pool]
             chosen = pick_k_unique(values, weights, count, ctx.rng)
             # The multi-picked ref is the carrier of any `@{X}` inside the
             # values it resolves. We pick on VALUES (not option dicts) so a
