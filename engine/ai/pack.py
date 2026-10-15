@@ -157,10 +157,13 @@ SETTINGS: dict[str, tuple[str, ...]] = {
     "rating": ("auto", "safe", "nsfw"),
     # family: quality / negative tags per $model_variant (WP Model Info).
     "model": ("any", "family"),
+    # on: an nsfw pack's template negative gets the youth block (child,
+    # loli, …); off: nothing added (the user's call).
+    "youth_negative": ("on", "off"),
 }
 DEFAULT_SETTINGS: dict[str, Any] = {
     "library": "reuse", "negatives": "auto", "structure": "sections", "style": "auto",
-    "rating": "auto", "count": 0, "model": "any",
+    "rating": "auto", "count": 0, "model": "any", "youth_negative": "on",
 }
 #: Most options a sweep axis should have (the Loop sweeps every ticked one).
 MAX_SWEEP_OPTIONS = 6
@@ -332,7 +335,8 @@ Plan what the request needs, up to 60 items. Don't add commentary; the \
 output is data for the user's own library.
 
 A pack rated nsfw is for adults only: every character is an adult, and no \
-child, teen, school-age or real-person subject is ever planned.
+child or real-person subject is ever planned. A costume or role the user \
+asks for (a school uniform, a maid) is worn by an adult.
 
 """ + ai_guide.STRUCTURE + "\n" + ai_guide.BLUEPRINTS + "\n" + ai_guide.WHICH + "\n" \
     + ai_guide.NODES + "\n" + ai_guide.COHERENCE
@@ -3166,72 +3170,80 @@ def compile_item(
         if plan.get("style") == "tags":
             payload = {**payload, "template_string": tag_commas(payload["template_string"])}
     if plan.get("rating") == "nsfw":
-        payload, said = _adult_only(kind, payload, plan)
+        payload, said = _adult_check(kind, payload, plan)
         warnings += said
     return {"key": key, "id": mid, "kind": kind, "payload": payload,
             "preview": preview, "warnings": warnings, "repair": repair_note(warnings)}
 
 
-def _adult_only(kind: str, payload: dict[str, Any],
-                plan: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
-    """An nsfw pack's item without anything that names a minor, and its
-    template's negative with the youth block. Raises ValueError (so the item
-    is rebuilt with the reason) when nothing would be left."""
+def _adult_check(kind: str, payload: dict[str, Any],
+                 plan: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """An nsfw pack's item. The pack is a sexual context, so text with a
+    clearly minor word (child, loli, "16 years old") is left out, as
+    `adult.sexual_minor` does everywhere (ValueError, so the item is
+    rebuilt, when nothing would be left). Words an adult can wear or be
+    called too (school uniform, teen) stay, with a warning for the user to
+    judge. The template's negative gets the youth block while the
+    youth_negative setting is on."""
     why = "an adult pack never names a minor"
+    said: list[str] = []
 
-    def left_out(texts: list[str]) -> str:
-        words = ", ".join(dict.fromkeys(w for t in texts for w in ai_adult.youth_words(t)))
-        more = f" and {len(texts) - 1} more" if len(texts) > 1 else ""
-        return f"Left out \"{texts[0][:40]}\"{more}: {why} ({words})"
+    def keep(rows: list[Any], text: Any, noun: str) -> list[Any]:
+        bad = [r for r in rows if ai_adult.minor_words(text(r))]
+        kept = [r for r in rows if r not in bad]
+        if bad and not kept:
+            raise ValueError(f"every {noun} names a minor; {why}")
+        if bad:
+            words = ", ".join(dict.fromkeys(w for r in bad for w in ai_adult.minor_words(text(r))))
+            more = f" and {len(bad) - 1} more" if len(bad) > 1 else ""
+            said.append(f"Left out \"{text(bad[0])[:40]}\"{more}: {why} ({words})")
+        return kept
 
+    def writes(rule: dict[str, Any]) -> str:
+        clauses = [*(rule.get("branches") or []), rule.get("else")]
+        return ", ".join(str(a.get("value") or "") for c in clauses for a in clause_actions(c)
+                         if a.get("mode") not in NEGATIVE_MODES)
+
+    texts: list[str] = []
     if kind == "wildcard":
-        bad = [o for o in payload.get("options") or [] if not o.get("is_null")
-               and ai_adult.youth_words(str(o.get("value") or ""))]
-        if not bad:
-            return payload, []
-        kept = [o for o in payload["options"] if o not in bad]
-        if not [o for o in kept if not o.get("is_null")]:
-            raise ValueError(f"every option names a minor; {why}")
-        payload = {**payload, "options": kept}
-        WildcardHandler.validate_payload(payload)
-        return payload, [left_out([str(o["value"]) for o in bad])]
-    if kind == "fixed_values":
-        bad = [v for v in payload.get("values") or []
-               if ai_adult.youth_words(str(v.get("value") or ""))]
-        if not bad:
-            return payload, []
-        kept = [v for v in payload["values"] if v not in bad]
-        if not kept:
-            raise ValueError(f"every value names a minor; {why}")
-        return {**payload, "values": kept}, [left_out([str(v["value"]) for v in bad])]
-    if kind == "derivation":
-        def writes(rule: dict[str, Any]) -> list[str]:
-            clauses = [*(rule.get("branches") or []), rule.get("else")]
-            return [str(a.get("value") or "") for c in clauses for a in clause_actions(c)
-                    if a.get("mode") not in NEGATIVE_MODES]
-        bad = [r for r in payload.get("rules") or []
-               if any(ai_adult.youth_words(t) for t in writes(r))]
-        if not bad:
-            return payload, []
-        kept = [r for r in payload["rules"] if r not in bad]
-        if not kept:
-            raise ValueError(f"every rule writes words for a minor; {why}")
-        text = next(t for t in writes(bad[0]) if ai_adult.youth_words(t))
-        return {**payload, "rules": kept}, [left_out([text])]
-    if kind == "combine":
-        if ai_adult.youth_words(str(payload.get("template") or "")):
+        real = [o for o in payload.get("options") or [] if not o.get("is_null")]
+        kept = keep(real, lambda o: str(o.get("value") or ""), "option")
+        if len(kept) < len(real):
+            payload = {**payload, "options": [o for o in payload["options"]
+                                              if o.get("is_null") or o in kept]}
+            WildcardHandler.validate_payload(payload)
+        texts = [str(o.get("value") or "") for o in kept]
+    elif kind == "fixed_values":
+        rows = payload.get("values") or []
+        kept = keep(rows, lambda v: str(v.get("value") or ""), "value")
+        if len(kept) < len(rows):
+            payload = {**payload, "values": kept}
+        texts = [str(v.get("value") or "") for v in kept]
+    elif kind == "derivation":
+        rows = payload.get("rules") or []
+        kept = keep(rows, writes, "rule")
+        if len(kept) < len(rows):
+            payload = {**payload, "rules": kept}
+        texts = [writes(r) for r in kept]
+    elif kind in ("combine", "template"):
+        text = str(payload.get("template" if kind == "combine" else "template_string") or "")
+        if ai_adult.minor_words(text):
             raise ValueError(f"it names a minor; {why}")
-        return payload, []
-    if kind == "template":
-        if ai_adult.youth_words(str(payload.get("template_string") or "")):
-            raise ValueError(f"the prompt names a minor; {why}")
+        texts = [text]
+    flagged = [t for t in texts if ai_adult.youth_words(t)]
+    if flagged:
+        words = ", ".join(dict.fromkeys(w for t in flagged for w in ai_adult.youth_words(t)))
+        more = f" and {len(flagged) - 1} more" if len(flagged) > 1 else ""
+        said.append(f"Check \"{flagged[0][:40]}\"{more}: it says {words} in an adult pack. "
+                    "Make sure every character reads as an adult")
+    if kind == "template" and parse_settings(plan.get("settings"))["youth_negative"] == "on":
         neg, added = ai_adult.with_youth_negative(str(payload.get("negative_template") or ""),
                                                   plan.get("style") or "tags")
         if added:
             payload = {**payload, "negative_template": neg}
-            return payload, ["Added " + ", ".join(added) + " to the negative: the pack is "
-                             "rated nsfw"]
-    return payload, []
+            said.append("Added " + ", ".join(added) + " to the negative: the pack is rated "
+                        "nsfw (Settings > Youth negative)")
+    return payload, said
 
 
 # The planner's own conditions written into the prompt text: "If $outer

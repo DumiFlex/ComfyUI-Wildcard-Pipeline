@@ -34,11 +34,12 @@ import re
 import secrets
 from typing import Any
 
-from engine.ai import about
+from engine.ai import about, adult
 from engine.ai import refs as ai_refs
 from engine.modules.derivation_handler import (
     _VALID_MODES,
     _VALID_OPS,
+    NEGATIVE_MODES,
     DerivationHandler,
 )
 
@@ -418,6 +419,8 @@ def _compile_actions(
             raise _Drop(str(e)) from None
         if not value and mode != "replace":
             continue
+        if mode not in NEGATIVE_MODES and adult.sexual_minor(value):
+            raise _Drop("it names a minor in a sexual context")
         for read in _VAR_READ.findall(value):
             if read not in catalog and read != target:
                 warnings.append(unset_note(read))

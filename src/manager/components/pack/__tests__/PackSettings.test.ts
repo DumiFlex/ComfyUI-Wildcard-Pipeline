@@ -13,7 +13,7 @@ describe("PackSettings", () => {
   it("holds only preferences that apply to any pack", async () => {
     const w = mount(PackSettings, { props: { modelValue: { ...DEFAULT_SETTINGS }, detailed: true } });
     const keys = w.findAllComponents(Select).map((c) => c.attributes("data-test"));
-    expect(keys).toEqual(["library", "negatives", "structure", "style", "rating", "model"]
+    expect(keys).toEqual(["library", "negatives", "structure", "style", "rating", "model", "youth_negative"]
       .map((k) => `pack-setting-${k}`));
     // What a pack is about (subject, LoRAs, a story) is the planner's, not a setting.
     for (const k of ["run", "loras", "inputs", "frames"]) {

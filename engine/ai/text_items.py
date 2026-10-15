@@ -20,7 +20,7 @@ import re
 import secrets
 from typing import Any
 
-from engine.ai import about
+from engine.ai import about, adult
 from engine.ai import refs as ai_refs
 from engine.modules.combine_handler import CombineHandler
 from engine.modules.fixed_values_handler import FixedValuesHandler
@@ -174,6 +174,9 @@ def compile_fixed(
         if not value:
             skipped.append({"text": name, "reason": "empty"})
             continue
+        if adult.sexual_minor(value):
+            skipped.append({"text": name, "reason": "it names a minor in a sexual context"})
+            continue
         if row is None:
             row = {"id": _new_id(taken), "name": name}
             rows.append(row)
@@ -235,6 +238,8 @@ def compile_combine(
     if not text:
         raise ValueError("the template is empty")
     negative = ai_refs.compile_text(_flat(raw.get("negative"), MAX_TEXT), surface="combine")
+    if adult.sexual_minor(text):
+        raise ValueError("it names a minor in a sexual context")
     warnings: list[str] = []
     text = _fix_axes(text, catalog, warnings)
     if out_var in reads(text):
@@ -263,6 +268,8 @@ def compile_template(raw: Any, *, catalog: dict[str, Any] | None = None) -> dict
         raise ValueError("the template is empty")
     negative = ai_refs.compile_text(_flat(raw.get("negative"), MAX_TEMPLATE),
                                     surface="template")
+    if adult.sexual_minor(text):
+        raise ValueError("it names a minor in a sexual context")
     warnings: list[str] = []
     text = _fix_axes(text, catalog, warnings)
     unknown = _unknown(text, catalog)

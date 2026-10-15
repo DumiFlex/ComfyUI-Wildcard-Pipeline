@@ -63,7 +63,7 @@ export const ITEM_TIME_LIMIT_MS = 4 * 60 * 1000;
 const RECHECK_MS = 400;
 export const DEFAULT_SETTINGS: AiPackSettings = {
   library: "reuse", negatives: "auto", structure: "sections", style: "auto", rating: "auto",
-  count: 0, model: "any",
+  count: 0, model: "any", youth_negative: "on",
 };
 export const DECIDE_ANSWER = "Your call (decide for me)";
 /** Mirrors `engine/ai/pack.py:build_order`: vocabularies (wildcards with

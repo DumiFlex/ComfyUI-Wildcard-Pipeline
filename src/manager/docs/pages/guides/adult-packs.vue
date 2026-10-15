@@ -114,12 +114,13 @@ const checklist: string[] = [
     title="Adult (NSFW) packs"
     icon="pi pi-shield"
     tone="neutral"
-    blurb="How to build a pack for adult characters on models trained for it: a rating driver, a clothing-state ladder, the rules that keep picks coherent, the tag vocabulary per family, and the safeguards every adult pack must carry."
+    blurb="How to build a pack for adult characters on models trained for it: a rating driver, a clothing-state ladder, the rules that keep picks coherent, the tag vocabulary per family, and the safeguards we recommend for every adult pack."
   >
-    <DocSection title="Safeguards (required)">
+    <DocSection title="Safeguards">
       <DocCallout variant="danger">
-        These rules are not optional. A pack that can reach suggestive or explicit content
-        follows all of them, on every model, for every character.
+        One rule is enforced: the AI assistant never writes a minor in a sexual context. The
+        rest of this list is our strong recommendation for any pack that can reach suggestive
+        or explicit content. Your own edits are never checked or changed.
       </DocCallout>
       <DocKeyList :items="safeguards" />
       <p>
@@ -127,6 +128,16 @@ const checklist: string[] = [
         options out of adult registers at the source, the adult anchor steers every character in
         the prompt, the youth block pushes away in the negative (at CFG above 1), and the
         blocklist removes what slipped through.
+      </p>
+      <p>
+        <b>What the assistant does.</b> In every AI feature (chat, Draft with AI, the Pack
+        builder), an option, value, rule or template that puts a clearly minor word (child,
+        loli, shota, an age under 18) next to a sexual or nude one is left out. In a Pack
+        builder pack rated NSFW, the whole pack counts as that context, so a clearly minor word
+        is left out wherever it is. Words an adult can wear or be called too (school uniform,
+        teen, younger sister) are kept, with a <b>Check</b> warning on the item so you can judge
+        them. <b>Settings › Youth negative</b> (on by default) adds the youth block to the
+        template's negative; turn it off to write your own.
       </p>
       <p>
         <b>For your pack:</b> build the safeguards first, before any content. They are a few

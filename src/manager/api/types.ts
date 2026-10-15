@@ -1648,6 +1648,9 @@ export interface AiPackSettings {
   count: number;
   /** family: quality and negative tags per $model_variant (WP Model Info). */
   model: "any" | "family";
+  /** on: an NSFW pack's template negative gets the youth block (child,
+   *  loli, …); off: nothing is added. */
+  youth_negative: "on" | "off";
 }
 
 export interface AiPackRun {

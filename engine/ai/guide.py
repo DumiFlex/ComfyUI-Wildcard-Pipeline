@@ -363,15 +363,17 @@ def format_line(model: str) -> str:
     return FORMATS.get(family(model), "")
 
 
-#: For a pack rated nsfw only: the safeguards first (enforced by
-#: engine/ai/adult.py as well), then how such packs are built.
+#: For a pack rated nsfw only: the safeguards first (engine/ai/adult.py
+#: drops clearly minor words and flags costume words), then how
+#: such packs are built.
 NSFW = """\
 Adult pack (rated nsfw). Every character is an adult, and written so: an \
 adult age or "mature female" / "mature male" style words on each character. \
-Never a child, teen, school-age words (school uniform, schoolgirl), a \
-character whose canon age is under 18 (even "aged up"), or a real person's \
-name or likeness. Options with youth words are left out, and the template's \
-negative always gets a youth block (child, loli, …). Structure: a Rating \
+Never a child, a teen, a character whose canon age is under 18 (even "aged \
+up"), or a real person's name or likeness. A costume the user asks for \
+(school uniform) is fine on an adult: write the adult words next to it. \
+Clearly minor words (child, loli, an age under 18) are always left out; \
+words an adult can wear too (school uniform, teen) are flagged for the user. Structure: a Rating \
 wildcard used "internal" (safe, nsfw) gates explicit options by constraint, \
 so the pack makes safe images too; a clothing-state wildcard (dressed, \
 partly undressed, topless, nude) with constraints to Outfit ("only" rules: \
