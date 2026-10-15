@@ -131,3 +131,20 @@ def test_model_only_warnings_carry_no_fix():
     op = {"op": "create", "body": item}
     warns = lint.check(op, item, {"t1": target}.get)
     assert warns and lint.fixes(op, item, None, warns) == []
+
+
+def test_exclude_on_an_option_that_also_carries_the_favoured_tag_is_named():
+    shoes = {"type": "wildcard", "name": "Shoes", "payload": {"options": [
+        {"id": "s", "value": "sneakers", "sub_categories": ["casual"]},
+        {"id": "b", "value": "boots", "sub_categories": ["casual", "formal"]},
+        {"id": "h", "value": "heels", "sub_categories": ["formal"]},
+    ]}}
+    con = {"type": "constraint", "name": "Outfit → Shoes", "payload": {
+        "target_wildcard_id": "shoe0001", "exceptions": [],
+        "matrix": {"formal": {"casual": {"mode": "exclude", "factor": 0}}}}}
+    out = lint.check({}, con, lambda i: shoes if i == "shoe0001" else None)
+    assert any('"boots" is excluded by its #casual tag although it also has #formal' in w
+               and "use only #formal" in w for w in out)
+    con["payload"]["matrix"] = {"formal": {"formal": {"mode": "only", "factor": 1}}}
+    assert not any("excluded by its" in w for w in
+                   lint.check({}, con, lambda i: shoes if i == "shoe0001" else None))

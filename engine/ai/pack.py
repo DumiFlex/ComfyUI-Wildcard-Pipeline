@@ -49,6 +49,7 @@ from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
 from engine.ai import guide as ai_guide
 from engine.ai import library_vars, text_items
+from engine.ai import lint as ai_lint
 from engine.ai import patterns as ai_patterns
 from engine.ai import refs as ai_refs
 from engine.ai import use as ai_use
@@ -4154,6 +4155,12 @@ def check_pack(
         if isinstance(d, dict) and d.get("kind") == "constraint":
             notes.append(f"The plan's constraint {d.get('name')} isn't in the pack: {d.get('why')}")
     notes += unread_notes(plan, built, problems)
+    # "Goes with" written as exclude drops options that carry both tags.
+    row_by_id = {r.get("id"): r for r in rows}
+    for i in plan["items"]:
+        if i["kind"] == "constraint" and i["key"] in built:
+            for said in ai_lint.exclude_shared_tags(built[i["key"]]["payload"], row_by_id.get):
+                problems.setdefault(i["key"], []).append(said)
     seed_list = list(range(1, max(1, seeds) + 1))
     frames = loop_frames(plan)
     if frames:
