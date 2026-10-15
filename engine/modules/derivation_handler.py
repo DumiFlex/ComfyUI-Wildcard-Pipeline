@@ -60,6 +60,10 @@ _MAX_CONDITION_DEPTH = 8
 # `negative_replace` (also v8): "Replace negative" — the value becomes the
 # variable's only negative, dropping what it carried.
 NEGATIVE_MODES = {"negative", "negative_replace"}
+# The separator an append value starts with (", red") or a prepend value
+# ends with ("red, "), dropped when the target is still empty.
+_JOIN_EDGE = re.compile(r"^[\s,;]+")
+_JOIN_TAIL = re.compile(r"[\s,;]+$")
 _VALID_MODES = {"replace", "append", "prepend", *NEGATIVE_MODES}
 
 
@@ -400,12 +404,18 @@ def _apply_action(
         pick=None, source=carrier_key or "derivation",
     )
     negatives.set_entries(ctx, target, entries, add=mode != "replace")
+    current = _ctx_get(ctx, target)
     if mode == "replace":
         result = new_value
+    elif not current.strip():
+        # Adding to nothing: the joining comma or space the value brought
+        # for a non-empty target would otherwise start the text.
+        edge = _JOIN_EDGE if mode == "append" else _JOIN_TAIL
+        result = edge.sub("", new_value)
     elif mode == "append":
-        result = _ctx_get(ctx, target) + new_value
+        result = current + new_value
     else:
-        result = new_value + _ctx_get(ctx, target)
+        result = new_value + current
     _ctx_set(ctx, target, result)
     return target, result
 

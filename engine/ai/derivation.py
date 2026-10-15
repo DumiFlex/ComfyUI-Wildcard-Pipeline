@@ -109,8 +109,7 @@ missing or empty. These take value "".
 
 Actions:
 - replace: set target_var to value. append / prepend: add value after / \
-before what target_var already holds (include a leading ", " when appending \
-to a list of tags).
+before what target_var already holds (a ", " between them is added for you).
 - negative: add value to target_var's negative prompt. negative_replace: make \
 value its only negative.
 - value is prompt text. It may read variables as $name, and also \
@@ -393,6 +392,10 @@ def unset_note(var: str) -> str:
             "or an earlier Context sets it)")
 
 
+_JOINED_FRONT = re.compile(r"^[,;.:!?]")
+_JOINED_BACK = re.compile(r"[,;.:]$")
+
+
 def _compile_actions(
     raw: Any, catalog: dict[str, dict[str, Any]], warnings: list[str],
     refs: ai_refs.RefIndex | None = None,
@@ -413,6 +416,12 @@ def _compile_actions(
             raise _Drop(str(e)) from None
         if not value and mode != "replace":
             continue
+        # Append / prepend join raw (`tie` + `watch` = `tiewatch`), and the
+        # strip above eats a leading space, so bring the separator here.
+        if mode == "append" and not _JOINED_FRONT.match(value):
+            value = ", " + value
+        elif mode == "prepend" and not _JOINED_BACK.search(value):
+            value = value + ", "
         for read in _VAR_READ.findall(value):
             if read not in catalog and read != target:
                 warnings.append(unset_note(read))

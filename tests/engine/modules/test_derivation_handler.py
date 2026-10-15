@@ -575,3 +575,18 @@ def test_locked_seed_distinct_from_chain_seed():
     # Both must be valid options:
     assert out_chain["mood"] in "abcdefghij"
     assert out_locked["mood"] in "abcdefghij"
+
+
+@pytest.mark.parametrize(("mode", "value", "start", "want"), [
+    ("append", ", watch", "tie", "tie, watch"),
+    ("append", ", watch", "", "watch"),
+    ("prepend", "hat, ", "", "hat"),
+    ("prepend", "hat, ", "scarf", "hat, scarf"),
+])
+def test_adding_to_an_empty_variable_drops_the_joining_separator(mode, value, start, want):
+    ctx = _ctx(acc=start)
+    payload = {"rules": [_rule(branches=[{
+        "condition": {"var": "missing", "op": "not_exists", "value": ""},
+        "action": {"target_var": "acc", "mode": mode, "value": value},
+    }])]}
+    assert DerivationHandler.resolve(payload, instance={}, ctx=ctx) == {"acc": want}
