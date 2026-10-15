@@ -1055,6 +1055,10 @@ class WildcardHandler(ModuleHandler):
             options, any_constraint_applied = apply_constraints_for_target(
                 options, my_id, constraints, picks, ctx["__wp_warnings__"],
                 hits=hits, firing_uid=firing_uid,
+                firing_origin=(
+                    ctx.get("__wp_current_module_bundle_origin__")
+                    if isinstance(ctx, dict) else None
+                ),
                 applied_out=applied_constraints,
                 # TARGET-side accepts axes: a target option's tags in one of
                 # these groups are alternatives the option offers, so the fold

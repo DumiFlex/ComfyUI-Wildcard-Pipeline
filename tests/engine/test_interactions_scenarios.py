@@ -818,14 +818,6 @@ def test_double_inserted_bundle_constraints_read_their_own_copy_when_targets_dif
         assert (ctx["gear1"], ctx["gear2"]) == ("apron", "leather"), seed
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "_constraints.py apply_constraints_for_target: reach is not scoped to the "
-    "constraint's bundle copy. With a bundle [role → constraint → gear] "
-    "inserted twice (same library uuids), copy 1's constraint (bound to copy "
-    "1's source via by_origin) also re-weights copy 2's gear, so copy 2's "
-    "target gets both copies' rules; with `only` rows that excludes "
-    "everything and copy 2's gear renders empty on every seed."
-))
 def test_double_inserted_bundle_keeps_each_copy_to_its_own_target():
     def copy_of(n: int, origin: str, role: str) -> list[dict]:
         return [
