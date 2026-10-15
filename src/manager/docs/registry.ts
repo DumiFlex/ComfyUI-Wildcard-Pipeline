@@ -3,7 +3,7 @@ import { type Component } from "vue";
 export type DocTone =
   | "node" | "neutral"
   | "wildcard" | "fixed_values" | "combine" | "derivation" | "constraint" | "bundle";
-export type DocGroupId = "overview" | "concepts" | "nodes" | "modules" | "reference";
+export type DocGroupId = "overview" | "guides" | "concepts" | "nodes" | "modules" | "reference";
 
 export interface DocPageMeta {
   id: string;
@@ -22,6 +22,7 @@ export interface DocPageMeta {
 
 export const DOC_GROUPS: { id: DocGroupId; label: string }[] = [
   { id: "overview",  label: "Overview" },
+  { id: "guides",    label: "Guides" },
   { id: "concepts",  label: "How it connects" },
   { id: "nodes",     label: "Nodes" },
   { id: "modules",   label: "Modules" },
@@ -53,6 +54,22 @@ export const DOC_PAGES: DocPageMeta[] = [
   { id: "glossary", title: "Glossary", group: "overview", icon: "pi pi-book", tone: "neutral",
     blurb: "Terms: module, instance, $var, ref, snapshot, drift, surface.",
     ...page(() => import("./pages/overview/glossary.vue")) },
+  // Guides
+  { id: "pack-structure", title: "Recommended pack structure", group: "guides", icon: "pi pi-th-large", tone: "neutral",
+    blurb: "Which feature does which job, which syntax works where, and blueprints for common packs.",
+    keywords: ["structure", "layout", "pack", "blueprint", "recipe", "decision", "driver", "when to use", "which feature",
+      "best practice", "anti-pattern", "story", "sweep", "season", "two characters", "accepts", "outfit"],
+    ...page(() => import("./pages/guides/pack-structure.vue")) },
+  { id: "prompt-writing", title: "Writing prompts for your model", group: "guides", icon: "pi pi-pencil", tone: "neutral",
+    blurb: "How each model family wants its prompt: order, quality tags, negatives and CFG, subjects and prompt types.",
+    keywords: ["prompt", "model", "illustrious", "pony", "noobai", "flux", "z-image", "qwen", "anima", "wan", "sdxl", "sd1.5",
+      "krea", "ltx", "chroma", "cfg", "break", "token", "weights", "lora", "trigger", "inpaint", "img2img", "hires",
+      "adetailer", "controlnet", "ip-adapter", "regional", "video", "quality tags", "score tags"],
+    ...page(() => import("./pages/guides/prompt-writing.vue")) },
+  { id: "adult-packs", title: "Adult (NSFW) packs", group: "guides", icon: "pi pi-shield", tone: "neutral",
+    blurb: "Structure, tag norms and the safeguards every adult pack must carry.",
+    keywords: ["nsfw", "adult", "explicit", "rating", "suggestive", "safeguard", "clothing state", "rating_explicit"],
+    ...page(() => import("./pages/guides/adult-packs.vue")) },
   // Concepts
   { id: "variable-pipeline", title: "The $variable pipeline", group: "concepts", icon: "pi pi-share-alt", tone: "neutral",
     blurb: "How modules produce $vars and the Assembler fills templates.", keywords: ["$var", "@{uuid}", "{a|b|c}", "syntax", "surface"],
@@ -73,7 +90,7 @@ export const DOC_PAGES: DocPageMeta[] = [
     keywords: ["override", "iteration", "frame", "keyframe", "per-frame", "edit frame", "enable", "disable"],
     ...page(() => import("./pages/concepts/iteration-overrides.vue")) },
   { id: "constraints", title: "Constraints in depth", group: "concepts", icon: "pi pi-share-alt", tone: "neutral",
-    blurb: "Source→target pairing, matrix vs exceptions, one-shot consume.", keywords: ["pairing", "matrix", "carrier"],
+    blurb: "Source→target pairing, matrix vs exceptions, target reach.", keywords: ["pairing", "matrix", "carrier", "reach"],
     ...page(() => import("./pages/concepts/constraints.vue")) },
   { id: "internal-variables", title: "Internal variables", group: "concepts", icon: "pi pi-share-alt", tone: "neutral",
     blurb: "Hide a $var from the rendered prompt; when it's stripped.", keywords: ["internal", "strip", "__"],
