@@ -180,6 +180,9 @@ def quiet_resolve(text: str, resolve_ctx: Any, rng: random.Random) -> str:
             _ref_log=None,
             _reads=None,
             _ref_negs=None,
+            # The negative stream is its own; no per-site children of the
+            # positive's stream key.
+            stream_key=None,
         )
     else:
         quiet = resolve_ctx

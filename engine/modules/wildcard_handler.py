@@ -24,6 +24,7 @@ from engine import negatives
 from engine.modules import build_resolve_ctx
 from engine.modules._detail import module_detail
 from engine.modules._seed import derive_module_rng as _derive_module_rng
+from engine.modules._seed import instance_key, stream_key
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
 from engine.syntax.resolve import pick_k_unique
@@ -624,7 +625,7 @@ def _file_negatives(
     the multi-pick index (None for a single pick)."""
     if not isinstance(ctx, dict):
         return
-    rng = negatives.neg_rng(seed, binding)
+    rng = negatives.neg_rng(seed, instance_key(ctx, binding))
     entries: list[dict[str, Any]] = []
     for opt, ref_negs, slot in picks:
         own = negatives.clean_negative(opt.get("negative"))
@@ -923,7 +924,8 @@ class WildcardHandler(ModuleHandler):
             pinned_rolled = _roll_axes(
                 _axis_menus(payload, pinned.get("sub_categories")),
                 _derive_module_rng(
-                    int(ctx.get("__wp_node_seed__", 0) or 0), f"{binding}::axes",
+                    int(ctx.get("__wp_node_seed__", 0) or 0),
+                    f"{instance_key(ctx, binding)}::axes",
                 ),
             )
             # Track the pinned pick the same way as a random pick —
@@ -937,7 +939,10 @@ class WildcardHandler(ModuleHandler):
                 if pin_mode != "pinned":
                     detail["match_variable"] = match_var.strip()
             value = str(pinned.get("value", ""))
-            resolve_ctx = build_resolve_ctx(ctx, surface="wildcard")
+            resolve_ctx = build_resolve_ctx(ctx, surface="wildcard", stream=stream_key(
+                int(ctx.get("__wp_node_seed__", 0) or 0),
+                f"{instance_key(ctx, binding)}/{pinned.get('id')}",
+            ))
             with negatives.collecting(resolve_ctx) as col:
                 out_value = resolve_text(value, resolve_ctx) if value else ""
             _file_negatives(
@@ -1073,7 +1078,7 @@ class WildcardHandler(ModuleHandler):
         # Effective seed selection:
         #   - locked_seed when present → reproducible per-instance
         #   - chain seed (`__wp_node_seed__`) otherwise
-        # Both paths feed the SAME `_derive_module_rng(seed, binding)`,
+        # Both paths feed the SAME `_derive_module_rng(seed, instance key)`,
         # so locking with `locked_seed = chain_seed` reproduces the
         # unlocked pick exactly. This is the contract the lock UX
         # relies on: the user sees a roll, locks it, captures the
@@ -1101,7 +1106,8 @@ class WildcardHandler(ModuleHandler):
                 locked_seed = None
         else:
             effective_seed = chain_seed
-        rng = _derive_module_rng(effective_seed, binding)
+        ikey = instance_key(ctx, binding)
+        rng = _derive_module_rng(effective_seed, ikey)
 
         # SP2a multi-select: a count range other than (1, 1) picks N options
         # without replacement and binds a ListVar. The null option is never in
@@ -1144,6 +1150,10 @@ class WildcardHandler(ModuleHandler):
             try:
                 multi_ctx = build_resolve_ctx(ctx, surface="wildcard")
                 for slot, opt in enumerate(picks):
+                    # Each pick's text rolls on its own stream.
+                    multi_ctx = build_resolve_ctx(ctx, surface="wildcard", stream=stream_key(
+                        effective_seed, f"{ikey}/{slot}:{opt.get('id')}",
+                    ))
                     with negatives.collecting(multi_ctx) as col:
                         items.append(resolve_text(str(opt.get("value", "")), multi_ctx))
                     neg_picks.append((opt, col.ref_negatives, slot))
@@ -1237,7 +1247,10 @@ class WildcardHandler(ModuleHandler):
         saved_rng = ctx.get("__wp_rng__")
         ctx["__wp_rng__"] = rng
         try:
-            resolve_ctx = build_resolve_ctx(ctx, surface="wildcard")
+            resolve_ctx = build_resolve_ctx(
+                ctx, surface="wildcard",
+                stream=stream_key(effective_seed, f"{ikey}/{chosen.get('id')}"),
+            )
             # SP3 nested-pick reach: THIS wildcard is the carrier of any
             # `@{T}` ref inside `value`. Stamp (its per-instance uid, the
             # chosen option's id) on the resolve frame so a constraint on

@@ -39,6 +39,12 @@ const strategies = [
         disturb each other's results.
       </p>
       <p>
+        Inside a module every pick rolls on its own stream too: each fixed value, each derivation
+        rule, and each <code>{a|b}</code> or <code>@{…}</code> in a piece of text. Adding a value,
+        firing another rule or giving another pick more options never changes a roll you already
+        like, and two copies of one module roll independently.
+      </p>
+      <p>
         The seed advances automatically after each generation, so you get a fresh set of picks
         every time you press Generate without editing anything manually.
       </p>

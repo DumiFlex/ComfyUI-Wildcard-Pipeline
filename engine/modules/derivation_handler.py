@@ -21,9 +21,9 @@ import re
 from typing import Any
 
 from engine import negatives
-from engine.modules import build_resolve_ctx
+from engine.modules import build_resolve_ctx, restream
 from engine.modules._detail import module_detail
-from engine.modules._seed import derive_module_rng
+from engine.modules._seed import derive_module_rng, instance_key, stream_key
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
 from engine.syntax.resolve import NEG_ACCESSOR
@@ -602,7 +602,7 @@ class DerivationHandler(ModuleHandler):
                 int(locked_seed) if isinstance(locked_seed, (int, float))
                 else chain_seed
             )
-            module_id = str(ctx.get("__wp_module_id__") or "derivation")
+            module_id = instance_key(ctx, "derivation")
             rng = derive_module_rng(effective_seed, module_id)
             ctx_local = {**ctx, "__wp_rng__": rng}
             resolve_ctx = build_resolve_ctx(ctx_local, surface="derivation")
@@ -610,16 +610,16 @@ class DerivationHandler(ModuleHandler):
             resolve_ctx = build_resolve_ctx(ctx, surface="derivation")
 
         def _branch_resolve_ctx(branch_key: str) -> Any:
-            # Non-hold (or no rng): the shared rng stream — existing
-            # behaviour, branch values draw in fire order. Hold: an
-            # INDEPENDENT rng per branch (keyed by rule:branch) so its value
-            # is frozen to its frame-0 roll regardless of which other
-            # branches drew before it in the shared stream.
-            if not _hold:
+            # An INDEPENDENT stream per branch (keyed by rule:branch), and
+            # per action below, so a value rolls the same whichever other
+            # branches fired before it. Under hold the seed is the constant
+            # hold seed, so the value is also frozen to its frame-0 roll.
+            if not ctx_local:
                 return resolve_ctx
-            rng_b = derive_module_rng(effective_seed, f"{module_id}::{branch_key}")
+            b_key = f"{module_id}::{branch_key}"
             return build_resolve_ctx(
-                {**ctx_local, "__wp_rng__": rng_b}, surface="derivation"
+                {**ctx_local, "__wp_rng__": derive_module_rng(effective_seed, b_key)},
+                surface="derivation", stream=stream_key(effective_seed, b_key),
             )
 
         # Tier-D instance overrides (2026-05-10 cycle).
@@ -667,10 +667,15 @@ class DerivationHandler(ModuleHandler):
                 # Later actions key their negative stream apart so two
                 # "Add to negative" actions on one branch never share rolls.
                 pair = _apply_action(
-                    action, ctx, b_ctx,
+                    action, ctx,
+                    restream(b_ctx, f"{b_ctx.stream_key}|a{ai}")
+                    if getattr(b_ctx, "stream_key", None) else b_ctx,
                     carrier_key=carrier,
                     neg_seed=effective_seed,
-                    neg_key=carrier if ai == 0 else f"{carrier}.{ai}",
+                    neg_key=(
+                        f"{module_id}::{carrier}" if ai == 0
+                        else f"{module_id}::{carrier}.{ai}"
+                    ),
                 )
                 if pair is not None and pair[1] is not None:
                     out[pair[0]] = pair[1]

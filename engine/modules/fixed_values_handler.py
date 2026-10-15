@@ -16,7 +16,7 @@ literal text + emits warnings (see engine/syntax/resolve.py).
 
 Seed lock: instance.locked_seed pins {a|b|c} resolution per instance
 via the shared engine.modules._seed.derive_module_rng helper, keyed by
-the module id when present (ctx["__wp_module_id__"]).
+the instance (`instance_key`), and each value rolls on its own stream.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from typing import Any
 
 from engine import negatives
 from engine.modules import build_resolve_ctx
-from engine.modules._seed import derive_module_rng
+from engine.modules._seed import derive_module_rng, instance_key, stream_key
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
 
@@ -178,11 +178,11 @@ class FixedValuesHandler(ModuleHandler):
             effective_seed = int(locked_seed)
         else:
             effective_seed = chain_seed
-        # Use module id as the per-module RNG key when ctx carries one;
-        # fall back to "fixed_values" literal so two co-resident
-        # fixed_values modules in the same chain still derive distinct
-        # RNG streams from the same seed (independence property).
-        module_key = str(ctx.get("__wp_module_id__") or "fixed_values")
+        # Keyed by instance so two fixed-values modules (or two instances
+        # of one) roll independently; each value then rolls on its own
+        # stream, keyed by its name, so adding or editing one value never
+        # moves another.
+        module_key = instance_key(ctx, "fixed_values")
         rng = derive_module_rng(effective_seed, module_key)
 
         ctx_local = {**ctx, "__wp_rng__": rng}
@@ -202,7 +202,10 @@ class FixedValuesHandler(ModuleHandler):
             if not name:
                 continue
             raw = str(v.get("value", ""))
-            out_resolved[name] = resolve_text(raw, resolve_ctx)
+            out_resolved[name] = resolve_text(raw, build_resolve_ctx(
+                ctx_local, surface="fixed_values",
+                stream=stream_key(effective_seed, f"{module_key}/{name}"),
+            ))
             if "negative" in v:
                 own = negatives.clean_negative(v.get("negative"))
             else:

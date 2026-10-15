@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from engine.syntax.streams import site_label, sub_stream
 from engine.syntax.subcat_filter import matches as _subcat_matches
 from engine.syntax.subcat_filter import parse as _parse_subcat
 from engine.syntax.tokenize import tokenize_text
@@ -44,7 +45,10 @@ def _resolve_tokens(
 ) -> str:
     parts: list[str] = []
     empty_refs: list[int] = []
-    for tok in tokens:
+    # Each pick site rolls on its own stream (engine/syntax/streams.py), so
+    # one site's draws never move another's.
+    seen: dict[str, int] = {}
+    for i, tok in enumerate(tokens):
         if tok.kind == TokenKind.TEXT:
             parts.append(tok.raw)
         elif tok.kind == TokenKind.ESCAPE:
@@ -52,14 +56,17 @@ def _resolve_tokens(
         elif tok.kind == TokenKind.VAR:
             parts.append(_resolve_var(tok, ctx))
         elif tok.kind == TokenKind.REF:
-            resolved = _resolve_ref(tok, ctx, depth, visited)
+            with sub_stream(ctx, site_label(tok.raw, _after(tokens, i), seen)):
+                resolved = _resolve_ref(tok, ctx, depth, visited)
             if not resolved:
                 empty_refs.append(len(parts))
             parts.append(resolved)
         elif tok.kind == TokenKind.DP_BRACE:
-            parts.append(_resolve_inline_pick(tok, ctx, depth, visited))
+            with sub_stream(ctx, site_label(tok.raw, _after(tokens, i), seen)):
+                parts.append(_resolve_inline_pick(tok, ctx, depth, visited))
         elif tok.kind == TokenKind.DP_MULTI:
-            parts.append(_resolve_multi_pick(tok, ctx, depth, visited))
+            with sub_stream(ctx, site_label(tok.raw, _after(tokens, i), seen)):
+                parts.append(_resolve_multi_pick(tok, ctx, depth, visited))
         elif tok.kind == TokenKind.DP_PIPE:
             # DP_PIPE is never emitted as a top-level token by the current
             # tokenizer (pipes are absorbed into branch boundaries). If one
@@ -68,6 +75,12 @@ def _resolve_tokens(
         else:
             raise AssertionError(f"unknown token kind: {tok.kind}")
     return _join_tidy(parts, empty_refs)
+
+
+def _after(tokens: list[Token], i: int) -> str:
+    """The literal text right after token `i` (its site's context)."""
+    nxt = tokens[i + 1] if i + 1 < len(tokens) else None
+    return nxt.raw if nxt is not None and nxt.kind == TokenKind.TEXT else ""
 
 
 _HWS = " \t"
@@ -507,13 +520,14 @@ def _resolve_multi_pick(
                 parts: list[str] = []
                 id_of = {str(o.get("value", "")): o.get("id") for o in pool}
                 opt_of = {str(o.get("value", "")): o for o in pool}
-                for v in chosen:
+                for i, v in enumerate(chosen):
                     _note_ref_negative(ctx, opt_of.get(v))
                     logged = _log_ref_pick(ctx, ref_uuid, id_of.get(v), depth, v)
-                    out = _resolve_tokens(
-                        tokenize_text(v), ctx, depth=depth + 1,
-                        visited=visited + (ref_uuid,),
-                    ) if v else ""
+                    with sub_stream(ctx, f"item{i}"):
+                        out = _resolve_tokens(
+                            tokenize_text(v), ctx, depth=depth + 1,
+                            visited=visited + (ref_uuid,),
+                        ) if v else ""
                     if logged is not None:
                         logged["value"] = out
                     parts.append(out)
@@ -529,13 +543,14 @@ def _resolve_multi_pick(
     if independent:
         # N draws WITH replacement over the branches; each resolved
         # independently (a lone ref re-rolls every time → variety from nesting).
-        for _ in range(count):
+        for i in range(count):
             j = _weighted_pick_index(weights, ctx.rng)
             v = branch_values[j]
-            resolved.append(
-                _resolve_tokens(tokenize_text(v), ctx, depth=depth, visited=visited)
-                if v else ""
-            )
+            with sub_stream(ctx, f"item{i}"):
+                resolved.append(
+                    _resolve_tokens(tokenize_text(v), ctx, depth=depth, visited=visited)
+                    if v else ""
+                )
         return sep.join(resolved)
 
     # Unique over branches (legacy path, now range-aware): N distinct branches.
@@ -543,12 +558,13 @@ def _resolve_multi_pick(
     if n_picks == 0:
         return ""
     chosen_values = pick_k_unique(branch_values, weights, n_picks, ctx.rng)
-    for branch_text in chosen_values:
+    for i, branch_text in enumerate(chosen_values):
         if not branch_text:
             resolved.append("")
             continue
         nested = tokenize_text(branch_text)
-        resolved.append(_resolve_tokens(nested, ctx, depth=depth, visited=visited))
+        with sub_stream(ctx, f"item{i}"):
+            resolved.append(_resolve_tokens(nested, ctx, depth=depth, visited=visited))
 
     return sep.join(resolved)
 
