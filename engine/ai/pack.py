@@ -661,6 +661,7 @@ def compile_plan(
                 x["about"] = pat.sub("", x["about"])
     if request:
         raw_items = _drop_unasked_subject(raw, raw_items, request, warnings)
+        raw_items = _drop_unasked_drivers(raw_items, request, warnings)
     raw_items = _merge_splits(raw_items, warnings)
     _strip_case_suffixes(raw_items, warnings)
     raw_items = _case_rules(raw_items, warnings)
@@ -1168,7 +1169,8 @@ MAX_INVENTORY = 40
 
 LIBRARY_LINES = {
     "reuse": "Reuse the user's wildcards and fixed values listed below (kind \"library\") "
-             "where one fits a slot; plan new items only for what they lack.",
+             "where one fits a slot the request asks for; plan new items only for what they "
+             "lack. Never add a library item the request doesn't call for.",
     "inspire": "Make every item new (no \"library\" items), but write them like the user's "
                "library below: its tags, variable names, option length and style.",
     "new": "Make every item new (no \"library\" items).",
@@ -2358,6 +2360,34 @@ def _light_follows_weather(raw_items: list[dict[str, Any]],
                     f"{light.get('name') or lv}: lighting rolled apart from the weather can "
                     "contradict it")
     return items
+
+
+def _drop_unasked_drivers(raw_items: list[dict[str, Any]], request: str,
+                          warnings: list[str]) -> list[dict[str, Any]]:
+    """A library item the request never names that the plan makes a rule
+    SOURCE (the library's Character Class steering an outfit pack) pulls
+    the pack off what was asked: it goes, with its rules."""
+    asked = _stems(request)
+    sources = {_var(x.get("source")) for x in raw_items if x.get("kind") == "constraint"}
+    gone = {_var(x.get("var")) for x in raw_items if x.get("kind") == "library"
+            and _var(x.get("var")) in sources
+            and not _stems(f"{_var(x.get('var'))} {x.get('name') or ''}") & asked}
+    if not gone:
+        return raw_items
+    out = []
+    for x in raw_items:
+        if x.get("kind") == "library" and _var(x.get("var")) in gone:
+            warnings.append(f"Left out {x.get('name') or _var(x.get('var'))}: the request "
+                            "doesn't ask for it, and its rules would steer the pack")
+            continue
+        if x.get("kind") == "constraint" and {_var(x.get("source")),
+                                              _var(x.get("target"))} & gone:
+            continue
+        for v in gone:
+            if isinstance(x.get("about"), str):
+                x["about"] = re.sub(r",?\s*\$" + re.escape(v) + r"\b", "", x["about"])
+        out.append(x)
+    return out
 
 
 # A subject the planner adds on its own ("noir detective" in a weather pack).

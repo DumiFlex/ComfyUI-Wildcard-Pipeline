@@ -1476,3 +1476,16 @@ def test_lighting_follows_the_weather():
     assert rules == [("weather", "lighting")]
     light = next(i for i in plan["items"] if i["var"] == "lighting")
     assert {"rain", "clear"} <= set(light["tags"])
+
+
+def test_a_library_item_the_request_never_asks_for_does_not_steer_the_pack():
+    raw = _raw(anchor="outfit", items=[
+        _item(kind="library", name="Character Class", var="char_class"),
+        _item(name="Outfit", var="outfit", tags=["formal"]),
+        _item(kind="constraint", name="Class → Outfit", source="char_class", target="outfit",
+              about="#mage gets #formal"),
+        _item(kind="template", name="T", about="$char_class, $outfit")])
+    plan = pack.compile_plan(raw, request="An outfit and shoes that always match")
+    assert {i["kind"] for i in plan["items"]} == {"wildcard", "template"}
+    kept = pack.compile_plan(raw, request="A class pack where the class picks the outfit")
+    assert any(i["kind"] == "constraint" for i in kept["items"])
