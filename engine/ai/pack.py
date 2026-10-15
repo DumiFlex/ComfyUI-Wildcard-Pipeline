@@ -435,6 +435,30 @@ def _side(raw: Any, known: dict[str, str]) -> str:
     return v
 
 
+def _sides_from_about(x: dict[str, Any], known: dict[str, str]) -> None:
+    """A constraint planned with empty sides but "Source: $animal_class,
+    Target: $species" (or "$biome → $weather") in its words: the sides come
+    from there, in place, instead of the rule being left out."""
+    if x.get("source") in known and x.get("target") in known:
+        return
+    text = f"{x.get('name') or ''} {x.get('about') or ''}"
+    named = {}
+    for side in ("source", "target"):
+        m = re.search(side + r"\s*(?:wildcard|variable)?\s*[:=]\s*\$?([a-zA-Z_]\w*)", text,
+                      re.I)
+        if m and m.group(1) in known:
+            named[side] = m.group(1)
+    vars_ = [v for v in dict.fromkeys(re.findall(r"\$([a-zA-Z_]\w*)", text)) if v in known]
+    rest = [v for v in vars_ if v not in named.values()]
+    for side in ("source", "target"):
+        if x.get(side) in known:
+            rest = [v for v in rest if v != x[side]]
+            continue
+        v = named.get(side) or (rest.pop(0) if rest else "")
+        if v and v != x.get("target" if side == "source" else "source"):
+            x[side] = v
+
+
 def _reads_var(items: list[dict[str, Any]], me: dict[str, Any], var: str) -> bool:
     """Whether another planned item mentions ``$var``."""
     pat = re.compile(r"\$" + re.escape(var) + r"\b")
@@ -595,6 +619,7 @@ def compile_plan(
             if isinstance(x.get("about"), str):
                 x["about"] = pat.sub("", x["about"])
     raw_items = _merge_splits(raw_items, warnings)
+    _strip_case_suffixes(raw_items, warnings)
     raw_items = _case_rules(raw_items, warnings)
     if request:
         raw_items = _fit_rules(raw_items, request, warnings)
@@ -606,6 +631,7 @@ def compile_plan(
         if x.get("kind") == "constraint":
             for side in ("source", "target"):
                 x[side] = _side(x.get(side), known_sides)
+            _sides_from_about(x, known_sides)
     ruled = {x[side] for x in raw_items if x.get("kind") == "constraint"
              for side in ("source", "target")}
     picked = {_var(x.get("var")) for x in raw_items if x.get("kind") in ("wildcard", "library")}
@@ -1777,15 +1803,54 @@ def _case_rules(raw_items: list[dict[str, Any]],
     return items
 
 
+def _strip_case_suffixes(raw_items: list[dict[str, Any]], warnings: list[str]) -> None:
+    """Tags spelled with their role (#summer_top, #winter_shoe) next to a
+    pick tagged #summer, #winter are those cases: renamed in place (the
+    wildcard's tags and every rule's #tags), so rules keyed on the season
+    find them."""
+    wild = [x for x in raw_items if x.get("kind") == "wildcard" and _var(x.get("var"))]
+    for n, w in enumerate(wild):
+        for src in wild[:n]:
+            cases = {str(t).lower() for t in src.get("tags") or []}
+            if len(cases) < 2:
+                continue
+            renamed = {}
+            for t in w.get("tags") or []:
+                low = str(t).lower()
+                m = re.fullmatch(r"([a-z0-9]+)[_-][a-z0-9_]+|[a-z0-9_]+[_-]([a-z0-9]+)", low)
+                c = m and (m.group(1) if m.group(1) in cases else
+                           m.group(2) if m.group(2) in cases else None)
+                if c:
+                    renamed[low] = c
+            if len(set(renamed.values())) < 2:
+                continue
+            w["tags"] = list(dict.fromkeys(renamed.get(str(t).lower(), t)
+                                           for t in w.get("tags") or []))
+            w["_follows"] = _var(src.get("var"))
+            pat = re.compile(r"#(" + "|".join(map(re.escape, renamed)) + r")\b", re.I)
+            for x in raw_items:
+                for field in ("about", "use"):
+                    if isinstance(x.get(field), str):
+                        x[field] = pat.sub(lambda m, r=renamed: "#" + r[m.group(1).lower()],
+                                           x[field])
+            warnings.append(f"Tagged {w.get('name') or _var(w.get('var'))} by "
+                            f"{src.get('name') or _var(src.get('var'))} (#"
+                            + ", #".join(dict.fromkeys(renamed.values())) + ") instead of "
+                            "#" + ", #".join(list(renamed)[:3]))
+            break
+
+
 def _follows(w: dict[str, Any], src: dict[str, Any]) -> bool:
     """Whether ``w``'s description names ``src`` ("tagged by season")."""
-    about = str(w.get("about") or "").lower().replace("_", " ")
+    if w.get("_follows") == _var(src.get("var")):
+        return True
+    about = f"{w.get('name') or ''} {w.get('about') or ''}".lower().replace("_", " ")
     names = {_var(src.get("var")).replace("_", " "),
              *(n for n in [str(src.get("name") or "").lower()] if n)}
     names |= {n[:-1] for n in names if n.endswith("s")} | {
         " ".join(n.split()[:-1]) for n in names if len(n.split()) > 1
         and n.split()[-1] in ("options", "list", "pick", "picks", "type", "types")}
-    return any(n and re.search(r"\b" + re.escape(n) + r"(?:e?s)?\b", about) for n in names)
+    return any(n and re.search(r"\b" + re.escape(n) + r"(?:e?s|al)?\b", about) for n in names)
 
 
 _FITS = re.compile(
@@ -1850,8 +1915,9 @@ def _stems(text: str) -> set[str]:
     return out
 
 
-_NEGATED = re.compile(r"\b(?:no|never|not|without|can'?t|cannot|don'?t|doesn'?t|won'?t|"
-                      r"shouldn'?t|nothing)\b[^.;:!?\n]{0,60}", re.I)
+# A negation with the few words before it ("elves never use guns").
+_NEGATED = re.compile(r"(?:\b[\w']+\s+){0,3}\b(?:no|never|not|without|can'?t|cannot|"
+                      r"don'?t|doesn'?t|won'?t|shouldn'?t|nothing)\b[^.;:!?\n]{0,60}", re.I)
 _SOFTEN = re.compile(r"\b(?:reduces?|reduced|reducing|lowers?|lowered|lessens?)\s+(?:the\s+)?"
                      r"(?:odds|chances?|likelihood|weight|frequency)\s+(?:of|for)\b|"
                      r"\b(?:make|makes)\s+(\w+(?:\s+\w+)?)\s+(?:rarer|less likely)\b|"
@@ -1870,8 +1936,9 @@ def _never_from_request(raw_items: list[dict[str, Any]], request: str,
         if x.get("kind") != "constraint":
             continue
         about = str(x.get("about") or "")
-        if not _SOFTEN.search(about) and not re.search(r"\breduce", about, re.I):
-            continue
+        if _NEVER.search(about) and not _SOFTEN.search(about) \
+                and not re.search(r"\breduce", about, re.I):
+            continue  # already says never: the built rules are checked for it
         words = _stems(f"{x.get('name') or ''} {about}")
         if not any(len(words & s) >= 2 for s in said):
             continue
@@ -2037,10 +2104,13 @@ def review_plan(plan: dict[str, Any],
     _settings_findings(plan, add)
     for d in plan.get("dropped") or []:
         if isinstance(d, dict) and d.get("kind") == "constraint":
+            sides = [f"${v}" for v in (d.get("source"), d.get("target")) if v]
             add(None, "fix", f"The constraint {d.get('name')} was left out because "
                 f"{d.get('why')}, so its rule ({d.get('about') or 'no description'}) does "
-                f"nothing; plan wildcards for ${d.get('source')} and ${d.get('target')} so "
-                "it can apply")
+                "nothing; " + (f"plan wildcards for {' and '.join(sides)} so it can apply"
+                               if len(sides) == 2 else
+                               "give it the wildcard it keys on as source and the one it "
+                               "changes as target"))
     # A new wildcard the library already has.
     if parse_settings(plan.get("settings"))["library"] == "reuse":
         lib = {}
@@ -2540,7 +2610,7 @@ def compile_item(
         out = text_items.compile_combine(answer, out_var=item["var"], catalog=cat)
         payload, preview, warnings = out["payload"], out["preview"], out["warnings"]
         payload, said = read_rolled(plan, built, payload)
-        warnings = [*warnings, *said, *_combine_notes(plan, item, payload)]
+        warnings = [*warnings, *said, *_combine_notes(plan, item, payload, built)]
         if plan.get("style") == "tags":
             payload = {**payload, "template": tag_commas(payload["template"])}
     else:
@@ -2554,8 +2624,8 @@ def compile_item(
             "preview": preview, "warnings": warnings, "repair": repair_note(warnings)}
 
 
-def _combine_notes(plan: dict[str, Any], item: dict[str, Any],
-                   payload: dict[str, Any]) -> list[str]:
+def _combine_notes(plan: dict[str, Any], item: dict[str, Any], payload: dict[str, Any],
+                   built: dict[str, Any] | None = None) -> list[str]:
     """A combine that makes its own pick ("{parka|trench coat}") instead of
     reading the variable its plan joins, and one that also reads what the
     template prints itself ($quality_tags), so the prompt shows it twice."""
@@ -2567,6 +2637,16 @@ def _combine_notes(plan: dict[str, Any], item: dict[str, Any],
     if skipped and _PICKS.search(text):
         said.append(f"It picks inline ({{a|b}}) instead of reading ${', $'.join(skipped)}; "
                     "read the variable so the constraints on it apply")
+    low = text.lower()
+    for w in (i for i in plan["items"] if is_wild(i) and i["key"] in (built or {})):
+        opts = [str(o.get("value") or "") for o in built[w["key"]]["payload"].get(
+            "options") or [] if isinstance(o, dict)]
+        written = [c for c in (sorted(_chunks(o))[:1] for o in opts) if c and len(c[0]) >= 5
+                   and re.search(r"(?<!\w)" + re.escape(c[0]) + r"(?!\w)", low)]
+        if len(written) >= 2:
+            said.append(f"It writes out {w['name']}'s options itself ("
+                        + ", ".join(f'"{c[0]}"' for c in written[:3]) + "), so every prompt "
+                        f"lists them all; read ${w['var']} instead")
     tpl = next((i for i in plan["items"] if i["kind"] == "template"), None)
     if tpl is not None:
         both = sorted(v for v in reads & set(_reads(tpl.get("about") or ""))
@@ -2692,7 +2772,8 @@ def _second_rolls(plan: dict[str, Any], payload: dict[str, Any]) -> list[str]:
     return said
 
 
-_NEVER = re.compile(r"\b(never|no|not|can'?t|cannot|excludes?|forbid\w*|without)\b", re.I)
+_NEVER = re.compile(r"\b(never|no|not|can'?t|cannot|excludes?|forbid\w*|without|"
+                    r"restrict\w*|ban(?:s|ned)?|prohibit\w*)\b", re.I)
 _ONLY = re.compile(r"\bonly\b", re.I)
 _SOFT = re.compile(r"\b(rarely|rarer|less|fewer|seldom|unlikely|sometimes|reduces?|mostly|"
                    r"usually|often)\b", re.I)
@@ -2835,7 +2916,7 @@ _STOP = {"the", "and", "with", "type", "list", "option", "options", "pack", "wil
 _REPAIRABLE = re.compile(r"has no option|No option carries|unknown tag|nothing sets|"
                          r"already rolls|no rule is an only|joins picks with|"
                          r"isn't an option or tag|a second time|"
-                         r"instead of reading|prints itself|"
+                         r"instead of reading|prints itself|options itself|"
                          r"isn't set|not a variable|doesn't set|which no", re.I)
 
 

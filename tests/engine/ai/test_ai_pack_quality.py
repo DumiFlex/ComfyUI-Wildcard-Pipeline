@@ -848,3 +848,78 @@ def test_a_combine_that_picks_inline_or_reads_the_templates_vars_is_sent_back():
     assert any("instead of reading $coat" in s for s in said)
     assert any("$quality_tags, which the template prints itself" in s for s in said)
     assert pack.repair_note(said)
+
+
+# --- tenth real-model run ---------------------------------------------------
+
+def test_a_constraint_with_blank_sides_takes_them_from_its_words():
+    raw = _raw(items=[
+        _item(name="Biome", var="biome", tags=["cold", "hot"]),
+        _item(name="Weather", var="weather", tags=["snow", "rain"]),
+        _item(kind="constraint", name="Snow Logic", source="", target="",
+              about="Source: $biome, Target: $weather. #hot never gets #snow"),
+        _item(kind="template", name="T", about="$biome, $weather")])
+    plan = pack.compile_plan(raw)
+    rule = next(i for i in plan["items"] if i["kind"] == "constraint")
+    assert (rule["source"], rule["target"]) == ("biome", "weather")
+
+
+def test_role_suffixed_case_tags_become_the_cases():
+    raw = _raw(items=[
+        _item(name="Current Season", var="season", tags=["winter", "summer", "autumn"]),
+        _item(name="Seasonal Top", var="top",
+              tags=["winter_top", "summer_top", "autumn_top"]),
+        _item(kind="constraint", name="Summer Top", source="season", target="top",
+              about="When season is summer, never allow #winter_top."),
+        _item(kind="template", name="T", about="$season, $top")])
+    plan = pack.compile_plan(raw)
+    top = next(i for i in plan["items"] if i["var"] == "top")
+    assert top["tags"] == ["winter", "summer", "autumn"]
+    rule = next(i for i in plan["items"] if i["kind"] == "constraint")
+    assert "#winter." in rule["about"] or "#winter " in rule["about"]
+    assert "#summer gets only #summer" in rule["about"]
+
+
+def test_rule_tags_match_singular_plural_and_role_words():
+    from engine.ai import constraint
+    view = lambda prefix, tags, opts: {"prefix": prefix, "tags": tags, "options": [  # noqa: E731
+        {"short": f"{prefix}{n}", "id": f"{prefix.lower()}{n}", "value": v, "tags": t}
+        for n, (v, t) in enumerate(opts, 1)]}
+    src = view("S", ["mage", "winter"], [("mage", ["mage"]), ("winter", ["winter"])])
+    tgt = view("T", ["sandal", "staff"], [("espadrilles", ["sandals"]), ("oak staff", ["staff"])])
+    out = constraint.compile_rules({"rules": [
+        {"source": "#winter", "target": "#sandal", "effect": "exclude"},
+        {"source": "#mage_weapons", "target": "#staff", "effect": "only"}]},
+        source=src, target=tgt)
+    assert not out["skipped"]
+    assert {(c["source_tag"], c["target_tag"]) for c in out["cells"]} == {
+        ("winter", "sandals"), ("mage", "staff")}
+
+
+def test_never_in_the_request_reaches_a_rule_named_after_it():
+    raw = _raw(items=[
+        _item(name="Race", var="race", tags=["elf", "dwarf"]),
+        _item(name="Weapon", var="weapon", tags=["gun", "bow"]),
+        _item(kind="constraint", name="Elf Weapon Restriction", source="race",
+              target="weapon", about="Elves rarely carry a gun"),
+        _item(kind="template", name="T", about="$race, $weapon")])
+    plan = pack.compile_plan(raw, request="fantasy heroes; elves never use guns")
+    rule = next(i for i in plan["items"] if i["kind"] == "constraint")
+    assert "Never: exclude it" in rule["about"]
+
+
+def test_a_combine_that_writes_out_a_wildcards_options_is_sent_back():
+    raw = _raw(items=[
+        _item(name="Biome", var="biome"),
+        _item(kind="combine", name="Habitat Phrase", var="habitat", about="joins $biome"),
+        _item(kind="template", name="T", about="$habitat")])
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    bk = next(i["key"] for i in plan["items"] if i["var"] == "biome")
+    built[bk]["payload"]["options"] = [
+        {"id": "a", "value": "dense forest, tall trees", "weight": 1},
+        {"id": "b", "value": "arid desert, sand dunes", "weight": 1}]
+    item = next(i for i in plan["items"] if i["kind"] == "combine")
+    said = pack._combine_notes(plan, item, {
+        "template": "$biome, dense forest, tall trees, arid desert, sand dunes"}, built)
+    assert any("writes out Biome's options itself" in s for s in said)

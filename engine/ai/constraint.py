@@ -202,7 +202,7 @@ def _side(raw: Any, view: dict[str, Any], tag_lower: dict[str, str]) -> tuple[st
         return None
     text = raw.strip()
     if text.startswith("#"):
-        tag = tag_lower.get(text[1:].strip().lower())
+        tag = _tag_like(text[1:].strip().lower(), tag_lower)
         return ("tag", tag) if tag else _by_word(text[1:], view)
     m = re.fullmatch(r"([STst])?\s*(\d+)", text)
     if m:
@@ -216,6 +216,20 @@ def _side(raw: Any, view: dict[str, Any], tag_lower: dict[str, str]) -> tuple[st
             return ("option", o)
     tag = tag_lower.get(text.lower())
     return ("tag", tag) if tag else None
+
+
+def _tag_like(word: str, tag_lower: dict[str, str]) -> str | None:
+    """The tag ``word`` names: itself, its singular or plural ("sandal" for
+    #sandals), or without a role word ("mage_weapons" for #mage)."""
+    forms = [word, word + "s", word[:-1] if word.endswith("s") else "",
+             word[:-2] if word.endswith("es") else ""]
+    parts = re.split(r"[_-]", word)
+    if len(parts) > 1:
+        forms += [parts[0], parts[-1]]
+    for f in forms:
+        if f and f in tag_lower:
+            return tag_lower[f]
+    return None
 
 
 def _by_word(word: str, view: dict[str, Any]) -> tuple[str, Any] | None:
@@ -255,6 +269,10 @@ def _carried(side: tuple[str, Any] | None, view: dict[str, Any]) -> tuple[str, A
     whose text says it, like a tag it doesn't list."""
     if side is None or side[0] != "tag" or any(side[1] in o["tags"] for o in view["options"]):
         return side
+    carried = {t.lower(): t for o in view["options"] for t in o["tags"]}
+    near = _tag_like(side[1].lower(), carried)
+    if near:
+        return ("tag", near)
     return _by_word(side[1], view) or side
 
 
