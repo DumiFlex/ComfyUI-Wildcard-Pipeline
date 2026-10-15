@@ -23,13 +23,17 @@ const optionFields = [
 ];
 
 const instanceOptions = [
-  { term: "Random mode", desc: "Pick any option from the pool using its weights. This is the default." },
-  { term: "Subcategory mode", desc: "A quick pre-filter that narrows the pool to options carrying a chosen sub-category before the pick. The pick itself is identical to random — only which options are eligible changes. The category filter below is the general, boolean form of it." },
-  { term: "Pinned mode", desc: "Locks to one specific option regardless of seed. Use this to hold an element steady across a batch while everything else varies." },
-  { term: "Category filter", desc: 'A boolean sub-category expression — "and / or / not", parentheses, and comma as shorthand for "or" (e.g. "feline and warm, not lynx") — that narrows the pool to matching options before the pick. Build it from grouped pills or type it in the advanced editor; it never applies to the null option.' },
+  { term: "Variable binding", desc: "The variable this use writes. It starts as the library's; change it to use the same wildcard twice ($hair and $hair_b) without one overwriting the other." },
+  { term: "Option toggles", desc: "Untick options this use may not roll. Ticking a single option is how you fix one value for a node: it still obeys constraints, so it can come out empty if a constraint excludes it. Keep an enabled fallback for that case." },
+  { term: "Per-use weights", desc: "Change an option's weight for this use only. The library editor doesn't show them." },
+  { term: "Category filter", desc: 'A boolean sub-category expression (and, or, not, parentheses, and comma as shorthand for "or", e.g. "feline and warm, not lynx") that narrows the pool to matching options before the pick. Build it from grouped pills or type it in the advanced editor; it never applies to the null option.' },
+  { term: "Pick, separator, Allow repeats", desc: "Draw several options at once. See Multi-pick below." },
   { term: "Exclude null", desc: "Drops the null option for this use, so the wildcard always resolves to real text. Only shown when the wildcard actually has a null option to exclude." },
-  { term: "Match variable", desc: "Under Runtime in the node settings. Instead of rolling, pick the option whose text equals a variable's value (ignoring case), e.g. model_variant from WP Model Info. No match uses the fallback option; without one the wildcard rolls as usual and WP Debug notes it. This is how a variable drives a constraint: the matched pick is a normal source pick." },
-  { term: "Locked seed", desc: "Freezes this wildcard's pick across every loop iteration — every iteration in the batch gets the same result. Useful for holding one element constant (e.g. the art style) while letting other wildcards vary." },
+  { term: "Fallback", desc: "The fallback's checkbox on the node turns it off for this use, which keeps the empty result there." },
+  { term: "Match variable", desc: "Under Runtime in the node settings. Instead of rolling, pick the option whose text equals a variable's value (ignoring case and outer spaces), e.g. model_variant from WP Model Info. It compares the option's raw text, so options holding {a|b} or @{} never match. No match uses the fallback option; without one the wildcard rolls as usual and WP Debug notes it. This is how a variable drives a constraint: the matched pick is a normal source pick." },
+  { term: "Lock pick", desc: "Freezes this use's pick: the same result on every Generate and every Loop frame, until you unlock it or change the options. Useful for holding one element (e.g. the art style) while the rest varies." },
+  { term: "Hold across run", desc: "The same pick for every frame of one WP Context Loop run, and a new pick on the next run. Use it for a character that must stay the same through a story." },
+  { term: "Hide from prompt", desc: "Writes the variable as internal: constraints, combines and derivations still read it, but the Assembler leaves it out. A later write without Hide from prompt makes it print again." },
 ];
 
 const importRules = [
@@ -70,6 +74,15 @@ const importRules = [
         ratio="16 / 7"
         caption="The Starter subject wildcard modal open on the $subject variable. Two sub-category chips (feline · 2, canine · 2) sit above a four-row pool: cat + tiger tagged FELINE, dog + wolf tagged CANINE, each row showing a 25% probability bar and a weight of 1. Footer carries the Lock pick + Hide from prompt runtime toggles plus the Save to library / Save split."
       />
+      <DocCallout variant="tip">
+        <b>Use a wildcard</b> for any choice something else reacts to (a constraint, a derivation,
+        Match variable, a sweep or a second template reads it), and for any list you want weights,
+        tags, a fallback or Test Runner counts on. A wildcard with no variable is a vocabulary,
+        drawn through <VarToken kind="ref">@{}</VarToken> references.
+        <b>Not for</b> always-on text (use Fixed Values), a tiny cosmetic variant inside one option
+        (an inline <VarToken kind="inline">{a|b}</VarToken>), or a phrase built from other picks
+        (use a Combine). See <DocRef id="pack-structure" />.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="Option fields">
@@ -83,8 +96,8 @@ const importRules = [
       </p>
       <DocKeyList :items="instanceOptions" />
       <DocCallout variant="tip">
-        Subcategory mode and random mode produce the same result when no sub-category filter is
-        active — subcategory mode is just a convenient way to pre-narrow the pool.
+        There is no pin control: to fix a value for one node, untick every other option, or use
+        Lock pick. Only a WP Context Loop sweep pins a pick, and a swept pick skips constraints.
       </DocCallout>
     </DocSection>
 

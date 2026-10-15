@@ -33,21 +33,43 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
       />
     </DocSection>
 
-    <DocSection title="Frozen snapshots">
+    <DocSection title="Snapshots and library edits">
       <p>
-        When you insert a bundle into a Context, the editor takes a snapshot of its children at
-        that moment. If you later edit the bundle's library entry, those changes do <em>not</em>
-        flow into existing snapshots — each use is independent.
+        A bundle stores a snapshot of each child module. What happens when you later edit a
+        module depends on where the snapshot lives:
       </p>
+      <ul>
+        <li>
+          <b>Bundles in the library</b> follow. Saving a module in the library rewrites the
+          matching child in every library bundle that holds it, keeping that bundle's own
+          per-use settings.
+        </li>
+        <li>
+          <b>Bundles already on a canvas</b> don't change by themselves. Their header shows
+          <strong>library updated</strong>; right-click the bundle and choose <b>Reset to
+          library snapshot</b> to pull the newer version, or use <b>Refresh from library</b> on
+          one row.
+        </li>
+        <li>
+          <b>Push to library…</b> sends your canvas edits the other way, into the library entry.
+        </li>
+      </ul>
       <p>
-        This is intentional: a bundle is a point-in-time capture of a known-working setup. If the
-        original bundle is later deleted from the library, the snapshot keeps working and the row
-        simply shows a <strong>MISSING</strong> badge to let you know it is no longer linked to a
-        live library entry.
+        If a module is deleted from the library, the snapshot keeps working and the row shows a
+        <strong>MISSING</strong> badge to let you know it is no longer linked to a live library
+        entry.
       </p>
       <DocCallout variant="tip">
-        To pick up changes from the library entry, use "Push to library" from the bundle's context
-        menu to sync the snapshot back up, or re-insert a fresh copy.
+        Inserting a bundle keeps its children's library ids, so they stay linked to the library
+        and inserting it twice gives two linked copies. <b>Extract to library</b> in the bundle
+        editor does the opposite: it makes new stand-alone modules with fresh ids (a fork),
+        rewires the references between them, and leaves the per-use overrides behind.
+      </DocCallout>
+      <DocCallout variant="tip">
+        <b>Use a bundle</b> for a set of modules you reuse together (a character, a wardrobe, a
+        whole pack), with sub-bundles for its sections. <b>Not for</b> keeping two copies apart:
+        a bundle groups modules but doesn't scope their variables. For two characters, insert it
+        twice and rename the second copy's variables.
       </DocCallout>
     </DocSection>
 
@@ -62,9 +84,9 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
     <DocSection title="Bundles and the wildcard cascade">
       <p>
         When you delete a wildcard from the library, the manager offers to clean up every use of
-        that wildcard across your Contexts. Bundles are intentionally excluded from this cascade —
-        their children are frozen snapshots, so they continue to work correctly even after the
-        source wildcard is gone.
+        that wildcard across your Contexts, and lists the library bundles that hold it. A bundle
+        child is a snapshot, so the bundle keeps working after the source wildcard is gone; the
+        child just shows the MISSING badge.
       </p>
     </DocSection>
 

@@ -20,7 +20,7 @@ export const FIGURE_TEXT: Record<string, string> = {
   "context-chaining-flow":
     "Flow diagram of three nodes left to right: WP Context A (rolls $vars), an arrow labelled feeds, WP Context B (adds / overrides), an arrow labelled merged $vars, and Prompt Assembler (fills template). Caption: each Context inherits the upstream map, and the last write for any $var wins.",
   "iteration-overrides-flow":
-    "Flow diagram of three stages left to right: Base settings (apply to all frames), an arrow labelled default, Frame #k override (patches just frame k), an arrow labelled per-frame patch, and Resolved frames (base, except where pinned). Caption: each frame resolves from the base, then any override recorded for that frame is layered on top, like a keyframe that changes only the frames you pin.",
+    "Flow diagram of three stages left to right: Base settings (apply to all frames), an arrow labelled default, Frame #k override (patches just frame k), an arrow labelled per-frame patch, and Resolved frames (base, except where overridden). Caption: each frame resolves from the base, then any override recorded for that frame is layered on top, like a keyframe that changes only the frames you override.",
   "negatives-flow":
     "Flow diagram of four stages left to right: a Wildcard option carrying 'negative: fruit', an arrow labelled picked, the variable $hair (carries it), an arrow labelled used, the Assembler (renders $hair), an arrow labelled collected, and the negative output (fruit). Caption: negatives follow usage, so words only reach an Assembler's negative output when their variable was rendered by its template.",
   "seeds-and-loops-flow":

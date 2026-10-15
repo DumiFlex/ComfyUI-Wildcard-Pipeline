@@ -5,11 +5,12 @@ import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
+import DocRef from "../../../components/docs/DocRef.vue";
 
 const overridable = [
   {
-    term: "Wildcard pick",
-    desc: "Pin a specific option for one frame while the rest re-roll. Frame #3 always lands on \"red\"; the others stay random.",
+    term: "Wildcard options",
+    desc: "Change which options a frame may roll, their weights or the category filter. Tick only \"red\" on frame #3 and that frame lands on red while the others stay random. A single ticked option still obeys constraints, so keep a fallback enabled if a constraint could exclude it.",
   },
   {
     term: "Combine template / Fixed value",
@@ -36,21 +37,21 @@ const overridable = [
     title="Per-iteration overrides"
     icon="pi pi-images"
     tone="neutral"
-    blurb="Give individual frames of a WP Context Loop run their own settings — a pinned wildcard pick, a tweaked template, a locked seed, or a skipped module — without disturbing the rest of the batch."
+    blurb="Give individual frames of a WP Context Loop run their own settings (a narrowed wildcard, a tweaked template, a locked seed, or a skipped module) without disturbing the rest of the batch."
   >
     <DocSection title="Base vs. per-frame">
       <p>
         A <b>WP Context Loop</b> fans your chain out into N passes (“frames”). By default every
         frame resolves from the same module settings — the <b>base</b>. An <b>override</b> is a
         per-frame exception: a single frame gets a different value while all the others keep using
-        the base. Think of it as a keyframe — most of the run follows the base, and you pin only the
+        the base. Think of it as a keyframe — most of the run follows the base, and you override only the
         spots that need to differ.
       </p>
       <DocFlow figure="iteration-overrides-flow"
         :stages="[
           { icon: 'pi pi-sitemap', name: 'Base settings', sub: 'apply to all frames', tone: 'node' },
           { icon: 'pi pi-images', name: 'Frame #k override', sub: 'patches just frame k', tone: 'neutral' },
-          { icon: 'pi pi-replay', name: 'Resolved frames', sub: 'base, except where pinned', tone: 'node' },
+          { icon: 'pi pi-replay', name: 'Resolved frames', sub: 'base, except where overridden', tone: 'node' },
         ]"
         :arrows="['default', 'per-frame patch']"
         caption="Each frame resolves from the base, then any override recorded for that frame is layered on top."
@@ -63,11 +64,11 @@ const overridable = [
         <code>#1 #2 #3 …</code> up to the count. Pick a frame chip and the module editors switch to
         “editing frame #k”: open any module, change it, and the change is recorded as that frame's
         override — not the base. Switch back to <code>base</code> and you're editing the default
-        that every un-pinned frame uses.
+        that every frame without an override uses.
       </p>
       <p>
         Overrides are sparse: a frame stores only the fields you actually changed, so a four-frame
-        run with one pinned wildcard carries one tiny patch, not four full copies. Each pinned field
+        run with one overridden wildcard carries one tiny patch, not four full copies. Each overridden field
         shows a small badge on its module row so you can see at a glance which frames diverge, and a
         <b>revert to base</b> control clears a frame's override and returns it to the default.
       </p>
@@ -81,6 +82,16 @@ const overridable = [
 
     <DocSection title="What you can override">
       <DocKeyList :items="overridable" />
+      <DocCallout variant="warn">
+        Per-frame overrides live in the workflow, on the canvas. They are not saved into bundles
+        and the Test Runner doesn't run them. For a rule over frames that ships in a pack, use a
+        Frame wildcard with Match variable on <code>iteration</code> plus a constraint, or a
+        derivation that tests <code>$iteration</code>. See <DocRef id="pack-structure" />.
+      </DocCallout>
+      <DocCallout variant="tip">
+        <b>Use overrides</b> for a few named beats on one canvas (frame #1 is the establishing
+        shot). <b>Not for</b> a pattern that runs over all frames, or anything you'll share.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="Per-frame enable / disable">

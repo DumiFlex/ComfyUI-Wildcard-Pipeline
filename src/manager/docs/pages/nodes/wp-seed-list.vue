@@ -78,17 +78,20 @@ const controls = [
       </p>
       <ul>
         <li>
-          <b>Hashed</b> (default) — each iteration gets an unrelated seed derived from the base.
-          Most variety; recommended.
+          <b>Hashed</b> (default) — each iteration gets a seed spread out from the base by a hash.
         </li>
         <li>
-          <b>Sequential</b> — base, base+1, base+2 … Adjacent iterations feel related and drift
-          gradually.
+          <b>Sequential</b> — base, base+1, base+2 … Easy to read out and quote to someone.
+          Neighbouring seeds still give unrelated images.
         </li>
         <li>
           <b>Stride</b> — large prime jumps through the seed space. Wide spread, deterministic.
         </li>
       </ul>
+      <p>
+        The strategy only changes which seeds you get. No strategy makes the images more or less
+        varied.
+      </p>
       <p>
         Every emitted seed is masked to 50 bits so it stays inside the range ComfyUI's frontend
         produces when you press the seed randomise button — you can copy any seed back into a
@@ -121,6 +124,14 @@ const controls = [
         sampler out N ways from one click. But if you connect it to a non-loop chain that
         expects a single seed, ComfyUI will iterate the downstream node N times anyway. Set the
         count to 1 to collapse to single-seed behaviour without removing the node.
+      </DocCallout>
+      <DocCallout variant="tip">
+        <b>Use Seed List</b> only for sampler seeds: when you loop prompts and want each frame's
+        image seed to follow the same frames (WP Image Filter's Send to Loop, or keeping a found
+        image reproducible). <b>Not for</b> prompt variety. It never changes a prompt: the Context
+        seed and the Loop already vary those. Prompt and sampler seeds are separate, so
+        reproducing a frame needs both the loop's seed lock (with Override seed on) and the Seed
+        List's lock. A fixed sampler seed with varying prompts is a valid comparison too.
       </DocCallout>
     </DocSection>
 

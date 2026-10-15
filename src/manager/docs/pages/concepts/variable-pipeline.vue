@@ -115,7 +115,8 @@ import DocRef from "../../../components/docs/DocRef.vue";
     <DocSection title="The per-surface gate">
       <p>
         Not every token resolves on every surface — each module resolves only what makes sense for
-        it; anything else stays literal text.
+        it; anything else stays literal text. "Dropped" means the token prints nothing and WP
+        Debug notes it.
       </p>
       <table class="wp-doc-syntax-table wp-doc-gate-table">
         <thead>
@@ -136,7 +137,7 @@ import DocRef from "../../../components/docs/DocRef.vue";
           <tr>
             <td>Combine template</td>
             <td>✓</td>
-            <td>literal</td>
+            <td>dropped</td>
             <td>✓</td>
           </tr>
           <tr>
@@ -147,7 +148,7 @@ import DocRef from "../../../components/docs/DocRef.vue";
           </tr>
           <tr>
             <td>Derivation condition value</td>
-            <td>✓</td>
+            <td>—</td>
             <td>—</td>
             <td>—</td>
           </tr>
@@ -160,7 +161,7 @@ import DocRef from "../../../components/docs/DocRef.vue";
           <tr>
             <td>Prompt Assembler template</td>
             <td>✓</td>
-            <td>literal</td>
+            <td>dropped</td>
             <td>literal</td>
           </tr>
         </tbody>
@@ -172,11 +173,14 @@ import DocRef from "../../../components/docs/DocRef.vue";
         <b>derivation</b> after the producers — those surfaces do read <VarToken>$var</VarToken>.
       </DocCallout>
       <DocCallout variant="tip">
-        The Assembler is <b>seedless</b>: any leftover picks or refs in the final template render
-        verbatim, so roll the value upstream and reference its <VarToken>$var</VarToken>.
-        Derivation <b>action</b> values now resolve <VarToken kind="ref">@{}</VarToken> refs too —
-        a rule can inject a nested wildcard's pick — while derivation <b>conditions</b> compare
-        plain <VarToken>$var</VarToken> values only.
+        The Assembler is <b>seedless</b>: any leftover <VarToken kind="inline">{a|b}</VarToken>
+        picks in the final template render verbatim and <VarToken kind="ref">@{}</VarToken> refs
+        print nothing, so roll the value upstream and reference its <VarToken>$var</VarToken>.
+        Derivation <b>action</b> values resolve <VarToken kind="ref">@{}</VarToken> refs too —
+        a rule can inject a nested wildcard's pick — while a derivation <b>condition</b> tests one
+        variable (<VarToken>$name.K</VarToken>, <VarToken>$name.AXIS</VarToken> and
+        <VarToken>$name.neg</VarToken> included) against plain text: the value it compares to
+        never resolves anything.
       </DocCallout>
     </DocSection>
 

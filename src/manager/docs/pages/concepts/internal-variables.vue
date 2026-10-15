@@ -43,6 +43,28 @@ import VarToken from "../../../components/docs/VarToken.vue";
       </DocCallout>
     </DocSection>
 
+    <DocSection title="Good to know">
+      <ul>
+        <li>In a module's settings the switch is called <b>Hide from prompt</b>.</li>
+        <li>
+          The flag belongs to the write, not the name. If a later module writes the same variable
+          without Hide from prompt, the variable prints again.
+        </li>
+        <li>
+          An internal variable in the Assembler template renders nothing, and the Assembler warns
+          about an unknown variable. To print a driver, read it in a combine
+          (<VarToken>$_season coat</VarToken>) and print the combine's variable.
+        </li>
+        <li>Internal variables add nothing to the Assembler's negative output.</li>
+      </ul>
+      <DocCallout variant="tip">
+        <b>Use it for</b> drivers: a pick that decides other picks (through constraints) but
+        should not print itself, like a season, a class or a rating level, and for numbers a WP
+        Var node reads. <b>Not for</b> hiding a variable from one template only: simply leave it
+        out of that template.
+      </DocCallout>
+    </DocSection>
+
     <DocSection title="Loop iteration variable flags">
       <p>
         The <VarToken>$iteration</VarToken> and <VarToken>$iteration_total</VarToken> variables

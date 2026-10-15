@@ -51,11 +51,11 @@ const terms = [
   },
   {
     term: "Constraint",
-    desc: "A module that forces a specific wildcard option to be chosen when another $variable has a particular value. Lets you say things like \"whenever $style is cinematic, $lighting must be low-key\".",
+    desc: "A module that changes the odds of a later wildcard's options based on what an earlier wildcard picked: boost, reduce, exclude, or allow only some. Lets you say things like \"when $style picks cinematic, $lighting picks only low-key options\". It reads picks, not variables, and sets no variable itself.",
   },
   {
     term: "Bundle",
-    desc: "A named group of modules stored together. You can drop an entire bundle into a WP Context at once. Bundle contents are frozen at insert time, so editing the library later does not change bundles already placed in a workflow.",
+    desc: "A named group of modules stored together. You can drop an entire bundle into a WP Context at once. Saving a module in the library updates it inside library bundles; a bundle already placed in a workflow keeps its snapshot and shows \"library updated\" until you pull the change with Reset to library snapshot.",
   },
   {
     term: "Seed",

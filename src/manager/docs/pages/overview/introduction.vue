@@ -79,8 +79,8 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
         <li><DocRef id="wildcard" /> — a list of options; one is picked at random each run.</li>
         <li><DocRef id="fixed-values" /> — always outputs the same value.</li>
         <li><DocRef id="combine" /> — joins several variables into one string.</li>
-        <li><DocRef id="derivation" /> — transforms an existing variable into a new one.</li>
-        <li><DocRef id="constraint" /> — forces a wildcard to pick a specific option when another variable has a certain value.</li>
+        <li><DocRef id="derivation" /> — IF/ELSE rules that write or change variables based on what was picked.</li>
+        <li><DocRef id="constraint" /> — changes the odds of a later wildcard's options based on what an earlier wildcard picked: boost, reduce, exclude or allow only some.</li>
       </ul>
       <DocCallout variant="tip">
         You create and edit modules here in the manager. You then add them to a
@@ -110,6 +110,8 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
         :links="[
           { id: 'quick-start', label: 'Quick start', icon: 'pi pi-play', tone: 'neutral' },
           { id: 'glossary', label: 'Glossary', icon: 'pi pi-book', tone: 'neutral' },
+          { id: 'pack-structure', label: 'Recommended pack structure', icon: 'pi pi-th-large', tone: 'neutral' },
+          { id: 'prompt-writing', label: 'Writing prompts for your model', icon: 'pi pi-pencil', tone: 'neutral' },
           { id: 'wp-context', label: 'WP Context', icon: 'pi pi-sitemap', tone: 'node' },
         ]"
       />

@@ -20,8 +20,8 @@ const conditionOps = [
 
 const actionModes = [
   { term: "Replace", desc: "Overwrite the variable's current value entirely with the action text." },
-  { term: "Append", desc: "Add the action text to the end of the variable's current value." },
-  { term: "Prepend", desc: "Insert the action text before the variable's current value." },
+  { term: "Append", desc: "Add the action text to the end of the variable's current value. Nothing is put in between, so start the text with its own separator (\", with a scarf\")." },
+  { term: "Prepend", desc: "Insert the action text before the variable's current value. End the text with its own separator (\"wet, \")." },
   { term: "Add to negative", desc: "Leave the variable's text alone and add the action text to its negative words, so they follow the variable into any Assembler that renders it. The value takes $vars, @{refs} and {a|b}; refs resolve quietly and never change a pick." },
   { term: "Replace negative", desc: "Like Add to negative, but the action text becomes the variable's only negative words: whatever it carried before is dropped. The variable's own text is still left alone." },
 ];
@@ -31,6 +31,9 @@ const instanceOptions = [
   { term: "Disable a branch", desc: "Skip a specific IF, ELIF, or ELSE branch within a rule for this use." },
   { term: "Value override", desc: "Replace the text that a specific branch action writes, or the value a condition compares against, for this use only. A branch that combines tests gets one condition field per test." },
   { term: "Rule order", desc: "Reorder the rules for this use without changing the shared library entry." },
+  { term: "Lock seed", desc: "Freezes the {a|b} and @{} rolls inside the actions on every Generate and every Loop frame." },
+  { term: "Hold across run", desc: "Freezes those rolls for one Loop run. The conditions are still checked on every frame, so a frame whose test changes takes a different branch; only the dice inside each branch stay the same." },
+  { term: "Hide from prompt", desc: "Writes the variables the rules set as internal: other modules read them, the Assembler leaves them out." },
 ];
 </script>
 
@@ -59,6 +62,16 @@ const instanceOptions = [
         ratio="16 / 7"
         caption="The Starter accent Derivation modal — a single Rule 1 condition reading '$mood = dramatic → $accent = cinematic lighting' (the engine falls through to the rule's else branch when $mood resolves to anything else). Footer carries Lock seed + Hide from prompt toggles. Behind the modal: a WP Context with Starter scene + Starter accent stacked, the accent row's orange left-border matching the derivation kind colour."
       />
+      <DocCallout variant="tip">
+        <b>Use a Derivation</b> for text that follows from a pick ("if winter, add a scarf"), a
+        draw that only happens in some cases (an action holding
+        <VarToken kind="ref">@{Accessories:winter}</VarToken>), a LoRA or injected value replacing
+        a rolled pick, story text on <VarToken>$iteration</VarToken>, and negatives that depend on
+        a pick. <b>Not for</b> changing the odds of another pick (use a Constraint), a long lookup
+        of equals → Replace branches from one pick to another (a constraint on a tagged list), or
+        overwriting a variable a constrained wildcard sets: the last write wins and the pick is
+        thrown away.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="How rules work">
@@ -150,10 +163,12 @@ const instanceOptions = [
       <DocCallout variant="warn">
         Actions and conditions are <b>not</b> symmetric. An action value resolves
         <VarToken kind="ref">@{}</VarToken> refs and <VarToken kind="inline">&#123;a|b&#125;</VarToken>
-        picks; a <b>condition</b> value — the text you compare against — does not. A condition is a
-        plain literal or a <VarToken>$variable</VarToken>, so <VarToken kind="ref">@{}</VarToken> and
-        <VarToken kind="inline">&#123;a|b&#125;</VarToken> stay verbatim there and won't match what
-        you expect. This mirrors the per-surface gate on <DocRef id="variable-pipeline" />.
+        picks; a <b>condition</b> value (the text you compare against) does not. It is always
+        plain text: <VarToken>$variable</VarToken>, <VarToken kind="ref">@{}</VarToken> and
+        <VarToken kind="inline">&#123;a|b&#125;</VarToken> stay verbatim there and won't match
+        what you expect. To compare two variables, test one and write the other's possible values
+        as branches, or use a constraint. This mirrors the per-surface gate on
+        <DocRef id="variable-pipeline" />.
       </DocCallout>
     </DocSection>
 
@@ -162,8 +177,9 @@ const instanceOptions = [
         A rule can read a multi-pick result the same way templates do. Reference the joined list with
         a bare <VarToken>$colors</VarToken> (it uses the variable's separator), or pull out a single
         item with <VarToken>$colors.0</VarToken> — <code>K</code> in <VarToken>$name.K</VarToken> is
-        0-based, so <VarToken>$colors.0</VarToken> is the first pick. This works in both condition and
-        action values. The full grammar lives on <DocRef id="variable-pipeline" />.
+        0-based, so <VarToken>$colors.0</VarToken> is the first pick. In a condition, put it in the
+        variable you test; in an action, write it in the value. The full grammar lives on
+        <DocRef id="variable-pipeline" />.
       </p>
     </DocSection>
 

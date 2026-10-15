@@ -15,8 +15,11 @@ const rowFields = [
 ];
 
 const instanceOptions = [
-  { term: "Value override", desc: "Replace the value of any row for this particular use, without changing the shared library entry. Good for adapting a reusable Fixed Values module to a specific workflow." },
-  { term: "Locked seed", desc: "Freezes any inline {a|b|c} picks across loop iterations so the value stays the same throughout a batch." },
+  { term: "Value override", desc: "Replace the value of any row for this particular use, without changing the shared library entry. A row's negative can be overridden too: an empty negative clears it, and leaving it alone keeps the library's." },
+  { term: "Row toggles", desc: "Turn rows on or off for this use only, e.g. a quality booster on one node and not another." },
+  { term: "Lock seed", desc: "Freezes any inline {a|b|c} picks, so the value is the same on every Generate and every Loop frame." },
+  { term: "Hold across run", desc: "Keeps the inline picks the same for every frame of one Loop run, and rolls again next run." },
+  { term: "Hide from prompt", desc: "Writes the variables as internal: other modules read them, the Assembler leaves them out." },
 ];
 </script>
 
@@ -45,6 +48,14 @@ const instanceOptions = [
         ratio="16 / 6"
         caption="The Starter style Fixed Values modal — two name → value rows ($style = oil painting, $quality = 8k, masterpiece) each with their own enable checkbox, footer reading '2 of 2 enabled · 1 added' to flag the instance-added row over the library baseline. Lock seed + Hide from prompt runtime toggles below. Behind the modal: a WP Context stack with Starter style (MOD-flagged orange border), Starter scene, Starter accent."
       />
+      <DocCallout variant="tip">
+        <b>Use Fixed Values</b> for constants: style and quality tags, a model's required prefix,
+        a standing negative, a switch you flip by hand. <b>Not for</b> real variety: an inline
+        <VarToken kind="inline">{watercolor|oil painting}</VarToken> here has no weights, tags,
+        constraints, fallback or Test Runner counts, so make it a Wildcard. And never let a
+        fixed value and a wildcard write the same variable: whichever runs later wins without a
+        word.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="Row fields">
