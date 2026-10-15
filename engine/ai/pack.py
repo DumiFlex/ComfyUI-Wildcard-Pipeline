@@ -4184,7 +4184,8 @@ def _printed_names(plan: dict[str, Any], built: dict[str, Any], runs: list[dict[
     ``{key of the item whose variable holds it: problem}``, when it shows
     in at least a sixth of the runs."""
     names = {n.lower() for i in plan["items"] for n in [i.get("var") or ""] if "_" in n}
-    for i in plan["items"]:
+    # In tags style an option may be its own booru tag ("long_hair").
+    for i in [] if plan.get("style") == "tags" else plan["items"]:
         if is_wild(i) and i["key"] in built:
             pl = built[i["key"]]["payload"]
             names |= {str(t).lower() for t in pl.get("sub_categories") or [] if "_" in str(t)}

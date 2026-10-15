@@ -1059,7 +1059,7 @@ def test_planner_conditions_and_dangling_articles_in_a_combine():
 
 
 def test_a_tag_name_printed_as_text_is_a_problem():
-    raw = _raw(items=[
+    raw = _raw(style="sentences", items=[
         _item(name="Outer", var="outer", tags=["summer_outer", "winter_outer"]),
         _item(kind="template", name="T", about="$outer")])
     plan = pack.compile_plan(raw)
@@ -1069,6 +1069,9 @@ def test_a_tag_name_printed_as_text_is_a_problem():
     out = pack._printed_names(plan, built, runs, "$outer", "")
     assert '"summer_outer"' in out[key]
     assert not pack._printed_names(plan, built, [{"outer": "linen shirt"}] * 6, "$outer", "")
+    # A tags-style pack's options may be their own booru tags.
+    tags_plan = pack.compile_plan({**raw, "style": "tags"})
+    assert not pack._printed_names(tags_plan, _built(tags_plan), runs, "$outer", "")
 
 
 # --- fourteenth real-model run ----------------------------------------------
@@ -1175,9 +1178,15 @@ def test_empty_variables_leave_no_edge_commas_or_dangling_words():
     from engine.template import tidy_prompt
     assert tidy_prompt("dawn, cloudy day, ") == "dawn, cloudy day"
     assert tidy_prompt(", night, rain") == "night, rain"
-    assert tidy_prompt("shadows with, gentle rain") == "shadows, gentle rain"
+    assert tidy_prompt("shadows with\ue000, gentle rain") == "shadows, gentle rain"
     assert tidy_prompt("standing in front of the house, rock and roll") == \
         "standing in front of the house, rock and roll"
+    # Only where a variable came out empty: booru tags keep their words.
+    assert tidy_prompt("shirt tucked in, smile :d, !?") == "shirt tucked in, smile :d, !?"
+    from engine.template import resolve_variables
+    ctx = {"light": "", "rain": "gentle rain", "tag": "shirt tucked in"}
+    assert resolve_variables("shadows with $light, $rain, $tag", ctx) == \
+        "shadows, gentle rain, shirt tucked in"
 
 
 # --- sixteenth real-model run -----------------------------------------------

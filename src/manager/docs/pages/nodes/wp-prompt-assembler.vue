@@ -55,7 +55,9 @@ const ports = [
           If no binding exists, the placeholder resolves to empty and the canvas preview
           highlights it with an amber underline so you can spot the gap before running.
           The output is tidied after: commas left at the start or end, and a joining word
-          left with nothing after it ("shadows with, rain"), are dropped.
+          left with nothing after it because its variable came out empty ("shadows with, rain"),
+          are dropped. Words your own text ends on ("shirt tucked in") and emoticon tags
+          (":d", "!?") are kept as written.
         </li>
         <li>
           <VarToken kind="inline">$$</VarToken> — a literal dollar sign, in case you need one in the output text.
