@@ -1206,6 +1206,28 @@ describe("collectLocalResolvedForModule", () => {
     expect(result.result).toBeUndefined();
   });
 
+  it("match_variable only matches options the node's toggles keep", () => {
+    const wc = (enabled: string[]) => ({
+      id: "wc000002", type: "wildcard", enabled: true, meta: { name: "" }, entries: [],
+      instance: { match_variable: "variant", enabled_options: enabled },
+      payload: { var_binding: "model", options: [
+        { id: "o1", value: "pony" }, { id: "o2", value: "sdxl" },
+        { id: "fb", value: "other", fallback: true },
+      ] },
+    });
+    const fixed = (variant: string) => ({
+      id: "fv000001", type: "fixed_values", enabled: true, meta: { name: "" }, entries: [],
+      payload: { values: [{ id: "v1", name: "variant", value: variant }] },
+    });
+    // A toggled-off option doesn't match; a toggled-off fallback isn't used.
+    let { ctx, graph } = singleNode([fixed("pony"), wc(["o2"])]);
+    expect(collectLocalResolvedForModule(graph, ctx).model).toBe("sdxl");
+    ({ ctx, graph } = singleNode([fixed("flux"), wc(["o1", "o2"])]));
+    expect(collectLocalResolvedForModule(graph, ctx).model).toBe("pony");
+    ({ ctx, graph } = singleNode([fixed("flux"), wc(["o1", "fb"])]));
+    expect(collectLocalResolvedForModule(graph, ctx).model).toBe("other");
+  });
+
   it("excludes the editing module's own binding", () => {
     const { ctx, graph } = singleNode([
       {

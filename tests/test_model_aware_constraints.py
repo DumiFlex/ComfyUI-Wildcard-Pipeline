@@ -135,6 +135,25 @@ def test_no_match_without_fallback_rolls_and_warns():
     assert [w["type"] for w in warns] == ["match_variable_no_match"]
 
 
+def test_toggled_off_option_does_not_match():
+    out, warns = _resolve({"enabled_options": ["o2"]}, {"model_variant": "pony"})
+    assert out == {"model": "illustrious"}
+    assert [w["type"] for w in warns] == ["match_variable_no_match"]
+
+
+def test_category_filtered_option_does_not_match():
+    out, _ = _resolve({"category_filter": "illustrious"}, {"model_variant": "pony"})
+    assert out == {"model": "illustrious"}
+
+
+def test_toggled_off_fallback_is_not_used():
+    for seed in range(10):
+        ctx_vars = {"model_variant": "flux", "__wp_node_seed__": seed}
+        out, warns = _resolve({"enabled_options": ["o1", "o2"]}, ctx_vars, fallback=True)
+        assert out["model"] in {"Pony", "illustrious"}
+        assert [w["type"] for w in warns] == ["match_variable_no_match"]
+
+
 def test_pinned_wins_over_match():
     out, _ = _resolve(
         {"mode": "pinned", "pinned_option_id": "o2"}, {"model_variant": "pony"},

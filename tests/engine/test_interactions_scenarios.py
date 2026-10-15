@@ -950,14 +950,6 @@ def test_two_derivations_roll_independently():
 # ── 15. match_variable and the node's toggles ────────────────────────────
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "wildcard_handler.py resolve(): match_variable runs before category_filter "
-    "/ enabled_options are applied (`_match_variable_option(ctx, options, ...)` "
-    "gets the unfiltered list), so a toggled-off fallback is still used on a "
-    "no-match and a toggled-off option still matches. The docs say turning "
-    "the fallback off for one use keeps it out ('the node's filters + toggles "
-    "decide whether the fallback is available at all')."
-))
 def test_match_variable_respects_the_nodes_option_toggles():
     model = _wc(MODEL, "model", [_opt("pony"), _opt("sdxl"), _opt("other", fallback=True)],
                 match_variable="model_variant", enabled_options=["pony", "sdxl"])

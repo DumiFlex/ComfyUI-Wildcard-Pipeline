@@ -894,6 +894,25 @@ class WildcardHandler(ModuleHandler):
 
         options: list[dict[str, Any]] = list(payload.get("options", []))
 
+        # `category_filter` narrows the option pool to entries whose tag
+        # set (`sub_categories`) satisfies a boolean expression; the node's
+        # option toggles (`enabled_options`) narrow it further (comments at
+        # the roll below). Computed up front so `match_variable` matches only
+        # what this use can pick, and its fallback only when it is enabled.
+        category_filter = instance.get("category_filter")
+        exclude_null = bool(instance.get("exclude_null", False))
+        pool = options
+        if (isinstance(category_filter, str) and category_filter.strip()) or exclude_null:
+            pool = cls._apply_pool_filter(
+                pool,
+                category_filter if isinstance(category_filter, str) else "",
+                exclude_null=exclude_null,
+            )
+        enabled = instance.get("enabled_options")
+        if enabled is not None:
+            allowed = set(enabled)
+            pool = [o for o in pool if o.get("id") in allowed]
+
         # `pinned` mode short-circuits the RNG: always pick the option
         # whose id matches `pinned_option_id`. Falls through to random
         # (with a warning) if the pinned id can't be found — handles
@@ -912,7 +931,7 @@ class WildcardHandler(ModuleHandler):
         # the fallback option if one is flagged, else a normal roll + warning.
         match_var = instance.get("match_variable")
         if pinned is None and isinstance(match_var, str) and match_var.strip():
-            pinned, pin_mode = _match_variable_option(ctx, options, match_var.strip())
+            pinned, pin_mode = _match_variable_option(ctx, pool, match_var.strip())
         if pinned is not None:
             # A pinned option still rolls its axes: pinning fixes WHICH
             # option fires, not which of the shoes it accepts. Roll BEFORE
@@ -957,19 +976,7 @@ class WildcardHandler(ModuleHandler):
         # to it). Untagged non-null options bypass the expression unless
         # a bare tag term excludes them (spec §3.4). See the shared
         # matcher in engine/syntax/subcat_filter.py.
-        category_filter = instance.get("category_filter")
-        exclude_null = bool(instance.get("exclude_null", False))
-        if (isinstance(category_filter, str) and category_filter.strip()) or exclude_null:
-            options = cls._apply_pool_filter(
-                options,
-                category_filter if isinstance(category_filter, str) else "",
-                exclude_null=exclude_null,
-            )
-
-        enabled = instance.get("enabled_options")
-        if enabled is not None:
-            allowed = set(enabled)
-            options = [o for o in options if o.get("id") in allowed]
+        options = pool
 
         # Schema v9 fallback: the flagged option stays in the draw pool and
         # is also taken when weights + constraints leave nothing to pick. Found
