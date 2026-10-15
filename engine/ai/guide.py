@@ -85,7 +85,9 @@ WHICH = """\
 Which feature for which job:
 - A list to draw from → wildcard (one concept per wildcard: hair, outfit, \
 place). A shared vocabulary drawn in several places, often narrowed by tag → \
-a wildcard with no variable that others point at with @{Name:tag}.
+a wildcard with no variable that others point at with @{Name:tag}. No \
+variable ONLY when other options point at it: a list the prompt shows (poses, \
+outfits) needs a variable the template reads.
 - @{…} is a fresh pick nothing can read, test or pin: use it only for parts \
 nothing else needs. Recipes: an Outfit option "@{Tops:formal} with \
 @{Bottoms:formal}" (pin the recipe, the parts still vary); filler: \
@@ -384,6 +386,19 @@ def family(model: str) -> str:
 def format_line(model: str) -> str:
     """How the named image model reads a prompt, or "" for an unknown one."""
     return FORMATS.get(family(model), "")
+
+
+def model_note(text: str) -> str:
+    """For a chat message that names an image model: how it reads a prompt,
+    and how a per-model preset is built, or "" when it names none. Goes in
+    the message tail, so only the one model's line is ever sent."""
+    key = family(text)
+    if not key:
+        return ""
+    return (f"(How that model reads a prompt: {FORMATS[key]} A quality preset for it is "
+            "fixed values with these exact words, no weights unless asked; for several "
+            "models, a derivation on $model_family from WP Model Info, which is a node "
+            "that sets variables, not a wildcard a constraint can use.)")
 
 
 #: For a pack rated nsfw only: the safeguards first (engine/ai/adult.py

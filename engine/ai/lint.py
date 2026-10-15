@@ -223,6 +223,11 @@ def exclude_shared_tags(payload: dict[str, Any],
     return out
 
 
+#: A new wildcard with no variable that nothing points at with @{…}.
+NO_VAR = ("It sets no variable, so only options that point at it with @{Name} can use "
+          "it, and nothing does yet. If the prompt should show it, give it a variable")
+
+
 def check(op: dict[str, Any], item: dict[str, Any],
           get: Callable[[str], dict[str, Any] | None],
           base: dict[str, Any] | None = None) -> list[str]:

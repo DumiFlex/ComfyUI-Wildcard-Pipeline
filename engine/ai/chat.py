@@ -1676,6 +1676,18 @@ class Library(MoreTools, ManageTools):
         self._created[iid] = pid
         self._catalog = None
 
+    def _pointed_at(self, name: str, item_id: str) -> bool:
+        """Whether any item (or a card of this chat) points at the wildcard
+        with ``@{…}`` by name or id."""
+        keys = [k for k in (item_id, name) if k]
+        if not keys:
+            return False
+        texts = [json.dumps(m.get("payload") or {}, ensure_ascii=False)
+                 for m in self.modules.values()]
+        texts += [json.dumps((p.get("op") or {}).get("body") or {}, ensure_ascii=False)
+                  for p in self.earlier_proposals.values()]
+        return any("@{" + k in t for t in texts for k in keys)
+
     def _broken_links(self, op: dict[str, Any]) -> list[str]:
         """A change to a wildcard that cards not yet applied rely on (a new
         constraint's rules name its options and tags): which rules it
@@ -1780,6 +1792,12 @@ class Library(MoreTools, ManageTools):
             if isinstance(body.get("payload"), dict) and base:
                 item["payload"] = {**(base.get("payload") or {}), **body["payload"]}
             found = ai_lint.check(op, item, self.get, base)
+            if op["op"] == "create" and item.get("type") == "wildcard" \
+                    and not (item.get("payload") or {}).get("var_binding") \
+                    and not self._pointed_at(str(item.get("name") or ""),
+                                             str((op.get("body") or {}).get("id") or "")):
+                # The 9B made a Pose list with no variable for the prompt to read.
+                found = [*found, ai_lint.NO_VAR]
             proposal["warnings"] += found
             fixes = ai_lint.fixes(op, item, base, found)
             if fixes:

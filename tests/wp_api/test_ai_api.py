@@ -1332,3 +1332,53 @@ def test_only_openai_itself_uses_responses():
                                         "base_url": "https://openrouter.ai/api/v1"})
     assert not _ai_chat.uses_responses({"api": "openai", "provider": "lmstudio", "local": True,
                                         "base_url": "http://127.0.0.1:1234/v1"})
+
+
+async def test_two_refused_calls_make_the_chat_answer_with_what_went_wrong(wp_client, fake_llm):
+    """The 9B looped on a refused call until it gave up with nothing."""
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "read", "args": json.dumps({"id": "aaaa9998"})}]},
+        {"message": "", "calls": [{"tool": "read", "args": json.dumps({"id": "aaaa9999"})}]},
+        {"message": "", "calls": [{"tool": "search", "args": json.dumps({"query": "x"})}]},
+        {"message": "never asked", "calls": []},
+    ])
+    resp = await wp_client.post("/wp/api/ai/chat", json={"message": "fix it"})
+    body = await resp.json()
+    failed = [s for s in body["steps"] if not s["ok"]]
+    assert len(failed) == 2
+    assert body["message"].startswith("I couldn't finish this. What got in the way:")
+    assert failed[0]["note"] in body["message"]
+    assert len(fake_llm.chat_steps) == 1
+
+
+async def test_an_edit_naming_no_option_says_so(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.overrides["wildcard_remove"] = {"remove": [
+        {"id": "the cloak one, since it is old", "reason": "old"}]}
+    resp = await wp_client.post("/wp/api/ai/wildcard/edit", json=_edit_body("remove"))
+    assert resp.status == 502
+    assert "named no option" in (await resp.json())["error"]
+
+
+async def test_an_answer_written_in_the_plan_is_shown(wp_client, fake_llm):
+    """Explain came back empty: the model wrote it all in "plan"."""
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    text = "Classify tags sort an option; accepts tags list what it goes with. " * 2
+    fake_llm.chat_steps.extend([{"plan": text, "message": "", "calls": []}])
+    resp = await wp_client.post("/wp/api/ai/chat", json={"message": "explain this"})
+    body = await resp.json()
+    assert body["message"] == text.strip()
+
+
+async def test_a_message_naming_a_model_carries_how_it_reads_a_prompt(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    await wp_client.post("/wp/api/ai/chat", json={"message": "make an Illustrious preset"})
+    sent = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert "very aesthetic, absurdres" in sent and "not a wildcard a constraint" in sent
+    await wp_client.post("/wp/api/ai/chat", json={"message": "make a hair list"})
+    assert "reads a prompt" not in fake_llm.seen[-1]["body"]["messages"][-1]["content"]

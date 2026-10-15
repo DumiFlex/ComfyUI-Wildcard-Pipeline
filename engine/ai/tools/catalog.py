@@ -170,7 +170,7 @@ TOOLS: list[Tool] = [
     Tool(
         "create_wildcard", "change",
         "Propose a new wildcard: options picked one per run, bound to a $variable (or a "
-        "vocabulary with no variable).",
+        "vocabulary with no variable, only when other options point at it with @{Name}).",
         '{"name", "var": variable name without $ ("" for a vocabulary), "description", '
         '"tags": [library tags], "category": name or "", "options": [{"text", "weight": 1, '
         '"tags": [option tags], "negative": "", "fallback": false}], "axes": [{"name", '

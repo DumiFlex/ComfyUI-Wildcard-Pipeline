@@ -70,3 +70,18 @@ def test_unchanged_items_are_left_out():
 def test_bad_answers_raise(raw):
     with pytest.raises(ValueError):
         organize.compile_answer(raw, items=_items(), categories=[], library=[])
+
+
+def test_answers_naming_items_by_name_or_place_still_land():
+    """The 9B and the 35B both wrote names where the number goes."""
+    entry = {"category": "Scenes", "tags_add": [], "tags_remove": [], "rating": "keep",
+             "reason": ""}
+    out = organize.compile_answer({"items": [
+        {**entry, "id": "Hair"}, {**entry, "id": "item 2"}, {**entry, "id": "3."},
+    ]}, items=_items(), categories=["Scenes"], library=[])
+    assert [c["id"] for c in out["changes"]] == ["1", "2"]  # bundles take no category
+    # One answer per item in order: the n-th answer is the n-th item.
+    out = organize.compile_answer({"items": [
+        {**entry, "id": "the first"}, {**entry, "id": "?"}, {**entry, "id": "?"},
+    ]}, items=_items(), categories=["Scenes"], library=[])
+    assert [c["id"] for c in out["changes"]] == ["1", "2"]

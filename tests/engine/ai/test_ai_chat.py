@@ -268,3 +268,13 @@ def test_search_reads_content_and_widens_broad_subjects():
     assert lib.search({"query": "eye color"}).splitlines()[1].startswith("- aaaa0002")
     assert lib.search({"query": "zzz"}) == "no matches"
     assert "3 matches" in lib.search({"query": "", "type": "wildcard"})
+
+
+def test_a_wildcard_with_no_variable_nothing_points_at_is_flagged():
+    lib = _lib()
+    p = lib.run("create_wildcard", {"name": "Pose", "var": "",
+                                    "options": [{"text": "sitting"}, {"text": "standing"}]})
+    assert any("sets no variable" in w for w in p["warnings"])
+    p = lib.run("create_wildcard", {"name": "Pose", "var": "pose",
+                                    "options": [{"text": "sitting"}, {"text": "standing"}]})
+    assert not any("sets no variable" in w for w in p["warnings"])

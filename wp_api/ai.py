@@ -59,6 +59,7 @@ from engine.ai import derivation as ai_derivation
 from engine.ai import describe as ai_describe
 from engine.ai import docs as ai_docs
 from engine.ai import followup as ai_followup
+from engine.ai import guide as ai_guide
 from engine.ai import index as ai_index
 from engine.ai import library_vars, pack_tidy, text_items
 from engine.ai import lint as ai_lint
@@ -445,6 +446,13 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
             status=502,
         )
+    if not result["changes"] and result["skipped"] and all(
+            x["reason"] == "not an option in the list" for x in result["skipped"]):
+        # Small models write prose where the option number goes: every change
+        # is dropped, which used to come back as a silent empty list.
+        return json_error(
+            "the model's answer couldn't be used (it named no option by its number). "
+            "Try again, or a larger model.", status=502)
     for c in result["changes"]:
         c["option_id"] = real_ids[c.pop("id")]
     result["action"] = action
@@ -1581,8 +1589,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         meta.pop("pointed", None)  # so are the parts already highlighted
         hints = await _retrieval(lib, text, meta, prof, cfg) if text else ""
         pics = _ai_images.note(len(images)) if images else ""
+        model = ai_guide.model_note(text) if text else ""
         sent = ai_safety.strip_invisible(
-            "\n\n".join(x for x in (since, changes, perms, text, pics, note, hints) if x))
+            "\n\n".join(x for x in (since, changes, perms, text, pics, note, hints, model)
+                       if x))
         new.append(ai_chatlog.user_entry(text, sent, images))
         meta = ai_chatlog.move_images(log + new, meta)
 
@@ -1602,6 +1612,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     interim = ""
     seen: set[str] = set()
     errors: dict[str, int] = {}
+    #: Refusals by tool and reason (ids and numbers left out).
+    refused: dict[str, int] = {}
     forced = False
     checked = False
     nudged = False
@@ -1692,6 +1704,13 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         usage = st["usage"]
         said = ai_safety.strip_invisible(st["message"])[:ai_chat.MAX_MESSAGE]
         calls = st["calls"][:ai_chat.MAX_CALLS_PER_STEP]
+        plan_text = (st.get("answer") or {}).get("plan") if isinstance(
+            st.get("answer"), dict) else ""
+        if not said and not calls and isinstance(plan_text, str) \
+                and len(plan_text.strip()) >= PLAN_AS_ANSWER:
+            # Small models write the whole explanation in "plan" and leave
+            # "message" empty: that showed as an empty answer.
+            said = ai_safety.strip_invisible(plan_text.strip())[:ai_chat.MAX_MESSAGE]
         dropped = len(st["calls"]) - len(calls)
         # How the model called its tools this answer, for the drawer's badge.
         tool_use["calls"] += len(calls)
@@ -1730,9 +1749,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 steps.append({"tool": "say", "note": said, "ok": True, "say": True})
         if forced and calls:
             # Told to answer and called again anyway: stop on what it said.
-            message = message or (
-                "I kept looking without getting to an answer. Try asking more specifically, "
-                "or name the item.")
+            message = message or interim or _stuck_line(steps)
             break
         if any(c["tool"] == "run_test" for c in calls):
             checked = True
@@ -1832,6 +1849,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     out = lib.run(tool, args)
             except ValueError as e:
                 errors[tool] = errors.get(tool, 0) + 1
+                why = tool + re.sub(r"\b[0-9a-f]{8}\b|\d+", "#", str(e))
+                refused[why] = refused.get(why, 0) + 1
                 needs_reply = True
                 result(f"{tool}: error: {e}")
                 steps.append({"tool": tool, "note": f"{tool}: {e}", "ok": False})
@@ -1937,8 +1956,11 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             break
         # Only repeats, read enough, or one step left: no more tools, answer now.
         reads += sum(1 for c in calls if c["tool"] in ai_tools.READ)
+        # The same refusal twice: small models loop on it instead of
+        # answering, so the next step must answer (with what went wrong).
         forced = (bool(calls and repeats == len(calls)) or step == ai_chat.MAX_STEPS - 1
-                  or reads >= read_budget or out_of_time)
+                  or reads >= read_budget or out_of_time
+                  or max(refused.values(), default=0) >= MAX_REFUSED)
         more = (f"\n\nOnly your first {len(calls)} calls ran; {dropped} more were left out."
                 + ("" if forced else " Make them in your next step.")) if dropped else ""
         new.append(ai_chatlog.results_entry(
@@ -2179,6 +2201,26 @@ def _adopt_earlier(lib: Any, log: list[dict[str, Any]], meta: dict[str, Any]) ->
                 continue
             keys = (meta.get("fixes") or {}).get(pid)
             lib.adopt_earlier(ai_lint.with_fixes(p, list(keys)) if keys else p)
+
+
+#: The same refusal this many times in one answer, and the model must answer.
+MAX_REFUSED = 2
+#: A JSON-mode "plan" this long, with no message and no calls, is the answer.
+PLAN_AS_ANSWER = 80
+
+
+def _stuck_line(steps: list[dict[str, Any]]) -> str:
+    """The answer when the model was told to answer and called tools
+    again: what got in the way (the refusals say why), never a bare "I
+    kept looking"."""
+    why = list(dict.fromkeys(str(x.get("note")) for x in steps
+                             if not x.get("ok") and x.get("note")))[-3:]
+    if not why:
+        return ("I kept looking without getting to an answer. Try asking more specifically, "
+                "or name the item.")
+    return ("I couldn't finish this. What got in the way:\n"
+            + "\n".join(f"- {w}" for w in why)
+            + "\n\nTell me which way to go, or ask for one part at a time.")
 
 
 def _done_line(steps: list[dict[str, Any]]) -> str:
