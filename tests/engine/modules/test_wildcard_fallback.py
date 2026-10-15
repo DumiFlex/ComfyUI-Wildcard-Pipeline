@@ -247,3 +247,19 @@ def test_validation_allows_one_fallback_only():
         WildcardHandler.validate_payload(payload)
     payload["options"][1]["fallback"] = False
     WildcardHandler.validate_payload(payload)
+
+
+def test_nested_multi_pick_never_draws_a_constraint_excluded_option():
+    # Before: the multi-pick pool read weight 0 (excluded) as 1 (`or 1`),
+    # so "red" came back on about half the runs while `@{…}` alone never
+    # drew it.
+    ctx = _nested_ctx(fallback=False)
+    ctx["__wp_catalog__"][_TGT]["options"] += [
+        {"id": "g", "value": "green", "weight": 1, "sub_categories": ["ok"]},
+        {"id": "w", "value": "white", "weight": 1, "sub_categories": ["ok"]},
+    ]
+    for seed in range(60):
+        ctx["__wp_rng__"] = random.Random(seed)
+        rctx = build_resolve_ctx(ctx, surface="wildcard")
+        out = resolve_text(f"{{2$$, $$@{{{_TGT}}}}}", rctx)
+        assert sorted(out.split(", ")) == ["green", "white"]

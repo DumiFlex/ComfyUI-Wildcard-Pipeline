@@ -497,10 +497,14 @@ def _resolve_multi_pick(
             ref_tok = bt[0]
             ref_uuid = ref_tok.meta.get("uuid", "")
             pool = ref_option_pool(ref_tok, ctx)
+            # A constraint excludes by weight 0; `or 1` used to revive those
+            # options here, so a multi-pick drew what its single-pick twin
+            # never does. Missing weight still means 1.
+            pool = [o for o in pool if _option_weight(o) > 0]
             if not pool:
                 return ""
             values = [str(o.get("value", "")) for o in pool]
-            weights = [float(o.get("weight", 1) or 1) for o in pool]
+            weights = [_option_weight(o) for o in pool]
             chosen = pick_k_unique(values, weights, count, ctx.rng)
             # The multi-picked ref is the carrier of any `@{X}` inside the
             # values it resolves. We pick on VALUES (not option dicts) so a
@@ -567,6 +571,11 @@ def _resolve_multi_pick(
             resolved.append(_resolve_tokens(nested, ctx, depth=depth, visited=visited))
 
     return sep.join(resolved)
+
+
+def _option_weight(option: dict) -> float:
+    w = option.get("weight")
+    return 1.0 if w is None else float(w)
 
 
 def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
