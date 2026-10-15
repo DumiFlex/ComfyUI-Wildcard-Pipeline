@@ -658,15 +658,6 @@ def test_multi_pick_with_a_tag_filter_draws_distinct_tagged_options():
     assert set(counts) == {2, 3}
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "wildcard_handler.py multi-pick path: `count` is clamped to the pool size "
-    "but not to the number of options with weight > 0, and "
-    "syntax/resolve.py _weighted_pick_index returns index 0 when the "
-    "remaining weights sum to 0. So once the live options are used up, "
-    "pick_k_unique keeps drawing EXCLUDED / weight-0 options: an `only` "
-    "constraint leaving one live option still yields two picks, and a "
-    "weight-0 ('disabled') option is picked."
-))
 def test_multi_pick_never_draws_an_option_a_constraint_excluded():
     role = _wc(ROLE, "role", [_opt("maid")])
     props = _wc(PROPS, "props", [_opt("broom"), _opt("gun"), _opt("knife")],
@@ -677,11 +668,6 @@ def test_multi_pick_never_draws_an_option_a_constraint_excluded():
         assert ctx["props"].items == ["broom"], (seed, ctx["props"].items)
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "same root cause as the constrained multi-pick: weight-0 options are "
-    "drawn once the weighted ones run out (wildcard_handler.py multi-pick "
-    "count + resolve.py _weighted_pick_index returning 0 on a dead pool)."
-))
 def test_multi_pick_never_draws_a_weight_zero_option():
     props = _wc(PROPS, "props", [_opt("broom"), _opt("gun", w=0), _opt("knife", w=0)],
                 pick_min=2, pick_max=2)

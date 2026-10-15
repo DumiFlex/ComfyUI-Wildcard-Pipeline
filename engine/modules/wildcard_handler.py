@@ -1113,10 +1113,23 @@ class WildcardHandler(ModuleHandler):
         lo = max(0, min(raw_min, raw_max))
         hi = max(lo, raw_max)
         if not (lo == 1 and hi == 1):
-            pool = [o for o in options if not o.get("is_null")]
-            weights = [max(0.0, float(o.get("weight", 1))) for o in pool]
+            # Only live options (weight > 0 after overrides + constraints) can
+            # be drawn, so the count is capped at those: a weight-0 option is
+            # disabled or shut out and never fills a slot. The null option is
+            # not in this pool, so a pool with no live non-null option is dead
+            # here and takes the fallback even when the null is still live.
+            pool = [o for o in options
+                    if not o.get("is_null") and _weight(o) > 0]
+            weights = [_weight(o) for o in pool]
             pool_n = len(pool)
             independent = bool(instance.get("pick_independent", False))
+            if not pool and fallback is not None and not use_fallback:
+                use_fallback = True
+                ctx["__wp_warnings__"].append(fallback_warning(
+                    my_id or "", fallback, constrained=any_constraint_applied,
+                ))
+                if detail is not None:
+                    detail["fallback"] = True
             if use_fallback:
                 # One fallback, never repeated: it stands in for the whole
                 # pick, so a `2-3` range doesn't render "hair, hair".

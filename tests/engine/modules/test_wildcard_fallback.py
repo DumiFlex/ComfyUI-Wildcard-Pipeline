@@ -164,6 +164,22 @@ def test_multi_pick_uses_the_fallback_once():
     assert str(out["shoes"]) == "shoes"
 
 
+def test_multi_pick_with_only_the_null_live_uses_the_fallback():
+    # The null option is never in a multi-pick pool, so a live null does not
+    # keep the pick alive: the fallback stands in, once.
+    payload = {"var_binding": "shoes", "options": [
+        {"id": "t1", "value": "sneakers", "weight": 0},
+        {"id": "fb", "value": "shoes", "weight": 0, "fallback": True},
+        {"id": "none", "value": "", "is_null": True, "weight": 1},
+    ]}
+    ctx = _ctx()
+    out = WildcardHandler.resolve(
+        payload, {"variable_binding": "shoes", "pick_min": 2, "pick_max": 2}, ctx,
+    )
+    assert out["shoes"].items == ["shoes"]
+    assert [w["type"] for w in ctx["__wp_warnings__"]] == ["fallback_used"]
+
+
 def test_independent_multi_pick_does_not_repeat_the_fallback():
     out = PipelineEngine().run(
         _chain(_shoes(), target_instance={

@@ -55,6 +55,13 @@ def test_pick_k_unique_clamps_k_to_pool():
     assert sorted(pick_k_unique(["a", "b"], [1.0, 1.0], 5, random.Random(1))) == ["a", "b"]
 
 
+def test_pick_k_unique_never_picks_a_weight_zero_item():
+    for seed in range(30):
+        got = pick_k_unique(["a", "b", "c"], [1.0, 0.0, 0.0], 3, random.Random(seed))
+        assert got == ["a"]
+    assert pick_k_unique(["a", "b"], [0.0, 0.0], 2, random.Random(1)) == []
+
+
 def test_pick_k_unique_zero_returns_empty():
     assert pick_k_unique(["a", "b"], [1.0, 1.0], 0, random.Random(1)) == []
 

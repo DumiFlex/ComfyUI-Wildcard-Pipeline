@@ -426,7 +426,8 @@ def _weighted_pick_index(weights: list[float], rng) -> int:
 def pick_k_unique(items, weights, k, rng):
     """Pick ``k`` items from ``items`` without replacement, weighted by the
     parallel ``weights`` list, returned in pick order. ``k`` is clamped to
-    ``len(items)``; ``k <= 0`` -> ``[]``.
+    ``len(items)``; ``k <= 0`` -> ``[]``. Items weighted 0 are never picked,
+    so fewer than ``k`` come back once the live ones run out.
 
     Shared by the inline ``{N$$sep$$}`` block (``_resolve_multi_pick``) and by
     multi-select wildcards (``wildcard_handler``). Draws from ``rng`` in the
@@ -437,7 +438,9 @@ def pick_k_unique(items, weights, k, rng):
     available_w = list(weights)
     chosen = []
     for _ in range(n):
-        if not available_idx:
+        # Stop once nothing live is left: a weight-0 item (disabled, or shut
+        # out by a constraint) is never drawn, even to fill the count.
+        if not available_idx or sum(max(0.0, w) for w in available_w) <= 0:
             break
         j = _weighted_pick_index(available_w, rng)
         chosen.append(items[available_idx.pop(j)])

@@ -160,6 +160,34 @@ def test_multi_pick_unique_clamps_to_pool():
     assert len(set(out["c"].items)) == 2
 
 
+def test_multi_pick_caps_the_count_at_live_options():
+    # Weight 0 means disabled: it never fills a slot, so 3 requested from one
+    # live option gives that one option.
+    for seed in range(30):
+        out = WildcardHandler.resolve(
+            _payload([
+                {"id": "a", "value": "alpha", "weight": 1},
+                {"id": "b", "value": "beta", "weight": 0},
+                {"id": "c", "value": "gamma", "weight": 0},
+            ]),
+            instance={"variable_binding": "c", "pick_min": 2, "pick_max": 3},
+            ctx=_ctx(seed=seed),
+        )
+        assert out["c"].items == ["alpha"]
+
+
+def test_multi_pick_with_no_live_options_binds_an_empty_list():
+    out = WildcardHandler.resolve(
+        _payload([
+            {"id": "a", "value": "alpha", "weight": 0},
+            {"id": "n", "value": "", "is_null": True, "weight": 1},
+        ]),
+        instance={"variable_binding": "c", "pick_min": 1, "pick_max": 2},
+        ctx=_ctx(seed=3),
+    )
+    assert out["c"].items == []
+
+
 def test_multi_pick_seed_deterministic():
     a = WildcardHandler.resolve(
         _payload(list(_MULTI)),
