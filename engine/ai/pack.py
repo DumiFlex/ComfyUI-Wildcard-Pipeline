@@ -2284,9 +2284,11 @@ def _stray_rule_tags(raw_items: list[dict[str, Any]], warnings: list[str]) -> No
 _SUBJECT_VAR = re.compile(r"^(?:main_)?(?:subject|character|person|figure|protagonist|model)"
                           r"s?(?:_type)?$")
 _SUBJECT_ASK = re.compile(r"\b(?:subjects?|characters?|people|persons?|portraits?|figures?|"
-                          r"m[ae]n|wom[ae]n|girls?|boys?|heroe?s?|someone|protagonists?|"
+                          r"m[ae]n|wom[ae]n|heroe?s?|someone|protagonists?|"
                           r"models?|who|survivors?|inventors?|crew|outfits?|hair\w*|"
-                          r"faces?|selfies?|poses?)\b", re.I)
+                          r"faces?|selfies?|poses?|\d*girls?|\d*boys?|solo|couples?|pin-?ups?|"
+                          r"lingerie|nude|nsfw|lewd|erotic|sexy|ecchi|hentai|waifus?|oc|"
+                          r"cosplay\w*|anime|bod(?:y|ies))\b", re.I)
 
 
 def _drop_unasked_subject(raw: dict[str, Any], raw_items: list[dict[str, Any]],
@@ -2884,7 +2886,9 @@ def compile_item(
             existing_payload={"options": [], "sub_categories": list(item["tags"])},
         )
         payload = compiled["payload"]
-        warnings += _snake_text(payload.get("options") or [])
+        if plan.get("style") != "tags":
+            # Booru tags are written with underscores on purpose.
+            warnings += _snake_text(payload.get("options") or [])
         warnings += _kin_options(plan, item, payload)
         used = {t for o in payload["options"] for t in o.get("sub_categories") or []}
         payload["sub_categories"] = [t for t in payload["sub_categories"] if t in used
@@ -2987,7 +2991,8 @@ def compile_item(
             payload = {**payload, "values": kept}
             preview = [p for p in preview if not any(p.startswith(f"${n} = ") for n in own)]
         warnings += _wrap_pipes(payload["values"])
-        warnings += _snake_text(payload["values"])
+        if plan.get("style") != "tags":
+            warnings += _snake_text(payload["values"])
         names = [v["name"] for v in payload["values"]]
         if item["var"] not in names:
             warnings.append(f"It doesn't set ${item['var']}")
@@ -3265,7 +3270,7 @@ def _plan_only_withs(item: dict[str, Any], src: dict[str, Any], tgt: dict[str, A
 
 
 # An option that stands for "nothing" ("no color variation", "none").
-_PLACEHOLDER = re.compile(r"^\s*(?:none|n/?a|nothing|no\s+(?:\w+\s+){0,2}"
+_PLACEHOLDER = re.compile(r"^\s*(?:none|n/?a|no\s+(?:\w+\s+){0,2}"
                           r"(?:variation|change|modifier|extra|accent)s?)\s*$", re.I)
 
 
@@ -3305,7 +3310,7 @@ def _snake_text(rows: list[Any]) -> list[str]:
 
 
 #: What a kept pick looks like in other words ("blizzard" is snow).
-_KIN_WORDS = {"snow": r"snow\w*|blizzard\w*|hail\w*|sleet\w*|frost\w*|icy|ice|whiteout",
+_KIN_WORDS = {"snow": r"snow\w*|blizzard\w*|hail\w*|sleet\w*|frost\w*|icy|whiteout",
               "rain": r"rain(?!bow)\w*|drizzl\w*|downpour\w*|monsoon\w*",
               "fog": r"fog\w*|mist\w*|haze|hazy",
               "storm": r"storm\w*|thunder\w*|lightning"}

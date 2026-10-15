@@ -1390,3 +1390,22 @@ def test_a_combine_of_phrases_side_by_side_gets_commas():
             "payload"]["options"]:
         o["value"] = "red"
     assert pack._bare_join("$top $bottom", plan, built) == ("$top $bottom", [])
+
+
+def test_booru_tags_and_nsfw_requests_are_left_alone():
+    # Tags style keeps underscores: they are how booru tags are written.
+    raw = _raw(items=[_item(name="Pose", var="pose"),
+                      _item(kind="template", name="T", about="$pose")])
+    plan = pack.compile_plan(raw)
+    key = next(i["key"] for i in plan["items"] if i["var"] == "pose")
+    out = pack.compile_item(plan, key, {}, {"options": [
+        {"text": t, "weight": 1, "tags": [], "negative": ""} for t in (
+            "hand_on_hip", "arms_up", "nothing")]})
+    assert [o["value"] for o in out["payload"]["options"]] == [
+        "hand_on_hip", "arms_up", "nothing"]
+    # A subject the request names in booru or NSFW words stays.
+    for request in ("1girl, lingerie, bedroom", "lewd pin-up pack"):
+        kept = pack.compile_plan(_raw(anchor="subject", items=[
+            _item(name="Subject", var="subject"),
+            _item(kind="template", name="T", about="$subject")]), request=request)
+        assert "subject" in {i["var"] for i in kept["items"]}, request
