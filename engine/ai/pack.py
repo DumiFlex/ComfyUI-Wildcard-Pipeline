@@ -2947,6 +2947,68 @@ def item_request(
             "temperature": 0.4}
 
 
+def _strip_sibling_picks(plan: dict[str, Any], built: dict[str, Any], item: dict[str, Any],
+                         payload: dict[str, Any]) -> list[str]:
+    """Take out of this wildcard's options the pieces that are whole options
+    of another of the pack's wildcards (a hair style "long hair, high
+    ponytail" next to a Hair Length that picks "long hair"), and a piece an
+    option says twice: the prompt would show both picks, and they disagree.
+    Changes ``payload`` in place; an option that would be left with nothing
+    stays as it was."""
+    others: dict[str, str] = {}
+    for i in plan["items"]:
+        if not is_wild(i) or i["key"] == item["key"] or i["key"] not in built \
+                or not i["var"] or i["var"] == item["var"]:
+            continue
+        for o in built[i["key"]]["payload"].get("options") or []:
+            text = " ".join(str(o.get("value") or "").split()).lower()
+            if isinstance(o, dict) and not o.get("is_null") and len(text) >= 3 \
+                    and "," not in text and "@{" not in text:
+                others.setdefault(text, i["name"])
+    taken: dict[str, list[str]] = {}
+    kept: list[dict[str, Any]] = []
+    doubled = 0
+    for o in payload.get("options") or []:
+        value = o.get("value")
+        # A whole option the same as another wildcard's is left alone (two
+        # colour picks may both offer "red"): only a piece of a longer one.
+        if o.get("is_null") or not isinstance(value, str) or "," not in value:
+            kept.append(o)
+            continue
+        out: list[str] = []
+        gone: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        twice = 0
+        for piece in (p.strip() for p in value.split(",")):
+            low = " ".join(piece.split()).lower()
+            if not low:
+                continue
+            if low in others:
+                gone.append((others[low], piece))
+            elif low in seen:
+                twice += 1
+            else:
+                seen.add(low)
+                out.append(piece)
+        if not out or (not gone and not twice):
+            kept.append(o)
+            continue
+        for name, piece in gone:
+            taken.setdefault(name, []).append(piece)
+        doubled += twice
+        kept.append({**o, "value": ", ".join(out)})
+    if not taken and not doubled:
+        return []
+    payload["options"] = kept
+    said = []
+    for name, pieces in taken.items():
+        quoted = ", ".join('"' + p + '"' for p in dict.fromkeys(pieces))
+        said.append(f"Took {quoted[:120]} out of the options: {name} picks that")
+    if doubled:
+        said.append(f"Took out {doubled} piece(s) an option said twice")
+    return said
+
+
 def _siblings_line(plan: dict[str, Any], item: dict[str, Any]) -> str:
     """The pack's other picks, so a hair style wildcard doesn't also roll
     hair length or colour (the prompt then says both, and they disagree)."""
@@ -3030,6 +3092,7 @@ def compile_item(
                                      or t in {x for v in (payload.get("tag_groups") or {})
                                               .values() for x in v}]
         warnings += _wrap_pipes(payload.get("options") or [])
+        warnings += _strip_sibling_picks(plan, built, item, payload)
         lists = _list_options(payload["options"])
         if lists and len(lists) < len(payload["options"]):
             payload["options"] = [o for o in payload["options"] if o not in lists]
@@ -4288,6 +4351,12 @@ def check_pack(
         if i["kind"] == "constraint" and i["key"] in built:
             for said in ai_lint.exclude_shared_tags(built[i["key"]]["payload"], row_by_id.get):
                 problems.setdefault(i["key"], []).append(said)
+        # A rule that maps one pick to another value by value is a wildcard
+        # plus a constraint written out longhand (a 22-branch weather table).
+        if i["kind"] == "derivation" and i["key"] in built:
+            for said in ai_lint.derivation_shape(i["name"], built[i["key"]]["payload"]):
+                if "value by value" in said:
+                    problems.setdefault(i["key"], []).append(said)
     seed_list = list(range(1, max(1, seeds) + 1))
     frames = loop_frames(plan)
     if frames:

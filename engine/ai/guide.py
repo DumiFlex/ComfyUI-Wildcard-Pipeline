@@ -113,7 +113,10 @@ trigger) → a WP Context Injector row sets it; read it like any variable. \
 Per-checkpoint differences → rules on $model_family / $model_variant (WP \
 Model Info). A sequence over a WP Context Loop → rules on $iteration. To key \
 a constraint on such a variable, bundle a wildcard whose options are its \
-values with "match $var" and make that wildcard the constraint's source.
+values with "match $var" and make that wildcard the constraint's source. \
+"match" only copies a value the variable already holds (the option with \
+that exact text); it never narrows a list: to narrow one pick by another, \
+use a constraint.
 - Two characters → the same wildcards twice with different variables \
 ($a_hair, $b_hair), each pair's constraint just before its own target with \
 reach "first", and a combine per character ($a_look) so each one's words stay \

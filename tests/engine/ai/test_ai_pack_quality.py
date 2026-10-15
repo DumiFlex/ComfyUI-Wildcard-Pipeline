@@ -1489,3 +1489,50 @@ def test_a_library_item_the_request_never_asks_for_does_not_steer_the_pack():
     assert {i["kind"] for i in plan["items"]} == {"wildcard", "template"}
     kept = pack.compile_plan(raw, request="A class pack where the class picks the outfit")
     assert any(i["kind"] == "constraint" for i in kept["items"])
+
+
+# --- round 23 ---------------------------------------------------------------
+
+def test_a_style_option_loses_the_length_another_wildcard_picks():
+    raw = _raw(items=[
+        _item(name="Hair Length", var="hair_length"), _item(name="Hair Style", var="hair_style"),
+        _item(kind="template", name="T", about="$hair_length, $hair_style")])
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    keys = {i["var"]: i["key"] for i in plan["items"] if i["var"]}
+    built[keys["hair_length"]]["payload"]["options"] = [
+        {"id": "l1", "value": "long hair", "weight": 1},
+        {"id": "l2", "value": "short hair", "weight": 1}]
+    item = next(i for i in plan["items"] if i["var"] == "hair_style")
+    payload = {"options": [
+        {"id": "s1", "value": "long hair, long hair, high ponytail", "weight": 1},
+        {"id": "s2", "value": "twin braids", "weight": 1},
+        {"id": "s3", "value": "short hair", "weight": 1}]}
+    said = pack._strip_sibling_picks(plan, built, item, payload)
+    # A piece Hair Length picks goes, and so does a piece said twice; a
+    # whole option that is the same as another wildcard's stays.
+    assert [o["value"] for o in payload["options"]] == [
+        "high ponytail", "twin braids", "short hair"]
+    assert any("Hair Length picks that" in s for s in said)
+    assert pack._strip_sibling_picks(plan, built, item, payload) == []
+
+
+def test_match_is_described_as_a_copy_not_a_filter():
+    from engine.ai import guide
+    assert "it never narrows a list" in guide.text()
+
+
+def test_a_rule_that_is_a_lookup_table_is_a_problem():
+    raw = _raw()
+    raw["items"].insert(-1, _item(kind="derivation", name="Weather Table", var="weather",
+                                  about="the weather for each race"))
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    key = next(i["key"] for i in plan["items"] if i["name"] == "Weather Table")
+    rule = {"summary": "table", "else_actions": [], "branches": [
+        {"match": "all", "conditions": [{"var": "race", "op": "equals", "value": f"race {n}"}],
+         "actions": [{"target_var": "weather", "mode": "replace", "value": f"weather {n}"}]}
+        for n in range(6)]}
+    built[key] = pack.compile_item(plan, key, built, {"rules": [rule]})
+    report = pack.check_pack(plan, built, seeds=5)
+    assert any("value by value" in p for p in report["problems"].get(key, []))
