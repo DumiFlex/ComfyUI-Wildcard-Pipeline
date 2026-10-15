@@ -292,8 +292,13 @@ def test_never_rules_built_as_reduce_become_excludes_and_only_is_sent_back():
     plan["items"][[i["key"] for i in plan["items"]].index(key)]["about"] = \
         "#elf gets only #robe"
     out = pack.compile_item(plan, key, built, answer)
-    assert out["payload"]["matrix"]["elf"]["armor"]["mode"] == "reduce"
-    assert "no rule is an only or exclude rule" in out["repair"]
+    row = out["payload"]["matrix"]["elf"]
+    if "robe" in row:
+        # The plan's own "gets only" lands as an only row, whatever the model wrote.
+        assert row == {"robe": {"mode": "only", "factor": 1}}
+    else:
+        assert row["armor"]["mode"] == "reduce"
+        assert "no rule is an only or exclude rule" in out["repair"]
     plan["items"][[i["key"] for i in plan["items"]].index(key)]["about"] = \
         "#elf rarely wears #armor"
     assert pack.compile_item(plan, key, built, answer)["repair"] == ""
@@ -658,17 +663,22 @@ def test_an_input_the_request_doesnt_name_is_rolled_even_with_give_words():
 def test_options_tagged_by_season_follow_the_season_pick():
     raw = _raw(items=[
         _item(name="Season", var="season", tags=["winter", "summer", "autumn"]),
-        _item(name="Tops", var="tops", tags=["winter", "summer", "casual"]),
+        _item(name="Tops", var="tops", tags=["winter", "summer", "casual"],
+              about="tops tagged by season"),
         _item(kind="constraint", name="No parka in summer", source="season", target="tops",
               about="#summer never gets parka"),
-        _item(name="Shoes", var="shoes", tags=["winter", "summer"]),
-        _item(kind="template", name="T", about="$season, $tops, $shoes")])
+        _item(name="Shoes", var="shoes", tags=["winter", "summer"],
+              about="shoes for each season"),
+        _item(name="Hair", var="hair", tags=["winter", "summer"], about="hair colours"),
+        _item(kind="template", name="T", about="$season, $tops, $shoes, $hair")])
     plan = pack.compile_plan(raw)
     rules = {(i["source"], i["target"]): i["about"] for i in plan["items"]
              if i["kind"] == "constraint"}
     assert "#winter gets only #winter" in rules[("season", "tops")]
     assert "parka" in rules[("season", "tops")]
     assert "#summer gets only #summer" in rules[("season", "shoes")]
+    # Shared tags alone don't make one pick decide another.
+    assert ("season", "hair") not in rules
 
 
 def test_a_weapon_that_fits_the_class_gets_a_rule():
@@ -731,27 +741,30 @@ def test_a_never_in_the_request_beats_a_reduce_in_the_plan():
     assert "reduce odds of boots" in rules["Summer Shoes"]
 
 
-def test_the_anchor_tags_a_wildcard_it_only_rules_by_name():
+def test_a_rule_on_an_untagged_target_gets_no_keep_rows():
+    # Round 9: race keep-rows on weapons never tagged by race excluded every
+    # weapon, so every hero held the fallback sword.
     raw = _raw(items=[
-        _item(name="Seasons", var="season", tags=["winter", "summer", "autumn"]),
-        _item(name="Tops", var="top", tags=["sweater", "t-shirt"]),
-        _item(kind="constraint", name="Summer Tops", source="season", target="top",
-              about="When season is summer, fewer sweaters."),
-        _item(kind="template", name="T", about="$season, $top")])
-    raw["anchor"] = "season"
+        _item(name="Race Options", var="race", tags=["elf", "human", "dwarf"]),
+        _item(name="Weapon Options", var="weapon", tags=["bow", "sword", "gun"],
+              about="Weapon carried by the character. Elves cannot use guns."),
+        _item(kind="constraint", name="Elf Weapon", source="race", target="weapon",
+              about="If race is Elf, exclude gun."),
+        _item(kind="template", name="T", about="$race, $weapon")])
+    raw["anchor"] = "race"
     plan = pack.compile_plan(raw)
-    top = next(i for i in plan["items"] if i["var"] == "top")
-    assert {"winter", "summer", "autumn"} <= set(top["tags"])
+    weapon = next(i for i in plan["items"] if i["var"] == "weapon")
+    assert set(weapon["tags"]) == {"bow", "sword", "gun"}
     rule = next(i for i in plan["items"] if i["kind"] == "constraint")
-    assert "#winter gets only #winter" in rule["about"] and "sweaters" in rule["about"]
+    assert "gets only" not in rule["about"]
 
 
 def test_one_pick_keeps_each_case_tagged_wildcard():
     cases = ["tundra", "forest", "desert"]
     raw = _raw(items=[
         _item(name="Biome", var="habitat", tags=cases),
-        _item(name="Animal", var="animal", tags=cases),
-        _item(name="Weather", var="weather", tags=cases),
+        _item(name="Animal", var="animal", tags=cases, about="animals for each biome"),
+        _item(name="Weather", var="weather", tags=cases, about="weather for each biome"),
         _item(kind="template", name="T", about="$habitat, $animal, $weather")])
     plan = pack.compile_plan(raw)
     into = [i["source"] for i in plan["items"]
@@ -786,4 +799,52 @@ def test_a_rule_that_rolls_a_wildcard_again_is_sent_back():
         "target_var": "outerwear", "mode": "replace", "value": "@{Outerwear:heavy}"}}]}]}
     said = pack._second_rolls(plan, payload)
     assert said and "a second time" in said[0]
+    assert pack.repair_note(said)
+
+
+# --- ninth real-model run ---------------------------------------------------
+
+def test_the_plans_gets_only_clauses_land_whatever_the_model_wrote():
+    tags = ["winter", "summer"]
+    src = {"tags": tags, "options": []}
+    tgt = {"tags": tags, "options": [{"tags": ["winter"]}, {"tags": ["summer"]}]}
+    matrix = {"winter": {"summer": {"mode": "exclude", "factor": 0}},
+              "summer": {"winter": {"mode": "boost", "factor": 2}}}
+    item = {"about": "When winter, never allow #summer.; #winter gets only #winter; "
+                     "#summer gets only #summer; #spring gets only #spring"}
+    said = pack._plan_onlys(item, src, tgt, matrix)
+    assert matrix == {"winter": {"winter": {"mode": "only", "factor": 1},
+                                 "summer": {"mode": "exclude", "factor": 0}},
+                      "summer": {"summer": {"mode": "only", "factor": 1}}}
+    assert said == ["#winter → #winter", "#summer → #summer"]
+
+
+def test_a_sentence_template_keeps_its_reads_next_to_a_combine():
+    raw = _raw(items=[
+        _item(name="Top", var="top"), _item(name="Coat", var="coat"),
+        _item(kind="combine", name="Coat Line", var="coat_line", about="$top under $coat"),
+        _item(kind="template", name="T", about="wearing a $top, layered under $coat_line")])
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    key = next(i["key"] for i in plan["items"] if i["kind"] == "combine")
+    built[key] = {"id": "c0ffee00", "payload": {"template": "$top under $coat",
+                                                "input_vars": ["top", "coat"]}}
+    payload = {"template_string": "wearing a $top and $coat_line", "negative_template": ""}
+    out, said = pack._drop_double_reads(plan, built, payload)
+    assert out["template_string"] == "wearing a $top and $coat_line" and not said
+    out, said = pack._drop_double_reads(plan, built, {**payload,
+                                                      "template_string": "$top, $coat_line"})
+    assert out["template_string"] == "$coat_line" and said
+
+
+def test_a_combine_that_picks_inline_or_reads_the_templates_vars_is_sent_back():
+    raw = _raw(items=[
+        _item(name="Coat", var="coat"), _item(name="Quality", var="quality_tags"),
+        _item(kind="combine", name="Coat Line", var="coat_line", about="joins $coat"),
+        _item(kind="template", name="T", about="$quality_tags, $coat_line")])
+    plan = pack.compile_plan(raw)
+    item = next(i for i in plan["items"] if i["kind"] == "combine")
+    said = pack._combine_notes(plan, item, {"template": "$quality_tags, {parka|trench coat}"})
+    assert any("instead of reading $coat" in s for s in said)
+    assert any("$quality_tags, which the template prints itself" in s for s in said)
     assert pack.repair_note(said)
