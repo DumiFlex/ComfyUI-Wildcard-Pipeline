@@ -643,6 +643,12 @@ class PipelineEngine:
             #     library id when `_uid` is absent (legacy / test modules).
             ctx["__wp_current_module_id__"] = _module_id
             ctx["__wp_current_module_uid__"] = _module_uid or _module_id
+            # Random-stream key of this instance (engine/modules/_seed.py):
+            # its bundle copy plus its own uid, so two instances (or two
+            # copies of one bundle) never roll in lockstep.
+            ctx["__wp_instance_key__"] = (
+                f"{_module_bundle_origin}/{_module_uid or _module_id}"
+            )
             ctx["__wp_current_module_name__"] = _module_name
             # See the `_module_bundle_origin` derivation above — exposed to
             # handlers (wildcard_handler records it on the pick; constraint_
@@ -786,6 +792,7 @@ class PipelineEngine:
         # keeps post-run ctx introspection tidy).
         ctx.pop("__wp_current_module_id__", None)
         ctx.pop("__wp_current_module_uid__", None)
+        ctx.pop("__wp_instance_key__", None)
         ctx.pop("__wp_current_module_name__", None)
         ctx.pop("__wp_current_module_bundle_origin__", None)
         ctx.pop(DETAIL_KEY, None)

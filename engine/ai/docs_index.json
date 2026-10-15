@@ -376,7 +376,7 @@
    "sections": [
     {
      "title": "The seed and per-module randomness",
-     "text": "Every WP Context node has a seed input. At generation time, each module in the stack gets its own independent random stream derived from that seed — so changing the seed changes every module's picks together, but reordering modules does not disturb each other's results.\nThe seed advances automatically after each generation, so you get a fresh set of picks every time you press Generate without editing anything manually."
+     "text": "Every WP Context node has a seed input. At generation time, each module in the stack gets its own independent random stream derived from that seed — so changing the seed changes every module's picks together, but reordering modules does not disturb each other's results.\nInside a module every pick rolls on its own stream too: each fixed value, each derivation rule, and each {a|b} or @{…} in a piece of text. Adding a value, firing another rule or giving another pick more options never changes a roll you already like, and two copies of one module roll independently.\nThe seed advances automatically after each generation, so you get a fresh set of picks every time you press Generate without editing anything manually."
     },
     {
      "title": "Locked seeds",

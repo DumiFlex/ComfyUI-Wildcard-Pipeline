@@ -19,7 +19,7 @@ from typing import Any
 
 from engine import negatives
 from engine.modules import build_resolve_ctx
-from engine.modules._seed import derive_module_rng
+from engine.modules._seed import derive_module_rng, instance_key, stream_key
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
 
@@ -104,7 +104,7 @@ class CombineHandler(ModuleHandler):
         # Effective seed selection (mirrors WildcardHandler):
         #   - locked_seed when present  → reproducible per-instance
         #   - chain seed otherwise      → re-rolls each queue
-        # Both feed derive_module_rng(seed, output_var) so locking with
+        # Both feed derive_module_rng(seed, instance key) so locking with
         # locked_seed = chain_seed reproduces the unlocked roll exactly.
         if instance.get("seed_scope") == "hold":
             # Held: reuse the frame-0 resolved value verbatim (from the
@@ -122,12 +122,15 @@ class CombineHandler(ModuleHandler):
             effective_seed = int(locked_seed)
         else:
             effective_seed = chain_seed
-        rng = derive_module_rng(effective_seed, output_var)
+        ikey = instance_key(ctx, output_var)
+        rng = derive_module_rng(effective_seed, ikey)
 
         # Patch ctx for the scope of this resolve so build_resolve_ctx
         # picks up our derived RNG instead of the chain RNG.
         ctx_local = {**ctx, "__wp_rng__": rng}
-        resolve_ctx = build_resolve_ctx(ctx_local, surface="combine")
+        resolve_ctx = build_resolve_ctx(
+            ctx_local, surface="combine", stream=stream_key(effective_seed, ikey),
+        )
         with negatives.collecting(resolve_ctx) as col:
             result = resolve_text(template, resolve_ctx)
         # Send-to-negative: the phrase carries the negatives of every variable
@@ -140,7 +143,7 @@ class CombineHandler(ModuleHandler):
         entries = negatives.entries_for_reads(ctx, col.reads)
         entries += negatives.own_entries(
             [own] if own else [], resolve_ctx,
-            negatives.neg_rng(effective_seed, output_var),
+            negatives.neg_rng(effective_seed, ikey),
             pick=None, source=output_var,
         )
         negatives.set_entries(ctx, output_var, entries)
