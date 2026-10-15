@@ -473,6 +473,20 @@ def _sides_from_about(x: dict[str, Any], known: dict[str, str]) -> None:
         v = named.get(side) or (rest.pop(0) if rest else "")
         if v and v != x.get("target" if side == "source" else "source"):
             x[side] = v
+    if x.get("source") in known and x.get("target") in known:
+        return
+    # No $ at all ("Biome to Climate"): the picks its words name, in order.
+    words = re.findall(r"[a-z]{3,}", text.lower())
+    order: list[str] = []
+    for w in words:
+        hits = [v for v in known if w in {v, v.rstrip("s")} or w.rstrip("s") in {
+            p.rstrip("s") for p in v.lower().split("_")} or w == str(known[v]).lower()]
+        if len(hits) == 1 and hits[0] not in order:
+            order.append(hits[0])
+    order = [v for v in order if v not in (x.get("source"), x.get("target"))]
+    for side in ("source", "target"):
+        if x.get(side) not in known and order:
+            x[side] = order.pop(0)
 
 
 def _reads_var(items: list[dict[str, Any]], me: dict[str, Any], var: str) -> bool:
@@ -747,6 +761,17 @@ def compile_plan(
                 var = var or _slug_var(name)
                 if not var:
                     warnings.append("Left out a library item with no name or variable")
+                    continue
+                twin = next((x for x in raw_items if x is not it and x.get("kind") in (
+                    "wildcard", "fixed_values") and _var(x.get("var"))
+                    and _var(x.get("var")) != var
+                    and _var(x.get("var")).rstrip("s") == var.rstrip("s")), None)
+                if twin is not None:
+                    # "Races" next to the pack's own race wildcard: two races
+                    # in every prompt.
+                    warnings.append(f"Left out {name or var}: it isn't in the library, and "
+                                    f"{twin.get('name') or _var(twin.get('var'))} already "
+                                    "picks it")
                     continue
                 kind = "fixed_values" if _PRESETISH.search(f"{name} {about}") else "wildcard"
                 made_new = "the settings say to make everything new" \
@@ -2028,6 +2053,9 @@ def _never_from_request(raw_items: list[dict[str, Any]], request: str,
 # (cold) of another (biome).
 _ONLY_IN = re.compile(r"\b([a-z]{3,})\s+(?:is\s+|are\s+)?only\s+(?:in|on|for|with|during|at|"
                       r"when)\s+(?:the\s+|a\s+|an\s+)?([a-z]{3,})(?:\s+([a-z]{3,}))?", re.I)
+#: What else counts as the pick a "X only in Y" keeps (hail is snow there).
+_KIN = {"snow": "snow, hail, sleet, frost or a blizzard", "rain": "rain, drizzle or a storm",
+        "fog": "fog, mist or haze", "storm": "a storm, thunder or lightning"}
 _ONLY_WITH = re.compile(r"#([\w-]+)\s+only\s+with\s+#([\w-]+)", re.I)
 
 
@@ -2075,6 +2103,11 @@ def _only_in_rules(raw_items: list[dict[str, Any]], request: str,
         for x, tag in ((s, ctag), (t, wtag)):
             if tag not in tags(x):
                 x["tags"] = [*(x.get("tags") or []), tag]
+        kin = _KIN.get(wtag.rstrip("s"), wtag)
+        ask = (f"Tag every option with {kin} #{wtag}, and keep at least two of them "
+               f"for the #{ctag} cases")
+        if ask not in str(t.get("about") or ""):
+            t["about"] = _cut(str(t.get("about") or "").rstrip(". ") + ". " + ask, MAX_ABOUT)
         clause = (f"#{wtag} only with #{ctag}: every other {s.get('name') or sv} "
                   f"excludes #{wtag}")
         have = next((x for x in items if x.get("kind") == "constraint"
@@ -2665,6 +2698,7 @@ def compile_item(
         payload["sub_categories"] = [t for t in payload["sub_categories"] if t in used
                                      or t in {x for v in (payload.get("tag_groups") or {})
                                               .values() for x in v}]
+        warnings += _wrap_pipes(payload.get("options") or [])
         WildcardHandler.validate_payload(payload)
         missing = [t for t in item["tags"] if t not in used]
         if missing:
@@ -2749,6 +2783,7 @@ def compile_item(
         if len(kept) != len(payload["values"]):
             payload = {**payload, "values": kept}
             preview = [p for p in preview if not any(p.startswith(f"${n} = ") for n in own)]
+        warnings += _wrap_pipes(payload["values"])
         names = [v["name"] for v in payload["values"]]
         if item["var"] not in names:
             warnings.append(f"It doesn't set ${item['var']}")
@@ -2931,6 +2966,41 @@ def _plan_only_withs(item: dict[str, Any], src: dict[str, Any], tgt: dict[str, A
     return said
 
 
+def _wrap_pipes(rows: list[Any]) -> list[str]:
+    """Values written as bare alternatives ("morning light|golden hour")
+    print the "|" as text: they become one pick, ``{a|b}``, in place."""
+    said = []
+    for r in rows:
+        v = r.get("value") if isinstance(r, dict) else None
+        if isinstance(v, str) and "|" in v and not re.search(r"[{}]", v):
+            r["value"] = "{" + "|".join(p.strip() for p in v.split("|")) + "}"
+            said.append(v)
+    if not said:
+        return []
+    return [f"Made \"{said[0][:40]}\"{' and others' if len(said) > 1 else ''} a pick of "
+            "one: a bare \"|\" printed as text"]
+
+
+def _combine_inputs(plan: dict[str, Any], built: dict[str, Any], var: str,
+                    seen: set[str] | None = None) -> list[str]:
+    """What a combine joins, through the combines it joins ($character
+    joining $look, which joins $race and $skin)."""
+    seen = seen if seen is not None else {var}
+    combos = {c["var"]: c for c in plan["items"] if c["kind"] == "combine"
+              and c["key"] in built}
+    out: list[str] = []
+    joins = built[combos[var]["key"]]["payload"].get("input_vars") or [] \
+        if var in combos else []
+    for v in joins:
+        if v in seen:
+            continue
+        seen.add(v)
+        out.append(v)
+        if v in combos:
+            out += _combine_inputs(plan, built, v, seen)
+    return out
+
+
 def _drop_double_reads(plan: dict[str, Any], built: dict[str, Any],
                        payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     """A template that reads a combine and what the combine joins prints it
@@ -2941,7 +3011,7 @@ def _drop_double_reads(plan: dict[str, Any], built: dict[str, Any],
     for c in plan["items"]:
         if c["kind"] != "combine" or c["key"] not in built or c["var"] not in shown:
             continue
-        joined = [v for v in built[c["key"]]["payload"].get("input_vars") or []
+        joined = [v for v in _combine_inputs(plan, built, c["var"])
                   if v in shown and v != c["var"]]
         # Only a read that is a list entry of its own goes: in a sentence
         # ("wearing a $top and $bottom") dropping it leaves the words behind.
@@ -3861,7 +3931,13 @@ def unread_notes(plan: dict[str, Any], built: dict[str, Any],
             continue
         if sets & ruled:
             continue
-        if i["kind"] in ("combine", "derivation"):
+        if i["kind"] == "derivation" and tpl is not None:
+            # A rule the request asked for ("night gets moody lighting") that
+            # the prompt never shows changes nothing.
+            problems.setdefault(tpl["key"], []).append(
+                f"it doesn't read ${i['var']} ({i['name']}), so that rule changes nothing in "
+                "the prompt; read it")
+        elif i["kind"] in ("combine", "derivation"):
             notes.append(f"Nothing reads ${i['var']}, so {i['name']} does nothing")
         elif tpl is not None:
             problems.setdefault(tpl["key"], []).append(

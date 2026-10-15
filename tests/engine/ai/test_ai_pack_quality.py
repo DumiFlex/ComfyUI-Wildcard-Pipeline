@@ -1069,3 +1069,57 @@ def test_a_tag_name_printed_as_text_is_a_problem():
     out = pack._printed_names(plan, built, runs, "$outer", "")
     assert '"summer_outer"' in out[key]
     assert not pack._printed_names(plan, built, [{"outer": "linen shirt"}] * 6, "$outer", "")
+
+
+# --- fourteenth real-model run ----------------------------------------------
+
+def test_bare_pipes_become_one_pick():
+    rows = [{"value": "morning light|golden hour"}, {"value": "{a|b} c"}, {"value": "dusk"}]
+    said = pack._wrap_pipes(rows)
+    assert [r["value"] for r in rows] == ["{morning light|golden hour}", "{a|b} c", "dusk"]
+    assert said and "pick of one" in said[0]
+
+
+def test_a_constraint_named_in_plain_words_gets_its_sides():
+    x = {"name": "Biome to Climate", "about": "cold biomes boost cold climate",
+         "source": "", "target": ""}
+    pack._sides_from_about(x, {"biome": "Biome Types", "climate": "Climate"})
+    assert (x["source"], x["target"]) == ("biome", "climate")
+
+
+def test_a_library_item_made_new_next_to_its_own_wildcard_is_left_out():
+    raw = _raw(items=[
+        _item(name="Race", var="race", tags=["elf", "orc"]),
+        _item(kind="library", name="Races", var="races"),
+        _item(kind="template", name="T", about="$race")])
+    plan = pack.compile_plan(raw)
+    assert [i["var"] for i in plan["items"] if i["kind"] != "template"] == ["race"]
+    assert any("Left out Races" in w and "already picks it" in w for w in plan["warnings"])
+
+
+def test_an_unread_rule_is_a_template_problem_and_nested_combines_drop_reads():
+    raw = _raw(items=[
+        _item(name="Time", var="time"), _item(name="Race", var="race"),
+        _item(kind="derivation", name="Night Lighting", var="lighting",
+              about="when $time is night, set $lighting to moody light"),
+        _item(kind="combine", name="Look", var="look", about="$race"),
+        _item(kind="combine", name="Character", var="character", about="$look"),
+        _item(kind="template", name="T", about="$time, $character, $look")])
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    keys = {i["var"]: i["key"] for i in plan["items"]}
+    built[keys["lighting"]] = {"id": "d0d0d0d0", "payload": {"rules": [
+        {"id": "r1", "branches": [{"when": {"var": "time", "op": "equals", "value": "night"},
+                                   "action": {"var": "lighting", "mode": "write",
+                                              "value": "moody light"}}]}]}}
+    built[keys["look"]] = {"id": "c1c1c1c1", "payload": {"template": "$race",
+                                                         "input_vars": ["race"]}}
+    built[keys["character"]] = {"id": "c2c2c2c2", "payload": {"template": "$look",
+                                                              "input_vars": ["look"]}}
+    problems: dict = {}
+    pack.unread_notes(plan, built, problems)
+    tpl = next(i["key"] for i in plan["items"] if i["kind"] == "template")
+    assert any("Night Lighting" in p and "changes nothing" in p for p in problems[tpl])
+    out, said = pack._drop_double_reads(
+        plan, built, {"template_string": "$time, $character, $look", "negative_template": ""})
+    assert out["template_string"] == "$time, $character" and said
