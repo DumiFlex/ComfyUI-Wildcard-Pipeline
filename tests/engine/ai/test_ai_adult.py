@@ -80,3 +80,16 @@ def test_the_planner_gets_the_structure_and_shapes():
                       ("juggernautXL", "sdxl"), ("my model", "")]:
         assert guide.family(name) == key, name
     assert set(guide.FORMATS) >= {k for _, k in guide._FAMILY}
+
+
+def test_no_ai_path_keeps_an_option_that_sexualises_a_minor():
+    from engine.ai import wildcard
+    assert adult.sexual_minor("nude schoolgirl") and adult.sexual_minor("loli, lingerie")
+    assert not adult.sexual_minor("school uniform, classroom")
+    assert not adult.sexual_minor("nude, mature female, 25 years old")
+    out = wildcard.compile_options({"options": [
+        {"text": "nude schoolgirl", "weight": 1, "tags": [], "negative": ""},
+        {"text": "school uniform", "weight": 1, "tags": [], "negative": ""}]},
+        existing_payload={"options": [], "sub_categories": []})
+    assert [o["value"] for o in out["options"]] == ["school uniform"]
+    assert out["skipped"][0]["reason"] == "it names a minor in a sexual context"

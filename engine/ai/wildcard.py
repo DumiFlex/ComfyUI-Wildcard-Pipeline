@@ -34,7 +34,7 @@ import re
 import secrets
 from typing import Any
 
-from engine.ai import about
+from engine.ai import about, adult
 from engine.ai import refs as ai_refs
 from engine.modules.wildcard_handler import WildcardHandler
 from engine.syntax.subcat_filter import validate_subcat_name
@@ -236,6 +236,9 @@ def compile_options(
             text = ai_refs.compile_text(text, surface="option", refs=refs, self_id=self_id)
         except ValueError as e:
             skipped.append({"text": text, "reason": str(e)})
+            continue
+        if adult.sexual_minor(text):
+            skipped.append({"text": text[:80], "reason": "it names a minor in a sexual context"})
             continue
         key = _norm_key(text)
         if key in seen:
