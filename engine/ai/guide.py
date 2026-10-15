@@ -22,7 +22,7 @@ from its options with those tags; @{Name!null} never its empty option.
 Where each works: wildcard options and negatives: picks and @{…}, no $. \
 Derivation actions: everything. Combines: $ and picks, no @{…}. Fixed values: \
 picks only (small variations; a real choice is a wildcard). The Assembler \
-template: $ only (it has no seed, so a pick or @{…} would stay as written). \
+template: $ only (it has no seed: {a|b} prints as typed, @{…} prints nothing). \
 Conditions: plain text or one $var.\
 """
 

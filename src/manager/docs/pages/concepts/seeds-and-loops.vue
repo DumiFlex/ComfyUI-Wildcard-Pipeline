@@ -14,7 +14,7 @@ const strategies = [
   },
   {
     term: "Sequential",
-    desc: "Seeds walk seed, seed+1, seed+2 … so adjacent iterations feel related and drift gradually.",
+    desc: "Seeds walk seed, seed+1, seed+2 … each frame rolls fresh picks: neighbouring seeds are no more alike than random ones, the numbers are just easy to find again.",
   },
   {
     term: "Prime stride",
