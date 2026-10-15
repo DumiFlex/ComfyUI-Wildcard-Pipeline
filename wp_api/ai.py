@@ -295,6 +295,9 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     axes = {
         str(k): _str_list(v, limit=200) for k, v in list(raw_groups.items())[:50]
     }
+    raw_kinds = payload.get("tag_group_kinds") \
+        if isinstance(payload.get("tag_group_kinds"), dict) else {}
+    kinds = {str(k): "accepts" for k, v in raw_kinds.items() if v == "accepts" and k in axes}
     name = wc.get("name") if isinstance(wc.get("name"), str) else ""
     var = wc.get("var_binding") if isinstance(wc.get("var_binding"), str) else ""
 
@@ -302,7 +305,7 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     self_id = wc.get("id") if isinstance(wc.get("id"), str) else None
     refs = _ref_index(_wildcards(request), self_id, payload, name)
     existing_texts = [ai_refs.display_text(t, refs) for t in existing_texts]
-    first = ai_wildcard.build_user_prompt(
+    first = ai_wildcard.build_user_prompt(kinds=kinds,
         instruction=ai_followup.first_instruction(turns, instruction), count=count,
         name=name[:200], var_binding=var[:100],
         existing_options=existing_texts, tags=tags, axes=axes,
@@ -311,8 +314,8 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     try:
         answer = await _ask(
             cfg, first=first, turns=turns, instruction=instruction,
-            system=webs.system(ai_wildcard.SYSTEM_PROMPT),
-            schema=webs.schema(ai_wildcard.OPTIONS_SCHEMA),
+            system=webs.system(ai_wildcard.draft_prompt()),
+            schema=webs.schema(ai_wildcard.DRAFT_SCHEMA),
             schema_name="wildcard_options",
             images=images or None, extra=webs.note,
         )
@@ -334,6 +337,13 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
             status=502,
         )
+    groups, group_notes = ai_wildcard.new_groups(
+        answer.get("axes") if isinstance(answer, dict) else None,
+        existing_payload={"sub_categories": tags, "tag_groups": axes, "tag_group_kinds": kinds},
+        new_tags=result["new_tags"], options=result["options"],
+    )
+    result["groups"] = groups
+    result["skipped"] += [{"text": "tag groups", "reason": n} for n in group_notes]
     result["model"] = cfg["model"]
     result["answer"] = answer
     result["research"] = research

@@ -91,7 +91,7 @@ async def test_ollama_native_draft(wp_client, fake_llm):
     assert sent["keep_alive"] == "30s"
     # The window is sized to the prompt, a power of two within the cap.
     assert sent["options"]["num_ctx"] in (4096, 8192)
-    assert sent["format"]["required"] == ["options"]
+    assert sent["format"]["required"] == ["axes", "options"]
     assert sent["stream"] is False
 
 

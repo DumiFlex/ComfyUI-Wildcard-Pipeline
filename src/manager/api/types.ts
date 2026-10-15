@@ -1012,14 +1012,25 @@ export interface AiWildcardDraftRequest extends AiConversational {
       options: Array<{ value: string }>;
       sub_categories: string[];
       tag_groups?: Record<string, string[]>;
+      tag_group_kinds?: Record<string, "accepts">;
     };
   };
+}
+
+/** A tag group the draft adds or extends: `tags` go into group `name`
+ *  (created when new); `kind` "accepts" makes it an accepts group. */
+export interface AiDraftGroup {
+  name: string;
+  kind: "classify" | "accepts";
+  tags: string[];
 }
 
 export interface AiWildcardDraftResult {
   options: AiDraftOption[];
   /** Tags the draft uses that the wildcard doesn't have yet. */
   new_tags: string[];
+  /** Tag groups the request asked for (older servers leave it out). */
+  groups?: AiDraftGroup[];
   skipped: Array<{ text: string; reason: string }>;
   model: string;
   /** The model's raw answer, for a follow-up's `history`. */

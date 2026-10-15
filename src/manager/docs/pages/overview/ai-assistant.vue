@@ -71,6 +71,14 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         model names the wildcard; the assistant finds it in your library and writes the reference,
         so ask for "a scarf in a warm colour from my Colors wildcard" and it points there.
       </p>
+      <p>
+        Ask for <b>tag groups</b> and the draft makes them too: "outfits tagged by style" puts
+        the style tags in a group, and "outfits and the shoes they go with" makes an
+        <b>accepts</b> group (SHOES: loafers, sneakers, boots), tagging each outfit with the
+        shoes that suit it instead of writing them into the text. The groups show under the
+        list, and <b>Add</b> creates them with the ticked options. A constraint on the accepts
+        group then makes your Shoes wildcard agree with the outfit.
+      </p>
       <DocCallout variant="tip">
         Options that repeat an existing one, read a <code>$variable</code> (options can't), point
         at a wildcard you don't have or at a tag it doesn't have, or point back at the wildcard
