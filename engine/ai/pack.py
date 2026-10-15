@@ -1943,7 +1943,7 @@ def _follows(w: dict[str, Any], src: dict[str, Any]) -> bool:
 
 
 _FITS = re.compile(
-    r"\b([a-z]+)\s+(?:that\s+|which\s+|to\s+)?(?:fits?|fitting|match(?:es|ing)?|"
+    r"(?:\b([a-z]+)\s+and\s+(?:an?\s+|the\s+)?)?\b([a-z]+)\s+(?:that\s+|which\s+|to\s+)?(?:fits?|fitting|match(?:es|ing)?|"
     r"suits?|suited\s+to|suiting|goes\s+with|go\s+with|right\s+for|"
     r"appropriate\s+(?:to|for)|depends?\s+on|follows?)\s+(?:the\s+|their\s+|his\s+|"
     r"her\s+|its\s+|each\s+|a\s+)?([a-z]+)", re.I)
@@ -1963,11 +1963,18 @@ def _fit_rules(raw_items: list[dict[str, Any]], request: str,
         hits = [x for x in wild if forms & {
             f for p in _var(x.get("var")).split("_")
             for f in (p, p[:-1] if p.endswith("s") else p)}]
+        if len(hits) > 1:
+            # "weapon" next to $weapon and $weapon_material: the plain one.
+            hits = [x for x in hits if _var(x.get("var")).rstrip("s") in forms] or hits
         return hits[0] if len(hits) == 1 else None
 
     items = list(raw_items)
+    pairs = []
     for m in _FITS.finditer(request):
-        tgt, src = find(m.group(1)), find(m.group(2))
+        # "an outfit and a weapon that fit the class": both follow it.
+        pairs += [(w, m.group(3)) for w in (m.group(1), m.group(2)) if w]
+    for tw, sw in pairs:
+        tgt, src = find(tw), find(sw)
         if tgt is None or src is None or tgt is src:
             continue
         sv, tv = _var(src.get("var")), _var(tgt.get("var"))
@@ -2699,6 +2706,12 @@ def compile_item(
                                      or t in {x for v in (payload.get("tag_groups") or {})
                                               .values() for x in v}]
         warnings += _wrap_pipes(payload.get("options") or [])
+        empty = [o for o in payload["options"] if isinstance(o.get("value"), str)
+                 and _PLACEHOLDER.search(o["value"])]
+        if empty and len(empty) < len(payload["options"]):
+            payload["options"] = [o for o in payload["options"] if o not in empty]
+            warnings.append(f"Left out \"{empty[0]['value'][:40]}\": an option that means "
+                            "\"nothing\" prints those words")
         WildcardHandler.validate_payload(payload)
         missing = [t for t in item["tags"] if t not in used]
         if missing:
@@ -2893,6 +2906,15 @@ def _combine_notes(plan: dict[str, Any], item: dict[str, Any], payload: dict[str
                         + ", ".join(f'"{c[0]}"' for c in written[:3]) + "), so every prompt "
                         f"lists them all; read ${w['var']} instead")
     tpl = next((i for i in plan["items"] if i["kind"] == "template"), None)
+    shown = set(_reads(tpl.get("about") or "")) if tpl is not None else set()
+    for c in plan["items"]:
+        if c["kind"] != "combine" or c is item or c["key"] not in (built or {}) \
+                or c["var"] not in shown or item["var"] in _combine_inputs(plan, built, c["var"]):
+            continue
+        dup = sorted(reads & set(_combine_inputs(plan, built, c["var"])))
+        if dup:
+            said.append(f"It also reads ${', $'.join(dup)}, which ${c['var']} ({c['name']}) "
+                        "already joins, so the prompt shows it twice; leave it out")
     if tpl is not None:
         both = sorted(v for v in reads & set(_reads(tpl.get("about") or ""))
                       if v not in planned)
@@ -2954,6 +2976,13 @@ def _plan_only_withs(item: dict[str, Any], src: dict[str, Any], tgt: dict[str, A
         if tb is None or keep is None or tb not in carried:
             continue
         hit = False
+        kept = matrix.get(keep) or {}
+        if any(isinstance(c, dict) and c.get("mode") == "only" for c in kept.values()) \
+                and (kept.get(tb) or {}).get("mode") != "only":
+            # "#cold gets only #cold" would shut snow out of the cold places
+            # too: there it's one of the kept ones.
+            kept[tb] = {"mode": "only", "factor": 1}
+            hit = True
         for sa in st.values():
             if sa == keep:
                 continue
@@ -2964,6 +2993,11 @@ def _plan_only_withs(item: dict[str, Any], src: dict[str, Any], tgt: dict[str, A
         if hit:
             said.append(f"#{tb} only with #{keep}")
     return said
+
+
+# An option that stands for "nothing" ("no color variation", "none").
+_PLACEHOLDER = re.compile(r"^\s*(?:none|n/?a|nothing|no\s+(?:\w+\s+){0,2}"
+                          r"(?:variation|change|modifier|extra|accent)s?)\s*$", re.I)
 
 
 def _wrap_pipes(rows: list[Any]) -> list[str]:
@@ -3296,7 +3330,7 @@ _REPAIRABLE = re.compile(r"has no option|No option carries|unknown tag|nothing s
                          r"already rolls|no rule is an only|joins picks with|"
                          r"isn't an option or tag|"
                          r"instead of reading|prints itself|options itself|"
-                         r"line that joins picks|ends on its article|"
+                         r"line that joins picks|ends on its article|already joins|"
                          r"isn't set|not a variable|doesn't set|which no", re.I)
 
 
@@ -3957,6 +3991,20 @@ def unread_notes(plan: dict[str, Any], built: dict[str, Any],
     # The template reading a variable and a combine of it prints it twice.
     if tpl is not None:
         shown = item_io(tpl, built[tpl["key"]]["payload"])[0]
+        read_combos = [c for c in plan["items"] if c["kind"] == "combine"
+                       and c["key"] in built and c["var"] in shown]
+        for n, c in enumerate(read_combos):
+            mine = set(_combine_inputs(plan, built, c["var"]))
+            for d in read_combos[:n]:
+                theirs = set(_combine_inputs(plan, built, d["var"]))
+                if c["var"] in theirs or d["var"] in mine:
+                    continue
+                dup = sorted(mine & theirs)
+                if dup:
+                    problems.setdefault(c["key"], []).append(
+                        f"it reads ${', $'.join(dup)}, which ${d['var']} ({d['name']}) "
+                        "already joins, so the prompt shows it twice; leave it out")
+                    break
         for c in plan["items"]:
             if c["kind"] != "combine" or c["key"] not in built or c["var"] not in shown:
                 continue

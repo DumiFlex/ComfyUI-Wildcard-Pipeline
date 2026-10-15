@@ -1123,3 +1123,49 @@ def test_an_unread_rule_is_a_template_problem_and_nested_combines_drop_reads():
     out, said = pack._drop_double_reads(
         plan, built, {"template_string": "$time, $character, $look", "negative_template": ""})
     assert out["template_string"] == "$time, $character" and said
+
+
+# --- fifteenth real-model run -----------------------------------------------
+
+def test_snow_stays_allowed_in_a_cold_row_that_keeps_only_cold():
+    rule = {"about": "#snow only with #cold: every other Biome excludes #snow"}
+    src = {"tags": ["cold", "hot"], "options": []}
+    tgt = {"tags": ["cold", "snow"], "options": [{"tags": ["snow"]}, {"tags": ["cold"]}]}
+    matrix = {"cold": {"cold": {"mode": "only", "factor": 1}}}
+    pack._plan_only_withs(rule, src, tgt, matrix)
+    assert matrix["cold"]["snow"] == {"mode": "only", "factor": 1}
+    assert matrix["hot"]["snow"] == {"mode": "exclude", "factor": 0}
+
+
+def test_two_things_that_fit_the_class_both_get_rules():
+    raw = _raw(anchor="", items=[
+        _item(name="Class", var="class", tags=["mage", "rogue"]),
+        _item(name="Outfit", var="outfit"), _item(name="Weapon", var="weapon"),
+        _item(name="Weapon Material", var="weapon_material"),
+        _item(kind="template", name="T", about="$class, $outfit, $weapon, $weapon_material")])
+    plan = pack.compile_plan(raw, request="race, class, an outfit and a weapon that fit "
+                                          "the class.")
+    rules = {(i["source"], i["target"]) for i in plan["items"] if i["kind"] == "constraint"}
+    assert {("class", "outfit"), ("class", "weapon")} <= rules
+
+
+def test_placeholder_options_go_and_overlapping_combines_are_sent_back():
+    rows = [{"value": "no color variation"}, {"value": "None"}, {"value": "no makeup look"}]
+    assert [bool(pack._PLACEHOLDER.search(r["value"])) for r in rows] == [True, True, False]
+    raw = _raw(items=[
+        _item(name="Race", var="race"), _item(name="Build", var="build"),
+        _item(kind="combine", name="Body", var="body", about="$race, $build"),
+        _item(kind="combine", name="Hero", var="hero", about="$build"),
+        _item(kind="template", name="T", about="$body, $hero")])
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    keys = {i["var"]: i for i in plan["items"]}
+    built[keys["body"]["key"]] = {"id": "c1c1c1c1", "payload": {
+        "template": "$race, $build", "input_vars": ["race", "build"]}}
+    built[keys["hero"]["key"]] = {"id": "c2c2c2c2", "payload": {
+        "template": "$build", "input_vars": ["build"]}}
+    said = pack._combine_notes(plan, keys["hero"], {"template": "$build"}, built)
+    assert any("$body (Body) already joins" in s for s in said) and pack.repair_note(said)
+    problems: dict = {}
+    pack.unread_notes(plan, built, problems)
+    assert any("already joins" in p for p in problems[keys["hero"]["key"]])
