@@ -198,16 +198,14 @@ export interface RefFilterParts {
  *   `"warm or intense!null"` → `{ expr: "warm or intense", excludeNull: true }`
  *   `"warm or cool"`         → `{ expr: "warm or cool",   excludeNull: false }`
  *
- * Sub-category names and the boolean expression never contain `!` (see the
- * grammar in `subcatFilter.ts`), so the only `!` in a serialized body is the
- * null marker. Single source for the peel that RefChip, the canvas OptionRow,
+ * Only a trailing `!null` is the marker: elsewhere `!` is the expression's
+ * `not` (`!warm`, see `subcatFilter.ts`). Single source for the peel that RefChip, the canvas OptionRow,
  * and RichTextInput's editor model all need — keeps them from re-deriving it
  * (and drifting) independently.
  */
 export function splitRefFilter(body: string): RefFilterParts {
-  const bang = body.lastIndexOf("!");
-  if (bang >= 0) {
-    return { expr: body.slice(0, bang).trim(), excludeNull: body.slice(bang + 1) === "null" };
+  if (body.endsWith("!null")) {
+    return { expr: body.slice(0, -"!null".length).trim(), excludeNull: true };
   }
   return { expr: body.trim(), excludeNull: false };
 }
@@ -242,6 +240,10 @@ function splitTopLevelPipes(s: string): string[] {
 // = unique), group 3 is the separator. Applied against the whole raw block
 // including the leading `{`. SP2b.
 const MULTI_PREFIX_RE = /^\{(\d+(?:-\d+)?)(~?)\$\$([\s\S]*?)\$\$/;
+// Dynamic Prompts shorthand `{N$$a|b}` (no separator): joined by ", ". Tried
+// only when the full prefix doesn't match. Mirrors Python `_MULTI_SHORT_RE`.
+const MULTI_SHORT_RE = /^\{(\d+(?:-\d+)?)(~?)\$\$/;
+const SHORT_SEP = ", ";
 
 /**
  * Try to scan a `{...}` block starting at `text[start]` (must be `{`).
@@ -275,11 +277,12 @@ function scanBraceBlock(
 
   // Detect multi-pick prefix: {N$$sep$$...
   const raw = text.slice(start, endIndex);
-  const multiMatch = MULTI_PREFIX_RE.exec(raw);
+  const fullMatch = MULTI_PREFIX_RE.exec(raw);
+  const multiMatch = fullMatch ?? MULTI_SHORT_RE.exec(raw);
   if (multiMatch) {
     const countRaw = multiMatch[1];                 // "N" or "N-M"
     const independent = multiMatch[2] === "~";      // SP2b: repeats allowed
-    const sep = multiMatch[3];
+    const sep = fullMatch ? fullMatch[3] : SHORT_SEP;
     // Prefix length excluding the leading `{`
     const prefixLen = multiMatch[0].length - 1;
     const rest = body.slice(prefixLen);

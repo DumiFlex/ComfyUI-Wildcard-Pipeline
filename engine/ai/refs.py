@@ -33,7 +33,7 @@ import difflib
 import re
 from typing import Any
 
-from engine.syntax.subcat_filter import ParseError, parse, validate_subcat_name
+from engine.syntax.subcat_filter import ParseError, parse, reads_as, validate_subcat_name
 from engine.syntax.tokenize import tokenize_text
 from engine.syntax.types import TokenKind
 
@@ -65,7 +65,9 @@ _WHY_NO_REF = {
 }
 _HEX8 = re.compile(r"^[0-9a-f]{8}$")
 # @{ head [#label] [:filter] [!null] } where head is a name, $var or 8-hex id.
-_NAMED_REF = re.compile(r"@\{([^{}#:!]+?)\s*(?:#([^{}#:!]*))?(?::([^{}!]*))?(?:!\s*(\w+)\s*)?\}")
+_NAMED_REF = re.compile(
+    r"@\{([^{}#:!]+?)\s*(?:#([^{}#:!]*))?(?::((?:[^{}!]|!(?!\s*null\s*\}))*))?(?:!\s*(\w+)\s*)?\}"
+)
 _LABEL_BAD = re.compile(r"[#:}@{!]")
 _IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -217,7 +219,8 @@ def _check_filter(expr: str, row: dict[str, Any]) -> str:
         hint = f"; did you mean {' or '.join(near)}?" if near else (
             f"; its tags are {', '.join(tags[:15])}" if tags else "; it has no tags")
         raise ValueError(f"{name} has no tag {t!r}{hint}")
-    return expr
+    # `!warm` parses as `not warm`; store the spelled-out form.
+    return reads_as(parse(expr)) if "!" in expr else expr
 
 
 def compile_refs(text: str, index: RefIndex | None, *, self_id: str | None = None) -> str:

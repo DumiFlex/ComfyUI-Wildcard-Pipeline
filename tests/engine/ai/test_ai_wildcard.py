@@ -167,3 +167,9 @@ def test_schema_is_openai_strict_compatible():
     item = w.OPTIONS_SCHEMA["properties"]["options"]["items"]
     assert set(item["required"]) == set(item["properties"])
     assert item["additionalProperties"] is False
+
+
+def test_a_bang_in_a_ref_filter_is_stored_as_not():
+    idx = refs.RefIndex([COLORS])
+    assert refs.compile_refs("@{Colors:!warm}", idx) == "@{c0c0c0c0#Colors:not warm}"
+    assert refs.compile_refs("@{Colors:!warm!null}", idx) == "@{c0c0c0c0#Colors:not warm!null}"
