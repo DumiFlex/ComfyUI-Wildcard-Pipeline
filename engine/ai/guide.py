@@ -14,11 +14,12 @@ SYNTAX = """\
 Text grammar (the compilers check it and say what to fix):
 - $name reads a variable; $name.0 the first of a multi-pick; $name.AXIS the \
 rolled tag of an accepts group; $name.neg its negative words. $$ is a literal $.
-- {a|b|c} picks one each run; {2$$, $$a|b|c} picks 2 joined by ", "; \
-{1-3$$ and $$a|b|c} picks 1 to 3; {2~$$, $$a|b|c} may pick the same \
-one twice.
+- {a|b|c} picks one each run; {2$$a|b|c} picks 2 joined by ", "; \
+{1-3$$ and $$a|b|c} picks 1 to 3 joined by " and "; {2~$$a|b|c} may pick \
+the same one twice.
 - @{Wildcard name} draws from another wildcard; @{Name:warm and not wet} only \
-from its options with those tags; @{Name!null} never its empty option.
+from its options with those tags (!wet means not wet); @{Name!null} never its \
+empty option.
 Where each works: wildcard options and negatives: picks and @{…}, no $. \
 Derivation actions: everything. Combines: $ and picks, no @{…}. Fixed values: \
 picks only (small variations; a real choice is a wildcard). The Assembler \
@@ -85,13 +86,21 @@ Which feature for which job:
 - A list to draw from → wildcard (one concept per wildcard: hair, outfit, \
 place). A shared vocabulary drawn in several places, often narrowed by tag → \
 a wildcard with no variable that others point at with @{Name:tag}.
+- @{…} is a fresh pick nothing can read, test or pin: use it only for parts \
+nothing else needs. Recipes: an Outfit option "@{Tops:formal} with \
+@{Bottoms:formal}" (pin the recipe, the parts still vary); filler: \
+"{2-3$$@{Props:indoor}}". If a rule, the template or a pin needs the value, \
+it is its own wildcard read as $var ("@{Colors} jacket and @{Colors} jeans" \
+gives two colours; one colour is $color twice).
 - Text that's always the same (a style preset, quality tags) → fixed values.
 - Joining picks into one phrase → combine ("$hair $eyes" → $look).
 - Text that depends on picks ("if $season is winter add a scarf"), or a \
 pick from a wildcard only in some cases → derivation (an action can be \
 @{Hats:winter}).
 - One pick changing another's odds ("elves rarely carry guns") → constraint \
-(exclude, reduce, boost; "only" when a source allows just a few targets).
+(exclude for "never", reduce/boost for odds, "only" for "goes with" / "just \
+these"). Exclude drops an option if ANY of its tags is excluded, so an option \
+tagged both winter and summer is gone in both: for "goes with" use only.
 - Two picks that must agree ("shoes that match the outfit") → an accepts \
 axis on both wildcards (options list what they go with) and a constraint \
 keyed on it.
@@ -105,6 +114,10 @@ Per-checkpoint differences → rules on $model_family / $model_variant (WP \
 Model Info). A sequence over a WP Context Loop → rules on $iteration. To key \
 a constraint on such a variable, bundle a wildcard whose options are its \
 values with "match $var" and make that wildcard the constraint's source.
+- Two characters → the same wildcards twice with different variables \
+($a_hair, $b_hair), each pair's constraint just before its own target with \
+reach "first", and a combine per character ($a_look) so each one's words stay \
+together.
 - Grouping a big pack → sub-bundles (one level) inside one bundle, e.g. \
 Outfit and Scene sub-bundles in a Character bundle. A constraint goes in \
 the same sub-bundle as its target wildcard, just before it; its source runs \
@@ -131,8 +144,13 @@ by everything they are. Reuse the library's tags and variables.
 - Prefer reduce over exclude when variety matters; give every constrained \
 target a fallback so it never comes out empty.
 - Weights for realism: common things weight 2-3, rare ones 0.5.
-- Match the model's style: Danbooru tags for Pony/Illustrious/SDXL anime, \
-short sentences for Flux and other natural-language models.
+- Match the model's style: Danbooru tags for Pony/Illustrious/NoobAI/SDXL \
+anime, sentences for Flux, Z-Image, Qwen, Chroma and other natural-language \
+models. Options are short phrases that fit both; quality, score and rating \
+words go in a per-model preset (fixed values, or a wildcard matched on \
+$model_variant), never in options. Pony V6 wants its score chain and rating_*, \
+Illustrious/NoobAI masterpiece-style quality tags and no score_ tags; Flux and \
+Z-Image ignore negatives (leave the negative template empty).
 - Every template gets a standing negative (lowres, watermark, bad anatomy, \
 … for the model's style) with $negatives where the used variables' \
 negatives go; when a pack or answer has none, say so once and offer it.
@@ -203,8 +221,9 @@ EXAMPLE_CHAT_REQUEST = "outfits that suit the season"
 EXAMPLE_CHAT_STEPS: list[dict] = [
     {
         "plan": "Season is the anchor. Outfit options get warm/light tags, a "
-                "constraint keys on them, and a fallback keeps Outfit from "
-                "ever coming out empty. Then check with run_test.",
+                "constraint keys on them (winter: only warm, so the all-season "
+                "fallback tagged both stays in), and a fallback keeps Outfit "
+                "from ever coming out empty. Then check with run_test.",
         "message": "I'll add a Season wildcard and an Outfit wildcard that follows it.",
         "calls": [
             {"tool": "create_wildcard", "args": {
@@ -222,7 +241,7 @@ EXAMPLE_CHAT_STEPS: list[dict] = [
             {"tool": "create_constraint", "args": {
                 "name": "Season → Outfit", "source_id": "Season", "target_id": "Outfit",
                 "rules": [
-                    {"source": "#winter", "target": "#light", "effect": "exclude"},
+                    {"source": "#winter", "target": "#warm", "effect": "only"},
                     {"source": "#summer", "target": "#warm", "effect": "reduce",
                      "factor": 0.2}]}},
         ],
@@ -326,8 +345,9 @@ FORMATS: dict[str, str] = {
                   "composition. Negative usually empty.",
     "hidream": "HiDream: natural sentences, most important first, under about 100 words. "
                "Only the Full model uses a negative.",
-    "lumina2": "Lumina 2 and Z-Image: long, detailed natural prose. Z-Image Turbo ignores "
-               "the negative, so write exclusions as positive words.",
+    "lumina2": "Lumina 2: long, detailed natural prose. Z-Image Turbo: plain sentences, "
+               "under about 60 words, no (word:1.2) weights; it ignores the negative, so "
+               "write exclusions as positive words.",
     "wan": "Wan 2.x (video): 80-100 words: style, subject and look, one simple motion, "
            "place, shot size and angle, then the camera movement.",
 }

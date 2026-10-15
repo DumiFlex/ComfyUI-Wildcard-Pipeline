@@ -88,6 +88,15 @@ def _target_present_in_chain(
     return False
 
 
+def _target_direct_in_chain(target_uuid: str, modules: list[Any]) -> bool:
+    """True when `target_uuid` runs as a wildcard of its own in the chain
+    (not only through `@{…}` refs in other options)."""
+    return any(
+        _module_field(m, "type") == "wildcard" and _module_field(m, "id") == target_uuid
+        for m in modules
+    )
+
+
 # Characters that break the engine ref tokenizer's `#name` segment
 # (`[^#:}@{]*`). Anything in this set gets replaced with a space when
 # embedding a cached name into a `@{uuid#name}` ref so a stray apostrophe
@@ -864,7 +873,17 @@ class PipelineEngine:
                 present = _target_present_in_chain(
                     target_uuid, modules, catalog,
                 )
-                if present:
+                # Reached only through `@{…}` refs: a run that didn't draw any
+                # of those refs (a recipe wildcard picked another recipe) is
+                # normal, not a mistake.
+                ref_only = present and not _target_direct_in_chain(target_uuid, modules)
+                if ref_only:
+                    message = (
+                        f"constraint @{{{library_cid}{cid_suffix}}} had nothing to do this "
+                        f"run — its target @{{{target_uuid}{tgt_suffix}}} is only reached "
+                        f"through @{{…}} refs, and none of them was drawn."
+                    )
+                elif present:
                     # Target IS in the chain but the selector covered no
                     # firing occurrence — every appearance resolved
                     # BEFORE this constraint registered (e.g. a source
@@ -899,7 +918,7 @@ class PipelineEngine:
                         # Either way it deserves the yellow advisory chip,
                         # not the blue informational one — the constraint
                         # is doing nothing, and the user should see it.
-                        "severity": "warn",
+                        "severity": "info" if ref_only else "warn",
                         "module_id": cid,
                         "source_field": "",
                         "position": 0,
@@ -908,6 +927,8 @@ class PipelineEngine:
                             "constraint_id": cid,
                             "target_wildcard_id": target_uuid,
                             "source_wildcard_id": c.get("source_wildcard_id", ""),
+                            # Only reached through refs, none drawn this run.
+                            "ref_only": ref_only,
                             # `target_present` lets the DebugViewer pick a
                             # distinct icon/severity later without re-parsing
                             # the message string.
