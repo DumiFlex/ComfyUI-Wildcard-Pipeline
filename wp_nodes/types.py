@@ -445,7 +445,28 @@ _CROSS_NODE_INTERNAL_KEYS = (
     # pins its own swept wildcards and holds the rest.
     "__wp_pin_overrides__",
     "__wp_sweep_hold__",
+    # Hold across a loop: frame 0's payload ({"context", "internals"}) as the
+    # previous node emitted it, so a held module on any frame resolves
+    # against frame 0's inputs (see `frame0_payload`).
+    "__wp_frame0__",
 )
+
+#: Cross-node internal carrying frame 0's payload through a loop.
+FRAME0_KEY = "__wp_frame0__"
+
+
+def frame0_payload(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Frame 0's output of a node, from its frame-0 ctx (the hold base pass
+    or the Context Loop's frame 0), in the shape `__wp_frame0__` carries:
+    the socket context plus the cross-node internals (minus itself)."""
+    return {
+        "context": strip_engine_internals(ctx),
+        "internals": {
+            key: ctx[key]
+            for key in _CROSS_NODE_INTERNAL_KEYS
+            if key in ctx and key != FRAME0_KEY
+        },
+    }
 
 
 def build_payload(

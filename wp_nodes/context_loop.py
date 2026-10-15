@@ -16,6 +16,7 @@ from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 from engine.seed_derive import apply_seed_locks, derive_loop_seeds
 from engine.sweep import HOLD_KEY, PIN_KEY, parse_sweep, sweep_frames, sweep_total
 from wp_nodes.types import (
+    FRAME0_KEY,
     ContextLoopConfigInput,
     ContextLoopWidgetInput,
     ContextPayload,
@@ -246,8 +247,7 @@ class WPContextLoop(io.ComfyNode):
         if total_internal:
             internal_flags[total_var_name] = True
 
-        payloads = []
-        for idx in kept:
+        def frame(idx: int) -> tuple[dict[str, str], dict[str, object]]:
             # User-facing iteration counter is the frame's ORIGINAL 1-based
             # number (bypass keeps identity — frame 5 stays "5 of 18", not
             # renumbered). The internal `__wp_loop_index__` below stays the
@@ -277,6 +277,17 @@ class WPContextLoop(io.ComfyNode):
                 # the same dict reference; downstream WP_Context copies
                 # internals defensively but explicit copy here is safer.
                 internals["__wp_internal_flags__"] = dict(internal_flags)
+            return context_vars, internals
+
+        payloads = []
+        for idx in kept:
+            context_vars, internals = frame(idx)
+            if idx != 0:
+                # Frame 0's payload rides along so a held module downstream
+                # resolves against frame 0's inputs on every frame (its
+                # $iteration, and whatever a Context derives from it).
+                ctx0, int0 = frame(0)
+                internals[FRAME0_KEY] = {"context": ctx0, "internals": int0}
             payloads.append(ContextPayload(
                 context=context_vars,
                 debug={},

@@ -545,16 +545,6 @@ def test_iteration_matched_source_constrains_an_unheld_target_per_frame():
         assert outs[2].context["pose"] == "full body"
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "pipeline.py PipelineEngine.run hold base pass: it re-runs the chain at "
-    "loop_index=0 on a deepcopy of THIS frame's ctx, so upstream per-frame "
-    "inputs ($iteration, and the pick a match_variable source makes from it) "
-    "are frame k's, not frame 0's. A held wildcard targeted by a constraint "
-    "whose source follows $iteration is re-resolved under frame k's "
-    "constraint and changes every frame, contrary to the docs ('a "
-    "constrained wildcard keeps its option even as the constraint reshapes "
-    "the pool')."
-))
 def test_held_target_of_an_iteration_driven_constraint_stays_put():
     frame = _wc(FRAME, "pose", [_opt("1", "sit"), _opt("2", "stand"), _opt("3", "stand")],
                 match_variable="iteration")

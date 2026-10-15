@@ -23,6 +23,10 @@ from engine.sweep import apply_pin_override
 
 logger = logging.getLogger(__name__)
 
+#: ctx key a caller sets to the ctx this run would have started from on loop
+#: frame 0. The hold base pass runs on it (see ``PipelineEngine.run``).
+FRAME0_CTX_KEY = "__wp_frame0_ctx__"
+
 # `@{uuid}` ref matcher — mirror of engine.syntax.tokenize._REF_RE
 # (4-segment: uuid + optional #name / :expr / !null; only the uuid is
 # captured here). Used by the never_applied warning classifier to tell
@@ -368,14 +372,25 @@ class PipelineEngine:
         # the throwaway pass's warnings/trace/constraint-state off the real
         # ctx. loop_index=0 here means the recursive run skips its own base
         # pass — no infinite recursion.
+        #
+        # The base pass runs on frame 0's INPUTS when the caller has them
+        # (``FRAME0_CTX_KEY``: the ctx this node would have started from on
+        # frame 0, e.g. $iteration = 1 and frame 0's upstream picks), so a
+        # held wildcard whose constraint source follows $iteration stays on
+        # its frame-0 option. Given those, the pass runs even with no hold
+        # here, so the caller can hand frame 0's output downstream. Without
+        # them it falls back to this frame's inputs (the old behaviour).
+        _frame0_input = ctx.pop(FRAME0_CTX_KEY, None)
         _any_hold = any(_module_seed_scope(m) == "hold" for m in modules)
-        if loop_index != 0 and _any_hold:
+        if loop_index != 0 and (_any_hold or isinstance(_frame0_input, dict)):
             import copy as _copy
 
             _hb = int(ctx.get("__wp_node_seed_hold__", 0) or 0)
             base_ctx = PipelineEngine().run(
                 modules,
-                ctx=_copy.deepcopy(ctx),
+                ctx=_copy.deepcopy(
+                    _frame0_input if isinstance(_frame0_input, dict) else ctx
+                ),
                 seed=_hb,
                 hold_seed=_hb,
                 loop_index=0,
