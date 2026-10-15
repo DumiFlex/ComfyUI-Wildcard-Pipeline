@@ -12,6 +12,7 @@ from typing import Any
 from engine import negatives
 from engine.modules import build_resolve_ctx
 from engine.syntax import resolve_text
+from engine.syntax.types import ListVar, deref_var_value
 
 _WS_RUN = re.compile(r"[ \t]{2,}")
 _COMMA_GAP = re.compile(r",\s*,")
@@ -57,7 +58,11 @@ def _mark_empty(template: str, ctx: dict[str, Any]) -> str:
     come out empty, for ``tidy_prompt``."""
     def sub(m: re.Match[str]) -> str:
         v = ctx.get(m.group(1))
-        empty = v is None or (isinstance(v, str) and not v.strip())
+        # Judged on what the read renders: a multi-pick that drew nothing (an
+        # empty ListVar, or only blank picks) is as empty as "".
+        empty = v is None or (
+            isinstance(v, (str, ListVar)) and not deref_var_value(v, None).strip()
+        )
         return m.group(0) + _EMPTY if empty else m.group(0)
     return _READ.sub(sub, template)
 

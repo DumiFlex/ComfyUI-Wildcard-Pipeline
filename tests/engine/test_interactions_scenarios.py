@@ -762,13 +762,6 @@ def test_empty_variables_leave_a_tidy_prompt():
     assert len(combos) == 8
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "engine/template.py _mark_empty only flags a `$var` as empty when its "
-    "value is None or a blank str. A multi-pick that drew nothing binds an "
-    "empty ListVar, which is not flagged, so the dangling-joiner tidy skips "
-    "it: 'a knight with $props' renders 'a knight with' (an empty string "
-    "value renders 'a knight')."
-))
 def test_empty_multi_pick_tidies_like_an_empty_string():
     props = _wc(PROPS, "props", [_opt("sword"), _opt("shield")], pick_min=0, pick_max=0)
     for seed in range(10):
