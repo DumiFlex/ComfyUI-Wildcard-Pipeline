@@ -640,6 +640,7 @@ def compile_plan(
     if request:
         raw_items = _fit_rules(raw_items, request, warnings)
         _never_from_request(raw_items, request, warnings)
+        raw_items = _only_in_rules(raw_items, request, warnings)
     known_sides = {_var(x.get("var")): _clean(x.get("name"), MAX_NAME)
                    for x in raw_items if _var(x.get("var"))}
     known_sides.update({i["var"]: i["var"] for i in inputs})
@@ -2023,6 +2024,77 @@ def _never_from_request(raw_items: list[dict[str, Any]], request: str,
                         "request says never")
 
 
+# "snow only in cold biomes": a pick (snow) that only goes with one case
+# (cold) of another (biome).
+_ONLY_IN = re.compile(r"\b([a-z]{3,})\s+(?:is\s+|are\s+)?only\s+(?:in|on|for|with|during|at|"
+                      r"when)\s+(?:the\s+|a\s+|an\s+)?([a-z]{3,})(?:\s+([a-z]{3,}))?", re.I)
+_ONLY_WITH = re.compile(r"#([\w-]+)\s+only\s+with\s+#([\w-]+)", re.I)
+
+
+def _forms(word: str) -> set[str]:
+    w = word.lower()
+    return {w, *(f for f in (w[:-1] if w.endswith("s") else "",
+                             w[:-2] if w.endswith("es") else "",
+                             w[:-3] + "y" if w.endswith("ies") else "") if len(f) >= 3)}
+
+
+def _only_in_rules(raw_items: list[dict[str, Any]], request: str,
+                   warnings: list[str]) -> list[dict[str, Any]]:
+    """"Snow only in cold biomes": the weather's #snow goes only with the
+    biome's #cold. The plan gets a "#snow only with #cold" clause on a
+    biome → weather rule (made when there's none), which the build turns
+    into excludes for every other biome tag, whatever the model wrote."""
+    wild = [x for x in raw_items if x.get("kind") == "wildcard" and _var(x.get("var"))]
+    items = list(raw_items)
+
+    def tags(x: dict[str, Any]) -> list[str]:
+        return [t for t in (_tag(t) for t in x.get("tags") or []) if t]
+
+    for m in _ONLY_IN.finditer(request):
+        what, case, group = m.group(1), m.group(2), m.group(3) or ""
+        wf, cf, gf = _forms(what), _forms(case), _forms(group) if group else set()
+        src = [x for x in wild if cf & set(tags(x))]
+        if len(src) != 1:
+            src = [x for x in wild if gf & set(_var(x.get("var")).split("_"))]
+        if len(src) != 1:
+            continue
+        s = src[0]
+        tgt = [x for x in wild if x is not s and wf & set(tags(x))]
+        if len(tgt) != 1:
+            tgt = [x for x in wild if x is not s and wf & set(re.findall(
+                r"[a-z]+", f"{x.get('name') or ''} {x.get('about') or ''}".lower()))]
+        if len(tgt) != 1:
+            continue
+        t = tgt[0]
+        sv, tv = _var(s.get("var")), _var(t.get("var"))
+        if any(x.get("kind") == "constraint" and _var(x.get("source")) == tv
+               and _var(x.get("target")) == sv for x in items):
+            continue  # a rule the other way: this one would make a loop
+        ctag = next((x for x in tags(s) if x in cf), case.lower())
+        wtag = next((x for x in tags(t) if x in wf), what.lower())
+        for x, tag in ((s, ctag), (t, wtag)):
+            if tag not in tags(x):
+                x["tags"] = [*(x.get("tags") or []), tag]
+        clause = (f"#{wtag} only with #{ctag}: every other {s.get('name') or sv} "
+                  f"excludes #{wtag}")
+        have = next((x for x in items if x.get("kind") == "constraint"
+                     and _var(x.get("source")) == sv and _var(x.get("target")) == tv), None)
+        if have is not None:
+            about = str(have.get("about") or "")
+            if not _ONLY_WITH.search(about):
+                have["about"] = _cut(clause + "; " + about, MAX_ABOUT)
+                warnings.append(f"{have.get('name') or 'A rule'} now keeps #{wtag} to "
+                                f"#{ctag}: the request says {what} only in {case}")
+            continue
+        items.insert(items.index(t), {
+            "kind": "constraint", "name": f"{s.get('name') or sv} → {t.get('name') or tv}",
+            "source": sv, "target": tv, "about": clause,
+            "section": t.get("section") or "", "use": ""})
+        warnings.append(f"Added a rule keeping #{wtag} to #{ctag}: the request says {what} "
+                        f"only in {case}")
+    return items
+
+
 def _cut(text: str, limit: int) -> str:
     """``text`` cut to ``limit`` at a clause end ("; "), never mid-tag."""
     if len(text) <= limit:
@@ -2640,6 +2712,7 @@ def compile_item(
         for c in compiled["cells"]:
             matrix.setdefault(c["source_tag"], {})[c["target_tag"]] = c["cell"]
         kept_only = _plan_onlys(item, src, tgt, matrix)
+        kept_only += _plan_only_withs(item, src, tgt, matrix)
         if kept_only:
             warnings.append("Kept the plan's " + ", ".join(kept_only[:4])
                             + (" and more" if len(kept_only) > 4 else "")
@@ -2690,6 +2763,11 @@ def compile_item(
             payload = {**payload, "template": re.sub(r"\s{2,}", " ", bare).strip()}
             said.append("Took out a {a|b} pick of single letters or articles: it printed "
                         "\"a a\" or a stray letter")
+        text, fixed = _plan_prose(payload["template"])
+        text, more = _dangling(text, plan, item, built)
+        if text != payload["template"]:
+            payload = {**payload, "template": text}
+        said += fixed + more
         warnings = [*warnings, *said, *_combine_notes(plan, item, payload, built)]
         if plan.get("style") == "tags":
             payload = {**payload, "template": tag_commas(payload["template"])}
@@ -2697,11 +2775,56 @@ def compile_item(
         out = text_items.compile_template(answer, catalog=_catalog(plan, built))
         payload, preview, warnings = out["payload"], out["preview"], out["warnings"]
         payload, said = _drop_double_reads(plan, built, payload)
-        warnings = [*warnings, *said]
+        text, fixed = _plan_prose(payload["template_string"])
+        text, more = _dangling(text, plan, item, built)
+        if text != payload["template_string"]:
+            payload = {**payload, "template_string": text}
+        warnings = [*warnings, *said, *fixed, *more]
         if plan.get("style") == "tags":
             payload = {**payload, "template_string": tag_commas(payload["template_string"])}
     return {"key": key, "id": mid, "kind": kind, "payload": payload,
             "preview": preview, "warnings": warnings, "repair": repair_note(warnings)}
+
+
+# The planner's own conditions written into the prompt text: "If $outer
+# is present: with $outer." prints as a sentence in every image.
+_PROSE = re.compile(r"(?:^|(?<=[.,;]))\s*\(?\s*(?:if|when|only if)\s+[^.,;:()]{1,40}?"
+                    r"\s+(?:is|are)\s+(?:present|set|given|there|not empty|non-empty|"
+                    r"available|used|picked|rolled)\s*\)?\s*[:,]\s*", re.I)
+_PROSE_TAIL = re.compile(r"\s*\(\s*(?:if\s+(?:any|present|set|given|available)|optional)"
+                         r"\s*\)", re.I)
+# A phrase that ends on its article ("wielding a,"): the word after it is gone.
+_DANGLING = re.compile(r"\b(?:a|an|the)\s*(?=,|\.|;|$)", re.I)
+
+
+def _plan_prose(text: str) -> tuple[str, list[str]]:
+    """``text`` without the planner's conditions ("If $x is present:",
+    "(if any)"); the empty-variable tidy already drops a phrase whose
+    variable is empty."""
+    bare = _PROSE_TAIL.sub("", _PROSE.sub(" ", text))
+    if bare == text:
+        return text, []
+    bare = re.sub(r"\s{2,}", " ", bare).strip()
+    return bare, ["Took out the plan's own condition (\"If … is present:\"): it printed "
+                  "as a sentence in every prompt"]
+
+
+def _dangling(text: str, plan: dict[str, Any], item: dict[str, Any],
+              built: dict[str, Any]) -> tuple[str, list[str]]:
+    """A phrase ending on "a" / "the" lost its word. When exactly one pick
+    the item's plan names isn't read, that's the word: it's read there."""
+    if not _DANGLING.search(text):
+        return text, []
+    reads = set(text_items.reads(text))
+    wild = {i["var"] for i in plan["items"] if is_wild(i) and i["key"] in built}
+    missing = [v for v in _reads(item.get("about") or "")
+               if v != item["var"] and v not in reads and v in wild]
+    if len(missing) == 1 and len(_DANGLING.findall(text)) == 1:
+        fixed = _DANGLING.sub(f"${missing[0]}", text, count=1)
+        return fixed, [f"Read ${missing[0]} where a phrase ended on its article: it "
+                       "printed \"… a,\" with nothing after it"]
+    return text, ["A phrase ends on its article (\"… a,\"), so the word after it is "
+                  "missing; read the variable that names it there"]
 
 
 _ARTICLE_PICK = re.compile(r"\{\s*(?:[a-z]|an|the)?\s*(?:\|\s*(?:[a-z]|an|the)?\s*)+\}",
@@ -2780,6 +2903,31 @@ def _plan_onlys(item: dict[str, Any], src: dict[str, Any], tgt: dict[str, Any],
         for k in [k for k, c in row.items() if k != tb and isinstance(c, dict)
                   and c.get("mode") not in ("only", "exclude")]:
             del row[k]
+    return said
+
+
+def _plan_only_withs(item: dict[str, Any], src: dict[str, Any], tgt: dict[str, Any],
+                     matrix: dict[str, dict[str, Any]]) -> list[str]:
+    """The plan's "#snow only with #cold" clauses as excludes, in place:
+    every source tag but #cold excludes #snow."""
+    st = {str(t).lower(): t for t in src.get("tags") or []}
+    tt = {str(t).lower(): t for t in tgt.get("tags") or []}
+    carried = {t for o in tgt.get("options") or [] for t in o.get("tags") or []}
+    said = []
+    for a, b in _ONLY_WITH.findall(str(item.get("about") or "")):
+        tb, keep = tt.get(a.lower()), st.get(b.lower())
+        if tb is None or keep is None or tb not in carried:
+            continue
+        hit = False
+        for sa in st.values():
+            if sa == keep:
+                continue
+            row = matrix.setdefault(sa, {})
+            if (row.get(tb) or {}).get("mode") != "exclude":
+                row[tb] = {"mode": "exclude", "factor": 0}
+                hit = True
+        if hit:
+            said.append(f"#{tb} only with #{keep}")
     return said
 
 
@@ -3078,7 +3226,7 @@ _REPAIRABLE = re.compile(r"has no option|No option carries|unknown tag|nothing s
                          r"already rolls|no rule is an only|joins picks with|"
                          r"isn't an option or tag|"
                          r"instead of reading|prints itself|options itself|"
-                         r"line that joins picks|"
+                         r"line that joins picks|ends on its article|"
                          r"isn't set|not a variable|doesn't set|which no", re.I)
 
 
@@ -3502,6 +3650,8 @@ def check_pack(
         for said in _unseen(plan, built, runs, text, neg):
             if not any(said.split(")")[0] in p for p in problems.get(item["key"], [])):
                 problems.setdefault(item["key"], []).append(said)
+        for k, said in _printed_names(plan, built, runs, text, neg).items():
+            problems.setdefault(k, []).append(said)
         if braces:
             problems.setdefault(item["key"], []).append(
                 "the prompt shows { } or @{ } as written: a variable it reads holds a pick "
@@ -3513,6 +3663,39 @@ def check_pack(
     return {"runs": report["runs"], "failed": report["failed"], "problems": problems,
             "notes": notes, "variables": variables, "prompts": prompts, "quality": quality,
             "order": order}
+
+
+def _printed_names(plan: dict[str, Any], built: dict[str, Any], runs: list[dict[str, Any]],
+                   text: str, neg: str) -> dict[str, str]:
+    """A tag or variable name printed as prompt text ("summer_outer"):
+    ``{key of the item whose variable holds it: problem}``, when it shows
+    in at least a sixth of the runs."""
+    names = {n.lower() for i in plan["items"] for n in [i.get("var") or ""] if "_" in n}
+    for i in plan["items"]:
+        if is_wild(i) and i["key"] in built:
+            pl = built[i["key"]]["payload"]
+            names |= {str(t).lower() for t in pl.get("sub_categories") or [] if "_" in str(t)}
+            names |= {str(t).lower() for t in i.get("tags") or [] if "_" in str(t)}
+    if not names:
+        return {}
+    writers = [(i, item_io(i, built[i["key"]]["payload"])[1]) for i in plan["items"]
+               if i["key"] in built and i["kind"] != "template"]
+    hits: dict[str, list[str]] = {}
+    for ctx in runs:
+        for i, sets in writers:
+            for v in sets:
+                chunks = {re.sub(r"\s+", " ", x).strip().lower().lstrip("#$")
+                          for x in str(ctx.get(v) or "").split(",")}
+                for c in sorted(chunks & names):
+                    hits.setdefault(i["key"], []).append(c)
+    out: dict[str, str] = {}
+    need = max(2, len(runs) // 6)
+    for k, got in hits.items():
+        if len(got) >= need:
+            shown = ", ".join(f'"{w}"' for w in dict.fromkeys(got))
+            out[k] = (f"it puts a tag or variable name in the prompt as text ({shown}); "
+                      "write words a picture shows instead")
+    return out
 
 
 def _chunks(text: str) -> set[str]:

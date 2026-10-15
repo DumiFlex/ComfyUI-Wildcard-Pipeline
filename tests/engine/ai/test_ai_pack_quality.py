@@ -1011,3 +1011,61 @@ def test_article_picks_go_and_inline_picks_in_a_join_are_sent_back():
                             {"template": "$top, {a|b} $coat, {red|blue} scarf"})
     assert "{a|b}" not in out["payload"]["template"]
     assert "line that joins picks" in out["repair"]
+
+
+# --- thirteenth real-model run ----------------------------------------------
+
+def test_snow_only_in_cold_biomes_becomes_excludes_for_the_other_biomes():
+    raw = _raw(anchor="", items=[
+        _item(name="Biome", var="biome", tags=["cold", "hot", "temperate"]),
+        _item(name="Weather", var="weather", about="rain, fog, snow or clear sky",
+              tags=["wet", "dry"]),
+        _item(kind="template", name="T", about="$biome, $weather")])
+    plan = pack.compile_plan(raw, request="Landscape pack: biome, time of day, weather; "
+                                          "snow only in cold biomes.")
+    rule = next(i for i in plan["items"] if i["kind"] == "constraint")
+    assert (rule["source"], rule["target"]) == ("biome", "weather")
+    assert "#snow only with #cold" in rule["about"]
+    weather = next(i for i in plan["items"] if i["var"] == "weather")
+    assert "snow" in weather["tags"]
+    assert any("keeping #snow to #cold" in w for w in plan["warnings"])
+    src = {"tags": ["cold", "hot", "temperate"], "options": []}
+    tgt = {"tags": ["wet", "snow"], "options": [{"tags": ["snow"]}, {"tags": ["wet"]}]}
+    matrix = {"hot": {"wet": {"mode": "boost", "factor": 2}}}
+    said = pack._plan_only_withs(rule, src, tgt, matrix)
+    assert matrix == {"hot": {"wet": {"mode": "boost", "factor": 2},
+                              "snow": {"mode": "exclude", "factor": 0}},
+                      "temperate": {"snow": {"mode": "exclude", "factor": 0}}}
+    assert said == ["#snow only with #cold"]
+
+
+def test_planner_conditions_and_dangling_articles_in_a_combine():
+    raw = _raw(items=[
+        _item(name="Top", var="top"), _item(name="Coat", var="coat"),
+        _item(name="Weapon", var="weapon"),
+        _item(kind="combine", name="Outfit", var="outfit", about="$top, $coat, $weapon"),
+        _item(kind="template", name="T", about="$outfit")])
+    plan = pack.compile_plan(raw)
+    key = next(i["key"] for i in plan["items"] if i["kind"] == "combine")
+    out = pack.compile_item(plan, key, _built(plan), {
+        "template": "wearing $top. If $coat is present: with $coat. wielding a, posing"})
+    text = out["payload"]["template"]
+    assert "If" not in text and "with $coat" in text
+    assert "wielding $weapon, posing" in text
+    assert any("condition" in w for w in out["warnings"])
+    assert pack._plan_prose("$top (if any), $coat")[0] == "$top, $coat"
+    text, said = pack._dangling("holding a, the,", plan, plan["items"][0], {})
+    assert text == "holding a, the," and pack.repair_note(said)
+
+
+def test_a_tag_name_printed_as_text_is_a_problem():
+    raw = _raw(items=[
+        _item(name="Outer", var="outer", tags=["summer_outer", "winter_outer"]),
+        _item(kind="template", name="T", about="$outer")])
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    key = next(i["key"] for i in plan["items"] if i["var"] == "outer")
+    runs = [{"outer": "summer_outer"}] * 6
+    out = pack._printed_names(plan, built, runs, "$outer", "")
+    assert '"summer_outer"' in out[key]
+    assert not pack._printed_names(plan, built, [{"outer": "linen shirt"}] * 6, "$outer", "")
