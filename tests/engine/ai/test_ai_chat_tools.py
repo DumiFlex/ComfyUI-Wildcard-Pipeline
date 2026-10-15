@@ -330,3 +330,16 @@ def test_show_test_add_and_remove_keep_the_open_seeds():
     assert args["stack"] == [{"module": "aaaa0004"}] and args["seeds"] == 5
     with pytest.raises(ValueError):
         client_tools.prepare(lib, "show_test", {"stack": ["Quality"], "change": "swap"})
+
+
+def test_ids_copied_from_chips_and_cards_still_name_the_item():
+    lib = _lib()
+    assert "Variable: $season" in lib.run("read", {"id": "[[aaaa0002#Season]]"})
+    assert "Variable: $season" in lib.run("read", {"id": "aaaa0002#Season"})
+    shoes = lib.run("create_wildcard", {"name": "Shoes", "var": "shoes",
+                                        "options": [{"text": "boots", "tags": ["warm"]}]})
+    new_id = shoes["op"]["body"]["id"]
+    for ref in (shoes["pid"], f"{new_id}#Shoes", f"@{{{new_id}}}"):
+        c = lib.run("create_constraint", {"source_id": "Season", "target_id": ref, "rules": [
+            {"source": "#cold", "target": "#warm", "effect": "boost", "factor": 2}]})
+        assert c["op"]["body"]["payload"]["target_wildcard_id"] == new_id

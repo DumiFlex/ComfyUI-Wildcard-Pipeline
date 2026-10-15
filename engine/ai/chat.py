@@ -686,10 +686,32 @@ class Library(MoreTools, ManageTools):
         out = dict(args)
         for k in keys:
             if isinstance(out.get(k), str) and self.get(out[k]) is None:
+                out[k] = self._bare_id(out[k])
+            if isinstance(out.get(k), str) and self.get(out[k]) is None:
                 row = self._find(out[k])
                 if row is not None:
                     out[k] = row["id"]
         return out
+
+    def _bare_id(self, raw: str) -> str:
+        """An id the way the model copies it from a chip or a card:
+        ``[[id#Name]]``, ``@{id}``, ``id#Name`` or the card's own ``p4``."""
+        text = raw.strip()
+        m = re.fullmatch(r"\[\[(.*)\]\]|@\{(.*)\}", text)
+        if m:
+            text = (m.group(1) or m.group(2) or "").strip()
+        head = text.split("#", 1)[0].strip()
+        if _HEX_ID.fullmatch(head):
+            return head
+        if re.fullmatch(r"p\d+", head):
+            made = [i for i, pid in self._created.items() if pid == head]
+            if len(made) == 1:
+                return made[0]
+            op = (self.earlier_proposals.get(head) or {}).get("op") or {}
+            iid = op.get("id") or (op.get("body") or {}).get("id")
+            if isinstance(iid, str) and self.get(iid) is not None:
+                return iid
+        return raw
 
     # ── read tools ───────────────────────────────────────────────────────
 
