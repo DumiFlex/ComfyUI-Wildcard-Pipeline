@@ -1217,3 +1217,20 @@ def test_the_template_starts_with_the_pick_the_others_follow_and_double_articles
     text, said = pack._lead_with_anchor("wearing $top", plan, _built(plan))
     assert text == "$season, wearing $top" and said
     assert tidy_prompt("wearing a a striped shirt") == "wearing a striped shirt"
+
+
+# --- seventeenth real-model run ---------------------------------------------
+
+def test_a_rule_planned_the_wrong_way_is_turned_around_by_the_request():
+    items = [
+        {"kind": "wildcard", "name": "Biome", "var": "biome", "tags": ["desert", "arctic"],
+         "about": "the habitat"},
+        {"kind": "constraint", "name": "Biome → Animal", "source": "biome",
+         "target": "animal", "about": "#desert gets only #desert"},
+        {"kind": "wildcard", "name": "Animal", "var": "animal", "tags": ["desert", "arctic"]}]
+    warnings: list = []
+    out = pack._fit_rules(items, "Animals in habitats: the animal decides which habitats "
+                                 "are possible.", warnings)
+    rule = next(x for x in out if x["kind"] == "constraint")
+    assert (rule["source"], rule["target"]) == ("animal", "biome")
+    assert any("Turned Biome → Animal around" in w for w in warnings)

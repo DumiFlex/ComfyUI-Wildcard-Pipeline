@@ -1962,6 +1962,11 @@ _FITS = re.compile(
     r"her\s+|its\s+|each\s+|a\s+)?([a-z]+)", re.I)
 
 
+_DECIDES = re.compile(
+    r"\b([a-z]{3,})\s+(?:decides|determines|controls|limits|sets|picks|chooses)\s+"
+    r"(?:which\s+|what\s+|the\s+|its\s+|their\s+)?([a-z]{3,})", re.I)
+
+
 def _fit_rules(raw_items: list[dict[str, Any]], request: str,
                warnings: list[str]) -> list[dict[str, Any]]:
     """"A weapon that fits the class": a constraint from the class pick to
@@ -1979,6 +1984,11 @@ def _fit_rules(raw_items: list[dict[str, Any]], request: str,
         if len(hits) > 1:
             # "weapon" next to $weapon and $weapon_material: the plain one.
             hits = [x for x in hits if _var(x.get("var")).rstrip("s") in forms] or hits
+        if not hits:
+            # "habitats" for a $biome wildcard whose name or about says habitat.
+            hits = [x for x in wild if forms & {
+                w.rstrip("s") if len(w) > 3 else w for w in re.findall(
+                    r"[a-z]+", f"{x.get('name') or ''} {x.get('about') or ''}".lower())}]
         return hits[0] if len(hits) == 1 else None
 
     items = list(raw_items)
@@ -1986,6 +1996,9 @@ def _fit_rules(raw_items: list[dict[str, Any]], request: str,
     for m in _FITS.finditer(request):
         # "an outfit and a weapon that fit the class": both follow it.
         pairs += [(w, m.group(3)) for w in (m.group(1), m.group(2)) if w]
+    for m in _DECIDES.finditer(request):
+        # "the animal decides which habitats are possible".
+        pairs.append((m.group(2), m.group(1)))
     for tw, sw in pairs:
         tgt, src = find(tw), find(sw)
         if tgt is None or src is None or tgt is src:
@@ -2001,6 +2014,18 @@ def _fit_rules(raw_items: list[dict[str, Any]], request: str,
                             "keep rules leave nothing that fits both")
         have = next((x for x in items if x.get("kind") == "constraint"
                      and {_var(x.get("source")), _var(x.get("target"))} == {sv, tv}), None)
+        if have is not None and _var(have.get("source")) == tv:
+            # Planned the other way round (the habitat picking the animal):
+            # the request says which one leads.
+            have["source"], have["target"] = sv, tv
+            have["about"] = (f"each {src.get('name') or sv} gets only the "
+                             f"{tgt.get('name') or tv} options that fit it; exclude the rest")
+            have.pop("_auto", None)
+            if src.get("tags") and not tgt.get("tags"):
+                tgt["tags"] = list(src["tags"])
+            warnings.append(f"Turned {have.get('name') or 'a rule'} around: the request says "
+                            f"{src.get('name') or sv} decides {tgt.get('name') or tv}")
+            continue
         if have is not None:
             # "Fits" means the rest don't: a rule that only boosts the
             # fitting ones still hands a mage plate armour now and then.
