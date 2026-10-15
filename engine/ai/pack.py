@@ -659,6 +659,8 @@ def compile_plan(
         for x in raw_items:
             if isinstance(x.get("about"), str):
                 x["about"] = pat.sub("", x["about"])
+    if request:
+        raw_items = _drop_unasked_subject(raw, raw_items, request, warnings)
     raw_items = _merge_splits(raw_items, warnings)
     _strip_case_suffixes(raw_items, warnings)
     raw_items = _case_rules(raw_items, warnings)
@@ -688,6 +690,7 @@ def compile_plan(
                             "two make a loop where one never applies")
             continue
         pairs.add(pair)
+    _stray_rule_tags(raw_items, warnings)
     ruled = {x[side] for x in raw_items if x.get("kind") == "constraint"
              for side in ("source", "target")}
     picked = {_var(x.get("var")) for x in raw_items if x.get("kind") in ("wildcard", "library")}
@@ -2076,6 +2079,34 @@ def _fit_rules(raw_items: list[dict[str, Any]], request: str,
             tgt["tags"] = list(src["tags"])
         warnings.append(f"Added a rule from {src.get('name') or sv} to "
                         f"{tgt.get('name') or tv}: the request says one fits the other")
+    asked = _stems(request)
+    for tw, sw in decides:
+        tgt, src = find(tw), find(sw)
+        if tgt is None or src is None or tgt is src or not tgt.get("tags"):
+            continue
+        # The extras the planner added (an action, a backdrop) follow the
+        # habitat too: an orca "resting under a tree" breaks the scene.
+        tv, own = _var(tgt.get("var")), _stems(f"{_var(src.get('var'))} {_var(tgt.get('var'))}")
+        ruled = {_var(x.get(s)) for x in items if x.get("kind") == "constraint"
+                 for s in ("source", "target")}
+        extras = [x for x in wild if x is not src and x is not tgt
+                  and _var(x.get("var")) not in ruled
+                  and not _GROUPISH.search(_var(x.get("var")))
+                  and not (_stems(_var(x.get("var"))) - own) & asked]
+        for x in extras[:2]:
+            xv = _var(x.get("var"))
+            items.insert(items.index(x), {
+                "kind": "constraint",
+                "name": f"{tgt.get('name') or tv} → {x.get('name') or xv}",
+                "source": tv, "target": xv,
+                "about": f"each {tgt.get('name') or tv} gets only the {x.get('name') or xv} "
+                         "options that fit it; exclude the ones that don't",
+                "section": x.get("section") or "", "use": ""})
+            if not set(map(str, x.get("tags") or [])) & set(map(str, tgt["tags"])):
+                x["tags"] = [*(x.get("tags") or []), *tgt["tags"]][:16]
+            warnings.append(f"Added a rule from {tgt.get('name') or tv} to "
+                            f"{x.get('name') or xv}: it has to fit the scene the request "
+                            "builds")
     return items
 
 
@@ -2206,6 +2237,85 @@ def _only_in_rules(raw_items: list[dict[str, Any]], request: str,
         warnings.append(f"Added a rule keeping #{wtag} to #{ctag}: the request says {what} "
                         f"only in {case}")
     return items
+
+
+# Where a rule's clause turns from its source tags to its target tags.
+_REL = re.compile(r"→|->|=>|:|\b(?:gets?|only|excludes?|boosts?|reduces?|favou?rs?|never|"
+                  r"allows?|keeps?|means?|takes?|uses?)\b", re.I)
+
+
+def _stray_rule_tags(raw_items: list[dict[str, Any]], warnings: list[str]) -> None:
+    """A rule keyed on tags neither side lists ("#rogue → #dagger" on a
+    class tagged #melee) matches nothing: the tags join the side the
+    clause puts them on, so the options get them when they are built."""
+    wild = {_var(x.get("var")): x for x in raw_items
+            if x.get("kind") == "wildcard" and _var(x.get("var"))}
+
+    def have(x: dict[str, Any]) -> set[str]:
+        return {t for t in (_tag(t) for t in x.get("tags") or []) if t}
+
+    for c in (x for x in raw_items if x.get("kind") == "constraint"):
+        src, tgt = wild.get(str(c.get("source") or "")), wild.get(str(c.get("target") or ""))
+        if src is None or tgt is None or src is tgt:
+            continue
+        added: dict[int, list[str]] = {id(src): [], id(tgt): []}
+        for clause in re.split(r"[;.]", str(c.get("about") or "")):
+            rel = _REL.search(clause)
+            if rel is None:
+                continue
+            parts = (clause[:rel.start()].lower(), clause[rel.end():].lower())
+            if not all(_TAG_REF.search(p) for p in parts):
+                continue  # "excludes #gun for #elf": no telling which side is which
+            for side, part in zip((src, tgt), parts, strict=True):
+                for t in _TAG_REF.findall(part):
+                    t = _tag(t)
+                    if not t or t in have(src) | have(tgt) or len(have(side)) >= 16:
+                        continue
+                    side["tags"] = [*(side.get("tags") or []), t]
+                    added[id(side)].append(t)
+        for side in (src, tgt):
+            if added[id(side)]:
+                warnings.append(f"Tagged {side.get('name') or _var(side.get('var'))} with #"
+                                + ", #".join(added[id(side)]) + f": {c.get('name') or 'a rule'}"
+                                " keys on them")
+
+
+# A subject the planner adds on its own ("noir detective" in a weather pack).
+_SUBJECT_VAR = re.compile(r"^(?:main_)?(?:subject|character|person|figure|protagonist|model)"
+                          r"s?(?:_type)?$")
+_SUBJECT_ASK = re.compile(r"\b(?:subjects?|characters?|people|persons?|portraits?|figures?|"
+                          r"m[ae]n|wom[ae]n|girls?|boys?|heroe?s?|someone|protagonists?|"
+                          r"models?|who|survivors?|inventors?|crew|outfits?|hair\w*|"
+                          r"faces?|selfies?|poses?)\b", re.I)
+
+
+def _drop_unasked_subject(raw: dict[str, Any], raw_items: list[dict[str, Any]],
+                          request: str, warnings: list[str]) -> list[dict[str, Any]]:
+    """A subject wildcard the request never asks for puts a stranger in
+    every prompt: it goes, with the rules on it and its reads in the plan."""
+    if _SUBJECT_ASK.search(request):
+        return raw_items
+    asked = _stems(request)
+    gone = [x for x in raw_items if x.get("kind") == "wildcard"
+            and _SUBJECT_VAR.match(_var(x.get("var")))
+            and not _stems(f"{_var(x.get('var'))} {x.get('name') or ''}") & asked]
+    if not gone:
+        return raw_items
+    out = []
+    for v in {_var(x.get("var")) for x in gone}:
+        warnings.append(f"Left out ${v}: the request asks for no subject")
+        if _var(raw.get("anchor")) == v:
+            raw["anchor"] = ""
+    vars_ = {_var(x.get("var")) for x in gone}
+    for x in raw_items:
+        if x in gone or (x.get("kind") == "constraint" and {
+                _var(x.get("source")), _var(x.get("target"))} & vars_):
+            continue
+        for v in vars_:
+            if isinstance(x.get("about"), str):
+                x["about"] = re.sub(r",?\s*\$" + re.escape(v) + r"\b", "", x["about"])
+        out.append(x)
+    return out
 
 
 def _cut(text: str, limit: int) -> str:
@@ -2774,6 +2884,8 @@ def compile_item(
             existing_payload={"options": [], "sub_categories": list(item["tags"])},
         )
         payload = compiled["payload"]
+        warnings += _snake_text(payload.get("options") or [])
+        warnings += _kin_options(plan, item, payload)
         used = {t for o in payload["options"] for t in o.get("sub_categories") or []}
         payload["sub_categories"] = [t for t in payload["sub_categories"] if t in used
                                      or t in {x for v in (payload.get("tag_groups") or {})
@@ -2875,6 +2987,7 @@ def compile_item(
             payload = {**payload, "values": kept}
             preview = [p for p in preview if not any(p.startswith(f"${n} = ") for n in own)]
         warnings += _wrap_pipes(payload["values"])
+        warnings += _snake_text(payload["values"])
         names = [v["name"] for v in payload["values"]]
         if item["var"] not in names:
             warnings.append(f"It doesn't set ${item['var']}")
@@ -2893,6 +3006,9 @@ def compile_item(
         text, more = _dangling(text, plan, item, built)
         text, fold = _fold_case_reads(text, plan, built)
         more += fold
+        if plan.get("style") != "tags":
+            text, joined = _bare_join(text, plan, built)
+            more += joined
         if text != payload["template"]:
             payload = {**payload, "template": text}
         said += fixed + more
@@ -3166,6 +3282,95 @@ def _list_options(options: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if len(parts) >= 4 and len(named) >= 3:
             out.append(o)
     return out
+
+
+_SNAKE = re.compile(r"(\$[A-Za-z_]\w*|@\{[^}]*\}|<[^>]*>)|(?<=[A-Za-z])_(?=[A-Za-z])")
+
+
+def _snake_text(rows: list[Any]) -> list[str]:
+    """Values written as tag ids ("polar_bear") print the underscores:
+    they become words, in place ($reads and @{refs} stay as they are)."""
+    said = []
+    for r in rows:
+        v = r.get("value") if isinstance(r, dict) else None
+        if isinstance(v, str) and "_" in v:
+            text = _SNAKE.sub(lambda m: m.group(1) or " ", v)
+            if text != v:
+                r["value"] = text
+                said.append(v)
+    if not said:
+        return []
+    return [f"Wrote \"{said[0][:40]}\"{' and others' if len(said) > 1 else ''} with spaces: "
+            "underscores printed as text"]
+
+
+#: What a kept pick looks like in other words ("blizzard" is snow).
+_KIN_WORDS = {"snow": r"snow\w*|blizzard\w*|hail\w*|sleet\w*|frost\w*|icy|ice|whiteout",
+              "rain": r"rain(?!bow)\w*|drizzl\w*|downpour\w*|monsoon\w*",
+              "fog": r"fog\w*|mist\w*|haze|hazy",
+              "storm": r"storm\w*|thunder\w*|lightning"}
+
+
+def _kin_options(plan: dict[str, Any], item: dict[str, Any],
+                 payload: dict[str, Any]) -> list[str]:
+    """A "#snow only with #cold" rule only stops options tagged #snow: the
+    rule's target tags the ones that say snow in other words ("blizzard
+    winds"), and another wildcard leaves them out (its picks aren't kept to
+    the cold places)."""
+    said: list[str] = []
+    opts = [o for o in payload.get("options") or [] if isinstance(o, dict)
+            and isinstance(o.get("value"), str)]
+    for c in (c for c in plan["items"] if c["kind"] == "constraint"):
+        if item["var"] == c["source"]:
+            continue
+        for a, b in _ONLY_WITH.findall(c.get("about") or ""):
+            a = a.lower()
+            kin = re.compile(r"\b(?:" + _KIN_WORDS.get(a.rstrip("s"), re.escape(a) + r"\w*")
+                             + r")\b", re.I)
+            hits = [o for o in opts if kin.search(o["value"])
+                    and a not in (o.get("sub_categories") or [])]
+            if not hits:
+                continue
+            first = f"\"{hits[0]['value'][:40]}\"" + (" and others" if len(hits) > 1 else "")
+            if item["var"] == c["target"]:
+                for o in hits:
+                    o["sub_categories"] = [*(o.get("sub_categories") or []), a]
+                if a not in payload.get("sub_categories", []):
+                    payload["sub_categories"] = [*payload.get("sub_categories", []), a]
+                said.append(f"Tagged {first} "
+                            f"#{a}: it says {a} in other words, and {c['name']} keeps #{a} "
+                            f"to #{b.lower()}")
+            elif len(hits) * 2 < len(opts):
+                payload["options"] = [o for o in payload["options"] if o not in hits]
+                opts = [o for o in opts if o not in hits]
+                said.append(f"Left out {first}: "
+                            f"the request keeps {a} to #{b.lower()}, and only "
+                            f"${c['target']} follows that rule")
+    return said
+
+
+_PHRASE_GAP = re.compile(r"\s*(?:\$[A-Za-z_]\w*\s+)+\$[A-Za-z_]\w*\s*")
+
+
+def _bare_join(text: str, plan: dict[str, Any],
+               built: dict[str, Any]) -> tuple[str, list[str]]:
+    """A combine of picks side by side ("$top $bottom $shoes") runs whole
+    phrases together ("henley shirt cargo shorts loafers"): commas go in
+    when every pick it joins is a phrase of two words or more."""
+    if not _PHRASE_GAP.fullmatch(text):
+        return text, []
+    wild = {i["var"]: i for i in plan["items"] if is_wild(i)}
+    for v in text_items.reads(text):
+        w = wild.get(v)
+        b = built.get(w["key"]) if w else None
+        if b is None:
+            return text, []
+        opts = [str(o.get("value") or "") for o in b["payload"].get("options") or []
+                if isinstance(o, dict)]
+        if not opts or sum(len(o.split()) for o in opts) < 2 * len(opts):
+            return text, []
+    return tag_commas(text), ["Put commas between the picks it joins: whole phrases ran "
+                              "together"]
 
 
 def _wrap_pipes(rows: list[Any]) -> list[str]:

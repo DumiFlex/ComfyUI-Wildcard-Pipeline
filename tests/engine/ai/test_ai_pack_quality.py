@@ -1293,3 +1293,100 @@ def test_the_species_decides_the_habitat_not_its_class():
     assert rules == [("animal_species", "habitat_type")]
     species = next(x for x in out if x.get("var") == "animal_species")
     assert {"forest", "ocean"} <= set(species["tags"])
+
+
+# --- twentieth real-model run -----------------------------------------------
+
+
+def test_tag_ids_as_option_text_get_spaces():
+    rows = [{"value": "polar_bear"}, {"value": "$snow_kind on @{abcd1234}"},
+            {"value": "red fox"}]
+    said = pack._snake_text(rows)
+    assert [r["value"] for r in rows] == ["polar bear", "$snow_kind on @{abcd1234}", "red fox"]
+    assert said and "underscores" in said[0]
+
+
+def test_snow_in_other_words_follows_the_only_in_rule():
+    raw = _raw(anchor="biome", items=[
+        _item(name="Biome", var="biome", tags=["cold", "warm"]),
+        _item(name="Weather", var="weather", tags=["clear"], about="rain, snow or clear skies"),
+        _item(name="Wind", var="wind"),
+        _item(kind="template", name="T", about="$biome, $weather, $wind")])
+    plan = pack.compile_plan(raw, request="Landscape pack: biome, weather; snow only in "
+                             "cold biomes.")
+    rule = next(i for i in plan["items"] if i["kind"] == "constraint")
+    assert "#snow only with #cold" in rule["about"]
+    keys = {i["var"]: i["key"] for i in plan["items"]}
+    out = pack.compile_item(plan, keys["weather"], {}, {"options": [
+        {"text": t, "weight": 1, "tags": tags, "negative": ""} for t, tags in (
+            ("light snowfall", ["snow"]), ("blizzard winds howling", []),
+            ("clear sky", ["clear"]))]})
+    tagged = {o["value"]: o.get("sub_categories") for o in out["payload"]["options"]}
+    assert "snow" in tagged["blizzard winds howling"]
+    wind = pack.compile_item(plan, keys["wind"], {}, {"options": [
+        {"text": t, "weight": 1, "tags": [], "negative": ""} for t in (
+            "snow driven by wind", "gentle breeze", "still air", "gusts")]})
+    assert [o["value"] for o in wind["payload"]["options"]] == [
+        "gentle breeze", "still air", "gusts"]
+    assert any("only $weather follows" in w for w in wind["warnings"])
+
+
+def test_a_rule_keyed_on_tags_neither_side_has_tags_them():
+    raw = _raw(anchor="char_class", items=[
+        _item(name="Class", var="char_class", tags=["melee"]),
+        _item(name="Weapon", var="weapon", tags=["blade"]),
+        _item(kind="constraint", name="Class → Weapon", source="char_class",
+              target="weapon", about="#rogue gets only #dagger; #mage → #staff"),
+        _item(kind="template", name="T", about="$char_class, $weapon")])
+    plan = pack.compile_plan(raw)
+    tags = {i["var"]: i["tags"] for i in plan["items"] if i["kind"] == "wildcard"}
+    assert {"rogue", "mage"} <= set(tags["char_class"])
+    assert {"dagger", "staff"} <= set(tags["weapon"])
+    assert not any("which neither" in f["text"] for f in pack.review_plan(plan))
+
+
+def test_a_subject_the_request_never_asks_for_is_left_out():
+    raw = _raw(anchor="subject", items=[
+        _item(name="Subject", var="subject"), _item(name="Weather", var="weather"),
+        _item(name="Time", var="time_of_day"),
+        _item(kind="template", name="T", about="$subject, $weather, $time_of_day")])
+    plan = pack.compile_plan(raw, request="A weather wildcard and a time of day; night "
+                             "scenes get moody lighting.")
+    assert "subject" not in {i["var"] for i in plan["items"]}
+    assert any("asks for no subject" in w for w in plan["warnings"])
+    kept = pack.compile_plan(_raw(anchor="subject", items=[
+        _item(name="Subject", var="subject"),
+        _item(kind="template", name="T", about="$subject")]),
+        request="Portraits in the rain")
+    assert "subject" in {i["var"] for i in kept["items"]}
+
+
+def test_the_extras_follow_the_pick_the_request_says_is_decided():
+    items = [
+        {"kind": "wildcard", "name": "Species", "var": "animal", "tags": []},
+        {"kind": "wildcard", "name": "Habitat", "var": "habitat", "tags": ["ocean", "desert"]},
+        {"kind": "wildcard", "name": "Action", "var": "animal_action", "tags": []},
+        {"kind": "wildcard", "name": "Light", "var": "lighting", "tags": []}]
+    warnings: list = []
+    out = pack._fit_rules(items, "Animals in habitats: the animal decides which habitats "
+                          "are possible.", warnings)
+    rules = {(x["source"], x["target"]) for x in out if x["kind"] == "constraint"}
+    assert {("animal", "habitat"), ("habitat", "animal_action"),
+            ("habitat", "lighting")} <= rules
+    action = next(x for x in out if x.get("var") == "animal_action")
+    assert {"ocean", "desert"} <= set(action["tags"])
+
+
+def test_a_combine_of_phrases_side_by_side_gets_commas():
+    raw = _raw(items=[
+        _item(name="Top", var="top"), _item(name="Bottom", var="bottom"),
+        _item(kind="combine", name="Outfit", var="outfit", about="$top $bottom"),
+        _item(kind="template", name="T", about="$outfit")])
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    text, said = pack._bare_join("$top $bottom", plan, built)
+    assert text == "$top, $bottom" and said
+    for o in built[next(i["key"] for i in plan["items"] if i["var"] == "top")][
+            "payload"]["options"]:
+        o["value"] = "red"
+    assert pack._bare_join("$top $bottom", plan, built) == ("$top $bottom", [])

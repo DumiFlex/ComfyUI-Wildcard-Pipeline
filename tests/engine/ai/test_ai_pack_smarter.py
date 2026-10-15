@@ -146,7 +146,7 @@ def test_review_finds_what_would_break_or_clash():
         _item(name="Place", var="place"),
         _item(name="Mood", var="mood"),
         _item(kind="constraint", name="S2O", source="season", target="outfit",
-              about="#winter excludes #light and #rain"),
+              about="exclude #light and #rain in #winter"),
         _item(kind="constraint", name="O2S", source="outfit", target="season",
               about="#warm boosts #winter"),
         _item(kind="template", name="T", about="$season $outfit $weather"),
