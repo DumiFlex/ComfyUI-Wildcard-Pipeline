@@ -648,6 +648,20 @@ def compile_plan(
             for side in ("source", "target"):
                 x[side] = _side(x.get(side), known_sides)
             _sides_from_about(x, known_sides)
+    # Two rules each way between the same picks: whichever runs second
+    # never applies (the loop). The first one planned stays.
+    pairs: set[tuple[str, str]] = set()
+    for x in list(raw_items):
+        if x.get("kind") != "constraint":
+            continue
+        pair = (str(x.get("source") or ""), str(x.get("target") or ""))
+        if pair[::-1] in pairs:
+            raw_items.remove(x)
+            warnings.append(f"Left out {x.get('name') or 'a constraint'}: a rule the other "
+                            f"way (${pair[1]} → ${pair[0]}) is already planned, and the "
+                            "two make a loop where one never applies")
+            continue
+        pairs.add(pair)
     ruled = {x[side] for x in raw_items if x.get("kind") == "constraint"
              for side in ("source", "target")}
     picked = {_var(x.get("var")) for x in raw_items if x.get("kind") in ("wildcard", "library")}
@@ -2613,7 +2627,7 @@ def compile_item(
         payload, said = read_rolled(plan, built, payload)
         warnings += said
         warnings += _append_onto_nothing(plan, key, built, payload)
-        warnings += _second_rolls(plan, payload)
+        warnings += _second_rolls(plan, payload, built)
         DerivationHandler.validate_payload(payload)
         preview = [ai_derivation.describe_rule(r) for r in payload["rules"]]
         warnings += list(dict.fromkeys(w for r in compiled["rules"] for w in r["warnings"]))
@@ -2670,6 +2684,12 @@ def compile_item(
         out = text_items.compile_combine(answer, out_var=item["var"], catalog=cat)
         payload, preview, warnings = out["payload"], out["preview"], out["warnings"]
         payload, said = read_rolled(plan, built, payload)
+        bare = _ARTICLE_PICK.sub("", payload["template"])
+        if bare != payload["template"]:
+            # "{a|b} $outerwear" printed "a a heavy parka" / "b".
+            payload = {**payload, "template": re.sub(r"\s{2,}", " ", bare).strip()}
+            said.append("Took out a {a|b} pick of single letters or articles: it printed "
+                        "\"a a\" or a stray letter")
         warnings = [*warnings, *said, *_combine_notes(plan, item, payload, built)]
         if plan.get("style") == "tags":
             payload = {**payload, "template": tag_commas(payload["template"])}
@@ -2682,6 +2702,10 @@ def compile_item(
             payload = {**payload, "template_string": tag_commas(payload["template_string"])}
     return {"key": key, "id": mid, "kind": kind, "payload": payload,
             "preview": preview, "warnings": warnings, "repair": repair_note(warnings)}
+
+
+_ARTICLE_PICK = re.compile(r"\{\s*(?:[a-z]|an|the)?\s*(?:\|\s*(?:[a-z]|an|the)?\s*)+\}",
+                           re.I)
 
 
 def _combine_notes(plan: dict[str, Any], item: dict[str, Any], payload: dict[str, Any],
@@ -2697,6 +2721,9 @@ def _combine_notes(plan: dict[str, Any], item: dict[str, Any], payload: dict[str
     if skipped and _PICKS.search(text):
         said.append(f"It picks inline ({{a|b}}) instead of reading ${', $'.join(skipped)}; "
                     "read the variable so the constraints on it apply")
+    elif len(reads) >= 2 and re.search(r"\{[^{}]*\|[^{}]*\}", text):
+        said.append("It picks inline ({a|b}) in a line that joins picks; leave the choice "
+                    "to a wildcard, which the constraints can reach")
     low = text.lower()
     for w in (i for i in plan["items"] if is_wild(i) and i["key"] in (built or {})):
         opts = [str(o.get("value") or "") for o in built[w["key"]]["payload"].get(
@@ -2718,6 +2745,17 @@ def _combine_notes(plan: dict[str, Any], item: dict[str, Any], payload: dict[str
 
 
 _GETS_ONLY = re.compile(r"#([\w-]+)\s+gets\s+only\s+#([\w-]+)", re.I)
+
+
+def _entry_core(v: str) -> str:
+    """A comma-list entry that reads ``$v``, with at most two plain words
+    of its own around it ("$weather conditions")."""
+    return (r"\s*(?:[A-Za-z]+\s+){0,2}\$" + re.escape(v)
+            + r"\b(?![.\w])(?:\s+[A-Za-z]+){0,2}\s*")
+
+
+def _entry(v: str) -> str:
+    return r"(?:^|,)" + _entry_core(v) + r"(?=,|$)"
 
 
 def _plan_onlys(item: dict[str, Any], src: dict[str, Any], tgt: dict[str, Any],
@@ -2759,15 +2797,30 @@ def _drop_double_reads(plan: dict[str, Any], built: dict[str, Any],
                   if v in shown and v != c["var"]]
         # Only a read that is a list entry of its own goes: in a sentence
         # ("wearing a $top and $bottom") dropping it leaves the words behind.
-        joined = [v for v in joined if re.search(
-            r"(?:^|,)\s*\$" + re.escape(v) + r"\b(?![.\w])\s*(?=,|$)", text)]
+        # A list entry may carry a word or two of its own ("$weather conditions").
+        joined = [v for v in joined if re.search(_entry(v), text)]
         for v in joined:
-            text = re.sub(r"(?:^|\s*,\s*)\$" + re.escape(v) + r"\b(?![.\w])\s*(?=,|$)",
-                          "", text).lstrip(" ,")
+            text = ",".join(p for p in text.split(",")
+                            if not re.fullmatch(_entry_core(v), p)).strip(" ,")
         if joined:
             shown -= set(joined)
             said.append(f"Dropped ${', $'.join(joined)}: ${c['var']} ({c['name']}) already "
                         "holds them")
+    # The same variable read twice as list entries prints it twice.
+    parts, seen, twice = text.split(","), set(), []
+    kept = []
+    for p in parts:
+        m = re.fullmatch(r"\s*\$([a-zA-Z_]\w*)\s*", p)
+        if m and m.group(1) in seen:
+            twice.append(m.group(1))
+            continue
+        if m:
+            seen.add(m.group(1))
+        kept.append(p)
+    if twice:
+        text = ",".join(kept).strip(" ,")
+        said.append(f"Read ${', $'.join(dict.fromkeys(twice))} once: the template printed "
+                    "it twice")
     if not said:
         return payload, []
     return {**payload, "template_string": text}, said
@@ -2812,23 +2865,71 @@ def _append_onto_nothing(plan: dict[str, Any], key: str, built: dict[str, Any],
     return said
 
 
-def _second_rolls(plan: dict[str, Any], payload: dict[str, Any]) -> list[str]:
+def _second_rolls(plan: dict[str, Any], payload: dict[str, Any],
+                  built: dict[str, Any] | None = None) -> list[str]:
     """A rule that writes a wildcard's own variable with an ``@{…}`` pick
-    rolls that wildcard a second time and throws the first pick away."""
-    wild = {i["var"]: i["name"] for i in plan["items"] if is_wild(i)}
-    said = []
+    (summer → ``@{Outerwear:parka}``) rolls that wildcard a second time and
+    throws the first pick away; one that appends picks of its kind to it
+    (``$footwear`` += "open-toed sandals") puts two in the prompt. Both
+    writes are taken out, in place (a branch left with nothing goes, then
+    a rule with nothing): the wildcard picks, a constraint narrows it."""
+    wild = {i["var"]: i for i in plan["items"] if is_wild(i)}
+    heads: dict[str, set[str]] = {}
+    for v, i in wild.items():
+        opts = (built or {}).get(i["key"], {}).get("payload", {}).get("options") or []
+        heads[v] = {c.split()[-1] for o in opts if isinstance(o, dict)
+                    for c in _chunks(str(o.get("value") or "")) if len(c.split()[-1]) >= 4}
+    said: list[str] = []
+
+    def bad(a: Any) -> bool:
+        var = a.get("target_var") if isinstance(a, dict) else None
+        if var not in wild:
+            return False
+        value = str(a.get("value") or "")
+        name = wild[var]["name"]
+        if "@{" in value:
+            note = (f"Left out a write of ${var} with a new pick (@{{…}}): it rolled {name} "
+                    "a second time; the wildcard picks it, a constraint narrows it")
+        elif a.get("mode") in ("append", "prepend") and {
+                c.split()[-1] for c in _chunks(value)} & heads.get(var, set()):
+            note = (f"Left out adding more {name} to ${var}: it put two in the prompt; the "
+                    "wildcard picks one, a constraint narrows it")
+        else:
+            return False
+        if note not in said:
+            said.append(note)
+        return True
+
+    rules = []
     for rule in payload["rules"]:
+        branches = []
         for clause in [*(rule.get("branches") or []), rule.get("else")]:
             if not isinstance(clause, dict):
+                branches.append(clause)
                 continue
-            for a in [clause.get("action"), *(clause.get("extra_actions") or [])]:
-                var = a.get("target_var") if isinstance(a, dict) else None
-                if var in wild and "@{" in str(a.get("value") or ""):
-                    note = (f"It writes ${var} with a new pick (@{{…}}), rolling "
-                            f"{wild[var]} a second time; leave ${var} to its wildcard "
-                            "(a constraint picks it by case)")
-                    if note not in said:
-                        said.append(note)
+            acts = [x for x in [clause.get("action"), *(clause.get("extra_actions") or [])]
+                    if isinstance(x, dict) and not bad(x)]
+            if not acts:
+                branches.append(None)
+                continue
+            new = {**clause, "action": acts[0]}
+            if len(acts) > 1:
+                new["extra_actions"] = acts[1:]
+            else:
+                new.pop("extra_actions", None)
+            branches.append(new)
+        n = len(rule.get("branches") or [])
+        kept = [x for x in branches[:n] if x is not None]
+        other = branches[n] if len(branches) > n else None
+        if kept:
+            rules.append({**rule, "branches": kept,
+                          **({"else": other} if other is not None else {})})
+            if other is None:
+                rules[-1].pop("else", None)
+    if said:
+        if not rules:
+            raise ValueError("every rule wrote a wildcard's own pick; " + said[0])
+        payload["rules"] = rules
     return said
 
 
@@ -2975,8 +3076,9 @@ _STOP = {"the", "and", "with", "type", "list", "option", "options", "pack", "wil
 #: rest of the pack (a rule tests a value or tag that isn't there).
 _REPAIRABLE = re.compile(r"has no option|No option carries|unknown tag|nothing sets|"
                          r"already rolls|no rule is an only|joins picks with|"
-                         r"isn't an option or tag|a second time|"
+                         r"isn't an option or tag|"
                          r"instead of reading|prints itself|options itself|"
+                         r"line that joins picks|"
                          r"isn't set|not a variable|doesn't set|which no", re.I)
 
 

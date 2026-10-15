@@ -156,7 +156,9 @@ def test_review_finds_what_would_break_or_clash():
     assert "$weather, which nothing in the pack sets" in texts
     assert "#rain, which neither" in texts
     assert "never empty" in texts
-    assert "closes a loop" in texts
+    # The rule back the other way is left out at the plan (it never applies).
+    assert "closes a loop" not in texts
+    assert any("make a loop" in w for w in plan["warnings"])
     assert "don't follow the anchor $season" in texts
     assert {f["level"] for f in found} == {"fix", "tip"}
     assert pack.review_note(found).startswith("Revise the plan")

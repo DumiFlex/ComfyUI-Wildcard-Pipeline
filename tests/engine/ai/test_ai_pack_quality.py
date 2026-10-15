@@ -62,9 +62,10 @@ def test_a_constraint_that_never_applies_is_reported_on_the_constraint():
     raw["items"].append(_item(kind="constraint", name="Outfit → Race", source="outfit",
                               target="race", section="Character", about="#robe gets #elf"))
     plan = pack.compile_plan(raw)
+    # Round 12: both ways left one dead; the plan keeps the first one.
+    assert any("make a loop" in w for w in plan["warnings"])
+    assert [i["name"] for i in plan["items"] if i["kind"] == "constraint"] != []
     report = pack.check_pack(plan, _built(plan), seeds=20)
-    cons = {i["key"] for i in plan["items"] if i["kind"] == "constraint"}
-    assert any("did not apply" in t for k in cons for t in report["problems"].get(k, []))
     assert not any("did not apply" in n for n in report["notes"])
 
 
@@ -797,9 +798,25 @@ def test_a_rule_that_rolls_a_wildcard_again_is_sent_back():
     plan = pack.compile_plan(raw)
     payload = {"rules": [{"branches": [{"condition": {}, "action": {
         "target_var": "outerwear", "mode": "replace", "value": "@{Outerwear:heavy}"}}]}]}
-    said = pack._second_rolls(plan, payload)
-    assert said and "a second time" in said[0]
-    assert pack.repair_note(said)
+    with pytest.raises(ValueError, match="a second time"):
+        pack._second_rolls(plan, payload)
+    # Round 12: summer forced a parka and appended sandals to the footwear.
+    built = _built(plan)
+    ok = {"target_var": "outfit_description", "mode": "replace", "value": "summer look"}
+    payload = {"rules": [{"branches": [{"condition": {}, "action": {
+        "target_var": "outerwear", "mode": "replace", "value": "@{Outerwear:parka}"},
+        "extra_actions": [ok]}]}]}
+    said = pack._second_rolls(plan, payload, built)
+    assert said and payload["rules"][0]["branches"][0]["action"] == ok
+    assert "extra_actions" not in payload["rules"][0]["branches"][0]
+    wk = next(i["key"] for i in plan["items"] if i["var"] == "outerwear")
+    built[wk]["payload"]["options"] = [{"id": "a", "value": "heavy down parka", "weight": 1}]
+    payload = {"rules": [{"branches": [
+        {"condition": {}, "action": {"target_var": "outerwear", "mode": "append",
+                                     "value": ", light parka"}},
+        {"condition": {}, "action": ok}]}]}
+    said = pack._second_rolls(plan, payload, built)
+    assert len(payload["rules"][0]["branches"]) == 1 and "two in the prompt" in said[0]
 
 
 # --- ninth real-model run ---------------------------------------------------
@@ -960,3 +977,37 @@ def test_a_library_vocabulary_nothing_else_covers_is_made_new():
         _item(kind="template", name="T", about="$eyes")])
     plan = pack.compile_plan(raw, library=[])
     assert any(i["name"] == "Colors" for i in plan["items"])
+
+
+# --- twelfth real-model run -------------------------------------------------
+
+def test_a_template_entry_with_its_own_words_and_a_twice_read_drop():
+    raw = _raw(items=[
+        _item(name="Weather", var="weather"), _item(name="Time", var="time_of_day"),
+        _item(name="Quality", var="quality"),
+        _item(kind="combine", name="Scene", var="scene", about="$time_of_day, $weather"),
+        _item(kind="template", name="T", about="$quality, $scene, $time_of_day light, "
+              "$weather conditions, $quality")])
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    key = next(i["key"] for i in plan["items"] if i["kind"] == "combine")
+    built[key] = {"id": "c0ffee01", "payload": {"template": "$time_of_day, $weather",
+                                                "input_vars": ["time_of_day", "weather"]}}
+    out, said = pack._drop_double_reads(plan, built, {
+        "template_string": "$quality, $scene, $time_of_day light, $weather conditions, "
+                           "$quality", "negative_template": ""})
+    assert out["template_string"] == "$quality, $scene"
+    assert any("once" in s for s in said)
+
+
+def test_article_picks_go_and_inline_picks_in_a_join_are_sent_back():
+    raw = _raw(items=[
+        _item(name="Top", var="top"), _item(name="Coat", var="coat"),
+        _item(kind="combine", name="Outfit", var="outfit", about="$top, $coat"),
+        _item(kind="template", name="T", about="$outfit")])
+    plan = pack.compile_plan(raw)
+    key = next(i["key"] for i in plan["items"] if i["kind"] == "combine")
+    out = pack.compile_item(plan, key, _built(plan),
+                            {"template": "$top, {a|b} $coat, {red|blue} scarf"})
+    assert "{a|b}" not in out["payload"]["template"]
+    assert "line that joins picks" in out["repair"]
