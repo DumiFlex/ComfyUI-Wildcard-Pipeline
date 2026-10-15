@@ -1418,3 +1418,61 @@ def test_booru_tags_and_nsfw_requests_are_left_alone():
             _item(name="Subject", var="subject"),
             _item(kind="template", name="T", about="$subject")]), request=request)
         assert "subject" in {i["var"] for i in kept["items"]}, request
+
+
+# --- twenty-first real-model run --------------------------------------------
+
+
+def test_a_combine_another_combine_holds_is_read_once():
+    raw = _raw(items=[
+        _item(name="Race", var="race"), _item(name="Hair", var="hair"),
+        _item(name="Class", var="char_class"),
+        _item(kind="combine", name="Look", var="look", about="$race, $hair"),
+        _item(kind="combine", name="Hero", var="hero", about="$look, $char_class"),
+        _item(kind="template", name="T", about="$hero, $look")])
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    keys = {i["var"]: i["key"] for i in plan["items"]}
+    built[keys["look"]] = {"id": "c1c1c1c1", "payload": {
+        "template": "$race, $hair", "input_vars": ["race", "hair"]}}
+    built[keys["hero"]] = {"id": "c2c2c2c2", "payload": {
+        "template": "$look, $char_class", "input_vars": ["look", "char_class"]}}
+    out, said = pack._drop_double_reads(plan, built, {"template_string": "$hero, $look",
+                                                      "negative_template": ""})
+    assert out["template_string"] == "$hero"
+    assert any("Dropped $look" in w for w in said)
+
+
+def test_a_group_rolled_apart_from_its_pick_is_left_out():
+    raw = _raw(anchor="animal_species", items=[
+        _item(name="Class", var="animal_class"), _item(name="Species", var="animal_species"),
+        _item(kind="template", name="T", about="$animal_class, $animal_species")])
+    plan = pack.compile_plan(raw)
+    assert "animal_class" not in {i["var"] for i in plan["items"]}
+    # A class that is a pick of its own (a fantasy class next to a race) stays.
+    kept = pack.compile_plan(_raw(anchor="char_race", items=[
+        _item(name="Race", var="char_race"), _item(name="Class", var="char_class"),
+        _item(kind="template", name="T", about="$char_race, $char_class")]))
+    assert "char_class" in {i["var"] for i in kept["items"]}
+
+
+def test_snow_keeps_to_the_cold_kinds_of_a_biome_list_without_a_cold_tag():
+    item = {"about": "#snow only with #cold: every other Biome excludes #snow"}
+    src = {"tags": ["tropical", "arctic_tundra", "temperate", "alpine"]}
+    tgt = {"tags": ["snow", "rain"], "options": [{"tags": ["snow"]}, {"tags": ["rain"]}]}
+    matrix: dict = {}
+    said = pack._plan_only_withs(item, src, tgt, matrix)
+    assert said and set(matrix) == {"tropical", "temperate"}
+    assert all(row["snow"]["mode"] == "exclude" for row in matrix.values())
+
+
+def test_lighting_follows_the_weather():
+    raw = _raw(anchor="weather", items=[
+        _item(name="Weather", var="weather", tags=["rain", "clear"]),
+        _item(name="Lighting", var="lighting"),
+        _item(kind="template", name="T", about="$weather, $lighting")])
+    plan = pack.compile_plan(raw)
+    rules = [(i["source"], i["target"]) for i in plan["items"] if i["kind"] == "constraint"]
+    assert rules == [("weather", "lighting")]
+    light = next(i for i in plan["items"] if i["var"] == "lighting")
+    assert {"rain", "clear"} <= set(light["tags"])

@@ -691,6 +691,8 @@ def compile_plan(
             continue
         pairs.add(pair)
     _stray_rule_tags(raw_items, warnings)
+    raw_items = _drop_loose_groups(raw_items, warnings)
+    raw_items = _light_follows_weather(raw_items, warnings)
     ruled = {x[side] for x in raw_items if x.get("kind") == "constraint"
              for side in ("source", "target")}
     picked = {_var(x.get("var")) for x in raw_items if x.get("kind") in ("wildcard", "library")}
@@ -2280,6 +2282,84 @@ def _stray_rule_tags(raw_items: list[dict[str, Any]], warnings: list[str]) -> No
                                 " keys on them")
 
 
+# A pick and the group it belongs to: $animal_species next to $animal_class.
+_MEMBER = re.compile(r"^(?:species|breed|breeds|specific|name|names|subtype|subtypes|"
+                     r"variant|variants|model|models|item|items)$")
+
+
+def _drop_loose_groups(raw_items: list[dict[str, Any]],
+                       warnings: list[str]) -> list[dict[str, Any]]:
+    """A group wildcard ($animal_class) that rolls on its own next to the
+    pick it groups ($animal_species) prints "insect, dolphin": with no rule
+    between them, the group goes and the pick says it all."""
+    wild = [x for x in raw_items if x.get("kind") == "wildcard" and _var(x.get("var"))]
+    ruled = {_var(x.get(s)) for x in raw_items if x.get("kind") == "constraint"
+             for s in ("source", "target")}
+    gone: set[str] = set()
+    for g in wild:
+        gv = _var(g.get("var"))
+        m = _GROUPISH.search(gv)
+        if not m or gv in ruled:
+            continue
+        head = gv[:m.start()]
+        member = next((x for x in wild if x is not g and (
+            _var(x.get("var")) == head or (
+                _var(x.get("var")).startswith(head + "_")
+                and _MEMBER.match(_var(x.get("var"))[len(head) + 1:])))), None)
+        if member is None:
+            continue
+        gone.add(gv)
+        warnings.append(f"Left out {g.get('name') or gv}: it rolled apart from "
+                        f"{member.get('name') or _var(member.get('var'))}, so the two could "
+                        "disagree, and the pick already says which one it is")
+    if not gone:
+        return raw_items
+    out = []
+    for x in raw_items:
+        if x.get("kind") == "wildcard" and _var(x.get("var")) in gone:
+            continue
+        for v in gone:
+            if isinstance(x.get("about"), str):
+                x["about"] = re.sub(r",?\s*\$" + re.escape(v) + r"\b", "", x["about"])
+        out.append(x)
+    return out
+
+
+_WEATHERISH = re.compile(r"^(?:\w+_)?(?:weather|precipitation)(?:_\w+)?$")
+_LIGHTISH = re.compile(r"^(?:\w+_)?(?:light|lighting|sunlight)(?:_\w+)?$")
+
+
+def _light_follows_weather(raw_items: list[dict[str, Any]],
+                           warnings: list[str]) -> list[dict[str, Any]]:
+    """Weather and lighting rolled apart print "steady rain, bright
+    overhead sunlight": the lighting follows the weather when nothing else
+    keeps it."""
+    wild = [x for x in raw_items if x.get("kind") == "wildcard" and _var(x.get("var"))]
+    weather = next((x for x in wild if _WEATHERISH.match(_var(x.get("var")))
+                    and x.get("tags")), None)
+    light = next((x for x in wild if _LIGHTISH.match(_var(x.get("var")))), None)
+    if weather is None or light is None:
+        return raw_items
+    wv, lv = _var(weather.get("var")), _var(light.get("var"))
+    if any(x.get("kind") == "constraint" and (_var(x.get("target")) == lv or {
+            _var(x.get("source")), _var(x.get("target"))} == {wv, lv}) for x in raw_items):
+        return raw_items
+    items = list(raw_items)
+    items.insert(items.index(light), {
+        "kind": "constraint", "name": f"{weather.get('name') or wv} → {light.get('name') or lv}",
+        "source": wv, "target": lv,
+        "about": f"each {weather.get('name') or wv} gets only the {light.get('name') or lv} "
+                 "options that fit it (no bright sun in rain or snow); exclude the ones that "
+                 "don't",
+        "section": light.get("section") or "", "use": ""})
+    if not set(map(str, light.get("tags") or [])) & set(map(str, weather["tags"])):
+        light["tags"] = [*(light.get("tags") or []), *weather["tags"]][:16]
+    warnings.append(f"Added a rule from {weather.get('name') or wv} to "
+                    f"{light.get('name') or lv}: lighting rolled apart from the weather can "
+                    "contradict it")
+    return items
+
+
 # A subject the planner adds on its own ("noir detective" in a weather pack).
 _SUBJECT_VAR = re.compile(r"^(?:main_)?(?:subject|character|person|figure|protagonist|model)"
                           r"s?(?:_type)?$")
@@ -3246,27 +3326,46 @@ def _plan_only_withs(item: dict[str, Any], src: dict[str, Any], tgt: dict[str, A
     carried = {t for o in tgt.get("options") or [] for t in o.get("tags") or []}
     said = []
     for a, b in _ONLY_WITH.findall(str(item.get("about") or "")):
-        tb, keep = tt.get(a.lower()), st.get(b.lower())
-        if tb is None or keep is None or tb not in carried:
+        tb = tt.get(a.lower())
+        keeps = [st[b.lower()]] if b.lower() in st else _case_kin(b.lower(), st)
+        if tb is None or not keeps or tb not in carried:
             continue
         hit = False
-        kept = matrix.get(keep) or {}
-        if any(isinstance(c, dict) and c.get("mode") == "only" for c in kept.values()) \
-                and (kept.get(tb) or {}).get("mode") != "only":
-            # "#cold gets only #cold" would shut snow out of the cold places
-            # too: there it's one of the kept ones.
-            kept[tb] = {"mode": "only", "factor": 1}
-            hit = True
+        for keep in keeps:
+            kept = matrix.get(keep) or {}
+            if any(isinstance(c, dict) and c.get("mode") == "only" for c in kept.values()) \
+                    and (kept.get(tb) or {}).get("mode") != "only":
+                # "#cold gets only #cold" would shut snow out of the cold
+                # places too: there it's one of the kept ones.
+                kept[tb] = {"mode": "only", "factor": 1}
+                hit = True
         for sa in st.values():
-            if sa == keep:
+            if sa in keeps:
                 continue
             row = matrix.setdefault(sa, {})
             if (row.get(tb) or {}).get("mode") != "exclude":
                 row[tb] = {"mode": "exclude", "factor": 0}
                 hit = True
         if hit:
-            said.append(f"#{tb} only with #{keep}")
+            said.append(f"#{tb} only with #{', #'.join(keeps)}")
     return said
+
+
+#: The source tags that count as a case the request names ("cold" places
+#: are the arctic, tundra and alpine ones on a biome list without #cold).
+_CASE_KIN = {"cold": r"cold|cool|arctic|polar|tundra|alpine|frozen|icy|snowy|winter|"
+                     r"boreal|subarctic|glacial|taiga",
+             "hot": r"hot|warm|tropical|desert|arid|summer|volcanic",
+             "wet": r"wet|rainy|humid|tropical|monsoon|rainforest|swamp|marsh",
+             "dry": r"dry|arid|desert|savann?ah?|steppe"}
+
+
+def _case_kin(case: str, tags: dict[str, str]) -> list[str]:
+    pat = _CASE_KIN.get(case) or _CASE_KIN.get(case.rstrip("s"))
+    if not pat:
+        return []
+    word = re.compile(r"(?:^|[_-])(?:" + pat + r")(?:$|[_-])")
+    return [t for k, t in tags.items() if word.search(k)]
 
 
 # An option that stands for "nothing" ("no color variation", "none").
@@ -3436,6 +3535,23 @@ def _drop_double_reads(plan: dict[str, Any], built: dict[str, Any],
             shown -= set(joined)
             said.append(f"Dropped ${', $'.join(joined)}: ${c['var']} ({c['name']}) already "
                         "holds them")
+    # Two combines where one holds all of the other ("$hero" with race,
+    # look and class next to "$look"): the smaller one prints twice.
+    combos = [c for c in plan["items"] if c["kind"] == "combine" and c["key"] in built
+              and c["var"] in shown and re.search(_entry(c["var"]), text)]
+    for c in combos:
+        inner = set(_combine_inputs(plan, built, c["var"]))
+        if not inner or c["var"] not in shown:
+            continue
+        big = next((o for o in combos if o is not c and o["var"] in shown
+                    and inner <= set(_combine_inputs(plan, built, o["var"]))), None)
+        if big is None:
+            continue
+        text = ",".join(p for p in text.split(",")
+                        if not re.fullmatch(_entry_core(c["var"]), p)).strip(" ,")
+        shown.discard(c["var"])
+        said.append(f"Dropped ${c['var']}: ${big['var']} ({big['name']}) already holds "
+                    "everything it joins")
     # The same variable read twice as list entries prints it twice.
     parts, seen, twice = text.split(","), set(), []
     kept = []
