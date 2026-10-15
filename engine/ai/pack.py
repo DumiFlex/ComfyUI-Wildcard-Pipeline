@@ -408,6 +408,22 @@ _USERS = re.compile(r"^(?:the )?(?:user'?s?|my|your)\s+", re.I)
 _METAISH = re.compile(r"\b(vocabulary|vocab|library|tag ?list|word ?list|lists?)\b", re.I)
 
 
+def _covered(items: list[dict[str, Any]], me: dict[str, Any], name: str) -> bool:
+    """Whether another item sets what a library item names ("Vocabulary
+    (Colors)" next to a Hair Color wildcard). Nothing at all, or only the
+    library's own words: it isn't covered, and is made new instead."""
+    words = {w.rstrip("s") for w in re.findall(r"[a-z]{3,}", _METAISH.sub("", name).lower())}
+    if not words:
+        return True
+    for x in items:
+        if x is me or x.get("kind") in ("constraint", "template", "library"):
+            continue
+        text = f"{_var(x.get('var'))} {x.get('name') or ''}".lower().replace("_", " ")
+        if any(re.search(r"\b" + re.escape(w) + r"(?:s|es)?\b", text) for w in words):
+            return True
+    return False
+
+
 _NEGATIVEISH = re.compile(r"\bnegatives?\b|negative_|_negatives?\b", re.I)
 
 
@@ -704,10 +720,15 @@ def compile_plan(
             if lib_row is None:
                 # Make it new instead: leaving it out loses part of the pack.
                 name = _USERS.sub("", _LIB_SUFFIX.sub("", name).strip()).strip()
-                if _METAISH.search(name) and not (var and _reads_var(raw_items, it, var)):
+                if _METAISH.search(name) and not (var and _reads_var(raw_items, it, var)) \
+                        and _covered(raw_items, it, name):
                     warnings.append(f"Left out {name or 'a library item'}: it isn't in the "
                                     "library, and the pack's own items cover it")
                     continue
+                if _METAISH.search(name):
+                    # "Vocabulary (Colors)" is a Colors wildcard.
+                    name = re.sub(r"[()\[\]]", "", _METAISH.sub("", name)).strip(" -:,") \
+                        or name
                 var = var or _slug_var(name)
                 if not var:
                     warnings.append("Left out a library item with no name or variable")
@@ -1572,13 +1593,15 @@ def _split_groups(wild: list[dict[str, Any]],
     words = " ".join(f"{o.get('name') or ''} {o.get('about') or ''} "
                      + " ".join(str(t) for t in o.get("tags") or [])
                      for o in others).lower()
+    other_tags = [str(t).lower() for o in others for t in o.get("tags") or []]
     out = []
     for role, cases in by_role.items():
         if len(cases) < 2:
             continue
         grid = any(r != role and r.endswith("_") == role.endswith("_")
                    and len(set(cases) & set(c)) >= 2 for r, c in by_role.items())
-        named = sum(1 for c in cases if re.search(r"\b" + re.escape(c) + r"\b", words))
+        named = sum(1 for c in cases if re.search(r"\b" + re.escape(c) + r"\b", words)
+                    or _case_tag(c, other_tags))
         # Another item must name the cases ("upper_body" / "lower_body" next
         # to each other is two subjects, not a split by case).
         if grid and named >= 2 or len(cases) >= 3 and named >= 3:
@@ -1661,6 +1684,18 @@ def _merge_splits(raw_items: list[dict[str, Any]],
                                                  f"{x.get('name')} {x.get('about')}".lower()))
             >= 2)), None)
         if source is None:
+            # "elven_traits", "dwarven_traits" next to a race tagged elf, dwarf.
+            for x in wild:
+                if x in members or x in sum((list(c.values()) for _, c in groups), []):
+                    continue
+                tags = [str(t).lower() for t in x.get("tags") or []]
+                hit = {c: t for c in names if (t := _case_tag(c, tags))}
+                if len(hit) >= 2:
+                    source = x
+                    cases = {hit.get(c, c): m for c, m in cases.items()}
+                    names = set(cases)
+                    break
+        if source is None:
             continue  # nothing to key the cases on: the review flags it instead
         merged = {
             "kind": "wildcard", "name": role.replace("_", " ").title(), "var": role,
@@ -1719,6 +1754,20 @@ def _merge_splits(raw_items: list[dict[str, Any]],
             + f" into one {merged['name']} wildcard tagged by case, kept to the "
             f"{source.get('name') or src} pick by a constraint")
     return items
+
+
+def _case_tag(case: str, tags: list[str]) -> str | None:
+    """The tag a case word means: itself, or its stem ("elven" → elf,
+    "dwarven" → dwarf, "orcish" → orc)."""
+    if case in tags:
+        return case
+    for t in tags:
+        n = 0
+        while n < min(len(t), len(case)) and t[n] == case[n]:
+            n += 1
+        if len(t) >= 3 and n >= max(2, len(t) - 1) and len(case) - n <= 4:
+            return t
+    return None
 
 
 def _dynamic_ref(role: str) -> re.Pattern[str]:
@@ -1882,9 +1931,20 @@ def _fit_rules(raw_items: list[dict[str, Any]], request: str,
         if tgt is None or src is None or tgt is src:
             continue
         sv, tv = _var(src.get("var")), _var(tgt.get("var"))
-        if any(x.get("kind") == "constraint" and {_var(x.get("source")),
-                                                  _var(x.get("target"))} == {sv, tv}
-               for x in items):
+        have = next((x for x in items if x.get("kind") == "constraint"
+                     and {_var(x.get("source")), _var(x.get("target"))} == {sv, tv}), None)
+        if have is not None:
+            # "Fits" means the rest don't: a rule that only boosts the
+            # fitting ones still hands a mage plate armour now and then.
+            about = str(have.get("about") or "")
+            if _var(have.get("source")) == sv and not re.search(
+                    r"\b(only|exclude\w*|never|not)\b", about, re.I):
+                have["about"] = _cut(about.rstrip(". ") + ". Each "
+                                     f"{src.get('name') or sv} gets only the "
+                                     f"{tgt.get('name') or tv} options that fit it; exclude "
+                                     "the rest", MAX_ABOUT)
+                warnings.append(f"{have.get('name') or 'A rule'} now keeps only the fitting "
+                                f"{tgt.get('name') or tv}: the request says one fits the other")
             continue
         items.insert(items.index(tgt), {
             "kind": "constraint", "name": f"{src.get('name') or sv} → {tgt.get('name') or tv}",

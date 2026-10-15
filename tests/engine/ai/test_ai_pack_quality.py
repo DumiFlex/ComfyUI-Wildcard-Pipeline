@@ -923,3 +923,40 @@ def test_a_combine_that_writes_out_a_wildcards_options_is_sent_back():
     said = pack._combine_notes(plan, item, {
         "template": "$biome, dense forest, tall trees, arid desert, sand dunes"}, built)
     assert any("writes out Biome's options itself" in s for s in said)
+
+
+# --- eleventh real-model run ------------------------------------------------
+
+def test_a_split_named_by_demonym_merges_onto_the_race_tags():
+    raw = _raw(items=[
+        _item(name="Race", var="race", tags=["elf", "dwarf", "human"]),
+        *[_item(name=f"{c.title()} Traits", var=f"{c}_traits")
+          for c in ("elven", "dwarven", "human")],
+        _item(kind="template", name="T",
+              about="$race, $elven_traits, $dwarven_traits, $human_traits")])
+    plan = pack.compile_plan(raw)
+    traits = next(i for i in plan["items"] if i["var"] == "traits")
+    assert set(traits["tags"]) == {"elf", "dwarf", "human"}
+    rule = next(i for i in plan["items"] if i["kind"] == "constraint")
+    assert "#elf gets only #elf" in rule["about"]
+
+
+def test_a_boost_only_rule_the_request_says_fits_becomes_only():
+    raw = _raw(items=[
+        _item(name="Class", var="class", tags=["mage", "warrior"]),
+        _item(name="Weapon", var="weapon"),
+        _item(kind="constraint", name="Class Weapon Match", source="class", target="weapon",
+              about="Boost weapons that suit the class"),
+        _item(kind="template", name="T", about="$class, $weapon")])
+    plan = pack.compile_plan(raw, request="heroes with a weapon that fits the class")
+    rule = next(i for i in plan["items"] if i["kind"] == "constraint")
+    assert "gets only" in rule["about"] and "exclude the rest" in rule["about"]
+
+
+def test_a_library_vocabulary_nothing_else_covers_is_made_new():
+    raw = _raw(items=[
+        _item(kind="library", name="Vocabulary (Colors)", var=""),
+        _item(name="Eyes", var="eyes"),
+        _item(kind="template", name="T", about="$eyes")])
+    plan = pack.compile_plan(raw, library=[])
+    assert any(i["name"] == "Colors" for i in plan["items"])
