@@ -575,3 +575,38 @@ def test_locked_seed_distinct_from_chain_seed():
     # Both must be valid options:
     assert out_chain["mood"] in "abcdefghij"
     assert out_locked["mood"] in "abcdefghij"
+
+
+def _write_then_read_payload():
+    return {"rules": [
+        _rule("r1", branches=[{
+            "condition": {"var": "x", "op": "equals", "value": "1"},
+            "action": {"target_var": "setting", "mode": "replace", "value": "a library"},
+        }]),
+        _rule("r2", branches=[{
+            "condition": {"var": "setting", "op": "contains", "value": "library"},
+            "action": {"target_var": "light", "mode": "replace", "value": "lamps in $setting"},
+        }]),
+    ]}
+
+
+@pytest.mark.parametrize("instance", [{}, {"seed_scope": "hold"}])
+def test_later_rule_action_reads_an_earlier_rules_write(instance):
+    out = DerivationHandler.resolve(
+        _write_then_read_payload(), instance, _ctx(x="1", __wp_node_seed__=3),
+    )
+    assert out == {"setting": "a library", "light": "lamps in a library"}
+
+
+def test_extra_action_reads_the_previous_actions_write():
+    payload = {"rules": [_rule("r1", branches=[{
+        "condition": {"var": "x", "op": "equals", "value": "1"},
+        "action": {"target_var": "s", "mode": "replace", "value": "a"},
+        "extra_actions": [
+            {"target_var": "s", "mode": "append", "value": "b"},
+            {"target_var": "t", "mode": "replace", "value": "[$s]"},
+        ],
+    }])]}
+    out = DerivationHandler.resolve(payload, {}, _ctx(x="1"))
+    assert out == {"s": "ab", "t": "[ab]"}
+

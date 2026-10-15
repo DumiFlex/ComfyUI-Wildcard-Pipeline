@@ -417,14 +417,6 @@ def test_derivations_follow_a_constrained_pick_and_feed_each_other():
     assert seen == {"reading indoors", "a picnic", "cycling"}
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "derivation_handler.py resolve(): action values resolve against "
-    "`resolve_ctx`, a snapshot of the vars taken when the module starts "
-    "(build_resolve_ctx copies `_vars`), while conditions read the live ctx. "
-    "So a later rule in the SAME derivation sees an earlier rule's write in "
-    "its condition but reads the stale value in its action: `$setting` "
-    "renders empty (unknown_var)."
-))
 def test_a_later_rule_action_reads_an_earlier_rules_write_in_the_same_module():
     d = _deriv("d3d30001",
                _rule("r1", _branch(_cond("activity", "equals", "reading indoors"),

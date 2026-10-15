@@ -51,7 +51,6 @@ _VALID_OPS = {
     "not_contains", "not_matches",
 }
 _VALID_MATCHES = {"all", "any"}
-_MISSING = object()
 # Groups nest; the editor stops at three levels, the cap here only guards a
 # hand-built payload against runaway recursion.
 _MAX_CONDITION_DEPTH = 8
@@ -641,6 +640,11 @@ class DerivationHandler(ModuleHandler):
             )
 
         out: dict[str, str] = {}
+        # Values this module has written so far, by base variable. Every
+        # action resolves against them, so a later action (in the same branch
+        # or a later rule) reads the earlier write, as conditions already do
+        # through the live ctx.
+        written: dict[str, Any] = {}
         # WP Debug: which branch of each rule fired and why (explain runs only).
         detail = module_detail(ctx)
         explained: list[dict[str, Any]] | None = [] if detail is not None else None
@@ -655,8 +659,10 @@ class DerivationHandler(ModuleHandler):
             carrier = branch_carrier_key(rule_id, key)
             rule_overrides = action_overrides.get(rule_id)
             b_ctx = _branch_resolve_ctx(carrier)
+            vars_view = getattr(b_ctx, "_vars", None)
+            if isinstance(vars_view, dict):
+                vars_view.update(written)
             shown: list[dict[str, Any]] = []
-            saved: dict[str, Any] = {}
             for ai, action in enumerate(clause_actions(clause)):
                 override = (
                     rule_overrides.get(action_override_key(key, ai))
@@ -674,23 +680,13 @@ class DerivationHandler(ModuleHandler):
                 )
                 if pair is not None and pair[1] is not None:
                     out[pair[0]] = pair[1]
-                    # The next action of this branch reads what this one
-                    # wrote. Scoped to the branch (restored below) so rules
-                    # keep resolving their values exactly as before.
-                    vars_view = getattr(b_ctx, "_vars", None)
+                    # The next action (this branch's or a later rule's)
+                    # reads what this one wrote.
+                    base = split_var_accessor(pair[0])[0]
+                    written[base] = pair[1]
                     if isinstance(vars_view, dict):
-                        base = split_var_accessor(pair[0])[0]
-                        if base not in saved:
-                            saved[base] = vars_view.get(base, _MISSING)
                         vars_view[base] = pair[1]
                 shown.append(_explain_action(action, pair))
-            vars_view = getattr(b_ctx, "_vars", None)
-            if isinstance(vars_view, dict):
-                for base, prev in saved.items():
-                    if prev is _MISSING:
-                        vars_view.pop(base, None)
-                    else:
-                        vars_view[base] = prev
             if rd is not None:
                 rd["fired"] = key
                 if shown:
