@@ -45,6 +45,7 @@ import re
 import secrets
 from typing import Any
 
+from engine.ai import adult as ai_adult
 from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
 from engine.ai import guide as ai_guide
@@ -56,7 +57,7 @@ from engine.ai import vocab as ai_vocab
 from engine.ai import wildcard as ai_wildcard
 from engine.modules.combine_handler import CombineHandler
 from engine.modules.constraint_handler import ConstraintHandler
-from engine.modules.derivation_handler import DerivationHandler
+from engine.modules.derivation_handler import NEGATIVE_MODES, DerivationHandler, clause_actions
 from engine.modules.fixed_values_handler import FixedValuesHandler
 from engine.modules.snapshot import payload_hash, walk_transitive_refs
 from engine.modules.wildcard_handler import WildcardHandler
@@ -330,7 +331,11 @@ tags and a constraint from the pick that decides. Variable names: letters, digit
 Plan what the request needs, up to 60 items. Don't add commentary; the \
 output is data for the user's own library.
 
-""" + ai_guide.WHICH + "\n" + ai_guide.NODES + "\n" + ai_guide.COHERENCE
+A pack rated nsfw is for adults only: every character is an adult, and no \
+child, teen, school-age or real-person subject is ever planned.
+
+""" + ai_guide.STRUCTURE + "\n" + ai_guide.BLUEPRINTS + "\n" + ai_guide.WHICH + "\n" \
+    + ai_guide.NODES + "\n" + ai_guide.COHERENCE
 
 
 class PlanError(ValueError):
@@ -2637,7 +2642,8 @@ colours), a negative setting the plan ignores. item is the item's name, or \
 request, else "tip". Say exactly what to change. At most 8 findings; [] \
 when the plan is good. Don't repeat the checker's findings; they are listed.
 
-""" + ai_guide.WHICH + "\n" + ai_guide.NODES + "\n" + ai_guide.COHERENCE
+""" + ai_guide.STRUCTURE + "\n" + ai_guide.WHICH + "\n" + ai_guide.NODES + "\n" \
+    + ai_guide.COHERENCE
 
 
 def review_prompt(plan: dict[str, Any], found: list[dict[str, Any]],
@@ -2711,6 +2717,19 @@ def _pack_line(plan: dict[str, Any]) -> str:
     if plan.get("model"):
         line += f" The image model is {plan['model']}."
     return line
+
+
+def model_lines(plan: dict[str, Any], kind: str) -> str:
+    """How the pack's image model reads a prompt (for items that write prompt
+    text), and the adult-pack rules when the pack is rated nsfw."""
+    out = ""
+    fmt = ai_guide.format_line(plan.get("model") or "")
+    if fmt and kind in ("wildcard", "fixed_values", "template"):
+        out += f"\nThe image model: {fmt}"
+    if plan.get("rating") == "nsfw" and kind in ("wildcard", "fixed_values", "template",
+                                                 "derivation", "combine"):
+        out += "\n" + ai_guide.NSFW.strip()
+    return out
 
 
 def negative_line(plan: dict[str, Any], kind: str) -> str:
@@ -2874,7 +2893,7 @@ def item_request(
             + "".join(f"\nUsed by: {c}" for c in consumers(plan, item))
             + ("\nSpell options exactly as the items above test them, and give them the "
                "tags those items key on." if consumers(plan, item) else "")
-            + _siblings_line(plan, item) + fix,
+            + _siblings_line(plan, item) + model_lines(plan, kind) + fix,
             count=item["count"], name=item["name"], var_binding=item["var"],
             existing_options=[], tags=item["tags"], refs_text=pointers,
         )
@@ -2884,7 +2903,7 @@ def item_request(
     if kind == "derivation":
         idx = ref_index(plan, built, library)
         user = ai_derivation.build_prompt(
-            instruction=item["about"] + fix, name=item["name"],
+            instruction=item["about"] + model_lines(plan, kind) + fix, name=item["name"],
             catalog_text=library_vars.describe(_catalog(plan, built)),
             existing_rules=[], description=_pack_line(plan), refs_text=idx.describe(),
         )
@@ -2907,7 +2926,8 @@ def item_request(
         cat.pop(item["var"], None)
     user = text_items.build_prompt(
         kind=kind, instruction=item["about"] + (
-            negative_line(plan, kind) if kind in ("template", "fixed_values") else "") + fix,
+            negative_line(plan, kind) if kind in ("template", "fixed_values") else "")
+        + model_lines(plan, kind) + fix,
         name=item["name"],
         catalog_text=library_vars.describe(cat), description=_pack_line(plan),
         out_var=item["var"] if kind in ("combine", "fixed_values") else "",
@@ -3145,8 +3165,73 @@ def compile_item(
         warnings = [*warnings, *said, *fixed, *more]
         if plan.get("style") == "tags":
             payload = {**payload, "template_string": tag_commas(payload["template_string"])}
+    if plan.get("rating") == "nsfw":
+        payload, said = _adult_only(kind, payload, plan)
+        warnings += said
     return {"key": key, "id": mid, "kind": kind, "payload": payload,
             "preview": preview, "warnings": warnings, "repair": repair_note(warnings)}
+
+
+def _adult_only(kind: str, payload: dict[str, Any],
+                plan: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """An nsfw pack's item without anything that names a minor, and its
+    template's negative with the youth block. Raises ValueError (so the item
+    is rebuilt with the reason) when nothing would be left."""
+    why = "an adult pack never names a minor"
+
+    def left_out(texts: list[str]) -> str:
+        words = ", ".join(dict.fromkeys(w for t in texts for w in ai_adult.youth_words(t)))
+        more = f" and {len(texts) - 1} more" if len(texts) > 1 else ""
+        return f"Left out \"{texts[0][:40]}\"{more}: {why} ({words})"
+
+    if kind == "wildcard":
+        bad = [o for o in payload.get("options") or [] if not o.get("is_null")
+               and ai_adult.youth_words(str(o.get("value") or ""))]
+        if not bad:
+            return payload, []
+        kept = [o for o in payload["options"] if o not in bad]
+        if not [o for o in kept if not o.get("is_null")]:
+            raise ValueError(f"every option names a minor; {why}")
+        payload = {**payload, "options": kept}
+        WildcardHandler.validate_payload(payload)
+        return payload, [left_out([str(o["value"]) for o in bad])]
+    if kind == "fixed_values":
+        bad = [v for v in payload.get("values") or []
+               if ai_adult.youth_words(str(v.get("value") or ""))]
+        if not bad:
+            return payload, []
+        kept = [v for v in payload["values"] if v not in bad]
+        if not kept:
+            raise ValueError(f"every value names a minor; {why}")
+        return {**payload, "values": kept}, [left_out([str(v["value"]) for v in bad])]
+    if kind == "derivation":
+        def writes(rule: dict[str, Any]) -> list[str]:
+            clauses = [*(rule.get("branches") or []), rule.get("else")]
+            return [str(a.get("value") or "") for c in clauses for a in clause_actions(c)
+                    if a.get("mode") not in NEGATIVE_MODES]
+        bad = [r for r in payload.get("rules") or []
+               if any(ai_adult.youth_words(t) for t in writes(r))]
+        if not bad:
+            return payload, []
+        kept = [r for r in payload["rules"] if r not in bad]
+        if not kept:
+            raise ValueError(f"every rule writes words for a minor; {why}")
+        text = next(t for t in writes(bad[0]) if ai_adult.youth_words(t))
+        return {**payload, "rules": kept}, [left_out([text])]
+    if kind == "combine":
+        if ai_adult.youth_words(str(payload.get("template") or "")):
+            raise ValueError(f"it names a minor; {why}")
+        return payload, []
+    if kind == "template":
+        if ai_adult.youth_words(str(payload.get("template_string") or "")):
+            raise ValueError(f"the prompt names a minor; {why}")
+        neg, added = ai_adult.with_youth_negative(str(payload.get("negative_template") or ""),
+                                                  plan.get("style") or "tags")
+        if added:
+            payload = {**payload, "negative_template": neg}
+            return payload, ["Added " + ", ".join(added) + " to the negative: the pack is "
+                             "rated nsfw"]
+    return payload, []
 
 
 # The planner's own conditions written into the prompt text: "If $outer

@@ -54,7 +54,7 @@ MAX_SEED = 2**53 - 1
 _KINDS = {
     "pick": ("wildcard",), "sep": ("wildcard",), "filter": ("wildcard",),
     "no empty": ("wildcard",), "match": ("wildcard",),
-    "hold": ("wildcard", "combine", "fixed_values"),
+    "hold": ("wildcard", "combine", "fixed_values", "derivation"),
     "internal": ("wildcard", "combine", "derivation"),
     "as": ("wildcard", "combine"),
     "only options": ("wildcard",), "off options": ("wildcard",),

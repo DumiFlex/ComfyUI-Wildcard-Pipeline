@@ -53,7 +53,7 @@ export const INSTANCE_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly Instance
     // Model-aware pipelines: pick the option equal to `$<match_variable>`.
     "match_variable",
   ],
-  fixed_values: ["values_overrides", "enabled_options", "locked_seed", "seed_scope"],
+  fixed_values: ["values_overrides", "enabled_options", "locked_seed", "seed_scope", "internal"],
   combine: ["template_override", "negative_override", "variable_binding", "locked_seed", "seed_scope", "internal"],
   derivation: [
     // Tier-D modal expansion (2026-05-10):
@@ -66,6 +66,8 @@ export const INSTANCE_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly Instance
     "rule_order_override",
     "locked_seed",
     "internal",
+    // Hold (the node offers it): freezes the {a|b} dice in each branch.
+    "seed_scope",
   ],
   constraint: [
     // Existing v1 disable lists (preserved):
