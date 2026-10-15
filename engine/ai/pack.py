@@ -595,9 +595,10 @@ def compile_plan(
             if isinstance(x.get("about"), str):
                 x["about"] = pat.sub("", x["about"])
     raw_items = _merge_splits(raw_items, warnings)
-    raw_items = _case_rules(raw_items, warnings)
+    raw_items = _case_rules(raw_items, warnings, _var(raw.get("anchor")))
     if request:
         raw_items = _fit_rules(raw_items, request, warnings)
+        _never_from_request(raw_items, request, warnings)
     known_sides = {_var(x.get("var")): _clean(x.get("name"), MAX_NAME)
                    for x in raw_items if _var(x.get("var"))}
     known_sides.update({i["var"]: i["var"] for i in inputs})
@@ -1647,11 +1648,16 @@ def _merge_splits(raw_items: list[dict[str, Any]],
         items.insert(at, merged)
         taken.add(role)
         pat = re.compile(r"\$(?:" + "|".join(map(re.escape, old_vars)) + r")\b")
+        # "boost tundra_animal" (the part's name without $) is its case's tag.
+        bare = {_var(m.get("var")): c for c, m in cases.items()}
+        bare_pat = re.compile(r"(?<![$\w])(?:" + "|".join(map(re.escape, bare)) + r")\b")
         for x in items:
             for field in ("about", "use"):
                 if isinstance(x.get(field), str):
                     x[field] = _once(_dynamic_ref(role).sub(
                         f"${role}", pat.sub(f"${role}", x[field])), role)
+                    if x.get("kind") == "constraint":
+                        x[field] = bare_pat.sub(lambda m, b=bare: "#" + b[m.group(0)], x[field])
             if x.get("kind") == "constraint":
                 for side in ("source", "target"):
                     if _var(x.get(side)) in old_vars:
@@ -1662,8 +1668,8 @@ def _merge_splits(raw_items: list[dict[str, Any]],
         same = [x for x in items if x.get("kind") == "constraint"
                 and _var(x.get("source")) == src and _var(x.get("target")) == role]
         if len(same) > 1:
-            same[0]["about"] = "; ".join(dict.fromkeys(
-                str(x.get("about") or "").strip() for x in same if x.get("about")))[:MAX_ABOUT]
+            same[0]["about"] = _cut("; ".join(dict.fromkeys(
+                str(x.get("about") or "").strip() for x in same if x.get("about"))), MAX_ABOUT)
             items = [x for x in items if x not in same[1:]]
         if not any(x.get("kind") == "constraint" and _var(x.get("source")) == src
                    and _var(x.get("target")) == role for x in items):
@@ -1694,53 +1700,78 @@ def _names(x: dict[str, Any], words: list[str]) -> list[str]:
             if re.search(r"\b" + re.escape(w.replace("_", " ")) + r"s?\b", text)]
 
 
-def _case_rules(raw_items: list[dict[str, Any]],
-                warnings: list[str]) -> list[dict[str, Any]]:
+def _case_rules(raw_items: list[dict[str, Any]], warnings: list[str],
+                anchor: str = "") -> list[dict[str, Any]]:
     """Options tagged by the cases another pick names (tops tagged winter /
     summer next to a season wildcard) follow that pick: a "#winter gets
     only #winter" rule is added, or added to the rule already between
-    them. Tags nothing enforces leave a wool sweater in summer."""
+    them. Tags nothing enforces leave a wool sweater in summer. One pick
+    keeps each wildcard (the one already ruling it, else the first), so
+    three picks tagged by biome don't all get rules into the weather.
+
+    A wildcard the anchor already rules by name only ("winter: fewer
+    shorts") with none of the anchor's cases in its tags gets them too,
+    so every option is tagged with the seasons it fits."""
     wild = [x for x in raw_items if x.get("kind") == "wildcard" and _var(x.get("var"))]
     items = list(raw_items)
+
+    def rule_of(sv: str, tv: str) -> dict[str, Any] | None:
+        return next((x for x in items if x.get("kind") == "constraint"
+                     and _var(x.get("source")) == sv and _var(x.get("target")) == tv), None)
+
     for w in wild:
+        tv = _var(w.get("var"))
         tags = [str(t).lower() for t in w.get("tags") or [] if str(t).strip()]
+        lead = next((x for x in wild if _var(x.get("var")) == anchor and x is not w), None)
+        lead_rule = rule_of(anchor, tv) if lead else None
+        lead_tags = [str(t).lower() for t in (lead or {}).get("tags") or []]
+        if lead_rule is not None and len(lead_tags) >= 2 and not set(lead_tags) & set(tags) \
+                and "#" not in str(lead_rule.get("about") or ""):
+            w["tags"] = [*(w.get("tags") or []), *lead_tags]
+            tags = [*tags, *lead_tags]
+            w["about"] = _cut(str(w.get("about") or "").rstrip(". ") + ". Tag every option "
+                              f"with the {lead.get('name') or anchor} it fits.", MAX_ABOUT)
         if len(tags) < 2:
             continue
+        found = []
         # The pick that decides comes first in the plan (season, then tops).
-        for src in wild[:wild.index(w)]:
+        for src in wild[:wild.index(w)] + ([lead] if lead and lead not in wild[
+                :wild.index(w)] else []):
             cases = _names(src, tags)
             own = {str(t).lower() for t in src.get("tags") or []}
             # The source must be about the cases: two of its own tags, or
             # three of them in its name or description.
             if len(set(cases) & own) < 2 and len(cases) < 3:
                 continue
-            sv, tv = _var(src.get("var")), _var(w.get("var"))
-            if any(x.get("kind") == "constraint" and _var(x.get("source")) == tv
-                   and _var(x.get("target")) == sv for x in items):
-                continue
-            rule = next((x for x in items if x.get("kind") == "constraint"
-                         and _var(x.get("source")) == sv and _var(x.get("target")) == tv),
-                        None)
-            about = str((rule or {}).get("about") or "")
-            missing = [c for c in cases if not re.search(
-                "#" + re.escape(c) + r"\b[^;]*#" + re.escape(c) + r"\b", about.lower())]
-            if not missing:
-                continue
-            said = "; ".join(f"#{c} gets only #{c}" for c in missing)
-            if rule is None:
-                items.insert(items.index(w), {
-                    "kind": "constraint", "name": f"{src.get('name') or sv} → "
-                    f"{w.get('name') or tv}", "source": sv, "target": tv, "about": said,
-                    "section": w.get("section") or "", "use": ""})
-                warnings.append(f"Added a rule keeping {w.get('name') or tv} to the "
-                                f"{src.get('name') or sv} pick: its options are tagged "
-                                + ", ".join(f"#{c}" for c in missing))
-            else:
-                rule["about"] = (about.rstrip("; ") + "; " + said if about else said
-                                 )[:MAX_ABOUT]
-                warnings.append(f"{rule.get('name') or 'A rule'} now also keeps "
-                                f"{w.get('name') or tv} to its #"
-                                + ", #".join(missing) + " options")
+            sv = _var(src.get("var"))
+            if rule_of(tv, sv) is not None:
+                found = []
+                break
+            found.append((src, cases, rule_of(sv, tv)))
+        if not found:
+            continue
+        src, cases, rule = next((f for f in found if f[2] is not None), found[0])
+        sv = _var(src.get("var"))
+        about = str((rule or {}).get("about") or "")
+        missing = [c for c in cases if not re.search(
+            "#" + re.escape(c) + r"\b[^;]*#" + re.escape(c) + r"\b", about.lower())]
+        if not missing:
+            continue
+        said = "; ".join(f"#{c} gets only #{c}" for c in missing)
+        if rule is None:
+            items.insert(items.index(w), {
+                "kind": "constraint", "name": f"{src.get('name') or sv} → "
+                f"{w.get('name') or tv}", "source": sv, "target": tv, "about": said,
+                "section": w.get("section") or "", "use": ""})
+            warnings.append(f"Added a rule keeping {w.get('name') or tv} to the "
+                            f"{src.get('name') or sv} pick: its options are tagged "
+                            + ", ".join(f"#{c}" for c in missing))
+        else:
+            rule["about"] = _cut(about.rstrip("; ") + "; " + said if about else said,
+                                 MAX_ABOUT)
+            warnings.append(f"{rule.get('name') or 'A rule'} now also keeps "
+                            f"{w.get('name') or tv} to its #"
+                            + ", #".join(missing) + " options")
     return items
 
 
@@ -1788,6 +1819,62 @@ def _fit_rules(raw_items: list[dict[str, Any]], request: str,
         warnings.append(f"Added a rule from {src.get('name') or sv} to "
                         f"{tgt.get('name') or tv}: the request says one fits the other")
     return items
+
+
+_STOP = {"when", "with", "that", "this", "than", "then", "from", "into", "only", "never",
+         "odds", "reduce", "lower", "exclude", "rule", "rules", "picks", "pick", "options",
+         "option", "gets", "have", "should", "would", "each", "every", "make", "less",
+         "fewer", "rarer", "rarely", "chance", "likely"}
+
+
+def _stems(text: str) -> set[str]:
+    out = set()
+    for w in re.findall(r"[a-z]{3,}", text.lower().replace("_", " ")):
+        w = w[:-3] + "f" if w.endswith("ves") else w[:-2] if w.endswith("es") \
+            and len(w) > 4 else w[:-1] if w.endswith("s") and len(w) > 3 else w
+        if w not in _STOP:
+            out.add(w)
+    return out
+
+
+_NEGATED = re.compile(r"\b(?:no|never|not|without|can'?t|cannot|don'?t|doesn'?t|won'?t|"
+                      r"shouldn'?t|nothing)\b[^.;:!?\n]{0,60}", re.I)
+_SOFTEN = re.compile(r"\b(?:reduces?|reduced|reducing|lowers?|lowered|lessens?)\s+(?:the\s+)?"
+                     r"(?:odds|chances?|likelihood|weight|frequency)\s+(?:of|for)\b|"
+                     r"\b(?:make|makes)\s+(\w+(?:\s+\w+)?)\s+(?:rarer|less likely)\b|"
+                     r"\b(?:rarely|less often|seldom|unlikely)\b", re.I)
+
+
+def _never_from_request(raw_items: list[dict[str, Any]], request: str,
+                        warnings: list[str]) -> None:
+    """The request says "no sandals in winter" and the planner wrote the
+    rule as "reduce odds of sandals": the rule says never again, so its
+    pairs are excluded instead of made rarer."""
+    said = [_stems(m.group(0)) for m in _NEGATED.finditer(request)]
+    if not said:
+        return
+    for x in raw_items:
+        if x.get("kind") != "constraint":
+            continue
+        about = str(x.get("about") or "")
+        if not _SOFTEN.search(about) and not re.search(r"\breduce", about, re.I):
+            continue
+        words = _stems(f"{x.get('name') or ''} {about}")
+        if not any(len(words & s) >= 2 for s in said):
+            continue
+        x["about"] = (_SOFTEN.sub(lambda m: f"never allow {m.group(1)}" if m.group(1)
+                                  else "never allow", about).rstrip(". ")
+                      + ". Never: exclude it, as the request says")[:MAX_ABOUT]
+        warnings.append(f"{x.get('name') or 'A rule'} excludes instead of reducing: the "
+                        "request says never")
+
+
+def _cut(text: str, limit: int) -> str:
+    """``text`` cut to ``limit`` at a clause end ("; "), never mid-tag."""
+    if len(text) <= limit:
+        return text
+    at = text.rfind("; ", 0, limit)
+    return text[:at] if at > 0 else text[:limit]
 
 
 def _once(text: str, var: str) -> str:
@@ -2383,6 +2470,7 @@ def compile_item(
         payload, said = read_rolled(plan, built, payload)
         warnings += said
         warnings += _append_onto_nothing(plan, key, built, payload)
+        warnings += _second_rolls(plan, payload)
         DerivationHandler.validate_payload(payload)
         preview = [ai_derivation.describe_rule(r) for r in payload["rules"]]
         warnings += list(dict.fromkeys(w for r in compiled["rules"] for w in r["warnings"]))
@@ -2508,6 +2596,26 @@ def _append_onto_nothing(plan: dict[str, Any], key: str, built: dict[str, Any],
                 a["mode"] = "replace"
                 a["value"] = str(a.get("value") or "").strip().strip(",").strip()
         said.append(f"Sets ${var} instead of adding to it: nothing sets it before")
+    return said
+
+
+def _second_rolls(plan: dict[str, Any], payload: dict[str, Any]) -> list[str]:
+    """A rule that writes a wildcard's own variable with an ``@{…}`` pick
+    rolls that wildcard a second time and throws the first pick away."""
+    wild = {i["var"]: i["name"] for i in plan["items"] if is_wild(i)}
+    said = []
+    for rule in payload["rules"]:
+        for clause in [*(rule.get("branches") or []), rule.get("else")]:
+            if not isinstance(clause, dict):
+                continue
+            for a in [clause.get("action"), *(clause.get("extra_actions") or [])]:
+                var = a.get("target_var") if isinstance(a, dict) else None
+                if var in wild and "@{" in str(a.get("value") or ""):
+                    note = (f"It writes ${var} with a new pick (@{{…}}), rolling "
+                            f"{wild[var]} a second time; leave ${var} to its wildcard "
+                            "(a constraint picks it by case)")
+                    if note not in said:
+                        said.append(note)
     return said
 
 
@@ -2653,7 +2761,7 @@ _STOP = {"the", "and", "with", "type", "list", "option", "options", "pack", "wil
 #: rest of the pack (a rule tests a value or tag that isn't there).
 _REPAIRABLE = re.compile(r"has no option|No option carries|unknown tag|nothing sets|"
                          r"already rolls|no rule is an only|joins picks with|"
-                         r"isn't an option or tag|"
+                         r"isn't an option or tag|a second time|"
                          r"isn't set|not a variable|doesn't set|which no", re.I)
 
 

@@ -711,3 +711,79 @@ def test_an_outfit_that_already_names_the_shoes_is_a_problem():
         {"id": "s3", "value": "boots", "weight": 1}]
     out = pack._overlaps(plan, built, "$outfit, $shoes")
     assert "sneakers" in out[keys["outfit"]] and keys["shoes"] not in out
+
+
+# --- eighth real-model run --------------------------------------------------
+
+def test_a_never_in_the_request_beats_a_reduce_in_the_plan():
+    raw = _raw(items=[
+        _item(name="Season", var="season", tags=["winter", "summer"]),
+        _item(name="Footwear", var="footwear"),
+        _item(kind="constraint", name="Winter Footwear", source="season", target="footwear",
+              about="When season is winter, reduce odds of sandals."),
+        _item(kind="constraint", name="Summer Shoes", source="season", target="footwear",
+              about="When season is summer, reduce odds of boots."),
+        _item(kind="template", name="T", about="$season, $footwear")])
+    plan = pack.compile_plan(raw, request="seasonal outfits, no sandals in winter")
+    rules = {i["name"]: i["about"] for i in plan["items"] if i["kind"] == "constraint"}
+    assert "reduce odds" not in rules["Winter Footwear"]
+    assert "never" in rules["Winter Footwear"].lower()
+    assert "reduce odds of boots" in rules["Summer Shoes"]
+
+
+def test_the_anchor_tags_a_wildcard_it_only_rules_by_name():
+    raw = _raw(items=[
+        _item(name="Seasons", var="season", tags=["winter", "summer", "autumn"]),
+        _item(name="Tops", var="top", tags=["sweater", "t-shirt"]),
+        _item(kind="constraint", name="Summer Tops", source="season", target="top",
+              about="When season is summer, fewer sweaters."),
+        _item(kind="template", name="T", about="$season, $top")])
+    raw["anchor"] = "season"
+    plan = pack.compile_plan(raw)
+    top = next(i for i in plan["items"] if i["var"] == "top")
+    assert {"winter", "summer", "autumn"} <= set(top["tags"])
+    rule = next(i for i in plan["items"] if i["kind"] == "constraint")
+    assert "#winter gets only #winter" in rule["about"] and "sweaters" in rule["about"]
+
+
+def test_one_pick_keeps_each_case_tagged_wildcard():
+    cases = ["tundra", "forest", "desert"]
+    raw = _raw(items=[
+        _item(name="Biome", var="habitat", tags=cases),
+        _item(name="Animal", var="animal", tags=cases),
+        _item(name="Weather", var="weather", tags=cases),
+        _item(kind="template", name="T", about="$habitat, $animal, $weather")])
+    plan = pack.compile_plan(raw)
+    into = [i["source"] for i in plan["items"]
+            if i["kind"] == "constraint" and i["target"] == "weather"]
+    assert into == ["habitat"]
+
+
+def test_a_merged_part_named_without_dollar_becomes_its_tag_and_abouts_cut_cleanly():
+    cases = ("forest", "desert", "arctic")
+    raw = _raw(items=[
+        _item(name="Biome", var="biome", tags=list(cases)),
+        *[_item(name=f"{c.title()} Animal", var=f"{c}_animal") for c in cases],
+        _item(kind="constraint", name="Habitat to Fauna", source="biome",
+              target="forest_animal", about="When biome is forest, boost forest_animal; "
+              "when desert, boost desert_animal"),
+        _item(kind="template", name="T", about="$forest_animal $desert_animal $arctic_animal")])
+    plan = pack.compile_plan(raw)
+    rule = next(i for i in plan["items"] if i["kind"] == "constraint")
+    assert "boost #forest" in rule["about"] and "_animal" not in rule["about"]
+    assert pack._cut("#a gets only #a; #mountain gets only #mountain", 30) == \
+        "#a gets only #a"
+
+
+def test_a_rule_that_rolls_a_wildcard_again_is_sent_back():
+    raw = _raw(items=[
+        _item(name="Outerwear", var="outerwear"),
+        _item(kind="derivation", name="Outfit", var="outfit_description",
+              about="Writes $outerwear for winter"),
+        _item(kind="template", name="T", about="$outerwear")])
+    plan = pack.compile_plan(raw)
+    payload = {"rules": [{"branches": [{"condition": {}, "action": {
+        "target_var": "outerwear", "mode": "replace", "value": "@{Outerwear:heavy}"}}]}]}
+    said = pack._second_rolls(plan, payload)
+    assert said and "a second time" in said[0]
+    assert pack.repair_note(said)
