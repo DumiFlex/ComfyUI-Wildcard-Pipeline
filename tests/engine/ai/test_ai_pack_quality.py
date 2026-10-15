@@ -1234,3 +1234,15 @@ def test_a_rule_planned_the_wrong_way_is_turned_around_by_the_request():
     rule = next(x for x in out if x["kind"] == "constraint")
     assert (rule["source"], rule["target"]) == ("animal", "biome")
     assert any("Turned Biome → Animal around" in w for w in warnings)
+
+
+# --- eighteenth real-model run ----------------------------------------------
+
+def test_labels_doubled_words_and_list_options_go():
+    text, said = pack._plan_prose("$season, Footwear: $shoes, wearing wearing $top. "
+                                  "Layering note: $coat")
+    assert "Footwear" not in text and "Layering" not in text and "wearing wearing" not in text
+    assert said and pack._plan_prose("($top:1.2), $coat")[0] == "($top:1.2), $coat"
+    opts = [{"value": v} for v in ("staff", "wand", "sword", "axe",
+                                   "staff, wand, sword, axe, bow")]
+    assert pack._list_options(opts) == [opts[-1]]

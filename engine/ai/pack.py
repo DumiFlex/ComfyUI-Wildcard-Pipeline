@@ -2752,6 +2752,11 @@ def compile_item(
                                      or t in {x for v in (payload.get("tag_groups") or {})
                                               .values() for x in v}]
         warnings += _wrap_pipes(payload.get("options") or [])
+        lists = _list_options(payload["options"])
+        if lists and len(lists) < len(payload["options"]):
+            payload["options"] = [o for o in payload["options"] if o not in lists]
+            warnings.append(f"Left out \"{lists[0]['value'][:40]}…\": one option that lists "
+                            "the others prints them all at once")
         empty = [o for o in payload["options"] if isinstance(o.get("value"), str)
                  and _PLACEHOLDER.search(o["value"])]
         if empty and len(empty) < len(payload["options"]):
@@ -2887,6 +2892,10 @@ def compile_item(
 _PROSE = re.compile(r"(?:^|(?<=[.,;]))\s*\(?\s*(?:if|when|only if)\s+[^.,;:()]{1,40}?"
                     r"\s+(?:is|are)\s+(?:present|set|given|there|not empty|non-empty|"
                     r"available|used|picked|rolled)\s*\)?\s*[:,]\s*", re.I)
+# "Footwear: $shoes", "Layering note: …": a label printed as prompt text.
+# Weights ("(word:1.2)") have no space after the colon.
+_LABEL = re.compile(r"(?:^|(?<=[.,;]))\s*[A-Za-z][A-Za-z ]{1,24}:\s+")
+_TWICE = re.compile(r"\b([A-Za-z]{3,})\s+\1\b", re.I)
 _PROSE_TAIL = re.compile(r"\s*\(\s*(?:if\s+(?:any|present|set|given|available)|optional)"
                          r"\s*\)", re.I)
 # A phrase that ends on its article ("wielding a,"): the word after it is gone.
@@ -2915,14 +2924,17 @@ def _lead_with_anchor(text: str, plan: dict[str, Any],
 
 def _plan_prose(text: str) -> tuple[str, list[str]]:
     """``text`` without the planner's conditions ("If $x is present:",
-    "(if any)"); the empty-variable tidy already drops a phrase whose
-    variable is empty."""
+    "(if any)"), labels ("Footwear: $shoes", "Layering note:") and a
+    doubled word ("wearing wearing"); the empty-variable tidy already
+    drops a phrase whose variable is empty."""
     bare = _PROSE_TAIL.sub("", _PROSE.sub(" ", text))
+    bare = _LABEL.sub(" ", bare)
+    bare = _TWICE.sub(r"\1", bare)
     if bare == text:
         return text, []
     bare = re.sub(r"\s{2,}", " ", bare).strip()
-    return bare, ["Took out the plan's own condition (\"If … is present:\"): it printed "
-                  "as a sentence in every prompt"]
+    return bare, ["Took out the plan's own condition or label (\"If … is present:\", "
+                  "\"Footwear:\"): it printed as text in every prompt"]
 
 
 def _dangling(text: str, plan: dict[str, Any], item: dict[str, Any],
@@ -3066,6 +3078,21 @@ def _plan_only_withs(item: dict[str, Any], src: dict[str, Any], tgt: dict[str, A
 # An option that stands for "nothing" ("no color variation", "none").
 _PLACEHOLDER = re.compile(r"^\s*(?:none|n/?a|nothing|no\s+(?:\w+\s+){0,2}"
                           r"(?:variation|change|modifier|extra|accent)s?)\s*$", re.I)
+
+
+def _list_options(options: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Options that are a list of the others ("staff, wand, sword, axe")."""
+    heads = [(o, sorted(_chunks(str(o.get("value") or "")))[:1]) for o in options]
+    out = []
+    for o, _ in heads:
+        parts = [re.sub(r"\s+", " ", x).strip().lower()
+                 for x in str(o.get("value") or "").split(",")]
+        others = {h[0] for p, h in heads if p is not o and h}
+        named = {p for p in parts if p in others or any(
+            re.search(r"(?<!\w)" + re.escape(p) + r"(?!\w)", h) for h in others if len(p) >= 3)}
+        if len(parts) >= 4 and len(named) >= 3:
+            out.append(o)
+    return out
 
 
 def _wrap_pipes(rows: list[Any]) -> list[str]:
