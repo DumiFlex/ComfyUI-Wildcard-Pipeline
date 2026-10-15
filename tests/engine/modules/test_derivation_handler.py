@@ -610,3 +610,18 @@ def test_extra_action_reads_the_previous_actions_write():
     out = DerivationHandler.resolve(payload, {}, _ctx(x="1"))
     assert out == {"s": "ab", "t": "[ab]"}
 
+
+
+@pytest.mark.parametrize(("mode", "value", "start", "want"), [
+    ("append", ", watch", "tie", "tie, watch"),
+    ("append", ", watch", "", "watch"),
+    ("prepend", "hat, ", "", "hat"),
+    ("prepend", "hat, ", "scarf", "hat, scarf"),
+])
+def test_adding_to_an_empty_variable_drops_the_joining_separator(mode, value, start, want):
+    ctx = _ctx(acc=start)
+    payload = {"rules": [_rule(branches=[{
+        "condition": {"var": "missing", "op": "not_exists", "value": ""},
+        "action": {"target_var": "acc", "mode": mode, "value": value},
+    }])]}
+    assert DerivationHandler.resolve(payload, instance={}, ctx=ctx) == {"acc": want}

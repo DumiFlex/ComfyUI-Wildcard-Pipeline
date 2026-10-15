@@ -109,8 +109,7 @@ missing or empty. These take value "".
 
 Actions:
 - replace: set target_var to value. append / prepend: add value after / \
-before what target_var already holds (include a leading ", " when appending \
-to a list of tags).
+before what target_var already holds (a ", " between them is added for you).
 - negative: add value to target_var's negative prompt. negative_replace: make \
 value its only negative.
 - value is prompt text. It may read variables as $name, and also \
