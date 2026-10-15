@@ -897,13 +897,6 @@ def test_negatives_of_an_internal_variable_follow_a_public_reader():
 # ── 14. module rng streams ───────────────────────────────────────────────
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "fixed_values_handler.py:185 keys its rng on ctx['__wp_module_id__'], "
-    "which nothing sets (pipeline.py sets __wp_current_module_id__), so every "
-    "fixed-values module falls back to the literal 'fixed_values' stream: two "
-    "modules with the same {a|b|...} alternation always land on the same "
-    "value, despite the comment promising independent streams."
-))
 def test_two_fixed_values_modules_roll_independently():
     alt = "{" + "|".join(str(i) for i in range(8)) + "}"
     fa = _fixed("fa000001", [{"id": "a", "name": "a", "value": alt}])
@@ -912,11 +905,6 @@ def test_two_fixed_values_modules_roll_independently():
     assert same < len(SEEDS) // 2, same
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "derivation_handler.py resolve() keys its rng on ctx['__wp_module_id__'] "
-    "(never set), so every derivation shares the 'derivation' stream and two "
-    "derivations with the same {a|b|...} action always pick alike."
-))
 def test_two_derivations_roll_independently():
     alt = "{" + "|".join(str(i) for i in range(8)) + "}"
 
@@ -959,13 +947,13 @@ def test_a_wildcard_reached_only_through_a_ref_cannot_be_a_constraint_source():
     assert colors == {"red", "orange", "blue", "teal"}
 
 
-def test_two_wildcards_bound_to_the_same_variable_share_one_rng_stream():
-    # The pick rng is keyed on (seed, binding), not on the module, so two
-    # wildcards with the same binding and option list roll the same option on
-    # every seed: a "re-roll $hair" further down the chain repeats the first.
+def test_two_wildcards_bound_to_the_same_variable_roll_on_their_own():
+    # Each module instance has its own stream: a "re-roll $hair" further down
+    # the chain is a new pick, not a repeat of the first (it used to be keyed
+    # on the binding, so the two always matched).
     first = _wc("4a190001", "hair", [_opt(f"h{i}") for i in range(10)])
     echo = _combine("4a190002", "before", "$hair")
     second = _wc("4a190003", "hair", [_opt(f"h{i}") for i in range(10)])
-    for seed in SEEDS:
-        ctx = _run([first, echo, second], seed)
-        assert ctx["before"] == ctx["hair"]
+    runs = [_run([first, echo, second], seed) for seed in SEEDS]
+    same = sum(ctx["before"] == ctx["hair"] for ctx in runs)
+    assert same < len(SEEDS) // 2
