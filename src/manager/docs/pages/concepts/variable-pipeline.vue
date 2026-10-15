@@ -84,7 +84,8 @@ import DocRef from "../../../components/docs/DocRef.vue";
           <tr>
             <td><VarToken kind="inline">{N$$sep$$a|b|c}</VarToken></td>
             <td>all text fields</td>
-            <td>Multi-pick: picks <em>N</em> items joined by <em>sep</em>.
+            <td>Multi-pick: picks <em>N</em> items joined by <em>sep</em>. Without a separator
+              (<code>{2$$a|b|c}</code>) they are joined by a comma.
               <VarToken kind="inline">{N-M$$sep$$…}</VarToken> picks a random count in the
               <em>N–M</em> range. Default is UNIQUE (no repeats); add <code>~</code>
               (<VarToken kind="inline">{N~$$…}</VarToken> / <VarToken kind="inline">{N-M~$$…}</VarToken>)

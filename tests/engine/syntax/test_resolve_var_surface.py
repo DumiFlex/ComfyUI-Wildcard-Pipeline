@@ -82,3 +82,8 @@ def test_internal_dunder_var_never_warns():
     result = resolve_text("$__wp_internal__", ctx)
     assert result == ""
     assert not any(w.get("type") == "var_out_of_surface" for w in ctx.warnings)
+
+
+def test_out_of_surface_var_keeps_its_accessor():
+    ctx = _FakeCtx("wildcard", vars_={"c": "red"})
+    assert resolve_text("$c.0 and $c.neg", ctx) == "$c.0 and $c.neg"

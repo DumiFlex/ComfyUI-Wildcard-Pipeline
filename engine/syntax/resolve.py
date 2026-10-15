@@ -177,7 +177,8 @@ def _resolve_var(tok: Token, ctx: ResolveContext) -> str:
                 f"combine / derivation / assembler surfaces support $var reads"
             ),
         )
-        return f"${name}"
+        # As written, accessor included (`$c.0` stays `$c.0`, not `$c`).
+        return tok.raw
     # An axis read is a different lookup against a different bucket, so it
     # branches BEFORE the var lookup — `$outfit.SHOES` must resolve even when
     # nothing bound `$outfit` itself, and must not raise `unknown_var` on the

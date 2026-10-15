@@ -202,3 +202,9 @@ def test_the_draft_prompt_names_accepts_groups():
                                 axes={"SHOES": ["boots"]}, kinds={"SHOES": "accepts"})
     assert "Tag group SHOES (accepts: what an option goes with): boots" in text
     assert "accepts" in w.draft_prompt() and w.DRAFT_SCHEMA["required"] == ["axes", "options"]
+
+
+def test_a_bang_in_a_ref_filter_is_stored_as_not():
+    idx = refs.RefIndex([COLORS])
+    assert refs.compile_refs("@{Colors:!warm}", idx) == "@{c0c0c0c0#Colors:not warm}"
+    assert refs.compile_refs("@{Colors:!warm!null}", idx) == "@{c0c0c0c0#Colors:not warm!null}"
