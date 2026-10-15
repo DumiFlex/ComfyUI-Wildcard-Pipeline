@@ -3132,6 +3132,9 @@ def compile_item(
                 seen_rules.add(same)
                 rules.append(r["rule"])
         payload = {"rules": rules}
+        from engine.ai import pack_tidy
+        payload, joined = pack_tidy.merge_lookup(payload)
+        warnings += joined
         if isinstance(answer, dict) and answer.get("_cut_off"):
             warnings.append("The answer was cut off at the output limit; kept the rules it "
                             "finished")
@@ -4455,6 +4458,10 @@ def check_pack(
             problems.setdefault(k, []).append(said)
         for k, said in _printed_names(plan, built, runs, text, neg).items():
             problems.setdefault(k, []).append(said)
+        from engine.ai import pack_tidy
+        tested = pack_tidy.runs(plan, built, library=library, base=base)
+        for k, said in pack_tidy.rule_breaks(plan, built, tested).items():
+            problems.setdefault(k, []).append(said)
         if braces:
             problems.setdefault(item["key"], []).append(
                 "the prompt shows { } or @{ } as written: a variable it reads holds a pick "
@@ -5321,10 +5328,34 @@ async def run_pack(
             return True
         return False
 
+    from engine.ai import pack_tidy
+
     for key in build_order(plan):
-        if not await build(key):
-            failed.append(key)
-    report = check_pack(plan, built, seeds=seeds, library=library) if built else None
+        if await build(key):
+            continue
+        if _item(plan, key)["kind"] == "template":
+            # As the manager does on the template's second failure.
+            try:
+                out = pack_tidy.fallback_item(plan, key, built, "both tries failed",
+                                              library=library)
+            except ValueError as e:
+                log.append(f"{key}: {e}")
+            else:
+                built[key] = {"id": out["id"], "payload": out["payload"]}
+                log.append(f"{key}: wrote a plain template")
+                continue
+        failed.append(key)
+
+    def checked() -> dict[str, Any] | None:
+        nonlocal built
+        if not built:
+            return None
+        built, tidied = pack_tidy.tidy(plan, built, library=library)
+        for k, t in tidied.items():
+            log.extend(f"{k} tidy: {w}" for w in t["warnings"])
+        return check_pack(plan, built, seeds=seeds, library=library)
+
+    report = checked()
     for _ in range(repairs):
         if not report or not report["problems"]:
             break
@@ -5337,5 +5368,5 @@ async def run_pack(
                     for c in plan["items"]:
                         if c["kind"] == "constraint" and w["var"] in (c["source"], c["target"]):
                             await build(c["key"])
-        report = check_pack(plan, built, seeds=seeds, library=library)
+        report = checked()
     return {"plan": plan, "built": built, "check": report, "log": log, "failed": failed}

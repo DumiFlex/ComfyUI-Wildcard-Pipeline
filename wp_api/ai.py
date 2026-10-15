@@ -60,7 +60,7 @@ from engine.ai import describe as ai_describe
 from engine.ai import docs as ai_docs
 from engine.ai import followup as ai_followup
 from engine.ai import index as ai_index
-from engine.ai import library_vars, text_items
+from engine.ai import library_vars, pack_tidy, text_items
 from engine.ai import lint as ai_lint
 from engine.ai import organize as ai_organize
 from engine.ai import pack as ai_pack
@@ -2583,21 +2583,31 @@ async def post_pack_item(request: web.Request) -> web.Response:
     vocab_line = ai_pack.item_vocab_note(plan, key, _ai_vocab.lookup, kinds)
     if vocab_line:
         req["user"] += "\n\n" + vocab_line
-    try:
-        answer = await _ai_client.complete_json(cfg, **req)
-    except _ai_client.AIError as e:
-        return json_error(e.message, status=e.status)
+    # The template's second try: when the model fails again, a plain one
+    # (every pick in order) keeps the pack rendering.
+    last_try = next(i for i in plan["items"] if i["key"] == key)["kind"] == "template" \
+        and note.startswith("your last answer failed")
     old = built.get(key)
     try:
+        answer = await _ai_client.complete_json(cfg, **req)
         out = ai_pack.compile_item(
             plan, key, built, answer, taken={b["id"] for b in built.values()},
             item_id=old["id"] if old else "", library=library,
         )
-    except ValueError as e:
-        return json_error(
-            f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
-            status=502,
-        )
+    except (_ai_client.AIError, ValueError) as e:
+        why = e.message if isinstance(e, _ai_client.AIError) else str(e)
+        if last_try:
+            try:
+                out = pack_tidy.fallback_item(plan, key, built, why, library=library)
+            except ValueError as e2:
+                return json_error(f"the model's answer couldn't be used ({e2})", status=502)
+        elif isinstance(e, _ai_client.AIError):
+            return json_error(e.message, status=e.status)
+        else:
+            return json_error(
+                f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
+                status=502,
+            )
     checked = ai_pack.tag_check_note(plan, out["kind"], out["payload"], _ai_vocab.lookup,
                                      kinds)
     if checked:
@@ -2625,9 +2635,15 @@ async def post_pack_check(request: web.Request) -> web.Response:
     if not built:
         return json_error("nothing is built yet", status=400)
     loop = asyncio.get_running_loop()
-    report = await loop.run_in_executor(
-        None, lambda: ai_pack.check_pack(plan, built, library=library, base=base))
-    return json_ok(report)
+
+    def run() -> dict[str, Any]:
+        # Fixes that need no model (words said twice, picks another wildcard
+        # makes) go back to the browser with the report checked on them.
+        tidied_built, tidied = pack_tidy.tidy(plan, built, library=library, base=base)
+        report = ai_pack.check_pack(plan, tidied_built, library=library, base=base)
+        return {**report, "tidied": tidied}
+
+    return json_ok(await loop.run_in_executor(None, run))
 
 
 async def post_pack_install(request: web.Request) -> web.Response:

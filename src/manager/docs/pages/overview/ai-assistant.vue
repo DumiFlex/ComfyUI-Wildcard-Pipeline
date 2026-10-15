@@ -666,9 +666,15 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           nested wildcards and linked constraints point at items before they are built. An item
           that takes longer than 4 minutes is stopped and marked; <b>Skip this item</b> moves on
           right away, and the row's buttons retry it, rebuild it with a note, or leave it out.
-          Then the pack runs 200 seeds on the real engine. An item with a problem (a rule that
-          never applies, a variable nothing sets) is rebuilt with the problem as a note, up to
-          twice, and the row says what was fixed. The run also flags options that never came up
+          If the template's answer fails twice, a plain one that reads every pick is written
+          for you (the row says so), so the pack still renders.
+          Before each test, words the prompt says twice are taken out of the later item that
+          writes them, but only when every test run keeps exactly the same words without them,
+          and pieces of a wildcard's options that another wildcard picks come out. Then the pack
+          runs 200 seeds on the real engine. An item with a problem (a rule that
+          never applies, a variable nothing sets, a prompt showing what one of the pack's own
+          rules keeps out, like snow in a desert scene) is rebuilt with the problem as a note, up
+          to twice, and the row says what was fixed. The run also flags options that never came up
           or that take most of the picks. A problem on an item has <b>Fix with AI</b> (rebuild it
           with the problem as a note), <b>Explain</b> and <b>Dismiss</b>. Click a row to see what
           it holds. The test run shows each variable's most common values and a few sample

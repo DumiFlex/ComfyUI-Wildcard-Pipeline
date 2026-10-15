@@ -289,3 +289,43 @@ async def test_split_a_bundle_groups_neighbours_only(wp_client, fake_llm):
     assert resp.status == 502
     resp = await wp_client.post("/wp/api/ai/bundle/split", json={"name": "L", "children": kids[:2]})
     assert resp.status == 400
+
+
+async def test_a_template_that_fails_twice_is_written_plain_and_the_check_tidies(
+        wp_client, fake_llm):
+    _on(fake_llm)
+    fake_llm.overrides["pack_plan"] = {**PLAN, "questions": []}
+    plan = (await _plan(wp_client))["plan"]
+    built: dict = {}
+    for i in plan["items"]:
+        if i["kind"] == "wildcard":
+            fake_llm.overrides["wildcard"] = {"options": [
+                {"text": f"{i['var']} {n}, sunny day", "weight": 1,
+                 "tags": [["cold", "warm"][n % 2]], "negative": ""} for n in range(4)]}
+            resp = await wp_client.post("/wp/api/ai/pack/item", json={
+                "plan": plan, "built": built, "key": i["key"]})
+            out = await resp.json()
+            built[i["key"]] = {"id": out["id"], "payload": out["payload"]}
+    tpl = next(i for i in plan["items"] if i["kind"] == "template")
+    fake_llm.overrides["template"] = {"text": "no template key"}
+    first = await wp_client.post("/wp/api/ai/pack/item", json={
+        "plan": plan, "built": built, "key": tpl["key"]})
+    assert first.status == 502
+    why = (await first.json())["error"]
+    resp = await wp_client.post("/wp/api/ai/pack/item", json={
+        "plan": plan, "built": built, "key": tpl["key"],
+        "note": f"your last answer failed: {why}"})
+    assert resp.status == 200, await resp.text()
+    out = await resp.json()
+    assert out["payload"]["template_string"] == "$season, $outfit"
+    assert "plain template" in out["warnings"][0]
+    built[tpl["key"]] = {"id": out["id"], "payload": out["payload"]}
+    resp = await wp_client.post("/wp/api/ai/pack/check", json={"plan": plan, "built": built})
+    assert resp.status == 200, await resp.text()
+    report = await resp.json()
+    # Both picks said "sunny day": the later one (Outfit) no longer does.
+    outfit = next(i for i in plan["items"] if i["name"] == "Outfit")
+    assert list(report["tidied"]) == [outfit["key"]]
+    assert all("sunny" not in o["value"]
+               for o in report["tidied"][outfit["key"]]["payload"]["options"])
+    assert all(p["text"].count("sunny day") == 1 for p in report["prompts"])

@@ -1835,6 +1835,10 @@ export interface AiPackCheck {
   quality: Array<{ key: string; text: string }>;
   /** Item keys in the order they run (and install). */
   order?: string[];
+  /** Items the check fixed without the model (words the prompt said twice,
+   *  pieces another wildcard picks): their new payload and preview, and the
+   *  lines to add to their warnings. The report was run on these. */
+  tidied?: Record<string, { payload: Record<string, unknown>; preview: string[]; warnings: string[] }>;
 }
 
 export interface AiPackInstallResult {

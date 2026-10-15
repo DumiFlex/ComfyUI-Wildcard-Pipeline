@@ -834,6 +834,16 @@ async function runCheck(p: AiPackPlan, signal: AbortSignal): Promise<AiPackCheck
   if (!Object.keys(built()).length) return null;
   stage.value = "Testing the pack on the engine…";
   const res = await api.ai.packCheck(withTarget({ plan: p, built: built() }), signal);
+  for (const [key, t] of Object.entries(res.tidied ?? {})) {
+    const result = states.value[key]?.result;
+    if (!result) continue;
+    setState(key, {
+      result: {
+        ...result, payload: t.payload, preview: t.preview,
+        warnings: [...result.warnings, ...t.warnings.filter((w) => !result.warnings.includes(w))],
+      },
+    });
+  }
   check.value = res;
   dismissedNotes.value = new Set();
   return res;
