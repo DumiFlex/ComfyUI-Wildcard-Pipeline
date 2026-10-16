@@ -8,13 +8,15 @@ from engine.db.connection import get_connection, resolve_db_path
 from engine.db.migrations import migrate
 from engine.db.repositories import ModuleNotFound, ModuleRepository
 from engine.modules.snapshot import ref_seed_uuids, walk_transitive_refs
-from engine.pipeline import PipelineEngine
+from engine.pipeline import FRAME0_CTX_KEY, PipelineEngine
 from engine.seed_derive import effective_chain_seed
 from wp_nodes.types import (
+    FRAME0_KEY,
     ContextModulesInput,
     PipelineContext,
     build_payload,
     deserialize_node_input,
+    frame0_payload,
 )
 
 #: DB files this process already migrated from the node path. The API routes
@@ -30,6 +32,37 @@ def _migrate_once(conn) -> None:
         return
     migrate(conn)
     _MIGRATED.add(key)
+
+
+def _input_ctx(upstream_ctx: dict, upstream_internals: dict, catalog: dict) -> dict:
+    """The ctx a run starts from: the upstream variables, the catalog, and
+    the upstream cross-node internals."""
+    ctx: dict = dict(upstream_ctx)
+    # Inject catalog ONCE at the top of execute, before pipeline
+    # run. Spec §2.6 — never re-inject mid-run.
+    ctx["__wp_catalog__"] = catalog
+    # Merge cross-node internals from the upstream payload —
+    # `__wp_picks__` so a downstream constraint can read source
+    # picks recorded in an earlier Context, `__wp_constraints__`
+    # so a constraint registered upstream still applies to a
+    # downstream target. Copy in defensively so this node's
+    # mutations don't corrupt the upstream payload (frozen
+    # dataclass implies the dict references are still shared).
+    for key, value in upstream_internals.items():
+        if isinstance(value, list):
+            ctx[key] = list(value)
+        elif isinstance(value, dict):
+            ctx[key] = dict(value)
+        elif isinstance(value, set):
+            # Defensive copy of any set-valued cross-node internal so
+            # upstream payload's set isn't mutated by this node's run.
+            # (SP3 swapped the constraint bookkeeping from a set to
+            # the `__wp_constraint_hits__` dict — handled by the dict
+            # branch above — but keep this for any future set keys.)
+            ctx[key] = set(value)
+        else:
+            ctx[key] = value
+    return ctx
 
 
 def _expand_catalog_via_live_db(catalog: dict, modules: list | None = None) -> dict:
@@ -218,31 +251,7 @@ class WPContext(io.ComfyNode):
         # target in too. See `ref_seed_uuids`.
         catalog = _expand_catalog_via_live_db(catalog, module_list)
 
-        ctx: dict = dict(upstream_ctx)
-        # Inject catalog ONCE at the top of execute, before pipeline
-        # run. Spec §2.6 — never re-inject mid-run.
-        ctx["__wp_catalog__"] = catalog
-        # Merge cross-node internals from the upstream payload —
-        # `__wp_picks__` so a downstream constraint can read source
-        # picks recorded in an earlier Context, `__wp_constraints__`
-        # so a constraint registered upstream still applies to a
-        # downstream target. Copy in defensively so this node's
-        # mutations don't corrupt the upstream payload (frozen
-        # dataclass implies the dict references are still shared).
-        for key, value in upstream_internals.items():
-            if isinstance(value, list):
-                ctx[key] = list(value)
-            elif isinstance(value, dict):
-                ctx[key] = dict(value)
-            elif isinstance(value, set):
-                # Defensive copy of any set-valued cross-node internal so
-                # upstream payload's set isn't mutated by this node's run.
-                # (SP3 swapped the constraint bookkeeping from a set to
-                # the `__wp_constraint_hits__` dict — handled by the dict
-                # branch above — but keep this for any future set keys.)
-                ctx[key] = set(value)
-            else:
-                ctx[key] = value
+        ctx = _input_ctx(upstream_ctx, upstream_internals, catalog)
 
         # Compute the actual chain seed for THIS iteration. When no
         # WP_ContextLoop is upstream, `upstream_internals` lacks both
@@ -281,6 +290,18 @@ class WPContext(io.ComfyNode):
         # Both are `__`-prefixed, so neither reaches the public context.
         ctx["__wp_explain__"] = True
         ctx["__wp_ref_log__"] = []
+        # Inside a loop, frame 0's upstream payload rides along as
+        # `__wp_frame0__`. The engine's hold base pass runs on it, so a held
+        # module resolves against frame 0's inputs ($iteration and anything
+        # upstream derived from it), not this frame's.
+        frame0 = upstream_internals.get(FRAME0_KEY)
+        if loop_index != 0 and isinstance(frame0, dict):
+            frame0_ctx = _input_ctx(
+                frame0.get("context") or {}, frame0.get("internals") or {}, catalog,
+            )
+            frame0_ctx["__wp_explain__"] = True
+            frame0_ctx["__wp_ref_log__"] = []
+            ctx[FRAME0_CTX_KEY] = frame0_ctx
         ctx = PipelineEngine().run(
             module_list,
             ctx=ctx,
@@ -289,6 +310,10 @@ class WPContext(io.ComfyNode):
             loop_index=loop_index,
         )
 
+        # Hand downstream nodes THIS node's frame-0 output, from the base pass.
+        base_ctx = ctx.get("__wp_hold_base_ctx__")
+        if loop_index != 0 and isinstance(base_ctx, dict):
+            ctx[FRAME0_KEY] = frame0_payload(base_ctx)
         payload = build_payload(
             ctx,
             upstream_debug=upstream_debug,

@@ -24,6 +24,9 @@ import type { VarProducerLike } from "../../../../../manager/components/RefChip.
 const RichTextInput = defineAsyncComponent(
   () => import("../../../../../manager/components/RichTextInput.vue"),
 );
+const NegativeField = defineAsyncComponent(
+  () => import("../../../../../manager/components/NegativeField.vue"),
+);
 
 const props = withDefaults(
   defineProps<{
@@ -65,6 +68,7 @@ const availableVars = computed<string[]>(() => {
 const payload = computed(() => (props.module.payload ?? {}) as {
   template?: string;
   output_var?: string;
+  negative?: string;
 });
 const instance = computed(() => props.module.instance ?? {});
 const libraryTemplate = computed(() => payload.value.template ?? "");
@@ -84,6 +88,18 @@ const templateValue = computed(() =>
 const templateOverridden = computed(() => {
   const ov = instance.value.template_override;
   return ov !== undefined && ov !== null && ov !== libraryTemplate.value;
+});
+
+// The combine's negative follows its template: the instance can override it
+// (`negative_override`, "" clears it), else the library's `negative` applies.
+const libraryNegative = computed(() => payload.value.negative ?? "");
+const negativeValue = computed(() => {
+  const ov = instance.value.negative_override;
+  return typeof ov === "string" ? ov : libraryNegative.value;
+});
+const negativeOverridden = computed(() => {
+  const ov = instance.value.negative_override;
+  return typeof ov === "string" && ov.trim() !== libraryNegative.value.trim();
 });
 
 // Tokenize once with surface="combine". Frontend tokenizer mirrors
@@ -267,6 +283,16 @@ function onTemplateInput(next: string): void {
 function onResetTemplate(): void {
   emit("update", patchInstance(props.module, "template_override", null));
 }
+
+function onNegativeInput(next: string | undefined): void {
+  const v = next ?? "";
+  const collapsed = v.trim() === libraryNegative.value.trim() ? null : v;
+  emit("update", patchInstance(props.module, "negative_override", collapsed));
+}
+
+function onResetNegative(): void {
+  emit("update", patchInstance(props.module, "negative_override", null));
+}
 </script>
 
 <template>
@@ -367,6 +393,35 @@ function onResetTemplate(): void {
       </div>
     </template>
 
+    <div class="wp-tpl__head wp-tpl__head--neg">
+      <span class="wp-tpl__label">Negative</span>
+      <span class="wp-tpl__hint">goes to the Assembler's negative when its template uses ${{ outputVar || "output" }}</span>
+      <div class="wp-tpl__head-actions">
+        <button
+          v-if="negativeOverridden"
+          type="button"
+          class="wp-tpl__reset"
+          data-test="tpl-neg-reset"
+          title="Restore negative to library default"
+          aria-label="Reset negative to library default"
+          @click="onResetNegative"
+        ><i class="pi pi-replay" aria-hidden="true" /></button>
+      </div>
+    </div>
+    <NegativeField
+      :model-value="negativeValue"
+      :var-suggestions="availableVars"
+      :var-producers="varProducerMap"
+      graph-aware
+      surface="combine"
+      label="combine"
+      always-open
+      test-id="tpl-negative"
+      :placeholder="libraryNegative || 'words to keep out of the image'"
+      :class="{ 'wp-tpl__input--mod': negativeOverridden }"
+      @update:model-value="onNegativeInput"
+    />
+
     <div class="wp-tpl__stored" data-test="tpl-stored-as">
       <span class="wp-tpl__stored-arrow">→ stored as</span>
       <span
@@ -382,6 +437,9 @@ function onResetTemplate(): void {
   padding: 12px 16px;
   background: var(--wp-bg);
   border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
+}
+.wp-tpl__head--neg {
+  margin-top: 10px;
 }
 .wp-tpl__head {
   display: flex;

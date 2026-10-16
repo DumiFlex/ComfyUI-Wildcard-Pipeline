@@ -75,6 +75,20 @@ def test_native_step_strips_thinking():
     assert st["message"] == "Hello" and st["calls"] == []
 
 
+def test_native_step_takes_a_call_written_in_the_reasoning():
+    names = {"search"}
+    call = '<tool_call>{"name": "search", "arguments": {"query": "hair"}}</tool_call>'
+    # In the server's reasoning field, the answer itself empty.
+    st = ac._native_step("", [], names, {}, "I should look. " + call)
+    assert [c["tool"] for c in st["calls"]] == ["search"] and st["salvaged"]
+    # Inside an unclosed <think> block.
+    st = ac._native_step("<think>let me search " + call, [], names, {})
+    assert [c["tool"] for c in st["calls"]] == ["search"]
+    # Reasoning is never read when there is an answer.
+    st = ac._native_step("Hello", [], names, {}, call)
+    assert st["calls"] == [] and st["message"] == "Hello"
+
+
 def test_salvage_calls_written_as_text():
     names = {"search", "read", "add_options"}
     # A native-tools model writing calls into its message (seen with a 12B).

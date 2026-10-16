@@ -194,6 +194,7 @@ const RELEVANT_INSTANCE_KEYS = new Set([
   "internal",
   // combine v2 (2026-05-08 syntax-parity cycle):
   "template_override",
+  "negative_override",
   // fixed_values:
   "values_overrides",
   // Tier 2:

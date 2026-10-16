@@ -99,6 +99,20 @@ def test_derivation_compiles_groups_and_extra_actions():
     DerivationHandler.validate_payload({"rules": [rule]})
 
 
+def test_a_value_that_only_says_what_to_leave_out_goes_to_the_negative():
+    cat = library_vars.build_catalog(LIBRARY)
+    out = ai_derivation.compile_rules(_drv([{
+        "summary": "No firearms in fantasy",
+        "branches": [{"match": "all", "conditions": [
+            {"var": "class", "op": "equals", "value": "Mage"}],
+            "actions": [{"target_var": "weapon", "mode": "replace",
+                         "value": "no guns, no firearms, no rifles"}]}]}]), catalog=cat)
+    [r] = out["rules"]
+    assert r["rule"]["branches"][0]["action"] == {
+        "target_var": "weapon", "mode": "negative", "value": "guns, firearms, rifles"}
+    assert any("only says what to leave out" in w for w in r["warnings"])
+
+
 def test_derivation_warns_and_skips():
     cat = library_vars.build_catalog(LIBRARY)
     out = ai_derivation.compile_rules(_drv([
@@ -207,8 +221,8 @@ def test_constraint_compiles_cells_exceptions_and_expansion():
                                     "factor": 1, "source_id": "c1", "target_id": "w2"}
     assert len(excs) == 2
     assert [x["reason"] for x in out["skipped"]] == [
-        "the source isn't an option or tag", "the source isn't an option or tag",
-    ]
+        "the source isn't an option or tag (its tags: #magic, #melee)",
+    ] * 2
 
 
 def test_constraint_tag_to_option_expands_per_option():
@@ -289,3 +303,48 @@ def test_describe_summaries_and_answer():
     ]
     with pytest.raises(ValueError):
         ai_describe.compile_answer({"description": "", "tags": []}, current=[], library=[])
+
+
+def test_constraint_prompt_shows_tag_groups_and_only_keeps_named_targets():
+    wc = {"name": "Outfit", "payload": {
+        "var_binding": "outfit", "sub_categories": ["summer", "spring", "dress"],
+        "tag_groups": {"season": ["summer", "spring"], "kind": ["dress"]},
+        "tag_group_kinds": {"season": "accepts"},
+        "options": [{"id": "o1", "value": "sundress", "sub_categories": ["summer", "dress"]}]}}
+    side = ai_constraint.side_view(wc, "T")
+    assert {"name": "season", "kind": "accepts", "tags": ["summer", "spring"]} in side["groups"]
+    text = ai_constraint.build_prompt(instruction="x", source=side, target=side, existing=[])
+    assert "ACCEPTS group season: #summer, #spring" in text
+    assert "CLASSIFY group kind: #dress" in text
+    # The prompt agrees with the engine: reduce/boost rules keep their target.
+    assert "only, reduce or boost rule" in ai_constraint.SYSTEM_PROMPT
+
+
+def test_append_and_prepend_get_a_list_separator():
+    # The engine joins as written: "tie" + "watch" would print "tiewatch".
+    cat = library_vars.build_catalog(LIBRARY)
+    out = ai_derivation.compile_rules(_drv([{"branches": [
+        {"conditions": [{"var": "class", "op": "equals", "value": "mage"}], "actions": [
+            {"target_var": "look", "mode": "append", "value": "watch"},
+            {"target_var": "look", "mode": "prepend", "value": "hooded"},
+            {"target_var": "look", "mode": "append", "value": ", ring"},
+        ]}]}]), catalog=cat)
+    b = out["rules"][0]["rule"]["branches"][0]
+    assert b["action"]["value"] == ", watch"
+    assert [a["value"] for a in b["extra_actions"]] == ["hooded, ", ", ring"]
+
+
+def test_append_and_prepend_values_bring_their_separator():
+    cat = library_vars.build_catalog(LIBRARY)
+
+    def act(mode, value):
+        return {"target_var": "gear", "mode": mode, "value": value}
+
+    out = ai_derivation.compile_rules(_drv([{"summary": "gear", "branches": [{
+        "match": "all", "conditions": [{"var": "class", "op": "equals", "value": "mage"}],
+        "actions": [act("append", "watch"), act("append", " ring"),
+                    act("append", ", belt"), act("prepend", "hat")]}],
+        "else_actions": []}]), catalog=cat)
+    branch = out["rules"][0]["rule"]["branches"][0]
+    values = [branch["action"]["value"], *(a["value"] for a in branch["extra_actions"])]
+    assert values == [", watch", ", ring", ", belt", "hat, "]

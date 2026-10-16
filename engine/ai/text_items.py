@@ -20,7 +20,7 @@ import re
 import secrets
 from typing import Any
 
-from engine.ai import about
+from engine.ai import about, adult
 from engine.ai import refs as ai_refs
 from engine.modules.combine_handler import CombineHandler
 from engine.modules.fixed_values_handler import FixedValuesHandler
@@ -72,6 +72,8 @@ $eyes" → $look). Read variables as $name ($name.0 for the first of a \
 multi-pick, $name.AXIS for an accepts tag group's rolled tag, $name.neg for \
 a variable's negative words). {a|b} picks one of a or b each run. You can't \
 point at wildcards here (@{...} stays as written); read their variables. \
+In the tags style, put ", " between the variables it joins ("$hair, $eyes"), \
+since each holds its own tags. \
 negative: words this combine adds to the negative prompt when the prompt \
 uses it, or "". It also carries the negatives of the variables it reads.\
 """
@@ -94,13 +96,18 @@ def build_prompt(
     *, kind: str, instruction: str, name: str, catalog_text: str,
     description: str = "", labels: list[str] | None = None, current: str = "",
     out_var: str = "",
+    others: dict[str, str] | None = None,
 ) -> str:
     what = {"fixed_values": "Fixed values", "combine": "Combine",
             "template": "Prompt template"}[kind]
     lines = [f"{what}: {name or '(unnamed)'}"]
     lines.extend(about.lines(description, labels or []))
     if out_var:
-        lines.append(f"It sets ${out_var}.")
+        lines.append(f"It sets ${out_var}." if kind != "fixed_values" else
+                     f"Its main value is ${out_var}: always set it.")
+    if others:
+        lines.append("Other items set these; don't set them here: " + ", ".join(
+            f"${v} ({n})" for v, n in list(others.items())[:40]) + ".")
     if current:
         lines.append("It holds now:")
         lines.append(current)
@@ -167,6 +174,9 @@ def compile_fixed(
         if not value:
             skipped.append({"text": name, "reason": "empty"})
             continue
+        if adult.sexual_minor(value):
+            skipped.append({"text": name, "reason": "it names a minor in a sexual context"})
+            continue
         if row is None:
             row = {"id": _new_id(taken), "name": name}
             rows.append(row)
@@ -198,6 +208,25 @@ def _new_id(taken: set[Any]) -> str:
             return vid
 
 
+_AXIS_READ = re.compile(r"\$([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)")
+
+
+def _fix_axes(text: str, catalog: dict[str, Any] | None,
+              warnings: list[str]) -> str:
+    """``$x.WORD`` reads x's accepts tag group WORD (or ``.neg``). A word that
+    isn't one of x's groups ("$race.tags", "$outerwear.AXIS") renders as
+    nothing at run time, so it becomes a plain ``$x``."""
+    def sub(m: re.Match[str]) -> str:
+        var, word = m.group(1), m.group(2)
+        entry = (catalog or {}).get(var)
+        if word == "neg" or not entry or not entry.get("sources") \
+                or word in (entry.get("axes") or []):
+            return m.group(0)
+        warnings.append(f"Read ${var} instead of ${var}.{word}: ${var} has no {word} tag group")
+        return f"${var}"
+    return _AXIS_READ.sub(sub, text)
+
+
 def compile_combine(
     raw: Any, *, out_var: str, catalog: dict[str, Any] | None = None,
     existing: dict[str, Any] | None = None,
@@ -209,7 +238,10 @@ def compile_combine(
     if not text:
         raise ValueError("the template is empty")
     negative = ai_refs.compile_text(_flat(raw.get("negative"), MAX_TEXT), surface="combine")
-    warnings = []
+    if adult.sexual_minor(text):
+        raise ValueError("it names a minor in a sexual context")
+    warnings: list[str] = []
+    text = _fix_axes(text, catalog, warnings)
     if out_var in reads(text):
         raise ValueError(f"the template reads ${out_var}, which it sets itself")
     unknown = _unknown(text, catalog, out_var)
@@ -236,12 +268,18 @@ def compile_template(raw: Any, *, catalog: dict[str, Any] | None = None) -> dict
         raise ValueError("the template is empty")
     negative = ai_refs.compile_text(_flat(raw.get("negative"), MAX_TEMPLATE),
                                     surface="template")
-    warnings = []
+    if adult.sexual_minor(text):
+        raise ValueError("it names a minor in a sexual context")
+    warnings: list[str] = []
+    text = _fix_axes(text, catalog, warnings)
     unknown = _unknown(text, catalog)
     if unknown:
         warnings.append("Reads $" + ", $".join(unknown) + ", which nothing in the library sets")
     if not reads(text):
         warnings.append("It reads no variables, so it's the same every run")
+    if re.search(r"\$\w+[^$]{0,40}\s(?:OR|or)\s[^$]{0,40}\$", text):
+        warnings.append("It joins picks with \"or\", but the Assembler prints every one; "
+                        "read the one pick instead")
     return {"payload": {"template_string": text, "negative_template": negative},
             "preview": [text] + ([f"Negative: {negative}"] if negative else []),
             "warnings": warnings}

@@ -1,3 +1,4 @@
+import { createPinia, setActivePinia } from "pinia";
 import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
@@ -38,6 +39,7 @@ const router = createRouter({ history: createMemoryHistory(), routes: [{ path: "
 
 describe("Settings › AI assistant", () => {
   beforeEach(() => {
+    setActivePinia(createPinia());
     _resetAiConfigForTests();
     vi.mocked(api.ai.config).mockReset();
     vi.mocked(api.ai.saveConfig).mockReset();
@@ -97,6 +99,19 @@ describe("Settings › AI assistant", () => {
     await w.get('[data-test="ai-test"]').trigger("click");
     await flushPromises();
     expect(w.get('[data-test="ai-test-result"]').text()).toBe("Connected · JSON answers ✓ · 1.4 s");
+  });
+
+  it("says how much context a new chat takes", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, model: "a" }));
+    vi.mocked(api.ai.test).mockResolvedValue({
+      ok: true, models: ["a"], model_found: true, json_ok: true, latency_ms: 900, context: 16384, context_low: false, error: null,
+      prefix: { tokens: 7400, window: 16384, tools: 24, lean: 0, format: "native" },
+    });
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    await w.get('[data-test="ai-test"]').trigger("click");
+    await flushPromises();
+    expect(w.get('[data-test="ai-test-result"]').text()).toContain("each chat starts at ≈ 7.4k of 16k tokens (24 tools)");
   });
 
   it("shows a failed test", async () => {
@@ -401,6 +416,7 @@ describe("Settings › AI assistant", () => {
 
 describe("Settings › AI assistant suggested models per provider", () => {
   beforeEach(() => {
+    setActivePinia(createPinia());
     _resetAiConfigForTests();
     vi.mocked(api.ai.config).mockReset();
     vi.mocked(api.ai.models).mockReset().mockResolvedValue({ models: [] });

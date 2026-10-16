@@ -11,6 +11,10 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
 const instanceOptions = [
   { term: "Template override", desc: "Replace the entire template for this particular use without changing the shared library entry." },
   { term: "Output variable", desc: "Change which $variable name this combine writes to for this use." },
+  { term: "Negative override", desc: "Replace the combine's negative for this use. An empty one clears it." },
+  { term: "Lock seed", desc: "Freezes the template's inline {a|b} picks on every Generate and every Loop frame." },
+  { term: "Hold across run", desc: "Keeps the result the same for every frame of one Loop run." },
+  { term: "Hide from prompt", desc: "Writes the output as internal: other modules read it, the Assembler leaves it out." },
 ];
 </script>
 
@@ -39,6 +43,12 @@ const instanceOptions = [
         ratio="16 / 7"
         caption="The Starter scene Combine modal binding to $prompt_fragment. Template reads '$style portrait of $subject, $mood lighting' with the three detected vars listed below ($style $subject $mood). Preview replays the template verbatim; Resolved swaps in static picks → 'oil painting portrait of cat, serene lighting'. Footer carries Lock seed + Hide from prompt runtime toggles."
       />
+      <DocCallout variant="tip">
+        <b>Use a Combine</b> to join picks into one phrase (<VarToken>wearing $outfit and
+        $shoes</VarToken>), to print a hidden driver inside a phrase, or to read an accepts group
+        as text. <b>Not for</b> making a pick (a combine's text is not a pick, so nothing can
+        constrain it) or for text that depends on a condition (use a Derivation).
+      </DocCallout>
     </DocSection>
 
     <DocSection title="What you type in the template">
@@ -54,6 +64,15 @@ const instanceOptions = [
         <li>
           <VarToken kind="inline">$$</VarToken> — a literal <code>$</code> character in the output (escape if you need
           to write a dollar sign that shouldn't be treated as a variable).
+        </li>
+        <li>
+          <VarToken>$name.0</VarToken>, <VarToken>$outfit.SHOES</VarToken> and
+          <VarToken>$name.neg</VarToken> read one pick of a multi-pick, an accepts group, or a
+          variable's negatives.
+        </li>
+        <li>
+          <VarToken kind="ref">@{}</VarToken> references are dropped here: they print nothing
+          and WP Debug notes it. Put a reference in a wildcard option instead.
         </li>
       </ul>
       <DocCallout variant="tip">

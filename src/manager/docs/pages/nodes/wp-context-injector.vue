@@ -90,6 +90,14 @@ const rowOptions = [
 
     <DocSection title="Good to know">
       <DocCallout variant="tip">
+        <b>Use the Injector</b> for text from outside the stack: a subject you type, an LLM's
+        caption, a LoRA name from another node, a number from a slider. <b>Not for</b> choices:
+        an injected value is not a pick, so nothing can constrain it and the Test Runner doesn't
+        count it. To make one a constraint source, give a wildcard options that spell its values
+        and turn on Match variable. For reusable logic that rolls, use a Combine in the library
+        instead of a template row.
+      </DocCallout>
+      <DocCallout variant="tip">
         To combine two sockets without an extra Combine module, click <b>Add template row</b>
         and set a template like <VarToken>$input_0 by $input_1</VarToken>. You name the row's
         <VarToken>$variable</VarToken> inline in its header and set that template from the row's

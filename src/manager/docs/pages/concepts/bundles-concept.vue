@@ -13,7 +13,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
     title="Bundles"
     icon="pi pi-share-alt"
     tone="neutral"
-    blurb="Group a contiguous module range into a reusable, frozen snapshot. Library edits do not propagate into bundle children after capture."
+    blurb="Group a contiguous module range into a reusable snapshot. Library bundles follow module edits; copies on the canvas show when the library has moved on."
   >
     <DocSection title="What a bundle is">
       <p>
@@ -33,18 +33,29 @@ import VarToken from "../../../components/docs/VarToken.vue";
       />
     </DocSection>
 
-    <DocSection title="Frozen snapshots">
+    <DocSection title="Snapshots">
       <p>
-        When you capture a bundle, the current state of each module — its options, settings, and
-        metadata — is saved into the bundle as a frozen snapshot. Changes you later make to the
-        source modules in the library do <em>not</em> propagate into existing bundles. Each
-        bundle keeps resolving from the state it captured.
+        When you capture a bundle, the current state of each module (its options, settings and
+        metadata) is saved into the bundle as a snapshot, and the bundle resolves from that
+        snapshot.
       </p>
+      <ul>
+        <li>
+          Saving a module in the library updates its snapshot in every <b>library</b> bundle that
+          holds it. The bundle's own per-use settings stay.
+        </li>
+        <li>
+          Bundles already on a <b>canvas</b> keep their snapshot until you pull the change: the
+          header shows <b>library updated</b>, and <b>Reset to library snapshot</b> (bundle) or
+          <b>Refresh from library</b> (one row) brings it in. <b>Push to library…</b> goes the
+          other way.
+        </li>
+      </ul>
       <DocCallout variant="tip">
-        Because bundle children are frozen, deleting a source wildcard from the library does not
+        Because bundle children are snapshots, deleting a source wildcard from the library does not
         break bundles that captured it. The bundle keeps working. A MISSING badge appears on the
-        workflow row to signal that the library entry and the bundle's snapshot have diverged —
-        giving you an honest indication to decide whether to update or leave it as-is.
+        workflow row to signal that the library entry is gone, so you can decide whether to
+        replace it or leave it as-is.
       </DocCallout>
     </DocSection>
 
@@ -59,10 +70,22 @@ import VarToken from "../../../components/docs/VarToken.vue";
 
     <DocSection title="Inserting a bundle">
       <p>
-        When you drop a saved bundle into a Context, each child module receives a fresh ID so that
-        inserting the same bundle multiple times does not cause ID collisions. Any
-        <VarToken kind="ref">@{uuid}</VarToken> references and constraint pairings inside the
-        bundle are automatically rewritten to match the new IDs.
+        When you drop a saved bundle into a Context, each child keeps its library id, so it stays
+        linked to the library entry and <VarToken kind="ref">@{uuid}</VarToken> references and
+        constraint pairings inside the bundle keep working as they are. Each child gets its own
+        row id on the canvas, so inserting the same bundle twice gives two independent rows of
+        each module.
+      </p>
+      <p>
+        Two copies still write the same <VarToken>$variables</VarToken>, and the later one wins.
+        To keep both, rename the second copy's variables (each child's Variable binding), or use
+        Duplicate on single rows, which renames for you (<VarToken>$hair</VarToken> becomes
+        <VarToken>$hair_2</VarToken>).
+      </p>
+      <p>
+        <b>Extract to library</b> in the bundle editor is the one step that makes new ids: it
+        turns the children into stand-alone library modules (a fork), rewires the references
+        between them to the new ids, and leaves per-use overrides behind.
       </p>
     </DocSection>
 

@@ -37,6 +37,7 @@ const groups = computed<Array<{ label: string; rows: Shortcut[] }>>(() => [
       { label: "Open command palette", keys: [mod.value, "K"] },
       { label: "Show this shortcut sheet", keys: [mod.value, "/"] },
       { label: "Toggle sidebar", keys: [mod.value, "B"] },
+      { label: "Explain the selected text (AI assistant)", keys: [mod.value, "Shift", "X"] },
       { label: "Skip to main content (focused)", keys: ["Tab"] },
     ],
   },

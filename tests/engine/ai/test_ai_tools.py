@@ -129,3 +129,34 @@ def test_step_schema_names_the_offered_tools():
     schema = tools.step_schema(["search", "read"])
     assert schema["properties"]["calls"]["items"]["properties"]["tool"]["enum"] == [
         "search", "read"]
+
+
+def test_typed_step_schema_gives_each_tool_its_own_args():
+    schema = tools.step_schema(["search", "read"], tools.tools(["search", "read"]))
+    options = schema["properties"]["calls"]["items"]["anyOf"]
+    assert [o["properties"]["tool"]["enum"] for o in options] == [["search"], ["read"]]
+    read = options[1]["properties"]["args"]
+    assert read["type"] == "object" and "id" in read["properties"]
+
+
+def test_the_typed_prompt_shows_args_as_objects():
+    typed = chat.system_prompt(typed=True)
+    assert "the arguments as a JSON object" in typed and "written as a string" not in typed
+    assert '"args": {"' in typed
+    assert "written as a string" in chat.system_prompt()
+
+
+def test_the_leanest_prompt_keeps_the_example_and_the_rules():
+    from engine.ai import budget, safety
+
+    lean = chat.system_prompt(slim=True, **{k: v for k, v in budget.LEVELS[-1].items()
+                                            if k in ("examples", "prose")})
+    assert "Example. User:" in lean and safety.UNTRUSTED_RULE in lean
+    assert "Per-use settings" not in lean
+    assert len(lean) < len(chat.system_prompt(slim=True, examples=False))
+
+
+def test_open_with_nothing_to_open_is_refused_with_a_reason():
+    lib = chat.Library([], [], [])
+    with pytest.raises(ValueError, match="already on screen"):
+        client_tools.prepare(lib, "open", {"id": " "})

@@ -131,3 +131,23 @@ def test_out_of_range_bypass_reapplies_when_count_grows():
     idxs = [p.internals["__wp_loop_index__"] for p in at10]
     assert 9 not in idxs
     assert idxs == [0, 1, 2, 3, 4, 5, 6, 7, 8]
+
+
+
+def test_later_frames_carry_frame_zero_payload():
+    raw = json.dumps({"strategy": "sequential", "override_seed": True})
+    payloads = WPContextLoop.execute(seed=42, count=3, wp_context_loop_config=raw).values[0]
+    assert "__wp_frame0__" not in payloads[0].internals
+    for p in payloads[1:]:
+        frame0 = p.internals["__wp_frame0__"]
+        assert frame0["context"] == {"iteration": "1", "iteration_total": "3"}
+        assert frame0["internals"]["__wp_loop_index__"] == 0
+        assert frame0["internals"]["__wp_seed_override__"] == 42
+        assert "__wp_frame0__" not in frame0["internals"]
+
+
+def test_frame_zero_payload_survives_a_bypassed_frame_zero():
+    raw = json.dumps({"bypass_frames": [0]})
+    payloads = WPContextLoop.execute(seed=1, count=3, wp_context_loop_config=raw).values[0]
+    assert [p.context["iteration"] for p in payloads] == ["2", "3"]
+    assert all(p.internals["__wp_frame0__"]["context"]["iteration"] == "1" for p in payloads)

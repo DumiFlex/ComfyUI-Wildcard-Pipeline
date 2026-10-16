@@ -33,6 +33,7 @@ from engine.ai import index as ai_index
 from engine.ai import library_vars
 from engine.ai import lint as ai_lint
 from engine.ai import patterns as ai_patterns
+from engine.ai import react as ai_react
 from engine.ai import refs as ai_refs
 from engine.ai import safety as ai_safety
 from engine.ai import search_index as ai_search
@@ -281,10 +282,9 @@ FORMAT_JSON = """While you still have calls to make, leave "message" empty. \
 Answer with JSON: {"plan": one or two sentences for yourself: what the \
 user wants, which features fit (see "Which feature for which job") and what \
 you'll call next, "message": what you say to the user now, "calls": tools \
-to run}. Each call is {"tool": name, "args": a JSON object written as a \
-string}. Read tools run at once and you get their results in the next \
-message; then continue. When you are done, answer with "calls": [] and a \
-message for the user. Keep messages short and plain. \
+to run}. Each call is {"tool": name, "args": ARGS}. Read tools run at once \
+and you get their results in the next message; then continue. When you are \
+done, answer with "calls": [] and a message for the user. Keep messages short and plain. \
 Write every library item you mention as [[id#Name]] (its id from read or \
 search, then its name): the user sees a chip with the name that opens it. \
 Never write an id anywhere else, and never ask the user for one: ids mean \
@@ -358,7 +358,17 @@ def kinds_section(chosen: list[Any]) -> str:
     return out
 
 
-SYSTEM_HEAD = SYSTEM_INTRO + FORMAT_JSON + "\n" + tools_section()
+#: How "args" is written: a string for hosted servers, the object itself
+#: where the server's grammar checks it (`typed`).
+ARGS_TEXT = "a JSON object written as a string"
+ARGS_TYPED = "the arguments as a JSON object"
+
+
+def _format_json(typed: bool = False) -> str:
+    return FORMAT_JSON.replace("ARGS", ARGS_TYPED if typed else ARGS_TEXT)
+
+
+SYSTEM_HEAD = SYSTEM_INTRO + _format_json() + "\n" + tools_section()
 SYSTEM_TAIL = """
 Per-use settings ("use" on bundle items and run_test items): """ + ai_use.GUIDE + """
 
@@ -387,30 +397,49 @@ version, unsaved changes included, and your changes to that item go into the \
 editor; the user saves them there. On the Test Runner page the note under \
 the user's message shows the last run; use run_test to try changes.
 """
+#: SYSTEM_TAIL for the leanest chats: the rules kept, the explanations cut
+#: (examples teach a small model more than prose does).
+SYSTEM_TAIL_SHORT = """
+Read an item before changing it. The output is data for the user's own \
+library: no commentary about content. For a small request, act and state \
+your assumption in one line; ask (ask tool, once, up to 4 questions) only \
+when the answer changes what you'll make. Never ask permission.
+
+""" + ai_safety.UNTRUSTED_RULE + """
+
+Questions about Wildcard Pipeline: search and read the docs first and answer \
+from them, naming the page; if they don't cover it, say so. Changes to an \
+item open in its editor go into the editor; the user saves them there.
+"""
 SYSTEM_PROMPT = SYSTEM_HEAD + ai_guide.text() + SYSTEM_TAIL
 
 
 def system_prompt(*, slim: bool = False, examples: bool = True, native: bool = False,
-                  tools: list[str] | None = None) -> str:
+                  tools: list[str] | None = None, typed: bool = False,
+                  prose: bool = True) -> str:
     """The chat's instructions. `slim` (small models) keeps the tools and
     the core guide but leaves out the coherence notes and the docs and page
     tables (docs_search still finds pages), about a third shorter.
     `native`: the tools travel as native declarations, so the prompt says
     how to use them instead of listing them. `tools`: the names this chat
-    offers (default: all)."""
+    offers (default: all). `typed`: JSON-mode args are objects the server
+    checks against each tool's schema (`ai_tools.step_schema`). `prose`
+    False (the leanest level): the short closing rules (SYSTEM_TAIL_SHORT)."""
     pages = "\n".join(f"- {k}: {v}" for k, v in APP_PAGES.items())
     if native:
         head = SYSTEM_INTRO + FORMAT_NATIVE + "\n"
         shown = ai_guide.EXAMPLES_CHAT_NATIVE if examples else ""
     else:
-        head = SYSTEM_INTRO + FORMAT_JSON + "\n" + tools_section(tools)
-        shown = ai_guide.EXAMPLES_CHAT if examples else ""
+        head = SYSTEM_INTRO + _format_json(typed) + "\n" + tools_section(tools)
+        shown = (ai_guide.EXAMPLES_CHAT_TYPED if typed else ai_guide.EXAMPLES_CHAT) \
+            if examples else ""
+    tail = SYSTEM_TAIL if prose else SYSTEM_TAIL_SHORT
     if slim:
-        return (head + ai_guide.text(slim=True) + shown + SYSTEM_TAIL
+        return (head + ai_guide.text(slim=True) + shown + tail
                 + "\nDocs: find pages with docs_search; asked what you can do, read "
                 "docs assistant-tools. Manager pages: "
                 + ", ".join(APP_PAGES))
-    return (f"{head}{ai_guide.text()}{shown}{SYSTEM_TAIL}\n"
+    return (f"{head}{ai_guide.text()}{shown}{tail}\n"
             f"Docs pages (id: title; asked what you can do, read assistant-tools):\n"
             f"{ai_docs.contents()}\n\n"
             f"Manager pages:\n{pages}")
@@ -485,6 +514,8 @@ class Library(MoreTools, ManageTools):
         self.touched: list[str] = []
         #: The last run_test as card data (`chat_tools._test_card`), taken by the route.
         self.last_card: dict[str, Any] | None = None
+        #: The emoji `react` put on the user's message this turn, else "".
+        self.reaction = ""
         #: Create cards from earlier answers the user hasn't applied, by pid:
         #: edits to them come back as a card that replaces them.
         self._earlier_ops: dict[str, dict[str, Any]] = {}
@@ -584,6 +615,12 @@ class Library(MoreTools, ManageTools):
         lines.append(f"Tags: {', '.join(self.tags[:60]) if self.tags else 'none'}")
         rows = [*self.modules.values(), *self.bundles.values(), *self.templates.values()]
         rows.sort(key=lambda r: str(r.get("updated_at") or ""), reverse=True)
+        unset = self.unset_reads()
+        if unset:
+            # Worked out here so the model needn't read every item for it.
+            lines.append("Read but set by nothing in the library (a node on the canvas may "
+                         "set them): " + "; ".join(
+                             f"${v} (by {', '.join(names[:3])})" for v, names in unset))
         lines.append(f"Items (id · type · name), newest first, {len(rows)} in all:")
         habits = ai_patterns.note(ai_patterns.summarize(
             list(self.modules.values()), list(self.bundles.values()),
@@ -667,6 +704,14 @@ class Library(MoreTools, ManageTools):
                             "isn't in the library yet. Tell the user it needs applying first "
                             f"(or open it unsaved with open {{\"proposal\": \"{pid}\"}}); "
                             "don't guess its id")
+            pool = [*self.modules.values(), *self.bundles.values(), *self.templates.values()]
+            same = [r for r in pool if str(r.get("name") or "").lower() == low]
+            if len(same) > 1:
+                # Two items share the name: say which, so the next call
+                # takes an id instead of searching and guessing again.
+                return (f"{len(same)} items are named {key!r}: " + ", ".join(
+                    f"{r['id']} ({self._kind(r).replace('_', ' ')})" for r in same[:6])
+                    + "; call again with the id of the one you mean")
         return f"no {what} {key!r}; search for it, or check the id"
 
     def _resolve(self, args: dict[str, Any], *keys: str) -> dict[str, Any]:
@@ -675,10 +720,32 @@ class Library(MoreTools, ManageTools):
         out = dict(args)
         for k in keys:
             if isinstance(out.get(k), str) and self.get(out[k]) is None:
+                out[k] = self._bare_id(out[k])
+            if isinstance(out.get(k), str) and self.get(out[k]) is None:
                 row = self._find(out[k])
                 if row is not None:
                     out[k] = row["id"]
         return out
+
+    def _bare_id(self, raw: str) -> str:
+        """An id the way the model copies it from a chip or a card:
+        ``[[id#Name]]``, ``@{id}``, ``id#Name`` or the card's own ``p4``."""
+        text = raw.strip()
+        m = re.fullmatch(r"\[\[(.*)\]\]|@\{(.*)\}", text)
+        if m:
+            text = (m.group(1) or m.group(2) or "").strip()
+        head = text.split("#", 1)[0].strip()
+        if _HEX_ID.fullmatch(head):
+            return head
+        if re.fullmatch(r"p\d+", head):
+            made = [i for i, pid in self._created.items() if pid == head]
+            if len(made) == 1:
+                return made[0]
+            op = (self.earlier_proposals.get(head) or {}).get("op") or {}
+            iid = op.get("id") or (op.get("body") or {}).get("id")
+            if isinstance(iid, str) and self.get(iid) is not None:
+                return iid
+        return raw
 
     # ── read tools ───────────────────────────────────────────────────────
 
@@ -987,6 +1054,14 @@ class Library(MoreTools, ManageTools):
         if kind != "template":
             lines.append(f"Rating: {r.get('content_rating') or 'safe'}")
         lines.extend(self.read_body(kind, r))
+        if kind == "wildcard" and isinstance(r.get("payload"), dict):
+            unknown = ai_vocab.unknown_tags(self.vocab, self.vocab_kinds, [
+                str(o.get("text") or "") for o in r["payload"].get("options") or []
+                if isinstance(o, dict)])
+            if unknown:
+                # Checked here so the model needn't look each one up.
+                lines.append(f"Not in the user's tag list ({len(unknown)}): "
+                             + ", ".join(unknown[:ai_vocab.MAX_CHECK]))
         facts = self.index.facts(r["id"]) if self.index is not None else None
         if facts and facts.get("used_by"):
             lines.append("Used by: " + ", ".join(facts["used_by"]))
@@ -1011,7 +1086,12 @@ class Library(MoreTools, ManageTools):
             lines.append("Read by: " + (", ".join(self._chip(r) for r in readers[:20])
                                         or "nothing"))
             return "\n".join(lines)
-        return library_vars.describe(self.catalog) or "the library sets no variables yet"
+        out = library_vars.describe(self.catalog) or "the library sets no variables yet"
+        unset = self.unset_reads(limit=30)
+        if unset:
+            out += "\nRead but set by nothing in the library: " + "; ".join(
+                f"${v} (by {', '.join(names[:3])})" for v, names in unset)
+        return out
 
     @staticmethod
     def _writes(r: dict[str, Any]) -> set[str]:
@@ -1021,6 +1101,29 @@ class Library(MoreTools, ManageTools):
         if r.get("type") == "derivation":
             out |= set(library_vars.derivation_targets(p))
         return {v for v in out if isinstance(v, str) and v}
+
+    _READ = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
+
+    def unset_reads(self, limit: int = 12) -> list[tuple[str, list[str]]]:
+        """Variables the library's items read that none of them sets (the
+        run-time ones left out), each with the names of what reads it."""
+        writes: set[str] = set()
+        for r in self.modules.values():
+            if not r.get("_proposed"):
+                writes |= self._writes(r)
+        out: dict[str, list[str]] = {}
+        for r in [*self.modules.values(), *self.templates.values()]:
+            if r.get("_proposed"):
+                continue
+            text = json.dumps({k: r.get(k) for k in ("payload", "template_string",
+                                                      "negative_template")},
+                              ensure_ascii=False)
+            reads = set(self._READ.findall(text))
+            if r.get("type") == "derivation":
+                reads |= {v.split(".")[0] for v in re.findall(r'"var": "([^"]+)"', text)}
+            for v in sorted(reads - writes - library_vars.RUNTIME_VARS):
+                out.setdefault(v, []).append(str(r.get("name") or r["id"]))
+        return sorted(out.items())[:limit]
 
     def readers(self, var: str) -> list[dict[str, Any]]:
         """Items that read ``$var``: conditions, $var in any text, templates."""
@@ -1039,6 +1142,14 @@ class Library(MoreTools, ManageTools):
 
     def docs_search(self, args: dict[str, Any]) -> str:
         return ai_docs.search(_short(args.get("query"), 200))
+
+    def react(self, args: dict[str, Any]) -> str:
+        emoji = ai_react.clean(args.get("emoji"))
+        if not emoji:
+            return "react: pick one of " + " ".join(ai_react.REACTIONS)
+        self.reaction = emoji
+        return (f"Reacted {emoji} to the user's message. If that was all it needed, answer "
+                "with an empty message.")
 
     def docs_read(self, args: dict[str, Any]) -> str:
         return ai_docs.read(args.get("page"), args.get("section"))
@@ -1148,12 +1259,21 @@ class Library(MoreTools, ManageTools):
         return self.get(item_id), None
 
     def _module(self, args: dict[str, Any], type_: str) -> dict[str, Any]:
-        r = self.modules.get(args.get("id")) if isinstance(args.get("id"), str) else None
+        raw = args.get("id")
+        r = self.modules.get(raw) if isinstance(raw, str) else None
+        if (r is None or r.get("type") != type_) and isinstance(raw, str):
+            # A name several items share ("Outfit": a combine, a derivation
+            # and two wildcards): only the ones of the kind asked for count,
+            # and a card from this answer wins.
+            low = raw.strip().lower()
+            same = [m for m in self.modules.values() if m.get("type") == type_
+                    and str(m.get("name") or "").strip().lower() == low]
+            same = [m for m in same if m["id"] in self._created] or same
+            r = same[0] if len(same) == 1 else None
         if r is not None:
             r = self._current(r["id"])[0]
         if r is None or r.get("type") != type_:
-            raise ValueError(f"no {type_.replace('_', ' ')} with id "
-                             f"{_short(args.get('id'), 20)!r}; search for it first")
+            raise ValueError(self.not_found(raw, type_.replace("_", " ")))
         return r
 
     def add_options(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -1635,6 +1755,18 @@ class Library(MoreTools, ManageTools):
         self._created[iid] = pid
         self._catalog = None
 
+    def _pointed_at(self, name: str, item_id: str) -> bool:
+        """Whether any item (or a card of this chat) points at the wildcard
+        with ``@{…}`` by name or id."""
+        keys = [k for k in (item_id, name) if k]
+        if not keys:
+            return False
+        texts = [json.dumps(m.get("payload") or {}, ensure_ascii=False)
+                 for m in self.modules.values()]
+        texts += [json.dumps((p.get("op") or {}).get("body") or {}, ensure_ascii=False)
+                  for p in self.earlier_proposals.values()]
+        return any("@{" + k in t for t in texts for k in keys)
+
     def _broken_links(self, op: dict[str, Any]) -> list[str]:
         """A change to a wildcard that cards not yet applied rely on (a new
         constraint's rules name its options and tags): which rules it
@@ -1739,6 +1871,12 @@ class Library(MoreTools, ManageTools):
             if isinstance(body.get("payload"), dict) and base:
                 item["payload"] = {**(base.get("payload") or {}), **body["payload"]}
             found = ai_lint.check(op, item, self.get, base)
+            if op["op"] == "create" and item.get("type") == "wildcard" \
+                    and not (item.get("payload") or {}).get("var_binding") \
+                    and not self._pointed_at(str(item.get("name") or ""),
+                                             str((op.get("body") or {}).get("id") or "")):
+                # The 9B made a Pose list with no variable for the prompt to read.
+                found = [*found, ai_lint.NO_VAR]
             proposal["warnings"] += found
             fixes = ai_lint.fixes(op, item, base, found)
             if fixes:

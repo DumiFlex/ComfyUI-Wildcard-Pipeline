@@ -278,8 +278,58 @@ def native(tools: list[Tool], api: str) -> list[dict[str, Any]]:
     return out
 
 
-def step_schema(names: list[str]) -> dict[str, Any]:
-    """The JSON-mode answer: a plan, a message and calls by name."""
+#: Most calls a two-phase pick may choose at once (small models).
+PICK_MAX = 4
+
+
+def pick_schema(names: list[str]) -> dict[str, Any]:
+    """The first half of a two-phase step: a plan and the tools to call
+    next, none when the model is ready to answer."""
+    return {
+        "type": "object", "additionalProperties": False, "required": ["plan", "tools"],
+        "properties": {"plan": {"type": "string"},
+                       "tools": {"type": "array", "maxItems": PICK_MAX,
+                                 "items": {"type": "string", "enum": list(names)}}},
+    }
+
+
+def pick_keys(picked: list[str]) -> list[str]:
+    """The write half's key for each picked call: "1:search", "2:read"."""
+    return [f"{i}:{name}" for i, name in enumerate(picked, 1)]
+
+
+def write_schema(picked: list[str], offered: list[Tool]) -> dict[str, Any]:
+    """The second half: each picked call's arguments (a name not offered
+    gets an empty object, and the loop refuses it with a reason), or the
+    message when nothing was picked."""
+    if not picked:
+        return {"type": "object", "additionalProperties": False, "required": ["message"],
+                "properties": {"message": {"type": "string"}}}
+    params = {t.name: t.params for t in offered}
+    keys = pick_keys(picked)
+    return {"type": "object", "additionalProperties": False, "required": keys,
+            "properties": {k: _strip_schema(params.get(n) or obj())
+                           for k, n in zip(keys, picked, strict=True)}}
+
+
+def step_schema(names: list[str], typed: list[Tool] | None = None) -> dict[str, Any]:
+    """The JSON-mode answer: a plan, a message and calls by name. `typed`
+    (the offered tools, for local servers whose grammar follows the
+    schema): each call's args are that tool's own parameters, so a small
+    model can't send broken JSON or wrong argument names. Hosted strict
+    mode refuses optional properties, so they get args as a string."""
+    if typed:
+        calls: dict[str, Any] = {"anyOf": [{
+            "type": "object", "additionalProperties": False, "required": ["tool", "args"],
+            "properties": {"tool": {"type": "string", "enum": [t.name]},
+                           "args": _strip_schema(t.params or obj())},
+        } for t in typed]}
+        return {
+            "type": "object", "additionalProperties": False,
+            "required": ["plan", "message", "calls"],
+            "properties": {"plan": {"type": "string"}, "message": {"type": "string"},
+                           "calls": {"type": "array", "items": calls}},
+        }
     return {
         "type": "object", "additionalProperties": False,
         "required": ["plan", "message", "calls"],

@@ -17,9 +17,17 @@ export interface LibraryRow {
   id: string;
   name: string;
   value: string;
-  /** Send-to-negative (v8): library content only. Instance
-   *  `values_overrides` never carry one (`shapeValuesPatch` writes
-   *  `{id, name, value}`), so the row shows it read-only. */
+  /** Send-to-negative (v8). An override row may carry its own: a present
+   *  `negative` key replaces the library row's ("" clears it), an absent
+   *  one keeps it (engine/modules/fixed_values_handler.py). */
+  negative?: string;
+}
+
+/** One `values_overrides` row as the engine reads it. */
+export interface OverrideRow {
+  id: string;
+  name: string;
+  value: string;
   negative?: string;
 }
 
@@ -31,6 +39,24 @@ export interface DraftRow {
   /** Original library row id when this draft maps to one. `null` for
    *  instance-added rows that have no library counterpart. */
   libraryId: string | null;
+  /** The row's effective negative ("" = none). */
+  negative?: string;
+}
+
+/** The negative a row ends up with: the override row's own when it has the
+ *  key, else the library row's. */
+export function effectiveNegative(
+  library: LibraryRow | undefined,
+  override: OverrideRow | undefined,
+): string {
+  if (override && typeof override.negative === "string") return override.negative;
+  return library?.negative ?? "";
+}
+
+/** Whether a library row's negative was changed on this instance. */
+export function negativeOverridden(library: LibraryRow | undefined, row: DraftRow): boolean {
+  if (!library || row.libraryId === null) return false;
+  return (row.negative ?? "").trim() !== (library.negative ?? "").trim();
 }
 
 export type OverrideKind = "none" | "value" | "name" | "both" | "added";
@@ -95,7 +121,7 @@ export function rowEnabled(
 export function shapeValuesPatch(
   draft: readonly DraftRow[],
   library: readonly LibraryRow[],
-): Array<{ id: string; name: string; value: string }> | null {
+): OverrideRow[] | null {
   const libIds = new Set(library.map((r) => r.id));
   const libById = new Map(library.map((r) => [r.id, r]));
 
@@ -105,7 +131,7 @@ export function shapeValuesPatch(
     if (r.libraryId === null) return true;
     const lib = libById.get(r.libraryId);
     if (!lib) return true;
-    return lib.name !== r.name || lib.value !== r.value;
+    return lib.name !== r.name || lib.value !== r.value || negativeOverridden(lib, r);
   });
   const sameOrder = draft.every((r, i) => r.libraryId === library[i]?.id);
   const sameSet = draft.length === library.length
@@ -115,5 +141,13 @@ export function shapeValuesPatch(
     return null;
   }
 
-  return draft.map((r) => ({ id: r.id, name: r.name, value: r.value }));
+  return draft.map((r) => {
+    const out: OverrideRow = { id: r.id, name: r.name, value: r.value };
+    const neg = (r.negative ?? "").trim() ? (r.negative as string) : "";
+    const lib = r.libraryId === null ? undefined : libById.get(r.libraryId);
+    // A row of the library keeps its negative unless this instance changed
+    // it ("" says "none here"); an added row carries its own when it has one.
+    if (lib ? negativeOverridden(lib, r) : neg) out.negative = neg;
+    return out;
+  });
 }

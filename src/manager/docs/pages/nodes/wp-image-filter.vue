@@ -55,6 +55,13 @@ const settings = [
         to an image travels with it, so the upscaler gets each picked image's own latent,
         conditioning and prompt.
       </p>
+      <DocCallout variant="tip">
+        <b>Use Image Filter</b> for a human pick before an expensive second pass (hires, upscale,
+        a detailer, video), to curate a sweep grid, or to inpaint a picked image in the same run.
+        <b>Not for</b> unattended runs: the queue waits while it is open. Set it to pass all, or
+        give it a timeout that keeps everything. An edited or inpainted prompt is a new prompt,
+        so in an adult pack it must carry the adult anchors.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="Where it goes">

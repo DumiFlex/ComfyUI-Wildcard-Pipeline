@@ -24,7 +24,11 @@ Entries, oldest first:
 - ``{"kind": "note", "text": str}`` — a nudge from the server.
 - ``{"kind": "shown", "view": {message, steps, proposals, refs, …}}`` — what
   the user saw for this part of the turn, so the chat list can reopen it.
-  The model never sees it (`render` skips it).
+  The model never sees it (`render` skips it). Its view's ``reaction`` (the
+  `react` tool's emoji) shows on the user message before it.
+- ``{"kind": "aside", "text": str, "reaction": emoji}`` — a message that was
+  only thanks or praise (`engine/ai/react.py:quick`): it got a reaction and
+  no model call. `render` skips it, so the model's prefix stays the same.
 
 Rendering gives provider-neutral messages that `_ai_client` turns into each
 API's format. A turn always ends with a step that calls nothing, so roles
@@ -118,6 +122,10 @@ def step_entry(text: str, calls: list[dict[str, Any]], *, answer: Any = None,
 
 def shown_entry(view: dict[str, Any]) -> dict[str, Any]:
     return {"kind": "shown", "view": view}
+
+
+def aside_entry(text: str, reaction: str) -> dict[str, Any]:
+    return {"kind": "aside", "text": text, "reaction": reaction}
 
 
 def results_entry(items: list[dict[str, Any]], tail: str) -> dict[str, Any]:
@@ -419,8 +427,16 @@ def display(entries: list[dict[str, Any]], meta: dict[str, Any]) -> list[dict[st
                 turn["images"] = [f"data:{im.get('media_type')};base64,{im.get('data')}"
                                   for im in e["images"]]
             out.append(turn)
+        elif kind == "aside":
+            out.append({"role": "user", "text": str(e.get("text") or ""),
+                        "reaction": str(e.get("reaction") or ""), "aside": True})
         elif kind == "shown" and isinstance(e.get("view"), dict):
             view = answered_view(fixed_view(e["view"], meta), meta)
+            if view.get("reaction"):
+                asker = next((t for t in reversed(out) if t["role"] == "user"
+                              and not t.get("aside")), None)
+                if asker is not None:
+                    asker["reaction"] = view["reaction"]
             status, created = status_of(view)
             out.append({"role": "assistant", "view": view, "status": status,
                         "created": created})

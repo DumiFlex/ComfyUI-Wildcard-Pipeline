@@ -8,7 +8,9 @@ import { computed, nextTick, ref, watch } from "vue";
 import SegControl, { type SegOption } from "../settings/SegControl.vue";
 import AiDraftPanel from "./AiDraftPanel.vue";
 import AiEditPanel from "./AiEditPanel.vue";
-import type { AiWildcardEditAction, AiWildcardEditChange, WildcardOption } from "../../api/types";
+import type {
+  AiDraftGroup, AiWildcardEditAction, AiWildcardEditChange, WildcardOption,
+} from "../../api/types";
 import type { ParsedBulkOption } from "../../utils/bulkParse";
 import { useAiConfig } from "../../composables/useAiConfig";
 
@@ -22,6 +24,7 @@ interface Props {
   selectedIds: Set<string>;
   existingTags: string[];
   tagGroups?: Record<string, string[]>;
+  tagGroupKinds?: Record<string, "accepts">;
   /** The wildcard's description and library tags: what it is for. */
   description?: string;
   labels?: string[];
@@ -30,6 +33,7 @@ const props = defineProps<Props>();
 
 const emit = defineEmits<{
   (e: "commit-options", payload: ParsedBulkOption[]): void;
+  (e: "commit-groups", groups: AiDraftGroup[]): void;
   (e: "apply-edits", action: AiWildcardEditAction, changes: AiWildcardEditChange[]): void;
   (e: "cancel"): void;
   (e: "update:pending", pending: boolean): void;
@@ -108,8 +112,10 @@ defineExpose({ draft, edit });
       :existing-values="options.map((o) => o.value)"
       :existing-tags="existingTags"
       :tag-groups="tagGroups"
+      :tag-group-kinds="tagGroupKinds"
       :description="description"
       :labels="labels"
+      @commit-groups="(g: AiDraftGroup[]) => emit('commit-groups', g)"
       @commit-options="(p: ParsedBulkOption[]) => emit('commit-options', p)"
       @cancel="emit('cancel')"
       @update:pending="(v: boolean) => (draftPending = v)"

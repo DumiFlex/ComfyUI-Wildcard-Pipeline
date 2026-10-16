@@ -4,6 +4,7 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+import DocRef from "../../../components/docs/DocRef.vue";
 import StarterButton from "../../../components/docs/StarterButton.vue";
 </script>
 
@@ -29,6 +30,14 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
         as the prompt-shaped counterpart to a bundle: a bundle reuses a set of modules, a template
         reuses the wording that stitches their <VarToken>$variables</VarToken> together.
       </p>
+      <DocCallout variant="tip">
+        <b>Use a template</b> for a prompt skeleton you reuse: one per model family (a tag
+        skeleton, a prose skeleton), or a fixed system prompt a model needs. <b>Not for</b>
+        variety: a template holds no variables of its own and rolls nothing, and in the Assembler
+        <VarToken kind="inline">{a|b}</VarToken> prints exactly as typed and
+        <VarToken kind="ref">@{}</VarToken> prints nothing. Put choices in wildcards. See
+        <DocRef id="prompt-writing" /> for the order each family wants.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="How it pairs with the Assembler">

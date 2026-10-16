@@ -98,3 +98,64 @@ def test_no_spurious_warnings_for_held_source_constraint():
     kinds = {w.get("type") for w in ctx.get("__wp_warnings__", []) if isinstance(w, dict)}
     assert "constraint_source_missing" not in kinds
     assert "constraint_never_applied" not in kinds
+
+
+
+def _match_iteration_source():
+    w = _wildcard("pos00001", "pose", [("1", ["sit"]), ("2", ["stand"]), ("3", ["stand"])])
+    w["instance"]["match_variable"] = "iteration"
+    return w
+
+
+def _held_outfit():
+    return _wildcard("out00003", "outfit", [("gown", ["long"]), ("mini", ["short"]),
+                                            ("jeans", ["long"]), ("shorts", ["short"])],
+                     seed_scope="hold")
+
+
+_POSE_CON = {"sit": {"short": {"mode": "exclude", "factor": 0}},
+             "stand": {"long": {"mode": "exclude", "factor": 0}}}
+
+
+def test_base_pass_runs_on_frame_zero_inputs_when_given():
+    """The hold base pass resolves against FRAME0_CTX_KEY (frame 0's input
+    ctx) when the caller passes it, so a held target of a constraint whose
+    source follows $iteration keeps its frame-0 option."""
+    from engine.pipeline import FRAME0_CTX_KEY
+    mods = [_match_iteration_source(),
+            _constraint("con00003", "pos00001", "out00003", _POSE_CON), _held_outfit()]
+    for seed in range(15):
+        frame0 = _run(mods, widget_seed=seed, loop_index=0, ctx={"iteration": "1"})
+        assert frame0["outfit"] in {"gown", "jeans"}
+        for k, it in ((1, "2"), (2, "3")):
+            ctx = _run(mods, widget_seed=seed, loop_index=k,
+                       ctx={"iteration": it, FRAME0_CTX_KEY: {"iteration": "1"}})
+            assert ctx["pose"] == it  # the free source still follows its frame
+            assert ctx["outfit"] == frame0["outfit"], (seed, k)
+            assert FRAME0_CTX_KEY not in ctx
+
+
+def test_held_target_stays_put_when_the_source_is_in_an_upstream_node(tmp_path, monkeypatch):
+    """Node A (no hold) picks the pose from $iteration; node B holds an outfit
+    the pose constrains. A hands B its frame-0 output, so B's base pass sees
+    frame 0's pose."""
+    import json
+
+    monkeypatch.setenv("WP_DB_PATH", str(tmp_path / "wp.db"))  # off the real library
+
+    from wp_nodes.context_loop import WPContextLoop
+    from wp_nodes.context_node import WPContext
+
+    def node(mods, seed, upstream):
+        widget = json.dumps({"version": 1, "modules": mods})
+        return WPContext.execute(seed=seed, wp_modules=widget, upstream=upstream).values[0]
+
+    node_a = [_match_iteration_source(),
+              _constraint("con00004", "pos00001", "out00003", _POSE_CON)]
+    for seed in range(15):
+        frames = WPContextLoop.execute(
+            seed=seed, count=3, wp_context_loop_config="{}").values[0]
+        outs = [node([_held_outfit()], seed, node(node_a, seed, f)) for f in frames]
+        assert [o.context["pose"] for o in outs] == ["1", "2", "3"]
+        assert len({o.context["outfit"] for o in outs}) == 1, (
+            seed, [o.context["outfit"] for o in outs])

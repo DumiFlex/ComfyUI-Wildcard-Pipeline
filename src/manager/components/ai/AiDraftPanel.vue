@@ -18,7 +18,7 @@ import Input from "../ui/Input.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
 import { useAiImages } from "../../composables/useAiImages";
 import { api } from "../../api/client";
-import type { AiDraftOption, AiWildcardDraftResult } from "../../api/types";
+import type { AiDraftGroup, AiDraftOption, AiWildcardDraftResult } from "../../api/types";
 import type { ParsedBulkOption } from "../../utils/bulkParse";
 import { keptNote, useAiConversation } from "../../composables/useAiConversation";
 
@@ -32,11 +32,14 @@ interface Props {
   description?: string;
   labels?: string[];
   tagGroups?: Record<string, string[]>;
+  tagGroupKinds?: Record<string, "accepts">;
 }
 const props = defineProps<Props>();
 
 const emit = defineEmits<{
   (e: "commit-options", payload: ParsedBulkOption[]): void;
+  /** Tag groups to create or extend, sent just before the options. */
+  (e: "commit-groups", groups: AiDraftGroup[]): void;
   (e: "cancel"): void;
   /** True while there is a draft or a request the user would lose. */
   (e: "update:pending", pending: boolean): void;
@@ -46,13 +49,19 @@ const count = ref<number>(10);
 /** Indices of result rows the user unticked. */
 const unticked = ref<Set<number>>(new Set());
 
-type Ctx = { values: string[]; tags: string[]; tagGroups?: Record<string, string[]> };
+type Ctx = {
+  values: string[];
+  tags: string[];
+  tagGroups?: Record<string, string[]>;
+  kinds?: Record<string, "accepts">;
+};
 const pics = useAiImages();
 const convo = useAiConversation<AiWildcardDraftResult, Ctx>({
   capture: () => ({
     values: props.existingValues.filter((v) => v.trim()),
     tags: props.existingTags,
     tagGroups: props.tagGroups,
+    kinds: props.tagGroupKinds,
   }),
   send: ({ instruction, history, ctx, web, searched, skipped }, signal) => {
     const n = Math.min(100, Math.max(1, Math.round(Number(count.value) || 10)));
@@ -74,6 +83,7 @@ const convo = useAiConversation<AiWildcardDraftResult, Ctx>({
           options: ctx.values.map((value) => ({ value })),
           sub_categories: ctx.tags,
           ...(ctx.tagGroups && Object.keys(ctx.tagGroups).length ? { tag_groups: ctx.tagGroups } : {}),
+          ...(ctx.kinds && Object.keys(ctx.kinds).length ? { tag_group_kinds: ctx.kinds } : {}),
         },
       },
     }, signal);
@@ -105,8 +115,18 @@ function toggle(i: number): void {
   unticked.value = next;
 }
 
+/** Groups whose tags a ticked option still uses (a group only sorts tags
+ *  that exist), or that turn an existing group into accepts. */
+const groups = computed<AiDraftGroup[]>(() => {
+  const used = new Set(ticked.value.flatMap((o) => o.tags));
+  return (result.value?.groups ?? [])
+    .map((g) => ({ ...g, tags: g.tags.filter((t) => used.has(t) || props.existingTags.includes(t)) }))
+    .filter((g) => g.tags.length > 0 || (props.tagGroups && g.name in props.tagGroups));
+});
+
 function commit(): void {
   if (ticked.value.length === 0) return;
+  if (groups.value.length) emit("commit-groups", groups.value);
   emit("commit-options", ticked.value.map((o) => ({
     value: o.value,
     weight: o.weight,
@@ -219,6 +239,11 @@ const skippedSummary = computed(() => {
         {{ result.options.length }} suggested<template v-if="skippedSummary"> · skipped {{ skippedSummary }}</template>
         <template v-if="result.new_tags.length"> · new tags (dashed) are created when you add</template>
       </p>
+      <ul v-if="groups.length" class="wp-ai-draft__groups" data-test="ai-draft-groups">
+        <li v-for="g in groups" :key="g.name">
+          <strong>{{ g.name }}</strong> <span class="wp-ai-draft__group-kind">{{ g.kind === "accepts" ? "accepts" : "classify" }} group</span>{{ g.tags.length ? `: ${g.tags.join(", ")}` : " (made an accepts group)" }}
+        </li>
+      </ul>
       <div class="wp-ai-draft__actions">
         <Button variant="ghost" size="sm" data-test="ai-draft-discard" @click="convo.clear">Discard</Button>
         <Button
@@ -275,4 +300,11 @@ const skippedSummary = computed(() => {
 .wp-ai-draft__neg { font-size: 11px; color: var(--wp-danger-text, var(--wp-danger)); }
 .wp-ai-draft__summary, .wp-ai-draft__note { margin: 0; font-size: 12px; color: var(--wp-text-dim); }
 .wp-ai-draft__actions { display: flex; justify-content: flex-end; gap: 8px; }
+.wp-ai-draft__groups { margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--wp-text-dim); }
+.wp-ai-draft__group-kind {
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--wp-surface-2, rgba(127, 127, 127, 0.15));
+  font-size: 11px;
+}
 </style>

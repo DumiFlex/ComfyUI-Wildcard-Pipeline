@@ -10,6 +10,7 @@ See `/pr-drafts/ai-client-tools.md`.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from engine.ai import ask as ai_ask
@@ -71,6 +72,10 @@ def prepare(lib: Any, tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], 
 
 
 def _open(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    if not any(str(args.get(k) or "").strip() for k in ("doc", "page", "id", "proposal")):
+        # The 9B opened "" after every proposal: its card is already shown.
+        raise ValueError("open needs an item id, a page or a docs page; a card you just "
+                         "proposed is already on screen, so don't open it")
     if args.get("doc"):
         doc = ai_docs.page(args.get("doc"))
         if doc is None or doc["id"] == "settings":
@@ -81,7 +86,7 @@ def _open(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
         if name not in PAGES:
             raise ValueError(f"no manager page {name!r}; pages: {', '.join(PAGES)}")
         out: dict[str, Any] = {"page": name}
-        label = f"Opened {name}"
+        label = f"Opened the {name} list" if name in LIST_PAGES else f"Opened {name}"
         if name == "settings" and args.get("section"):
             section = _text(args.get("section"), 30).lower()
             if section not in SETTINGS_SECTIONS:
@@ -90,13 +95,34 @@ def _open(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
             out["section"] = section
             label += f" › {section}"
         return out, label
-    pid = _proposal(lib, args.get("proposal") or args.get("id"))
+    raw = args.get("proposal") or args.get("id")
+    mine = _this_answer(lib, raw)
+    if mine:
+        raise ValueError(f"card {mine} is from this answer and already on screen; the user "
+                         "applies it or opens it from its card, so don't open it")
+    pid = _proposal(lib, raw)
     if pid:
         title = str((lib.earlier_proposals.get(pid) or {}).get("title") or pid)
         return {"proposal": pid}, f"Opened {title} in an editor"
-    row = _row(lib, args.get("id"))
+    row = _row(lib, raw)
     return ({"id": row["id"], "type": lib._kind(row)},
             f"Opened {row.get('name') or row['id']}")
+
+
+def _this_answer(lib: Any, raw: Any) -> str:
+    """The pid of a card proposed earlier in this same answer that ``raw``
+    names (its pid or the id it will get), else "": the browser shows it
+    only once the answer ends, so there is nothing to open yet."""
+    if not isinstance(raw, str) or not raw.strip():
+        return ""
+    key = raw.strip()
+    earlier = getattr(lib, "earlier_proposals", {}) or {}
+    if re.fullmatch(r"p\d+", key) and key not in earlier \
+            and int(key[1:]) <= int(getattr(lib, "_next_pid", 0) or 0):
+        return key
+    made = getattr(lib, "_created", {}) or {}
+    pid = made.get(key.split("#", 1)[0].strip())
+    return pid if isinstance(pid, str) and pid not in earlier else ""
 
 
 def _proposal(lib: Any, raw: Any) -> str:
@@ -213,8 +239,20 @@ def _show_test(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
             raise ValueError(f"{row.get('name')} is a template; the stack takes modules and "
                              "bundles")
         stack.append({"bundle": row["id"]} if kind == "bundle" else {"module": row["id"]})
+    change = _text(args.get("change"), 10).lower() or "replace"
+    if change not in ("replace", "add", "remove"):
+        raise ValueError("change is replace, add or remove")
+    needs = getattr(lib, "with_needs", None)
+    added: list[str] = []
+    if needs is not None and change != "remove":
+        ids, added = needs([x.get("module") or x.get("bundle") or "" for x in stack])
+        stack = [{"bundle": i} if i in lib.bundles else {"module": i} for i in ids][:MAX_STACK]
     seeds = args.get("seeds") if isinstance(args.get("seeds"), int) else 20
     out: dict[str, Any] = {"stack": stack, "seeds": max(1, min(500, seeds))}
+    if change != "replace":
+        out["change"] = change
+        if not isinstance(args.get("seeds"), int):
+            out.pop("seeds")  # keep the open run's seeds
     if isinstance(args.get("from"), int) and not isinstance(args.get("from"), bool):
         out["from"] = max(0, args["from"])
     pins = args.get("pins")
@@ -231,8 +269,14 @@ def _show_test(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
     n = len(stack)
     what = f"{n} item" + ("" if n == 1 else "s")
     label = (f"Ran {what} in the Test Runner" if run else f"Set up {what} in the Test Runner")
+    if change == "add":
+        label = f"Added {what} to the Test Runner" + (" and ran it" if run else "")
+    elif change == "remove":
+        label = f"Took {what} out of the Test Runner" + (" and ran it" if run else "")
     if out.get("save"):
         label += f", saved as {out['save']}"
+    if added:
+        out["notes"] = added
     return out, label
 
 
@@ -297,6 +341,31 @@ _PREPARE = {
 
 #: Longest browser answer kept for the model.
 MAX_RESULT = 4000
+
+
+#: Said after a page call that did nothing, so a small model doesn't tell
+#: the user it worked (Nemotron said "I've highlighted the paragraph").
+FAILED_NOTE = ("This call FAILED: nothing happened on the user's page. Don't say it worked; "
+               "fix the call (read_page lists the parts) or tell the user it didn't work.")
+#: Manager pages that list one kind of module; each has a docs page too.
+LIST_PAGES = ("wildcards", "fixed-values", "combines", "derivations", "constraints", "bundles",
+              "templates")
+
+
+def failed(text: str) -> bool:
+    """Whether a page call's result says it did nothing."""
+    body = text.split(": ", 1)[1] if ": " in text else text
+    return body.startswith("couldn't") or body.startswith("no part ")
+
+
+def open_note(args: dict[str, Any]) -> str:
+    """What the model is told after opening a list page, which it confuses
+    with that module's docs page."""
+    page = args.get("page")
+    if page in LIST_PAGES:
+        return (f" (the user's {page} list, not the docs: a docs page opens with "
+                '{"doc": id})')
+    return ""
 
 
 def result_text(tool: str, answer: dict[str, Any]) -> str:

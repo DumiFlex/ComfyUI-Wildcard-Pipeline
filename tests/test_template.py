@@ -110,3 +110,26 @@ def test_resolve_variables_legacy_dollar_var_unchanged():
         "subject": "girl",
     }
     assert resolve_variables("a $style $subject", ctx) == "a anime girl"
+
+
+@pytest.mark.parametrize("value", [
+    "",
+    "  ",
+    None,
+    "LISTVAR_EMPTY",
+    "LISTVAR_BLANK",
+])
+def test_empty_value_drops_the_dangling_joining_word(value):
+    from engine.syntax.types import ListVar
+    if value == "LISTVAR_EMPTY":
+        value = ListVar([], ", ")
+    elif value == "LISTVAR_BLANK":
+        value = ListVar(["", ""], "")
+    ctx = _ctx() if value is None else _ctx(props=value)
+    assert resolve_variables("a knight with $props", ctx) == "a knight"
+
+
+def test_non_empty_multi_pick_keeps_the_joining_word():
+    from engine.syntax.types import ListVar
+    ctx = _ctx(props=ListVar(["sword", "shield"], " and "))
+    assert resolve_variables("a knight with $props", ctx) == "a knight with sword and shield"

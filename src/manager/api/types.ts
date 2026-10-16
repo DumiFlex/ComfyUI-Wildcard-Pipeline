@@ -947,6 +947,10 @@ export interface AiTestResult {
   /** The embedding model's check, when meaning search is on. `swapped`:
    *  Ollama unloaded the chat model to load it. */
   embed?: { ok: boolean; dims: number | null; error: string | null; swapped: boolean } | null;
+  /** What a new chat sends before its first message (instructions, `tools`
+   *  tool declarations, library summary), in tokens, fitted to `window`;
+   *  `lean` is how far it was cut down (0 = not at all). */
+  prefix?: { tokens: number; window: number; tools: number; lean: number; format: string } | null;
 }
 
 /** The chat's library index (`GET /wp/api/ai/index`). */
@@ -1012,14 +1016,25 @@ export interface AiWildcardDraftRequest extends AiConversational {
       options: Array<{ value: string }>;
       sub_categories: string[];
       tag_groups?: Record<string, string[]>;
+      tag_group_kinds?: Record<string, "accepts">;
     };
   };
+}
+
+/** A tag group the draft adds or extends: `tags` go into group `name`
+ *  (created when new); `kind` "accepts" makes it an accepts group. */
+export interface AiDraftGroup {
+  name: string;
+  kind: "classify" | "accepts";
+  tags: string[];
 }
 
 export interface AiWildcardDraftResult {
   options: AiDraftOption[];
   /** Tags the draft uses that the wildcard doesn't have yet. */
   new_tags: string[];
+  /** Tag groups the request asked for (older servers leave it out). */
+  groups?: AiDraftGroup[];
   skipped: Array<{ text: string; reason: string }>;
   model: string;
   /** The model's raw answer, for a follow-up's `history`. */
@@ -1331,6 +1346,11 @@ export interface AiChatStep {
   tool: string;
   note: string;
   ok: boolean;
+  /** What the model said before calling its tools (`note` is the text). */
+  say?: boolean;
+  /** What the model thought in that step (its reasoning, or a JSON-mode
+   *  step's plan): shown folded as "Thinking". */
+  think?: boolean;
   card?: AiTestCard;
 }
 
@@ -1505,6 +1525,10 @@ export interface AiChatResult {
   answered?: Record<string, AiAskAnswered>;
   /** How full the model's window is, for the meter. */
   context?: AiChatContext;
+  /** An emoji on the user's message (the model's `react`, or a thanks). */
+  reaction?: string;
+  /** The message was only thanks: it got `reaction` and no answer. */
+  aside?: boolean;
 }
 
 /** The meter: tokens the last request used against what the model holds.
@@ -1531,7 +1555,7 @@ export interface AiChatSummary {
 
 /** One turn of a reopened chat, as the user saw it. */
 export type AiChatTurn =
-  | { role: "user"; text: string; images?: string[] }
+  | { role: "user"; text: string; images?: string[]; reaction?: string; aside?: boolean }
   | {
       role: "assistant";
       view: Omit<AiChatResult, "chat_id">;
@@ -1557,7 +1581,7 @@ export type AiChatStreamEvent =
   | { type: "status"; v: string }
   | { type: "thinking" }
   | { type: "text"; v: string }
-  | { type: "tool"; step: { tool: string; note: string; ok: boolean } }
+  | { type: "tool"; step: AiChatStep }
   | { type: "done"; result: AiChatResult }
   | { type: "error"; status: number; message: string };
 
@@ -1631,6 +1655,9 @@ export interface AiPackSettings {
   count: number;
   /** family: quality and negative tags per $model_variant (WP Model Info). */
   model: "any" | "family";
+  /** on: an NSFW pack's template negative gets the youth block (child,
+   *  loli, …); off: nothing is added. */
+  youth_negative: "on" | "off";
 }
 
 export interface AiPackRun {
@@ -1659,9 +1686,20 @@ export interface AiPackSection {
   about: string;
 }
 
+export interface AiPackDropped {
+  kind: "constraint";
+  name: string;
+  source: string;
+  target: string;
+  about: string;
+  why: string;
+}
+
 export interface AiPackPlan {
   title: string;
   summary: string;
+  /** How the pack fits together: what decides what, and why each rule is there. */
+  design?: string;
   rating: "safe" | "nsfw";
   /** How every option is written: Danbooru-style tags or natural phrases. */
   style: "tags" | "sentences";
@@ -1687,6 +1725,10 @@ export interface AiPackPlan {
   items: AiPackItem[];
   /** What the checker left out of the model's plan. */
   warnings: string[];
+  /** Constraints the checker had to leave out (a side isn't a wildcard),
+   *  kept until one between the same variables is planned; the plan review
+   *  and the check both report them. */
+  dropped?: AiPackDropped[];
   /** "Extend with AI": the bundle the plan adds to. */
   base?: { id: string; name: string; nested: boolean; sets: string[] };
   /** Variables the user's open canvas sets (Injector rows, the Loop). */
@@ -1757,6 +1799,8 @@ export interface AiPackPlanResult {
   web?: boolean;
   /** About how much of the model's window the request and its answer took. */
   context?: Pick<AiChatContext, "used" | "window" | "estimated" | "about">;
+  /** What the model thought while planning, when its server sends it. */
+  thinking?: string;
 }
 
 export interface AiPackReview {
@@ -1787,6 +1831,8 @@ export interface AiPackItemResult {
   /** Warnings worth one automatic rebuild, as its note ("" when none). */
   repair: string;
   model: string;
+  /** What the model thought while building it, when its server sends it. */
+  thinking?: string;
 }
 
 export interface AiPackCheck {
@@ -1800,6 +1846,12 @@ export interface AiPackCheck {
   /** Variety advice: options never picked, too few distinct values, one
    *  value taking most runs. */
   quality: Array<{ key: string; text: string }>;
+  /** Item keys in the order they run (and install). */
+  order?: string[];
+  /** Items the check fixed without the model (words the prompt said twice,
+   *  pieces another wildcard picks): their new payload and preview, and the
+   *  lines to add to their warnings. The report was run on these. */
+  tidied?: Record<string, { payload: Record<string, unknown>; preview: string[]; warnings: string[] }>;
 }
 
 export interface AiPackInstallResult {

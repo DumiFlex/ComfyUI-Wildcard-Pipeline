@@ -11,7 +11,7 @@ const controls = [
   { term: "Count", desc: "How many variations to make in one run (1–999). Set it to 1 to switch looping off without removing the node." },
   { term: "Seed", desc: "The starting point for the batch. Change it for a different set of variations; keep it the same to reproduce the same batch. Right-click → Convert widget to input to drive it from another seed node." },
   { term: "Override seed", desc: "On: the loop chooses the seed for every iteration, so the whole batch is reproducible from this one seed. Off (default): each WP Context keeps using its own seed and the loop just nudges it per iteration." },
-  { term: "Variation strategy", desc: "How the per-iteration seeds spread out. Hashed (default) makes each iteration unrelated and maximally varied; Sequential walks seed, seed+1, seed+2… so neighbours feel related; Prime stride takes large even jumps." },
+  { term: "Variation strategy", desc: "How the per-iteration seeds are worked out. Hashed (default) spreads them with a hash; Sequential walks seed, seed+1, seed+2… so the seeds are easy to read out and quote; Prime stride takes large even jumps. The strategy changes which seeds are used, not how varied the results are: every strategy gives each frame its own unrelated roll." },
   { term: "Bypass", desc: "The node's own on/off switch. When on, the loop collapses to a single run but stays wired, so you can flip it back without rebuilding the graph." },
 ];
 </script>
@@ -58,9 +58,12 @@ const controls = [
         </li>
         <li>
           <b>Edit frame</b> — the <code>base / #1 #2 …</code> chip row. Pick a frame and the module
-          editors switch to editing just that frame, recording a per-frame override — a pinned
-          wildcard pick, a tweaked template, a per-frame seed lock, or a per-frame enable/disable.
-          <code>base</code> edits the default every un-pinned frame uses.
+          editors switch to editing just that frame, recording a per-frame override — narrowed
+          wildcard options, a tweaked template, a per-frame seed lock, or a per-frame enable/disable.
+          <code>base</code> edits the default every frame without an override uses. Ctrl-click a
+          frame chip to bypass that frame (the kept frames keep their numbers), and Alt-click it to
+          lock its seed. Overrides stay on the canvas: bundles don't save them and the Test Runner
+          doesn't run them.
         </li>
       </ul>
     </DocSection>
@@ -95,9 +98,10 @@ const controls = [
         </li>
       </ul>
       <p>
-        Each frame pins the swept wildcards exactly like pinning an option by hand, so their tag
-        axes still roll and constraints they drive still apply downstream. A swept wildcard is not
-        itself re-weighted by constraints, because the sweep decides its pick. Frame bypass and
+        Each frame pins the swept wildcards (the sweep is the only thing that pins a pick; the
+        node has no pin control), so their tag axes still roll and constraints they drive still
+        apply downstream. A swept wildcard is not itself re-weighted by constraints, because the
+        sweep decides its pick: sweeping a constraint target shows pairs the pack forbids. Frame bypass and
         per-frame overrides work as usual. Changing the sweep moves each seed lock and bypassed
         frame with its combination, and drops it when that combination no longer runs; lowering
         the count drops the ones past it.
@@ -137,9 +141,16 @@ const controls = [
 
     <DocSection title="Good to know">
       <DocCallout variant="tip">
-        A module with a <b>locked seed</b> ignores the loop — it makes the same pick every
-        iteration. Useful for holding one thing steady (say, the art style) while everything else
-        varies across the batch.
+        A module with a <b>locked seed</b> (Lock pick on a wildcard) ignores the loop: it makes
+        the same pick every iteration, and on every Generate. Useful for holding one thing steady
+        (say, the art style) while everything else varies. <b>Hold across run</b> does the same
+        for one run and rolls again on the next.
+      </DocCallout>
+      <DocCallout variant="tip">
+        <b>Use the loop</b> for a batch of variations, a story told over frames, or a sweep that
+        compares options side by side. <b>Not for</b> sampler seeds alone: WP Seed List gives each
+        frame its own sampler seed, and the loop's Override seed plus seed locks keep keeper
+        frames reproducible (the locks are ignored while Override seed is off).
       </DocCallout>
       <DocCallout variant="warn">
         The loop emits a <b>list of prompts</b> — one per iteration. Downstream samplers run once

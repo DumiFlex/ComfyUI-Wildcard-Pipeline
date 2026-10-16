@@ -34,7 +34,8 @@ import re
 import secrets
 from typing import Any
 
-from engine.ai import about
+from engine.ai import about, adult
+from engine.ai import negation as ai_negation
 from engine.ai import refs as ai_refs
 from engine.modules.wildcard_handler import WildcardHandler
 from engine.syntax.subcat_filter import validate_subcat_name
@@ -114,6 +115,7 @@ def build_user_prompt(
     existing_options: list[str], tags: list[str],
     axes: dict[str, list[str]] | None = None,
     description: str = "", labels: list[str] | None = None, refs_text: str = "",
+    kinds: dict[str, str] | None = None,
 ) -> str:
     """The per-request message: what exists, then what to add."""
     lines: list[str] = []
@@ -124,7 +126,9 @@ def build_user_prompt(
     if axes:
         for axis, members in axes.items():
             if members:
-                lines.append(f"Tag group {axis}: {', '.join(members)}")
+                kind = " (accepts: what an option goes with)" \
+                    if (kinds or {}).get(axis) == "accepts" else ""
+                lines.append(f"Tag group {axis}{kind}: {', '.join(members)}")
     grouped = {t for ms in (axes or {}).values() for t in ms}
     loose = [t for t in tags if t not in grouped]
     if loose:
@@ -233,6 +237,13 @@ def compile_options(
             text = ai_refs.compile_text(text, surface="option", refs=refs, self_id=self_id)
         except ValueError as e:
             skipped.append({"text": text, "reason": str(e)})
+            continue
+        if adult.sexual_minor(text):
+            skipped.append({"text": text[:80], "reason": "it names a minor in a sexual context"})
+            continue
+        if ai_negation.excluded(text):
+            skipped.append({"text": text[:80], "reason": "it only says what to leave out, "
+                                                         "which belongs in the negative"})
             continue
         key = _norm_key(text)
         if key in seen:
@@ -357,6 +368,78 @@ needs no groups.\
 
 def spec_prompt() -> str:
     return SYSTEM_PROMPT + "\n\n" + SPEC_GUIDE
+
+
+#: The Add tab's answer: options plus any tag groups the request asks for.
+DRAFT_SCHEMA: dict[str, Any] = {
+    "type": "object", "additionalProperties": False,
+    "required": ["axes", "options"],
+    "properties": {
+        "axes": {"type": "array", "items": _AXIS},
+        "options": OPTIONS_SCHEMA["properties"]["options"],
+    },
+}
+
+DRAFT_GUIDE = """\
+- axes: [] unless the request asks to group tags, or the options offer \
+alternatives another wildcard should match ("outfits and the shoes they go \
+with"). Each axis is {name, kind, tags}. kind "classify" says what an option \
+IS (style: casual, formal). kind "accepts" lists what an option GOES WITH \
+(SHOES: sneakers, boots, heels): each run rolls one of its tags, readable \
+as $variable.SHOES, and a constraint on that tag makes the Shoes wildcard \
+agree. An accepts name is letters, digits and _ (like SHOES), not "neg". \
+Tag every option with at least one tag of each accepts group. Never write \
+the alternatives into the option text: "school uniform" with tags \
+loafers, sneakers, not "school uniform with loafers".\
+"""
+
+
+def draft_prompt() -> str:
+    return SYSTEM_PROMPT + "\n\n" + DRAFT_GUIDE
+
+
+def new_groups(
+    raw_axes: Any, *, existing_payload: dict[str, Any], new_tags: list[str],
+    options: list[dict[str, Any]] | None = None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """The tag groups a draft adds: ``[{name, kind, tags}]``, each tag spelled
+    as the wildcard (or the draft) has it and not already in another group,
+    plus warnings. A group the wildcard has keeps its kind unless the draft
+    makes it ``accepts``. Tags no option has are left out: a group only
+    sorts tags that exist. ``options`` (the draft's) are checked to carry a
+    tag of every accepts group."""
+    warnings: list[str] = []
+    registry = [t for t in existing_payload.get("sub_categories") or [] if isinstance(t, str)]
+    lower = {t.lower(): t for t in [*registry, *new_tags]}
+    groups = existing_payload.get("tag_groups") or {}
+    kinds = existing_payload.get("tag_group_kinds") or {}
+    grouped = {t: k for k, v in groups.items() if isinstance(v, list) for t in v}
+    out: list[dict[str, Any]] = []
+    for a in _axes(raw_axes, warnings):
+        members = []
+        for t in a["tags"]:
+            if t.lower() not in lower:
+                continue
+            t = lower[t.lower()]
+            if grouped.get(t, a["name"]) != a["name"] or t in members:
+                continue
+            members.append(t)
+        kind = "accepts" if a["kind"] == "accepts" or kinds.get(a["name"]) == "accepts" \
+            else "classify"
+        fresh = [t for t in members if t not in (groups.get(a["name"]) or [])]
+        if fresh or (a["name"] in groups and kind != kinds.get(a["name"], "classify")):
+            out.append({"name": a["name"], "kind": kind, "tags": fresh})
+            grouped.update({t: a["name"] for t in fresh})
+    for name in {g["name"] for g in out if g["kind"] == "accepts"} | {
+            k for k, v in kinds.items() if v == "accepts"}:
+        members_all = set(groups.get(name) or []) | {
+            t for g in out if g["name"] == name for t in g["tags"]}
+        loose = [o["value"] for o in options or [] if not set(o.get("tags") or []) & members_all]
+        if loose and members_all:
+            n = len(loose)
+            warnings.append(f"{n} new option{'s offer' if n != 1 else ' offers'} no {name} tag "
+                            f"(e.g. {loose[0][:40]})")
+    return out, warnings
 
 
 def _axes(raw: Any, warnings: list[str]) -> list[dict[str, Any]]:

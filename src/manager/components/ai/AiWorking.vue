@@ -60,7 +60,7 @@ export function formatElapsed(s: number): string {
  * (`api/ai-progress.ts`), polling the server for its phase. The chat passes
  * its own `text` and `phase` from its stream.
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { activeAiRequests, fetchAiProgress, type AiPhase, type AiProgress } from "../../api/ai-progress";
 
 const props = withDefaults(defineProps<{
@@ -121,7 +121,7 @@ const detail = computed(() => {
 
 /** What is really happening, in a few words. */
 const real = computed(() => {
-  if (props.text !== undefined) return props.text.replace(/(…|\.\.\.)\s*$/, "").trim() || "Working";
+  if (props.text !== undefined) return props.text.replace(/(…|\.+)\s*$/, "").trim() || "Working";
   const p = progress.value;
   switch (shownPhase.value) {
     case "reading": return "Reading the prompt";
@@ -135,12 +135,30 @@ const word = ref(pickWord(""));
 const step = ref(0);
 const showReal = computed(() => step.value % REAL_EVERY === 0);
 const shown = computed(() => (showReal.value ? real.value : word.value));
+/** What the word transition keys on: a new status animates in, a token
+ *  count ticking up while writing doesn't. */
+const wordKey = computed(() => {
+  if (!showReal.value) return `w:${word.value}`;
+  return props.text !== undefined ? `r:${real.value}` : `r:${shownPhase.value}`;
+});
 let wordTimer: ReturnType<typeof setInterval> | null = null;
+
+/** The words box follows the new word's width smoothly while the old word
+ *  fades out over it (a crossfade in place, nothing goes blank). */
+const measure = ref<HTMLElement | null>(null);
+const boxWidth = ref<number | null>(null);
+async function fit(): Promise<void> {
+  await nextTick();
+  const w = measure.value?.offsetWidth;
+  if (w) boxWidth.value = w;
+}
+watch(shown, () => { void fit(); });
 
 // A new phase (or chat status) is said straight away.
 watch(() => [shownPhase.value, props.text], () => { step.value = 0; });
 
 onMounted(() => {
+  void fit();
   tick = setInterval(() => { elapsed.value = Math.floor((Date.now() - started) / 1000); }, 1000);
   wordTimer = setInterval(() => {
     step.value += 1;
@@ -188,7 +206,7 @@ const TYPING = [[250, "#6366f1"], [512, "#a970ff"], [774, "#33d6c6"]] as const;
     <svg class="wp-aiw__logo" viewBox="0 0 1024 1024" :width="size" :height="size" aria-hidden="true">
       <template v-if="mark === 'typing'">
         <g v-for="([x, c], i) in TYPING" :key="i" class="wp-aiw__hop" :style="{ '--wp-aiw-k': i }">
-          <path class="wp-aiw__star" :fill="c" :transform="`translate(${x - 256} 304) scale(.5)`" :d="STAR_BIG" />
+          <path class="wp-aiw__star" :fill="c" :transform="`translate(${x - 256} 256) scale(.5)`" :d="STAR_BIG" />
         </g>
       </template>
       <g v-else-if="mark === 'shuffle'" transform="translate(512 512) scale(1.45) translate(-512 -512)">
@@ -215,9 +233,12 @@ const TYPING = [[250, "#6366f1"], [512, "#a970ff"], [774, "#33d6c6"]] as const;
         <path class="wp-aiw__star wp-aiw__burst" style="--wp-aiw-dx: -152px; --wp-aiw-dy: 152px" fill="#33d6c6" :d="STAR_B" />
       </g>
     </svg>
-    <Transition name="wp-aiw-word" mode="out-in">
-      <span :key="showReal ? 'real' : word" class="wp-aiw__word" data-test="ai-working-word">{{ shown }}…</span>
-    </Transition>
+    <span class="wp-aiw__words" :style="boxWidth ? { width: `${boxWidth}px` } : undefined">
+      <Transition name="wp-aiw-word" type="transition">
+        <span :key="wordKey" class="wp-aiw__word" data-test="ai-working-word">{{ shown }}…</span>
+      </Transition>
+      <span ref="measure" class="wp-aiw__word wp-aiw__measure" aria-hidden="true">{{ shown }}…</span>
+    </span>
     <span class="wp-aiw__time" data-test="ai-working-time">{{ time }}</span>
     <span class="wp-aiw__sr" data-test="ai-working-detail">{{ detail }}</span>
   </div>
@@ -237,24 +258,56 @@ const TYPING = [[250, "#6366f1"], [512, "#a970ff"], [774, "#33d6c6"]] as const;
 .wp-aiw[data-tempo="mid"] { --wp-aiw-t: 2.2s; }
 .wp-aiw[data-tempo="fast"] { --wp-aiw-t: 1.5s; }
 .wp-aiw__logo { flex-shrink: 0; overflow: visible; }
+.wp-aiw__words {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  transition: width 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
 .wp-aiw__word {
+  display: inline-block;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 500;
-  background: linear-gradient(90deg, #a970ff, #6366f1 45%, #33d6c6);
+  /* A light band sweeps over the gradient text, like Claude's own line. */
+  background:
+    linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.75) 50%, transparent 65%) no-repeat,
+    linear-gradient(90deg, #a970ff, #6366f1 45%, #33d6c6);
+  background-size: 250% 100%, 100% 100%;
+  background-position: 150% 0, 0 0;
   -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: wp-aiw-shimmer 2.6s linear infinite;
+}
+@keyframes wp-aiw-shimmer {
+  0% { background-position: 150% 0, 0 0; }
+  70%, 100% { background-position: -50% 0, 0 0; }
+}
+/* Sized like the word, never seen: what the box grows or shrinks to. */
+.wp-aiw__measure {
+  position: absolute; left: 0; top: 0;
+  visibility: hidden; pointer-events: none; animation: none;
+  max-width: none; overflow: visible;
 }
 .wp-aiw__time { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--wp-text-dim); }
 .wp-aiw[data-inline="true"] { font-size: 12px; }
-.wp-aiw[data-inline="true"] .wp-aiw__word { max-width: 240px; }
+.wp-aiw[data-inline="true"] .wp-aiw__words { max-width: 240px; }
 .wp-aiw__sr {
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
-.wp-aiw-word-enter-active, .wp-aiw-word-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
-.wp-aiw-word-enter-from { opacity: 0; transform: translateY(4px); }
-.wp-aiw-word-leave-to { opacity: 0; transform: translateY(-4px); }
+/* Crossfade in place: the old word fades out on top of the new one. */
+.wp-aiw-word-enter-active, .wp-aiw-word-leave-active { transition: opacity 0.45s ease, filter 0.45s ease; }
+.wp-aiw-word-leave-active { position: absolute; left: 0; top: 50%; translate: 0 -50%; }
+.wp-aiw-word-enter-from, .wp-aiw-word-leave-to { opacity: 0; filter: blur(2px); }
+@media (prefers-reduced-motion: reduce) {
+  .wp-aiw__word { animation: none; }
+  .wp-aiw__words { transition: none; }
+  .wp-aiw-word-enter-from, .wp-aiw-word-leave-to { filter: none; }
+}
 
 .wp-aiw__star, .wp-aiw__dot, .wp-aiw__hop { transform-box: fill-box; transform-origin: center; }
 .wp-aiw__vb { transform-box: view-box; transform-origin: 512px 512px; }

@@ -42,13 +42,13 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           { term: 'API key', desc: 'Only needed for Claude, OpenAI or a server that asks for one. It is stored on ComfyUI\'s side and never shown again; Remove deletes it. A key is only ever sent to the address it was saved for: change the Server address and the key stays saved but is not sent (Settings says which address it belongs to) until you paste it again or change the address back. ANTHROPIC_API_KEY and OPENAI_API_KEY in the environment work too and only go to Claude\'s or OpenAI\'s own address; WP_AI_API_KEY goes to the provider\'s usual address, or to the one in WP_AI_API_KEY_HOST.' },
           { term: 'Model', desc: 'Picked from the list your server reports (refresh after downloading a new one), or typed in.' },
           { term: 'Unload after', desc: 'For local servers: how long an idle model stays loaded before it leaves the GPU, so ComfyUI gets its memory back. Pick a preset (right after each answer, 30 seconds up to 1 hour) or Custom to type the seconds.' },
-          { term: 'Model size', desc: 'How much the assistant asks of the model. Small models (under 20B) get shorter instructions, smaller tool results and steadier settings; large ones and hosted models get everything. Automatic reads the size from the model\'s name; set it when the name doesn\'t say.' },
+          { term: 'Model size', desc: 'How much the assistant asks of the model. Small models (under 20B) get shorter instructions, smaller tool results and steadier settings. Small and medium models are offered the tools for the page you are on (medium ones also the wildcard, rule, constraint, test and list tools everywhere) and ask for the rest when a job needs them, since fewer tools to choose from means fewer wrong picks; large ones and hosted models get everything. In JSON steps on a local server, a small model answers each step in two parts: first which tools to call, then what to write in them, so it doesn\'t decide while it writes. Automatic reads the size from the model\'s name; set it when the name doesn\'t say.' },
           { term: 'Most context to use', desc: 'Tokens of context the assistant uses (16384 by default). Ollama gets exactly this much for the whole chat, because changing it reloads the model and throws away what it already read; drafts ask for what they need, up to this. Ollama\'s own default is far smaller and silently cuts the instructions off. Lower it if the model no longer fits on your GPU. Presets go from 4k to 128k (1k is 1024 tokens); Custom takes any number. A new chat also checks how much context the model really has (LM Studio and llama.cpp report it) and, when the full instructions and every tool wouldn\'t leave room to answer, starts leaner: fewer tools up front (the rest stay one call away) and a shorter library summary. If the server still says the request is too long, the chat tries once more with less and otherwise tells you how much context to load the model with.' },
-          { term: 'Tool format', desc: 'Under Advanced: how the chat calls its tools. Native tool calls are what most models are trained for; JSON steps work with any model. Automatic asks the server whether the model supports tool calls (Ollama, LM Studio and llama.cpp say so; Claude and OpenAI always do) and falls back to JSON steps when a server refuses them. A chat keeps the format it started with. OpenAI itself is spoken to through its Responses API, which its newest models (GPT-6.1 Sol, GPT-6 Astra) need for tool calls; their reasoning is carried from step to step in encrypted form, so they keep their train of thought while they search and read, and Thinking: Off asks them not to reason where the model allows it.' },
+          { term: 'Tool format', desc: 'Under Advanced: how the chat calls its tools. Native tool calls are what most models are trained for; JSON steps work with any model. Automatic asks the server whether the model supports tool calls (Ollama, LM Studio and llama.cpp say so; Claude and OpenAI always do) and falls back to JSON steps when a server refuses them. In JSON steps on a local server (Ollama, LM Studio, llama.cpp, other OpenAI-compatible) the server also checks the arguments of each tool call as the model writes them. A chat keeps the format it started with. OpenAI itself is spoken to through its Responses API, which its newest models (GPT-6.1 Sol, GPT-6 Astra) need for tool calls; their reasoning is carried from step to step in encrypted form, so they keep their train of thought while they search and read, and Thinking: Off asks them not to reason where the model allows it.' },
           { term: 'Embedding model', desc: 'Under Search: turns on meaning search, so the chat also finds items by what they mean (“warm colors” finds a wildcard of amber and crimson). Pick a small embedding model your server has, such as nomic-embed-text or embeddinggemma on Ollama, or text-embedding-3-small on OpenAI; the list shows the names that look like embedding models, and Type a name takes any other. Off (the default) keeps search to words, which already covers most questions. Claude has no embeddings API, so it is not offered there. Your library is embedded in the background a few dozen items at a time, so a chat never waits for it.' },
           { term: 'Embedding server', desc: 'Shown once an embedding model is picked. Leave it empty to use the server above; a llama.cpp server only serves embeddings when started with --embeddings, so run a second one and put its address here.' },
           { term: 'Library index', desc: 'How many items the chat\'s search index holds and, with meaning search on, how many are searchable by meaning. The index lives next to your library database (wildcard-pipeline.ai-index.db) and keeps itself up to date; Rebuild throws it away and builds it again.' },
-          { term: 'Test connection', desc: 'Lists the models, then asks the chosen one for a tiny JSON answer, and tells you whether it worked and how long it took. For LM Studio and llama.cpp it also reads how much context the model was loaded with and warns when it is under 16k, since the chat\'s instructions, a few turns and the answer need that much. These servers fix the context when they load the model, so set it there (in LM Studio: the Context Length in the model\'s load settings) and load the model again.' },
+          { term: 'Test connection', desc: 'Lists the models, then asks the chosen one for a tiny JSON answer, and tells you whether it worked and how long it took. It also says how many tokens a new chat sends before you type anything (its instructions, the tools it is offered and your library summary), out of the model\'s context: the rest is what the conversation and tool results can use. For LM Studio and llama.cpp it also reads how much context the model was loaded with and warns when it is under 16k, since the chat\'s instructions, a few turns and the answer need that much. These servers fix the context when they load the model, so set it there (in LM Studio: the Context Length in the model\'s load settings) and load the model again.' },
         ]"
       />
     </DocSection>
@@ -70,6 +70,14 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         <code>@{Colors:warm}</code> draws from another wildcard (only its options tagged warm). The
         model names the wildcard; the assistant finds it in your library and writes the reference,
         so ask for "a scarf in a warm colour from my Colors wildcard" and it points there.
+      </p>
+      <p>
+        Ask for <b>tag groups</b> and the draft makes them too: "outfits tagged by style" puts
+        the style tags in a group, and "outfits and the shoes they go with" makes an
+        <b>accepts</b> group (SHOES: loafers, sneakers, boots), tagging each outfit with the
+        shoes that suit it instead of writing them into the text. The groups show under the
+        list, and <b>Add</b> creates them with the ticked options. A constraint on the accepts
+        group then makes your Shoes wildcard agree with the outfit.
       </p>
       <DocCallout variant="tip">
         Options that repeat an existing one, read a <code>$variable</code> (options can't), point
@@ -308,9 +316,12 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         Rewrite, Retag and Weights tabs, <b>Draft with AI</b> in the other editors), opens
         <b>Organize with AI</b> on the rows it means, or sets up the Test Runner (the stack,
         how many seeds, a fixed first seed, pinned values, the variable to show) and runs it,
-        or saves it as a scenario. Nothing is applied from a panel until you apply it there.
-        The chat is told what came back. A Test Runner scenario with unsaved changes is never replaced, and an editor with
-        unsaved changes asks before the chat moves you elsewhere.
+        or saves it as a scenario. Ask it to add a module to the run or take one out and it
+        changes the open stack instead, keeping your seeds and pins; a constraint brings its
+        source and target wildcards along, in run order. Nothing is applied from a panel until
+        you apply it there. The chat is told what came back. A Test Runner scenario with
+        unsaved changes you made is never replaced (its own earlier quick run is), and an
+        editor with unsaved changes asks before the chat moves you elsewhere.
       </p>
       <p>
         It can also <b>run a stack on the engine</b> before it answers: modules and bundles from
@@ -356,7 +367,21 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         in its top right corner opens the whole card in a larger window, with the same Apply,
         Open in editor and Dismiss buttons. When two cards
         change the same item, the second builds on the first, so apply them in order. The chat
-        stays when you close the drawer; <b>New chat</b> starts over.
+        stays when you close the drawer; <b>New chat</b> starts over with an empty message box.
+      </p>
+      <p>
+        A new chat starts with a few questions that fit the page you're on and what your library
+        holds: on Constraints it offers "How do constraints work?" (and, with two or more
+        wildcards, which of them should rule each other out), in an editor it offers to improve
+        the open item, and on the home page it asks about your biggest category. <b>What can you
+        do?</b> fills in where a page has fewer. Clicking one puts it in the box to send or edit.
+      </p>
+      <p>
+        The assistant can react to a message with an emoji (👍 ❤️ 🎉 😄 🙏 👀) shown under it, like
+        a chat app. A message that is only thanks or praise ("thanks!", "perfect, ty", 👍) gets a
+        reaction straight away without asking the model, so it costs nothing and the model never
+        reads it. "Yes", "ok" or "do it" always go to the model, and so does any thanks right
+        after the assistant asked you something.
       </p>
       <p>
         The chat remembers everything it did, not just what it said: ComfyUI keeps each chat's
@@ -371,7 +396,11 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       </p>
       <p>
         Answers appear as the model writes them, with the items it reads listed above as it goes
-        and a line saying what it is doing (thinking, writing, summarising). <b>Stop</b> ends the
+        and a line saying what it is doing (thinking, writing, summarising). What the model
+        writes between its steps ("Now I'll add the constraint…") stays folded under the steps as
+        a <b>Working note</b>, and when its server sends the model's reasoning (most thinking
+        models do, unless Thinking is Off), each step has a folded <b>Thinking</b> you can open to
+        see why it did what it did. Neither is sent back to the model. <b>Stop</b> ends the
         answer. <b>Try again</b> under the last reply asks the same message again for a new
         answer, which replaces the old one; it waits until you undo any change you applied from
         that answer.
@@ -544,6 +573,15 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         part of the page first to ask about just that part. It doesn't guess: if the docs don't
         cover something, it says so.
       </p>
+      <p>
+        Select text anywhere in the manager (a docs paragraph, a chat reply, a warning, a test
+        result) and a small bar appears above it. <b>Explain</b> sends it to the chat to explain
+        in simpler words, and <b>Ask</b> quotes it in the message box for your own question.
+        <code>Ctrl+Shift+X</code> explains the selection without the bar. The bar never shows in
+        text boxes or editors, where selecting is for editing, and the browser's right-click menu
+        is left alone. Turn it off with <b>Settings › AI assistant › Show Explain on selected
+        text</b>.
+      </p>
     </DocSection>
 
     <DocSection title="Build a whole pack">
@@ -614,7 +652,11 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           much of the model's context the last plan request took; every update sends the whole
           conversation again, so it grows. <b>Plan 2 of 3</b> flips between plans; updating an
           earlier one adds a new plan after the others (it says which plan it came from), so
-          nothing is overwritten.</li>
+          nothing is overwritten. Under the plan's title, <b>How it fits together</b> is the
+          planner's own account of the pack (which pick decides which, and why each rule is
+          there), and with a thinking model the plan and each built item have a folded
+          <b>Thinking</b>, so when a pack comes out wrong you can see whether the model misread
+          the request or built its idea wrong.</li>
         <li><b>Plan review.</b> The plan is checked as you edit it for what would break: a
           template or rule that reads a variable nothing sets, a constraint keyed on a tag
           neither wildcard lists, two constraints that loop, wildcards that ignore the pack's
@@ -632,9 +674,16 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           nested wildcards and linked constraints point at items before they are built. An item
           that takes longer than 4 minutes is stopped and marked; <b>Skip this item</b> moves on
           right away, and the row's buttons retry it, rebuild it with a note, or leave it out.
-          Then the pack runs 200 seeds on the real engine. An item with a problem (a rule that
-          never applies, a variable nothing sets) is rebuilt with the problem as a note, up to
-          twice, and the row says what was fixed. The run also flags options that never came up
+          If the template's answer fails twice, a plain one that reads every pick is written
+          for you (the row says so), so the pack still renders.
+          Before each test, words the prompt says twice are taken out of the later item that
+          writes them, but only when every test run keeps exactly the same words without them,
+          and pieces of a wildcard's options that another wildcard picks come out. Then the pack
+          runs 200 seeds on the real engine. An item with a problem (a rule that
+          never applies, a variable nothing sets, a prompt showing what one of the pack's own
+          rules keeps out, like snow in a desert scene, or a rule that leaves a wildcard no
+          option it allows for some pick) is rebuilt with the problem as a note, up
+          to twice, and the row says what was fixed. The run also flags options that never came up
           or that take most of the picks. A problem on an item has <b>Fix with AI</b> (rebuild it
           with the problem as a note), <b>Explain</b> and <b>Dismiss</b>. Click a row to see what
           it holds. The test run shows each variable's most common values and a few sample

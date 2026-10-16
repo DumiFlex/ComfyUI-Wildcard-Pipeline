@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import RichTextInput from "../../../../../manager/components/RichTextInput.vue";
+import NegativeField from "../../../../../manager/components/NegativeField.vue";
 import {
+  negativeOverridden,
   rowOverrideKind,
   type DraftRow,
   type LibraryRow,
@@ -22,8 +24,8 @@ const props = defineProps<{
 const valueTokens = computed<PreviewToken[]>(() =>
   tokenize(props.row.value, "fixed_values"),
 );
-/** The library row's negative ("" = none), shown as a read-only hint. */
-const negativeText = computed(() => (props.library?.negative ?? "").trim());
+/** This instance changed the library row's negative. */
+const negOverridden = computed(() => negativeOverridden(props.library, props.row));
 
 const hasNonTextToken = computed(() =>
   valueTokens.value.some((t) => t.kind !== "text"),
@@ -31,7 +33,7 @@ const hasNonTextToken = computed(() =>
 
 const emit = defineEmits<{
   "toggle": [rowId: string];
-  "update": [rowId: string, patch: { name?: string; value?: string }];
+  "update": [rowId: string, patch: { name?: string; value?: string; negative?: string }];
   "reset": [rowId: string];
   "delete": [rowId: string];
 }>();
@@ -51,7 +53,7 @@ const valueOverridden = computed(
 );
 const isAdded = computed(() => overrideKind.value === "added");
 const showReset = computed(
-  () => !isAdded.value && (nameOverridden.value || valueOverridden.value),
+  () => !isAdded.value && (nameOverridden.value || valueOverridden.value || negOverridden.value),
 );
 
 function onToggle(): void {
@@ -187,11 +189,20 @@ function onDelete(): void {
         />
       </span>
       <span
-        v-if="negativeText"
         class="row__neg"
+        :class="{ 'row__neg--mod': negOverridden }"
         data-test="row-neg"
-        :title="`Negative from the library — edit it there`"
-      ><span class="row__neg-tag">NEG</span> {{ negativeText }}</span>
+        :title="negOverridden ? 'Changed on this instance; the reset button brings back the library negative' : undefined"
+      >
+        <NegativeField
+          :model-value="row.negative"
+          surface="fixed_values"
+          label="value"
+          test-id="row-negative"
+          :disabled="!row.enabled"
+          @update:model-value="(v: string | undefined) => emit('update', props.row.id, { negative: v ?? '' })"
+        />
+      </span>
       <span
         v-if="hasNonTextToken"
         class="row__value-preview"
@@ -381,21 +392,10 @@ function onDelete(): void {
 }
 .row__neg {
   margin-top: 3px;
-  font: 10px/1.4 var(--wp-font-mono);
-  color: var(--wp-text-muted, var(--wp-text2));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
 }
-.row__neg-tag {
-  padding: 0 4px;
-  border-radius: 3px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: var(--wp-danger, #ef4444);
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 14%, transparent);
-}
+.row__neg--mod :deep(.wp-rich-input),
+.row__neg--mod :deep([contenteditable]) { border-color: var(--wp-accent); }
 .row__value-cell--mod .row__value-wrap { border-color: var(--wp-accent); }
 .row__value-preview {
   margin-top: 3px;

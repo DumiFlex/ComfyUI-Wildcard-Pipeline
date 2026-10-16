@@ -52,7 +52,10 @@ const RESULT: AiChatResult = {
   chat_id: "c1",
   message: "Here is a weather wildcard and two more outfits.",
   model: "m",
-  steps: [{ tool: "search", note: 'Searched "outfit"', ok: true }],
+  steps: [
+    { tool: "think", note: "Look for outfits first.", ok: true, think: true },
+    { tool: "search", note: 'Searched "outfit"', ok: true },
+  ],
   proposals: [
     {
       pid: "p1", tool: "create_wildcard", title: "Create wildcard Weather",
@@ -154,6 +157,11 @@ describe("AiChatDrawer", () => {
     });
     expect(w.get('[data-test="ai-chat-user"]').text()).toBe("make weather and more outfits");
     expect(w.get('[data-test="ai-chat-steps"]').text()).toContain('Searched "outfit"');
+    // What it thought is folded under the steps, not shown as the answer.
+    const thought = w.get('[data-test="ai-chat-thought"] details');
+    expect(thought.find("summary").text()).toBe("Thinking");
+    expect((thought.element as HTMLDetailsElement).open).toBe(false);
+    expect(thought.text()).toContain("Look for outfits first.");
     const cards = w.findAll('[data-test="ai-chat-proposal"]');
     expect(cards).toHaveLength(3);
     // The third builds on the second, so it waits.
@@ -309,6 +317,45 @@ describe("AiChatDrawer", () => {
     expect(router.currentRoute.value.fullPath).toBe("/settings/ai");
     w.unmount();
     editorHost.unmount();
+  });
+
+  it("starts a new chat with an empty box", async () => {
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("hello");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    useAiChat().input.value = "Explain this page in simpler words";
+    await w.get('[data-test="ai-chat-new"]').trigger("click");
+    await flushPromises();
+    expect(useAiChat().input.value).toBe("");
+    expect((w.get('[data-test="ai-chat-input"]').element as HTMLTextAreaElement).value).toBe("");
+    w.unmount();
+  });
+
+  it("shows reactions under the user's message, with no empty reply", async () => {
+    const { w } = await mountIt();
+    vi.mocked(api.ai.chat).mockResolvedValueOnce({
+      ...RESULT, message: "", steps: [], proposals: [], reaction: "🎉",
+    });
+    await w.get('[data-test="ai-chat-input"]').setValue("it finally renders!");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    expect(w.get('[data-test="ai-chat-reaction"]').text()).toBe("🎉");
+    expect(w.find('[data-test="ai-chat-reply"]').exists()).toBe(false);
+
+    vi.mocked(api.ai.chat).mockResolvedValueOnce({
+      chat_id: "c1", aside: true, reaction: "❤️", message: "", proposals: [], steps: [], model: "m",
+    });
+    await w.get('[data-test="ai-chat-input"]').setValue("thanks!");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    const users = w.findAll('[data-test="ai-chat-user"]');
+    expect(users).toHaveLength(2);
+    expect(users[1].get('[data-test="ai-chat-reaction"]').text()).toBe("❤️");
+    // Edit and Try again stay on the message that got an answer.
+    expect(users[1].find('[data-test="ai-chat-edit"]').exists()).toBe(false);
+    expect(users[0].find('[data-test="ai-chat-edit"]').exists()).toBe(true);
+    w.unmount();
   });
 
   it("names the docs page being read", async () => {

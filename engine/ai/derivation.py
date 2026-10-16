@@ -34,11 +34,13 @@ import re
 import secrets
 from typing import Any
 
-from engine.ai import about
+from engine.ai import about, adult
+from engine.ai import negation as ai_negation
 from engine.ai import refs as ai_refs
 from engine.modules.derivation_handler import (
     _VALID_MODES,
     _VALID_OPS,
+    NEGATIVE_MODES,
     DerivationHandler,
 )
 
@@ -109,8 +111,7 @@ missing or empty. These take value "".
 
 Actions:
 - replace: set target_var to value. append / prepend: add value after / \
-before what target_var already holds (include a leading ", " when appending \
-to a list of tags).
+before what target_var already holds (a ", " between them is added for you).
 - negative: add value to target_var's negative prompt. negative_replace: make \
 value its only negative.
 - value is prompt text. It may read variables as $name, and also \
@@ -361,8 +362,31 @@ def _compile_condition(
             if fixed is not None:
                 value = fixed
             elif any(s["kind"] == "wildcard" for s in entry["sources"]):
-                warnings.append(f'${var} has no option "{value}"')
+                op, value = _near_test(var, op, value, entry, warnings)
     return {"var": var, "op": op, "value": value}
+
+
+def _near_test(var: str, op: str, value: str, entry: dict[str, Any],
+               warnings: list[str]) -> tuple[str, str]:
+    """An ``equals`` test on text no option has. A tag ("elf" on options
+    that only say "pointed ears") becomes a test on the options carrying
+    it; a piece of an option ("dense forest") becomes a ``contains`` test.
+    Anything else is a warning a rebuild should fix."""
+    neg = op == "not_equals"
+    tagged = (entry.get("tagged") or {}).get(value.lower().lstrip("#")) or []
+    if tagged:
+        pattern = "^(?:" + "|".join(re.escape(v) for v in tagged) + ")$"
+        if len(pattern) <= MAX_VALUE_LEN:
+            warnings.append(f'Tests the ${var} options tagged #{value.lower().lstrip("#")} '
+                            f'("{value}" is a tag, not an option)')
+            return ("not_matches" if neg else "matches"), pattern
+    low = value.lower()
+    hits = [v for v in entry["values"] if low and low in v.lower()]
+    if hits:
+        at = hits[0].lower().index(low)
+        return ("not_contains" if neg else "contains"), hits[0][at:at + len(value)]
+    warnings.append(f'${var} has no option "{value}"')
+    return op, value
 
 
 def unset_note(var: str) -> str:
@@ -384,12 +408,26 @@ def _compile_actions(
         mode = a.get("mode") if a.get("mode") in _VALID_MODES else "replace"
         value = a.get("value") if isinstance(a.get("value"), str) else ""
         value = re.sub(r"\s+", " ", value).strip()[:MAX_VALUE_LEN]
+        # The engine joins append / prepend text as written: "tie" + "watch"
+        # is "tiewatch". A list piece gets its comma.
+        if value and mode == "append" and not re.match(r"[,;.\s]", value):
+            value = ", " + value
+        elif value and mode == "prepend" and not re.search(r"[,;.]$", value):
+            value = value + ", "
         try:
             value = ai_refs.compile_text(value, surface="action", refs=refs)
         except ValueError as e:
             raise _Drop(str(e)) from None
         if not value and mode != "replace":
             continue
+        left_out = ai_negation.excluded(value) if mode not in NEGATIVE_MODES else ""
+        if left_out:
+            # "no guns, no rifles" written as the value would print them.
+            warnings.append(f"\"{value[:60]}\" only says what to leave out: it adds "
+                            f"{left_out[:60]} to ${target}'s negative instead")
+            mode, value = "negative", left_out
+        if mode not in NEGATIVE_MODES and adult.sexual_minor(value):
+            raise _Drop("it names a minor in a sexual context")
         for read in _VAR_READ.findall(value):
             if read not in catalog and read != target:
                 warnings.append(unset_note(read))

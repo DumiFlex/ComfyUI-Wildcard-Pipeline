@@ -63,3 +63,19 @@ def test_the_worked_chat_example_runs_through_the_real_tools():
     assert guide.EXAMPLES_CHAT in chat.system_prompt()
     assert guide.COHERENCE not in chat.system_prompt(slim=True)
     assert len(chat.system_prompt(slim=True)) < len(chat.system_prompt()) * 0.8
+
+
+def test_bang_not_and_bare_counts_are_written_the_engine_way():
+    refs = ai_refs.RefIndex([COLORS])
+    # "!warm" is how other tools write NOT; the engine's filter has no "!".
+    assert ai_refs.compile_text("@{Colors:!warm}", surface="option", refs=refs) \
+        == "@{abcd1234#Colors:not warm}"
+    assert ai_refs.compile_text("@{Colors:!warm!null}", surface="option", refs=refs) \
+        == "@{abcd1234#Colors:not warm!null}"
+    inst, notes = ai_use.parse_use("filter !warm and wet", kind="wildcard",
+                                   tags=["warm", "wet"])
+    assert inst["category_filter"] == "not warm and wet" and not notes
+    # "{2$$a|b}" with no separator prints junk; the comma goes in.
+    assert ai_refs.compile_text("{2$$a|b|c}", surface="fixed", refs=refs) == "{2$$, $$a|b|c}"
+    assert ai_refs.compile_text("{1-2$$ and $$a|b}", surface="fixed", refs=refs) \
+        == "{1-2$$ and $$a|b}"

@@ -51,28 +51,12 @@ import type { AiCardFix, AiChatPage, AiChatProposal, AiChatStep, AiTestCard as T
 import { currentPageNote, editorForPage } from "../../composables/useOpenEditor";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 import { useCategoryStore } from "../../stores/categoryStore";
+import { useTemplateStore } from "../../stores/templateStore";
+import { starterQuestions, type StarterLibrary } from "../../utils/chat-starters";
 import { cardMeta, cardOptions, cardView, draftRoute, otherPreview, type CardOption } from "../../composables/aiCards";
 import { isWebCall, webCallCard, type WebCall } from "../../utils/web-calls";
 
 const PREVIEW_LINES = 6;
-const SUGGESTIONS = [
-  "What does my library set up for characters?",
-  "Make a wildcard of weather with tags for warm and cold",
-  "How do constraints work?",
-];
-const DOC_SUGGESTIONS = [
-  "Explain this page in simpler words",
-  "Show me a small example of this",
-];
-const TEST_SUGGESTIONS = [
-  "Explain this run",
-  "Why do I never get some of these options?",
-];
-const EDITOR_SUGGESTIONS = [
-  "What could make this better?",
-  "Remove options that repeat each other",
-];
-
 const chat = useAiChat();
 
 /** The run_test steps' cards, in order. */
@@ -217,7 +201,7 @@ function onDeleted(id: string): void {
 
 function newChat(): void {
   showList.value = false;
-  chat.reset();
+  chat.startNew();
 }
 
 /* ── Images ── */
@@ -283,7 +267,21 @@ function toggleImage(i: number, j: number): void {
 }
 
 /** The latest user message, the one the pencil can edit. */
-const lastUserAt = computed(() => chat.entries.value.map((e) => e.role).lastIndexOf("user"));
+const lastUserAt = computed(() => {
+  const list = chat.entries.value;
+  for (let i = list.length - 1; i >= 0; i--) {
+    const e = list[i];
+    if (e.role === "user" && !e.aside) return i;
+  }
+  return -1;
+});
+
+/** An answer that was only a reaction: nothing to show but the emoji. */
+function quiet(entry: ChatAssistantEntry): boolean {
+  const r = entry.result;
+  return !!r.reaction && !r.message.trim() && !r.proposals.length && !r.steps.length
+    && !r.pending?.length;
+}
 /** The last answer still waits on questions (the box answers them too). */
 const waitingOnAsk = computed(() => {
   const last = chat.entries.value[chat.entries.value.length - 1];
@@ -354,12 +352,33 @@ async function compact(): Promise<void> {
   chat.error.value = err ? `Couldn't summarise: ${err}` : "";
 }
 
-const suggestions = computed(() => {
-  if (route.name === "documentation-page") return DOC_SUGGESTIONS;
-  if (route.name === "test") return TEST_SUGGESTIONS;
-  if (typeof route.params.id === "string" && route.params.id) return EDITOR_SUGGESTIONS;
-  return SUGGESTIONS;
+const templateStore = useTemplateStore();
+
+/** What the library holds, for starters that fit it. */
+const starterLibrary = computed<StarterLibrary>(() => {
+  const modules: Record<string, number> = {};
+  const perCategory = new Map<string, number>();
+  for (const m of moduleStore.catalog) {
+    modules[m.type] = (modules[m.type] ?? 0) + 1;
+    if (m.category_id) perCategory.set(m.category_id, (perCategory.get(m.category_id) ?? 0) + 1);
+  }
+  let top = "";
+  let most = 0;
+  for (const [id, n] of perCategory) if (n > most) { most = n; top = id; }
+  const topCategory = categories.items.find((c) => c.id === top)?.name;
+  return {
+    modules,
+    bundles: bundleStore.catalog.length,
+    templates: templateStore.catalog.length,
+    categories: categories.items.length,
+    ...(topCategory ? { topCategory } : {}),
+  };
 });
+
+const suggestions = computed(() => starterQuestions(
+  { name: String(route.name ?? ""), hasId: typeof route.params.id === "string" && !!route.params.id },
+  starterLibrary.value,
+));
 
 function page(): AiChatPage {
   const id = route.params.id;
@@ -700,7 +719,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
       </div>
 
       <template v-for="(entry, i) in chat.entries.value" :key="i">
-        <div v-if="entry.role === 'user'" class="wp-ai-chat__user" data-test="ai-chat-user">
+        <div v-if="entry.role === 'user'" class="wp-ai-chat__user" data-test="ai-chat-user" :data-reacted="entry.reaction ? 'true' : undefined">
           <span v-if="entry.images?.length" class="wp-ai-chat__pics">
             <button
               v-for="(src, j) in entry.images"
@@ -729,8 +748,16 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             data-test="ai-chat-edit"
             @click="chat.editLast(); box?.focus()"
           ><i class="pi pi-pencil" aria-hidden="true" /></button>
+          <span
+            v-if="entry.reaction"
+            class="wp-ai-chat__reaction"
+            role="img"
+            :aria-label="`Reacted ${entry.reaction}`"
+            :title="entry.aside ? 'Reacted instead of answering' : 'Reacted to your message'"
+            data-test="ai-chat-reaction"
+          >{{ entry.reaction }}</span>
         </div>
-        <div v-else class="wp-ai-chat__reply" data-test="ai-chat-reply">
+        <div v-else-if="!quiet(entry)" class="wp-ai-chat__reply" data-test="ai-chat-reply">
           <p v-if="byLine(i)" class="wp-ai-chat__by" data-test="ai-chat-by" :title="`Answered by ${byLine(i)}`">
             <i class="pi pi-microchip-ai" aria-hidden="true" /> {{ byLine(i) }}
           </p>
@@ -744,10 +771,24 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             <i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ rescued(i) }} tool call{{ rescued(i) === 1 ? "" : "s" }} written as text
           </p>
           <ul v-if="entry.result.steps.length" class="wp-ai-chat__steps" data-test="ai-chat-steps">
-            <li v-for="(s, j) in entry.result.steps" :key="j" :data-ok="s.ok ? 'true' : 'false'">
-              <i :class="['pi', s.ok ? 'pi-check' : 'pi-exclamation-circle']" aria-hidden="true" />
-              {{ s.note }}
-            </li>
+            <template v-for="(s, j) in entry.result.steps" :key="j">
+              <li v-if="s.think" class="wp-ai-chat__said wp-ai-chat__thought" data-test="ai-chat-thought">
+                <details>
+                  <summary>Thinking</summary>
+                  <p class="wp-ai-chat__thought-text">{{ s.note }}</p>
+                </details>
+              </li>
+              <li v-else-if="s.say" v-show="s.note !== entry.result.message" class="wp-ai-chat__said" data-test="ai-chat-said">
+                <details>
+                  <summary>Working note</summary>
+                  <AiMessage :text="s.note" :refs="entry.result.refs" />
+                </details>
+              </li>
+              <li v-else :data-ok="s.ok ? 'true' : 'false'">
+                <i :class="['pi', s.ok ? 'pi-check' : 'pi-exclamation-circle']" aria-hidden="true" />
+                {{ s.note }}
+              </li>
+            </template>
           </ul>
           <AiTestCard
             v-for="(card, j) in testCards(entry.result.steps)"
@@ -766,8 +807,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             :disabled="chat.loading.value"
             @answer="(a) => chat.answerAsk(c.id, a)"
           />
-          <div v-if="entry.result.message.trim()" class="wp-ai-chat__msg-tools">
+          <div
+            v-if="entry.result.message.trim() || (canRetry && i === chat.entries.value.length - 1)"
+            class="wp-ai-chat__msg-tools"
+          >
             <button
+              v-if="entry.result.message.trim()"
               type="button"
               class="wp-ai-chat__icon-btn"
               :aria-label="copied === i ? 'Copied' : 'Copy this answer'"
@@ -775,6 +820,16 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               data-test="ai-chat-copy"
               @click="copyAnswer(i, entry.result.message, entry.result.refs)"
             ><i :class="['pi', copied === i ? 'pi-check' : 'pi-copy']" aria-hidden="true" /></button>
+            <Button
+              v-if="canRetry && i === chat.entries.value.length - 1"
+              variant="ghost"
+              size="sm"
+              icon="pi-refresh"
+              :disabled="!!chat.retryBlocked()"
+              :title="chat.retryBlocked() || 'Ask the same message again for a new answer'"
+              data-test="ai-chat-retry"
+              @click="retry"
+            >Try again</Button>
           </div>
 
           <article
@@ -994,24 +1049,16 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         </div>
       </template>
 
-      <div v-if="canRetry" class="wp-ai-chat__again">
-        <Button
-          variant="ghost"
-          size="sm"
-          icon="pi-refresh"
-          :disabled="!!chat.retryBlocked()"
-          :title="chat.retryBlocked() || 'Ask the same message again for a new answer'"
-          data-test="ai-chat-retry"
-          @click="retry"
-        >Try again</Button>
-      </div>
-
       <div v-if="chat.loading.value && !chat.asking.value.size" class="wp-ai-chat__reply wp-ai-chat__live" data-test="ai-chat-live">
         <ul v-if="chat.live.value.steps.length" class="wp-ai-chat__steps">
-          <li v-for="(s, j) in chat.live.value.steps" :key="j" :data-ok="s.ok ? 'true' : 'false'">
-            <i :class="['pi', s.ok ? 'pi-check' : 'pi-exclamation-circle']" aria-hidden="true" />
-            {{ s.note }}
-          </li>
+          <template v-for="(s, j) in chat.live.value.steps" :key="j">
+            <li v-if="s.think" class="wp-ai-chat__said wp-ai-chat__thought"><details><summary>Thinking</summary><p class="wp-ai-chat__thought-text">{{ s.note }}</p></details></li>
+            <li v-else-if="s.say" class="wp-ai-chat__said"><details><summary>Working note</summary><AiMessage :text="s.note" /></details></li>
+            <li v-else :data-ok="s.ok ? 'true' : 'false'">
+              <i :class="['pi', s.ok ? 'pi-check' : 'pi-exclamation-circle']" aria-hidden="true" />
+              {{ s.note }}
+            </li>
+          </template>
         </ul>
         <AiMessage v-if="chat.live.value.text" :text="chat.live.value.text" live />
         <AiWorking class="wp-ai-chat__status" :text="liveStatus" :phase="livePhase" :size="22" data-test="ai-chat-loading" />
@@ -1230,11 +1277,29 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   background: color-mix(in oklab, var(--wp-accent-500) 18%, var(--wp-bg-2));
   white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; position: relative;
 }
+.wp-ai-chat__user[data-reacted] { margin-bottom: 10px; }
+.wp-ai-chat__reaction {
+  position: absolute; left: -8px; bottom: -12px; min-width: 24px; height: 22px; padding: 0 5px;
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 11px;
+  font-size: 13px; line-height: 1; background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border); box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+  animation: wp-ai-chat-react 0.32s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+@keyframes wp-ai-chat-react {
+  from { transform: scale(0.3); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .wp-ai-chat__reaction { animation: none; } }
 .wp-ai-chat__reply { display: flex; flex-direction: column; gap: 8px; }
 .wp-ai-chat__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .wp-ai-chat__steps li { font-size: 11px; color: var(--wp-text-dim); display: flex; gap: 6px; align-items: baseline; overflow-wrap: anywhere; }
 .wp-ai-chat__steps li[data-ok="false"] { color: var(--wp-warn); }
 .wp-ai-chat__steps .pi { font-size: 10px; }
+/* Text the model wrote before acting: a normal-size paragraph between the steps. */
+.wp-ai-chat__steps li.wp-ai-chat__said { display: block; font-size: 12px; color: var(--wp-text-muted); margin: 2px 0; }
+.wp-ai-chat__said summary { cursor: pointer; font-style: italic; }
+.wp-ai-chat__said details[open] { border-left: 2px solid var(--wp-border); padding-left: 8px; }
+.wp-ai-chat__thought-text { white-space: pre-wrap; margin: 4px 0 0; max-height: 320px; overflow-y: auto; }
 .wp-ai-chat__card {
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, var(--wp-border));
   border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;
@@ -1254,7 +1319,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__edit { position: absolute; left: -28px; bottom: 2px; opacity: 0.5; }
 .wp-ai-chat__user:hover .wp-ai-chat__edit, .wp-ai-chat__edit:focus-visible { opacity: 1; }
 .wp-ai-chat__editing { margin: 0 0 4px; font-size: 12px; color: var(--wp-text-muted); display: flex; gap: 8px; }
-.wp-ai-chat__msg-tools { display: flex; gap: 2px; margin-top: -4px; }
+.wp-ai-chat__msg-tools { display: flex; align-items: center; gap: 4px; margin-top: -4px; }
 .wp-ai-chat__icon-btn {
   display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
   border: 0; border-radius: 4px; background: none; color: var(--wp-text-dim); cursor: pointer; font-size: 12px;
@@ -1327,7 +1392,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__image-ideas { display: flex; flex-wrap: wrap; gap: 6px; }
 .wp-ai-chat__suggestion--small { padding: 4px 8px; font-size: 12px; }
 .wp-ai-chat__attach:disabled { opacity: 0.45; cursor: default; }
-.wp-ai-chat__again { display: flex; justify-content: flex-start; margin-top: -6px; }
 .wp-ai-chat__live :deep(.wp-ai-msg) { opacity: 0.92; }
 .wp-ai-chat__meter {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;

@@ -56,7 +56,7 @@ ComfyUI extension that builds image-generation prompts from modules: wildcards \
 (lists of options, one picked per run), fixed values, combines, derivation \
 rules, constraints between wildcards, and bundles of modules.
 
-For each numbered item, decide:
+For each numbered item, decide (and give its number as "id", e.g. "1"):
 - category: the one category it belongs in. Prefer the library's existing \
 categories, spelled exactly as listed. Propose a new category only when none \
 fits; keep it short (one to three words, Title Case). Use "" to leave the \
@@ -138,6 +138,18 @@ def _clean(raw: Any, limit: int) -> str | None:
     return text
 
 
+def _find(sid: str, by_id: dict[str, dict[str, Any]],
+          by_name: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+    """The item an answer's id means: its number ("2", "#2", "item 2",
+    "2."), else its name."""
+    if sid in by_id:
+        return by_id[sid]
+    m = re.fullmatch(r"(?:item\s*)?(\d+)\.?(?:\s.*)?", sid, re.I)
+    if m and m.group(1) in by_id:
+        return by_id[m.group(1)]
+    return by_name.get(sid.strip(" \"'").lower())
+
+
 def compile_answer(
     raw: Any, *, items: list[dict[str, Any]], categories: list[str], library: list[str],
 ) -> dict[str, Any]:
@@ -162,11 +174,20 @@ def compile_answer(
     skipped: list[dict[str, str]] = []
     seen: set[str] = set()
     new_cats: dict[str, str] = {}
-    for entry in raw["items"]:
-        if not isinstance(entry, dict):
-            continue
+    by_name = {it["name"].strip().lower(): it for it in items}
+    entries = [e for e in raw["items"] if isinstance(e, dict)]
+    # One answer per item, in order: the n-th answer is the n-th item even
+    # when its id isn't the number (small models write the name, "item 2").
+    in_order = len(entries) == len(items)
+    guessed = 0
+    for pos, entry in enumerate(entries):
         sid = str(entry.get("id", "")).strip().lstrip("#")
-        it = by_id.get(sid)
+        it = _find(sid, by_id, by_name)
+        if it is None and in_order:
+            it = items[pos]
+            guessed += 1
+        if it is not None:
+            sid = it["id"]
         if it is None:
             skipped.append({"text": sid or "?", "reason": "no such item"})
             continue
@@ -209,7 +230,9 @@ def compile_answer(
             change["rating"] = rating
         if change["category"] or change["tags_add"] or change["tags_remove"] or change["rating"]:
             changes.append(change)
-    if not seen:
+    if not seen or (guessed == len(entries) and not changes):
+        # Every id empty or unknown and nothing to change: it said nothing
+        # about these items, which "Nothing to change" would hide.
         raise ValueError("it named none of the items")
     return {
         "changes": changes,

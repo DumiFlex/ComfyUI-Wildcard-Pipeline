@@ -127,6 +127,11 @@ class MoreTools:
                 hits = [m for m in self.modules.values() if isinstance(m.get("payload"), dict)
                         and low in (m["payload"].get("var_binding"),
                                     m["payload"].get("output_var"))]
+            if len(hits) > 1:
+                # A name the library already has, just proposed again in
+                # this answer ("Outfit"): the answer means its own card.
+                made = getattr(self, "_created", {})
+                hits = [r for r in hits if r.get("id") in made] or hits
             row = hits[0] if len(hits) == 1 else None
         if row is not None and kinds and self._kind(row) not in kinds:  # type: ignore
             return None
@@ -758,6 +763,63 @@ class MoreTools:
 
     # ── run_test ─────────────────────────────────────────────────────────
 
+    def with_needs(self, ids: list[str]) -> tuple[list[str], list[str]]:
+        """A stack's ids with what its constraints need added in run order: a
+        constraint without its source wildcard before it, or its target
+        after it, does nothing. A wildcard inside a bundle on the stack
+        counts as there. Returns (ids, notes for the model)."""
+        out = list(ids)
+        notes: list[str] = []
+
+        def present(mid: str) -> bool:
+            return mid in out or any(
+                any(isinstance(c, dict) and c.get("id") == mid
+                    for c in (self.bundles.get(b) or {}).get("children") or [])
+                for b in out if b in self.bundles)
+
+        for cid in list(ids):
+            row = self.modules.get(cid)
+            if not row or row.get("type") != "constraint":
+                continue
+            p = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+            src = str(p.get("source_wildcard_id") or "")
+            tgt = str(p.get("target_wildcard_id") or "")
+            added = []
+            if src in self.modules and not present(src):
+                out.insert(out.index(cid), src)
+                added.append(self.names.get(src, src))
+            if tgt in self.modules and not present(tgt):
+                out.insert(out.index(cid) + 1, tgt)
+                added.append(self.names.get(tgt, tgt))
+            elif tgt in out and out.index(tgt) < out.index(cid):
+                # Already there but runs first: the constraint moves ahead of it.
+                out.remove(cid)
+                out.insert(out.index(tgt), cid)
+                notes.append(f"moved {row.get('name')} before its target "
+                             f"{self.names.get(tgt, tgt)}")
+            if added:
+                notes.append(f"added {' and '.join(added)} for {row.get('name')} (a constraint "
+                             "needs its source before it and its target after it)")
+        return out, notes
+
+    def _stack_needs(self, args: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+        """`args` with the stack's constraint wildcards added (`with_needs`)."""
+        raw = args.get("stack")
+        if not isinstance(raw, list):
+            return args, []
+        by_id: dict[str, Any] = {}
+        rest: list[Any] = []
+        for x in raw:
+            row = self._find(x.get("item") or x.get("id") if isinstance(x, dict) else x)
+            if row is None or row["id"] in by_id:
+                rest.append(x)
+            else:
+                by_id[row["id"]] = x
+        ids, notes = self.with_needs(list(by_id))
+        if not notes:
+            return args, []
+        return {**args, "stack": [by_id.get(i, i) for i in ids] + rest}, notes
+
     def _stack(self, raw: Any, proposed: bool) -> tuple[list[dict[str, Any]], list[str]]:
         warnings: list[str] = []
         modules: list[dict[str, Any]] = []
@@ -860,7 +922,9 @@ class MoreTools:
             if template is None:
                 raise ValueError(f"no template {_short(args['template'], 40)!r}")
         proposed = bool(args.get("proposed")) and bool(self._pending)  # type: ignore
+        args, needs = self._stack_needs(args)
         modules, warnings = self._stack(args.get("stack"), False)
+        warnings = needs + warnings
         after_modules: list[dict[str, Any]] = []
         if proposed:
             after_modules, warnings = self._stack(args.get("stack"), True)

@@ -170,17 +170,37 @@ def test_negatives_never_shift_picks():
 # ── fixed values + combine ──────────────────────────────────────────────
 
 
-def test_fixed_value_negative_comes_from_the_library_row():
-    fv = {
+def _fv(override_row):
+    return {
         "type": "fixed_values", "id": "fv",
         "payload": {"values": [
             {"id": "f0", "name": "style", "value": "oil", "negative": "photo"}]},
-        "instance": {"values_overrides": [
-            {"id": "f0", "name": "style", "value": "watercolor", "negative": "NOPE"}]},
+        "instance": {"values_overrides": [override_row]},
     }
-    ctx = _run([fv])
+
+
+def test_fixed_value_override_without_negative_keeps_the_library_one():
+    ctx = _run([_fv({"id": "f0", "name": "style", "value": "watercolor"})])
     assert ctx["style"] == "watercolor"
     assert _texts(ctx, "style") == ["photo"]
+
+
+def test_fixed_value_override_negative_replaces_the_library_one():
+    ctx = _run([_fv({"id": "f0", "name": "style", "value": "watercolor", "negative": "sketch"})])
+    assert _texts(ctx, "style") == ["sketch"]
+
+
+def test_fixed_value_override_empty_negative_clears_it():
+    ctx = _run([_fv({"id": "f0", "name": "style", "value": "oil", "negative": ""})])
+    assert _texts(ctx, "style") == []
+
+
+def test_fixed_value_added_row_carries_its_own_negative():
+    fv = _fv({"id": "f0", "name": "style", "value": "oil"})
+    fv["instance"]["values_overrides"].append(
+        {"id": "x1", "name": "mood", "value": "calm", "negative": "angry"})
+    ctx = _run([fv])
+    assert _texts(ctx, "mood") == ["angry"]
 
 
 def test_combine_carries_its_reads_plus_its_own():
@@ -193,6 +213,23 @@ def test_combine_carries_its_reads_plus_its_own():
             "negative": "cropped"}},
     ])
     assert _texts(ctx, "scene") == ["blonde", "torn clothes", "cropped"]
+
+
+def _combine(instance):
+    return {"type": "combine", "instance": instance, "payload": {
+        "output_var": "scene", "template": "a scene", "negative": "cropped"}}
+
+
+def test_combine_negative_override_replaces_the_library_one():
+    assert _texts(_run([_combine({"negative_override": "blurry"})]), "scene") == ["blurry"]
+
+
+def test_combine_empty_negative_override_clears_it():
+    assert _texts(_run([_combine({"negative_override": ""})]), "scene") == []
+
+
+def test_combine_null_negative_override_keeps_the_library_one():
+    assert _texts(_run([_combine({"negative_override": None})]), "scene") == ["cropped"]
 
 
 # ── derivation ──────────────────────────────────────────────────────────

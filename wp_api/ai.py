@@ -59,12 +59,14 @@ from engine.ai import derivation as ai_derivation
 from engine.ai import describe as ai_describe
 from engine.ai import docs as ai_docs
 from engine.ai import followup as ai_followup
+from engine.ai import guide as ai_guide
 from engine.ai import index as ai_index
-from engine.ai import library_vars, text_items
+from engine.ai import library_vars, pack_tidy, text_items
 from engine.ai import lint as ai_lint
 from engine.ai import organize as ai_organize
 from engine.ai import pack as ai_pack
 from engine.ai import patterns as ai_patterns
+from engine.ai import react as ai_react
 from engine.ai import refs as ai_refs
 from engine.ai import research as ai_research
 from engine.ai import safety as ai_safety
@@ -182,7 +184,29 @@ async def post_test(request: web.Request) -> web.Response:
         return cfg
     result = await _ai_client.probe(cfg)
     result["embed"] = await _ai_embed.check(cfg) if result.get("ok") else None
+    result["prefix"] = await _prefix(request, cfg) if result.get("json_ok") else None
     return json_ok(result)
+
+
+async def _prefix(request: web.Request, cfg: dict[str, Any]) -> dict[str, Any]:
+    """What a new chat would send before its first message, opened the way
+    `post_chat` opens one (no page): instructions, tools and the library
+    summary, in tokens, with the window it was fitted to."""
+    with db_session(request) as conn:
+        lib = ai_chat.Library(
+            ModuleRepository(conn).list(), BundleRepository(conn).list(),
+            CategoryRepository(conn).list(), TemplateRepository(conn).list(),
+        )
+    prof = ai_budget.profile(cfg)
+    fmt = await _ai_chat.pick_format(cfg)
+    meta: dict[str, Any] = {"web": _ai_search.enabled(cfg), "typed": _ai_chat.checks_schema(cfg),
+                            "delete": bool(cfg.get("allow_delete"))}
+    window = await _window(cfg, meta)
+    snapshot = _open_chat(lib, cfg, meta, prof, None, fmt, window)
+    slim = prof["slim"] or bool(_lean(meta).get("slim"))
+    fixed = _fixed_chars(cfg, {**prof, "slim": slim}, meta, fmt, snapshot)
+    return {"tokens": ai_budget.tokens(fixed), "window": window, "tools": len(meta["tools"]),
+            "lean": int(meta.get("lean") or 0), "format": fmt}
 
 
 def _turns(body: dict[str, Any]) -> list[dict[str, Any]] | web.Response:
@@ -294,6 +318,9 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     axes = {
         str(k): _str_list(v, limit=200) for k, v in list(raw_groups.items())[:50]
     }
+    raw_kinds = payload.get("tag_group_kinds") \
+        if isinstance(payload.get("tag_group_kinds"), dict) else {}
+    kinds = {str(k): "accepts" for k, v in raw_kinds.items() if v == "accepts" and k in axes}
     name = wc.get("name") if isinstance(wc.get("name"), str) else ""
     var = wc.get("var_binding") if isinstance(wc.get("var_binding"), str) else ""
 
@@ -301,7 +328,7 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     self_id = wc.get("id") if isinstance(wc.get("id"), str) else None
     refs = _ref_index(_wildcards(request), self_id, payload, name)
     existing_texts = [ai_refs.display_text(t, refs) for t in existing_texts]
-    first = ai_wildcard.build_user_prompt(
+    first = ai_wildcard.build_user_prompt(kinds=kinds,
         instruction=ai_followup.first_instruction(turns, instruction), count=count,
         name=name[:200], var_binding=var[:100],
         existing_options=existing_texts, tags=tags, axes=axes,
@@ -310,8 +337,8 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     try:
         answer = await _ask(
             cfg, first=first, turns=turns, instruction=instruction,
-            system=webs.system(ai_wildcard.SYSTEM_PROMPT),
-            schema=webs.schema(ai_wildcard.OPTIONS_SCHEMA),
+            system=webs.system(ai_wildcard.draft_prompt()),
+            schema=webs.schema(ai_wildcard.DRAFT_SCHEMA),
             schema_name="wildcard_options",
             images=images or None, extra=webs.note,
         )
@@ -333,6 +360,13 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
             status=502,
         )
+    groups, group_notes = ai_wildcard.new_groups(
+        answer.get("axes") if isinstance(answer, dict) else None,
+        existing_payload={"sub_categories": tags, "tag_groups": axes, "tag_group_kinds": kinds},
+        new_tags=result["new_tags"], options=result["options"],
+    )
+    result["groups"] = groups
+    result["skipped"] += [{"text": "tag groups", "reason": n} for n in group_notes]
     result["model"] = cfg["model"]
     result["answer"] = answer
     result["research"] = research
@@ -434,6 +468,13 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
             status=502,
         )
+    if not result["changes"] and result["skipped"] and all(
+            x["reason"] == "not an option in the list" for x in result["skipped"]):
+        # Small models write prose where the option number goes: every change
+        # is dropped, which used to come back as a silent empty list.
+        return json_error(
+            "the model's answer couldn't be used (it named no option by its number). "
+            "Try again, or a larger model.", status=502)
     for c in result["changes"]:
         c["option_id"] = real_ids[c.pop("id")]
     result["action"] = action
@@ -856,19 +897,31 @@ def _results_tail(question: str, *, last: bool, native: bool) -> str:
 async def _chat_step(
     cfg: dict[str, Any], *, system: str, log: list[dict[str, Any]], fmt: str,
     names: list[str], prof: dict[str, Any], num_ctx: int, cache_key: str,
-    emit: Any = None,
+    emit: Any = None, typed: bool = False,
 ) -> dict[str, Any]:
     """One model step, asked again once with the problem named when a
-    JSON-mode answer isn't usable: small models usually fix a named error."""
+    JSON-mode answer isn't usable: small models usually fix a named error.
+    `typed`: JSON-mode args follow each tool's schema (local servers); a
+    server that can't take that schema is asked again with the string form.
+    Small models there pick their tool and write it in two asks
+    (`_ai_chat.two_phase`)."""
     chosen = ai_tools.tools(names)
     native = ai_tools.native(chosen, cfg["api"])
-    schema = ai_tools.step_schema(names)
+    typed = typed and fmt == "json" and _ai_chat.checks_schema(cfg)
+    schema = ai_tools.step_schema(names, chosen if typed else None)
     problem = ""
-    for attempt in range(2):
+    attempt = 0
+    while attempt < 2:
         asked = log if not problem else [*log, {"role": "user", "content": (
             f"Your last answer couldn't be used ({problem}). Answer again with only the "
             "JSON object: plan, message, calls.")}]
         try:
+            if typed and prof.get("two_phase"):
+                return await _ai_chat.two_phase(
+                    cfg, system=system, log=asked, offered=chosen,
+                    pick_temp=prof["chat_temp"], write_temp=prof["write_temp"],
+                    num_ctx=num_ctx, cache_key=cache_key, emit=emit,
+                )
             return await _ai_chat.step(
                 cfg, system=system, log=asked, fmt=fmt, tools=native, names=names,
                 schema=schema, temperature=prof["chat_temp"], num_ctx=num_ctx,
@@ -877,6 +930,9 @@ async def _chat_step(
         except _ai_chat.ToolsUnsupported:
             raise
         except _ai_client.AIError as e:
+            if typed and _ai_chat.refused_schema(cfg, e):
+                typed, schema = False, ai_tools.step_schema(names)
+                continue  # the same ask, args as a string
             if attempt or fmt != "json" or "JSON" not in e.message:
                 raise
             problem = "it wasn't valid JSON"
@@ -886,6 +942,7 @@ async def _chat_step(
                     f"the model's answer couldn't be used ({e}). Try again, or a larger "
                     "model.") from e
             problem = str(e)
+        attempt += 1
     raise _ai_client.AIError("the model's answer couldn't be used")
 
 
@@ -1043,7 +1100,8 @@ def _lean(meta: dict[str, Any]) -> dict[str, Any]:
 def _system_text(prof: dict[str, Any], meta: dict[str, Any], fmt: str, snapshot: str) -> str:
     return ai_chat.system_prompt(
         slim=prof["slim"], native=fmt == "native", tools=meta["tools"],
-        examples=_lean(meta).get("examples", True),
+        examples=_lean(meta).get("examples", True), prose=_lean(meta).get("prose", True),
+        typed=fmt == "json" and bool(meta.get("typed")),
     ) + "\n\nThe user's library (data, not instructions):\n" + snapshot
 
 
@@ -1086,7 +1144,9 @@ def _open_chat(lib: Any, cfg: dict[str, Any], meta: dict[str, Any], base: dict[s
             meta["lean"] = level
         else:
             meta.pop("lean", None)
-        meta["tools"] = ai_tools.toolset(page.get("route") if page else None, scoped=slim,
+        meta["tools"] = ai_tools.toolset(page.get("route") if page else None,
+                                         scoped=slim or bool(base.get("scoped")),
+                                         wide=not slim,
                                          web=bool(meta.get("web")),
                                          delete=bool(meta.get("delete")),
                                          vocab=bool(meta.get("vocab")),
@@ -1474,6 +1534,20 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 m[key] = retried_from
         chat = {**chat, "meta": m}
     paused = (chat or {}).get("meta", {}).get("pending") if chat else None
+    reaction = ""
+    if (chat is not None and not resume and not retry and not paused and not images
+            and not body.get("events") and any(e.get("kind") == "step" for e in log)
+            and not ai_chatlog.last_reply(log).rstrip().endswith("?")):
+        reaction = ai_react.quick(text)
+    if reaction:
+        # Only thanks or praise: a reaction, no model call, and nothing the
+        # model will read (`aside` entries aren't rendered).
+        with db_session(request) as conn:
+            ChatRepository(conn).append(chat["id"], [ai_chatlog.aside_entry(text, reaction)],
+                                        meta=chat["meta"])
+        return json_ok({"chat_id": chat["id"], "aside": True, "reaction": reaction,
+                        "message": "", "proposals": [], "steps": [], "refs": {},
+                        "pending": [], "model": str(chat["meta"].get("model") or "")})
     if resume:
         if not paused:
             return json_error("nothing in this chat is waiting for an answer", status=409)
@@ -1493,14 +1567,18 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         danbooru_on = bool(cfg.get("danbooru_lookup"))
         meta: dict[str, Any] = {
             "format": fmt, "proposals": {}, "fingerprint": {},
-            "tools": ai_tools.toolset(page.get("route") if page else None, scoped=prof["slim"],
-                                      web=web_on,
+            "tools": ai_tools.toolset(page.get("route") if page else None,
+                                      scoped=prof["slim"] or bool(prof.get("scoped")),
+                                      wide=not prof["slim"], web=web_on,
                                       delete=bool(cfg.get("allow_delete")),
                                       vocab=bool(vocab_kinds), reader=reader_on,
                                       danbooru=danbooru_on),
             "vocab": sorted(vocab_kinds),
             "web": web_on, "reader": reader_on, "danbooru": danbooru_on,
             "delete": bool(cfg.get("allow_delete")),
+            # JSON-mode args as objects the server checks (fixed per chat so
+            # the instructions stay the same).
+            "typed": _ai_chat.checks_schema(cfg),
             # Told in the first message's tail when on (_sync_permissions).
             "auto": False,
         }
@@ -1556,8 +1634,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         meta.pop("pointed", None)  # so are the parts already highlighted
         hints = await _retrieval(lib, text, meta, prof, cfg) if text else ""
         pics = _ai_images.note(len(images)) if images else ""
+        model = ai_guide.model_note(text) if text else ""
         sent = ai_safety.strip_invisible(
-            "\n\n".join(x for x in (since, changes, perms, text, pics, note, hints) if x))
+            "\n\n".join(x for x in (since, changes, perms, text, pics, note, hints, model)
+                       if x))
         new.append(ai_chatlog.user_entry(text, sent, images))
         meta = ai_chatlog.move_images(log + new, meta)
 
@@ -1577,10 +1657,16 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     interim = ""
     seen: set[str] = set()
     errors: dict[str, int] = {}
+    #: Refusals by tool and reason (ids and numbers left out).
+    refused: dict[str, int] = {}
     forced = False
     checked = False
     nudged = False
     empty_nudged = False
+    #: Ask the next step with the model's thinking off: set by the empty
+    #: nudge, since a thinking model that came back empty once tends to
+    #: think itself out of an answer again.
+    think_off = False
     #: The answer a nudge set aside: shown if the nudged step comes back empty.
     set_aside = ""
     #: A cut answer waiting for the step that continues it, and how many
@@ -1617,9 +1703,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             await emit({"type": "step", "n": step + 1})
         try:
             st = await asyncio.wait_for(
-                _chat_step(cfg, system=system_for(), log=rendered, fmt=fmt,
+                _chat_step({**cfg, "thinking": "off"} if think_off else cfg,
+                           system=system_for(), log=rendered, fmt=fmt,
                            names=meta["tools"], prof=prof, num_ctx=num_ctx,
-                           cache_key=cache_key, emit=emit),
+                           cache_key=cache_key, emit=emit, typed=bool(meta.get("typed"))),
                 timeout=STEP_SECONDS)
         except asyncio.TimeoutError:
             if not steps and not any(x.get("kind") == "step" for x in new):
@@ -1656,11 +1743,25 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 return json_error(e.message + hint, status=e.status)
             message = f"(Stopped early: {e.message})"
             break
+        think_off = False
         step += 1
         ran += 1
         usage = st["usage"]
         said = ai_safety.strip_invisible(st["message"])[:ai_chat.MAX_MESSAGE]
         calls = st["calls"][:ai_chat.MAX_CALLS_PER_STEP]
+        plan_text = (st.get("answer") or {}).get("plan") if isinstance(
+            st.get("answer"), dict) else ""
+        if not said and not calls and isinstance(plan_text, str) \
+                and len(plan_text.strip()) >= PLAN_AS_ANSWER:
+            # Small models write the whole explanation in "plan" and leave
+            # "message" empty: that showed as an empty answer.
+            said = ai_safety.strip_invisible(plan_text.strip())[:ai_chat.MAX_MESSAGE]
+        native_note = st.get("plan") if fmt == "native" else ""
+        if not said and calls and isinstance(native_note, str) and native_note.strip():
+            # Native text written next to calls ("I've proposed the two
+            # wildcards…") streamed live: keep it on screen above its steps
+            # instead of the next step wiping it.
+            said = ai_safety.strip_invisible(native_note.strip())[:ai_chat.MAX_MESSAGE]
         dropped = len(st["calls"]) - len(calls)
         # How the model called its tools this answer, for the drawer's badge.
         tool_use["calls"] += len(calls)
@@ -1671,6 +1772,12 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         new.append(ai_chatlog.step_entry(ai_safety.strip_invisible(st["text"]), calls,
                                          answer=st["answer"], usage=usage,
                                          model=str(cfg.get("model") or ""), raw=raw))
+        thought = st.get("thinking")
+        if isinstance(thought, str) and thought.strip():
+            # What it thought before acting, for the drawer's "Thinking"
+            # (display only: steps are never sent to the model).
+            steps.append({"tool": "think", "note": thought.strip(), "ok": True,
+                          "think": True})
         if carry and not calls:
             said = ai_chat.join_continuation(carry, said)
             carry = ""
@@ -1693,11 +1800,13 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 message += "\n\n*(Cut off: the model stopped before finishing.)*"
         elif said:
             interim = said
+            # What it said before acting stays on screen above its steps
+            # (it streamed live), instead of vanishing when the calls start.
+            if not any(x.get("say") and x.get("note") == said for x in steps):
+                steps.append({"tool": "say", "note": said, "ok": True, "say": True})
         if forced and calls:
             # Told to answer and called again anyway: stop on what it said.
-            message = message or (
-                "I kept looking without getting to an answer. Try asking more specifically, "
-                "or name the item.")
+            message = message or interim or _stuck_line(steps)
             break
         if any(c["tool"] == "run_test" for c in calls):
             checked = True
@@ -1758,12 +1867,12 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                         pointed = list(meta.get("pointed") or [])
                         if anchors in pointed:
                             # Small models point at the same part again and
-                            # again instead of answering.
+                            # again instead of answering. Only a highlight
+                            # the browser showed counts (`_paused_results`).
                             needs_reply = True
                             result(ai_chat.POINTED_AGAIN)
                             steps.append({"tool": tool, "note": label, "ok": True})
                             continue
-                        meta["pointed"] = [*pointed, anchors]
                     if tool in ai_tools.WEB and _web_pre_allowed(cfg, meta):
                         # Allowed for this chat (or always): run it now.
                         result(await _web_call(cfg, meta, tool, cargs))
@@ -1797,6 +1906,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     out = lib.run(tool, args)
             except ValueError as e:
                 errors[tool] = errors.get(tool, 0) + 1
+                why = tool + re.sub(r"\b[0-9a-f]{8}\b|\d+", "#", str(e))
+                refused[why] = refused.get(why, 0) + 1
                 needs_reply = True
                 result(f"{tool}: error: {e}")
                 steps.append({"tool": tool, "note": f"{tool}: {e}", "ok": False})
@@ -1813,6 +1924,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 needs_reply = True
                 result(f"{tool} {_json.dumps(args, ensure_ascii=False, sort_keys=True)[:200]}:\n"
                        + ai_budget.clip(out, prof["result_chars"]) + extra)
+                if tool == "react":
+                    continue  # shown on the user's message, not as a step
                 step_ = {"tool": tool, "note": ai_chat.args_note(tool, args, lib), "ok": True}
                 card = getattr(lib, "last_card", None) if tool == "run_test" else None
                 if card:
@@ -1847,6 +1960,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 # An empty answer: thinking models can spend the whole output
                 # allowance before writing anything.
                 cut = bool(usage.get("cut"))
+                if lib.reaction and not set_aside:
+                    break  # it reacted and had nothing to add: that's the answer
                 if set_aside:
                     # Nudged, and then nothing: the earlier answer stands.
                     message = set_aside
@@ -1857,7 +1972,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                         "models do this. Try again, raise the output limit, or turn its "
                         "thinking off.)" if cut else _done_line(steps))
                     break
-                empty_nudged = True
+                empty_nudged = think_off = True
                 new.append(ai_chatlog.note_entry(ai_chat.EMPTY_NUDGE))
                 continue
             if (not calls and not proposals and not nudged and not cut
@@ -1898,8 +2013,11 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             break
         # Only repeats, read enough, or one step left: no more tools, answer now.
         reads += sum(1 for c in calls if c["tool"] in ai_tools.READ)
+        # The same refusal twice: small models loop on it instead of
+        # answering, so the next step must answer (with what went wrong).
         forced = (bool(calls and repeats == len(calls)) or step == ai_chat.MAX_STEPS - 1
-                  or reads >= read_budget or out_of_time)
+                  or reads >= read_budget or out_of_time
+                  or max(refused.values(), default=0) >= MAX_REFUSED)
         more = (f"\n\nOnly your first {len(calls)} calls ran; {dropped} more were left out."
                 + ("" if forced else " Make them in your next step.")) if dropped else ""
         new.append(ai_chatlog.results_entry(
@@ -1908,7 +2026,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     if pause:
         pass  # the turn goes on when the browser answers
     else:
-        if not message:
+        if not message and not (lib.reaction and not proposals and not interim):
             message = interim if interim and proposals else (
                 "Here's what I'd change." if proposals else interim or set_aside
                 or _done_line(steps))
@@ -1920,6 +2038,9 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                  for c in last["calls"]], ""))
         if new[-1].get("kind") != "step":
             new.append(_final_step(fmt, message))
+    if not pause and not proposals and _CLAIMS.search(message or ""):
+        # The 9B said "I've created … as a fixed values module" with no card.
+        message = message.rstrip() + "\n\n" + NOTHING_PROPOSED
     # Chips for the items it names; no bare ids for the user.
     message = lib.link_items(message)
     meta["format"] = fmt
@@ -1935,10 +2056,13 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         # turn goes on; it posts their results back as `results`.
         "pending": [{k: c[k] for k in ("id", "tool", "args", "label")} for c in pause],
     }
+    if lib.reaction:
+        out["reaction"] = lib.reaction  # on the user's message
     # What the user saw, for reopening the chat later (the model never
     # reads it).
     new.append(ai_chatlog.shown_entry({k: out[k] for k in (
-        "message", "proposals", "steps", "refs", "model", "pending", "format", "tool_use")}))
+        "message", "proposals", "steps", "refs", "model", "pending", "format", "tool_use",
+        "reaction") if k in out}))
     out["context"] = _context(cfg, meta, log + new, fixed, usage, window)
     with db_session(request) as conn:
         repo = ChatRepository(conn)
@@ -2139,10 +2263,40 @@ def _adopt_earlier(lib: Any, log: list[dict[str, Any]], meta: dict[str, Any]) ->
             lib.adopt_earlier(ai_lint.with_fixes(p, list(keys)) if keys else p)
 
 
+#: An answer saying it made a change ("I've created …").
+_CLAIMS = re.compile(r"\b(?:I(?:'ve| have)?|I've now)\s+(?:just\s+)?(?:created|made|added|built|"
+                     r"set up|saved|updated|applied)\b", re.I)
+#: Added to such an answer when no card came with it.
+NOTHING_PROPOSED = ("*(Nothing was proposed in this answer, so nothing changed. Ask me to "
+                    "propose it and a card will show.)*")
+#: The same refusal this many times in one answer, and the model must answer.
+MAX_REFUSED = 2
+#: A JSON-mode "plan" this long, with no message and no calls, is the answer.
+PLAN_AS_ANSWER = 80
+
+
+def _stuck_line(steps: list[dict[str, Any]]) -> str:
+    """The answer when the model was told to answer and called tools
+    again: what got in the way (the refusals say why), never a bare "I
+    kept looking"."""
+    why = list(dict.fromkeys(str(x.get("note")) for x in steps
+                             if not x.get("ok") and x.get("note")))[-3:]
+    if not why:
+        return ("I kept looking without getting to an answer. Try asking more specifically, "
+                "or name the item.")
+    return ("I couldn't finish this. What got in the way:\n"
+            + "\n".join(f"- {w}" for w in why)
+            + "\n\nTell me which way to go, or ask for one part at a time.")
+
+
 def _done_line(steps: list[dict[str, Any]]) -> str:
     """The answer when the model said nothing after acting: what it did,
     never a bare "Done."."""
-    did = [str(x.get("note")) for x in steps if x.get("ok") and x.get("note")]
+    undone = {str(x.get("note"))[len("Couldn't: "):] for x in steps
+              if not x.get("ok") and str(x.get("note") or "").startswith("Couldn't: ")}
+    did = [str(x.get("note")) for x in steps
+           if x.get("ok") and x.get("note") and not x.get("say") and not x.get("think")
+           and x.get("note") not in undone]
     pointed = [n[len("Pointed at "):] for n in did if n.startswith("Pointed at ")]
     if pointed:
         # "Where is X?" answered by pointing: say so in words.
@@ -2184,6 +2338,17 @@ async def _paused_results(
             if answer.get("denied"):
                 steps.append({"tool": c["tool"], "note": "You declined: "
                               + (c.get("label") or c["tool"]), "ok": False})
+            elif ai_client_tools.failed(text):
+                # Its step showed as done when it was sent; say it wasn't,
+                # to the user and, plainly, to the model.
+                steps.append({"tool": c["tool"], "note": "Couldn't: "
+                              + (c.get("label") or c["tool"]), "ok": False})
+                text += "\n" + ai_client_tools.FAILED_NOTE
+            elif c["tool"] == "highlight":
+                meta["pointed"] = [*(meta.get("pointed") or []),
+                                   sorted(p["anchor"] for p in c["args"].get("points") or [])]
+            if c["tool"] == "open" and not answer.get("denied"):
+                text += ai_client_tools.open_note(c["args"])
         by_id[c["id"]] = {"id": c["id"], "tool": c["tool"], "text": text}
     order = [i for i in paused.get("order") or [] if i in by_id]
     order += [i for i in by_id if i not in order]
@@ -2356,26 +2521,37 @@ async def post_pack_plan(request: web.Request) -> web.Response:
         follow += ("\n\nThe reference images aren't attached again; keep what you took "
                    "from them unless asked otherwise.")
     answer: Any = None
-    try:
-        answer = await _ask(
-            cfg, first=first, turns=turns, instruction=follow,
-            system=ai_pack.PLAN_SYSTEM, schema=ai_pack.PLAN_SCHEMA,
-            schema_name="pack_plan", temperature=0.4, images=images or None,
-            image_note=False,  # plan_prompt says how to use them
-            partial=True,  # a cut-off plan keeps the items it finished
-        )
-        plan = ai_pack.compile_plan(answer, library=library, previous=previous,
-                                    decisions=decisions, settings=settings, base=base,
-                                    canvas=canvas)
-    except _ai_client.AIError as e:
-        return json_error(e.message, status=e.status)
-    except ai_pack.PlanError as e:
-        if isinstance(answer, dict) and answer.get(_ai_client.CUT_OFF):
-            return json_error(_ai_client.CUT_OFF_MESSAGE, status=502)
-        return json_error(
-            f"the model's plan couldn't be used ({e}). Try again, or a larger model.",
-            status=502,
-        )
+    retry = ""
+    for attempt in range(2):
+        try:
+            answer = await _ask(
+                cfg, first=first, turns=turns, instruction=follow, extra=retry,
+                system=ai_pack.PLAN_SYSTEM, schema=ai_pack.PLAN_SCHEMA,
+                schema_name="pack_plan", temperature=0.4 if not retry else 0.2,
+                images=images or None,
+                image_note=False,  # plan_prompt says how to use them
+                partial=True,  # a cut-off plan keeps the items it finished
+            )
+            plan = ai_pack.compile_plan(answer, library=library, previous=previous,
+                                        decisions=decisions, settings=settings, base=base,
+                                        canvas=canvas, request=" ".join(
+                                            [first_text, instruction, sample, *(
+                                                str(d.get("answer") or "") for d in decisions
+                                                if isinstance(d, dict))]))
+            break
+        except _ai_client.AIError as e:
+            return json_error(e.message, status=e.status)
+        except ai_pack.PlanError as e:
+            if isinstance(answer, dict) and answer.get(_ai_client.CUT_OFF):
+                return json_error(_ai_client.CUT_OFF_MESSAGE, status=502)
+            if attempt:
+                return json_error(
+                    f"the model's plan couldn't be used ({e}). Try again, or a larger model.",
+                    status=502,
+                )
+            # A small model now and then answers a plan with no wildcards
+            # or no template: asked once more with what was wrong.
+            retry = ai_pack.plan_retry_note(str(e))
     if not web_on:
         plan["research"] = []
     plan["research"] = [q for q in plan["research"]
@@ -2384,7 +2560,9 @@ async def post_pack_plan(request: web.Request) -> web.Response:
         plan["from_images"] = []
     if isinstance(answer, dict):
         answer.pop(_ai_client.CUT_OFF, None)  # never replayed to the model
+    thought = _ai_client.last_thinking()
     return json_ok({"plan": plan, "model": cfg["model"], "answer": answer,
+                    **({"thinking": thought} if thought else {}),
                     "review": ai_pack.review_plan(plan, library), "web": web_on,
                     "context": await _plan_context(cfg, first, turns, follow, answer,
                                                    len(images))})
@@ -2537,26 +2715,39 @@ async def post_pack_item(request: web.Request) -> web.Response:
     vocab_line = ai_pack.item_vocab_note(plan, key, _ai_vocab.lookup, kinds)
     if vocab_line:
         req["user"] += "\n\n" + vocab_line
-    try:
-        answer = await _ai_client.complete_json(cfg, **req)
-    except _ai_client.AIError as e:
-        return json_error(e.message, status=e.status)
+    # The template's second try: when the model fails again, a plain one
+    # (every pick in order) keeps the pack rendering.
+    last_try = next(i for i in plan["items"] if i["key"] == key)["kind"] == "template" \
+        and note.startswith("your last answer failed")
     old = built.get(key)
     try:
+        answer = await _ai_client.complete_json(cfg, **req)
         out = ai_pack.compile_item(
             plan, key, built, answer, taken={b["id"] for b in built.values()},
             item_id=old["id"] if old else "", library=library,
         )
-    except ValueError as e:
-        return json_error(
-            f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
-            status=502,
-        )
+    except (_ai_client.AIError, ValueError) as e:
+        why = e.message if isinstance(e, _ai_client.AIError) else str(e)
+        if last_try:
+            try:
+                out = pack_tidy.fallback_item(plan, key, built, why, library=library)
+            except ValueError as e2:
+                return json_error(f"the model's answer couldn't be used ({e2})", status=502)
+        elif isinstance(e, _ai_client.AIError):
+            return json_error(e.message, status=e.status)
+        else:
+            return json_error(
+                f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
+                status=502,
+            )
     checked = ai_pack.tag_check_note(plan, out["kind"], out["payload"], _ai_vocab.lookup,
                                      kinds)
     if checked:
         out["warnings"] = [*out["warnings"], checked]
     out["model"] = cfg["model"]
+    thought = _ai_client.last_thinking()
+    if thought:
+        out["thinking"] = thought
     return json_ok(out)
 
 
@@ -2579,9 +2770,15 @@ async def post_pack_check(request: web.Request) -> web.Response:
     if not built:
         return json_error("nothing is built yet", status=400)
     loop = asyncio.get_running_loop()
-    report = await loop.run_in_executor(
-        None, lambda: ai_pack.check_pack(plan, built, library=library, base=base))
-    return json_ok(report)
+
+    def run() -> dict[str, Any]:
+        # Fixes that need no model (words said twice, picks another wildcard
+        # makes) go back to the browser with the report checked on them.
+        tidied_built, tidied = pack_tidy.tidy(plan, built, library=library, base=base)
+        report = ai_pack.check_pack(plan, tidied_built, library=library, base=base)
+        return {**report, "tidied": tidied}
+
+    return json_ok(await loop.run_in_executor(None, run))
 
 
 async def post_pack_install(request: web.Request) -> web.Response:

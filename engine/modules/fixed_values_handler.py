@@ -3,8 +3,9 @@
 Two-tier model mirroring wildcard:
   - `payload.values` = library-truth (immutable while picked).
   - `instance.values_overrides` = optional full-replacement list of
-    `{id, name, value}` written by the modal when the user edits a
-    library-tracked fixed_values.
+    `{id, name, value, negative?}` written by the modal when the user edits
+    a library-tracked fixed_values. A row's `negative` key replaces the
+    library row's negative ("" clears it); without it the library's stays.
 
 Per-value syntax resolution (Phase: combine v2 + syntax parity cycle):
 each emitted value passes through resolve_text with surface="fixed_values"
@@ -15,7 +16,7 @@ literal text + emits warnings (see engine/syntax/resolve.py).
 
 Seed lock: instance.locked_seed pins {a|b|c} resolution per instance
 via the shared engine.modules._seed.derive_module_rng helper, keyed by
-the module instance uid when present (ctx["__wp_current_module_uid__"]).
+the instance (`instance_key`), and each value rolls on its own stream.
 """
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ from typing import Any
 
 from engine import negatives
 from engine.modules import build_resolve_ctx
-from engine.modules._seed import derive_module_rng
+from engine.modules._seed import derive_module_rng, instance_key, stream_key
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
 
@@ -177,24 +178,19 @@ class FixedValuesHandler(ModuleHandler):
             effective_seed = int(locked_seed)
         else:
             effective_seed = chain_seed
-        # Key the stream on this module INSTANCE (`__wp_current_module_uid__`,
-        # set by the pipeline, falling back to the library id) so two
-        # co-resident fixed_values modules roll independently. The old key,
-        # `__wp_module_id__`, was never set, so they all shared the literal
-        # "fixed_values" stream (fixed 2026-10-16).
-        module_key = str(
-            ctx.get("__wp_current_module_uid__")
-            or ctx.get("__wp_current_module_id__")
-            or "fixed_values"
-        )
+        # Keyed by instance so two fixed-values modules (or two instances
+        # of one) roll independently; each value then rolls on its own
+        # stream, keyed by its name, so adding or editing one value never
+        # moves another.
+        module_key = instance_key(ctx, "fixed_values")
         rng = derive_module_rng(effective_seed, module_key)
 
         ctx_local = {**ctx, "__wp_rng__": rng}
         resolve_ctx = build_resolve_ctx(ctx_local, surface="fixed_values")
 
-        # Negatives are library content, like the value itself: an instance
-        # override list can re-word values but never re-words a negative, so
-        # look each one up on the library row (by id, then by name).
+        # Negatives follow the value: an override row with its own
+        # ``negative`` key replaces the library row's ("" clears it); one
+        # without keeps the library row's (by id, then by name).
         lib_rows = [v for v in payload.get("values", []) if isinstance(v, dict)]
         lib_by_id = {v.get("id"): v for v in lib_rows if v.get("id")}
         lib_by_name = {(v.get("name") or "").strip(): v for v in lib_rows}
@@ -206,9 +202,15 @@ class FixedValuesHandler(ModuleHandler):
             if not name:
                 continue
             raw = str(v.get("value", ""))
-            out_resolved[name] = resolve_text(raw, resolve_ctx)
-            lib = lib_by_id.get(v.get("id")) or lib_by_name.get(name) or {}
-            own = negatives.clean_negative(lib.get("negative"))
+            out_resolved[name] = resolve_text(raw, build_resolve_ctx(
+                ctx_local, surface="fixed_values",
+                stream=stream_key(effective_seed, f"{module_key}/{name}"),
+            ))
+            if "negative" in v:
+                own = negatives.clean_negative(v.get("negative"))
+            else:
+                lib = lib_by_id.get(v.get("id")) or lib_by_name.get(name) or {}
+                own = negatives.clean_negative(lib.get("negative"))
             negatives.set_entries(ctx, name, negatives.own_entries(
                 [own] if own else [], resolve_ctx, n_rng, pick=None, source=name,
             ))

@@ -18,6 +18,7 @@ line of ``;``-separated clauses, which this module turns into instance keys:
     only options 1,3,"red"  enabled_options (option ids; the rest are off)
     off options 2,4       enabled_options (every option but those)
     weight 3=2.5, 4=0     option_weights (replaces those options' weights)
+    weight long_hair=3    … every option carrying that tag
     pin 2                 mode "pinned" + pinned_option_id (always that one)
     seed 1234             locked_seed (the same pick whatever the run seed)
     rules off 2,3         derivation: disabled_rule_ids; constraint:
@@ -40,6 +41,7 @@ import math
 import re
 from typing import Any
 
+from engine.ai import refs as ai_refs
 from engine.syntax.subcat_filter import ParseError, parse
 
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
@@ -52,7 +54,7 @@ MAX_SEED = 2**53 - 1
 _KINDS = {
     "pick": ("wildcard",), "sep": ("wildcard",), "filter": ("wildcard",),
     "no empty": ("wildcard",), "match": ("wildcard",),
-    "hold": ("wildcard", "combine", "fixed_values"),
+    "hold": ("wildcard", "combine", "fixed_values", "derivation"),
     "internal": ("wildcard", "combine", "derivation"),
     "as": ("wildcard", "combine"),
     "only options": ("wildcard",), "off options": ("wildcard",),
@@ -69,6 +71,10 @@ _ALIASES = {
     "lock seed": "seed", "locked seed": "seed", "rule off": "rules off",
     "branch off": "branches off",
 }
+#: Other ways a model writes "no empty".
+_NO_EMPTY = {"exclude null", "exclude_null", "!null", "never empty", "not empty", "non empty",
+             "non-empty", "no null", "filter not empty", "filter non empty",
+             "filter not null"}
 #: Instance keys `parse_use` writes for these clauses (besides the old ones).
 WRITES = (
     "enabled_options", "option_weights", "mode", "pinned_option_id", "locked_seed",
@@ -113,10 +119,10 @@ def parse_use(
                 clause = _ALIASES[alias] + clause[len(alias):]
                 low = clause.lower()
                 break
+        if low in _NO_EMPTY:
+            clause = low = "no empty"
         word = next((w for w in sorted(_KINDS, key=len, reverse=True)
                      if low == w or low.startswith(w + " ")), None)
-        if word is None and low in ("exclude null", "exclude_null", "!null", "never empty"):
-            word = "no empty"
         if word is None:
             notes.append(f"{clause!r} isn't a setting")
             continue
@@ -152,7 +158,7 @@ def _apply(word: str, rest: str, out: dict[str, Any], tags: list[str] | None) ->
         out["pick_separator"] = (m.group(1) if m.group(1) is not None else m.group(2)) \
             if m else rest
     elif word == "filter":
-        expr = " ".join(rest.split())
+        expr = " ".join(ai_refs.bang_not(rest).split())
         try:
             ast = parse(expr)
         except ParseError as e:
@@ -356,7 +362,9 @@ def _weight(rest: str, out: dict[str, Any], kind: str,
             payload: dict[str, Any] | None) -> None:
     if not rest:
         raise ValueError("write weight N=W, e.g. weight 3=2.5")
-    weights: dict[str, float] = {}
+    # Several "weight" clauses add up ("weight long_hair=3; weight short_hair=1").
+    weights: dict[str, float] = dict(out.get("option_weights") or {})
+    rest_w: float | None = None
     for item in _items(rest):
         m = re.fullmatch(r"(.+?)\s*=\s*(\S+)", item, re.S)
         if not m:
@@ -364,8 +372,39 @@ def _weight(rest: str, out: dict[str, Any], kind: str,
         w = _number(m.group(2), "a weight")
         if w < 0 or w > MAX_WEIGHT:
             raise ValueError(f"a weight is between 0 and {MAX_WEIGHT:g}, not {m.group(2)}")
-        weights[_option_id(m.group(1), payload)] = int(w) if w.is_integer() else w
+        w = int(w) if w.is_integer() else w
+        if _OTHERS.fullmatch(m.group(1).strip().lower()):
+            # "others=1": every option the clause doesn't weigh itself.
+            rest_w = w
+            continue
+        tagged = _tagged(m.group(1), payload)
+        if tagged:
+            # "long_hair=3": every option carrying the tag.
+            for oid in tagged:
+                weights[oid] = w
+            continue
+        weights[_option_id(m.group(1), payload)] = w
+    if rest_w is not None:
+        for o in _options(payload) or []:
+            weights.setdefault(str(o.get("id")), rest_w)
     out["option_weights"] = weights
+
+
+_OTHERS = re.compile(r"(?:all\s+)?(?:the\s+)?(?:others?|rest|everything\s+else|"
+                     r"other\s+options|else|\*)")
+
+
+def _tagged(ref: str, payload: dict[str, Any] | None) -> list[str]:
+    """The ids of the options carrying tag ``ref`` (``long_hair`` or
+    ``#long_hair``), when it names a tag and not an option."""
+    opts = _options(payload)
+    word = ref.strip().lstrip("#").strip().lower().replace(" ", "_")
+    if opts is None or not word or ref.strip().isdigit() or any(
+            str(o.get("id")) == word or " ".join(str(o.get("value", "")).split()).lower()
+            == word for o in opts):
+        return []
+    return [str(o.get("id")) for o in opts if word in {
+        str(t).lower().replace(" ", "_") for t in o.get("sub_categories") or []}]
 
 
 def _pin(rest: str, out: dict[str, Any], kind: str,
@@ -611,7 +650,8 @@ $model_variant" (take the option whose text equals that variable), "hold" \
 stays), "internal" (rules can read it, the prompt doesn't show it), "as \
 $other" (bind it to another variable). Wildcard options, by their number in \
 read (or "quoted text", or #id): "only options 1,3" (the rest off here), \
-"off options 2,4", "weight 3=2.5, 4=0" (this use's weights), "pin 2" (always \
+"off options 2,4", "weight 3=2.5, 4=0" (this use's weights; a tag in place \
+of a number weights every option carrying it), "pin 2" (always \
 that option). "seed 1234" (wildcard, combine, fixed values, derivation: the \
 same result whatever the run seed). Derivation: "rules off 2", "branches \
 off 2.2, 2.else" (rule 2's second branch and its ELSE; branch 1 is the IF, \

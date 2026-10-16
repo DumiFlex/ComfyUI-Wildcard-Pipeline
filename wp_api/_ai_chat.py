@@ -50,6 +50,28 @@ def strip_thinking(text: str) -> str:
     return text.strip()
 
 
+#: Reasoning kept per step for the drawer's "Thinking" (display only).
+MAX_THINKING = 6000
+
+
+def thinking_text(text: Any, reasoning: Any = "") -> str:
+    """What the model thought in a step, for the drawer: the server's
+    reasoning field, else the ``<think>`` part of the text (a Qwen-style
+    template may leave only its "</think>")."""
+    if isinstance(reasoning, str) and reasoning.strip():
+        return reasoning.strip()[:MAX_THINKING]
+    if not isinstance(text, str):
+        return ""
+    low = text.lower()
+    parts = [m.group(0)[len("<think>"):-len("</think>")]
+             for m in re.finditer(r"<think>.*?</think>", text, re.DOTALL | re.IGNORECASE)]
+    if not parts and "</think>" in low:
+        parts = [text[:low.index("</think>")].replace("<think>", "")]
+    elif not parts and "<think>" in low:
+        parts = [text[low.index("<think>") + len("<think>"):]]
+    return "\n\n".join(p.strip() for p in parts if p.strip())[:MAX_THINKING]
+
+
 class ToolsUnsupported(AIError):
     """The server refused a request with tools in it."""
 
@@ -156,6 +178,32 @@ async def vision_support(cfg: dict[str, Any]) -> bool | None:
                 found = None
     _vision[key] = (time.monotonic(), found)
     return found
+
+
+#: Providers whose server builds a grammar from the JSON schema it gets, so
+#: a JSON-mode step can carry each tool's own arguments (`step_schema`).
+#: Hosted strict modes refuse optional properties.
+SCHEMA_SERVERS = ("ollama", "lmstudio", "llamacpp", "custom")
+#: (base_url, model) pairs whose server refused a typed step schema.
+_NO_TYPED: set[tuple[str, str]] = set()
+
+
+def checks_schema(cfg: dict[str, Any]) -> bool:
+    """Whether this server's JSON-mode steps may carry typed args."""
+    if (str(cfg.get("base_url") or ""), str(cfg.get("model") or "")) in _NO_TYPED:
+        return False
+    return cfg.get("provider") in SCHEMA_SERVERS
+
+
+def refused_schema(cfg: dict[str, Any], e: AIError) -> bool:
+    """A server that couldn't take the typed schema (too big or a keyword
+    its grammar builder lacks); remembered so later steps send the string
+    form."""
+    if not (400 <= (e.upstream or 0) < 600
+            and re.search(r"schema|grammar|format", e.message, re.I)):
+        return False
+    _NO_TYPED.add((str(cfg.get("base_url") or ""), str(cfg.get("model") or "")))
+    return True
 
 
 async def pick_format(cfg: dict[str, Any]) -> str:
@@ -519,20 +567,28 @@ def _usage_anthropic(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _native_step(text: Any, calls: list[dict[str, Any]], names: set[str],
-                 usage: dict[str, Any]) -> dict[str, Any]:
-    text = strip_thinking(text if isinstance(text, str) else "")
+                 usage: dict[str, Any], reasoning: Any = "") -> dict[str, Any]:
+    raw = text if isinstance(text, str) else ""
+    text = strip_thinking(raw)
     salvaged = False
     if not calls:
         calls = salvage_calls(text, names)
+        if not calls and not text:
+            # Nothing outside the reasoning: Qwen-style models sometimes
+            # write their call inside it (in <think>, or the server's
+            # reasoning field) and end the turn there.
+            calls = salvage_calls(raw, names) or salvage_calls(
+                reasoning if isinstance(reasoning, str) else "", names)
         if calls:
             text = ""
             salvaged = True
     return {"text": text, "calls": calls, "answer": None, "usage": usage,
             "message": "" if calls else text, "plan": text if calls else "",
-            "salvaged": salvaged}
+            "salvaged": salvaged, "thinking": thinking_text(raw, reasoning)}
 
 
-def _json_step(raw_text: str, answer: Any, usage: dict[str, Any]) -> dict[str, Any]:
+def _json_step(raw_text: str, answer: Any, usage: dict[str, Any],
+               reasoning: Any = "") -> dict[str, Any]:
     """A JSON-mode answer as a step. Calls keep `args` as the model's
     string; the loop parses and checks them."""
     if not isinstance(answer, dict):
@@ -546,8 +602,10 @@ def _json_step(raw_text: str, answer: Any, usage: dict[str, Any]) -> dict[str, A
             calls.append({"id": new_call_id(), "tool": c["tool"],
                           "args": raw if isinstance(raw, dict) else None,
                           "args_text": raw if isinstance(raw, str) else chatlog.dumps(raw)})
+    # The step's own "plan" is its short why when the server sent no reasoning.
     return {"text": raw_text, "calls": calls, "answer": answer, "usage": usage,
-            "message": message.strip(), "plan": plan}
+            "message": message.strip(), "plan": plan,
+            "thinking": thinking_text(raw_text, reasoning) or plan.strip()[:MAX_THINKING]}
 
 
 # ── streaming ───────────────────────────────────────────────────────────
@@ -622,8 +680,13 @@ def _openai_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
                 continue
             if d.get("refusal"):
                 msg["refusal"] = d["refusal"]
-            if d.get("reasoning_content") or d.get("reasoning"):
+            think = d.get("reasoning_content") or d.get("reasoning")
+            if think:
                 await live.thinking()
+                if isinstance(think, str):
+                    # Kept for one thing only: a call written in the
+                    # reasoning when the answer came back empty.
+                    msg["reasoning_content"] = (msg.get("reasoning_content") or "") + think
             text = d.get("content")
             if isinstance(text, str) and text:
                 msg["content"] += text
@@ -697,6 +760,9 @@ def _ollama_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
         m = obj.get("message") if isinstance(obj.get("message"), dict) else {}
         if m.get("thinking"):
             await live.thinking()
+            if isinstance(m["thinking"], str):
+                got = data["message"].get("thinking") or ""
+                data["message"]["thinking"] = got + m["thinking"]
         text = m.get("content")
         if isinstance(text, str) and text:
             data["message"]["content"] += text
@@ -743,6 +809,8 @@ def _anthropic_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
                 partial[i] = partial.get(i, "") + d["partial_json"]
             elif d.get("type") == "thinking_delta":
                 await live.thinking()
+                if isinstance(d.get("thinking"), str):
+                    block["thinking"] = str(block.get("thinking") or "") + d["thinking"]
         elif kind == "content_block_stop":
             i = obj.get("index") if isinstance(obj.get("index"), int) else -1
             if 0 <= i < len(data["content"]) and partial.get(i):
@@ -865,6 +933,41 @@ async def step(
             raise
 
 
+async def two_phase(
+    cfg: dict[str, Any], *, system: str, log: list[dict[str, Any]],
+    offered: list[registry.Tool], pick_temp: float, write_temp: float, num_ctx: int,
+    cache_key: str = "", emit: Any = None,
+) -> dict[str, Any]:
+    """A small model's JSON step asked in two parts: first which tools to
+    call (none to answer) at a low temperature, then their arguments or the
+    message, each checked by the server's grammar, so the choice isn't made
+    while writing. Returned as one ordinary JSON step, so the log and the
+    history the model reads stay the same."""
+    names = [t.name for t in offered]
+    pick = await step(cfg, system=system, log=log, fmt="json", tools=[], names=names,
+                      schema=registry.pick_schema(names), temperature=pick_temp,
+                      num_ctx=num_ctx, cache_key=cache_key, emit=emit)
+    chosen = pick["answer"].get("tools")
+    picked = [n for n in chosen if isinstance(n, str)][:registry.PICK_MAX] \
+        if isinstance(chosen, list) else []
+    keys = registry.pick_keys(picked)
+    ask = (f"Now write the arguments for {', '.join(keys)}." if picked
+           else "Now write your message to the user.")
+    asked = [*log, {"role": "assistant", "content": chatlog.dumps(pick["answer"]), "calls": []},
+             {"role": "user", "content": ask}]
+    out = await step(cfg, system=system, log=asked, fmt="json", tools=[], names=names,
+                     schema=registry.write_schema(picked, offered), temperature=write_temp,
+                     num_ctx=num_ctx, cache_key=cache_key, emit=emit)
+    got = out["answer"]
+    message = got.get("message") if isinstance(got.get("message"), str) and not picked else ""
+    answer = {"plan": pick["plan"], "message": message,
+              "calls": [{"tool": n, "args": got.get(k) if isinstance(got.get(k), dict) else {}}
+                        for k, n in zip(keys, picked, strict=True)]}
+    st = _json_step(chatlog.dumps(answer), answer, out["usage"])
+    st["thinking"] = pick["thinking"]
+    return st
+
+
 async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, Any]], fmt: str,
                           tools: list[dict[str, Any]], schema: dict[str, Any],
                           temperature: float, max_tokens: int,
@@ -899,22 +1002,26 @@ async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, 
     if data.get("_early"):
         usage["early"] = True
     blocks = [b for b in data.get("content") or [] if isinstance(b, dict)]
+    thought = "\n\n".join(str(b.get("thinking") or "").strip() for b in blocks
+                           if b.get("type") == "thinking" and b.get("thinking"))
     if fmt == "json":
         for block in blocks:
             if block.get("type") == "tool_use":
                 answer = block.get("input")
-                return _json_step(chatlog.dumps(answer), answer, usage)
+                return _json_step(chatlog.dumps(answer), answer, usage, thought)
         text = client.claude_text(blocks)
         if text.strip():
             # Asked in words (no forced choice), the answer may come as text.
-            return _json_step(text, client._parse_text_json(text), usage)
+            return _json_step(text, client._parse_text_json(text), usage, thought)
         raise AIError("the model didn't return the expected answer")
     text = "\n".join(str(b.get("text") or "") for b in blocks if b.get("type") == "text")
     calls = [{"id": str(b.get("id") or new_call_id()), "tool": str(b.get("name")),
               "args": b.get("input") if isinstance(b.get("input"), dict) else {},
               "args_text": chatlog.dumps(b.get("input") or {})}
              for b in blocks if b.get("type") == "tool_use"]
-    return _native_step(text, calls, allowed, usage)
+    st = _native_step(text, calls, allowed, usage)
+    st["thinking"] = st["thinking"] or thought[:MAX_THINKING]
+    return st
 
 
 async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any]], fmt: str,
@@ -947,7 +1054,7 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
         usage["early"] = True
     if fmt == "json":
         text = msg.get("content") if isinstance(msg.get("content"), str) else ""
-        return _json_step(text, client._parse_text_json(text), usage)
+        return _json_step(text, client._parse_text_json(text), usage, msg.get("thinking"))
     calls = []
     for c in msg.get("tool_calls") or []:
         fn = c.get("function") if isinstance(c, dict) else None
@@ -963,7 +1070,7 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
                           "args": args if isinstance(args, dict) else None,
                           "args_text": args if isinstance(args, str)
                           else chatlog.dumps(args or {})})
-    return _native_step(msg.get("content"), calls, allowed, usage)
+    return _native_step(msg.get("content"), calls, allowed, usage, msg.get("thinking"))
 
 
 async def _step_responses(cfg: dict[str, Any], system: str, log: list[dict[str, Any]],
@@ -1037,10 +1144,13 @@ async def _step_responses(cfg: dict[str, Any], system: str, log: list[dict[str, 
                           "args": None,
                           "args_text": raw if isinstance(raw, str) else chatlog.dumps(raw or {})})
     text = "\n".join(t for t in texts if t)
+    summary = "\n\n".join(
+        str(x.get("text") or "").strip() for it in output if it.get("type") == "reasoning"
+        for x in it.get("summary") or [] if isinstance(x, dict) and x.get("text"))
     if fmt == "json":
-        st = _json_step(text, client._parse_text_json(text), usage)
+        st = _json_step(text, client._parse_text_json(text), usage, summary)
     else:
-        st = _native_step(text, calls, allowed, usage)
+        st = _native_step(text, calls, allowed, usage, summary)
     st["raw"] = output
     return st
 
@@ -1103,7 +1213,8 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
         usage["early"] = True
     if fmt == "json":
         text = message.get("content") if isinstance(message.get("content"), str) else ""
-        return _json_step(text, client._parse_text_json(text), usage)
+        return _json_step(text, client._parse_text_json(text), usage,
+                          message.get("reasoning_content") or message.get("reasoning"))
     calls = []
     for c in message.get("tool_calls") or []:
         fn = c.get("function") if isinstance(c, dict) else None
@@ -1112,4 +1223,5 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
             calls.append({"id": str(c.get("id") or new_call_id()), "tool": fn["name"],
                           "args": raw if isinstance(raw, dict) else None,
                           "args_text": raw if isinstance(raw, str) else chatlog.dumps(raw or {})})
-    return _native_step(message.get("content"), calls, allowed, usage)
+    return _native_step(message.get("content"), calls, allowed, usage,
+                        message.get("reasoning_content") or message.get("reasoning"))

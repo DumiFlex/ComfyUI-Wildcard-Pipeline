@@ -60,6 +60,10 @@ _FAMILY_PREFIXES: tuple[tuple[str, str], ...] = (
     ("HiDream", "hidream"),
     ("Lumina2", "lumina2"),
     ("QwenImage", "qwen_image"),
+    # Versioned class names, so one family across versions and variants
+    # (`ZImagePixelSpace`, `HunyuanImage21`).
+    ("ZImage", "zimage"),
+    ("HunyuanImage", "hunyuan_image"),
     ("WAN", "wan"),
     ("LTXV", "ltxv"),
     ("Cosmos", "cosmos"),

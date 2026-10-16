@@ -21,9 +21,9 @@ import re
 from typing import Any
 
 from engine import negatives
-from engine.modules import build_resolve_ctx
+from engine.modules import build_resolve_ctx, restream
 from engine.modules._detail import module_detail
-from engine.modules._seed import derive_module_rng
+from engine.modules._seed import derive_module_rng, instance_key, stream_key
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
 from engine.syntax.resolve import NEG_ACCESSOR
@@ -51,7 +51,6 @@ _VALID_OPS = {
     "not_contains", "not_matches",
 }
 _VALID_MATCHES = {"all", "any"}
-_MISSING = object()
 # Groups nest; the editor stops at three levels, the cap here only guards a
 # hand-built payload against runaway recursion.
 _MAX_CONDITION_DEPTH = 8
@@ -60,6 +59,10 @@ _MAX_CONDITION_DEPTH = 8
 # `negative_replace` (also v8): "Replace negative" — the value becomes the
 # variable's only negative, dropping what it carried.
 NEGATIVE_MODES = {"negative", "negative_replace"}
+# The separator an append value starts with (", red") or a prepend value
+# ends with ("red, "), dropped when the target is still empty.
+_JOIN_EDGE = re.compile(r"^[\s,;]+")
+_JOIN_TAIL = re.compile(r"[\s,;]+$")
 _VALID_MODES = {"replace", "append", "prepend", *NEGATIVE_MODES}
 
 
@@ -400,12 +403,18 @@ def _apply_action(
         pick=None, source=carrier_key or "derivation",
     )
     negatives.set_entries(ctx, target, entries, add=mode != "replace")
+    current = _ctx_get(ctx, target)
     if mode == "replace":
         result = new_value
+    elif not current.strip():
+        # Adding to nothing: the joining comma or space the value brought
+        # for a non-empty target would otherwise start the text.
+        edge = _JOIN_EDGE if mode == "append" else _JOIN_TAIL
+        result = edge.sub("", new_value)
     elif mode == "append":
-        result = _ctx_get(ctx, target) + new_value
+        result = current + new_value
     else:
-        result = new_value + _ctx_get(ctx, target)
+        result = new_value + current
     _ctx_set(ctx, target, result)
     return target, result
 
@@ -602,16 +611,7 @@ class DerivationHandler(ModuleHandler):
                 int(locked_seed) if isinstance(locked_seed, (int, float))
                 else chain_seed
             )
-            # Key the stream on this module INSTANCE (the pipeline sets
-            # `__wp_current_module_uid__`, falling back to the library id), so
-            # two derivations in one chain roll independently. The old key,
-            # `__wp_module_id__`, was never set, so every derivation shared
-            # the literal "derivation" stream (fixed 2026-10-16).
-            module_id = str(
-                ctx.get("__wp_current_module_uid__")
-                or ctx.get("__wp_current_module_id__")
-                or "derivation"
-            )
+            module_id = instance_key(ctx, "derivation")
             rng = derive_module_rng(effective_seed, module_id)
             ctx_local = {**ctx, "__wp_rng__": rng}
             resolve_ctx = build_resolve_ctx(ctx_local, surface="derivation")
@@ -619,16 +619,16 @@ class DerivationHandler(ModuleHandler):
             resolve_ctx = build_resolve_ctx(ctx, surface="derivation")
 
         def _branch_resolve_ctx(branch_key: str) -> Any:
-            # Non-hold (or no rng): the shared rng stream — existing
-            # behaviour, branch values draw in fire order. Hold: an
-            # INDEPENDENT rng per branch (keyed by rule:branch) so its value
-            # is frozen to its frame-0 roll regardless of which other
-            # branches drew before it in the shared stream.
-            if not _hold:
+            # An INDEPENDENT stream per branch (keyed by rule:branch), and
+            # per action below, so a value rolls the same whichever other
+            # branches fired before it. Under hold the seed is the constant
+            # hold seed, so the value is also frozen to its frame-0 roll.
+            if not ctx_local:
                 return resolve_ctx
-            rng_b = derive_module_rng(effective_seed, f"{module_id}::{branch_key}")
+            b_key = f"{module_id}::{branch_key}"
             return build_resolve_ctx(
-                {**ctx_local, "__wp_rng__": rng_b}, surface="derivation"
+                {**ctx_local, "__wp_rng__": derive_module_rng(effective_seed, b_key)},
+                surface="derivation", stream=stream_key(effective_seed, b_key),
             )
 
         # Tier-D instance overrides (2026-05-10 cycle).
@@ -650,6 +650,11 @@ class DerivationHandler(ModuleHandler):
             )
 
         out: dict[str, str] = {}
+        # Values this module has written so far, by base variable. Every
+        # action resolves against them, so a later action (in the same branch
+        # or a later rule) reads the earlier write, as conditions already do
+        # through the live ctx.
+        written: dict[str, Any] = {}
         # WP Debug: which branch of each rule fired and why (explain runs only).
         detail = module_detail(ctx)
         explained: list[dict[str, Any]] | None = [] if detail is not None else None
@@ -664,8 +669,10 @@ class DerivationHandler(ModuleHandler):
             carrier = branch_carrier_key(rule_id, key)
             rule_overrides = action_overrides.get(rule_id)
             b_ctx = _branch_resolve_ctx(carrier)
+            vars_view = getattr(b_ctx, "_vars", None)
+            if isinstance(vars_view, dict):
+                vars_view.update(written)
             shown: list[dict[str, Any]] = []
-            saved: dict[str, Any] = {}
             for ai, action in enumerate(clause_actions(clause)):
                 override = (
                     rule_overrides.get(action_override_key(key, ai))
@@ -676,30 +683,25 @@ class DerivationHandler(ModuleHandler):
                 # Later actions key their negative stream apart so two
                 # "Add to negative" actions on one branch never share rolls.
                 pair = _apply_action(
-                    action, ctx, b_ctx,
+                    action, ctx,
+                    restream(b_ctx, f"{b_ctx.stream_key}|a{ai}")
+                    if getattr(b_ctx, "stream_key", None) else b_ctx,
                     carrier_key=carrier,
                     neg_seed=effective_seed,
-                    neg_key=carrier if ai == 0 else f"{carrier}.{ai}",
+                    neg_key=(
+                        f"{module_id}::{carrier}" if ai == 0
+                        else f"{module_id}::{carrier}.{ai}"
+                    ),
                 )
                 if pair is not None and pair[1] is not None:
                     out[pair[0]] = pair[1]
-                    # The next action of this branch reads what this one
-                    # wrote. Scoped to the branch (restored below) so rules
-                    # keep resolving their values exactly as before.
-                    vars_view = getattr(b_ctx, "_vars", None)
+                    # The next action (this branch's or a later rule's)
+                    # reads what this one wrote.
+                    base = split_var_accessor(pair[0])[0]
+                    written[base] = pair[1]
                     if isinstance(vars_view, dict):
-                        base = split_var_accessor(pair[0])[0]
-                        if base not in saved:
-                            saved[base] = vars_view.get(base, _MISSING)
                         vars_view[base] = pair[1]
                 shown.append(_explain_action(action, pair))
-            vars_view = getattr(b_ctx, "_vars", None)
-            if isinstance(vars_view, dict):
-                for base, prev in saved.items():
-                    if prev is _MISSING:
-                        vars_view.pop(base, None)
-                    else:
-                        vars_view[base] = prev
             if rd is not None:
                 rd["fired"] = key
                 if shown:

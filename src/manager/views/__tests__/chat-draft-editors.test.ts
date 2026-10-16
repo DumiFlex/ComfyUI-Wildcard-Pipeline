@@ -124,6 +124,26 @@ describe("FixedEditor with a chat draft", () => {
     expect(onSaved).toHaveBeenCalledWith("abcd1234");
   });
 
+  it("tells the chat when the draft's editor closes unsaved, and not after a save", async () => {
+    const onClosed = vi.fn();
+    stageDraft({ type: "fixed_values", onClosed, body: { name: "Left", payload: { values: [] } } });
+    const left = mount(FixedEditor, { global: { plugins: [makeRouter()] } });
+    await flushPromises();
+    left.unmount();
+    expect(onClosed).toHaveBeenCalledTimes(1);
+
+    const kept = vi.fn();
+    stageDraft({
+      type: "fixed_values", id: "abcd1234", onClosed: kept, onSaved: vi.fn(),
+      body: { name: "Kept", payload: { values: [{ id: "v1", name: "mood", value: "calm" }] } },
+    });
+    const w = mount(FixedEditor, { global: { plugins: [makeRouter()] } });
+    await flushPromises();
+    await clickSave(w);
+    w.unmount();
+    expect(kept).not.toHaveBeenCalled();
+  });
+
   it("ignores a draft staged for another type", async () => {
     stageDraft({ type: "combine", body: { name: "nope", payload: { template: "x" } } });
     const w = mount(FixedEditor, { global: { plugins: [makeRouter()] } });

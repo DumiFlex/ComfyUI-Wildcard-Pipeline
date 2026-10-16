@@ -97,6 +97,34 @@ describe("AiDraftPanel", () => {
     expect(w.find('[data-test="ai-draft-results"]').exists()).toBe(false);
   });
 
+  it("adds the tag groups the ticked rows use, before the options", async () => {
+    draft.mockResolvedValue({
+      options: [
+        { value: "school uniform", weight: 1, tags: ["loafers"], negative: "" },
+        { value: "hiking gear", weight: 1, tags: ["boots"], negative: "" },
+      ],
+      new_tags: ["loafers", "boots"], skipped: [], model: "m", answer: {},
+      groups: [{ name: "SHOES", kind: "accepts", tags: ["loafers", "boots"] }],
+    });
+    const w = mount(AiDraftPanel, {
+      props: {
+        name: "outfit", varBinding: "outfit", existingValues: [], existingTags: [],
+        tagGroups: { STYLE: [] }, tagGroupKinds: {},
+      },
+    });
+    await w.get('[data-test="ai-instruction"]').setValue("outfits and their shoes");
+    await w.get('[data-test="ai-run"]').trigger("click");
+    await flushPromises();
+    expect(w.get('[data-test="ai-draft-groups"]').text()).toContain("SHOES");
+    // Untick hiking gear: its "boots" no longer goes into the group.
+    await w.findAll(".wp-ai-draft__check")[1].trigger("change");
+    await w.get('[data-test="ai-draft-add"]').trigger("click");
+    expect(w.emitted("commit-groups")?.[0]).toEqual([[
+      { name: "SHOES", kind: "accepts", tags: ["loafers"] },
+    ]]);
+    expect(w.emitted("commit-options")?.[0][0]).toHaveLength(1);
+  });
+
   it("shows the server's error", async () => {
     const { ApiError } = await import("../../../api/client");
     draft.mockRejectedValue(new ApiError(403, "the AI assistant is off"));

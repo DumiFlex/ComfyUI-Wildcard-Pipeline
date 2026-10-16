@@ -38,7 +38,7 @@ const item = (key: string, kind: AiPackItem["kind"], name: string, extra: Partia
   source: "", target: "", use: "", library_id: "", library_type: "", ...extra,
 });
 
-const SETTINGS = { library: "reuse", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, model: "any" } as const;
+const SETTINGS = { library: "reuse", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, model: "any", youth_negative: "on" } as const;
 
 function plan(round: number): AiPackPlanResult {
   return {
@@ -356,6 +356,34 @@ describe("PackBuilder v2", () => {
     expect(vi.mocked(api.ai.packItem).mock.calls.map((c) => c[0].key)).toEqual(["i1", "i2"]);
     expect(w.get('[data-test="pack-summary"]').text()).toContain("1 built, 1 skipped");
     expect(w.get('[data-test="pack-install"]').attributes("disabled")).toBeUndefined();
+  });
+
+  it("takes the check's own fixes into the built items", async () => {
+    vi.mocked(api.ai.packItem).mockImplementation(({ key }) => Promise.resolve({
+      key, id: key === "i1" ? "00000001" : "00000002", kind: "wildcard",
+      payload: { options: [{ value: "long, golden" }] }, preview: ["long, golden"],
+      warnings: ["kept"], repair: "", model: "m",
+    }));
+    vi.mocked(api.ai.packCheck).mockResolvedValue({
+      runs: 200, failed: 0, problems: {}, notes: [], variables: [], prompts: [], quality: [],
+      tidied: { i1: { payload: { options: [{ value: "long" }] }, preview: ["long"],
+                      warnings: ['Took out "golden": the prompt already says it'] } },
+    });
+    vi.mocked(api.ai.packInstall).mockResolvedValue({
+      undo_entry_id: "u", ids: {}, bundle_id: "b", sub_bundles: [], template_id: "", tag: "t",
+      notes: [],
+    });
+    const w = await mountIt();
+    await w.get('[data-test="pack-build"]').trigger("click");
+    await flushPromises();
+    await w.get('[data-test="pack-install"]').trigger("click");
+    await flushPromises();
+    const sent = vi.mocked(api.ai.packInstall).mock.calls[0][0].built;
+    expect(sent.i1.payload).toEqual({ options: [{ value: "long" }] });
+    expect(sent.i2.payload).toEqual({ options: [{ value: "long, golden" }] });
+    const s = usePackBuilder().states.value.i1;
+    expect(s.result?.warnings).toEqual(["kept", 'Took out "golden": the prompt already says it']);
+    expect(s.result?.preview).toEqual(["long"]);
   });
 
   it("extends a bundle: says so, sends its id, and keeps its items fixed", async () => {

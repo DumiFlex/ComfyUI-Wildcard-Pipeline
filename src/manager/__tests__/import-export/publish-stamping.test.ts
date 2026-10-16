@@ -478,6 +478,16 @@ describe("publish body stamping", () => {
     })).toBe(NEGATIVES_SCHEMA_VERSION);
   });
 
+  it("stamps NEGATIVES (8) for a bundle child's combine negative_override", () => {
+    const child = (override: string) => ({ children: [{
+      id: "cb-001abc", type: "combine", name: "c",
+      payload: { template: "$a", output_var: "c" },
+      instance: { negative_override: override },
+    }] });
+    expect(schemaVersionForPayload(child("blurry"))).toBe(NEGATIVES_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(child(""))).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
   it("stamps NEGATIVES (8) for an Add to negative action, over a v7 group", () => {
     const row = derivationRow({ match: "any", conditions: [test, test] });
     const branch = ((row.payload as { rules: { branches: { action: Record<string, unknown> }[] }[] })

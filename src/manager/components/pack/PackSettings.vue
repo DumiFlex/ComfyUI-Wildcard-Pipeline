@@ -53,6 +53,10 @@ const FIELDS: Array<{ key: Field; label: string; about: string; options: Array<S
     { value: "any", label: "Any model", hint: "One set of quality and negative tags." },
     { value: "family", label: "Per model family", hint: "Quality and negative tags per model (Pony score tags, Illustrious / NoobAI tags…) from a WP Model Info node." },
   ] },
+  { key: "youth_negative", label: "Youth negative", about: "Whether NSFW packs add youth words to the negative.", options: [
+    { value: "on", label: "On", hint: "NSFW packs add child, loli, aged down… to the template's negative, so the model leans away from youthful looks." },
+    { value: "off", label: "Off", hint: "Nothing is added; the negative is yours to write." },
+  ] },
 ];
 
 const COUNT_HINT = "How many options each wildcard gets. Empty is Auto: the planner sizes each one.";

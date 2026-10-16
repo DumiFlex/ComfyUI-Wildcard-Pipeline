@@ -1664,11 +1664,17 @@ function writeBindings(
         if (matchVar) {
           const raw = ctx[matchVar];
           const wanted = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+          // Only options this use can pick (category filter + toggles), so a
+          // toggled-off option never matches and a toggled-off fallback is
+          // never used — as the engine does.
+          const pool = options.filter((o) =>
+            isEnabled(o as unknown as WildcardOption, m.instance as unknown as InstanceLike),
+          );
           chosen = (wanted
-            ? options.find((o) => !o.is_null && String(o.value ?? "").trim().toLowerCase() === wanted)
+            ? pool.find((o) => !o.is_null && String(o.value ?? "").trim().toLowerCase() === wanted)
             : undefined)
-            ?? options.find((o) => (o as { fallback?: boolean }).fallback === true)
-            ?? options[0];
+            ?? pool.find((o) => !o.is_null && (o as { fallback?: boolean }).fallback === true)
+            ?? pool[0] ?? options[0];
         }
         ctx[binding] = expandValue(String(chosen.value ?? ""), ctx, catalog, 0);
       } else {

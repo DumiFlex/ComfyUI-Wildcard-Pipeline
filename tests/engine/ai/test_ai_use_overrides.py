@@ -195,10 +195,13 @@ def _wild(inst, uid="w1", mid="abcd0001", payload=HATS):
             "instance": {"variable_binding": payload["var_binding"], **inst}}
 
 
-def _hats(line, seeds=range(30)):
+_SEEDS = range(30)
+
+
+def _hats(line):
     inst, notes = _use(line)
     assert not notes
-    return {PipelineEngine().run([_wild(inst)], seed=s)["hat"] for s in seeds}
+    return {PipelineEngine().run([_wild(inst)], seed=s)["hat"] for s in _SEEDS}
 
 
 def test_engine_option_toggles_weights_and_pin():

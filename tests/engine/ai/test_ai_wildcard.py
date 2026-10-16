@@ -28,6 +28,13 @@ def test_basic_options_come_through():
     assert out["skipped"] == []
 
 
+def test_an_option_that_only_says_what_to_leave_out_is_skipped():
+    out = w.compile_options({"options": [_opt("longsword"), _opt("no guns, no rifles"),
+                                         _opt("no hat")]}, existing_payload=EXISTING)
+    assert [o["value"] for o in out["options"]] == ["longsword", "no hat"]
+    assert "leave out" in out["skipped"][0]["reason"]
+
+
 def test_duplicates_of_existing_and_each_other_are_skipped():
     out = w.compile_options({"options": [
         _opt("Red  Hair,"), _opt("green hair"), _opt("green hair"),
@@ -167,3 +174,44 @@ def test_schema_is_openai_strict_compatible():
     item = w.OPTIONS_SCHEMA["properties"]["options"]["items"]
     assert set(item["required"]) == set(item["properties"])
     assert item["additionalProperties"] is False
+
+
+def test_the_draft_can_add_tag_groups_and_accepts():
+    existing = {"sub_categories": ["casual", "boots"], "tag_groups": {"style": ["casual"]},
+                "tag_group_kinds": {}}
+    answer = {"options": [
+        {"text": "school uniform", "weight": 1, "tags": ["formal", "loafers", "sneakers"],
+         "negative": ""},
+        {"text": "hiking gear", "weight": 1, "tags": ["casual", "Boots"], "negative": ""},
+        {"text": "ball gown", "weight": 1, "tags": ["formal"], "negative": ""},
+    ], "axes": [
+        {"name": "style", "kind": "classify", "tags": ["formal", "casual"]},
+        {"name": "SHOES", "kind": "accepts", "tags": ["loafers", "sneakers", "boots", "heels"]},
+        {"name": "neg", "kind": "accepts", "tags": ["casual"]},
+    ]}
+    out = w.compile_options(answer, existing_payload=existing)
+    groups, notes = w.new_groups(answer["axes"], existing_payload=existing,
+                                  new_tags=out["new_tags"], options=out["options"])
+    # "casual" is already in style; "heels" is on no option; "Boots" keeps
+    # the wildcard's spelling; a tag already grouped never moves.
+    assert groups == [{"name": "style", "kind": "classify", "tags": ["formal"]},
+                      {"name": "SHOES", "kind": "accepts",
+                       "tags": ["loafers", "sneakers", "boots"]}]
+    assert any("isn't a usable name" in n for n in notes)
+    assert any("1 new option offers no SHOES tag (e.g. ball gown)" in n for n in notes)
+    # Nothing new: no group comes back.
+    assert w.new_groups([], existing_payload=existing, new_tags=[]) == ([], [])
+
+
+def test_the_draft_prompt_names_accepts_groups():
+    text = w.build_user_prompt(instruction="more", count=3, name="Outfit", var_binding="outfit",
+                                existing_options=["jeans"], tags=["boots"],
+                                axes={"SHOES": ["boots"]}, kinds={"SHOES": "accepts"})
+    assert "Tag group SHOES (accepts: what an option goes with): boots" in text
+    assert "accepts" in w.draft_prompt() and w.DRAFT_SCHEMA["required"] == ["axes", "options"]
+
+
+def test_a_bang_in_a_ref_filter_is_stored_as_not():
+    idx = refs.RefIndex([COLORS])
+    assert refs.compile_refs("@{Colors:!warm}", idx) == "@{c0c0c0c0#Colors:not warm}"
+    assert refs.compile_refs("@{Colors:!warm!null}", idx) == "@{c0c0c0c0#Colors:not warm!null}"

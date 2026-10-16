@@ -3,6 +3,8 @@ import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { newModuleId } from "../../../../../widgets/_shared";
 import {
+  effectiveNegative,
+  negativeOverridden,
   rowOverrideKind,
   rowEnabled,
   shapeValuesPatch,
@@ -38,13 +40,18 @@ const libraryById = computed(() => new Map(libraryRows.value.map((r) => [r.id, r
 const draftRows = computed<DraftRow[]>(() => {
   const source = overrides.value ?? libraryRows.value;
   const libIds = new Set(libraryRows.value.map((r) => r.id));
-  return source.map((r) => ({
-    id: r.id,
-    name: r.name,
-    value: r.value,
-    enabled: rowEnabled(r.id, enabledOptions.value),
-    libraryId: libIds.has(r.id) ? r.id : null,
-  }));
+  return source.map((r) => {
+    const libraryId = libIds.has(r.id) ? r.id : null;
+    const lib = libraryId ? libraryById.value.get(libraryId) : undefined;
+    return {
+      id: r.id,
+      name: r.name,
+      value: r.value,
+      enabled: rowEnabled(r.id, enabledOptions.value),
+      libraryId,
+      negative: effectiveNegative(lib, overrides.value ? r : undefined),
+    };
+  });
 });
 
 function emitDraft(next: DraftRow[]): void {
@@ -80,7 +87,7 @@ function onToggle(rowId: string): void {
   emitDraft(next);
 }
 
-function onUpdate(rowId: string, patch: { name?: string; value?: string }): void {
+function onUpdate(rowId: string, patch: { name?: string; value?: string; negative?: string }): void {
   const next = draftRows.value.map((r) =>
     r.id === rowId ? { ...r, ...patch } : r,
   );
@@ -91,7 +98,7 @@ function onReset(rowId: string): void {
   const lib = libraryById.value.get(rowId);
   if (!lib) return;
   const next = draftRows.value.map((r) =>
-    r.id === rowId ? { ...r, name: lib.name, value: lib.value } : r,
+    r.id === rowId ? { ...r, name: lib.name, value: lib.value, negative: lib.negative ?? "" } : r,
   );
   emitDraft(next);
 }
@@ -104,7 +111,7 @@ function onDelete(rowId: string): void {
 function onAddRow(): void {
   const next: DraftRow[] = [
     ...draftRows.value,
-    { id: newModuleId(), name: "", value: "", enabled: true, libraryId: null },
+    { id: newModuleId(), name: "", value: "", enabled: true, libraryId: null, negative: "" },
   ];
   emitDraft(next);
 }
@@ -114,8 +121,8 @@ const totalCount = computed(() => draftRows.value.length);
 const overrideCount = computed(() =>
   draftRows.value.filter((r) => {
     if (r.libraryId === null) return false;
-    const kind = rowOverrideKind(libraryById.value.get(r.libraryId), r);
-    return kind !== "none";
+    const lib = libraryById.value.get(r.libraryId);
+    return rowOverrideKind(lib, r) !== "none" || negativeOverridden(lib, r);
   }).length,
 );
 const addedCount = computed(() => draftRows.value.filter((r) => r.libraryId === null).length);

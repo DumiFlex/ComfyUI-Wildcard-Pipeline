@@ -5,6 +5,7 @@ import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
+import DocRef from "../../../components/docs/DocRef.vue";
 
 const ports = [
   { term: "prompt (in)", desc: "The text to clean. Typically from a WP Prompt Assembler, but works with any STRING source." },
@@ -46,6 +47,14 @@ const syntaxRules = [
         the other side ready to wire into a CLIP Text Encode. It works on text alone and
         needs no Context connection.
       </p>
+      <DocCallout variant="tip">
+        <b>Use the Cleaner</b> after the Assembler to remove duplicates and near-duplicates, merge
+        weights, space LoRA tags and block words. Text mode on Gentle suits prose prompts; tags
+        mode splits on commas, so it would split sentences. <b>Not for</b> fixing a pack: if it
+        often removes something, fix the option that produced it. Never blocklist or fuzzy-dedupe a
+        LoRA's trigger words, or the LoRA stops working. The blocklist matches whole words, so
+        list every form of a word you block (see <DocRef id="adult-packs" />).
+      </DocCallout>
       <DocImage
         src="images/docs/wp-prompt-cleaner.png"
         ratio="16 / 5"

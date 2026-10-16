@@ -70,6 +70,9 @@ async def test_draft_asks_to_search_only_when_web_search_is_set_up(wp_client, fa
     assert off["research"] == []
     sent = fake_llm.seen[-1]["body"]
     assert "research" not in sent["response_format"]["json_schema"]["schema"]["properties"]
+    # A JSON answer is capped, so a model that loops stops instead of
+    # writing until the request times out.
+    assert sent["max_tokens"] > 0
 
     monkeypatch.setattr("wp_api._ai_search.enabled", lambda cfg: True)
     fake_llm.overrides["wildcard_options"] = {

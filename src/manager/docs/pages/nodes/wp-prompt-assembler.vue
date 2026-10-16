@@ -54,6 +54,10 @@ const ports = [
           <VarToken>$varname</VarToken> — replaced with the value from the Context.
           If no binding exists, the placeholder resolves to empty and the canvas preview
           highlights it with an amber underline so you can spot the gap before running.
+          The output is tidied after: commas left at the start or end, and a joining word
+          left with nothing after it because its variable came out empty ("shadows with, rain"),
+          are dropped. Words your own text ends on ("shirt tucked in") and emoticon tags
+          (":d", "!?") are kept as written.
         </li>
         <li>
           <VarToken kind="inline">$$</VarToken> — a literal dollar sign, in case you need one in the output text.
@@ -66,6 +70,25 @@ const ports = [
         verbatim. To get a real random pick, produce the value in a <em>seeded</em> module — a
         <b>Wildcard</b>, <b>Combine</b>, or <b>Derivation</b> inside a WP Context — and reference
         its <VarToken>$variable</VarToken> in the template instead.
+      </DocCallout>
+      <DocCallout variant="warn">
+        <VarToken kind="ref">@{}</VarToken> references are dropped in the template: they print
+        nothing and WP Debug notes it. Put a reference in a wildcard option and print that
+        wildcard's variable.
+      </DocCallout>
+      <DocCallout variant="warn">
+        The tidy only closes gaps left by empty variables. It is not a cleaner: it never removes
+        duplicate tags, and it keeps the template's own words. With <VarToken>$hat</VarToken>,
+        <VarToken>$scarf</VarToken> and <VarToken>$place</VarToken> empty,
+        <code>a girl wearing $hat with $scarf, $pose, in the $place</code> renders "a girl
+        wearing, sitting": the joining words go, the verb stays. Write templates that read well
+        when a variable is empty (put the verb inside a combine), and use WP Prompt Cleaner after
+        the Assembler to remove duplicates.
+      </DocCallout>
+      <DocCallout variant="tip">
+        <b>Use one Assembler</b> per prompt you need: the main prompt, a detailer prompt that
+        renders only the face slots, one per region for regional prompting. Each reads the same
+        Context, so their picks agree. <b>Not for</b> rolling anything: it has no seed.
       </DocCallout>
       <DocCallout variant="tip">
         The <b>Variables</b> strip below the template lists every upstream binding — click any

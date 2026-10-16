@@ -108,6 +108,17 @@ TOOLS: list[Tool] = [
         ("core",),
     ),
     Tool(
+        "react", "read",
+        "Put one emoji on the user's message, like a chat reaction: for thanks, praise or "
+        "good news. With nothing else to say, react and write no reply.",
+        '{"emoji": one of 👍 ❤️ 🎉 😄 🙏 👀}: shows that emoji on the user\'s message. For '
+        "thanks or praise, react and leave your message empty; never react instead of "
+        "answering a question or a request.",
+        obj({"emoji": s("one of 👍 ❤️ 🎉 😄 🙏 👀", enum=["👍", "❤️", "🎉", "😄", "🙏", "👀"])},
+            ("emoji",)),
+        ("core",),
+    ),
+    Tool(
         "lookup", "read",
         "Look up the user's own vocabulary: Danbooru tags from their tag list (with post "
         "counts), or their LoRA and embedding files. Check tags before writing tag-style "
@@ -159,7 +170,7 @@ TOOLS: list[Tool] = [
     Tool(
         "create_wildcard", "change",
         "Propose a new wildcard: options picked one per run, bound to a $variable (or a "
-        "vocabulary with no variable).",
+        "vocabulary with no variable, only when other options point at it with @{Name}).",
         '{"name", "var": variable name without $ ("" for a vocabulary), "description", '
         '"tags": [library tags], "category": name or "", "options": [{"text", "weight": 1, '
         '"tags": [option tags], "negative": "", "fallback": false}], "axes": [{"name", '
@@ -470,8 +481,9 @@ TOOLS: list[Tool] = [
         "open", "client",
         "Go to an item's editor, a docs page or a manager page in the user's browser, or "
         "open a proposed new wildcard or derivation in an editor before it is applied.",
-        '{"id"} for an item\'s editor, {"doc": docs page id} for a docs page, {"page": '
-        'manager page, "section": settings section}, or {"proposal": pid} to open a '
+        '{"id"} for an item\'s editor, {"doc": docs page id} for a docs page (the docs '
+        'about constraints are a doc, not the constraints page), {"page": manager page, '
+        '"section": settings section}, or {"proposal": pid} to open a '
         'proposal card (a new wildcard or derivation, or a change to an item) in its editor '
         'unsaved: takes the user there now.',
         obj({"id": s("item id or name"), "doc": s("docs page id"),
@@ -538,12 +550,18 @@ TOOLS: list[Tool] = [
         "show_test", "client",
         "Set up the Test Runner with a stack (seeds, pinned variables) and run it, so the "
         "user sees the results; it can save it as a scenario.",
-        '{"stack": [names or ids of modules and bundles], "seeds": how many runs (20), '
+        '{"stack": [names or ids of modules and bundles], "change": "replace" (the default: '
+        'a new stack), "add" (put these after what is there) or "remove" (take these out of '
+        'the stack that is open), "seeds": how many runs (20), '
         '"from": first seed for a fixed run (random when left out), "pins": {"var": value '
         'set from outside}, "output": variable to show first, "save": scenario name to save '
         'it as, "run": false to only set it up}: opens the Test Runner with that set-up and '
-        "runs it for the user to see. Use run_test to check something yourself.",
-        obj({"stack": arr(s("name or id")), "seeds": n("how many runs", integer=True),
+        "runs it for the user to see. The stack runs in order: put what sets a variable "
+        "before what reads it; a constraint gets its source and target wildcards added. Use "
+        "run_test to check something yourself.",
+        obj({"stack": arr(s("name or id")),
+             "change": s("replace, add or remove", enum=["replace", "add", "remove"]),
+             "seeds": n("how many runs", integer=True),
              "from": n("first seed (fixed seeds)", integer=True),
              "pins": obj(desc="variable -> value set from outside, like an Injector"),
              "output": s("variable to show first"), "save": s("save as a scenario named"),
@@ -644,6 +662,11 @@ PAGE_GROUPS: dict[str, tuple[str, ...]] = {
     "pack-builder": ("pack", "wildcards"),
 }
 DEFAULT_GROUPS = ("wildcards", "constraints", "derivations", "pack")
+#: What a medium model gets on every page besides the page's own groups:
+#: the item types most asks touch, tests and list tools. Bundles,
+#: templates, combines and fixed values stay one more_tools call away off
+#: their own pages.
+WIDE_GROUPS = ("wildcards", "constraints", "derivations", "pack", "test", "lists")
 
 
 #: Offered only while Settings › AI assistant › "Let the assistant delete
@@ -670,10 +693,11 @@ def web_allowed(name: str, *, web: bool, reader: bool, danbooru: bool) -> bool:
 
 def toolset(route: str | None, *, scoped: bool, web: bool = False,
             delete: bool = False, vocab: bool = False, reader: bool = False,
-            danbooru: bool = False) -> list[str]:
-    """Tool names a new chat offers. Unscoped (medium and large models):
-    all of them. Scoped (small models): the core tools, the page's groups
-    and `more_tools`, in catalog order so the list is stable. `web`: web
+            danbooru: bool = False, wide: bool = False) -> list[str]:
+    """Tool names a new chat offers. Unscoped (large models): all of them.
+    Scoped (small and medium models): the core tools, the page's groups
+    and `more_tools`, in catalog order so the list is stable; `wide`
+    (medium) adds the common groups (`WIDE_GROUPS`) on every page. `web`: web
     search is set up (Settings › AI assistant), so `web_search` is offered.
     `delete`: deleting is allowed, so `delete_items` is offered. `vocab`: a
     lookup source is on, so `lookup` is offered. `reader`: a page reader is
@@ -688,7 +712,8 @@ def toolset(route: str | None, *, scoped: bool, web: bool = False,
     for suffix in ("-new", "-edit"):
         if key.endswith(suffix):
             key = key[: -len(suffix)]
-    groups = {"core", *PAGE_GROUPS.get(key, DEFAULT_GROUPS), *(("web",) if web else ()),
+    groups = {"core", *PAGE_GROUPS.get(key, DEFAULT_GROUPS), *(WIDE_GROUPS if wide else ()),
+              *(("web",) if web else ()),
               *(("delete",) if delete else ()), *(("vocab",) if vocab else ())}
     groups |= {"danbooru"} if danbooru else set()
     names = [t.name for t in TOOLS if groups.intersection(t.groups) and on(t)]

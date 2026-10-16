@@ -206,10 +206,30 @@ const settingsLine = computed(() => {
   ].filter(Boolean).join(" · ");
 });
 
+/** Whether the problem a rebuild was asked to fix is still in the check:
+ *  "fixed:" then would claim a fix that didn't happen. */
+function stillThere(key: string): boolean {
+  const asked = pb.states.value[key]?.fixed ?? [];
+  const now = problems(key);
+  return asked.some((t) => now.includes(t));
+}
+
 const RANK: Record<AiPackItem["kind"], number> = {
-  fixed_values: 0, library: 1, wildcard: 1, derivation: 2, combine: 3, constraint: 4, template: 5,
+  fixed_values: 0, library: 1, wildcard: 1, derivation: 2, combine: 3, constraint: 1, template: 5,
 };
+/** Where an item sits in the list: run order once the check has run (what
+ *  install keeps); before that, by kind, with a constraint just ahead of
+ *  its target wildcard, where it runs. */
 function order(i: AiPackItem): number {
+  const ran = pb.check.value?.order;
+  if (ran?.length) {
+    const at = ran.indexOf(i.key);
+    return at >= 0 ? at : ran.length + RANK[i.kind] * 1000 + items.value.indexOf(i);
+  }
+  if (i.kind === "constraint") {
+    const target = items.value.find((x) => x.var === i.target && x.kind !== "constraint");
+    if (target) return order(target) - 0.5;
+  }
   return RANK[i.kind] * 1000 + items.value.indexOf(i);
 }
 
@@ -613,6 +633,11 @@ function stopExtending(): void {
           <span v-if="pb.edited.value" class="wp-pack__edited" data-test="pack-edited">edited by you</span>
         </p>
         <p v-if="draft?.summary" class="wp-pack__dim">{{ draft.summary }}</p>
+        <p v-if="draft?.design" class="wp-pack__design" data-test="pack-design"><span class="wp-pack__design-label">How it fits together</span> {{ draft.design }}</p>
+        <details v-if="pb.planThinking.value" class="wp-pack__thought" data-test="pack-thinking">
+          <summary>Thinking</summary>
+          <p>{{ pb.planThinking.value }}</p>
+        </details>
         <p v-if="shape" class="wp-pack__shape" data-test="pack-shape">{{ shape }}</p>
         <div v-if="draft" class="wp-pack__run" data-test="pack-run">
           <span class="wp-pack__dim wp-pack__run-label">Runs as</span>
@@ -694,8 +719,13 @@ function stopExtending(): void {
               <span class="wp-pack__kind" :data-kind="i.kind">{{ kindLabel(i) }}</span>
               <button type="button" class="wp-pack__item-main wp-pack__expand" :aria-expanded="open.has(i.key)" @click="toggle(i.key)">
                 <span class="wp-pack__item-name">{{ i.name }}</span>
-                <span v-if="pb.states.value[i.key].fixed?.length && status(i.key) !== 'fixing'" class="wp-pack__fixed">
-                  fixed: {{ pb.states.value[i.key].fixed?.[0] }}
+                <span
+                  v-if="pb.states.value[i.key].fixed?.length && status(i.key) !== 'fixing'"
+                  class="wp-pack__fixed"
+                  :data-still="stillThere(i.key) ? 'true' : undefined"
+                  data-test="pack-fixed"
+                >
+                  {{ stillThere(i.key) ? "still: " : "fixed: " }}{{ pb.states.value[i.key].fixed?.[0] }}
                 </span>
               </button>
               <span class="wp-pack__item-meta">{{ builtMeta(i) }}</span>
@@ -771,6 +801,10 @@ function stopExtending(): void {
               <ul v-if="pb.states.value[i.key].result?.warnings.length" class="wp-pack__warnings">
                 <li v-for="(w, j) in pb.states.value[i.key].result?.warnings" :key="j"><i class="pi pi-info-circle" aria-hidden="true" /> {{ w }}</li>
               </ul>
+              <details v-if="pb.states.value[i.key].result?.thinking" class="wp-pack__thought" data-test="pack-item-thinking">
+                <summary>Thinking</summary>
+                <p>{{ pb.states.value[i.key].result?.thinking }}</p>
+              </details>
             </div>
           </li>
         </ul>
@@ -955,7 +989,8 @@ function stopExtending(): void {
 .wp-pack__state[data-status="building"], .wp-pack__state[data-status="fixing"] { color: var(--wp-accent-text); }
 .wp-pack__built .wp-pack__state .pi-exclamation-triangle { color: var(--wp-warn); }
 .wp-pack__built + .wp-pack__built > .wp-pack__item { border-top: 1px solid var(--wp-border); }
-.wp-pack__fixed { font-size: 12px; color: var(--wp-warn); }
+.wp-pack__fixed { font-size: 12px; color: var(--wp-success); }
+.wp-pack__fixed[data-still="true"] { color: var(--wp-warn); }
 .wp-pack__detail { padding: 0 0 8px 120px; }
 .wp-pack__preview { margin: 0; padding: 6px 8px 6px 22px; font-size: 12px; border-radius: 6px; background: var(--wp-bg-1); display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
 .wp-pack__ok { margin: 0 0 10px; color: var(--wp-success); font-size: 13px; display: flex; gap: 6px; align-items: center; }
@@ -1049,6 +1084,11 @@ function stopExtending(): void {
 .wp-pack__warnings li { display: flex; gap: 6px; align-items: baseline; }
 .wp-pack__warnings li > span { min-width: 0; overflow-wrap: anywhere; }
 .wp-pack__summary { margin: 10px 0 0; font-size: 12.5px; color: var(--wp-text-muted); }
+.wp-pack__design { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; }
+.wp-pack__design-label { font-weight: 600; margin-right: 4px; }
+.wp-pack__thought { margin: 6px 0 0; font-size: 12px; color: var(--wp-text-muted); }
+.wp-pack__thought summary { cursor: pointer; font-style: italic; }
+.wp-pack__thought p { white-space: pre-wrap; margin: 4px 0 0; padding-left: 8px; border-left: 2px solid var(--wp-border); max-height: 320px; overflow-y: auto; }
 .wp-pack__state[data-status="retrying"] { color: var(--wp-warn); }
 .wp-pack__state[data-status="skipped"] { color: var(--wp-text-dim); }
 .wp-pack__built[data-status="skipped"] .wp-pack__item-main { opacity: 0.55; }

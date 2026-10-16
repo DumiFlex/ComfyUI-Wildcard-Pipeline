@@ -5,6 +5,7 @@ import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
+import DocRef from "../../../components/docs/DocRef.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
 const vars = [
@@ -46,6 +47,20 @@ const ports = [
         sdxl for both. <VarToken>$model_variant</VarToken> tells them apart, and it can only come
         from the file name.
       </p>
+      <DocCallout variant="warn">
+        The family list was written before some newer models. Flux.1 and Flux.2 both read as
+        flux. Anima probably reads as cosmos and Z-Image as lumina2, and models with no entry
+        (Krea 2, Kolors and others) read as their class name in snake_case. A merge without
+        "noob", "pony" or "illustrious" in its file name gets no variant. Check what the node
+        reads once, then pin the variant or add a rule for the file name. The full list is on
+        <DocRef id="prompt-writing" />.
+      </DocCallout>
+      <DocCallout variant="tip">
+        <b>Use Model Info</b> when one pack should write different quality tags, LoRAs or
+        styles per checkpoint: a derivation on <VarToken>$model_variant</VarToken>, or a wildcard
+        with Match variable that a constraint reads. <b>Not for</b> a workflow that only ever runs
+        one model: a fixed value is simpler.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="Where it goes">

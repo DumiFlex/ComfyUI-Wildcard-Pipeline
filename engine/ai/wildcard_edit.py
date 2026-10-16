@@ -21,7 +21,7 @@ import math
 import re
 from typing import Any
 
-from engine.ai import about
+from engine.ai import about, adult
 from engine.ai import refs as ai_refs
 from engine.ai.wildcard import (
     MAX_TEXT_LEN,
@@ -211,6 +211,10 @@ def compile_edit(
                 skipped.append({"text": text, "reason": str(e)})
                 continue
             if not text or text == opt["value"]:
+                continue
+            if adult.sexual_minor(text):
+                skipped.append({"text": text[:80],
+                                "reason": "it names a minor in a sexual context"})
                 continue
             nk = _norm_key(text)
             if final_texts.get(nk, oid) != oid:

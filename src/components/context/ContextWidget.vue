@@ -3096,6 +3096,7 @@ function isModified(m: ModuleEntry): boolean {
       // Template override only. Identity (binding) excluded — see
       // wildcard branch comment.
       if (typeof inst.template_override === "string" && inst.template_override.length > 0) return true;
+      if (typeof inst.negative_override === "string") return true;
       return false;
     case "derivation":
       if (nonEmptyArr(inst.disabled_rule_ids)) return true;
@@ -3357,6 +3358,7 @@ function modifiedTooltip(m: ModuleEntry): string {
       if (typeof inst.template_override === "string" && inst.template_override.length > 0) {
         bits.push("template override");
       }
+      if (typeof inst.negative_override === "string") bits.push("negative override");
       if (typeof inst.variable_binding === "string" && inst.variable_binding.length > 0) {
         bits.push(`binding: ${inst.variable_binding}`);
       }

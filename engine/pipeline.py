@@ -23,6 +23,10 @@ from engine.sweep import apply_pin_override
 
 logger = logging.getLogger(__name__)
 
+#: ctx key a caller sets to the ctx this run would have started from on loop
+#: frame 0. The hold base pass runs on it (see ``PipelineEngine.run``).
+FRAME0_CTX_KEY = "__wp_frame0_ctx__"
+
 # `@{uuid}` ref matcher — mirror of engine.syntax.tokenize._REF_RE
 # (4-segment: uuid + optional #name / :expr / !null; only the uuid is
 # captured here). Used by the never_applied warning classifier to tell
@@ -82,6 +86,15 @@ def _target_present_in_chain(
             if _carries(payload):
                 return True
     return False
+
+
+def _target_direct_in_chain(target_uuid: str, modules: list[Any]) -> bool:
+    """True when `target_uuid` runs as a wildcard of its own in the chain
+    (not only through `@{…}` refs in other options)."""
+    return any(
+        _module_field(m, "type") == "wildcard" and _module_field(m, "id") == target_uuid
+        for m in modules
+    )
 
 
 # Characters that break the engine ref tokenizer's `#name` segment
@@ -368,14 +381,25 @@ class PipelineEngine:
         # the throwaway pass's warnings/trace/constraint-state off the real
         # ctx. loop_index=0 here means the recursive run skips its own base
         # pass — no infinite recursion.
+        #
+        # The base pass runs on frame 0's INPUTS when the caller has them
+        # (``FRAME0_CTX_KEY``: the ctx this node would have started from on
+        # frame 0, e.g. $iteration = 1 and frame 0's upstream picks), so a
+        # held wildcard whose constraint source follows $iteration stays on
+        # its frame-0 option. Given those, the pass runs even with no hold
+        # here, so the caller can hand frame 0's output downstream. Without
+        # them it falls back to this frame's inputs (the old behaviour).
+        _frame0_input = ctx.pop(FRAME0_CTX_KEY, None)
         _any_hold = any(_module_seed_scope(m) == "hold" for m in modules)
-        if loop_index != 0 and _any_hold:
+        if loop_index != 0 and (_any_hold or isinstance(_frame0_input, dict)):
             import copy as _copy
 
             _hb = int(ctx.get("__wp_node_seed_hold__", 0) or 0)
             base_ctx = PipelineEngine().run(
                 modules,
-                ctx=_copy.deepcopy(ctx),
+                ctx=_copy.deepcopy(
+                    _frame0_input if isinstance(_frame0_input, dict) else ctx
+                ),
                 seed=_hb,
                 hold_seed=_hb,
                 loop_index=0,
@@ -628,6 +652,12 @@ class PipelineEngine:
             #     library id when `_uid` is absent (legacy / test modules).
             ctx["__wp_current_module_id__"] = _module_id
             ctx["__wp_current_module_uid__"] = _module_uid or _module_id
+            # Random-stream key of this instance (engine/modules/_seed.py):
+            # its bundle copy plus its own uid, so two instances (or two
+            # copies of one bundle) never roll in lockstep.
+            ctx["__wp_instance_key__"] = (
+                f"{_module_bundle_origin}/{_module_uid or _module_id}"
+            )
             ctx["__wp_current_module_name__"] = _module_name
             # See the `_module_bundle_origin` derivation above — exposed to
             # handlers (wildcard_handler records it on the pick; constraint_
@@ -771,6 +801,7 @@ class PipelineEngine:
         # keeps post-run ctx introspection tidy).
         ctx.pop("__wp_current_module_id__", None)
         ctx.pop("__wp_current_module_uid__", None)
+        ctx.pop("__wp_instance_key__", None)
         ctx.pop("__wp_current_module_name__", None)
         ctx.pop("__wp_current_module_bundle_origin__", None)
         ctx.pop(DETAIL_KEY, None)
@@ -842,7 +873,17 @@ class PipelineEngine:
                 present = _target_present_in_chain(
                     target_uuid, modules, catalog,
                 )
-                if present:
+                # Reached only through `@{…}` refs: a run that didn't draw any
+                # of those refs (a recipe wildcard picked another recipe) is
+                # normal, not a mistake.
+                ref_only = present and not _target_direct_in_chain(target_uuid, modules)
+                if ref_only:
+                    message = (
+                        f"constraint @{{{library_cid}{cid_suffix}}} had nothing to do this "
+                        f"run — its target @{{{target_uuid}{tgt_suffix}}} is only reached "
+                        f"through @{{…}} refs, and none of them was drawn."
+                    )
+                elif present:
                     # Target IS in the chain but the selector covered no
                     # firing occurrence — every appearance resolved
                     # BEFORE this constraint registered (e.g. a source
@@ -877,7 +918,7 @@ class PipelineEngine:
                         # Either way it deserves the yellow advisory chip,
                         # not the blue informational one — the constraint
                         # is doing nothing, and the user should see it.
-                        "severity": "warn",
+                        "severity": "info" if ref_only else "warn",
                         "module_id": cid,
                         "source_field": "",
                         "position": 0,
@@ -886,6 +927,8 @@ class PipelineEngine:
                             "constraint_id": cid,
                             "target_wildcard_id": target_uuid,
                             "source_wildcard_id": c.get("source_wildcard_id", ""),
+                            # Only reached through refs, none drawn this run.
+                            "ref_only": ref_only,
                             # `target_present` lets the DebugViewer pick a
                             # distinct icon/severity later without re-parsing
                             # the message string.

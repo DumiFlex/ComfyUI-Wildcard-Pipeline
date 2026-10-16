@@ -41,6 +41,15 @@ const controls = [
       />
     </DocSection>
 
+    <DocSection title="When to use it">
+      <DocCallout variant="tip">
+        <b>Use it for</b> a pick that drives a decimal in the graph: <code>$cfg</code>, a LoRA strength, a denoise. Read a variable with Hide from prompt on, so the value never
+        reaches the prompt; a derivation can write it from another pick ("if
+        <code>$model_family</code> is flux, <code>$cfg</code> is 1"). <b>Not for</b> text that
+        stays in the prompt. The node re-runs only when the value it reads changes.
+      </DocCallout>
+    </DocSection>
+
     <DocSection title="Controls">
       <DocKeyList :items="controls" />
     </DocSection>

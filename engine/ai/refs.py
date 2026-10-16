@@ -33,7 +33,7 @@ import difflib
 import re
 from typing import Any
 
-from engine.syntax.subcat_filter import ParseError, parse, validate_subcat_name
+from engine.syntax.subcat_filter import ParseError, parse, reads_as, validate_subcat_name
 from engine.syntax.tokenize import tokenize_text
 from engine.syntax.types import TokenKind
 
@@ -65,7 +65,10 @@ _WHY_NO_REF = {
 }
 _HEX8 = re.compile(r"^[0-9a-f]{8}$")
 # @{ head [#label] [:filter] [!null] } where head is a name, $var or 8-hex id.
-_NAMED_REF = re.compile(r"@\{([^{}#:!]+?)\s*(?:#([^{}#:!]*))?(?::([^{}!]*))?(?:!\s*(\w+)\s*)?\}")
+_NAMED_REF = re.compile(
+    r"@\{([^{}#:!]+?)\s*(?:#([^{}#:!]*))?(?::((?:[^{}!]|!(?!\s*null\s*\}))*))?(?:!\s*(\w+)\s*)?\}"
+)
+_DP_COUNT = re.compile(r"\{(\d+(?:-\d+)?)\$\$((?:(?!\$\$)[^{}])*\|(?:(?!\$\$)[^{}])*)\}")
 _LABEL_BAD = re.compile(r"[#:}@{!]")
 _IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -181,9 +184,15 @@ def _ref(row: dict[str, Any], expr: str, null: bool) -> str:
     return out + "}"
 
 
+def bang_not(expr: str) -> str:
+    """``!warm`` (how other tools write NOT) as ``not warm``: the engine's
+    filter grammar has no ``!``, and one there drops the whole module."""
+    return re.sub(r"!\s*(?=[^\s()!,])", "not ", expr)
+
+
 def _check_filter(expr: str, row: dict[str, Any]) -> str:
     """The filter, normalised, or ValueError naming the bad tag."""
-    expr = " ".join(expr.split())
+    expr = " ".join(bang_not(expr).split())
     if not expr:
         return ""
     try:
@@ -217,13 +226,17 @@ def _check_filter(expr: str, row: dict[str, Any]) -> str:
         hint = f"; did you mean {' or '.join(near)}?" if near else (
             f"; its tags are {', '.join(tags[:15])}" if tags else "; it has no tags")
         raise ValueError(f"{name} has no tag {t!r}{hint}")
-    return expr
+    # `!warm` parses as `not warm`; store the spelled-out form.
+    return reads_as(parse(expr)) if "!" in expr else expr
 
 
 def compile_refs(text: str, index: RefIndex | None, *, self_id: str | None = None) -> str:
     """Name-based refs in ``text`` → stored ``@{id#Name:filter!null}``."""
     if "@{" not in text:
         return text
+    # "@{Colors:!warm}" / "@{Colors:warm, !cold}": NOT, not the null flag.
+    text = re.sub(r"(@\{[^{}:]*:[^{}]*?)!\s*(?!null\s*\})(?=[^\s()!,}])", r"\1not ", text)
+    text = re.sub(r"(@\{[^{}:]*:[^{}]*?)!\s*(?!null\s*\})(?=[^\s()!,}])", r"\1not ", text)
 
     def sub(m: re.Match[str]) -> str:
         head, expr, flag = m.group(1).strip(), (m.group(3) or "").strip(), m.group(4)
@@ -251,6 +264,9 @@ def compile_text(
     """``text`` as it should be stored on ``surface``; ValueError says why
     not. Name refs become id refs; everything else is kept as written."""
     allow_var, allow_pick, allow_ref = _ALLOW[surface]
+    # Dynamic Prompts' "{2$$a|b|c}" (no separator) prints junk here: the
+    # separator goes in ("{2$$, $$a|b|c}").
+    text = _DP_COUNT.sub(r"{\1$$, $$\2}", text)
     if "@{" in text:
         if not allow_ref:
             raise ValueError(_WHY_NO_REF.get(surface, "no @{…} here"))

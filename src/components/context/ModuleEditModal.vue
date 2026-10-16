@@ -165,7 +165,7 @@ const RESET_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly InstanceFieldKey[]
     "pick_min", "pick_max", "pick_separator",
   ],
   fixed_values: ["values_overrides", "enabled_options"],
-  combine: ["template_override", "variable_binding"],
+  combine: ["template_override", "negative_override", "variable_binding"],
   derivation: [
     "disabled_rule_ids",
     "disabled_branch_keys",
@@ -348,9 +348,12 @@ function save() {
           Array.isArray(libraryValues)
           && libraryValues.length === v2Override.length
           && libraryValues.every((lib, i) => {
-            const l = lib as { id?: unknown; name?: unknown; value?: unknown };
-            const cur = v2Override[i] as { id?: unknown; name?: unknown; value?: unknown };
-            return l.id === cur.id && l.name === cur.name && l.value === cur.value;
+            const l = lib as { id?: unknown; name?: unknown; value?: unknown; negative?: unknown };
+            const cur = v2Override[i] as { id?: unknown; name?: unknown; value?: unknown; negative?: unknown };
+            // An override row without `negative` keeps the library's.
+            const sameNeg = typeof cur.negative !== "string"
+              || cur.negative.trim() === (typeof l.negative === "string" ? l.negative.trim() : "");
+            return l.id === cur.id && l.name === cur.name && l.value === cur.value && sameNeg;
           });
         if (sameAsLibrary) {
           delete (inst as { values_overrides?: unknown }).values_overrides;
@@ -381,14 +384,35 @@ function save() {
         next.instance = inst;
       }
     } else {
-      // Inline-created path — payload.values is the only store. v2
-      // modal still emits entries in sync, so derivation works
-      // identically to the v1 path.
-      const values = next.entries.map((e, i) => ({
-        id: `val_${i.toString(16).padStart(4, "0")}`,
-        name: e.variable_name,
-        value: e.value,
-      }));
+      // Inline-created path — payload.values is the only store. The v2
+      // modal writes its rows to `values_overrides` (ids + negatives
+      // kept), so fold those into payload.values; otherwise derive from
+      // entries, carrying each row's id + negative over by position.
+      type Row = { id?: string; name?: string; value?: string; negative?: string };
+      const current = ((next.payload as { values?: Row[] } | undefined)?.values ?? []);
+      let values: Row[];
+      if (Array.isArray(v2Override)) {
+        const byId = new Map(current.map((r) => [r.id, r]));
+        values = (v2Override as Row[]).map((r) => {
+          const neg = typeof r.negative === "string" ? r.negative : byId.get(r.id)?.negative ?? "";
+          const row: Row = { id: r.id, name: r.name, value: r.value };
+          if (neg.trim()) row.negative = neg;
+          return row;
+        });
+        delete (inst as { values_overrides?: unknown }).values_overrides;
+        next.instance = inst;
+      } else {
+        values = next.entries.map((e, i) => {
+          const row: Row = {
+            id: current[i]?.id ?? `val_${i.toString(16).padStart(4, "0")}`,
+            name: e.variable_name,
+            value: e.value,
+          };
+          const neg = current[i]?.negative;
+          if (typeof neg === "string" && neg.trim()) row.negative = neg;
+          return row;
+        });
+      }
       next.payload = { ...(next.payload ?? {}), values };
     }
   }

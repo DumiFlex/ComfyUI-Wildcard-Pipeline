@@ -69,6 +69,8 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         "locked_seed": "number",
         # Iteration seed scope: hold/vary control (parity with wildcard).
         "seed_scope": "string",
+        # Hide-from-prompt toggle the node offers (the engine honours it).
+        "internal": "boolean",
     },
     "combine": {
         # v2 single-pane modal exposes a richer override surface:
@@ -77,6 +79,8 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         #   - locked_seed: pin {a|b|c} resolution
         #   - internal: hide-from-prompt toggle
         "template_override": "string",
+        # Send-to-negative (schema v8): replaces payload.negative ("" clears).
+        "negative_override": "string",
         "variable_binding": "string",
         "locked_seed": "number",
         # Iteration seed scope: hold/vary control (parity with wildcard).
@@ -102,6 +106,9 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         "rule_order_override": "list[string]",
         "locked_seed": "number",
         "internal": "boolean",
+        # Hold freezes the {a|b} dice inside each branch across Loop frames
+        # (the condition is still tested every frame).
+        "seed_scope": "string",
     },
     "constraint": {
         "disabled_exception_keys":     "list[string]",

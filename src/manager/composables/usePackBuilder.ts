@@ -63,7 +63,7 @@ export const ITEM_TIME_LIMIT_MS = 4 * 60 * 1000;
 const RECHECK_MS = 400;
 export const DEFAULT_SETTINGS: AiPackSettings = {
   library: "reuse", negatives: "auto", structure: "sections", style: "auto", rating: "auto",
-  count: 0, model: "any",
+  count: 0, model: "any", youth_negative: "on",
 };
 export const DECIDE_ANSWER = "Your call (decide for me)";
 /** Mirrors `engine/ai/pack.py:build_order`: vocabularies (wildcards with
@@ -266,6 +266,9 @@ const convo = useAiConversation<AiPackPlanResult, null>({
     return bits.join(". ").slice(0, 900);
   },
 });
+
+/** What the model thought while it planned, when its server sends that. */
+const planThinking = computed(() => convo.result.value?.thinking ?? "");
 
 function viewFor(res: AiPackPlanResult): PlanView {
   let v = views.get(res);
@@ -657,7 +660,15 @@ async function fixFindings(): Promise<void> {
   const open = findings.value;
   const list = selected.value.size ? open.filter((f) => selected.value.has(f.id)) : open;
   if (!list.length) return;
-  const note = "Revise the plan to fix these: " + list.map((f) => `- ${f.text}.`).join(" ");
+  // Numbered, each with its item, so a small model works through all of
+  // them instead of fixing the first and calling it done.
+  const names = new Map((plan.value?.items ?? []).map((i) => [i.key, i.name]));
+  const note = "Revise the plan to fix ALL of these, one by one:\n" + list.map((f, n) => {
+    const name = f.key ? names.get(f.key) : "";
+    return `${n + 1}. ${name ? `${name}: ` : ""}${f.text.replace(/\.\s*$/, "")}.`;
+  }).join("\n") + "\nWhere one asks for a new item (a constraint, a derivation, a wildcard), "
+    + "add it to the plan; where one asks to change an item, change that item.";
+  const recheck = list.some((f) => f.by === "model");
   convo.instruction.value = [convo.instruction.value.trim(), note].filter(Boolean).join("\n");
   const v = view.value;
   if (v) {
@@ -667,6 +678,9 @@ async function fixFindings(): Promise<void> {
   }
   selected.value = new Set();
   await refinePlan();
+  // The model's own findings are checked again on the new plan, so one it
+  // didn't fix shows up again instead of quietly disappearing.
+  if (recheck && !convo.error.value) await reviewPlan();
 }
 
 /** Have the model rewrite one item (or add items, with no key) as asked;
@@ -823,6 +837,16 @@ async function runCheck(p: AiPackPlan, signal: AbortSignal): Promise<AiPackCheck
   if (!Object.keys(built()).length) return null;
   stage.value = "Testing the pack on the engine…";
   const res = await api.ai.packCheck(withTarget({ plan: p, built: built() }), signal);
+  for (const [key, t] of Object.entries(res.tidied ?? {})) {
+    const result = states.value[key]?.result;
+    if (!result) continue;
+    setState(key, {
+      result: {
+        ...result, payload: t.payload, preview: t.preview,
+        warnings: [...result.warnings, ...t.warnings.filter((w) => !result.warnings.includes(w))],
+      },
+    });
+  }
   check.value = res;
   dismissedNotes.value = new Set();
   return res;
@@ -1026,7 +1050,7 @@ export function usePackBuilder() {
     setOther, decideFor, decideAll, pickFor, reopenDecision, changeAssumption, editItem, changes, dropped, reopened, resendImages,
     addItem, editPlan, applyFinding, dismissFinding, selected, toggleSelected, changeItem,
     changing, research, allowResearch, skipResearch, searching, webResults, images, target,
-    extendBundle, skipCurrent, skipItem, dismissNote, dismissedNotes,
+    extendBundle, skipCurrent, skipItem, dismissNote, dismissedNotes, planThinking,
   };
 }
 

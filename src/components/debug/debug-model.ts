@@ -417,6 +417,7 @@ function warningDetailText(type: string, detail: Record<string, unknown>): strin
     return Number.isFinite(reached) && Number.isFinite(requested) ? `reached ${reached} of ${requested}` : "";
   }
   if (type === "constraint_never_applied") {
+    if (detail.ref_only === true) return "target not drawn this run";
     return detail.target_present === false ? "target not in chain" : "";
   }
   if (type === "unknown_ref") {
@@ -516,9 +517,14 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
   const stepKeyByModuleId = new Map<string, string>();
 
   const never = new Set<string>();
+  // Constraints whose target is only reached through refs that weren't
+  // drawn this run (a recipe picked another recipe): idle, not broken.
+  const idle = new Set<string>();
   for (const w of rawWarnings) {
     const o = asRecord(w);
-    if (o.type === "constraint_never_applied" && str(o.module_id)) never.add(str(o.module_id));
+    if (o.type !== "constraint_never_applied" || !str(o.module_id)) continue;
+    if (asRecord(o.detail).ref_only === true) idle.add(str(o.module_id));
+    else never.add(str(o.module_id));
   }
 
   const steps: TraceStep[] = trace.map((t, i) => {
@@ -556,7 +562,8 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
     let finalLabel = label;
     if (kind === "constraint" && status === "ok") {
       const ids = [str(t._uid), str(t.id), str(detail?.uid)].filter(Boolean);
-      if (ids.some((x) => never.has(x)) || constraint?.hits === 0) {
+      const isIdle = ids.some((x) => idle.has(x));
+      if (!isIdle && (ids.some((x) => never.has(x)) || constraint?.hits === 0)) {
         finalStatus = "never";
         finalLabel = "never applied";
       }

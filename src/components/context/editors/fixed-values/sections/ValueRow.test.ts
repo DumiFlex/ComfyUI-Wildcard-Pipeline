@@ -33,15 +33,28 @@ async function typeValue(w: any, v: string): Promise<void> {
 const lib: LibraryRow = { id: "v1", name: "lens", value: "85mm" };
 const plainDraft: DraftRow = { id: "v1", name: "lens", value: "85mm", enabled: true, libraryId: "v1" };
 
-describe("ValueRow — library negative", () => {
-  it("shows the library row's negative read-only; nothing when there is none", () => {
-    const none = mount(ValueRow, { props: { row: plainDraft, library: lib }, global: { stubs: globalStubs } });
-    expect(none.find('[data-test="row-neg"]').exists()).toBe(false);
-    const w = mount(ValueRow, {
-      props: { row: plainDraft, library: { ...lib, negative: "fisheye" } },
-      global: { stubs: globalStubs },
+describe("ValueRow — negative", () => {
+  const NegStub = {
+    name: "NegativeField",
+    props: ["modelValue", "disabled", "label"],
+    emits: ["update:modelValue"],
+    template: `<div class="wp-neg-stub"></div>`,
+  };
+  const stubs = { ...globalStubs, NegativeField: NegStub };
+
+  it("edits the row's negative and marks a change from the library", async () => {
+    const libNeg = { ...lib, negative: "fisheye" };
+    const same = mount(ValueRow, {
+      props: { row: { ...plainDraft, negative: "fisheye" }, library: libNeg }, global: { stubs },
     });
-    expect(w.get('[data-test="row-neg"]').text()).toBe("NEG fisheye");
+    expect(same.findComponent(NegStub).props("modelValue")).toBe("fisheye");
+    expect(same.get('[data-test="row-neg"]').classes()).not.toContain("row__neg--mod");
+    same.findComponent(NegStub).vm.$emit("update:modelValue", undefined);
+    expect(same.emitted("update")![0]).toEqual(["v1", { negative: "" }]);
+    const changed = mount(ValueRow, {
+      props: { row: { ...plainDraft, negative: "blur" }, library: libNeg }, global: { stubs },
+    });
+    expect(changed.get('[data-test="row-neg"]').classes()).toContain("row__neg--mod");
   });
 });
 

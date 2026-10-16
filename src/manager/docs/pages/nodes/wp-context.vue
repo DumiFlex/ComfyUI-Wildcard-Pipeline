@@ -60,27 +60,46 @@ const ports = [
           picks and nested <code>@{}</code> refs stay frozen too), then re-rolls next run. The
           “keep this element steady for the whole batch” switch. Flip it from the module's Runtime
           settings, or right-click the row and pick <b>Hold across run</b> for a two-click toggle.
+          A <b>derivation</b> is the exception: it still checks its conditions on every frame, and
+          only the <code>{a|b}</code> and <code>@{}</code> rolls inside each branch are held.
         </li>
         <li>
           <b>Per-frame overrides</b> — using the loop's <b>edit frame</b> selector you can give one
-          frame its own pick, seed lock, or enable/disable for any module in the stack, leaving the
-          rest of the batch on the base.
+          frame its own options, seed lock, or enable/disable for any module in the stack, leaving
+          the rest of the batch on the base. They stay on the canvas: bundles don't save them.
         </li>
       </ul>
     </DocSection>
 
     <DocSection title="Good to know">
       <DocCallout variant="tip">
-        Lock a module's seed (via the module's instance options) to freeze that pick across
-        all <b>WP Context Loop</b> iterations — handy for holding the art style steady while
-        the subject varies across a batch.
+        Lock a module's seed (Lock pick on a wildcard) to freeze that pick on every Generate and
+        every <b>WP Context Loop</b> frame, handy for holding the art style steady while the
+        subject varies. Hold across run keeps it for one run only.
       </DocCallout>
       <DocCallout variant="tip">
         Modules you add to a WP Context are <b>snapshots</b>, not live links. If you edit a module
         in the library afterward, the Context doesn't change under you — it flags that row as
-        <b>drifted</b> so you can pull (sync) the updated version when you're ready. That keeps a
-        saved workflow reproducible: it won't silently change because you edited a module somewhere
-        else.
+        <b>drifted</b> so you can pull the updated version with <b>Refresh from library</b> when
+        you're ready. That keeps a saved workflow reproducible: it won't silently change because you
+        edited a module somewhere else.
+      </DocCallout>
+      <DocCallout variant="tip">
+        Rows on the node are also the vocabulary for <code>@{}</code> references. A reference
+        looks for its wildcard among the node's rows first (even a disabled row) and only then in
+        the library of the machine that runs the graph. So a workflow you share keeps working
+        elsewhere if the vocabularies it references sit on the node, and later library edits
+        don't reach them. WP Debug shows where each pool came from.
+      </DocCallout>
+      <DocCallout variant="tip">
+        <b>Duplicate</b> on a row renames the copy's variable (<code>$hair</code> becomes
+        <code>$hair_2</code>), so the copy rolls on its own. Two rows you set to the same variable
+        by hand overwrite each other: the later one wins.
+      </DocCallout>
+      <DocCallout variant="tip">
+        <b>Use one WP Context</b> per pack or per character, and chain a second one when a later
+        part of the graph should add to or override the first. <b>Not for</b> text typed straight
+        onto the canvas or an LLM's caption: that is WP Context Injector's job.
       </DocCallout>
     </DocSection>
 

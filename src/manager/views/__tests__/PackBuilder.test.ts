@@ -43,7 +43,7 @@ const PLAN: AiPackPlanResult = {
     style: "tags", model: "", anchor: "season",
     questions: [{ header: "Size", question: "How many?", multi: false, choices: ["Few", "Many"] }],
     assumptions: ["Daytime only"], research: [], decisions: [], sections: [],
-    settings: { library: "reuse", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, model: "any" },
+    settings: { library: "reuse", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, model: "any", youth_negative: "on" },
     inputs: [],
     items: [
       item("i1", "template", "Scene"),
@@ -187,8 +187,14 @@ describe("PackBuilder", () => {
     await flushPromises();
     const refine = vi.mocked(api.ai.packPlan).mock.calls[1][0];
     expect(refine.instruction).toBe(
-      "Revise the plan to fix these: - keys on #rain, which neither lists. - Add a mood.");
+      "Revise the plan to fix ALL of these, one by one:\n"
+      + "1. Season → Outfit: keys on #rain, which neither lists.\n2. Add a mood.\n"
+      + "Where one asks for a new item (a constraint, a derivation, a wildcard), add it to the "
+      + "plan; where one asks to change an item, change that item.");
     expect(refine.sample).toBe("1girl, red hair, beach");
+    // An AI finding was in the batch: the AI review runs again on the new plan.
+    const reviews = vi.mocked(api.ai.packReview).mock.calls;
+    expect(reviews[reviews.length - 1][0]).toMatchObject({ ai: true });
   });
 
   it("retries a failed item with the error and rebuilds one that doesn't fit", async () => {

@@ -14,7 +14,7 @@ const strategies = [
   },
   {
     term: "Sequential",
-    desc: "Seeds walk seed, seed+1, seed+2 … so adjacent iterations feel related and drift gradually.",
+    desc: "Seeds walk seed, seed+1, seed+2 … each frame rolls fresh picks: neighbouring seeds are no more alike than random ones, the numbers are just easy to find again.",
   },
   {
     term: "Prime stride",
@@ -37,6 +37,12 @@ const strategies = [
         module in the stack gets its own independent random stream derived from that seed — so
         changing the seed changes every module's picks together, but reordering modules does not
         disturb each other's results.
+      </p>
+      <p>
+        Inside a module every pick rolls on its own stream too: each fixed value, each derivation
+        rule, and each <code>{a|b}</code> or <code>@{…}</code> in a piece of text. Adding a value,
+        firing another rule or giving another pick more options never changes a roll you already
+        like, and two copies of one module roll independently.
       </p>
       <p>
         The seed advances automatically after each generation, so you get a fresh set of picks
@@ -74,7 +80,9 @@ const strategies = [
           holds the resolved value, not just the seed: a constrained wildcard keeps its option even
           as the constraint reshapes the pool, and any nested <code>@{}</code> ref is frozen too —
           an outfit of <VarToken>@{color} jeans</VarToken> that lands on “green jeans” stays
-          “green jeans” all run. A held <b>derivation</b> works a little differently: it freezes
+          “green jeans” all run. It is resolved with the first iteration's inputs too, so a
+          constraint whose source follows <VarToken>$iteration</VarToken> (in this Context or
+          an earlier one) doesn't move it on later iterations. A held <b>derivation</b> works a little differently: it freezes
           each rule branch's random roll, not <em>which</em> branch fires — the conditions still
           pick the branch from the current inputs, but a chosen branch always resolves to the same
           value it landed on at the first iteration. No manual seed lock needed. Flip it from the

@@ -67,6 +67,7 @@ import { formatProbability } from "../utils/percent";
 import type {
   ModuleHistoryEntry,
   WildcardOption,
+  AiDraftGroup,
   AiWildcardEditAction,
   AiWildcardEditChange,
   WildcardPayload,
@@ -1789,6 +1790,24 @@ function isUntouchedBlank(o: WildcardOption): boolean {
     && !o.negative;
 }
 
+/** Tag groups from an AI draft, applied just before its options: new tags
+ *  are registered, each tag moves into its group (a tag lives in one group),
+ *  and "accepts" goes through the same name check as the toggle. */
+function commitAiGroups(groups: AiDraftGroup[]): void {
+  for (const g of groups) {
+    const axis = g.name.trim();
+    if (!axis || axis === OTHER_AXIS) continue;
+    const members = g.tags.filter((t) => ensureSubcat(t));
+    const next: Record<string, string[]> = {};
+    for (const [a, ms] of Object.entries(tagGroups.value)) {
+      next[a] = a === axis ? ms : ms.filter((m) => !members.includes(m));
+    }
+    next[axis] = [...(next[axis] ?? []), ...members.filter((m) => !(next[axis] ?? []).includes(m))];
+    tagGroups.value = next;
+    if (g.kind === "accepts" && tagGroupKinds.value[axis] !== "accepts") toggleGroupKind(axis);
+  }
+}
+
 function commitAiDraft(parsed: ParsedBulkOption[]): void {
   commitBulkAddOptions(parsed);
   aiDraftOpen.value = false;
@@ -2523,8 +2542,10 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           :selected-ids="selectedIds"
           :existing-tags="subCategories"
           :tag-groups="tagGroups"
+          :tag-group-kinds="tagGroupKinds"
           :description="description"
           :labels="tags"
+          @commit-groups="commitAiGroups"
           @commit-options="commitAiDraft"
           @apply-edits="applyAiEdits"
           @cancel="aiDraftOpen = false"

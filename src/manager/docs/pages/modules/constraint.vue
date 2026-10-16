@@ -51,6 +51,16 @@ const reachModes = [
         ratio="16 / 7"
         caption="The Starter pairing constraint modal — source Starter subject (feline/canine sub-categories) → target Starter mood (calm/intense). The 2×2 rule matrix boosts feline×intense + canine×calm by ×3.0 and reduces the mismatched diagonals to ×0.3. One Exceptions row below overrides tiger → sleepy to EXCLUDE so the EXTRA-tagged exception wins over the matrix boost when both apply."
       />
+      <DocCallout variant="tip">
+        <b>Use a Constraint</b> when two picks must agree: the tag matrix for whole families
+        (winter rules out summer clothes), exceptions for single pairs, Only for allow-lists, and
+        a fallback option on the target so it never comes out empty. It reaches targets used only
+        inside <VarToken kind="ref">@{}</VarToken> references too. <b>Not for</b> adding text (use
+        a Derivation) or a narrowing that never changes (a category filter or
+        <VarToken kind="ref">@{X:tag}</VarToken> does that). The source must be a wildcard in the
+        stack: a pick made only inside a reference sets no variable, so a constraint on it never
+        applies.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="The flow">

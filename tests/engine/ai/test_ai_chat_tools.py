@@ -291,3 +291,78 @@ def test_pins_feed_inputs():
                                      "input_vars": ["who"]}}], [], [])
     out = lib.run("run_test", {"stack": ["Say"], "pins": {"$who": "world"}, "seeds": 5})
     assert '$said: "hello world" 100%' in out
+
+
+# ── a constraint's stack needs ──────────────────────────────────────────
+
+
+def test_with_needs_adds_a_constraints_wildcards_in_run_order():
+    lib = _lib()
+    ids, notes = lib.with_needs(["aaaa0004"])
+    assert ids == ["aaaa0002", "aaaa0004", "aaaa0001"]
+    assert "Season and Outfit" in notes[0]
+    # Target first: the constraint moves ahead of it.
+    ids, notes = lib.with_needs(["aaaa0002", "aaaa0001", "aaaa0004"])
+    assert ids == ["aaaa0002", "aaaa0004", "aaaa0001"] and "moved" in notes[0]
+    # In a bundle on the stack counts as there.
+    assert lib.with_needs(["bbbb0001", "aaaa0004"])[0] == ["bbbb0001", "aaaa0004"]
+
+
+def test_run_test_and_show_test_take_the_constraint_alone():
+    from engine.ai import client_tools
+    lib = _lib()
+    out = lib.run_test({"stack": ["Season → Outfit"], "seeds": 5})
+    assert "added Season and Outfit" in out
+    args, _ = client_tools.prepare(lib, "show_test", {"stack": ["aaaa0004"]})
+    assert args["stack"] == [{"module": "aaaa0002"}, {"module": "aaaa0004"},
+                             {"module": "aaaa0001"}]
+    assert args["notes"]
+
+
+def test_show_test_add_and_remove_keep_the_open_seeds():
+    from engine.ai import client_tools
+    lib = _lib()
+    args, label = client_tools.prepare(lib, "show_test", {"stack": ["Quality"], "change": "add"})
+    assert args["change"] == "add" and "seeds" not in args and label.startswith("Added 1 item")
+    # Taking a constraint out never pulls its wildcards out with it.
+    args, label = client_tools.prepare(lib, "show_test", {"stack": ["aaaa0004"],
+                                                          "change": "remove", "seeds": 5})
+    assert args["stack"] == [{"module": "aaaa0004"}] and args["seeds"] == 5
+    with pytest.raises(ValueError):
+        client_tools.prepare(lib, "show_test", {"stack": ["Quality"], "change": "swap"})
+
+
+def test_ids_copied_from_chips_and_cards_still_name_the_item():
+    lib = _lib()
+    assert "Variable: $season" in lib.run("read", {"id": "[[aaaa0002#Season]]"})
+    assert "Variable: $season" in lib.run("read", {"id": "aaaa0002#Season"})
+    shoes = lib.run("create_wildcard", {"name": "Shoes", "var": "shoes",
+                                        "options": [{"text": "boots", "tags": ["warm"]}]})
+    new_id = shoes["op"]["body"]["id"]
+    for ref in (shoes["pid"], f"{new_id}#Shoes", f"@{{{new_id}}}"):
+        c = lib.run("create_constraint", {"source_id": "Season", "target_id": ref, "rules": [
+            {"source": "#cold", "target": "#warm", "effect": "boost", "factor": 2}]})
+        assert c["op"]["body"]["payload"]["target_wildcard_id"] == new_id
+
+
+def test_a_name_proposed_again_in_this_answer_means_its_own_card():
+    from engine.ai import client_tools
+    lib = _lib()
+    # Another kind sharing the source's name doesn't make it ambiguous.
+    lib.modules["bbbb0001"] = {"id": "bbbb0001", "type": "combine", "name": "Season",
+                               "tags": [], "payload": {"template": "$season"}}
+    made = lib.run("create_wildcard", {
+        "name": "Outfit", "var": "outfit_demo",
+        "options": [{"text": "t-shirt", "tags": ["light"]},
+                    {"text": "wool coat", "tags": ["warm"]}]})
+    new_id = made["op"]["body"]["id"]
+    assert new_id != "aaaa0001"
+    con = lib.run("create_constraint", {
+        "source_id": "Season", "target_id": "Outfit",
+        "rules": [{"source": "winter", "target": "#warm", "effect": "only"}]})
+    assert con["op"]["body"]["payload"]["target_wildcard_id"] == new_id
+    assert con["op"]["body"]["payload"]["source_wildcard_id"] == "aaaa0002"
+    # Its cards show once the answer ends: opening one now is refused with why.
+    for raw in (made["pid"], new_id):
+        with pytest.raises(ValueError, match="already on screen"):
+            client_tools.prepare(lib, "open", {"proposal": raw})

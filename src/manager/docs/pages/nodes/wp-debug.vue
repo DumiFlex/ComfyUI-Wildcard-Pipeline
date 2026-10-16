@@ -37,6 +37,15 @@ const tabs = [
       />
     </DocSection>
 
+    <DocSection title="When to use it">
+      <DocCallout variant="tip">
+        <b>Use WP Debug</b> to see why one run came out as it did: every variable, the trace of
+        which module wrote what (later writes that replaced earlier ones included), each pick and
+        every warning, such as a reference that found no wildcard. <b>Not for</b> how often
+        options show up over many seeds. That is the Test Runner's job.
+      </DocCallout>
+    </DocSection>
+
     <DocSection title="Viewer tabs">
       <DocKeyList :items="tabs" />
       <DocCallout variant="tip">

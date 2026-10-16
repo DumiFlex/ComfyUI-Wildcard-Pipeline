@@ -192,6 +192,42 @@ def constraint_fallback(payload: dict[str, Any],
             "fallback (edit_options)"]
 
 
+def exclude_shared_tags(payload: dict[str, Any],
+                        get: Callable[[str], dict[str, Any] | None]) -> list[str]:
+    """An exclude cell drops an option if ANY of its tags is excluded. When
+    the dropped option also carries a tag the same source row favours (the
+    source tag itself, or one it boosts or allows with only), that is almost
+    always "goes with" written as exclude: say so, and name the fix."""
+    target = get(str(payload.get("target_wildcard_id") or ""))
+    if not target or target.get("type") != "wildcard":
+        return []
+    opts = [o for o in (target.get("payload") or {}).get("options") or [] if isinstance(o, dict)]
+    out: list[str] = []
+    for src, row in (payload.get("matrix") or {}).items():
+        if not isinstance(row, dict):
+            continue
+        favoured = {src} | {t for t, c in row.items()
+                            if isinstance(c, dict) and c.get("mode") in ("boost", "only")}
+        excluded = {t for t, c in row.items() if isinstance(c, dict) and c.get("mode") == "exclude"}
+        for o in opts:
+            tags = set(o.get("sub_categories") or [])
+            hit, kept = tags & excluded, tags & favoured
+            if hit and kept:
+                out.append(
+                    f'With #{src}, "{o.get("value")}" is excluded by its #{sorted(hit)[0]} tag '
+                    f"although it also has #{sorted(kept)[0]}: exclude drops an option if any "
+                    f"of its tags is excluded. For \"#{src} goes with #{sorted(kept)[0]}\" use "
+                    f"only #{sorted(kept)[0]} instead of excluding the rest")
+                if len(out) >= 2:
+                    return out
+    return out
+
+
+#: A new wildcard with no variable that nothing points at with @{…}.
+NO_VAR = ("It sets no variable, so only options that point at it with @{Name} can use "
+          "it, and nothing does yet. If the prompt should show it, give it a variable")
+
+
 def check(op: dict[str, Any], item: dict[str, Any],
           get: Callable[[str], dict[str, Any] | None],
           base: dict[str, Any] | None = None) -> list[str]:
@@ -214,7 +250,7 @@ def check(op: dict[str, Any], item: dict[str, Any],
     elif kind == "derivation":
         out += derivation_shape(name, payload)
     elif kind == "constraint":
-        out += constraint_fallback(payload, get)
+        out += constraint_fallback(payload, get) + exclude_shared_tags(payload, get)
     return out[:MAX_WARNINGS]
 
 

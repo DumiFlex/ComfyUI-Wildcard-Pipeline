@@ -223,7 +223,7 @@ const NEG_ACCESSOR_RE = /\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?\.neg(?![A-Za-z0-9_])
 
 /**
  * Walk `node` (object/array, any depth) looking for a non-empty `negative`
- * string, a derivation action whose mode is `negative`, a derivation clause
+ * (or combine instance `negative_override`) string, a derivation action whose mode is `negative`, a derivation clause
  * with more than one action (`extra_actions`), or text reading `$name.neg`.
  * An empty negative is stored as absent and never needs v8. Mirror of
  * `engine/migrations/stamping.py:uses_negatives`.
@@ -231,8 +231,9 @@ const NEG_ACCESSOR_RE = /\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?\.neg(?![A-Za-z0-9_])
 export function usesNegatives(node: unknown): boolean {
   if (Array.isArray(node)) return node.some((child) => usesNegatives(child));
   if (!isPlainObject(node)) return false;
-  const neg = node.negative;
-  if (typeof neg === "string" && neg.trim() !== "") return true;
+  for (const neg of [node.negative, node.negative_override]) {
+    if (typeof neg === "string" && neg.trim() !== "") return true;
+  }
   if (isNegativeMode(node.mode) && "target_var" in node) return true;
   if (Array.isArray(node.extra_actions) && node.extra_actions.length > 0) return true;
   for (const value of Object.values(node)) {

@@ -18,7 +18,9 @@ import { api } from "../../../api/client";
 import type { AiConfigPatch, AiEmbedApi, AiIndexStatus, AiModelSize, AiProviderId, AiTestResult, AiToolFormat } from "../../../api/types";
 import { useAiConfig } from "../../../composables/useAiConfig";
 import { SUGGESTIONS_SOURCE_NOTE, hfRepo, suggestionsFor, type SuggestedModel } from "../ai-models";
+import { useUiStore } from "../../../stores/uiStore";
 
+const ui = useUiStore();
 const { config, error, save } = useAiConfig();
 
 const PROVIDER_ORDER: AiProviderId[] = ["anthropic", "openai", "openrouter", "ollama", "lmstudio", "llamacpp", "custom"];
@@ -511,6 +513,9 @@ const testSummary = computed(() => {
   if (t.context_low) parts.push(`only ${Math.round((t.context ?? 0) / 1024)}k context`);
   else if (t.context) parts.push(`${Math.round(t.context / 1024)}k context`);
   if (t.embed) parts.push(t.embed.ok ? `embeddings ✓ (${t.embed.dims})` : "embeddings ✗");
+  if (t.prefix) {
+    parts.push(`each chat starts at ≈ ${(t.prefix.tokens / 1000).toFixed(1)}k of ${Math.round(t.prefix.window / 1024)}k tokens (${t.prefix.tools} tools)`);
+  }
   return parts.join(" · ");
 });
 const testTone = computed(() => {
@@ -656,7 +661,7 @@ const off = computed(() => !config.value?.enabled);
             the address back.
           </p>
 
-          <SettingRow form label="Test connection" hint="Lists the server's models and asks the chosen one for a tiny JSON answer." setting-key="ai-test">
+          <SettingRow form label="Test connection" hint="Lists the server's models, asks the chosen one for a tiny JSON answer, and says how much of the model's context a new chat's instructions, tools and library summary take before you type anything." setting-key="ai-test">
             <Button size="sm" :loading="testing" :disabled="off" data-test="ai-test" @click="runTest">Test connection</Button>
             <span v-if="test" class="wp-ai-set__result" :data-tone="testTone" data-test="ai-test-result">
               <i :class="testTone === 'ok' ? 'pi pi-check-circle' : 'pi pi-exclamation-triangle'" aria-hidden="true" />{{ testSummary }}
@@ -901,6 +906,21 @@ const off = computed(() => !config.value?.enabled);
             >
               Rebuild
             </Button>
+          </SettingRow>
+        </SettingGroup>
+
+        <SettingGroup title="Chat">
+          <SettingRow
+            label="Show Explain on selected text"
+            hint="Select text anywhere in the manager (docs, replies, warnings) and a small Explain / Ask bar appears above it. Ctrl+Shift+X explains the selection without it. The browser's right-click menu is left alone. Saved in this browser."
+            setting-key="ai-explain-chip"
+          >
+            <Toggle
+              :model-value="ui.explainChip"
+              aria-label="Show Explain on selected text"
+              data-test="ai-explain-chip"
+              @update:model-value="(v: boolean) => ui.setExplainChip(v)"
+            />
           </SettingRow>
         </SettingGroup>
 

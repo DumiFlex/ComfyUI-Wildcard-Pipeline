@@ -29,9 +29,17 @@ SIZES = ("small", "medium", "large")
 #: writing tasks keep their own temperatures. `result_chars` caps one tool
 #: result, `history_chars` the earlier steps the chat re-sends.
 PROFILES: dict[str, dict[str, Any]] = {
-    "small": {"chat_temp": 0.15, "result_chars": 3500, "history_chars": 14000, "slim": True},
-    "medium": {"chat_temp": 0.25, "result_chars": 7000, "history_chars": 30000, "slim": False},
-    "large": {"chat_temp": 0.4, "result_chars": 14000, "history_chars": 90000, "slim": False},
+    # `two_phase`: on a server that checks schemas, a JSON step is asked in
+    # two parts, first which one tool (at chat_temp), then its arguments or
+    # the answer (at write_temp), so the choice isn't made while writing.
+    "small": {"chat_temp": 0.15, "result_chars": 3500, "history_chars": 14000, "slim": True,
+              "scoped": True, "two_phase": True, "write_temp": 0.4},
+    # Medium models pick better among fewer tools too: the page's tools plus
+    # the common ones, the rest one more_tools call away.
+    "medium": {"chat_temp": 0.25, "result_chars": 7000, "history_chars": 30000, "slim": False,
+               "scoped": True},
+    "large": {"chat_temp": 0.4, "result_chars": 14000, "history_chars": 90000, "slim": False,
+              "scoped": False},
 }
 
 _PARAMS = re.compile(r"(?<![\d.])(\d+(?:\.\d+)?)\s*b(?![a-z])", re.IGNORECASE)
@@ -103,13 +111,14 @@ def prompt_chars(system: str, history: list[tuple[str, Any]], user: str,
 CHAT_RESERVE = 4096
 #: How lean a new chat's fixed part gets when the model's window is small,
 #: leanest last: the size's own prompt; the small-model prompt and tool set
-#: with a 40-item library summary; that with a 12-item summary and no
-#: examples. A chat keeps the level it started with (`meta["lean"]`), so
+#: with a 40-item library summary; that with a 12-item summary and the
+#: short closing rules (the worked example stays: it teaches a small model
+#: more than the prose it replaces). A chat keeps the level it started with (`meta["lean"]`), so
 #: its prompt prefix stays the same for caching.
 LEVELS: tuple[dict[str, Any], ...] = (
     {},
     {"slim": True, "overview": 40},
-    {"slim": True, "overview": 12, "examples": False},
+    {"slim": True, "overview": 12, "prose": False},
 )
 
 

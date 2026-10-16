@@ -69,8 +69,26 @@ Effects:
 - exclude: when the source side is picked, the target side can't be. factor 0.
 - reduce: makes the target side rarer. factor between 0 and 1 (0.3 = much rarer).
 - boost: makes it more likely. factor above 1 (2 = twice as likely).
-- only: when the source side is picked, ONLY targets with an "only" rule from \
-the same source side stay possible; everything else is shut out. factor 1.
+- only: when the source side is picked, the target sides this source side \
+names stay possible and every other target option is shut out. factor 1. \
+"Names" means any rule from that source side: an only, reduce or boost rule \
+keeps its target (reduce and boost with their own odds), so "only boots, and \
+sandals rarely" is an only rule for #boots plus a reduce rule for #sandals. \
+Don't mix only and reduce/boost on one source side unless you mean that.
+
+Tag groups: a wildcard's tags can be grouped. In a CLASSIFY group a tag says \
+what the option IS, and a rule on it applies when the option has it. In an \
+ACCEPTS group the tags are alternatives the option offers (a dress that goes \
+with "summer" or "spring"): on the source, each run rolls one of them, and the \
+rule follows the rolled one; on the target, an option stays possible when the \
+source allows any of its alternatives. Key rules that should match picks on \
+the accepts group's tags.
+
+"Never" and "can't" are exclude, not reduce; "only" is an only rule (or an \
+exclude for every other side); reduce is for "rarely" and "less often". "X \
+only with A" (snow only in cold places) shuts X out everywhere else: from \
+every source side other than A, exclude X. Cover every source tag that \
+isn't A, not just a few.
 
 Only write the rules the request asks for. Give each a reason of a few words. \
 Don't add commentary; the output is data for the user's own library.\
@@ -98,12 +116,20 @@ def side_view(wildcard: dict[str, Any], prefix: str) -> dict[str, Any]:
     for i, o in enumerate(options, 1):
         o["short"] = f"{prefix}{i}"
     tags = [t for t in payload.get("sub_categories") or [] if isinstance(t, str)]
+    kinds = payload.get("tag_group_kinds")
+    kinds = kinds if isinstance(kinds, dict) else {}
+    raw_groups = payload.get("tag_groups")
+    raw_groups = raw_groups if isinstance(raw_groups, dict) else {}
+    groups = [{"name": str(g), "kind": "accepts" if kinds.get(g) == "accepts" else "classify",
+               "tags": [t for t in members if isinstance(t, str)]}
+              for g, members in raw_groups.items() if isinstance(members, list) and members]
     description, labels = about.clean(wildcard.get("description"), wildcard.get("tags"))
     return {
         "name": wildcard.get("name") if isinstance(wildcard.get("name"), str) else "",
         "var": payload.get("var_binding") if isinstance(payload.get("var_binding"), str) else "",
         "options": options,
         "tags": tags,
+        "groups": groups,
         "prefix": prefix,
         "description": description,
         "labels": labels,
@@ -125,6 +151,9 @@ def build_prompt(
         lines.append(f"{label} wildcard: {side['name'] or '(unnamed)'}{var}")
         lines.extend(about.lines(side["description"], side["labels"], indent="  "))
         lines.append(f"Tags: {', '.join('#' + t for t in side['tags']) or 'none'}")
+        for g in side.get("groups") or []:
+            lines.append(f"  {g['kind'].upper()} group {g['name']}: "
+                         + ", ".join("#" + t for t in g["tags"]))
         for o in side["options"]:
             tags = f"  [{', '.join('#' + t for t in o['tags'])}]" if o["tags"] else ""
             lines.append(f"{o['short']}. {o['value']}{tags}")
@@ -173,8 +202,8 @@ def _side(raw: Any, view: dict[str, Any], tag_lower: dict[str, str]) -> tuple[st
         return None
     text = raw.strip()
     if text.startswith("#"):
-        tag = tag_lower.get(text[1:].strip().lower())
-        return ("tag", tag) if tag else None
+        tag = _tag_like(text[1:].strip().lower(), tag_lower)
+        return ("tag", tag) if tag else _by_word(text[1:], view)
     m = re.fullmatch(r"([STst])?\s*(\d+)", text)
     if m:
         short = f"{view['prefix']}{int(m.group(2))}"
@@ -189,7 +218,67 @@ def _side(raw: Any, view: dict[str, Any], tag_lower: dict[str, str]) -> tuple[st
     return ("tag", tag) if tag else None
 
 
+def _tag_like(word: str, tag_lower: dict[str, str]) -> str | None:
+    """The tag ``word`` names: itself, its singular or plural ("sandal" for
+    #sandals), or without a role word ("mage_weapons" for #mage)."""
+    forms = [word, word + "s", word[:-1] if word.endswith("s") else "",
+             word[:-2] if word.endswith("es") else ""]
+    parts = re.split(r"[_-]", word)
+    if len(parts) > 1:
+        forms += [parts[0], parts[-1]]
+    for f in forms:
+        if f and f in tag_lower:
+            return tag_lower[f]
+    return None
+
+
+def _by_word(word: str, view: dict[str, Any]) -> tuple[str, Any] | None:
+    """A tag the wildcard doesn't have ("#snow", "#plate_armor") as the
+    options whose text says it ("light snow", "heavy plate armor"), so the
+    rule still lands instead of being left out."""
+    w = word.strip().lower().replace("_", " ").replace("-", " ")
+    if len(w) < 3:
+        return None
+    pat = re.compile(r"\b" + re.escape(w) + r"s?\b")
+    hits = [o for o in view["options"] if pat.search(o["value"].lower())]
+    return ("options", hits) if hits else None
+
+
+def _split_sides(rules: list[Any]) -> list[dict[str, Any]]:
+    """A rule naming several tags on one side ("#hot, #dry, #sand") as one
+    rule per tag, so the ones that exist land and the rest are skipped
+    one by one instead of the whole rule."""
+    out: list[dict[str, Any]] = []
+    for item in rules:
+        if not isinstance(item, dict):
+            continue
+        sides = []
+        for key in ("source", "target"):
+            raw = item.get(key)
+            parts = [p.strip() for p in re.split(r"\s*(?:,|/|\bor\b|\band\b|\+)\s*", raw)
+                     if p.strip()] if isinstance(raw, str) and raw.count("#") > 1 else []
+            sides.append(parts or [raw])
+        for a in sides[0]:
+            for b in sides[1]:
+                out.append({**item, "source": a, "target": b})
+    return out[:MAX_RULES * 2]
+
+
+def _carried(side: tuple[str, Any] | None, view: dict[str, Any]) -> tuple[str, Any] | None:
+    """A tag the wildcard lists but no option carries reads as the options
+    whose text says it, like a tag it doesn't list."""
+    if side is None or side[0] != "tag" or any(side[1] in o["tags"] for o in view["options"]):
+        return side
+    carried = {t.lower(): t for o in view["options"] for t in o["tags"]}
+    near = _tag_like(side[1].lower(), carried)
+    if near:
+        return ("tag", near)
+    return _by_word(side[1], view) or side
+
+
 def _label(side: tuple[str, Any]) -> str:
+    if side[0] == "options":
+        return " / ".join(o["value"] for o in side[1][:3]) + ("…" if len(side[1]) > 3 else "")
     return f"#{side[1]}" if side[0] == "tag" else side[1]["value"]
 
 
@@ -217,15 +306,17 @@ def compile_rules(
     seen_cells: set[tuple[str, str]] = set()
     seen_pairs: set[tuple[str, str]] = set()
 
-    for item in raw["rules"][:MAX_RULES]:
-        if not isinstance(item, dict):
-            continue
-        s = _side(item.get("source"), source, src_tags)
-        t = _side(item.get("target"), target, tgt_tags)
+    for item in _split_sides(raw["rules"][:MAX_RULES]):
+        s = _carried(_side(item.get("source"), source, src_tags), source)
+        t = _carried(_side(item.get("target"), target, tgt_tags), target)
         shown = f"{item.get('source')} → {item.get('target')}"[:80]
         if s is None or t is None:
             which = "source" if s is None else "target"
-            skipped.append({"text": shown, "reason": f"the {which} isn't an option or tag"})
+            have = (source if s is None else target)["tags"]
+            # The tags it does have, so a rebuild picks from them.
+            skipped.append({"text": shown, "reason": f"the {which} isn't an option or tag"
+                            + (f" (its tags: #{', #'.join(have[:12])})" if have else
+                               " (it has no tags: name options by number)")})
             continue
         effect = item.get("effect")
         if effect not in EFFECTS:
@@ -252,8 +343,10 @@ def compile_rules(
             })
             continue
 
-        srcs = [s[1]] if s[0] == "option" else [o for o in source["options"] if s[1] in o["tags"]]
-        tgts = [t[1]] if t[0] == "option" else [o for o in target["options"] if t[1] in o["tags"]]
+        srcs = [s[1]] if s[0] == "option" else s[1] if s[0] == "options" else [
+            o for o in source["options"] if s[1] in o["tags"]]
+        tgts = [t[1]] if t[0] == "option" else t[1] if t[0] == "options" else [
+            o for o in target["options"] if t[1] in o["tags"]]
         pairs = [(a, b) for a in srcs for b in tgts]
         if not pairs:
             skipped.append({"text": shown, "reason": "no option carries that tag"})

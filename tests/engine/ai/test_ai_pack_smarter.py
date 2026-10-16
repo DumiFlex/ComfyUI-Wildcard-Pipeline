@@ -42,18 +42,21 @@ def test_library_items_are_reused_not_rebuilt(wp_db):
     assert (lib["kind"], lib["name"], lib["var"], lib["library_id"]) == (
         "library", "Hair", "hair", HAIR["id"])
     assert lib["tags"] == ["long", "short"]
-    assert any("Nope" in w for w in plan["warnings"])
+    # Not in the library: made new (a wildcard $nope) instead of left out.
+    assert any("Made Nope new" in w for w in plan["warnings"])
+    by_name = {i["name"]: i for i in plan["items"]}
+    assert by_name["Nope"]["kind"] == "wildcard" and by_name["Nope"]["var"] == "nope"
     with pytest.raises(pack.PlanError):
         pack.item_request(plan, lib["key"], {})
     out = pack.library_item(plan, lib["key"], library)
     assert out["id"] == HAIR["id"] and out["kind"] == "library"
     built = {lib["key"]: {"id": out["id"], "payload": out["payload"]}}
-    eyes = plan["items"][1]
+    eyes = by_name["Eyes"]
     answer = {"options": [{"text": t, "weight": 1, "tags": [], "negative": ""}
                           for t in ("blue eyes", "green eyes", "red eyes", "grey eyes")]}
     e = pack.compile_item(plan, eyes["key"], built, answer, library=library)
     built[eyes["key"]] = {"id": e["id"], "payload": e["payload"]}
-    t = plan["items"][2]
+    t = by_name["T"]
     tpl = pack.compile_item(plan, t["key"], built, {"template": "$hair, $eyes", "negative": ""},
                             library=library)
     built[t["key"]] = {"id": tpl["id"], "payload": tpl["payload"]}
@@ -143,7 +146,7 @@ def test_review_finds_what_would_break_or_clash():
         _item(name="Place", var="place"),
         _item(name="Mood", var="mood"),
         _item(kind="constraint", name="S2O", source="season", target="outfit",
-              about="#winter excludes #light and #rain"),
+              about="exclude #light and #rain in #winter"),
         _item(kind="constraint", name="O2S", source="outfit", target="season",
               about="#warm boosts #winter"),
         _item(kind="template", name="T", about="$season $outfit $weather"),
@@ -153,7 +156,9 @@ def test_review_finds_what_would_break_or_clash():
     assert "$weather, which nothing in the pack sets" in texts
     assert "#rain, which neither" in texts
     assert "never empty" in texts
-    assert "closes a loop" in texts
+    # The rule back the other way is left out at the plan (it never applies).
+    assert "closes a loop" not in texts
+    assert any("make a loop" in w for w in plan["warnings"])
     assert "don't follow the anchor $season" in texts
     assert {f["level"] for f in found} == {"fix", "tip"}
     assert pack.review_note(found).startswith("Revise the plan")
