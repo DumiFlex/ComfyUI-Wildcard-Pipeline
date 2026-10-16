@@ -477,6 +477,27 @@ def _record_axes(
         decl[binding] = list(_accepts_axes(payload))
 
 
+def _warn_pinned_missing(ctx: dict[str, Any] | None, pinned_id: Any) -> None:
+    """A ``pinned`` instance whose option the library no longer has rolls
+    normally; say so (a sweep frame relies on the pin, so a deleted option
+    would otherwise turn its grid into random frames without a word)."""
+    if ctx is None or not isinstance(ctx.get("__wp_warnings__"), list):
+        return
+    ctx["__wp_warnings__"].append({
+        "type": "pinned_option_missing",
+        "severity": "warn",
+        "module_id": ctx.get("__wp_current_module_id__") or "",
+        "source_field": "",
+        "position": 0,
+        "token_index": None,
+        "detail": {"option_id": "" if pinned_id is None else str(pinned_id)},
+        "message": (
+            f"pinned option {pinned_id!r} is no longer in this wildcard; "
+            "rolled normally"
+        ),
+    })
+
+
 def _match_variable_option(
     ctx: Any, options: list[dict[str, Any]], var_name: str,
 ) -> tuple[dict[str, Any] | None, str]:
@@ -906,6 +927,8 @@ class WildcardHandler(ModuleHandler):
         if mode == "pinned":
             pinned_id = instance.get("pinned_option_id")
             pinned = next((o for o in options if o.get("id") == pinned_id), None)
+            if pinned is None:
+                _warn_pinned_missing(ctx, pinned_id)
         # `match_variable`: take the option whose text equals another
         # variable's value (case-insensitive), e.g. `$model_variant` from WP
         # Model Info, so this wildcard's pick can drive constraints. No match →

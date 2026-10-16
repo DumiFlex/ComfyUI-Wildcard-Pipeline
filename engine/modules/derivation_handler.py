@@ -602,7 +602,16 @@ class DerivationHandler(ModuleHandler):
                 int(locked_seed) if isinstance(locked_seed, (int, float))
                 else chain_seed
             )
-            module_id = str(ctx.get("__wp_module_id__") or "derivation")
+            # Key the stream on this module INSTANCE (the pipeline sets
+            # `__wp_current_module_uid__`, falling back to the library id), so
+            # two derivations in one chain roll independently. The old key,
+            # `__wp_module_id__`, was never set, so every derivation shared
+            # the literal "derivation" stream (fixed 2026-10-16).
+            module_id = str(
+                ctx.get("__wp_current_module_uid__")
+                or ctx.get("__wp_current_module_id__")
+                or "derivation"
+            )
             rng = derive_module_rng(effective_seed, module_id)
             ctx_local = {**ctx, "__wp_rng__": rng}
             resolve_ctx = build_resolve_ctx(ctx_local, surface="derivation")

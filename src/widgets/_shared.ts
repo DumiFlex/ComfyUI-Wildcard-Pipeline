@@ -1,4 +1,4 @@
-import { createApp, type App, type Component } from "vue";
+import { createApp, effectScope, type App, type Component, type EffectScope } from "vue";
 
 import { nodeCollapseAnimating } from "../extension/_stashes";
 import { isVueNodes } from "../extension/renderer";
@@ -14,7 +14,17 @@ export interface DomWidgetHost {
   widget: DomWidget;
   element: HTMLElement;
   app: App;
+  /** Tear the widget down: stop its effect scope, run registered cleanups,
+   *  unmount the Vue app. Idempotent. Called automatically when the node is
+   *  removed from its graph (chained onto `node.onRemoved`). */
   unmount: () => void;
+  /** Effect scope owned by this host and stopped on unmount. Glue code that
+   *  creates `reactiveFromGraph` refs or `watch`es outside a component's
+   *  `setup()` must create them inside it (pass `scope` in the options, or
+   *  `host.scope.run(...)`) so their intervals are cleared on removal. */
+  scope: EffectScope;
+  /** Register extra teardown (listeners, observers) to run on unmount. */
+  onCleanup: (fn: () => void) => void;
   getValue: () => string;
   setValue: (v: string) => void;
   /** Trigger a node relayout — runs the canonical 3-step
@@ -81,6 +91,25 @@ export interface CreateDomWidgetHostOptions<P extends Record<string, unknown>> {
    * instead of leaving a dead band under this box.
    */
   fitContent?: boolean;
+  /**
+   * Effect scope the glue already ran its reactive setup in (see
+   * {@link buildInScope}). The host adopts it and stops it on unmount.
+   * Omitted → the host creates its own (`host.scope`).
+   */
+  scope?: EffectScope;
+}
+
+/**
+ * Run widget glue inside a fresh effect scope, so every `reactiveFromGraph`
+ * / `watch` it creates outside a component `setup()` is disposed with the
+ * widget. `build` receives the scope to hand to `createDomWidgetHost`.
+ */
+export function buildInScope<T>(build: (scope: EffectScope) => T): T {
+  // Detached: the widget's lifetime is the node's, never an ambient scope's.
+  const scope = effectScope(true);
+  const result = scope.run(() => ({ v: build(scope) }));
+  if (!result) throw new Error("wp: widget scope inactive");
+  return result.v;
 }
 
 /** LiteGraph snaps node size to this grid by default. Mirror it when
@@ -259,6 +288,9 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   // here — the public API on createDomWidgetHost is still strict in P.
   const app = createApp(component, (options.componentProps ?? {}) as unknown as P);
   app.mount(inner);
+
+  const scope = options.scope ?? effectScope(true);
+  const cleanups: Array<() => void> = [];
 
   // Observe inner content height. When Vue grows the DOM, bump minHeight (so
   // ComfyUI's getMinHeight callback returns the right value) and grow the node
@@ -528,15 +560,57 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     }
   }
 
+  let unmounted = false;
+  function unmount(): void {
+    if (unmounted) return;
+    unmounted = true;
+    // Each step guarded so one failing teardown can't strand the rest.
+    const steps: Array<() => void> = [
+      () => scope.stop(),
+      ...cleanups.splice(0).reverse(),
+      () => resizeObserver?.disconnect(),
+      () => fillDispose?.(),
+      removeWheelShield,
+      () => app.unmount(),
+      restoreOnRemoved,
+    ];
+    for (const step of steps) {
+      try { step(); } catch (err) { console.error("[wp] widget teardown failed", err); }
+    }
+  }
+
+  // Node removal (delete, graph.clear on workflow load / undo) tears the
+  // widget down. Wrap-and-call-original with `this` preserved, so ComfyUI's
+  // own removal (and any other extension's) runs first and unchanged. We
+  // never touch `widget.onRemove` — ComfyUI relies on its `this` binding.
+  const removable = node as unknown as { onRemoved?: (...a: unknown[]) => unknown };
+  const hadOwnOnRemoved = Object.prototype.hasOwnProperty.call(removable, "onRemoved");
+  const origOnRemoved = removable.onRemoved;
+  const onRemovedWrapper = function (this: unknown, ...args: unknown[]): unknown {
+    try {
+      return origOnRemoved?.apply(this, args);
+    } finally {
+      unmount();
+    }
+  };
+  removable.onRemoved = onRemovedWrapper;
+  function restoreOnRemoved(): void {
+    // Only when still ours — someone may have wrapped on top since; their
+    // wrapper keeps calling ours, which is a no-op once unmounted.
+    if (removable.onRemoved !== onRemovedWrapper) return;
+    if (hadOwnOnRemoved) removable.onRemoved = origOnRemoved;
+    else delete removable.onRemoved;
+  }
+
   return {
     widget,
     element: inner,
     app,
-    unmount: () => {
-      resizeObserver?.disconnect();
-      fillDispose?.();
-      removeWheelShield();
-      app.unmount();
+    unmount,
+    scope,
+    onCleanup: (fn) => {
+      if (unmounted) fn();
+      else cleanups.push(fn);
     },
     getValue: () => state,
     setValue: (v) => {

@@ -16,9 +16,10 @@
  *    `1` while the engine rolls a real pick), so we now only show
  *    what actually came out of the engine.
  */
-import { defineAsyncComponent, h, ref, type Component } from "vue";
+import { defineAsyncComponent, h, ref, type Component, type EffectScope } from "vue";
 import { app } from "#comfyui/app";
-import { createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
+import { buildInScope, createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
+import { listenApi } from "./_listen";
 import {
   collectUpstreamVariables,
   findRootGraph,
@@ -78,7 +79,14 @@ function pickFirst(obj: Record<string, unknown>, key: string): unknown {
   return undefined;
 }
 
-export function create(node: VarPickerNode, inputName: string) {
+export function create(node: VarPickerNode, inputName: string): DomWidgetHost {
+  // Run inside a host-owned effect scope: the `reactiveFromGraph` refs and
+  // watchers below live outside any component setup(), so without it their
+  // polls would outlive the node.
+  return buildInScope((scope) => build(node, inputName, scope));
+}
+
+function build(node: VarPickerNode, inputName: string, scope: EffectScope): DomWidgetHost {
   if (!node.properties) node.properties = {};
   if (typeof node.properties.var_name !== "string") node.properties.var_name = "";
 
@@ -144,6 +152,7 @@ export function create(node: VarPickerNode, inputName: string) {
   };
 
   host = createDomWidgetHost(node, inputName, wrapper, {
+    scope,
     initialValue: String(node.properties?.var_name ?? ""),
     onValueRestored: (v: string) => {
       if (!node.properties) node.properties = {};
@@ -175,11 +184,7 @@ export function create(node: VarPickerNode, inputName: string) {
     if (typeof def === "string") previewDefault.value = def;
     hasExecuted.value = true;
   }
-  const apiObj = (app as unknown as { api?: {
-    addEventListener: (n: string, fn: (e: Event) => void) => void;
-    removeEventListener: (n: string, fn: (e: Event) => void) => void;
-  } }).api;
-  apiObj?.addEventListener("executed", onExecuted);
+  listenApi(host, "executed", onExecuted);
 
   return host;
 }
