@@ -247,3 +247,18 @@ def test_two_wildcards_for_one_colour_or_length_are_twins():
         ("hair_color", "hair_tone")]
     w = [{"var": v, "name": v} for v in ("hair_length", "hair_length_bias", "eye_color")]
     assert len(pack._twin_picks(w)) == 1
+
+
+def test_a_variable_the_template_reads_twice_loses_its_second_read():
+    plan, built, keys = _with_quality()
+    tpl = built[keys["Prompt"]]["payload"]
+    tpl["template_string"] = "$quality, $race, $hair, $outfit, $place, $light, $hair"
+    new, changed = pack_tidy.tidy(plan, built)
+    assert keys["Prompt"] in changed
+    assert new[keys["Prompt"]]["payload"]["template_string"] == \
+        "$quality, $race, $hair, $outfit, $place, $light"
+    assert any('"$hair"' in w for w in changed[keys["Prompt"]]["warnings"])
+    tested = pack_tidy.runs(plan, new)
+    for t in tested:
+        chunks = [c.strip() for c in t["prompt"].split(",")]
+        assert len(chunks) == len(set(chunks))

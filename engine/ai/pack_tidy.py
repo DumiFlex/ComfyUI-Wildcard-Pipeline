@@ -125,6 +125,40 @@ def _without(text: str, piece: str) -> str | None:
     return (", " + joined) if lead else joined
 
 
+def _without_last(text: str, piece: str) -> str | None:
+    """``text`` with only its LAST comma piece equal to ``piece`` taken out
+    (a second read of the same variable), or None as in ``_without``."""
+    parts = text.split(",")
+    at = [n for n, p in enumerate(parts) if _norm(p) == piece]
+    if not at:
+        return None
+    kept = parts[:at[-1]] + parts[at[-1] + 1:]
+    if not any(_norm(p) for p in kept):
+        return None
+    lead = re.match(r"\s*,\s*", text)
+    joined = ", ".join(p.strip() for p in kept if p.strip())
+    return (", " + joined) if lead else joined
+
+
+def _reads_saying(text: str, piece: str, ctx: dict[str, Any]) -> list[str]:
+    """The comma pieces of a template or combine that read a variable
+    (``$hair``, ``$colour hair``) and print ``piece`` in this run, last
+    first: the reads a repeat may come from."""
+    from engine.template import resolve_variables
+
+    out = []
+    for raw in reversed(text.split(",")):
+        if "$" not in raw:
+            continue
+        try:
+            shown = resolve_variables(raw, ctx)
+        except Exception:  # noqa: BLE001 - a read that can't render is not a candidate
+            continue
+        if piece in _chunks(shown) and _norm(raw) not in out:
+            out.append(_norm(raw))
+    return out
+
+
 def _validate(kind: str, payload: dict[str, Any]) -> None:
     {"wildcard": WildcardHandler, "fixed_values": FixedValuesHandler,
      "derivation": DerivationHandler}.get(kind, _NoCheck).validate_payload(payload)
@@ -172,6 +206,7 @@ def strip_repeats(plan: dict[str, Any], built: dict[str, Any], *,
     done: set[tuple[str, int, str]] = set()
     while tries < MAX_TRIES:
         twice: dict[str, int] = {}
+        seen_in: dict[str, dict[str, Any]] = {}
         for r in base_runs:
             counts: dict[str, int] = {}
             for c in _chunks(r["prompt"]):
@@ -179,6 +214,7 @@ def strip_repeats(plan: dict[str, Any], built: dict[str, Any], *,
             for c, n in counts.items():
                 if n > 1 and len(c) >= 3 and not _LIVE.search(c):
                     twice[c] = twice.get(c, 0) + 1
+                    seen_in.setdefault(c, r["ctx"])
         if not twice:
             break
         found = False
@@ -189,14 +225,26 @@ def strip_repeats(plan: dict[str, Any], built: dict[str, Any], *,
                 if i is None or i.get("existing") or i["kind"] in ("constraint", "library"):
                     continue
                 payload = built[key]["payload"]
+                cuts: list[tuple[int, str, str]] = []
                 for n, (_box, _field, text) in enumerate(_slots(i["kind"], payload)):
-                    if (key, n, piece) in done or _without(text, piece) is None:
+                    if _without(text, piece) is not None:
+                        cuts.append((n, piece, piece))
+                    if i["kind"] in ("template", "combine"):
+                        # The same variable read twice (or a combine that
+                        # already holds it): drop the later read.
+                        cuts += [(n, raw, piece) for raw in _reads_saying(
+                            text, piece, seen_in[piece])]
+                for n, cut, said_piece in cuts:
+                    if (key, n, cut) in done:
                         continue
-                    done.add((key, n, piece))
+                    done.add((key, n, cut))
                     tries += 1
                     trial = copy.deepcopy(payload)
                     box, field, old = _slots(i["kind"], trial)[n]
-                    box[field] = _without(old, piece)
+                    box[field] = (_without(old, cut) if cut == said_piece
+                                  else _without_last(old, cut))
+                    if box[field] is None:
+                        continue
                     try:
                         _validate(i["kind"], trial)
                     except Exception:  # noqa: BLE001 - a fix that breaks the item is skipped
@@ -205,7 +253,7 @@ def strip_repeats(plan: dict[str, Any], built: dict[str, Any], *,
                     after = runs(plan, new_built, library=library, base=base)
                     if _same_meaning(base_runs, after) >= 2:
                         built, base_runs = new_built, after
-                        said.setdefault(key, []).append(piece)
+                        said.setdefault(key, []).append(cut)
                         found = True
                         break
                     if tries >= MAX_TRIES:
