@@ -58,6 +58,43 @@ function watchNodeMode(node: ConnectableNode, cb: () => void): () => void {
   return () => { slot!.subs.delete(cb); };
 }
 
+/** One `onConnectionsChange` wrapper per node, fanning out to a subscriber
+ *  set. Wrapping per call and restoring the captured original on dispose is
+ *  not LIFO-safe: disposing an earlier subscriber would drop a later one's
+ *  wrapper. Here subscribers come and go in any order; the wrapper is only
+ *  uninstalled when the last one leaves AND it is still the installed
+ *  handler (another extension may have wrapped on top — then it stays as an
+ *  inert pass-through to the original). */
+interface ConnectionsSlot {
+  orig: ConnectableNode["onConnectionsChange"];
+  wrapper: (...args: unknown[]) => void;
+  subs: Set<() => void>;
+}
+const connectionSlots = new WeakMap<object, ConnectionsSlot>();
+
+export function watchConnections(node: ConnectableNode, cb: () => void): () => void {
+  let slot = connectionSlots.get(node);
+  if (!slot) {
+    const subs = new Set<() => void>();
+    const orig = node.onConnectionsChange;
+    const wrapper = function (this: unknown, ...args: unknown[]): void {
+      orig?.apply(this, args);
+      for (const s of [...subs]) s();
+    };
+    slot = { orig, wrapper, subs };
+    connectionSlots.set(node, slot);
+    node.onConnectionsChange = wrapper;
+  }
+  const mine = slot;
+  mine.subs.add(cb);
+  return () => {
+    mine.subs.delete(cb);
+    if (mine.subs.size > 0 || connectionSlots.get(node) !== mine) return;
+    connectionSlots.delete(node);
+    if (node.onConnectionsChange === mine.wrapper) node.onConnectionsChange = mine.orig;
+  };
+}
+
 /** Opacity our own widgets use for a muted/bypassed node (`--skipped`). */
 export const SKIPPED_OPACITY = "0.45";
 
@@ -178,11 +215,7 @@ export function reactiveFromGraph<T>(
     if (!equals(state.value, next)) state.value = next;
   }
 
-  const orig = node.onConnectionsChange;
-  node.onConnectionsChange = function (...args: unknown[]) {
-    orig?.apply(this, args);
-    refresh();
-  };
+  const unwatchConnections = watchConnections(node, refresh);
 
   // Mode-change intercept — instant detection of mute/bypass toggles
   // (ComfyUI assigns `node.mode = 2|4` directly, no event fires).
@@ -238,7 +271,7 @@ export function reactiveFromGraph<T>(
     stopPoll();
     unsubscribe();
     unwatchMode();
-    node.onConnectionsChange = orig;
+    unwatchConnections();
   });
 
   return state;
