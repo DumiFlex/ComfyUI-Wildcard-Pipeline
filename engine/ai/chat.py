@@ -615,6 +615,12 @@ class Library(MoreTools, ManageTools):
         lines.append(f"Tags: {', '.join(self.tags[:60]) if self.tags else 'none'}")
         rows = [*self.modules.values(), *self.bundles.values(), *self.templates.values()]
         rows.sort(key=lambda r: str(r.get("updated_at") or ""), reverse=True)
+        unset = self.unset_reads()
+        if unset:
+            # Worked out here so the model needn't read every item for it.
+            lines.append("Read but set by nothing in the library (a node on the canvas may "
+                         "set them): " + "; ".join(
+                             f"${v} (by {', '.join(names[:3])})" for v, names in unset))
         lines.append(f"Items (id · type · name), newest first, {len(rows)} in all:")
         habits = ai_patterns.note(ai_patterns.summarize(
             list(self.modules.values()), list(self.bundles.values()),
@@ -1048,6 +1054,14 @@ class Library(MoreTools, ManageTools):
         if kind != "template":
             lines.append(f"Rating: {r.get('content_rating') or 'safe'}")
         lines.extend(self.read_body(kind, r))
+        if kind == "wildcard" and isinstance(r.get("payload"), dict):
+            unknown = ai_vocab.unknown_tags(self.vocab, self.vocab_kinds, [
+                str(o.get("text") or "") for o in r["payload"].get("options") or []
+                if isinstance(o, dict)])
+            if unknown:
+                # Checked here so the model needn't look each one up.
+                lines.append(f"Not in the user's tag list ({len(unknown)}): "
+                             + ", ".join(unknown[:ai_vocab.MAX_CHECK]))
         facts = self.index.facts(r["id"]) if self.index is not None else None
         if facts and facts.get("used_by"):
             lines.append("Used by: " + ", ".join(facts["used_by"]))
@@ -1072,7 +1086,12 @@ class Library(MoreTools, ManageTools):
             lines.append("Read by: " + (", ".join(self._chip(r) for r in readers[:20])
                                         or "nothing"))
             return "\n".join(lines)
-        return library_vars.describe(self.catalog) or "the library sets no variables yet"
+        out = library_vars.describe(self.catalog) or "the library sets no variables yet"
+        unset = self.unset_reads(limit=30)
+        if unset:
+            out += "\nRead but set by nothing in the library: " + "; ".join(
+                f"${v} (by {', '.join(names[:3])})" for v, names in unset)
+        return out
 
     @staticmethod
     def _writes(r: dict[str, Any]) -> set[str]:
@@ -1082,6 +1101,29 @@ class Library(MoreTools, ManageTools):
         if r.get("type") == "derivation":
             out |= set(library_vars.derivation_targets(p))
         return {v for v in out if isinstance(v, str) and v}
+
+    _READ = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
+
+    def unset_reads(self, limit: int = 12) -> list[tuple[str, list[str]]]:
+        """Variables the library's items read that none of them sets (the
+        run-time ones left out), each with the names of what reads it."""
+        writes: set[str] = set()
+        for r in self.modules.values():
+            if not r.get("_proposed"):
+                writes |= self._writes(r)
+        out: dict[str, list[str]] = {}
+        for r in [*self.modules.values(), *self.templates.values()]:
+            if r.get("_proposed"):
+                continue
+            text = json.dumps({k: r.get(k) for k in ("payload", "template_string",
+                                                      "negative_template")},
+                              ensure_ascii=False)
+            reads = set(self._READ.findall(text))
+            if r.get("type") == "derivation":
+                reads |= {v.split(".")[0] for v in re.findall(r'"var": "([^"]+)"', text)}
+            for v in sorted(reads - writes - library_vars.RUNTIME_VARS):
+                out.setdefault(v, []).append(str(r.get("name") or r["id"]))
+        return sorted(out.items())[:limit]
 
     def readers(self, var: str) -> list[dict[str, Any]]:
         """Items that read ``$var``: conditions, $var in any text, templates."""

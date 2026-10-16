@@ -21,6 +21,8 @@ from engine.model_info import (
     VARIANT_VAR,
 )
 
+#: Set by the engine or the canvas (WP Model Info, the Loop), not by an item.
+RUNTIME_VARS = frozenset({"iteration", "iteration_total", FAMILY_VAR, VARIANT_VAR, NAME_VAR})
 #: Values listed per variable in the prompt; the rest are counted.
 MAX_VALUES_SHOWN = 30
 #: Characters of a module's description shown next to its variable.

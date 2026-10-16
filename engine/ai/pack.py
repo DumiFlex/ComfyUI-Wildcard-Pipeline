@@ -1484,7 +1484,7 @@ _TAG_REF = re.compile(r"#([a-z0-9_\-]+)")
 _SETS = re.compile(r"\b(?:set|sets|add|adds|append|appends|prepend|put|puts|make|makes)\b"
                    r"[^$.;]{0,40}\$([a-zA-Z_][a-zA-Z0-9_]*)", re.I)
 #: Set by the engine or the canvas, not by an item.
-RUNTIME_VARS = {"iteration", "iteration_total", "model_family", "model_variant", "model_name"}
+RUNTIME_VARS = set(library_vars.RUNTIME_VARS)
 #: Words that name the same slot, for pointing a stray anchor at a variable
 #: the pack does set ($setting → $scene).
 _SAME_SLOT = [

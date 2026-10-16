@@ -62,6 +62,32 @@ def test_overview_search_read_variables():
     assert lib.page_note({"route": "bundles"}) == "(The user is on the bundles page.)"
 
 
+def test_overview_names_variables_nothing_sets():
+    lib = chat.Library([
+        {"id": "aaaa0001", "type": "wildcard", "name": "Hair",
+         "payload": {"var_binding": "hair", "options": [{"id": "o1", "text": "$color hair"}]}},
+        {"id": "aaaa0002", "type": "combine", "name": "Look",
+         "payload": {"output_var": "look", "template": "$hair, $mood, $model_family"}},
+    ], [], [])
+    over = lib.overview()
+    assert "Read but set by nothing in the library" in over
+    assert "$color (by Hair)" in over and "$mood (by Look)" in over
+    assert "$hair (" not in over and "$model_family (" not in over  # set / run-time
+    assert "$color (by Hair)" in lib.variables({})
+
+
+def test_read_names_option_tags_the_users_list_lacks():
+    known = {"red_hair", "long_hair"}
+    lib = chat.Library([{"id": "aaaa0001", "type": "wildcard", "name": "Hair",
+                         "payload": {"var_binding": "hair", "options": [
+                             {"id": "o1", "text": "red hair, long hair"},
+                             {"id": "o2", "text": "glowy sparkle hair"}]}}], [], [])
+    lib.vocab = lambda kind, q, n: [{"name": q}] if q in known else []
+    assert "Not in the user's tag list" not in lib.read({"id": "aaaa0001"})
+    lib.vocab_kinds = {"tags"}
+    assert "Not in the user's tag list (1): glowy_sparkle_hair" in lib.read({"id": "aaaa0001"})
+
+
 def test_create_wildcard_proposal():
     lib = _lib()
     p = lib.run("create_wildcard", {
