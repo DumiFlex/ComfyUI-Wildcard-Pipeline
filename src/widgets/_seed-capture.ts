@@ -9,7 +9,8 @@
  * widget to the NEXT run's value. The listener is removed with the widget host.
  */
 import { nodePrevSeeds } from "../extension/_stashes";
-import { listenApi, type DomWidgetHost } from "./_shared";
+import { type DomWidgetHost } from "./_shared";
+import { listenApi } from "./_listen";
 
 type ExecutedEvent = CustomEvent<{ node: string | number; output?: unknown }>;
 

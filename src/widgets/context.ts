@@ -1,9 +1,10 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { app } from "#comfyui/app";
 import {
-  createDomWidgetHost, listenApi, parseWidgetJson, serializeWidgetJson, emptyContextValue,
+  createDomWidgetHost, parseWidgetJson, serializeWidgetJson, emptyContextValue,
   type ContextWidgetValue, type MountTargetNode,
 } from "./_shared";
+import { listenApi } from "./_listen";
 import { attachThemeDetector } from "../extension/theme-detector";
 import {
   collectDownstreamNestedReachUuids,

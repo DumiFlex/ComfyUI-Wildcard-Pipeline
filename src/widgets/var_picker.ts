@@ -18,7 +18,8 @@
  */
 import { defineAsyncComponent, h, ref, type Component, type EffectScope } from "vue";
 import { app } from "#comfyui/app";
-import { buildInScope, createDomWidgetHost, listenApi, type DomWidgetHost, type MountTargetNode } from "./_shared";
+import { buildInScope, createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
+import { listenApi } from "./_listen";
 import {
   collectUpstreamVariables,
   findRootGraph,

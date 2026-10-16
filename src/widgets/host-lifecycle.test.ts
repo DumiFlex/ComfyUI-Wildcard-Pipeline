@@ -6,7 +6,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { defineComponent, h, ref, watch } from "vue";
 import { app } from "#comfyui/app";
-import { buildInScope, createDomWidgetHost, listenApi, type DomWidget } from "./_shared";
+import { buildInScope, createDomWidgetHost, type DomWidget } from "./_shared";
+import { listenApi } from "./_listen";
 import { reactiveFromGraph } from "../extension/reactive";
 
 interface FakeNode {

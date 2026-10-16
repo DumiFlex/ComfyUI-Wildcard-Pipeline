@@ -1,5 +1,4 @@
 import { createApp, effectScope, type App, type Component, type EffectScope } from "vue";
-import { app as comfyApp } from "#comfyui/app";
 
 import { nodeCollapseAnimating } from "../extension/_stashes";
 import { isVueNodes } from "../extension/renderer";
@@ -111,20 +110,6 @@ export function buildInScope<T>(build: (scope: EffectScope) => T): T {
   const result = scope.run(() => ({ v: build(scope) }));
   if (!result) throw new Error("wp: widget scope inactive");
   return result.v;
-}
-
-type ApiListener = (e: Event) => void;
-interface ApiLike {
-  addEventListener?: (n: string, fn: ApiListener) => void;
-  removeEventListener?: (n: string, fn: ApiListener) => void;
-}
-
-/** Subscribe to a ComfyUI `api` event for the host's lifetime. */
-export function listenApi(host: Pick<DomWidgetHost, "onCleanup">, event: string, fn: ApiListener): void {
-  const api = (comfyApp as unknown as { api?: ApiLike }).api;
-  if (!api?.addEventListener) return;
-  api.addEventListener(event, fn);
-  host.onCleanup(() => api.removeEventListener?.(event, fn));
 }
 
 /** LiteGraph snaps node size to this grid by default. Mirror it when

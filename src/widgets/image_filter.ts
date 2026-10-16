@@ -1,5 +1,6 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
-import { createDomWidgetHost, listenApi, serializeWidgetJson, type MountTargetNode } from "./_shared";
+import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
+import { listenApi } from "./_listen";
 import { reactiveFromGraph } from "../extension/reactive";
 import { lastRequestByNode } from "../extension/image-filter";
 import {
