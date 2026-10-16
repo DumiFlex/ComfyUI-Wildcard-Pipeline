@@ -71,6 +71,10 @@ def prepare(lib: Any, tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], 
 
 
 def _open(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    if not any(str(args.get(k) or "").strip() for k in ("doc", "page", "id", "proposal")):
+        # The 9B opened "" after every proposal: its card is already shown.
+        raise ValueError("open needs an item id, a page or a docs page; a card you just "
+                         "proposed is already on screen, so don't open it")
     if args.get("doc"):
         doc = ai_docs.page(args.get("doc"))
         if doc is None or doc["id"] == "settings":

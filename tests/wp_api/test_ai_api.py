@@ -11,6 +11,7 @@ from engine.ai import chat as ai_chat
 from engine.ai import config as ai_config
 from tests.wp_api._ai_fakes import ANSWER, EDIT_ANSWERS  # noqa: F401 - shared fakes
 from wp_api import _ai_client
+from wp_api import ai as ai_routes
 
 
 async def _chat(wp_client, message, **extra):
@@ -1382,3 +1383,15 @@ async def test_a_message_naming_a_model_carries_how_it_reads_a_prompt(wp_client,
     assert "very aesthetic, absurdres" in sent and "not a wildcard a constraint" in sent
     await wp_client.post("/wp/api/ai/chat", json={"message": "make a hair list"})
     assert "reads a prompt" not in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+
+
+async def test_an_answer_claiming_a_change_with_no_card_says_nothing_changed(
+        wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.extend([{"message": "I've created the preset for you.", "calls": []}])
+    body = await (await wp_client.post("/wp/api/ai/chat", json={"message": "a preset"})).json()
+    assert body["message"].endswith(ai_routes.NOTHING_PROPOSED)
+    fake_llm.chat_steps.extend([{"message": "Created means made new.", "calls": []}])
+    body = await (await wp_client.post("/wp/api/ai/chat", json={"message": "what"})).json()
+    assert ai_routes.NOTHING_PROPOSED not in body["message"]

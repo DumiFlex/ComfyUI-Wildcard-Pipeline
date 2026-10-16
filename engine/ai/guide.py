@@ -93,7 +93,9 @@ nothing else needs. Recipes: an Outfit option "@{Tops:formal} with \
 @{Bottoms:formal}" (pin the recipe, the parts still vary); filler: \
 "{2-3$$@{Props:indoor}}". If a rule, the template or a pin needs the value, \
 it is its own wildcard read as $var ("@{Colors} jacket and @{Colors} jeans" \
-gives two colours; one colour is $color twice).
+gives two colours; for one colour, make Colors a wildcard bound to $color and \
+write "$color jacket and $color jeans" in a combine or the template, never in \
+an option: options can't read $variables).
 - Text that's always the same (a style preset, quality tags) → fixed values.
 - Joining picks into one phrase → combine ("$hair $eyes" → $look).
 - Text that depends on picks ("if $season is winter add a scarf"), or a \

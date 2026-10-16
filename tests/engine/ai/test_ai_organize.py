@@ -85,3 +85,10 @@ def test_answers_naming_items_by_name_or_place_still_land():
         {**entry, "id": "the first"}, {**entry, "id": "?"}, {**entry, "id": "?"},
     ]}, items=_items(), categories=["Scenes"], library=[])
     assert [c["id"] for c in out["changes"]] == ["1", "2"]
+
+
+def test_empty_ids_with_nothing_changed_are_an_unusable_answer():
+    entry = {"category": "", "tags_add": [], "tags_remove": [], "rating": "keep", "reason": ""}
+    with pytest.raises(ValueError, match="named none"):
+        organize.compile_answer({"items": [{**entry, "id": ""}] * 3}, items=_items(),
+                                categories=[], library=[])

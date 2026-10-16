@@ -1981,6 +1981,9 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                  for c in last["calls"]], ""))
         if new[-1].get("kind") != "step":
             new.append(_final_step(fmt, message))
+    if not pause and not proposals and _CLAIMS.search(message or ""):
+        # The 9B said "I've created … as a fixed values module" with no card.
+        message = message.rstrip() + "\n\n" + NOTHING_PROPOSED
     # Chips for the items it names; no bare ids for the user.
     message = lib.link_items(message)
     meta["format"] = fmt
@@ -2203,6 +2206,12 @@ def _adopt_earlier(lib: Any, log: list[dict[str, Any]], meta: dict[str, Any]) ->
             lib.adopt_earlier(ai_lint.with_fixes(p, list(keys)) if keys else p)
 
 
+#: An answer saying it made a change ("I've created …").
+_CLAIMS = re.compile(r"\b(?:I(?:'ve| have)?|I've now)\s+(?:just\s+)?(?:created|made|added|built|"
+                     r"set up|saved|updated|applied)\b", re.I)
+#: Added to such an answer when no card came with it.
+NOTHING_PROPOSED = ("*(Nothing was proposed in this answer, so nothing changed. Ask me to "
+                    "propose it and a card will show.)*")
 #: The same refusal this many times in one answer, and the model must answer.
 MAX_REFUSED = 2
 #: A JSON-mode "plan" this long, with no message and no calls, is the answer.

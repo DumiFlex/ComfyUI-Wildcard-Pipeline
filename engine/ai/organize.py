@@ -179,11 +179,13 @@ def compile_answer(
     # One answer per item, in order: the n-th answer is the n-th item even
     # when its id isn't the number (small models write the name, "item 2").
     in_order = len(entries) == len(items)
+    guessed = 0
     for pos, entry in enumerate(entries):
         sid = str(entry.get("id", "")).strip().lstrip("#")
         it = _find(sid, by_id, by_name)
         if it is None and in_order:
             it = items[pos]
+            guessed += 1
         if it is not None:
             sid = it["id"]
         if it is None:
@@ -228,7 +230,9 @@ def compile_answer(
             change["rating"] = rating
         if change["category"] or change["tags_add"] or change["tags_remove"] or change["rating"]:
             changes.append(change)
-    if not seen:
+    if not seen or (guessed == len(entries) and not changes):
+        # Every id empty or unknown and nothing to change: it said nothing
+        # about these items, which "Nothing to change" would hide.
         raise ValueError("it named none of the items")
     return {
         "changes": changes,

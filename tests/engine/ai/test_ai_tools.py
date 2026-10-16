@@ -129,3 +129,9 @@ def test_step_schema_names_the_offered_tools():
     schema = tools.step_schema(["search", "read"])
     assert schema["properties"]["calls"]["items"]["properties"]["tool"]["enum"] == [
         "search", "read"]
+
+
+def test_open_with_nothing_to_open_is_refused_with_a_reason():
+    lib = chat.Library([], [], [])
+    with pytest.raises(ValueError, match="already on screen"):
+        client_tools.prepare(lib, "open", {"id": " "})
