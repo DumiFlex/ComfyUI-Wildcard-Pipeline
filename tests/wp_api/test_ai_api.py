@@ -1017,6 +1017,43 @@ async def test_chat_falls_back_to_json_when_the_server_refuses_tools(wp_client, 
     assert out["format"] == "json" and out["message"] == "Hi there."
 
 
+async def test_a_local_json_chat_gets_each_tools_args_checked_by_the_server(
+        wp_client, fake_llm):
+    """LM Studio, llama.cpp and Ollama build a grammar from the schema, so a
+    JSON-mode step carries each tool's own arguments and the model answers
+    with an object, not a string it may break."""
+    ai_config.update({"enabled": True, "provider": "lmstudio", "tool_format": "json",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m"})
+    fake_llm.chat_steps.extend([
+        {"plan": "", "message": "", "calls": [{"tool": "search", "args": {"query": "hair"}}]},
+        {"plan": "", "message": "Nothing yet.", "calls": []}])
+    out = await _chat(wp_client, "find hair")
+    assert out["message"] == "Nothing yet."
+    assert [s["tool"] for s in out["steps"] if not s.get("think")] == ["search"]
+    sent = fake_llm.seen[-1]["body"]
+    options = sent["response_format"]["json_schema"]["schema"]["properties"]["calls"][
+        "items"]["anyOf"]
+    assert ["search"] in [o["properties"]["tool"]["enum"] for o in options]
+    assert "the arguments as a JSON object" in sent["messages"][0]["content"]
+
+
+async def test_a_server_that_cant_take_the_typed_schema_gets_the_string_form(
+        wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio", "tool_format": "json",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "no-grammar"})
+    fake_llm.chat_steps.append({"message": "Hi there.", "calls": []})
+    out = await _chat(wp_client, "hello")
+    assert out["message"] == "Hi there."
+    items = fake_llm.seen[-1]["body"]["response_format"]["json_schema"]["schema"][
+        "properties"]["calls"]["items"]
+    assert items["properties"]["args"] == {"type": "string"}
+    # Remembered: the next step goes straight to the string form.
+    n = len(fake_llm.seen)
+    fake_llm.chat_steps.append({"message": "Again.", "calls": []})
+    await _chat(wp_client, "again", chat_id=out["chat_id"])
+    assert len(fake_llm.seen) == n + 1
+
+
 async def test_chat_takes_tool_calls_written_as_text(wp_client, fake_llm):
     await _two_wildcards(wp_client)
     ai_config.update({"enabled": True, "provider": "lmstudio",

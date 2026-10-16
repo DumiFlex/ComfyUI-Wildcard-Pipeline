@@ -262,10 +262,11 @@ EXAMPLE_CHAT_STEPS: list[dict] = [
 ]
 
 
-def _example_chat() -> str:
+def _example_chat(typed: bool = False) -> str:
     lines = [f'Example. User: "{EXAMPLE_CHAT_REQUEST}"']
     for step in EXAMPLE_CHAT_STEPS:
-        calls = [{"tool": c["tool"], "args": json.dumps(c["args"], ensure_ascii=False)}
+        calls = [{"tool": c["tool"],
+                  "args": c["args"] if typed else json.dumps(c["args"], ensure_ascii=False)}
                  for c in step["calls"]]
         lines.append("You: " + json.dumps({**step, "calls": calls}, ensure_ascii=False))
     lines.append("(then a last answer with \"calls\": [] saying what the test showed)")
@@ -287,6 +288,8 @@ def _example_chat_native() -> str:
 
 
 EXAMPLES_CHAT = "\n" + _example_chat()
+#: The same, with args as objects (chats whose server checks them, `typed`).
+EXAMPLES_CHAT_TYPED = "\n" + _example_chat(typed=True)
 EXAMPLES_CHAT_NATIVE = "\n" + _example_chat_native()
 
 

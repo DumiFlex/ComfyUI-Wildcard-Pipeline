@@ -282,10 +282,9 @@ FORMAT_JSON = """While you still have calls to make, leave "message" empty. \
 Answer with JSON: {"plan": one or two sentences for yourself: what the \
 user wants, which features fit (see "Which feature for which job") and what \
 you'll call next, "message": what you say to the user now, "calls": tools \
-to run}. Each call is {"tool": name, "args": a JSON object written as a \
-string}. Read tools run at once and you get their results in the next \
-message; then continue. When you are done, answer with "calls": [] and a \
-message for the user. Keep messages short and plain. \
+to run}. Each call is {"tool": name, "args": ARGS}. Read tools run at once \
+and you get their results in the next message; then continue. When you are \
+done, answer with "calls": [] and a message for the user. Keep messages short and plain. \
 Write every library item you mention as [[id#Name]] (its id from read or \
 search, then its name): the user sees a chip with the name that opens it. \
 Never write an id anywhere else, and never ask the user for one: ids mean \
@@ -359,7 +358,17 @@ def kinds_section(chosen: list[Any]) -> str:
     return out
 
 
-SYSTEM_HEAD = SYSTEM_INTRO + FORMAT_JSON + "\n" + tools_section()
+#: How "args" is written: a string for hosted servers, the object itself
+#: where the server's grammar checks it (`typed`).
+ARGS_TEXT = "a JSON object written as a string"
+ARGS_TYPED = "the arguments as a JSON object"
+
+
+def _format_json(typed: bool = False) -> str:
+    return FORMAT_JSON.replace("ARGS", ARGS_TYPED if typed else ARGS_TEXT)
+
+
+SYSTEM_HEAD = SYSTEM_INTRO + _format_json() + "\n" + tools_section()
 SYSTEM_TAIL = """
 Per-use settings ("use" on bundle items and run_test items): """ + ai_use.GUIDE + """
 
@@ -392,20 +401,22 @@ SYSTEM_PROMPT = SYSTEM_HEAD + ai_guide.text() + SYSTEM_TAIL
 
 
 def system_prompt(*, slim: bool = False, examples: bool = True, native: bool = False,
-                  tools: list[str] | None = None) -> str:
+                  tools: list[str] | None = None, typed: bool = False) -> str:
     """The chat's instructions. `slim` (small models) keeps the tools and
     the core guide but leaves out the coherence notes and the docs and page
     tables (docs_search still finds pages), about a third shorter.
     `native`: the tools travel as native declarations, so the prompt says
     how to use them instead of listing them. `tools`: the names this chat
-    offers (default: all)."""
+    offers (default: all). `typed`: JSON-mode args are objects the server
+    checks against each tool's schema (`ai_tools.step_schema`)."""
     pages = "\n".join(f"- {k}: {v}" for k, v in APP_PAGES.items())
     if native:
         head = SYSTEM_INTRO + FORMAT_NATIVE + "\n"
         shown = ai_guide.EXAMPLES_CHAT_NATIVE if examples else ""
     else:
-        head = SYSTEM_INTRO + FORMAT_JSON + "\n" + tools_section(tools)
-        shown = ai_guide.EXAMPLES_CHAT if examples else ""
+        head = SYSTEM_INTRO + _format_json(typed) + "\n" + tools_section(tools)
+        shown = (ai_guide.EXAMPLES_CHAT_TYPED if typed else ai_guide.EXAMPLES_CHAT) \
+            if examples else ""
     if slim:
         return (head + ai_guide.text(slim=True) + shown + SYSTEM_TAIL
                 + "\nDocs: find pages with docs_search; asked what you can do, read "

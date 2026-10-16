@@ -278,8 +278,24 @@ def native(tools: list[Tool], api: str) -> list[dict[str, Any]]:
     return out
 
 
-def step_schema(names: list[str]) -> dict[str, Any]:
-    """The JSON-mode answer: a plan, a message and calls by name."""
+def step_schema(names: list[str], typed: list[Tool] | None = None) -> dict[str, Any]:
+    """The JSON-mode answer: a plan, a message and calls by name. `typed`
+    (the offered tools, for local servers whose grammar follows the
+    schema): each call's args are that tool's own parameters, so a small
+    model can't send broken JSON or wrong argument names. Hosted strict
+    mode refuses optional properties, so they get args as a string."""
+    if typed:
+        calls: dict[str, Any] = {"anyOf": [{
+            "type": "object", "additionalProperties": False, "required": ["tool", "args"],
+            "properties": {"tool": {"type": "string", "enum": [t.name]},
+                           "args": _strip_schema(t.params or obj())},
+        } for t in typed]}
+        return {
+            "type": "object", "additionalProperties": False,
+            "required": ["plan", "message", "calls"],
+            "properties": {"plan": {"type": "string"}, "message": {"type": "string"},
+                           "calls": {"type": "array", "items": calls}},
+        }
     return {
         "type": "object", "additionalProperties": False,
         "required": ["plan", "message", "calls"],

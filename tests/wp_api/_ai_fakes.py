@@ -77,6 +77,10 @@ async def fake_llm(aiohttp_server):
                                       "usage": {"prompt_tokens": 900, "completion_tokens": 20,
                                                 "prompt_tokens_details": {"cached_tokens": 800}}})
         schema_name = body["response_format"]["json_schema"]["name"]
+        if body.get("model") == "no-grammar" and "anyOf" in json.dumps(body["response_format"]):
+            # A grammar builder that can't take the typed step schema.
+            return web.json_response({"error": {
+                "message": "failed to convert JSON schema to grammar"}}, status=400)
         content = {"ok": True} if schema_name == "probe" else EDIT_ANSWERS.get(schema_name, ANSWER)
         if schema_name in overrides:
             content = overrides[schema_name]

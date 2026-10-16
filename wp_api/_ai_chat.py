@@ -180,6 +180,32 @@ async def vision_support(cfg: dict[str, Any]) -> bool | None:
     return found
 
 
+#: Providers whose server builds a grammar from the JSON schema it gets, so
+#: a JSON-mode step can carry each tool's own arguments (`step_schema`).
+#: Hosted strict modes refuse optional properties.
+SCHEMA_SERVERS = ("ollama", "lmstudio", "llamacpp", "custom")
+#: (base_url, model) pairs whose server refused a typed step schema.
+_NO_TYPED: set[tuple[str, str]] = set()
+
+
+def checks_schema(cfg: dict[str, Any]) -> bool:
+    """Whether this server's JSON-mode steps may carry typed args."""
+    if (str(cfg.get("base_url") or ""), str(cfg.get("model") or "")) in _NO_TYPED:
+        return False
+    return cfg.get("provider") in SCHEMA_SERVERS
+
+
+def refused_schema(cfg: dict[str, Any], e: AIError) -> bool:
+    """A server that couldn't take the typed schema (too big or a keyword
+    its grammar builder lacks); remembered so later steps send the string
+    form."""
+    if not (400 <= (e.upstream or 0) < 600
+            and re.search(r"schema|grammar|format", e.message, re.I)):
+        return False
+    _NO_TYPED.add((str(cfg.get("base_url") or ""), str(cfg.get("model") or "")))
+    return True
+
+
 async def pick_format(cfg: dict[str, Any]) -> str:
     """"native" or "json" for a new chat: the user's choice, else native
     where the server says the model takes tools, else JSON."""
