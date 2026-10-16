@@ -48,6 +48,7 @@ from typing import Any
 from engine.ai import adult as ai_adult
 from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
+from engine.ai import fits as ai_fits
 from engine.ai import guide as ai_guide
 from engine.ai import library_vars, text_items
 from engine.ai import lint as ai_lint
@@ -2919,6 +2920,16 @@ def item_request(
                 "temperature": 0.3, "partial": True}
     if kind == "constraint":
         src, tgt = _constraint_sides(plan, item, built)
+        sides = _fit_sides(plan, item, built)
+        if sides is not None:
+            # "A weapon that fits the class": a pick list per class, which
+            # a small model gets right far more often than tag cells.
+            (sw, sp), (tw, tp) = sides
+            return {"system": ai_fits.SYSTEM_PROMPT, "user": ai_fits.build_prompt(
+                about=item["about"], source_name=sw["name"], target_name=tw["name"],
+                source=sp, target=tp, note=fix.strip()),
+                "schema": ai_fits.SCHEMA, "schema_name": "constraint_fits",
+                "temperature": 0.2}
         user = ai_constraint.build_prompt(
             instruction=item["about"] + fix, source=src, target=tgt, existing=[],
             name=item["name"], description=_pack_line(plan),
@@ -3030,6 +3041,21 @@ def owners(plan: dict[str, Any], key: str) -> dict[str, str]:
     there too overwrites (or is overwritten by) the Hair Style wildcard."""
     return {i["var"]: i["name"] for i in plan["items"]
             if i["key"] != key and i["var"] and i["kind"] not in ("constraint", "template")}
+
+
+def _fit_sides(plan: dict[str, Any], item: dict[str, Any], built: dict[str, Any],
+               ) -> tuple[tuple[dict[str, Any], dict[str, Any]],
+                          tuple[dict[str, Any], dict[str, Any]]] | None:
+    """((source item, payload), (target item, payload)) when the constraint
+    is a plain "fits" rule `ai_fits` writes, else None."""
+    by_var = {i["var"]: i for i in plan["items"] if is_wild(i)}
+    s, t = by_var.get(item["source"]), by_var.get(item["target"])
+    if s is None or t is None or s["key"] not in built or t["key"] not in built:
+        return None
+    sp, tp = built[s["key"]]["payload"], built[t["key"]]["payload"]
+    if not ai_fits.applies(item["about"], sp, tp):
+        return None
+    return (s, sp), (t, tp)
 
 
 def _constraint_sides(
@@ -3147,6 +3173,20 @@ def compile_item(
         warnings += list(dict.fromkeys(w for r in compiled["rules"] for w in r["warnings"]))
         warnings += [f"Left out {s['text'][:60]}: {s['reason']}"
                      for s in compiled["skipped"][:5]]
+    elif kind == "constraint" and isinstance(answer, dict) and "fits" in answer:
+        sides = _fit_sides(plan, item, built)
+        if sides is None:
+            raise ValueError("this rule isn't a fits rule any more; build it again")
+        (sw, sp), (tw, tp) = sides
+        exceptions, warnings = ai_fits.compile_answer(answer, source=sp, target=tp)
+        payload = {"source_wildcard_id": built[sw["key"]]["id"],
+                   "target_wildcard_id": built[tw["key"]]["id"],
+                   "matrix": {}, "exceptions": exceptions}
+        ConstraintHandler.validate_payload(payload)
+        per: dict[str, list[str]] = {}
+        for e in exceptions:
+            per.setdefault(e["source"], []).append(e["target"])
+        preview = [f"{a} → only {', '.join(b)}" for a, b in per.items()]
     elif kind == "constraint":
         src, tgt = _constraint_sides(plan, item, built)
         compiled = ai_constraint.compile_rules(answer, source=src, target=tgt)
