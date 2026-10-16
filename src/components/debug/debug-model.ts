@@ -279,6 +279,8 @@ export const WARNING_LABELS: Record<string, string> = {
   constraint_register_failed: "Constraint failed to register",
   constraint_excludes_all_options: "Constraint excluded every option",
   fallback_used: "Fallback used",
+  pinned_option_missing: "Pinned option missing",
+  match_variable_no_match: "No option matches the variable",
   constraint_factor_ignored_on_allow: "Constraint factor ignored (allow)",
   unknown_constraint_mode: "Unknown constraint mode",
   fixed_values_overrides_malformed: "Fixed-values overrides malformed",
