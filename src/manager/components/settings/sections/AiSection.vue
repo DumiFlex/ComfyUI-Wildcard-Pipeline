@@ -513,6 +513,9 @@ const testSummary = computed(() => {
   if (t.context_low) parts.push(`only ${Math.round((t.context ?? 0) / 1024)}k context`);
   else if (t.context) parts.push(`${Math.round(t.context / 1024)}k context`);
   if (t.embed) parts.push(t.embed.ok ? `embeddings ✓ (${t.embed.dims})` : "embeddings ✗");
+  if (t.prefix) {
+    parts.push(`each chat starts at ≈ ${(t.prefix.tokens / 1000).toFixed(1)}k of ${Math.round(t.prefix.window / 1024)}k tokens (${t.prefix.tools} tools)`);
+  }
   return parts.join(" · ");
 });
 const testTone = computed(() => {
@@ -658,7 +661,7 @@ const off = computed(() => !config.value?.enabled);
             the address back.
           </p>
 
-          <SettingRow form label="Test connection" hint="Lists the server's models and asks the chosen one for a tiny JSON answer." setting-key="ai-test">
+          <SettingRow form label="Test connection" hint="Lists the server's models, asks the chosen one for a tiny JSON answer, and says how much of the model's context a new chat's instructions, tools and library summary take before you type anything." setting-key="ai-test">
             <Button size="sm" :loading="testing" :disabled="off" data-test="ai-test" @click="runTest">Test connection</Button>
             <span v-if="test" class="wp-ai-set__result" :data-tone="testTone" data-test="ai-test-result">
               <i :class="testTone === 'ok' ? 'pi pi-check-circle' : 'pi pi-exclamation-triangle'" aria-hidden="true" />{{ testSummary }}

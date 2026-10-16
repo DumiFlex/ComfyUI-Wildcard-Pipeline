@@ -184,7 +184,29 @@ async def post_test(request: web.Request) -> web.Response:
         return cfg
     result = await _ai_client.probe(cfg)
     result["embed"] = await _ai_embed.check(cfg) if result.get("ok") else None
+    result["prefix"] = await _prefix(request, cfg) if result.get("json_ok") else None
     return json_ok(result)
+
+
+async def _prefix(request: web.Request, cfg: dict[str, Any]) -> dict[str, Any]:
+    """What a new chat would send before its first message, opened the way
+    `post_chat` opens one (no page): instructions, tools and the library
+    summary, in tokens, with the window it was fitted to."""
+    with db_session(request) as conn:
+        lib = ai_chat.Library(
+            ModuleRepository(conn).list(), BundleRepository(conn).list(),
+            CategoryRepository(conn).list(), TemplateRepository(conn).list(),
+        )
+    prof = ai_budget.profile(cfg)
+    fmt = await _ai_chat.pick_format(cfg)
+    meta: dict[str, Any] = {"web": _ai_search.enabled(cfg), "typed": _ai_chat.checks_schema(cfg),
+                            "delete": bool(cfg.get("allow_delete"))}
+    window = await _window(cfg, meta)
+    snapshot = _open_chat(lib, cfg, meta, prof, None, fmt, window)
+    slim = prof["slim"] or bool(_lean(meta).get("slim"))
+    fixed = _fixed_chars(cfg, {**prof, "slim": slim}, meta, fmt, snapshot)
+    return {"tokens": ai_budget.tokens(fixed), "window": window, "tools": len(meta["tools"]),
+            "lean": int(meta.get("lean") or 0), "format": fmt}
 
 
 def _turns(body: dict[str, Any]) -> list[dict[str, Any]] | web.Response:

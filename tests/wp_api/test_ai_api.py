@@ -155,6 +155,9 @@ async def test_test_connection_reports_models_and_json(wp_client, fake_llm):
     assert body["model_found"] is True
     assert body["json_ok"] is True
     assert isinstance(body["latency_ms"], int)
+    # What a new chat sends before the first message, against the window.
+    prefix = body["prefix"]
+    assert 1000 < prefix["tokens"] < prefix["window"] and prefix["tools"] > 5
 
 
 async def test_unreachable_server_is_a_clear_error(wp_client, unused_tcp_port):

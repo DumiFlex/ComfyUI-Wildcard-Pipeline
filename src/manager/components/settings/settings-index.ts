@@ -90,7 +90,7 @@ const STATIC_ENTRIES: SettingEntry[] = [
   { key: "ai-reader-key", section: "ai", label: "Page reader key", hint: "The Firecrawl key or Crawl4AI token, sent only to that server.", keywords: "firecrawl crawl4ai api key token" },
   { key: "ai-danbooru", section: "ai", label: "Danbooru tag lookup", hint: "Let the chat look a tag up on Danbooru: wiki, aliases, implications and related tags. Each lookup asks first.", keywords: "danbooru tag wiki alias implication related booru" },
   { key: "ai-web-always", section: "ai", label: "Don't ask before web calls", hint: "Run web searches, page reads and Danbooru lookups without the Allow card.", keywords: "allow approve ask permission web search always" },
-  { key: "ai-test", section: "ai", label: "Test connection", hint: "Check the server answers and the model returns JSON.", keywords: "check ping" },
+  { key: "ai-test", section: "ai", label: "Test connection", hint: "Check the server answers and the model returns JSON, and see how much context a chat takes before you type.", keywords: "check ping prefix tokens context" },
   { key: "db-summary", section: "library", label: "Database", hint: "File, size and what is in it.", keywords: "sqlite file size rows" },
   { key: "backups-auto", section: "library", label: "Automatic backups", hint: "Copy the database before every migration and once a day.", keywords: "backup restore snapshot" },
   { key: "backups-keep", section: "library", label: "Backups to keep", hint: "Older automatic backups are deleted.", keywords: "backup retention" },

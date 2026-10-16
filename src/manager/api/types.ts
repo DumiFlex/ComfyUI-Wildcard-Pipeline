@@ -947,6 +947,10 @@ export interface AiTestResult {
   /** The embedding model's check, when meaning search is on. `swapped`:
    *  Ollama unloaded the chat model to load it. */
   embed?: { ok: boolean; dims: number | null; error: string | null; swapped: boolean } | null;
+  /** What a new chat sends before its first message (instructions, `tools`
+   *  tool declarations, library summary), in tokens, fitted to `window`;
+   *  `lean` is how far it was cut down (0 = not at all). */
+  prefix?: { tokens: number; window: number; tools: number; lean: number; format: string } | null;
 }
 
 /** The chat's library index (`GET /wp/api/ai/index`). */
