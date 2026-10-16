@@ -1711,6 +1711,12 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             # Small models write the whole explanation in "plan" and leave
             # "message" empty: that showed as an empty answer.
             said = ai_safety.strip_invisible(plan_text.strip())[:ai_chat.MAX_MESSAGE]
+        native_note = st.get("plan") if fmt == "native" else ""
+        if not said and calls and isinstance(native_note, str) and native_note.strip():
+            # Native text written next to calls ("I've proposed the two
+            # wildcards…") streamed live: keep it on screen above its steps
+            # instead of the next step wiping it.
+            said = ai_safety.strip_invisible(native_note.strip())[:ai_chat.MAX_MESSAGE]
         dropped = len(st["calls"]) - len(calls)
         # How the model called its tools this answer, for the drawer's badge.
         tool_use["calls"] += len(calls)

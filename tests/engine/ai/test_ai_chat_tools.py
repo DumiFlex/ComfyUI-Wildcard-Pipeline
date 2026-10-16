@@ -343,3 +343,26 @@ def test_ids_copied_from_chips_and_cards_still_name_the_item():
         c = lib.run("create_constraint", {"source_id": "Season", "target_id": ref, "rules": [
             {"source": "#cold", "target": "#warm", "effect": "boost", "factor": 2}]})
         assert c["op"]["body"]["payload"]["target_wildcard_id"] == new_id
+
+
+def test_a_name_proposed_again_in_this_answer_means_its_own_card():
+    from engine.ai import client_tools
+    lib = _lib()
+    # Another kind sharing the source's name doesn't make it ambiguous.
+    lib.modules["bbbb0001"] = {"id": "bbbb0001", "type": "combine", "name": "Season",
+                               "tags": [], "payload": {"template": "$season"}}
+    made = lib.run("create_wildcard", {
+        "name": "Outfit", "var": "outfit_demo",
+        "options": [{"text": "t-shirt", "tags": ["light"]},
+                    {"text": "wool coat", "tags": ["warm"]}]})
+    new_id = made["op"]["body"]["id"]
+    assert new_id != "aaaa0001"
+    con = lib.run("create_constraint", {
+        "source_id": "Season", "target_id": "Outfit",
+        "rules": [{"source": "winter", "target": "#warm", "effect": "only"}]})
+    assert con["op"]["body"]["payload"]["target_wildcard_id"] == new_id
+    assert con["op"]["body"]["payload"]["source_wildcard_id"] == "aaaa0002"
+    # Its cards show once the answer ends: opening one now is refused with why.
+    for raw in (made["pid"], new_id):
+        with pytest.raises(ValueError, match="already on screen"):
+            client_tools.prepare(lib, "open", {"proposal": raw})

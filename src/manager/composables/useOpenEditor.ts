@@ -62,7 +62,12 @@ export interface StagedDraft {
   /** Called with the new id once Save created it: the card counts as
    *  applied. */
   onSaved?: (id: string) => void;
+  /** Called when its editor closes without saving it (the user left the
+   *  page and discarded): the card is waiting again. */
+  onClosed?: () => void;
 }
+/** Drafts whose editor saved them, so closing that editor isn't a discard. */
+const savedDrafts = new WeakSet<StagedDraft>();
 let staged: StagedDraft | null = null;
 
 /** Hand a proposed new item to the editor about to open. */
@@ -111,15 +116,18 @@ export function registerOpenEditor(spec: OpenEditorSpec): () => StagedDraft | nu
   };
   editor.value = entry;
   if (isNew) fresh = { entry, read: false };
+  let taken: StagedDraft | null = null;
   onBeforeUnmount(() => {
     if (editor.value === entry) editor.value = null;
     if (fresh?.entry === entry) fresh = null;
+    if (taken && !savedDrafts.has(taken)) taken.onClosed?.();
   });
   if (!isNew) return () => null;
   return () => {
     const draft = staged;
     if (!draft || draft.type !== spec.type) return null;
     staged = null;
+    taken = draft;
     // The card's reserved id is the one other cards point at.
     if (draft.id) entry.id = draft.id;
     write(spec, draft.body);
@@ -147,7 +155,10 @@ export function editorForPage(routeId: string | undefined): AiChatEditorState | 
 
 /** Tell the chat its draft was saved (Save = Apply). */
 export function draftSaved(d: StagedDraft | null | undefined, id: string | undefined): void {
-  if (d && id) d.onSaved?.(id);
+  if (d && id) {
+    savedDrafts.add(d);
+    d.onSaved?.(id);
+  }
 }
 
 /** Register what the current view shows, as a short line or two. */

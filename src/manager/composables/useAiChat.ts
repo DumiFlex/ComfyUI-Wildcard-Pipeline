@@ -138,7 +138,12 @@ function record(pid: string, status: AiChatStatusEvent["status"], created?: stri
 
 function onEvent(ev: AiChatStreamEvent): void {
   const cur = live.value;
-  if (ev.type === "step") live.value = { ...cur, text: "", thinking: false, status: "" };
+  if (ev.type === "step") {
+    // Text the last step streamed stays above the steps, not wiped by the next.
+    const kept = cur.text.trim() && !cur.steps.some((s) => s.say && s.note === cur.text)
+      ? [...cur.steps, { tool: "say", note: cur.text, ok: true, say: true }] : cur.steps;
+    live.value = { ...cur, steps: kept, text: "", thinking: false, status: "" };
+  }
   else if (ev.type === "text") live.value = { ...cur, text: ev.v, thinking: false };
   else if (ev.type === "thinking") live.value = { ...cur, thinking: true };
   else if (ev.type === "status") live.value = { ...cur, status: ev.v };
@@ -800,6 +805,13 @@ async function openInEditor(entry: ChatAssistantEntry, p: AiChatProposal): Promi
           entry.created[p.pid] = id;
           entry.status[p.pid] = "applied";
           record(p.pid, "applied", id, skip.size);
+          touch();
+        },
+        // Left without saving: the card can be applied or opened again.
+        onClosed: () => {
+          if (entry.status[p.pid] !== "opened") return;
+          delete entry.status[p.pid];
+          record(p.pid, "undone");
           touch();
         },
       });

@@ -773,7 +773,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
           <ul v-if="entry.result.steps.length" class="wp-ai-chat__steps" data-test="ai-chat-steps">
             <template v-for="(s, j) in entry.result.steps" :key="j">
               <li v-if="s.say" v-show="s.note !== entry.result.message" class="wp-ai-chat__said" data-test="ai-chat-said">
-                <AiMessage :text="s.note" :refs="entry.result.refs" />
+                <details>
+                  <summary>Working note</summary>
+                  <AiMessage :text="s.note" :refs="entry.result.refs" />
+                </details>
               </li>
               <li v-else :data-ok="s.ok ? 'true' : 'false'">
                 <i :class="['pi', s.ok ? 'pi-check' : 'pi-exclamation-circle']" aria-hidden="true" />
@@ -1043,7 +1046,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
       <div v-if="chat.loading.value && !chat.asking.value.size" class="wp-ai-chat__reply wp-ai-chat__live" data-test="ai-chat-live">
         <ul v-if="chat.live.value.steps.length" class="wp-ai-chat__steps">
           <template v-for="(s, j) in chat.live.value.steps" :key="j">
-            <li v-if="s.say" class="wp-ai-chat__said"><AiMessage :text="s.note" /></li>
+            <li v-if="s.say" class="wp-ai-chat__said"><details><summary>Working note</summary><AiMessage :text="s.note" /></details></li>
             <li v-else :data-ok="s.ok ? 'true' : 'false'">
               <i :class="['pi', s.ok ? 'pi-check' : 'pi-exclamation-circle']" aria-hidden="true" />
               {{ s.note }}
@@ -1286,7 +1289,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__steps li[data-ok="false"] { color: var(--wp-warn); }
 .wp-ai-chat__steps .pi { font-size: 10px; }
 /* Text the model wrote before acting: a normal-size paragraph between the steps. */
-.wp-ai-chat__steps li.wp-ai-chat__said { display: block; font-size: 13px; color: var(--wp-text); margin: 4px 0; }
+.wp-ai-chat__steps li.wp-ai-chat__said { display: block; font-size: 12px; color: var(--wp-text-muted); margin: 2px 0; }
+.wp-ai-chat__said summary { cursor: pointer; font-style: italic; }
+.wp-ai-chat__said details[open] { border-left: 2px solid var(--wp-border); padding-left: 8px; }
 .wp-ai-chat__card {
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, var(--wp-border));
   border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;

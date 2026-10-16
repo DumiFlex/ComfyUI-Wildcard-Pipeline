@@ -127,6 +127,11 @@ class MoreTools:
                 hits = [m for m in self.modules.values() if isinstance(m.get("payload"), dict)
                         and low in (m["payload"].get("var_binding"),
                                     m["payload"].get("output_var"))]
+            if len(hits) > 1:
+                # A name the library already has, just proposed again in
+                # this answer ("Outfit"): the answer means its own card.
+                made = getattr(self, "_created", {})
+                hits = [r for r in hits if r.get("id") in made] or hits
             row = hits[0] if len(hits) == 1 else None
         if row is not None and kinds and self._kind(row) not in kinds:  # type: ignore
             return None

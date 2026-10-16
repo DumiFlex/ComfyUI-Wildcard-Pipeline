@@ -1395,3 +1395,19 @@ async def test_an_answer_claiming_a_change_with_no_card_says_nothing_changed(
     fake_llm.chat_steps.extend([{"message": "Created means made new.", "calls": []}])
     body = await (await wp_client.post("/wp/api/ai/chat", json={"message": "what"})).json()
     assert ai_routes.NOTHING_PROPOSED not in body["message"]
+
+
+async def test_native_text_next_to_calls_stays_as_a_note(wp_client, fake_llm):
+    """Native text written along with calls streamed live; it stays on
+    screen as a "say" step instead of the next step replacing it."""
+    await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "tooly"})
+    fake_llm.chat_steps.extend([
+        {"content": "Looking.", "tool_calls": [
+            _tool_call("call_a", "search", {"query": "weapon"})]},
+        {"content": "You have a Weapon."},
+    ])
+    out = await _chat(wp_client, "what weapons do I have?", page={"route": "wildcards"})
+    assert out["steps"][0] == {"tool": "say", "note": "Looking.", "ok": True, "say": True}
+    assert out["message"] == "You have a Weapon."

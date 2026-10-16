@@ -10,6 +10,7 @@ See `/pr-drafts/ai-client-tools.md`.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from engine.ai import ask as ai_ask
@@ -94,13 +95,34 @@ def _open(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
             out["section"] = section
             label += f" › {section}"
         return out, label
-    pid = _proposal(lib, args.get("proposal") or args.get("id"))
+    raw = args.get("proposal") or args.get("id")
+    mine = _this_answer(lib, raw)
+    if mine:
+        raise ValueError(f"card {mine} is from this answer and already on screen; the user "
+                         "applies it or opens it from its card, so don't open it")
+    pid = _proposal(lib, raw)
     if pid:
         title = str((lib.earlier_proposals.get(pid) or {}).get("title") or pid)
         return {"proposal": pid}, f"Opened {title} in an editor"
-    row = _row(lib, args.get("id"))
+    row = _row(lib, raw)
     return ({"id": row["id"], "type": lib._kind(row)},
             f"Opened {row.get('name') or row['id']}")
+
+
+def _this_answer(lib: Any, raw: Any) -> str:
+    """The pid of a card proposed earlier in this same answer that ``raw``
+    names (its pid or the id it will get), else "": the browser shows it
+    only once the answer ends, so there is nothing to open yet."""
+    if not isinstance(raw, str) or not raw.strip():
+        return ""
+    key = raw.strip()
+    earlier = getattr(lib, "earlier_proposals", {}) or {}
+    if re.fullmatch(r"p\d+", key) and key not in earlier \
+            and int(key[1:]) <= int(getattr(lib, "_next_pid", 0) or 0):
+        return key
+    made = getattr(lib, "_created", {}) or {}
+    pid = made.get(key.split("#", 1)[0].strip())
+    return pid if isinstance(pid, str) and pid not in earlier else ""
 
 
 def _proposal(lib: Any, raw: Any) -> str:

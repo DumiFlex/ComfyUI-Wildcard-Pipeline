@@ -1189,12 +1189,21 @@ class Library(MoreTools, ManageTools):
         return self.get(item_id), None
 
     def _module(self, args: dict[str, Any], type_: str) -> dict[str, Any]:
-        r = self.modules.get(args.get("id")) if isinstance(args.get("id"), str) else None
+        raw = args.get("id")
+        r = self.modules.get(raw) if isinstance(raw, str) else None
+        if (r is None or r.get("type") != type_) and isinstance(raw, str):
+            # A name several items share ("Outfit": a combine, a derivation
+            # and two wildcards): only the ones of the kind asked for count,
+            # and a card from this answer wins.
+            low = raw.strip().lower()
+            same = [m for m in self.modules.values() if m.get("type") == type_
+                    and str(m.get("name") or "").strip().lower() == low]
+            same = [m for m in same if m["id"] in self._created] or same
+            r = same[0] if len(same) == 1 else None
         if r is not None:
             r = self._current(r["id"])[0]
         if r is None or r.get("type") != type_:
-            raise ValueError(f"no {type_.replace('_', ' ')} with id "
-                             f"{_short(args.get('id'), 20)!r}; search for it first")
+            raise ValueError(self.not_found(raw, type_.replace("_", " ")))
         return r
 
     def add_options(self, args: dict[str, Any]) -> dict[str, Any]:
