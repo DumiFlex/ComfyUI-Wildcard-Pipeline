@@ -633,6 +633,11 @@ function stopExtending(): void {
           <span v-if="pb.edited.value" class="wp-pack__edited" data-test="pack-edited">edited by you</span>
         </p>
         <p v-if="draft?.summary" class="wp-pack__dim">{{ draft.summary }}</p>
+        <p v-if="draft?.design" class="wp-pack__design" data-test="pack-design"><span class="wp-pack__design-label">How it fits together</span> {{ draft.design }}</p>
+        <details v-if="pb.planThinking.value" class="wp-pack__thought" data-test="pack-thinking">
+          <summary>Thinking</summary>
+          <p>{{ pb.planThinking.value }}</p>
+        </details>
         <p v-if="shape" class="wp-pack__shape" data-test="pack-shape">{{ shape }}</p>
         <div v-if="draft" class="wp-pack__run" data-test="pack-run">
           <span class="wp-pack__dim wp-pack__run-label">Runs as</span>
@@ -796,6 +801,10 @@ function stopExtending(): void {
               <ul v-if="pb.states.value[i.key].result?.warnings.length" class="wp-pack__warnings">
                 <li v-for="(w, j) in pb.states.value[i.key].result?.warnings" :key="j"><i class="pi pi-info-circle" aria-hidden="true" /> {{ w }}</li>
               </ul>
+              <details v-if="pb.states.value[i.key].result?.thinking" class="wp-pack__thought" data-test="pack-item-thinking">
+                <summary>Thinking</summary>
+                <p>{{ pb.states.value[i.key].result?.thinking }}</p>
+              </details>
             </div>
           </li>
         </ul>
@@ -1075,6 +1084,11 @@ function stopExtending(): void {
 .wp-pack__warnings li { display: flex; gap: 6px; align-items: baseline; }
 .wp-pack__warnings li > span { min-width: 0; overflow-wrap: anywhere; }
 .wp-pack__summary { margin: 10px 0 0; font-size: 12.5px; color: var(--wp-text-muted); }
+.wp-pack__design { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; }
+.wp-pack__design-label { font-weight: 600; margin-right: 4px; }
+.wp-pack__thought { margin: 6px 0 0; font-size: 12px; color: var(--wp-text-muted); }
+.wp-pack__thought summary { cursor: pointer; font-style: italic; }
+.wp-pack__thought p { white-space: pre-wrap; margin: 4px 0 0; padding-left: 8px; border-left: 2px solid var(--wp-border); max-height: 320px; overflow-y: auto; }
 .wp-pack__state[data-status="retrying"] { color: var(--wp-warn); }
 .wp-pack__state[data-status="skipped"] { color: var(--wp-text-dim); }
 .wp-pack__built[data-status="skipped"] .wp-pack__item-main { opacity: 0.55; }

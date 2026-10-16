@@ -1727,6 +1727,12 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         new.append(ai_chatlog.step_entry(ai_safety.strip_invisible(st["text"]), calls,
                                          answer=st["answer"], usage=usage,
                                          model=str(cfg.get("model") or ""), raw=raw))
+        thought = st.get("thinking")
+        if isinstance(thought, str) and thought.strip():
+            # What it thought before acting, for the drawer's "Thinking"
+            # (display only: steps are never sent to the model).
+            steps.append({"tool": "think", "note": thought.strip(), "ok": True,
+                          "think": True})
         if carry and not calls:
             said = ai_chat.join_continuation(carry, said)
             carry = ""
@@ -2244,7 +2250,8 @@ def _done_line(steps: list[dict[str, Any]]) -> str:
     undone = {str(x.get("note"))[len("Couldn't: "):] for x in steps
               if not x.get("ok") and str(x.get("note") or "").startswith("Couldn't: ")}
     did = [str(x.get("note")) for x in steps
-           if x.get("ok") and x.get("note") and not x.get("say") and x.get("note") not in undone]
+           if x.get("ok") and x.get("note") and not x.get("say") and not x.get("think")
+           and x.get("note") not in undone]
     pointed = [n[len("Pointed at "):] for n in did if n.startswith("Pointed at ")]
     if pointed:
         # "Where is X?" answered by pointing: say so in words.
@@ -2508,7 +2515,9 @@ async def post_pack_plan(request: web.Request) -> web.Response:
         plan["from_images"] = []
     if isinstance(answer, dict):
         answer.pop(_ai_client.CUT_OFF, None)  # never replayed to the model
+    thought = _ai_client.last_thinking()
     return json_ok({"plan": plan, "model": cfg["model"], "answer": answer,
+                    **({"thinking": thought} if thought else {}),
                     "review": ai_pack.review_plan(plan, library), "web": web_on,
                     "context": await _plan_context(cfg, first, turns, follow, answer,
                                                    len(images))})
@@ -2691,6 +2700,9 @@ async def post_pack_item(request: web.Request) -> web.Response:
     if checked:
         out["warnings"] = [*out["warnings"], checked]
     out["model"] = cfg["model"]
+    thought = _ai_client.last_thinking()
+    if thought:
+        out["thinking"] = thought
     return json_ok(out)
 
 

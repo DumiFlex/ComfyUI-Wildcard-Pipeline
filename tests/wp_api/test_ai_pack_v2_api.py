@@ -344,3 +344,14 @@ async def test_a_plan_with_no_wildcards_is_asked_for_once_more(wp_client, fake_l
     fake_llm.overrides["pack_plan"] = [empty]
     resp = await wp_client.post("/wp/api/ai/pack/plan", json={"instruction": "seasons"})
     assert resp.status == 502 and "no wildcards" in await resp.text()
+
+
+async def test_a_plan_keeps_its_design_and_what_the_model_thought(wp_client, fake_llm):
+    import json as _json
+    _on(fake_llm)
+    fake_llm.overrides["pack_plan"] = (
+        "<think>Season first, then outfits.</think>"
+        + _json.dumps({**PLAN, "design": "The season decides the outfit."}))
+    out = await _plan(wp_client)
+    assert out["plan"]["design"] == "The season decides the outfit."
+    assert out["thinking"] == "Season first, then outfits."

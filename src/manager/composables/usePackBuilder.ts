@@ -267,6 +267,9 @@ const convo = useAiConversation<AiPackPlanResult, null>({
   },
 });
 
+/** What the model thought while it planned, when its server sends that. */
+const planThinking = computed(() => convo.result.value?.thinking ?? "");
+
 function viewFor(res: AiPackPlanResult): PlanView {
   let v = views.get(res);
   if (!v) {
@@ -1047,7 +1050,7 @@ export function usePackBuilder() {
     setOther, decideFor, decideAll, pickFor, reopenDecision, changeAssumption, editItem, changes, dropped, reopened, resendImages,
     addItem, editPlan, applyFinding, dismissFinding, selected, toggleSelected, changeItem,
     changing, research, allowResearch, skipResearch, searching, webResults, images, target,
-    extendBundle, skipCurrent, skipItem, dismissNote, dismissedNotes,
+    extendBundle, skipCurrent, skipItem, dismissNote, dismissedNotes, planThinking,
   };
 }
 

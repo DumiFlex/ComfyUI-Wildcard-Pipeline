@@ -127,6 +127,7 @@ MIN_FRAMES, MAX_FRAMES, DEFAULT_FRAMES = 2, 12, 4
 PLAN_SCHEMA: dict[str, Any] = _obj({
     "title": _STR,
     "summary": _STR,
+    "design": _STR,
     "rating": {"type": "string", "enum": ["safe", "nsfw"]},
     "style": {"type": "string", "enum": list(STYLES)},
     "model": _STR,
@@ -255,6 +256,9 @@ there; anything else is a new wildcard or fixed values.
 
 Plan a pack for the request. Answer with:
 - title: a short pack name. summary: one sentence on what it makes.
+- design: 2 to 4 sentences on how the pack fits together: which pick decides \
+which, and why each constraint or rule is there ("The season decides the \
+outfit: winter allows only #warm tops, so no shorts in winter.").
 - rating: "nsfw" if the pack is sexual or explicit, else "safe".
 - style: "tags" (comma-separated Danbooru-style tags, for SDXL anime models \
 like Pony, Illustrious, NoobAI) or "sentences" (short natural phrases, for \
@@ -319,7 +323,7 @@ plain words, naming variables with $).
   - combine: name, var (the variable it sets), about (which $variables it \
 joins and how).
   - constraint: name, source and target (the two wildcards' variables, no \
-$), about (the rules in words, by tag).
+$), about (the rules in words, by tag, and why).
   - template: exactly one, last: name, about (what the prompt reads, with \
 $variables, and its standing negative).
   - library: name (exactly as listed), var (its variable); about says why.
@@ -959,6 +963,8 @@ def compile_plan(
         "canvas": canvas_vars(canvas),
         "title": _clean(raw.get("title"), MAX_NAME) or (base or {}).get("name") or "AI pack",
         "summary": _clean(raw.get("summary"), 300),
+        "design": _clean(raw.get("design"), 900) or (
+            _clean(previous.get("design"), 900) if isinstance(previous, dict) else ""),
         "rating": rating,
         "style": style,
         "model": _clean(raw.get("model"), 40),
@@ -984,6 +990,7 @@ def plan_answer(plan: dict[str, Any]) -> dict[str, Any]:
     as the model's last answer after the user edited it by hand."""
     return {
         "title": plan["title"], "summary": plan.get("summary", ""),
+        "design": plan.get("design", ""),
         "rating": plan.get("rating", "safe"), "style": plan.get("style", "tags"),
         "model": plan.get("model", ""), "anchor": plan.get("anchor", ""),
         "questions": [{k: q[k] for k in ("header", "question", "multi", "choices")}

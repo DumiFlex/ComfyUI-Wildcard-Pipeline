@@ -1411,3 +1411,27 @@ async def test_native_text_next_to_calls_stays_as_a_note(wp_client, fake_llm):
     out = await _chat(wp_client, "what weapons do I have?", page={"route": "wildcards"})
     assert out["steps"][0] == {"tool": "say", "note": "Looking.", "ok": True, "say": True}
     assert out["message"] == "You have a Weapon."
+
+
+async def test_what_the_model_thought_is_kept_as_a_thinking_step(wp_client, fake_llm):
+    await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "tooly"})
+    fake_llm.chat_steps.extend([
+        {"content": "<think>Find the weapons first.</think>", "tool_calls": [
+            _tool_call("call_a", "search", {"query": "weapon"})]},
+        {"content": "</think>You have a Weapon."},
+    ])
+    out = await _chat(wp_client, "what weapons do I have?", page={"route": "wildcards"})
+    assert out["steps"][0] == {"tool": "think", "note": "Find the weapons first.",
+                               "ok": True, "think": True}
+    assert out["message"] == "You have a Weapon."
+
+
+def test_thinking_text_reads_each_way_a_server_sends_it():
+    from wp_api import _ai_chat
+    assert _ai_chat.thinking_text("x", "  plan it ") == "plan it"
+    assert _ai_chat.thinking_text("<think>a</think> b") == "a"
+    assert _ai_chat.thinking_text("a</think> b") == "a"
+    assert _ai_chat.thinking_text("<think>cut off") == "cut off"
+    assert _ai_chat.thinking_text("no reasoning") == ""

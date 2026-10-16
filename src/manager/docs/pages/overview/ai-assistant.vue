@@ -396,7 +396,11 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       </p>
       <p>
         Answers appear as the model writes them, with the items it reads listed above as it goes
-        and a line saying what it is doing (thinking, writing, summarising). <b>Stop</b> ends the
+        and a line saying what it is doing (thinking, writing, summarising). What the model
+        writes between its steps ("Now I'll add the constraint…") stays folded under the steps as
+        a <b>Working note</b>, and when its server sends the model's reasoning (most thinking
+        models do, unless Thinking is Off), each step has a folded <b>Thinking</b> you can open to
+        see why it did what it did. Neither is sent back to the model. <b>Stop</b> ends the
         answer. <b>Try again</b> under the last reply asks the same message again for a new
         answer, which replaces the old one; it waits until you undo any change you applied from
         that answer.
@@ -648,7 +652,11 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           much of the model's context the last plan request took; every update sends the whole
           conversation again, so it grows. <b>Plan 2 of 3</b> flips between plans; updating an
           earlier one adds a new plan after the others (it says which plan it came from), so
-          nothing is overwritten.</li>
+          nothing is overwritten. Under the plan's title, <b>How it fits together</b> is the
+          planner's own account of the pack (which pick decides which, and why each rule is
+          there), and with a thinking model the plan and each built item have a folded
+          <b>Thinking</b>, so when a pack comes out wrong you can see whether the model misread
+          the request or built its idea wrong.</li>
         <li><b>Plan review.</b> The plan is checked as you edit it for what would break: a
           template or rule that reads a variable nothing sets, a constraint keyed on a tag
           neither wildcard lists, two constraints that loop, wildcards that ignore the pack's

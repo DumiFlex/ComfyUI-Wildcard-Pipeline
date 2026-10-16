@@ -52,7 +52,10 @@ const RESULT: AiChatResult = {
   chat_id: "c1",
   message: "Here is a weather wildcard and two more outfits.",
   model: "m",
-  steps: [{ tool: "search", note: 'Searched "outfit"', ok: true }],
+  steps: [
+    { tool: "think", note: "Look for outfits first.", ok: true, think: true },
+    { tool: "search", note: 'Searched "outfit"', ok: true },
+  ],
   proposals: [
     {
       pid: "p1", tool: "create_wildcard", title: "Create wildcard Weather",
@@ -154,6 +157,11 @@ describe("AiChatDrawer", () => {
     });
     expect(w.get('[data-test="ai-chat-user"]').text()).toBe("make weather and more outfits");
     expect(w.get('[data-test="ai-chat-steps"]').text()).toContain('Searched "outfit"');
+    // What it thought is folded under the steps, not shown as the answer.
+    const thought = w.get('[data-test="ai-chat-thought"] details');
+    expect(thought.find("summary").text()).toBe("Thinking");
+    expect((thought.element as HTMLDetailsElement).open).toBe(false);
+    expect(thought.text()).toContain("Look for outfits first.");
     const cards = w.findAll('[data-test="ai-chat-proposal"]');
     expect(cards).toHaveLength(3);
     // The third builds on the second, so it waits.

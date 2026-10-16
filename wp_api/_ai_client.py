@@ -47,6 +47,7 @@ users behind a corporate proxy can still reach a cloud provider.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import ipaddress
 import json
 import re
@@ -603,6 +604,21 @@ async def _responses_json(
                             cut_off=details.get("reason") == "max_output_tokens" or _early(data))
 
 
+#: What the model thought on this request's last `complete_json` (its
+#: reasoning field, or the <think> part of the text), for the Pack builder's
+#: "Thinking". Per request: every aiohttp handler runs in its own task.
+_THOUGHT: contextvars.ContextVar[str] = contextvars.ContextVar("wp_ai_thought", default="")
+
+
+def last_thinking() -> str:
+    return _THOUGHT.get()
+
+
+def _keep_thinking(text: Any, reasoning: Any = "") -> None:
+    from wp_api import _ai_chat  # imports this module
+    _THOUGHT.set(_ai_chat.thinking_text(text, reasoning))
+
+
 async def complete_json(
     cfg: dict[str, Any], *, system: str, user: str, schema: dict[str, Any],
     schema_name: str, temperature: float = 0.8, max_tokens: int = 8192,
@@ -620,6 +636,7 @@ async def complete_json(
     An answer the server cut off at its limit is an error, unless `partial`
     says the caller can use what came before the cut (marked `CUT_OFF`).
     """
+    _THOUGHT.set("")
     answer = await _complete_json(
         cfg, system=system, user=user, schema=schema, schema_name=schema_name,
         temperature=temperature, max_tokens=max_tokens, history=history,
@@ -660,6 +677,9 @@ async def _complete_json(
                 # A tool call cut off mid-way is not the answer it started.
                 raise AIError(CUT_OFF_MESSAGE)
             blocks = data.get("content") if isinstance(data, dict) else None
+            _keep_thinking("", "\n\n".join(
+                str(b.get("thinking") or "") for b in blocks or []
+                if isinstance(b, dict) and b.get("type") == "thinking"))
             for block in blocks or []:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
                     return block.get("input")
@@ -697,6 +717,8 @@ async def _complete_json(
                 "messages": _chat_messages(system, history, user, images, "ollama"),
             })
             msg = data.get("message") if isinstance(data, dict) else None
+            if isinstance(msg, dict):
+                _keep_thinking(msg.get("content"), msg.get("thinking"))
             return _parse_text_json(
                 msg.get("content") if isinstance(msg, dict) else None,
                 cut_off=isinstance(data, dict) and data.get("done_reason") == "length"
@@ -749,6 +771,8 @@ async def _complete_json(
         message = choices[0].get("message") or {}
         if message.get("refusal"):
             raise AIError("the model declined this request", status=422)
+        _keep_thinking(message.get("content"),
+                       message.get("reasoning_content") or message.get("reasoning"))
         return _parse_text_json(message.get("content"),
                                 cut_off=choices[0].get("finish_reason") == "length"
                                 or _early(data))

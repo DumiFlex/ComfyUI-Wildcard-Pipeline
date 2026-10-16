@@ -1344,6 +1344,9 @@ export interface AiChatStep {
   ok: boolean;
   /** What the model said before calling its tools (`note` is the text). */
   say?: boolean;
+  /** What the model thought in that step (its reasoning, or a JSON-mode
+   *  step's plan): shown folded as "Thinking". */
+  think?: boolean;
   card?: AiTestCard;
 }
 
@@ -1691,6 +1694,8 @@ export interface AiPackDropped {
 export interface AiPackPlan {
   title: string;
   summary: string;
+  /** How the pack fits together: what decides what, and why each rule is there. */
+  design?: string;
   rating: "safe" | "nsfw";
   /** How every option is written: Danbooru-style tags or natural phrases. */
   style: "tags" | "sentences";
@@ -1790,6 +1795,8 @@ export interface AiPackPlanResult {
   web?: boolean;
   /** About how much of the model's window the request and its answer took. */
   context?: Pick<AiChatContext, "used" | "window" | "estimated" | "about">;
+  /** What the model thought while planning, when its server sends it. */
+  thinking?: string;
 }
 
 export interface AiPackReview {
@@ -1820,6 +1827,8 @@ export interface AiPackItemResult {
   /** Warnings worth one automatic rebuild, as its note ("" when none). */
   repair: string;
   model: string;
+  /** What the model thought while building it, when its server sends it. */
+  thinking?: string;
 }
 
 export interface AiPackCheck {

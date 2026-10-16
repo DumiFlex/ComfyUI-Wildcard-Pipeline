@@ -50,6 +50,28 @@ def strip_thinking(text: str) -> str:
     return text.strip()
 
 
+#: Reasoning kept per step for the drawer's "Thinking" (display only).
+MAX_THINKING = 6000
+
+
+def thinking_text(text: Any, reasoning: Any = "") -> str:
+    """What the model thought in a step, for the drawer: the server's
+    reasoning field, else the ``<think>`` part of the text (a Qwen-style
+    template may leave only its "</think>")."""
+    if isinstance(reasoning, str) and reasoning.strip():
+        return reasoning.strip()[:MAX_THINKING]
+    if not isinstance(text, str):
+        return ""
+    low = text.lower()
+    parts = [m.group(0)[len("<think>"):-len("</think>")]
+             for m in re.finditer(r"<think>.*?</think>", text, re.DOTALL | re.IGNORECASE)]
+    if not parts and "</think>" in low:
+        parts = [text[:low.index("</think>")].replace("<think>", "")]
+    elif not parts and "<think>" in low:
+        parts = [text[low.index("<think>") + len("<think>"):]]
+    return "\n\n".join(p.strip() for p in parts if p.strip())[:MAX_THINKING]
+
+
 class ToolsUnsupported(AIError):
     """The server refused a request with tools in it."""
 
@@ -536,10 +558,11 @@ def _native_step(text: Any, calls: list[dict[str, Any]], names: set[str],
             salvaged = True
     return {"text": text, "calls": calls, "answer": None, "usage": usage,
             "message": "" if calls else text, "plan": text if calls else "",
-            "salvaged": salvaged}
+            "salvaged": salvaged, "thinking": thinking_text(raw, reasoning)}
 
 
-def _json_step(raw_text: str, answer: Any, usage: dict[str, Any]) -> dict[str, Any]:
+def _json_step(raw_text: str, answer: Any, usage: dict[str, Any],
+               reasoning: Any = "") -> dict[str, Any]:
     """A JSON-mode answer as a step. Calls keep `args` as the model's
     string; the loop parses and checks them."""
     if not isinstance(answer, dict):
@@ -553,8 +576,10 @@ def _json_step(raw_text: str, answer: Any, usage: dict[str, Any]) -> dict[str, A
             calls.append({"id": new_call_id(), "tool": c["tool"],
                           "args": raw if isinstance(raw, dict) else None,
                           "args_text": raw if isinstance(raw, str) else chatlog.dumps(raw)})
+    # The step's own "plan" is its short why when the server sent no reasoning.
     return {"text": raw_text, "calls": calls, "answer": answer, "usage": usage,
-            "message": message.strip(), "plan": plan}
+            "message": message.strip(), "plan": plan,
+            "thinking": thinking_text(raw_text, reasoning) or plan.strip()[:MAX_THINKING]}
 
 
 # ── streaming ───────────────────────────────────────────────────────────
@@ -758,6 +783,8 @@ def _anthropic_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
                 partial[i] = partial.get(i, "") + d["partial_json"]
             elif d.get("type") == "thinking_delta":
                 await live.thinking()
+                if isinstance(d.get("thinking"), str):
+                    block["thinking"] = str(block.get("thinking") or "") + d["thinking"]
         elif kind == "content_block_stop":
             i = obj.get("index") if isinstance(obj.get("index"), int) else -1
             if 0 <= i < len(data["content"]) and partial.get(i):
@@ -914,22 +941,26 @@ async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, 
     if data.get("_early"):
         usage["early"] = True
     blocks = [b for b in data.get("content") or [] if isinstance(b, dict)]
+    thought = "\n\n".join(str(b.get("thinking") or "").strip() for b in blocks
+                           if b.get("type") == "thinking" and b.get("thinking"))
     if fmt == "json":
         for block in blocks:
             if block.get("type") == "tool_use":
                 answer = block.get("input")
-                return _json_step(chatlog.dumps(answer), answer, usage)
+                return _json_step(chatlog.dumps(answer), answer, usage, thought)
         text = client.claude_text(blocks)
         if text.strip():
             # Asked in words (no forced choice), the answer may come as text.
-            return _json_step(text, client._parse_text_json(text), usage)
+            return _json_step(text, client._parse_text_json(text), usage, thought)
         raise AIError("the model didn't return the expected answer")
     text = "\n".join(str(b.get("text") or "") for b in blocks if b.get("type") == "text")
     calls = [{"id": str(b.get("id") or new_call_id()), "tool": str(b.get("name")),
               "args": b.get("input") if isinstance(b.get("input"), dict) else {},
               "args_text": chatlog.dumps(b.get("input") or {})}
              for b in blocks if b.get("type") == "tool_use"]
-    return _native_step(text, calls, allowed, usage)
+    st = _native_step(text, calls, allowed, usage)
+    st["thinking"] = st["thinking"] or thought[:MAX_THINKING]
+    return st
 
 
 async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any]], fmt: str,
@@ -962,7 +993,7 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
         usage["early"] = True
     if fmt == "json":
         text = msg.get("content") if isinstance(msg.get("content"), str) else ""
-        return _json_step(text, client._parse_text_json(text), usage)
+        return _json_step(text, client._parse_text_json(text), usage, msg.get("thinking"))
     calls = []
     for c in msg.get("tool_calls") or []:
         fn = c.get("function") if isinstance(c, dict) else None
@@ -1052,10 +1083,13 @@ async def _step_responses(cfg: dict[str, Any], system: str, log: list[dict[str, 
                           "args": None,
                           "args_text": raw if isinstance(raw, str) else chatlog.dumps(raw or {})})
     text = "\n".join(t for t in texts if t)
+    summary = "\n\n".join(
+        str(x.get("text") or "").strip() for it in output if it.get("type") == "reasoning"
+        for x in it.get("summary") or [] if isinstance(x, dict) and x.get("text"))
     if fmt == "json":
-        st = _json_step(text, client._parse_text_json(text), usage)
+        st = _json_step(text, client._parse_text_json(text), usage, summary)
     else:
-        st = _native_step(text, calls, allowed, usage)
+        st = _native_step(text, calls, allowed, usage, summary)
     st["raw"] = output
     return st
 
@@ -1118,7 +1152,8 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
         usage["early"] = True
     if fmt == "json":
         text = message.get("content") if isinstance(message.get("content"), str) else ""
-        return _json_step(text, client._parse_text_json(text), usage)
+        return _json_step(text, client._parse_text_json(text), usage,
+                          message.get("reasoning_content") or message.get("reasoning"))
     calls = []
     for c in message.get("tool_calls") or []:
         fn = c.get("function") if isinstance(c, dict) else None
