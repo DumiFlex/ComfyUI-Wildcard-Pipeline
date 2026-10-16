@@ -93,9 +93,13 @@ def _expand_with_db(
         return catalog
     try:
         conn = get_connection()
+    except Exception:
+        return catalog
+    try:
         migrate(conn)
         repo = ModuleRepository(conn)
     except Exception:
+        conn.close()
         return catalog
 
     def _fetch(uuid: str) -> dict[str, Any] | None:
@@ -116,7 +120,11 @@ def _expand_with_db(
             return None
 
     roots = list(catalog.keys()) + [u for u in sorted(seeds) if u not in catalog]
-    walk = walk_transitive_refs(roots, fetch_module=_fetch)
+    try:
+        walk = walk_transitive_refs(roots, fetch_module=_fetch)
+    finally:
+        # Every preview request used to leave this connection open.
+        conn.close()
     return walk.snapshots
 
 

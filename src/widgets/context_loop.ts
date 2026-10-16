@@ -8,11 +8,12 @@
  * canonical serialised form on every SFC update so ComfyUI's widget
  * state matches what `execute()` sees.
  */
-import { defineAsyncComponent, h, ref, watch, type Component } from "vue";
+import { defineAsyncComponent, h, ref, watch, type Component, type EffectScope } from "vue";
 import { app } from "#comfyui/app";
-import { createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
+import { buildInScope, createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
 import { attachLoopSeedsCapture } from "./_seed-capture";
 import { reactiveFromGraph } from "../extension/reactive";
+import { nodePrevSeeds } from "../extension/_stashes";
 import {
   emptyContextLoopConfig,
   keepFramesWithin,
@@ -39,7 +40,14 @@ interface ContextLoopHostNode extends MountTargetNode, LiteNodeLike {
   properties?: Record<string, unknown>;
 }
 
-export function create(node: ContextLoopHostNode, inputName: string) {
+export function create(node: ContextLoopHostNode, inputName: string): DomWidgetHost {
+  // Run inside a host-owned effect scope: the `reactiveFromGraph` refs and
+  // watchers below live outside any component setup(), so without it their
+  // polls would outlive the node.
+  return buildInScope((scope) => build(node, inputName, scope));
+}
+
+function build(node: ContextLoopHostNode, inputName: string, scope: EffectScope): DomWidgetHost {
   /**
    * Frame-grid collapse, persisted so it survives a workflow save.
    *
@@ -95,7 +103,7 @@ export function create(node: ContextLoopHostNode, inputName: string) {
   // assigns a fresh array each run, so ref equality detects the change.
   const previousSeeds = reactiveFromGraph(
     node,
-    () => (node as unknown as { __wp_prev_seeds__?: number[] }).__wp_prev_seeds__ ?? null,
+    () => nodePrevSeeds.get(node) ?? null,
     Object.is,
   );
 
@@ -188,6 +196,7 @@ export function create(node: ContextLoopHostNode, inputName: string) {
   });
 
   host = createDomWidgetHost(node, inputName, wrapper, {
+    scope,
     initialValue: serializeContextLoopConfig(config.value),
     onValueRestored: (raw: string) => {
       // Saved properties land with the workflow, after `create()` ran.
@@ -202,7 +211,8 @@ export function create(node: ContextLoopHostNode, inputName: string) {
 
   // Capture the Loop's executed `loop_seeds` series for the modal's "lock
   // previous" button (see _seed-capture).
-  attachLoopSeedsCapture(node);
+  attachLoopSeedsCapture(node, host);
+  host.onCleanup(() => loopEditors.delete(node));
 
   return host;
 }

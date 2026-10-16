@@ -1,15 +1,16 @@
 /**
  * Shared "previous run seed series" capture for the Context Loop + Seed List
  * widget glue. Both nodes emit their executed per-iteration series as
- * `loop_seeds` in the node UI; this stores it onto `node.__wp_prev_seeds__` so
+ * `loop_seeds` in the node UI; this stores it in the `nodePrevSeeds` stash so
  * the seed modal can offer a per-frame "lock previous" button.
  *
  * Mirrors the WP_Context capture in `context.ts`. Captured series is the run
  * that JUST finished — robust to control_after_generate rotating the live seed
- * widget to the NEXT run's value. No listener cleanup (same rationale as
- * context.ts): the handler filters by node id and returns early when stale.
+ * widget to the NEXT run's value. The listener is removed with the widget host.
  */
-import { app } from "#comfyui/app";
+import { nodePrevSeeds } from "../extension/_stashes";
+import { type DomWidgetHost } from "./_shared";
+import { listenApi } from "./_listen";
 
 type ExecutedEvent = CustomEvent<{ node: string | number; output?: unknown }>;
 
@@ -26,9 +27,13 @@ function pickArrayValue(obj: Record<string, unknown>, key: string): unknown {
   return undefined;
 }
 
-/** Attach an `executed` listener that captures this node's `loop_seeds` series
- *  onto `node.__wp_prev_seeds__` (or clears it when the series is empty). */
-export function attachLoopSeedsCapture(node: { id: string | number }): void {
+/** Attach an `executed` listener (for the host's lifetime) that captures this
+ *  node's `loop_seeds` series into `nodePrevSeeds` (or clears it when the
+ *  series is empty). */
+export function attachLoopSeedsCapture(
+  node: { id: string | number },
+  host: Pick<DomWidgetHost, "onCleanup">,
+): void {
   function onExecuted(ev: Event): void {
     const detail = (ev as ExecutedEvent).detail;
     if (!detail || String(detail.node) !== String(node.id)) return;
@@ -38,9 +43,8 @@ export function attachLoopSeedsCapture(node: { id: string | number }): void {
     const series = rawSeries
       .map((v) => (typeof v === "number" ? v : Number(v)))
       .filter((n) => Number.isFinite(n));
-    (node as unknown as { __wp_prev_seeds__?: number[] }).__wp_prev_seeds__ =
-      series.length ? series : undefined;
+    if (series.length) nodePrevSeeds.set(node, series);
+    else nodePrevSeeds.delete(node);
   }
-  (app as unknown as { api?: { addEventListener: (n: string, fn: (e: Event) => void) => void } })
-    .api?.addEventListener("executed", onExecuted);
+  listenApi(host, "executed", onExecuted);
 }

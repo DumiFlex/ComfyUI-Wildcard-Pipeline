@@ -52,6 +52,10 @@ const MIN_VERSION_FOR_ACTION_BAR: readonly [number, number, number] = [1, 33, 9]
 // ticks into ComfyUI's boot, so 120 frames (~2s at 60fps) is far past
 // the realistic worst case.
 const MAX_ATTACH_ATTEMPTS = 120;
+// Icon-swap budget for the actionbar path. Larger than the attach budget:
+// the button is mounted by ComfyUI's Vue actionbar, which can land well
+// after first paint on a slow boot (~10s at 60fps).
+const MAX_ICON_FRAMES = 600;
 
 interface AppMenu { settingsGroup?: { element: HTMLElement } }
 interface AppLike { menu?: AppMenu }
@@ -258,16 +262,18 @@ function applyBrandIcon(): number {
  * tame.
  *
  * Loop terminates the first frame at least one matching button is
- * found AND has been processed.
+ * found AND has been processed, or after `maxFrames` frames — if the
+ * running frontend never renders a matching button (renamed label,
+ * removed actionbar) an uncapped loop would be a permanent 60 Hz
+ * `querySelectorAll`. rAF does not tick in a hidden tab, so a slow
+ * background boot does not burn the budget.
  */
-export function startIconReplaceLoop(): void {
+export function startIconReplaceLoop(maxFrames = MAX_ICON_FRAMES): void {
   if (typeof document === "undefined") return;
   injectStyles();
+  let frames = 0;
   const tick = (): void => {
-    const touched = applyBrandIcon();
-    if (touched === 0) {
-      requestAnimationFrame(tick);
-    }
+    if (applyBrandIcon() === 0 && ++frames < maxFrames) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
 }

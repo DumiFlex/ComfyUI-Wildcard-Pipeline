@@ -1,10 +1,13 @@
 """/wp/api/import/* + /wp/api/export/* — library bundle commit pipeline."""
 from __future__ import annotations
 
+from typing import Any
+
 from aiohttp import web
 
 from engine.exporter import build_export_payload
 from engine.importer import commit_import, get_undo_entry, undo_import
+from engine.modules import get_handler
 from wp_api._helpers import db_session, json_error, json_ok
 from wp_api._validators import (
     MAX_IMPORT_BODY_BYTES,
@@ -12,6 +15,7 @@ from wp_api._validators import (
     validate_wildcard_name,
     validate_wildcard_subcats,
 )
+from wp_api.modules import _hydrate_constraint_exceptions
 
 # 8-bucket export request keys (Task 10). Each key, when present, must be
 # a list of UUIDs; missing keys default to []. Mis-typed UUIDs (e.g. a
@@ -111,6 +115,107 @@ def _validate_wildcard_grammar(body: dict) -> str | None:
     return None
 
 
+_MODULE_KINDS = ("wildcard", "fixed_values", "combine", "derivation", "constraint")
+_BUCKET_ENTITY_KEY = {"adds": "entity", "replaces": "new_content", "renames": "content"}
+
+
+def _commit_entities(body: dict):
+    """Yield ``(label, kind, entity, id)`` for every entity in the commit."""
+    for bucket, key in _BUCKET_ENTITY_KEY.items():
+        for i, item in enumerate(body.get(bucket) or []):
+            if not isinstance(item, dict):
+                continue
+            entity = item.get(key)
+            if not isinstance(entity, dict):
+                continue
+            eid = item.get("new_id") if bucket == "renames" else (
+                item.get("id") if bucket == "replaces" else entity.get("id")
+            )
+            yield f"{bucket}[{i}]", item.get("kind"), entity, eid
+
+
+def _hydrate_from_pack(payload: dict, pack_wildcards: dict[str, dict]) -> None:
+    """Fill a constraint exception's missing option text from a wildcard in
+    the same commit (the library lookup in ``_hydrate_constraint_exceptions``
+    can't see wildcards that are only now being imported)."""
+    excs = payload.get("exceptions")
+    if not isinstance(excs, list):
+        return
+    for side in ("source", "target"):
+        opts = (pack_wildcards.get(payload.get(f"{side}_wildcard_id")) or {}).get("options")
+        if not isinstance(opts, list):
+            continue
+        by_id = {o.get("id"): o.get("value") for o in opts if isinstance(o, dict)}
+        for exc in excs:
+            if not isinstance(exc, dict):
+                continue
+            if isinstance(exc.get(side), str) or isinstance(exc.get(f"{side}_value"), str):
+                continue
+            v = by_id.get(exc.get(f"{side}_id"))
+            if isinstance(v, str):
+                exc[f"{side}_value"] = v
+
+
+def _check_payload(
+    label: str, kind: Any, payload: Any, conn, pack_wildcards: dict[str, dict],
+) -> str | None:
+    if not isinstance(payload, dict):
+        return f"{label}.payload must be an object"
+    handler = get_handler(kind)
+    if handler is None:
+        return None
+    if kind == "constraint":
+        _hydrate_from_pack(payload, pack_wildcards)
+        _hydrate_constraint_exceptions(conn, payload)
+    try:
+        # The runtime check only (what every graph run re-applies), not the
+        # authoring rules: an older export that runs today must still import.
+        handler.validate_payload(payload)
+    except ValueError as exc:
+        return f"{label}.payload: {exc}"
+    return None
+
+
+def _validate_payload_shapes(body: dict, conn) -> str | None:
+    """Reject a commit whose module (or bundle child) payload the engine
+    would refuse at run time. The importer writes whatever it's handed, so
+    without this a hand-edited or buggy pack landed in the library and only
+    failed later, in a graph run or an editor. Returns the first error."""
+    entities = list(_commit_entities(body))
+    pack_wildcards = {
+        eid: e["payload"] for _, kind, e, eid in entities
+        if kind == "wildcard" and isinstance(eid, str) and isinstance(e.get("payload"), dict)
+    }
+    for label, kind, entity, _ in entities:
+        if kind in _MODULE_KINDS:
+            if entity.get("payload") is None:
+                missing = [f for f in ("name", "payload") if entity.get(f) is None]
+                return f"{label}: {kind} is missing " + ", ".join(repr(f) for f in missing)
+            err = _check_payload(label, kind, entity.get("payload"), conn, pack_wildcards)
+            if err is not None:
+                return err
+        elif kind == "bundle":
+            children = entity.get("children")
+            if children is None:
+                continue
+            if not isinstance(children, list):
+                return f"{label}.children must be a list"
+            for j, child in enumerate(children):
+                if not isinstance(child, dict):
+                    return f"{label}.children[{j}] must be an object"
+                if child.get("payload") is None:
+                    # Inline entries may omit the payload (same rule as the
+                    # bundle editor's own save).
+                    continue
+                err = _check_payload(
+                    f"{label}.children[{j}]", child.get("type"), child.get("payload"),
+                    conn, pack_wildcards,
+                )
+                if err is not None:
+                    return err
+    return None
+
+
 async def import_commit(request: web.Request) -> web.Response:
     """POST /wp/api/import/commit — apply a classified commit payload.
 
@@ -163,6 +268,9 @@ async def import_commit(request: web.Request) -> web.Response:
         return json_error(err, status=400)
 
     with db_session(request) as conn:
+        err = _validate_payload_shapes(body, conn)
+        if err is not None:
+            return json_error(err, status=400)
         result = commit_import(conn, body)
     if not result.get("ok"):
         # commit_import returns {"ok": False, "error": str} for both

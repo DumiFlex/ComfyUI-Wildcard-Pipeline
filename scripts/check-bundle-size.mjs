@@ -294,6 +294,8 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // RAISED 476 -> 480 KB on 2026-10-14 when the AI knowledge round (canvas-facts
 // answer, ~0.6 KB in boot) landed on top of it.
 // Same "guide, not a cap" rule as above.
+// dev's canvas widget lifecycle fix (2026-10-16, ~0.65 KB in boot) fits in
+// the same 480 KB.
 const TOTAL_LIMIT = 480 * 1024;     // 480 KB
 
 function gzipSize(path) {

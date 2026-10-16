@@ -45,8 +45,15 @@ def instance_key(ctx: Any, fallback: str) -> str:
     (unit tests, previews) have none and fall back to `fallback`, their
     old key, so those callers keep their seeds.
     """
-    key = ctx.get("__wp_instance_key__") if isinstance(ctx, dict) else None
-    return key if isinstance(key, str) and key else fallback
+    if not isinstance(ctx, dict):
+        return fallback
+    # Without the pipeline's key, the instance uid still keeps two
+    # instances apart.
+    for k in ("__wp_instance_key__", "__wp_current_module_uid__"):
+        key = ctx.get(k)
+        if isinstance(key, str) and key:
+            return key
+    return fallback
 
 
 def stream_key(seed: int, key: str) -> str:

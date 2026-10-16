@@ -1,11 +1,11 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
-import { app } from "#comfyui/app";
 import {
   createDomWidgetHost,
   parseWidgetJsonWithRecovery,
   serializeWidgetJson,
   type MountTargetNode,
 } from "./_shared";
+import { listenApi } from "./_listen";
 import { reactiveFromGraph } from "../extension/reactive";
 import {
   emptyCleanerConfig,
@@ -146,11 +146,7 @@ export function create(node: CleanerHostNode, inputName: string) {
     // height drag. The ResizeObserver still bumps minHeight if content
     // ever needs more room.
   }
-  const apiObj = (app as unknown as { api?: {
-    addEventListener: (n: string, fn: (e: Event) => void) => void;
-    removeEventListener: (n: string, fn: (e: Event) => void) => void;
-  } }).api;
-  apiObj?.addEventListener("executed", onExecuted);
+  listenApi(host, "executed", onExecuted);
 
   return host;
 }

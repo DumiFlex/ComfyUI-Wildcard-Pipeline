@@ -676,7 +676,7 @@ export function mountHelper(node: AssemblerNode) {
     // user-stuck tall size kept a dead band below the template input.
     autoHeight: true,
   });
-  attachThemeDetector(assemblerHost.widget.element, app);
+  assemblerHost.onCleanup(attachThemeDetector(assemblerHost.widget.element, app));
 }
 
 function insertIntoTemplate(node: AssemblerNode, token: string) {

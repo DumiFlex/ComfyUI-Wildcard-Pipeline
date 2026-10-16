@@ -340,3 +340,78 @@ async def test_unknown_category_ids_are_dropped_not_fatal(wp_client):
     assert resp.status == 200, await resp.text()
     got = await (await wp_client.get("/wp/api/modules/cat00003")).json()
     assert got["category_id"] is None
+
+
+# ── payload shape validation (review 2026-10-16) ────────────────────────────
+
+
+async def _library_ids(wp_client) -> set[str]:
+    resp = await wp_client.get("/wp/api/modules?limit=500")
+    body = await resp.json()
+    rows = body.get("items", body) if isinstance(body, dict) else body
+    return {r["id"] for r in rows}
+
+
+async def test_commit_rejects_wildcard_with_malformed_options(wp_client):
+    bad = _wildcard_entity("aa000001")
+    bad["payload"] = {"options": "oops"}
+    good = _wildcard_entity("aa000002", name="fine")
+    resp = await wp_client.post("/wp/api/import/commit", json={
+        "adds": [{"kind": "wildcard", "entity": good}, {"kind": "wildcard", "entity": bad}],
+    })
+    assert resp.status == 400
+    body = await resp.json()
+    assert body["error"].startswith("adds[1].payload")
+    # Nothing from the commit landed (the good one included).
+    assert not {"aa000001", "aa000002"} & await _library_ids(wp_client)
+
+
+async def test_commit_rejects_non_object_payload_on_replace(wp_client):
+    seeded = await _seed_wildcard(wp_client)
+    resp = await wp_client.post("/wp/api/import/commit", json={
+        "replaces": [{
+            "kind": "wildcard", "id": seeded["id"],
+            "new_content": {**_wildcard_entity(seeded["id"]), "payload": ["x"]},
+        }],
+    })
+    assert resp.status == 400
+    assert "replaces[0].payload must be an object" in (await resp.json())["error"]
+
+
+async def test_commit_rejects_bad_bundle_child(wp_client):
+    bundle = _bundle_entity("bb000001")
+    bundle["children"] = [{"id": "cc000001", "type": "combine", "payload": {"output_var": 5}}]
+    resp = await wp_client.post("/wp/api/import/commit", json={
+        "adds": [{"kind": "bundle", "entity": bundle}],
+    })
+    assert resp.status == 400
+    assert (await resp.json())["error"].startswith("adds[0].children[0].payload")
+
+
+async def test_commit_hydrates_constraint_exceptions_from_the_same_pack(wp_client):
+    src = _wildcard_entity("aa000011", name="src")
+    tgt = _wildcard_entity("aa000012", name="tgt")
+    tgt["payload"] = {"options": [{"id": "b", "value": "blue", "weight": 1}]}
+    constraint = {
+        "id": "cc000011", "name": "link", "description": "", "category_id": None,
+        "tags": [], "is_favorite": False, "version": 1,
+        "payload": {
+            "source_wildcard_id": "aa000011", "target_wildcard_id": "aa000012",
+            "matrix": {},
+            # Option ids only: the text comes from the wildcards in this pack.
+            "exceptions": [{"source_id": "r", "target_id": "b", "mode": "exclude", "factor": 0}],
+        },
+    }
+    resp = await wp_client.post("/wp/api/import/commit", json={
+        "adds": [
+            {"kind": "wildcard", "entity": src},
+            {"kind": "wildcard", "entity": tgt},
+            {"kind": "constraint", "entity": constraint},
+        ],
+    })
+    assert resp.status == 200, await resp.text()
+    resp = await wp_client.get("/wp/api/modules/cc000011")
+    row = await resp.json()
+    row = row.get("data", row)
+    exc = row["payload"]["exceptions"][0]
+    assert exc["source_value"] == "red" and exc["target_value"] == "blue"
