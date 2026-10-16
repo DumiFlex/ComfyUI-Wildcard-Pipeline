@@ -13,6 +13,7 @@ import { app } from "#comfyui/app";
 import { buildInScope, createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
 import { attachLoopSeedsCapture } from "./_seed-capture";
 import { reactiveFromGraph } from "../extension/reactive";
+import { nodePrevSeeds } from "../extension/_stashes";
 import {
   emptyContextLoopConfig,
   keepFramesWithin,
@@ -102,7 +103,7 @@ function build(node: ContextLoopHostNode, inputName: string, scope: EffectScope)
   // assigns a fresh array each run, so ref equality detects the change.
   const previousSeeds = reactiveFromGraph(
     node,
-    () => (node as unknown as { __wp_prev_seeds__?: number[] }).__wp_prev_seeds__ ?? null,
+    () => nodePrevSeeds.get(node) ?? null,
     Object.is,
   );
 

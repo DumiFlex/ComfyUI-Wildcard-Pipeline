@@ -24,6 +24,7 @@ import { collectCrossNodePairingsFull, collectFullChainModules } from "../extens
 import { deriveLoopSeeds, applySeedLocks, effectiveChainSeed } from "../components/shared/seed-derive";
 import type { ChainModule, PairingBadge, RowPairings, TargetSelect } from "../extension/constraint-pairs";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
+import { nodeLastUsedPerModule, nodeLastUsedSeed, nodeLoopSeeds } from "../extension/_stashes";
 import { applyVarAccessor, type ResolvedValue } from "./richTokenize";
 
 /** Shallow-equal map comparator for `reactiveFromGraph` so the
@@ -480,14 +481,11 @@ export function create(node: ContextNode, inputName: string) {
       }
 
       function lastUsedSeedReader(moduleId?: string): number | null {
-        const perModule = (node as unknown as {
-          __wp_last_used_per_module__?: Record<string, number>;
-        }).__wp_last_used_per_module__;
+        const perModule = nodeLastUsedPerModule.get(node);
         if (moduleId && perModule && typeof perModule[moduleId] === "number") {
           return perModule[moduleId];
         }
-        const v = (node as unknown as { __wp_last_used_seed__?: number })
-          .__wp_last_used_seed__;
+        const v = nodeLastUsedSeed.get(node);
         return typeof v === "number" && Number.isFinite(v) ? v : null;
       }
 
@@ -504,7 +502,7 @@ export function create(node: ContextNode, inputName: string) {
         // This is the PREVIOUS run's value, which is what "lock to reproduce"
         // needs; it survives control_after_generate=randomize rotating the
         // live seed widget to the NEXT run's seed.
-        const captured = (node as unknown as { __wp_loop_seeds__?: number[] }).__wp_loop_seeds__;
+        const captured = nodeLoopSeeds.get(node);
         if (Array.isArray(captured) && frame < captured.length
             && typeof captured[frame] === "number") {
           return captured[frame];
@@ -658,8 +656,7 @@ export function create(node: ContextNode, inputName: string) {
     const rawSeed = pickArrayValue(out, "seed");
     const seedNum = typeof rawSeed === "number" ? rawSeed : Number(rawSeed);
     if (Number.isFinite(seedNum)) {
-      (node as unknown as { __wp_last_used_seed__?: number }).__wp_last_used_seed__ =
-        Math.floor(seedNum);
+      nodeLastUsedSeed.set(node, Math.floor(seedNum));
     }
 
     const rawMap = pickArrayValue(out, "module_seeds");
@@ -669,8 +666,7 @@ export function create(node: ContextNode, inputName: string) {
         const n = typeof v === "number" ? v : Number(v);
         if (Number.isFinite(n)) perModule[mid] = Math.floor(n);
       }
-      (node as unknown as { __wp_last_used_per_module__?: Record<string, number> })
-        .__wp_last_used_per_module__ = perModule;
+      nodeLastUsedPerModule.set(node, perModule);
     }
     // The Loop's per-iteration derived series for THIS run. Stored so the
     // per-frame seed lock pins the seed each frame actually rolled — the
@@ -681,11 +677,11 @@ export function create(node: ContextNode, inputName: string) {
       const series = rawSeries
         .map((v) => (typeof v === "number" ? v : Number(v)))
         .filter((n) => Number.isFinite(n));
-      (node as unknown as { __wp_loop_seeds__?: number[] }).__wp_loop_seeds__ =
-        series.length ? series : undefined;
+      if (series.length) nodeLoopSeeds.set(node, series);
+      else nodeLoopSeeds.delete(node);
     }
     // No fallback when `module_seeds` is missing — the chain-level
-    // `__wp_last_used_seed__` already updated above gives the
+    // `nodeLastUsedSeed` already updated above gives the
     // toggle a sensible fallback via the chain-level reader path,
     // and we'd rather have no per-module data than re-introduce
     // the local-widget-value heuristic that produced wrong locks

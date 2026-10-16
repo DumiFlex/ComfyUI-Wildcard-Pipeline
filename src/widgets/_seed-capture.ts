@@ -1,13 +1,14 @@
 /**
  * Shared "previous run seed series" capture for the Context Loop + Seed List
  * widget glue. Both nodes emit their executed per-iteration series as
- * `loop_seeds` in the node UI; this stores it onto `node.__wp_prev_seeds__` so
+ * `loop_seeds` in the node UI; this stores it in the `nodePrevSeeds` stash so
  * the seed modal can offer a per-frame "lock previous" button.
  *
  * Mirrors the WP_Context capture in `context.ts`. Captured series is the run
  * that JUST finished — robust to control_after_generate rotating the live seed
  * widget to the NEXT run's value. The listener is removed with the widget host.
  */
+import { nodePrevSeeds } from "../extension/_stashes";
 import { listenApi, type DomWidgetHost } from "./_shared";
 
 type ExecutedEvent = CustomEvent<{ node: string | number; output?: unknown }>;
@@ -26,7 +27,7 @@ function pickArrayValue(obj: Record<string, unknown>, key: string): unknown {
 }
 
 /** Attach an `executed` listener (for the host's lifetime) that captures this
- *  node's `loop_seeds` series onto `node.__wp_prev_seeds__` (or clears it when the
+ *  node's `loop_seeds` series into `nodePrevSeeds` (or clears it when the
  *  series is empty). */
 export function attachLoopSeedsCapture(
   node: { id: string | number },
@@ -41,8 +42,8 @@ export function attachLoopSeedsCapture(
     const series = rawSeries
       .map((v) => (typeof v === "number" ? v : Number(v)))
       .filter((n) => Number.isFinite(n));
-    (node as unknown as { __wp_prev_seeds__?: number[] }).__wp_prev_seeds__ =
-      series.length ? series : undefined;
+    if (series.length) nodePrevSeeds.set(node, series);
+    else nodePrevSeeds.delete(node);
   }
   listenApi(host, "executed", onExecuted);
 }
