@@ -1,8 +1,10 @@
 """WP_Context — runs a module list and emits a PipelineContext payload."""
 
+import contextlib
+
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
-from engine.db.connection import get_connection
+from engine.db.connection import get_connection, resolve_db_path
 from engine.db.migrations import migrate
 from engine.db.repositories import ModuleNotFound, ModuleRepository
 from engine.modules.snapshot import ref_seed_uuids, walk_transitive_refs
@@ -14,6 +16,20 @@ from wp_nodes.types import (
     build_payload,
     deserialize_node_input,
 )
+
+#: DB files this process already migrated from the node path. The API routes
+#: migrate at startup; this only covers a graph run that reaches the library
+#: before them (or without them), and keeps the sha256 pass over every
+#: migration file off each run.
+_MIGRATED: set[str] = set()
+
+
+def _migrate_once(conn) -> None:
+    key = str(resolve_db_path())
+    if key in _MIGRATED:
+        return
+    migrate(conn)
+    _MIGRATED.add(key)
 
 
 def _expand_catalog_via_live_db(catalog: dict, modules: list | None = None) -> dict:
@@ -42,12 +58,22 @@ def _expand_catalog_via_live_db(catalog: dict, modules: list | None = None) -> d
 
     try:
         conn = get_connection()
-        migrate(conn)
-        repo = ModuleRepository(conn)
     except Exception:
         # No DB access from this graph run (e.g. embedded ComfyUI
         # without the SPA stack) — return what we have.
         return catalog
+    # One connection per run, closed when the walk is done (it used to stay
+    # open: one leaked connection per WP_Context execution).
+    with contextlib.closing(conn):
+        try:
+            _migrate_once(conn)
+        except Exception:
+            return catalog
+        return _walk_live(catalog, seeds, ModuleRepository(conn))
+
+
+def _walk_live(catalog: dict, seeds, repo: ModuleRepository) -> dict:
+    """The walk itself, on the caller's open repository."""
 
     def _fetch(uuid: str) -> dict | None:
         embedded = catalog.get(uuid)
