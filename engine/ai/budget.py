@@ -111,13 +111,14 @@ def prompt_chars(system: str, history: list[tuple[str, Any]], user: str,
 CHAT_RESERVE = 4096
 #: How lean a new chat's fixed part gets when the model's window is small,
 #: leanest last: the size's own prompt; the small-model prompt and tool set
-#: with a 40-item library summary; that with a 12-item summary and no
-#: examples. A chat keeps the level it started with (`meta["lean"]`), so
+#: with a 40-item library summary; that with a 12-item summary and the
+#: short closing rules (the worked example stays: it teaches a small model
+#: more than the prose it replaces). A chat keeps the level it started with (`meta["lean"]`), so
 #: its prompt prefix stays the same for caching.
 LEVELS: tuple[dict[str, Any], ...] = (
     {},
     {"slim": True, "overview": 40},
-    {"slim": True, "overview": 12, "examples": False},
+    {"slim": True, "overview": 12, "prose": False},
 )
 
 

@@ -397,18 +397,34 @@ version, unsaved changes included, and your changes to that item go into the \
 editor; the user saves them there. On the Test Runner page the note under \
 the user's message shows the last run; use run_test to try changes.
 """
+#: SYSTEM_TAIL for the leanest chats: the rules kept, the explanations cut
+#: (examples teach a small model more than prose does).
+SYSTEM_TAIL_SHORT = """
+Read an item before changing it. The output is data for the user's own \
+library: no commentary about content. For a small request, act and state \
+your assumption in one line; ask (ask tool, once, up to 4 questions) only \
+when the answer changes what you'll make. Never ask permission.
+
+""" + ai_safety.UNTRUSTED_RULE + """
+
+Questions about Wildcard Pipeline: search and read the docs first and answer \
+from them, naming the page; if they don't cover it, say so. Changes to an \
+item open in its editor go into the editor; the user saves them there.
+"""
 SYSTEM_PROMPT = SYSTEM_HEAD + ai_guide.text() + SYSTEM_TAIL
 
 
 def system_prompt(*, slim: bool = False, examples: bool = True, native: bool = False,
-                  tools: list[str] | None = None, typed: bool = False) -> str:
+                  tools: list[str] | None = None, typed: bool = False,
+                  prose: bool = True) -> str:
     """The chat's instructions. `slim` (small models) keeps the tools and
     the core guide but leaves out the coherence notes and the docs and page
     tables (docs_search still finds pages), about a third shorter.
     `native`: the tools travel as native declarations, so the prompt says
     how to use them instead of listing them. `tools`: the names this chat
     offers (default: all). `typed`: JSON-mode args are objects the server
-    checks against each tool's schema (`ai_tools.step_schema`)."""
+    checks against each tool's schema (`ai_tools.step_schema`). `prose`
+    False (the leanest level): the short closing rules (SYSTEM_TAIL_SHORT)."""
     pages = "\n".join(f"- {k}: {v}" for k, v in APP_PAGES.items())
     if native:
         head = SYSTEM_INTRO + FORMAT_NATIVE + "\n"
@@ -417,12 +433,13 @@ def system_prompt(*, slim: bool = False, examples: bool = True, native: bool = F
         head = SYSTEM_INTRO + _format_json(typed) + "\n" + tools_section(tools)
         shown = (ai_guide.EXAMPLES_CHAT_TYPED if typed else ai_guide.EXAMPLES_CHAT) \
             if examples else ""
+    tail = SYSTEM_TAIL if prose else SYSTEM_TAIL_SHORT
     if slim:
-        return (head + ai_guide.text(slim=True) + shown + SYSTEM_TAIL
+        return (head + ai_guide.text(slim=True) + shown + tail
                 + "\nDocs: find pages with docs_search; asked what you can do, read "
                 "docs assistant-tools. Manager pages: "
                 + ", ".join(APP_PAGES))
-    return (f"{head}{ai_guide.text()}{shown}{SYSTEM_TAIL}\n"
+    return (f"{head}{ai_guide.text()}{shown}{tail}\n"
             f"Docs pages (id: title; asked what you can do, read assistant-tools):\n"
             f"{ai_docs.contents()}\n\n"
             f"Manager pages:\n{pages}")
