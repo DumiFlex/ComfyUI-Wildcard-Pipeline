@@ -275,8 +275,26 @@ function allParts(): Array<PagePart & { kind?: Kind }> {
   return [...marked, ...autoParts().filter((p) => !keys.has(p.key) && !els.has(p.el))];
 }
 
-function findPart(key: string): HTMLElement | null {
-  return allParts().find((a) => a.key === key)?.el ?? null;
+/** The part a key names. Models also name a part by its words (a heading's
+ *  text instead of its key), so after the exact key: a key that is those
+ *  words' slug, a label equal to them, then a label that starts with them. */
+export function findPart(key: string): HTMLElement | null {
+  const parts = allParts();
+  const exact = parts.find((a) => a.key === key);
+  if (exact) return exact.el;
+  const words = key.replace(/\s+/g, " ").trim().toLowerCase();
+  if (!words) return null;
+  const s = slug(words);
+  const tries: Array<(a: (typeof parts)[number]) => boolean> = [
+    (a) => a.key === `h-${s}` || a.key === s,
+    (a) => a.label.toLowerCase() === words,
+    (a) => words.length >= 4 && a.label.toLowerCase().startsWith(words),
+  ];
+  for (const t of tries) {
+    const hit = parts.find(t);
+    if (hit) return hit.el;
+  }
+  return null;
 }
 
 /** The parts a heading's section holds: those after it up to the next
@@ -340,9 +358,9 @@ function readPage(host: AiActionHost, within = ""): string {
 
 function readWithin(key: string): string {
   const auto = autoParts();
-  const i = auto.findIndex((a) => a.key === key);
-  const el = i >= 0 ? auto[i].el : findPart(key);
-  if (!el) return `no part "${key}" on this page; call read_page for the list`;
+  const el = findPart(key);
+  const i = el ? auto.findIndex((a) => a.el === el) : -1;
+  if (!el) return `couldn't: no part "${key}" on this page; call read_page for the list`;
   const inside = i >= 0 && auto[i].kind === "h" ? sectionOf(auto, i)
     : auto.filter((a) => a.el !== el && el.contains(a.el));
   const marked = anchors().filter((a) => a.el !== el && el.contains(a.el));
@@ -401,7 +419,7 @@ export function findText(el: HTMLElement, quote: string): Range | null {
 
 function prefersReducedMotion(): boolean {
   return typeof window.matchMedia === "function"
-    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    && window.matchMedia("(prefers-reduced-motion: reduce)")?.matches === true;
 }
 
 export interface PointArgs { anchor: string; caption: string; text?: string }
@@ -430,7 +448,7 @@ async function highlight(points: PointArgs[]): Promise<string> {
     shown.push({ el, caption: pt.caption, key: pt.anchor, range });
     said.push(`pointed at ${range ? `"${clip(range.toString(), 50)}" in ` : ""}${labelOf(el) || pt.anchor}${note}`);
   }
-  if (!shown.length) return `${said.join("; ")}; call read_page for the list`;
+  if (!shown.length) return `couldn't: ${said.join("; ")}; call read_page for the list`;
   const target = shown[0].range?.startContainer.parentElement ?? shown[0].el;
   target.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
   pointers.value = shown;

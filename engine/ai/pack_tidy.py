@@ -281,9 +281,10 @@ def tidy(plan: dict[str, Any], built: dict[str, Any], *,
     to add to the item's own)."""
     built, siblings = strip_siblings(plan, built)
     built, repeats = strip_repeats(plan, built, library=library, base=base)
+    built, empties = fill_dead_ends(plan, built)
     changed: dict[str, dict[str, Any]] = {}
-    for key in dict.fromkeys([*siblings, *repeats]):
-        lines = list(siblings.get(key) or [])
+    for key in dict.fromkeys([*siblings, *repeats, *empties]):
+        lines = list(siblings.get(key) or []) + list(empties.get(key) or [])
         if repeats.get(key):
             quoted = ", ".join(f'"{p}"' for p in repeats[key][:6])
             lines.append(f"Took out {quoted}: the prompt already says it, so it showed twice")
@@ -310,6 +311,9 @@ def preview(plan: dict[str, Any], built: dict[str, Any], key: str) -> list[str]:
                 for v in payload.get("values") or []]
     if i["kind"] == "combine":
         return [f"${i['var']} = {payload.get('template') or ''}"]
+    if i["kind"] == "constraint":
+        from engine.ai import constraint as ai_constraint
+        return ai_constraint.describe_existing(payload)
     text = str(payload.get("template_string") or "")
     neg = str(payload.get("negative_template") or "")
     return [text] + ([f"Negative: {neg}"] if neg else [])
@@ -408,25 +412,20 @@ def _weight(o: dict[str, Any]) -> float:
         return 1.0
 
 
-def dead_ends(plan: dict[str, Any], built: dict[str, Any]) -> dict[str, str]:
-    """A constraint that rules out every option of its target for some
-    source pick (every weather option is snow and the rule bans snow in a
-    desert): the fallback then fires anyway and the prompt breaks the rule.
-    ``{target key: problem}``, so the target is rebuilt with options the
-    rule allows."""
+def _stuck(plan: dict[str, Any], built: dict[str, Any]):
+    """``(constraint, source item, target item, stuck source values)`` for
+    each constraint that leaves its target no option for some source pick."""
     by_var = {i["var"]: i for i in plan["items"] if P.is_wild(i) and i["key"] in built}
-    out: dict[str, str] = {}
+    seen: set[str] = set()
     for c in plan["items"]:
         if c["kind"] != "constraint" or c["key"] not in built:
             continue
         s, t = by_var.get(c["source"]), by_var.get(c["target"])
-        if s is None or t is None or t["key"] in out:
+        if s is None or t is None or t["key"] in seen:
             continue
         rule = built[c["key"]]["payload"]
         options = [o for o in built[t["key"]]["payload"].get("options") or []
                    if isinstance(o, dict) and _weight(o) > 0]
-        if any(o.get("is_null") for o in options):
-            continue  # an empty pick is always left
         if len(options) < 2:
             continue
         stuck: list[str] = []
@@ -435,17 +434,74 @@ def dead_ends(plan: dict[str, Any], built: dict[str, Any]) -> dict[str, str]:
                 continue
             pick = {"value": o["value"], "tags": list(o.get("sub_categories") or [])}
             if all(combine_constraint_factor(
-                    [pick], {"value": x.get("value"), "tags": x.get("sub_categories") or []},
+                    [pick], {"value": x.get("value") or "", "tags": x.get("sub_categories") or []},
                     rule.get("matrix"), rule.get("exceptions")) is EXCLUDE for x in options):
                 stuck.append(o["value"])
-        if not stuck:
-            continue
-        named = ", ".join(f'"{v}"' for v in stuck[:3]) + (" …" if len(stuck) > 3 else "")
-        out[t["key"]] = (f"{c['name']} rules out every option when ${s['var']} is {named}, so "
-                         f"the prompt breaks the rule anyway; give {t['name']} options the rule "
-                         f"allows for {'those' if len(stuck) > 1 else 'that'} "
-                         f"{s['name']} (different tags)")
-    return out
+        if stuck:
+            seen.add(t["key"])
+            yield c, s, t, stuck
+
+
+def _named(values: list[str]) -> str:
+    return ", ".join(f'"{v}"' for v in values[:3]) + (" …" if len(values) > 3 else "")
+
+
+def dead_ends(plan: dict[str, Any], built: dict[str, Any]) -> dict[str, str]:
+    """A constraint that rules out every option of its target for some
+    source pick (every weather option is snow and the rule bans snow in a
+    desert): the fallback then fires anyway and the prompt breaks the rule.
+    ``{target key: problem}``, so the target is rebuilt with options the
+    rule allows."""
+    return {t["key"]: (f"{c['name']} rules out every option when ${s['var']} is "
+                       f"{_named(stuck)}, so the prompt breaks the rule anyway; give "
+                       f"{t['name']} options the rule allows for "
+                       f"{'those' if len(stuck) > 1 else 'that'} {s['name']} (different tags)")
+            for c, s, t, stuck in _stuck(plan, built)}
+
+
+def fill_dead_ends(plan: dict[str, Any],
+                   built: dict[str, Any]) -> tuple[dict[str, Any], dict[str, list[str]]]:
+    """The fix for a dead end that needs no model: the target gets an empty
+    option that only those source picks can land on (a jungle gets no snow
+    instead of a blizzard), and every other pick keeps exactly its old
+    chances. ``(built, {key: warning lines})``; the input is left as is."""
+    said: dict[str, list[str]] = {}
+    for c, s, t, stuck in list(_stuck(plan, built)):
+        if not said:
+            built = copy.deepcopy(built)
+        target = built[t["key"]]["payload"]
+        rule = built[c["key"]]["payload"]
+        options = target.setdefault("options", [])
+        if not any(o.get("is_null") for o in options if isinstance(o, dict)):
+            taken = {str(o.get("id")) for o in options if isinstance(o, dict)}
+            options.append({"id": P.new_id(taken), "value": "", "is_null": True,
+                            "weight": 1, "sub_categories": []})
+        exceptions = [e for e in rule.get("exceptions") or []
+                      if not (isinstance(e, dict)
+                              and e.get("target_value", e.get("target")) == "")]
+        only = {str(e.get("source_value", e.get("source"))) for e in exceptions
+                if isinstance(e, dict) and e.get("mode") == "only"}
+        for o in built[s["key"]]["payload"].get("options") or []:
+            if not isinstance(o, dict) or o.get("is_null") or not isinstance(o.get("value"), str):
+                continue
+            v = o["value"]
+            if v in stuck:
+                mode = "only" if v in only else "allow"
+            elif v in only:
+                continue  # an `only` row already shuts the empty option out
+            else:
+                mode = "exclude"
+            exc: dict[str, Any] = {"source": v, "target": "", "mode": mode,
+                                   "factor": 0 if mode == "exclude" else 1.0}
+            if o.get("id"):
+                exc["source_id"] = o["id"]
+            exceptions.append(exc)
+        rule["exceptions"] = exceptions
+        line = (f"{c['name']} left nothing for {_named(stuck)}: added an empty option that "
+                f"only {'those' if len(stuck) > 1 else 'that'} {s['name']} can get")
+        said.setdefault(t["key"], []).append(line)
+        said.setdefault(c["key"], []).append(line)
+    return built, said
 
 
 # ── lookup tables ───────────────────────────────────────────────────────

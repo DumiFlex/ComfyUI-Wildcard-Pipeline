@@ -141,3 +141,37 @@ def test_a_retry_after_a_cut_off_answer_is_asked_cooler_and_shorter():
                               "answer was cut off at its output limit")
     assert pack.CUT_RETRY not in first["user"] and pack.CUT_RETRY in again["user"]
     assert again["temperature"] <= 0.2
+
+
+def test_a_rule_that_leaves_its_target_nothing_gets_an_empty_option_only_there():
+    from engine.modules._constraint_math import EXCLUDE, combine_constraint_factor
+
+    plan = pack.compile_plan(_raw())
+    built = _built(plan)
+    keys = _keys(plan)
+    for o in built[keys["Outfit"]]["payload"]["options"]:
+        o["sub_categories"] = ["armor"]
+    new, changed = pack_tidy.tidy(plan, built)
+    assert {keys["Outfit"], keys["Race → Outfit"]} <= set(changed)
+    assert any("empty option" in w for w in changed[keys["Outfit"]]["warnings"])
+    assert changed[keys["Race → Outfit"]]["preview"]
+    assert pack_tidy.dead_ends(plan, new) == {}
+    options = new[keys["Outfit"]]["payload"]["options"]
+    rule = new[keys["Race → Outfit"]]["payload"]
+    for race in new[keys["Race"]]["payload"]["options"]:
+        pick = {"value": race["value"], "tags": race.get("sub_categories") or []}
+        live = [o for o in options if combine_constraint_factor(
+            [pick], {"value": o["value"], "tags": o.get("sub_categories") or []},
+            rule["matrix"], rule["exceptions"]) is not EXCLUDE]
+        if "elf" in pick["tags"]:
+            assert [o.get("is_null") for o in live] == [True]  # nothing, not armour
+        else:
+            assert live and not any(o.get("is_null") for o in live)  # chances unchanged
+    # The pack really renders that way.
+    elves = {o["value"] for o in new[keys["Race"]]["payload"]["options"]
+             if "elf" in (o.get("sub_categories") or [])}
+    seen = [bool(r["ctx"].get("outfit")) for r in pack_tidy.runs(plan, new)
+            if r["ctx"].get("race") in elves]
+    assert seen and not any(seen)
+    assert all(o.get("sub_categories") == ["armor"] for o in
+               built[keys["Outfit"]]["payload"]["options"])  # input untouched

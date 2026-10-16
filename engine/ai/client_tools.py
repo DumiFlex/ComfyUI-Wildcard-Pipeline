@@ -85,7 +85,7 @@ def _open(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
         if name not in PAGES:
             raise ValueError(f"no manager page {name!r}; pages: {', '.join(PAGES)}")
         out: dict[str, Any] = {"page": name}
-        label = f"Opened {name}"
+        label = f"Opened the {name} list" if name in LIST_PAGES else f"Opened {name}"
         if name == "settings" and args.get("section"):
             section = _text(args.get("section"), 30).lower()
             if section not in SETTINGS_SECTIONS:
@@ -319,6 +319,31 @@ _PREPARE = {
 
 #: Longest browser answer kept for the model.
 MAX_RESULT = 4000
+
+
+#: Said after a page call that did nothing, so a small model doesn't tell
+#: the user it worked (Nemotron said "I've highlighted the paragraph").
+FAILED_NOTE = ("This call FAILED: nothing happened on the user's page. Don't say it worked; "
+               "fix the call (read_page lists the parts) or tell the user it didn't work.")
+#: Manager pages that list one kind of module; each has a docs page too.
+LIST_PAGES = ("wildcards", "fixed-values", "combines", "derivations", "constraints", "bundles",
+              "templates")
+
+
+def failed(text: str) -> bool:
+    """Whether a page call's result says it did nothing."""
+    body = text.split(": ", 1)[1] if ": " in text else text
+    return body.startswith("couldn't") or body.startswith("no part ")
+
+
+def open_note(args: dict[str, Any]) -> str:
+    """What the model is told after opening a list page, which it confuses
+    with that module's docs page."""
+    page = args.get("page")
+    if page in LIST_PAGES:
+        return (f" (the user's {page} list, not the docs: a docs page opens with "
+                '{"doc": id})')
+    return ""
 
 
 def result_text(tool: str, answer: dict[str, Any]) -> str:

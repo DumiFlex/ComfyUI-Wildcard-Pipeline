@@ -5303,6 +5303,12 @@ Complete = Any
 DECIDE_ANSWER = "Your call (decide for me)"
 
 
+def plan_retry_note(error: str) -> str:
+    """Sent with a plan request asked again after the answer couldn't be used."""
+    return (f"Your last plan couldn't be used: {error}. Write the whole plan again with "
+            "that fixed: wildcards for what varies, then the rest, and a template.")
+
+
 async def run_pack(
     complete: Complete, instruction: str, *, seeds: int = 100, repairs: int = 2,
     library: list[dict[str, Any]] | None = None, settings: Any = None,
@@ -5319,7 +5325,13 @@ async def run_pack(
     first = plan_prompt(instruction, library_note=lib_note, settings=cfg, library=library)
     answer = await complete(system=PLAN_SYSTEM, user=first,
                             schema=PLAN_SCHEMA, schema_name="pack_plan", temperature=0.4)
-    plan = compile_plan(answer, library=library, settings=cfg, request=instruction)
+    try:
+        plan = compile_plan(answer, library=library, settings=cfg, request=instruction)
+    except PlanError as e:  # once more with what was wrong, as the route does
+        log.append(f"plan: {e}; asked again")
+        answer = await complete(system=PLAN_SYSTEM, user=first + "\n\n" + plan_retry_note(str(e)),
+                                schema=PLAN_SCHEMA, schema_name="pack_plan", temperature=0.2)
+        plan = compile_plan(answer, library=library, settings=cfg, request=instruction)
     history = [(first, answer)]
     decisions: list[dict[str, str]] = []
     if plan["questions"]:

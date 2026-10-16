@@ -1810,12 +1810,12 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                         pointed = list(meta.get("pointed") or [])
                         if anchors in pointed:
                             # Small models point at the same part again and
-                            # again instead of answering.
+                            # again instead of answering. Only a highlight
+                            # the browser showed counts (`_paused_results`).
                             needs_reply = True
                             result(ai_chat.POINTED_AGAIN)
                             steps.append({"tool": tool, "note": label, "ok": True})
                             continue
-                        meta["pointed"] = [*pointed, anchors]
                     if tool in ai_tools.WEB and _web_pre_allowed(cfg, meta):
                         # Allowed for this chat (or always): run it now.
                         result(await _web_call(cfg, meta, tool, cargs))
@@ -2235,8 +2235,10 @@ def _stuck_line(steps: list[dict[str, Any]]) -> str:
 def _done_line(steps: list[dict[str, Any]]) -> str:
     """The answer when the model said nothing after acting: what it did,
     never a bare "Done."."""
+    undone = {str(x.get("note"))[len("Couldn't: "):] for x in steps
+              if not x.get("ok") and str(x.get("note") or "").startswith("Couldn't: ")}
     did = [str(x.get("note")) for x in steps
-           if x.get("ok") and x.get("note") and not x.get("say")]
+           if x.get("ok") and x.get("note") and not x.get("say") and x.get("note") not in undone]
     pointed = [n[len("Pointed at "):] for n in did if n.startswith("Pointed at ")]
     if pointed:
         # "Where is X?" answered by pointing: say so in words.
@@ -2278,6 +2280,17 @@ async def _paused_results(
             if answer.get("denied"):
                 steps.append({"tool": c["tool"], "note": "You declined: "
                               + (c.get("label") or c["tool"]), "ok": False})
+            elif ai_client_tools.failed(text):
+                # Its step showed as done when it was sent; say it wasn't,
+                # to the user and, plainly, to the model.
+                steps.append({"tool": c["tool"], "note": "Couldn't: "
+                              + (c.get("label") or c["tool"]), "ok": False})
+                text += "\n" + ai_client_tools.FAILED_NOTE
+            elif c["tool"] == "highlight":
+                meta["pointed"] = [*(meta.get("pointed") or []),
+                                   sorted(p["anchor"] for p in c["args"].get("points") or [])]
+            if c["tool"] == "open" and not answer.get("denied"):
+                text += ai_client_tools.open_note(c["args"])
         by_id[c["id"]] = {"id": c["id"], "tool": c["tool"], "text": text}
     order = [i for i in paused.get("order") or [] if i in by_id]
     order += [i for i in by_id if i not in order]
@@ -2450,29 +2463,37 @@ async def post_pack_plan(request: web.Request) -> web.Response:
         follow += ("\n\nThe reference images aren't attached again; keep what you took "
                    "from them unless asked otherwise.")
     answer: Any = None
-    try:
-        answer = await _ask(
-            cfg, first=first, turns=turns, instruction=follow,
-            system=ai_pack.PLAN_SYSTEM, schema=ai_pack.PLAN_SCHEMA,
-            schema_name="pack_plan", temperature=0.4, images=images or None,
-            image_note=False,  # plan_prompt says how to use them
-            partial=True,  # a cut-off plan keeps the items it finished
-        )
-        plan = ai_pack.compile_plan(answer, library=library, previous=previous,
-                                    decisions=decisions, settings=settings, base=base,
-                                    canvas=canvas, request=" ".join(
-                                        [first_text, instruction, sample, *(
-                                            str(d.get("answer") or "") for d in decisions
-                                            if isinstance(d, dict))]))
-    except _ai_client.AIError as e:
-        return json_error(e.message, status=e.status)
-    except ai_pack.PlanError as e:
-        if isinstance(answer, dict) and answer.get(_ai_client.CUT_OFF):
-            return json_error(_ai_client.CUT_OFF_MESSAGE, status=502)
-        return json_error(
-            f"the model's plan couldn't be used ({e}). Try again, or a larger model.",
-            status=502,
-        )
+    retry = ""
+    for attempt in range(2):
+        try:
+            answer = await _ask(
+                cfg, first=first, turns=turns, instruction=follow, extra=retry,
+                system=ai_pack.PLAN_SYSTEM, schema=ai_pack.PLAN_SCHEMA,
+                schema_name="pack_plan", temperature=0.4 if not retry else 0.2,
+                images=images or None,
+                image_note=False,  # plan_prompt says how to use them
+                partial=True,  # a cut-off plan keeps the items it finished
+            )
+            plan = ai_pack.compile_plan(answer, library=library, previous=previous,
+                                        decisions=decisions, settings=settings, base=base,
+                                        canvas=canvas, request=" ".join(
+                                            [first_text, instruction, sample, *(
+                                                str(d.get("answer") or "") for d in decisions
+                                                if isinstance(d, dict))]))
+            break
+        except _ai_client.AIError as e:
+            return json_error(e.message, status=e.status)
+        except ai_pack.PlanError as e:
+            if isinstance(answer, dict) and answer.get(_ai_client.CUT_OFF):
+                return json_error(_ai_client.CUT_OFF_MESSAGE, status=502)
+            if attempt:
+                return json_error(
+                    f"the model's plan couldn't be used ({e}). Try again, or a larger model.",
+                    status=502,
+                )
+            # A small model now and then answers a plan with no wildcards
+            # or no template: asked once more with what was wrong.
+            retry = ai_pack.plan_retry_note(str(e))
     if not web_on:
         plan["research"] = []
     plan["research"] = [q for q in plan["research"]
