@@ -87,7 +87,23 @@ async def fake_llm(aiohttp_server):
             if isinstance(content, list):  # answers in turn, the last one repeated
                 content = content.pop(0) if len(content) > 1 else content[0]
         if schema_name == "chat_step":
-            content = chat_steps.pop(0) if chat_steps else {"message": "Done.", "calls": []}
+            props = body["response_format"]["json_schema"]["schema"]["properties"]
+            if "tools" in props:
+                # Two-phase pick (small models): the next step's tool names.
+                nxt = chat_steps[0] if chat_steps else {"calls": []}
+                content = chat_steps.pop(0) if isinstance(nxt, str) else {
+                    "plan": nxt.get("plan", ""),
+                    "tools": [c["tool"] for c in nxt.get("calls") or []]}
+            elif "calls" not in props:
+                # Two-phase write: the next step's args, or its message.
+                nxt = chat_steps.pop(0) if chat_steps else {"message": "Done.", "calls": []}
+                content = {f"{i}:{c['tool']}": json.loads(c["args"])
+                           if isinstance(c["args"], str) else c["args"]
+                           for i, c in enumerate(nxt.get("calls") or [], 1)}
+                if not content:
+                    content = {"message": nxt.get("message", "")}
+            else:
+                content = chat_steps.pop(0) if chat_steps else {"message": "Done.", "calls": []}
         text = content if isinstance(content, str) else json.dumps(content)
         choice = {"message": {"content": text}}
         if overrides.get("_finish"):
@@ -125,7 +141,23 @@ async def fake_llm(aiohttp_server):
         if schema_name in overrides:
             content = overrides[schema_name]
         if schema_name == "chat_step":
-            content = chat_steps.pop(0) if chat_steps else {"message": "Done.", "calls": []}
+            props = body["response_format"]["json_schema"]["schema"]["properties"]
+            if "tools" in props:
+                # Two-phase pick (small models): the next step's tool names.
+                nxt = chat_steps[0] if chat_steps else {"calls": []}
+                content = chat_steps.pop(0) if isinstance(nxt, str) else {
+                    "plan": nxt.get("plan", ""),
+                    "tools": [c["tool"] for c in nxt.get("calls") or []]}
+            elif "calls" not in props:
+                # Two-phase write: the next step's args, or its message.
+                nxt = chat_steps.pop(0) if chat_steps else {"message": "Done.", "calls": []}
+                content = {f"{i}:{c['tool']}": json.loads(c["args"])
+                           if isinstance(c["args"], str) else c["args"]
+                           for i, c in enumerate(nxt.get("calls") or [], 1)}
+                if not content:
+                    content = {"message": nxt.get("message", "")}
+            else:
+                content = chat_steps.pop(0) if chat_steps else {"message": "Done.", "calls": []}
         text = content if isinstance(content, str) else json.dumps(content)
         return web.json_response({"status": "completed", "output": [
             {"type": "message", "role": "assistant",

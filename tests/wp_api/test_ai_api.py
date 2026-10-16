@@ -656,7 +656,9 @@ async def test_chat_stops_reading_at_the_read_budget(wp_client, fake_llm):
     body = await _chat(wp_client, "explain everything")
     assert body["message"] == "Answer."
     # Six reads is a small model's budget: the second results say answer now.
-    assert "No more tool calls" in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    # (A small model's last ask is the two-phase "write" half; the results
+    # with the note come just before its pick.)
+    assert "No more tool calls" in fake_llm.seen[-1]["body"]["messages"][-3]["content"]
 
 
 async def test_chat_says_when_calls_past_the_cap_were_left_out(wp_client, fake_llm):
@@ -897,10 +899,12 @@ async def test_chat_asks_again_when_a_step_is_not_json(wp_client, fake_llm):
     resp = await wp_client.post("/wp/api/ai/chat", json={"message": "hello"})
     assert resp.status == 200, await resp.text()
     assert (await resp.json())["message"] == "Hi."
-    retry = fake_llm.seen[-1]["body"]
+    retry = fake_llm.seen[-2]["body"]  # the pick half, asked again
     assert "couldn't be used (it wasn't valid JSON)" in retry["messages"][-1]["content"]
-    # A small model gets the short prompt and a steady temperature.
+    # A small model gets the short prompt and a steady temperature for the
+    # pick, a freer one for writing.
     assert retry["temperature"] == 0.15
+    assert fake_llm.seen[-1]["body"]["temperature"] == 0.4
     assert "Making prompts coherent" not in retry["messages"][0]["content"]
 
 
@@ -1035,6 +1039,31 @@ async def test_a_local_json_chat_gets_each_tools_args_checked_by_the_server(
         "items"]["anyOf"]
     assert ["search"] in [o["properties"]["tool"]["enum"] for o in options]
     assert "the arguments as a JSON object" in sent["messages"][0]["content"]
+
+
+async def test_a_small_model_picks_its_tools_then_writes_them(wp_client, fake_llm):
+    """Two asks per step: which tools (a steady temperature, names only),
+    then their arguments, each checked by the server; the history keeps one
+    ordinary step."""
+    ai_config.update({"enabled": True, "provider": "lmstudio", "model_size": "small",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m"})
+    fake_llm.chat_steps.extend([
+        {"plan": "Look for hair first.", "message": "",
+         "calls": [{"tool": "search", "args": {"query": "hair"}}]},
+        {"plan": "", "message": "Nothing yet.", "calls": []}])
+    out = await _chat(wp_client, "find hair")
+    assert out["message"] == "Nothing yet."
+    assert [s["tool"] for s in out["steps"] if not s.get("think")] == ["search"]
+    assert any(s.get("think") and s["note"] == "Look for hair first." for s in out["steps"])
+    pick, write, pick2, _ = [x["body"] for x in fake_llm.seen[-4:]]
+    props = pick["response_format"]["json_schema"]["schema"]["properties"]
+    assert "search" in props["tools"]["items"]["enum"] and pick["temperature"] == 0.15
+    wrote = write["response_format"]["json_schema"]["schema"]
+    assert wrote["required"] == ["1:search"] and write["temperature"] == 0.4
+    assert write["messages"][-1]["content"] == "Now write the arguments for 1:search."
+    # The next step sees one ordinary JSON step, with the call and its args.
+    said = json.loads(pick2["messages"][-2]["content"])
+    assert said["calls"] == [{"tool": "search", "args": {"query": "hair"}}]
 
 
 async def test_a_server_that_cant_take_the_typed_schema_gets_the_string_form(

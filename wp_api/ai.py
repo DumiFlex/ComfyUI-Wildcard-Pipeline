@@ -880,7 +880,9 @@ async def _chat_step(
     """One model step, asked again once with the problem named when a
     JSON-mode answer isn't usable: small models usually fix a named error.
     `typed`: JSON-mode args follow each tool's schema (local servers); a
-    server that can't take that schema is asked again with the string form."""
+    server that can't take that schema is asked again with the string form.
+    Small models there pick their tool and write it in two asks
+    (`_ai_chat.two_phase`)."""
     chosen = ai_tools.tools(names)
     native = ai_tools.native(chosen, cfg["api"])
     typed = typed and fmt == "json" and _ai_chat.checks_schema(cfg)
@@ -892,6 +894,12 @@ async def _chat_step(
             f"Your last answer couldn't be used ({problem}). Answer again with only the "
             "JSON object: plan, message, calls.")}]
         try:
+            if typed and prof.get("two_phase"):
+                return await _ai_chat.two_phase(
+                    cfg, system=system, log=asked, offered=chosen,
+                    pick_temp=prof["chat_temp"], write_temp=prof["write_temp"],
+                    num_ctx=num_ctx, cache_key=cache_key, emit=emit,
+                )
             return await _ai_chat.step(
                 cfg, system=system, log=asked, fmt=fmt, tools=native, names=names,
                 schema=schema, temperature=prof["chat_temp"], num_ctx=num_ctx,

@@ -933,6 +933,41 @@ async def step(
             raise
 
 
+async def two_phase(
+    cfg: dict[str, Any], *, system: str, log: list[dict[str, Any]],
+    offered: list[registry.Tool], pick_temp: float, write_temp: float, num_ctx: int,
+    cache_key: str = "", emit: Any = None,
+) -> dict[str, Any]:
+    """A small model's JSON step asked in two parts: first which tools to
+    call (none to answer) at a low temperature, then their arguments or the
+    message, each checked by the server's grammar, so the choice isn't made
+    while writing. Returned as one ordinary JSON step, so the log and the
+    history the model reads stay the same."""
+    names = [t.name for t in offered]
+    pick = await step(cfg, system=system, log=log, fmt="json", tools=[], names=names,
+                      schema=registry.pick_schema(names), temperature=pick_temp,
+                      num_ctx=num_ctx, cache_key=cache_key, emit=emit)
+    chosen = pick["answer"].get("tools")
+    picked = [n for n in chosen if isinstance(n, str)][:registry.PICK_MAX] \
+        if isinstance(chosen, list) else []
+    keys = registry.pick_keys(picked)
+    ask = (f"Now write the arguments for {', '.join(keys)}." if picked
+           else "Now write your message to the user.")
+    asked = [*log, {"role": "assistant", "content": chatlog.dumps(pick["answer"]), "calls": []},
+             {"role": "user", "content": ask}]
+    out = await step(cfg, system=system, log=asked, fmt="json", tools=[], names=names,
+                     schema=registry.write_schema(picked, offered), temperature=write_temp,
+                     num_ctx=num_ctx, cache_key=cache_key, emit=emit)
+    got = out["answer"]
+    message = got.get("message") if isinstance(got.get("message"), str) and not picked else ""
+    answer = {"plan": pick["plan"], "message": message,
+              "calls": [{"tool": n, "args": got.get(k) if isinstance(got.get(k), dict) else {}}
+                        for k, n in zip(keys, picked, strict=True)]}
+    st = _json_step(chatlog.dumps(answer), answer, out["usage"])
+    st["thinking"] = pick["thinking"]
+    return st
+
+
 async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, Any]], fmt: str,
                           tools: list[dict[str, Any]], schema: dict[str, Any],
                           temperature: float, max_tokens: int,

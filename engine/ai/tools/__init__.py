@@ -18,11 +18,21 @@ from engine.ai.tools.catalog import (
     toolset,
     web_allowed,
 )
-from engine.ai.tools.registry import ArgsError, Tool, check_args, native, prompt_lines, step_schema
+from engine.ai.tools.registry import (
+    ArgsError,
+    Tool,
+    check_args,
+    native,
+    pick_keys,
+    pick_schema,
+    prompt_lines,
+    step_schema,
+    write_schema,
+)
 
-__all__ = ["ASK", "BY_NAME", "CHANGE", "CLIENT", "DANBOORU", "DELETE", "READ", "READER", "TOOLS",
-           "VOCAB", "WEB", "WEB_SEARCH",
+__all__ = ["ASK", "BY_NAME", "CHANGE", "CLIENT", "DANBOORU", "DELETE", "READ", "READER",
+           "TOOLS", "VOCAB", "WEB", "WEB_SEARCH",
            "ArgsError",
            "Tool",
-           "check_args", "native", "prompt_lines", "step_schema", "sync_delete", "toolset", "tools",
-           "web_allowed"]
+           "check_args", "native", "pick_keys", "pick_schema", "prompt_lines", "step_schema",
+           "sync_delete", "toolset", "tools", "web_allowed", "write_schema"]

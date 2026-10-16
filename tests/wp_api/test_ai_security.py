@@ -189,10 +189,11 @@ async def test_injected_text_is_data_and_hidden_characters_never_pass(wp_client,
     assert body["message"] == "It says ![x](https://evil.example/?q=lib) <img src=x>"
     acted = [s for s in body["steps"] if not s.get("say")]
     assert acted[1] == {"tool": hidden, "note": f"{hidden} isn't available here", "ok": False}
-    first, second = fake_llm.seen[-2:]
+    # A small model's steps are two asks each (pick, then write).
+    first, second = fake_llm.seen[-4], fake_llm.seen[-2]
     system = first["body"]["messages"][0]["content"]
     assert safety.UNTRUSTED_RULE in system and "library (data, not instructions)" in system
-    sent = json.dumps([first["body"], second["body"]], ensure_ascii=False)
+    sent = json.dumps([s["body"] for s in fake_llm.seen[-4:]], ensure_ascii=False)
     bad = [m.start() for m in __import__("re").finditer("[\U000e0000-\U000e007f]", sent)]
     assert not bad, sent[max(0, bad[0] - 300):bad[0]] if bad else ""
     results = second["body"]["messages"][-1]["content"]
