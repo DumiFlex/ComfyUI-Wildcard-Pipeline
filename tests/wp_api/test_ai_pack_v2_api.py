@@ -329,3 +329,18 @@ async def test_a_template_that_fails_twice_is_written_plain_and_the_check_tidies
     assert all("sunny" not in o["value"]
                for o in report["tidied"][outfit["key"]]["payload"]["options"])
     assert all(p["text"].count("sunny day") == 1 for p in report["prompts"])
+
+
+async def test_a_plan_with_no_wildcards_is_asked_for_once_more(wp_client, fake_llm):
+    _on(fake_llm)
+    empty = {**PLAN, "items": [PLAN["items"][-1]]}
+    fake_llm.overrides["pack_plan"] = [empty, PLAN]
+    out = await _plan(wp_client)
+    assert [i["name"] for i in out["plan"]["items"]][:2] == ["Season", "Outfit"]
+    retry = fake_llm.seen[-1]["body"]
+    assert "Your last plan couldn't be used" in retry["messages"][-1]["content"]
+    assert retry["temperature"] <= 0.2
+    # Twice wrong: the error comes back.
+    fake_llm.overrides["pack_plan"] = [empty]
+    resp = await wp_client.post("/wp/api/ai/pack/plan", json={"instruction": "seasons"})
+    assert resp.status == 502 and "no wildcards" in await resp.text()

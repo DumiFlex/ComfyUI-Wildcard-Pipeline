@@ -141,3 +141,124 @@ def test_a_retry_after_a_cut_off_answer_is_asked_cooler_and_shorter():
                               "answer was cut off at its output limit")
     assert pack.CUT_RETRY not in first["user"] and pack.CUT_RETRY in again["user"]
     assert again["temperature"] <= 0.2
+
+
+def test_a_rule_that_leaves_its_target_nothing_gets_an_empty_option_only_there():
+    from engine.modules._constraint_math import EXCLUDE, combine_constraint_factor
+
+    plan = pack.compile_plan(_raw())
+    built = _built(plan)
+    keys = _keys(plan)
+    for o in built[keys["Outfit"]]["payload"]["options"]:
+        o["sub_categories"] = ["armor"]
+    new, changed = pack_tidy.tidy(plan, built)
+    assert {keys["Outfit"], keys["Race → Outfit"]} <= set(changed)
+    assert any("empty option" in w for w in changed[keys["Outfit"]]["warnings"])
+    assert changed[keys["Race → Outfit"]]["preview"]
+    assert pack_tidy.dead_ends(plan, new) == {}
+    options = new[keys["Outfit"]]["payload"]["options"]
+    rule = new[keys["Race → Outfit"]]["payload"]
+    for race in new[keys["Race"]]["payload"]["options"]:
+        pick = {"value": race["value"], "tags": race.get("sub_categories") or []}
+        live = [o for o in options if combine_constraint_factor(
+            [pick], {"value": o["value"], "tags": o.get("sub_categories") or []},
+            rule["matrix"], rule["exceptions"]) is not EXCLUDE]
+        if "elf" in pick["tags"]:
+            assert [o.get("is_null") for o in live] == [True]  # nothing, not armour
+        else:
+            assert live and not any(o.get("is_null") for o in live)  # chances unchanged
+    # The pack really renders that way.
+    elves = {o["value"] for o in new[keys["Race"]]["payload"]["options"]
+             if "elf" in (o.get("sub_categories") or [])}
+    seen = [bool(r["ctx"].get("outfit")) for r in pack_tidy.runs(plan, new)
+            if r["ctx"].get("race") in elves]
+    assert seen and not any(seen)
+    assert all(o.get("sub_categories") == ["armor"] for o in
+               built[keys["Outfit"]]["payload"]["options"])  # input untouched
+
+
+def _with_hair_colour(always=True):
+    raw = _raw()
+    raw["items"].insert(3, _item(name="Hair Colour", var="hair_color", section="Character"))
+    raw["items"][-1]["about"] = "$race, $hair_color hair, $hair, $outfit, $place"
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    keys = _keys(plan)
+    built[keys["Prompt"]]["payload"]["template_string"] = raw["items"][-1]["about"]
+    colours = built[keys["Hair Colour"]]["payload"]["options"]
+    names = ["silver", "jet black", "red", "blonde", "auburn", "pink"]
+    for o, c in zip(colours, names, strict=False):
+        o["value"] = c
+    if not always:
+        colours.append({"id": "nn", "value": "", "is_null": True, "weight": 3})
+    hair = built[keys["Hair"]]["payload"]["options"]
+    hair[0]["value"] = "long jet black hair, ponytail"
+    hair[1]["value"] = "short Red hair"
+    hair[2]["value"] = "red ribbon, braid"  # not about hair colour: kept
+    built[keys["Outfit"]]["payload"]["options"][0]["value"] = "red dress"  # another subject
+    return plan, built, keys
+
+
+def test_a_colour_the_hair_options_repeat_comes_out_of_them():
+    plan, built, keys = _with_hair_colour()
+    new, changed = pack_tidy.tidy(plan, built)
+    hair = [o["value"] for o in new[keys["Hair"]]["payload"]["options"]]
+    assert hair[:3] == ["long hair, ponytail", "short hair", "red ribbon, braid"]
+    assert any('"jet black"' in w and "Hair Colour" in w for w in changed[keys["Hair"]]["warnings"])
+    assert new[keys["Outfit"]]["payload"]["options"][0]["value"] == "red dress"
+    # A colour wildcard that sometimes picks nothing keeps the hair's own colours.
+    plan, built, keys = _with_hair_colour(always=False)
+    new, changed = pack_tidy.tidy(plan, built)
+    assert new[keys["Hair"]]["payload"]["options"][0]["value"].startswith("long jet black hair")
+    assert keys["Hair"] not in changed
+
+
+def test_a_colour_missing_from_many_prompts_is_named():
+    plan, built, keys = _with_hair_colour(always=False)
+    done = pack_tidy.runs(plan, built)
+    said = pack_tidy.missing_attributes(plan, built, done)
+    assert "drop the empty option" in said[keys["Hair Colour"]]
+    plan, built, keys = _with_hair_colour()
+    assert pack_tidy.missing_attributes(plan, built, pack_tidy.runs(plan, built)) == {}
+
+
+def test_hair_colours_the_request_asks_for_get_a_wildcard_when_the_plan_forgot():
+    raw = _raw()
+    raw["items"] = [_item(name="Hair Styles", var="hair_style", section="Character"),
+                    _item(name="Hair Length", var="hair_length", section="Character"),
+                    _item(kind="template", name="Prompt", about="$hair_length, $hair_style")]
+    plan = pack.compile_plan(raw, request="Hairstyles and hair colours, long styles more common")
+    names = [i["name"] for i in plan["items"]]
+    assert "Hair Colour" in names
+    tpl = next(i for i in plan["items"] if i["kind"] == "template")
+    assert "$hair_color, $hair_style" in tpl["about"]
+    assert any("Added Hair Colour" in w for w in plan["warnings"])
+    # A plan that has one is left alone, and so is a request about other colours.
+    raw["items"].insert(0, _item(name="Hair Tint", var="hair_tint", section="Character"))
+    again = pack.compile_plan(raw, request="hairstyles and hair colours")
+    assert "Hair Colour" not in [i["name"] for i in again["items"]]
+    other = pack.compile_plan(_raw(), request="fantasy people in different colours")
+    assert not any("Colour" in i["name"] for i in other["items"])
+
+
+def test_two_wildcards_for_one_colour_or_length_are_twins():
+    w = [{"var": v, "name": v} for v in ("hair_color", "hair_tone", "hair_style")]
+    assert [(a["var"], b["var"]) for a, b, _ in pack._twin_picks(w)] == [
+        ("hair_color", "hair_tone")]
+    w = [{"var": v, "name": v} for v in ("hair_length", "hair_length_bias", "eye_color")]
+    assert len(pack._twin_picks(w)) == 1
+
+
+def test_a_variable_the_template_reads_twice_loses_its_second_read():
+    plan, built, keys = _with_quality()
+    tpl = built[keys["Prompt"]]["payload"]
+    tpl["template_string"] = "$quality, $race, $hair, $outfit, $place, $light, $hair"
+    new, changed = pack_tidy.tidy(plan, built)
+    assert keys["Prompt"] in changed
+    assert new[keys["Prompt"]]["payload"]["template_string"] == \
+        "$quality, $race, $hair, $outfit, $place, $light"
+    assert any('"$hair"' in w for w in changed[keys["Prompt"]]["warnings"])
+    tested = pack_tidy.runs(plan, new)
+    for t in tested:
+        chunks = [c.strip() for c in t["prompt"].split(",")]
+        assert len(chunks) == len(set(chunks))

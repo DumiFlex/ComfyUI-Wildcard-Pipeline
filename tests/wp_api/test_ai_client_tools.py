@@ -257,3 +257,30 @@ async def test_searxng_without_json_says_how_to_fix_it(aiohttp_server):
                       "api_key": ""}}
     with pytest.raises(_ai_client.AIError, match="search.formats"):
         await _ai_search.search(cfg, "q")
+
+
+async def test_a_page_call_that_did_nothing_shows_failed_and_the_model_is_told(
+        wp_client, fake_llm):
+    _on(fake_llm)
+    point = {"tool": "highlight", "args": '{"anchor": "Core idea", "caption": "Core idea"}'}
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "open", "args": '{"page": "constraints"}'}, point]},
+        {"message": "", "calls": [point]},  # the same part again, after it failed
+        {"message": "", "calls": []},
+        {"message": "", "calls": []},
+    ])
+    first = await _chat(wp_client, "highlight the constraint docs for me")
+    opened, pointed = first["pending"]
+    assert opened["label"] == "Opened the constraints list"
+    second = await _resume(wp_client, first["chat_id"], [
+        {"id": opened["id"], "text": "opened"},
+        {"id": pointed["id"], "text": "couldn't: no part \"Core idea\" on this page"}])
+    assert {"tool": "highlight", "note": "Couldn't: Pointed at Core idea", "ok": False} \
+        in second["steps"]
+    told = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert "FAILED" in told and "not the docs" in told
+    # A failed highlight isn't "already showing": the retry goes to the page.
+    assert second["pending"] and second["pending"][0]["tool"] == "highlight"
+    done = await _resume(wp_client, second["chat_id"], [
+        {"id": second["pending"][0]["id"], "text": "couldn't: no part \"Core idea\""}])
+    assert "highlighted" not in done["message"]

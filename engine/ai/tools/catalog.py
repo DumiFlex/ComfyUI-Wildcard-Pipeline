@@ -481,8 +481,9 @@ TOOLS: list[Tool] = [
         "open", "client",
         "Go to an item's editor, a docs page or a manager page in the user's browser, or "
         "open a proposed new wildcard or derivation in an editor before it is applied.",
-        '{"id"} for an item\'s editor, {"doc": docs page id} for a docs page, {"page": '
-        'manager page, "section": settings section}, or {"proposal": pid} to open a '
+        '{"id"} for an item\'s editor, {"doc": docs page id} for a docs page (the docs '
+        'about constraints are a doc, not the constraints page), {"page": manager page, '
+        '"section": settings section}, or {"proposal": pid} to open a '
         'proposal card (a new wildcard or derivation, or a change to an item) in its editor '
         'unsaved: takes the user there now.',
         obj({"id": s("item id or name"), "doc": s("docs page id"),

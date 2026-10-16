@@ -80,6 +80,8 @@ async def fake_llm(aiohttp_server):
         content = {"ok": True} if schema_name == "probe" else EDIT_ANSWERS.get(schema_name, ANSWER)
         if schema_name in overrides:
             content = overrides[schema_name]
+            if isinstance(content, list):  # answers in turn, the last one repeated
+                content = content.pop(0) if len(content) > 1 else content[0]
         if schema_name == "chat_step":
             content = chat_steps.pop(0) if chat_steps else {"message": "Done.", "calls": []}
         text = content if isinstance(content, str) else json.dumps(content)

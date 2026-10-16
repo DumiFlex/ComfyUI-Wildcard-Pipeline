@@ -39,8 +39,26 @@ describe("useAiActions", () => {
 
   it("says when there is nothing to point at, and when a part is missing", async () => {
     const call: AiPendingCall = { id: "h", tool: "highlight", label: "", args: { anchor: "nope", caption: "" } };
-    expect(await runCall(call, host())).toContain('no part "nope"');
+    const said = await runCall(call, host());
+    expect(said).toContain('no part "nope"');
+    expect(said.startsWith("couldn't")).toBe(true);
     expect(pointers.value).toEqual([]);
+  });
+
+  it("finds a part named by its words instead of its key", async () => {
+    document.body.innerHTML = `<main id="wp-main">
+      <h2>What a constraint does</h2><p>A Constraint module links a source wildcard.</p>
+      <h2>Order matters</h2><p>The stack runs top to bottom.</p></main>`;
+    const call: AiPendingCall = {
+      id: "h", tool: "highlight", label: "",
+      args: { points: [{ anchor: "What a constraint does", caption: "Core idea" }] },
+    };
+    expect(await runCall(call, host())).toContain("pointed at What a constraint does");
+    expect(pointers.value[0].el.textContent).toBe("What a constraint does");
+    const near: AiPendingCall = {
+      id: "h2", tool: "highlight", label: "", args: { points: [{ anchor: "order", caption: "" }] },
+    };
+    expect(await runCall(near, host())).toContain("pointed at Order matters");
   });
 
   it("reports when the user stays on a page with unsaved changes", async () => {

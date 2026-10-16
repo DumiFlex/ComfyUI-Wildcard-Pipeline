@@ -125,6 +125,40 @@ def _without(text: str, piece: str) -> str | None:
     return (", " + joined) if lead else joined
 
 
+def _without_last(text: str, piece: str) -> str | None:
+    """``text`` with only its LAST comma piece equal to ``piece`` taken out
+    (a second read of the same variable), or None as in ``_without``."""
+    parts = text.split(",")
+    at = [n for n, p in enumerate(parts) if _norm(p) == piece]
+    if not at:
+        return None
+    kept = parts[:at[-1]] + parts[at[-1] + 1:]
+    if not any(_norm(p) for p in kept):
+        return None
+    lead = re.match(r"\s*,\s*", text)
+    joined = ", ".join(p.strip() for p in kept if p.strip())
+    return (", " + joined) if lead else joined
+
+
+def _reads_saying(text: str, piece: str, ctx: dict[str, Any]) -> list[str]:
+    """The comma pieces of a template or combine that read a variable
+    (``$hair``, ``$colour hair``) and print ``piece`` in this run, last
+    first: the reads a repeat may come from."""
+    from engine.template import resolve_variables
+
+    out = []
+    for raw in reversed(text.split(",")):
+        if "$" not in raw:
+            continue
+        try:
+            shown = resolve_variables(raw, ctx)
+        except Exception:  # noqa: BLE001 - a read that can't render is not a candidate
+            continue
+        if piece in _chunks(shown) and _norm(raw) not in out:
+            out.append(_norm(raw))
+    return out
+
+
 def _validate(kind: str, payload: dict[str, Any]) -> None:
     {"wildcard": WildcardHandler, "fixed_values": FixedValuesHandler,
      "derivation": DerivationHandler}.get(kind, _NoCheck).validate_payload(payload)
@@ -172,6 +206,7 @@ def strip_repeats(plan: dict[str, Any], built: dict[str, Any], *,
     done: set[tuple[str, int, str]] = set()
     while tries < MAX_TRIES:
         twice: dict[str, int] = {}
+        seen_in: dict[str, dict[str, Any]] = {}
         for r in base_runs:
             counts: dict[str, int] = {}
             for c in _chunks(r["prompt"]):
@@ -179,6 +214,7 @@ def strip_repeats(plan: dict[str, Any], built: dict[str, Any], *,
             for c, n in counts.items():
                 if n > 1 and len(c) >= 3 and not _LIVE.search(c):
                     twice[c] = twice.get(c, 0) + 1
+                    seen_in.setdefault(c, r["ctx"])
         if not twice:
             break
         found = False
@@ -189,14 +225,26 @@ def strip_repeats(plan: dict[str, Any], built: dict[str, Any], *,
                 if i is None or i.get("existing") or i["kind"] in ("constraint", "library"):
                     continue
                 payload = built[key]["payload"]
+                cuts: list[tuple[int, str, str]] = []
                 for n, (_box, _field, text) in enumerate(_slots(i["kind"], payload)):
-                    if (key, n, piece) in done or _without(text, piece) is None:
+                    if _without(text, piece) is not None:
+                        cuts.append((n, piece, piece))
+                    if i["kind"] in ("template", "combine"):
+                        # The same variable read twice (or a combine that
+                        # already holds it): drop the later read.
+                        cuts += [(n, raw, piece) for raw in _reads_saying(
+                            text, piece, seen_in[piece])]
+                for n, cut, said_piece in cuts:
+                    if (key, n, cut) in done:
                         continue
-                    done.add((key, n, piece))
+                    done.add((key, n, cut))
                     tries += 1
                     trial = copy.deepcopy(payload)
                     box, field, old = _slots(i["kind"], trial)[n]
-                    box[field] = _without(old, piece)
+                    box[field] = (_without(old, cut) if cut == said_piece
+                                  else _without_last(old, cut))
+                    if box[field] is None:
+                        continue
                     try:
                         _validate(i["kind"], trial)
                     except Exception:  # noqa: BLE001 - a fix that breaks the item is skipped
@@ -205,7 +253,7 @@ def strip_repeats(plan: dict[str, Any], built: dict[str, Any], *,
                     after = runs(plan, new_built, library=library, base=base)
                     if _same_meaning(base_runs, after) >= 2:
                         built, base_runs = new_built, after
-                        said.setdefault(key, []).append(piece)
+                        said.setdefault(key, []).append(cut)
                         found = True
                         break
                     if tries >= MAX_TRIES:
@@ -273,6 +321,139 @@ def strip_siblings(plan: dict[str, Any],
     return built, said
 
 
+#: Words of an attribute wildcard's name that say which kind of word it
+#: picks, not what it describes ("Hair Colour" describes hair).
+_KIND_WORDS = {"color", "colour", "colors", "colours", "shade", "shades", "tone", "tones",
+               "tint", "tints"}
+#: Name words that are neither the kind nor the subject.
+_FILLER = {"the", "of", "and", "pick", "picks", "main"}
+#: Longest attribute value taken out of another wildcard's words.
+_ATTR_WORDS = 3
+
+
+def _attribute(item: dict[str, Any], payload: dict[str, Any]) -> tuple[set[str], list[str]]:
+    """``(subject words, values)`` for a wildcard that picks one short
+    attribute of a subject (Hair Colour: subject "hair", values "silver",
+    "black"…), else empty."""
+    words = set(re.findall(r"[a-z]+", f"{item.get('name') or ''} "
+                           f"{(item.get('var') or '').replace('_', ' ')}".lower()))
+    kinds = words & _KIND_WORDS
+    subject = {w for w in words - _KIND_WORDS - _FILLER if len(w) >= 3}
+    values = [_norm(o["value"]) for o in payload.get("options") or []
+              if isinstance(o, dict) and not o.get("is_null") and isinstance(o.get("value"), str)
+              and not _LIVE.search(o["value"]) and "," not in o["value"]
+              and 0 < len(o["value"].split()) <= _ATTR_WORDS]
+    if not kinds or not subject or len(values) < 2:
+        return set(), []
+    return subject, sorted(set(values), key=len, reverse=True)
+
+
+def _names_subject(piece: str, subject: set[str]) -> bool:
+    return any(re.search(rf"\b{re.escape(w)}", piece) for w in subject)
+
+
+def strip_attributes(plan: dict[str, Any], built: dict[str, Any], *,
+                     library: list[dict[str, Any]] | None = None,
+                     base: dict[str, Any] | None = None,
+                     ) -> tuple[dict[str, Any], dict[str, list[str]]]:
+    """A colour said twice: a Hair Colour wildcard picks "silver" while a
+    hairstyle option says "long black hair", so the prompt shows two hair
+    colours. Takes the attribute's values out of other wildcards' pieces that
+    name the same subject ("long black hair" → "long hair"), but only when
+    the attribute's own pick shows in every test run, so no prompt is left
+    without one."""
+    said: dict[str, list[str]] = {}
+    attrs = [(i, *_attribute(i, built[i["key"]]["payload"])) for i in plan["items"]
+             if i["kind"] == "wildcard" and i["key"] in built and i.get("var")]
+    attrs = [a for a in attrs if a[2]]
+    if not attrs:
+        return built, said
+    tested: list[dict[str, Any]] | None = None
+    for attr, subject, values in attrs:
+        trial = dict(built)
+        took: dict[str, list[str]] = {}
+        for i in plan["items"]:
+            if i["kind"] != "wildcard" or i is attr or i["key"] not in built or i.get("existing") \
+                    or not P.is_wild(i) or i.get("var") == attr["var"]:
+                continue
+            payload = copy.deepcopy(built[i["key"]]["payload"])
+            changed = False
+            for o in payload.get("options") or []:
+                v = o.get("value") if isinstance(o, dict) else None
+                if not isinstance(v, str) or o.get("is_null") or _LIVE.search(v):
+                    continue
+                pieces = []
+                for piece in v.split(","):
+                    low = _norm(piece)
+                    if _names_subject(low, subject) and low not in values:
+                        for x in values:
+                            words = r"\s+".join(re.escape(w) for w in x.split())
+                            m = re.search(rf"(?<![\w-]){words}(?![\w-])", piece, re.I)
+                            if not m:
+                                continue
+                            rest = " ".join((piece[:m.start()] + " " + piece[m.end():]).split())
+                            if rest and _names_subject(_norm(rest), subject):
+                                took.setdefault(i["key"], []).append(x)
+                                piece, changed = rest, True
+                            break
+                    pieces.append(piece.strip())
+                if changed:
+                    o["value"] = ", ".join(p for p in pieces if p)
+            if changed:
+                try:
+                    WildcardHandler.validate_payload(payload)
+                except Exception:  # noqa: BLE001 - leave the item as it was
+                    took.pop(i["key"], None)
+                    continue
+                trial[i["key"]] = {**built[i["key"]], "payload": payload}
+        if not took:
+            continue
+        if tested is None:
+            tested = runs(plan, built, library=library, base=base)
+        # The attribute must show on its own in every run.
+        if not tested or any(not _norm(str(r["ctx"].get(attr["var"]) or ""))
+                             or not _says(_norm(r["prompt"]), _norm(str(r["ctx"][attr["var"]])))
+                             for r in tested):
+            continue
+        built = trial
+        tested = None
+        for key, gone in took.items():
+            quoted = ", ".join(f'"{g}"' for g in list(dict.fromkeys(gone))[:5])
+            said.setdefault(key, []).append(
+                f"Took {quoted} out: {attr['name']} already picks the {' '.join(sorted(subject))}"
+                f"'s {'colour' if 'colo' in attr['name'].lower() else 'kind'}, so it showed twice")
+    return built, said
+
+
+#: Share of test runs a colour may be missing from before the check says so.
+MISSING_SHARE = 0.25
+
+
+def missing_attributes(plan: dict[str, Any], built: dict[str, Any],
+                       done: list[dict[str, Any]]) -> dict[str, str]:
+    """A colour wildcard whose pick is missing from many prompts (an empty
+    option, or a pick nothing prints): ``{key: problem}``."""
+    out: dict[str, str] = {}
+    if not done or not any(r["prompt"] for r in done):
+        return out
+    for i in plan["items"]:
+        if i["kind"] != "wildcard" or i["key"] not in built or not i.get("var"):
+            continue
+        subject, _values = _attribute(i, built[i["key"]]["payload"])
+        if not subject:
+            continue
+        gone = sum(1 for r in done
+                   if not _norm(str(r["ctx"].get(i["var"]) or ""))
+                   or not _says(_norm(r["prompt"]), _norm(str(r["ctx"][i["var"]]))))
+        if gone >= max(2, MISSING_SHARE * len(done)):
+            nulls = any(o.get("is_null") and _weight(o) > 0
+                        for o in built[i["key"]]["payload"].get("options") or [])
+            out[i["key"]] = (f"{gone} of {len(done)} prompts show no {i['name'].lower()}"
+                             + ("; drop the empty option so every prompt gets one" if nulls
+                                else "; make sure the template prints it every time"))
+    return out
+
+
 def tidy(plan: dict[str, Any], built: dict[str, Any], *,
          library: list[dict[str, Any]] | None = None,
          base: dict[str, Any] | None = None) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
@@ -281,9 +462,11 @@ def tidy(plan: dict[str, Any], built: dict[str, Any], *,
     to add to the item's own)."""
     built, siblings = strip_siblings(plan, built)
     built, repeats = strip_repeats(plan, built, library=library, base=base)
+    built, attrs = strip_attributes(plan, built, library=library, base=base)
+    built, empties = fill_dead_ends(plan, built)
     changed: dict[str, dict[str, Any]] = {}
-    for key in dict.fromkeys([*siblings, *repeats]):
-        lines = list(siblings.get(key) or [])
+    for key in dict.fromkeys([*siblings, *repeats, *attrs, *empties]):
+        lines = [*(siblings.get(key) or []), *(attrs.get(key) or []), *(empties.get(key) or [])]
         if repeats.get(key):
             quoted = ", ".join(f'"{p}"' for p in repeats[key][:6])
             lines.append(f"Took out {quoted}: the prompt already says it, so it showed twice")
@@ -310,6 +493,9 @@ def preview(plan: dict[str, Any], built: dict[str, Any], key: str) -> list[str]:
                 for v in payload.get("values") or []]
     if i["kind"] == "combine":
         return [f"${i['var']} = {payload.get('template') or ''}"]
+    if i["kind"] == "constraint":
+        from engine.ai import constraint as ai_constraint
+        return ai_constraint.describe_existing(payload)
     text = str(payload.get("template_string") or "")
     neg = str(payload.get("negative_template") or "")
     return [text] + ([f"Negative: {neg}"] if neg else [])
@@ -408,25 +594,20 @@ def _weight(o: dict[str, Any]) -> float:
         return 1.0
 
 
-def dead_ends(plan: dict[str, Any], built: dict[str, Any]) -> dict[str, str]:
-    """A constraint that rules out every option of its target for some
-    source pick (every weather option is snow and the rule bans snow in a
-    desert): the fallback then fires anyway and the prompt breaks the rule.
-    ``{target key: problem}``, so the target is rebuilt with options the
-    rule allows."""
+def _stuck(plan: dict[str, Any], built: dict[str, Any]):
+    """``(constraint, source item, target item, stuck source values)`` for
+    each constraint that leaves its target no option for some source pick."""
     by_var = {i["var"]: i for i in plan["items"] if P.is_wild(i) and i["key"] in built}
-    out: dict[str, str] = {}
+    seen: set[str] = set()
     for c in plan["items"]:
         if c["kind"] != "constraint" or c["key"] not in built:
             continue
         s, t = by_var.get(c["source"]), by_var.get(c["target"])
-        if s is None or t is None or t["key"] in out:
+        if s is None or t is None or t["key"] in seen:
             continue
         rule = built[c["key"]]["payload"]
         options = [o for o in built[t["key"]]["payload"].get("options") or []
                    if isinstance(o, dict) and _weight(o) > 0]
-        if any(o.get("is_null") for o in options):
-            continue  # an empty pick is always left
         if len(options) < 2:
             continue
         stuck: list[str] = []
@@ -435,17 +616,74 @@ def dead_ends(plan: dict[str, Any], built: dict[str, Any]) -> dict[str, str]:
                 continue
             pick = {"value": o["value"], "tags": list(o.get("sub_categories") or [])}
             if all(combine_constraint_factor(
-                    [pick], {"value": x.get("value"), "tags": x.get("sub_categories") or []},
+                    [pick], {"value": x.get("value") or "", "tags": x.get("sub_categories") or []},
                     rule.get("matrix"), rule.get("exceptions")) is EXCLUDE for x in options):
                 stuck.append(o["value"])
-        if not stuck:
-            continue
-        named = ", ".join(f'"{v}"' for v in stuck[:3]) + (" …" if len(stuck) > 3 else "")
-        out[t["key"]] = (f"{c['name']} rules out every option when ${s['var']} is {named}, so "
-                         f"the prompt breaks the rule anyway; give {t['name']} options the rule "
-                         f"allows for {'those' if len(stuck) > 1 else 'that'} "
-                         f"{s['name']} (different tags)")
-    return out
+        if stuck:
+            seen.add(t["key"])
+            yield c, s, t, stuck
+
+
+def _named(values: list[str]) -> str:
+    return ", ".join(f'"{v}"' for v in values[:3]) + (" …" if len(values) > 3 else "")
+
+
+def dead_ends(plan: dict[str, Any], built: dict[str, Any]) -> dict[str, str]:
+    """A constraint that rules out every option of its target for some
+    source pick (every weather option is snow and the rule bans snow in a
+    desert): the fallback then fires anyway and the prompt breaks the rule.
+    ``{target key: problem}``, so the target is rebuilt with options the
+    rule allows."""
+    return {t["key"]: (f"{c['name']} rules out every option when ${s['var']} is "
+                       f"{_named(stuck)}, so the prompt breaks the rule anyway; give "
+                       f"{t['name']} options the rule allows for "
+                       f"{'those' if len(stuck) > 1 else 'that'} {s['name']} (different tags)")
+            for c, s, t, stuck in _stuck(plan, built)}
+
+
+def fill_dead_ends(plan: dict[str, Any],
+                   built: dict[str, Any]) -> tuple[dict[str, Any], dict[str, list[str]]]:
+    """The fix for a dead end that needs no model: the target gets an empty
+    option that only those source picks can land on (a jungle gets no snow
+    instead of a blizzard), and every other pick keeps exactly its old
+    chances. ``(built, {key: warning lines})``; the input is left as is."""
+    said: dict[str, list[str]] = {}
+    for c, s, t, stuck in list(_stuck(plan, built)):
+        if not said:
+            built = copy.deepcopy(built)
+        target = built[t["key"]]["payload"]
+        rule = built[c["key"]]["payload"]
+        options = target.setdefault("options", [])
+        if not any(o.get("is_null") for o in options if isinstance(o, dict)):
+            taken = {str(o.get("id")) for o in options if isinstance(o, dict)}
+            options.append({"id": P.new_id(taken), "value": "", "is_null": True,
+                            "weight": 1, "sub_categories": []})
+        exceptions = [e for e in rule.get("exceptions") or []
+                      if not (isinstance(e, dict)
+                              and e.get("target_value", e.get("target")) == "")]
+        only = {str(e.get("source_value", e.get("source"))) for e in exceptions
+                if isinstance(e, dict) and e.get("mode") == "only"}
+        for o in built[s["key"]]["payload"].get("options") or []:
+            if not isinstance(o, dict) or o.get("is_null") or not isinstance(o.get("value"), str):
+                continue
+            v = o["value"]
+            if v in stuck:
+                mode = "only" if v in only else "allow"
+            elif v in only:
+                continue  # an `only` row already shuts the empty option out
+            else:
+                mode = "exclude"
+            exc: dict[str, Any] = {"source": v, "target": "", "mode": mode,
+                                   "factor": 0 if mode == "exclude" else 1.0}
+            if o.get("id"):
+                exc["source_id"] = o["id"]
+            exceptions.append(exc)
+        rule["exceptions"] = exceptions
+        line = (f"{c['name']} left nothing for {_named(stuck)}: added an empty option that "
+                f"only {'those' if len(stuck) > 1 else 'that'} {s['name']} can get")
+        said.setdefault(t["key"], []).append(line)
+        said.setdefault(c["key"], []).append(line)
+    return built, said
 
 
 # ── lookup tables ───────────────────────────────────────────────────────
