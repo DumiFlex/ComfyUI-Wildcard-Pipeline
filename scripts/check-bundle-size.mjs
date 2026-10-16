@@ -292,7 +292,12 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // manager's AI asks an open canvas which variables its Injector, Loop and
 // Model Info nodes set): ~0.6 KB in boot; with both, the total sits ~770
 // bytes under the gate. Same "guide, not a cap" rule as above.
-const TOTAL_LIMIT = 472 * 1024;     // 472 KB
+// RAISED 472 -> 473 KB on 2026-10-16 for the canvas widget lifecycle fix
+// (teardown on node removal, host-owned effect scopes, shared
+// onConnectionsChange subscribers): ~0.65 KB in boot. dev sat at 482,819
+// bytes, 509 under the gate; the fix lands at ~483,465. Same "guide, not a
+// cap" rule as above.
+const TOTAL_LIMIT = 473 * 1024;     // 473 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;
