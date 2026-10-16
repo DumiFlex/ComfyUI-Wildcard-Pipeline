@@ -4522,6 +4522,8 @@ def check_pack(
             problems.setdefault(k, []).append(said)
         for k, said in pack_tidy.dead_ends(plan, built).items():
             problems.setdefault(k, []).append(said)
+        for k, said in pack_tidy.missing_attributes(plan, built, tested).items():
+            problems.setdefault(k, []).append(said)
         if braces:
             problems.setdefault(item["key"], []).append(
                 "the prompt shows { } or @{ } as written: a variable it reads holds a pick "

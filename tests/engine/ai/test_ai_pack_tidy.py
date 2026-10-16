@@ -175,3 +175,48 @@ def test_a_rule_that_leaves_its_target_nothing_gets_an_empty_option_only_there()
     assert seen and not any(seen)
     assert all(o.get("sub_categories") == ["armor"] for o in
                built[keys["Outfit"]]["payload"]["options"])  # input untouched
+
+
+def _with_hair_colour(always=True):
+    raw = _raw()
+    raw["items"].insert(3, _item(name="Hair Colour", var="hair_color", section="Character"))
+    raw["items"][-1]["about"] = "$race, $hair_color hair, $hair, $outfit, $place"
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    keys = _keys(plan)
+    built[keys["Prompt"]]["payload"]["template_string"] = raw["items"][-1]["about"]
+    colours = built[keys["Hair Colour"]]["payload"]["options"]
+    names = ["silver", "jet black", "red", "blonde", "auburn", "pink"]
+    for o, c in zip(colours, names, strict=False):
+        o["value"] = c
+    if not always:
+        colours.append({"id": "nn", "value": "", "is_null": True, "weight": 3})
+    hair = built[keys["Hair"]]["payload"]["options"]
+    hair[0]["value"] = "long jet black hair, ponytail"
+    hair[1]["value"] = "short Red hair"
+    hair[2]["value"] = "red ribbon, braid"  # not about hair colour: kept
+    built[keys["Outfit"]]["payload"]["options"][0]["value"] = "red dress"  # another subject
+    return plan, built, keys
+
+
+def test_a_colour_the_hair_options_repeat_comes_out_of_them():
+    plan, built, keys = _with_hair_colour()
+    new, changed = pack_tidy.tidy(plan, built)
+    hair = [o["value"] for o in new[keys["Hair"]]["payload"]["options"]]
+    assert hair[:3] == ["long hair, ponytail", "short hair", "red ribbon, braid"]
+    assert any('"jet black"' in w and "Hair Colour" in w for w in changed[keys["Hair"]]["warnings"])
+    assert new[keys["Outfit"]]["payload"]["options"][0]["value"] == "red dress"
+    # A colour wildcard that sometimes picks nothing keeps the hair's own colours.
+    plan, built, keys = _with_hair_colour(always=False)
+    new, changed = pack_tidy.tidy(plan, built)
+    assert new[keys["Hair"]]["payload"]["options"][0]["value"].startswith("long jet black hair")
+    assert keys["Hair"] not in changed
+
+
+def test_a_colour_missing_from_many_prompts_is_named():
+    plan, built, keys = _with_hair_colour(always=False)
+    done = pack_tidy.runs(plan, built)
+    said = pack_tidy.missing_attributes(plan, built, done)
+    assert "drop the empty option" in said[keys["Hair Colour"]]
+    plan, built, keys = _with_hair_colour()
+    assert pack_tidy.missing_attributes(plan, built, pack_tidy.runs(plan, built)) == {}

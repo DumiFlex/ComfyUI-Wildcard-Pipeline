@@ -273,6 +273,139 @@ def strip_siblings(plan: dict[str, Any],
     return built, said
 
 
+#: Words of an attribute wildcard's name that say which kind of word it
+#: picks, not what it describes ("Hair Colour" describes hair).
+_KIND_WORDS = {"color", "colour", "colors", "colours", "shade", "shades", "tone", "tones",
+               "tint", "tints"}
+#: Name words that are neither the kind nor the subject.
+_FILLER = {"the", "of", "and", "pick", "picks", "main"}
+#: Longest attribute value taken out of another wildcard's words.
+_ATTR_WORDS = 3
+
+
+def _attribute(item: dict[str, Any], payload: dict[str, Any]) -> tuple[set[str], list[str]]:
+    """``(subject words, values)`` for a wildcard that picks one short
+    attribute of a subject (Hair Colour: subject "hair", values "silver",
+    "black"…), else empty."""
+    words = set(re.findall(r"[a-z]+", f"{item.get('name') or ''} "
+                           f"{(item.get('var') or '').replace('_', ' ')}".lower()))
+    kinds = words & _KIND_WORDS
+    subject = {w for w in words - _KIND_WORDS - _FILLER if len(w) >= 3}
+    values = [_norm(o["value"]) for o in payload.get("options") or []
+              if isinstance(o, dict) and not o.get("is_null") and isinstance(o.get("value"), str)
+              and not _LIVE.search(o["value"]) and "," not in o["value"]
+              and 0 < len(o["value"].split()) <= _ATTR_WORDS]
+    if not kinds or not subject or len(values) < 2:
+        return set(), []
+    return subject, sorted(set(values), key=len, reverse=True)
+
+
+def _names_subject(piece: str, subject: set[str]) -> bool:
+    return any(re.search(rf"\b{re.escape(w)}", piece) for w in subject)
+
+
+def strip_attributes(plan: dict[str, Any], built: dict[str, Any], *,
+                     library: list[dict[str, Any]] | None = None,
+                     base: dict[str, Any] | None = None,
+                     ) -> tuple[dict[str, Any], dict[str, list[str]]]:
+    """A colour said twice: a Hair Colour wildcard picks "silver" while a
+    hairstyle option says "long black hair", so the prompt shows two hair
+    colours. Takes the attribute's values out of other wildcards' pieces that
+    name the same subject ("long black hair" → "long hair"), but only when
+    the attribute's own pick shows in every test run, so no prompt is left
+    without one."""
+    said: dict[str, list[str]] = {}
+    attrs = [(i, *_attribute(i, built[i["key"]]["payload"])) for i in plan["items"]
+             if i["kind"] == "wildcard" and i["key"] in built and i.get("var")]
+    attrs = [a for a in attrs if a[2]]
+    if not attrs:
+        return built, said
+    tested: list[dict[str, Any]] | None = None
+    for attr, subject, values in attrs:
+        trial = dict(built)
+        took: dict[str, list[str]] = {}
+        for i in plan["items"]:
+            if i["kind"] != "wildcard" or i is attr or i["key"] not in built or i.get("existing") \
+                    or not P.is_wild(i) or i.get("var") == attr["var"]:
+                continue
+            payload = copy.deepcopy(built[i["key"]]["payload"])
+            changed = False
+            for o in payload.get("options") or []:
+                v = o.get("value") if isinstance(o, dict) else None
+                if not isinstance(v, str) or o.get("is_null") or _LIVE.search(v):
+                    continue
+                pieces = []
+                for piece in v.split(","):
+                    low = _norm(piece)
+                    if _names_subject(low, subject) and low not in values:
+                        for x in values:
+                            words = r"\s+".join(re.escape(w) for w in x.split())
+                            m = re.search(rf"(?<![\w-]){words}(?![\w-])", piece, re.I)
+                            if not m:
+                                continue
+                            rest = " ".join((piece[:m.start()] + " " + piece[m.end():]).split())
+                            if rest and _names_subject(_norm(rest), subject):
+                                took.setdefault(i["key"], []).append(x)
+                                piece, changed = rest, True
+                            break
+                    pieces.append(piece.strip())
+                if changed:
+                    o["value"] = ", ".join(p for p in pieces if p)
+            if changed:
+                try:
+                    WildcardHandler.validate_payload(payload)
+                except Exception:  # noqa: BLE001 - leave the item as it was
+                    took.pop(i["key"], None)
+                    continue
+                trial[i["key"]] = {**built[i["key"]], "payload": payload}
+        if not took:
+            continue
+        if tested is None:
+            tested = runs(plan, built, library=library, base=base)
+        # The attribute must show on its own in every run.
+        if not tested or any(not _norm(str(r["ctx"].get(attr["var"]) or ""))
+                             or not _says(_norm(r["prompt"]), _norm(str(r["ctx"][attr["var"]])))
+                             for r in tested):
+            continue
+        built = trial
+        tested = None
+        for key, gone in took.items():
+            quoted = ", ".join(f'"{g}"' for g in list(dict.fromkeys(gone))[:5])
+            said.setdefault(key, []).append(
+                f"Took {quoted} out: {attr['name']} already picks the {' '.join(sorted(subject))}"
+                f"'s {'colour' if 'colo' in attr['name'].lower() else 'kind'}, so it showed twice")
+    return built, said
+
+
+#: Share of test runs a colour may be missing from before the check says so.
+MISSING_SHARE = 0.25
+
+
+def missing_attributes(plan: dict[str, Any], built: dict[str, Any],
+                       done: list[dict[str, Any]]) -> dict[str, str]:
+    """A colour wildcard whose pick is missing from many prompts (an empty
+    option, or a pick nothing prints): ``{key: problem}``."""
+    out: dict[str, str] = {}
+    if not done or not any(r["prompt"] for r in done):
+        return out
+    for i in plan["items"]:
+        if i["kind"] != "wildcard" or i["key"] not in built or not i.get("var"):
+            continue
+        subject, _values = _attribute(i, built[i["key"]]["payload"])
+        if not subject:
+            continue
+        gone = sum(1 for r in done
+                   if not _norm(str(r["ctx"].get(i["var"]) or ""))
+                   or not _says(_norm(r["prompt"]), _norm(str(r["ctx"][i["var"]]))))
+        if gone >= max(2, MISSING_SHARE * len(done)):
+            nulls = any(o.get("is_null") and _weight(o) > 0
+                        for o in built[i["key"]]["payload"].get("options") or [])
+            out[i["key"]] = (f"{gone} of {len(done)} prompts show no {i['name'].lower()}"
+                             + ("; drop the empty option so every prompt gets one" if nulls
+                                else "; make sure the template prints it every time"))
+    return out
+
+
 def tidy(plan: dict[str, Any], built: dict[str, Any], *,
          library: list[dict[str, Any]] | None = None,
          base: dict[str, Any] | None = None) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
@@ -281,10 +414,11 @@ def tidy(plan: dict[str, Any], built: dict[str, Any], *,
     to add to the item's own)."""
     built, siblings = strip_siblings(plan, built)
     built, repeats = strip_repeats(plan, built, library=library, base=base)
+    built, attrs = strip_attributes(plan, built, library=library, base=base)
     built, empties = fill_dead_ends(plan, built)
     changed: dict[str, dict[str, Any]] = {}
-    for key in dict.fromkeys([*siblings, *repeats, *empties]):
-        lines = list(siblings.get(key) or []) + list(empties.get(key) or [])
+    for key in dict.fromkeys([*siblings, *repeats, *attrs, *empties]):
+        lines = [*(siblings.get(key) or []), *(attrs.get(key) or []), *(empties.get(key) or [])]
         if repeats.get(key):
             quoted = ", ".join(f'"{p}"' for p in repeats[key][:6])
             lines.append(f"Took out {quoted}: the prompt already says it, so it showed twice")
