@@ -35,6 +35,7 @@ import secrets
 from typing import Any
 
 from engine.ai import about, adult
+from engine.ai import negation as ai_negation
 from engine.ai import refs as ai_refs
 from engine.modules.wildcard_handler import WildcardHandler
 from engine.syntax.subcat_filter import validate_subcat_name
@@ -239,6 +240,10 @@ def compile_options(
             continue
         if adult.sexual_minor(text):
             skipped.append({"text": text[:80], "reason": "it names a minor in a sexual context"})
+            continue
+        if ai_negation.excluded(text):
+            skipped.append({"text": text[:80], "reason": "it only says what to leave out, "
+                                                         "which belongs in the negative"})
             continue
         key = _norm_key(text)
         if key in seen:

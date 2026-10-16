@@ -2219,7 +2219,9 @@ def _asked_colours(raw_items: list[dict[str, Any]], request: str,
     taken = {_var(x.get("var")) for x in items}
     for subject in asked:
         def covers(x: dict[str, Any], subject: str = subject) -> bool:
-            words = f"{x.get('name') or ''} {x.get('var') or ''} {x.get('about') or ''}"
+            # By name or variable only: a Hair Styles item whose about says
+            # "with colours" left round 31's hair prompts with no colour.
+            words = f"{x.get('name') or ''} {x.get('var') or ''}"
             return bool(_COLOURISH.search(words)) and subject[:4] in words.lower()
         if any(covers(x) for x in items if x.get("kind") in ("wildcard", "library",
                                                              "fixed_values", "combine")):

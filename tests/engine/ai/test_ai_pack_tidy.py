@@ -213,6 +213,26 @@ def test_a_colour_the_hair_options_repeat_comes_out_of_them():
     assert keys["Hair"] not in changed
 
 
+def test_a_colour_spelled_differently_still_comes_out_of_the_hair_options():
+    plan, built, keys = _with_hair_colour()
+    hair = built[keys["Hair"]]["payload"]["options"]
+    hair[0]["value"] = "long hair, sleek platinum blonde hair"
+    hair[1]["value"] = "lemon blonde hair, bob cut"
+    new, changed = pack_tidy.tidy(plan, built)
+    got = [o["value"] for o in new[keys["Hair"]]["payload"]["options"]]
+    assert got[:2] == ["long hair, sleek hair", "bob cut"]
+    assert keys["Hair"] in changed
+
+
+def test_hair_colours_are_added_when_only_an_about_mentions_colour():
+    raw = _raw()
+    raw["items"] = [_item(name="Hair Styles", var="hair_style", section="Character",
+                          about="hairstyles with colours"),
+                    _item(kind="template", name="Prompt", about="$hair_style")]
+    plan = pack.compile_plan(raw, request="Hairstyles and hair colours")
+    assert "Hair Colour" in [i["name"] for i in plan["items"]]
+
+
 def test_a_colour_missing_from_many_prompts_is_named():
     plan, built, keys = _with_hair_colour(always=False)
     done = pack_tidy.runs(plan, built)

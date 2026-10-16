@@ -28,6 +28,13 @@ def test_basic_options_come_through():
     assert out["skipped"] == []
 
 
+def test_an_option_that_only_says_what_to_leave_out_is_skipped():
+    out = w.compile_options({"options": [_opt("longsword"), _opt("no guns, no rifles"),
+                                         _opt("no hat")]}, existing_payload=EXISTING)
+    assert [o["value"] for o in out["options"]] == ["longsword", "no hat"]
+    assert "leave out" in out["skipped"][0]["reason"]
+
+
 def test_duplicates_of_existing_and_each_other_are_skipped():
     out = w.compile_options({"options": [
         _opt("Red  Hair,"), _opt("green hair"), _opt("green hair"),

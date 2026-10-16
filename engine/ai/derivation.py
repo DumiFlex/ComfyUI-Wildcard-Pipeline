@@ -35,6 +35,7 @@ import secrets
 from typing import Any
 
 from engine.ai import about, adult
+from engine.ai import negation as ai_negation
 from engine.ai import refs as ai_refs
 from engine.modules.derivation_handler import (
     _VALID_MODES,
@@ -419,6 +420,12 @@ def _compile_actions(
             raise _Drop(str(e)) from None
         if not value and mode != "replace":
             continue
+        left_out = ai_negation.excluded(value) if mode not in NEGATIVE_MODES else ""
+        if left_out:
+            # "no guns, no rifles" written as the value would print them.
+            warnings.append(f"\"{value[:60]}\" only says what to leave out: it adds "
+                            f"{left_out[:60]} to ${target}'s negative instead")
+            mode, value = "negative", left_out
         if mode not in NEGATIVE_MODES and adult.sexual_minor(value):
             raise _Drop("it names a minor in a sexual context")
         for read in _VAR_READ.findall(value):

@@ -345,7 +345,34 @@ def _attribute(item: dict[str, Any], payload: dict[str, Any]) -> tuple[set[str],
               and 0 < len(o["value"].split()) <= _ATTR_WORDS]
     if not kinds or not subject or len(values) < 2:
         return set(), []
+    # "lemon blonde hair" also matches as "lemon blonde" inside "sleek lemon
+    # blonde bob".
+    bare = [" ".join(w for w in v.split() if w not in subject) for v in values]
+    values += [b for b in bare if b and b not in values]
     return subject, sorted(set(values), key=len, reverse=True)
+
+
+#: Colour words, for a colour said in another wildcard's options that the
+#: colour wildcard spells differently ("sleek platinum blonde hair" next to
+#: Hair Colour's "lemon blonde hair"): round 31's hair pack.
+_COLOUR_WORDS = (
+    "black|white|grey|gray|silver|blonde|blond|brunette|brown|auburn|red|ginger|copper|"
+    "pink|purple|violet|lavender|blue|teal|turquoise|green|mint|orange|yellow|gold|golden|"
+    "platinum|ash|honey|strawberry|chestnut|caramel|chocolate|raven|jet|crimson|scarlet|"
+    "burgundy|magenta|rose|peach|cream|ivory|beige|tan|bronze|amber|azure|cyan|navy|"
+    "emerald|sapphire|ruby|plum|cherry|lemon|sandy|dirty|light|dark|pale|pastel|bright|"
+    "deep|icy|ice|snow|multicolored|multicoloured|two-tone|ombre|rainbow|streaked")
+_COLOUR_RUN = re.compile(rf"(?<![\w-])(?:(?:{_COLOUR_WORDS})(?:[\s-]+|$)){{1,4}}", re.I)
+#: Words of a colour run that only shade another ("light", "dark"): a run of
+#: just these is not a colour.
+_SHADES = {"light", "dark", "pale", "pastel", "bright", "deep", "dirty"}
+
+
+def _colour_run(piece: str) -> re.Match[str] | None:
+    for m in _COLOUR_RUN.finditer(piece):
+        if set(m.group(0).lower().replace("-", " ").split()) - _SHADES:
+            return m
+    return None
 
 
 def _names_subject(piece: str, subject: set[str]) -> bool:
@@ -370,6 +397,7 @@ def strip_attributes(plan: dict[str, Any], built: dict[str, Any], *,
         return built, said
     tested: list[dict[str, Any]] | None = None
     for attr, subject, values in attrs:
+        colour = bool(re.search(r"colou?r", f"{attr.get('name')} {attr.get('var')}", re.I))
         trial = dict(built)
         took: dict[str, list[str]] = {}
         for i in plan["items"]:
@@ -386,18 +414,26 @@ def strip_attributes(plan: dict[str, Any], built: dict[str, Any], *,
                 for piece in v.split(","):
                     low = _norm(piece)
                     if _names_subject(low, subject) and low not in values:
+                        found = None
                         for x in values:
                             words = r"\s+".join(re.escape(w) for w in x.split())
-                            m = re.search(rf"(?<![\w-]){words}(?![\w-])", piece, re.I)
-                            if not m:
-                                continue
-                            rest = " ".join((piece[:m.start()] + " " + piece[m.end():]).split())
+                            found = re.search(rf"(?<![\w-]){words}(?![\w-])", piece, re.I)
+                            if found:
+                                break
+                        run = _colour_run(piece) if colour else None
+                        if run is not None and (found is None or (
+                                run.start() <= found.start() and run.end() >= found.end())):
+                            found = run  # the whole colour: "platinum blonde", not "blonde"
+                        if found is not None:
+                            rest = " ".join((piece[:found.start()] + " "
+                                             + piece[found.end():]).split())
                             if rest and _names_subject(_norm(rest), subject):
-                                took.setdefault(i["key"], []).append(x)
-                                piece, changed = rest, True
-                            break
+                                took.setdefault(i["key"], []).append(found.group(0).strip())
+                                # A bare "hair" left over says nothing.
+                                bare = set(_norm(rest).split()) <= subject
+                                piece, changed = ("" if bare else rest), True
                     pieces.append(piece.strip())
-                if changed:
+                if changed and any(pieces):
                     o["value"] = ", ".join(p for p in pieces if p)
             if changed:
                 try:

@@ -99,6 +99,20 @@ def test_derivation_compiles_groups_and_extra_actions():
     DerivationHandler.validate_payload({"rules": [rule]})
 
 
+def test_a_value_that_only_says_what_to_leave_out_goes_to_the_negative():
+    cat = library_vars.build_catalog(LIBRARY)
+    out = ai_derivation.compile_rules(_drv([{
+        "summary": "No firearms in fantasy",
+        "branches": [{"match": "all", "conditions": [
+            {"var": "class", "op": "equals", "value": "Mage"}],
+            "actions": [{"target_var": "weapon", "mode": "replace",
+                         "value": "no guns, no firearms, no rifles"}]}]}]), catalog=cat)
+    [r] = out["rules"]
+    assert r["rule"]["branches"][0]["action"] == {
+        "target_var": "weapon", "mode": "negative", "value": "guns, firearms, rifles"}
+    assert any("only says what to leave out" in w for w in r["warnings"])
+
+
 def test_derivation_warns_and_skips():
     cat = library_vars.build_catalog(LIBRARY)
     out = ai_derivation.compile_rules(_drv([
