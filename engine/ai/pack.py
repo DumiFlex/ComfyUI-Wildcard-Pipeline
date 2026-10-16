@@ -2874,11 +2874,29 @@ def library_item(plan: dict[str, Any], key: str,
             "preview": preview, "warnings": [f"Uses your {what} {item['name']} as it is"]}
 
 
+#: A retry after an answer ran past the output limit (a small model looping
+#: on one phrase, or thinking too long) is asked cooler and shorter.
+_CUT = re.compile(r"cut off|output limit", re.I)
+CUT_RETRY = ("Your last answer ran past the output limit. Write the JSON straight away, "
+             "short, and never repeat a phrase.")
+
+
 def item_request(
     plan: dict[str, Any], key: str, built: dict[str, Any], note: str = "",
     library: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """``{system, user, schema, schema_name, temperature}`` for one item."""
+    req = _item_request(plan, key, built, note, library)
+    if _CUT.search(note or ""):
+        req["user"] += "\n\n" + CUT_RETRY
+        req["temperature"] = min(float(req.get("temperature", 0.8)), 0.2)
+    return req
+
+
+def _item_request(
+    plan: dict[str, Any], key: str, built: dict[str, Any], note: str = "",
+    library: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     item = _item(plan, key)
     kind = item["kind"]
     if kind == "library":
@@ -4502,6 +4520,8 @@ def check_pack(
         tested = pack_tidy.runs(plan, built, library=library, base=base)
         for k, said in pack_tidy.rule_breaks(plan, built, tested).items():
             problems.setdefault(k, []).append(said)
+        for k, said in pack_tidy.dead_ends(plan, built).items():
+            problems.setdefault(k, []).append(said)
         if braces:
             problems.setdefault(item["key"], []).append(
                 "the prompt shows { } or @{ } as written: a variable it reads holds a pick "
@@ -5359,6 +5379,7 @@ async def run_pack(
                 continue
             except Exception as e:  # noqa: BLE001 - a failed call is a scored miss
                 log.append(f"{key} attempt {attempt + 1}: {type(e).__name__}: {e}")
+                error = str(e)
                 continue
             built[key] = {"id": out["id"], "payload": out["payload"]}
             log.extend(f"{key}: {w}" for w in out["warnings"])

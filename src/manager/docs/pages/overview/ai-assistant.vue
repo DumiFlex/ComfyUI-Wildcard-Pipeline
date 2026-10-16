@@ -673,7 +673,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           and pieces of a wildcard's options that another wildcard picks come out. Then the pack
           runs 200 seeds on the real engine. An item with a problem (a rule that
           never applies, a variable nothing sets, a prompt showing what one of the pack's own
-          rules keeps out, like snow in a desert scene) is rebuilt with the problem as a note, up
+          rules keeps out, like snow in a desert scene, or a rule that leaves a wildcard no
+          option it allows for some pick) is rebuilt with the problem as a note, up
           to twice, and the row says what was fixed. The run also flags options that never came up
           or that take most of the picks. A problem on an item has <b>Fix with AI</b> (rebuild it
           with the problem as a note), <b>Explain</b> and <b>Dismiss</b>. Click a row to see what

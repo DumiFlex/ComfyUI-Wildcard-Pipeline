@@ -401,6 +401,53 @@ def rule_breaks(plan: dict[str, Any], built: dict[str, Any],
     return out
 
 
+def _weight(o: dict[str, Any]) -> float:
+    try:
+        return float(o.get("weight", 1) if o.get("weight") is not None else 1)
+    except (TypeError, ValueError):
+        return 1.0
+
+
+def dead_ends(plan: dict[str, Any], built: dict[str, Any]) -> dict[str, str]:
+    """A constraint that rules out every option of its target for some
+    source pick (every weather option is snow and the rule bans snow in a
+    desert): the fallback then fires anyway and the prompt breaks the rule.
+    ``{target key: problem}``, so the target is rebuilt with options the
+    rule allows."""
+    by_var = {i["var"]: i for i in plan["items"] if P.is_wild(i) and i["key"] in built}
+    out: dict[str, str] = {}
+    for c in plan["items"]:
+        if c["kind"] != "constraint" or c["key"] not in built:
+            continue
+        s, t = by_var.get(c["source"]), by_var.get(c["target"])
+        if s is None or t is None or t["key"] in out:
+            continue
+        rule = built[c["key"]]["payload"]
+        options = [o for o in built[t["key"]]["payload"].get("options") or []
+                   if isinstance(o, dict) and _weight(o) > 0]
+        if any(o.get("is_null") for o in options):
+            continue  # an empty pick is always left
+        if len(options) < 2:
+            continue
+        stuck: list[str] = []
+        for o in built[s["key"]]["payload"].get("options") or []:
+            if not isinstance(o, dict) or o.get("is_null") or not isinstance(o.get("value"), str):
+                continue
+            pick = {"value": o["value"], "tags": list(o.get("sub_categories") or [])}
+            if all(combine_constraint_factor(
+                    [pick], {"value": x.get("value"), "tags": x.get("sub_categories") or []},
+                    rule.get("matrix"), rule.get("exceptions")) is EXCLUDE for x in options):
+                stuck.append(o["value"])
+        if not stuck:
+            continue
+        named = ", ".join(f'"{v}"' for v in stuck[:3]) + (" …" if len(stuck) > 3 else "")
+        out[t["key"]] = (f"{c['name']} rules out every option when ${s['var']} is {named}, so "
+                         f"the prompt breaks the rule anyway; give {t['name']} options the rule "
+                         f"allows for {'those' if len(stuck) > 1 else 'that'} "
+                         f"{s['name']} (different tags)")
+    return out
+
+
 # ── lookup tables ───────────────────────────────────────────────────────
 
 

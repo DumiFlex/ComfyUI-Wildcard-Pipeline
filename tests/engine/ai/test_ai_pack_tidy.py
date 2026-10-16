@@ -113,3 +113,31 @@ def test_a_template_the_model_never_answered_reads_every_pick():
     plan["items"][-1]["about"] = "the prompt"
     reads = pack_tidy.fallback_template(plan, built)["template"]
     assert {"$race", "$hair", "$outfit", "$place", "$light", "$quality"} == set(reads.split(", "))
+
+
+def test_a_rule_that_leaves_its_target_nothing_names_the_target():
+    plan = pack.compile_plan(_raw())
+    built = _built(plan)
+    keys = _keys(plan)
+    assert pack_tidy.dead_ends(plan, built) == {}
+    # Every outfit is armour, which elves never wear.
+    for o in built[keys["Outfit"]]["payload"]["options"]:
+        o["sub_categories"] = ["armor"]
+    said = pack_tidy.dead_ends(plan, built)
+    assert set(said) == {keys["Outfit"]}
+    assert "rules out every option" in said[keys["Outfit"]] and "$race" in said[keys["Outfit"]]
+    report = pack.check_pack(plan, built, seeds=20)
+    assert any("rules out every option" in t for t in report["problems"][keys["Outfit"]])
+    # An empty option is always left, so nothing is stuck.
+    built[keys["Outfit"]]["payload"]["options"].append({"id": "n", "value": "", "is_null": True})
+    assert pack_tidy.dead_ends(plan, built) == {}
+
+
+def test_a_retry_after_a_cut_off_answer_is_asked_cooler_and_shorter():
+    plan = pack.compile_plan(_raw())
+    key = _keys(plan)["Prompt"]
+    first = pack.item_request(plan, key, _built(plan))
+    again = pack.item_request(plan, key, _built(plan), "your last answer failed: the model's "
+                              "answer was cut off at its output limit")
+    assert pack.CUT_RETRY not in first["user"] and pack.CUT_RETRY in again["user"]
+    assert again["temperature"] <= 0.2
