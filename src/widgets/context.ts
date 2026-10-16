@@ -1,7 +1,7 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { app } from "#comfyui/app";
 import {
-  createDomWidgetHost, parseWidgetJson, serializeWidgetJson, emptyContextValue,
+  createDomWidgetHost, listenApi, parseWidgetJson, serializeWidgetJson, emptyContextValue,
   type ContextWidgetValue, type MountTargetNode,
 } from "./_shared";
 import { attachThemeDetector } from "../extension/theme-detector";
@@ -601,7 +601,7 @@ export function create(node: ContextNode, inputName: string) {
       if (v !== currentJson.value) currentJson.value = v;
     },
   });
-  attachThemeDetector(host.widget.element, app);
+  host.onCleanup(attachThemeDetector(host.widget.element, app));
 
   // No `beforeQueued` per-module snapshot anymore. That path read
   // `seedWidget.value` which is:
@@ -691,25 +691,10 @@ export function create(node: ContextNode, inputName: string) {
     // the local-widget-value heuristic that produced wrong locks
     // for link-driven seed inputs.
   }
-  const apiObj = (app as unknown as { api?: {
-    addEventListener: (n: string, fn: (e: Event) => void) => void;
-    removeEventListener: (n: string, fn: (e: Event) => void) => void;
-  } }).api;
-  apiObj?.addEventListener("executed", onExecuted);
+  listenApi(host, "executed", onExecuted);
 
-  // No widget.onRemove monkey-patch — wrapping ComfyUI's internal
-  // `onRemove` callback was breaking the `this` binding their code
-  // relies on (manifested as "TypeError: can't access property 'id',
-  // this is undefined" during graph.clear() / loadGraphData). The
-  // engineering rule here: don't interfere with ComfyUI / other-
-  // nodes lifecycle — patch ours only.
-  //
-  // The leak from skipping listener cleanup is bounded: the
-  // `executed` handler filters by `detail.node === node.id` and
-  // returns early when the node is gone, so a stale closure costs
-  // one filter check per executed event. If a future workflow
-  // churn pattern makes that meaningful we'll revisit via a
-  // node-level chainCallback or move the listener into Vue's
-  // scope-dispose, but for now the simplest path is no cleanup.
+  // Removed with the host: `createDomWidgetHost` chains `node.onRemoved`
+  // (never `widget.onRemove`, whose `this` binding ComfyUI relies on during
+  // graph.clear() / loadGraphData) and runs the registered cleanups.
   return host;
 }

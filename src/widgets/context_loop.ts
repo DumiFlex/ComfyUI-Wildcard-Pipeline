@@ -8,9 +8,9 @@
  * canonical serialised form on every SFC update so ComfyUI's widget
  * state matches what `execute()` sees.
  */
-import { defineAsyncComponent, h, ref, watch, type Component } from "vue";
+import { defineAsyncComponent, h, ref, watch, type Component, type EffectScope } from "vue";
 import { app } from "#comfyui/app";
-import { createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
+import { buildInScope, createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
 import { attachLoopSeedsCapture } from "./_seed-capture";
 import { reactiveFromGraph } from "../extension/reactive";
 import {
@@ -39,7 +39,14 @@ interface ContextLoopHostNode extends MountTargetNode, LiteNodeLike {
   properties?: Record<string, unknown>;
 }
 
-export function create(node: ContextLoopHostNode, inputName: string) {
+export function create(node: ContextLoopHostNode, inputName: string): DomWidgetHost {
+  // Run inside a host-owned effect scope: the `reactiveFromGraph` refs and
+  // watchers below live outside any component setup(), so without it their
+  // polls would outlive the node.
+  return buildInScope((scope) => build(node, inputName, scope));
+}
+
+function build(node: ContextLoopHostNode, inputName: string, scope: EffectScope): DomWidgetHost {
   /**
    * Frame-grid collapse, persisted so it survives a workflow save.
    *
@@ -188,6 +195,7 @@ export function create(node: ContextLoopHostNode, inputName: string) {
   });
 
   host = createDomWidgetHost(node, inputName, wrapper, {
+    scope,
     initialValue: serializeContextLoopConfig(config.value),
     onValueRestored: (raw: string) => {
       // Saved properties land with the workflow, after `create()` ran.
@@ -202,7 +210,8 @@ export function create(node: ContextLoopHostNode, inputName: string) {
 
   // Capture the Loop's executed `loop_seeds` series for the modal's "lock
   // previous" button (see _seed-capture).
-  attachLoopSeedsCapture(node);
+  attachLoopSeedsCapture(node, host);
+  host.onCleanup(() => loopEditors.delete(node));
 
   return host;
 }

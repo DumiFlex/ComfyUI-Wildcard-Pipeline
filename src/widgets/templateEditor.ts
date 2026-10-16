@@ -305,7 +305,7 @@ export function create(node: EditorNode, inputName: string) {
     (node as { properties?: Record<string, unknown> }).properties,
     model.value,
   );
-  attachThemeDetector(editorHost.widget.element, app);
+  editorHost.onCleanup(attachThemeDetector(editorHost.widget.element, app));
 
   // Published for the assembler helper's chip strip, which is a different
   // widget and has no other way to insert at this editor's caret. The chips

@@ -1,6 +1,5 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
-import { app } from "#comfyui/app";
-import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
+import { createDomWidgetHost, listenApi, serializeWidgetJson, type MountTargetNode } from "./_shared";
 import { reactiveFromGraph } from "../extension/reactive";
 import {
   defaultModelInfoConfig,
@@ -98,10 +97,7 @@ export function create(node: ModelInfoHostNode, inputName: string) {
     recordModelInfoRun(node, next);
     lastRun.value = next;
   }
-  const apiObj = (app as unknown as { api?: {
-    addEventListener: (n: string, fn: (e: Event) => void) => void;
-  } }).api;
-  apiObj?.addEventListener("executed", onExecuted);
+  listenApi(host, "executed", onExecuted);
 
   return host;
 }
