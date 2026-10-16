@@ -88,8 +88,9 @@ def abilities() -> dict[str, Any]:
                 "Apply small changes automatically on, a low-risk card such as new tags or a new "
                 "category applies itself, with Undo). Cards that create items keep their "
                 "ids while the chat is open, so later cards can already point at them. "
-                "Small models get the tools for the page they are on plus more_tools, "
-                "which lists the rest.")},
+                "Small and medium models get the tools for the page they are on (medium "
+                "models also the wildcard, rule, constraint, test and list tools everywhere) "
+                "plus more_tools, which lists the rest; large models get every tool.")},
             {"title": "How answers look", "text": (
                 "Items show as chips: the model writes [[id#Name]] and the user sees the "
                 "name, which opens the item. The chat shows **bold**, *italic*, lists, "

@@ -29,9 +29,14 @@ SIZES = ("small", "medium", "large")
 #: writing tasks keep their own temperatures. `result_chars` caps one tool
 #: result, `history_chars` the earlier steps the chat re-sends.
 PROFILES: dict[str, dict[str, Any]] = {
-    "small": {"chat_temp": 0.15, "result_chars": 3500, "history_chars": 14000, "slim": True},
-    "medium": {"chat_temp": 0.25, "result_chars": 7000, "history_chars": 30000, "slim": False},
-    "large": {"chat_temp": 0.4, "result_chars": 14000, "history_chars": 90000, "slim": False},
+    "small": {"chat_temp": 0.15, "result_chars": 3500, "history_chars": 14000, "slim": True,
+              "scoped": True},
+    # Medium models pick better among fewer tools too: the page's tools plus
+    # the common ones, the rest one more_tools call away.
+    "medium": {"chat_temp": 0.25, "result_chars": 7000, "history_chars": 30000, "slim": False,
+               "scoped": True},
+    "large": {"chat_temp": 0.4, "result_chars": 14000, "history_chars": 90000, "slim": False,
+              "scoped": False},
 }
 
 _PARAMS = re.compile(r"(?<![\d.])(\d+(?:\.\d+)?)\s*b(?![a-z])", re.IGNORECASE)

@@ -1105,7 +1105,9 @@ def _open_chat(lib: Any, cfg: dict[str, Any], meta: dict[str, Any], base: dict[s
             meta["lean"] = level
         else:
             meta.pop("lean", None)
-        meta["tools"] = ai_tools.toolset(page.get("route") if page else None, scoped=slim,
+        meta["tools"] = ai_tools.toolset(page.get("route") if page else None,
+                                         scoped=slim or bool(base.get("scoped")),
+                                         wide=not slim,
                                          web=bool(meta.get("web")),
                                          delete=bool(meta.get("delete")),
                                          vocab=bool(meta.get("vocab")),
@@ -1526,8 +1528,9 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         danbooru_on = bool(cfg.get("danbooru_lookup"))
         meta: dict[str, Any] = {
             "format": fmt, "proposals": {}, "fingerprint": {},
-            "tools": ai_tools.toolset(page.get("route") if page else None, scoped=prof["slim"],
-                                      web=web_on,
+            "tools": ai_tools.toolset(page.get("route") if page else None,
+                                      scoped=prof["slim"] or bool(prof.get("scoped")),
+                                      wide=not prof["slim"], web=web_on,
                                       delete=bool(cfg.get("allow_delete")),
                                       vocab=bool(vocab_kinds), reader=reader_on,
                                       danbooru=danbooru_on),

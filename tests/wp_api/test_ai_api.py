@@ -863,7 +863,9 @@ async def test_chat_sees_templates_and_runs_stacks(wp_client, fake_llm):
                 {"id": "Hero shot", "negative": "$negatives, lowres"})},
         ]},
     ])
-    resp = await wp_client.post("/wp/api/ai/chat", json={"message": "check my hero template"})
+    # On the templates page, where a medium model has the template tools.
+    resp = await wp_client.post("/wp/api/ai/chat", json={"message": "check my hero template",
+                                                         "page": {"route": "templates"}})
     assert resp.status == 200, await resp.text()
     body = await resp.json()
     acted = [s for s in body["steps"] if not s.get("say")]
@@ -1435,3 +1437,23 @@ def test_thinking_text_reads_each_way_a_server_sends_it():
     assert _ai_chat.thinking_text("a</think> b") == "a"
     assert _ai_chat.thinking_text("<think>cut off") == "cut off"
     assert _ai_chat.thinking_text("no reasoning") == ""
+
+
+async def test_a_medium_model_gets_the_page_tools_and_asks_for_the_rest(wp_client, fake_llm):
+    await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_bundle", "args": json.dumps({"name": "B"})}]},
+        {"message": "", "calls": [{"tool": "more_tools", "args": "{}"}]},
+        {"message": "Now I can.", "calls": []},
+    ])
+    out = await _chat(wp_client, "make a bundle", page={"route": "wildcards"})
+    first = fake_llm.seen[0]["body"]["messages"][0]["content"]
+    assert "- create_wildcard " in first and "- create_bundle " not in first
+    assert "- more_tools " in first
+    results = fake_llm.seen[1]["body"]["messages"][-1]["content"]
+    assert "call more_tools first" in results
+    later = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert "create_bundle" in later
+    assert out["message"] == "Now I can."

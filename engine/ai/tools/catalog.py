@@ -662,6 +662,11 @@ PAGE_GROUPS: dict[str, tuple[str, ...]] = {
     "pack-builder": ("pack", "wildcards"),
 }
 DEFAULT_GROUPS = ("wildcards", "constraints", "derivations", "pack")
+#: What a medium model gets on every page besides the page's own groups:
+#: the item types most asks touch, tests and list tools. Bundles,
+#: templates, combines and fixed values stay one more_tools call away off
+#: their own pages.
+WIDE_GROUPS = ("wildcards", "constraints", "derivations", "pack", "test", "lists")
 
 
 #: Offered only while Settings › AI assistant › "Let the assistant delete
@@ -688,10 +693,11 @@ def web_allowed(name: str, *, web: bool, reader: bool, danbooru: bool) -> bool:
 
 def toolset(route: str | None, *, scoped: bool, web: bool = False,
             delete: bool = False, vocab: bool = False, reader: bool = False,
-            danbooru: bool = False) -> list[str]:
-    """Tool names a new chat offers. Unscoped (medium and large models):
-    all of them. Scoped (small models): the core tools, the page's groups
-    and `more_tools`, in catalog order so the list is stable. `web`: web
+            danbooru: bool = False, wide: bool = False) -> list[str]:
+    """Tool names a new chat offers. Unscoped (large models): all of them.
+    Scoped (small and medium models): the core tools, the page's groups
+    and `more_tools`, in catalog order so the list is stable; `wide`
+    (medium) adds the common groups (`WIDE_GROUPS`) on every page. `web`: web
     search is set up (Settings › AI assistant), so `web_search` is offered.
     `delete`: deleting is allowed, so `delete_items` is offered. `vocab`: a
     lookup source is on, so `lookup` is offered. `reader`: a page reader is
@@ -706,7 +712,8 @@ def toolset(route: str | None, *, scoped: bool, web: bool = False,
     for suffix in ("-new", "-edit"):
         if key.endswith(suffix):
             key = key[: -len(suffix)]
-    groups = {"core", *PAGE_GROUPS.get(key, DEFAULT_GROUPS), *(("web",) if web else ()),
+    groups = {"core", *PAGE_GROUPS.get(key, DEFAULT_GROUPS), *(WIDE_GROUPS if wide else ()),
+              *(("web",) if web else ()),
               *(("delete",) if delete else ()), *(("vocab",) if vocab else ())}
     groups |= {"danbooru"} if danbooru else set()
     names = [t.name for t in TOOLS if groups.intersection(t.groups) and on(t)]
