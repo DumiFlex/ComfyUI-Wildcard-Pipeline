@@ -15,7 +15,7 @@ literal text + emits warnings (see engine/syntax/resolve.py).
 
 Seed lock: instance.locked_seed pins {a|b|c} resolution per instance
 via the shared engine.modules._seed.derive_module_rng helper, keyed by
-the module id when present (ctx["__wp_module_id__"]).
+the module instance uid when present (ctx["__wp_current_module_uid__"]).
 """
 from __future__ import annotations
 
@@ -177,11 +177,16 @@ class FixedValuesHandler(ModuleHandler):
             effective_seed = int(locked_seed)
         else:
             effective_seed = chain_seed
-        # Use module id as the per-module RNG key when ctx carries one;
-        # fall back to "fixed_values" literal so two co-resident
-        # fixed_values modules in the same chain still derive distinct
-        # RNG streams from the same seed (independence property).
-        module_key = str(ctx.get("__wp_module_id__") or "fixed_values")
+        # Key the stream on this module INSTANCE (`__wp_current_module_uid__`,
+        # set by the pipeline, falling back to the library id) so two
+        # co-resident fixed_values modules roll independently. The old key,
+        # `__wp_module_id__`, was never set, so they all shared the literal
+        # "fixed_values" stream (fixed 2026-10-16).
+        module_key = str(
+            ctx.get("__wp_current_module_uid__")
+            or ctx.get("__wp_current_module_id__")
+            or "fixed_values"
+        )
         rng = derive_module_rng(effective_seed, module_key)
 
         ctx_local = {**ctx, "__wp_rng__": rng}
