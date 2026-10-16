@@ -220,3 +220,30 @@ def test_a_colour_missing_from_many_prompts_is_named():
     assert "drop the empty option" in said[keys["Hair Colour"]]
     plan, built, keys = _with_hair_colour()
     assert pack_tidy.missing_attributes(plan, built, pack_tidy.runs(plan, built)) == {}
+
+
+def test_hair_colours_the_request_asks_for_get_a_wildcard_when_the_plan_forgot():
+    raw = _raw()
+    raw["items"] = [_item(name="Hair Styles", var="hair_style", section="Character"),
+                    _item(name="Hair Length", var="hair_length", section="Character"),
+                    _item(kind="template", name="Prompt", about="$hair_length, $hair_style")]
+    plan = pack.compile_plan(raw, request="Hairstyles and hair colours, long styles more common")
+    names = [i["name"] for i in plan["items"]]
+    assert "Hair Colour" in names
+    tpl = next(i for i in plan["items"] if i["kind"] == "template")
+    assert "$hair_color, $hair_style" in tpl["about"]
+    assert any("Added Hair Colour" in w for w in plan["warnings"])
+    # A plan that has one is left alone, and so is a request about other colours.
+    raw["items"].insert(0, _item(name="Hair Tint", var="hair_tint", section="Character"))
+    again = pack.compile_plan(raw, request="hairstyles and hair colours")
+    assert "Hair Colour" not in [i["name"] for i in again["items"]]
+    other = pack.compile_plan(_raw(), request="fantasy people in different colours")
+    assert not any("Colour" in i["name"] for i in other["items"])
+
+
+def test_two_wildcards_for_one_colour_or_length_are_twins():
+    w = [{"var": v, "name": v} for v in ("hair_color", "hair_tone", "hair_style")]
+    assert [(a["var"], b["var"]) for a, b, _ in pack._twin_picks(w)] == [
+        ("hair_color", "hair_tone")]
+    w = [{"var": v, "name": v} for v in ("hair_length", "hair_length_bias", "eye_color")]
+    assert len(pack._twin_picks(w)) == 1

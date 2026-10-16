@@ -680,6 +680,7 @@ def compile_plan(
         raw_items = _fit_rules(raw_items, request, warnings)
         _never_from_request(raw_items, request, warnings)
         raw_items = _only_in_rules(raw_items, request, warnings)
+        raw_items = _asked_colours(raw_items, request, warnings)
     known_sides = {_var(x.get("var")): _clean(x.get("name"), MAX_NAME)
                    for x in raw_items if _var(x.get("var"))}
     known_sides.update({i["var"]: i["var"] for i in inputs})
@@ -1689,7 +1690,13 @@ def _split_groups(wild: list[dict[str, Any]],
 
 
 _MODIFIERS = {"base", "main", "primary", "secondary", "variation", "variant", "alt",
-              "extra", "accent", "second", "alternate", "other", "additional"}
+              "extra", "accent", "second", "alternate", "other", "additional", "bias",
+              "weight", "weights", "odds", "choice", "pick"}
+#: Words that all name one attribute: a colour wildcard next to a tone or
+#: highlights one prints two colours.
+_SAME_ATTRIBUTE = (frozenset({"color", "colour", "tone", "tones", "shade", "hue", "tint",
+                              "highlights", "highlight", "streaks", "dye"}),
+                   frozenset({"length", "lengths", "long"}))
 
 
 def _twin_picks(wild: list[dict[str, Any]]) -> list[tuple[dict[str, Any], dict[str, Any], str]]:
@@ -1703,11 +1710,15 @@ def _twin_picks(wild: list[dict[str, Any]]) -> list[tuple[dict[str, Any], dict[s
             k = 0
             while k < min(len(pa), len(pb)) and pa[k] == pb[k]:
                 k += 1
-            if k < 2:
-                continue
             ra, rb = pa[k:], pb[k:]
-            if all(len(r) <= 1 and (not r or r[0] in _MODIFIERS) for r in (ra, rb)):
+            kin = next((f for f in _SAME_ATTRIBUTE if pa[k - 1] in f), frozenset()) if k else ()
+            if k >= 2 and all(len(r) <= 1 and (not r or r[0] in _MODIFIERS or r[0] in kin)
+                              for r in (ra, rb)):
                 out.append((a, b, " ".join(pa[:k])))
+            elif k == 1 and ra and rb and any(
+                    ra[0] in fam and rb[0] in fam
+                    and all(w in _MODIFIERS for w in ra[1:] + rb[1:]) for fam in _SAME_ATTRIBUTE):
+                out.append((a, b, f"{pa[0]} {ra[0]}"))
     return out
 
 
@@ -2175,6 +2186,66 @@ def _never_from_request(raw_items: list[dict[str, Any]], request: str,
                         "request says never")
 
 
+# "hairstyles and hair colours": a colour the request asks for by name.
+_ASKED_COLOUR = re.compile(r"\b([a-z]{3,})\s+colou?rs?\b", re.I)
+_COLOURISH = re.compile(r"colou?r|tone|shade|hue|tint", re.I)
+#: Words before "colour" that aren't a subject ("different colours").
+_NOT_SUBJECT = {"different", "many", "various", "the", "and", "with", "all", "some", "two",
+                "matching", "random", "bright", "dark", "pastel", "warm", "cool", "more",
+                "other", "its", "their", "his", "her", "of", "for", "skin"}
+
+
+def _asked_colours(raw_items: list[dict[str, Any]], request: str,
+                   warnings: list[str]) -> list[dict[str, Any]]:
+    """The request asks for hair colours and the plan has hairstyles but no
+    colour: a 9B planned "Hair Styles, Hair Length" and every prompt came
+    out with no colour. Adds the colour wildcard, read where the template
+    reads that subject."""
+    asked = []
+    for m in _ASKED_COLOUR.finditer(request):
+        subject = m.group(1).lower()
+        if subject not in _NOT_SUBJECT and subject not in asked:
+            asked.append(subject)
+    if not asked:
+        return raw_items
+    items = list(raw_items)
+    taken = {_var(x.get("var")) for x in items}
+    for subject in asked:
+        def covers(x: dict[str, Any], subject: str = subject) -> bool:
+            words = f"{x.get('name') or ''} {x.get('var') or ''} {x.get('about') or ''}"
+            return bool(_COLOURISH.search(words)) and subject[:4] in words.lower()
+        if any(covers(x) for x in items if x.get("kind") in ("wildcard", "library",
+                                                             "fixed_values", "combine")):
+            continue
+        near = next((x for x in items if x.get("kind") == "wildcard"
+                     and subject[:4] in f"{x.get('name') or ''} {x.get('var') or ''}".lower()),
+                    None)
+        if near is None:
+            continue  # the subject itself isn't in the plan: not ours to guess
+        var = f"{subject}_color"
+        if var in taken:
+            continue
+        taken.add(var)
+        item = {"kind": "wildcard", "name": f"{subject.title()} Colour", "var": var,
+                "section": near.get("section") or "", "count": 12, "tags": [],
+                "about": f"one {subject} colour per prompt, a colour word only "
+                         f"(\"silver\", \"jet black\"), never a style or length",
+                "source": "", "target": "", "use": ""}
+        items.insert(items.index(near), item)
+        near_var = _var(near.get("var"))
+        for t in (x for x in items if x.get("kind") == "template"):
+            about = str(t.get("about") or "")
+            if f"${var}" in about:
+                continue
+            if near_var and f"${near_var}" in about:
+                t["about"] = about.replace(f"${near_var}", f"${var}, ${near_var}", 1)
+            else:
+                t["about"] = (about.rstrip(", ") + f", ${var}").strip(", ")
+        warnings.append(f"Added {item['name']}: the request asks for {subject} colours and "
+                        "no item picked one")
+    return items
+
+
 # "snow only in cold biomes": a pick (snow) that only goes with one case
 # (cold) of another (biome).
 _ONLY_IN = re.compile(r"\b([a-z]{3,})\s+(?:is\s+|are\s+)?only\s+(?:in|on|for|with|during|at|"
@@ -2509,9 +2580,8 @@ def review_plan(plan: dict[str, Any],
             "between them")
     for a, b, what in _twin_picks(list(wild.values())):
         add(b, "fix", f"{a['name']} and {b['name']} both pick the {what}, so the prompt "
-            f"shows two; make one wildcard, or have {b['name']} add only what "
-            f"{a['name']} doesn't say "
-            "(highlights, a pattern), never a second one")
+            f"shows two; make one wildcard (a colour that varies is more options in "
+            f"it, never a second colour)")
     for i in items:
         if i["kind"] in ("derivation", "combine", "template"):
             missing = [v for v in _reads(i.get("about") or "") if v not in known
