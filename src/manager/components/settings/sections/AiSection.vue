@@ -519,7 +519,7 @@ const testSummary = computed(() => {
 const prefixLine = computed(() => {
   const p = test.value?.prefix;
   if (!p) return "";
-  const k = (n: number): string => `${(n / 1000).toFixed(1)}k`;
+  const k = (n: number): string => (n < 1000 ? String(n) : `${(n / 1000).toFixed(1)}k`);
   const bits: string[] = [];
   if (p.parts) {
     bits.push(`instructions ${k(p.parts.instructions)}`);
@@ -531,7 +531,9 @@ const prefixLine = computed(() => {
   const fits = p.fits ?? p.tokens < p.window;
   return `Fixed prefix ≈ ${k(p.tokens)} tokens${bits.length ? `: ${bits.join(", ")}` : ""}. `
     + "Every request of a new chat starts with it, before your messages. "
-    + (fits ? `It fits the model's ${room}k window.` : `It doesn't fit the model's ${room}k window: load the model with more context, or set Model size to Small.`);
+    + (fits
+      ? `It fits the model's ${room}k window.`
+      : `It doesn't fit the model's ${room}k window: load the model with more context${p.size === "small" ? "" : ", or set Model size to Small"}.`);
 });
 const testTone = computed(() => {
   const t = test.value;
