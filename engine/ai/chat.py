@@ -414,9 +414,17 @@ item open in its editor go into the editor; the user saves them there.
 SYSTEM_PROMPT = SYSTEM_HEAD + ai_guide.text() + SYSTEM_TAIL
 
 
+#: FORMAT_NATIVE's way to finish, and its split-step form (the act ask
+#: must call something, so being done is the `answer` tool).
+_NATIVE_DONE = "When you are done, answer the user in plain text without calling a tool."
+_NATIVE_DONE_SPLIT = ("When you are done, call answer instead of a tool; you then write your "
+                      "reply to the user in plain text.")
+assert _NATIVE_DONE in FORMAT_NATIVE
+
+
 def system_prompt(*, slim: bool = False, examples: bool = True, native: bool = False,
                   tools: list[str] | None = None, typed: bool = False,
-                  prose: bool = True) -> str:
+                  prose: bool = True, split: bool = False) -> str:
     """The chat's instructions. `slim` (small models) keeps the tools and
     the core guide but leaves out the coherence notes and the docs and page
     tables (docs_search still finds pages), about a third shorter.
@@ -424,10 +432,14 @@ def system_prompt(*, slim: bool = False, examples: bool = True, native: bool = F
     how to use them instead of listing them. `tools`: the names this chat
     offers (default: all). `typed`: JSON-mode args are objects the server
     checks against each tool's schema (`ai_tools.step_schema`). `prose`
-    False (the leanest level): the short closing rules (SYSTEM_TAIL_SHORT)."""
+    False (the leanest level): the short closing rules (SYSTEM_TAIL_SHORT).
+    `split` (native): steps are asked in two parts, so the model finishes
+    by calling `answer` (`_ai_chat.split_step`)."""
     pages = "\n".join(f"- {k}: {v}" for k, v in APP_PAGES.items())
     if native:
-        head = SYSTEM_INTRO + FORMAT_NATIVE + "\n"
+        fmt = FORMAT_NATIVE.replace(_NATIVE_DONE, _NATIVE_DONE_SPLIT) if split \
+            else FORMAT_NATIVE
+        head = SYSTEM_INTRO + fmt + "\n"
         shown = ai_guide.EXAMPLES_CHAT_NATIVE if examples else ""
     else:
         head = SYSTEM_INTRO + _format_json(typed) + "\n" + tools_section(tools)

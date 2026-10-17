@@ -14,7 +14,9 @@ from wp_api import _ai_chat, _ai_client
 
 def _on(fake_llm, **extra):
     ai_config.update({"enabled": True, "provider": "lmstudio",
-                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1", **extra})
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1",
+                      # The one-ask step; split steps have their own tests.
+                      "model_size": "large", **extra})
 
 
 async def _json(resp, status=200):
@@ -485,17 +487,17 @@ async def test_retry_drops_the_old_turns_card_fixes(wp_client, fake_llm):
 
 
 async def test_a_second_request_for_a_busy_chat_is_refused(wp_client, fake_llm):
-    from wp_api import ai as ai_routes
+    from wp_api import _ai_turn as ai_turn
     _on(fake_llm)
     fake_llm.chat_steps.append({"message": "Hi!", "calls": []})
     first = await _chat(wp_client, "hello")
-    ai_routes._BUSY.add(first["chat_id"])
+    ai_turn._BUSY.add(first["chat_id"])
     try:
         out = await _json(await wp_client.post("/wp/api/ai/chat", json={
             "message": "again", "chat_id": first["chat_id"]}), 409)
         assert "still answering" in out["error"]
     finally:
-        ai_routes._BUSY.discard(first["chat_id"])
+        ai_turn._BUSY.discard(first["chat_id"])
     fake_llm.chat_steps.append({"message": "Back.", "calls": []})
     assert (await _chat(wp_client, "again", chat_id=first["chat_id"]))["message"] == "Back."
 

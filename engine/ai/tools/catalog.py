@@ -7,6 +7,8 @@ the two name the same arguments.
 """
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from engine.ai.chat_manage import CATEGORY_ICONS
 from engine.ai.tools.registry import Tool, any_of, arr, b, n, obj, s
 
@@ -55,6 +57,24 @@ _USE = obj(desc="per-use settings, see the guide")
 _ITEM = any_of(s("name or id"), obj({"item": s("name or id"), "use": _USE}, ("item",)))
 _NUMS = arr(n(integer=True), "numbers as read shows them")
 _REACH = s("all, first or next N: which target wildcards after it it changes")
+
+#: Groups `more_tools` can add one at a time, with what they hold (said in
+#: its description, which stays the same for every chat).
+MORE_GROUPS: dict[str, str] = {
+    "wildcards": "create and edit wildcards, draft options",
+    "derivations": "derivation rules",
+    "constraints": "constraints",
+    "fixed-values": "fixed values",
+    "combines": "combines",
+    "templates": "prompt templates",
+    "bundles": "bundles",
+    "lists": "tidying many items: organize, select rows, duplicates, many at once, tags, "
+             "categories",
+    "test": "show a run in the Test Runner",
+    "pack": "the Pack builder",
+    "web": "web search and reading result pages, when the user set it up",
+    "danbooru": "Danbooru tag lookup, when the user turned it on",
+}
 
 TOOLS: list[Tool] = [
     # ── read ─────────────────────────────────────────────────────────────
@@ -157,13 +177,15 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         "more_tools", "read",
-        "List the tools this chat hasn't offered yet and make them available. Call it first "
-        "whenever the job needs a tool you don't have (a combine, a bundle, a template…); "
-        "never fake one item type with another's tool.",
-        "{}: the tools not listed here (other module types), which you can call after. Call "
-        "it whenever the job needs a tool you don't have; never fake one item type with "
-        "another's tool.",
-        obj(),
+        "Make more tools available: one group, or every tool this chat hasn't offered yet. "
+        "Call it first whenever the job needs a tool you don't have (a combine, a bundle, "
+        "web search…); never fake one item type with another's tool. Groups: "
+        + "; ".join(f"{k} ({v})" for k, v in MORE_GROUPS.items()) + ".",
+        '{"group": one of ' + ", ".join(MORE_GROUPS) + ', or leave it out for every '
+        "tool}: makes those tools available (listed in the result) so you can call them "
+        "next. Call it whenever the job needs a tool you don't have; never fake one item "
+        "type with another's tool.",
+        obj({"group": s("one group; leave out for every tool", enum=list(MORE_GROUPS))}),
         (),
     ),
     # ── change ───────────────────────────────────────────────────────────
@@ -663,10 +685,14 @@ PAGE_GROUPS: dict[str, tuple[str, ...]] = {
 }
 DEFAULT_GROUPS = ("wildcards", "constraints", "derivations", "pack")
 #: What a medium model gets on every page besides the page's own groups:
-#: the item types most asks touch, tests and list tools. Bundles,
-#: templates, combines and fixed values stay one more_tools call away off
-#: their own pages.
-WIDE_GROUPS = ("wildcards", "constraints", "derivations", "pack", "test", "lists")
+#: the item types most asks touch and tests. Bundles, templates, combines,
+#: fixed values and the list tools stay one more_tools call away off their
+#: own pages.
+WIDE_GROUPS = ("wildcards", "constraints", "derivations", "pack", "test")
+#: Groups a scoped chat never declares up front, even when switched on: a
+#: rare ask loads them with more_tools (`more`), so their declarations don't
+#: cost every request.
+LAZY_GROUPS = ("web", "danbooru")
 
 
 #: Offered only while Settings › AI assistant › "Let the assistant delete
@@ -697,8 +723,10 @@ def toolset(route: str | None, *, scoped: bool, web: bool = False,
     """Tool names a new chat offers. Unscoped (large models): all of them.
     Scoped (small and medium models): the core tools, the page's groups
     and `more_tools`, in catalog order so the list is stable; `wide`
-    (medium) adds the common groups (`WIDE_GROUPS`) on every page. `web`: web
-    search is set up (Settings › AI assistant), so `web_search` is offered.
+    (medium) adds the common groups (`WIDE_GROUPS`) on every page; web and
+    Danbooru tools are never declared up front (`LAZY_GROUPS`). `web`: web
+    search is set up (Settings › AI assistant), so `web_search` is offered
+    (unscoped; scoped chats load it with more_tools).
     `delete`: deleting is allowed, so `delete_items` is offered. `vocab`: a
     lookup source is on, so `lookup` is offered. `reader`: a page reader is
     set (with `web`, `read_result`); `danbooru`: the Danbooru lookup is on."""
@@ -712,27 +740,41 @@ def toolset(route: str | None, *, scoped: bool, web: bool = False,
     for suffix in ("-new", "-edit"):
         if key.endswith(suffix):
             key = key[: -len(suffix)]
+    # Web and Danbooru stay lazy (`LAZY_GROUPS`): one more_tools call away.
     groups = {"core", *PAGE_GROUPS.get(key, DEFAULT_GROUPS), *(WIDE_GROUPS if wide else ()),
-              *(("web",) if web else ()),
               *(("delete",) if delete else ()), *(("vocab",) if vocab else ())}
-    groups |= {"danbooru"} if danbooru else set()
     names = [t.name for t in TOOLS if groups.intersection(t.groups) and on(t)]
     return [*names, "more_tools"]
 
 
+def more(names: list[str], group: str | None, allowed: Callable[[Tool], bool]) -> \
+        tuple[list[str], list[Tool]]:
+    """`more_tools`: the chat's tool list with one group (or, with no
+    group, every tool) that `allowed` lets in added AT THE END, so the
+    declarations already sent keep their place and the cached prefix stays.
+    Returns the new list and the tools it added."""
+    if group is not None and group not in MORE_GROUPS:
+        raise ValueError("no group " + repr(str(group)[:30]) + "; groups: "
+                         + ", ".join(MORE_GROUPS))
+    have = set(names)
+    added = [t for t in TOOLS if t.name not in have and t.name != "more_tools"
+             and (group is None or group in t.groups) and allowed(t)]
+    return [*names, *(t.name for t in added)], added
+
+
 def sync_delete(names: list[str], allowed: bool, group: tuple[str, ...] = DELETE) -> list[str]:
     """A chat's tool list with the delete tools (or another ``group``)
-    added or removed to match the setting now, in catalog order (unchanged
-    when it already matches, so the cached prompt prefix stays)."""
+    added at the end or removed to match the setting now (unchanged when it
+    already matches, so the cached prompt prefix stays)."""
     have = set(names)
     if allowed == have.issuperset(group) and (allowed or not have.intersection(group)):
         return names
-    want = (have | set(group)) if allowed else (have - set(group))
-    return [t.name for t in TOOLS if t.name in want]
+    if not allowed:
+        return [n for n in names if n not in group]
+    return [*names, *(t.name for t in TOOLS if t.name in group and t.name not in have)]
 
 
 def tools(names: list[str]) -> list[Tool]:
-    """Registry entries for `names`, in catalog order; unknown names drop."""
-    wanted = set(names)
-    return [t for t in TOOLS if t.name in wanted]
-
+    """Registry entries for `names`, in the order given (a chat's list is in
+    catalog order with later additions at the end); unknown names drop."""
+    return [BY_NAME[n] for n in dict.fromkeys(names) if n in BY_NAME]

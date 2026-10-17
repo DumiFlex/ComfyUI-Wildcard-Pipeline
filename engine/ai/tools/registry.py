@@ -278,38 +278,43 @@ def native(tools: list[Tool], api: str) -> list[dict[str, Any]]:
     return out
 
 
-#: Most calls a two-phase pick may choose at once (small models).
-PICK_MAX = 4
+#: The act half of a split step (`_ai_chat.split_step`) in native mode:
+#: called instead of a tool when the model has what it needs, since the act
+#: ask must call something. Never run; declared only in split chats.
+ANSWER_TOOL = "answer"
+ANSWER_SUMMARY = ("Call this instead of a tool when you have everything you need to reply: "
+                  "you then write your reply to the user.")
 
 
-def pick_schema(names: list[str]) -> dict[str, Any]:
-    """The first half of a two-phase step: a plan and the tools to call
-    next, none when the model is ready to answer."""
+def answer_decl(api: str) -> dict[str, Any]:
+    """The `answer` tool as a native declaration."""
+    params: dict[str, Any] = {"type": "object", "properties": {}}
+    if api == "anthropic":
+        return {"name": ANSWER_TOOL, "description": ANSWER_SUMMARY, "input_schema": params}
+    return {"type": "function", "function": {
+        "name": ANSWER_TOOL, "description": ANSWER_SUMMARY, "parameters": params}}
+
+
+def act_schema(names: list[str], typed: list[Tool] | None = None,
+               max_calls: int = 0) -> dict[str, Any]:
+    """The act half of a split JSON step: a plan and the calls to make,
+    none when the model is ready to answer. No message: it writes that in
+    the answer half (`ANSWER_SCHEMA`). `max_calls` caps the calls per step
+    (0: no cap, for hosted strict modes that may refuse maxItems)."""
+    calls = dict(step_schema(names, typed)["properties"]["calls"])
+    if max_calls > 0:
+        calls["maxItems"] = max_calls
     return {
-        "type": "object", "additionalProperties": False, "required": ["plan", "tools"],
-        "properties": {"plan": {"type": "string"},
-                       "tools": {"type": "array", "maxItems": PICK_MAX,
-                                 "items": {"type": "string", "enum": list(names)}}},
+        "type": "object", "additionalProperties": False, "required": ["plan", "calls"],
+        "properties": {"plan": {"type": "string"}, "calls": calls},
     }
 
 
-def pick_keys(picked: list[str]) -> list[str]:
-    """The write half's key for each picked call: "1:search", "2:read"."""
-    return [f"{i}:{name}" for i, name in enumerate(picked, 1)]
-
-
-def write_schema(picked: list[str], offered: list[Tool]) -> dict[str, Any]:
-    """The second half: each picked call's arguments (a name not offered
-    gets an empty object, and the loop refuses it with a reason), or the
-    message when nothing was picked."""
-    if not picked:
-        return {"type": "object", "additionalProperties": False, "required": ["message"],
-                "properties": {"message": {"type": "string"}}}
-    params = {t.name: t.params for t in offered}
-    keys = pick_keys(picked)
-    return {"type": "object", "additionalProperties": False, "required": keys,
-            "properties": {k: _strip_schema(params.get(n) or obj())
-                           for k, n in zip(keys, picked, strict=True)}}
+#: The answer half of a split JSON step: only the message.
+ANSWER_SCHEMA: dict[str, Any] = {
+    "type": "object", "additionalProperties": False, "required": ["message"],
+    "properties": {"message": {"type": "string"}},
+}
 
 
 def step_schema(names: list[str], typed: list[Tool] | None = None) -> dict[str, Any]:

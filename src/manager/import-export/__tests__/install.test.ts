@@ -444,7 +444,7 @@ describe("installEnvelope reattach pass", () => {
           id: "wc0001aa",
           type: "wildcard",
           name: "Scene",
-          payload: { options: [{ value: `a @{${PUB_SUBJECT}} b` }] },
+          payload: { options: [{ id: "opt00001", value: `a @{${PUB_SUBJECT}} b` }] },
         },
       ],
       constraints: [

@@ -104,7 +104,15 @@ def _open(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
     if pid:
         title = str((lib.earlier_proposals.get(pid) or {}).get("title") or pid)
         return {"proposal": pid}, f"Opened {title} in an editor"
-    row = _row(lib, raw)
+    try:
+        row = _row(lib, raw)
+    except ValueError:
+        # A docs page id given as an item id (the 9B opened {"id":
+        # "constraints"} for the constraints docs): open the doc.
+        doc = ai_docs.page(raw) if isinstance(raw, str) and not args.get("proposal") else None
+        if doc is None or doc["id"] == "settings":
+            raise
+        return {"doc": doc["id"]}, f"Opened the docs: {doc['title']}"
     return ({"id": row["id"], "type": lib._kind(row)},
             f"Opened {row.get('name') or row['id']}")
 
@@ -169,6 +177,10 @@ def _point(raw: Any) -> dict[str, str]:
     if text:
         out["text"] = text
     return out
+
+
+#: A highlight before any read_page on this page: its anchors are guesses.
+READ_PAGE_FIRST = "call read_page first, then highlight an anchor it returned"
 
 
 def _highlight(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:

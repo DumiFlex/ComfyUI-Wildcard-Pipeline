@@ -18,7 +18,8 @@
  */
 import { computed, ref, watch } from "vue";
 import { api } from "../api/client";
-import { parsePayload, type IntegrityWarning } from "./parse";
+import { type IntegrityWarning } from "./parse";
+import { parseCheckedPayload } from "./shape-check";
 import type { RawPayload } from "./migrations";
 import {
   buildWildcardForm,
@@ -306,7 +307,7 @@ const step = computed<1 | 2 | 3>(() => (props.payloadLoaded ? 3 : report.value ?
 
 function continueToImport(): void {
   if (!payload.value) return;
-  const parsed = parsePayload(JSON.stringify(payload.value));
+  const parsed = parseCheckedPayload(JSON.stringify(payload.value));
   if (!parsed.ok) {
     errorMsg.value = parsed.reason;
     return;

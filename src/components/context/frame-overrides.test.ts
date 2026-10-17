@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride, toggleFrameLock, toggleFrameEnabled, dropRedundantFrameLockNulls, effectiveEnabled, frameEnableOverride } from "./frame-overrides";
+import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride, toggleFrameLock, toggleFrameEnabled, dropRedundantFrameLockNulls, effectiveEnabled, frameEnableOverride, applyFrameEdit } from "./frame-overrides";
 import type { ModuleEntry } from "../../widgets/_shared";
 
 function mod(extra: Partial<ModuleEntry> = {}): ModuleEntry {
@@ -114,5 +114,21 @@ describe("frame-overrides", () => {
     });
     expect(dropRedundantFrameLockNulls(m).iteration_overrides)
       .toEqual({ "1": { locked_seed: 99 }, "2": { pinned_option_id: "0" } });
+  });
+  it("applyFrameEdit: frame override becomes the delta over the given fields, base untouched", () => {
+    const base = mod({
+      instance: { category_filter: "a", locked_seed: 1 },
+      iteration_overrides: { "2": { exclude_null: true } },
+    });
+    const edited = mod({ instance: { category_filter: "b", locked_seed: 1, variable_binding: "y" } });
+    const r = applyFrameEdit(base, edited, 2, ["category_filter", "locked_seed", "exclude_null"]);
+    expect(r.instance).toEqual(base.instance);
+    // Replaces (not merges into) the previous frame-2 override.
+    expect(r.iteration_overrides).toEqual({ "2": { category_filter: "b" } });
+  });
+  it("applyFrameEdit: an empty delta clears the frame's override", () => {
+    const base = mod({ instance: { category_filter: "a" }, iteration_overrides: { "1": { category_filter: "z" } } });
+    const r = applyFrameEdit(base, mod({ instance: { category_filter: "a" } }), 1, ["category_filter"]);
+    expect(r.iteration_overrides).toBeUndefined();
   });
 });
