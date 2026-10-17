@@ -23,6 +23,7 @@ target's options are re-weighted. The model sees both option lists, numbered
 """
 from __future__ import annotations
 
+import json
 import math
 import re
 from typing import Any
@@ -280,6 +281,28 @@ def _label(side: tuple[str, Any]) -> str:
     if side[0] == "options":
         return " / ".join(o["value"] for o in side[1][:3]) + ("…" if len(side[1]) > 3 else "")
     return f"#{side[1]}" if side[0] == "tag" else side[1]["value"]
+
+
+def example_rule(source: dict[str, Any], target: dict[str, Any]) -> str:
+    """One rule that works between these two wildcards, written from their
+    own tags and options, plus what each side can name. A failed call
+    shows it: a small model copies an example far better than it follows
+    "name options by number" (the 9B failed three times in a row)."""
+    def side(view: dict[str, Any]) -> tuple[str, str]:
+        carried = [t for t in view["tags"] if any(t in o["tags"] for o in view["options"])]
+        first = f"#{carried[0]}" if carried else (
+            view["options"][0]["value"] if view["options"] else "1")
+        names = (f"tags #{', #'.join(carried[:8])}; " if carried else "no tags; ") + \
+            "options " + ", ".join(f'{o["short"][1:]} "{o["value"][:30]}"'
+                                   for o in view["options"][:6])
+        return first, names
+    s_first, s_names = side(source)
+    t_first, t_names = side(target)
+    rule = json.dumps({"source": s_first, "target": t_first, "effect": "exclude",
+                       "reason": "..."}, ensure_ascii=False)
+    return (f"A rule that works here: {rule}. The source {source['name'] or ''} has "
+            f"{s_names}. The target {target['name'] or ''} has {t_names}. Name a tag with # "
+            "only when it is in that list; otherwise use the option's number or exact text")
 
 
 def compile_rules(

@@ -1936,6 +1936,16 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             else:
                 # Hidden characters can't ride into the library on a card.
                 out = ai_safety.clean(out)
+                twin = any(p_["pid"] == out.get("replaces") for p_ in proposals)
+                if twin:
+                    # A repeat of a card from this answer: the user gets one.
+                    old_pid, new_pid = out["replaces"], out["pid"]
+                    proposals[:] = [p_ for p_ in proposals if p_["pid"] != old_pid]
+                    for p_ in proposals:
+                        if p_.get("after") == old_pid:
+                            p_["after"] = new_pid
+                        if p_.get("needs"):
+                            p_["needs"] = [new_pid if n == old_pid else n for n in p_["needs"]]
                 proposals.append(out)
                 meta.setdefault("proposals", {})[out["pid"]] = {
                     "title": out["title"], "status": None}
@@ -1944,6 +1954,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     if gone is not None:
                         meta["proposals"][out["replaces"]] = {**gone, "status": "replaced"}
                 result(ai_chat.proposal_note(tool, out) + extra)
+                if twin:
+                    out.pop("replaces")  # the user never saw the card it replaces
                 steps.append({"tool": tool, "note": out["title"], "ok": True})
         if emit:
             for s_ in steps[sent_steps:]:

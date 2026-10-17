@@ -1,0 +1,123 @@
+"""Chat eval round 1 (Dumi's 9B log, 2026-10-17): repeated cards, run_test
+naming, derivations stuck on one branch, constraint errors with an example."""
+from __future__ import annotations
+
+import pytest
+
+from engine.ai import chat
+from tests.engine.ai.test_ai_chat_tools import _lib
+
+STYLE = {"name": "Model Style Tags", "var": "model_style", "options": [
+    {"text": "cinematic lighting", "tags": ["cinematic"]},
+    {"text": "anime shading", "tags": ["anime"]}]}
+
+
+def test_the_same_wildcard_again_replaces_its_card():
+    lib = _lib()
+    first = lib.run("create_wildcard", STYLE)
+    again = lib.run("create_wildcard", {**STYLE, "options": [
+        *STYLE["options"], {"text": "noir contrast"}]})
+    assert again["replaces"] == first["pid"]
+    assert again["op"]["body"]["id"] == first["op"]["body"]["id"]
+    # No "already set by Model Style Tags (proposed)": it is the same card.
+    assert not any("already set" in w for w in again["warnings"])
+    rows = [m for m in lib.modules.values() if m.get("name") == "Model Style Tags"]
+    assert len(rows) == 1 and len(rows[0]["payload"]["options"]) == 3
+    assert "replaces card p1" in chat.proposal_note("create_wildcard", again)
+    assert lib.replaced == {first["pid"]: again["pid"]}
+
+
+def test_another_wildcard_for_a_proposed_variable_is_refused_with_its_id():
+    lib = _lib()
+    first = lib.run("create_wildcard", STYLE)
+    iid = first["op"]["body"]["id"]
+    with pytest.raises(ValueError, match=rf"already set by \[\[{iid}#Model Style Tags\]\].*"
+                                         rf"reuse it .*edit_options.*{iid}"):
+        lib.run("create_wildcard", {**STYLE, "name": "Style Tags"})
+    # A library item keeps the warning: two writers on purpose are allowed.
+    out = lib.run("create_wildcard", {"name": "More outfits", "var": "outfit",
+                                      "options": [{"text": "cape"}]})
+    assert any("already set by [[aaaa0001#Outfit]]" in w for w in out["warnings"])
+
+
+def test_the_same_derivation_or_constraint_again_replaces_its_card():
+    lib = _lib()
+    rule = {"branches": [{"conditions": [{"var": "season", "op": "equals",
+                                          "value": "winter"}],
+                          "actions": [{"target_var": "cue", "value": "snow"}]}]}
+    a = lib.run("create_derivation", {"name": "Cues", "rules": [rule]})
+    b = lib.run("create_derivation", {"name": "cues", "rules": [rule, rule]})
+    assert b["replaces"] == a["pid"] and b["op"]["body"]["id"] == a["op"]["body"]["id"]
+    c1 = lib.run("create_constraint", {"source_id": "Season", "target_id": "Outfit", "rules": [
+        {"source": "#cold", "target": "#sneakers", "effect": "exclude"}]})
+    c2 = lib.run("create_constraint", {"source_id": "aaaa0002", "target_id": "aaaa0001",
+                                       "name": "Winter shoes", "rules": [
+        {"source": "#cold", "target": "sundress", "effect": "exclude"}]})
+    assert c2["replaces"] == c1["pid"]
+
+
+def test_a_card_pointing_at_a_replaced_card_waits_for_the_new_one():
+    lib = _lib()
+    first = lib.run("create_wildcard", STYLE)
+    iid = first["op"]["body"]["id"]
+    con = lib.run("create_constraint", {"source_id": iid, "target_id": "Outfit", "rules": [
+        {"source": "#anime", "target": "#warm", "effect": "exclude"}]})
+    assert con["after"] == first["pid"]
+    again = lib.run("create_wildcard", STYLE)
+    assert again["op"]["body"]["id"] == iid and lib.replaced[first["pid"]] == again["pid"]
+
+
+def test_run_test_finds_items_the_way_the_model_names_them():
+    lib = _lib()
+    style = lib.run("create_wildcard", STYLE)
+    iid = style["op"]["body"]["id"]
+    # A chip, a name with its kind, a card id; proposed cards run without
+    # "proposed": true.
+    for ref in (f"{iid}#Model Style Tags", "Model Style Tag wildcard", style["pid"],
+                f"[[{iid}#Model Style Tags]]"):
+        out = lib.run("run_test", {"stack": [ref], "seeds": 10})
+        assert "$model_style" in out, ref
+    # "A → B" names the constraint between two items.
+    out = lib.run("run_test", {"stack": ["aaaa0002 → aaaa0001"], "seeds": 10})
+    assert "$season" in out and "$outfit" in out
+    with pytest.raises(ValueError, match="nothing to run; Left out Sequence Frame Cues"):
+        lib.run("run_test", {"stack": ["Sequence Frame Cues"]})
+
+
+def test_run_test_says_when_a_derivation_never_leaves_one_branch():
+    lib = _lib()
+    lib.run("create_derivation", {"name": "Sequence Frame Cues", "rules": [{
+        "branches": [{"conditions": [{"var": "iteration_total", "op": "equals",
+                                      "value": "3"}],
+                      "actions": [{"target_var": "frame_cue", "value": "first shot"}]}],
+        "else_actions": [{"target_var": "frame_cue", "value": "middle pose"}]}]})
+    out = lib.run("run_test", {"stack": ["Sequence Frame Cues"], "seeds": 20})
+    assert ('Sequence Frame Cues set $frame_cue to "middle pose" on every seed' in out
+            and "nothing in this run sets $iteration_total" in out and "pins" in out)
+    assert lib.last_card["warnings"][0]["count"] == 20
+    # Pinned, both branches can run: no note.
+    out = lib.run("run_test", {"stack": ["Sequence Frame Cues"], "seeds": 20,
+                               "pins": {"iteration_total": "3"}})
+    assert "on every seed" not in out
+    # One branch and no else: one value is all it can give.
+    lib2 = _lib()
+    lib2.run("create_derivation", {"name": "Snow", "rules": [{"branches": [{"conditions": [
+        {"var": "season", "op": "exists"}], "actions": [{"target_var": "w", "value": "x"}]}]}]})
+    assert "on every seed" not in lib2.run("run_test", {"stack": ["Season", "Snow"],
+                                                        "seeds": 10})
+
+
+def test_failed_rules_show_one_rule_that_works():
+    lib = _lib()
+    with pytest.raises(ValueError) as e:
+        lib.run("create_constraint", {"source_id": "Colors", "target_id": "Season", "rules": [
+            {"source": "#warm interior", "target": "#lighting-cinematic",
+             "effect": "exclude"}]})
+    msg = str(e.value)
+    assert 'A rule that works here: {"source": "#warm", "target": "#cold"' in msg
+    assert 'options 1 "winter", 2 "summer"' in msg
+    with pytest.raises(ValueError) as e:
+        lib.run("create_derivation", {"name": "Cue", "rules": [{"branches": [{
+            "conditions": [{"var": "iteration_total", "op": "equals", "value": "3"}],
+            "actions": [{"target_var": None, "value": "x"}]}]}]})
+    assert "A rule that works:" in str(e.value) and '"var": "outfit"' in str(e.value)

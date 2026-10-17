@@ -519,6 +519,8 @@ class Library(MoreTools, ManageTools):
         #: Create cards from earlier answers the user hasn't applied, by pid:
         #: edits to them come back as a card that replaces them.
         self._earlier_ops: dict[str, dict[str, Any]] = {}
+        #: Cards replaced by a repeat of them (`_take_place`): old pid -> new.
+        self.replaced: dict[str, str] = {}
         self._next_pid = 0
         #: Proposals from earlier answers in this chat: pid -> {title, status}.
         self.earlier_proposals: dict[str, dict[str, Any]] = {}
@@ -1206,7 +1208,8 @@ class Library(MoreTools, ManageTools):
             raise ValueError("var must be a variable name: letters, digits and _ "
                              "(or \"\" for a vocabulary)")
         if not var and any(str(r.get("name") or "").lower() == name.lower()
-                           for r in self.modules.values() if r.get("type") == "wildcard"):
+                           for r in self.modules.values()
+                           if r.get("type") == "wildcard" and not r.get("_proposed")):
             raise ValueError(f"a wildcard named {name} exists; a vocabulary needs a "
                              "unique name so @{{{name}}} finds it")
         texts = [str(o.get("text") or "") for o in args.get("options") or []
@@ -1218,7 +1221,17 @@ class Library(MoreTools, ManageTools):
         out = ai_wildcard.compile_spec(self._spec(args), var=var or None, refs=self.refs)
         payload = out["payload"]
         meta = self._meta(args)
-        warnings = [w for w in [self.var_clash(var)] if w]
+        twin = self._proposed_writer(var, name)
+        if twin is not None:
+            # The 9B proposed "Model Style Tags" four times in one answer,
+            # each read the "already set by" warning and made another card.
+            raise ValueError(
+                f"${var} is already set by {self._chip(twin)}, which "
+                + ("you proposed in this answer" if not twin.get("_earlier")
+                   else "an earlier card of this chat proposes")
+                + f": reuse it (change it with edit_options {{\"id\": \"{twin['id']}\"}}) "
+                "or pick another variable name")
+        warnings = [w for w in [self.var_clash(var, skip_name=name)] if w]
         return {
             "title": f"Create wildcard {name}",
             "summary": (f"${var}" if var else "vocabulary (no variable)")
@@ -1230,18 +1243,62 @@ class Library(MoreTools, ManageTools):
                    "body": {"type": "wildcard", "name": name, **meta["body"], "payload": payload}},
         }
 
-    def var_clash(self, var: str) -> str:
+    @staticmethod
+    def _writes_var(r: dict[str, Any], var: str) -> bool:
+        p = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        return (p.get("var_binding") == var or p.get("output_var") == var
+                or any(isinstance(v, dict) and v.get("name") == var
+                       for v in p.get("values") or []))
+
+    def _proposed_writer(self, var: str, name: str) -> dict[str, Any] | None:
+        """A card not yet applied (this answer's or an earlier one's) that
+        sets ``$var`` under another name: a second writer is a mistake, so
+        the call is refused with the id to reuse. One with the same name is
+        the same card again: `_twin` replaces it instead."""
+        if not var:
+            return None
+        low = name.strip().lower()
+        for r in reversed(list(self.modules.values())):
+            if r.get("_proposed") and self._writes_var(r, var) \
+                    and str(r.get("name") or "").strip().lower() != low:
+                return r
+        return None
+
+    def _twin(self, op: dict[str, Any]) -> dict[str, Any] | None:
+        """The card not yet applied that this new item repeats: same kind
+        and name (and variable for a wildcard, source and target for a
+        constraint). Its card is replaced at the same id (`run`)."""
+        body = op.get("body") if isinstance(op.get("body"), dict) else {}
+        if op.get("op") != "create" or op.get("kind") not in ("module", "bundle"):
+            return None
+        rows = self.modules if op["kind"] == "module" else self.bundles
+        p = body.get("payload") if isinstance(body.get("payload"), dict) else {}
+
+        def key(r: dict[str, Any], q: dict[str, Any]) -> tuple[Any, ...]:
+            if r.get("type") == "constraint":
+                return ("constraint", q.get("source_wildcard_id"), q.get("target_wildcard_id"))
+            return (r.get("type"), str(r.get("name") or "").strip().lower(),
+                    q.get("var_binding") if r.get("type") == "wildcard" else None)
+
+        want = key(body, p)
+        for r in reversed(list(rows.values())):
+            q = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+            if r.get("_proposed") and key(r, q) == want:
+                return r
+        return None
+
+    def var_clash(self, var: str, skip_name: str = "") -> str:
         """A warning when items already set ``$var``, naming them, with what
-        to do instead (two writers: the later one wins at run time)."""
+        to do instead (two writers: the later one wins at run time). A card
+        named ``skip_name`` is the one being replaced, not another writer."""
         if not var or var not in self.catalog:
             return ""
-        writers = []
-        for r in self.modules.values():
-            p = r.get("payload") if isinstance(r.get("payload"), dict) else {}
-            if (p.get("var_binding") == var or p.get("output_var") == var
-                    or any(isinstance(v, dict) and v.get("name") == var
-                           for v in p.get("values") or [])):
-                writers.append(r)
+        skip = skip_name.strip().lower()
+        writers = [r for r in self.modules.values() if self._writes_var(r, var)
+                   and not (r.get("_proposed") and skip
+                            and str(r.get("name") or "").strip().lower() == skip)]
+        if not writers and any(self._writes_var(r, var) for r in self.modules.values()):
+            return ""
         if not writers:
             return f"${var} is already set elsewhere in the library"
         chips = ", ".join(self._chip(r) + (" (proposed)" if r.get("_proposed") else "")
@@ -1537,8 +1594,28 @@ class Library(MoreTools, ManageTools):
             catalog=self.catalog, taken_ids=taken, refs=self.refs,
         )
         if not compiled["rules"]:
-            raise ValueError("no usable rules" + _skipped(compiled["skipped"]))
+            raise ValueError("no usable rules" + _skipped(compiled["skipped"]) + ". "
+                             + self._rule_example())
         return compiled
+
+    def _rule_example(self) -> str:
+        """One rule that works, written from a variable of this library and
+        one of its values, for a failed create_derivation / add_rules."""
+        var, value = "class", "mage"
+        for name, entry in self.catalog.items():
+            if entry.get("values") and any(s.get("kind") == "wildcard"
+                                           for s in entry.get("sources") or []):
+                var, value = name, str(entry["values"][0])[:40]
+                break
+        rule = {"summary": "…", "branches": [{"conditions": [
+            {"var": var, "op": "equals", "value": value}], "actions": [
+            {"target_var": "new_var", "mode": "replace", "value": "some text"}]}],
+            "else_actions": [{"target_var": "new_var", "mode": "replace",
+                              "value": "other text"}]}
+        return ("A rule that works: " + json.dumps(rule, ensure_ascii=False)
+                + '. "var" and "target_var" are bare variable names (no $); a condition '
+                "compares with text, and a variable a Context Loop or Model Info sets "
+                "($iteration, $model_family) is fine to read")
 
     def create_derivation(self, args: dict[str, Any]) -> dict[str, Any]:
         name = self._name(args, "")
@@ -1591,7 +1668,8 @@ class Library(MoreTools, ManageTools):
             source=source, target=target,
         )
         if not compiled["cells"] and not compiled["exceptions"]:
-            raise ValueError("no usable rules" + _skipped(compiled["skipped"]))
+            raise ValueError("no usable rules" + _skipped(compiled["skipped"]) + ". "
+                             + ai_constraint.example_rule(source, target))
         matrix: dict[str, dict[str, Any]] = {}
         for c in compiled["cells"]:
             matrix.setdefault(c["source_tag"], {})[c["target_tag"]] = c["cell"]
@@ -1734,6 +1812,28 @@ class Library(MoreTools, ManageTools):
             rows[new_id] = {**copy.deepcopy(body), "id": new_id, "_proposed": pid}
             self._created[new_id] = pid
 
+    def _take_place(self, proposal: dict[str, Any], twin: dict[str, Any]) -> None:
+        """Make a create that repeats an unapplied card (`_twin`) replace
+        that card at the same id, so the user gets one card, the newest."""
+        op, pid = proposal["op"], proposal["pid"]
+        old_pid = str(twin["_proposed"])
+        iid = twin["id"]
+        body = op["body"]
+        body["id"] = iid
+        rows = self.modules if op["kind"] == "module" else self.bundles
+        row = {**copy.deepcopy(body), "id": iid, "_proposed": pid}
+        if twin.get("_earlier"):
+            row["_earlier"] = twin["_earlier"]
+            self.earlier_proposals.setdefault(old_pid, {})["status"] = "replaced"
+        rows[iid] = row
+        self.names[iid] = str(body.get("name") or "")
+        self._catalog = None
+        self._created[iid] = pid
+        if op["kind"] == "module":
+            self._pending[iid] = (pid, row)
+        proposal["replaces"] = old_pid
+        self.replaced[old_pid] = pid
+
     def adopt_earlier(self, proposal: dict[str, Any]) -> None:
         """Make a new module an earlier answer proposed (and the user hasn't
         applied) readable and editable here, at the id its card creates it
@@ -1842,7 +1942,10 @@ class Library(MoreTools, ManageTools):
         if op["op"] == "update" and op["id"] == self.editor_id:
             # Built on the editor's unsaved version: it goes into the editor.
             op["basis"] = "editor"
-        if op["op"] == "create":
+        twin = self._twin(op) if op["op"] == "create" else None
+        if twin is not None:
+            self._take_place(proposal, twin)
+        elif op["op"] == "create":
             self._adopt(proposal)
         elif not after:
             self._replace_earlier(proposal)
@@ -1927,6 +2030,9 @@ def proposal_note(tool: str, proposal: dict[str, Any]) -> str:
         name = re.sub(r"[\[\]\n#]", " ", str(body.get("name") or "")).strip()
         head += (f": it will be created as [[{body['id']}#{name}]]. Point at it by that id "
                  "now (constraints, bundles, @{id} refs, more changes)")
+    if proposal.get("replaces"):
+        head += (f". It replaces card {proposal['replaces']} (the same item): there is one "
+                 "card for it, don't propose it again")
     needs = proposal.get("needs") or ([proposal["after"]] if proposal.get("after") else [])
     if needs:
         head += (f". It needs card{'s' if len(needs) > 1 else ''} {', '.join(needs)} applied "
