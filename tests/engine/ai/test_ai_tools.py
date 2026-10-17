@@ -51,14 +51,16 @@ def test_toolsets():
     assert "edit_tags" in tools.toolset("all", scoped=True)
 
 
-def test_sync_delete_adds_and_removes_in_catalog_order():
+def test_sync_delete_adds_at_the_end_and_removes():
     base = tools.toolset(None, scoped=False)
     on = tools.sync_delete(base, True)
-    assert on == tools.toolset(None, scoped=False, delete=True)
+    # Appended, so the declarations already sent keep their place.
+    assert on == [*base, "delete_items"]
     assert tools.sync_delete(on, True) is on  # unchanged: same list back
     assert tools.sync_delete(on, False) == base
     assert tools.sync_delete(base, False) is base
-    assert "web_search" in tools.toolset("wildcards", scoped=True, web=True)
+    # Web tools are lazy in a scoped chat: one more_tools call away.
+    assert "web_search" not in tools.toolset("wildcards", scoped=True, web=True)
     lists = tools.toolset("all", scoped=True)
     assert "select_rows" in lists and "organize" in lists and "show_test" not in lists
     assert "show_test" in tools.toolset("test", scoped=True)
@@ -66,8 +68,9 @@ def test_sync_delete_adds_and_removes_in_catalog_order():
 
 
 def test_native_declarations():
-    chosen = tools.tools(["read", "search"])
-    assert [t.name for t in chosen] == ["search", "read"]  # catalog order
+    chosen = tools.tools(["search", "read", "search", "nope"])
+    assert [t.name for t in chosen] == ["search", "read"]  # the order given, once each
+    assert [t.name for t in tools.tools(["read", "search"])] == ["read", "search"]
     oa = tools.native(chosen, "openai")
     assert oa[0]["type"] == "function" and oa[0]["function"]["name"] == "search"
     assert oa[1]["function"]["parameters"]["required"] == ["id"]

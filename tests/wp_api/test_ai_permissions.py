@@ -10,7 +10,9 @@ from tests.wp_api.test_ai_api import _chat, _two_wildcards
 
 def _on(fake_llm, **extra):
     ai_config.update({"enabled": True, "provider": "lmstudio",
-                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1", **extra})
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1",
+                      # The one-ask step; split steps have their own tests.
+                      "model_size": "large", **extra})
 
 
 async def _json(resp, status=200):

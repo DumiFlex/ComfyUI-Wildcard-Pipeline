@@ -29,15 +29,20 @@ SIZES = ("small", "medium", "large")
 #: writing tasks keep their own temperatures. `result_chars` caps one tool
 #: result, `history_chars` the earlier steps the chat re-sends.
 PROFILES: dict[str, dict[str, Any]] = {
-    # `two_phase`: on a server that checks schemas, a JSON step is asked in
-    # two parts, first which one tool (at chat_temp), then its arguments or
-    # the answer (at write_temp), so the choice isn't made while writing.
+    # `split`: each step is asked in two parts (`_ai_chat.split_step`): an
+    # act ask at `act_temp` that can only call tools (at most `act_calls`
+    # per step where the server checks JSON schemas) or say it is ready, then, when it is ready, an
+    # answer ask at `write_temp` that can only write. The choice is never
+    # made while writing, so "Should I proceed?" and a forced last step
+    # that calls again can't happen.
     "small": {"chat_temp": 0.15, "result_chars": 3500, "history_chars": 14000, "slim": True,
-              "scoped": True, "two_phase": True, "write_temp": 0.4},
+              "scoped": True, "split": True, "act_temp": 0.15, "write_temp": 0.4,
+              "act_calls": 1},
     # Medium models pick better among fewer tools too: the page's tools plus
     # the common ones, the rest one more_tools call away.
     "medium": {"chat_temp": 0.25, "result_chars": 7000, "history_chars": 30000, "slim": False,
-               "scoped": True},
+               "scoped": True, "split": True, "act_temp": 0.15, "write_temp": 0.4,
+               "act_calls": 3},
     "large": {"chat_temp": 0.4, "result_chars": 14000, "history_chars": 90000, "slim": False,
               "scoped": False},
 }

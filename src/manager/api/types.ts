@@ -949,8 +949,15 @@ export interface AiTestResult {
   embed?: { ok: boolean; dims: number | null; error: string | null; swapped: boolean } | null;
   /** What a new chat sends before its first message (instructions, `tools`
    *  tool declarations, library summary), in tokens, fitted to `window`;
-   *  `lean` is how far it was cut down (0 = not at all). */
-  prefix?: { tokens: number; window: number; tools: number; lean: number; format: string } | null;
+   *  `lean` is how far it was cut down (0 = not at all). `parts` splits
+   *  `tokens` (`tools` is 0 in JSON mode, where the tools are listed in the
+   *  instructions); `split`: steps are asked in two parts (small and medium
+   *  models). */
+  prefix?: {
+    tokens: number; window: number; tools: number; lean: number; format: string;
+    parts?: { instructions: number; tools: number; library: number };
+    fits?: boolean; size?: string; split?: boolean;
+  } | null;
 }
 
 /** The chat's library index (`GET /wp/api/ai/index`). */
