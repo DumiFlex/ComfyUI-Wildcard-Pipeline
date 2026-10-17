@@ -1025,7 +1025,11 @@ async def split_step(
                      schema={}, temperature=write_temp, num_ctx=num_ctx,
                      cache_key=cache_key, emit=emit,
                      tool_choice=None if key in _NO_CHOICE else "none")
-    out["calls"] = [c for c in out["calls"] if c["tool"] != registry.ANSWER_TOOL]
+    # The answer ask only writes: a server that ignores tool_choice "none"
+    # (or one asked with "auto") can still send calls, which a step told to
+    # answer must not run. Its text is the answer.
+    out["calls"], out["plan"] = [], ""
+    out["message"] = out["text"]
     out["thinking"] = out["thinking"] or thinking
     return out
 

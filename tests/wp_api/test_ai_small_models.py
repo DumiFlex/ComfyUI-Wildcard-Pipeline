@@ -122,6 +122,23 @@ async def test_a_native_split_step_on_a_server_without_tool_choice(wp_client, fa
     _ai_chat._NO_CHOICE.clear()
 
 
+async def test_a_native_answer_ask_never_runs_calls(wp_client, fake_llm):
+    """A server that ignores tool_choice "none" can still send a call with
+    the answer: the step was told to write, so only its text counts."""
+    await _two_wildcards(wp_client)
+    _on(fake_llm, model="tooly", tool_format="native")
+    ready = {"id": "call_ready", "type": "function",
+             "function": {"name": "answer", "arguments": "{}"}}
+    search = {"id": "call_s", "type": "function",
+              "function": {"name": "search", "arguments": json.dumps({"query": "hair"})}}
+    fake_llm.chat_steps.extend([{"content": "", "tool_calls": [ready]},
+                                {"content": "You have two wildcards.", "tool_calls": [search]}])
+    out = await _chat(wp_client, "what do I have?")
+    assert fake_llm.seen[-1]["body"]["tool_choice"] == "none"
+    assert out["message"] == "You have two wildcards."
+    assert not any(s.get("tool") == "search" for s in out["steps"])
+
+
 async def test_web_tools_load_by_group_at_the_end_of_the_list(
         wp_client, fake_llm, searx):  # noqa: F811 - the fixture
     _on(fake_llm, model="tooly")
@@ -147,6 +164,26 @@ async def test_web_tools_load_by_group_at_the_end_of_the_list(
     assert first["messages"][0] == after["messages"][0]  # the instructions never change
     [call] = body["pending"]
     assert call["tool"] == "web_search"
+
+
+async def test_every_tool_keeps_web_search_on_the_next_message(
+        wp_client, fake_llm, searx):  # noqa: F811 - the fixture
+    """more_tools with no group loads web search too; the next request
+    must not drop it again as an unloaded lazy group."""
+    _on(fake_llm, model="tooly")
+    ai_config.update({"search_engine": "searxng",
+                      "search_url": str(searx.make_url("")).rstrip("/")})
+    fake_llm.chat_steps.extend([
+        {"content": "", "tool_calls": [{"id": "c1", "type": "function", "function": {
+            "name": "more_tools", "arguments": "{}"}}]},
+        {"content": "Ready."},
+    ])
+    first = await _chat(wp_client, "load everything")
+    loaded = [t["function"]["name"] for t in fake_llm.seen[-1]["body"]["tools"]]
+    assert "web_search" in loaded
+    fake_llm.chat_steps.append({"content": "Still here."})
+    await _chat(wp_client, "and now?", chat_id=first["chat_id"])
+    assert [t["function"]["name"] for t in fake_llm.seen[-1]["body"]["tools"]] == loaded
 
 
 async def test_more_tools_names_its_groups(wp_client, fake_llm):

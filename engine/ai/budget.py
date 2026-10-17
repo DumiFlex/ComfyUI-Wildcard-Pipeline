@@ -31,7 +31,7 @@ SIZES = ("small", "medium", "large")
 PROFILES: dict[str, dict[str, Any]] = {
     # `split`: each step is asked in two parts (`_ai_chat.split_step`): an
     # act ask at `act_temp` that can only call tools (at most `act_calls`
-    # per step in JSON mode) or say it is ready, then, when it is ready, an
+    # per step where the server checks JSON schemas) or say it is ready, then, when it is ready, an
     # answer ask at `write_temp` that can only write. The choice is never
     # made while writing, so "Should I proceed?" and a forced last step
     # that calls again can't happen.

@@ -1113,8 +1113,11 @@ def _more_tools(meta: dict[str, Any], group: Any = None) -> str:
                 and (t.name not in ai_tools.VOCAB or bool(meta.get("vocab"))))
     name = group if isinstance(group, str) and group else None
     tools, added = ai_tools.more(list(meta.get("tools") or []), name, allowed)
-    if name:
-        meta["groups"] = sorted({*(meta.get("groups") or []), name})
+    # Loaded lazy groups stay loaded (`_sync_permissions`), also when they
+    # came with "every tool".
+    lazy = {g for t in added for g in t.groups if g in ai_tools.LAZY_GROUPS}
+    if name or lazy:
+        meta["groups"] = sorted({*(meta.get("groups") or []), *lazy, *([name] if name else [])})
     if not added:
         if name == "web" and not meta.get("web"):
             return ("web search isn't set up; the user turns it on in Settings › AI assistant "
@@ -2461,7 +2464,7 @@ async def _paused_results(
             elif c["tool"] == "highlight":
                 meta["pointed"] = [*(meta.get("pointed") or []),
                                    sorted(p["anchor"] for p in c["args"].get("points") or [])]
-            elif c["tool"] == "read_page":
+            elif c["tool"] == "read_page" and not answer.get("cancelled"):
                 meta["page_read"] = True  # its anchors can be highlighted now
             if c["tool"] == "open" and not answer.get("denied"):
                 text += ai_client_tools.open_note(c["args"])
