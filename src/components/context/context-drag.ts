@@ -17,6 +17,8 @@ import {
   MOTION_FLIP_MS,
 } from "./bundles/flip";
 import type { WidgetState } from "./widget-state";
+import type { ModuleRowCtx } from "./module-row-ctx";
+import type { BundleFrameCtx } from "./bundles/bundle-frame-ctx";
 
 /**
  * ContextWidget drag-and-drop: hover/zone state, the drop indicator bar,
@@ -862,24 +864,26 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
     return { insertIdx: zone.insertIdx, stamp: zone.containerUid ?? undefined };
   }
 
+  const rowCtx = {
+    rowGap, draggingModuleUid, recentDropUids, pulseDelayFor, onDragStart, onDragEnd,
+  } satisfies Partial<ModuleRowCtx>;
+  const frameCtx = {
+    bundleHeaderGap, isBundleDropTarget, recentDropUids, pulseDelayFor,
+    onBundleDragStart, onDragEnd, dropBarFor,
+  } satisfies Partial<BundleFrameCtx>;
+
   return {
-    draggingModuleUid,
-    recentDropUids,
+    // Template bindings (list / empty hero / "Drop here" footer).
     suppressMove,
-    holdSuppressMove,
     isDropEndZone,
-    rowGap,
-    bundleHeaderGap,
-    isBundleDropTarget,
-    dropBarFor,
-    pulseDelayFor,
-    onDragStart,
-    onBundleDragStart,
-    onDragEnd,
     onListDragOver,
     onEmptyHeroDragOver,
     onEndDragOver,
     onContainerLeave,
     onDrop,
+    holdSuppressMove,
+    /** Drag members of the ModuleRow / BundleFrame provide contexts. */
+    rowCtx,
+    frameCtx,
   };
 }

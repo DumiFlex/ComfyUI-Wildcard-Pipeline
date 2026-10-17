@@ -22,6 +22,7 @@ import {
 } from "./bundles/flip";
 import { collectInContextBindings, extractPrimaryBinding, isHoldable } from "./module-state";
 import type { WidgetState } from "./widget-state";
+import type { ModuleRowCtx } from "./module-row-ctx";
 
 /** Props the row operations read (seed readers for the lock fallback). */
 export interface ModuleOpsProps {
@@ -803,8 +804,6 @@ export function createModuleOps(
   }
 
   return {
-    toggleLockOnCard,
-    toggleInternalOnCard,
     onPickerAdd,
     removeModule,
     duplicateModule,
@@ -818,6 +817,10 @@ export function createModuleOps(
     openEditModal,
     saveEditedModule,
     revertEditingFrame,
-    onCardKeydown,
+    /** Row-level members of the ModuleRow provide context. */
+    rowCtx: {
+      toggleCollapsed, toggleEnabled, removeModule,
+      toggleLockOnCard, toggleInternalOnCard, onCardKeydown,
+    } satisfies Partial<ModuleRowCtx>,
   };
 }
