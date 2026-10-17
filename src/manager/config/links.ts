@@ -61,10 +61,9 @@ export const DISCORD_INVITE = "https://discord.gg/BFYR9WQdVR";
 /**
  * Wildcard Pipeline Community API + embed host.
  *
- * Both the sister web SPA (full https URL) and the in-extension
- * embed bundle (`/embed/wpc-embed.js`) live here. The community-tab
- * integration loads the embed bundle from this origin at runtime;
- * every downstream call (auth, REST, downloads) hits the same base.
+ * Both the sister web SPA (full https URL) and the page the Community
+ * tab frames (`/embed-frame.html`) live here; every downstream call
+ * (auth, REST, downloads) hits the same base.
  *
  * Set via Vite env (`VITE_WPC_API_URL`) so dev points at
  * `http://localhost:8765` and the published build hits the canonical
@@ -75,9 +74,5 @@ export const WPC_API_URL: string =
   (import.meta.env.VITE_WPC_API_URL as string | undefined)?.replace(/\/$/, "") ??
   "https://wp.dumiflex.dev";
 
-/** Latest embed bundle (always points at the newest release). */
-export const WPC_EMBED_URL = `${WPC_API_URL}/embed/wpc-embed.js`;
-
-/** Embed manifest for version pinning. See
- *  https://github.com/DumiFlex/Wildcard-Pipeline-Community/blob/main/docs/extension-integration.md */
-export const WPC_EMBED_MANIFEST_URL = `${WPC_API_URL}/api/v1/embed/version.json`;
+/** The Community tab's page, framed in a sandboxed iframe (Community.vue). */
+export const WPC_EMBED_FRAME_URL = `${WPC_API_URL}/embed-frame.html`;

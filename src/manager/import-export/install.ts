@@ -14,10 +14,9 @@
  * Import tab uses today, but v1 fails loudly so users see the conflict
  * instead of silently overwriting their own work.
  *
- * Exposed globally as `window.__wpcRuntime.install` (see manager
- * bootstrap) so the community embed bundle — loaded into the same
- * document via dynamic import — can call into this pipeline directly
- * without re-implementing migrations or duplicating the commit shape.
+ * Served to the framed community embed as the bridge's `install`
+ * request (community/hostRuntime.ts + frameBridge.ts), so it reuses
+ * this pipeline instead of re-implementing migrations or the commit shape.
  */
 
 import { api } from "../api/client";
