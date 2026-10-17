@@ -1245,10 +1245,7 @@ const moduleRowCtx: ModuleRowCtx = {
   isModified, isDrifted, isMissingFromLibrary, isTypeConflict,
   severityFor, conflictTooltip, conflictBadgeText,
   modifiedTooltip, summaryFor, summaryTokens, siblingInfo,
-  // rowGap, draggingModuleUid, recentDropUids, pulseDelayFor, onDragStart, onDragEnd
   ...dragRowCtx,
-  // toggleCollapsed, toggleEnabled, removeModule, toggleLockOnCard,
-  // toggleInternalOnCard, onCardKeydown
   ...opsRowCtx,
   openContextMenu,
   pairingFor,
@@ -1286,17 +1283,13 @@ const bundleFrameCtx: BundleFrameCtx = {
   bundleChildDriftCount: (b: BundleInstance) => bundleChildDriftCount(b, value.value.modules),
   isBundleLibraryDrifted,
   isBundleMissingFromLibrary,
-  // bundleInternalState, bundleLockState, toggleBundleInternal, toggleBundleLock
   ...masterToggles,
   // Suppressed for an unlinked bundle — there is no insert for its children to
   // have diverged from, so MOD would be diffing against a ghost.
   isBundleSnapshotModified: (b: BundleInstance) =>
     !isBundleUnlinked(b) && bundleSnapshotModified(b, value.value.modules),
-  // toggleBundleCollapsed, toggleBundleEnabled, removeBundle
   ...bundleOpsFrameCtx,
   openBundleContextMenu,
-  // bundleHeaderGap, isBundleDropTarget, recentDropUids, pulseDelayFor,
-  // onBundleDragStart, onDragEnd, dropBarFor
   ...dragFrameCtx,
 };
 provide(BundleFrameCtxKey, bundleFrameCtx);
@@ -1307,7 +1300,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
     class="wp-context"
     :class="{ 'wp-context--muted': isMuted }"
     :data-mode-label="isMuted ? muteLabel : undefined"
-    @dragleave="onContainerLeave"
+    @dragleave="onContainerLeave($event)"
   >
     <!-- Node identity strip. A fixed, read-only CODENAME naming THIS
          WP_Context node — a stable `adjective-noun` derived from the
@@ -1363,7 +1356,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
         v-if="!isEmpty"
         key="populated"
         class="wp-page"
-        @dragover="onListDragOver"
+        @dragover="onListDragOver($event)"
         @drop="(ev) => onDrop(ev, null)"
       >
         <!-- Toolbar: module count + bulk-drift refresh + collapse/expand/toggle-all. -->
@@ -1380,7 +1373,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
             class="wp-section-label__bulk wp-section-label__bulk--drift"
             :title="`Refresh ${driftedCount} drifted module(s) from the library.`"
             data-testid="bulk-refresh-drifted"
-            @click="refreshAllDrifted"
+            @click="refreshAllDrifted()"
           >
             <i class="pi pi-refresh" aria-hidden="true"></i>
             <span>refresh {{ driftedCount }} drifted</span>
@@ -1392,21 +1385,21 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
             class="wp-btn--icon-sm"
             title="Collapse all"
             aria-label="Collapse all modules"
-            @click="collapseAll"
+            @click="collapseAll()"
           ><i class="pi pi-chevron-up" /></button>
           <button
             type="button"
             class="wp-btn--icon-sm"
             title="Expand all"
             aria-label="Expand all modules"
-            @click="expandAll"
+            @click="expandAll()"
           ><i class="pi pi-chevron-down" /></button>
           <button
             type="button"
             class="wp-btn--icon-sm"
             title="Toggle all enabled"
             aria-label="Toggle all enabled"
-            @click="toggleAllEnabled"
+            @click="toggleAllEnabled()"
           ><i class="pi pi-eye" /></button>
         </div>
 
@@ -1473,7 +1466,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
         class="wp-empty-hero"
         :class="{ 'wp-empty-hero--drop-target': isDropEndZone }"
         data-test="context-empty"
-        @dragover="onEmptyHeroDragOver"
+        @dragover="onEmptyHeroDragOver($event)"
         @drop="(ev) => onDrop(ev, null)"
       >
         <!-- eslint-disable-next-line vue/no-v-html — wpLogoSvg is a static
@@ -1511,7 +1504,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
     <div
       class="wp-drop-end"
       :class="{ 'wp-drop-end--active': isDropEndZone, 'wp-drop-end--show': dragState !== null }"
-      @dragover="onEndDragOver"
+      @dragover="onEndDragOver($event)"
       @drop="(ev) => onDrop(ev, null)"
     >Drop here</div>
 

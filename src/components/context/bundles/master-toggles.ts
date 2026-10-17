@@ -2,10 +2,82 @@ import type { BundleInstance, ModuleEntry } from "../../../widgets/_shared";
 import { isInternal, isInternalable, isLocked, isSeedLockable } from "../module-state";
 import type { WidgetState } from "../widget-state";
 
+type Tri = "all" | "none" | "partial" | null;
+
+/** OFF resolution mode for nested master cascades.
+ *
+ *   - "preserve"  → only rows whose claim (`master_internal_by` /
+ *                    `master_lock_by`) matches this bundle's `_uid` get
+ *                    cleared. Manual rows survive. Inner masters reached
+ *                    via recursion ALSO run in preserve mode regardless
+ *                    of their own claims, so a parent's OFF doesn't
+ *                    accidentally sweep an inner bundle's manual rows.
+ *   - "cascade"   → every flagged row this bundle owns (direct
+ *                    children) clears unconditionally. Triggered only
+ *                    when the entire scope is hand-marked (no master
+ *                    claim anywhere this bundle could see) and the
+ *                    user clicks the master button at "all" — they
+ *                    almost certainly meant "turn everything off".
+ *                    Inner masters receive the same "cascade" so
+ *                    inner-owned manual rows clear too. */
+type BundleOffMode = "preserve" | "cascade";
+
+/** One master button: which rows it applies to, how a row reads as on,
+ *  and the instance / `_ui` / BundleInstance keys it writes. */
+interface Master {
+  applies(m: ModuleEntry): boolean;
+  /** Aggregation read (drives the button's tri-state). */
+  isOn(m: ModuleEntry): boolean;
+  /** Raw "already on" read of a row's instance during a set. */
+  has(inst: Record<string, unknown>): boolean;
+  field: "internal" | "locked_seed";
+  flag: "master_internal" | "master_lock";
+  claim: "master_internal_by" | "master_lock_by";
+  chain: "master_internal_chained_by" | "master_lock_chained_by";
+  /** Lock only: ON writes a seed (and remembers it in `last_locked_seed`). */
+  seed?: true;
+}
+
+/** Skips kinds that don't support the internal flag (constraint).
+ *  Otherwise a bundle of one constraint + N internal wildcards would read
+ *  "partial" forever — the constraint is non-applicable, not "not
+ *  internal yet." The cascade uses the same skip so it matches the
+ *  aggregation. */
+const INTERNAL: Master = {
+  applies: isInternalable,
+  isOn: isInternal,
+  has: (inst) => !!inst.internal,
+  field: "internal",
+  flag: "master_internal",
+  claim: "master_internal_by",
+  chain: "master_internal_chained_by",
+};
+
+/** Only the seed-lockable children count, so a bundle of fixed_values +
+ *  constraints with nothing lockable reads `null` and BundleHeader hides
+ *  the lock button instead of rendering a no-op control. */
+const LOCK: Master = {
+  applies: isSeedLockable,
+  isOn: isLocked,
+  has: (inst) => typeof inst.locked_seed === "number",
+  field: "locked_seed",
+  flag: "master_lock",
+  claim: "master_lock_by",
+  chain: "master_lock_chained_by",
+  seed: true,
+};
+
+function dropChainTag(b: BundleInstance, spec: Master): BundleInstance {
+  const { [spec.chain]: _drop, ...rest } = b;
+  void _drop;
+  return rest as BundleInstance;
+}
+
 /**
  * Bundle master toggles — the BundleHeader Lock / Hide buttons. Tri-state
  * aggregation over a bundle's children plus the cascading set/toggle that
- * claims (or releases) direct children and chains into inner bundles.
+ * claims (or releases) direct children and chains into inner bundles. Both
+ * buttons run the same machine over their own keys (`INTERNAL` / `LOCK`).
  */
 export function createBundleMasterToggles(
   state: WidgetState,
@@ -13,29 +85,19 @@ export function createBundleMasterToggles(
 ) {
   const { value, commitModules } = state;
 
-  /** Tri-state aggregation of `instance.internal` across a bundle's
-   *  children. Drives the master-toggle visual in BundleHeader:
-   *    - "all"     → every child has internal=true (button pressed)
-   *    - "none"    → no child has internal (button neutral)
+  /** Tri-state aggregation across a bundle's applicable children:
+   *    - "all"     → every one is on (button pressed)
+   *    - "none"    → none is (button neutral)
    *    - "partial" → mixed (button half-pressed, dashed border)
-   *
-   *  Empty bundle defaults to "none" — the button is harmless to show
-   *  but clicking it does nothing (no children to flip). */
-  function bundleInternalState(
-    bundle: BundleInstance,
-  ): "all" | "none" | "partial" | null {
+   *    - null      → no applicable child (button hidden / inert) */
+  function aggregate(spec: Master, bundle: BundleInstance): Tri {
     const mods = value.value.modules;
     let on = 0;
     let total = 0;
     for (let i = bundle.start_idx; i <= bundle.end_idx; i++) {
-      // Skip kinds that don't support the internal flag (constraint).
-      // Otherwise a bundle of one constraint + N internal wildcards
-      // would read "partial" forever — the constraint is non-applicable,
-      // not "not internal yet." Same skip applied in
-      // `toggleBundleInternal` so the cascade matches the aggregation.
-      if (!isInternalable(mods[i])) continue;
+      if (!spec.applies(mods[i])) continue;
       total++;
-      if (isInternal(mods[i])) on++;
+      if (spec.isOn(mods[i])) on++;
     }
     if (total === 0) return null;
     if (on === 0) return "none";
@@ -43,54 +105,16 @@ export function createBundleMasterToggles(
     return "partial";
   }
 
-  /** Same shape over `locked_seed`, but only the seed-lockable
-   *  children count. Returns `null` when the bundle has zero lockable
-   *  children — BundleHeader uses that to hide the lock button so a
-   *  bundle of fixed_values + constraints (which can't be seed-locked)
-   *  doesn't render a no-op control. */
-  function bundleLockState(
-    bundle: BundleInstance,
-  ): "all" | "none" | "partial" | null {
-    const mods = value.value.modules;
-    let on = 0;
-    let total = 0;
-    for (let i = bundle.start_idx; i <= bundle.end_idx; i++) {
-      if (!isSeedLockable(mods[i])) continue;
-      total++;
-      if (isLocked(mods[i])) on++;
-    }
-    if (total === 0) return null;
-    if (on === 0) return "none";
-    if (on === total) return "all";
-    return "partial";
-  }
-
-  /** OFF resolution mode for nested master cascades.
-   *
-   *   - "preserve"  → only rows whose `master_internal_by` matches this
-   *                    bundle's `_uid` get cleared. Manual-internal rows
-   *                    survive. Inner masters reached via recursion ALSO
-   *                    run in preserve mode regardless of their own
-   *                    claims, so a parent's OFF doesn't accidentally
-   *                    sweep an inner bundle's manual rows.
-   *   - "cascade"   → every internal row this bundle owns (direct
-   *                    children) clears unconditionally. Triggered only
-   *                    when the entire scope is hand-marked (no master
-   *                    claim anywhere this bundle could see) and the
-   *                    user clicks the master button at "all" — they
-   *                    almost certainly meant "turn everything off".
-   *                    Inner masters receive the same "cascade" so
-   *                    inner-owned manual rows clear too. */
-  type BundleOffMode = "preserve" | "cascade";
-
-  /** Set `instance.internal` for every direct child of a bundle, then
-   *  recurse into inner bundles. See `BundleOffMode` for the OFF
-   *  decision matrix.
+  /** Set the flag for every direct child of a bundle, then recurse into
+   *  inner bundles. See `BundleOffMode` for the OFF decision matrix.
    *
    *  A bundle's master governs ONLY its direct children — rows owned
    *  by an inner bundle are skipped + the recursive call propagates
-   *  the same on/off + mode downward. */
-  function setBundleInternal(
+   *  the same on/off + mode downward. Lock ON uses the per-instance
+   *  last-used seed via `lastUsedSeedReader`, then the
+   *  `_ui.last_locked_seed` memory, then 0. */
+  function setBundleMaster(
+    spec: Master,
     uid: string,
     targetOn: boolean,
     forceMode?: BundleOffMode,
@@ -102,17 +126,18 @@ export function createBundleMasterToggles(
     const innerUids = new Set(innerBundles.map((b) => b._uid));
     const modules = value.value.modules;
     // OFF-mode decision (forceMode wins on recursive descent). Scan
-    // the entire scope for any `master_internal_by` tag — presence
-    // anywhere → preserve (some master claimed something, OFF
-    // should undo only that). Absence anywhere → cascade (all
-    // hand-marked, click OFF at "all" means "really clear all").
+    // the ENTIRE scope (not just direct children) for any claim tag —
+    // presence anywhere → preserve (some master claimed something, OFF
+    // should undo only that, and an inner-owned claim saves hand-marked
+    // rows in this bundle's direct scope). Absence anywhere → cascade
+    // (all hand-marked, click OFF at "all" means "really clear all").
     let mode: BundleOffMode = forceMode ?? "preserve";
     if (!targetOn && !forceMode) {
       let hasAnyClaim = false;
       for (let i = bundle.start_idx; i <= bundle.end_idx; i++) {
         const m = modules[i];
-        if (!m || !isInternalable(m)) continue;
-        if (m.instance?._ui?.master_internal_by) {
+        if (!m || !spec.applies(m)) continue;
+        if (m.instance?._ui?.[spec.claim]) {
           hasAnyClaim = true;
           break;
         }
@@ -122,76 +147,73 @@ export function createBundleMasterToggles(
     // Track which inners this call should recurse into. Two rules:
     //   ON  — recurse if the inner state was NOT "all" before this op
     //         (we're flipping it from partial/none to all). Tag the
-    //         inner with `master_internal_chained_by = bundle._uid`
-    //         so its eventual OFF can find us. If inner was already
-    //         "all", skip — user/its own master got there independently,
-    //         we don't want to "own" inner's pre-existing state.
-    //   OFF — recurse only if inner.master_internal_chained_by ===
-    //         bundle._uid (we previously chained inner ON). Otherwise
-    //         leave inner alone (user-controlled). On recursion, clear
-    //         the chain tag.
-    type InnerOp = { inner: BundleInstance; chainTag: "set" | "clear" | null };
-    const innerOps: InnerOp[] = [];
+    //         inner with the chain key = bundle._uid so its eventual
+    //         OFF can find us. If inner was already "all", skip —
+    //         user/its own master got there independently, we don't
+    //         want to "own" inner's pre-existing state.
+    //   OFF — recurse only if the inner's chain key === bundle._uid (we
+    //         previously chained inner ON). Otherwise leave inner alone
+    //         (user-controlled). On recursion, clear the chain tag.
+    const innerOps: BundleInstance[] = [];
     for (const inner of innerBundles) {
-      if (targetOn) {
-        const innerState = bundleInternalState(inner);
-        if (innerState !== "all") {
-          innerOps.push({ inner, chainTag: "set" });
-        }
-      } else {
-        if (inner.master_internal_chained_by === bundle._uid) {
-          innerOps.push({ inner, chainTag: "clear" });
-        }
+      if (targetOn ? aggregate(spec, inner) !== "all" : inner[spec.chain] === bundle._uid) {
+        innerOps.push(inner);
       }
     }
     const list = modules.map((m, i) => {
       if (i < bundle.start_idx || i > bundle.end_idx) return m;
-      if (!isInternalable(m)) return m;
+      if (!spec.applies(m)) return m;
       const origin = (m as ModuleEntry & { bundle_origin?: string }).bundle_origin;
       if (origin && innerUids.has(origin)) return m;
-      const inst = m.instance ?? {};
-      const ui = inst._ui ?? {};
+      const inst = (m.instance ?? {}) as Record<string, unknown>;
+      const ui = (inst._ui ?? {}) as Record<string, unknown>;
       if (targetOn) {
-        if (inst.internal) return m;
+        if (spec.has(inst)) return m;
+        let on: unknown = true;
+        let remembered: Record<string, unknown> = {};
+        if (spec.seed) {
+          const lastUsed = props.lastUsedSeedReader?.(m._uid ?? m.id);
+          on = typeof lastUsed === "number" ? lastUsed
+            : typeof ui.last_locked_seed === "number" ? ui.last_locked_seed
+            : 0;
+          remembered = { last_locked_seed: on };
+        }
         return {
           ...m,
           instance: {
             ...inst,
-            internal: true,
-            _ui: { ...ui, master_internal: true, master_internal_by: bundle._uid },
+            [spec.field]: on,
+            _ui: { ...ui, ...remembered, [spec.flag]: true, [spec.claim]: bundle._uid },
           },
-        };
-      } else {
-        if (!inst.internal) return m;
-        // Preserve mode → only clear rows THIS bundle owns. Cascade
-        // mode → clear everything in scope regardless of claim.
-        if (mode === "preserve" && ui.master_internal_by !== bundle._uid) return m;
-        const { internal: _drop, ...restInst } = inst;
-        void _drop;
-        const { master_internal: _drop2, master_internal_by: _drop3, ...restUi } = ui;
-        void _drop2;
-        void _drop3;
-        return { ...m, instance: { ...restInst, _ui: restUi } };
+        } as ModuleEntry;
       }
+      if (!spec.has(inst)) return m;
+      // Preserve mode → only clear rows THIS bundle owns. Cascade
+      // mode → clear everything in scope regardless of claim.
+      if (mode === "preserve" && ui[spec.claim] !== bundle._uid) return m;
+      // DROP the key entirely — a `null` locked_seed reads the same to
+      // the engine but the bundle fingerprint distinguishes it
+      // (stableStringify emits `"locked_seed":null` vs no key at all).
+      const { [spec.field]: _drop, ...restInst } = inst;
+      const { [spec.flag]: _drop2, [spec.claim]: _drop3, ...restUi } = ui;
+      void _drop;
+      void _drop2;
+      void _drop3;
+      return { ...m, instance: { ...restInst, _ui: restUi } } as ModuleEntry;
     });
     // Apply chain-tag updates to inner BundleInstances alongside the
     // module commit. Single commitModules call keeps modules + bundles
     // in lock-step so a subsequent recursive call sees the new flags.
-    const tagsByUid = new Map<string, "set" | "clear">();
-    for (const op of innerOps) if (op.chainTag) tagsByUid.set(op.inner._uid, op.chainTag);
+    const tagged = new Set(innerOps.map((b) => b._uid));
     const nextBundles = bundles.map((b) => {
-      const tag = tagsByUid.get(b._uid);
-      if (!tag) return b;
-      if (tag === "set") return { ...b, master_internal_chained_by: bundle._uid };
-      const { master_internal_chained_by: _drop, ...rest } = b;
-      void _drop;
-      return rest as BundleInstance;
+      if (!tagged.has(b._uid)) return b;
+      return targetOn ? { ...b, [spec.chain]: bundle._uid } : dropChainTag(b, spec);
     });
     commitModules(list, nextBundles);
     // Recurse into inner bundles selected above. Mode propagates so a
     // preserving outer doesn't turn into a cascading inner.
-    for (const op of innerOps) {
-      setBundleInternal(op.inner._uid, targetOn, mode);
+    for (const inner of innerOps) {
+      setBundleMaster(spec, inner._uid, targetOn, mode);
     }
   }
 
@@ -199,163 +221,28 @@ export function createBundleMasterToggles(
    *  "all" → click OFF (sweep everything in scope); state "none" or
    *  "partial" → click ON (claim every off row + propagate to inner
    *  masters). User-initiated click also clears this bundle's own
-   *  `master_internal_chained_by` flag — taking direct action means
-   *  the bundle is no longer "owned" by an outer chain. Any future
-   *  outer OFF will leave it alone. */
-  function toggleBundleInternal(uid: string): void {
+   *  chain tag — taking direct action means the bundle is no longer
+   *  "owned" by an outer chain. Any future outer OFF will leave it
+   *  alone. */
+  function toggleBundleMaster(spec: Master, uid: string): void {
     const bundles = value.value.bundles ?? [];
     const bundle = bundles.find((b) => b._uid === uid);
     if (!bundle) return;
-    const state = bundleInternalState(bundle);
-    if (state === null) return;
-    if (bundle.master_internal_chained_by) {
-      const nextBundles = bundles.map((b) => {
-        if (b._uid !== uid) return b;
-        const { master_internal_chained_by: _drop, ...rest } = b;
-        void _drop;
-        return rest as BundleInstance;
-      });
-      value.value = { ...value.value, bundles: nextBundles };
+    const tri = aggregate(spec, bundle);
+    if (tri === null) return;
+    if (bundle[spec.chain]) {
+      value.value = {
+        ...value.value,
+        bundles: bundles.map((b) => (b._uid === uid ? dropChainTag(b, spec) : b)),
+      };
     }
-    setBundleInternal(uid, state !== "all");
-  }
-
-  /** Set seed-lock for every direct child of a bundle, recurse into
-   *  inner bundles. Mirrors `setBundleInternal` — see that fn for the
-   *  full design rationale (inner-bundle ownership, smart OFF,
-   *  cascade-via-recursion). Lock-specific bit: ON uses the
-   *  per-instance last-used seed via `lastUsedSeedReader`, then the
-   *  `_ui.last_locked_seed` memory, then 0. */
-  function setBundleLock(
-    uid: string,
-    targetOn: boolean,
-    forceMode?: BundleOffMode,
-  ): void {
-    const bundles = value.value.bundles ?? [];
-    const bundle = bundles.find((b) => b._uid === uid);
-    if (!bundle) return;
-    const innerBundles = bundles.filter((b) => b.parent_uid === bundle._uid);
-    const innerUids = new Set(innerBundles.map((b) => b._uid));
-    const modules = value.value.modules;
-    // Same OFF-mode decision matrix as setBundleInternal — see
-    // `BundleOffMode` docs above for the full table. Pre-scan covers
-    // the ENTIRE scope (not just direct children) so an inner-owned
-    // claim correctly forces outer's OFF into preserve mode and
-    // saves any hand-locked rows in outer's direct scope.
-    let mode: BundleOffMode = forceMode ?? "preserve";
-    if (!targetOn && !forceMode) {
-      let hasAnyClaim = false;
-      for (let i = bundle.start_idx; i <= bundle.end_idx; i++) {
-        const m = modules[i];
-        if (!m || !isSeedLockable(m)) continue;
-        if (m.instance?._ui?.master_lock_by) {
-          hasAnyClaim = true;
-          break;
-        }
-      }
-      mode = hasAnyClaim ? "preserve" : "cascade";
-    }
-    // Inner chain decisions mirror setBundleInternal. See that fn's
-    // commentary for the full rationale.
-    type InnerOp = { inner: BundleInstance; chainTag: "set" | "clear" | null };
-    const innerOps: InnerOp[] = [];
-    for (const inner of innerBundles) {
-      if (targetOn) {
-        const innerState = bundleLockState(inner);
-        if (innerState !== "all") {
-          innerOps.push({ inner, chainTag: "set" });
-        }
-      } else {
-        if (inner.master_lock_chained_by === bundle._uid) {
-          innerOps.push({ inner, chainTag: "clear" });
-        }
-      }
-    }
-    const list = modules.map((m, i) => {
-      if (i < bundle.start_idx || i > bundle.end_idx) return m;
-      if (!isSeedLockable(m)) return m;
-      const origin = (m as ModuleEntry & { bundle_origin?: string }).bundle_origin;
-      if (origin && innerUids.has(origin)) return m;
-      const inst = m.instance ?? {};
-      const ui = inst._ui ?? {};
-      if (targetOn) {
-        if (typeof inst.locked_seed === "number") return m;
-        let fallback: number;
-        const lastUsed = props.lastUsedSeedReader?.(m._uid ?? m.id);
-        if (typeof lastUsed === "number") fallback = lastUsed;
-        else if (typeof ui.last_locked_seed === "number") fallback = ui.last_locked_seed;
-        else fallback = 0;
-        return {
-          ...m,
-          instance: {
-            ...inst,
-            locked_seed: fallback,
-            _ui: {
-              ...ui,
-              last_locked_seed: fallback,
-              master_lock: true,
-              master_lock_by: bundle._uid,
-            },
-          },
-        };
-      } else {
-        if (typeof inst.locked_seed !== "number") return m;
-        if (mode === "preserve" && ui.master_lock_by !== bundle._uid) return m;
-        const { master_lock: _drop, master_lock_by: _drop2, ...restUi } = ui;
-        void _drop;
-        void _drop2;
-        // DROP the `locked_seed` key entirely — earlier we set it to
-        // `null`, which the engine treats identically to missing but
-        // the bundle fingerprint distinguishes (stableStringify emits
-        // `"locked_seed":null` vs no key at all).
-        const { locked_seed: _drop3, ...restInstClean } = inst;
-        void _drop3;
-        return {
-          ...m,
-          instance: { ...restInstClean, _ui: restUi },
-        };
-      }
-    });
-    const tagsByUid = new Map<string, "set" | "clear">();
-    for (const op of innerOps) if (op.chainTag) tagsByUid.set(op.inner._uid, op.chainTag);
-    const nextBundles = bundles.map((b) => {
-      const tag = tagsByUid.get(b._uid);
-      if (!tag) return b;
-      if (tag === "set") return { ...b, master_lock_chained_by: bundle._uid };
-      const { master_lock_chained_by: _drop, ...rest } = b;
-      void _drop;
-      return rest as BundleInstance;
-    });
-    commitModules(list, nextBundles);
-    for (const op of innerOps) {
-      setBundleLock(op.inner._uid, targetOn, mode);
-    }
-  }
-
-  function toggleBundleLock(uid: string): void {
-    const bundles = value.value.bundles ?? [];
-    const bundle = bundles.find((b) => b._uid === uid);
-    if (!bundle) return;
-    const state = bundleLockState(bundle);
-    if (state === null) return;
-    // Direct user click clears this bundle's own chain tag — taking
-    // ownership decouples it from any outer chain.
-    if (bundle.master_lock_chained_by) {
-      const nextBundles = bundles.map((b) => {
-        if (b._uid !== uid) return b;
-        const { master_lock_chained_by: _drop, ...rest } = b;
-        void _drop;
-        return rest as BundleInstance;
-      });
-      value.value = { ...value.value, bundles: nextBundles };
-    }
-    setBundleLock(uid, state !== "all");
+    setBundleMaster(spec, uid, tri !== "all");
   }
 
   return {
-    bundleInternalState,
-    bundleLockState,
-    toggleBundleInternal,
-    toggleBundleLock,
+    bundleInternalState: (b: BundleInstance) => aggregate(INTERNAL, b),
+    bundleLockState: (b: BundleInstance) => aggregate(LOCK, b),
+    toggleBundleInternal: (uid: string) => toggleBundleMaster(INTERNAL, uid),
+    toggleBundleLock: (uid: string) => toggleBundleMaster(LOCK, uid),
   };
 }

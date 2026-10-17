@@ -817,7 +817,6 @@ export function createModuleOps(
     openEditModal,
     saveEditedModule,
     revertEditingFrame,
-    /** Row-level members of the ModuleRow provide context. */
     rowCtx: {
       toggleCollapsed, toggleEnabled, removeModule,
       toggleLockOnCard, toggleInternalOnCard, onCardKeydown,

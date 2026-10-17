@@ -6,7 +6,7 @@ import {
 } from "../../../widgets/_shared";
 import { getBundleCollapsedByDefault, getConfirmDestructiveBundle } from "../../../extension/settings";
 import { pushToast } from "../../shared/toast-store";
-import { buildBundleInsertion, type BundleLibraryEntry } from "./insert";
+import { buildBundleInsertion, type BundleInsertion, type BundleLibraryEntry } from "./insert";
 import { toChildSnapshot } from "./save";
 import { snapBundleFingerprints } from "./bundle-fingerprint";
 import {
@@ -18,6 +18,49 @@ import {
 } from "./flip";
 import type { WidgetState } from "../widget-state";
 import type { BundleFrameCtx } from "./bundle-frame-ctx";
+
+type LibraryBundle = Awaited<ReturnType<typeof api.bundles.get>>;
+
+/** The insert glue's view of a fetched library bundle. */
+function libEntryOf(entry: LibraryBundle): BundleLibraryEntry {
+  return {
+    id: entry.id,
+    name: entry.name,
+    color: entry.color,
+    children: entry.children as BundleLibraryEntry["children"],
+    payload_hash: entry.payload_hash,
+  };
+}
+
+/**
+ * A spliced bundle child as a canvas row. `modulesToSplice` carries the
+ * loose ChildSnapshot shape from uuid-remap (only `id` + `type` typed).
+ * Bundle library children are stored as FULL module snapshots at save
+ * time — defaults are backfilled here for any fields the bundle editor
+ * didn't write explicitly so the row satisfies ModuleEntry at runtime.
+ * `collapsed` carries through so a child inserted collapsed (per
+ * `buildBundleInsertion`) starts with its chevron closed.
+ */
+function childRow(
+  c: BundleInsertion["modulesToSplice"][number],
+  uid: string | undefined,
+  origin: string | undefined,
+): ModuleEntry {
+  const rec = c as Record<string, unknown>;
+  return {
+    id: c.id,
+    _uid: uid,
+    type: c.type as ModuleEntry["type"],
+    enabled: (rec.enabled as boolean | undefined) ?? true,
+    collapsed: (rec.collapsed as boolean | undefined) ?? false,
+    meta: (rec.meta as ModuleEntry["meta"] | undefined) ?? { name: "" },
+    entries: (rec.entries as ModuleEntry["entries"] | undefined) ?? [],
+    payload: c.payload,
+    instance: c.instance,
+    payload_hash: c.payload_hash,
+    bundle_origin: origin,
+  } as ModuleEntry;
+}
 
 /**
  * Whole-bundle operations on a Context canvas: insert from the library,
@@ -41,15 +84,8 @@ export function createBundleOps(state: WidgetState, holdSuppressMove: () => void
   async function onPickBundle(bundleId: string): Promise<void> {
     try {
       const entry = await api.bundles.get(bundleId);
-      const libEntry: BundleLibraryEntry = {
-        id: entry.id,
-        name: entry.name,
-        color: entry.color,
-        children: entry.children as BundleLibraryEntry["children"],
-        payload_hash: entry.payload_hash,
-      };
       const insertIdx = value.value.modules.length;
-      const { modulesToSplice, bundleInstance, innerInstances } = buildBundleInsertion(libEntry, insertIdx);
+      const { modulesToSplice, bundleInstance, innerInstances } = buildBundleInsertion(libEntryOf(entry), insertIdx);
       // Honor "Collapse new bundles by default". Default false keeps
       // bundles open on insert (existing behaviour); when true, stamp
       // the collapsed flag so the frame mounts header-only. Inner
@@ -61,35 +97,8 @@ export function createBundleOps(state: WidgetState, holdSuppressMove: () => void
       }
       // Mutate via spread to keep the ref's identity stable + trigger
       // Vue reactivity. modules[] gets the new rows at the tail, bundles[]
-      // gets the new instance.
-      //
-      // `modulesToSplice` carries the loose ChildSnapshot shape from
-      // uuid-remap (only `id` + `type` typed). Bundle library children
-      // are stored as FULL module snapshots at save time — defaults are
-      // backfilled here for any fields the bundle editor didn't write
-      // explicitly so the spliced row satisfies ModuleEntry at runtime.
-      const splice = modulesToSplice.map((c) => {
-        const rec = c as Record<string, unknown>;
-        const meta = (rec.meta as ModuleEntry["meta"] | undefined) ?? { name: "" };
-        const entries = (rec.entries as ModuleEntry["entries"] | undefined) ?? [];
-        return {
-          id: c.id,
-          _uid: c._uid,
-          type: c.type as ModuleEntry["type"],
-          enabled: (rec.enabled as boolean | undefined) ?? true,
-          // Bundle children inserted in their collapsed state per
-          // `buildBundleInsertion` — the explicit rebuild above
-          // dropped this field; now carried through so the chevron
-          // starts in collapsed position.
-          collapsed: (rec.collapsed as boolean | undefined) ?? false,
-          meta,
-          entries,
-          payload: c.payload,
-          instance: c.instance,
-          payload_hash: c.payload_hash,
-          bundle_origin: c.bundle_origin,
-        } as ModuleEntry;
-      });
+      // gets the new instance (rows built by `childRow`).
+      const splice = modulesToSplice.map((c) => childRow(c, c._uid, c.bundle_origin));
       commitModules(
         [...value.value.modules, ...splice],
         [...(value.value.bundles ?? []), bundleInstance, ...innerInstances],
@@ -600,19 +609,12 @@ export function createBundleOps(state: WidgetState, holdSuppressMove: () => void
         );
         return;
       }
-      const libEntry: BundleLibraryEntry = {
-        id: entry.id,
-        name: entry.name,
-        color: entry.color,
-        children: entry.children as BundleLibraryEntry["children"],
-        payload_hash: entry.payload_hash,
-      };
       // Replace the current bundle's child range with the freshly
       // deserialized library snapshot. Preserve the BundleInstance
       // _uid + position so the overlay doesn't visually re-appear
       // elsewhere; we just replace its content.
       const startIdx = target.start_idx;
-      const replacementInsertion = buildBundleInsertion(libEntry, startIdx);
+      const replacementInsertion = buildBundleInsertion(libEntryOf(entry), startIdx);
       // buildBundleInsertion mints a brand-new outer + brand-new inners.
       // For reset, we discard the new outer's identity (re-use `target._uid`
       // so the frame stays put) but KEEP each fresh inner's identity
@@ -636,26 +638,11 @@ export function createBundleOps(state: WidgetState, holdSuppressMove: () => void
       // even when the reset was the only outstanding edit. Fresh uids
       // only get minted for positions the new snapshot adds beyond the
       // old child count (i.e. the library snapshot grew since insert).
-      const newChildren = replacementInsertion.modulesToSplice.map((c, i) => {
-        const rec = c as Record<string, unknown>;
-        const meta = (rec.meta as ModuleEntry["meta"] | undefined) ?? { name: "" };
-        const entries = (rec.entries as ModuleEntry["entries"] | undefined) ?? [];
-        const origin = c.bundle_origin === freshOuterUid ? target._uid : c.bundle_origin;
-        const preservedUid = oldChildren[i]?._uid ?? c._uid;
-        return {
-          id: c.id,
-          _uid: preservedUid,
-          type: c.type as ModuleEntry["type"],
-          enabled: (rec.enabled as boolean | undefined) ?? true,
-          collapsed: (rec.collapsed as boolean | undefined) ?? false,
-          meta,
-          entries,
-          payload: c.payload,
-          instance: c.instance,
-          payload_hash: c.payload_hash,
-          bundle_origin: origin,
-        } as ModuleEntry;
-      });
+      const newChildren = replacementInsertion.modulesToSplice.map((c, i) => childRow(
+        c,
+        oldChildren[i]?._uid ?? c._uid,
+        c.bundle_origin === freshOuterUid ? target._uid : c.bundle_origin,
+      ));
       // Inner BundleInstances: rewrite their parent_uid from the freshly
       // minted outer to the existing outer so the nested frames sit
       // inside the preserved bundle wrapper.
@@ -940,7 +927,6 @@ export function createBundleOps(state: WidgetState, holdSuppressMove: () => void
     resetBundleToLibrary,
     resetChildToBundleSnapshot,
     wrapIntoNewBundle,
-    /** Bundle-op members of the BundleFrame provide context. */
     frameCtx: {
       toggleBundleCollapsed, toggleBundleEnabled, removeBundle,
     } satisfies Partial<BundleFrameCtx>,

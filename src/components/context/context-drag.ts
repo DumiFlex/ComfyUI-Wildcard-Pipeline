@@ -21,6 +21,39 @@ import type { ModuleRowCtx } from "./module-row-ctx";
 import type { BundleFrameCtx } from "./bundles/bundle-frame-ctx";
 
 /**
+ * Removes bundle `b`'s row range plus `b` and every bundle nested under it
+ * (repeated until no new uid lands, so any depth), shifting the ranges of
+ * bundles after it. Returns the new `[modules, bundles]`.
+ */
+function cutBundleSubtree(
+  modules: ModuleEntry[],
+  bundles: BundleInstance[],
+  b: BundleInstance,
+): [ModuleEntry[], BundleInstance[]] {
+  const moving = new Set<string>([b._uid]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const x of bundles) {
+      if (x.parent_uid && moving.has(x.parent_uid) && !moving.has(x._uid)) {
+        moving.add(x._uid);
+        grew = true;
+      }
+    }
+  }
+  const { start_idx: start, end_idx: end } = b;
+  const removed = end - start + 1;
+  return [
+    [...modules.slice(0, start), ...modules.slice(end + 1)],
+    bundles
+      .filter((x) => !moving.has(x._uid))
+      .map((x) => (x.start_idx > end
+        ? { ...x, start_idx: x.start_idx - removed, end_idx: x.end_idx - removed }
+        : x)),
+  ];
+}
+
+/**
  * ContextWidget drag-and-drop: hover/zone state, the drop indicator bar,
  * drop pulses, the same-node + cross-node drop paths and the source-side
  * cleanup (dragend + the handoff queue in `drag-store`).
@@ -326,24 +359,7 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
         const start = live.start_idx;
         const end = live.end_idx;
         if (start < 0 || end < start || end >= modules.length) continue;
-        const movingBundleUids = new Set<string>([h.bundleUid]);
-        let grew = true;
-        while (grew) {
-          grew = false;
-          for (const b of bundles) {
-            if (b.parent_uid && movingBundleUids.has(b.parent_uid) && !movingBundleUids.has(b._uid)) {
-              movingBundleUids.add(b._uid);
-              grew = true;
-            }
-          }
-        }
-        const removedCount = end - start + 1;
-        modules = [...modules.slice(0, start), ...modules.slice(end + 1)];
-        bundles = bundles
-          .filter((b) => !movingBundleUids.has(b._uid))
-          .map((b) => (b.start_idx > end
-            ? { ...b, start_idx: b.start_idx - removedCount, end_idx: b.end_idx - removedCount }
-            : b));
+        [modules, bundles] = cutBundleSubtree(modules, bundles, live);
         changed = true;
       }
     }
@@ -502,40 +518,10 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
           // module path. Filter the bundle range by its bundleUid +
           // descendants instead of relying on stored start_idx/end_idx
           // that the handoff queue may have already invalidated.
-          const movingBundleUids = new Set<string>([ds.bundleUid]);
-          // First pass: collect every inner whose parent is in the set.
-          // Repeated until no new uids land — covers nested bundles
-          // even though the tier-2 cap means one inner level today.
+          // A bundle already gone means the handoff cleaned up first.
           const curBundles = value.value.bundles ?? [];
-          let grew = true;
-          while (grew) {
-            grew = false;
-            for (const b of curBundles) {
-              if (b.parent_uid && movingBundleUids.has(b.parent_uid) && !movingBundleUids.has(b._uid)) {
-                movingBundleUids.add(b._uid);
-                grew = true;
-              }
-            }
-          }
-          const bundleStillPresent = curBundles.some((b) => b._uid === ds.bundleUid);
-          if (!bundleStillPresent) {
-            // Handoff already cleaned up; nothing left to do.
-          } else {
-            const movingBundle = curBundles.find((b) => b._uid === ds.bundleUid);
-            if (movingBundle) {
-              const start = movingBundle.start_idx;
-              const end = movingBundle.end_idx;
-              const before = value.value.modules.slice(0, start);
-              const after = value.value.modules.slice(end + 1);
-              const removedCount = end - start + 1;
-              const remainingBundles = curBundles
-                .filter((b) => !movingBundleUids.has(b._uid))
-                .map((b) => (b.start_idx > end
-                  ? { ...b, start_idx: b.start_idx - removedCount, end_idx: b.end_idx - removedCount }
-                  : b));
-              commitModules([...before, ...after], remainingBundles);
-            }
-          }
+          const movingBundle = curBundles.find((b) => b._uid === ds.bundleUid);
+          if (movingBundle) commitModules(...cutBundleSubtree(value.value.modules, curBundles, movingBundle));
         }
       }
     }
@@ -873,7 +859,6 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
   } satisfies Partial<BundleFrameCtx>;
 
   return {
-    // Template bindings (list / empty hero / "Drop here" footer).
     suppressMove,
     isDropEndZone,
     onListDragOver,
@@ -882,7 +867,6 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
     onContainerLeave,
     onDrop,
     holdSuppressMove,
-    /** Drag members of the ModuleRow / BundleFrame provide contexts. */
     rowCtx,
     frameCtx,
   };
