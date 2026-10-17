@@ -30,6 +30,18 @@ export function nonEmptyObj(v: unknown): boolean {
     && Object.keys(v as Record<string, unknown>).length > 0;
 }
 
+/**
+ * Per-instance override detection. A library-snapshot module is
+ * "modified" when any field on `m.instance` differs from the engine's
+ * `_fresh_instance()` defaults — option enable/disable, weight
+ * overrides, mode (pinned / subcategory), or category filter. Drives
+ * the small accent dot on the card header so users can spot which
+ * picked modules they've tweaked locally.
+ *
+ * Symmetric with the modal's `hasInstanceOverrides` (kept in sync
+ * manually — small enough surface that DRYing isn't worth a shared
+ * util yet).
+ */
 export function isModified(m: ModuleEntry): boolean {
   // Lock + internal have their own dedicated header buttons, so
   // double-counting them in the "modified" dot is just visual
