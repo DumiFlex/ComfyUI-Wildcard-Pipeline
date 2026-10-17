@@ -29,7 +29,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]" pytest-cov
       - run: ruff check .
-      - run: pytest --ignore=tests/syntax/test_fuzz.py --ignore=tests/syntax/test_perf.py
+      # --cov makes [tool.coverage.report] fail_under in pyproject.toml apply.
+      - run: >
+          pytest --ignore=tests/syntax/test_fuzz.py --ignore=tests/syntax/test_perf.py
+          --cov --cov-report=term-missing:skip-covered
 
       - name: Python syntax tests with coverage
         run: >
@@ -53,6 +56,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      - run: pnpm check:css-isolation
       - run: pnpm test:coverage
       - name: TS syntax tests (parity + snapshot)
         run: pnpm vitest run src/manager/__tests__/syntax/

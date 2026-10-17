@@ -103,6 +103,8 @@ function mkWildcardEntity(id: string, options: Array<{ value: string; weight?: n
     tags: [],
     payload_hash: "0".repeat(64),
     options,
+    // parsePayload shape-checks the nested payload, as the server does.
+    payload: { options: options.map((o, i) => ({ id: `opt${i}`, weight: 1, ...o })) },
   };
 }
 

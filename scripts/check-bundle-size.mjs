@@ -296,7 +296,12 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // Same "guide, not a cap" rule as above.
 // dev's canvas widget lifecycle fix (2026-10-16, ~0.65 KB in boot) fits in
 // the same 480 KB.
-const TOTAL_LIMIT = 480 * 1024;     // 480 KB
+// RAISED 480 -> 496 KB on 2026-10-17 for client-side shape checks on install
+// (review finding H1): the canvas can install community dependencies, so the
+// Zod validators ship as their own lazy chunk (shape-check-*.mjs, ~17 KB
+// gzip) that loads only when something is installed. dev sat at 485,671
+// bytes; the branch at 502,904.
+const TOTAL_LIMIT = 496 * 1024;     // 496 KB
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;

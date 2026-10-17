@@ -125,7 +125,7 @@ describe("Import / Export page note", () => {
       schema_version: 1, bundles: [], fixed_values: [], combines: [], derivations: [],
       constraints: [], categories: [], templates: [],
       wildcards: [{ id: "cccc0001", type: "wildcard", name: "Hats", description: "", tags: [],
-        payload_hash: "0".repeat(64), options: [{ value: "cap", weight: 1 }] }],
+        payload_hash: "0".repeat(64), payload: { options: [{ id: "opt00001", value: "cap", weight: 1 }] } }],
     };
     await w.find('[data-test="import-paste-btn"]').trigger("click");
     await flushPromises();
