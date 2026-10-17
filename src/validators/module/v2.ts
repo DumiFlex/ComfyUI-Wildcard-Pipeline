@@ -25,8 +25,10 @@ export const wildcardV2 = moduleRowBase.extend({
     tag_group_kinds: z.record(z.string(), z.enum(["classify", "accepts"])).optional(),
     options: z.array(z.object({
       id: z.string(),
-      value: z.string(),
-      weight: z.number(),
+      // The engine defaults a missing value to "" and weight to 1, so an
+      // install must not refuse a pack that leaves them out.
+      value: z.string().optional(),
+      weight: z.number().min(0).optional(),
       sub_categories: z.array(z.string()).optional(),
       is_null: z.boolean().optional(),
       // Send-to-negative (catalog v8, additive): listed so a shared option's
@@ -44,10 +46,12 @@ export const wildcardV2 = moduleRowBase.extend({
 // combine payload; otherwise the v1 shapes carry over unchanged.
 export const fixedValuesV2 = fixedValuesV1.extend({
   payload: z.object({
+    // Engine (fixed_values_handler.validate_payload): only the row object is
+    // required; name and value default to "", id is editor bookkeeping.
     values: z.array(z.object({
-      id: z.string(),
-      name: z.string(),
-      value: z.string(),
+      id: z.string().optional(),
+      name: z.string().optional(),
+      value: z.string().optional(),
       negative: z.string().optional(),
     })),
   }),
