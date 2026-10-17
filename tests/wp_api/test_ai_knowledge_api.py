@@ -17,7 +17,9 @@ from wp_api._model_index import build_hits
 
 def _on(fake_llm):
     ai_config.update({"enabled": True, "provider": "lmstudio",
-                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1",
+                      # The one-ask step; split steps have their own tests.
+                      "model_size": "large"})
 
 
 def _item(**kw):

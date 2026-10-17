@@ -96,7 +96,8 @@ def test_web_tools_follow_their_settings():
     assert "web_search" in names and "read_result" not in names and "danbooru" not in names
     names = ai_tools.toolset(None, scoped=False, web=True, reader=True, danbooru=True)
     assert {"web_search", "read_result", "danbooru"} <= set(names)
-    assert "danbooru" in ai_tools.toolset("wildcards", scoped=True, danbooru=True)
+    # Lazy in a scoped chat: more_tools {"group": "danbooru"} loads it.
+    assert "danbooru" not in ai_tools.toolset("wildcards", scoped=True, danbooru=True)
     assert "read_result" not in ai_tools.toolset("wildcards", scoped=True, reader=True)
 
 

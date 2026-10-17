@@ -111,7 +111,25 @@ describe("Settings › AI assistant", () => {
     await flushPromises();
     await w.get('[data-test="ai-test"]').trigger("click");
     await flushPromises();
-    expect(w.get('[data-test="ai-test-result"]').text()).toContain("each chat starts at ≈ 7.4k of 16k tokens (24 tools)");
+    expect(w.get('[data-test="ai-prefix"]').text()).toContain("Fixed prefix ≈ 7.4k tokens.");
+    expect(w.get('[data-test="ai-prefix"]').text()).toContain("It fits the model's 16k window.");
+  });
+
+  it("splits the fixed prefix into its parts and warns when it doesn't fit", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, model: "a" }));
+    vi.mocked(api.ai.test).mockResolvedValue({
+      ok: true, models: ["a"], model_found: true, json_ok: true, latency_ms: 900, context: 8192, context_low: true, error: null,
+      prefix: { tokens: 9100, window: 8192, tools: 24, lean: 2, format: "native", fits: false,
+                parts: { instructions: 4200, tools: 3700, library: 1200 } },
+    });
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    await w.get('[data-test="ai-test"]').trigger("click");
+    await flushPromises();
+    const line = w.get('[data-test="ai-prefix"]');
+    expect(line.text()).toContain("Fixed prefix ≈ 9.1k tokens: instructions 4.2k, 24 tool declarations 3.7k, library summary 1.2k.");
+    expect(line.text()).toContain("doesn't fit the model's 8k window");
+    expect(line.attributes("data-tone")).toBe("warn");
   });
 
   it("shows a failed test", async () => {
