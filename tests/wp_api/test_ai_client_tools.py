@@ -22,7 +22,9 @@ async def _resume(wp_client, chat_id, results, status=200, **extra):
 
 def _on(fake_llm, **extra):
     ai_config.update({"enabled": True, "provider": "lmstudio",
-                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1", **extra})
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1",
+                      # The one-ask step; split steps have their own tests.
+                      "model_size": "large", **extra})
 
 
 async def test_a_page_tool_pauses_the_turn_and_its_answer_continues_it(wp_client, fake_llm):
@@ -32,6 +34,7 @@ async def test_a_page_tool_pauses_the_turn_and_its_answer_continues_it(wp_client
         {"message": "Let me show you.", "calls": [
             {"tool": "read", "args": json.dumps({"id": tgt})},
             {"tool": "open", "args": json.dumps({"id": "Weapon"})},
+            {"tool": "read_page", "args": "{}"},
             {"tool": "highlight", "args": '{"anchor": "a2", "caption": "the options"}'},
         ]},
         {"message": "That's the options list.", "calls": []},
@@ -40,13 +43,15 @@ async def test_a_page_tool_pauses_the_turn_and_its_answer_continues_it(wp_client
     assert first["message"] == "Let me show you."
     assert [(c["tool"], c["args"]) for c in first["pending"]] == [
         ("open", {"id": tgt, "type": "wildcard"}),
+        ("read_page", {}),
         ("highlight", {"points": [{"anchor": "a2", "caption": "the options"}]}),
     ]
     assert [s["note"] for s in first["steps"] if not s.get("say")] == [
-        "Read Weapon", "Opened Weapon", "Pointed at the options"]
-    opened, pointed = first["pending"]
+        "Read Weapon", "Opened Weapon", "Read the page", "Pointed at the options"]
+    opened, read, pointed = first["pending"]
     done = await _resume(wp_client, first["chat_id"], [
         {"id": opened["id"], "text": "Weapon is open"},
+        {"id": read["id"], "text": "[a2] Options"},
         {"id": pointed["id"], "denied": True},
     ])
     assert done["message"] == "That's the options list." and done["pending"] == []
@@ -65,15 +70,19 @@ async def test_pointing_twice_is_turned_into_an_answer(wp_client, fake_llm):
     _on(fake_llm)
     point = {"tool": "highlight", "args": '{"anchor": "settings", "caption": "Settings button"}'}
     fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "read_page", "args": "{}"}]},
         {"message": "", "calls": [point]},
         {"message": "", "calls": [point]},  # the same part again
         {"message": "", "calls": []},
         {"message": "", "calls": []},
     ])
     first = await _chat(wp_client, "where is the settings button?")
-    assert first["pending"][0]["tool"] == "highlight"
+    assert first["pending"][0]["tool"] == "read_page"
+    read = await _resume(wp_client, first["chat_id"],
+                         [{"id": first["pending"][0]["id"], "text": "[settings] Settings"}])
+    assert read["pending"][0]["tool"] == "highlight"
     done = await _resume(wp_client, first["chat_id"],
-                         [{"id": first["pending"][0]["id"], "text": "pointed"}])
+                         [{"id": read["pending"][0]["id"], "text": "pointed"}])
     # No second pause: the model is told it already pointed there.
     assert done["pending"] == []
     told = json.dumps(fake_llm.seen[-2]["body"]["messages"])
@@ -264,16 +273,18 @@ async def test_a_page_call_that_did_nothing_shows_failed_and_the_model_is_told(
     _on(fake_llm)
     point = {"tool": "highlight", "args": '{"anchor": "Core idea", "caption": "Core idea"}'}
     fake_llm.chat_steps.extend([
-        {"message": "", "calls": [{"tool": "open", "args": '{"page": "constraints"}'}, point]},
+        {"message": "", "calls": [{"tool": "open", "args": '{"page": "constraints"}'},
+                                  {"tool": "read_page", "args": "{}"}, point]},
         {"message": "", "calls": [point]},  # the same part again, after it failed
         {"message": "", "calls": []},
         {"message": "", "calls": []},
     ])
     first = await _chat(wp_client, "highlight the constraint docs for me")
-    opened, pointed = first["pending"]
+    opened, read, pointed = first["pending"]
     assert opened["label"] == "Opened the constraints list"
     second = await _resume(wp_client, first["chat_id"], [
         {"id": opened["id"], "text": "opened"},
+        {"id": read["id"], "text": "[list] Constraints"},
         {"id": pointed["id"], "text": "couldn't: no part \"Core idea\" on this page"}])
     assert {"tool": "highlight", "note": "Couldn't: Pointed at Core idea", "ok": False} \
         in second["steps"]

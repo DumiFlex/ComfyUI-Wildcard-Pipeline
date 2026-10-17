@@ -89,8 +89,11 @@ def abilities() -> dict[str, Any]:
                 "category applies itself, with Undo). Cards that create items keep their "
                 "ids while the chat is open, so later cards can already point at them. "
                 "Small and medium models get the tools for the page they are on (medium "
-                "models also the wildcard, rule, constraint, test and list tools everywhere) "
-                "plus more_tools, which lists the rest; large models get every tool.")},
+                "models also the wildcard, rule, constraint and test tools everywhere) plus "
+                "more_tools, which loads one group (web search, Danbooru and the list tools "
+                "are always loaded this way) or all the rest; large models get every tool. "
+                "Small and medium models answer each step in two parts: what to call (or "
+                "that they are ready), then the reply.")},
             {"title": "How answers look", "text": (
                 "Items show as chips: the model writes [[id#Name]] and the user sees the "
                 "name, which opens the item. The chat shows **bold**, *italic*, lists, "

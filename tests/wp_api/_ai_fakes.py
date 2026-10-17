@@ -39,6 +39,27 @@ EDIT_ANSWERS = {
 }
 
 
+def _chat_step(schema: dict, chat_steps: list) -> object:
+    """The next scripted chat step for a JSON-mode ask. Steps are written
+    whole ({plan, message, calls}); a split step (small and medium models)
+    asks for them in two parts: the act ask ({plan, calls}) takes a step
+    with calls and leaves a plain reply for the answer ask ({message})."""
+    props = schema["properties"]
+    nxt = chat_steps[0] if chat_steps else {"message": "Done.", "calls": []}
+    if "calls" in props and "message" not in props:
+        if isinstance(nxt, str) or nxt.get("calls"):
+            if chat_steps:
+                chat_steps.pop(0)
+            return nxt if isinstance(nxt, str) else {"plan": nxt.get("plan", ""),
+                                                     "calls": nxt["calls"]}
+        return {"plan": nxt.get("plan", ""), "calls": []}
+    if chat_steps:
+        chat_steps.pop(0)
+    if "calls" not in props:
+        return nxt if isinstance(nxt, str) else {"message": nxt.get("message", "")}
+    return nxt
+
+
 @pytest.fixture(autouse=True)
 def _isolated_ai(tmp_path, monkeypatch):
     monkeypatch.setenv("WP_AI_CONFIG_PATH", str(tmp_path / "ai.json"))
@@ -71,8 +92,25 @@ async def fake_llm(aiohttp_server):
         if "tools" in body and body.get("model") == "refuser":
             return web.json_response({"error": {"message": "this model has no tool support"}},
                                      status=400)
+        if "tools" in body and body.get("model") == "no-choice" \
+                and body.get("tool_choice") not in (None, "auto"):
+            # A server whose tool calling only takes tool_choice "auto".
+            return web.json_response({"error": {
+                "message": f"tool_choice '{body['tool_choice']}' is not supported"}}, status=400)
         if "tools" in body:
-            step = chat_steps.pop(0) if chat_steps else {"content": "Done."}
+            if body.get("tool_choice") == "required":
+                # A split step's act ask: a real call, or `answer` when the
+                # next scripted step is a plain reply (left for the answer ask).
+                nxt = chat_steps[0] if chat_steps else {"content": "Done."}
+                if not nxt.get("tool_calls"):
+                    nxt = {"content": "", "tool_calls": [{
+                        "id": "call_ready", "type": "function",
+                        "function": {"name": "answer", "arguments": "{}"}}]}
+                else:
+                    chat_steps.pop(0)
+                step = nxt
+            else:
+                step = chat_steps.pop(0) if chat_steps else {"content": "Done."}
             return web.json_response({"choices": [{"message": {"role": "assistant", **step}}],
                                       "usage": {"prompt_tokens": 900, "completion_tokens": 20,
                                                 "prompt_tokens_details": {"cached_tokens": 800}}})
@@ -87,23 +125,7 @@ async def fake_llm(aiohttp_server):
             if isinstance(content, list):  # answers in turn, the last one repeated
                 content = content.pop(0) if len(content) > 1 else content[0]
         if schema_name == "chat_step":
-            props = body["response_format"]["json_schema"]["schema"]["properties"]
-            if "tools" in props:
-                # Two-phase pick (small models): the next step's tool names.
-                nxt = chat_steps[0] if chat_steps else {"calls": []}
-                content = chat_steps.pop(0) if isinstance(nxt, str) else {
-                    "plan": nxt.get("plan", ""),
-                    "tools": [c["tool"] for c in nxt.get("calls") or []]}
-            elif "calls" not in props:
-                # Two-phase write: the next step's args, or its message.
-                nxt = chat_steps.pop(0) if chat_steps else {"message": "Done.", "calls": []}
-                content = {f"{i}:{c['tool']}": json.loads(c["args"])
-                           if isinstance(c["args"], str) else c["args"]
-                           for i, c in enumerate(nxt.get("calls") or [], 1)}
-                if not content:
-                    content = {"message": nxt.get("message", "")}
-            else:
-                content = chat_steps.pop(0) if chat_steps else {"message": "Done.", "calls": []}
+            content = _chat_step(body["response_format"]["json_schema"]["schema"], chat_steps)
         text = content if isinstance(content, str) else json.dumps(content)
         choice = {"message": {"content": text}}
         if overrides.get("_finish"):
@@ -141,23 +163,7 @@ async def fake_llm(aiohttp_server):
         if schema_name in overrides:
             content = overrides[schema_name]
         if schema_name == "chat_step":
-            props = body["response_format"]["json_schema"]["schema"]["properties"]
-            if "tools" in props:
-                # Two-phase pick (small models): the next step's tool names.
-                nxt = chat_steps[0] if chat_steps else {"calls": []}
-                content = chat_steps.pop(0) if isinstance(nxt, str) else {
-                    "plan": nxt.get("plan", ""),
-                    "tools": [c["tool"] for c in nxt.get("calls") or []]}
-            elif "calls" not in props:
-                # Two-phase write: the next step's args, or its message.
-                nxt = chat_steps.pop(0) if chat_steps else {"message": "Done.", "calls": []}
-                content = {f"{i}:{c['tool']}": json.loads(c["args"])
-                           if isinstance(c["args"], str) else c["args"]
-                           for i, c in enumerate(nxt.get("calls") or [], 1)}
-                if not content:
-                    content = {"message": nxt.get("message", "")}
-            else:
-                content = chat_steps.pop(0) if chat_steps else {"message": "Done.", "calls": []}
+            content = _chat_step(body["text"]["format"]["schema"], chat_steps)
         text = content if isinstance(content, str) else json.dumps(content)
         return web.json_response({"status": "completed", "output": [
             {"type": "message", "role": "assistant",

@@ -513,10 +513,27 @@ const testSummary = computed(() => {
   if (t.context_low) parts.push(`only ${Math.round((t.context ?? 0) / 1024)}k context`);
   else if (t.context) parts.push(`${Math.round(t.context / 1024)}k context`);
   if (t.embed) parts.push(t.embed.ok ? `embeddings ✓ (${t.embed.dims})` : "embeddings ✗");
-  if (t.prefix) {
-    parts.push(`each chat starts at ≈ ${(t.prefix.tokens / 1000).toFixed(1)}k of ${Math.round(t.prefix.window / 1024)}k tokens (${t.prefix.tools} tools)`);
-  }
   return parts.join(" · ");
+});
+/** The fixed prefix every chat request starts with, split into its parts. */
+const prefixLine = computed(() => {
+  const p = test.value?.prefix;
+  if (!p) return "";
+  const k = (n: number): string => (n < 1000 ? String(n) : `${(n / 1000).toFixed(1)}k`);
+  const bits: string[] = [];
+  if (p.parts) {
+    bits.push(`instructions ${k(p.parts.instructions)}`);
+    if (p.parts.tools) bits.push(`${p.tools} tool declarations ${k(p.parts.tools)}`);
+    else bits.push(`${p.tools} tools listed in the instructions`);
+    bits.push(`library summary ${k(p.parts.library)}`);
+  }
+  const room = Math.round(p.window / 1024);
+  const fits = p.fits ?? p.tokens < p.window;
+  return `Fixed prefix ≈ ${k(p.tokens)} tokens${bits.length ? `: ${bits.join(", ")}` : ""}. `
+    + "Every request of a new chat starts with it, before your messages. "
+    + (fits
+      ? `It fits the model's ${room}k window.`
+      : `It doesn't fit the model's ${room}k window: load the model with more context${p.size === "small" ? "" : ", or set Model size to Small"}.`);
 });
 const testTone = computed(() => {
   const t = test.value;
@@ -667,6 +684,9 @@ const off = computed(() => !config.value?.enabled);
               <i :class="testTone === 'ok' ? 'pi pi-check-circle' : 'pi pi-exclamation-triangle'" aria-hidden="true" />{{ testSummary }}
             </span>
           </SettingRow>
+          <p v-if="prefixLine" class="wp-ai-set__prefix" :data-tone="test?.prefix?.fits === false ? 'warn' : undefined" data-test="ai-prefix">
+            {{ prefixLine }}
+          </p>
           <p v-if="test?.context_low" class="wp-ai-set__ctx" role="status" data-test="ai-context-low">
             The model was loaded with {{ Math.round((test.context ?? 0) / 1024) }}k of context. The chat
             needs 16k or more: its instructions, a few turns and the answer don't fit in less. The
@@ -1236,6 +1256,14 @@ const off = computed(() => !config.value?.enabled);
 .wp-ai-set__result[data-tone="warn"] { color: var(--wp-warn); }
 .wp-ai-set__result i { font-size: 12px; flex: none; }
 .wp-ai-set__ctx code { font-family: var(--wp-font-mono); font-size: 12px; }
+.wp-ai-set__prefix {
+  margin: 0;
+  padding: var(--wp-space-4) var(--wp-space-6);
+  font-size: var(--wp-text-sm);
+  color: var(--wp-text-muted);
+  border-top: 1px solid var(--wp-border);
+}
+.wp-ai-set__prefix[data-tone="warn"] { color: var(--wp-warn); }
 .wp-ai-set__index { flex: 1 1 200px; min-width: 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 .wp-ai-set__ctx {
   margin: 0;

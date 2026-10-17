@@ -469,7 +469,8 @@ async def test_organize_reads_items_and_maps_changes_back(wp_client, fake_llm):
 async def test_chat_reads_then_proposes(wp_client, fake_llm):
     src, tgt = await _two_wildcards(wp_client)
     ai_config.update({"enabled": True, "provider": "lmstudio",
-                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1",
+                      "model_size": "large"})
     fake_llm.chat_steps.append({"message": "Hello!", "calls": []})
     first_turn = await _chat(wp_client, "hi")
     fake_llm.chat_steps.extend([
@@ -585,7 +586,8 @@ async def test_chat_validation_and_off(wp_client, fake_llm):
 
 async def test_chat_stops_after_max_steps(wp_client, fake_llm):
     ai_config.update({"enabled": True, "provider": "lmstudio",
-                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1",
+                      "model_size": "large"})
     fake_llm.chat_steps.extend(
         [{"message": "", "calls": [{"tool": "search", "args": json.dumps({"query": f"q{i}"})}]}
          for i in range(10)])
@@ -598,7 +600,8 @@ async def test_chat_stops_after_max_steps(wp_client, fake_llm):
 async def test_chat_stops_repeating_the_same_call(wp_client, fake_llm):
     """Rocinante re-ran one search every step and never answered."""
     ai_config.update({"enabled": True, "provider": "lmstudio",
-                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1",
+                      "model_size": "large"})
     same = {"message": "I'll search your library.",
             "calls": [{"tool": "search", "args": json.dumps({"query": "character"})}]}
     fake_llm.chat_steps.extend([same, same, {"message": "You have Hair Color.", "calls": []}])
@@ -617,7 +620,8 @@ async def test_chat_stops_repeating_the_same_call(wp_client, fake_llm):
 
 async def test_chat_answer_is_the_step_that_stops_calling(wp_client, fake_llm):
     ai_config.update({"enabled": True, "provider": "lmstudio",
-                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1",
+                      "model_size": "large"})
     fake_llm.chat_steps.extend([
         {"message": "I'll search your library.",
          "calls": [{"tool": "search", "args": json.dumps({"query": "hair"})}]},
@@ -658,10 +662,12 @@ async def test_chat_stops_reading_at_the_read_budget(wp_client, fake_llm):
     ])
     body = await _chat(wp_client, "explain everything")
     assert body["message"] == "Answer."
-    # Six reads is a small model's budget: the second results say answer now.
-    # (A small model's last ask is the two-phase "write" half; the results
-    # with the note come just before its pick.)
-    assert "No more tool calls" in fake_llm.seen[-1]["body"]["messages"][-3]["content"]
+    # Six reads is a small model's budget: the second results say answer now,
+    # and the step after them is asked for its message only, so it can't
+    # call again.
+    last = fake_llm.seen[-1]["body"]
+    assert "No more tool calls" in last["messages"][-1]["content"]
+    assert last["response_format"]["json_schema"]["schema"]["required"] == ["message"]
 
 
 async def test_chat_says_when_calls_past_the_cap_were_left_out(wp_client, fake_llm):
@@ -677,7 +683,8 @@ async def test_chat_says_when_calls_past_the_cap_were_left_out(wp_client, fake_l
 
 async def test_chat_acts_when_the_user_says_yes_instead_of_asking_again(wp_client, fake_llm):
     ai_config.update({"enabled": True, "provider": "lmstudio",
-                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1",
+                      "model_size": "large"})
     asked = "I'll build a medieval pack. Should I proceed with creating these items?"
     fake_llm.chat_steps.extend([
         {"message": asked, "calls": []},
@@ -857,7 +864,8 @@ async def test_chat_sees_templates_and_runs_stacks(wp_client, fake_llm):
         "name": "Hero shot", "template_string": "$class, $weapon"})
     assert resp.status in (200, 201), await resp.text()
     ai_config.update({"enabled": True, "provider": "lmstudio",
-                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1",
+                      "model_size": "large"})
     fake_llm.chat_steps.extend([
         {"message": "Trying it.", "calls": [
             {"tool": "run_test", "args": json.dumps(
@@ -972,10 +980,16 @@ async def test_chat_native_tools_keep_the_turn_for_the_follow_up(wp_client, fake
     assert first["format"] == "native" and re.fullmatch(
         r"You have \[\[[0-9a-f]{8}#Weapon\]\]\.", first["message"])
     assert first["usage"] == {"prompt": 900, "output": 20, "cached": 800}
-    turn1 = fake_llm.seen[-1]["body"]
-    assert "response_format" not in turn1 and turn1["tool_choice"] == "auto"
+    # A medium model's steps split: the act ask must call (a tool or
+    # `answer`), the answer ask can't; both carry the same tools and messages.
+    act, turn1 = fake_llm.seen[-2]["body"], fake_llm.seen[-1]["body"]
+    assert act["tool_choice"] == "required" and act["messages"] == turn1["messages"]
+    assert "response_format" not in turn1 and turn1["tool_choice"] == "none"
+    assert act["tools"] == turn1["tools"]
     offered = [t["function"]["name"] for t in turn1["tools"]]
-    assert "search" in offered and "create_wildcard" in offered
+    assert "search" in offered and "create_wildcard" in offered and offered[-1] == "answer"
+    assert act["temperature"] == 0.15 and turn1["temperature"] == 0.4
+    assert "call answer instead of a tool" in turn1["messages"][0]["content"]
     tool_msgs = [m for m in turn1["messages"] if m["role"] == "tool"]
     assert [m["tool_call_id"] for m in tool_msgs] == ["call_a", "call_b"]
     assert "ignored unknown arguments: why" in tool_msgs[0]["content"]
@@ -996,7 +1010,8 @@ async def test_chat_native_tools_keep_the_turn_for_the_follow_up(wp_client, fake
 async def test_chat_reports_card_actions_and_library_changes(wp_client, fake_llm):
     _src, tgt = await _two_wildcards(wp_client)
     ai_config.update({"enabled": True, "provider": "lmstudio",
-                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1",
+                      "model_size": "large"})
     fake_llm.chat_steps.append({"message": "Here.", "calls": [
         {"tool": "update_info", "args": json.dumps({"id": tgt, "tags_add": ["gear"]})}]})
     first = await _chat(wp_client, "tag Weapon as gear")
@@ -1037,17 +1052,18 @@ async def test_a_local_json_chat_gets_each_tools_args_checked_by_the_server(
     out = await _chat(wp_client, "find hair")
     assert out["message"] == "Nothing yet."
     assert [s["tool"] for s in out["steps"] if not s.get("think")] == ["search"]
-    sent = fake_llm.seen[-1]["body"]
+    sent = fake_llm.seen[-2]["body"]  # the last act ask (then the answer ask)
     options = sent["response_format"]["json_schema"]["schema"]["properties"]["calls"][
         "items"]["anyOf"]
     assert ["search"] in [o["properties"]["tool"]["enum"] for o in options]
     assert "the arguments as a JSON object" in sent["messages"][0]["content"]
 
 
-async def test_a_small_model_picks_its_tools_then_writes_them(wp_client, fake_llm):
-    """Two asks per step: which tools (a steady temperature, names only),
-    then their arguments, each checked by the server; the history keeps one
-    ordinary step."""
+async def test_a_small_model_acts_then_answers(wp_client, fake_llm):
+    """Two asks per step: the act ask (steady temperature) can only call
+    tools, at most one for a small model, each checked by the server; when
+    it calls nothing, the answer ask (writing temperature) can only write.
+    Both send the same messages, and the history keeps ordinary steps."""
     ai_config.update({"enabled": True, "provider": "lmstudio", "model_size": "small",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "m"})
     fake_llm.chat_steps.extend([
@@ -1058,15 +1074,19 @@ async def test_a_small_model_picks_its_tools_then_writes_them(wp_client, fake_ll
     assert out["message"] == "Nothing yet."
     assert [s["tool"] for s in out["steps"] if not s.get("think")] == ["search"]
     assert any(s.get("think") and s["note"] == "Look for hair first." for s in out["steps"])
-    pick, write, pick2, _ = [x["body"] for x in fake_llm.seen[-4:]]
-    props = pick["response_format"]["json_schema"]["schema"]["properties"]
-    assert "search" in props["tools"]["items"]["enum"] and pick["temperature"] == 0.15
-    wrote = write["response_format"]["json_schema"]["schema"]
-    assert wrote["required"] == ["1:search"] and write["temperature"] == 0.4
-    assert write["messages"][-1]["content"] == "Now write the arguments for 1:search."
+    act, act2, answer = [x["body"] for x in fake_llm.seen[-3:]]
+    schema = act["response_format"]["json_schema"]["schema"]
+    assert set(schema["properties"]) == {"plan", "calls"}
+    assert schema["properties"]["calls"]["maxItems"] == 1 and act["temperature"] == 0.15
+    options = schema["properties"]["calls"]["items"]["anyOf"]
+    assert ["search"] in [o["properties"]["tool"]["enum"] for o in options]
+    wrote = answer["response_format"]["json_schema"]["schema"]
+    assert wrote["required"] == ["message"] and answer["temperature"] == 0.4
+    assert answer["messages"] == act2["messages"]
     # The next step sees one ordinary JSON step, with the call and its args.
-    said = json.loads(pick2["messages"][-2]["content"])
-    assert said["calls"] == [{"tool": "search", "args": {"query": "hair"}}]
+    said = json.loads(act2["messages"][-2]["content"])
+    assert said == {"plan": "Look for hair first.", "message": "",
+                    "calls": [{"tool": "search", "args": {"query": "hair"}}]}
 
 
 async def test_a_server_that_cant_take_the_typed_schema_gets_the_string_form(
@@ -1076,20 +1096,22 @@ async def test_a_server_that_cant_take_the_typed_schema_gets_the_string_form(
     fake_llm.chat_steps.append({"message": "Hi there.", "calls": []})
     out = await _chat(wp_client, "hello")
     assert out["message"] == "Hi there."
-    items = fake_llm.seen[-1]["body"]["response_format"]["json_schema"]["schema"][
+    items = fake_llm.seen[-2]["body"]["response_format"]["json_schema"]["schema"][
         "properties"]["calls"]["items"]
     assert items["properties"]["args"] == {"type": "string"}
-    # Remembered: the next step goes straight to the string form.
+    # Remembered: the next step goes straight to the string form (an act
+    # ask and an answer ask, nothing refused).
     n = len(fake_llm.seen)
     fake_llm.chat_steps.append({"message": "Again.", "calls": []})
     await _chat(wp_client, "again", chat_id=out["chat_id"])
-    assert len(fake_llm.seen) == n + 1
+    assert len(fake_llm.seen) == n + 2
 
 
 async def test_chat_takes_tool_calls_written_as_text(wp_client, fake_llm):
     await _two_wildcards(wp_client)
     ai_config.update({"enabled": True, "provider": "lmstudio",
-                      "base_url": str(fake_llm.make_url("/v1")), "model": "tooly"})
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "tooly",
+                      "model_size": "large"})
     fake_llm.chat_steps.extend([
         {"content": '[TOOL_CALLS][{"name": "search", "arguments": {"query": "weapon"}}]'},
         {"content": "Found it."},
@@ -1409,7 +1431,8 @@ def test_only_openai_itself_uses_responses():
 async def test_two_refused_calls_make_the_chat_answer_with_what_went_wrong(wp_client, fake_llm):
     """The 9B looped on a refused call until it gave up with nothing."""
     ai_config.update({"enabled": True, "provider": "lmstudio",
-                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1",
+                      "model_size": "large"})
     fake_llm.chat_steps.extend([
         {"message": "", "calls": [{"tool": "read", "args": json.dumps({"id": "aaaa9998"})}]},
         {"message": "", "calls": [{"tool": "read", "args": json.dumps({"id": "aaaa9999"})}]},

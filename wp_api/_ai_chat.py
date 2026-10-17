@@ -901,7 +901,7 @@ async def step(
     cfg: dict[str, Any], *, system: str, log: list[dict[str, Any]], fmt: str,
     tools: list[dict[str, Any]], names: list[str], schema: dict[str, Any],
     temperature: float, num_ctx: int, cache_key: str = "", max_tokens: int = 8192,
-    emit: Any = None,
+    emit: Any = None, tool_choice: str | None = None,
 ) -> dict[str, Any]:
     """One model step. Returns ``{"text", "calls", "answer", "usage",
     "message", "plan"}``; JSON-mode answers that aren't JSON raise AIError
@@ -909,7 +909,8 @@ async def step(
 
     `tools` are the native declarations for this provider (unused in JSON
     mode), `names` the tools this chat offers, `schema` the JSON-mode step
-    schema."""
+    schema. `tool_choice` ("required" / "none") is sent to OpenAI-style
+    servers in native mode only (`split_step`)."""
     client._require_model(cfg)
     allowed = set(names)
     if client._semaphore.locked():
@@ -926,46 +927,111 @@ async def step(
                 return await _step_ollama(cfg, system, log, fmt, tools, schema, temperature,
                                           num_ctx, allowed, emit)
             return await _step_openai(cfg, system, log, fmt, tools, schema, temperature,
-                                      max_tokens, cache_key, allowed, emit)
+                                      max_tokens, cache_key, allowed, emit, tool_choice)
         except AIError as e:
             if fmt == "native" and _refused(e):
                 raise ToolsUnsupported(e.message, status=e.status) from e
             raise
 
 
-async def two_phase(
-    cfg: dict[str, Any], *, system: str, log: list[dict[str, Any]],
-    offered: list[registry.Tool], pick_temp: float, write_temp: float, num_ctx: int,
-    cache_key: str = "", emit: Any = None,
+#: (base_url, model) pairs whose server refused a `tool_choice` other than
+#: "auto"; their split steps ask with "auto" and take plain text as the answer.
+_NO_CHOICE: set[tuple[str, str]] = set()
+
+
+def split_native(cfg: dict[str, Any]) -> bool:
+    """Whether a native-mode chat can split its steps: the act ask needs
+    `tool_choice: "required"` and the answer ask `"none"`, which local
+    OpenAI-style servers take (LM Studio, llama.cpp, vLLM). Ollama has no
+    tool_choice, and cloud models are large."""
+    return cfg.get("api") == "openai" and bool(cfg.get("local"))
+
+
+def _choice_refused(e: AIError) -> bool:
+    return bool(re.search(r"answered 4\d\d", e.message)
+                and re.search(r"tool_choice|\brequired\b", e.message, re.I))
+
+
+async def split_step(
+    cfg: dict[str, Any], *, system: str, log: list[dict[str, Any]], fmt: str,
+    offered: list[registry.Tool], tools: list[dict[str, Any]], typed: bool,
+    act_temp: float, write_temp: float, max_calls: int, num_ctx: int,
+    cache_key: str = "", emit: Any = None, answer_only: bool = False,
 ) -> dict[str, Any]:
-    """A small model's JSON step asked in two parts: first which tools to
-    call (none to answer) at a low temperature, then their arguments or the
-    message, each checked by the server's grammar, so the choice isn't made
-    while writing. Returned as one ordinary JSON step, so the log and the
-    history the model reads stay the same."""
+    """A small or medium model's step asked in two parts (see
+    `/pr-drafts/ai-small-model-plumbing.md`):
+
+    - the act ask, at a low temperature, can only call tools or say it is
+      ready (JSON: ``{plan, calls}`` with no message; native: tool_choice
+      "required" with the `answer` tool beside the real ones);
+    - when it is ready (or `answer_only`: the step is told to answer), the
+      answer ask, at the writing temperature, can only write (JSON:
+      ``{message}``; native: tool_choice "none").
+
+    Both asks send the same messages, so the second is a full cache hit.
+    The result is one ordinary step, so the log and the history the model
+    reads keep their shape. `tools` are the native declarations (the
+    `answer` tool included)."""
     names = [t.name for t in offered]
-    pick = await step(cfg, system=system, log=log, fmt="json", tools=[], names=names,
-                      schema=registry.pick_schema(names), temperature=pick_temp,
-                      num_ctx=num_ctx, cache_key=cache_key, emit=emit)
-    chosen = pick["answer"].get("tools")
-    picked = [n for n in chosen if isinstance(n, str)][:registry.PICK_MAX] \
-        if isinstance(chosen, list) else []
-    keys = registry.pick_keys(picked)
-    ask = (f"Now write the arguments for {', '.join(keys)}." if picked
-           else "Now write your message to the user.")
-    asked = [*log, {"role": "assistant", "content": chatlog.dumps(pick["answer"]), "calls": []},
-             {"role": "user", "content": ask}]
-    out = await step(cfg, system=system, log=asked, fmt="json", tools=[], names=names,
-                     schema=registry.write_schema(picked, offered), temperature=write_temp,
-                     num_ctx=num_ctx, cache_key=cache_key, emit=emit)
-    got = out["answer"]
-    message = got.get("message") if isinstance(got.get("message"), str) and not picked else ""
-    answer = {"plan": pick["plan"], "message": message,
-              "calls": [{"tool": n, "args": got.get(k) if isinstance(got.get(k), dict) else {}}
-                        for k, n in zip(keys, picked, strict=True)]}
-    st = _json_step(chatlog.dumps(answer), answer, out["usage"])
-    st["thinking"] = pick["thinking"]
-    return st
+    if fmt == "json":
+        plan, thinking = "", ""
+        if not answer_only:
+            act = await step(cfg, system=system, log=log, fmt="json", tools=[], names=names,
+                             schema=registry.act_schema(names, offered if typed else None,
+                                                        max_calls if typed else 0),
+                             temperature=act_temp, num_ctx=num_ctx, cache_key=cache_key,
+                             emit=emit)
+            plan = act["plan"]
+            thinking = act["thinking"]
+            if act["calls"]:
+                got = act["answer"]
+                answer = {"plan": plan, "message": "", "calls": got.get("calls") or []}
+                st = _json_step(chatlog.dumps(answer), answer, act["usage"])
+                st["thinking"] = thinking
+                return st
+        out = await step(cfg, system=system, log=log, fmt="json", tools=[], names=names,
+                         schema=registry.ANSWER_SCHEMA, temperature=write_temp,
+                         num_ctx=num_ctx, cache_key=cache_key, emit=emit)
+        got = out["answer"]
+        answer = {"plan": plan, "message": got.get("message") if isinstance(
+            got.get("message"), str) else "", "calls": []}
+        st = _json_step(chatlog.dumps(answer), answer, out["usage"])
+        st["thinking"] = out["thinking"] or thinking
+        return st
+    key = (str(cfg.get("base_url") or ""), str(cfg.get("model") or ""))
+    thinking = ""
+    if not answer_only:
+        choice = None if key in _NO_CHOICE else "required"
+        ask = {"system": system, "log": log, "fmt": "native", "tools": tools,
+               "names": [*names, registry.ANSWER_TOOL], "schema": {},
+               "temperature": act_temp, "num_ctx": num_ctx, "cache_key": cache_key,
+               "emit": emit}
+        try:
+            act = await step(cfg, **ask, tool_choice=choice)
+        except AIError as e:
+            if not (choice and _choice_refused(e)):
+                raise
+            _NO_CHOICE.add(key)
+            choice = None
+            act = await step(cfg, **ask)
+        real = [c for c in act["calls"] if c["tool"] != registry.ANSWER_TOOL]
+        ready = len(real) < len(act["calls"])
+        if real or not ready:
+            # Calls to run; or, asked with "auto", its plain answer.
+            act["calls"] = real
+            return act
+        thinking = act["thinking"]
+    out = await step(cfg, system=system, log=log, fmt="native", tools=tools, names=[],
+                     schema={}, temperature=write_temp, num_ctx=num_ctx,
+                     cache_key=cache_key, emit=emit,
+                     tool_choice=None if key in _NO_CHOICE else "none")
+    # The answer ask only writes: a server that ignores tool_choice "none"
+    # (or one asked with "auto") can still send calls, which a step told to
+    # answer must not run. Its text is the answer.
+    out["calls"], out["plan"] = [], ""
+    out["message"] = out["text"]
+    out["thinking"] = out["thinking"] or thinking
+    return out
 
 
 async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, Any]], fmt: str,
@@ -1158,14 +1224,14 @@ async def _step_responses(cfg: dict[str, Any], system: str, log: list[dict[str, 
 async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any]], fmt: str,
                        tools: list[dict[str, Any]], schema: dict[str, Any], temperature: float,
                        max_tokens: int, cache_key: str, allowed: set[str],
-                       emit: Any = None) -> dict[str, Any]:
+                       emit: Any = None, tool_choice: str | None = None) -> dict[str, Any]:
     body: dict[str, Any] = {
         "model": cfg["model"],
         "messages": openai_messages(system, log, fmt),
     }
     if fmt == "native":
         body["tools"] = tools
-        body["tool_choice"] = "auto"
+        body["tool_choice"] = tool_choice or "auto"
         if cfg.get("local"):
             # llama.cpp returns one call per step unless asked for more.
             body["parallel_tool_calls"] = True

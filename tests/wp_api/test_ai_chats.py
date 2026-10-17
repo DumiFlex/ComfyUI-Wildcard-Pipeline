@@ -14,7 +14,9 @@ from wp_api import _ai_chat, _ai_client
 
 def _on(fake_llm, **extra):
     ai_config.update({"enabled": True, "provider": "lmstudio",
-                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1", **extra})
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1",
+                      # The one-ask step; split steps have their own tests.
+                      "model_size": "large", **extra})
 
 
 async def _json(resp, status=200):
