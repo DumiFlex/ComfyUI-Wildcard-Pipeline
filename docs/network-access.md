@@ -7,7 +7,7 @@ it makes:
 | What | When | Where to |
 | --- | --- | --- |
 | Update check | When the manager opens (turn off under Settings → Updates), or when you click **Check now** | GitHub releases API |
-| Community tab | Only when you open the **Community** page in the manager | `wp.dumiflex.dev` |
+| Community tab | Only when you open the **Community** page in the manager. The page runs in a sandboxed frame from the community site, so its code never runs inside ComfyUI, and your community sign-in is stored by that site, not by ComfyUI | `wp.dumiflex.dev` |
 | AI assistant | Only after you turn it on under Settings → AI assistant, and then only when you test the connection, refresh the model list or ask it to draft or change something | The server you set there: your own Ollama, LM Studio or llama.cpp on this PC, or the Claude or OpenAI API |
 | AI web search | Only after you pick a search engine under Settings → AI assistant → Web search, and then only for a search you allow (or every search, if you turned on **Don't ask before web calls**) | The engine you picked: your own SearXNG, or Brave Search, Tavily or Kagi with your key |
 | AI page reading | Only with web search set up, for one link a search you allowed returned, after you allow the read (Settings → AI assistant → Read result pages; Off stops it) | That page (built in, public addresses only), or your Crawl4AI / Firecrawl server, which fetches it |
