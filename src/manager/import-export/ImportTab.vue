@@ -12,8 +12,9 @@
  * Wildcard files (Dynamic Prompts / PPP / Impact Pack) dropped here are
  * handed to the Wildcard packs tab via `wildcard-files`.
  *
- * Both paths feed `parsePayload` (see ./parse.ts), which runs JSON
- * shape → migration chain → fingerprint integrity verify. On success
+ * Both paths feed `parseCheckedPayload` (parse.ts + shape-check.ts), which runs
+ * JSON shape → migration chain → per-row payload shape check → fingerprint
+ * integrity verify. On success
  * we emit `payload-ready` with the migrated payload, the total
  * migrated-entity count (for "migrated N entities from schema vN" UX),
  * and any integrity warnings (mismatched snapshot fingerprints).
@@ -30,7 +31,8 @@
  * by the rest of the import pane.
  */
 import { computed, ref } from "vue";
-import { parsePayload, type IntegrityWarning } from "./parse";
+import { type IntegrityWarning } from "./parse";
+import { parseCheckedPayload } from "./shape-check";
 import type { RawPayload } from "./migrations";
 import {
   looksLikeWpExport,
@@ -224,7 +226,7 @@ function payloadEntityCount(payload: RawPayload): number {
 }
 
 function handleParse(raw: string, source: "file" | "paste"): void {
-  const result = parsePayload(raw);
+  const result = parseCheckedPayload(raw);
   if (!result.ok) {
     errorMsg.value = result.reason;
     migrationNote.value = "";
