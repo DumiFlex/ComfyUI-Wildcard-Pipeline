@@ -83,6 +83,9 @@ import {
   isTypeConflict,
 } from "./library-status";
 import ConfirmDialog from "../shared/ConfirmDialog.vue";
+import ContextRecoveryPanel from "./ContextRecoveryPanel.vue";
+import ContextToolbar from "./ContextToolbar.vue";
+import ContextAddActions from "./ContextAddActions.vue";
 
 const props = withDefaults(defineProps<{
   nodeId: number;
@@ -728,33 +731,15 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
       </span>
     </div>
 
-    <!-- Corrupt-workflow recovery panel (5.6). Surfaces when JSON parse fails
-         or returns a non-object. View raw exposes the bad payload so users
-         can copy it out before resetting. -->
-    <div v-if="parseError" class="wp-recovery" role="alert">
-      <div class="wp-recovery__header">
-        <i class="pi pi-exclamation-triangle wp-recovery__icon" aria-hidden="true"></i>
-        <div class="wp-recovery__msg">
-          <strong>Couldn't read this node's saved data.</strong>
-          <div class="wp-recovery__detail">{{ parseError }}</div>
-        </div>
-      </div>
-      <div class="wp-recovery__actions">
-        <button type="button" class="wp-recovery__btn" @click="showRaw = !showRaw">
-          <i class="pi" :class="showRaw ? 'pi-eye-slash' : 'pi-eye'" aria-hidden="true"></i>
-          {{ showRaw ? "Hide raw" : "View raw" }}
-        </button>
-        <button
-          type="button"
-          class="wp-recovery__btn wp-recovery__btn--danger"
-          @click="resetCorruptValue"
-        >
-          <i class="pi pi-refresh" aria-hidden="true"></i>
-          Reset to empty
-        </button>
-      </div>
-      <pre v-if="showRaw" class="wp-recovery__raw">{{ parseRaw }}</pre>
-    </div>
+    <!-- Corrupt-workflow recovery panel (5.6). -->
+    <ContextRecoveryPanel
+      v-if="parseError"
+      :show-raw="showRaw"
+      :error="parseError"
+      :raw="parseRaw"
+      @reset="resetCorruptValue"
+      @toggle-raw="showRaw = !showRaw"
+    />
 
     <!-- Page swap: populated layout vs empty hero. mode="out-in" sequences
          them — the populated block fully fades out before the empty hero
@@ -769,48 +754,15 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
         @drop="(ev) => onDrop(ev, null)"
       >
         <!-- Toolbar: module count + bulk-drift refresh + collapse/expand/toggle-all. -->
-        <div class="wp-w-toolbar">
-          <span class="wp-w-toolbar-label">modules</span>
-          <span class="wp-w-count">{{ enabledCount }} / {{ totalCount }}</span>
-
-          <!-- Bulk-refresh drifted. Visible only when at least one module
-               drifted from its library version; orange accent matches the
-               per-card drift dot. -->
-          <button
-            v-if="driftedCount > 0"
-            type="button"
-            class="wp-section-label__bulk wp-section-label__bulk--drift"
-            :title="`Refresh ${driftedCount} drifted module(s) from the library.`"
-            data-testid="bulk-refresh-drifted"
-            @click="refreshAllDrifted()"
-          >
-            <i class="pi pi-refresh" aria-hidden="true"></i>
-            <span>refresh {{ driftedCount }} drifted</span>
-          </button>
-
-          <span class="wp-w-toolbar-spacer" />
-          <button
-            type="button"
-            class="wp-btn--icon-sm"
-            title="Collapse all"
-            aria-label="Collapse all modules"
-            @click="collapseAll()"
-          ><i class="pi pi-chevron-up" /></button>
-          <button
-            type="button"
-            class="wp-btn--icon-sm"
-            title="Expand all"
-            aria-label="Expand all modules"
-            @click="expandAll()"
-          ><i class="pi pi-chevron-down" /></button>
-          <button
-            type="button"
-            class="wp-btn--icon-sm"
-            title="Toggle all enabled"
-            aria-label="Toggle all enabled"
-            @click="toggleAllEnabled()"
-          ><i class="pi pi-eye" /></button>
-        </div>
+        <ContextToolbar
+          :enabled-count="enabledCount"
+          :total-count="totalCount"
+          :drifted-count="driftedCount"
+          @refresh="refreshAllDrifted()"
+          @collapse="collapseAll()"
+          @expand="expandAll()"
+          @toggle-all="toggleAllEnabled()"
+        />
 
         <div
           ref="modulesContainer"
@@ -847,24 +799,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
              reusable scaffolds users typically wanted that button for.
              SPA library still reachable via the right-click context
              menu on any module. -->
-        <div
-          class="wp-w-footer"
-        >
-          <button
-            class="wp-btn wp-btn--primary"
-            data-testid="open-picker"
-            @click="openPicker"
-          >
-            <i class="pi pi-plus" /> Add module
-          </button>
-          <button
-            class="wp-btn"
-            data-testid="open-bundle-picker"
-            @click="openBundlePicker"
-          >
-            <i class="pi pi-plus" /> Add Bundle
-          </button>
-        </div>
+        <ContextAddActions class="wp-w-footer" @module="openPicker" @bundle="openBundlePicker" />
       </div>
 
       <!-- Empty-state hero — shown when modules is empty and there's no
@@ -891,22 +826,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
           Add a wildcard, fixed values pack, combine, derivation or constraint to start
           building this context.
         </div>
-        <div class="wp-empty-hero-actions">
-          <button
-            class="wp-btn wp-btn--primary"
-            data-testid="open-picker"
-            @click="openPicker"
-          >
-            <i class="pi pi-plus" /> Add module
-          </button>
-          <button
-            class="wp-btn"
-            data-testid="open-bundle-picker"
-            @click="openBundlePicker"
-          >
-            <i class="pi pi-plus" /> Add Bundle
-          </button>
-        </div>
+        <ContextAddActions class="wp-empty-hero-actions" @module="openPicker" @bundle="openBundlePicker" />
       </div>
     </Transition>
 
