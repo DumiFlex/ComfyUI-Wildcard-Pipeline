@@ -11,7 +11,7 @@ from engine.ai import chat as ai_chat
 from engine.ai import config as ai_config
 from tests.wp_api._ai_fakes import ANSWER, EDIT_ANSWERS  # noqa: F401 - shared fakes
 from wp_api import _ai_client
-from wp_api import ai as ai_routes
+from wp_api import _ai_turn as ai_turn
 
 
 async def _chat(wp_client, message, **extra):
@@ -1485,10 +1485,10 @@ async def test_an_answer_claiming_a_change_with_no_card_says_nothing_changed(
                       "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
     fake_llm.chat_steps.extend([{"message": "I've created the preset for you.", "calls": []}])
     body = await (await wp_client.post("/wp/api/ai/chat", json={"message": "a preset"})).json()
-    assert body["message"].endswith(ai_routes.NOTHING_PROPOSED)
+    assert body["message"].endswith(ai_turn.NOTHING_PROPOSED)
     fake_llm.chat_steps.extend([{"message": "Created means made new.", "calls": []}])
     body = await (await wp_client.post("/wp/api/ai/chat", json={"message": "what"})).json()
-    assert ai_routes.NOTHING_PROPOSED not in body["message"]
+    assert ai_turn.NOTHING_PROPOSED not in body["message"]
 
 
 async def test_native_text_next_to_calls_stays_as_a_note(wp_client, fake_llm):
