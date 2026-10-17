@@ -101,6 +101,13 @@ _KIND_WORDS = {"wildcard", "wildcards", "derivation", "derivations", "constraint
                "fixed", "values", "value", "module", "the", "card", "new"}
 
 
+#: What a Context Loop sets on each frame; run_test plays a few frames when
+#: a derivation reads them (`_loop_frames`).
+LOOP_VARS = ("iteration", "iteration_total")
+LOOP_FRAMES = 3
+LOOP_SEEDS = 20
+
+
 class MoreTools:
     """Mixed into `chat.Library` (which supplies modules, bundles,
     templates, `_module`, `_current`, `_meta`, `_name`, `catalog`)."""
@@ -880,7 +887,10 @@ class MoreTools:
             if row is not None and row.get("_proposed") and not proposed:
                 continue  # new in this answer: only in the "now" run
             if row is None:
-                warnings.append(f"Left out {_short(ref, 40)}: not in the library")
+                # Several items share the name (round 1: three "Lighting"
+                # wildcards): say which, so the next call takes an id.
+                warnings.append(f"Left out {_short(ref, 40)}: "
+                                + self.not_found(ref))  # type: ignore[attr-defined]
                 continue
             kind = self._kind(row)  # type: ignore[attr-defined]
             if kind == "template":
@@ -992,13 +1002,57 @@ class MoreTools:
         else:
             before = self._run(modules, pins, seeds, template)
             report, modules = self._run(after_modules, pins, seeds, template), after_modules
-        stuck = self._stuck(report, modules, pins)
+        frames = self._loop_frames(modules, pins)
+        stuck = [] if frames else self._stuck(report, modules, pins)
+        stuck += frames
         warnings += stuck
         self.last_card = self._test_card(report, modules, before, args, pins, seeds)
         # On the card too: the user sees why a variable never changes.
         self.last_card["warnings"][:0] = [{"text": _short(w, 160), "count": report["runs"]}
                                           for w in stuck]
         return self._report(report, modules, warnings, before)
+
+    def _loop_frames(self, modules: list[dict[str, Any]], pins: dict[str, str]) -> list[str]:
+        """A derivation reading the loop's ``$iteration`` / ``$iteration_total``
+        can't show its frames in one run: nothing sets them outside a
+        Context Loop. Run the stack as frames 1-3 of 3 and say what its
+        variables were in each (chat eval round 1: the 9B invented "with
+        N=5 you get …" from a run that never set $iteration)."""
+        targets: list[str] = []
+        for m in modules:
+            if m.get("type") != "derivation":
+                continue
+            for rule in (m.get("payload") or {}).get("rules") or []:
+                if not isinstance(rule, dict):
+                    continue
+                branches = [b for b in rule.get("branches") or [] if isinstance(b, dict)]
+                reads = {str(c.get("var") or "").split(".")[0]
+                         for b in branches for c in _conditions(b.get("condition"))}
+                if not reads & (set(LOOP_VARS) - set(pins)):
+                    continue
+                clauses = [*branches, *([rule["else"]] if isinstance(rule.get("else"),
+                                                                     dict) else [])]
+                targets += [a["target_var"] for c in clauses for a in clause_actions(c)
+                            if isinstance(a, dict) and isinstance(a.get("target_var"), str)]
+        targets = list(dict.fromkeys(targets))[:4]
+        if not targets:
+            return []
+        out = []
+        for i in range(1, LOOP_FRAMES + 1):
+            frame = {"iteration": str(i), "iteration_total": str(LOOP_FRAMES), **pins}
+            rep = self._run(modules, frame, LOOP_SEEDS, None)
+            got = []
+            for var in targets:
+                v = rep["variables"].get(var)
+                if not v:
+                    got.append(f"${var} not set")
+                    continue
+                total = sum(v["counts"].values()) + v["other"]
+                got.append(f"${var} = " + "; ".join(
+                    f'"{_short(self._show(k), 40)}" {round(100 * n / total) if total else 0}%'
+                    for k, n in list(v["counts"].items())[:2]))
+            out.append(f"Loop frame {i} of {LOOP_FRAMES} ($iteration = {i}): " + ", ".join(got))
+        return out
 
     def _stuck(self, report: dict[str, Any], modules: list[dict[str, Any]],
                pins: dict[str, str]) -> list[str]:

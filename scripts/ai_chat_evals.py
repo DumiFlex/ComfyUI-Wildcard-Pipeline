@@ -141,6 +141,8 @@ def score_turn(out: dict[str, Any], expect: Any) -> dict[str, Any]:
             claims.append(f"says a {kind} was made; its call failed")
     if "nothing was proposed" in message.lower() or "no card" in message.lower():
         claims.append("claimed a change with no card")
+    if "no test ran in this answer" in message.lower():
+        claims.append("talked about a test that never ran")
     return {"cards": len(proposals), "repeats": repeats, "errors": len(errors),
             "tests": len(tests), "tests_ran": len(ran), "did": did,
             "claims": sorted(set(claims)), "steps": len(steps),

@@ -63,7 +63,7 @@ def test_a_card_pointing_at_a_replaced_card_waits_for_the_new_one():
     con = lib.run("create_constraint", {"source_id": iid, "target_id": "Outfit", "rules": [
         {"source": "#anime", "target": "#warm", "effect": "exclude"}]})
     assert con["after"] == first["pid"]
-    again = lib.run("create_wildcard", STYLE)
+    again = lib.run("create_wildcard", {**STYLE, "options": STYLE["options"][:1]})
     assert again["op"]["body"]["id"] == iid and lib.replaced[first["pid"]] == again["pid"]
 
 
@@ -86,18 +86,16 @@ def test_run_test_finds_items_the_way_the_model_names_them():
 
 def test_run_test_says_when_a_derivation_never_leaves_one_branch():
     lib = _lib()
-    lib.run("create_derivation", {"name": "Sequence Frame Cues", "rules": [{
-        "branches": [{"conditions": [{"var": "iteration_total", "op": "equals",
-                                      "value": "3"}],
-                      "actions": [{"target_var": "frame_cue", "value": "first shot"}]}],
-        "else_actions": [{"target_var": "frame_cue", "value": "middle pose"}]}]})
-    out = lib.run("run_test", {"stack": ["Sequence Frame Cues"], "seeds": 20})
-    assert ('Sequence Frame Cues set $frame_cue to "middle pose" on every seed' in out
-            and "nothing in this run sets $iteration_total" in out and "pins" in out)
+    lib.run("create_derivation", {"name": "Mood Cue", "rules": [{
+        "branches": [{"conditions": [{"var": "mood", "op": "equals", "value": "sad"}],
+                      "actions": [{"target_var": "cue", "value": "rain"}]}],
+        "else_actions": [{"target_var": "cue", "value": "sun"}]}]})
+    out = lib.run("run_test", {"stack": ["Mood Cue"], "seeds": 20})
+    assert ('Mood Cue set $cue to "sun" on every seed' in out
+            and "nothing in this run sets $mood" in out and "pins" in out)
     assert lib.last_card["warnings"][0]["count"] == 20
-    # Pinned, both branches can run: no note.
-    out = lib.run("run_test", {"stack": ["Sequence Frame Cues"], "seeds": 20,
-                               "pins": {"iteration_total": "3"}})
+    # Pinned, what it reads never changes: one value is right, no note.
+    out = lib.run("run_test", {"stack": ["Mood Cue"], "seeds": 20, "pins": {"mood": "sad"}})
     assert "on every seed" not in out
     # One branch and no else: one value is all it can give.
     lib2 = _lib()
@@ -105,6 +103,62 @@ def test_run_test_says_when_a_derivation_never_leaves_one_branch():
         {"var": "season", "op": "exists"}], "actions": [{"target_var": "w", "value": "x"}]}]}]})
     assert "on every seed" not in lib2.run("run_test", {"stack": ["Season", "Snow"],
                                                         "seeds": 10})
+
+
+def test_run_test_plays_loop_frames_for_a_derivation_reading_the_loop():
+    lib = _lib()
+    lib.run("create_derivation", {"name": "Shot Type", "rules": [{
+        "branches": [{"conditions": [{"var": "$iteration", "op": "equals", "value": 1}],
+                      "actions": [{"target_var": "$shot", "value": "establishing shot"}]}],
+        "else_actions": [{"target_var": "shot", "value": "close-up"}]}]})
+    out = lib.run("run_test", {"stack": ["Shot Type"], "seeds": 20})
+    assert 'Loop frame 1 of 3 ($iteration = 1): $shot = "establishing shot" 100%' in out
+    assert 'Loop frame 2 of 3 ($iteration = 2): $shot = "close-up" 100%' in out
+    assert "on every seed" not in out
+    # Pinned by the model: its own run says it all.
+    out = lib.run("run_test", {"stack": ["Shot Type"], "seeds": 5, "pins": {"iteration": "2"}})
+    assert "Loop frame" not in out
+
+
+def test_rules_the_way_a_small_model_writes_them():
+    lib = _lib()
+    when = [{"var": "season", "op": "equals", "value": "winter"}]
+    out = lib.run("create_derivation", {"name": "Extra", "rules": [
+        # Conditions and actions split over two branch objects.
+        {"branches": [{"conditions": when, "match": "all"}, {"match": "any"},
+                      {"actions": [{"target_var": "extra", "value": "scarf"}]}]},
+        {"summary": "only a summary"},
+        # An else-only rule: the ELSE of the rule before.
+        {"else_actions": [{"target_var": "extra", "value": "hat"}]},
+        # Again, now that rule 1 has that ELSE: dropped.
+        {"else_actions": [{"target_var": "extra", "value": "hat"}]},
+        # A default for another variable: only when it is still empty.
+        {"else_actions": [{"target_var": "title", "value": "Adventurer"}]},
+    ]})
+    rules = out["op"]["body"]["payload"]["rules"]
+    assert len(rules) == 2 and not out["warnings"]
+    assert rules[0]["branches"][0]["action"]["value"] == "scarf"
+    assert rules[0]["else"]["action"]["value"] == "hat"
+    assert rules[1]["branches"][0]["condition"] == {"var": "title", "op": "is_empty",
+                                                   "value": ""}
+    # The same rule many times over is one rule.
+    rule = {"branches": [{"conditions": when, "actions": [{"target_var": "x", "value": "y"}]}]}
+    many = lib.run("create_derivation", {"name": "Many", "rules": [rule] * 30})
+    assert len(many["op"]["body"]["payload"]["rules"]) == 1
+    # A value that came out as JSON punctuation says so.
+    with pytest.raises(ValueError, match="came out as '}]}],', which is JSON"):
+        lib.run("create_derivation", {"name": "Junk", "rules": [{"branches": [{
+            "conditions": [{"var": "$iteration", "op": "equals", "value": "}]}], "}],
+            "actions": [{"target_var": "shot", "value": "a"}]}]}]})
+
+
+def test_an_unchanged_resend_makes_no_new_card():
+    lib = _lib()
+    first = lib.run("create_wildcard", STYLE)
+    again = lib.run("create_wildcard", STYLE)
+    assert isinstance(again, str) and f"exactly card {first['pid']}" in again
+    nxt = lib.run("create_wildcard", {**STYLE, "options": STYLE["options"][:1]})
+    assert nxt["pid"] == "p2" and nxt["replaces"] == "p1"
 
 
 def test_failed_rules_show_one_rule_that_works():

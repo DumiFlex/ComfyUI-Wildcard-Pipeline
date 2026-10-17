@@ -598,7 +598,12 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                         # Its anchors would be guesses, and the browser would
                         # only say "no part" after a pause.
                         raise ValueError(ai_client_tools.READ_PAGE_FIRST)
-                    cargs, label = ai_client_tools.prepare(lib, tool, args)
+                    try:
+                        cargs, label = ai_client_tools.prepare(lib, tool, args)
+                    except ai_client_tools.Shown as shown:
+                        needs_reply = True
+                        result(str(shown))
+                        continue
                     if tool == "highlight":
                         anchors = sorted(p["anchor"] for p in cargs["points"])
                         pointed = list(meta.get("pointed") or [])
@@ -792,6 +797,11 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                  for c in last["calls"]], ""))
         if new[-1].get("kind") != "step":
             new.append(_final_step(fmt, message))
+    if not pause and _TESTED.search(message or "") and not any(
+            s_.get("tool") == "run_test" and s_.get("ok") for s_ in steps):
+        # Chat eval round 1: "I ran a test on your Lighting wildcard" after
+        # its only run_test failed.
+        message = message.rstrip() + "\n\n" + NOTHING_TESTED
     if not pause and not proposals and _CLAIMS.search(message or ""):
         # The 9B said "I've created … as a fixed values module" with no card.
         message = message.rstrip() + "\n\n" + NOTHING_PROPOSED
@@ -852,6 +862,10 @@ _CLAIMS = re.compile(r"\b(?:I(?:'ve| have)?|I've now)\s+(?:just\s+)?(?:created|m
 
 
 #: Added to such an answer when no card came with it.
+_TESTED = re.compile(r"\b(?:I(?:'ve| have)?\s+(?:just\s+)?(?:ran|run|tested)\b|"
+                     r"\b(?:the\s+)?test\s+(?:ran|run|shows|showed|passed)\b)", re.I)
+NOTHING_TESTED = ("*(No test ran in this answer, so what it says about test results is not "
+                  "checked. Ask me to run the test.)*")
 NOTHING_PROPOSED = ("*(Nothing was proposed in this answer, so nothing changed. Ask me to "
                     "propose it and a card will show.)*")
 

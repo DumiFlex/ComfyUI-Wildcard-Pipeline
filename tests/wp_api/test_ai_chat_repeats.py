@@ -25,3 +25,16 @@ async def test_a_repeated_card_in_one_answer_is_shown_once(wp_client, fake_llm):
     cards = [p for p in out["proposals"] if p["tool"] == "create_wildcard"]
     assert len(cards) == 1 and cards[0]["pid"] == "p2" and "replaces" not in cards[0]
     assert len(cards[0]["op"]["body"]["payload"]["options"]) == 3
+
+
+async def test_opening_its_own_card_is_no_error_and_an_untested_claim_is_marked(
+        wp_client, fake_llm):
+    _on(fake_llm)
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(STYLE)}]},
+        {"message": "", "calls": [{"tool": "open", "args": json.dumps({"proposal": "p1"})}]},
+        {"message": "I ran a test and every option came up.", "calls": []},
+    ])
+    out = await _chat(wp_client, "Make a style wildcard and test it.")
+    assert all(s["ok"] for s in out["steps"]) and not out["pending"]
+    assert "No test ran in this answer" in out["message"]

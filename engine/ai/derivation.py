@@ -30,6 +30,7 @@ warnings the editor shows next to the rule.
 """
 from __future__ import annotations
 
+import json
 import re
 import secrets
 from typing import Any
@@ -203,6 +204,10 @@ def _cond_var(raw: Any) -> tuple[str, str] | None:
     return m.group(1) + m.group(2), m.group(1)
 
 
+#: A condition value that is only JSON punctuation.
+_JUNK = re.compile(r"[\s\[\]{}:,\"']+")
+
+
 def _flat(text: Any) -> str:
     return re.sub(r"\s+", " ", text).strip() if isinstance(text, str) else ""
 
@@ -229,6 +234,7 @@ def compile_rules(
     if not isinstance(raw, dict) or not isinstance(raw.get("rules"), list):
         raise ValueError("the model's answer wasn't a list of rules")
     taken = set(taken_ids or ())
+    raw = {**raw, "rules": _tidy_rules(raw["rules"])}
     # Variables these rules set count as known, so a rule may read what an
     # earlier one in the same answer writes without a warning.
     catalog = dict(catalog)
@@ -236,7 +242,7 @@ def compile_rules(
         for target in _answer_targets(item):
             catalog.setdefault(target, {"name": target, "sources": [], "values": [], "tags": []})
     out: list[dict[str, Any]] = []
-    skipped: list[dict[str, str]] = []
+    skipped: list[dict[str, str]] = list(raw.get("_notes") or [])
     for item in raw["rules"][:MAX_RULES]:
         if not isinstance(item, dict):
             continue
@@ -258,6 +264,70 @@ def compile_rules(
             "warnings": list(dict.fromkeys(warnings)),
         })
     return {"rules": out, "skipped": skipped}
+
+
+def _is_else_only(item: dict[str, Any]) -> bool:
+    return not item.get("branches") and bool(item.get("else_actions"))
+
+
+def _tidy_rules(rules: list[Any]) -> list[Any]:
+    """The rules the way a small model means them (chat eval round 1, 9B):
+
+    - a rule that is only a summary is dropped, and one written twice is
+      kept once (one answer repeated the same rule 64 times);
+    - a branch holding only conditions followed by one holding only actions
+      is one branch;
+    - a rule with only ``else_actions`` ("Default title if class is unset")
+      becomes the ELSE of the rule before it when that one has none, goes
+      when it repeats that ELSE, and otherwise sets its variables only when
+      they are still empty (an ``is_empty`` test), which is what a default
+      means.
+
+    Notes on what changed ride along as ``_notes`` (shown as skipped)."""
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in rules:
+        if not isinstance(item, dict):
+            continue
+        key = json.dumps({k: v for k, v in item.items() if k != "summary"}, sort_keys=True,
+                         default=str)
+        if key in seen or not (item.get("branches") or item.get("else_actions")):
+            continue
+        seen.add(key)
+        item = {**item, "branches": _join_branches(item.get("branches"))}
+        prev = out[-1] if out else None
+        if _is_else_only(item):
+            acts = item["else_actions"]
+            if prev is not None and not prev.get("else_actions") and prev.get("branches"):
+                out[-1] = {**prev, "else_actions": acts}
+                continue
+            if prev is not None and prev.get("else_actions") == acts:
+                continue
+            targets = [t for t in (_var_name(a.get("target_var")) for a in acts
+                                   if isinstance(a, dict)) if t]
+            if targets:
+                item = {"summary": item.get("summary"), "branches": [{
+                    "match": "any", "conditions": [{"var": targets[0], "op": "is_empty"}],
+                    "actions": acts}]}
+        out.append(item)
+    return out
+
+
+def _join_branches(raw: Any) -> list[Any]:
+    """Branches with a conditions-only branch and the actions-only one after
+    it joined (the 9B split each IF into two objects)."""
+    branches = [b for b in raw if isinstance(b, dict)] if isinstance(raw, list) else []
+    out: list[dict[str, Any]] = []
+    for b in branches:
+        if not b.get("conditions") and not b.get("actions"):
+            continue  # {"match": "any"} alone
+        prev = out[-1] if out else None
+        if (b.get("actions") and not b.get("conditions") and prev is not None
+                and prev.get("conditions") and not prev.get("actions")):
+            out[-1] = {**prev, "actions": b["actions"]}
+            continue
+        out.append(b)
+    return out
 
 
 def _answer_targets(item: Any) -> list[str]:
@@ -337,7 +407,14 @@ def _compile_condition(
     var, base = got
     if op not in _VALID_OPS:
         raise _Drop(f"unknown test {op!r}")
-    value = "" if op in _NO_VALUE_OPS else _flat(c.get("value"))[:MAX_VALUE_LEN]
+    raw_value = c.get("value")
+    if isinstance(raw_value, (int, float)) and not isinstance(raw_value, bool):
+        raw_value = str(raw_value)
+    value = "" if op in _NO_VALUE_OPS else _flat(raw_value)[:MAX_VALUE_LEN]
+    if value and _JUNK.fullmatch(value):
+        # The 9B wrote "}]}], " where "1" belonged ($iteration equals 1).
+        raise _Drop(f"the value for ${var} came out as {value!r}, which is JSON, not text; "
+                    'write it as a quoted string, e.g. "value": "1"')
     entry = catalog.get(base)
     if entry is None:
         warnings.append(unset_note(base))

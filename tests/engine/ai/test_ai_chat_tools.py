@@ -201,7 +201,7 @@ def test_wildcard_spec_in_chat():
                                     "options": [{"text": "wool"}, {"text": "silk"}]})
     assert "var_binding" not in v["op"]["body"]["payload"]
     assert v["summary"].startswith("vocabulary")
-    with pytest.raises(ValueError, match="unique name"):
+    with pytest.raises(ValueError, match="give it a variable"):
         lib.run("create_wildcard", {"name": "colors", "var": "", "options": [{"text": "x"}]})
     with pytest.raises(ValueError):
         lib.run("create_wildcard", {"name": "Bad", "var": "bad",
@@ -339,9 +339,10 @@ def test_ids_copied_from_chips_and_cards_still_name_the_item():
     shoes = lib.run("create_wildcard", {"name": "Shoes", "var": "shoes",
                                         "options": [{"text": "boots", "tags": ["warm"]}]})
     new_id = shoes["op"]["body"]["id"]
-    for ref in (shoes["pid"], f"{new_id}#Shoes", f"@{{{new_id}}}"):
+    for n, ref in enumerate((shoes["pid"], f"{new_id}#Shoes", f"@{{{new_id}}}")):
+        # A new factor each time: an unchanged repeat makes no card.
         c = lib.run("create_constraint", {"source_id": "Season", "target_id": ref, "rules": [
-            {"source": "#cold", "target": "#warm", "effect": "boost", "factor": 2}]})
+            {"source": "#cold", "target": "#warm", "effect": "boost", "factor": 2 + n}]})
         assert c["op"]["body"]["payload"]["target_wildcard_id"] == new_id
 
 
@@ -364,5 +365,5 @@ def test_a_name_proposed_again_in_this_answer_means_its_own_card():
     assert con["op"]["body"]["payload"]["source_wildcard_id"] == "aaaa0002"
     # Its cards show once the answer ends: opening one now is refused with why.
     for raw in (made["pid"], new_id):
-        with pytest.raises(ValueError, match="already on screen"):
+        with pytest.raises(client_tools.Shown, match="already on screen"):
             client_tools.prepare(lib, "open", {"proposal": raw})

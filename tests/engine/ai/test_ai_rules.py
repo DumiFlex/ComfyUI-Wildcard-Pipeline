@@ -146,7 +146,8 @@ def test_derivation_warns_and_skips():
         "action": {"target_var": "song", "mode": "replace", "value": "silence"},
     }
     assert "IF ($class equals \"bard\" and $mood is_set)" in r["summary"]
-    assert [s["text"] for s in out["skipped"]] == ["bad var", "ref", "regex", "not regex", "empty"]
+    # A rule with nothing in it is dropped without a note.
+    assert [s["text"] for s in out["skipped"]] == ["bad var", "ref", "regex", "not regex"]
     with pytest.raises(ValueError):
         ai_derivation.compile_rules({"nope": 1}, catalog=cat)
 

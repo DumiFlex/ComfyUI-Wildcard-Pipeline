@@ -1222,8 +1222,9 @@ class Library(MoreTools, ManageTools):
         if not var and any(str(r.get("name") or "").lower() == name.lower()
                            for r in self.modules.values()
                            if r.get("type") == "wildcard" and not r.get("_proposed")):
-            raise ValueError(f"a wildcard named {name} exists; a vocabulary needs a "
-                             "unique name so @{{{name}}} finds it")
+            raise ValueError(f"a wildcard named {name} exists and this one sets no variable; "
+                             f"give it a variable (\"var\") or a name no item has (a "
+                             f"vocabulary is found by name with @{{{name}}})")
         texts = [str(o.get("text") or "") for o in args.get("options") or []
                  if isinstance(o, dict)]
         if _ARROW.search(name) or sum(1 for t in texts if _ARROW.search(t)) > len(texts) // 2:
@@ -1279,7 +1280,8 @@ class Library(MoreTools, ManageTools):
     def _twin(self, op: dict[str, Any]) -> dict[str, Any] | None:
         """The card not yet applied that this new item repeats: same kind
         and name (and variable for a wildcard, source and target for a
-        constraint). Its card is replaced at the same id (`run`)."""
+        constraint). Its card is replaced at the same id (`run`); a
+        wildcard's variable may change."""
         body = op.get("body") if isinstance(op.get("body"), dict) else {}
         if op.get("op") != "create" or op.get("kind") not in ("module", "bundle"):
             return None
@@ -1289,8 +1291,10 @@ class Library(MoreTools, ManageTools):
         def key(r: dict[str, Any], q: dict[str, Any]) -> tuple[Any, ...]:
             if r.get("type") == "constraint":
                 return ("constraint", q.get("source_wildcard_id"), q.get("target_wildcard_id"))
-            return (r.get("type"), str(r.get("name") or "").strip().lower(),
-                    q.get("var_binding") if r.get("type") == "wildcard" else None)
+            # A wildcard proposed again under its name with another variable
+            # is a revision too (round 1: "Weather Conditions" for $weather,
+            # then again for $atmosphere after the clash warning).
+            return (r.get("type"), str(r.get("name") or "").strip().lower())
 
         want = key(body, p)
         for r in reversed(list(rows.values())):
@@ -1955,6 +1959,12 @@ class Library(MoreTools, ManageTools):
             # Built on the editor's unsaved version: it goes into the editor.
             op["basis"] = "editor"
         twin = self._twin(op) if op["op"] == "create" else None
+        if twin is not None and _same_item(twin, op["body"]):
+            # Sent again unchanged after its card's warning: nothing new.
+            self._next_pid -= 1
+            return (f"{tool}: this is exactly card {twin['_proposed']}, which is already on "
+                    "screen; nothing changed. If its warning needs a fix, change what it "
+                    "says; otherwise answer now")
         if twin is not None:
             self._take_place(proposal, twin)
         elif op["op"] == "create":
@@ -2027,6 +2037,17 @@ _NOTE = re.compile(
     r"|.* may name the old tags; check its rules$"
     r"|Points at the new item "
     r"|Builds on the earlier change to ")
+
+
+def _same_item(row: dict[str, Any], body: dict[str, Any]) -> bool:
+    """Whether a new item's body is the unapplied card's item again."""
+    def bare(v: Any) -> Any:  # rule and option ids are new on every call
+        if isinstance(v, dict):
+            return {k: bare(x) for k, x in v.items() if k != "id"}
+        return [bare(x) for x in v] if isinstance(v, list) else v
+
+    keys = ("name", "description", "tags", "category_id", "payload", "children")
+    return all(bare(row.get(k)) == bare(body.get(k)) for k in keys)
 
 
 def proposal_note(tool: str, proposal: dict[str, Any]) -> str:
