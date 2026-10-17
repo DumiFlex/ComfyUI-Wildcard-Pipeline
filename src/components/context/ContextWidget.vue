@@ -52,22 +52,18 @@ const BundleInstanceModal = defineAsyncComponent(
 );
 import PushToLibraryModal from "./PushToLibraryModal.vue";
 import PushBundleToLibraryModal from "./PushBundleToLibraryModal.vue";
-import ContextMenu, {
-  type ContextMenuEntry,
-  type ContextMenuHeader,
-  type ContextMenuItem,
-} from "../shared/ContextMenu.vue";
+import ContextMenu from "../shared/ContextMenu.vue";
 import { dragState } from "./drag-store";
 import { useContextDrag } from "./context-drag";
 import type { WidgetState } from "./widget-state";
 import { createModuleOps } from "./module-ops";
+import { useContextMenus } from "./context-menus";
 import {
   effectiveEnabled,
   effectiveLockedSeed,
   frameEnableOverride,
   isCollapsed,
   isHeld,
-  isHoldable,
   isInternal,
   isLocked,
   isModified,
@@ -184,19 +180,6 @@ const props = withDefaults(defineProps<{
 
 const isMuted = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 const muteLabel = computed(() => props.nodeMode === 4 ? "bypassed" : "muted");
-
-const ctxMenu = ref<{
-  visible: boolean;
-  x: number;
-  y: number;
-  items: ContextMenuEntry[];
-  header?: ContextMenuHeader;
-}>({
-  visible: false,
-  x: 0,
-  y: 0,
-  items: [],
-});
 
 // Phase B: track the currently-edited module by INDEX, not id —
 // sibling rows share `m.id`, so a id-keyed editing state would open
@@ -487,29 +470,26 @@ const {
   rowCtx: dragRowCtx, frameCtx: dragFrameCtx,
 } = useContextDrag(widgetState, props);
 
+const librarySync = useLibrarySync(widgetState);
 const {
-  driftedCount, refreshOne, refreshAllDrifted,
-  pushDraft, pushOpen, openPushToLibrary, onPushSaved, onPushClosed,
+  driftedCount, refreshAllDrifted,
+  pushDraft, pushOpen, onPushSaved, onPushClosed,
   pushBundleDraft, pushBundleChildrenForLibrary, pushBundleChildrenPreview,
-  pushBundleOpen, pushBundleCascadeScan, openPushBundleToLibrary,
+  pushBundleOpen, pushBundleCascadeScan,
   pushBundleCascadeRestore, onBundlePushSaved, onBundlePushClosed,
-} = useLibrarySync(widgetState);
+} = librarySync;
 
-const {
-  pendingConfirm, onPickBundle, toggleBundleCollapsed, toggleBundleEnabled,
-  removeBundle, detachBundle, duplicateBundle, resetBundleToLibrary,
-  resetChildToBundleSnapshot, wrapIntoNewBundle, frameCtx: bundleOpsFrameCtx,
-} = createBundleOps(widgetState, holdSuppressMove);
+const bundleOps = createBundleOps(widgetState, holdSuppressMove);
+const { pendingConfirm, onPickBundle, frameCtx: bundleOpsFrameCtx } = bundleOps;
 // Lock / Hide masters: exactly the BundleFrame ctx members of the same names.
 const masterToggles = createBundleMasterToggles(widgetState, props);
 const { bundleInternalState, bundleLockState } = masterToggles;
+const bundleEdit = useBundleEdit(widgetState, { ...masterToggles, ...librarySync, ...bundleOps });
 const {
-  bundleDraft, bundleLibraryDefaults, editingBundleEntry, openBundleEditModal,
+  bundleDraft, bundleLibraryDefaults, editingBundleEntry,
   onBundleEditUpdate, saveBundleEdit, cancelBundleEdit, onBundleEditToggleLock,
   onBundleEditToggleInternal, onBundleEditSaveToLibrary, onBundleEditResetToLibrary,
-} = useBundleEdit(widgetState, {
-  ...masterToggles, openPushBundleToLibrary, resetBundleToLibrary,
-});
+} = bundleEdit;
 
 /** Stamp `_uid` on any module missing one. Phase B: each row needs a
  *  per-instance stable Vue v-for key that survives reorders + inserts —
@@ -564,106 +544,6 @@ function openBundlePicker() {
  *  to /bundles/new; SPA wires up the editor in Phase 4. */
 function openBundleAuthor(): void {
   openSpaLibrary();   // Reuse existing SPA link for v1 — Phase 4 deep-links to bundle editor
-}
-
-/** Bundle right-click menu. Mirrors module ctxmenu pattern — sets
- *  ctxMenu state with bundle-scoped items. The shared ContextMenu
- *  component handles positioning + dismiss. */
-function openBundleContextMenu(ev: MouseEvent, uid: string): void {
-  const target = (value.value.bundles ?? []).find((b) => b._uid === uid);
-  if (!target) return;
-  const estW = 240;
-  const estH = 220;
-  const x = Math.min(ev.clientX, window.innerWidth - estW - 8);
-  const y = Math.min(ev.clientY, window.innerHeight - estH - 8);
-  const items: ContextMenuEntry[] = [
-    {
-      label: "Edit bundle…",
-      icon: "pi-pencil",
-      subtitle: "Display name, color, lock + hide cascades",
-      onSelect: () => openBundleEditModal(uid),
-      divider: true,
-    },
-    {
-      label: target.collapsed ? "Expand bundle" : "Collapse bundle",
-      icon: target.collapsed ? "pi-caret-down" : "pi-caret-right",
-      onSelect: () => toggleBundleCollapsed(uid),
-    },
-    {
-      label: target.enabled ? "Disable bundle" : "Enable bundle",
-      icon: target.enabled ? "pi-eye-slash" : "pi-eye",
-      subtitle: "Cascades to all children",
-      onSelect: () => toggleBundleEnabled(uid, !target.enabled),
-      divider: true,
-    },
-    // The two library actions accent themselves to match the bundle's CURRENT
-    // state, so the menu points at the recovery for the badge the user just
-    // saw. Only one lights up: the states are ranked, since a bundle can be
-    // several at once and two competing accents would say nothing.
-    //   missing  → Push (re-link or add) — nothing to reset FROM
-    //   drifted  → Reset (pull the library's newer version)
-    //   modified → Push (save your local edits up)
-    (() => {
-      const drifted = !isBundleMissingFromLibrary(target)
-        && isBundleLibraryDrifted(target);
-      return {
-        label: "Reset to library snapshot",
-        icon: "pi-refresh",
-        subtitle: drifted
-          ? "Library changed since insert — pull the newer version"
-          : "Replace children with frozen library state",
-        accent: drifted,
-        onSelect: () => { void resetBundleToLibrary(uid); },
-      };
-    })(),
-    (() => {
-      const bundleMissing = isBundleMissingFromLibrary(target);
-      const modified = !bundleMissing
-        && !isBundleLibraryDrifted(target)
-        && bundleSnapshotModified(target, value.value.modules);
-      let subtitle = "Rename, retag, overwrite library entry";
-      if (bundleMissing) subtitle = "Not linked to a library entry — re-link or add";
-      else if (modified) subtitle = "Local edits since insert — save them to the library";
-      return {
-        label: "Push to library…",
-        icon: "pi-cloud-upload",
-        subtitle,
-        accent: bundleMissing || modified,
-        onSelect: () => openPushBundleToLibrary(uid),
-        divider: true,
-      };
-    })(),
-    {
-      label: "Duplicate bundle",
-      icon: "pi-clone",
-      subtitle: "Insert another instance below",
-      onSelect: () => { void duplicateBundle(uid); },
-    },
-    {
-      label: "Detach",
-      icon: "pi-link",
-      subtitle: "Frame removed, children stay",
-      onSelect: () => detachBundle(uid),
-      divider: true,
-    },
-    {
-      label: "Remove bundle + children",
-      icon: "pi-trash",
-      danger: true,
-      onSelect: () => removeBundle(uid),
-    },
-  ];
-  ctxMenu.value = {
-    visible: true,
-    x: Math.max(8, x),
-    y: Math.max(8, y),
-    items,
-    header: {
-      icon: "pi-box",
-      label: `Bundle · ${target.name ?? "bundle"}`,
-      iconColor: target.color || undefined,
-    },
-  };
 }
 
 // Populated vs. empty page swap is driven by a wrapper <Transition
@@ -1104,136 +984,14 @@ function openSpaLibrary(): void {
   window.open("/wp/dashboard", "_blank", "noopener");
 }
 
+const moduleOps = createModuleOps(widgetState, props, showPicker, editingIdx);
 const {
-  onPickerAdd, removeModule, duplicateModule, moveToEdge, toggleEnabled,
-  toggleCollapsed, toggleHold, collapseAll, expandAll, toggleAllEnabled,
-  openEditModal, saveEditedModule, revertEditingFrame, rowCtx: opsRowCtx,
-} = createModuleOps(widgetState, props, showPicker, editingIdx);
-
-function openContextMenu(ev: MouseEvent, m: ModuleEntry, idx: number) {
-  // Phase B: caller passes the row's array index (from v-for) so we
-  // operate on the specific sibling rather than the first findIndex
-  // match — siblings share `m.id`.
-  const list = value.value.modules;
-  const i = idx;
-  const estW = 180;
-  const estH = 220;
-  const x = Math.min(ev.clientX, window.innerWidth - estW - 8);
-  const y = Math.min(ev.clientY, window.innerHeight - estH - 8);
-  // Build the items list dynamically — "Save to library" only shows
-  // when the module is missing from the live library AND has a
-  // payload to save (inline-created fixed_values without a payload
-  // are intentionally excluded; they're already authoritative on the
-  // workflow side).
-  const items: ContextMenuItem[] = [
-    { label: "Edit", icon: "pi-pencil", onSelect: () => openEditModal(idx) },
-  ];
-  // Quick Hold toggle — kept at the top so it's a 2-click reach
-  // (right-click → Hold) instead of opening the editor and digging into
-  // Runtime. Only for kinds that honor seed_scope. Hold is base-level;
-  // when a loop edit-frame is active it applies to every frame, so we
-  // surface it disabled with a hint rather than silently writing it.
-  if (isHoldable(m)) {
-    const held = isHeld(m);
-    const frameActive = currentFrame.value != null;
-    items.push({
-      label: held ? "Release hold" : "Hold across run",
-      icon: "pi-link",
-      disabled: frameActive,
-      subtitle: frameActive
-        ? "Applies to every frame — switch to base to change"
-        : held
-          ? undefined
-          : "Freeze this value for the whole batch",
-      onSelect: () => toggleHold(idx),
-    });
-  }
-  // Refresh + Save are mutually exclusive in normal use (a module is
-  // either drifted OR missing OR clean), so hiding the inactive entry
-  // beats greying it — matches Save's existing conditional-push pattern
-  // and keeps the menu shorter.
-  if (isDrifted(m)) {
-    items.push({
-      label: "Refresh from library",
-      icon: "pi-refresh",
-      // Accented + explained: drift is the state where the menu HAS the fix
-      // for the badge the user just saw, so it should say so.
-      subtitle: "Library changed since insert — pull the newer version",
-      accent: true,
-      onSelect: () => { void refreshOne(idx); },
-      divider: true,
-    });
-  }
-  // "Push to library" is now always present for any row that has a
-  // payload. The unified PushToLibraryModal owns the explicit fork-vs-
-  // update choice + the meta editing surface, replacing the older
-  // implicit logic that only surfaced when the row was missing from
-  // the live library. Inline-created rows still qualify — the modal
-  // greys out the "Update existing" button when payload_hash is empty.
-  if (!!m.payload) {
-    const missing = isMissingFromLibrary(m);
-    // Local overrides with no drift → pushing is what the user probably wants.
-    // Ranked below `missing` so only one library action ever accents.
-    const modified = !missing && !isDrifted(m) && isModified(m);
-    let subtitle: string | undefined;
-    if (missing) subtitle = "Not linked to a library entry — re-link or add";
-    else if (modified) subtitle = "Local edits since insert — save them to the library";
-    items.push({
-      label: "Push to library…",
-      icon: "pi-cloud-upload",
-      subtitle,
-      accent: missing || modified,
-      onSelect: () => openPushToLibrary(idx),
-      divider: true,
-    });
-  }
-  // Bundle children get an extra "Reset to bundle snapshot" item that
-  // restores THIS row from the parent bundle's frozen library blob.
-  // Distinct from "Refresh from library" (which pulls the current
-  // library version of the underlying module).
-  if ((m as ModuleEntry & { bundle_origin?: string }).bundle_origin) {
-    items.push({
-      label: "Reset to bundle snapshot",
-      icon: "pi-history",
-      subtitle: "Restore frozen state from bundle",
-      onSelect: () => { void resetChildToBundleSnapshot(idx); },
-      divider: true,
-    });
-  }
-  items.push(
-    { label: m.enabled ? "Disable" : "Enable", icon: m.enabled ? "pi-eye-slash" : "pi-eye", onSelect: () => toggleEnabled(idx) },
-    { label: m.collapsed ? "Expand" : "Collapse", icon: m.collapsed ? "pi-caret-down" : "pi-caret-right", onSelect: () => toggleCollapsed(idx) },
-    { label: "Duplicate", icon: "pi-clone", onSelect: () => duplicateModule(idx), divider: true },
-  );
-  // Wrap-into-new-bundle — only for unbundled rows.
-  if (!(m as ModuleEntry & { bundle_origin?: string }).bundle_origin) {
-    items.push({
-      label: "Wrap into new bundle…",
-      icon: "pi-box",
-      subtitle: "Create a library bundle from this row",
-      onSelect: () => { void wrapIntoNewBundle(idx); },
-      divider: true,
-    });
-  }
-  items.push(
-    { label: "Move to top", icon: "pi-angle-double-up", disabled: i === 0, onSelect: () => moveToEdge(idx, "top") },
-    { label: "Move to bottom", icon: "pi-angle-double-down", disabled: i === list.length - 1, onSelect: () => moveToEdge(idx, "bottom") },
-    { label: "Remove", icon: "pi-trash", danger: true, divider: true, onSelect: () => removeModule(idx) },
-  );
-  ctxMenu.value = {
-    visible: true, x: Math.max(8, x), y: Math.max(8, y), items,
-    // Scope header — kind icon + "Kind · Name" label. Mirrors the
-    // bundle ctxmenu's header so every right-click reads as "you are
-    // operating on THIS specific entity". `kindIcon` returns
-    // "pi pi-X" (two-class); ContextMenu's template prepends "pi"
-    // already, so we strip the leading word to avoid double-prefix.
-    header: {
-      icon: kindIcon(m.type).split(" ").pop() ?? "pi-circle",
-      label: `${KIND_TITLE[m.type] ?? m.type} · ${m.meta.name || "(unnamed)"}`,
-      iconColor: `var(--wp-kind-${kindChipModifier(m.type)})`,
-    },
-  };
-}
+  onPickerAdd, collapseAll, expandAll, toggleAllEnabled,
+  saveEditedModule, revertEditingFrame, rowCtx: opsRowCtx,
+} = moduleOps;
+const { ctxMenu, openContextMenu, openBundleContextMenu } = useContextMenus(widgetState, {
+  ...moduleOps, ...librarySync, ...bundleOps, ...bundleEdit,
+});
 
 const topLevelItems = computed(() =>
   buildTopLevelItems(value.value.modules, value.value.bundles ?? []));
