@@ -19,7 +19,7 @@ from engine.ai import safety
 from engine.ai import tools as ai_tools
 from tests.wp_api.test_ai_api import _chat, _two_wildcards, _wildcard
 from wp_api import _ai_client, _ai_guard
-from wp_api import ai as ai_routes
+from wp_api import _ai_turn as ai_turn
 
 # ── The key goes only where it was given for ───────────────────────────────
 
@@ -230,7 +230,7 @@ async def test_one_broken_tool_doesnt_end_the_answer(wp_client, fake_llm, monkey
 async def test_an_answer_has_a_time_limit(wp_client, fake_llm, monkeypatch):
     ai_config.update({"enabled": True, "provider": "lmstudio", "model_size": "large",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
-    monkeypatch.setattr(ai_routes, "TURN_SECONDS_LOCAL", -1)
+    monkeypatch.setattr(ai_turn, "TURN_SECONDS_LOCAL", -1)
     search = {"tool": "search", "args": json.dumps({"query": "x"})}
     fake_llm.chat_steps.extend([
         {"message": "", "calls": [search]},
@@ -244,7 +244,7 @@ async def test_an_answer_has_a_time_limit(wp_client, fake_llm, monkeypatch):
     assert len(fake_llm.chat_steps) == 1
     fake_llm.chat_steps.clear()
     # One step can't run forever either.
-    monkeypatch.setattr(ai_routes, "STEP_SECONDS", 0)
+    monkeypatch.setattr(ai_turn, "STEP_SECONDS", 0)
     resp = await wp_client.post("/wp/api/ai/chat", json={"message": "hi"})
     assert resp.status == 504
 
@@ -254,7 +254,7 @@ async def test_out_of_time_a_split_step_only_answers(wp_client, fake_llm, monkey
     message only, so it answers instead of calling again."""
     ai_config.update({"enabled": True, "provider": "lmstudio",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
-    monkeypatch.setattr(ai_routes, "TURN_SECONDS_LOCAL", -1)
+    monkeypatch.setattr(ai_turn, "TURN_SECONDS_LOCAL", -1)
     fake_llm.chat_steps.extend([
         {"message": "", "calls": [{"tool": "search", "args": json.dumps({"query": "x"})}]},
         {"message": "Nothing matches x yet.", "calls": []},
