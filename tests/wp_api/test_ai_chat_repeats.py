@@ -38,3 +38,17 @@ async def test_opening_its_own_card_is_no_error_and_an_untested_claim_is_marked(
     out = await _chat(wp_client, "Make a style wildcard and test it.")
     assert all(s["ok"] for s in out["steps"]) and not out["pending"]
     assert "No test ran in this answer" in out["message"]
+
+
+async def test_a_failed_change_sent_again_is_not_run_again(wp_client, fake_llm):
+    _on(fake_llm)
+    bad = json.dumps({"name": "Bad", "var": "not a name", "options": [{"text": "x"}]})
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": bad}]},
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": bad}]},
+        {"message": "That didn't work.", "calls": []},
+    ])
+    out = await _chat(wp_client, "Make a wildcard.")
+    results = json.dumps(fake_llm.seen[-1]["body"]["messages"][-1]["content"])
+    assert "already made this exact call and it failed" in results
+    assert [s["ok"] for s in out["steps"] if s["tool"] == "create_wildcard"] == [False]

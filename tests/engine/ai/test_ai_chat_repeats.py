@@ -175,3 +175,88 @@ def test_failed_rules_show_one_rule_that_works():
             "conditions": [{"var": "iteration_total", "op": "equals", "value": "3"}],
             "actions": [{"target_var": None, "value": "x"}]}]}]})
     assert "A rule that works:" in str(e.value) and '"var": "outfit"' in str(e.value)
+
+
+# ── round 2 ──────────────────────────────────────────────────────────────
+
+
+def test_a_wildcard_with_no_var_sets_one_named_after_it():
+    lib = _lib()
+    # The library's Outfit sets $outfit: a new Outfit writes it too.
+    out = lib.run("create_wildcard", {"name": "Outfit", "options": [{"text": "cape"}]})
+    payload = out["op"]["body"]["payload"]
+    assert payload["var_binding"] == "outfit"
+    assert out["warnings"][0].startswith("Sets $outfit, named after it")
+    hair = lib.run("create_wildcard", {"name": "Hair Colour", "options": [{"text": "red"}]})
+    assert hair["op"]["body"]["payload"]["var_binding"] == "hair_colour"
+    # "" is still a vocabulary.
+    voc = lib.run("create_wildcard", {"name": "Hues", "var": "", "options": [{"text": "teal"}]})
+    assert not voc["op"]["body"]["payload"].get("var_binding")
+
+
+def test_conditions_written_with_match_or_without_var():
+    lib = _lib()
+    act = [{"target_var": "shot", "value": "close-up"}]
+    good = {"conditions": [{"var": "iteration", "op": "equals", "value": "1"}],
+            "actions": [{"target_var": "shot", "value": "establishing shot"}]}
+    # {"match": "any"} written as a condition belongs to the group.
+    out = lib.run("create_derivation", {"name": "Shot", "rules": [{"branches": [
+        good, {"conditions": [{"match": "any"}, {"var": "season", "op": "equals",
+                                                 "value": "winter"}], "actions": act}]}]})
+    assert len(out["op"]["body"]["payload"]["rules"][0]["branches"]) == 2
+    # A broken branch costs that branch, with a note; the good one stays.
+    out = lib.run("create_derivation", {"name": "Shot 2", "rules": [{"branches": [
+        good, {"conditions": [{"match": "all", "op": "equals", "value": "1"}],
+               "actions": act}]}]})
+    assert len(out["op"]["body"]["payload"]["rules"][0]["branches"]) == 1
+    assert any('branch 2: condition 1 has no "var"' in w and '"match" belongs on the branch'
+               in w for w in out["warnings"])
+    with pytest.raises(ValueError, match='condition 1 has no "var"'):
+        lib.run("create_derivation", {"name": "Shot 3", "rules": [{"branches": [
+            {"conditions": [{"op": "equals", "value": "1"}], "actions": act}]}]})
+
+
+def test_a_constraint_on_a_derivation_says_what_it_is():
+    lib = _lib()
+    with pytest.raises(ValueError, match=r"\[\[aaaa0003#Extras\]\] is a derivation, not a "
+                                         "wildcard"):
+        lib.run("create_constraint", {"source_id": "aaaa0003", "target_id": "aaaa0001",
+                                      "rules": [{"source": "#cold", "target": "#warm",
+                                                 "effect": "exclude"}]})
+
+
+def test_run_test_takes_a_template_chip_and_runs_the_most_used_of_a_shared_name():
+    lib = _lib()
+    lib.templates["746c1f41"] = {**lib.templates["tttt0001"], "id": "746c1f41",
+                                 "name": "Environments"}
+    out = lib.run("run_test", {"stack": ["Look"], "template": "746c1f41#Environments",
+                               "seeds": 3})
+    assert "Prompt:" in out
+    for i in (8, 9):
+        lib.modules[f"aaaa000{i}"] = {
+            "id": f"aaaa000{i}", "type": "wildcard", "name": "Lighting", "tags": [],
+            "payload": {"var_binding": "light", "options": [
+                {"id": "l1", "value": f"lamp {i}", "weight": 1}]}}
+    lib.modules["aaaa0010"] = {"id": "aaaa0010", "type": "constraint", "name": "x", "tags": [],
+                               "payload": {"source_wildcard_id": "aaaa0009",
+                                           "target_wildcard_id": "aaaa0001",
+                                           "matrix": {}, "exceptions": []}}
+    out = lib.run("run_test", {"stack": ["Lighting"], "seeds": 5})
+    assert "ran aaaa0009 (the most used); the others are aaaa0008" in out
+    assert '"lamp 9" 100%' in out
+
+
+def test_the_same_edit_twice_names_the_card_that_made_it():
+    lib = _lib()
+    edit = {"id": "aaaa0002", "negatives": [{"n": 1, "negative": "sunny"}]}
+    first = lib.run("edit_options", edit)
+    with pytest.raises(ValueError, match=f"card {first['pid']} already makes this change"):
+        lib.run("edit_options", edit)
+
+
+def test_run_test_says_when_every_option_was_picked():
+    lib = _lib()
+    lib.run("create_wildcard", {"name": "Tones", "var": "tone", "options": [
+        {"text": f"tone {i}"} for i in range(8)]})
+    out = lib.run("run_test", {"stack": ["Tones"], "seeds": 200})
+    assert "All 8 options of Tones were picked" in out

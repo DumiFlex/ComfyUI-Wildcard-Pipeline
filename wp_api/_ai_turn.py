@@ -386,6 +386,9 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     message = ""
     interim = ""
     seen: set[str] = set()
+    #: Change calls that failed, by their exact args: the same call again
+    #: fails the same way (round 2: an identical create_wildcard twice).
+    failed: dict[str, str] = {}
     errors: dict[str, int] = {}
     #: Refusals by tool and reason (ids and numbers left out).
     refused: dict[str, int] = {}
@@ -567,6 +570,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 result(f"{tool}: error: {tool} isn't available here; call more_tools first")
                 steps.append({"tool": tool, "note": f"{tool} isn't available here", "ok": False})
                 continue
+            key = ""
             try:
                 raw = call["args"] if isinstance(call.get("args"), dict) else call["args_text"]
                 args, arg_notes = ai_tools.check_args(spec, ai_chat.parse_args(raw))
@@ -634,6 +638,13 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     result(f"{tool}: you already made this exact call; its results are above. "
                            "Don't repeat it.")
                     continue
+                if key in failed:
+                    repeats += 1
+                    needs_reply = True
+                    result(f"{tool}: you already made this exact call and it failed ("
+                           f"{failed[key]}); sending it again fails again. Change what the "
+                           "error names, or answer now")
+                    continue
                 seen.add(key)
                 if errors.get(tool, 0) >= 3:
                     raise ValueError("this tool failed three times in this answer; stop "
@@ -648,6 +659,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     out = lib.run(tool, args)
             except ValueError as e:
                 errors[tool] = errors.get(tool, 0) + 1
+                if key and tool in ai_chat.CHANGE_TOOLS:
+                    failed[key] = ai_budget.clip(str(e), 300)
                 why = tool + re.sub(r"\b[0-9a-f]{8}\b|\d+", "#", str(e))
                 refused[why] = refused.get(why, 0) + 1
                 needs_reply = True

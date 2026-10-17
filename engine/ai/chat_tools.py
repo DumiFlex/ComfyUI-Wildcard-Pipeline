@@ -192,6 +192,26 @@ class MoreTools:
             hits = newest[-1:] or hits
         return hits[0] if len(hits) == 1 else None
 
+    def _find_shared(self, raw: Any) -> tuple[dict[str, Any] | None, str]:
+        """`_find_loose`, and when several items of one kind share the name
+        ("Lighting" ×3), the most used of them with a note naming the rest:
+        the 9B was told the ids and still ended "the test runner needs a
+        stack" (chat eval round 2), so the run goes ahead."""
+        row = self._find_loose(raw)
+        if row is not None or not isinstance(raw, str):
+            return row, ""
+        low = raw.strip().lower()
+        pool = [*self.modules.values(), *self.bundles.values()]
+        same = [r for r in pool if str(r.get("name") or "").strip().lower() == low
+                and not r.get("_proposed")]
+        kinds = {self._kind(r) for r in same}  # type: ignore[attr-defined]
+        if len(same) < 2 or len(kinds) != 1:
+            return None, ""
+        best = max(same, key=lambda r: len(self._used_by(r["id"])))
+        rest = ", ".join(r["id"] for r in same if r is not best)
+        return best, (f"{len(same)} items are named {raw.strip()!r}: ran {best['id']} (the most "
+                      f"used); the others are {rest}, pass one's id to run it instead")
+
     def _used_by(self, mid: str) -> list[str]:
         out = []
         for m in self.modules.values():
@@ -865,7 +885,7 @@ class MoreTools:
         by_id: dict[str, Any] = {}
         rest: list[Any] = []
         for x in raw:
-            row = self._find_loose(x.get("item") or x.get("id") if isinstance(x, dict) else x)
+            row = self._find_shared(x.get("item") or x.get("id") if isinstance(x, dict) else x)[0]
             if row is None or row["id"] in by_id:
                 rest.append(x)
             else:
@@ -882,7 +902,9 @@ class MoreTools:
         for i, x in enumerate((raw if isinstance(raw, list) else [])[:MAX_STACK]):
             ref, use = (x.get("item") or x.get("id"), x.get("use")) if isinstance(x, dict) \
                 else (x, "")
-            found = self._find_loose(ref)
+            found, note = self._find_shared(ref)
+            if note:
+                warnings.append(note)
             row = get(found["id"]) if found else None
             if row is not None and row.get("_proposed") and not proposed:
                 continue  # new in this answer: only in the "now" run
@@ -976,7 +998,9 @@ class MoreTools:
             if isinstance(args.get("pins"), dict) else {}
         template = None
         if args.get("template"):
-            template = self._find(args["template"], ("template",))
+            template = self._find_loose(args["template"])
+            if template is not None and self._kind(template) != "template":  # type: ignore
+                template = None
             if template is None:
                 raise ValueError(f"no template {_short(args['template'], 40)!r}")
         args, needs = self._stack_needs(args)
@@ -1189,6 +1213,11 @@ class MoreTools:
             never = [o.get("value") for o in m["payload"].get("options") or []
                      if isinstance(o, dict) and not o.get("is_null") and o.get("id") not in picked
                      and o.get("weight", 1) != 0]
+            live = [o for o in m["payload"].get("options") or []
+                    if isinstance(o, dict) and not o.get("is_null") and o.get("weight", 1) != 0]
+            if not never and len(live) > TOP_VALUES:
+                # The top values alone made the 9B say "all 5 options" of 10.
+                lines.append(f"All {len(live)} options of {m.get('name')} were picked")
             if never and len(never) < len(m["payload"].get("options") or []):
                 lines.append(f"Never picked in {m.get('name')}: "
                              + ", ".join(_short(self._show(x), 40) for x in never[:8])

@@ -1219,6 +1219,12 @@ class Library(MoreTools, ManageTools):
         if var and not _IDENT.match(var):
             raise ValueError("var must be a variable name: letters, digits and _ "
                              "(or \"\" for a vocabulary)")
+        defaulted = ""
+        if args.get("var") is None:
+            # No "var" at all is a forgotten one ("" is a vocabulary): chat
+            # eval round 2 asked for "a weather wildcard" three times and got
+            # a refusal, then an unasked rename of a library item.
+            var = defaulted = self._default_var(name)
         if not var and any(str(r.get("name") or "").lower() == name.lower()
                            for r in self.modules.values()
                            if r.get("type") == "wildcard" and not r.get("_proposed")):
@@ -1245,6 +1251,9 @@ class Library(MoreTools, ManageTools):
                 + f": reuse it (change it with edit_options {{\"id\": \"{twin['id']}\"}}) "
                 "or pick another variable name")
         warnings = [w for w in [self.var_clash(var, skip_name=name)] if w]
+        if defaulted:
+            warnings.insert(0, f"Sets ${defaulted}, named after it (no \"var\" was given; "
+                               "\"var\": \"\" makes a vocabulary with no variable)")
         return {
             "title": f"Create wildcard {name}",
             "summary": (f"${var}" if var else "vocabulary (no variable)")
@@ -1255,6 +1264,20 @@ class Library(MoreTools, ManageTools):
             "op": {"op": "create", "kind": "module", "new_category": meta["new_category"],
                    "body": {"type": "wildcard", "name": name, **meta["body"], "payload": payload}},
         }
+
+    def _default_var(self, name: str) -> str:
+        """The variable a wildcard made without "var" sets: the one library
+        wildcards of that name set (a new Weather writes $weather like the
+        others), else the name as a variable."""
+        low = name.strip().lower()
+        same = [str((r.get("payload") or {}).get("var_binding") or "")
+                for r in self.modules.values()
+                if r.get("type") == "wildcard" and str(r.get("name") or "").lower() == low]
+        same = [v for v in same if v]
+        if same:
+            return max(set(same), key=same.count)
+        slug = re.sub(r"[^a-z0-9]+", "_", low).strip("_")[:48]
+        return slug if _IDENT.match(slug) else ""
 
     @staticmethod
     def _writes_var(r: dict[str, Any], var: str) -> bool:
@@ -1346,6 +1369,12 @@ class Library(MoreTools, ManageTools):
         if r is not None:
             r = self._current(r["id"])[0]
         if r is None or r.get("type") != type_:
+            other = self.get(self._bare_id(raw)) if isinstance(raw, str) else None
+            if other is not None:
+                # Round 2: a constraint from the derivation it had just made.
+                raise ValueError(
+                    f"{self._chip(other)} is a {self._kind(other).replace('_', ' ')}, not a "
+                    f"{type_.replace('_', ' ')}; this needs a {type_.replace('_', ' ')}")
             raise ValueError(self.not_found(raw, type_.replace("_", " ")))
         return r
 
@@ -1950,7 +1979,15 @@ class Library(MoreTools, ManageTools):
             return fn(args)
         item_id = args.get("id") if tool in ITEM_TOOLS else None
         after = self._current(item_id)[1]
-        proposal = fn(args)
+        try:
+            proposal = fn(args)
+        except ValueError as e:
+            if after and str(e).startswith("that changes nothing"):
+                # Round 2: the same edit sent twice; the 9B read "changes
+                # nothing" as a wrong id and remade the whole wildcard.
+                raise ValueError(f"{e}: card {after} already makes this change (it is on "
+                                 "screen); answer now, or ask for a different change") from None
+            raise
         self._next_pid += 1
         pid = f"p{self._next_pid}"
         proposal = {"pid": pid, "tool": tool, **proposal, "after": after}

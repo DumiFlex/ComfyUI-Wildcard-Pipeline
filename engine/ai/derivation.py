@@ -346,11 +346,18 @@ def _compile_rule(
     refs: ai_refs.RefIndex | None = None,
 ) -> dict[str, Any]:
     branches: list[dict[str, Any]] = []
-    for b in (item.get("branches") or [])[:MAX_BRANCHES]:
-        if not isinstance(b, dict):
+    raw_branches = [b for b in (item.get("branches") or [])[:MAX_BRANCHES] if isinstance(b, dict)]
+    dropped: list[str] = []
+    for i, b in enumerate(raw_branches, 1):
+        # One broken branch costs that branch, not the rule (chat eval round
+        # 2: a good IF went down with a bad second one, three times).
+        where = f"branch {i}: " if len(raw_branches) > 1 else ""
+        try:
+            condition = _compile_group(b, catalog, warnings, 0)
+            actions = _compile_actions(b.get("actions"), catalog, warnings, refs)
+        except _Drop as e:
+            dropped.append(f"{where}{e}")
             continue
-        condition = _compile_group(b, catalog, warnings, 0)
-        actions = _compile_actions(b.get("actions"), catalog, warnings, refs)
         if condition is None or not actions:
             continue
         branch: dict[str, Any] = {"condition": condition, "action": actions[0]}
@@ -358,7 +365,8 @@ def _compile_rule(
             branch["extra_actions"] = actions[1:]
         branches.append(branch)
     if not branches:
-        raise _Drop("no usable condition and action")
+        raise _Drop("; ".join(dropped) or "no usable condition and action")
+    warnings.extend(f"left out {d}" for d in dropped)
     rule: dict[str, Any] = {"branches": branches}
     else_actions = _compile_actions(item.get("else_actions"), catalog, warnings, refs)
     if else_actions:
@@ -379,16 +387,25 @@ def _compile_group(
     """A branch's (or group's) conditions as one condition: a single test
     stays bare, several become an all/any group. A condition that holds
     ``conditions`` itself is a nested group."""
-    conds = [
-        c for c in (_compile_condition(x, catalog, warnings, depth)
-                    for x in (g.get("conditions") or [])[:MAX_CONDITIONS])
-        if c is not None
-    ]
+    match = g.get("match")
+    conds: list[dict[str, Any]] = []
+    for k, x in enumerate((g.get("conditions") or [])[:MAX_CONDITIONS], 1):
+        if isinstance(x, dict) and set(x) == {"match"}:
+            # {"match": "any"} written as a condition: it is the group's.
+            match = match or x["match"]
+            continue
+        if isinstance(x, dict) and "var" not in x and not isinstance(x.get("conditions"), list):
+            hint = ('; "match" belongs on the branch, next to "conditions"'
+                    if "match" in x else "")
+            raise _Drop(f'condition {k} has no "var" (the variable it tests){hint}')
+        c = _compile_condition(x, catalog, warnings, depth)
+        if c is not None:
+            conds.append(c)
     if not conds:
         return None
     if len(conds) == 1:
         return conds[0]
-    return {"match": "any" if g.get("match") == "any" else "all", "conditions": conds}
+    return {"match": "any" if match == "any" else "all", "conditions": conds}
 
 
 def _compile_condition(
