@@ -709,6 +709,8 @@ class Library(MoreTools, ManageTools):
         guesses ids and then claims things about an item that isn't there."""
         key = _short(raw, 60)
         low = key.lower().lstrip("$")
+        if low in TOOLS:
+            return (f"{key!r} is a tool, not an item: call {key} itself with its arguments")
         if low:
             for pid, p in self.earlier_proposals.items():
                 if low in str(p.get("title") or "").lower() and p.get("status") not in (
@@ -751,6 +753,9 @@ class Library(MoreTools, ManageTools):
         head = text.split("#", 1)[0].strip()
         if _HEX_ID.fullmatch(head):
             return head
+        m = re.fullmatch(r".*\(\s*([0-9a-f]{8})\s*\)", text)
+        if m and self.get(m.group(1)) is not None:
+            return m.group(1)  # "Weather (997f6b50)", as answers write items
         if re.fullmatch(r"p\d+", head):
             made = [i for i, pid in self._created.items() if pid == head]
             if len(made) == 1:

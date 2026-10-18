@@ -216,7 +216,11 @@ def _side(raw: Any, view: dict[str, Any], tag_lower: dict[str, str]) -> tuple[st
         if o["value"].strip().lower() == text.lower():
             return ("option", o)
     tag = tag_lower.get(text.lower())
-    return ("tag", tag) if tag else None
+    if tag:
+        return ("tag", tag)
+    # A word from the options ("sandals" for "sundress, sandals"), as a
+    # missing #tag is read (chat eval round 3).
+    return _by_word(text, view) if " " not in text.strip() else None
 
 
 def _tag_like(word: str, tag_lower: dict[str, str]) -> str | None:
@@ -245,19 +249,24 @@ def _by_word(word: str, view: dict[str, Any]) -> tuple[str, Any] | None:
     return ("options", hits) if hits else None
 
 
-def _split_sides(rules: list[Any]) -> list[dict[str, Any]]:
+def _split_sides(rules: list[Any], views: tuple[dict[str, Any], dict[str, Any]] | None = None,
+                 ) -> list[dict[str, Any]]:
     """A rule naming several tags on one side ("#hot, #dry, #sand") as one
     rule per tag, so the ones that exist land and the rest are skipped
-    one by one instead of the whole rule."""
+    one by one instead of the whole rule. So is a list of option numbers or
+    words ("3, 4", "sandals, shorts") that isn't one option's own text."""
     out: list[dict[str, Any]] = []
     for item in rules:
         if not isinstance(item, dict):
             continue
         sides = []
-        for key in ("source", "target"):
+        for i, key in enumerate(("source", "target")):
             raw = item.get(key)
+            several = isinstance(raw, str) and (raw.count("#") > 1 or (
+                views is not None and re.search(r",|/|\band\b|\bor\b|\+", raw) is not None
+                and _side(raw, views[i], {t.lower(): t for t in views[i]["tags"]}) is None))
             parts = [p.strip() for p in re.split(r"\s*(?:,|/|\bor\b|\band\b|\+)\s*", raw)
-                     if p.strip()] if isinstance(raw, str) and raw.count("#") > 1 else []
+                     if p.strip()] if several else []
             sides.append(parts or [raw])
         for a in sides[0]:
             for b in sides[1]:
@@ -329,7 +338,7 @@ def compile_rules(
     seen_cells: set[tuple[str, str]] = set()
     seen_pairs: set[tuple[str, str]] = set()
 
-    for item in _split_sides(raw["rules"][:MAX_RULES]):
+    for item in _split_sides(raw["rules"][:MAX_RULES], (source, target)):
         s = _carried(_side(item.get("source"), source, src_tags), source)
         t = _carried(_side(item.get("target"), target, tgt_tags), target)
         shown = f"{item.get('source')} → {item.get('target')}"[:80]
@@ -339,7 +348,8 @@ def compile_rules(
             # The tags it does have, so a rebuild picks from them.
             skipped.append({"text": shown, "reason": f"the {which} isn't an option or tag"
                             + (f" (its tags: #{', #'.join(have[:12])})" if have else
-                               " (it has no tags: name options by number)")})
+                               " (it has no tags: name options by number)")
+                            + "; one option or tag per side, a rule each"})
             continue
         effect = item.get("effect")
         if effect not in EFFECTS:

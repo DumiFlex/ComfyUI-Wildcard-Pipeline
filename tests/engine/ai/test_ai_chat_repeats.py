@@ -260,3 +260,32 @@ def test_run_test_says_when_every_option_was_picked():
         {"text": f"tone {i}"} for i in range(8)]})
     out = lib.run("run_test", {"stack": ["Tones"], "seeds": 200})
     assert "All 8 options of Tones were picked" in out
+
+
+# ── round 3 ──────────────────────────────────────────────────────────────
+
+
+def test_a_constraint_side_listing_several_options_is_a_rule_each():
+    lib = _lib()
+    for target in ("2, 3", "sundress, jacket"):
+        out = lib.run("create_constraint", {"source_id": "Season", "target_id": "Outfit",
+                                            "name": f"No {target}", "rules": [
+            {"source": "#cold", "target": target, "effect": "exclude"}]})
+        assert not any("isn't an option" in w for w in out["warnings"]), target
+        excluded = {e["target"] for e in out["op"]["body"]["payload"]["exceptions"]}
+        assert excluded == {"sundress", "rain jacket"}, target
+    # One option's own text with a comma stays one option.
+    lib.modules["aaaa0001"]["payload"]["options"][0]["value"] = "wool coat, boots"
+    out = lib.run("create_constraint", {"source_id": "Season", "target_id": "Outfit",
+                                        "name": "Coat", "rules": [
+        {"source": "summer", "target": "wool coat, boots", "effect": "exclude"}]})
+    assert [e["target"] for e in out["op"]["body"]["payload"]["exceptions"]] \
+        == ["wool coat, boots"]
+
+
+def test_items_named_the_way_answers_write_them_and_tools_as_ids():
+    lib = _lib()
+    out = lib.run("run_test", {"stack": ["Season (aaaa0002)"], "seeds": 5})
+    assert "$season" in out
+    with pytest.raises(ValueError, match="'create_wildcard' is a tool, not an item"):
+        lib.run("read", {"id": "create_wildcard"})
