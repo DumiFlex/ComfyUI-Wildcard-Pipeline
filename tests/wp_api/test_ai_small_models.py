@@ -43,7 +43,8 @@ async def test_after_its_cards_a_split_step_writes_what_it_proposed(wp_client, f
          "calls": []},
     ])
     n = len(fake_llm.seen)
-    body = await _chat(wp_client, "add a war axe")
+    body = await _chat(wp_client, "add a war axe to my Weapon")
+    assert len(body["proposals"]) == 1
     assert body["message"] == "I've proposed a war axe; apply the card. The test picks it."
     assert [s["tool"] for s in body["steps"] if not s.get("think")] == [
         "read", "add_options", "run_test"]

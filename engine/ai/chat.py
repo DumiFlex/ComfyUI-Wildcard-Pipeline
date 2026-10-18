@@ -1532,6 +1532,13 @@ class Library(MoreTools, ManageTools):
             "retag": {"options": _numbered("retag", "tags")},
             "reweight": {"options": _numbered("weights", "weight")},
         }
+        if any(x["id"] == "0" for raw in asks.values() for x in next(iter(raw.values()))):
+            # Browser test: "make the blank option rarer" sent n 0, and the
+            # card changed another option while leaving the blank alone.
+            empty = next((n for n in sorted(nulls, key=int)), "")
+            raise ValueError("options are numbered from 1, as read shows them"
+                             + (f"; the empty option is number {empty}" if empty else
+                                "; this wildcard has no empty option (null_weight adds one)"))
         changes: dict[str, list[dict[str, Any]]] = {}
         skipped: list[dict[str, str]] = []
         new_tags: list[str] = []

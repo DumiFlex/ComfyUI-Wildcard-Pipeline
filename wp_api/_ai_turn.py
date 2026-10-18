@@ -897,7 +897,7 @@ def _adopt_earlier(lib: Any, log: list[dict[str, Any]], meta: dict[str, Any]) ->
 
 #: An answer saying it made a change ("I've created …").
 _CLAIMS = re.compile(r"\b(?:I(?:'ve| have)?|I've now)\s+(?:just\s+)?(?:created|made|added|built|"
-                     r"set up|saved|updated|applied)\b", re.I)
+                     r"set up|saved|updated|applied|proposed)\b", re.I)
 #: The kind of item such an answer says it made ("I've proposed a combine").
 _CLAIM_KIND = re.compile(r"\bI(?:'ve| have)?\s+(?:just\s+)?(?:created|made|added|built|set up|"
                          r"proposed)\b[^.\n]{0,80}?\b(fixed[ -]values?|combine|template|bundle|"

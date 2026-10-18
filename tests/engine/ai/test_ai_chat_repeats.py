@@ -338,3 +338,9 @@ def test_an_id_made_of_json_brackets_says_so():
     lib = _lib()
     with pytest.raises(ValueError, match="came out as JSON brackets"):
         lib.run("read", {"id": "}}] } ]} ,"})
+
+
+def test_option_zero_is_refused_with_the_numbering():
+    lib = _lib()
+    with pytest.raises(ValueError, match="numbered from 1.*no empty option"):
+        lib.run("edit_options", {"id": "aaaa0001", "weights": [{"n": 0, "weight": 1}]})

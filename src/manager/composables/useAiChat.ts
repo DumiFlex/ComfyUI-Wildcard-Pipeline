@@ -23,6 +23,7 @@
  * it. Stored chats can be reopened (`load`), the last message run again
  * (`retry`), and older turns summarised to make room (`compact`).
  */
+import { markLibraryChanged } from "./useLibraryChanged";
 import { computed, ref, shallowRef, triggerRef } from "vue";
 import { api, ApiError } from "../api/client";
 import type {
@@ -130,6 +131,7 @@ const visionModel = ref("");
 function record(pid: string, status: AiChatStatusEvent["status"], created?: string, leftOut = 0): void {
   const ev: AiChatStatusEvent = created ? { pid, status, created } : { pid, status };
   if (leftOut > 0) ev.left_out = leftOut;
+  if (status === "applied" || status === "undone") markLibraryChanged();
   pending = [...pending.filter((e) => e.pid !== pid || "fix" in e), ev];
   // Saved now too, so the chat reopens with its cards as they are.
   const id = chatId.value;

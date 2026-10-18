@@ -20,7 +20,8 @@
  * items array before handing it to ModuleListView gives us the OR
  * we actually want.
  */
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
+import { libraryVersion } from "../composables/useLibraryChanged";
 import { useRoute, useRouter } from "vue-router";
 import { useListUrlState } from "../composables/useListUrlState";
 import { useLoadError } from "../composables/useLoadError";
@@ -248,6 +249,9 @@ async function fetchAll() {
     hasLoaded.value = true;
   }
 }
+
+// A chat card applied or undone changed the library behind this list.
+watch(libraryVersion, () => { void fetchAll(); void categoryStore.fetchAll(); });
 
 onMounted(async () => {
   await Promise.all([fetchAll(), categoryStore.fetchAll()]);
