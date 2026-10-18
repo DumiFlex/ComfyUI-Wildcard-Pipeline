@@ -494,7 +494,9 @@ class MoreTools:
                 continue
             n = _num(x.get("n"), len(rules))
             if n is None:
-                warnings.append(f"Left out rule {x.get('n')}: no such rule")
+                warnings.append(f"Left out rule {x.get('n')}: no such rule (it has "
+                                f"{len(rules)} rule{'s' if len(rules) != 1 else ''}, counting "
+                                "from 1; add_rules adds a new one)")
                 continue
             compiled = ai_derivation.compile_rules(
                 {"rules": [x.get("rule")]}, catalog=self.catalog,  # type: ignore

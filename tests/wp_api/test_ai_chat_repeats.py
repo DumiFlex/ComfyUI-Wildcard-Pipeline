@@ -52,3 +52,14 @@ async def test_a_failed_change_sent_again_is_not_run_again(wp_client, fake_llm):
     results = json.dumps(fake_llm.seen[-1]["body"]["messages"][-1]["content"])
     assert "already made this exact call and it failed" in results
     assert [s["ok"] for s in out["steps"] if s["tool"] == "create_wildcard"] == [False]
+
+
+def test_a_claimed_kind_with_no_card_of_it_is_flagged():
+    from wp_api import _ai_turn
+    wild = [{"op": {"op": "create", "kind": "module", "body": {"type": "wildcard"}}}]
+    assert _ai_turn._missing_kinds("I've proposed a combine for the face.", wild) == ["combine"]
+    assert _ai_turn._missing_kinds("I've created the fixed values preset.", wild) == [
+        "fixed_values"]
+    assert _ai_turn._missing_kinds("I've proposed a new wildcard.", wild) == []
+    tmpl = [{"op": {"op": "update", "kind": "template", "id": "x"}}]
+    assert _ai_turn._missing_kinds("I have made the template tighter.", tmpl) == []

@@ -839,6 +839,11 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     if not pause and not proposals and _CLAIMS.search(message or ""):
         # The 9B said "I've created … as a fixed values module" with no card.
         message = message.rstrip() + "\n\n" + NOTHING_PROPOSED
+    elif not pause and proposals and (missing := _missing_kinds(message, proposals)):
+        # All-tools eval: "I've proposed a combine" beside a wildcard card.
+        what = " or ".join(k.replace("_", " ") for k in missing)
+        message = (message.rstrip() + f"\n\n*(No {what} card came with this answer, so no "
+                   f"{what} was made. Ask me to propose it.)*")
     # Chips for the items it names; no bare ids for the user.
     message = lib.link_items(message)
     meta["format"] = fmt
@@ -893,6 +898,21 @@ def _adopt_earlier(lib: Any, log: list[dict[str, Any]], meta: dict[str, Any]) ->
 #: An answer saying it made a change ("I've created …").
 _CLAIMS = re.compile(r"\b(?:I(?:'ve| have)?|I've now)\s+(?:just\s+)?(?:created|made|added|built|"
                      r"set up|saved|updated|applied)\b", re.I)
+#: The kind of item such an answer says it made ("I've proposed a combine").
+_CLAIM_KIND = re.compile(r"\bI(?:'ve| have)?\s+(?:just\s+)?(?:created|made|added|built|set up|"
+                         r"proposed)\b[^.\n]{0,80}?\b(fixed[ -]values?|combine|template|bundle|"
+                         r"constraint|derivation|wildcard)s?\b", re.I)
+
+
+def _missing_kinds(message: str, proposals: list[dict[str, Any]]) -> list[str]:
+    """Kinds the answer says it made that no card of this answer is."""
+    have = set()
+    for p in proposals:
+        op = p.get("op") or {}
+        have.add(str(op.get("type") or (op.get("body") or {}).get("type") or op.get("kind")))
+    said = [re.sub(r"fixed[ -]values?", "fixed_values", m.group(1).lower())
+            for m in _CLAIM_KIND.finditer(message or "")]
+    return [k for k in dict.fromkeys(said) if k not in have]
 
 
 #: Added to such an answer when no card came with it.

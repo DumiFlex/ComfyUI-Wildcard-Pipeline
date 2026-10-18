@@ -676,7 +676,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           <b>Fix all with AI</b>. Fix all applies the findings that have their own fix first,
           without the model, and sends only the rest; one the model hands back unchanged is marked
           "the AI left this unchanged", so you can fix it by hand or dismiss it instead of pressing
-          Fix all again. <b>Review with AI</b> asks the model for a second opinion. Notes
+          Fix all again. A long list goes to the model in rounds. <b>Review with AI</b> asks the
+          model for a second opinion; after Fix all it checks again, repeating the findings still
+          there and adding at most two new ones. Notes
           the planner left (items it dropped) have <b>Explain</b>, which asks the chat what they
           mean.</li>
         <li><b>Build &amp; check.</b> Each item is written in its own request, wildcards first so

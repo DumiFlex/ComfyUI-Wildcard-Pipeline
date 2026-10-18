@@ -307,3 +307,34 @@ def test_the_chat_changes_only_library_items_the_user_named():
     assert "aaaa0002" in lib.named_in("make the season wildcard warmer")
     lib.named = lib.named_in("make my Outfit warmer")
     lib.run("edit_options", {"id": "aaaa0001", "negatives": [{"n": 1, "negative": "x"}]})
+
+
+def test_wrong_kind_refusals_name_the_tool_to_use():
+    """All-tools eval: the 9B retried the wrong tool after "is a template,
+    not a wildcard", and made wildcards named "Portrait Template"."""
+    lib = _lib()
+    rule = {"branches": [{"conditions": [{"var": "season", "op": "equals",
+                                          "value": "winter"}],
+                          "actions": [{"target_var": "cue", "value": "snow"}]}]}
+    d = lib.run("create_derivation", {"name": "Cues", "rules": [rule]})
+    did = d["op"]["body"]["id"]
+    with pytest.raises(ValueError, match=r"is a derivation, not a wildcard.*use edit_rules"):
+        lib.run("add_options", {"id": did, "options": [{"text": "x"}]})
+    with pytest.raises(ValueError, match=r'names a template.*create_template.*"templates"'):
+        lib.run("create_wildcard", {"name": "Portrait Template", "var": "portrait",
+                                    "options": [{"text": "a"}]})
+    with pytest.raises(ValueError, match=r"names a fixed values.*create_fixed_values"):
+        lib.run("create_wildcard", {"name": "Quality Fixed Values", "var": "q",
+                                    "options": [{"text": "a"}]})
+    try:
+        out = lib.run("edit_rules", {"id": did, "replace": [{"n": 2, "rule": rule}]})
+        text = " ".join(out["warnings"])
+    except ValueError as e:
+        text = str(e)
+    assert "it has 1 rule, counting from 1; add_rules adds a new one" in text
+
+
+def test_an_id_made_of_json_brackets_says_so():
+    lib = _lib()
+    with pytest.raises(ValueError, match="came out as JSON brackets"):
+        lib.run("read", {"id": "}}] } ]} ,"})

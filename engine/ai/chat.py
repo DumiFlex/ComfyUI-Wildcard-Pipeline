@@ -504,6 +504,29 @@ def parse_step(raw: Any) -> tuple[str, list[dict[str, Any]]]:
     return message.strip()[:MAX_MESSAGE], calls[:MAX_CALLS_PER_STEP]
 
 
+#: The tool that changes each kind of item, and the more_tools group it's in.
+KIND_TOOLS = {"wildcard": ("edit_options", "wildcards"),
+              "derivation": ("edit_rules", "derivations"),
+              "constraint": ("edit_constraint", "constraints"),
+              "fixed_values": ("edit_values", "fixed-values"),
+              "combine": ("edit_combine", "combines"),
+              "template": ("edit_template", "templates"),
+              "bundle": ("edit_bundle", "bundles")}
+#: A wildcard name that says it is another kind ("Portrait Template").
+_OTHER_KIND = re.compile(r"\b(templates?|bundles?|fixed[ -]values?|combines?)\b", re.I)
+
+
+def use_instead(kind: str, create: bool = False) -> str:
+    """The pointer a wrong-kind refusal ends with, so the model calls the
+    right tool instead of retrying this one (all-tools eval)."""
+    tool, group = KIND_TOOLS.get(kind, ("", ""))
+    if not tool:
+        return ""
+    if create:
+        tool = "create_" + kind
+    return (f": use {tool} (if you don't have it, call more_tools with "
+            f'{{"group": "{group}"}} first)')
+
 class Library(MoreTools, ManageTools):
     """The rows one chat request may look at, plus the change compilers."""
 
@@ -767,6 +790,11 @@ class Library(MoreTools, ManageTools):
         low = key.lower().lstrip("$")
         if low in TOOLS:
             return (f"{key!r} is a tool, not an item: call {key} itself with its arguments")
+        if key and not re.search(r"\w", key):
+            # All-tools eval: read({"id": "}}] } ]} ,"}), the JSON closing
+            # brackets written as the value.
+            return (f"the {what} id came out as JSON brackets ({key!r}): write the item's "
+                    "8-character id or its name as the value")
         if low:
             for pid, p in self.earlier_proposals.items():
                 if low in str(p.get("title") or "").lower() and p.get("status") not in (
@@ -1292,6 +1320,12 @@ class Library(MoreTools, ManageTools):
             raise ValueError(f"a wildcard named {name} exists and this one sets no variable; "
                              f"give it a variable (\"var\") or a name no item has (a "
                              f"vocabulary is found by name with @{{{name}}})")
+        other = _OTHER_KIND.search(name)
+        if other:
+            word = other.group(1).lower().rstrip("s").replace(" ", "_").replace("-", "_")
+            kind = {"fixed_value": "fixed_values"}.get(word, word)
+            raise ValueError(f"{name!r} names a {kind.replace('_', ' ')}, not a wildcard"
+                             + use_instead(kind, create=True))
         texts = [str(o.get("text") or "") for o in args.get("options") or []
                  if isinstance(o, dict)]
         if _ARROW.search(name) or sum(1 for t in texts if _ARROW.search(t)) > len(texts) // 2:
@@ -1433,9 +1467,11 @@ class Library(MoreTools, ManageTools):
             other = self.get(self._bare_id(raw)) if isinstance(raw, str) else None
             if other is not None:
                 # Round 2: a constraint from the derivation it had just made.
+                kind = self._kind(other)
                 raise ValueError(
-                    f"{self._chip(other)} is a {self._kind(other).replace('_', ' ')}, not a "
-                    f"{type_.replace('_', ' ')}; this needs a {type_.replace('_', ' ')}")
+                    f"{self._chip(other)} is a {kind.replace('_', ' ')}, not a "
+                    f"{type_.replace('_', ' ')}; this needs a {type_.replace('_', ' ')}"
+                    + use_instead(kind))
             raise ValueError(self.not_found(raw, type_.replace("_", " ")))
         return r
 
