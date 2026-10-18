@@ -355,3 +355,40 @@ def test_names_in_card_style_and_ambiguous_bundle_children():
         lib.run("create_bundle", {"name": "Kit two", "items": ["Outfit", "Season"]})
     note = chat.proposal_note("edit_categories", {"pid": "p1", "title": "x", "op": {}})
     assert "update_many" in note
+
+
+def test_a_category_already_on_a_card_is_not_proposed_again():
+    # Re-test on b793872 (9B): five "Create categories" cards for Lighting in
+    # one answer, and never the update_many that files items there.
+    lib = _lib()
+    first = lib.run("edit_categories", {"create": ["Lighting"]})
+    with pytest.raises(ValueError, match=rf"already creates Lighting \(card {first['pid']}\)"
+                                         r".*update_many"):
+        lib.run("edit_categories", {"create": [{"name": "lighting", "color": "amber"}]})
+    both = lib.run("edit_categories", {"create": ["Lighting", "Weather"]})
+    assert both["op"]["create"] == ["Weather"]
+    assert any("Lighting is already on card" in w for w in both["warnings"])
+    # A card from an earlier answer counts too.
+    lib2 = _lib()
+    lib2.adopt_earlier({"pid": "p7", "op": first["op"]})
+    with pytest.raises(ValueError, match=r"card p7"):
+        lib2.run("edit_categories", {"create": ["Lighting"]})
+
+
+def test_the_empty_option_weight_can_change_by_number():
+    # Re-test on b793872: "make the blank option rarer" with the empty
+    # option's number failed the engine check on its empty value.
+    lib = _lib()
+    lib.modules["aaaa0001"]["payload"]["options"].insert(
+        0, {"id": "nul1", "value": "", "is_null": True, "weight": 1, "sub_categories": []})
+    out = lib.run("edit_options", {"id": "aaaa0001", "weights": [{"n": 1, "weight": 0.5}]})
+    row = out["op"]["body"]["payload"]["options"][0]
+    assert row["is_null"] and row["weight"] == 0.5 and row["value"] == ""
+
+
+def test_a_combine_ref_refusal_names_the_variable_to_read():
+    from engine.ai import refs
+    index = refs.RefIndex([{"id": "aaaa0001", "name": "Hair",
+                            "payload": {"var_binding": "hair", "options": []}}])
+    with pytest.raises(ValueError, match=r"write \$hair instead of @\{Hair\}, and call"):
+        refs.compile_text("@{Hair}, @{aaaa0001}, smile", surface="combine", refs=index)

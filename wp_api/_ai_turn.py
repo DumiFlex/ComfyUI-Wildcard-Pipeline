@@ -836,8 +836,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         # Chat eval round 1: "I ran a test on your Lighting wildcard" after
         # its only run_test failed.
         message = message.rstrip() + "\n\n" + NOTHING_TESTED
-    if not pause and not proposals and _CLAIMS.search(message or ""):
-        # The 9B said "I've created … as a fixed values module" with no card.
+    if not pause and not proposals and (_CLAIMS.search(message or "")
+                                        or _card_as_text(message)):
+        # The 9B said "I've created … as a fixed values module" with no card,
+        # and wrote "here's the card to apply: …" or an add_rules call as text.
         message = message.rstrip() + "\n\n" + NOTHING_PROPOSED
     elif not pause and proposals and (missing := _missing_kinds(message, proposals)):
         # All-tools eval: "I've proposed a combine" beside a wildcard card.
@@ -913,6 +915,23 @@ def _missing_kinds(message: str, proposals: list[dict[str, Any]]) -> list[str]:
     said = [re.sub(r"fixed[ -]values?", "fixed_values", m.group(1).lower())
             for m in _CLAIM_KIND.finditer(message or "")]
     return [k for k in dict.fromkeys(said) if k not in have]
+
+
+#: An answer that speaks of a card it shows, or spells a change call out.
+_CARD_WORDS = re.compile(r"\bhere(?:'s| is| are)\s+the\s+cards?\b|\bapply\s+(?:the|this|these|"
+                         r"that|those)\s+cards?\b|\bcards?\s+(?:below|above)\b|"
+                         r"\b(?:the|this)\s+cards?\s+(?:to\s+apply|shows?|is\s+ready)\b", re.I)
+
+
+def _card_as_text(message: str) -> bool:
+    """Whether an answer with no card talks as if one came with it (all-tools
+    eval: "here's the card to apply: Face Description · $face_desc", "Apply
+    the cards if they look right", an add_rules call written into the text)."""
+    text = message or ""
+    if _CARD_WORDS.search(text):
+        return True
+    names = "|".join(sorted(ai_chat.CHANGE_TOOLS))
+    return bool(re.search(rf"[\"'](?:{names})[\"']|\b(?:{names})\s*[({{]", text))
 
 
 #: Added to such an answer when no card came with it.

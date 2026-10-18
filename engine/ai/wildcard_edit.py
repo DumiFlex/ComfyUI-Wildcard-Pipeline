@@ -303,6 +303,9 @@ def _validate_changed(
                 if t in registry or t in new_tags
             ],
         }
+        if o.get("is_null"):
+            # The empty option: only its weight can change.
+            row["is_null"] = True
         rows.append(row)
     if rows:
         WildcardHandler.validate_payload({

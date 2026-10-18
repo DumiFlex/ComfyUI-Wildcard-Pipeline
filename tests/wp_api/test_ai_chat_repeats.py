@@ -63,3 +63,13 @@ def test_a_claimed_kind_with_no_card_of_it_is_flagged():
     assert _ai_turn._missing_kinds("I've proposed a new wildcard.", wild) == []
     tmpl = [{"op": {"op": "update", "kind": "template", "id": "x"}}]
     assert _ai_turn._missing_kinds("I have made the template tighter.", tmpl) == []
+
+
+def test_a_card_written_as_text_counts_as_a_claim():
+    from wp_api import _ai_turn
+    # Re-test on b793872 (9B): no card came with any of these.
+    assert _ai_turn._card_as_text("Here's the card to apply: Face Description · $face_desc")
+    assert _ai_turn._card_as_text("Apply the cards if they look right.")
+    assert _ai_turn._card_as_text('{"tool": "add_rules", "args": {"id": "aaaa0001"}}')
+    assert _ai_turn._card_as_text("add_rules({id: 1})")
+    assert not _ai_turn._card_as_text("Your wildcard has 3 options; edit_rules can change it.")

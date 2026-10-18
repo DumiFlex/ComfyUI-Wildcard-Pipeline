@@ -376,3 +376,29 @@ def test_a_draft_missing_an_asked_variable_says_so():
                                     "read $quality_tags, $char_desc and $expression") == (
         "Doesn't read $quality_tags, which you asked for")
     assert text_items.missing_asked("$a $b", "use $a and $b") == ""
+
+
+def test_values_wrapped_in_quotes_lose_them():
+    # Re-test on b793872 (9B): every $iteration rule wrote "'establishing shot'".
+    out = ai_derivation.compile_rules({"rules": [{"branches": [{
+        "conditions": [{"var": "iteration", "op": "equals", "value": "1"}],
+        "actions": [{"target_var": "shot", "value": "'establishing shot'"}]}],
+        "else_actions": [{"target_var": "shot", "value": "“close-up”"}]}]},
+        catalog={})
+    rule = out["rules"][0]["rule"]
+    assert rule["branches"][0]["action"]["value"] == "establishing shot"
+    assert rule["else"]["action"]["value"] == "close-up"
+    assert ai_derivation._unquote("say 'hi' and 'bye'") == "say 'hi' and 'bye'"
+
+
+def test_a_dropped_catch_all_is_warned_about():
+    # Re-test on b793872 (9B): "anyone else Adventurer" came back with no ELSE.
+    branch = {"branches": [{"conditions": [{"var": "class", "op": "equals", "value": "mage"}],
+                            "actions": [{"target_var": "title", "value": "Archmage"}]}]}
+    rules = [x["rule"] for x in ai_derivation.compile_rules({"rules": [branch]},
+                                                            catalog={})["rules"]]
+    asked = "mage gets Archmage, anyone else gets Adventurer"
+    assert "anyone else" in ai_derivation.missing_else(asked, rules)
+    assert ai_derivation.missing_else("mage gets Archmage", rules) == ""
+    with_else = [{**rules[0], "else": {"action": {"target_var": "title", "value": "x"}}}]
+    assert ai_derivation.missing_else(asked, with_else) == ""

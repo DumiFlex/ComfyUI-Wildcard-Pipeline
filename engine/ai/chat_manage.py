@@ -94,6 +94,7 @@ class ManageTools:
     category_rows: dict[str, dict[str, Any]]
     tags: list[str]
     allow_delete: bool
+    proposed_categories: dict[str, tuple[str, str]]
 
     def _rows(self) -> list[tuple[str, dict[str, Any]]]:
         return [*(("module", r) for r in self.modules.values()),
@@ -129,6 +130,8 @@ class ManageTools:
     def edit_categories(self, args: dict[str, Any]) -> dict[str, Any]:
         creates: list[str] = []
         notes: list[str] = []
+        #: Creates an unapplied card already makes: name -> pid.
+        already: dict[str, str] = {}
         seen: set[str] = set()
         #: Colors and icons to set: on a new category by name, on one that
         #: exists by id with what it had (for Undo).
@@ -155,6 +158,12 @@ class ManageTools:
             if self._category_by_name(name):
                 notes.append(f"{name} exists already")
                 continue
+            on_card = (getattr(self, "proposed_categories", None) or {}).get(name.lower())
+            if on_card:
+                # Re-test on b793872: the 9B proposed "Lighting" five times in
+                # one answer and never moved anything into it.
+                already[on_card[1]] = on_card[0]
+                continue
             if not any(ch.isalnum() for ch in name):
                 notes.append(f"{name!r} needs a letter or digit")
                 continue
@@ -180,6 +189,12 @@ class ManageTools:
             renames.append({"id": cat["id"], "from": cat["name"], "to": to})
         if len(creates) + len(renames) > MAX_RENAMES:
             raise ValueError(f"at most {MAX_RENAMES} creates and renames per call; split it")
+        if not creates and not renames and not styles and already:
+            names = ", ".join(f"{n} (card {p})" for n, p in list(already.items())[:5])
+            raise ValueError(f"a card already creates {names}; don't propose it again. To "
+                             "file items there, call update_many with that category name "
+                             "now (it works before the card is applied); otherwise answer")
+        notes += [f"{n} is already on card {p}" for n, p in already.items()]
         if not creates and not renames and not styles:
             raise ValueError("that changes nothing" + (f" ({'; '.join(notes)})" if notes else ""))
         looks = {st["name"].lower(): st for st in styles}

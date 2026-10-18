@@ -258,6 +258,19 @@ def compile_refs(text: str, index: RefIndex | None, *, self_id: str | None = Non
     return _NAMED_REF.sub(sub, text)
 
 
+def _read_instead(text: str, refs: RefIndex | None) -> str:
+    """How to write each @{…} as the variable its wildcard sets (all-tools
+    eval: the 9B wrote @{Hair} in a combine, read the refusal and gave up)."""
+    swaps: dict[str, str] = {}
+    for m in _NAMED_REF.finditer(text):
+        row = refs.find(m.group(1)) if refs else None
+        var = str((row or {}).get("payload", {}).get("var_binding") or "")
+        if var and var not in swaps:
+            swaps[var] = f"write ${var} instead of {m.group(0)}"
+    lines = list(swaps.values())
+    return ("; " + ", ".join(lines[:4]) + ", and call the tool again") if lines else ""
+
+
 def compile_text(
     text: str, *, surface: str, refs: RefIndex | None = None, self_id: str | None = None,
 ) -> str:
@@ -269,7 +282,8 @@ def compile_text(
     text = _DP_COUNT.sub(r"{\1$$, $$\2}", text)
     if "@{" in text:
         if not allow_ref:
-            raise ValueError(_WHY_NO_REF.get(surface, "no @{…} here"))
+            raise ValueError(_WHY_NO_REF.get(surface, "no @{…} here")
+                             + (_read_instead(text, refs) if allow_var else ""))
         text = compile_refs(text, refs, self_id=self_id)
     for tok in tokenize_text(text):
         if tok.kind is TokenKind.VAR and not allow_var:

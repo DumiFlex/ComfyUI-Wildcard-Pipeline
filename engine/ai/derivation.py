@@ -517,6 +517,38 @@ def unset_note(var: str) -> str:
             "or an earlier Context sets it)")
 
 
+#: Quote pairs a small model wraps a whole value in.
+_QUOTES = {'"': '"', "'": "'", "\u201c": "\u201d", "\u2018": "\u2019", "`": "`"}
+
+
+def _unquote(value: str) -> str:
+    """A value written inside its own quotes, without them. Re-test (9B):
+    every $iteration rule set $shot to "'establishing shot'", which prints
+    the quotes. One with quotes inside ("say 'hi' and 'bye'") stays."""
+    while len(value) >= 2 and _QUOTES.get(value[0]) == value[-1] \
+            and value[0] not in value[1:-1] and value[-1] not in value[1:-1]:
+        value = value[1:-1].strip()
+    return value
+
+
+#: A request for a catch-all: what everyone the branches don't match gets.
+_CATCH_ALL = re.compile(r"\b(?:any(?:one|body|thing)|every(?:one|body|thing)|all|the)\s+"
+                        r"(?:else|others?)\b|\botherwise\b|\bfor\s+the\s+rest\b|"
+                        r"\bby\s+default\b|\bif\s+none\b|\bin\s+all\s+other\s+cases\b",
+                        re.I)
+
+
+def missing_else(asked: str, rules: list[dict[str, Any]]) -> str:
+    """A warning when the request asks for a catch-all ("anyone else gets
+    Adventurer") and no rule has an ELSE, or "". Re-test (9B): all three
+    drafts kept the mage and warrior branches and dropped the rest quietly."""
+    m = _CATCH_ALL.search(asked or "")
+    if not m or any(isinstance(r.get("else"), dict) for r in rules):
+        return ""
+    return (f"You asked for \"{m.group(0)}\", but no rule has an ELSE for it; "
+            "add one, or ask again")
+
+
 def _compile_actions(
     raw: Any, catalog: dict[str, dict[str, Any]], warnings: list[str],
     refs: ai_refs.RefIndex | None = None,
@@ -530,7 +562,7 @@ def _compile_actions(
             raise _Drop(f"{a.get('target_var')!r} isn't a variable name")
         mode = a.get("mode") if a.get("mode") in _VALID_MODES else "replace"
         value = a.get("value") if isinstance(a.get("value"), str) else ""
-        value = re.sub(r"\s+", " ", value).strip()[:MAX_VALUE_LEN]
+        value = _unquote(re.sub(r"\s+", " ", value).strip())[:MAX_VALUE_LEN]
         # The engine joins append / prepend text as written: "tie" + "watch"
         # is "tiewatch". A list piece gets its comma.
         if value and mode == "append" and not re.match(r"[,;.\s]", value):

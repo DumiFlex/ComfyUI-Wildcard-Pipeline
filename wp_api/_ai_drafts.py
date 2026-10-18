@@ -311,6 +311,9 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
             status=502,
         )
+    gone = ai_derivation.missing_else(instruction, [x["rule"] for x in result["rules"]])
+    if gone:
+        result["skipped"] = [*result["skipped"], {"text": "a catch-all", "reason": gone}]
     result["model"] = cfg["model"]
     result["answer"] = answer
     return json_ok(result)

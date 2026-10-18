@@ -566,6 +566,9 @@ class Library(MoreTools, ManageTools):
         self._earlier_ops: dict[str, dict[str, Any]] = {}
         #: Cards replaced by a repeat of them (`_take_place`): old pid -> new.
         self.replaced: dict[str, str] = {}
+        #: Categories an unapplied card creates: lower-case name -> (pid,
+        #: name), so the same create isn't proposed again (`edit_categories`).
+        self.proposed_categories: dict[str, tuple[str, str]] = {}
         self._next_pid = 0
         #: Proposals from earlier answers in this chat: pid -> {title, status}.
         self.earlier_proposals: dict[str, dict[str, Any]] = {}
@@ -1518,7 +1521,7 @@ class Library(MoreTools, ManageTools):
         shown = [
             {"id": str(n), "value": "" if o.get("is_null") else str(o.get("value") or ""),
              "weight": o.get("weight", 1), "sub_categories": list(o.get("sub_categories") or []),
-             "negative": o.get("negative") or ""}
+             "negative": o.get("negative") or "", **({"is_null": True} if o.get("is_null") else {})}
             for n, o in enumerate(opts, start=1)
         ]
         registry = [t for t in old.get("sub_categories") or [] if isinstance(t, str)]
@@ -1996,6 +1999,9 @@ class Library(MoreTools, ManageTools):
         op = proposal.get("op") or {}
         body = op.get("body") if isinstance(op.get("body"), dict) else None
         pid = proposal.get("pid")
+        if op.get("op") == "categories" and isinstance(pid, str):
+            self._note_categories(op, pid)
+            return
         if (op.get("op") != "create" or op.get("kind") != "module" or body is None
                 or not isinstance(body.get("id"), str) or not isinstance(pid, str)
                 or body["id"] in self.modules):
@@ -2008,6 +2014,11 @@ class Library(MoreTools, ManageTools):
         # for it: its id is reserved, but it exists only once applied.
         self._created[iid] = pid
         self._catalog = None
+
+    def _note_categories(self, op: dict[str, Any], pid: str) -> None:
+        for name in op.get("create") or []:
+            if isinstance(name, str) and name.strip():
+                self.proposed_categories.setdefault(name.strip().lower(), (pid, name.strip()))
 
     def _pointed_at(self, name: str, item_id: str) -> bool:
         """Whether any item (or a card of this chat) points at the wildcard
@@ -2102,6 +2113,8 @@ class Library(MoreTools, ManageTools):
         pid = f"p{self._next_pid}"
         proposal = {"pid": pid, "tool": tool, **proposal, "after": after}
         op = proposal["op"]
+        if op["op"] == "categories":
+            self._note_categories(op, pid)
         if op["op"] == "update" and op["id"] == self.editor_id:
             # Built on the editor's unsaved version: it goes into the editor.
             op["basis"] = "editor"
