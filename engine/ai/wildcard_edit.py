@@ -59,6 +59,22 @@ SCHEMAS: dict[str, dict[str, Any]] = {
     "reweight": _list_of("options", {"id": _ID, "weight": {"type": "number"}}),
 }
 
+
+def schema_for(action: str, ids: list[str]) -> dict[str, Any]:
+    """The action's schema with ``id`` as one of the numbers sent. A small
+    local model under a grammar couldn't put a number inside a JSON string:
+    the 9B wrote "", "},{" or prose there every time, and wrote the right
+    numbers once the field was an integer enum (browser test 2026-10-18).
+    ``compile_edit`` takes the integers."""
+    if not ids or not all(i.isdigit() for i in ids):
+        return SCHEMAS[action]
+    key, fields = {"remove": ("remove", {"reason": {"type": "string"}}),
+                   "rewrite": ("options", {"text": {"type": "string"}}),
+                   "retag": ("options", {"tags": {"type": "array",
+                                                  "items": {"type": "string"}}}),
+                   "reweight": ("options", {"weight": {"type": "number"}})}[action]
+    return _list_of(key, {"id": {"type": "integer", "enum": [int(i) for i in ids]}, **fields})
+
 _BASE = """\
 You edit wildcard lists for Wildcard Pipeline, a ComfyUI extension that builds \
 image-generation prompts. A wildcard is a list of interchangeable options; each \

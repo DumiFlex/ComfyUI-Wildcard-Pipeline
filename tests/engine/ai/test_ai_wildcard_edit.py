@@ -88,3 +88,18 @@ def test_wrong_shape_raises():
         ed.compile_edit("remove", {"options": []}, options=OPTS, registry=REG)
     with pytest.raises(ValueError):
         ed.compile_edit("nope", {}, options=OPTS, registry=REG)
+
+
+def test_ids_are_integer_choices_for_small_models():
+    """The 9B under LM Studio's grammar wrote "", "},{" or prose into a
+    string id; as an integer enum it named the right options."""
+    s = ed.schema_for("remove", ["1", "2", "3"])
+    item = s["properties"]["remove"]["items"]
+    assert item["properties"]["id"] == {"type": "integer", "enum": [1, 2, 3]}
+    assert item["required"] == ["id", "reason"]
+    assert ed.schema_for("reweight", ["a1"]) == ed.SCHEMAS["reweight"]
+    from engine.ai import organize
+    o = organize.schema_for(["1", "2"])["properties"]["items"]["items"]
+    assert o["properties"]["id"] == {"type": "integer", "enum": [1, 2]}
+    assert organize.SCHEMA["properties"]["items"]["items"]["properties"]["id"] == {
+        "type": "string"}

@@ -217,7 +217,8 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
         answer = await _ask(
             cfg, first=first, turns=turns, instruction=instruction,
             system=webs.system(ai_edit.system_prompt(action)),
-            schema=webs.schema(ai_edit.SCHEMAS[action]), schema_name=f"wildcard_{action}",
+            schema=webs.schema(ai_edit.schema_for(action, [r["id"] for r in rows])),
+            schema_name=f"wildcard_{action}",
             # Edits should be faithful to the request, not creative.
             temperature=0.3,
             images=images or None, extra=webs.note,
@@ -602,7 +603,8 @@ async def post_organize(request: web.Request) -> web.Response:
     try:
         answer = await _ask(
             cfg, first=first, turns=turns, instruction=hint,
-            system=ai_organize.SYSTEM_PROMPT, schema=ai_organize.SCHEMA,
+            system=ai_organize.SYSTEM_PROMPT,
+            schema=ai_organize.schema_for([it["id"] for it in items]),
             schema_name="organize", temperature=0.3,
         )
     except _ai_client.AIError as e:
