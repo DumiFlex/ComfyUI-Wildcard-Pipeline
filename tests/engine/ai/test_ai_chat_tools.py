@@ -109,7 +109,7 @@ def test_fixed_values_create_and_edit():
     assert row["id"] == "v1" and row["value"] == "best quality" and row["negative"] == "lowres"
     assert e["after"] is None
     e2 = lib.run("edit_values", {"id": "aaaa0005", "remove": ["$quality"]})
-    assert e2["after"] == e["pid"] and e2["op"]["body"]["payload"]["values"] == []
+    assert e2["replaces"] == e["pid"] and e2["op"]["body"]["payload"]["values"] == []
 
 
 def test_combine_create_and_edit():
@@ -258,7 +258,9 @@ def test_edit_bundle():
     assert kids[-1]["id"] == "aaaa0006"
     assert p["op"]["before"]["children"][1]["instance"] == {"pick_min": 1, "pick_max": 2}
     r = lib.run("edit_bundle", {"id": "bbbb0001", "remove": [1]})
-    assert r["after"] == p["pid"] and len(r["op"]["body"]["children"]) == 2
+    # Folded into the first card: one card with both changes.
+    assert r["replaces"] == p["pid"] and len(r["op"]["body"]["children"]) == 2
+    assert r["op"]["before"]["children"][1]["instance"] == {"pick_min": 1, "pick_max": 2}
 
 
 def test_run_test_reports_values_never_picked_and_prompts():

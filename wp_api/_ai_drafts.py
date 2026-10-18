@@ -228,7 +228,7 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     answer, research = webs.take(answer)
     try:
         result = ai_edit.compile_edit(action, answer, options=rows, registry=tags,
-                                      refs=refs, self_id=self_id)
+                                      refs=refs, self_id=self_id, labels=labels)
     except ValueError as e:
         return json_error(
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",

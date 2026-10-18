@@ -107,3 +107,17 @@ def test_update_info_is_low_risk_unless_it_changes_the_rating():
     lib = _lib()
     assert lib.run("update_info", {"id": "Season", "tags_add": ["cold"]})["risk"] == "low"
     assert "risk" not in lib.run("update_info", {"id": "Outfit", "rating": "nsfw"})
+
+
+def test_update_many_skips_items_an_earlier_card_already_moves():
+    # Re-test on 367a6a5 (9B): "Change 9 items: Logic & Rules (new)" and then
+    # the same move for 8 of them.
+    lib = _lib()
+    first = lib.run("update_many", {"ids": ["aaaa0001", "aaaa0002"], "category": "Logic"})
+    with pytest.raises(ValueError, match=rf"card {first['pid']} already makes this change"):
+        lib.run("update_many", {"ids": ["aaaa0002"], "category": "logic"})
+    more = lib.run("update_many", {"ids": ["aaaa0002", "aaaa0003"], "category": "Logic"})
+    assert [it["id"] for it in more["op"]["items"]] == ["aaaa0003"]
+    # Another new category is another change.
+    other = lib.run("update_many", {"ids": ["aaaa0002"], "category": "Weather"})
+    assert [it["id"] for it in other["op"]["items"]] == ["aaaa0002"]

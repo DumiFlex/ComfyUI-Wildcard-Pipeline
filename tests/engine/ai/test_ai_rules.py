@@ -402,3 +402,26 @@ def test_a_dropped_catch_all_is_warned_about():
     assert ai_derivation.missing_else("mage gets Archmage", rules) == ""
     with_else = [{**rules[0], "else": {"action": {"target_var": "title", "value": "x"}}}]
     assert ai_derivation.missing_else(asked, with_else) == ""
+
+
+def test_a_catch_all_split_into_a_second_rule_joins_the_first():
+    # Re-test on 367a6a5 (9B): "mage → Archmage" then "warrior → Champion,
+    # else Adventurer" as two rules, so every mage ended up an Adventurer.
+    def branch(cls, title):
+        return {"conditions": [{"var": "class", "op": "equals", "value": cls}],
+                "actions": [{"target_var": "title", "value": title}]}
+    out = ai_derivation.compile_rules({"rules": [
+        {"branches": [branch("mage", "Archmage")]},
+        {"branches": [branch("warrior", "Champion")],
+         "else_actions": [{"target_var": "title", "value": "Adventurer"}]}]}, catalog={})
+    assert len(out["rules"]) == 1
+    rule = out["rules"][0]["rule"]
+    assert [b["action"]["value"] for b in rule["branches"]] == ["Archmage", "Champion"]
+    assert rule["else"]["action"]["value"] == "Adventurer"
+    # Rules on different variables stay apart.
+    apart = ai_derivation.compile_rules({"rules": [
+        {"branches": [branch("mage", "Archmage")]},
+        {"branches": [{"conditions": [{"var": "season", "op": "equals", "value": "winter"}],
+                       "actions": [{"target_var": "title", "value": "Frost"}]}],
+         "else_actions": [{"target_var": "title", "value": "Wanderer"}]}]}, catalog={})
+    assert len(apart["rules"]) == 2

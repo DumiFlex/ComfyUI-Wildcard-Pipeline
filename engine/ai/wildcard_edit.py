@@ -168,8 +168,11 @@ def _clean_weight(raw: Any) -> float | int | None:
 def compile_edit(
     action: str, raw: Any, *, options: list[dict[str, Any]], registry: list[str],
     refs: ai_refs.RefIndex | None = None, self_id: str | None = None,
+    labels: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Check the model's answer against the options it was shown.
+    """Check the model's answer against the options it was shown. ``labels``
+    are the wildcard's own (library) tags: a retag never copies one onto an
+    option unless it is an option tag too.
 
     Returns ``{"changes": [...], "new_tags": [...], "skipped": [...]}``. Each
     change is ``{"id", "before": {...}, "after": {...}}`` for the edited
@@ -185,6 +188,7 @@ def compile_edit(
 
     by_id = {o["id"]: o for o in options}
     registry_lower = {t.lower(): t for t in registry}
+    label_set = {t.lower() for t in labels or []} - set(registry_lower)
     changes: list[dict[str, Any]] = []
     new_tags: list[str] = []
     skipped: list[dict[str, str]] = []
@@ -252,6 +256,13 @@ def compile_edit(
             for raw_tag in item.get("tags") or []:
                 tag = _clean_tag(raw_tag)
                 if tag is None:
+                    continue
+                if tag.lower() in label_set:
+                    # Re-test (9B): the wildcard's library tag "axis" went on
+                    # every option.
+                    if not any(x["text"] == tag for x in skipped):
+                        skipped.append({"text": tag, "reason": "it is the wildcard's own "
+                                        "library tag, not an option tag"})
                     continue
                 tag = registry_lower.get(tag.lower(), tag)
                 if tag not in registry and tag not in new_tags:

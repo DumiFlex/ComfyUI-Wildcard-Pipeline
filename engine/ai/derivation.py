@@ -309,7 +309,9 @@ def _tidy_rules(rules: list[Any]) -> list[Any]:
       becomes the ELSE of the rule before it when that one has none, goes
       when it repeats that ELSE, and otherwise sets its variables only when
       they are still empty (an ``is_empty`` test), which is what a default
-      means.
+      means;
+    - a rule with only branches, followed by one testing the same variables
+      that adds more branches and an ELSE, is one rule (`_continues`).
 
     Notes on what changed ride along as ``_notes`` (shown as skipped)."""
     out: list[dict[str, Any]] = []
@@ -338,8 +340,32 @@ def _tidy_rules(rules: list[Any]) -> list[Any]:
                 item = {"summary": item.get("summary"), "branches": [{
                     "match": "any", "conditions": [{"var": targets[0], "op": "is_empty"}],
                     "actions": acts}]}
+        if prev is not None and _continues(prev, item):
+            out[-1] = {**prev, "branches": [*prev["branches"], *item["branches"]],
+                       "else_actions": item["else_actions"]}
+            continue
         out.append(item)
     return out
+
+
+def _tested(item: dict[str, Any]) -> set[str]:
+    return {v for b in item.get("branches") or [] if isinstance(b, dict)
+            for c in b.get("conditions") or [] if isinstance(c, dict)
+            for v in [_var_name(c.get("var"))] if v}
+
+
+def _continues(prev: dict[str, Any], item: dict[str, Any]) -> bool:
+    """Whether ``item`` is the rest of ``prev`` split off. Re-test (9B):
+    "mage → Archmage" as one rule, then "warrior → Champion, else
+    Adventurer" as the next; rules run in order, so that ELSE overwrote the
+    mage's title. Both test the same variables, write the same ones, and the
+    first has no ELSE of its own."""
+    if prev.get("else_actions") or not prev.get("branches") \
+            or not item.get("branches") or not item.get("else_actions"):
+        return False
+    tested = _tested(prev)
+    return bool(tested) and tested == _tested(item) \
+        and set(_answer_targets(prev)) <= set(_answer_targets(item))
 
 
 def _join_branches(raw: Any) -> list[Any]:

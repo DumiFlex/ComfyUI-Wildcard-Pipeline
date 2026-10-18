@@ -111,3 +111,17 @@ def test_rewrite_drops_the_note_the_prompt_puts_after_an_option():
         {"id": "2", "text": "blue hoodie [tags playful]"},
     ]}, options=OPTS, registry=REG)
     assert [c["after"]["value"] for c in out["changes"]] == ["crimson cloak", "blue hoodie"]
+
+
+def test_retag_leaves_the_wildcards_own_library_tags_off_options():
+    # Re-test on 367a6a5 (9B): the wildcard's library tag "axis" went on
+    # every option.
+    opts = [{"id": "1", "value": "smirk", "weight": 1, "sub_categories": []}]
+    out = ed.compile_edit("retag", {"options": [{"id": 1, "tags": ["axis", "playful"]}]},
+                               options=opts, registry=["playful"], labels=["axis", "face"])
+    assert out["changes"][0]["after"]["tags"] == ["playful"]
+    assert any("library tag" in s["reason"] for s in out["skipped"])
+    # A label that is also an option tag stays.
+    both = ed.compile_edit("retag", {"options": [{"id": 1, "tags": ["axis"]}]},
+                                options=opts, registry=["axis"], labels=["axis"])
+    assert both["changes"][0]["after"]["tags"] == ["axis"]

@@ -42,7 +42,7 @@ from engine.ai import use as ai_use
 from engine.ai import vocab as ai_vocab
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_wildcard_edit
-from engine.ai.chat_manage import ManageTools
+from engine.ai.chat_manage import ManageTools, bulk_key
 from engine.ai.chat_tools import MoreTools, _num, _reach, _reach_text
 from engine.modules.constraint_handler import ConstraintHandler
 from engine.modules.derivation_handler import DerivationHandler
@@ -211,6 +211,25 @@ def stalls(said: str, user_text: str, last_answer: str) -> bool:
         return True
     norm = lambda t: re.sub(r"\W+", " ", t or "").strip().lower()  # noqa: E731
     return bool(last_answer) and norm(said) == norm(last_answer)
+
+
+#: "I'll use add_rules to add a new rule." with no call after it.
+_PROMISES = re.compile(r"\b(?:I(?:'ll| will| am going to|'m going to)|let me)\s+(?:now\s+)?"
+                       r"(?:use|call|try|run)\s+(?:the\s+)?`?([a-z_]+)`?", re.I)
+
+
+def promised_call(said: str) -> str:
+    """The change tool an answer with no calls says it will call, or "".
+    Re-test on 367a6a5 (9B): "I'll use add_rules…" ended the turn."""
+    for m in _PROMISES.finditer(said or ""):
+        if m.group(1).lower() in CHANGE_TOOLS:
+            return m.group(1).lower()
+    return ""
+
+
+def promise_nudge(tool: str) -> str:
+    return (f"You said you'd call {tool}, but you made no call, so nothing was proposed. "
+            f"Call {tool} now with its arguments (not as text in your message).")
 
 
 TOOLS = READ_TOOLS + CHANGE_TOOLS
@@ -569,6 +588,11 @@ class Library(MoreTools, ManageTools):
         #: Categories an unapplied card creates: lower-case name -> (pid,
         #: name), so the same create isn't proposed again (`edit_categories`).
         self.proposed_categories: dict[str, tuple[str, str]] = {}
+        #: Each item change an update_many card of this answer makes
+        #: (`chat_manage.bulk_key`) -> its pid.
+        self.bulk_cards: dict[tuple[str, str], str] = {}
+        #: This answer's cards by pid (`_fold`).
+        self._answer_cards: dict[str, dict[str, Any]] = {}
         self._next_pid = 0
         #: Proposals from earlier answers in this chat: pid -> {title, status}.
         self.earlier_proposals: dict[str, dict[str, Any]] = {}
@@ -1555,7 +1579,8 @@ class Library(MoreTools, ManageTools):
                 continue
             out = ai_wildcard_edit.compile_edit(action, raw, options=shown,
                                                 registry=registry + new_tags,
-                                                refs=self.refs, self_id=r["id"])
+                                                refs=self.refs, self_id=r["id"],
+                                                labels=list(r.get("tags") or []))
             got = out["changes"]
             if action in ("rewrite", "retag"):
                 skipped += [{"text": "the empty option", "reason": "it has no text"}
@@ -2115,6 +2140,10 @@ class Library(MoreTools, ManageTools):
         op = proposal["op"]
         if op["op"] == "categories":
             self._note_categories(op, pid)
+        if op["op"] == "bulk":
+            new_cat = op.get("new_category") or ""
+            for it in op.get("items") or []:
+                self.bulk_cards.setdefault(bulk_key(it["id"], it["body"], new_cat), pid)
         if op["op"] == "update" and op["id"] == self.editor_id:
             # Built on the editor's unsaved version: it goes into the editor.
             op["basis"] = "editor"
@@ -2133,6 +2162,8 @@ class Library(MoreTools, ManageTools):
             self._replace_earlier(proposal)
             if proposal.get("replaces"):
                 return proposal
+        elif self._fold(proposal):
+            after = proposal.get("after")
         # A change that points at an item proposed earlier in this answer
         # (a constraint between two new wildcards, a bundle of new modules)
         # waits for that one: its id only exists once it is applied.
@@ -2186,7 +2217,34 @@ class Library(MoreTools, ManageTools):
         notes = [w for w in proposal["warnings"] if isinstance(w, str) and _NOTE.match(w)]
         if notes:
             proposal["notes"] = notes
+        self._answer_cards[pid] = proposal
         return proposal
+
+    def _fold(self, proposal: dict[str, Any]) -> bool:
+        """Fold a second change to the same item by the same tool in this
+        answer into one card: it was built on the first card's result, so it
+        holds both changes. Re-test on 367a6a5 (9B): edit_bundle three times,
+        two near-identical cards left on screen."""
+        op = proposal["op"]
+        prev = self._answer_cards.get(str(proposal.get("after")))
+        prev_op = (prev or {}).get("op") or {}
+        if (prev is None or op.get("op") != "update" or prev.get("tool") != proposal["tool"]
+                or prev_op.get("op") != "update" or prev_op.get("id") != op.get("id")):
+            return False
+        op["body"] = {**copy.deepcopy(prev_op.get("body") or {}), **(op.get("body") or {})}
+        if "before" in prev_op:
+            op["before"] = copy.deepcopy(prev_op["before"])
+        proposal["preview"] = list(dict.fromkeys(
+            [*(prev.get("preview") or []), *(proposal.get("preview") or [])]))
+        start = re.match(r"(\d+) → ", str(prev.get("summary") or ""))
+        end = re.match(r"\d+ → (.*)", str(proposal.get("summary") or ""))
+        if start and end:
+            proposal["summary"] = f"{start.group(1)} → {end.group(1)}"
+        proposal["replaces"] = prev["pid"]
+        proposal["after"] = prev.get("after")
+        if prev.get("needs"):
+            proposal["needs"] = prev["needs"]
+        return True
 
 
 #: Card warnings that only tell the user something (what was kept, what to

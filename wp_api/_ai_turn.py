@@ -416,6 +416,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     forced = False
     checked = False
     nudged = False
+    #: The step whose create calls were turned to plan_pack (`PACK_FIRST`).
+    steered_at: int | None = None
     empty_nudged = False
     #: Ask the next step with the model's thinking off: set by the empty
     #: nudge, since a thinking model that came back empty once tends to
@@ -651,6 +653,15 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                                   "label": label})
                     steps.append({"tool": tool, "note": label, "ok": True})
                     continue
+                if (tool.startswith("create_") and steered_at in (None, step)
+                        and _PACK_ASK.search(text or "")
+                        and "plan_pack" in (meta.get("tools") or [])
+                        and not any(c["tool"] == "plan_pack" for c in calls)
+                        and not any(p_["tool"] == "plan_pack" for p_ in proposals)):
+                    # Every eval run: "plan a pack" made 2-3 loose items and
+                    # never the Pack builder, which plans and checks a pack.
+                    steered_at = step
+                    raise ValueError(PACK_FIRST)
                 key = tool + _json.dumps(args, sort_keys=True, ensure_ascii=False)
                 if tool not in ai_chat.CHANGE_TOOLS and key in seen:
                     # Small models re-run the same search every step.
@@ -772,6 +783,13 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 nudged = True
                 set_aside, message = said, ""
                 new.append(ai_chatlog.note_entry(ai_chat.UNFINISHED_NUDGE))
+                continue
+            promised = ai_chat.promised_call(said)
+            if (not calls and not proposals and not nudged and promised
+                    and step < ai_chat.MAX_STEPS):
+                nudged = True
+                set_aside, message = said, ""
+                new.append(ai_chatlog.note_entry(ai_chat.promise_nudge(promised)))
                 continue
             # Asked leave instead of proposing, or met "yes" with more talk:
             # tell it once to act. Small models loop on "Should I proceed?".
@@ -932,6 +950,14 @@ def _card_as_text(message: str) -> bool:
         return True
     names = "|".join(sorted(ai_chat.CHANGE_TOOLS))
     return bool(re.search(rf"[\"'](?:{names})[\"']|\b(?:{names})\s*[({{]", text))
+
+
+#: A message asking for a whole pack.
+_PACK_ASK = re.compile(r"\b(?:plan|make|build|create|design|set up|start)\b[^.?!\n]{0,40}"
+                       r"\bpacks?\b", re.I)
+PACK_FIRST = ("the user asked for a whole pack: call plan_pack with its description (what "
+              "it makes, its parts and its rules) so the Pack builder plans, checks and "
+              "builds it. Only if they asked for just these few items, call this again")
 
 
 #: Added to such an answer when no card came with it.

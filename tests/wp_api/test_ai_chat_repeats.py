@@ -73,3 +73,50 @@ def test_a_card_written_as_text_counts_as_a_claim():
     assert _ai_turn._card_as_text('{"tool": "add_rules", "args": {"id": "aaaa0001"}}')
     assert _ai_turn._card_as_text("add_rules({id: 1})")
     assert not _ai_turn._card_as_text("Your wildcard has 3 options; edit_rules can change it.")
+
+
+async def test_a_promised_call_that_never_came_is_asked_for_once(wp_client, fake_llm):
+    # Re-test on 367a6a5 (9B): "I'll use add_rules…" and the turn ended.
+    _on(fake_llm)
+    fake_llm.chat_steps.extend([
+        {"message": "I'll use create_wildcard to add the style list.", "calls": []},
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(STYLE)}]},
+        {"message": "Proposed Model Style Tags.", "calls": []},
+    ])
+    out = await _chat(wp_client, "Make a style wildcard.")
+    sent = json.dumps(fake_llm.seen[1]["body"]["messages"])
+    assert "You said you'd call create_wildcard" in sent
+    assert [p["tool"] for p in out["proposals"]] == ["create_wildcard"]
+
+
+def test_promised_call_names_only_change_tools():
+    from engine.ai import chat
+    assert chat.promised_call("Got it. I'll use `add_rules` to add one.") == "add_rules"
+    assert chat.promised_call("Let me call edit_rules now") == "edit_rules"
+    assert chat.promised_call("I'll use search to look first.") == ""
+    assert chat.promised_call("You can use add_rules for that.") == ""
+
+
+async def test_a_pack_ask_built_item_by_item_is_turned_to_plan_pack(wp_client, fake_llm):
+    # Every eval run: "plan a pack" made loose items and never plan_pack.
+    _on(fake_llm)
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(STYLE)}]},
+        {"message": "", "calls": [{"tool": "plan_pack", "args": json.dumps(
+            {"description": "A fantasy character pack: race, class, gear by class."})}]},
+        {"message": "Proposed the pack plan.", "calls": []},
+    ])
+    out = await _chat(wp_client, "Plan a fantasy character pack for me.")
+    assert [p["tool"] for p in out["proposals"]] == ["plan_pack"]
+    assert "call plan_pack" in json.dumps(fake_llm.seen[1]["body"]["messages"])
+
+
+async def test_items_asked_again_after_the_pack_steer_are_made(wp_client, fake_llm):
+    _on(fake_llm)
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(STYLE)}]},
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(STYLE)}]},
+        {"message": "Proposed Model Style Tags.", "calls": []},
+    ])
+    out = await _chat(wp_client, "Make a style wildcard for my anime pack.")
+    assert [p["tool"] for p in out["proposals"]] == ["create_wildcard"]
