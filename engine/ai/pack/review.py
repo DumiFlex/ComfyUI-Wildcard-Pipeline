@@ -2,6 +2,7 @@
 `review_plan` with its model prompt."""
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any
 
@@ -167,6 +168,13 @@ def _settings_findings(plan: dict[str, Any], add: Any) -> None:
                 "pack's own quality words.")})
 
 
+def finding_id(prefix: str, key: str, text: str) -> str:
+    """A finding's id from what it says, so the same finding keeps its id
+    across rechecks: a dismissal stays on it instead of hiding whatever
+    finding takes its place in the list (positional ids did)."""
+    return prefix + hashlib.sha1(f"{key}|{text}".encode()).hexdigest()[:10]
+
+
 def review_plan(plan: dict[str, Any],
                 library: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Check a plan against the guide before anything is built:
@@ -182,7 +190,10 @@ def review_plan(plan: dict[str, Any],
 
     def add(item: dict[str, Any] | None, level: str, text: str,
             patch: dict[str, Any] | None = None) -> None:
-        f: dict[str, Any] = {"id": f"r{len(out) + 1}", "key": item["key"] if item else "",
+        key = item["key"] if item else ""
+        if any(x["id"] == finding_id("r", key, text) for x in out):
+            return  # said already
+        f: dict[str, Any] = {"id": finding_id("r", key, text), "key": key,
                              "level": level, "text": text}
         if patch:
             f["patch"] = patch
@@ -376,8 +387,8 @@ def compile_review(answer: Any, plan: dict[str, Any]) -> list[dict[str, Any]]:
         text = _clean(f.get("text"), 300)
         if text:
             level = "fix" if f.get("severity") == "fix" else "tip"
-            out.append({"id": f"m{len(out) + 1}",
-                        "key": names.get(_clean(f.get("item"), MAX_NAME).lower(), ""),
+            key = names.get(_clean(f.get("item"), MAX_NAME).lower(), "")
+            out.append({"id": finding_id("m", key, text), "key": key,
                         "level": level, "text": text, "by": "model"})
     return out[:8]
 

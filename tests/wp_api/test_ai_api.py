@@ -9,6 +9,7 @@ from aiohttp import web
 
 from engine.ai import chat as ai_chat
 from engine.ai import config as ai_config
+from engine.ai import pack as ai_pack
 from tests.wp_api._ai_fakes import ANSWER, EDIT_ANSWERS  # noqa: F401 - shared fakes
 from wp_api import _ai_client
 from wp_api import _ai_turn as ai_turn
@@ -929,7 +930,8 @@ async def test_pack_plan_sees_the_library_and_a_sample_and_gets_reviewed(wp_clie
          "tags": [], "source": "", "target": "", "use": ""},
         *PACK_PLAN["items"]]}
     resp = await wp_client.post("/wp/api/ai/pack/plan", json={
-        "instruction": "more like this", "sample": "mage, longsword, castle"})
+        "instruction": "more like this", "sample": "mage, longsword, castle",
+        "settings": {"library": "reuse"}})
     assert resp.status == 200, await resp.text()
     body = await resp.json()
     lib = body["plan"]["items"][0]
@@ -950,7 +952,8 @@ async def test_pack_plan_sees_the_library_and_a_sample_and_gets_reviewed(wp_clie
     resp = await wp_client.post("/wp/api/ai/pack/review", json={"plan": body["plan"], "ai": True})
     assert resp.status == 200, await resp.text()
     review = await resp.json()
-    assert review["findings"][-1] == {"id": "m1", "key": "", "level": "tip", "text": "Add a mood.",
+    mood = ai_pack.finding_id("m", "", "Add a mood.")
+    assert review["findings"][-1] == {"id": mood, "key": "", "level": "tip", "text": "Add a mood.",
                                       "by": "model"}
     assert review["note"].startswith("Revise the plan")
     resp = await wp_client.post("/wp/api/ai/pack/review", json={"plan": body["plan"]})

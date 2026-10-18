@@ -231,6 +231,12 @@ _REF = re.compile(r"\[\[([^\[\]\n]{1,80})\]\]")
 #: Words a model puts after an item's name ("Character Design bundle").
 _KIND_WORDS = {"", "bundle", "wildcard", "combine", "derivation", "constraint", "template",
                "fixed values", "module", "item"}
+#: Words after "my" that say what kind of item, not which one.
+_OWN_SKIP = frozenset({"wildcard", "wildcards", "template", "templates", "derivation",
+                       "derivations", "constraint", "constraints", "bundle", "bundles",
+                       "combine", "combines", "fixed", "values", "value", "rule", "rules",
+                       "item", "items", "list", "library", "module", "modules", "one", "and",
+                       "to", "with", "so", "for", "in", "of", "it", "a", "is"})
 _IDENT = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$")
 _HEX_ID = re.compile(r"\b[0-9a-f]{8}\b")
 #: "A → B": a model writing a constraint as a wildcard.
@@ -511,6 +517,10 @@ class Library(MoreTools, ManageTools):
         self.category_rows = {c["id"]: dict(c) for c in categories}
         #: Settings › AI assistant › "Let the assistant delete items".
         self.allow_delete = False
+        #: Library items the user named in this chat, had open, or that an
+        #: earlier card changed: the only ones the edit tools may change.
+        #: None (tests, other callers) leaves every item open.
+        self.named: set[str] | None = None
         self.cat_by_lower = {c["name"].lower(): c["id"] for c in categories}
         self.names = {i: m.get("name") or "" for i, m in self.modules.items()}
         self.tags = ai_describe.library_tags([*modules, *bundles, *(templates or [])])
@@ -663,6 +673,52 @@ class Library(MoreTools, ManageTools):
             if r["payload"].get("output_var"):
                 bits.append(f"${r['payload']['output_var']}")
         return " · ".join(bits)
+
+    def named_in(self, text: str) -> set[str]:
+        """Ids of library items the user's message names: an id, a chip,
+        or a name not right after "a", "an", "new" or "another" ("change my
+        Weather" names it, "make a weather wildcard" does not)."""
+        out: set[str] = set(_HEX_ID.findall(text or "")) & {
+            *self.modules, *self.bundles, *self.templates}
+        low = (text or "").lower()
+        for pool in (self.modules, self.bundles, self.templates):
+            for r in pool.values():
+                name = str(r.get("name") or "").strip().lower()
+                if len(name) < 3 or r.get("_proposed"):
+                    continue
+                for m in re.finditer(r"(?<![\w])" + re.escape(name) + r"(?![\w])", low):
+                    before = re.findall(r"[a-z]+", low[:m.start()])[-1:]
+                    if before not in (["a"], ["an"], ["new"], ["another"]):
+                        out.add(r["id"])
+                        break
+        # "my hero template" for "Hero shot": the words after my/the/this,
+        # kind words left out, all in one item's name.
+        for m in re.finditer(r"\b(?:my|the|this|that|these|those)\s+((?:[\w'-]+\s*){1,3})", low):
+            words = [w for w in re.findall(r"[a-z0-9]+", m.group(1))
+                     if w not in _OWN_SKIP]
+            if not words:
+                continue
+            for pool in (self.modules, self.bundles, self.templates):
+                for r in pool.values():
+                    have = set(re.findall(r"[a-z0-9]+", str(r.get("name") or "").lower()))
+                    if not r.get("_proposed") and all(
+                            w in have or w.rstrip("s") in have for w in words):
+                        out.add(r["id"])
+        return out
+
+    def _check_named(self, tool: str, item_id: Any) -> None:
+        """Refuse an edit of a library item the user never pointed at (chat
+        eval round 3: "make a weather wildcard" rewrote their Weather)."""
+        if self.named is None or not isinstance(item_id, str):
+            return
+        row = self.get(item_id)
+        if row is None or row.get("_proposed") or item_id in self.named \
+                or item_id == self.editor_id:
+            return
+        raise ValueError(
+            f"{self._chip(row)} is the user's own item and they haven't named it in this chat: "
+            "don't change it. Make a new item for what they asked (a new name, or another "
+            "variable), or ask them whether they mean this one")
 
     def page_note(self, page: Any) -> str:
         """What the user is looking at, added under their message."""
@@ -1983,6 +2039,7 @@ class Library(MoreTools, ManageTools):
                 self.touched.append(args["id"])
             return fn(args)
         item_id = args.get("id") if tool in ITEM_TOOLS else None
+        self._check_named(tool, item_id)
         after = self._current(item_id)[1]
         try:
             proposal = fn(args)

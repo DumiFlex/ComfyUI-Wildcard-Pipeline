@@ -6,7 +6,7 @@ import PackBuilder from "../PackBuilder.vue";
 import { api } from "../../api/client";
 import { _resetAiConfigForTests } from "../../composables/useAiConfig";
 import {
-  _resetPackBuilderForTests, applyPatch, mentionsImages, pickAnswer, usePackBuilder,
+  _resetPackBuilderForTests, applyPatch, mentionsImages, pickAnswer, savedSettings, usePackBuilder,
 } from "../../composables/usePackBuilder";
 import type { AiConfig, AiPackItem, AiPackPlanResult } from "../../api/types";
 
@@ -38,7 +38,7 @@ const item = (key: string, kind: AiPackItem["kind"], name: string, extra: Partia
   source: "", target: "", use: "", library_id: "", library_type: "", ...extra,
 });
 
-const SETTINGS = { library: "reuse", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, model: "any", youth_negative: "on" } as const;
+const SETTINGS = { library: "inspire", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, model: "any", youth_negative: "on" } as const;
 
 function plan(round: number): AiPackPlanResult {
   return {
@@ -218,6 +218,15 @@ describe("PackBuilder v2", () => {
     expect(JSON.parse(localStorage.getItem("wp-pack-settings") ?? "{}").structure).toBe("flat");
     await w.get('[data-test="pack-back"]').trigger("click");
     expect(w.find('[data-test="pack-settings-step"]').exists()).toBe(false);
+    localStorage.removeItem("wp-pack-settings");
+  });
+
+  it("starts packs on new items, even with settings saved under the old reuse default", () => {
+    expect(savedSettings().library).toBe("inspire");
+    localStorage.setItem("wp-pack-settings", JSON.stringify({ library: "reuse", structure: "flat" }));
+    expect(savedSettings()).toMatchObject({ library: "inspire", structure: "flat" });
+    localStorage.setItem("wp-pack-settings", JSON.stringify({ library: "reuse", v: 2 }));
+    expect(savedSettings().library).toBe("reuse");
     localStorage.removeItem("wp-pack-settings");
   });
 

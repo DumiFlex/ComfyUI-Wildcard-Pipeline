@@ -375,6 +375,19 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     pids = [int(p[1:]) for p in meta.get("proposals") or {} if p[1:].isdigit()]
     lib._next_pid = max(pids, default=0)
     lib.earlier_proposals = dict(meta.get("proposals") or {})
+    # The library items the edit tools may change: ones the user named in
+    # this chat, the page's item, and ones an earlier card already changes.
+    named = set(meta.get("named") or [])
+    if not resume and text:
+        named |= lib.named_in(text)
+    if page and isinstance(page.get("id"), str):
+        named.add(page["id"])
+    for p_ in lib.earlier_proposals.values():
+        op = p_.get("op") if isinstance(p_, dict) else None
+        if isinstance(op, dict) and op.get("op") == "update" and isinstance(op.get("id"), str):
+            named.add(op["id"])
+    meta["named"] = sorted(named)
+    lib.named = named
     lib.decisions = list(meta.get("decisions") or [])  # what `ask` may not ask again
     # Links read_result may open: the same list the searches fill.
     lib.web_urls = meta.setdefault("web_urls", [])

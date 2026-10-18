@@ -12,6 +12,7 @@ import { usePackBuilder } from "../../composables/usePackBuilder";
 const pb = usePackBuilder();
 const busy = computed(() => pb.convo.loading.value || !!pb.changing.value);
 const fixes = computed(() => pb.findings.value.filter((f) => f.level === "fix").length);
+const stuck = computed(() => pb.findings.value.filter((f) => pb.unfixed.value.has(f.id)).length);
 const ticked = computed(() => pb.findings.value.filter((f) => pb.selected.value.has(f.id)).length);
 
 function itemName(key: string): string {
@@ -46,7 +47,7 @@ function patchLabel(f: AiPackFinding): string {
         >
         <i :class="['pi', f.level === 'fix' ? 'pi-exclamation-triangle' : 'pi-lightbulb']" aria-hidden="true" />
         <span class="wp-pack-findings__text">
-          <b v-if="f.key && itemName(f.key)">{{ itemName(f.key) }}: </b>{{ f.text }}<span v-if="f.by === 'model'" class="wp-pack-findings__by"> · AI review</span>
+          <b v-if="f.key && itemName(f.key)">{{ itemName(f.key) }}: </b>{{ f.text }}<span v-if="f.by === 'model'" class="wp-pack-findings__by"> · AI review</span><span v-if="pb.unfixed.value.has(f.id)" class="wp-pack-findings__by" data-test="pack-finding-unfixed"> · the AI left this unchanged</span>
         </span>
         <span class="wp-pack-findings__acts">
           <button v-if="f.patch" type="button" class="wp-pack-findings__btn" :disabled="busy" data-test="pack-finding-apply" @click="pb.applyFinding(f)">{{ patchLabel(f) }}</button>
@@ -55,7 +56,7 @@ function patchLabel(f: AiPackFinding): string {
       </li>
     </ul>
     <div class="wp-pack-findings__row">
-      <span class="wp-pack-findings__dim">{{ fixes ? `${fixes} to fix before building.` : 'Checked against the authoring guide.' }}</span>
+      <span class="wp-pack-findings__dim">{{ stuck ? `The AI couldn't fix ${stuck} last time: apply its fix, edit the item, or dismiss it.` : fixes ? `${fixes} to fix before building.` : 'Checked against the authoring guide.' }}</span>
       <Button size="sm" variant="ghost" icon="pi-microchip-ai" :loading="pb.reviewing.value" :disabled="busy" data-test="pack-review-ai" @click="pb.reviewPlan">Review with AI</Button>
       <Button
         v-if="pb.findings.value.length"

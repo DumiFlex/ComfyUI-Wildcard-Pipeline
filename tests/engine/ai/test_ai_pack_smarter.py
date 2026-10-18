@@ -37,7 +37,7 @@ def test_library_items_are_reused_not_rebuilt(wp_db):
         _item(name="Eyes", var="eyes", about="eye colours"),
         _item(kind="template", name="T", about="$hair, $eyes"),
     ]}
-    plan = pack.compile_plan(raw, library=library)
+    plan = pack.compile_plan(raw, library=library, settings={"library": "reuse"})
     lib = plan["items"][0]
     assert (lib["kind"], lib["name"], lib["var"], lib["library_id"]) == (
         "library", "Hair", "hair", HAIR["id"])
@@ -167,7 +167,8 @@ def test_review_finds_what_would_break_or_clash():
     texts = " | ".join(f["text"] for f in pack.review_plan(lone))
     assert "Nothing links the picks" in texts and "no template" in texts
     model = pack.compile_review({"findings": [{"item": "a", "text": "Split it"}, {"x": 1}]}, lone)
-    assert model == [{"id": "m1", "key": lone["items"][0]["key"], "level": "tip",
+    assert model == [{"id": pack.finding_id("m", lone["items"][0]["key"], "Split it"),
+                      "key": lone["items"][0]["key"], "level": "tip",
                       "text": "Split it", "by": "model"}]
     assert "A · $a" in pack.review_prompt(lone, [])
 

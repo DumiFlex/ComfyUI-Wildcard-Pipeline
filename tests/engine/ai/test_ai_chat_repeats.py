@@ -289,3 +289,21 @@ def test_items_named_the_way_answers_write_them_and_tools_as_ids():
     assert "$season" in out
     with pytest.raises(ValueError, match="'create_wildcard' is a tool, not an item"):
         lib.run("read", {"id": "create_wildcard"})
+
+
+def test_the_chat_changes_only_library_items_the_user_named():
+    lib = _lib()
+    lib.named = lib.named_in("Make a new outfit wildcard")
+    assert lib.named == set()
+    with pytest.raises(ValueError, match=r"\[\[aaaa0001#Outfit\]\] is the user's own item"):
+        lib.run("edit_options", {"id": "aaaa0001", "negatives": [{"n": 1, "negative": "x"}]})
+    # Its own cards are always open.
+    card = lib.run("create_wildcard", {"name": "Capes", "var": "cape",
+                                       "options": [{"text": "red cape"}]})
+    lib.run("add_options", {"id": card["op"]["body"]["id"], "options": [{"text": "blue cape"}]})
+    for said in ("add rain to my Season", "change Outfit", "tweak my outfits list",
+                 "fix aaaa0001", "edit the season wildcard"):
+        assert lib.named_in(said), said
+    assert "aaaa0002" in lib.named_in("make the season wildcard warmer")
+    lib.named = lib.named_in("make my Outfit warmer")
+    lib.run("edit_options", {"id": "aaaa0001", "negatives": [{"n": 1, "negative": "x"}]})
