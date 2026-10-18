@@ -98,6 +98,31 @@ describe("BundleChildPane.vue", () => {
     expect(wrap.find('[data-test="bundle-pane-sections-combine"]').exists()).toBe(true);
   });
 
+  it("a combine child reads the variables its siblings set", async () => {
+    const full = {
+      _uid: "u2", id: "cb_a", type: "combine", enabled: true, meta: { name: "Full Prompt" },
+      payload: { template: "$quality_tags, $hair", output_var: "final_prompt", input_vars: [] },
+      instance: {},
+    };
+    const wrap = mount(BundleChildPane, {
+      props: {
+        child: full,
+        siblingModules: [
+          { _uid: "u1", id: "fx_a", type: "fixed_values", enabled: true, meta: { name: "Quality" },
+            payload: { values: [{ id: "v1", name: "quality_tags", value: "masterpiece" }] }, instance: {} },
+          { _uid: "u3", id: "wc_h", type: "wildcard", enabled: true, meta: { name: "Hair" },
+            payload: { var_binding: "hair", options: [{ id: "o1", value: "red hair" }] }, instance: {} },
+          full,
+        ],
+      },
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    const resolved = wrap.find('[data-test="tpl-preview-resolved"]');
+    expect(resolved.exists()).toBe(true);
+    expect(resolved.text()).toContain("masterpiece, red hair");
+    expect(resolved.find(".tpl-tok--var-unresolved").exists()).toBe(false);
+  });
+
   it("mounts fixed_values sections when child.type === 'fixed_values'", () => {
     const wrap = mount(BundleChildPane, {
       props: {

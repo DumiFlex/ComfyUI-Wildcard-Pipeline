@@ -33,6 +33,7 @@ import ConstraintMatrixSection from "../../components/context/editors/constraint
 import ConstraintExceptionsSection from "../../components/context/editors/constraint/sections/ExceptionsSection.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 import type { ModuleEntry } from "../../widgets/_shared";
+import { bundleSiblingVars } from "../utils/bundle-vars";
 
 interface Props {
   child: Record<string, unknown> | null;
@@ -98,6 +99,11 @@ const refInnerCount = computed<number>(() => {
 });
 const headerIcon = computed<string>(() => (kind.value === "bundle" ? "pi pi-box" : kindIcon(kind.value)));
 const headerColor = computed<string>(() => KIND_COLOR[kind.value] ?? "var(--wp-accent-500)");
+
+/** What the other children set: they run together in one node, so a
+ *  child's `$vars` and negatives can read them. */
+const siblings = computed(() => bundleSiblingVars(props.siblingModules ?? [], props.child));
+const siblingProducerMap = computed(() => new Map(Object.entries(siblings.value.producers)));
 
 function onUpdate(patch: Partial<ModuleEntry>) {
   emit("update", patch);
@@ -241,10 +247,10 @@ const constraintTargetValues = computed<string[]>(() => {
         <WildcardIdentitySection
           :module="moduleEntry"
           :upstream-vars="[]"
-          :sibling-vars="[]"
+          :sibling-vars="siblings.names"
           @update="onUpdate"
         />
-        <WildcardPoolSection :module="moduleEntry" @update="onUpdate" />
+        <WildcardPoolSection :module="moduleEntry" :var-producers="siblingProducerMap" @update="onUpdate" />
         <WildcardRuntimeSection :module="moduleEntry" @update="onUpdate" />
       </div>
 
@@ -253,8 +259,14 @@ const constraintTargetValues = computed<string[]>(() => {
         data-test="bundle-pane-sections-combine"
         class="wp-bpane__sections"
       >
-        <CombineIdentitySection :module="moduleEntry" @update="onUpdate" />
-        <CombineTemplateSection :module="moduleEntry" @update="onUpdate" />
+        <CombineIdentitySection :module="moduleEntry" :sibling-vars="siblings.names" @update="onUpdate" />
+        <CombineTemplateSection
+          :module="moduleEntry"
+          :sibling-vars="siblings.names"
+          :upstream-producers="siblings.producers"
+          :upstream-resolved="siblings.resolved"
+          @update="onUpdate"
+        />
         <CombineRuntimeSection :module="moduleEntry" @update="onUpdate" />
       </div>
 
@@ -274,7 +286,12 @@ const constraintTargetValues = computed<string[]>(() => {
         class="wp-bpane__sections"
       >
         <DerivationIdentitySection :module="moduleEntry" @update="onUpdate" />
-        <DerivationRulesSection :module="moduleEntry" @update="onUpdate" />
+        <DerivationRulesSection
+          :module="moduleEntry"
+          :var-suggestions="siblings.names"
+          :var-producers="siblingProducerMap"
+          @update="onUpdate"
+        />
         <DerivationRuntimeSection :module="moduleEntry" @update="onUpdate" />
       </div>
 
