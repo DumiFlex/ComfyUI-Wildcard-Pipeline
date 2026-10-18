@@ -647,9 +647,20 @@ class MoreTools:
         ref, use = (raw.get("item") or raw.get("id"), raw.get("use")) \
             if isinstance(raw, dict) else (raw, "")
         row = self._find(ref)
+        if row is None and isinstance(ref, str):
+            row = self._find(self._bare_id(ref))  # type: ignore[attr-defined]
         if row is None:
-            warnings.append(f"Left out {_short(ref, 40) or 'an item'}: not in the library "
-                            "(or more than one item has that name; use its id)")
+            low = str(ref or "").strip().lower()
+            same = [r for r in [*self.modules.values(), *self.bundles.values()]
+                    if low and str(r.get("name") or "").strip().lower() == low]
+            if len(same) > 1:
+                # All-tools eval: "Face kit" came out without its Expression
+                # (3 share the name) and the card looked finished.
+                raise ValueError(
+                    f"{len(same)} items are named {str(ref).strip()!r}: "
+                    + ", ".join(self._chip(r) for r in same)  # type: ignore[attr-defined]
+                    + "; pass the one you mean by its id")
+            warnings.append(f"Left out {_short(ref, 40) or 'an item'}: not in the library")
             return None
         row = self._current(row["id"])[0] or row  # type: ignore[attr-defined]
         kind = self._kind(row)  # type: ignore[attr-defined]

@@ -344,3 +344,14 @@ def test_option_zero_is_refused_with_the_numbering():
     lib = _lib()
     with pytest.raises(ValueError, match="numbered from 1.*no empty option"):
         lib.run("edit_options", {"id": "aaaa0001", "weights": [{"n": 0, "weight": 1}]})
+
+
+def test_names_in_card_style_and_ambiguous_bundle_children():
+    lib = _lib()
+    assert lib._bare_id("Outfit aaaa0001") == "aaaa0001"
+    assert lib._bare_id("Outfit · $outfit") == "Outfit"
+    lib.modules["bbbb0009"] = {**lib.modules["aaaa0001"], "id": "bbbb0009"}
+    with pytest.raises(ValueError, match="2 items are named 'Outfit'.*by its id"):
+        lib.run("create_bundle", {"name": "Kit two", "items": ["Outfit", "Season"]})
+    note = chat.proposal_note("edit_categories", {"pid": "p1", "title": "x", "op": {}})
+    assert "update_many" in note

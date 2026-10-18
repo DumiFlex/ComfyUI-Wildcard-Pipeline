@@ -837,9 +837,14 @@ class Library(MoreTools, ManageTools):
         head = text.split("#", 1)[0].strip()
         if _HEX_ID.fullmatch(head):
             return head
-        m = re.fullmatch(r".*\(\s*([0-9a-f]{8})\s*\)", text)
+        m = re.fullmatch(r"[^→>]*?[\s(]([0-9a-f]{8})\s*\)?", text)
         if m and self.get(m.group(1)) is not None:
-            return m.group(1)  # "Weather (997f6b50)", as answers write items
+            # "Weather (997f6b50)", as answers write items, or "Lighting d97da2bb".
+            return m.group(1)
+        # "Character Hair · $hair", the way cards are titled (all-tools eval).
+        named = re.sub(r"\s*·\s*\$[A-Za-z_]\w*\s*$", "", text)
+        if named != text and named:
+            return named
         if re.fullmatch(r"p\d+", head):
             made = [i for i, pid in self._created.items() if pid == head]
             if len(made) == 1:
@@ -2212,6 +2217,12 @@ def proposal_note(tool: str, proposal: dict[str, Any]) -> str:
     if needs:
         head += (f". It needs card{'s' if len(needs) > 1 else ''} {', '.join(needs)} applied "
                  "first (its Apply all button does that)")
+    if tool == "edit_categories":
+        # All-tools eval: it made "Lighting" and stopped at "apply it, and I'll
+        # move your wildcards into it"; update_many makes the category itself.
+        head += (". If items should go into a new category too, call update_many with "
+                 "that category's name now, in this answer: it files them there once "
+                 "applied, no need to wait for this card")
     head += ". Tell the user you proposed it and what to apply; don't say you made it."
     warns = [w for w in proposal.get("warnings") or [] if isinstance(w, str)]
     if warns:
