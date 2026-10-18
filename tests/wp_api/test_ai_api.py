@@ -1543,7 +1543,7 @@ async def test_a_medium_model_gets_the_page_tools_and_asks_for_the_rest(wp_clien
         {"message": "", "calls": [{"tool": "more_tools", "args": "{}"}]},
         {"message": "Now I can.", "calls": []},
     ])
-    out = await _chat(wp_client, "make a bundle", page={"route": "wildcards"})
+    out = await _chat(wp_client, "go ahead with it", page={"route": "wildcards"})
     first = fake_llm.seen[0]["body"]["messages"][0]["content"]
     assert "- create_wildcard " in first and "- create_bundle " not in first
     assert "- more_tools " in first

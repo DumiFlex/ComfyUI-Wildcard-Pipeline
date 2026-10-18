@@ -195,7 +195,7 @@ async def test_more_tools_names_its_groups(wp_client, fake_llm):
         {"message": "Done.", "calls": []},
     ])
     n = len(fake_llm.seen)
-    await _chat(wp_client, "make a combine")
+    await _chat(wp_client, "go ahead with it")
     results = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
     assert "web search isn't set up" in results
     assert "create_combine" in results  # its prompt line, since the JSON prompt stays
@@ -204,6 +204,26 @@ async def test_more_tools_names_its_groups(wp_client, fake_llm):
     assert len({x["body"]["messages"][0]["content"] for x in fake_llm.seen[n:]}) == 1
     act = _schema(fake_llm.seen[-2])["properties"]["calls"]["items"]
     assert "create_combine" in json.dumps(act)  # but the grammar takes it now
+
+
+def test_the_message_words_name_the_groups_it_needs():
+    from engine.ai import tools as ai_tools
+    assert ai_tools.groups_for("make a fixed values preset") == ["fixed-values"]
+    assert ai_tools.groups_for("retag my items and fix the categories") == ["lists"]
+    assert ai_tools.groups_for("bundle these into a template") == ["templates", "bundles"]
+    assert ai_tools.groups_for("hello there") == []
+
+
+async def test_a_message_naming_a_kind_loads_its_tools(wp_client, fake_llm):
+    _on(fake_llm)
+    fake_llm.chat_steps.append({"message": "Sure.", "calls": []})
+    n = len(fake_llm.seen)
+    await _chat(wp_client, "make a combine of hair and eyes")
+    act = next(_schema(x)["properties"]["calls"]["items"] for x in fake_llm.seen[n:]
+               if "calls" in _schema(x)["properties"])
+    assert "create_combine" in json.dumps(act)
+    tail = fake_llm.seen[n]["body"]["messages"][-1]["content"]
+    assert "create_combine" in tail
 
 
 def test_more_adds_a_group_or_everything_at_the_end():

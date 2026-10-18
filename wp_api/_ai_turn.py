@@ -322,6 +322,14 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         # The JSON prompt keeps the tools the chat started with: say how
         # the new ones are called here instead.
         perms += "\n" + ai_chat.kinds_section(ai_tools.tools(added)).strip()
+    if not resume and text:
+        # The groups the message asks for by name come loaded: small models
+        # rarely call more_tools and fake the missing tool with another.
+        for group in ai_tools.groups_for(text):
+            if group in ai_tools.MORE_GROUPS:
+                got = _more_tools(meta, group)
+                if got.startswith("These tools"):
+                    perms = "\n".join(x for x in (perms, got) if x)
     meta, since = ai_chatlog.apply_events(meta, body.get("events"))
     route = str(page.get("route") or "") if page else ""
     if page and route != meta.get("page_route"):
