@@ -103,3 +103,11 @@ def test_ids_are_integer_choices_for_small_models():
     assert o["properties"]["id"] == {"type": "integer", "enum": [1, 2]}
     assert organize.SCHEMA["properties"]["items"]["items"]["properties"]["id"] == {
         "type": "string"}
+
+
+def test_rewrite_drops_the_note_the_prompt_puts_after_an_option():
+    out = ed.compile_edit("rewrite", {"options": [
+        {"id": 1, "text": "crimson cloak  [weight 2; tags playful]"},
+        {"id": "2", "text": "blue hoodie [tags playful]"},
+    ]}, options=OPTS, registry=REG)
+    assert [c["after"]["value"] for c in out["changes"]] == ["crimson cloak", "blue hoodie"]

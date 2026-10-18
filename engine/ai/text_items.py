@@ -227,6 +227,18 @@ def _fix_axes(text: str, catalog: dict[str, Any] | None,
     return _AXIS_READ.sub(sub, text)
 
 
+_ASKED_VAR = re.compile(r"\$([a-zA-Z_][a-zA-Z0-9_]*)")
+
+
+def missing_asked(text: str, asked: str) -> str:
+    """A warning naming the ``$vars`` the request spelled out that the draft
+    doesn't read, or "". Browser test (9B): a portrait template asked to read
+    $quality_tags came back without it, quietly."""
+    have = set(reads(text))
+    gone = [v for v in dict.fromkeys(_ASKED_VAR.findall(asked or "")) if v not in have]
+    return ("Doesn't read $" + ", $".join(gone) + ", which you asked for") if gone else ""
+
+
 def compile_combine(
     raw: Any, *, out_var: str, catalog: dict[str, Any] | None = None,
     existing: dict[str, Any] | None = None,

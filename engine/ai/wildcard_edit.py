@@ -152,6 +152,10 @@ def build_edit_prompt(
     return "\n".join(lines)
 
 
+#: The "[weight 2; tags a, b]" note the prompt puts after each option.
+_NOTE = re.compile(r"\s*\[(?:weight [^\]]*|tags [^\]]*)\]\s*$")
+
+
 def _clean_weight(raw: Any) -> float | int | None:
     if isinstance(raw, bool) or not isinstance(raw, (int, float)):
         return None
@@ -217,6 +221,9 @@ def compile_edit(
         elif action == "rewrite":
             text = item.get("text")
             text = re.sub(r"\s+", " ", text).strip() if isinstance(text, str) else ""
+            # The prompt lists "3. text  [weight 2; tags playful]" and the 9B
+            # copied that note into every rewrite (browser test 2026-10-18).
+            text = _NOTE.sub("", text).strip()
             if len(text) > MAX_TEXT_LEN:
                 skipped.append({"text": text[:80] + "…", "reason": "too long"})
                 continue

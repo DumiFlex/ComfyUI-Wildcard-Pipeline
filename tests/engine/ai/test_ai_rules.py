@@ -350,3 +350,29 @@ def test_append_and_prepend_values_bring_their_separator():
     branch = out["rules"][0]["rule"]["branches"][0]
     values = [branch["action"]["value"], *(a["value"] for a in branch["extra_actions"])]
     assert values == [", watch", ", ring", ", belt", "hat, "]
+
+
+def test_a_last_catch_all_branch_becomes_the_else():
+    """Browser test (9B): "anyone else → Adventurer" written as a last
+    branch `class not_equals ""` after the mage and warrior branches."""
+    cat = library_vars.build_catalog(LIBRARY)
+
+    def branch(op, value, title):
+        return {"match": "all", "conditions": [{"var": "class", "op": op, "value": value}],
+                "actions": [{"target_var": "title", "mode": "replace", "value": title}]}
+
+    out = ai_derivation.compile_rules(_drv([{
+        "summary": "Titles", "else_actions": [], "branches": [
+            branch("equals", "Mage", "Archmage"), branch("equals", "Warrior", "Champion"),
+            branch("not_equals", "", "Adventurer")]}]), catalog=cat)
+    rule = out["rules"][0]["rule"]
+    assert len(rule["branches"]) == 2
+    assert rule["else"]["action"]["value"] == "Adventurer"
+
+
+def test_a_draft_missing_an_asked_variable_says_so():
+    from engine.ai import text_items
+    assert text_items.missing_asked("$char_desc, $expression",
+                                    "read $quality_tags, $char_desc and $expression") == (
+        "Doesn't read $quality_tags, which you asked for")
+    assert text_items.missing_asked("$a $b", "use $a and $b") == ""

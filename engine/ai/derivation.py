@@ -96,8 +96,9 @@ reads variables and sets others, so later text can use them.
 
 How a rule runs: its branches are checked top to bottom and the FIRST branch \
 whose conditions hold runs its actions; if none holds, else_actions run (leave \
-else_actions empty for no else). Separate rules run independently, one after \
-another.
+else_actions empty for no else). "Anyone else", "otherwise", "for the rest" \
+or "by default" is else_actions, never a branch of its own. Separate rules run \
+independently, one after another.
 
 Conditions (var is a variable name, no $; it may also read $name.0, \
 $name.AXIS or $name.neg as name.0, name.AXIS, name.neg):
@@ -270,6 +271,33 @@ def _is_else_only(item: dict[str, Any]) -> bool:
     return not item.get("branches") and bool(item.get("else_actions"))
 
 
+#: A test that holds whenever the variable has any value: as the last
+#: branch after others on that variable it is "anyone else".
+_ANY_VALUE = {"exists", "is_set", "is_not_empty"}
+
+
+def _last_branch_as_else(item: dict[str, Any]) -> dict[str, Any]:
+    """Browser test (9B): "anyone else → Adventurer" came back as a last
+    branch testing ``class not_equals ""`` after the mage and warrior
+    branches. With no else yet, a last branch whose one condition only asks
+    that the earlier branches' variable has a value is that rule's ELSE."""
+    branches = item.get("branches") or []
+    if len(branches) < 2 or item.get("else_actions"):
+        return item
+    last = branches[-1]
+    conds = [c for c in last.get("conditions") or [] if isinstance(c, dict)]
+    if len(conds) != 1 or not last.get("actions"):
+        return item
+    c = conds[0]
+    op, var = c.get("op"), _var_name(c.get("var"))
+    anything = op in _ANY_VALUE or (op == "not_equals" and not str(c.get("value") or "").strip())
+    earlier = {_var_name(x.get("var")) for b in branches[:-1] for x in b.get("conditions") or []
+               if isinstance(x, dict)}
+    if not anything or not var or earlier != {var}:
+        return item
+    return {**item, "branches": branches[:-1], "else_actions": last["actions"]}
+
+
 def _tidy_rules(rules: list[Any]) -> list[Any]:
     """The rules the way a small model means them (chat eval round 1, 9B):
 
@@ -295,6 +323,7 @@ def _tidy_rules(rules: list[Any]) -> list[Any]:
             continue
         seen.add(key)
         item = {**item, "branches": _join_branches(item.get("branches"))}
+        item = _last_branch_as_else(item)
         prev = out[-1] if out else None
         if _is_else_only(item):
             acts = item["else_actions"]

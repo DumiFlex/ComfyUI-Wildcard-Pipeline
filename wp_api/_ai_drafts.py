@@ -401,6 +401,11 @@ async def post_text_draft(request: web.Request) -> web.Response:
                                                 existing=payload)
         else:
             result = text_items.compile_template(answer, catalog=catalog)
+        if kind != "fixed_values":
+            body = result["payload"].get("template") or result["payload"].get("template_string")
+            gone = text_items.missing_asked(str(body or ""), instruction)
+            if gone:
+                result["warnings"] = [*result["warnings"], gone]
     except ValueError as e:
         return json_error(
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
