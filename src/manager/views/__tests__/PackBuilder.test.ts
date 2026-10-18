@@ -194,7 +194,7 @@ describe("PackBuilder", () => {
     expect(refine.sample).toBe("1girl, red hair, beach");
     // An AI finding was in the batch: the AI review runs again on the new plan.
     const reviews = vi.mocked(api.ai.packReview).mock.calls;
-    expect(reviews[reviews.length - 1][0]).toMatchObject({ ai: true });
+    expect(reviews[reviews.length - 1][0]).toMatchObject({ ai: true, recheck: ["Add a mood"] });
     // Both came back as they were: marked, and the next Fix all says so.
     expect(w.findAll('[data-test="pack-finding-unfixed"]')).toHaveLength(2);
     expect(w.text()).toContain("The AI couldn't fix 2 last time");
@@ -202,6 +202,31 @@ describe("PackBuilder", () => {
     await flushPromises();
     expect(vi.mocked(api.ai.packPlan).mock.calls[2][0].instruction).toContain(
       "The last revision left these exactly as they were");
+  });
+
+  it("sends a long list of findings in rounds under the length cap and keeps the typed text on an error", async () => {
+    const many = Array.from({ length: 12 }, (_, n) => ({
+      id: `r${n}`, key: "", level: "fix" as const, text: `Problem ${n} ${"x".repeat(240)}` }));
+    vi.mocked(api.ai.packPlan).mockResolvedValue({ ...PLAN, review: many });
+    vi.mocked(api.ai.packReview).mockReset().mockResolvedValue({ findings: many, note: "", plan: PLAN.plan });
+    const { w } = await mountIt();
+    await w.get('[data-test="pack-request"]').setValue("season outfits");
+    await w.get('[data-test="pack-next"]').trigger("click");
+    await w.get('[data-test="pack-plan"]').trigger("click");
+    await flushPromises();
+    await w.get('[data-test="pack-fix"]').trigger("click");
+    await flushPromises();
+    const sent = vi.mocked(api.ai.packPlan).mock.calls.slice(1).map((c) => c[0].instruction ?? "");
+    expect(sent.length).toBeGreaterThan(1);
+    for (const text of sent) expect(text.length).toBeLessThanOrEqual(2000);
+    expect(sent.join("\n")).toContain("Problem 11");
+
+    vi.mocked(api.ai.packPlan).mockRejectedValue(new Error("down"));
+    await w.get('[data-test="pack-edit"]').setValue("warmer colours");
+    await w.get('[data-test="pack-fix"]').trigger("click");
+    await flushPromises();
+    expect((w.get('[data-test="pack-edit"]').element as HTMLTextAreaElement).value)
+      .toBe("warmer colours");
   });
 
   it("applies the findings that carry a fix without asking the model", async () => {

@@ -57,7 +57,7 @@ function patchLabel(f: AiPackFinding): string {
     </ul>
     <div class="wp-pack-findings__row">
       <span class="wp-pack-findings__dim">{{ stuck ? `The AI couldn't fix ${stuck} last time: apply its fix, edit the item, or dismiss it.` : fixes ? `${fixes} to fix before building.` : 'Checked against the authoring guide.' }}</span>
-      <Button size="sm" variant="ghost" icon="pi-microchip-ai" :loading="pb.reviewing.value" :disabled="busy" data-test="pack-review-ai" @click="pb.reviewPlan">Review with AI</Button>
+      <Button size="sm" variant="ghost" icon="pi-microchip-ai" :loading="pb.reviewing.value" :disabled="busy" data-test="pack-review-ai" @click="pb.reviewPlan()">Review with AI</Button>
       <Button
         v-if="pb.findings.value.length"
         size="sm"

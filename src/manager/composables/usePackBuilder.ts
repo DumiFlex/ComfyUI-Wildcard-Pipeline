@@ -646,7 +646,10 @@ async function recheck(): Promise<void> {
 }
 
 /** Ask the model to review the plan too. */
-async function reviewPlan(): Promise<void> {
+/** Have the model review the plan. ``recheck`` is the texts of its own
+ *  findings Fix all just sent: it then repeats the ones still there (same
+ *  text, so they show as unfixed) and adds at most two new ones. */
+async function reviewPlan(recheck?: string[]): Promise<void> {
   const p = plan.value;
   if (!p || reviewing.value) return;
   reviewing.value = true;
@@ -654,6 +657,7 @@ async function reviewPlan(): Promise<void> {
   try {
     const res = await api.ai.packReview(withTarget({
       plan: p, ai: true, request: convo.asked.value[0] ?? "",
+      ...(recheck?.length ? { recheck } : {}),
     }));
     setView({
       review: res.findings.filter((f) => f.by !== "model"),
@@ -664,6 +668,32 @@ async function reviewPlan(): Promise<void> {
   } finally {
     reviewing.value = false;
   }
+}
+
+/** What a refine's instruction may hold: the server takes 2000 characters
+ *  (`MAX_INSTRUCTION_LEN`); the rest is room for its own wrapping. */
+const NOTE_MAX = 1800;
+
+/** Split numbered note lines into runs that fit ``room`` characters each
+ *  (a line that can't fit alone is cut). */
+export function noteChunks(lines: string[], room: number): string[][] {
+  const fit = Math.max(200, room);
+  const out: string[][] = [];
+  let cur: string[] = [];
+  let used = 0;
+  for (const raw of lines) {
+    const line = raw.length > fit - 6 ? raw.slice(0, fit - 7) + "…" : raw;
+    const cost = line.length + 5; // "NN. " + newline
+    if (cur.length && used + cost > fit) {
+      out.push(cur);
+      cur = [];
+      used = 0;
+    }
+    cur.push(line);
+    used += cost;
+  }
+  if (cur.length) out.push(cur);
+  return out;
 }
 
 /** Findings Fix all sent to the model that came back unchanged, by id
@@ -696,22 +726,39 @@ async function fixFindings(): Promise<void> {
   // them instead of fixing the first and calling it done.
   const items = new Map((plan.value?.items ?? []).map((i) => [i.key, i]));
   const again = rest.some((f) => unfixed.value.has(f.id));
-  const note = "Revise the plan to fix ALL of these, one by one:\n" + rest.map((f, n) => {
+  const lines = rest.map((f) => {
     const item = f.key ? items.get(f.key) : undefined;
     const what = item ? `${item.name} (${item.kind}${item.var ? `, $${item.var}` : ""}): ` : "";
-    return `${n + 1}. ${what}${f.text.replace(/\.\s*$/, "")}.`;
-  }).join("\n") + "\nWhere one asks for a new item (a constraint, a derivation, a wildcard), "
+    return `${what}${f.text.replace(/\.\s*$/, "")}.`;
+  });
+  const head = "Revise the plan to fix ALL of these, one by one:\n";
+  const tail = "\nWhere one asks for a new item (a constraint, a derivation, a wildcard), "
     + "add it to the plan; where one asks to change an item, change that item's fields."
     + (again ? "\nThe last revision left these exactly as they were: change the plan this time, "
       + "or remove the item they are about if it can't be fixed." : "");
-  const recheck = rest.some((f) => f.by === "model");
+  const own = convo.instruction.value.trim();
   const sent = new Set(rest.map((f) => f.id));
-  convo.instruction.value = [convo.instruction.value.trim(), note].filter(Boolean).join("\n");
-  await refinePlan();
-  if (convo.error.value) return;
+  // The request takes NOTE_MAX characters, so a long list goes over in
+  // rounds; the user's own text rides with the first.
+  // A long typed text goes on its own first, so the notes keep their room.
+  const alone = own.length > NOTE_MAX / 2;
+  const chunks = noteChunks(lines, NOTE_MAX - head.length - tail.length
+    - (alone ? 0 : own.length + 1));
+  const rounds = alone ? [null, ...chunks] : chunks;
+  for (const [n, chunk] of rounds.entries()) {
+    const note = chunk ? head + chunk.map((l, k) => `${k + 1}. ${l}`).join("\n") + tail : "";
+    convo.instruction.value = [n === 0 ? own : "", note].filter(Boolean).join("\n");
+    await refinePlan();
+    if (convo.error.value) {
+      // Put back what the user typed (if it wasn't sent yet), not the note.
+      convo.instruction.value = n === 0 ? own : "";
+      return;
+    }
+  }
   // The model's own findings are checked again on the new plan, so one it
   // didn't fix shows up again instead of quietly disappearing.
-  if (recheck) await reviewPlan();
+  const recheck = rest.filter((f) => f.by === "model").map((f) => f.text);
+  if (recheck.length) await reviewPlan(recheck);
   const back = findings.value.filter((f) => sent.has(f.id)).map((f) => f.id);
   unfixed.value = new Set(back);
 }

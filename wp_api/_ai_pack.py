@@ -15,6 +15,7 @@ from engine.ai import followup as ai_followup
 from engine.ai import pack as ai_pack
 from engine.ai import pack_tidy
 from engine.ai import patterns as ai_patterns
+from engine.ai import safety as ai_safety
 from engine.ai import vocab as ai_vocab
 from engine.db.repositories import (
     BundleRepository,
@@ -312,15 +313,18 @@ async def post_pack_review(request: web.Request) -> web.Response:
     findings = ai_pack.review_plan(plan, library)
     if body.get("ai") is True:
         asked = body.get("request") if isinstance(body.get("request"), str) else ""
+        raw = body.get("recheck")
+        recheck = [ai_safety.strip_invisible(t).strip()[:300] for t in raw[:ai_pack.MAX_RECHECK]
+                   if isinstance(t, str) and t.strip()] if isinstance(raw, list) else None
         try:
             answer = await _ai_client.complete_json(
                 cfg, system=ai_pack.REVIEW_SYSTEM,
-                user=ai_pack.review_prompt(plan, findings, asked),
+                user=ai_pack.review_prompt(plan, findings, asked, recheck),
                 schema=ai_pack.REVIEW_SCHEMA, schema_name="pack_review", temperature=0.3,
             )
         except _ai_client.AIError as e:
             return json_error(e.message, status=e.status)
-        findings += ai_pack.compile_review(answer, plan)
+        findings += ai_pack.compile_review(answer, plan, findings, recheck)
     return json_ok({"findings": findings, "note": ai_pack.review_note(findings),
                     "plan": plan})
 

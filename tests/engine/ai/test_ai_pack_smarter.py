@@ -173,6 +173,29 @@ def test_review_finds_what_would_break_or_clash():
     assert "A · $a" in pack.review_prompt(lone, [])
 
 
+def test_a_recheck_keeps_old_findings_and_takes_two_new_ones():
+    plan = pack.compile_plan({"title": "x", "items": [_item(name="A", var="a")]})
+    key = plan["items"][0]["key"]
+    rule = [{"id": "r1", "key": key, "level": "fix", "text": "A has only one option to pick"}]
+    answer = {"findings": [
+        {"item": "a", "text": "A only has one option to pick from"},  # the checker's, reworded
+        {"item": "a", "text": "Give A options in one style, it mixes styles"},  # earlier, reworded
+        {"item": "", "text": "Add a lighting wildcard"},
+        {"item": "", "text": "Add a camera angle wildcard"},
+        {"item": "", "text": "Add a background wildcard"},
+    ]}
+    first = pack.compile_review(answer, plan, rule)
+    assert [f["text"] for f in first][0] == "Give A options in one style, it mixes styles"
+    assert len(first) == 4  # the checker's repeat is dropped
+    earlier = "A mixes two styles: give A options in one style"
+    again = pack.compile_review(answer, plan, rule, [earlier])
+    assert [f["text"] for f in again] == [earlier, "Add a lighting wildcard",
+                                          "Add a camera angle wildcard"]
+    assert again[0]["id"] == pack.finding_id("m", key, earlier)
+    prompt = pack.review_prompt(plan, rule, "", [earlier])
+    assert "re-check" in prompt and f"1. {earlier}" in prompt
+
+
 def test_variety_and_repair_notes():
     plan = pack.compile_plan({"title": "x", "items": [
         _item(name="Hat", var="hat", count=8), _item(kind="template", name="T", about="$hat")]})

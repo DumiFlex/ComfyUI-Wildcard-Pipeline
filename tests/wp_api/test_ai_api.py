@@ -958,6 +958,11 @@ async def test_pack_plan_sees_the_library_and_a_sample_and_gets_reviewed(wp_clie
     assert review["note"].startswith("Revise the plan")
     resp = await wp_client.post("/wp/api/ai/pack/review", json={"plan": body["plan"]})
     assert all(f.get("by") != "model" for f in (await resp.json())["findings"])
+    resp = await wp_client.post("/wp/api/ai/pack/review", json={
+        "plan": body["plan"], "ai": True, "recheck": ["Add a mood wildcard.", 3]})
+    assert resp.status == 200, await resp.text()
+    assert "re-check" in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert (await resp.json())["findings"][-1]["text"] == "Add a mood wildcard."
 
 
 def _tool_call(cid, name, args):
