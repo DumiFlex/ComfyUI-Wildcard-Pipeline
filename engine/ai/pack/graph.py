@@ -1937,6 +1937,66 @@ def apply_picks(graph: dict[str, Any], request: str) -> list[str]:
     return lines
 
 
+# --- slots that aren't picks -------------------------------------------------
+
+#: Slot names (or variables) that hold what never rolls: quality words
+#: are the same every run, a negative prompt is the template's.
+_QUALITY_SLOT = frozenset({"quality", "qualities", "quality_tags", "quality_tag", "qual"})
+_NEGATIVE_SLOT = frozenset({"negative", "negatives", "negative_prompt", "neg_prompt",
+                            "negative_tags", "neg"})
+_PRESET_NEGATIVES = re.compile(r"\bpresets?\b.{0,80}\b(?:its|their)\s+own\s+negatives?\b"
+                               r"|\b(?:its|their)\s+own\s+negatives?\b.{0,80}\bpresets?\b",
+                               re.I | re.S)
+
+
+def _slot_key(slot: dict[str, Any]) -> set[str]:
+    return {slot["var"].lower(), _axis_name(slot["name"]), slot["name"].lower()}
+
+
+def _in_relations(graph: dict[str, Any], slot: dict[str, Any]) -> bool:
+    return any(r["from"]["slot"] == slot["name"] or (r.get("to") or {}).get("slot")
+               == slot["name"] for r in graph["relations"])
+
+
+def apply_request_slots(graph: dict[str, Any], request: str) -> list[str]:
+    """What the code lands when the planner wrote a pick for something
+    that never rolls (an evals finding on small models): a Quality slot
+    is fixed values (its text, or the style's usual quality words), a
+    Negative slot is the template's negative, and a preset asked to
+    carry "its own negatives" carries the standing negative itself
+    instead of the template. A slot that has axes or sits in a relation
+    is left alone: the model meant it. Returns the lines saying so."""
+    lines: list[str] = []
+    for s in list(graph["slots"]):
+        key = _slot_key(s)
+        if s["axes"] or _in_relations(graph, s):
+            continue
+        if key & _NEGATIVE_SLOT:
+            graph["slots"].remove(s)
+            graph["template"]["order"] = [v for v in graph["template"]["order"]
+                                          if v != s["var"]]
+            if not graph["template"]["negative"] and "," in s["what"]:
+                graph["template"]["negative"] = s["what"]
+            lines.append(f"{s['name']} is the negative prompt, not a pick: it went to the "
+                         "template's negative")
+        elif key & _QUALITY_SLOT and len(graph["fixed"]) < MAX_FIXED \
+                and not any(f["var"] == s["var"] for f in graph["fixed"]):
+            words = s["what"] if "," in s["what"] else (
+                "masterpiece, best quality" if graph["style"] == "tags"
+                else "high quality, detailed")
+            graph["slots"].remove(s)
+            graph["fixed"].append({"name": s["name"], "var": s["var"], "text": words,
+                                   "negative": ""})
+            lines.append(f"{s['name']} is fixed values: quality words are the same every run")
+    if _PRESET_NEGATIVES.search(request or "") and graph["fixed"] \
+            and graph["template"]["negative"] and not any(f["negative"] for f in graph["fixed"]):
+        f = graph["fixed"][0]
+        f["negative"] = graph["template"]["negative"]
+        graph["template"]["negative"] = ""
+        lines.append(f"{f['name']} carries its own negative (it was the template's), as asked")
+    return lines
+
+
 # --- the request against the graph -------------------------------------------
 
 #: Request words that name no content: function words, builder-speak and
@@ -2223,6 +2283,7 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
     applied += apply_settings(graph, kw.get("settings"))
     applied += code_beat(graph)
     applied += apply_picks(graph, kw.get("request") or "")
+    applied += apply_request_slots(graph, kw.get("request") or "")
     if parse_run(graph["run"])["mode"] == "single":
         # A hold only means something over a Loop: in single images it
         # just makes every prompt the same.

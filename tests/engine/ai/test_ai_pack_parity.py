@@ -3,6 +3,8 @@ the pool, the ``draw`` relation (a shared list in front of options), picks
 read off the request, two model families, and the fallback-rate note."""
 from __future__ import annotations
 
+import copy
+
 import pytest
 
 from engine.ai import pack
@@ -277,3 +279,54 @@ def test_a_template_pick_becomes_its_first_branch():
     assert sum("Assembler can't pick" in w for w in out["warnings"]) == 3
     with pytest.raises(ValueError, match="empty"):
         text_items.compile_template({"template": "{|}"})
+
+
+def test_quality_and_negative_slots_are_not_picks():
+    g = _graph([_slot("Quality", "qual", "masterpiece, best quality, highres", []),
+                _slot("Hero", "hero", "heroes", []),
+                _slot("Negative Prompt", "negative", "lowres, bad hands", [])],
+               [], ["Quality", "Hero", "Negative Prompt"])
+    plan = pack.compile_graph_plan(g)
+    graph = plan["graph"]
+    assert [s["var"] for s in graph["slots"]] == ["hero"]
+    assert graph["fixed"] == [{"name": "Quality", "var": "qual",
+                               "text": "masterpiece, best quality, highres", "negative": ""}]
+    assert graph["template"]["negative"] == "lowres, bad hands"
+    assert graph["template"]["order"] == ["qual", "hero"]
+    assert plan["applied"] == [
+        "Quality is fixed values: quality words are the same every run",
+        "Negative Prompt is the negative prompt, not a pick: it went to the template's "
+        "negative"]
+    kinds = {i["name"]: i["kind"] for i in plan["items"]}
+    assert kinds["Quality"] == "fixed_values" and "Negative Prompt" not in kinds
+    # A quality slot with no words of its own gets the style's usual ones;
+    # one that sits in a relation (the model meant a pick) is left alone.
+    g = _graph([_slot("Quality", "quality", "quality words", []),
+                _slot("Hero", "hero", "heroes", [])], [], ["Quality", "Hero"], style="sentences")
+    assert pack.compile_graph_plan(g)["graph"]["fixed"][0]["text"] == "high quality, detailed"
+    g = _graph([_slot("Quality", "quality", "quality words", []),
+                _slot("Hero", "hero", "heroes", [{"name": "era", "values": ["old", "new"]}])],
+               [_rel("boost", "Hero", "era", "old", "Quality", "", "", factor=2)],
+               ["Quality", "Hero"])
+    plan = pack.compile_graph_plan(g)
+    assert [s["var"] for s in plan["graph"]["slots"]] == ["quality", "hero"]
+    assert plan["graph"]["fixed"] == []
+
+
+def test_a_preset_asked_for_its_own_negatives_carries_the_standing_one():
+    g = _graph([_slot("Hero", "hero", "heroes", [])], [], ["Style", "Hero"],
+               fixed=[{"name": "Style", "var": "style", "text": "anime screencap",
+                       "negative": ""}])
+    g["template"]["negative"] = "bad anatomy, lowres"
+    plan = pack.compile_graph_plan(
+        g, request="An anime style preset with quality tags and its own negatives.")
+    assert plan["graph"]["fixed"][0]["negative"] == "bad anatomy, lowres"
+    assert plan["graph"]["template"]["negative"] == ""
+    assert "Style carries its own negative (it was the template's), as asked" in plan["applied"]
+    # Without the ask, or when the preset already has one, nothing moves.
+    plain = pack.compile_graph_plan(copy.deepcopy(g), request="anime heroes with a preset")
+    assert plain["graph"]["template"]["negative"] == "bad anatomy, lowres"
+    g["fixed"][0]["negative"] = "photo"
+    own = pack.compile_graph_plan(g, request="a preset with its own negatives")
+    assert own["graph"]["fixed"][0]["negative"] == "photo"
+    assert own["graph"]["template"]["negative"] == "bad anatomy, lowres"

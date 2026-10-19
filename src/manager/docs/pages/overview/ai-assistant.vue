@@ -692,7 +692,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           order names it, and the slot's options are written without colours. "2 to 3
           accessories" in the request makes the matching slot pick 2-3 when the planner left it
           at one, a request naming two model families ("Pony and Flux") gets the per-family
-          quality rule without the setting, and a fixed preset can carry its own negatives.
+          quality rule without the setting, and a fixed preset can carry its own negatives. A
+          Quality slot the planner writes becomes fixed values (quality words don't roll), a
+          Negative slot becomes the template's negative, and a preset asked for "its own
+          negatives" carries the standing negative itself; "Wired by the code" says so.
           Click an item to edit its slot (axes, use) or the
           relations it compiles from, and <b>Add a relation</b> or <b>Add a slot</b>; the items
           are compiled again from your change. The assistant lists every item it will build,
