@@ -133,10 +133,14 @@ def _score(result: dict[str, Any]) -> dict[str, Any]:
     check = result["check"] or {}
     problems = sum(len(v) for v in (check.get("problems") or {}).values()) \
         + len(check.get("notes") or [])
+    checked = [r for r in check.get("relations") or [] if r.get("checked")]
     return {
         "items": total, "built": built, "built_share": round(built / total, 2) if total else 0,
         "problems": problems if check else None, "clean": bool(check) and problems == 0,
         "prompts": [p["text"] for p in check.get("prompts") or []],
+        # wired: relations that held on the engine runs (graph plans only).
+        "relations": len(checked), "held": sum(1 for r in checked if r.get("holds")),
+        "distinct": check.get("distinct") if check else None,
     }
 
 
@@ -168,6 +172,10 @@ def report(rows: list[dict], model: str) -> str:
     planned = [r for r in rows if r["plan"]]
     clean = [r for r in planned if r.get("clean")]
     share = sum(r["built_share"] for r in planned) / len(planned) if planned else 0
+    checked = [r for r in planned if r.get("check") is not False and r.get("distinct") is not None]
+    distinct = sum(r["distinct"] for r in checked) / len(checked) if checked else 0
+    held = sum(r.get("held") or 0 for r in planned)
+    relations = sum(r.get("relations") or 0 for r in planned)
     lines = [
         f"# Pack builder evals: {model}", "",
         f"- Requests: {len(rows)}",
@@ -176,19 +184,23 @@ def report(rows: list[dict], model: str) -> str:
         f"- Packs with a clean test run: {len(clean)} / {len(rows)}",
         f"- Feature requests that used the feature: "
         f"{sum(1 for r in planned if r.get('feature_used'))} / "
-        f"{sum(1 for r in rows if r.get('feature'))}", "",
-        "| # | Request | Plan | Built | Problems | Seconds |",
-        "| --- | --- | --- | --- | --- | --- |",
+        f"{sum(1 for r in rows if r.get('feature'))}",
+        f"- Relations that held on the test runs (wired): {held} / {relations}",
+        f"- Distinct prompts per run (mean): {distinct:.2f}", "",
+        "| # | Request | Plan | Built | Problems | Wired | Distinct | Seconds |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for n, r in enumerate(rows, 1):
         req = r["request"][:70].replace("|", "/")
         if not r["plan"]:
-            lines.append(f"| {n} | {req} | no: {r['error'][:60]} | | | {r['seconds']} |")
+            lines.append(f"| {n} | {req} | no: {r['error'][:60]} | | | | | {r['seconds']} |")
             continue
         feat = f" ({r['feature']}: {'used' if r['feature_used'] else 'missing'})" \
             if r.get("feature") else ""
+        wired = f"{r['held']}/{r['relations']}" if r.get("relations") else "-"
+        distinct_s = f"{r['distinct']:.2f}" if r.get("distinct") is not None else "-"
         lines.append(f"| {n} | {req}{feat} | yes | {r['built']}/{r['items']} | "
-                     f"{r['problems']} | {r['seconds']} |")
+                     f"{r['problems']} | {wired} | {distinct_s} | {r['seconds']} |")
     lines += ["", "## Sample prompts", ""]
     for r in planned:
         if r["prompts"]:

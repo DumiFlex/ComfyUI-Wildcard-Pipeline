@@ -260,3 +260,121 @@ async def test_run_pack_on_the_graph_planner():
     assert result["check"]["notes"] == []
     assert any("named nothing" in line for line in result["log"])
     assert result["plan"]["graph"]["slots"][0]["name"] == "Race"
+    rels = result["check"]["relations"]
+    assert [r["kind"] for r in rels] == ["exclude", "only", "agree", "derive", "append"]
+    assert all(r["checked"] and r["holds"] and r["seen"] > 0 for r in rels), rels
+    assert result["check"]["distinct"] > 0.5
+
+
+# --- phase 3: fill calls, the scope check and relations verified on runs ----
+
+def test_fill_call_adds_options_for_the_missing_axis_values():
+    plan = _plan()
+    g = plan["graph"]
+    outfit = pg.slot_by_var(g, "outfit")
+    key = next(i["key"] for i in plan["items"] if i["name"] == "Outfit")
+    winter_only = {"options": [{"text": t, "weight": 1, "negative": "", "tags": tags}
+                               for t, tags in OPTIONS["Outfit"][:2]]}
+    first = pg.compile_slot(g, outfit, winter_only)
+    assert first["warnings"] == ["No option is summer on season"]
+    assert pack.repair_note(first["warnings"]) == "No option is summer on season"
+    built = {key: {"id": "outfit01", "payload": first["payload"]}}
+    assert pg.fill_gaps(g, outfit, first["payload"]) == {"season": ["summer"]}
+    # The repair of a coverage note is a fill: add options, keep the rest.
+    req = pg.slot_request(plan, key, first["warnings"][0], built)
+    assert req["schema_name"] == "pack_slot_fill"
+    add = req["schema"]["properties"]["add"]["items"]["properties"]["tags"]["properties"]
+    assert add["season"]["items"]["enum"] == ["summer"]
+    assert "No option is summer on season yet" in req["user"]
+    assert "fur-lined cloak; wool coat" in req["user"]
+    # Any other note is a full rebuild.
+    assert pg.slot_request(plan, key, "it repeats words", built)["schema_name"] == "pack_slot"
+    assert pg.slot_request(plan, key, "", built)["schema_name"] == "pack_slot"
+    answer = {"add": [{"text": "linen tunic", "weight": 1, "negative": "",
+                       "tags": {"season": ["summer"]}},
+                      {"text": "wool coat", "weight": 1, "negative": "",
+                       "tags": {"season": ["summer"]}}]}
+    out = pg.compile_slot(g, outfit, answer, existing=first["payload"])
+    values = [o["value"] for o in out["payload"]["options"]]
+    assert values == ["fur-lined cloak", "wool coat", "linen tunic"]  # the repeat is skipped
+    old_ids = [o["id"] for o in first["payload"]["options"]]
+    assert [o["id"] for o in out["payload"]["options"]][:2] == old_ids
+    assert out["payload"]["tag_groups"] == {"season": ["winter", "summer"]}
+    assert not any("No option is" in w for w in out["warnings"])
+    assert sum(1 for o in out["payload"]["options"] if o.get("fallback")) == 1
+    # An "add" with nothing to add to is a plain answer.
+    plain = pg.compile_slot(g, outfit, answer)
+    assert [o["value"] for o in plain["payload"]["options"]] == ["linen tunic", "wool coat"]
+
+
+def test_scope_check_drops_twins_and_flags_bleed():
+    plan = _plan()
+    g = plan["graph"]
+    built = _build(plan)
+    key = next(i["key"] for i in plan["items"] if i["name"] == "Outfit")
+    others = pg.other_texts(plan, built, key)
+    assert "Outfit" not in others and others["Weapon"][0] == "musket"
+    answer = {"options": [
+        {"text": "wool coat", "weight": 1, "negative": "", "tags": {"season": ["winter"]}},
+        {"text": "longsword", "weight": 1, "negative": "", "tags": {"season": ["summer"]}},
+        {"text": "linen tunic, oak staff", "weight": 1, "negative": "",
+         "tags": {"season": ["summer"]}},
+    ]}
+    out = pg.compile_slot(g, pg.slot_by_var(g, "outfit"), answer, others=others)
+    assert [o["value"] for o in out["payload"]["options"]] == ["wool coat",
+                                                               "linen tunic, oak staff"]
+    assert 'Left out "longsword": Weapon already has it' in out["warnings"]
+    bleed = next(w for w in out["warnings"] if "names what" in w)
+    assert bleed == '"linen tunic, oak staff" names what Weapon picks ("oak staff"); ' \
+        "leave that to Weapon"
+    assert pack.repair_note(out["warnings"]) == bleed  # one rebuild is asked
+    with pytest.raises(ValueError, match="names what another slot picks"):
+        pg.compile_slot(g, pg.slot_by_var(g, "outfit"),
+                        {"options": [{"text": "musket", "weight": 1, "negative": "",
+                                      "tags": {"season": ["winter"]}}]}, others=others)
+
+
+def test_fallback_is_never_what_a_rule_excludes():
+    plan = _plan()
+    g = plan["graph"]
+    out = pg.compile_slot(g, pg.slot_by_var(g, "weapon"), _answer("Weapon"))
+    fb = next(o for o in out["payload"]["options"] if o.get("fallback"))
+    assert "gun" not in fb["sub_categories"]
+    assert "staff" in fb["sub_categories"]  # the only row's value
+
+
+def test_verify_relations_on_runs():
+    plan = _plan()
+    built = _build(plan)
+    good = {"race": "elf", "class": "mage", "class.role": "caster", "weapon": "oak staff",
+            "season": "winter", "season.season": "winter", "outfit": "wool coat, scarf",
+            "title": "Archmage"}
+    rels = pg.verify_relations(plan, built, [good])
+    assert [(r["kind"], r["seen"], r["broken"], r["holds"]) for r in rels] == [
+        ("exclude", 1, 0, True), ("only", 1, 0, True), ("agree", 1, 0, True),
+        ("derive", 1, 0, True), ("append", 1, 0, True)]
+    bad = {"race": "elf", "class": "knight", "class.role": "martial", "weapon": "musket",
+           "season": "summer", "season.season": "summer", "outfit": "wool coat",
+           "title": "Hero"}
+    rels = pg.verify_relations(plan, built, [good, bad])
+    by_kind = {r["kind"]: r for r in rels}
+    assert by_kind["exclude"]["broken"] == 1 and not by_kind["exclude"]["holds"]
+    assert by_kind["only"]["seen"] == 1 and by_kind["only"]["holds"]  # knight isn't a caster
+    assert by_kind["agree"]["broken"] == 1  # summer with a winter coat
+    assert by_kind["derive"]["seen"] == 2 and by_kind["derive"]["broken"] == 1  # else
+    assert by_kind["append"]["seen"] == 1 and by_kind["append"]["holds"]
+    assert pg.verify_relations(plan, {}, [good]) == [] or all(
+        not r["checked"] for r in pg.verify_relations(plan, {}, [good]))
+    # A pack-wide note names a broken rule.
+    assert pg.verify_relations(plan, built, []) == []
+
+
+def test_check_pack_notes_a_broken_rule(monkeypatch):
+    plan = _plan()
+    built = _build(plan)
+    monkeypatch.setattr(pg, "verify_relations", lambda *_: [
+        {"text": "Race elf never gets Weapon gun", "kind": "exclude", "checked": True,
+         "seen": 10, "broken": 2, "holds": False}])
+    report = pack.check_pack(plan, built, seeds=20)
+    assert "Rule broken in 2 of 10 runs: Race elf never gets Weapon gun" in report["notes"]
+    assert report["relations"][0]["holds"] is False

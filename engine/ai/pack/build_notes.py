@@ -56,7 +56,7 @@ def item_vocab_note(plan: dict[str, Any], key: str, lookup: ai_vocab.Lookup | No
 #: rest of the pack (a rule tests a value or tag that isn't there).
 _REPAIRABLE = re.compile(r"has no option|No option carries|No option is|unknown tag|nothing sets|"
                          r"already rolls|no rule is an only|joins picks with|"
-                         r"isn't an option or tag|"
+                         r"isn't an option or tag|names what|"
                          r"instead of reading|prints itself|options itself|"
                          r"line that joins picks|ends on its article|already joins|options at once|"
                          r"isn't set|not a variable|doesn't set|which no", re.I)

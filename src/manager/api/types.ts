@@ -1955,6 +1955,11 @@ export interface AiPackCheck {
   quality: Array<{ key: string; text: string }>;
   /** Item keys in the order they run (and install). */
   order?: string[];
+  /** A graph plan's relations as the check verified them on engine runs
+   *  (boost / reduce are odds, so `checked` is false for them). */
+  relations?: Array<{ text: string; kind: string; checked: boolean; seen: number; broken: number; holds: boolean }>;
+  /** Distinct prompts over the check's runs ÷ runs. */
+  distinct?: number;
   /** Items the check fixed without the model (words the prompt said twice,
    *  pieces another wildcard picks): their new payload and preview, and the
    *  lines to add to their warnings. The report was run on these. */

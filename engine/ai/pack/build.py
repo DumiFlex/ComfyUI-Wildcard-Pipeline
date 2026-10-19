@@ -213,7 +213,7 @@ def _item_request(
     if kind == "library":
         raise PlanError(f"{item['name']} comes from the library; nothing to write")
     if pack_graph.slot_for(plan, key) is not None:
-        return pack_graph.slot_request(plan, key, note)
+        return pack_graph.slot_request(plan, key, note, built)
     fix = f"\n\nThe last version had these problems; fix them: {note.strip()}" \
         if note.strip() else ""
     if kind == "wildcard":

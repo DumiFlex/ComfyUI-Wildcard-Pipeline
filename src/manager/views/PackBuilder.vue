@@ -272,6 +272,9 @@ function problems(key: string): string[] {
   return (pb.check.value?.problems[key] ?? []).filter((t) => !pb.dismissedNotes.value.has(`${key}:${t}`));
 }
 
+/** A graph plan's relations the check could verify on its runs. */
+const rulesChecked = computed(() => (pb.check.value?.relations ?? []).filter((r) => r.checked));
+
 function quality(key: string): string[] {
   return (pb.check.value?.quality ?? [])
     .filter((q) => q.key === key && !pb.dismissedNotes.value.has(`${key}:${q.text}`))
@@ -832,6 +835,9 @@ function stopExtending(): void {
               <button type="button" class="wp-pack__mini" :disabled="chat.loading.value" data-test="pack-note-explain" @click="explain(n)">Explain</button>
             </li>
           </ul>
+          <p v-if="rulesChecked.length" class="wp-pack__dim" data-test="pack-rules">
+            Rules checked on the runs: {{ rulesChecked.filter((r) => r.holds).length }} of {{ rulesChecked.length }} held<template v-if="rulesChecked.some((r) => !r.holds)">; the broken ones are listed above</template>.
+          </p>
           <div v-for="v in pb.check.value.variables.slice(0, 6)" :key="v.var" class="wp-pack__var">
             <code>${{ v.var }}</code>
             <span class="wp-pack__dim">{{ v.distinct }} value{{ v.distinct === 1 ? '' : 's' }}</span>

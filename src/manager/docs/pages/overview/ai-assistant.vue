@@ -612,6 +612,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           what a pack is about (its subject, LoRAs, a story) comes from your description:
           <DocKeyList
             :items="[
+              { term: 'Planner', desc: 'Pack graph (the default): the model writes slots, axes and relations and the code wires every rule and the template from them. Items one by one: the older planner, where the model writes each rule and the template itself.' },
               { term: 'Your library', desc: 'New, in its style (the default: built fresh but written like your library), Reuse what fits (wildcards and fixed values you already have, marked yours), or Everything new.' },
               { term: 'Negatives', desc: 'Standing + per option (a standing negative in the template and negatives on options that need them), Template only, or None.' },
               { term: 'Structure', desc: 'Sub-bundle per section, or One bundle.' },
@@ -622,8 +623,21 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
             ]"
           />
         </li>
-        <li><b>Plan.</b> The assistant lists every item it will build, grouped by section, and
-          asks what it can't guess. Some questions take several answers; every question has an
+        <li><b>Plan.</b> With the <b>Pack graph</b> planner the model writes a small graph
+          rather than the items: a <b>slot</b> per choice the image makes (one wildcard each,
+          with what it holds, how many options, whether it shows in the prompt or only feeds
+          rules, "pick 2", hold, a share of "none"), each slot's <b>axes</b> (the ways its
+          options are told apart: a Season axis with winter and summer, a Formality axis), the
+          <b>relations</b> between slots (never gets, only gets, favours, rarely gets, agrees
+          with on an axis, accepts, sets a variable, adds to a variable, each from one slot's
+          axis value to another's) and the <b>template order</b>. The code then makes every
+          constraint, derivation and the template from the graph, so a rule can only name a slot
+          and a value the graph declares; a relation that names something the graph doesn't
+          have is dropped, listed under the plan, and the model is asked once to write it
+          again with the names that exist. Click an item to edit its slot (axes, use) or the
+          relations it compiles from, and <b>Add a relation</b> or <b>Add a slot</b>; the items
+          are compiled again from your change. The assistant lists every item it will build,
+          grouped by section, and asks what it can't guess. Some questions take several answers; every question has an
           <b>Other</b> box for your own answer and <b>Decide for me</b>; <b>Decide the rest</b>
           leaves the open ones to the model. <b>Send answers</b> updates the plan. Answered
           questions show as chips under <b>You decided</b> and are never asked again (click one
@@ -683,7 +697,17 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           mean.</li>
         <li><b>Build &amp; check.</b> Each item is written in its own request, wildcards first so
           rules can use their tags; every item has its id reserved in the plan, so references,
-          nested wildcards and linked constraints point at items before they are built. An item
+          nested wildcards and linked constraints point at items before they are built. On a
+          graph plan only the wildcards ask the model: each option must be tagged with one of
+          the slot's own axis values (the answer form allows nothing else), an option that is
+          one of another slot's options is left out, one that names another slot's pick inside
+          its text is flagged and the slot rebuilt once, and when no option carries an axis value
+          a rule needs, the model is asked only to <b>add</b> options with it, keeping the rest.
+          Constraints, rules, fixed values and the template are written by the code from the
+          graph, with no request and no way to misname a tag. The test run then checks every
+          relation on real runs (a "never gets" that still co-occurred, an "only" the target
+          left, a rule that didn't write its text) and says how many held; a broken one is a
+          note on the pack. An item
           that takes longer than 4 minutes is stopped and marked; <b>Skip this item</b> moves on
           right away, and the row's buttons retry it, rebuild it with a note, or leave it out.
           If the template's answer fails twice, a plain one that reads every pick is written

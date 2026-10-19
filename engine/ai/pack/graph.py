@@ -728,15 +728,19 @@ def wired_payload(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict
 
 # --- the per-slot content call ----------------------------------------------
 
-def slot_schema(graph: dict[str, Any], slot: dict[str, Any]) -> dict[str, Any]:
+def slot_schema(graph: dict[str, Any], slot: dict[str, Any],
+                fill: dict[str, list[str]] | None = None) -> dict[str, Any]:
     """The JSON schema of one slot's options: ``text``, ``weight``,
     ``negative`` and a ``tags`` object with one key per axis, each an enum
     of that axis's values (a list of them on a classify axis, one on an
-    accepts axis)."""
+    accepts axis). With ``fill`` (``{axis: [values]}``) it is a fill call's
+    schema: an ``add`` list whose options can only carry those values on
+    that axis, so every new option plugs a gap."""
     kinds = axis_kinds(graph, slot)
     tag_props: dict[str, Any] = {}
     for a in slot["axes"]:
-        enum = {"type": "string", "enum": list(a["values"])}
+        allowed = (fill or {}).get(a["name"]) or list(a["values"])
+        enum = {"type": "string", "enum": list(allowed)}
         if kinds[a["name"]] == "accepts" and not any(
                 r["kind"] == "accepts" and r["from"]["slot"] == slot["name"]
                 and r["from"]["axis"] == a["name"] for r in graph["relations"]):
@@ -745,27 +749,118 @@ def slot_schema(graph: dict[str, Any], slot: dict[str, Any]) -> dict[str, Any]:
             tag_props[a["name"]] = {"type": "array", "items": enum, "minItems": 1}
     option = _obj({"text": _STR, "weight": {"type": "number"}, "negative": _STR,
                    "tags": _obj(tag_props)})
-    return _obj({"options": {"type": "array", "items": option}})
+    return _obj({("add" if fill else "options"): {"type": "array", "items": option}})
+
+
+def fill_gaps(graph: dict[str, Any], slot: dict[str, Any],
+              payload: dict[str, Any] | None) -> dict[str, list[str]]:
+    """The axis values no option of ``payload`` carries: ``{axis: [values]}``,
+    only the axes with a gap. A relation that names such a value would
+    match nothing, so the fill call (``slot_request`` with ``built``) asks
+    for options tagged with them."""
+    if not isinstance(payload, dict):
+        return {}
+    used = {t for o in payload.get("options") or [] if isinstance(o, dict)
+            and not o.get("is_null") for t in o.get("sub_categories") or []}
+    out: dict[str, list[str]] = {}
+    for a in slot["axes"]:
+        gone = [v for v in a["values"] if v not in used]
+        if gone:
+            out[a["name"]] = gone
+    return out
+
+
+_COVERAGE = re.compile(r"^No option is ")
+
+
+def _coverage_only(note: str) -> bool:
+    """Whether a repair note asks for nothing but axis coverage."""
+    parts = [x.strip() for x in note.split(";") if x.strip()]
+    return bool(parts) and all(_COVERAGE.match(x) for x in parts)
+
+
+def _norm(text: Any) -> str:
+    return " ".join(str(text or "").split()).lower()
+
+
+def other_texts(plan: dict[str, Any], built: dict[str, Any], key: str) -> dict[str, list[str]]:
+    """The option texts of every other built slot, by slot name: what a
+    slot's options must not repeat (``compile_slot``'s ``others``)."""
+    graph = plan.get("graph")
+    if not isinstance(graph, dict):
+        return {}
+    out: dict[str, list[str]] = {}
+    for i in plan["items"]:
+        if i["key"] == key or i["kind"] != "wildcard" or i["key"] not in built:
+            continue
+        slot = _slot_of(graph, i)
+        if slot is None:
+            continue
+        out[slot["name"]] = [_norm(o.get("value")) for o in
+                             built[i["key"]]["payload"].get("options") or []
+                             if isinstance(o, dict) and _norm(o.get("value"))]
+    return out
+
+
+def scope_notes(rows: list[dict[str, Any]], others: dict[str, list[str]]
+                ) -> tuple[list[dict[str, Any]], list[str]]:
+    """Scope bleed, checked by code: an option that IS one of another
+    slot's options is left out (that slot owns it); an option that names
+    one of them inside its text ("red dress" next to a Colours slot with
+    "red") is kept with a warning the rebuild is told. Returns ``(rows,
+    warnings)``."""
+    if not others:
+        return rows, []
+    owned = {t: name for name, texts in others.items() for t in texts}
+    chunks = {name: sorted({c for t in texts for c in t.split(",")
+                            if len(c.strip()) >= 4}, key=len, reverse=True)
+              for name, texts in others.items()}
+    kept: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    for r in rows:
+        text = _norm(r.get("value"))
+        if r.get("is_null") or not text:
+            kept.append(r)
+            continue
+        if text in owned:
+            warnings.append(f"Left out \"{text[:40]}\": {owned[text]} already has it")
+            continue
+        hit = next(((name, c.strip()) for name, cs in chunks.items() for c in cs
+                    if re.search(r"(?<!\w)" + re.escape(c.strip()) + r"(?!\w)", text)), None)
+        if hit is not None:
+            warnings.append(f"\"{text[:40]}\" names what {hit[0]} picks (\"{hit[1]}\"); "
+                            f"leave that to {hit[0]}")
+        kept.append(r)
+    return kept, warnings
 
 
 def compile_slot(
     graph: dict[str, Any], slot: dict[str, Any], answer: Any, *, limit: int | None = None,
+    existing: dict[str, Any] | None = None, others: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     """The model's options for one slot as a wildcard payload: tags from the
     ``tags`` object (every axis value an option names), tag groups from the
     slot's axes, a fallback chosen by code on a narrowed slot, and the
-    ``sometimes_none`` share as a null option. Returns ``{payload, preview,
-    warnings}``. Raises ValueError when no option is usable."""
+    ``sometimes_none`` share as a null option. A fill answer (``add``
+    instead of ``options``) is merged into ``existing``, keeping its
+    options and ids. ``others`` (``other_texts``) is what the other slots
+    hold, for the scope check. Returns ``{payload, preview, warnings}``.
+    Raises ValueError when no option is usable."""
     from engine.ai import wildcard as ai_wildcard
     from engine.modules.wildcard_handler import WildcardHandler
 
-    if not isinstance(answer, dict) or not isinstance(answer.get("options"), list):
+    if not isinstance(answer, dict):
+        raise ValueError("the model's answer wasn't a list of options")
+    adding = isinstance(answer.get("add"), list) and not isinstance(answer.get("options"), list)
+    if adding and not (isinstance(existing, dict) and existing.get("options")):
+        answer, adding = {**answer, "options": answer["add"]}, False
+    if not adding and not isinstance(answer.get("options"), list):
         raise ValueError("the model's answer wasn't a list of options")
     kinds = axis_kinds(graph, slot)
     values = {a["name"]: a["values"] for a in slot["axes"]}
     warnings: list[str] = []
     raw_options = []
-    for o in answer["options"]:
+    for o in answer["add" if adding else "options"]:
         if not isinstance(o, dict):
             continue
         tags: list[str] = []
@@ -788,17 +883,24 @@ def compile_slot(
             continue
         raw_options.append({"text": o.get("text"), "weight": o.get("weight", 1),
                             "tags": tags, "negative": o.get("negative") or ""})
+    # A fill keeps what is there: its options stay, ids and all, and the
+    # new ones join them (the null option and the fallback are redone).
+    kept: list[dict[str, Any]] = []
+    if adding and existing is not None:
+        for o in existing["options"]:
+            if isinstance(o, dict) and isinstance(o.get("value"), str) and not o.get("is_null"):
+                kept.append({k: v for k, v in o.items() if k != "fallback"})
     compiled = ai_wildcard.compile_options(
         {"options": raw_options},
-        existing_payload={"options": [], "sub_categories": [v for vs in values.values()
+        existing_payload={"options": kept, "sub_categories": [v for vs in values.values()
                                                              for v in vs]},
-        limit=limit or slot["count"],
+        limit=len(raw_options) if adding else limit or slot["count"],
     )
     options = compiled["options"]
-    if not options:
+    if not options and not kept:
         raise ValueError("no usable options" + "".join(
             f"; {s['text'][:40]}: {s['reason']}" for s in compiled["skipped"][:3]))
-    taken: set[str] = set()
+    taken: set[str] = {o["id"] for o in kept}
     rows: list[dict[str, Any]] = []
     for o in options:
         row: dict[str, Any] = {"id": ai_wildcard.new_option_id(taken), "value": o["value"],
@@ -806,14 +908,26 @@ def compile_slot(
         if o["negative"]:
             row["negative"] = o["negative"]
         rows.append(row)
+    rows, scoped = scope_notes(rows, others or {})
+    warnings += scoped
+    if not rows and not kept:
+        raise ValueError("every option names what another slot picks: " + "; ".join(scoped[:3]))
+    rows = [*kept, *rows]
     narrowed = inbound(graph, slot)
     if narrowed and rows:
-        # The option that fits the most of what narrows this slot stands in
-        # when a rule leaves nothing: it is never empty.
-        axes_in = {r["to"]["axis"] for r in narrowed if r["to"].get("axis")}
-        best = max(rows, key=lambda r: sum(1 for t in r["sub_categories"]
-                                           if any(t in values[a] for a in axes_in
-                                                  if a in values)))
+        # The option that fits the most of what narrows this slot, and
+        # nothing excludes, stands in when a rule leaves nothing: it is
+        # never empty, and never the one a rule said no to.
+        wanted = {r["to"]["value"] for r in narrowed if r["kind"] in ("only", "boost")
+                  if r["to"].get("value")}
+        wanted |= {v for r in narrowed if r["kind"] in ("agree", "accepts")
+                   for v in r.get("values") or []}
+        banned = {r["to"]["value"] for r in narrowed if r["kind"] in ("exclude", "reduce")
+                  if r["to"].get("value")}
+        best = max(rows, key=lambda r: (
+            sum(1 for t in r["sub_categories"] if t in wanted)
+            - 2 * sum(1 for t in r["sub_categories"] if t in banned),
+            float(r.get("weight") or 0)))
         best["fallback"] = True
     if slot["sometimes_none"]:
         total = sum(float(r["weight"]) for r in rows) or 1.0
@@ -861,6 +975,128 @@ def slot_prompt(graph: dict[str, Any], slot: dict[str, Any], *, note: str = "") 
     if note.strip():
         lines.append(f"The last version had these problems; fix them: {note.strip()}")
     return "\n".join(lines)
+
+
+# --- relations checked on engine runs ----------------------------------------
+
+def _picked_tags(graph: dict[str, Any], payloads: dict[str, dict[str, Any]], slot_name: str,
+                 ctx: dict[str, Any]) -> tuple[set[str], bool] | None:
+    """The tags the run's pick for a slot carries, and whether that pick
+    was the fallback option. None when the slot isn't built; an empty set
+    when it picked nothing (a null option)."""
+    slot = next(s for s in graph["slots"] if s["name"] == slot_name)
+    payload = payloads.get(slot_name)
+    if payload is None:
+        return None
+    value = _norm(ctx.get(slot["var"]))
+    if not value:
+        return set(), False
+    chunks = {c.strip() for c in value.split(",")}
+    tags: set[str] = set()
+    fallback = False
+    for o in payload.get("options") or []:
+        if not isinstance(o, dict) or o.get("is_null"):
+            continue
+        text = _norm(o.get("value"))
+        if text and (text == value or text in chunks
+                     or re.search(r"(?<!\w)" + re.escape(text) + r"(?!\w)", value)):
+            tags |= set(o.get("sub_categories") or [])
+            fallback = fallback or o.get("fallback") is True
+    for a in slot["axes"]:
+        got = ctx.get(f"{slot['var']}.{a['name']}")
+        if isinstance(got, str) and got:
+            tags.add(got)
+    return tags, fallback
+
+
+def verify_relations(plan: dict[str, Any], built: dict[str, Any],
+                     runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Every relation of a graph plan checked against engine runs (the
+    contexts ``PipelineEngine.run`` returned): ``[{text, kind, checked,
+    seen, broken, holds}]``. ``exclude`` must never co-occur, ``only``
+    rows must leave the target in the row (or on its fallback), ``agree``
+    / ``accepts`` must share a value (or fall back), ``derive`` /
+    ``append`` must write their text when their value fires and the
+    ``otherwise`` when none does. ``boost`` / ``reduce`` are odds, not
+    rules, so they are not checked; nor is a relation whose slots aren't
+    built."""
+    graph = plan.get("graph")
+    if not isinstance(graph, dict) or not runs:
+        return []
+    payloads: dict[str, dict[str, Any]] = {}
+    for i in plan["items"]:
+        if i["kind"] == "wildcard" and i["key"] in built:
+            slot = _slot_of(graph, i)
+            if slot is not None:
+                payloads[slot["name"]] = built[i["key"]]["payload"]
+    only_rows: dict[tuple[str, str, str], set[str]] = {}
+    for r in graph["relations"]:
+        if r["kind"] == "only":
+            only_rows.setdefault((r["from"]["slot"], r["from"]["value"], r["to"]["slot"]),
+                                 set()).add(r["to"]["value"])
+    by_var: dict[str, list[dict[str, Any]]] = {}
+    for r in graph["relations"]:
+        if r["kind"] == "derive":
+            by_var.setdefault(r["var"], []).append(r)
+    out: list[dict[str, Any]] = []
+    for r in graph["relations"]:
+        kind, src, dst = r["kind"], r["from"], r.get("to") or {}
+        row = {"text": _slot_rel_words(r), "kind": kind, "checked": kind not in _WEIGHTED,
+               "seen": 0, "broken": 0, "holds": True}
+        out.append(row)
+        if not row["checked"]:
+            continue
+        for ctx in runs:
+            got_src = _picked_tags(graph, payloads, src["slot"], ctx)
+            if got_src is None:
+                row["checked"] = False
+                break
+            st, _ = got_src
+            if kind in ("exclude", "only"):
+                if src["value"] not in st:
+                    continue
+                got_dst = _picked_tags(graph, payloads, dst["slot"], ctx)
+                if got_dst is None:
+                    row["checked"] = False
+                    break
+                dt, fell = got_dst
+                if not dt:
+                    continue
+                row["seen"] += 1
+                if kind == "exclude" and dst["value"] in dt:
+                    row["broken"] += 1
+                elif kind == "only" and not fell and not (
+                        dt & only_rows[(src["slot"], src["value"], dst["slot"])]):
+                    row["broken"] += 1
+            elif kind in ("agree", "accepts"):
+                got_dst = _picked_tags(graph, payloads, dst["slot"], ctx)
+                if got_dst is None:
+                    row["checked"] = False
+                    break
+                dt, fell = got_dst
+                shared = set(r["values"])
+                if not (st & shared) or not dt:
+                    continue
+                row["seen"] += 1
+                if not (st & dt & shared) and not fell:
+                    row["broken"] += 1
+            else:
+                got = _norm(ctx.get(r["var"]))
+                if src["value"] in st:
+                    row["seen"] += 1
+                    if _norm(r["text"]) not in got:
+                        row["broken"] += 1
+                elif kind == "derive" and r.get("otherwise"):
+                    fired = False
+                    for d in by_var[r["var"]]:
+                        t = _picked_tags(graph, payloads, d["from"]["slot"], ctx)
+                        fired = fired or bool(t and d["from"]["value"] in t[0])
+                    if not fired:
+                        row["seen"] += 1
+                        if _norm(r["otherwise"]) not in got:
+                            row["broken"] += 1
+        row["holds"] = row["checked"] and row["broken"] == 0
+    return out
 
 
 # --- the planner call -------------------------------------------------------
@@ -986,22 +1222,67 @@ pose in a setting). Vary the options; no two should mean the same thing.\
 """
 
 
-def slot_request(plan: dict[str, Any], key: str, note: str = "") -> dict[str, Any]:
+def slot_request(plan: dict[str, Any], key: str, note: str = "",
+                 built: dict[str, Any] | None = None) -> dict[str, Any]:
     """``{system, user, schema, schema_name, temperature}`` of one slot's
-    content call."""
+    content call. When the note asks for nothing but axis coverage and the
+    slot is built (``built``), it is a FILL call: the model adds options
+    tagged with the missing values and the rest stays as it is."""
     slot = slot_for(plan, key)
     if slot is None:
         raise PlanError(f"{key} isn't a slot")
     from engine.ai import guide as ai_guide
     graph = plan["graph"]
-    user = slot_prompt(graph, slot, note=note)
+    old = (built or {}).get(key)
+    gaps = fill_gaps(graph, slot, old["payload"]) if isinstance(old, dict) \
+        and _coverage_only(note) else {}
+    if gaps:
+        axis = max(gaps, key=lambda a: len(gaps[a]))
+        user = fill_prompt(graph, slot, old["payload"], gaps, axis)
+        schema = slot_schema(graph, slot, fill={axis: gaps[axis]})
+        name = "pack_slot_fill"
+    else:
+        user = slot_prompt(graph, slot, note=note)
+        schema = slot_schema(graph, slot)
+        name = "pack_slot"
     fmt = ai_guide.format_line(plan.get("model") or "")
     if fmt:
         user += f"\nThe image model: {fmt}"
     if plan.get("rating") == "nsfw":
         user += "\n" + ai_guide.NSFW.strip()
-    return {"system": SLOT_SYSTEM, "user": user, "schema": slot_schema(graph, slot),
-            "schema_name": "pack_slot", "temperature": 0.8}
+    return {"system": SLOT_SYSTEM, "user": user, "schema": schema,
+            "schema_name": name, "temperature": 0.8}
+
+
+def fill_prompt(graph: dict[str, Any], slot: dict[str, Any], payload: dict[str, Any],
+                gaps: dict[str, list[str]], axis: str) -> str:
+    """The user prompt of a fill call: add options for the values of
+    ``axis`` no option carries (the other gaps are mentioned)."""
+    want = gaps[axis]
+    count = min(MAX_COUNT, 2 * len(want))
+    lines = [f"Add {count} options to the wildcard \"{slot['name']}\" of the pack "
+             f"\"{graph['title']}\" ({graph['summary'] or 'no summary'}).",
+             f"What it holds: {slot['what'] or slot['name']}.",
+             f"Style: {'short comma tags' if graph['style'] == 'tags' else 'short sentences'}; "
+             f"rating: {graph['rating']}.",
+             f"No option is {', '.join(want)} on {axis} yet: every new option must be one of "
+             f"those (at least two for each)."]
+    for a in slot["axes"]:
+        if a["name"] != axis:
+            lines.append(f"Tag every option on {a['name']} with "
+                         + ("the one value" if axis_kinds(graph, slot)[a["name"]] == "accepts"
+                            else "every value") + f" that fits: {', '.join(a['values'])}"
+                         + (f" (none is {', '.join(gaps[a['name']])} yet)"
+                            if a["name"] in gaps else "") + ".")
+    have = [_norm(o.get("value")) for o in payload.get("options") or []
+            if isinstance(o, dict) and _norm(o.get("value"))]
+    if have:
+        lines.append("Already there, so don't repeat them: " + "; ".join(have[:MAX_COUNT]) + ".")
+    others = [s["name"] for s in graph["slots"] if s is not slot]
+    if others:
+        lines.append("Other wildcards cover " + ", ".join(others[:12])
+                     + ": keep those words out of these options.")
+    return "\n".join(lines)
 
 
 def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
