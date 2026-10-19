@@ -42,7 +42,7 @@ from engine.ai import use as ai_use
 from engine.ai import vocab as ai_vocab
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_wildcard_edit
-from engine.ai.chat_manage import ManageTools
+from engine.ai.chat_manage import ManageTools, bulk_key
 from engine.ai.chat_tools import MoreTools, _num, _reach, _reach_text
 from engine.modules.constraint_handler import ConstraintHandler
 from engine.modules.derivation_handler import DerivationHandler
@@ -213,6 +213,25 @@ def stalls(said: str, user_text: str, last_answer: str) -> bool:
     return bool(last_answer) and norm(said) == norm(last_answer)
 
 
+#: "I'll use add_rules to add a new rule." with no call after it.
+_PROMISES = re.compile(r"\b(?:I(?:'ll| will| am going to|'m going to)|let me)\s+(?:now\s+)?"
+                       r"(?:use|call|try|run)\s+(?:the\s+)?`?([a-z_]+)`?", re.I)
+
+
+def promised_call(said: str) -> str:
+    """The change tool an answer with no calls says it will call, or "".
+    Re-test on 367a6a5 (9B): "I'll use add_rules…" ended the turn."""
+    for m in _PROMISES.finditer(said or ""):
+        if m.group(1).lower() in CHANGE_TOOLS:
+            return m.group(1).lower()
+    return ""
+
+
+def promise_nudge(tool: str) -> str:
+    return (f"You said you'd call {tool}, but you made no call, so nothing was proposed. "
+            f"Call {tool} now with its arguments (not as text in your message).")
+
+
 TOOLS = READ_TOOLS + CHANGE_TOOLS
 
 MAX_STEPS = 6
@@ -231,6 +250,12 @@ _REF = re.compile(r"\[\[([^\[\]\n]{1,80})\]\]")
 #: Words a model puts after an item's name ("Character Design bundle").
 _KIND_WORDS = {"", "bundle", "wildcard", "combine", "derivation", "constraint", "template",
                "fixed values", "module", "item"}
+#: Words after "my" that say what kind of item, not which one.
+_OWN_SKIP = frozenset({"wildcard", "wildcards", "template", "templates", "derivation",
+                       "derivations", "constraint", "constraints", "bundle", "bundles",
+                       "combine", "combines", "fixed", "values", "value", "rule", "rules",
+                       "item", "items", "list", "library", "module", "modules", "one", "and",
+                       "to", "with", "so", "for", "in", "of", "it", "a", "is"})
 _IDENT = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$")
 _HEX_ID = re.compile(r"\b[0-9a-f]{8}\b")
 #: "A → B": a model writing a constraint as a wildcard.
@@ -498,6 +523,29 @@ def parse_step(raw: Any) -> tuple[str, list[dict[str, Any]]]:
     return message.strip()[:MAX_MESSAGE], calls[:MAX_CALLS_PER_STEP]
 
 
+#: The tool that changes each kind of item, and the more_tools group it's in.
+KIND_TOOLS = {"wildcard": ("edit_options", "wildcards"),
+              "derivation": ("edit_rules", "derivations"),
+              "constraint": ("edit_constraint", "constraints"),
+              "fixed_values": ("edit_values", "fixed-values"),
+              "combine": ("edit_combine", "combines"),
+              "template": ("edit_template", "templates"),
+              "bundle": ("edit_bundle", "bundles")}
+#: A wildcard name that says it is another kind ("Portrait Template").
+_OTHER_KIND = re.compile(r"\b(templates?|bundles?|fixed[ -]values?|combines?)\b", re.I)
+
+
+def use_instead(kind: str, create: bool = False) -> str:
+    """The pointer a wrong-kind refusal ends with, so the model calls the
+    right tool instead of retrying this one (all-tools eval)."""
+    tool, group = KIND_TOOLS.get(kind, ("", ""))
+    if not tool:
+        return ""
+    if create:
+        tool = "create_" + kind
+    return (f": use {tool} (if you don't have it, call more_tools with "
+            f'{{"group": "{group}"}} first)')
+
 class Library(MoreTools, ManageTools):
     """The rows one chat request may look at, plus the change compilers."""
 
@@ -511,6 +559,10 @@ class Library(MoreTools, ManageTools):
         self.category_rows = {c["id"]: dict(c) for c in categories}
         #: Settings › AI assistant › "Let the assistant delete items".
         self.allow_delete = False
+        #: Library items the user named in this chat, had open, or that an
+        #: earlier card changed: the only ones the edit tools may change.
+        #: None (tests, other callers) leaves every item open.
+        self.named: set[str] | None = None
         self.cat_by_lower = {c["name"].lower(): c["id"] for c in categories}
         self.names = {i: m.get("name") or "" for i, m in self.modules.items()}
         self.tags = ai_describe.library_tags([*modules, *bundles, *(templates or [])])
@@ -531,6 +583,16 @@ class Library(MoreTools, ManageTools):
         #: Create cards from earlier answers the user hasn't applied, by pid:
         #: edits to them come back as a card that replaces them.
         self._earlier_ops: dict[str, dict[str, Any]] = {}
+        #: Cards replaced by a repeat of them (`_take_place`): old pid -> new.
+        self.replaced: dict[str, str] = {}
+        #: Categories an unapplied card creates: lower-case name -> (pid,
+        #: name), so the same create isn't proposed again (`edit_categories`).
+        self.proposed_categories: dict[str, tuple[str, str]] = {}
+        #: Each item change an update_many card of this answer makes
+        #: (`chat_manage.bulk_key`) -> its pid.
+        self.bulk_cards: dict[tuple[str, str], str] = {}
+        #: This answer's cards by pid (`_fold`).
+        self._answer_cards: dict[str, dict[str, Any]] = {}
         self._next_pid = 0
         #: Proposals from earlier answers in this chat: pid -> {title, status}.
         self.earlier_proposals: dict[str, dict[str, Any]] = {}
@@ -662,6 +724,52 @@ class Library(MoreTools, ManageTools):
                 bits.append(f"${r['payload']['output_var']}")
         return " · ".join(bits)
 
+    def named_in(self, text: str) -> set[str]:
+        """Ids of library items the user's message names: an id, a chip,
+        or a name not right after "a", "an", "new" or "another" ("change my
+        Weather" names it, "make a weather wildcard" does not)."""
+        out: set[str] = set(_HEX_ID.findall(text or "")) & {
+            *self.modules, *self.bundles, *self.templates}
+        low = (text or "").lower()
+        for pool in (self.modules, self.bundles, self.templates):
+            for r in pool.values():
+                name = str(r.get("name") or "").strip().lower()
+                if len(name) < 3 or r.get("_proposed"):
+                    continue
+                for m in re.finditer(r"(?<![\w])" + re.escape(name) + r"(?![\w])", low):
+                    before = re.findall(r"[a-z]+", low[:m.start()])[-1:]
+                    if before not in (["a"], ["an"], ["new"], ["another"]):
+                        out.add(r["id"])
+                        break
+        # "my hero template" for "Hero shot": the words after my/the/this,
+        # kind words left out, all in one item's name.
+        for m in re.finditer(r"\b(?:my|the|this|that|these|those)\s+((?:[\w'-]+\s*){1,3})", low):
+            words = [w for w in re.findall(r"[a-z0-9]+", m.group(1))
+                     if w not in _OWN_SKIP]
+            if not words:
+                continue
+            for pool in (self.modules, self.bundles, self.templates):
+                for r in pool.values():
+                    have = set(re.findall(r"[a-z0-9]+", str(r.get("name") or "").lower()))
+                    if not r.get("_proposed") and all(
+                            w in have or w.rstrip("s") in have for w in words):
+                        out.add(r["id"])
+        return out
+
+    def _check_named(self, tool: str, item_id: Any) -> None:
+        """Refuse an edit of a library item the user never pointed at (chat
+        eval round 3: "make a weather wildcard" rewrote their Weather)."""
+        if self.named is None or not isinstance(item_id, str):
+            return
+        row = self.get(item_id)
+        if row is None or row.get("_proposed") or item_id in self.named \
+                or item_id == self.editor_id:
+            return
+        raise ValueError(
+            f"{self._chip(row)} is the user's own item and they haven't named it in this chat: "
+            "don't change it. Make a new item for what they asked (a new name, or another "
+            "variable), or ask them whether they mean this one")
+
     def page_note(self, page: Any) -> str:
         """What the user is looking at, added under their message."""
         if not isinstance(page, dict):
@@ -707,6 +815,13 @@ class Library(MoreTools, ManageTools):
         guesses ids and then claims things about an item that isn't there."""
         key = _short(raw, 60)
         low = key.lower().lstrip("$")
+        if low in TOOLS:
+            return (f"{key!r} is a tool, not an item: call {key} itself with its arguments")
+        if key and not re.search(r"\w", key):
+            # All-tools eval: read({"id": "}}] } ]} ,"}), the JSON closing
+            # brackets written as the value.
+            return (f"the {what} id came out as JSON brackets ({key!r}): write the item's "
+                    "8-character id or its name as the value")
         if low:
             for pid, p in self.earlier_proposals.items():
                 if low in str(p.get("title") or "").lower() and p.get("status") not in (
@@ -716,6 +831,19 @@ class Library(MoreTools, ManageTools):
                             "isn't in the library yet. Tell the user it needs applying first "
                             f"(or open it unsaved with open {{\"proposal\": \"{pid}\"}}); "
                             "don't guess its id")
+            cat = next((c for c in self.category_rows.values()
+                        if str(c.get("name") or "").lower() == low or c.get("id") == low), None)
+            if cat is not None:
+                # Re-test on d6ac847: read({"id": "Subject"}) for a category.
+                inside = [r for r in [*self.modules.values(), *self.bundles.values(),
+                                      *self.templates.values()]
+                          if r.get("category_id") == cat["id"] and not r.get("_proposed")]
+                shown = ", ".join(self._chip(r) for r in inside[:12])
+                more = f" and {len(inside) - 12} more" if len(inside) > 12 else ""
+                return (f"{cat['name']} is a category, not an item. It holds {len(inside)} "
+                        f"item{'s' if len(inside) != 1 else ''}" + (f": {shown}{more}" if inside
+                                                                     else "") + ". Read one of "
+                        "them by its id, or propose changes with update_many / edit_categories")
             pool = [*self.modules.values(), *self.bundles.values(), *self.templates.values()]
             same = [r for r in pool if str(r.get("name") or "").lower() == low]
             if len(same) > 1:
@@ -749,6 +877,14 @@ class Library(MoreTools, ManageTools):
         head = text.split("#", 1)[0].strip()
         if _HEX_ID.fullmatch(head):
             return head
+        m = re.fullmatch(r"[^→>]*?[\s(]([0-9a-f]{8})\s*\)?", text)
+        if m and self.get(m.group(1)) is not None:
+            # "Weather (997f6b50)", as answers write items, or "Lighting d97da2bb".
+            return m.group(1)
+        # "Character Hair · $hair", the way cards are titled (all-tools eval).
+        named = re.sub(r"\s*·\s*\$[A-Za-z_]\w*\s*$", "", text)
+        if named != text and named:
+            return named
         if re.fullmatch(r"p\d+", head):
             made = [i for i, pid in self._created.items() if pid == head]
             if len(made) == 1:
@@ -1217,10 +1353,24 @@ class Library(MoreTools, ManageTools):
         if var and not _IDENT.match(var):
             raise ValueError("var must be a variable name: letters, digits and _ "
                              "(or \"\" for a vocabulary)")
+        defaulted = ""
+        if args.get("var") is None:
+            # No "var" at all is a forgotten one ("" is a vocabulary): chat
+            # eval round 2 asked for "a weather wildcard" three times and got
+            # a refusal, then an unasked rename of a library item.
+            var = defaulted = self._default_var(name)
         if not var and any(str(r.get("name") or "").lower() == name.lower()
-                           for r in self.modules.values() if r.get("type") == "wildcard"):
-            raise ValueError(f"a wildcard named {name} exists; a vocabulary needs a "
-                             "unique name so @{{{name}}} finds it")
+                           for r in self.modules.values()
+                           if r.get("type") == "wildcard" and not r.get("_proposed")):
+            raise ValueError(f"a wildcard named {name} exists and this one sets no variable; "
+                             f"give it a variable (\"var\") or a name no item has (a "
+                             f"vocabulary is found by name with @{{{name}}})")
+        other = _OTHER_KIND.search(name)
+        if other:
+            word = other.group(1).lower().rstrip("s").replace(" ", "_").replace("-", "_")
+            kind = {"fixed_value": "fixed_values"}.get(word, word)
+            raise ValueError(f"{name!r} names a {kind.replace('_', ' ')}, not a wildcard"
+                             + use_instead(kind, create=True))
         texts = [str(o.get("text") or "") for o in args.get("options") or []
                  if isinstance(o, dict)]
         if _ARROW.search(name) or sum(1 for t in texts if _ARROW.search(t)) > len(texts) // 2:
@@ -1230,7 +1380,20 @@ class Library(MoreTools, ManageTools):
         out = ai_wildcard.compile_spec(self._spec(args), var=var or None, refs=self.refs)
         payload = out["payload"]
         meta = self._meta(args)
-        warnings = [w for w in [self.var_clash(var)] if w]
+        twin = self._proposed_writer(var, name)
+        if twin is not None:
+            # The 9B proposed "Model Style Tags" four times in one answer,
+            # each read the "already set by" warning and made another card.
+            raise ValueError(
+                f"${var} is already set by {self._chip(twin)}, which "
+                + ("you proposed in this answer" if not twin.get("_earlier")
+                   else "an earlier card of this chat proposes")
+                + f": reuse it (change it with edit_options {{\"id\": \"{twin['id']}\"}}) "
+                "or pick another variable name")
+        warnings = [w for w in [self.var_clash(var, skip_name=name)] if w]
+        if defaulted:
+            warnings.insert(0, f"Sets ${defaulted}, named after it (no \"var\" was given; "
+                               "\"var\": \"\" makes a vocabulary with no variable)")
         return {
             "title": f"Create wildcard {name}",
             "summary": (f"${var}" if var else "vocabulary (no variable)")
@@ -1242,18 +1405,79 @@ class Library(MoreTools, ManageTools):
                    "body": {"type": "wildcard", "name": name, **meta["body"], "payload": payload}},
         }
 
-    def var_clash(self, var: str) -> str:
+    def _default_var(self, name: str) -> str:
+        """The variable a wildcard made without "var" sets: the one library
+        wildcards of that name set (a new Weather writes $weather like the
+        others), else the name as a variable."""
+        low = name.strip().lower()
+        same = [str((r.get("payload") or {}).get("var_binding") or "")
+                for r in self.modules.values()
+                if r.get("type") == "wildcard" and str(r.get("name") or "").lower() == low]
+        same = [v for v in same if v]
+        if same:
+            return max(set(same), key=same.count)
+        slug = re.sub(r"[^a-z0-9]+", "_", low).strip("_")[:48]
+        return slug if _IDENT.match(slug) else ""
+
+    @staticmethod
+    def _writes_var(r: dict[str, Any], var: str) -> bool:
+        p = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        return (p.get("var_binding") == var or p.get("output_var") == var
+                or any(isinstance(v, dict) and v.get("name") == var
+                       for v in p.get("values") or []))
+
+    def _proposed_writer(self, var: str, name: str) -> dict[str, Any] | None:
+        """A card not yet applied (this answer's or an earlier one's) that
+        sets ``$var`` under another name: a second writer is a mistake, so
+        the call is refused with the id to reuse. One with the same name is
+        the same card again: `_twin` replaces it instead."""
+        if not var:
+            return None
+        low = name.strip().lower()
+        for r in reversed(list(self.modules.values())):
+            if r.get("_proposed") and self._writes_var(r, var) \
+                    and str(r.get("name") or "").strip().lower() != low:
+                return r
+        return None
+
+    def _twin(self, op: dict[str, Any]) -> dict[str, Any] | None:
+        """The card not yet applied that this new item repeats: same kind
+        and name (and variable for a wildcard, source and target for a
+        constraint). Its card is replaced at the same id (`run`); a
+        wildcard's variable may change."""
+        body = op.get("body") if isinstance(op.get("body"), dict) else {}
+        if op.get("op") != "create" or op.get("kind") not in ("module", "bundle"):
+            return None
+        rows = self.modules if op["kind"] == "module" else self.bundles
+        p = body.get("payload") if isinstance(body.get("payload"), dict) else {}
+
+        def key(r: dict[str, Any], q: dict[str, Any]) -> tuple[Any, ...]:
+            if r.get("type") == "constraint":
+                return ("constraint", q.get("source_wildcard_id"), q.get("target_wildcard_id"))
+            # A wildcard proposed again under its name with another variable
+            # is a revision too (round 1: "Weather Conditions" for $weather,
+            # then again for $atmosphere after the clash warning).
+            return (r.get("type"), str(r.get("name") or "").strip().lower())
+
+        want = key(body, p)
+        for r in reversed(list(rows.values())):
+            q = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+            if r.get("_proposed") and key(r, q) == want:
+                return r
+        return None
+
+    def var_clash(self, var: str, skip_name: str = "") -> str:
         """A warning when items already set ``$var``, naming them, with what
-        to do instead (two writers: the later one wins at run time)."""
+        to do instead (two writers: the later one wins at run time). A card
+        named ``skip_name`` is the one being replaced, not another writer."""
         if not var or var not in self.catalog:
             return ""
-        writers = []
-        for r in self.modules.values():
-            p = r.get("payload") if isinstance(r.get("payload"), dict) else {}
-            if (p.get("var_binding") == var or p.get("output_var") == var
-                    or any(isinstance(v, dict) and v.get("name") == var
-                           for v in p.get("values") or [])):
-                writers.append(r)
+        skip = skip_name.strip().lower()
+        writers = [r for r in self.modules.values() if self._writes_var(r, var)
+                   and not (r.get("_proposed") and skip
+                            and str(r.get("name") or "").strip().lower() == skip)]
+        if not writers and any(self._writes_var(r, var) for r in self.modules.values()):
+            return ""
         if not writers:
             return f"${var} is already set elsewhere in the library"
         chips = ", ".join(self._chip(r) + (" (proposed)" if r.get("_proposed") else "")
@@ -1285,6 +1509,14 @@ class Library(MoreTools, ManageTools):
         if r is not None:
             r = self._current(r["id"])[0]
         if r is None or r.get("type") != type_:
+            other = self.get(self._bare_id(raw)) if isinstance(raw, str) else None
+            if other is not None:
+                # Round 2: a constraint from the derivation it had just made.
+                kind = self._kind(other)
+                raise ValueError(
+                    f"{self._chip(other)} is a {kind.replace('_', ' ')}, not a "
+                    f"{type_.replace('_', ' ')}; this needs a {type_.replace('_', ' ')}"
+                    + use_instead(kind))
             raise ValueError(self.not_found(raw, type_.replace("_", " ")))
         return r
 
@@ -1326,7 +1558,7 @@ class Library(MoreTools, ManageTools):
         shown = [
             {"id": str(n), "value": "" if o.get("is_null") else str(o.get("value") or ""),
              "weight": o.get("weight", 1), "sub_categories": list(o.get("sub_categories") or []),
-             "negative": o.get("negative") or ""}
+             "negative": o.get("negative") or "", **({"is_null": True} if o.get("is_null") else {})}
             for n, o in enumerate(opts, start=1)
         ]
         registry = [t for t in old.get("sub_categories") or [] if isinstance(t, str)]
@@ -1345,6 +1577,13 @@ class Library(MoreTools, ManageTools):
             "retag": {"options": _numbered("retag", "tags")},
             "reweight": {"options": _numbered("weights", "weight")},
         }
+        if any(x["id"] == "0" for raw in asks.values() for x in next(iter(raw.values()))):
+            # Browser test: "make the blank option rarer" sent n 0, and the
+            # card changed another option while leaving the blank alone.
+            empty = next((n for n in sorted(nulls, key=int)), "")
+            raise ValueError("options are numbered from 1, as read shows them"
+                             + (f"; the empty option is number {empty}" if empty else
+                                "; this wildcard has no empty option (null_weight adds one)"))
         changes: dict[str, list[dict[str, Any]]] = {}
         skipped: list[dict[str, str]] = []
         new_tags: list[str] = []
@@ -1353,7 +1592,8 @@ class Library(MoreTools, ManageTools):
                 continue
             out = ai_wildcard_edit.compile_edit(action, raw, options=shown,
                                                 registry=registry + new_tags,
-                                                refs=self.refs, self_id=r["id"])
+                                                refs=self.refs, self_id=r["id"],
+                                                labels=list(r.get("tags") or []))
             got = out["changes"]
             if action in ("rewrite", "retag"):
                 skipped += [{"text": "the empty option", "reason": "it has no text"}
@@ -1549,8 +1789,28 @@ class Library(MoreTools, ManageTools):
             catalog=self.catalog, taken_ids=taken, refs=self.refs,
         )
         if not compiled["rules"]:
-            raise ValueError("no usable rules" + _skipped(compiled["skipped"]))
+            raise ValueError("no usable rules" + _skipped(compiled["skipped"]) + ". "
+                             + self._rule_example())
         return compiled
+
+    def _rule_example(self) -> str:
+        """One rule that works, written from a variable of this library and
+        one of its values, for a failed create_derivation / add_rules."""
+        var, value = "class", "mage"
+        for name, entry in self.catalog.items():
+            if entry.get("values") and any(s.get("kind") == "wildcard"
+                                           for s in entry.get("sources") or []):
+                var, value = name, str(entry["values"][0])[:40]
+                break
+        rule = {"summary": "…", "branches": [{"conditions": [
+            {"var": var, "op": "equals", "value": value}], "actions": [
+            {"target_var": "new_var", "mode": "replace", "value": "some text"}]}],
+            "else_actions": [{"target_var": "new_var", "mode": "replace",
+                              "value": "other text"}]}
+        return ("A rule that works: " + json.dumps(rule, ensure_ascii=False)
+                + '. "var" and "target_var" are bare variable names (no $); a condition '
+                "compares with text, and a variable a Context Loop or Model Info sets "
+                "($iteration, $model_family) is fine to read")
 
     def create_derivation(self, args: dict[str, Any]) -> dict[str, Any]:
         name = self._name(args, "")
@@ -1603,7 +1863,8 @@ class Library(MoreTools, ManageTools):
             source=source, target=target,
         )
         if not compiled["cells"] and not compiled["exceptions"]:
-            raise ValueError("no usable rules" + _skipped(compiled["skipped"]))
+            raise ValueError("no usable rules" + _skipped(compiled["skipped"]) + ". "
+                             + ai_constraint.example_rule(source, target))
         matrix: dict[str, dict[str, Any]] = {}
         for c in compiled["cells"]:
             matrix.setdefault(c["source_tag"], {})[c["target_tag"]] = c["cell"]
@@ -1746,6 +2007,28 @@ class Library(MoreTools, ManageTools):
             rows[new_id] = {**copy.deepcopy(body), "id": new_id, "_proposed": pid}
             self._created[new_id] = pid
 
+    def _take_place(self, proposal: dict[str, Any], twin: dict[str, Any]) -> None:
+        """Make a create that repeats an unapplied card (`_twin`) replace
+        that card at the same id, so the user gets one card, the newest."""
+        op, pid = proposal["op"], proposal["pid"]
+        old_pid = str(twin["_proposed"])
+        iid = twin["id"]
+        body = op["body"]
+        body["id"] = iid
+        rows = self.modules if op["kind"] == "module" else self.bundles
+        row = {**copy.deepcopy(body), "id": iid, "_proposed": pid}
+        if twin.get("_earlier"):
+            row["_earlier"] = twin["_earlier"]
+            self.earlier_proposals.setdefault(old_pid, {})["status"] = "replaced"
+        rows[iid] = row
+        self.names[iid] = str(body.get("name") or "")
+        self._catalog = None
+        self._created[iid] = pid
+        if op["kind"] == "module":
+            self._pending[iid] = (pid, row)
+        proposal["replaces"] = old_pid
+        self.replaced[old_pid] = pid
+
     def adopt_earlier(self, proposal: dict[str, Any]) -> None:
         """Make a new module an earlier answer proposed (and the user hasn't
         applied) readable and editable here, at the id its card creates it
@@ -1754,6 +2037,9 @@ class Library(MoreTools, ManageTools):
         op = proposal.get("op") or {}
         body = op.get("body") if isinstance(op.get("body"), dict) else None
         pid = proposal.get("pid")
+        if op.get("op") == "categories" and isinstance(pid, str):
+            self._note_categories(op, pid)
+            return
         if (op.get("op") != "create" or op.get("kind") != "module" or body is None
                 or not isinstance(body.get("id"), str) or not isinstance(pid, str)
                 or body["id"] in self.modules):
@@ -1766,6 +2052,11 @@ class Library(MoreTools, ManageTools):
         # for it: its id is reserved, but it exists only once applied.
         self._created[iid] = pid
         self._catalog = None
+
+    def _note_categories(self, op: dict[str, Any], pid: str) -> None:
+        for name in op.get("create") or []:
+            if isinstance(name, str) and name.strip():
+                self.proposed_categories.setdefault(name.strip().lower(), (pid, name.strip()))
 
     def _pointed_at(self, name: str, item_id: str) -> bool:
         """Whether any item (or a card of this chat) points at the wildcard
@@ -1845,21 +2136,47 @@ class Library(MoreTools, ManageTools):
                 self.touched.append(args["id"])
             return fn(args)
         item_id = args.get("id") if tool in ITEM_TOOLS else None
+        self._check_named(tool, item_id)
         after = self._current(item_id)[1]
-        proposal = fn(args)
+        try:
+            proposal = fn(args)
+        except ValueError as e:
+            if after and str(e).startswith("that changes nothing"):
+                # Round 2: the same edit sent twice; the 9B read "changes
+                # nothing" as a wrong id and remade the whole wildcard.
+                raise ValueError(f"{e}: card {after} already makes this change (it is on "
+                                 "screen); answer now, or ask for a different change") from None
+            raise
         self._next_pid += 1
         pid = f"p{self._next_pid}"
         proposal = {"pid": pid, "tool": tool, **proposal, "after": after}
         op = proposal["op"]
+        if op["op"] == "categories":
+            self._note_categories(op, pid)
+        if op["op"] == "bulk":
+            new_cat = op.get("new_category") or ""
+            for it in op.get("items") or []:
+                self.bulk_cards.setdefault(bulk_key(it["id"], it["body"], new_cat), pid)
         if op["op"] == "update" and op["id"] == self.editor_id:
             # Built on the editor's unsaved version: it goes into the editor.
             op["basis"] = "editor"
-        if op["op"] == "create":
+        twin = self._twin(op) if op["op"] == "create" else None
+        if twin is not None and _same_item(twin, op["body"]):
+            # Sent again unchanged after its card's warning: nothing new.
+            self._next_pid -= 1
+            return (f"{tool}: this is exactly card {twin['_proposed']}, which is already on "
+                    "screen; nothing changed. If its warning needs a fix, change what it "
+                    "says; otherwise answer now")
+        if twin is not None:
+            self._take_place(proposal, twin)
+        elif op["op"] == "create":
             self._adopt(proposal)
         elif not after:
             self._replace_earlier(proposal)
             if proposal.get("replaces"):
                 return proposal
+        elif self._fold(proposal):
+            after = proposal.get("after")
         # A change that points at an item proposed earlier in this answer
         # (a constraint between two new wildcards, a bundle of new modules)
         # waits for that one: its id only exists once it is applied.
@@ -1913,7 +2230,34 @@ class Library(MoreTools, ManageTools):
         notes = [w for w in proposal["warnings"] if isinstance(w, str) and _NOTE.match(w)]
         if notes:
             proposal["notes"] = notes
+        self._answer_cards[pid] = proposal
         return proposal
+
+    def _fold(self, proposal: dict[str, Any]) -> bool:
+        """Fold a second change to the same item by the same tool in this
+        answer into one card: it was built on the first card's result, so it
+        holds both changes. Re-test on 367a6a5 (9B): edit_bundle three times,
+        two near-identical cards left on screen."""
+        op = proposal["op"]
+        prev = self._answer_cards.get(str(proposal.get("after")))
+        prev_op = (prev or {}).get("op") or {}
+        if (prev is None or op.get("op") != "update" or prev.get("tool") != proposal["tool"]
+                or prev_op.get("op") != "update" or prev_op.get("id") != op.get("id")):
+            return False
+        op["body"] = {**copy.deepcopy(prev_op.get("body") or {}), **(op.get("body") or {})}
+        if "before" in prev_op:
+            op["before"] = copy.deepcopy(prev_op["before"])
+        proposal["preview"] = list(dict.fromkeys(
+            [*(prev.get("preview") or []), *(proposal.get("preview") or [])]))
+        start = re.match(r"(\d+) → ", str(prev.get("summary") or ""))
+        end = re.match(r"\d+ → (.*)", str(proposal.get("summary") or ""))
+        if start and end:
+            proposal["summary"] = f"{start.group(1)} → {end.group(1)}"
+        proposal["replaces"] = prev["pid"]
+        proposal["after"] = prev.get("after")
+        if prev.get("needs"):
+            proposal["needs"] = prev["needs"]
+        return True
 
 
 #: Card warnings that only tell the user something (what was kept, what to
@@ -1924,6 +2268,17 @@ _NOTE = re.compile(
     r"|.* may name the old tags; check its rules$"
     r"|Points at the new item "
     r"|Builds on the earlier change to ")
+
+
+def _same_item(row: dict[str, Any], body: dict[str, Any]) -> bool:
+    """Whether a new item's body is the unapplied card's item again."""
+    def bare(v: Any) -> Any:  # rule and option ids are new on every call
+        if isinstance(v, dict):
+            return {k: bare(x) for k, x in v.items() if k != "id"}
+        return [bare(x) for x in v] if isinstance(v, list) else v
+
+    keys = ("name", "description", "tags", "category_id", "payload", "children")
+    return all(bare(row.get(k)) == bare(body.get(k)) for k in keys)
 
 
 def proposal_note(tool: str, proposal: dict[str, Any]) -> str:
@@ -1939,10 +2294,19 @@ def proposal_note(tool: str, proposal: dict[str, Any]) -> str:
         name = re.sub(r"[\[\]\n#]", " ", str(body.get("name") or "")).strip()
         head += (f": it will be created as [[{body['id']}#{name}]]. Point at it by that id "
                  "now (constraints, bundles, @{id} refs, more changes)")
+    if proposal.get("replaces"):
+        head += (f". It replaces card {proposal['replaces']} (the same item): there is one "
+                 "card for it, don't propose it again")
     needs = proposal.get("needs") or ([proposal["after"]] if proposal.get("after") else [])
     if needs:
         head += (f". It needs card{'s' if len(needs) > 1 else ''} {', '.join(needs)} applied "
                  "first (its Apply all button does that)")
+    if tool == "edit_categories":
+        # All-tools eval: it made "Lighting" and stopped at "apply it, and I'll
+        # move your wildcards into it"; update_many makes the category itself.
+        head += (". If items should go into a new category too, call update_many with "
+                 "that category's name now, in this answer: it files them there once "
+                 "applied, no need to wait for this card")
     head += ". Tell the user you proposed it and what to apply; don't say you made it."
     warns = [w for w in proposal.get("warnings") or [] if isinstance(w, str)]
     if warns:

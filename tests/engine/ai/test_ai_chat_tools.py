@@ -109,7 +109,7 @@ def test_fixed_values_create_and_edit():
     assert row["id"] == "v1" and row["value"] == "best quality" and row["negative"] == "lowres"
     assert e["after"] is None
     e2 = lib.run("edit_values", {"id": "aaaa0005", "remove": ["$quality"]})
-    assert e2["after"] == e["pid"] and e2["op"]["body"]["payload"]["values"] == []
+    assert e2["replaces"] == e["pid"] and e2["op"]["body"]["payload"]["values"] == []
 
 
 def test_combine_create_and_edit():
@@ -201,7 +201,7 @@ def test_wildcard_spec_in_chat():
                                     "options": [{"text": "wool"}, {"text": "silk"}]})
     assert "var_binding" not in v["op"]["body"]["payload"]
     assert v["summary"].startswith("vocabulary")
-    with pytest.raises(ValueError, match="unique name"):
+    with pytest.raises(ValueError, match="give it a variable"):
         lib.run("create_wildcard", {"name": "colors", "var": "", "options": [{"text": "x"}]})
     with pytest.raises(ValueError):
         lib.run("create_wildcard", {"name": "Bad", "var": "bad",
@@ -258,7 +258,9 @@ def test_edit_bundle():
     assert kids[-1]["id"] == "aaaa0006"
     assert p["op"]["before"]["children"][1]["instance"] == {"pick_min": 1, "pick_max": 2}
     r = lib.run("edit_bundle", {"id": "bbbb0001", "remove": [1]})
-    assert r["after"] == p["pid"] and len(r["op"]["body"]["children"]) == 2
+    # Folded into the first card: one card with both changes.
+    assert r["replaces"] == p["pid"] and len(r["op"]["body"]["children"]) == 2
+    assert r["op"]["before"]["children"][1]["instance"] == {"pick_min": 1, "pick_max": 2}
 
 
 def test_run_test_reports_values_never_picked_and_prompts():
@@ -339,9 +341,10 @@ def test_ids_copied_from_chips_and_cards_still_name_the_item():
     shoes = lib.run("create_wildcard", {"name": "Shoes", "var": "shoes",
                                         "options": [{"text": "boots", "tags": ["warm"]}]})
     new_id = shoes["op"]["body"]["id"]
-    for ref in (shoes["pid"], f"{new_id}#Shoes", f"@{{{new_id}}}"):
+    for n, ref in enumerate((shoes["pid"], f"{new_id}#Shoes", f"@{{{new_id}}}")):
+        # A new factor each time: an unchanged repeat makes no card.
         c = lib.run("create_constraint", {"source_id": "Season", "target_id": ref, "rules": [
-            {"source": "#cold", "target": "#warm", "effect": "boost", "factor": 2}]})
+            {"source": "#cold", "target": "#warm", "effect": "boost", "factor": 2 + n}]})
         assert c["op"]["body"]["payload"]["target_wildcard_id"] == new_id
 
 
@@ -364,5 +367,5 @@ def test_a_name_proposed_again_in_this_answer_means_its_own_card():
     assert con["op"]["body"]["payload"]["source_wildcard_id"] == "aaaa0002"
     # Its cards show once the answer ends: opening one now is refused with why.
     for raw in (made["pid"], new_id):
-        with pytest.raises(ValueError, match="already on screen"):
+        with pytest.raises(client_tools.Shown, match="already on screen"):
             client_tools.prepare(lib, "open", {"proposal": raw})

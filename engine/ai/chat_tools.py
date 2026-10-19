@@ -24,7 +24,7 @@ from engine.ai import text_items
 from engine.ai import use as ai_use
 from engine.ai import wildcard as ai_wildcard
 from engine.modules.constraint_handler import ConstraintHandler
-from engine.modules.derivation_handler import DerivationHandler
+from engine.modules.derivation_handler import DerivationHandler, clause_actions
 from engine.modules.snapshot import payload_hash
 
 MAX_READ_ROWS = 150
@@ -94,6 +94,20 @@ def _reach_text(sel: Any) -> str:
     return "picked targets"
 
 
+#: Words a model adds to an item's name when it names it ("Lighting
+#: wildcard", "Frame Cues derivation"); `_find_loose` drops them.
+_KIND_WORDS = {"wildcard", "wildcards", "derivation", "derivations", "constraint",
+               "constraints", "bundle", "bundles", "template", "templates", "combine",
+               "fixed", "values", "value", "module", "the", "card", "new"}
+
+
+#: What a Context Loop sets on each frame; run_test plays a few frames when
+#: a derivation reads them (`_loop_frames`).
+LOOP_VARS = ("iteration", "iteration_total")
+LOOP_FRAMES = 3
+LOOP_SEEDS = 20
+
+
 class MoreTools:
     """Mixed into `chat.Library` (which supplies modules, bundles,
     templates, `_module`, `_current`, `_meta`, `_name`, `catalog`)."""
@@ -136,6 +150,67 @@ class MoreTools:
         if row is not None and kinds and self._kind(row) not in kinds:  # type: ignore
             return None
         return row
+
+    def _find_loose(self, raw: Any) -> dict[str, Any] | None:
+        """`_find`, plus the ways a model names a stack item for run_test:
+        a chip (``id#Name``) or card id (``p4``), the name with its kind
+        ("Sequence Frame Cue Derivation"), singular or plural, ``A → B`` for
+        the constraint between two items, and the newest card when cards
+        repeat a name."""
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        row = self._find(raw)
+        if row is None:
+            row = self._find(self._bare_id(raw))  # type: ignore[attr-defined]
+        if row is not None:
+            return row
+        pair = re.split(r"\s*(?:→|->|=>)\s*", raw.strip())
+        if len(pair) == 2:
+            a, b = (self._find_loose(x) for x in pair)
+            if a is not None and b is not None:
+                for m in reversed(list(self.modules.values())):
+                    p = m.get("payload") if isinstance(m.get("payload"), dict) else {}
+                    if m.get("type") == "constraint" and (p.get("source_wildcard_id"),
+                                                          p.get("target_wildcard_id")) \
+                            == (a["id"], b["id"]):
+                        return m
+            return None
+
+        def norm(text: Any) -> str:
+            words = re.findall(r"[a-z0-9]+", str(text or "").lower().lstrip("$"))
+            words = [w for w in words if w not in _KIND_WORDS]
+            return " ".join(w[:-1] if len(w) > 3 and w.endswith("s") else w for w in words)
+
+        want = norm(raw)
+        if not want:
+            return None
+        pool = [*self.modules.values(), *self.bundles.values(), *self.templates.values()]
+        hits = [r for r in pool if norm(r.get("name")) == want]
+        if len(hits) > 1:
+            made = getattr(self, "_created", {})
+            newest = [r for r in hits if r.get("id") in made]
+            hits = newest[-1:] or hits
+        return hits[0] if len(hits) == 1 else None
+
+    def _find_shared(self, raw: Any) -> tuple[dict[str, Any] | None, str]:
+        """`_find_loose`, and when several items of one kind share the name
+        ("Lighting" ×3), the most used of them with a note naming the rest:
+        the 9B was told the ids and still ended "the test runner needs a
+        stack" (chat eval round 2), so the run goes ahead."""
+        row = self._find_loose(raw)
+        if row is not None or not isinstance(raw, str):
+            return row, ""
+        low = raw.strip().lower()
+        pool = [*self.modules.values(), *self.bundles.values()]
+        same = [r for r in pool if str(r.get("name") or "").strip().lower() == low
+                and not r.get("_proposed")]
+        kinds = {self._kind(r) for r in same}  # type: ignore[attr-defined]
+        if len(same) < 2 or len(kinds) != 1:
+            return None, ""
+        best = max(same, key=lambda r: len(self._used_by(r["id"])))
+        rest = ", ".join(r["id"] for r in same if r is not best)
+        return best, (f"{len(same)} items are named {raw.strip()!r}: ran {best['id']} (the most "
+                      f"used); the others are {rest}, pass one's id to run it instead")
 
     def _used_by(self, mid: str) -> list[str]:
         out = []
@@ -419,7 +494,9 @@ class MoreTools:
                 continue
             n = _num(x.get("n"), len(rules))
             if n is None:
-                warnings.append(f"Left out rule {x.get('n')}: no such rule")
+                warnings.append(f"Left out rule {x.get('n')}: no such rule (it has "
+                                f"{len(rules)} rule{'s' if len(rules) != 1 else ''}, counting "
+                                "from 1; add_rules adds a new one)")
                 continue
             compiled = ai_derivation.compile_rules(
                 {"rules": [x.get("rule")]}, catalog=self.catalog,  # type: ignore
@@ -570,9 +647,20 @@ class MoreTools:
         ref, use = (raw.get("item") or raw.get("id"), raw.get("use")) \
             if isinstance(raw, dict) else (raw, "")
         row = self._find(ref)
+        if row is None and isinstance(ref, str):
+            row = self._find(self._bare_id(ref))  # type: ignore[attr-defined]
         if row is None:
-            warnings.append(f"Left out {_short(ref, 40) or 'an item'}: not in the library "
-                            "(or more than one item has that name; use its id)")
+            low = str(ref or "").strip().lower()
+            same = [r for r in [*self.modules.values(), *self.bundles.values()]
+                    if low and str(r.get("name") or "").strip().lower() == low]
+            if len(same) > 1:
+                # All-tools eval: "Face kit" came out without its Expression
+                # (3 share the name) and the card looked finished.
+                raise ValueError(
+                    f"{len(same)} items are named {str(ref).strip()!r}: "
+                    + ", ".join(self._chip(r) for r in same)  # type: ignore[attr-defined]
+                    + "; pass the one you mean by its id")
+            warnings.append(f"Left out {_short(ref, 40) or 'an item'}: not in the library")
             return None
         row = self._current(row["id"])[0] or row  # type: ignore[attr-defined]
         kind = self._kind(row)  # type: ignore[attr-defined]
@@ -810,7 +898,7 @@ class MoreTools:
         by_id: dict[str, Any] = {}
         rest: list[Any] = []
         for x in raw:
-            row = self._find(x.get("item") or x.get("id") if isinstance(x, dict) else x)
+            row = self._find_shared(x.get("item") or x.get("id") if isinstance(x, dict) else x)[0]
             if row is None or row["id"] in by_id:
                 rest.append(x)
             else:
@@ -827,12 +915,17 @@ class MoreTools:
         for i, x in enumerate((raw if isinstance(raw, list) else [])[:MAX_STACK]):
             ref, use = (x.get("item") or x.get("id"), x.get("use")) if isinstance(x, dict) \
                 else (x, "")
-            found = self._find(ref)
+            found, note = self._find_shared(ref)
+            if note:
+                warnings.append(note)
             row = get(found["id"]) if found else None
             if row is not None and row.get("_proposed") and not proposed:
                 continue  # new in this answer: only in the "now" run
             if row is None:
-                warnings.append(f"Left out {_short(ref, 40)}: not in the library")
+                # Several items share the name (round 1: three "Lighting"
+                # wildcards): say which, so the next call takes an id.
+                warnings.append(f"Left out {_short(ref, 40)}: "
+                                + self.not_found(ref))  # type: ignore[attr-defined]
                 continue
             kind = self._kind(row)  # type: ignore[attr-defined]
             if kind == "template":
@@ -918,11 +1011,18 @@ class MoreTools:
             if isinstance(args.get("pins"), dict) else {}
         template = None
         if args.get("template"):
-            template = self._find(args["template"], ("template",))
+            template = self._find_loose(args["template"])
+            if template is not None and self._kind(template) != "template":  # type: ignore
+                template = None
             if template is None:
                 raise ValueError(f"no template {_short(args['template'], 40)!r}")
-        proposed = bool(args.get("proposed")) and bool(self._pending)  # type: ignore
         args, needs = self._stack_needs(args)
+        # A stack naming a card not yet applied means the run with it: the
+        # model often leaves out "proposed" and then gets "nothing to run".
+        named = [self._find_loose(x.get("item") or x.get("id") if isinstance(x, dict) else x)
+                 for x in (args.get("stack") if isinstance(args.get("stack"), list) else [])]
+        proposed = (bool(args.get("proposed")) and bool(self._pending)  # type: ignore
+                    ) or any(r is not None and r.get("_proposed") for r in named)
         modules, warnings = self._stack(args.get("stack"), False)
         warnings = needs + warnings
         after_modules: list[dict[str, Any]] = []
@@ -939,8 +1039,104 @@ class MoreTools:
         else:
             before = self._run(modules, pins, seeds, template)
             report, modules = self._run(after_modules, pins, seeds, template), after_modules
+        frames = self._loop_frames(modules, pins)
+        stuck = [] if frames else self._stuck(report, modules, pins)
+        stuck += frames
+        warnings += stuck
         self.last_card = self._test_card(report, modules, before, args, pins, seeds)
+        # On the card too: the user sees why a variable never changes.
+        self.last_card["warnings"][:0] = [{"text": _short(w, 160), "count": report["runs"]}
+                                          for w in stuck]
         return self._report(report, modules, warnings, before)
+
+    def _loop_frames(self, modules: list[dict[str, Any]], pins: dict[str, str]) -> list[str]:
+        """A derivation reading the loop's ``$iteration`` / ``$iteration_total``
+        can't show its frames in one run: nothing sets them outside a
+        Context Loop. Run the stack as frames 1-3 of 3 and say what its
+        variables were in each (chat eval round 1: the 9B invented "with
+        N=5 you get …" from a run that never set $iteration)."""
+        targets: list[str] = []
+        for m in modules:
+            if m.get("type") != "derivation":
+                continue
+            for rule in (m.get("payload") or {}).get("rules") or []:
+                if not isinstance(rule, dict):
+                    continue
+                branches = [b for b in rule.get("branches") or [] if isinstance(b, dict)]
+                reads = {str(c.get("var") or "").split(".")[0]
+                         for b in branches for c in _conditions(b.get("condition"))}
+                if not reads & (set(LOOP_VARS) - set(pins)):
+                    continue
+                clauses = [*branches, *([rule["else"]] if isinstance(rule.get("else"),
+                                                                     dict) else [])]
+                targets += [a["target_var"] for c in clauses for a in clause_actions(c)
+                            if isinstance(a, dict) and isinstance(a.get("target_var"), str)]
+        targets = list(dict.fromkeys(targets))[:4]
+        if not targets:
+            return []
+        out = []
+        for i in range(1, LOOP_FRAMES + 1):
+            frame = {"iteration": str(i), "iteration_total": str(LOOP_FRAMES), **pins}
+            rep = self._run(modules, frame, LOOP_SEEDS, None)
+            got = []
+            for var in targets:
+                v = rep["variables"].get(var)
+                if not v:
+                    got.append(f"${var} not set")
+                    continue
+                total = sum(v["counts"].values()) + v["other"]
+                got.append(f"${var} = " + "; ".join(
+                    f'"{_short(self._show(k), 40)}" {round(100 * n / total) if total else 0}%'
+                    for k, n in list(v["counts"].items())[:2]))
+            out.append(f"Loop frame {i} of {LOOP_FRAMES} ($iteration = {i}): " + ", ".join(got))
+        return out
+
+    def _stuck(self, report: dict[str, Any], modules: list[dict[str, Any]],
+               pins: dict[str, str]) -> list[str]:
+        """Derivations whose variable came out the same on every seed though
+        their rules have more than one way to go: an IF that never held
+        (the 9B's ``$iteration_total is "3"``, which only a Context Loop
+        sets). Names the variables the tests read that nothing in the run
+        sets, so the model pins them or says the test can't show it."""
+        if report.get("runs", 0) < 5:
+            return []
+        sets: set[str] = set(pins)
+        for m in modules:
+            sets |= self._writes(m)  # type: ignore[attr-defined]
+        out: list[str] = []
+        for m in modules:
+            if m.get("type") != "derivation":
+                continue
+            for rule in (m.get("payload") or {}).get("rules") or []:
+                if not isinstance(rule, dict):
+                    continue
+                branches = [b for b in rule.get("branches") or [] if isinstance(b, dict)]
+                if len(branches) + (1 if rule.get("else") else 0) < 2:
+                    continue
+                clauses = [*branches, *([rule["else"]] if isinstance(rule.get("else"),
+                                                                     dict) else [])]
+                targets = {a.get("target_var") for c in clauses for a in clause_actions(c)
+                           if isinstance(a, dict) and a.get("mode") in (None, "replace")}
+                for var in sorted(t for t in targets if isinstance(t, str)):
+                    v = report["variables"].get(var)
+                    if not v or v["distinct"] != 1 or v.get("other"):
+                        continue
+                    value = next(iter(v["counts"]), "")
+                    read = {str(c.get("var") or "").split(".")[0]
+                            for b in branches for c in _conditions(b.get("condition"))} - {""}
+                    reads = sorted(read - sets)
+                    if not reads and not any(
+                            (report["variables"].get(r) or {}).get("distinct", 0) > 1
+                            for r in read):
+                        continue  # what it reads never changes here (pins): one value is right
+                    why = (f"; nothing in this run sets ${', $'.join(reads)}, so its test "
+                           "can't hold here: pass pins (e.g. {\"" + reads[0] + "\": \"...\"}) "
+                           "or tell the user it only changes when that is set"
+                           if reads else "; check its conditions against the values above")
+                    out.append(f"{m.get('name')} set ${var} to "
+                               f"\"{_short(self._show(value), 40)}\" on every seed: only one "
+                               f"of its branches ever ran{why}")
+        return out[:3]
 
     def _test_card(self, report: dict[str, Any], modules: list[dict[str, Any]],
                    before: dict[str, Any] | None, args: dict[str, Any],
@@ -951,7 +1147,7 @@ class MoreTools:
         stack: list[dict[str, str]] = []
         for x in (args.get("stack") if isinstance(args.get("stack"), list) else [])[:MAX_STACK]:
             ref = x.get("item") or x.get("id") if isinstance(x, dict) else x
-            row = self._find(ref)
+            row = self._find_loose(ref)
             if row is None or row.get("_proposed"):
                 continue
             kind = self._kind(row)  # type: ignore[attr-defined]
@@ -1030,6 +1226,11 @@ class MoreTools:
             never = [o.get("value") for o in m["payload"].get("options") or []
                      if isinstance(o, dict) and not o.get("is_null") and o.get("id") not in picked
                      and o.get("weight", 1) != 0]
+            live = [o for o in m["payload"].get("options") or []
+                    if isinstance(o, dict) and not o.get("is_null") and o.get("weight", 1) != 0]
+            if not never and len(live) > TOP_VALUES:
+                # The top values alone made the 9B say "all 5 options" of 10.
+                lines.append(f"All {len(live)} options of {m.get('name')} were picked")
             if never and len(never) < len(m["payload"].get("options") or []):
                 lines.append(f"Never picked in {m.get('name')}: "
                              + ", ".join(_short(self._show(x), 40) for x in never[:8])
@@ -1048,6 +1249,15 @@ class MoreTools:
 _USE_KEYS = {"pick_min", "pick_max", "pick_separator", "pick_independent", "category_filter",
              "exclude_null", "match_variable", "seed_scope", "internal", "variable_binding",
              *(k for k in ai_use.WRITES if k != "target_select")}
+
+
+def _conditions(cond: Any) -> list[dict[str, Any]]:
+    """The single tests in a condition, groups opened."""
+    if not isinstance(cond, dict):
+        return []
+    if isinstance(cond.get("conditions"), list):
+        return [c for x in cond["conditions"] for c in _conditions(x)]
+    return [cond]
 
 
 def _num(raw: Any, size: int) -> int | None:

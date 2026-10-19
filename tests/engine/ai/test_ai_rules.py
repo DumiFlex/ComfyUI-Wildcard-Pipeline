@@ -146,7 +146,8 @@ def test_derivation_warns_and_skips():
         "action": {"target_var": "song", "mode": "replace", "value": "silence"},
     }
     assert "IF ($class equals \"bard\" and $mood is_set)" in r["summary"]
-    assert [s["text"] for s in out["skipped"]] == ["bad var", "ref", "regex", "not regex", "empty"]
+    # A rule with nothing in it is dropped without a note.
+    assert [s["text"] for s in out["skipped"]] == ["bad var", "ref", "regex", "not regex"]
     with pytest.raises(ValueError):
         ai_derivation.compile_rules({"nope": 1}, catalog=cat)
 
@@ -221,7 +222,8 @@ def test_constraint_compiles_cells_exceptions_and_expansion():
                                     "factor": 1, "source_id": "c1", "target_id": "w2"}
     assert len(excs) == 2
     assert [x["reason"] for x in out["skipped"]] == [
-        "the source isn't an option or tag (its tags: #magic, #melee)",
+        "the source isn't an option or tag (its tags: #magic, #melee); "
+        "one option or tag per side, a rule each",
     ] * 2
 
 
@@ -348,3 +350,93 @@ def test_append_and_prepend_values_bring_their_separator():
     branch = out["rules"][0]["rule"]["branches"][0]
     values = [branch["action"]["value"], *(a["value"] for a in branch["extra_actions"])]
     assert values == [", watch", ", ring", ", belt", "hat, "]
+
+
+def test_a_last_catch_all_branch_becomes_the_else():
+    """Browser test (9B): "anyone else → Adventurer" written as a last
+    branch `class not_equals ""` after the mage and warrior branches."""
+    cat = library_vars.build_catalog(LIBRARY)
+
+    def branch(op, value, title):
+        return {"match": "all", "conditions": [{"var": "class", "op": op, "value": value}],
+                "actions": [{"target_var": "title", "mode": "replace", "value": title}]}
+
+    out = ai_derivation.compile_rules(_drv([{
+        "summary": "Titles", "else_actions": [], "branches": [
+            branch("equals", "Mage", "Archmage"), branch("equals", "Warrior", "Champion"),
+            branch("not_equals", "", "Adventurer")]}]), catalog=cat)
+    rule = out["rules"][0]["rule"]
+    assert len(rule["branches"]) == 2
+    assert rule["else"]["action"]["value"] == "Adventurer"
+
+
+def test_a_draft_missing_an_asked_variable_says_so():
+    from engine.ai import text_items
+    assert text_items.missing_asked("$char_desc, $expression",
+                                    "read $quality_tags, $char_desc and $expression") == (
+        "Doesn't read $quality_tags, which you asked for")
+    assert text_items.missing_asked("$a $b", "use $a and $b") == ""
+
+
+def test_values_wrapped_in_quotes_lose_them():
+    # Re-test on b793872 (9B): every $iteration rule wrote "'establishing shot'".
+    out = ai_derivation.compile_rules({"rules": [{"branches": [{
+        "conditions": [{"var": "iteration", "op": "equals", "value": "1"}],
+        "actions": [{"target_var": "shot", "value": "'establishing shot'"}]}],
+        "else_actions": [{"target_var": "shot", "value": "“close-up”"}]}]},
+        catalog={})
+    rule = out["rules"][0]["rule"]
+    assert rule["branches"][0]["action"]["value"] == "establishing shot"
+    assert rule["else"]["action"]["value"] == "close-up"
+    assert ai_derivation._unquote("say 'hi' and 'bye'") == "say 'hi' and 'bye'"
+
+
+def test_a_dropped_catch_all_is_warned_about():
+    # Re-test on b793872 (9B): "anyone else Adventurer" came back with no ELSE.
+    branch = {"branches": [{"conditions": [{"var": "class", "op": "equals", "value": "mage"}],
+                            "actions": [{"target_var": "title", "value": "Archmage"}]}]}
+    rules = [x["rule"] for x in ai_derivation.compile_rules({"rules": [branch]},
+                                                            catalog={})["rules"]]
+    asked = "mage gets Archmage, anyone else gets Adventurer"
+    assert "anyone else" in ai_derivation.missing_else(asked, rules)
+    assert ai_derivation.missing_else("mage gets Archmage", rules) == ""
+    with_else = [{**rules[0], "else": {"action": {"target_var": "title", "value": "x"}}}]
+    assert ai_derivation.missing_else(asked, with_else) == ""
+
+
+def test_a_catch_all_split_into_a_second_rule_joins_the_first():
+    # Re-test on 367a6a5 (9B): "mage → Archmage" then "warrior → Champion,
+    # else Adventurer" as two rules, so every mage ended up an Adventurer.
+    def branch(cls, title):
+        return {"conditions": [{"var": "class", "op": "equals", "value": cls}],
+                "actions": [{"target_var": "title", "value": title}]}
+    out = ai_derivation.compile_rules({"rules": [
+        {"branches": [branch("mage", "Archmage")]},
+        {"branches": [branch("warrior", "Champion")],
+         "else_actions": [{"target_var": "title", "value": "Adventurer"}]}]}, catalog={})
+    assert len(out["rules"]) == 1
+    rule = out["rules"][0]["rule"]
+    assert [b["action"]["value"] for b in rule["branches"]] == ["Archmage", "Champion"]
+    assert rule["else"]["action"]["value"] == "Adventurer"
+    # Rules on different variables stay apart.
+    apart = ai_derivation.compile_rules({"rules": [
+        {"branches": [branch("mage", "Archmage")]},
+        {"branches": [{"conditions": [{"var": "season", "op": "equals", "value": "winter"}],
+                       "actions": [{"target_var": "title", "value": "Frost"}]}],
+         "else_actions": [{"target_var": "title", "value": "Wanderer"}]}]}, catalog={})
+    assert len(apart["rules"]) == 2
+
+
+def test_else_repair_attaches_to_the_rule_without_one():
+    rules = [x["rule"] for x in ai_derivation.compile_rules({"rules": [{"branches": [{
+        "conditions": [{"var": "class", "op": "equals", "value": "mage"}],
+        "actions": [{"target_var": "title", "value": "Archmage"}]}]}]}, catalog={})["rules"]]
+    added = ai_derivation.attach_else({"otherwise": [
+        {"target_var": "title", "mode": "replace", "value": "\"Adventurer\""}]}, rules, {})
+    assert added == "$title = Adventurer"
+    assert rules[0]["else"]["action"]["value"] == "Adventurer"
+    assert ai_derivation.attach_else({"otherwise": []}, rules, {}) == ""
+    assert ai_derivation.else_schema(["title"])["properties"]["otherwise"]["items"][
+        "properties"]["target_var"]["enum"] == ["title"]
+    assert "anyone else" in ai_derivation.else_prompt(
+        "mage Archmage, anyone else Adventurer", rules)

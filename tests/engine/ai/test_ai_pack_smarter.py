@@ -37,7 +37,7 @@ def test_library_items_are_reused_not_rebuilt(wp_db):
         _item(name="Eyes", var="eyes", about="eye colours"),
         _item(kind="template", name="T", about="$hair, $eyes"),
     ]}
-    plan = pack.compile_plan(raw, library=library)
+    plan = pack.compile_plan(raw, library=library, settings={"library": "reuse"})
     lib = plan["items"][0]
     assert (lib["kind"], lib["name"], lib["var"], lib["library_id"]) == (
         "library", "Hair", "hair", HAIR["id"])
@@ -167,9 +167,33 @@ def test_review_finds_what_would_break_or_clash():
     texts = " | ".join(f["text"] for f in pack.review_plan(lone))
     assert "Nothing links the picks" in texts and "no template" in texts
     model = pack.compile_review({"findings": [{"item": "a", "text": "Split it"}, {"x": 1}]}, lone)
-    assert model == [{"id": "m1", "key": lone["items"][0]["key"], "level": "tip",
+    assert model == [{"id": pack.finding_id("m", lone["items"][0]["key"], "Split it"),
+                      "key": lone["items"][0]["key"], "level": "tip",
                       "text": "Split it", "by": "model"}]
     assert "A · $a" in pack.review_prompt(lone, [])
+
+
+def test_a_recheck_keeps_old_findings_and_takes_two_new_ones():
+    plan = pack.compile_plan({"title": "x", "items": [_item(name="A", var="a")]})
+    key = plan["items"][0]["key"]
+    rule = [{"id": "r1", "key": key, "level": "fix", "text": "A has only one option to pick"}]
+    answer = {"findings": [
+        {"item": "a", "text": "A only has one option to pick from"},  # the checker's, reworded
+        {"item": "a", "text": "Give A options in one style, it mixes styles"},  # earlier, reworded
+        {"item": "", "text": "Add a lighting wildcard"},
+        {"item": "", "text": "Add a camera angle wildcard"},
+        {"item": "", "text": "Add a background wildcard"},
+    ]}
+    first = pack.compile_review(answer, plan, rule)
+    assert [f["text"] for f in first][0] == "Give A options in one style, it mixes styles"
+    assert len(first) == 4  # the checker's repeat is dropped
+    earlier = "A mixes two styles: give A options in one style"
+    again = pack.compile_review(answer, plan, rule, [earlier])
+    assert [f["text"] for f in again] == [earlier, "Add a lighting wildcard",
+                                          "Add a camera angle wildcard"]
+    assert again[0]["id"] == pack.finding_id("m", key, earlier)
+    prompt = pack.review_prompt(plan, rule, "", [earlier])
+    assert "re-check" in prompt and f"1. {earlier}" in prompt
 
 
 def test_variety_and_repair_notes():

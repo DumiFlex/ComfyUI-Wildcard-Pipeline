@@ -132,7 +132,7 @@ async def test_bad_asks_are_refused_with_a_reason(wp_client, fake_llm):
             {"tool": "read", "args": json.dumps({"id": tgt})}]},
         {"message": "done", "calls": []},
     ])
-    out = await _chat(wp_client, "tag it", chat_id=out["chat_id"])
+    out = await _chat(wp_client, "tag my Weapon", chat_id=out["chat_id"])
     assert out["pending"] == []
     notes = [s["note"] for s in out["steps"] if not s["ok"]]
     assert "ask first, then propose" in notes[0]

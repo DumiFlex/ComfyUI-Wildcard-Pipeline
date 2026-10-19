@@ -38,7 +38,7 @@ SETTINGS: dict[str, tuple[str, ...]] = {
     "youth_negative": ("on", "off"),
 }
 DEFAULT_SETTINGS: dict[str, Any] = {
-    "library": "reuse", "negatives": "auto", "structure": "sections", "style": "auto",
+    "library": "inspire", "negatives": "auto", "structure": "sections", "style": "auto",
     "rating": "auto", "count": 0, "model": "any", "youth_negative": "on",
 }
 #: Most options a sweep axis should have (the Loop sweeps every ticked one).

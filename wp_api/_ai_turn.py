@@ -322,6 +322,14 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         # The JSON prompt keeps the tools the chat started with: say how
         # the new ones are called here instead.
         perms += "\n" + ai_chat.kinds_section(ai_tools.tools(added)).strip()
+    if not resume and text:
+        # The groups the message asks for by name come loaded: small models
+        # rarely call more_tools and fake the missing tool with another.
+        for group in ai_tools.groups_for(text):
+            if group in ai_tools.MORE_GROUPS:
+                got = _more_tools(meta, group)
+                if got.startswith("These tools"):
+                    perms = "\n".join(x for x in (perms, got) if x)
     meta, since = ai_chatlog.apply_events(meta, body.get("events"))
     route = str(page.get("route") or "") if page else ""
     if page and route != meta.get("page_route"):
@@ -375,6 +383,19 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     pids = [int(p[1:]) for p in meta.get("proposals") or {} if p[1:].isdigit()]
     lib._next_pid = max(pids, default=0)
     lib.earlier_proposals = dict(meta.get("proposals") or {})
+    # The library items the edit tools may change: ones the user named in
+    # this chat, the page's item, and ones an earlier card already changes.
+    named = set(meta.get("named") or [])
+    if not resume and text:
+        named |= lib.named_in(text)
+    if page and isinstance(page.get("id"), str):
+        named.add(page["id"])
+    for p_ in lib.earlier_proposals.values():
+        op = p_.get("op") if isinstance(p_, dict) else None
+        if isinstance(op, dict) and op.get("op") == "update" and isinstance(op.get("id"), str):
+            named.add(op["id"])
+    meta["named"] = sorted(named)
+    lib.named = named
     lib.decisions = list(meta.get("decisions") or [])  # what `ask` may not ask again
     # Links read_result may open: the same list the searches fill.
     lib.web_urls = meta.setdefault("web_urls", [])
@@ -386,12 +407,17 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     message = ""
     interim = ""
     seen: set[str] = set()
+    #: Change calls that failed, by their exact args: the same call again
+    #: fails the same way (round 2: an identical create_wildcard twice).
+    failed: dict[str, str] = {}
     errors: dict[str, int] = {}
     #: Refusals by tool and reason (ids and numbers left out).
     refused: dict[str, int] = {}
     forced = False
     checked = False
     nudged = False
+    #: The step whose create calls were turned to plan_pack (`PACK_FIRST`).
+    steered_at: int | None = None
     empty_nudged = False
     #: Ask the next step with the model's thinking off: set by the empty
     #: nudge, since a thinking model that came back empty once tends to
@@ -567,6 +593,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 result(f"{tool}: error: {tool} isn't available here; call more_tools first")
                 steps.append({"tool": tool, "note": f"{tool} isn't available here", "ok": False})
                 continue
+            key = ""
             try:
                 raw = call["args"] if isinstance(call.get("args"), dict) else call["args_text"]
                 args, arg_notes = ai_tools.check_args(spec, ai_chat.parse_args(raw))
@@ -598,7 +625,12 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                         # Its anchors would be guesses, and the browser would
                         # only say "no part" after a pause.
                         raise ValueError(ai_client_tools.READ_PAGE_FIRST)
-                    cargs, label = ai_client_tools.prepare(lib, tool, args)
+                    try:
+                        cargs, label = ai_client_tools.prepare(lib, tool, args)
+                    except ai_client_tools.Shown as shown:
+                        needs_reply = True
+                        result(str(shown))
+                        continue
                     if tool == "highlight":
                         anchors = sorted(p["anchor"] for p in cargs["points"])
                         pointed = list(meta.get("pointed") or [])
@@ -621,6 +653,15 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                                   "label": label})
                     steps.append({"tool": tool, "note": label, "ok": True})
                     continue
+                if (tool.startswith("create_") and steered_at in (None, step)
+                        and _PACK_ASK.search(text or "")
+                        and "plan_pack" in (meta.get("tools") or [])
+                        and not any(c["tool"] == "plan_pack" for c in calls)
+                        and not any(p_["tool"] == "plan_pack" for p_ in proposals)):
+                    # Every eval run: "plan a pack" made 2-3 loose items and
+                    # never the Pack builder, which plans and checks a pack.
+                    steered_at = step
+                    raise ValueError(PACK_FIRST)
                 key = tool + _json.dumps(args, sort_keys=True, ensure_ascii=False)
                 if tool not in ai_chat.CHANGE_TOOLS and key in seen:
                     # Small models re-run the same search every step.
@@ -628,6 +669,13 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     needs_reply = True
                     result(f"{tool}: you already made this exact call; its results are above. "
                            "Don't repeat it.")
+                    continue
+                if key in failed:
+                    repeats += 1
+                    needs_reply = True
+                    result(f"{tool}: you already made this exact call and it failed ("
+                           f"{failed[key]}); sending it again fails again. Change what the "
+                           "error names, or answer now")
                     continue
                 seen.add(key)
                 if errors.get(tool, 0) >= 3:
@@ -643,6 +691,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     out = lib.run(tool, args)
             except ValueError as e:
                 errors[tool] = errors.get(tool, 0) + 1
+                if key and tool in ai_chat.CHANGE_TOOLS:
+                    failed[key] = ai_budget.clip(str(e), 300)
                 why = tool + re.sub(r"\b[0-9a-f]{8}\b|\d+", "#", str(e))
                 refused[why] = refused.get(why, 0) + 1
                 needs_reply = True
@@ -673,6 +723,16 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             else:
                 # Hidden characters can't ride into the library on a card.
                 out = ai_safety.clean(out)
+                twin = any(p_["pid"] == out.get("replaces") for p_ in proposals)
+                if twin:
+                    # A repeat of a card from this answer: the user gets one.
+                    old_pid, new_pid = out["replaces"], out["pid"]
+                    proposals[:] = [p_ for p_ in proposals if p_["pid"] != old_pid]
+                    for p_ in proposals:
+                        if p_.get("after") == old_pid:
+                            p_["after"] = new_pid
+                        if p_.get("needs"):
+                            p_["needs"] = [new_pid if n == old_pid else n for n in p_["needs"]]
                 proposals.append(out)
                 meta.setdefault("proposals", {})[out["pid"]] = {
                     "title": out["title"], "status": None}
@@ -681,6 +741,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     if gone is not None:
                         meta["proposals"][out["replaces"]] = {**gone, "status": "replaced"}
                 result(ai_chat.proposal_note(tool, out) + extra)
+                if twin:
+                    out.pop("replaces")  # the user never saw the card it replaces
                 steps.append({"tool": tool, "note": out["title"], "ok": True})
         if emit:
             for s_ in steps[sent_steps:]:
@@ -721,6 +783,13 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 nudged = True
                 set_aside, message = said, ""
                 new.append(ai_chatlog.note_entry(ai_chat.UNFINISHED_NUDGE))
+                continue
+            promised = ai_chat.promised_call(said)
+            if (not calls and not proposals and not nudged and promised
+                    and step < ai_chat.MAX_STEPS):
+                nudged = True
+                set_aside, message = said, ""
+                new.append(ai_chatlog.note_entry(ai_chat.promise_nudge(promised)))
                 continue
             # Asked leave instead of proposing, or met "yes" with more talk:
             # tell it once to act. Small models loop on "Should I proceed?".
@@ -780,9 +849,22 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                  for c in last["calls"]], ""))
         if new[-1].get("kind") != "step":
             new.append(_final_step(fmt, message))
-    if not pause and not proposals and _CLAIMS.search(message or ""):
-        # The 9B said "I've created … as a fixed values module" with no card.
+    if not pause and _TESTED.search(message or "") and not any(
+            s_.get("tool") == "run_test" and s_.get("ok") for s_ in steps):
+        # Chat eval round 1: "I ran a test on your Lighting wildcard" after
+        # its only run_test failed.
+        message = message.rstrip() + "\n\n" + NOTHING_TESTED
+    if not pause and not proposals and (_CLAIMS.search(message or "")
+                                        or _card_as_text(message)
+                                        or _ORGANIZE_ASK.search(text or "")):
+        # The 9B said "I've created … as a fixed values module" with no card,
+        # and wrote "here's the card to apply: …" or an add_rules call as text.
         message = message.rstrip() + "\n\n" + NOTHING_PROPOSED
+    elif not pause and proposals and (missing := _missing_kinds(message, proposals)):
+        # All-tools eval: "I've proposed a combine" beside a wildcard card.
+        what = " or ".join(k.replace("_", " ") for k in missing)
+        message = (message.rstrip() + f"\n\n*(No {what} card came with this answer, so no "
+                   f"{what} was made. Ask me to propose it.)*")
     # Chips for the items it names; no bare ids for the user.
     message = lib.link_items(message)
     meta["format"] = fmt
@@ -836,10 +918,59 @@ def _adopt_earlier(lib: Any, log: list[dict[str, Any]], meta: dict[str, Any]) ->
 
 #: An answer saying it made a change ("I've created …").
 _CLAIMS = re.compile(r"\b(?:I(?:'ve| have)?|I've now)\s+(?:just\s+)?(?:created|made|added|built|"
-                     r"set up|saved|updated|applied)\b", re.I)
+                     r"set up|saved|updated|applied|proposed)\b", re.I)
+#: The kind of item such an answer says it made ("I've proposed a combine").
+_CLAIM_KIND = re.compile(r"\bI(?:'ve| have)?\s+(?:just\s+)?(?:created|made|added|built|set up|"
+                         r"proposed)\b[^.\n]{0,80}?\b(fixed[ -]values?|combine|template|bundle|"
+                         r"constraint|derivation|wildcard)s?\b", re.I)
+
+
+def _missing_kinds(message: str, proposals: list[dict[str, Any]]) -> list[str]:
+    """Kinds the answer says it made that no card of this answer is."""
+    have = set()
+    for p in proposals:
+        op = p.get("op") or {}
+        have.add(str(op.get("type") or (op.get("body") or {}).get("type") or op.get("kind")))
+    said = [re.sub(r"fixed[ -]values?", "fixed_values", m.group(1).lower())
+            for m in _CLAIM_KIND.finditer(message or "")]
+    return [k for k in dict.fromkeys(said) if k not in have]
+
+
+#: A message asking the chat to sort the library: an answer with no card
+#: (re-test on d6ac847: eight categories listed as text) changed nothing.
+_ORGANIZE_ASK = re.compile(r"\b(?:organi[sz]e|tidy(?: up)?|clean(?: ?up)?|sort|file|group)\b"
+                           r"[^.?!\n]{0,60}\b(?:librar(?:y|ies)|items?|wildcards?|modules?|"
+                           r"categor(?:y|ies)|everything|these|them|it)\b", re.I)
+#: An answer that speaks of a card it shows, or spells a change call out.
+_CARD_WORDS = re.compile(r"\bhere(?:'s| is| are)\s+the\s+cards?\b|\bapply\s+(?:the|this|these|"
+                         r"that|those)\s+cards?\b|\bcards?\s+(?:below|above)\b|"
+                         r"\b(?:the|this)\s+cards?\s+(?:to\s+apply|shows?|is\s+ready)\b", re.I)
+
+
+def _card_as_text(message: str) -> bool:
+    """Whether an answer with no card talks as if one came with it (all-tools
+    eval: "here's the card to apply: Face Description · $face_desc", "Apply
+    the cards if they look right", an add_rules call written into the text)."""
+    text = message or ""
+    if _CARD_WORDS.search(text):
+        return True
+    names = "|".join(sorted(ai_chat.CHANGE_TOOLS))
+    return bool(re.search(rf"[\"'](?:{names})[\"']|\b(?:{names})\s*[({{]", text))
+
+
+#: A message asking for a whole pack.
+_PACK_ASK = re.compile(r"\b(?:plan|make|build|create|design|set up|start)\b[^.?!\n]{0,40}"
+                       r"\bpacks?\b", re.I)
+PACK_FIRST = ("the user asked for a whole pack: call plan_pack with its description (what "
+              "it makes, its parts and its rules) so the Pack builder plans, checks and "
+              "builds it. Only if they asked for just these few items, call this again")
 
 
 #: Added to such an answer when no card came with it.
+_TESTED = re.compile(r"\b(?:I(?:'ve| have)?\s+(?:just\s+)?(?:ran|run|tested)\b|"
+                     r"\b(?:the\s+)?test\s+(?:ran|run|shows|showed|passed)\b)", re.I)
+NOTHING_TESTED = ("*(No test ran in this answer, so what it says about test results is not "
+                  "checked. Ask me to run the test.)*")
 NOTHING_PROPOSED = ("*(Nothing was proposed in this answer, so nothing changed. Ask me to "
                     "propose it and a card will show.)*")
 

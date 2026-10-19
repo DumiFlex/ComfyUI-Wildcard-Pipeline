@@ -43,7 +43,7 @@ const PLAN: AiPackPlanResult = {
     style: "tags", model: "", anchor: "season",
     questions: [{ header: "Size", question: "How many?", multi: false, choices: ["Few", "Many"] }],
     assumptions: ["Daytime only"], research: [], decisions: [], sections: [],
-    settings: { library: "reuse", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, model: "any", youth_negative: "on" },
+    settings: { library: "inspire", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, model: "any", youth_negative: "on" },
     inputs: [],
     items: [
       item("i1", "template", "Scene"),
@@ -188,13 +188,63 @@ describe("PackBuilder", () => {
     const refine = vi.mocked(api.ai.packPlan).mock.calls[1][0];
     expect(refine.instruction).toBe(
       "Revise the plan to fix ALL of these, one by one:\n"
-      + "1. Season → Outfit: keys on #rain, which neither lists.\n2. Add a mood.\n"
+      + "1. Season → Outfit (constraint): keys on #rain, which neither lists.\n2. Add a mood.\n"
       + "Where one asks for a new item (a constraint, a derivation, a wildcard), add it to the "
-      + "plan; where one asks to change an item, change that item.");
+      + "plan; where one asks to change an item, change that item's fields.");
     expect(refine.sample).toBe("1girl, red hair, beach");
     // An AI finding was in the batch: the AI review runs again on the new plan.
     const reviews = vi.mocked(api.ai.packReview).mock.calls;
-    expect(reviews[reviews.length - 1][0]).toMatchObject({ ai: true });
+    expect(reviews[reviews.length - 1][0]).toMatchObject({ ai: true, recheck: ["Add a mood"] });
+    // Both came back as they were: marked, and the next Fix all says so.
+    expect(w.findAll('[data-test="pack-finding-unfixed"]')).toHaveLength(2);
+    expect(w.text()).toContain("The AI couldn't fix 2 last time");
+    await w.get('[data-test="pack-fix"]').trigger("click");
+    await flushPromises();
+    expect(vi.mocked(api.ai.packPlan).mock.calls[2][0].instruction).toContain(
+      "The last revision left these exactly as they were");
+  });
+
+  it("sends a long list of findings in rounds under the length cap and keeps the typed text on an error", async () => {
+    const many = Array.from({ length: 12 }, (_, n) => ({
+      id: `r${n}`, key: "", level: "fix" as const, text: `Problem ${n} ${"x".repeat(240)}` }));
+    vi.mocked(api.ai.packPlan).mockResolvedValue({ ...PLAN, review: many });
+    vi.mocked(api.ai.packReview).mockReset().mockResolvedValue({ findings: many, note: "", plan: PLAN.plan });
+    const { w } = await mountIt();
+    await w.get('[data-test="pack-request"]').setValue("season outfits");
+    await w.get('[data-test="pack-next"]').trigger("click");
+    await w.get('[data-test="pack-plan"]').trigger("click");
+    await flushPromises();
+    await w.get('[data-test="pack-fix"]').trigger("click");
+    await flushPromises();
+    const sent = vi.mocked(api.ai.packPlan).mock.calls.slice(1).map((c) => c[0].instruction ?? "");
+    expect(sent.length).toBeGreaterThan(1);
+    for (const text of sent) expect(text.length).toBeLessThanOrEqual(2000);
+    expect(sent.join("\n")).toContain("Problem 11");
+
+    vi.mocked(api.ai.packPlan).mockRejectedValue(new Error("down"));
+    await w.get('[data-test="pack-edit"]').setValue("warmer colours");
+    await w.get('[data-test="pack-fix"]').trigger("click");
+    await flushPromises();
+    expect((w.get('[data-test="pack-edit"]').element as HTMLTextAreaElement).value)
+      .toBe("warmer colours");
+  });
+
+  it("applies the findings that carry a fix without asking the model", async () => {
+    vi.mocked(api.ai.packPlan).mockResolvedValue({
+      ...PLAN,
+      review: [{ id: "r9", key: "i4", level: "fix", text: "Outfit needs more options",
+        patch: { op: "edit", key: "i4", set: { count: 8 } } }],
+    });
+    vi.mocked(api.ai.packReview).mockReset().mockResolvedValue({ findings: [], note: "", plan: PLAN.plan });
+    const { w } = await mountIt();
+    await w.get('[data-test="pack-request"]').setValue("season outfits");
+    await w.get('[data-test="pack-next"]').trigger("click");
+    await w.get('[data-test="pack-plan"]').trigger("click");
+    await flushPromises();
+    await w.get('[data-test="pack-fix"]').trigger("click");
+    await flushPromises();
+    expect(vi.mocked(api.ai.packPlan).mock.calls).toHaveLength(1);
+    expect(w.find('[data-test="pack-finding"]').exists()).toBe(false);
   });
 
   it("retries a failed item with the error and rebuilds one that doesn't fit", async () => {

@@ -59,6 +59,22 @@ SCHEMAS: dict[str, dict[str, Any]] = {
     "reweight": _list_of("options", {"id": _ID, "weight": {"type": "number"}}),
 }
 
+
+def schema_for(action: str, ids: list[str]) -> dict[str, Any]:
+    """The action's schema with ``id`` as one of the numbers sent. A small
+    local model under a grammar couldn't put a number inside a JSON string:
+    the 9B wrote "", "},{" or prose there every time, and wrote the right
+    numbers once the field was an integer enum (browser test 2026-10-18).
+    ``compile_edit`` takes the integers."""
+    if not ids or not all(i.isdigit() for i in ids):
+        return SCHEMAS[action]
+    key, fields = {"remove": ("remove", {"reason": {"type": "string"}}),
+                   "rewrite": ("options", {"text": {"type": "string"}}),
+                   "retag": ("options", {"tags": {"type": "array",
+                                                  "items": {"type": "string"}}}),
+                   "reweight": ("options", {"weight": {"type": "number"}})}[action]
+    return _list_of(key, {"id": {"type": "integer", "enum": [int(i) for i in ids]}, **fields})
+
 _BASE = """\
 You edit wildcard lists for Wildcard Pipeline, a ComfyUI extension that builds \
 image-generation prompts. A wildcard is a list of interchangeable options; each \
@@ -136,6 +152,10 @@ def build_edit_prompt(
     return "\n".join(lines)
 
 
+#: The "[weight 2; tags a, b]" note the prompt puts after each option.
+_NOTE = re.compile(r"\s*\[(?:weight [^\]]*|tags [^\]]*)\]\s*$")
+
+
 def _clean_weight(raw: Any) -> float | int | None:
     if isinstance(raw, bool) or not isinstance(raw, (int, float)):
         return None
@@ -148,8 +168,11 @@ def _clean_weight(raw: Any) -> float | int | None:
 def compile_edit(
     action: str, raw: Any, *, options: list[dict[str, Any]], registry: list[str],
     refs: ai_refs.RefIndex | None = None, self_id: str | None = None,
+    labels: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Check the model's answer against the options it was shown.
+    """Check the model's answer against the options it was shown. ``labels``
+    are the wildcard's own (library) tags: a retag never copies one onto an
+    option unless it is an option tag too.
 
     Returns ``{"changes": [...], "new_tags": [...], "skipped": [...]}``. Each
     change is ``{"id", "before": {...}, "after": {...}}`` for the edited
@@ -165,6 +188,7 @@ def compile_edit(
 
     by_id = {o["id"]: o for o in options}
     registry_lower = {t.lower(): t for t in registry}
+    label_set = {t.lower() for t in labels or []} - set(registry_lower)
     changes: list[dict[str, Any]] = []
     new_tags: list[str] = []
     skipped: list[dict[str, str]] = []
@@ -201,6 +225,9 @@ def compile_edit(
         elif action == "rewrite":
             text = item.get("text")
             text = re.sub(r"\s+", " ", text).strip() if isinstance(text, str) else ""
+            # The prompt lists "3. text  [weight 2; tags playful]" and the 9B
+            # copied that note into every rewrite (browser test 2026-10-18).
+            text = _NOTE.sub("", text).strip()
             if len(text) > MAX_TEXT_LEN:
                 skipped.append({"text": text[:80] + "…", "reason": "too long"})
                 continue
@@ -229,6 +256,13 @@ def compile_edit(
             for raw_tag in item.get("tags") or []:
                 tag = _clean_tag(raw_tag)
                 if tag is None:
+                    continue
+                if tag.lower() in label_set:
+                    # Re-test (9B): the wildcard's library tag "axis" went on
+                    # every option.
+                    if not any(x["text"] == tag for x in skipped):
+                        skipped.append({"text": tag, "reason": "it is the wildcard's own "
+                                        "library tag, not an option tag"})
                     continue
                 tag = registry_lower.get(tag.lower(), tag)
                 if tag not in registry and tag not in new_tags:
@@ -280,6 +314,9 @@ def _validate_changed(
                 if t in registry or t in new_tags
             ],
         }
+        if o.get("is_null"):
+            # The empty option: only its weight can change.
+            row["is_null"] = True
         rows.append(row)
     if rows:
         WildcardHandler.validate_payload({

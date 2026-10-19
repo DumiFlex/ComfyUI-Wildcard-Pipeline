@@ -7,6 +7,7 @@ the two name the same arguments.
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 
 from engine.ai.chat_manage import CATEGORY_ICONS
@@ -682,7 +683,35 @@ PAGE_GROUPS: dict[str, tuple[str, ...]] = {
     "templates": ("templates", "lists"),
     "test": ("wildcards", "derivations", "constraints", "test"),
     "pack-builder": ("pack", "wildcards"),
+    "categories": ("lists",),
+    "tags": ("lists",),
 }
+#: Words in the user's message that load a tool group a scoped chat lacks
+#: (`groups_for`): the 9B called more_tools once in 69 turns of the
+#: all-tools eval and faked fixed values, templates and bundles with
+#: create_wildcard, and retags with edit_options.
+ASK_GROUPS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("fixed-values", re.compile(r"\bfixed[ -]?values?\b|\bpresets?\b|\bquality tags?\b")),
+    ("combines", re.compile(r"\bcombines?\b")),
+    ("templates", re.compile(r"\btemplates?\b")),
+    ("bundles", re.compile(r"\bbundles?\b")),
+    ("derivations", re.compile(r"\bderivations?\b|\brules?\b")),
+    ("constraints", re.compile(r"\bconstraints?\b|\bnever (?:go|goes|gets?|pairs?)\b")),
+    ("wildcards", re.compile(r"\bwildcards?\b|\bweights?\b|\brarer\b|\bmore often\b"
+                             r"|\boptions?\b")),
+    ("lists", re.compile(r"\b(?:re)?tag(?:s|ged|ging)?\b|\bcategor(?:y|ies)\b|\brename\b"
+                         r"|\bduplicates?\b|\brating\b|\borgani[sz]e\b|\btidy\b"
+                         r"|\bclean ?up\b|\bnsfw\b|\bsfw\b")),
+    ("test", re.compile(r"\btest(?:s|ing)?\b|\btest runner\b")),
+)
+
+
+def groups_for(text: str) -> list[str]:
+    """The tool groups a user's message asks for by its words."""
+    low = (text or "").lower()
+    return [g for g, pat in ASK_GROUPS if pat.search(low)]
+
+
 DEFAULT_GROUPS = ("wildcards", "constraints", "derivations", "pack")
 #: What a medium model gets on every page besides the page's own groups:
 #: the item types most asks touch and tests. Bundles, templates, combines,

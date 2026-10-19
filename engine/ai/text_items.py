@@ -227,6 +227,49 @@ def _fix_axes(text: str, catalog: dict[str, Any] | None,
     return _AXIS_READ.sub(sub, text)
 
 
+_ASKED_VAR = re.compile(r"\$([a-zA-Z_][a-zA-Z0-9_]*)")
+#: "{portrait}" or "{ }": braces around plain words, not a pick.
+_STRAY_BRACES = re.compile(r"(?<![@$])\{([^{}|$]*)\}")
+
+
+def _unbrace(text: str, warnings: list[str]) -> str:
+    """Braces around plain words, which the engine refuses as "not a pick",
+    become the words (re-test on d6ac847: one template draft came back 502
+    for a "{...}")."""
+    def sub(m: re.Match[str]) -> str:
+        inner = m.group(1).strip()
+        if inner:
+            warnings.append(f"Dropped the braces around \"{inner[:40]}\": a {{ }} is a pick, "
+                            "written {a|b}")
+        return inner
+    out = _STRAY_BRACES.sub(sub, text or "")
+    return re.sub(r"[ \t]{2,}", " ", out).strip() if out != text else out
+
+
+def unasked(text: str, asked: str, reads_: list[str]) -> str:
+    """A warning naming the ``$vars`` the draft reads that the request,
+    which spelled out two or more, didn't ask for, or "". Re-test on
+    d6ac847 (9B): two template drafts read ~20 library variables for a
+    three-variable ask."""
+    want = list(dict.fromkeys(_ASKED_VAR.findall(asked or "")))
+    if len(want) < 2:
+        return ""
+    extra = [v for v in reads_ if v not in want and v != "negatives"]
+    if not extra:
+        return ""
+    return ("Also reads $" + ", $".join(extra[:12]) + (", …" if len(extra) > 12 else "")
+            + ", which you didn't ask for; take out what you don't want")
+
+
+def missing_asked(text: str, asked: str) -> str:
+    """A warning naming the ``$vars`` the request spelled out that the draft
+    doesn't read, or "". Browser test (9B): a portrait template asked to read
+    $quality_tags came back without it, quietly."""
+    have = set(reads(text))
+    gone = [v for v in dict.fromkeys(_ASKED_VAR.findall(asked or "")) if v not in have]
+    return ("Doesn't read $" + ", $".join(gone) + ", which you asked for") if gone else ""
+
+
 def compile_combine(
     raw: Any, *, out_var: str, catalog: dict[str, Any] | None = None,
     existing: dict[str, Any] | None = None,
@@ -263,14 +306,15 @@ def compile_template(raw: Any, *, catalog: dict[str, Any] | None = None) -> dict
     """``{payload: {template_string, negative_template}, preview, warnings}``."""
     if not isinstance(raw, dict) or not isinstance(raw.get("template"), str):
         raise ValueError("the answer had no template")
-    text = ai_refs.compile_text(_flat(raw["template"], MAX_TEMPLATE), surface="template")
+    warnings: list[str] = []
+    text = ai_refs.compile_text(_unbrace(_flat(raw["template"], MAX_TEMPLATE), warnings),
+                                surface="template")
     if not text:
         raise ValueError("the template is empty")
-    negative = ai_refs.compile_text(_flat(raw.get("negative"), MAX_TEMPLATE),
+    negative = ai_refs.compile_text(_unbrace(_flat(raw.get("negative"), MAX_TEMPLATE), warnings),
                                     surface="template")
     if adult.sexual_minor(text):
         raise ValueError("it names a minor in a sexual context")
-    warnings: list[str] = []
     text = _fix_axes(text, catalog, warnings)
     unknown = _unknown(text, catalog)
     if unknown:

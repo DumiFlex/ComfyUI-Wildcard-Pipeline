@@ -2,6 +2,7 @@
 `review_plan` with its model prompt."""
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any
 
@@ -167,6 +168,13 @@ def _settings_findings(plan: dict[str, Any], add: Any) -> None:
                 "pack's own quality words.")})
 
 
+def finding_id(prefix: str, key: str, text: str) -> str:
+    """A finding's id from what it says, so the same finding keeps its id
+    across rechecks: a dismissal stays on it instead of hiding whatever
+    finding takes its place in the list (positional ids did)."""
+    return prefix + hashlib.sha1(f"{key}|{text}".encode()).hexdigest()[:10]
+
+
 def review_plan(plan: dict[str, Any],
                 library: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Check a plan against the guide before anything is built:
@@ -182,7 +190,10 @@ def review_plan(plan: dict[str, Any],
 
     def add(item: dict[str, Any] | None, level: str, text: str,
             patch: dict[str, Any] | None = None) -> None:
-        f: dict[str, Any] = {"id": f"r{len(out) + 1}", "key": item["key"] if item else "",
+        key = item["key"] if item else ""
+        if any(x["id"] == finding_id("r", key, text) for x in out):
+            return  # said already
+        f: dict[str, Any] = {"id": finding_id("r", key, text), "key": key,
                              "level": level, "text": text}
         if patch:
             f["patch"] = patch
@@ -355,7 +366,7 @@ when the plan is good. Don't repeat the checker's findings; they are listed.
 
 
 def review_prompt(plan: dict[str, Any], found: list[dict[str, Any]],
-                  request: str = "") -> str:
+                  request: str = "", recheck: list[str] | None = None) -> str:
     lines = ([f"The user asked: {request.strip()[:1500]}"] if request.strip() else []) \
         + _plan_lines(plan) + ["", settings_note(plan.get("settings") or {})]
     if plan.get("decisions"):
@@ -364,21 +375,68 @@ def review_prompt(plan: dict[str, Any], found: list[dict[str, Any]],
         lines.append(canvas_note(plan["canvas"]))
     if found:
         lines.append("The checker already found: " + " ".join(f["text"] for f in found))
+    if recheck:
+        lines += ["", "This is a re-check after the plan was revised. Last time you raised:"]
+        lines += [f"{n}. {t}" for n, t in enumerate(recheck, 1)]
+        lines.append(f"Repeat each one the revised plan still has, word for word with its item; "
+                     f"leave out the ones it fixed. Add at most {MAX_NEW_ON_RECHECK} new "
+                     "findings, only ones that break the pack (severity fix).")
     return "\n".join(lines)
 
 
-def compile_review(answer: Any, plan: dict[str, Any]) -> list[dict[str, Any]]:
+#: On a re-check, new model findings past this many are dropped, so Fix all
+#: settles instead of finding something new every round.
+MAX_NEW_ON_RECHECK = 2
+#: How many earlier findings a re-check takes.
+MAX_RECHECK = 8
+_WORD = re.compile(r"[a-z0-9_$]{4,}")
+
+
+def _words(text: str) -> set[str]:
+    return {w.rstrip("s") for w in _WORD.findall(text.lower())}
+
+
+def _same(a: str, b: str) -> bool:
+    """Two findings say the same thing: most of the shorter's words are in
+    the other (a model rewording a finding, or repeating the checker)."""
+    wa, wb = _words(a), _words(b)
+    small = min(len(wa), len(wb))
+    return small > 0 and len(wa & wb) / small >= 0.6
+
+
+def compile_review(answer: Any, plan: dict[str, Any],
+                   found: list[dict[str, Any]] | None = None,
+                   recheck: list[str] | None = None) -> list[dict[str, Any]]:
+    """The model's findings, minus any that repeat the checker's (``found``).
+    On a re-check (``recheck``: the texts it raised last time) one that
+    rewords an earlier finding keeps the earlier text, so it keeps its id and
+    shows as unfixed, and at most MAX_NEW_ON_RECHECK new ones are taken."""
     names = {i["name"].lower(): i["key"] for i in plan["items"]}
     out: list[dict[str, Any]] = []
+    new = 0
     for f in (answer.get("findings") if isinstance(answer, dict) else None) or []:
         if not isinstance(f, dict):
             continue
         text = _clean(f.get("text"), 300)
-        if text:
-            level = "fix" if f.get("severity") == "fix" else "tip"
-            out.append({"id": f"m{len(out) + 1}",
-                        "key": names.get(_clean(f.get("item"), MAX_NAME).lower(), ""),
-                        "level": level, "text": text, "by": "model"})
+        if not text:
+            continue
+        key = names.get(_clean(f.get("item"), MAX_NAME).lower(), "")
+        if any((not r.get("key") or not key or r["key"] == key) and _same(text, r["text"])
+               for r in found or []):
+            continue
+        if recheck is not None:
+            was = next((t for t in recheck if _same(text, t)), None)
+            if was is None:
+                if new >= MAX_NEW_ON_RECHECK:
+                    continue
+                new += 1
+            else:
+                text = was
+        if any(o["key"] == key and o["text"] == text for o in out):
+            continue
+        level = "fix" if f.get("severity") == "fix" else "tip"
+        out.append({"id": finding_id("m", key, text), "key": key,
+                    "level": level, "text": text, "by": "model"})
     return out[:8]
 
 

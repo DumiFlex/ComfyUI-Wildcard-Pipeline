@@ -84,6 +84,13 @@ def _icon(raw: Any) -> str | None:
     return name
 
 
+def bulk_key(item_id: str, body: dict[str, Any], new_cat: str = "") -> tuple[str, str]:
+    """One item's change on an update_many card, to spot the same change on
+    a second card (a move into a new category counts by its name)."""
+    new = new_cat.strip().lower() if "category_id" in body else ""
+    return item_id, json.dumps({**body, "_new": new}, sort_keys=True, default=str)
+
+
 class ManageTools:
     """Needs `modules`, `bundles`, `templates`, `category_rows`, `get`,
     `_find`, `_used_by`, `_kind`, `not_found` and `tags` from Library."""
@@ -94,6 +101,8 @@ class ManageTools:
     category_rows: dict[str, dict[str, Any]]
     tags: list[str]
     allow_delete: bool
+    proposed_categories: dict[str, tuple[str, str]]
+    bulk_cards: dict[tuple[str, str], str]
 
     def _rows(self) -> list[tuple[str, dict[str, Any]]]:
         return [*(("module", r) for r in self.modules.values()),
@@ -129,6 +138,8 @@ class ManageTools:
     def edit_categories(self, args: dict[str, Any]) -> dict[str, Any]:
         creates: list[str] = []
         notes: list[str] = []
+        #: Creates an unapplied card already makes: name -> pid.
+        already: dict[str, str] = {}
         seen: set[str] = set()
         #: Colors and icons to set: on a new category by name, on one that
         #: exists by id with what it had (for Undo).
@@ -155,6 +166,12 @@ class ManageTools:
             if self._category_by_name(name):
                 notes.append(f"{name} exists already")
                 continue
+            on_card = (getattr(self, "proposed_categories", None) or {}).get(name.lower())
+            if on_card:
+                # Re-test on b793872: the 9B proposed "Lighting" five times in
+                # one answer and never moved anything into it.
+                already[on_card[1]] = on_card[0]
+                continue
             if not any(ch.isalnum() for ch in name):
                 notes.append(f"{name!r} needs a letter or digit")
                 continue
@@ -180,6 +197,12 @@ class ManageTools:
             renames.append({"id": cat["id"], "from": cat["name"], "to": to})
         if len(creates) + len(renames) > MAX_RENAMES:
             raise ValueError(f"at most {MAX_RENAMES} creates and renames per call; split it")
+        if not creates and not renames and not styles and already:
+            names = ", ".join(f"{n} (card {p})" for n, p in list(already.items())[:5])
+            raise ValueError(f"a card already creates {names}; don't propose it again. To "
+                             "file items there, call update_many with that category name "
+                             "now (it works before the card is applied); otherwise answer")
+        notes += [f"{n} is already on card {p}" for n, p in already.items()]
         if not creates and not renames and not styles:
             raise ValueError("that changes nothing" + (f" ({'; '.join(notes)})" if notes else ""))
         looks = {st["name"].lower(): st for st in styles}
@@ -284,7 +307,11 @@ class ManageTools:
             raise ValueError("say what to change: category, tags_add, tags_remove or rating")
         items: list[dict[str, Any]] = []
         missing: list[str] = []
+        #: Items an earlier update_many card of this answer already changes
+        #: this way: their card's pid.
+        on_card: dict[str, str] = {}
         seen: set[str] = set()
+        cards = getattr(self, "bulk_cards", None) or {}
         for value in raw:
             row = self._find(value)  # type: ignore[attr-defined]
             if row is None or row.get("_proposed"):
@@ -309,12 +336,22 @@ class ManageTools:
                 body["content_rating"] = rating
             if not body:
                 continue
+            pid = cards.get(bulk_key(row["id"], body, new_cat))
+            if pid:
+                # Re-test on 367a6a5 (9B): "Change 9 items: Logic & Rules
+                # (new)" and then the same move for 8 of them.
+                on_card[str(row.get("name") or row["id"])] = pid
+                continue
             items.append({"kind": kind, "id": row["id"], "name": row.get("name") or row["id"],
                           "body": body,
                           # Goes into the category the card creates first.
                           **({"to_new": True} if new_cat and "category_id" in body else {}),
                           "before": {k: (row.get(k) if k != "content_rating"
                                          else row.get(k) or "safe") for k in body}})
+        if not items and on_card:
+            raise ValueError(f"card {', '.join(sorted(set(on_card.values())))} already makes "
+                             "this change to " + ", ".join(list(on_card)[:8])
+                             + "; don't propose it again: answer now")
         if not items:
             raise ValueError("that changes nothing" + (
                 f" (not found: {', '.join(missing[:8])})" if missing else ""))

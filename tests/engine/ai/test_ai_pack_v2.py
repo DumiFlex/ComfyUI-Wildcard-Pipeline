@@ -107,7 +107,7 @@ def test_library_fixed_values_can_be_reused():
         "values": [{"id": "v1", "name": "quality", "value": "masterpiece"}]}}]
     raw = _raw()
     raw["items"].insert(0, _item(kind="library", name="Quality"))
-    plan = pack.compile_plan(raw, lib)
+    plan = pack.compile_plan(raw, lib, settings={"library": "reuse"})
     q = next(i for i in plan["items"] if i["name"] == "Quality")
     assert pack.module_type(q) == "fixed_values" and q["var"] == "quality"
     assert not pack.is_wild(q)
@@ -252,7 +252,7 @@ def test_findings_carry_patches_the_page_can_apply():
         "var_binding": "hair", "options": []}}]
     raw = _raw()
     raw["items"] = [i for i in raw["items"] if i["kind"] != "template"]
-    plan = pack.compile_plan(raw, lib)
+    plan = pack.compile_plan(raw, lib, settings={"library": "reuse"})
     found = pack.review_plan(plan, lib)
     by_text = {f["text"]: f for f in found}
     tpl = next(f for t, f in by_text.items() if "no template" in t)

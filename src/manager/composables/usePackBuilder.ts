@@ -62,7 +62,9 @@ export const ITEM_TIME_LIMIT_MS = 4 * 60 * 1000;
 /** Edits wait this long before the plan is checked again. */
 const RECHECK_MS = 400;
 export const DEFAULT_SETTINGS: AiPackSettings = {
-  library: "reuse", negatives: "auto", structure: "sections", style: "auto", rating: "auto",
+  // New items by default (Dumi, 2026-10-18): a pack reuses your own only
+  // when you pick "Reuse what fits".
+  library: "inspire", negatives: "auto", structure: "sections", style: "auto", rating: "auto",
   count: 0, model: "any", youth_negative: "on",
 };
 export const DECIDE_ANSWER = "Your call (decide for me)";
@@ -168,14 +170,20 @@ const view = shallowRef<PlanView | null>(null);
 /** The pack settings are kept in this browser, so the Settings step
  *  starts from what was chosen last time. */
 const SETTINGS_KEY = "wp-pack-settings";
+const SETTINGS_VERSION = 2;
 
-function savedSettings(): AiPackSettings {
+export function savedSettings(): AiPackSettings {
   try {
     const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null") as Partial<AiPackSettings> | null;
     if (!raw || typeof raw !== "object") return { ...DEFAULT_SETTINGS };
     const out = { ...DEFAULT_SETTINGS };
     for (const k of Object.keys(DEFAULT_SETTINGS) as Array<keyof AiPackSettings>) {
       if (typeof raw[k] === typeof DEFAULT_SETTINGS[k]) (out as Record<string, unknown>)[k] = raw[k];
+    }
+    // Saved before the default became "inspire": "reuse" was the old
+    // default riding along with another change, not a choice.
+    if ((raw as { v?: number }).v !== SETTINGS_VERSION && out.library === "reuse") {
+      out.library = DEFAULT_SETTINGS.library;
     }
     return out;
   } catch {
@@ -185,7 +193,9 @@ function savedSettings(): AiPackSettings {
 
 const settings = ref<AiPackSettings>(savedSettings());
 watch(settings, (v) => {
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(v)); } catch { /* private window */ }
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...v, v: SETTINGS_VERSION }));
+  } catch { /* private window */ }
 }, { deep: true });
 const decisions = ref<AiPackDecision[]>([]);
 /** Decisions the user took back to answer again in words (by question):
@@ -486,6 +496,7 @@ async function askPlan(): Promise<void> {
   webResults.value = [];
   searched.value = [];
   dismissedNotes.value = new Set();
+  unfixed.value = new Set();
   sendPrevious = undefined;
   await convo.ask();
 }
@@ -635,7 +646,10 @@ async function recheck(): Promise<void> {
 }
 
 /** Ask the model to review the plan too. */
-async function reviewPlan(): Promise<void> {
+/** Have the model review the plan. ``recheck`` is the texts of its own
+ *  findings Fix all just sent: it then repeats the ones still there (same
+ *  text, so they show as unfixed) and adds at most two new ones. */
+async function reviewPlan(recheck?: string[]): Promise<void> {
   const p = plan.value;
   if (!p || reviewing.value) return;
   reviewing.value = true;
@@ -643,6 +657,7 @@ async function reviewPlan(): Promise<void> {
   try {
     const res = await api.ai.packReview(withTarget({
       plan: p, ai: true, request: convo.asked.value[0] ?? "",
+      ...(recheck?.length ? { recheck } : {}),
     }));
     setView({
       review: res.findings.filter((f) => f.by !== "model"),
@@ -655,32 +670,97 @@ async function reviewPlan(): Promise<void> {
   }
 }
 
-/** Send the ticked findings (or every open one) to the planner. */
+/** What a refine's instruction may hold: the server takes 2000 characters
+ *  (`MAX_INSTRUCTION_LEN`); the rest is room for its own wrapping. */
+const NOTE_MAX = 1800;
+
+/** Split numbered note lines into runs that fit ``room`` characters each
+ *  (a line that can't fit alone is cut). */
+export function noteChunks(lines: string[], room: number): string[][] {
+  const fit = Math.max(200, room);
+  const out: string[][] = [];
+  let cur: string[] = [];
+  let used = 0;
+  for (const raw of lines) {
+    const line = raw.length > fit - 6 ? raw.slice(0, fit - 7) + "…" : raw;
+    const cost = line.length + 5; // "NN. " + newline
+    if (cur.length && used + cost > fit) {
+      out.push(cur);
+      cur = [];
+      used = 0;
+    }
+    cur.push(line);
+    used += cost;
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
+
+/** Findings Fix all sent to the model that came back unchanged, by id
+ *  (ids come from what a finding says, so the same one keeps its id). */
+const unfixed = ref(new Set<string>());
+
+/** Fix the ticked findings (or every open one): the ones with a built-in
+ *  fix are applied here with no model, the rest go to the planner. Ones
+ *  the planner hands back unchanged are marked, and the next Fix all
+ *  leaves them out instead of sending the same notes round again. */
 async function fixFindings(): Promise<void> {
   const open = findings.value;
-  const list = selected.value.size ? open.filter((f) => selected.value.has(f.id)) : open;
+  const ticked = open.filter((f) => selected.value.has(f.id));
+  const fresh = open.filter((f) => !unfixed.value.has(f.id));
+  const list = ticked.length ? ticked : fresh.length ? fresh : open;
   if (!list.length) return;
+  selected.value = new Set();
+  const v = view.value;
+  const patched = list.filter((f) => f.patch);
+  if (v && patched.length) {
+    let next = v.draft;
+    for (const f of patched) next = applyPatch(next, f.patch!);
+    const dismissed = new Set(v.dismissed);
+    for (const f of patched) dismissed.add(f.id);
+    editDraft(next, { dismissed });
+  }
+  const rest = list.filter((f) => !f.patch);
+  if (!rest.length) return;
   // Numbered, each with its item, so a small model works through all of
   // them instead of fixing the first and calling it done.
-  const names = new Map((plan.value?.items ?? []).map((i) => [i.key, i.name]));
-  const note = "Revise the plan to fix ALL of these, one by one:\n" + list.map((f, n) => {
-    const name = f.key ? names.get(f.key) : "";
-    return `${n + 1}. ${name ? `${name}: ` : ""}${f.text.replace(/\.\s*$/, "")}.`;
-  }).join("\n") + "\nWhere one asks for a new item (a constraint, a derivation, a wildcard), "
-    + "add it to the plan; where one asks to change an item, change that item.";
-  const recheck = list.some((f) => f.by === "model");
-  convo.instruction.value = [convo.instruction.value.trim(), note].filter(Boolean).join("\n");
-  const v = view.value;
-  if (v) {
-    const dismissed = new Set(v.dismissed);
-    for (const f of list) dismissed.add(f.id);
-    setView({ dismissed });
+  const items = new Map((plan.value?.items ?? []).map((i) => [i.key, i]));
+  const again = rest.some((f) => unfixed.value.has(f.id));
+  const lines = rest.map((f) => {
+    const item = f.key ? items.get(f.key) : undefined;
+    const what = item ? `${item.name} (${item.kind}${item.var ? `, $${item.var}` : ""}): ` : "";
+    return `${what}${f.text.replace(/\.\s*$/, "")}.`;
+  });
+  const head = "Revise the plan to fix ALL of these, one by one:\n";
+  const tail = "\nWhere one asks for a new item (a constraint, a derivation, a wildcard), "
+    + "add it to the plan; where one asks to change an item, change that item's fields."
+    + (again ? "\nThe last revision left these exactly as they were: change the plan this time, "
+      + "or remove the item they are about if it can't be fixed." : "");
+  const own = convo.instruction.value.trim();
+  const sent = new Set(rest.map((f) => f.id));
+  // The request takes NOTE_MAX characters, so a long list goes over in
+  // rounds; the user's own text rides with the first.
+  // A long typed text goes on its own first, so the notes keep their room.
+  const alone = own.length > NOTE_MAX / 2;
+  const chunks = noteChunks(lines, NOTE_MAX - head.length - tail.length
+    - (alone ? 0 : own.length + 1));
+  const rounds = alone ? [null, ...chunks] : chunks;
+  for (const [n, chunk] of rounds.entries()) {
+    const note = chunk ? head + chunk.map((l, k) => `${k + 1}. ${l}`).join("\n") + tail : "";
+    convo.instruction.value = [n === 0 ? own : "", note].filter(Boolean).join("\n");
+    await refinePlan();
+    if (convo.error.value) {
+      // Put back what the user typed (if it wasn't sent yet), not the note.
+      convo.instruction.value = n === 0 ? own : "";
+      return;
+    }
   }
-  selected.value = new Set();
-  await refinePlan();
   // The model's own findings are checked again on the new plan, so one it
   // didn't fix shows up again instead of quietly disappearing.
-  if (recheck && !convo.error.value) await reviewPlan();
+  const recheck = rest.filter((f) => f.by === "model").map((f) => f.text);
+  if (recheck.length) await reviewPlan(recheck);
+  const back = findings.value.filter((f) => sent.has(f.id)).map((f) => f.id);
+  unfixed.value = new Set(back);
 }
 
 /** Have the model rewrite one item (or add items, with no key) as asked;
@@ -849,6 +929,7 @@ async function runCheck(p: AiPackPlan, signal: AbortSignal): Promise<AiPackCheck
   }
   check.value = res;
   dismissedNotes.value = new Set();
+  unfixed.value = new Set();
   return res;
 }
 
@@ -1011,6 +1092,7 @@ function reset(): void {
   searched.value = [];
   selected.value = new Set();
   dismissedNotes.value = new Set();
+  unfixed.value = new Set();
   sample.value = "";
   error.value = "";
   images.clear();
@@ -1046,7 +1128,7 @@ export function usePackBuilder() {
     convo, plan, draft, removed, edited, states, phase, working, stage, current, check,
     installed, error, builtCount, summary, askPlan, refinePlan, canRefine, awaitingSearch, removeItem, build,
     rebuild, stop, install, undoInstall, backToPlan, reset, sample, findings, reviewing,
-    reviewPlan, fixFindings, settings, decisions, picks, questions, answeredCount, choose,
+    reviewPlan, fixFindings, unfixed, settings, decisions, picks, questions, answeredCount, choose,
     setOther, decideFor, decideAll, pickFor, reopenDecision, changeAssumption, editItem, changes, dropped, reopened, resendImages,
     addItem, editPlan, applyFinding, dismissFinding, selected, toggleSelected, changeItem,
     changing, research, allowResearch, skipResearch, searching, webResults, images, target,

@@ -62,6 +62,12 @@ def _row(lib: Any, raw: Any, what: str = "item") -> dict[str, Any]:
     return row
 
 
+class Shown(Exception):
+    """The call asks to show what is already on screen (a card of this
+    answer): the message is the call's result, not an error. Chat eval round
+    1: the 9B opened its own card after nearly every proposal."""
+
+
 def prepare(lib: Any, tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
     """(the args the browser gets, a short label for the steps list).
     Raises ValueError with a message for the model."""
@@ -98,8 +104,9 @@ def _open(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
     raw = args.get("proposal") or args.get("id")
     mine = _this_answer(lib, raw)
     if mine:
-        raise ValueError(f"card {mine} is from this answer and already on screen; the user "
-                         "applies it or opens it from its card, so don't open it")
+        raise Shown(f"open: card {mine} is already on screen for the user, who applies it "
+                    "from there; there is nothing to open. Answer now, or make the next "
+                    "change")
     pid = _proposal(lib, raw)
     if pid:
         title = str((lib.earlier_proposals.get(pid) or {}).get("title") or pid)

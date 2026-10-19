@@ -602,7 +602,7 @@ export const api = {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },
-    async packReview(body: { plan: AiPackPlan; ai?: boolean; request?: string }, signal?: AbortSignal) {
+    async packReview(body: { plan: AiPackPlan; ai?: boolean; request?: string; recheck?: string[] }, signal?: AbortSignal) {
       return request<AiPackReview>("/wp/api/ai/pack/review", {
         method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
       });

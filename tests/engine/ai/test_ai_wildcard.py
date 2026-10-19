@@ -215,3 +215,16 @@ def test_a_bang_in_a_ref_filter_is_stored_as_not():
     idx = refs.RefIndex([COLORS])
     assert refs.compile_refs("@{Colors:!warm}", idx) == "@{c0c0c0c0#Colors:not warm}"
     assert refs.compile_refs("@{Colors:!warm!null}", idx) == "@{c0c0c0c0#Colors:not warm!null}"
+
+
+def test_template_draft_warns_about_unasked_vars_and_drops_stray_braces():
+    from engine.ai import text_items
+    # Re-test on d6ac847 (9B): a three-variable ask read ~20 library vars,
+    # and one draft came back 502 for "{portrait}".
+    warn = text_items.unasked("$a, $b, $c, $d", "use $a and $b", ["a", "b", "c", "d"])
+    assert warn.startswith("Also reads $c, $d, which you didn't ask for")
+    assert text_items.unasked("$a, $c", "use $a", ["a", "c"]) == ""
+    out = text_items.compile_template({"template": "{portrait} of $a, { }"},
+                                      catalog={"a": {"sources": [{"kind": "wildcard"}]}})
+    assert out["payload"]["template_string"] == "portrait of $a,"
+    assert any('Dropped the braces around "portrait"' in w for w in out["warnings"])

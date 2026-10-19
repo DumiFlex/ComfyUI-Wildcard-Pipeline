@@ -121,11 +121,18 @@ def test_changes_to_one_item_build_on_each_other():
     assert first["op"]["before"]["payload"]["options"][-1]["value"] == "sundress"
     second = lib.run("add_options", {"id": "aaaa0001", "options": [
         {"text": "raincoat"}, {"text": "parka"}]})
-    assert second["after"] == first["pid"]
+    # The same tool on the same item again in one answer: one card with
+    # both changes, replacing the first (re-test on 367a6a5).
+    assert second["replaces"] == first["pid"] and not second["after"]
     values = [o["value"] for o in second["op"]["body"]["payload"]["options"]]
     assert values == ["wool coat", "sundress", "raincoat", "parka"]
-    assert second["op"]["before"]["payload"]["options"][-1]["value"] == "raincoat"
-    assert "apply that one first" in second["warnings"][0]
+    assert second["op"]["before"]["payload"]["options"][-1]["value"] == "sundress"
+    assert second["summary"].startswith("2 → 4")
+    assert not any("apply that one first" in w for w in second["warnings"])
+    # Another tool on it still builds on the card.
+    third = lib.run("edit_options", {"id": "aaaa0001", "weights": [{"n": 1, "weight": 2}]})
+    assert third["after"] == second["pid"]
+    assert "apply that one first" in third["warnings"][0]
     with pytest.raises(ValueError):
         lib.run("add_options", {"id": "aaaa0003", "options": [{"text": "x"}]})
 

@@ -340,6 +340,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         constraint points at are never removed this way.
       </p>
       <p>
+        The assistant only changes items of yours that you named in the chat ("add rain to my
+        Weather", an id, a chip) or that you have open; asked to make something new, it makes a new
+        item instead of rewriting one you have, and it can still read, search and test your whole
+        library. Cards it proposed itself stay open to change.
         The assistant plans before it acts and checks its work: when it proposes changes to
         modules it runs the stack with them before it answers, so the reply says what the change
         does. It can propose several items that depend on each other in one answer (a wildcard
@@ -608,7 +612,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           what a pack is about (its subject, LoRAs, a story) comes from your description:
           <DocKeyList
             :items="[
-              { term: 'Your library', desc: 'Reuse what fits (wildcards and fixed values you already have, marked yours), New, in its style (built fresh but written like your library), or Everything new.' },
+              { term: 'Your library', desc: 'New, in its style (the default: built fresh but written like your library), Reuse what fits (wildcards and fixed values you already have, marked yours), or Everything new.' },
               { term: 'Negatives', desc: 'Standing + per option (a standing negative in the template and negatives on options that need them), Template only, or None.' },
               { term: 'Structure', desc: 'Sub-bundle per section, or One bundle.' },
               { term: 'Written as', desc: 'Tags or Natural phrases, or let the planner decide from your request and library.' },
@@ -669,7 +673,12 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           count as set. An anchor nothing sets is a finding too, with <b>Use $x</b> when the pack
           sets something close, else <b>Clear it</b>. Each finding has <b>Apply</b> (a fix you can
           see before it lands) and <b>Dismiss</b>; tick some and press <b>Fix with AI</b>, or
-          <b>Fix all with AI</b>. <b>Review with AI</b> asks the model for a second opinion. Notes
+          <b>Fix all with AI</b>. Fix all applies the findings that have their own fix first,
+          without the model, and sends only the rest; one the model hands back unchanged is marked
+          "the AI left this unchanged", so you can fix it by hand or dismiss it instead of pressing
+          Fix all again. A long list goes to the model in rounds. <b>Review with AI</b> asks the
+          model for a second opinion; after Fix all it checks again, repeating the findings still
+          there and adding at most two new ones. Notes
           the planner left (items it dropped) have <b>Explain</b>, which asks the chat what they
           mean.</li>
         <li><b>Build &amp; check.</b> Each item is written in its own request, wildcards first so

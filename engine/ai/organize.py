@@ -4,7 +4,7 @@ The model sees each item numbered 1..N (kind, name, description, current
 category, tags and rating, plus a short summary of what it holds), the
 library's categories and tags, and answers per item:
 
-    {"items": [{"id": "3", "category": str, "tags_add": [str],
+    {"items": [{"id": 3, "category": str, "tags_add": [str],
                 "tags_remove": [str], "rating": "safe"|"nsfw"|"keep",
                 "reason": str}]}
 
@@ -50,13 +50,27 @@ SCHEMA: dict[str, Any] = {
     },
 }
 
+
+
+def schema_for(ids: list[str]) -> dict[str, Any]:
+    """SCHEMA with ``id`` as one of the item numbers sent, as an integer: a
+    small local model under a grammar fills a string id with "" or "},{"
+    (see ``wildcard_edit.schema_for``). ``compile_answer`` reads either."""
+    if not ids or not all(i.isdigit() for i in ids):
+        return SCHEMA
+    item = SCHEMA["properties"]["items"]["items"]
+    props = {**item["properties"], "id": {"type": "integer", "enum": [int(i) for i in ids]}}
+    return {**SCHEMA, "properties": {"items": {"type": "array",
+                                               "items": {**item, "properties": props}}}}
+
+
 SYSTEM_PROMPT = """\
 You organize items in a Wildcard Pipeline library. Wildcard Pipeline is a \
 ComfyUI extension that builds image-generation prompts from modules: wildcards \
 (lists of options, one picked per run), fixed values, combines, derivation \
 rules, constraints between wildcards, and bundles of modules.
 
-For each numbered item, decide (and give its number as "id", e.g. "1"):
+For each numbered item, decide (and give its number as "id", e.g. 1):
 - category: the one category it belongs in. Prefer the library's existing \
 categories, spelled exactly as listed. Propose a new category only when none \
 fits; keep it short (one to three words, Title Case). Use "" to leave the \

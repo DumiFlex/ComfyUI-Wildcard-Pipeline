@@ -88,3 +88,40 @@ def test_wrong_shape_raises():
         ed.compile_edit("remove", {"options": []}, options=OPTS, registry=REG)
     with pytest.raises(ValueError):
         ed.compile_edit("nope", {}, options=OPTS, registry=REG)
+
+
+def test_ids_are_integer_choices_for_small_models():
+    """The 9B under LM Studio's grammar wrote "", "},{" or prose into a
+    string id; as an integer enum it named the right options."""
+    s = ed.schema_for("remove", ["1", "2", "3"])
+    item = s["properties"]["remove"]["items"]
+    assert item["properties"]["id"] == {"type": "integer", "enum": [1, 2, 3]}
+    assert item["required"] == ["id", "reason"]
+    assert ed.schema_for("reweight", ["a1"]) == ed.SCHEMAS["reweight"]
+    from engine.ai import organize
+    o = organize.schema_for(["1", "2"])["properties"]["items"]["items"]
+    assert o["properties"]["id"] == {"type": "integer", "enum": [1, 2]}
+    assert organize.SCHEMA["properties"]["items"]["items"]["properties"]["id"] == {
+        "type": "string"}
+
+
+def test_rewrite_drops_the_note_the_prompt_puts_after_an_option():
+    out = ed.compile_edit("rewrite", {"options": [
+        {"id": 1, "text": "crimson cloak  [weight 2; tags playful]"},
+        {"id": "2", "text": "blue hoodie [tags playful]"},
+    ]}, options=OPTS, registry=REG)
+    assert [c["after"]["value"] for c in out["changes"]] == ["crimson cloak", "blue hoodie"]
+
+
+def test_retag_leaves_the_wildcards_own_library_tags_off_options():
+    # Re-test on 367a6a5 (9B): the wildcard's library tag "axis" went on
+    # every option.
+    opts = [{"id": "1", "value": "smirk", "weight": 1, "sub_categories": []}]
+    out = ed.compile_edit("retag", {"options": [{"id": 1, "tags": ["axis", "playful"]}]},
+                               options=opts, registry=["playful"], labels=["axis", "face"])
+    assert out["changes"][0]["after"]["tags"] == ["playful"]
+    assert any("library tag" in s["reason"] for s in out["skipped"])
+    # A label that is also an option tag stays.
+    both = ed.compile_edit("retag", {"options": [{"id": 1, "tags": ["axis"]}]},
+                                options=opts, registry=["axis"], labels=["axis"])
+    assert both["changes"][0]["after"]["tags"] == ["axis"]
