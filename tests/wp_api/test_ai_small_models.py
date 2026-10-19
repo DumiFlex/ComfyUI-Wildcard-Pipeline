@@ -266,6 +266,28 @@ def test_open_takes_a_docs_page_id_given_as_an_item_id():
         raise AssertionError("an unknown id must be refused")
 
 
+async def test_an_empty_answer_after_a_highlight_says_what_was_done(wp_client, fake_llm):
+    """Browser check 2026-10-19: "Highlight the bundles" pointed at the
+    right rows and then ended on "The model gave an empty answer"."""
+    _on(fake_llm, model_size="large")
+    page = {"route": "dashboard"}
+    fake_llm.chat_steps.extend([{"message": "", "calls": [{"tool": "read_page", "args": "{}"}]}])
+    first = await _chat(wp_client, "highlight the settings", page=page)
+    assert first["pending"][0]["tool"] == "read_page"
+    point = {"tool": "highlight", "args": '{"anchor": "settings", "caption": "Settings"}'}
+    fake_llm.chat_steps.extend([{"message": "", "calls": [point]}])
+    read = await _resume(wp_client, first["chat_id"],
+                         [{"id": first["pending"][0]["id"], "text": "[settings] Settings"}],
+                         page=page)
+    assert read["pending"][0]["tool"] == "highlight"
+    # The model has nothing to say after the highlight (twice: it is nudged once).
+    fake_llm.chat_steps.extend([{"message": "", "calls": []}, {"message": "", "calls": []}])
+    done = await _resume(wp_client, read["chat_id"],
+                         [{"id": read["pending"][0]["id"], "text": "pointed"}], page=page)
+    assert done["message"] == "It's highlighted on the page: Settings."
+    assert done["pending"] == []
+
+
 async def test_highlight_needs_a_read_page_on_this_page(wp_client, fake_llm):
     _on(fake_llm, model_size="large")
     point = {"tool": "highlight", "args": '{"anchor": "settings", "caption": "Settings"}'}

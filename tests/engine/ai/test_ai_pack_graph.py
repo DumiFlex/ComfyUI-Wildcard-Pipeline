@@ -488,6 +488,52 @@ def test_a_story_run_is_wired_by_the_code():
     assert any(i["var"] == "beat" for i in refined["items"])
 
 
+def test_the_code_owns_the_story_beat():
+    """Browser check 2026-10-19: a refine turned the code's beat derivation
+    into a plain Beat wildcard that never read $iteration, so "Story over a
+    Loop needs a derivation that sets the story beat" came back after
+    every Fix all."""
+    beat = {"name": "Beat", "var": "beat", "what": "story beats", "section": "", "count": 4,
+            "show": "prompt", "pick": "", "hold": False, "sometimes_none": 0,
+            "axes": [{"name": "stage", "values": ["introduction", "climax"]}]}
+    rels = [*GRAPH["relations"],
+            {"kind": "exclude", "from_slot": "Beat", "from_axis": "stage",
+             "from_value": "climax", "to_slot": "Weapon", "to_axis": "type",
+             "to_value": "staff", "factor": 0, "var": "", "text": "", "otherwise": "",
+             "words": []},
+            {"kind": "derive", "from_slot": "Race", "from_axis": "kind", "from_value": "elf",
+             "to_slot": "", "to_axis": "", "to_value": "", "factor": 0, "var": "beat",
+             "text": "arrival", "otherwise": "", "words": []}]
+    plan = pack.compile_graph_plan(_graph(run={"mode": "story", "frames": 3},
+                                          slots=[*GRAPH["slots"], beat], relations=rels))
+    assert not any(s["var"] == "beat" for s in plan["graph"]["slots"])
+    assert not any(r.get("var") == "beat" or "Beat" in (r["from"]["slot"],
+                                                         (r.get("to") or {}).get("slot"))
+                   for r in plan["graph"]["relations"])
+    [item] = [i for i in plan["items"] if i["var"] == "beat"]
+    assert item["kind"] == "derivation" and "frame 1 to 3" in item["about"]
+    [line] = plan["applied"]
+    assert line.startswith("The code sets $beat from $iteration on a story: dropped the "
+                           "planner's Beat")
+    texts = " | ".join(f["text"] for f in pack.review_plan(plan))
+    assert "Story over a Loop" not in texts
+    # A single-image plan keeps a Beat slot the planner meant.
+    single = pack.compile_graph_plan(_graph(slots=[*GRAPH["slots"], beat]))
+    assert any(s["var"] == "beat" for s in single["graph"]["slots"])
+    assert single["applied"] == []
+
+
+def test_a_fix_all_request_is_not_the_users_words():
+    assert pack.own_request("more hats") == "more hats"
+    note = pack.review_note([{"text": "Add a hat slot"}])
+    assert note.startswith(pack.REVIEW_NOTE_HEAD)
+    assert pack.own_request("more hats\n" + note) == "more hats"
+    assert pack.own_request(note) == ""
+    # The request-words check sees only the user's words.
+    g = pack.compile_graph(_graph())
+    assert pack.request_gaps(g, pack.own_request(note)) == []
+
+
 def test_a_sweep_run_marks_the_axes_and_holds_the_rest():
     plan = pack.compile_graph_plan(_graph(run={"mode": "sweep", "frames": 0}))
     by = {i["name"]: i for i in plan["items"] if i["kind"] == "wildcard"}
@@ -652,7 +698,10 @@ def test_findings_are_typed_so_a_rewording_keeps_its_id():
         {"item": "Subject", "type": "missing_slot", "severity": "fix", "text": "No subject slot"},
         {"item": "", "type": "nope", "severity": "tip", "text": "Looks fine otherwise"},
     ]}, plan)
-    assert [(f["key"], f["type"]) for f in first] == [(race, "mixed_slot"), ("", "other")]
+    # On a graph plan a free "other" nit (a rename, a shorter text) is dropped.
+    assert [(f["key"], f["type"]) for f in first] == [(race, "mixed_slot")]
+    types = schema["properties"]["findings"]["items"]["properties"]["type"]["enum"]
+    assert "other" not in types and "mixed_slot" in types
     again = pack.compile_review({"findings": [
         {"item": "Race", "type": "mixed_slot", "severity": "fix", "text": "Race holds ages too"},
     ]}, plan)

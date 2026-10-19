@@ -198,7 +198,7 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     answer: Any = None
     retry = ""
     graph = settings["planner"] == "graph"
-    asked = " ".join([first_text, instruction, sample,
+    asked = " ".join([first_text, ai_pack.own_request(instruction), sample,
                       *(str(d.get("answer") or "") for d in decisions if isinstance(d, dict))])
     for attempt in range(2):
         try:

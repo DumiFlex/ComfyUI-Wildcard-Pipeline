@@ -344,6 +344,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         meta["page_note"] = note
     new: list[dict[str, Any]] = []
     first_steps: list[dict[str, Any]] = []
+    first_done: list[str] = []
     step = 0
     if paused:
         # Every paused call gets its result before anything else: the
@@ -352,7 +353,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         meta.pop("pending", None)
         got = {a["id"]: a for a in (answers or []) if isinstance(a, dict)
                and isinstance(a.get("id"), str)} if resume else {}
-        items, first_steps = await _paused_results(cfg, meta, paused, got)
+        items, first_steps, first_done = await _paused_results(cfg, meta, paused, got)
         tail = ""
         if resume:
             step = int(paused.get("step") or 0)
@@ -782,7 +783,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     message = message or interim or (
                         "(The model used up its output limit before answering; thinking "
                         "models do this. Try again, raise the output limit, or turn its "
-                        "thinking off.)" if cut else _done_line(steps))
+                        "thinking off.)" if cut else _done_line(steps, first_done))
                     break
                 empty_nudged = think_off = True
                 new.append(ai_chatlog.note_entry(ai_chat.EMPTY_NUDGE))
@@ -849,7 +850,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         if not message and not (lib.reaction and not proposals and not interim):
             message = interim if interim and proposals else (
                 "Here's what I'd change." if proposals else interim or set_aside
-                or _done_line(steps))
+                or _done_line(steps, first_done))
         # Every call gets a result and the turn ends on an answer.
         last = new[-1]
         if last.get("kind") == "step" and last.get("calls"):
@@ -1069,14 +1070,15 @@ def _stuck_line(steps: list[dict[str, Any]]) -> str:
             + "\n\nTell me which way to go, or ask for one part at a time.")
 
 
-def _done_line(steps: list[dict[str, Any]]) -> str:
+def _done_line(steps: list[dict[str, Any]], paused_done: list[str] | None = None) -> str:
     """The answer when the model said nothing after acting: what it did,
     never a bare "Done."."""
     undone = {str(x.get("note"))[len("Couldn't: "):] for x in steps
               if not x.get("ok") and str(x.get("note") or "").startswith("Couldn't: ")}
-    did = [str(x.get("note")) for x in steps
-           if x.get("ok") and x.get("note") and not x.get("say") and not x.get("think")
-           and x.get("note") not in undone]
+    did = [*(paused_done or []),
+           *(str(x.get("note")) for x in steps
+             if x.get("ok") and x.get("note") and not x.get("say") and not x.get("think")
+             and x.get("note") not in undone)]
     pointed = [n[len("Pointed at "):] for n in did if n.startswith("Pointed at ")]
     if pointed:
         # "Where is X?" answered by pointing: say so in words.
@@ -1094,6 +1096,7 @@ async def _paused_results(
     server results made before the pause plus each paused call's answer."""
     by_id = {it["id"]: it for it in paused.get("items") or [] if isinstance(it, dict)}
     steps: list[dict[str, Any]] = []
+    done: list[str] = []
     for c in paused.get("calls") or []:
         answer = got.get(c["id"], {"cancelled": True})
         if c["tool"] in ai_tools.WEB and answer.get("approve") in ("once", "chat"):
@@ -1132,10 +1135,17 @@ async def _paused_results(
             if c["tool"] == "open" and not answer.get("denied"):
                 text += ai_client_tools.open_note(c["args"])
                 meta.pop("page_read", None)  # a new page: read it again
+            if not (answer.get("denied") or answer.get("cancelled")
+                    or ai_client_tools.failed(text)):
+                # Its step line was shown when the turn paused, so not
+                # again; an empty final answer still says what was done
+                # (browser check 2026-10-19: a highlight that worked ended
+                # on "The model gave an empty answer").
+                done.append(str(c.get("label") or c["tool"]))
         by_id[c["id"]] = {"id": c["id"], "tool": c["tool"], "text": text}
     order = [i for i in paused.get("order") or [] if i in by_id]
     order += [i for i in by_id if i not in order]
-    return [by_id[i] for i in order], steps
+    return [by_id[i] for i in order], steps, done
 
 
 #: Most result links a chat remembers for read_result.

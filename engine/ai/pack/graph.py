@@ -777,6 +777,38 @@ def _graph_text(graph: dict[str, Any]) -> str:
                      *(r.get("var") or "" for r in graph["relations"])]).lower()
 
 
+def code_beat(graph: dict[str, Any]) -> list[str]:
+    """On a story run the code sets $beat from $iteration: a slot, fixed
+    value or relation the planner wrote for $beat is taken out (browser
+    check 2026-10-19: a refine turned the code's beat derivation into a
+    plain Beat wildcard that never read $iteration, so the story finding
+    came back after every Fix all). Returns the applied lines."""
+    if parse_run(graph["run"])["mode"] != "story":
+        return []
+    gone: list[str] = []
+    names = {s["name"] for s in graph["slots"] if s["var"] == BEAT_VAR}
+    if names:
+        graph["slots"] = [s for s in graph["slots"] if s["var"] != BEAT_VAR]
+        gone += sorted(names)
+    fixed = [f["name"] for f in graph["fixed"] if f["var"] == BEAT_VAR]
+    if fixed:
+        graph["fixed"] = [f for f in graph["fixed"] if f["var"] != BEAT_VAR]
+        gone += fixed
+    kept = []
+    for r in graph["relations"]:  # compiled: {"from": {"slot", …}, "to": {…} | None, "var"}
+        ends = {(r.get("from") or {}).get("slot"), (r.get("to") or {}).get("slot")}
+        if r.get("var") == BEAT_VAR or ends & names:
+            if r.get("var") == BEAT_VAR and f"${BEAT_VAR} rule" not in gone:
+                gone.append(f"${BEAT_VAR} rule")
+            continue
+        kept.append(r)
+    graph["relations"] = kept
+    if not gone:
+        return []
+    return [f"The code sets ${BEAT_VAR} from $iteration on a story: dropped the planner's "
+            + ", ".join(gone)]
+
+
 def story_beat(graph: dict[str, Any]) -> bool:
     """Whether the code adds the story-beat derivation: a story run whose
     graph doesn't set $beat itself."""
@@ -1989,6 +2021,7 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
         # re-decided by the model's next answer.
         graph["run"] = parse_run(kw["previous"]["run"], graph["run"])
     applied += apply_settings(graph, kw.get("settings"))
+    applied += code_beat(graph)
     if parse_run(graph["run"])["mode"] == "single":
         # A hold only means something over a Loop: in single images it
         # just makes every prompt the same.

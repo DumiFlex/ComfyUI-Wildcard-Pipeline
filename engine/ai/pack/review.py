@@ -407,6 +407,9 @@ def review_plan(plan: dict[str, Any],
 #: fingerprint, so a reworded finding on a re-check is the same finding.
 MODEL_TYPES = ("missing_relation", "wrong_relation", "mixed_slot", "axis_mismatch",
                "missing_slot", "extra_slot", "order", "style", "other")
+#: On a graph plan the code owns names, texts and the template, so the
+#: model's review may only raise the design faults.
+GRAPH_TYPES = MODEL_TYPES[:-1]
 
 REVIEW_SCHEMA: dict[str, Any] = _obj({
     "findings": {"type": "array", "items": _obj({
@@ -422,6 +425,10 @@ def review_schema(plan: dict[str, Any]) -> dict[str, Any]:
     names = list(dict.fromkeys(i["name"] for i in plan["items"] if i.get("name")))[:80]
     item = dict(REVIEW_SCHEMA["properties"]["findings"]["items"])
     item["properties"] = {**item["properties"], "item": {"type": "string", "enum": ["", *names]}}
+    if isinstance(plan.get("graph"), dict):
+        # A graph plan takes only the design faults: no free "other" nits
+        # (renames, shorter texts, "add X if it isn't there").
+        item["properties"]["type"] = {"type": "string", "enum": list(GRAPH_TYPES)}
     return _obj({"findings": {"type": "array", "items": item}})
 
 REVIEW_SYSTEM = """\
@@ -457,14 +464,15 @@ request states with no relation for it; a relation whose words or values \
 don't match what the request said; a slot mixing two concepts (poses and \
 hair); two slots that should agree on an axis but name it differently; a \
 slot the request asked for that is missing, or one it never asked for; a \
-template order that reads the image model's needs wrongly. item is the \
-slot's or relation's name as listed, or "" for the whole pack; severity \
-"fix" when the prompts would contradict the request, else "tip". type \
-says what kind of fault it is (missing_relation, wrong_relation, mixed_slot, \
-axis_mismatch, missing_slot, extra_slot, order, style, other). Say \
-exactly which slot, axis or relation to change and to what. At most 6 \
-findings; [] when the design holds. Don't repeat the checker's findings; \
-they are listed.
+template order that reads the image model's needs wrongly. A name, a \
+wording, a text's length or what the template reads is the code's business, \
+not a finding. item is the slot's or relation's name as listed, or "" for \
+the whole pack; severity "fix" when the prompts would contradict the \
+request, else "tip". type says what kind of fault it is (missing_relation, \
+wrong_relation, mixed_slot, axis_mismatch, missing_slot, extra_slot, order, \
+style). Say exactly which slot, axis or relation to change and to what. At \
+most 6 findings; [] when the design holds. Don't repeat the checker's \
+findings; they are listed.
 """
 
 
@@ -543,6 +551,8 @@ def compile_review(answer: Any, plan: dict[str, Any],
         if graph and name and not key:
             continue  # about something the pack doesn't have
         typ = f.get("type") if f.get("type") in MODEL_TYPES else "other"
+        if graph and typ == "other":
+            continue  # a nit the code's own checks don't back (see GRAPH_TYPES)
         if any((not r.get("key") or not key or r["key"] == key) and _same(text, r["text"])
                for r in found or []):
             continue
@@ -563,11 +573,26 @@ def compile_review(answer: Any, plan: dict[str, Any],
     return out[:8]
 
 
+#: The first line of a Fix all request (the manager writes the same line,
+#: `usePackBuilder.fixFindings`): what follows it is the findings, not the
+#: user's words.
+REVIEW_NOTE_HEAD = "Revise the plan to fix ALL of these, one by one:"
+
+
+def own_request(instruction: str) -> str:
+    """The user's own words in a refine instruction: a Fix all request's
+    findings list is cut off (browser check 2026-10-19: the request-words
+    check read "revise, plan, fix, change…" from it as things the pack
+    should cover)."""
+    at = instruction.find(REVIEW_NOTE_HEAD)
+    return instruction if at < 0 else instruction[:at].rstrip()
+
+
 def review_note(findings: list[dict[str, Any]]) -> str:
     """Findings as a refine request for the planner."""
     if not findings:
         return ""
-    return ("Revise the plan to fix ALL of these, one by one:\n"
+    return (REVIEW_NOTE_HEAD + "\n"
             + "\n".join(f"{n}. {f['text'].rstrip('. ')}." for n, f in enumerate(findings, 1))
             + "\nWhere one asks for a new item (a constraint, a derivation, a wildcard), add it "
             "to the plan; where one asks to change an item, change that item.")
