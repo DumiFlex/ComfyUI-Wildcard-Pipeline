@@ -38,6 +38,44 @@ def tag_check_note(plan: dict[str, Any], kind: str, payload: dict[str, Any],
     return f"Not in your Danbooru tag list: {shown}"
 
 
+def ground_item(plan: dict[str, Any], kind: str, payload: dict[str, Any],
+                lookup: ai_vocab.Lookup | None, kinds: set[str]
+                ) -> tuple[dict[str, Any], str]:
+    """A built item's tags spelled the way the user's Danbooru list spells
+    them (``vocab.ground_text``: an alias becomes its tag, a near miss the
+    real spelling), in tag-style packs while the tag lookup is on. Returns
+    ``(payload, note)``; the payload is a copy when anything changed and
+    the note says what (\"\" when nothing did)."""
+    if lookup is None or "tags" not in kinds or plan.get("style") != "tags" \
+            or kind not in ("wildcard", "fixed_values"):
+        return payload, ""
+    out = copy.deepcopy(payload)
+    cache: dict[str, str] = {}
+    changes: list[tuple[str, str]] = []
+    for row in [*(out.get("options") or []), *(out.get("values") or [])]:
+        if not isinstance(row, dict) or not isinstance(row.get("value"), str) \
+                or row.get("is_null"):
+            continue
+        row["value"], got = ai_vocab.ground_text(lookup, row["value"], cache)
+        changes += got
+    if not changes:
+        return payload, ""
+    seen = list(dict.fromkeys(f"{a} → {b}" for a, b in changes))
+    shown = ", ".join(seen[:8]) + (f" and {len(seen) - 8} more" if len(seen) > 8 else "")
+    return out, f"Spelled as your Danbooru tag list does: {shown}"
+
+
+def item_preview(kind: str, payload: dict[str, Any]) -> list[str]:
+    """The preview lines of a wildcard or fixed values payload."""
+    from engine.ai import wildcard as ai_wildcard
+
+    if kind == "wildcard":
+        return [ai_wildcard.option_line(o) for o in payload.get("options") or []
+                if isinstance(o, dict)]
+    return [f"${v.get('name')} = {v.get('value')}" for v in payload.get("values") or []
+            if isinstance(v, dict)]
+
+
 def item_vocab_note(plan: dict[str, Any], key: str, lookup: ai_vocab.Lookup | None,
                     kinds: set[str]) -> str:
     """Real tags for a tag-style wildcard's subject, for its build request."""

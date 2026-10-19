@@ -1668,6 +1668,9 @@ export interface AiPackSettings {
   /** graph: the model writes slots, axes and relations and the code wires
    *  the pack; items: the model writes every item and payload itself. */
   planner: "graph" | "items";
+  /** three: the first plan is drafted three times and the code keeps the
+   *  best fit; one: one draft. */
+  drafts: "one" | "three";
 }
 
 /** One way a slot's options are sorted, for a relation to key on. */

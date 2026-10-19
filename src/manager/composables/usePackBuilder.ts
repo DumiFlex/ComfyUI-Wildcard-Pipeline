@@ -66,7 +66,7 @@ export const DEFAULT_SETTINGS: AiPackSettings = {
   // New items by default (Dumi, 2026-10-18): a pack reuses your own only
   // when you pick "Reuse what fits".
   library: "inspire", negatives: "auto", structure: "sections", style: "auto", rating: "auto",
-  count: 0, model: "any", youth_negative: "on", planner: "graph",
+  count: 0, model: "any", youth_negative: "on", planner: "graph", drafts: "one",
 };
 export const DECIDE_ANSWER = "Your call (decide for me)";
 /** Mirrors `engine/ai/pack.py:build_order`: vocabularies (wildcards with

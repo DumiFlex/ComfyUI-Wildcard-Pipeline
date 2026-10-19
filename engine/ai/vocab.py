@@ -168,6 +168,69 @@ def unknown_tags(lookup: Lookup | None, kinds: set[str], texts: list[str]) -> li
     return check(lookup, tags[:MAX_CHECKED_TAGS])[1]
 
 
+def _variants(tag: str) -> list[str]:
+    """Spellings a made-up tag may be a near miss of, closest first: the
+    plural or singular, and hyphens as underscores or the other way."""
+    out = [tag]
+    if tag.endswith("ies") and len(tag) > 4:
+        out.append(tag[:-3] + "y")
+    elif tag.endswith("es") and len(tag) > 4:
+        out += [tag[:-2], tag[:-1]]
+    elif tag.endswith("s") and not tag.endswith("ss") and len(tag) > 3:
+        out.append(tag[:-1])
+    else:
+        out.append(tag + "s")
+    out += [t.replace("-", "_") for t in list(out) if "-" in t]
+    out += [t.replace("_", "-") for t in list(out) if "_" in t]
+    return list(dict.fromkeys(out))
+
+
+def ground_tag(lookup: Lookup, tag: str) -> str:
+    """The tag list's own spelling of ``tag`` (``tag_name`` form): its
+    canonical name when it is an alias, a near spelling (``_variants``)
+    when only that is in the list, else "" (unknown). A name with brackets
+    is never offered: in a prompt they are weights."""
+    for v in _variants(tag):
+        hit = _exact(lookup("tags", v, 5), v)
+        if hit is not None:
+            name = str(hit.get("name") or v)
+            return v if any(c in name for c in "()[]") else name
+    return ""
+
+
+_WRAP = re.compile(r"^\(?\s*(.*?)\s*(?::[\d.]+)?\s*\)?$")
+
+
+def ground_text(lookup: Lookup, text: str, cache: dict[str, str] | None = None
+                ) -> tuple[str, list[tuple[str, str]]]:
+    """``text`` (comma tags) with each tag spelled the way the tag list
+    spells it (``ground_tag``): ``(text, [(was, now)])``. A weight and its
+    brackets stay, spaces stay spaces (underscores stay underscores), and
+    every part ``split_tags`` skips is left as it is; so is an unknown tag
+    (``tag_check_note`` reports those)."""
+    cache = {} if cache is None else cache
+    parts = text.split(",")
+    changes: list[tuple[str, str]] = []
+    for n, part in enumerate(parts):
+        m = _WRAP.match(part.strip())
+        core = m.group(1) if m else ""
+        if not core or _SKIP.search(core) or core.lower().startswith("embedding:") \
+                or len(core) > 60 or any(c in core for c in "()[]{}"):
+            continue
+        tag = tag_name(core)
+        if tag not in cache:
+            cache[tag] = ground_tag(lookup, tag)
+        now = cache[tag]
+        if not now or now == tag:
+            continue
+        new = now if "_" in core and " " not in core else now.replace("_", " ")
+        if new.lower() == core.lower():
+            continue
+        parts[n] = part.replace(core, new, 1)
+        changes.append((core, new))
+    return ",".join(parts), changes
+
+
 def loras_note(lookup: Lookup | None, kinds: set[str], words: list[str],
                limit: int = 30) -> str:
     """The user's LoRA files matching a request's words (or the first ones),

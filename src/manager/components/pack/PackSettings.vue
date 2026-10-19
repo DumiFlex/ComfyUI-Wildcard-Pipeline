@@ -29,6 +29,10 @@ const FIELDS: Array<{ key: Field; label: string; about: string; options: Array<S
     { value: "graph", label: "Shape, wired by code", hint: "The AI writes the pack's shape (slots, what they vary on, what depends on what, the prompt order) and the options; the code wires every rule and the template. Works on small local models." },
     { value: "items", label: "Every item by the AI", hint: "The AI writes the item list and every rule, constraint and template itself. For large models." },
   ] },
+  { key: "drafts", label: "Plan drafts", about: "How many plans the AI drafts first.", options: [
+    { value: "one", label: "One", hint: "One plan draft. Fastest." },
+    { value: "three", label: "Best of three", hint: "The AI drafts the plan three times and the code keeps the one that fits your request best (every part you named, the rules you gave). About three times as long to plan; helps small local models most." },
+  ] },
   { key: "library", label: "Your library", about: "Whether the pack uses what you already have.", options: [
     { value: "reuse", label: "Reuse what fits", hint: "Uses your wildcards and fixed values where they fit (marked yours) and builds the rest." },
     { value: "inspire", label: "New, in its style", hint: "Builds everything fresh, written the way your library is (tags or sentences, tag names)." },

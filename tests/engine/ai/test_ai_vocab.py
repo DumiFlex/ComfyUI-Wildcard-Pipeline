@@ -65,6 +65,44 @@ def test_pack_checks_tag_style_items():
     assert "long_hair" in pack.item_vocab_note(plan, plan["items"][0]["key"], fake, {"tags"})
 
 
+ALIASES = {"blond_hair": "blonde_hair"}
+
+
+def fake_aliases(kind, query, limit):
+    q = query.strip().lower().replace(" ", "_")
+    if kind == "tags" and q in ALIASES:
+        return [{"name": ALIASES[q], "matched": q, "count": 10, "category": "general"}]
+    return fake(kind, query, limit)
+
+
+def test_ground_text_respells_near_misses_and_aliases():
+    text, changes = vocab.ground_text(fake_aliases, "(blond hair:1.2), smiles, long-hair, "
+                                                    "sparkly gown, $hair, score_9")
+    assert text == "(blonde hair:1.2), smile, long hair, sparkly gown, $hair, score_9"
+    assert changes == [("blond hair", "blonde hair"), ("smiles", "smile"),
+                       ("long-hair", "long hair")]
+    # Underscores stay underscores; a known tag is left alone.
+    assert vocab.ground_text(fake, "red_hairs, 1girl") == ("red_hair, 1girl",
+                                                          [("red_hairs", "red_hair")])
+    assert vocab.ground_text(fake, "smile")[1] == []
+
+
+def test_pack_items_are_spelled_like_the_tag_list():
+    plan = pack.compile_plan({"title": "x", "style": "tags", "items": [
+        {"kind": "wildcard", "name": "Hair", "var": "hair", "about": "hair"}]})
+    payload = {"options": [{"id": "a", "value": "long-hair, smiles"},
+                           {"id": "b", "value": "", "is_null": True}]}
+    out, note = pack.ground_item(plan, "wildcard", payload, fake, {"tags"})
+    assert out["options"][0]["value"] == "long hair, smile"
+    assert payload["options"][0]["value"] == "long-hair, smiles"  # a copy
+    assert note.startswith("Spelled as your Danbooru tag list does: long-hair → long hair")
+    assert pack.item_preview("wildcard", out)[0].startswith("long hair, smile")
+    # Off when the lookup is off or the pack writes sentences.
+    assert pack.ground_item(plan, "wildcard", payload, fake, set()) == (payload, "")
+    assert pack.ground_item({**plan, "style": "sentences"}, "wildcard", payload, fake,
+                            {"tags"}) == (payload, "")
+
+
 def test_the_chat_offers_lookup_only_when_on():
     assert "lookup" not in ai_tools.toolset(None, scoped=False)
     assert "lookup" in ai_tools.toolset(None, scoped=False, vocab=True)

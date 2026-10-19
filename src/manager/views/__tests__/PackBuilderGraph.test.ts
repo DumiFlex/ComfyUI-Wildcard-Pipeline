@@ -36,7 +36,7 @@ const item = (key: string, kind: AiPackItem["kind"], name: string, extra: Partia
   source: "", target: "", use: "", library_id: "", library_type: "", ...extra,
 });
 
-const SETTINGS = { library: "inspire", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, model: "any", youth_negative: "on", planner: "graph" } as const;
+const SETTINGS = { library: "inspire", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, model: "any", youth_negative: "on", planner: "graph", drafts: "one" } as const;
 
 const GRAPH: AiPackGraph = {
   title: "Heroes", summary: "", design: "", rating: "safe", style: "tags", model: "", anchor: "race",

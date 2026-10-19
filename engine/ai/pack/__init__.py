@@ -138,7 +138,9 @@ from engine.ai.pack.build_notes import (
     _option_texts,
     _sibling_refs,
     _use_notes,
+    ground_item,
     item_instance,
+    item_preview,
     item_texts,
     item_vocab_note,
     parse_built,
@@ -168,6 +170,7 @@ from engine.ai.pack.compile_item import (
     _adult_check,
     compile_item,
 )
+from engine.ai.pack.drafts import DRAFT_TEMPERATURES, draft_line, pick_draft, score_plan
 from engine.ai.pack.extend import (
     MAX_BASE_LINES,
     base_note,
@@ -440,7 +443,11 @@ from engine.ai.pack.text_fixes import (
 )
 
 __all__ = [
+    "DRAFT_TEMPERATURES",
     "GRAPH_SCHEMA",
+    "draft_line",
+    "pick_draft",
+    "score_plan",
     "GRAPH_SYSTEM",
     "SLOT_SYSTEM",
     "compile_graph",
@@ -675,6 +682,8 @@ __all__ = [
     "review_note",
     "follow_up_note",
     "item_texts",
+    "ground_item",
+    "item_preview",
     "tag_check_note",
     "item_vocab_note",
     "_REPAIRABLE",

@@ -9,6 +9,7 @@ from engine.ai.pack._common import PLAN_SCHEMA, PlanError, _item
 from engine.ai.pack.build import item_request, library_item
 from engine.ai.pack.check import check_pack
 from engine.ai.pack.compile_item import compile_item
+from engine.ai.pack.drafts import DRAFT_TEMPERATURES, draft_line, pick_draft
 from engine.ai.pack.graph import (
     GRAPH_SCHEMA,
     GRAPH_SYSTEM,
@@ -85,6 +86,21 @@ async def run_pack(
         answer = await complete(system=system, user=first + "\n\n" + plan_retry_note(str(e)),
                                 schema=schema, schema_name=schema_name, temperature=0.2)
         plan = await compiled(answer)
+    if graph and cfg["drafts"] == "three":
+        drafts = [(answer, plan)]
+        for t in DRAFT_TEMPERATURES[1:]:
+            try:
+                a = await complete(system=system, user=first, schema=schema,
+                                   schema_name=schema_name, temperature=t)
+                drafts.append((a, await compiled(a)))
+            except Exception as e:  # noqa: BLE001 - a failed draft is skipped
+                log.append(f"plan: a draft failed ({type(e).__name__}: {e})")
+        best, scores = pick_draft([p for _, p in drafts], instruction, library)
+        answer, plan = drafts[best]
+        line = draft_line(best, scores)
+        if line:
+            plan["applied"] = [*plan.get("applied", []), line]
+            log.append(f"plan: {line}")
     history = [(first, answer)]
     decisions: list[dict[str, str]] = []
     if plan["questions"]:

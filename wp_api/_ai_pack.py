@@ -238,6 +238,34 @@ async def post_pack_plan(request: web.Request) -> web.Response:
             # A small model now and then answers a plan with no wildcards
             # or no template: asked once more with what was wrong.
             retry = ai_pack.plan_retry_note(str(e))
+    if graph and not turns and settings["drafts"] == "three":
+        # Best of three on the first plan: the code keeps the draft that
+        # fits the request best (`drafts.pick_draft`); a failed draft is
+        # skipped.
+        drafts = [(answer, plan)]
+        for t in ai_pack.DRAFT_TEMPERATURES[1:]:
+            try:
+                a = await _ask(cfg, first=first, turns=turns, instruction=follow, extra="",
+                               system=ai_pack.GRAPH_SYSTEM, schema=ai_pack.GRAPH_SCHEMA,
+                               schema_name="pack_graph", temperature=t,
+                               images=images or None, image_note=False, partial=True)
+                if isinstance(a, dict) and a.get(_ai_client.CUT_OFF):
+                    continue
+                p = ai_pack.compile_graph_plan(a, library=library, previous=previous,
+                                               decisions=decisions, settings=settings,
+                                               base=base, canvas=canvas, request=asked)
+                if p["bad_refs"]:
+                    p = await _repair_refs(cfg, p, library=library, decisions=decisions,
+                                           settings=settings, base=base, canvas=canvas,
+                                           request=asked)
+                drafts.append((a, p))
+            except (_ai_client.AIError, ai_pack.PlanError):
+                continue
+        best, scores = ai_pack.pick_draft([p for _, p in drafts], asked, library)
+        answer, plan = drafts[best]
+        line = ai_pack.draft_line(best, scores)
+        if line:
+            plan["applied"] = [*plan.get("applied", []), line]
     if not web_on:
         plan["research"] = []
     plan["research"] = [q for q in plan["research"]
@@ -501,6 +529,11 @@ async def post_pack_item(request: web.Request) -> web.Response:
                 f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
                 status=502,
             )
+    grounded, spelled = ai_pack.ground_item(plan, out["kind"], out["payload"],
+                                            _ai_vocab.lookup, kinds)
+    if spelled:
+        out = {**out, "payload": grounded, "preview": ai_pack.item_preview(out["kind"], grounded),
+               "warnings": [*out["warnings"], spelled]}
     checked = ai_pack.tag_check_note(plan, out["kind"], out["payload"], _ai_vocab.lookup,
                                      kinds)
     if checked:

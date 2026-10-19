@@ -20,7 +20,8 @@ needs a running model and takes minutes per request.
 USAGE
 -----
     python scripts/ai_pack_evals.py [--limit N] [--model NAME] [--out report.md]
-                                    [--planner graph|items] [--save DIR]
+                                    [--planner graph|items] [--drafts one|three]
+                                    [--save DIR]
 
 ``--save DIR`` keeps every pack the run built: ``DIR/<n>-<slug>.md`` is a
 readable sheet (items with their options and tags, constraint cells,
@@ -387,6 +388,8 @@ def main() -> int:
     ap.add_argument("--planner", choices=("graph", "items"), default="graph",
                     help="graph: the model writes slots, axes and relations and the code "
                          "wires the pack; items: the model writes every item and payload")
+    ap.add_argument("--drafts", choices=("one", "three"), default="one",
+                    help="plan drafts on the first plan (the Plan drafts setting)")
     args = ap.parse_args()
     from wp_api import _ai_client
 
@@ -401,10 +404,10 @@ def main() -> int:
         return await _ai_client.complete_json(cfg, **kwargs)
 
     rows = asyncio.run(evaluate(complete, REQUESTS[: args.limit], seeds=args.seeds,
-                                settings={"planner": args.planner},
+                                settings={"planner": args.planner, "drafts": args.drafts},
                                 save=Path(args.save) if args.save else None))
-    Path(args.out).write_text(report(rows, f"{cfg['model']} ({args.planner} planner)"),
-                              encoding="utf-8")
+    title = f"{cfg['model']} ({args.planner} planner, drafts: {args.drafts})"
+    Path(args.out).write_text(report(rows, title), encoding="utf-8")
     Path(args.out).with_suffix(".json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
     print(f"Wrote {args.out}")
     return 0
