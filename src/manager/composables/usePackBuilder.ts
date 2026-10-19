@@ -418,7 +418,9 @@ function setPick(q: string, next: QuestionPick): void {
   picks.value = { ...picks.value, [q]: next };
 }
 
-/** Pick (or unpick) a choice; a single-answer question keeps one. */
+/** Pick (or unpick) a choice; a single-answer question keeps one. A
+ *  question the code asked is settled by the code as soon as it has its
+ *  answer (two picks for a sweep). */
 function choose(q: AiPackQuestion, choice: string): void {
   const cur = pickFor(q.question);
   const has = cur.chosen.includes(choice);
@@ -426,6 +428,36 @@ function choose(q: AiPackQuestion, choice: string): void {
     ? (has ? cur.chosen.filter((c) => c !== choice) : [...cur.chosen, choice])
     : (has ? [] : [choice]);
   setPick(q.question, { chosen, other: q.multi ? cur.other : "", decide: false });
+  if (q.binds) settle(q, chosen);
+}
+
+/** Apply a code question's answer to the plan (no AI call) and keep it as
+ *  a decision, so it is not asked again. A sweep needs two slots before
+ *  it is settled; the slots picked so far are marked meanwhile. */
+function settle(q: AiPackQuestion, chosen: string[]): void {
+  const p = draft.value;
+  const b = q.binds;
+  if (!p || !b) return;
+  let done = false;
+  if (b.set === "run" && chosen.length) {
+    const story = chosen[0] !== "Single images";
+    editPlan({ run: story ? { mode: "story", frames: b.frames } : { mode: "single", frames: 0 } });
+    done = true;
+  } else if (b.set === "sweep") {
+    const on = new Set(chosen);
+    editGraph((g) => ({ ...g, slots: g.slots.map((s) => ({ ...s, sweep: on.has(s.name) })) }));
+    done = chosen.length >= 2;
+  }
+  if (!done) return;
+  const d = { question: q.question, answer: chosen.join(", ") };
+  mergeDecisions([d]);
+  const now = draft.value;
+  if (!now) return;
+  editDraft({
+    ...now,
+    questions: now.questions.filter((x) => x.question !== q.question),
+    decisions: [...now.decisions.filter((x) => x.question !== d.question), d],
+  });
 }
 
 /** Type your own answer ("Other…"). A single-answer question drops its
@@ -436,6 +468,14 @@ function setOther(q: AiPackQuestion, text: string): void {
 }
 
 function decideFor(q: AiPackQuestion): void {
+  if (q.binds) {
+    // The code's own question: "decide for me" takes the first choice
+    // (the first two for a sweep).
+    const chosen = q.choices.slice(0, q.multi ? 2 : 1);
+    setPick(q.question, { chosen, other: "", decide: false });
+    settle(q, chosen);
+    return;
+  }
   const cur = pickFor(q.question);
   setPick(q.question, { chosen: [], other: "", decide: !cur.decide });
 }
@@ -444,9 +484,13 @@ function decideFor(q: AiPackQuestion): void {
 function decideAll(): void {
   const next = { ...picks.value };
   for (const q of questions.value) {
-    if (!pickAnswer(next[q.question])) next[q.question] = { chosen: [], other: "", decide: true };
+    if (!q.binds && !pickAnswer(next[q.question])) next[q.question] = { chosen: [], other: "", decide: true };
   }
   picks.value = next;
+  // The code's own questions are settled on the spot.
+  for (const q of [...questions.value]) {
+    if (q.binds) decideFor(q);
+  }
 }
 
 /** The answers given this round, as decisions. */

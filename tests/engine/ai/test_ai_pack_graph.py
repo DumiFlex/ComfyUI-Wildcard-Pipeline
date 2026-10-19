@@ -666,3 +666,29 @@ def test_findings_are_typed_so_a_rewording_keeps_its_id():
     # The graph review prompt carries the axes and the prompt order.
     prompt = pack.review_prompt(plan, [], "heroes")
     assert "Axes: Race: kind (elf, dwarf, human)" in prompt and "Prompt order: " in prompt
+
+
+def test_the_code_asks_about_the_run_and_the_sweep_axes():
+    # A request that reads like a story on a single-image plan: the code
+    # asks, with what the answer sets, and stops once it is answered.
+    plan = pack.compile_graph_plan(_graph(), request="a 6 frame comic of a hero's day")
+    q = plan["questions"][-1]
+    assert q["header"] == "Story or single" and q["multi"] is False
+    assert q["choices"] == ["A story of 6 frames", "Single images"]
+    assert q["binds"] == {"set": "run", "frames": 6}
+    answered = [{"question": q["question"], "answer": "Single images"}]
+    plan = pack.compile_graph_plan(_graph(), request="a 6 frame comic", decisions=answered)
+    assert all(not x.get("binds") for x in plan["questions"])
+    plan = pack.compile_graph_plan(_graph(run={"mode": "story", "frames": 6}),
+                                   request="a 6 frame comic")
+    assert all(not x.get("binds") for x in plan["questions"])
+    assert not pack.code_questions(plan["graph"], "fantasy heroes")
+    # A sweep run with no axis marked asks which slots to compare.
+    plan = pack.compile_graph_plan(_graph(run={"mode": "sweep", "frames": 0}))
+    q = plan["questions"][-1]
+    assert q["header"] == "Sweep axes" and q["multi"] is True
+    assert q["choices"] == ["Race", "Class", "Weapon", "Outfit"]
+    assert q["binds"] == {"set": "sweep"}
+    marked = [{**s, "sweep": s["var"] == "race"} for s in GRAPH["slots"]]
+    plan = pack.compile_graph_plan(_graph(run={"mode": "sweep", "frames": 0}, slots=marked))
+    assert all(not x.get("binds") for x in plan["questions"])

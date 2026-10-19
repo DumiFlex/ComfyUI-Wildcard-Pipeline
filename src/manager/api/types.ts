@@ -1786,6 +1786,9 @@ export interface AiPackQuestion {
   /** More than one choice may be picked. */
   multi: boolean;
   choices: string[];
+  /** A question the code asked: the answer sets this on the plan (the
+   *  run style, or which slots a sweep compares) with no AI call. */
+  binds?: { set: "run"; frames: number } | { set: "sweep" };
 }
 
 /** A question the user already answered; never asked again. */

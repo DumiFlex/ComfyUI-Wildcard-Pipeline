@@ -88,9 +88,10 @@ def _pack_body(
         if isinstance(raw, dict) and isinstance(raw.get("graph"), dict):
             # A graph plan: its items are compiled from the graph again, and
             # keep their keys and ids through ``previous``.
+            asked = body.get("request") if isinstance(body.get("request"), str) else ""
             plan = ai_pack.compile_graph_plan(raw, library=library, base=base,
                                               canvas=_canvas(body), previous=raw,
-                                              settings=raw.get("settings"))
+                                              settings=raw.get("settings"), request=asked)
         else:
             plan = ai_pack.compile_plan(raw, library=library, base=base, canvas=_canvas(body))
     except ai_pack.PlanError as e:
@@ -214,10 +215,11 @@ async def post_pack_plan(request: web.Request) -> web.Response:
             if graph:
                 plan = ai_pack.compile_graph_plan(answer, library=library, previous=previous,
                                                   decisions=decisions, settings=settings,
-                                                  base=base, canvas=canvas)
+                                                  base=base, canvas=canvas, request=asked)
                 if plan["bad_refs"]:
                     plan = await _repair_refs(cfg, plan, library=library, decisions=decisions,
-                                              settings=settings, base=base, canvas=canvas)
+                                              settings=settings, base=base, canvas=canvas,
+                                              request=asked)
             else:
                 plan = ai_pack.compile_plan(answer, library=library, previous=previous,
                                             decisions=decisions, settings=settings, base=base,

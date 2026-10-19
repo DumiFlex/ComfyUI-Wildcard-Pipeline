@@ -655,7 +655,13 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           out, and a template field you set all stay as you left them through every update,
           the AI is told which parts are yours, and a slot its next answer drops is put back.
           Above the plan, "Wired by the code" lists what the code did on the last compile
-          (counts capped, sections folded, your parts kept). The checker also reads your request against the graph: a thing it names
+          (counts capped, sections folded, your parts kept). The code asks its own questions
+          when the graph has a fork the request didn't settle, marked "applied by the code":
+          a request that reads like a story on a single-image plan asks <b>Story or single</b>
+          (the frame count read from the request), and a sweep run with no axis marked asks
+          <b>Sweep axes</b> (pick two or three). Their answers land on the plan the moment you
+          pick them, with no AI call, and are kept as decisions; <b>Decide for me</b> takes the
+          first choice. The checker also reads your request against the graph: a thing it names
           ("sandals", "parka") that no slot, axis value, rule or fixed text says is a finding,
           sent back to the planner. Click an item to edit its slot (axes, use) or the
           relations it compiles from, and <b>Add a relation</b> or <b>Add a slot</b>; the items

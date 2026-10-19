@@ -191,6 +191,48 @@ describe("PackBuilder on a graph plan", () => {
     expect(calls[calls.length - 1][0].previous?.locks?.slots).toEqual(["race"]);
   });
 
+  it("settles the code's own questions with no AI call", async () => {
+    const story = { header: "Story or single", question: "Story or single images?", multi: false,
+      choices: ["A story of 4 frames", "Single images"], binds: { set: "run" as const, frames: 4 } };
+    const sweep = { header: "Sweep axes", question: "Which slots?", multi: true,
+      choices: ["Race", "Weapon"], binds: { set: "sweep" as const } };
+    vi.mocked(api.ai.packPlan).mockImplementation(async () => {
+      const p = plan();
+      return { ...p, plan: { ...p.plan, questions: [story, sweep] } };
+    });
+    const { w, pb } = await start();
+    expect(w.findAll("[data-test='pack-question-code']").length).toBe(2);
+    // A story answer sets the run on the plan and the graph, and is kept as a decision.
+    pb.choose(story, "A story of 4 frames");
+    expect(pb.draft.value?.run).toEqual({ mode: "story", frames: 4 });
+    expect(pb.draft.value?.graph?.run).toEqual({ mode: "story", frames: 4 });
+    expect(pb.draft.value?.questions.map((q) => q.header)).toEqual(["Sweep axes"]);
+    expect(pb.decisions.value).toEqual([{ question: story.question, answer: "A story of 4 frames" }]);
+    // A sweep marks the slots as they are picked and settles at two.
+    pb.choose(sweep, "Weapon");
+    expect(pb.draft.value?.graph?.slots.map((s) => !!s.sweep)).toEqual([false, true]);
+    expect(pb.draft.value?.questions.length).toBe(1);
+    pb.choose(sweep, "Race");
+    expect(pb.draft.value?.graph?.slots.map((s) => !!s.sweep)).toEqual([true, true]);
+    expect(pb.draft.value?.questions.length).toBe(0);
+    expect(pb.decisions.value.length).toBe(2);
+    expect(vi.mocked(api.ai.packPlan).mock.calls.length).toBe(1);
+  });
+
+  it("decides the code's questions for the user with the first choices", async () => {
+    const story = { header: "Story or single", question: "Story or single images?", multi: false,
+      choices: ["A story of 3 frames", "Single images"], binds: { set: "run" as const, frames: 3 } };
+    vi.mocked(api.ai.packPlan).mockImplementation(async () => {
+      const p = plan();
+      return { ...p, plan: { ...p.plan, questions: [story] } };
+    });
+    const { pb } = await start();
+    pb.decideAll();
+    expect(pb.draft.value?.run).toEqual({ mode: "story", frames: 3 });
+    expect(pb.draft.value?.questions.length).toBe(0);
+    expect(pb.draft.value?.decisions).toEqual([{ question: story.question, answer: "A story of 3 frames" }]);
+  });
+
   it("applies a settings change to a graph plan through the code, with no AI call", async () => {
     const { w, pb } = await start();
     vi.mocked(api.ai.packReview).mockClear();

@@ -38,6 +38,7 @@ function isPicked(q: string, c: string): boolean {
       <p class="wp-pack-qs__head">
         <span class="wp-pack-qs__header">{{ q.header }}</span>
         <span v-if="q.multi" class="wp-pack-qs__multi">pick any</span>
+        <span v-if="q.binds" class="wp-pack-qs__multi" title="Your answer is applied to the plan right away, with no AI call" data-test="pack-question-code">applied by the code</span>
       </p>
       <p class="wp-pack-qs__text">{{ q.question }}</p>
       <div class="wp-pack-qs__choices" :role="q.multi ? 'group' : 'radiogroup'" :aria-label="q.question">

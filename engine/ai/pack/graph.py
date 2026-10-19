@@ -1849,6 +1849,44 @@ def locks_note(plan: dict[str, Any]) -> str:
             + ". Change the rest only.")
 
 
+# --- questions the code asks (and the browser answers by code) -------------
+
+_STORY_WORDS = re.compile(
+    r"\b(story|stories|storyboard|sequence|comic|panels?|frames?|step[- ]by[- ]step|"
+    r"progression|episodes?|over (?:a|the) loop)\b", re.I)
+_FRAMES = re.compile(r"\b(\d{1,2})\s*(?:frames?|panels?|steps|images|pictures|scenes)\b", re.I)
+STORY_QUESTION = ("The request reads like a story. Run it as a story over a Loop (one frame "
+                  "per step, the cast held), or as single images?")
+SWEEP_QUESTION = ("Which slots does the sweep sheet compare? Pick 2 or 3 short ones; the rest "
+                  "are held.")
+
+
+def code_questions(graph: dict[str, Any], request: str,
+                   decisions: Any = None) -> list[dict[str, Any]]:
+    """Questions the code asks when the graph has a fork the request didn't
+    settle, each with ``binds`` saying what the answer sets (the browser
+    applies it; no model call): the run style when the request reads like
+    a story but runs as single images; the sweep axes when a sweep run has
+    none marked. One already answered (``decisions``) is not asked again."""
+    from engine.ai.pack.settings import DEFAULT_FRAMES, MAX_FRAMES, MIN_FRAMES, parse_decisions
+    asked = {d["question"] for d in parse_decisions(decisions)}
+    run = parse_run(graph["run"])
+    out: list[dict[str, Any]] = []
+    if run["mode"] == "single" and _STORY_WORDS.search(request or "") \
+            and STORY_QUESTION not in asked:
+        m = _FRAMES.search(request or "")
+        frames = max(MIN_FRAMES, min(MAX_FRAMES, int(m.group(1)))) if m else DEFAULT_FRAMES
+        out.append({"header": "Story or single", "question": STORY_QUESTION, "multi": False,
+                    "choices": [f"A story of {frames} frames", "Single images"],
+                    "binds": {"set": "run", "frames": frames}})
+    prompt = [s for s in graph["slots"] if s["show"] == "prompt"]
+    if run["mode"] == "sweep" and len(prompt) >= 3 and not any(s.get("sweep") for s in prompt) \
+            and SWEEP_QUESTION not in asked:
+        out.append({"header": "Sweep axes", "question": SWEEP_QUESTION, "multi": True,
+                    "choices": [s["name"] for s in prompt][:8], "binds": {"set": "sweep"}})
+    return out
+
+
 def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
     """A graph answer as a plan (``compile_plan`` on its items), carrying
     the graph as ``plan["graph"]``, the settings applied to it
@@ -1882,6 +1920,8 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
     plan["graph"] = {k: v for k, v in graph.items() if k not in ("warnings", "bad_refs")}
     plan["locks"] = locks
     plan["applied"] = applied
+    plan["questions"] = [*plan["questions"],
+                         *code_questions(graph, kw.get("request") or "", plan["decisions"])]
     plan["warnings"] = [*graph["warnings"],
                         *(f"Left out a relation: {b}"
                           for b in [*graph["dropped"], *graph["bad_refs"]]),
