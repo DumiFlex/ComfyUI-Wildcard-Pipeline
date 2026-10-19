@@ -1054,7 +1054,7 @@ async def test_chat_native_tools_keep_the_turn_for_the_follow_up(wp_client, fake
     """A follow-up sees the earlier calls and results, and the next request
     starts with exactly the previous one, so the server's cache is reused."""
     _src, tgt = await _two_wildcards(wp_client)
-    ai_config.update({"enabled": True, "provider": "lmstudio",
+    ai_config.update({"enabled": True, "provider": "lmstudio", "tool_format": "native",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "tooly"})
     fake_llm.chat_steps.extend([
         {"content": "Looking.", "tool_calls": [
@@ -1129,7 +1129,7 @@ async def test_chat_falls_back_to_json_steps_when_the_server_cant_read_native_ca
     monkeypatch.setattr(_ai_chat, "_NO_NATIVE", set())
     await _two_wildcards(wp_client)
     ai_config.update({"enabled": True, "provider": "lmstudio",
-                      "base_url": str(fake_llm.make_url("/v1")), "model": "tooly"})
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "tooly-70b"})
     fake_llm.chat_steps.extend([
         {"content": "", "tool_calls": [_tool_call("call_a", "search", {"query": "weapon"})]},
         {"content": "You have [[Weapon]]."},
@@ -1157,6 +1157,21 @@ async def test_chat_falls_back_to_json_steps_when_the_server_cant_read_native_ca
     fake_llm.chat_steps.append({"plan": "", "message": "Hi.", "calls": []})
     third = await _chat(wp_client, "hello")
     assert third["format"] == "json" and "response_format" in fake_llm.seen[-1]["body"]
+
+
+async def test_small_and_medium_local_models_start_in_json_steps(wp_client, fake_llm):
+    """Automatic: JSON steps for a local model the name sizes small or
+    medium (or that the name doesn't size), native calls for a large one
+    whose server says it takes tools; the user's choice still wins."""
+    await _two_wildcards(wp_client)
+    for model, extra, want in (("tooly", {}, "json"), ("qwen3.5-9b", {}, "json"),
+                               ("tooly-70b", {}, "native"),
+                               ("qwen3.5-9b", {"tool_format": "native"}, "native"),
+                               ("tooly-70b", {"tool_format": "json"}, "json")):
+        ai_config.update({"enabled": True, "provider": "lmstudio", "tool_format": "auto",
+                          "base_url": str(fake_llm.make_url("/v1")), "model": model, **extra})
+        body = await (await wp_client.post("/wp/api/ai/test")).json()
+        assert body["prefix"]["format"] == want, (model, extra)
 
 
 async def test_chat_falls_back_to_json_when_the_server_refuses_tools(wp_client, fake_llm):
@@ -1237,7 +1252,7 @@ async def test_a_server_that_cant_take_the_typed_schema_gets_the_string_form(
 
 async def test_chat_takes_tool_calls_written_as_text(wp_client, fake_llm):
     await _two_wildcards(wp_client)
-    ai_config.update({"enabled": True, "provider": "lmstudio",
+    ai_config.update({"enabled": True, "provider": "lmstudio", "tool_format": "native",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "tooly",
                       "model_size": "large"})
     fake_llm.chat_steps.extend([
@@ -1623,7 +1638,7 @@ async def test_native_text_next_to_calls_stays_as_a_note(wp_client, fake_llm):
     """Native text written along with calls streamed live; it stays on
     screen as a "say" step instead of the next step replacing it."""
     await _two_wildcards(wp_client)
-    ai_config.update({"enabled": True, "provider": "lmstudio",
+    ai_config.update({"enabled": True, "provider": "lmstudio", "tool_format": "native",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "tooly"})
     fake_llm.chat_steps.extend([
         {"content": "Looking.", "tool_calls": [
@@ -1637,7 +1652,7 @@ async def test_native_text_next_to_calls_stays_as_a_note(wp_client, fake_llm):
 
 async def test_what_the_model_thought_is_kept_as_a_thinking_step(wp_client, fake_llm):
     await _two_wildcards(wp_client)
-    ai_config.update({"enabled": True, "provider": "lmstudio",
+    ai_config.update({"enabled": True, "provider": "lmstudio", "tool_format": "native",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "tooly"})
     fake_llm.chat_steps.extend([
         {"content": "<think>Find the weapons first.</think>", "tool_calls": [

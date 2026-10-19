@@ -179,7 +179,7 @@ async def fake_llm(aiohttp_server):
 
     async def lmstudio_model(request):
         mid = request.match_info["mid"]
-        caps = ["tool_use"] if mid == "tooly" else []
+        caps = ["tool_use"] if mid.startswith("tooly") else []
         # A roomy window unless a test sets a small one (`overrides["_ctx"]`).
         out = {"id": mid, "loaded_context_length": overrides.get("_ctx", 65536),
                "capabilities": caps}

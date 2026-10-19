@@ -25,7 +25,7 @@ import time
 import urllib.parse
 from typing import Any
 
-from engine.ai import chatlog, safety
+from engine.ai import budget, chatlog, safety
 from engine.ai.tools import registry
 from wp_api import _ai_client as client
 from wp_api._ai_client import AIError
@@ -213,12 +213,19 @@ def refused_schema(cfg: dict[str, Any], e: AIError) -> bool:
 
 
 async def pick_format(cfg: dict[str, Any]) -> str:
-    """"native" or "json" for a new chat: the user's choice, else native
-    where the server says the model takes tools, else JSON."""
+    """"native" or "json" for a new chat: the user's choice; else JSON
+    steps for a small or medium local model (chat eval 2026-10-19, a 9B on
+    LM Studio with the stock Qwen template: 21/27 in JSON steps against
+    10/27 with native calls, at half the time per turn, since the server's
+    tool-call parser and the model's own XML disagree) or one the server
+    could not read native calls from; else native where the server says the
+    model takes tools, else JSON."""
     chosen = cfg.get("tool_format")
     if chosen in ("native", "json"):
         return str(chosen)
     if _model_key(cfg) in _NO_NATIVE:
+        return "json"
+    if cfg.get("local") and budget.profile(cfg).get("split"):
         return "json"
     return "native" if await tool_support(cfg) else "json"
 

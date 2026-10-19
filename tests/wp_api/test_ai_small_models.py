@@ -142,7 +142,7 @@ async def test_a_native_answer_ask_never_runs_calls(wp_client, fake_llm):
 
 async def test_web_tools_load_by_group_at_the_end_of_the_list(
         wp_client, fake_llm, searx):  # noqa: F811 - the fixture
-    _on(fake_llm, model="tooly")
+    _on(fake_llm, model="tooly", tool_format="native")
     ai_config.update({"search_engine": "searxng",
                       "search_url": str(searx.make_url("")).rstrip("/")})
     fake_llm.chat_steps.extend([
@@ -171,7 +171,7 @@ async def test_every_tool_keeps_web_search_on_the_next_message(
         wp_client, fake_llm, searx):  # noqa: F811 - the fixture
     """more_tools with no group loads web search too; the next request
     must not drop it again as an unloaded lazy group."""
-    _on(fake_llm, model="tooly")
+    _on(fake_llm, model="tooly", tool_format="native")
     ai_config.update({"search_engine": "searxng",
                       "search_url": str(searx.make_url("")).rstrip("/")})
     fake_llm.chat_steps.extend([
@@ -296,7 +296,7 @@ async def test_highlight_needs_a_read_page_on_this_page(wp_client, fake_llm):
 
 async def test_connection_test_splits_the_fixed_prefix(wp_client, fake_llm):
     await _two_wildcards(wp_client)
-    _on(fake_llm, model="tooly")
+    _on(fake_llm, model="tooly", tool_format="native")
     body = await (await wp_client.post("/wp/api/ai/test")).json()
     prefix = body["prefix"]
     parts = prefix["parts"]

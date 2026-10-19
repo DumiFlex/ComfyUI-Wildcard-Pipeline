@@ -1141,7 +1141,7 @@ const off = computed(() => !config.value?.enabled);
           <SettingRow
             form
             label="Tool format"
-            hint="How the chat calls its tools. Native tool calls are what most models are trained for; the JSON step format works with any model. Automatic uses native calls when the server says the model supports them. Applies to new chats."
+            hint="How the chat calls its tools. Native tool calls are what most models are trained for; the JSON step format works with any model. Automatic uses JSON steps for a small or medium local model (they call tools more reliably that way) and native calls for a large one when the server says it supports them. Applies to new chats."
             setting-key="ai-tool-format"
           >
             <Select
