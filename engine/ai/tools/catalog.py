@@ -33,15 +33,19 @@ _ACTION = obj({
 _COND_OP = s("equals, not_equals, contains, not_contains, matches, not_matches, exists, "
               "not_exists, is_empty, is_not_empty, is_set (set and not empty) or is_unset "
               "(missing or empty)")
+#: Text, or a bare number for a frame test ($iteration equals 1): under a
+#: JSON grammar small models garble a digit inside a string ("}]}],").
+_COND_VALUE = any_of(s(), n(integer=True), desc="text, or a number for $iteration")
 _RULE = obj({
     "summary": s("what the rule does, in a few words"),
     "branches": arr(obj({
         "match": s("all or any"),
         "conditions": arr(obj({
             "var": s("variable name; may read name.0, name.AXIS or name.neg"),
-            "op": _COND_OP, "value": s(),
+            "op": _COND_OP, "value": _COND_VALUE,
             "match": s("for a nested group: all or any"),
-            "conditions": arr(obj({"var": s(), "op": _COND_OP, "value": s()}, ("var", "op")),
+            "conditions": arr(obj({"var": s(), "op": _COND_OP, "value": _COND_VALUE},
+                                  ("var", "op")),
                               "a nested group's tests, instead of var/op/value"),
         })),
         "actions": arr(_ACTION),

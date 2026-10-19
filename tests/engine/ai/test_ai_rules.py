@@ -152,6 +152,45 @@ def test_derivation_warns_and_skips():
         ai_derivation.compile_rules({"nope": 1}, catalog=cat)
 
 
+def _loop_rule(var, op, value, summary="frame"):
+    return {"summary": summary, "branches": [{"match": "all",
+        "conditions": [{"var": var, "op": op, "value": value}],
+        "actions": [_A("wide shot")]}], "else_actions": []}
+
+
+def test_frame_values_take_numbers_and_refuse_json_junk():
+    # Chat eval (9B, LM Studio grammar): "}]}]," where "1" belonged.
+    cat = library_vars.build_catalog(LIBRARY)
+    out = ai_derivation.compile_rules(_drv([
+        _loop_rule("iteration", "equals", 1, "number"),
+        _loop_rule("iteration", "equals", " 02 ", "padded"),
+        _loop_rule("iteration", "matches", "^[3-4]$", "range"),
+        _loop_rule("iteration", "equals", "}]}],", "junk"),
+        _loop_rule("iteration", "equals", "", "empty"),
+        _loop_rule("iteration", "equals", "one", "word"),
+        _loop_rule("iteration", "matches", "^[", "bad pattern"),
+        _loop_rule("class", "equals", "mage}],", "closers"),
+    ]), catalog=cat)
+    tests = [r["rule"]["branches"][0]["condition"] for r in out["rules"]]
+    assert tests == [
+        {"var": "iteration", "op": "equals", "value": "1"},
+        {"var": "iteration", "op": "equals", "value": "2"},
+        {"var": "iteration", "op": "matches", "value": "^[3-4]$"},
+    ]
+    assert all(r["warnings"] == [] for r in out["rules"])
+    skipped = {s["text"]: s["reason"] for s in out["skipped"]}
+    assert set(skipped) == {"junk", "empty", "word", "bad pattern", "closers"}
+    # The reasons spell out the expected form.
+    assert '"value": "1"' in skipped["junk"] and '"value": 1' in skipped["junk"]
+    assert '"^[3-4]$"' in skipped["empty"] and "not a frame number" in skipped["word"]
+    assert "pattern for $iteration" in skipped["bad pattern"]
+    assert "JSON, not text" in skipped["closers"]
+    # The schema the draft panel sends allows the number.
+    cond = ai_derivation.SCHEMA["properties"]["rules"]["items"]["properties"]["branches"][
+        "items"]["properties"]["conditions"]["items"]["properties"]["value"]
+    assert {"type": "integer"} in cond["anyOf"]
+
+
 def test_derivation_actions_pick_from_wildcards_by_name():
     idx = refs.RefIndex([{"id": "c0c0c0c0", "name": "Weapons", "type": "wildcard",
                           "payload": {"sub_categories": ["arcane"], "options": []}}])
