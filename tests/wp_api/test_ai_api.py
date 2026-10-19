@@ -469,6 +469,55 @@ async def test_organize_reads_items_and_maps_changes_back(wp_client, fake_llm):
     assert (await wp_client.post(url, json=many)).status == 400
 
 
+async def test_a_test_the_user_asked_for_runs_when_the_model_declines(wp_client, fake_llm):
+    # Chat eval (9B): "test it first" got the card and "I can't run tests".
+    from wp_api import _ai_turn
+
+    _src, tgt = await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1",
+                      "model_size": "large"})
+    declined = "I can't run tests here; apply the card and try it on the canvas."
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "add_options", "args": json.dumps(
+            {"id": tgt, "options": [{"text": "war axe"}]})}]},
+        {"message": declined, "calls": []},  # the check nudge follows
+        {"message": declined, "calls": []},
+    ])
+    body = await _chat(wp_client, "add a war axe to my Weapon and test it first")
+    [card] = body["proposals"]
+    assert card["tool"] == "add_options"
+    [ran] = [s for s in body["steps"] if s["tool"] == "run_test"]
+    assert ran["ok"] and ran["auto"] and ran["note"] == "Ran Weapon with the proposed changes"
+    assert ran["card"]["kind"] == "test" and ran["card"]["compared"] is True
+    assert ran["card"]["stack"] == [{"module": tgt}]
+    assert "war axe" in json.dumps(ran["card"]["vars"])
+    assert body["message"] == declined + "\n\n" + _ai_turn.AUTO_TESTED
+    assert _ai_turn.NOTHING_TESTED not in body["message"]
+    # The model reads the report next turn, after its own answer: the log
+    # only grew at the end.
+    fake_llm.chat_steps.append({"message": "The axe comes up a third of the time.", "calls": []})
+    n = len(fake_llm.seen)
+    await _chat(wp_client, "what did the test show?", chat_id=body["chat_id"])
+    msgs = fake_llm.seen[n]["body"]["messages"]
+    assert msgs[-2]["role"] == "assistant"
+    assert _ai_turn.AUTO_TEST_NOTE in msgs[-1]["content"]
+    assert '"proposed": true' in msgs[-1]["content"] and "war axe" in msgs[-1]["content"]
+    assert msgs[-1]["content"].endswith("what did the test show?")
+    assert not any(_ai_turn.AUTO_TEST_NOTE in m["content"] for m in msgs[:-1])
+    # No test the user didn't ask for: the answer stands as the model left it.
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "add_options", "args": json.dumps(
+            {"id": tgt, "options": [{"text": "mace"}]})}]},
+        {"message": declined, "calls": []},
+        {"message": declined, "calls": []},
+    ])
+    body = await _chat(wp_client, "and a mace too", chat_id=body["chat_id"])
+    assert len(body["proposals"]) == 1
+    assert not any(s["tool"] == "run_test" for s in body["steps"])
+    assert body["message"] == declined
+
+
 async def test_chat_reads_then_proposes(wp_client, fake_llm):
     src, tgt = await _two_wildcards(wp_client)
     ai_config.update({"enabled": True, "provider": "lmstudio",
