@@ -672,7 +672,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           the planner. A rule the code wires (the story beat, the model quality) can't be
           changed with AI; change the run or the setting instead. The wired template reads
           every prompt slot, fixed value and derived variable (one left out of the order is
-          added, with a note), a <code>{{placeholder}}</code> the planner writes into the lead
+          added, with a note), a <code v-pre>{{placeholder}}</code> the planner writes into the lead
           or tail becomes its variable or goes, single-image runs hold nothing, and a
           "1girl, solo" lead on a pack whose request names no person but does name a thing
           (animals, cars, rooms, food) is taken out. The checker also reads your request against the graph: a thing it names
