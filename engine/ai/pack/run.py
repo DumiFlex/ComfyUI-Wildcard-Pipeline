@@ -9,6 +9,16 @@ from engine.ai.pack._common import PLAN_SCHEMA, PlanError, _item
 from engine.ai.pack.build import item_request, library_item
 from engine.ai.pack.check import check_pack
 from engine.ai.pack.compile_item import compile_item
+from engine.ai.pack.graph import (
+    GRAPH_SCHEMA,
+    GRAPH_SYSTEM,
+    compile_graph_plan,
+    is_wired,
+    refs_prompt,
+    refs_schema,
+    wired_payload,
+    with_refs,
+)
 from engine.ai.pack.plan import build_order, compile_plan
 from engine.ai.pack.prompts import plan_prompt, refine_text
 from engine.ai.pack.review import review_note, review_plan
@@ -42,17 +52,39 @@ async def run_pack(
     plan fails."""
     log: list[str] = []
     cfg = parse_settings(settings)
+    graph = cfg["planner"] == "graph"
+    system = GRAPH_SYSTEM if graph else PLAN_SYSTEM
+    schema = GRAPH_SCHEMA if graph else PLAN_SCHEMA
+    schema_name = "pack_graph" if graph else "pack_plan"
+
+    async def compiled(answer: Any, previous: Any = None,
+                       decisions: Any = None) -> dict[str, Any]:
+        if not graph:
+            return compile_plan(answer, library=library, previous=previous,
+                                decisions=decisions, settings=cfg, request=instruction)
+        plan = compile_graph_plan(answer, library=library, previous=previous,
+                                  decisions=decisions, settings=cfg)
+        if plan["bad_refs"]:
+            # One repair call, on an enum of what the graph declares.
+            log.append(f"plan: {len(plan['bad_refs'])} relation(s) named nothing; asked again")
+            g = {**plan["graph"], "bad_refs": plan["bad_refs"]}
+            fix = await complete(system=GRAPH_SYSTEM, user=refs_prompt(g), schema=refs_schema(g),
+                                 schema_name="pack_refs", temperature=0.2)
+            plan = compile_graph_plan(with_refs(g, fix), library=library, previous=plan,
+                                      decisions=decisions, settings=cfg)
+        return plan
+
     lib_note = ai_patterns.note(ai_patterns.summarize(library or []))
     first = plan_prompt(instruction, library_note=lib_note, settings=cfg, library=library)
-    answer = await complete(system=PLAN_SYSTEM, user=first,
-                            schema=PLAN_SCHEMA, schema_name="pack_plan", temperature=0.4)
+    answer = await complete(system=system, user=first,
+                            schema=schema, schema_name=schema_name, temperature=0.4)
     try:
-        plan = compile_plan(answer, library=library, settings=cfg, request=instruction)
+        plan = await compiled(answer)
     except PlanError as e:  # once more with what was wrong, as the route does
         log.append(f"plan: {e}; asked again")
-        answer = await complete(system=PLAN_SYSTEM, user=first + "\n\n" + plan_retry_note(str(e)),
-                                schema=PLAN_SCHEMA, schema_name="pack_plan", temperature=0.2)
-        plan = compile_plan(answer, library=library, settings=cfg, request=instruction)
+        answer = await complete(system=system, user=first + "\n\n" + plan_retry_note(str(e)),
+                                schema=schema, schema_name=schema_name, temperature=0.2)
+        plan = await compiled(answer)
     history = [(first, answer)]
     decisions: list[dict[str, str]] = []
     if plan["questions"]:
@@ -60,23 +92,21 @@ async def run_pack(
                      for q in plan["questions"]]
         log.append(f"plan: left {len(decisions)} question(s) to the model")
         follow = refine_text("I answered your questions.", decisions, cfg)
-        answer = await complete(system=PLAN_SYSTEM, user=follow, history=history,
-                                schema=PLAN_SCHEMA, schema_name="pack_plan",
+        answer = await complete(system=system, user=follow, history=history,
+                                schema=schema, schema_name=schema_name,
                                 temperature=0.4)
         history = [*history, (follow, answer)]
-        plan = compile_plan(answer, library=library, previous=plan,
-                            decisions=decisions, settings=cfg, request=instruction)
+        plan = await compiled(answer, previous=plan, decisions=decisions)
     # The plan review's fixes, as a user pressing "Fix all" would send them.
     fixes = [f for f in review_plan(plan, library) if f["level"] == "fix"]
     if fixes:
         log.append(f"plan: fixing {len(fixes)} review finding(s)")
         note = review_note(fixes)
         try:
-            answer = await complete(system=PLAN_SYSTEM, user=note, history=history,
-                                    schema=PLAN_SCHEMA, schema_name="pack_plan",
+            answer = await complete(system=system, user=note, history=history,
+                                    schema=schema, schema_name=schema_name,
                                     temperature=0.4)
-            plan = compile_plan(answer, library=library, previous=plan,
-                                decisions=decisions, settings=cfg, request=instruction)
+            plan = await compiled(answer, previous=plan, decisions=decisions)
         except PlanError as e:
             log.append(f"plan: the fixed plan couldn't be used ({e}); kept the last one")
         left = [f["text"] for f in review_plan(plan, library) if f["level"] == "fix"]
@@ -93,6 +123,15 @@ async def run_pack(
                 log.append(f"{key}: {e}")
                 return False
             built[key] = {"id": out["id"], "payload": out["payload"]}
+            return True
+        if is_wired(plan, key):
+            try:
+                out = wired_payload(plan, key, built)
+            except PlanError as e:
+                log.append(f"{key}: {e}")
+                return False
+            built[key] = {"id": _item(plan, key)["id"], "payload": out["payload"]}
+            log.extend(f"{key}: {w}" for w in out["warnings"])
             return True
         error = ""
         for attempt in range(2):

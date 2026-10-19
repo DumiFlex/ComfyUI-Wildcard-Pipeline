@@ -7,6 +7,15 @@ from engine.ai import pack
 from engine.db.repositories import BundleRepository, ModuleRepository, TemplateRepository
 from engine.importer import commit_import
 
+pytestmark = pytest.mark.usefixtures("items_planner")
+
+@pytest.fixture
+def items_planner(monkeypatch):
+    """The item-list planner (the model writes every item and payload), for
+    tests written against it; packs default to the graph planner."""
+    from engine.ai.pack import settings as pack_settings
+    monkeypatch.setitem(pack_settings.DEFAULT_SETTINGS, "planner", "items")
+
 PLAN = {
     "title": "Fantasy Characters", "summary": "Fantasy character portraits.",
     "rating": "safe",

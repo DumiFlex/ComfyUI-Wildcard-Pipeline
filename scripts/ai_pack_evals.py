@@ -140,14 +140,17 @@ def _score(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def evaluate(complete: Any, requests: list[Any], *, seeds: int = 100) -> list[dict]:
-    """``requests``: text, or ``(text, feature)`` to also score a feature."""
+async def evaluate(complete: Any, requests: list[Any], *, seeds: int = 100,
+                   settings: dict | None = None) -> list[dict]:
+    """``requests``: text, or ``(text, feature)`` to also score a feature.
+    ``settings`` are the pack settings (``planner`` picks the graph or the
+    item-list planner)."""
     rows = []
     for entry in requests:
         req, feature = entry if isinstance(entry, tuple) else (entry, "")
         started = time.perf_counter()
         try:
-            result = await pack.run_pack(complete, req, seeds=seeds)
+            result = await pack.run_pack(complete, req, seeds=seeds, settings=settings)
         except Exception as e:  # noqa: BLE001 - every request is scored
             rows.append({"request": req, "plan": False, "feature": feature,
                          "error": f"{type(e).__name__}: {e}",
@@ -199,6 +202,9 @@ def main() -> int:
     ap.add_argument("--model", default="")
     ap.add_argument("--seeds", type=int, default=100)
     ap.add_argument("--out", default="pack-evals.md")
+    ap.add_argument("--planner", choices=("graph", "items"), default="graph",
+                    help="graph: the model writes slots, axes and relations and the code "
+                         "wires the pack; items: the model writes every item and payload")
     args = ap.parse_args()
     from wp_api import _ai_client
 
@@ -212,8 +218,10 @@ def main() -> int:
     async def complete(**kwargs: Any) -> Any:
         return await _ai_client.complete_json(cfg, **kwargs)
 
-    rows = asyncio.run(evaluate(complete, REQUESTS[: args.limit], seeds=args.seeds))
-    Path(args.out).write_text(report(rows, cfg["model"]), encoding="utf-8")
+    rows = asyncio.run(evaluate(complete, REQUESTS[: args.limit], seeds=args.seeds,
+                                settings={"planner": args.planner}))
+    Path(args.out).write_text(report(rows, f"{cfg['model']} ({args.planner} planner)"),
+                              encoding="utf-8")
     Path(args.out).with_suffix(".json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
     print(f"Wrote {args.out}")
     return 0

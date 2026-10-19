@@ -10,6 +10,8 @@ from tests.wp_api._ai_fakes import ANSWER  # noqa: F401 - shared fakes
 from tests.wp_api.test_ai_images import _png
 from wp_api import _ai_chat, _ai_client
 
+pytestmark = pytest.mark.usefixtures("items_planner")
+
 
 def _on(fake_llm, model="m1"):
     ai_config.update({"enabled": True, "provider": "lmstudio",
@@ -355,3 +357,54 @@ async def test_a_plan_keeps_its_design_and_what_the_model_thought(wp_client, fak
     out = await _plan(wp_client)
     assert out["plan"]["design"] == "The season decides the outfit."
     assert out["thinking"] == "Season first, then outfits."
+
+
+async def test_pack_graph_plan_wires_items_without_the_model(wp_client, fake_llm):
+    from tests.engine.ai.test_ai_pack_graph import GRAPH, _answer
+
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.overrides["pack_graph"] = GRAPH
+    fake_llm.overrides["pack_refs"] = {"relations": []}
+    resp = await wp_client.post("/wp/api/ai/pack/plan", json={
+        "instruction": "fantasy heroes", "settings": {"planner": "graph"}})
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    plan = body["plan"]
+    assert plan["graph"]["slots"][0]["var"] == "race"
+    assert any("Left out a relation" in w for w in plan["warnings"])
+    assert body["answer"]["title"] == "Fantasy heroes"
+    names = {i["name"]: i for i in plan["items"]}
+    assert "Race → Weapon" in names and "Title rule" in names
+    built: dict = {}
+    # A wired constraint asked for before its wildcards says what to build first.
+    resp = await wp_client.post("/wp/api/ai/pack/item", json={
+        "plan": plan, "built": built, "key": names["Race → Weapon"]["key"]})
+    assert resp.status == 400 and "build" in await resp.text()
+    for item in plan["items"]:
+        slot = next((s for s in plan["graph"]["slots"] if s["var"] == item["var"]
+                     and item["kind"] == "wildcard"), None)
+        if slot:
+            fake_llm.overrides["pack_slot"] = _answer(slot["name"])
+        resp = await wp_client.post("/wp/api/ai/pack/item", json={
+            "plan": plan, "built": built, "key": item["key"]})
+        assert resp.status == 200, await resp.text()
+        out = await resp.json()
+        assert out["id"] == item["id"]
+        built[item["key"]] = {"id": out["id"], "payload": out["payload"]}
+    slot_calls = [s for s in fake_llm.seen if s["body"].get("response_format", {})
+                  .get("json_schema", {}).get("name") == "pack_slot"]
+    assert len(slot_calls) == 5
+    assert built[names["Race → Weapon"]["key"]]["payload"]["matrix"] == {
+        "elf": {"gun": {"mode": "exclude", "factor": 0}}}
+    resp = await wp_client.post("/wp/api/ai/pack/check", json={"plan": plan, "built": built})
+    assert resp.status == 200, await resp.text()
+    check = await resp.json()
+    assert check["problems"] == {} and check["failed"] == 0, check
+    # A plan sent back keeps its keys and ids.
+    resp = await wp_client.post("/wp/api/ai/pack/review", json={"plan": plan})
+    assert resp.status == 200
+    again = (await resp.json())["plan"]
+    assert [(i["key"], i["id"]) for i in again["items"]] == \
+        [(i["key"], i["id"]) for i in plan["items"]]
+    assert again["graph"]["relations"] == plan["graph"]["relations"]

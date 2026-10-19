@@ -203,3 +203,60 @@ def test_wired_constraint_needs_both_wildcards():
     key = next(i["key"] for i in plan["items"] if i["name"] == "Race → Weapon")
     with pytest.raises(pack.PlanError, match="build"):
         pg.wired_payload(plan, key, {})
+
+
+def test_graph_answer_round_trips():
+    plan = _plan()
+    again = pg.compile_graph(pg.graph_answer(plan))
+    assert pg.compile_graph(plan["graph"])["relations"] == again["relations"]  # idempotent
+    assert again["relations"] == plan["graph"]["relations"]
+    assert again["template"] == plan["graph"]["template"]
+    assert again["bad_refs"] == []
+
+
+def test_refs_schema_and_repair():
+    g = pg.compile_graph(GRAPH)
+    schema = pg.refs_schema(g)
+    rel = schema["properties"]["relations"]["items"]["properties"]
+    assert rel["from_slot"]["enum"] == ["Race", "Class", "Weapon", "Season", "Outfit"]
+    assert "gun" in rel["to_value"]["enum"] and "orc" not in rel["to_value"]["enum"]
+    assert "orc" in pg.refs_prompt(g) and "Race ($race): kind: elf, dwarf, human" in \
+        pg.refs_prompt(g)
+    fixed = pg.with_refs(g, {"relations": [
+        {"kind": "exclude", "from_slot": "Race", "from_axis": "kind", "from_value": "dwarf",
+         "to_slot": "Weapon", "to_axis": "type", "to_value": "gun", "factor": 0,
+         "var": "", "text": "", "otherwise": ""},
+        {"kind": "exclude", "from_slot": "Race", "from_axis": "kind", "from_value": "orc",
+         "to_slot": "Weapon", "to_axis": "type", "to_value": "gun", "factor": 0,
+         "var": "", "text": "", "otherwise": ""}]})
+    assert len(fixed["relations"]) == len(g["relations"]) + 1
+    assert fixed["bad_refs"] == ["exclude: Race.kind has no value orc"]
+    assert fixed["dropped"] == ["exclude: Race.kind has no value orc"]  # the first try's
+    again = pg.compile_graph(fixed)
+    assert again["dropped"] == ["exclude: Race.kind has no value orc"]
+    assert pg.with_refs(g, {"relations": []}) is g
+
+
+async def test_run_pack_on_the_graph_planner():
+    calls: list[str] = []
+
+    async def complete(**kw):
+        calls.append(kw["schema_name"])
+        if kw["schema_name"] == "pack_graph":
+            return GRAPH
+        if kw["schema_name"] == "pack_refs":
+            return {"relations": []}
+        assert kw["schema_name"] == "pack_slot"
+        name = kw["user"].split('"')[1]
+        assert "Other wildcards cover" in kw["user"]
+        return _answer(name)
+
+    result = await pack.run_pack(complete, "fantasy heroes", seeds=40,
+                                 settings={"planner": "graph"})
+    assert result["failed"] == []
+    assert calls.count("pack_graph") == 1 and calls.count("pack_refs") == 1
+    assert calls.count("pack_slot") == 5  # one per slot; wired items need no call
+    assert result["check"]["problems"] == {}, result["check"]["problems"]
+    assert result["check"]["notes"] == []
+    assert any("named nothing" in line for line in result["log"])
+    assert result["plan"]["graph"]["slots"][0]["name"] == "Race"

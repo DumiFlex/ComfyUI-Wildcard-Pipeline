@@ -174,6 +174,24 @@ from engine.ai.pack.extend import (
     bundle_base,
     extend_ops,
 )
+from engine.ai.pack.graph import (
+    GRAPH_SCHEMA,
+    GRAPH_SYSTEM,
+    SLOT_SYSTEM,
+    compile_graph,
+    compile_graph_plan,
+    compile_slot,
+    graph_answer,
+    graph_plan,
+    is_wired,
+    refs_prompt,
+    refs_schema,
+    slot_for,
+    slot_request,
+    slot_schema,
+    wired_payload,
+    with_refs,
+)
 from engine.ai.pack.install import (
     _child,
     _new_modules,
@@ -384,6 +402,22 @@ from engine.ai.pack.text_fixes import (
 )
 
 __all__ = [
+    "GRAPH_SCHEMA",
+    "GRAPH_SYSTEM",
+    "SLOT_SYSTEM",
+    "compile_graph",
+    "compile_graph_plan",
+    "compile_slot",
+    "graph_answer",
+    "graph_plan",
+    "is_wired",
+    "refs_prompt",
+    "refs_schema",
+    "slot_for",
+    "slot_request",
+    "slot_schema",
+    "wired_payload",
+    "with_refs",
     "KINDS",
     "STYLES",
     "MAX_INPUTS",

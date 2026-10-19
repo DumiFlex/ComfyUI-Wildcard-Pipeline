@@ -410,6 +410,14 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
             "negative": _clean(raw.get("negative"), MAX_TEXT * 2)}
 
 
+def _compiled(raw: dict[str, Any]) -> bool:
+    """Whether ``raw`` is a graph ``compile_graph`` made (relations carry
+    ``from`` objects) rather than one the model wrote."""
+    rels = raw.get("relations")
+    return isinstance(rels, list) and any(isinstance(r, dict) and isinstance(r.get("from"), dict)
+                                          for r in rels)
+
+
 def compile_graph(raw: Any) -> dict[str, Any]:
     """The model's graph, cleaned and checked: ``{title, summary, design,
     rating, style, model, anchor, questions, assumptions, from_images,
@@ -419,6 +427,13 @@ def compile_graph(raw: Any) -> dict[str, Any]:
     Raises PlanError when the graph has no slot."""
     if not isinstance(raw, dict):
         raise PlanError("the answer wasn't a pack graph")
+    dropped = [b for b in raw.get("dropped") or [] if isinstance(b, str)] \
+        if isinstance(raw.get("dropped"), list) else []
+    if _compiled(raw):
+        # A graph compiled before (a plan sent back): read it as written,
+        # remembering what it had already dropped.
+        dropped += [b for b in raw.get("bad_refs") or [] if isinstance(b, str)]
+        raw = graph_answer({"graph": raw})
     warnings: list[str] = []
     bad_refs: list[str] = []
     inputs: list[dict[str, str]] = []
@@ -482,6 +497,7 @@ def compile_graph(raw: Any) -> dict[str, Any]:
         "template": template,
         "warnings": warnings,
         "bad_refs": bad_refs,
+        "dropped": list(dict.fromkeys(dropped)),
     }
 
 
@@ -845,3 +861,237 @@ def slot_prompt(graph: dict[str, Any], slot: dict[str, Any], *, note: str = "") 
     if note.strip():
         lines.append(f"The last version had these problems; fix them: {note.strip()}")
     return "\n".join(lines)
+
+
+# --- the planner call -------------------------------------------------------
+
+GRAPH_BLUEPRINTS = """\
+Worked examples (shapes to adapt, never a menu to pick from; the request \
+decides what the slots are):
+1. "Fantasy heroes; elves never use guns; mages get a title": slots Race \
+(axis kind: elf, dwarf, human), Class (axis role: caster, martial), Weapon \
+(axis type: gun, blade, staff), Outfit, Setting; relations exclude \
+Race.kind=elf → Weapon.type=gun; only Class.role=caster → Weapon.type=staff; \
+derive $title "Archmage" when Class.role=caster, otherwise "Adventurer"; \
+template order Quality, title, Race, Class, Outfit, Weapon, Setting.
+2. "Seasonal outfits, nothing summery in winter": slot Season (internal, axis \
+season: winter, spring, summer, autumn), Outfit (axis season with the same \
+values; an outfit lists every season it fits), Weather (axis season); \
+relations agree on season Season → Outfit and Season → Weather; append \
+", scarf" to $outfit when Season.season=winter.
+3. "Shoes that match the outfit": Outfit (axis shoes: sneakers, boots, \
+heels, loafers: what each outfit goes with), Shoes (axis shoes, the same \
+values: what each pair is); relation accepts Outfit → Shoes on shoes.
+4. "A 4-frame story of one hero": run {mode: story, frames: 4}; Hero and \
+Outfit with hold true; a Beat slot of 4 options read per frame is planned \
+by the code from the run, so leave $beat out.
+5. "The user types the subject": inputs [{var: subject, about: who, \
+example: "a red-haired knight"}]; no Subject slot; template order starts \
+with subject.
+"""
+
+GRAPH_SYSTEM = """\
+You plan prompt packs for Wildcard Pipeline, a ComfyUI extension that builds \
+image-generation prompts from modules that run in order on a WP Context node \
+and set $variables; a WP Prompt Assembler renders a template from them. You \
+write the pack as a graph; the code wires it. Decide WHAT: which slots, what \
+they vary on, what depends on what, the prompt order. Never write option \
+text, tags on options, rule syntax or the template string: the code and a \
+later call per slot do that.
+
+Answer with:
+- title (short pack name), summary (one sentence), design (2-4 sentences on \
+how the pack fits together: which pick decides which, and why each relation \
+is there).
+- rating: "nsfw" if sexual or explicit, else "safe". style: "tags" \
+(comma-separated Danbooru-style tags: Pony, Illustrious, NoobAI) or \
+"sentences" (short natural phrases: Flux, SD3, Qwen-Image); follow the \
+settings, else the request, else "tags". model: the image model family the \
+request names ("pony", "flux") or "". anchor: the slot variable the others \
+follow (setting, class, season), or "".
+- questions: up to 4 things you can't guess that would change the pack \
+(header 1-3 words; 2-5 short choices; multi true when several apply \
+together). Never re-ask a question listed under "Decided". [] when nothing \
+important is open. Write the full graph anyway with the likeliest answers.
+- assumptions (up to 6 short lines on what you guessed), from_images (up to \
+4 lines on what you took from attached images, else []), research (up to 2 \
+web queries when web search is on and facts would help, else []).
+- run: {mode: "single", frames: 0} for one image per run; {mode: "story", \
+frames: 2-12} for a story or sequence a WP Context Loop plays frame by \
+frame; {mode: "sweep", frames: 0} for a sheet comparing options.
+- inputs: what comes from outside at run time (a subject the user types, a \
+LoRA): {var, about, example}. A named fixed subject or "whatever I give it" \
+is an input and gets no slot; a LoRA is an input named <slot>_lora. [] when \
+the pack makes everything itself.
+- sections: the pack's parts ({name, about}), each a sub-bundle; [] for a \
+small pack. Every slot names its section or "".
+- slots: one per choice the image makes (setting, character, outfit, pose, \
+lighting, …), up to 24. Each: name; var (its variable, letters digits _); \
+what (what its options are, one concept only: poses hold poses, not hair); \
+section; count (options to write, 4-40); show "prompt" (read by the \
+template) or "internal" (a driver rules need but the prompt shouldn't say: \
+a season, a mood, a rating); pick "" for one pick, "2" or "2-3" for several; \
+hold true when the pick must stay the same for a whole batch or story; \
+sometimes_none 0, or the percent of runs that get nothing (a hat 30% of the \
+time); axes: the ways its options are sorted that a relation or another \
+slot needs, each {name (a lowercase word), values (2-12 lowercase words)}. \
+An axis exists only for a relation: no relation, no axis. Two slots that \
+must agree share an axis NAME and VALUES (Season.season and Outfit.season: \
+winter, summer). Values are tags, so keep them single words.
+- fixed: variables set to the same text every run ({name, var, text, \
+negative}): quality tags, a style preset. Up to 6.
+- relations, each with every field ("" / 0 where unused):
+  - exclude / only / boost / reduce: from_slot.from_axis = from_value → \
+to_slot.to_axis = to_value, with factor for boost (>1) and reduce (<1). \
+"never" is exclude; "just these" / "goes with" is only.
+  - agree: from_slot and to_slot share an axis (from_axis): the target's \
+pick carries the source's value (shoes for the outfit, outfit for the \
+season). The code adds a fallback so the target is never empty.
+  - accepts: like agree, but the source's options each LIST the values they \
+go with (an outfit: sneakers, boots) while the target's options ARE one \
+value each.
+  - derive: var (a NEW variable), text (what it becomes) when \
+from_slot.from_axis = from_value; otherwise (text for every other pick, or \
+"" to leave it unset). Several derive rows on one var are its cases.
+  - append: text added to var (a slot's or a derived variable) when \
+from_slot.from_axis = from_value.
+  Every slot, axis and value a relation names must be declared on the slot \
+it names: a relation that names something else is dropped.
+- template: lead (always-first words: "1girl, solo", or ""), order (slot \
+names, fixed names, derived variables and inputs in the order the image \
+model should read them: subject and quality first, then character, outfit, \
+pose, setting, lighting, style; internal slots never), tail (always-last \
+words or ""), negative (the standing negative prompt in the pack's style: \
+usual defects, things the pack must never show; "" for none).
+
+Plan what the request needs. Don't add commentary; the output is data.
+
+A pack rated nsfw is for adults only: every character is an adult, and no \
+child or real-person subject is ever planned. A costume or role the user \
+asks for (a school uniform, a maid) is worn by an adult.
+
+""" + GRAPH_BLUEPRINTS
+
+SLOT_SYSTEM = """\
+You write the options of one wildcard in a prompt pack for Wildcard Pipeline \
+(image-generation prompts). Answer with options, each {text, weight, \
+negative, tags}: text is the option as it appears in the prompt (short, in \
+the pack's style, one concept, no quotes, no $variables, no braces); weight \
+is 1 for usual, 2-3 for common, 0.5 for rare; negative is what to keep out \
+of the image when this option is picked ("" when nothing); tags gives, for \
+every axis named, the value(s) that fit this option, from that axis's own \
+values only. Spread the options over the axis values so no value is left \
+without options. Never list another slot's words (hair in an outfit, a \
+pose in a setting). Vary the options; no two should mean the same thing.\
+"""
+
+
+def slot_request(plan: dict[str, Any], key: str, note: str = "") -> dict[str, Any]:
+    """``{system, user, schema, schema_name, temperature}`` of one slot's
+    content call."""
+    slot = slot_for(plan, key)
+    if slot is None:
+        raise PlanError(f"{key} isn't a slot")
+    from engine.ai import guide as ai_guide
+    graph = plan["graph"]
+    user = slot_prompt(graph, slot, note=note)
+    fmt = ai_guide.format_line(plan.get("model") or "")
+    if fmt:
+        user += f"\nThe image model: {fmt}"
+    if plan.get("rating") == "nsfw":
+        user += "\n" + ai_guide.NSFW.strip()
+    return {"system": SLOT_SYSTEM, "user": user, "schema": slot_schema(graph, slot),
+            "schema_name": "pack_slot", "temperature": 0.8}
+
+
+def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
+    """A graph answer as a plan (``compile_plan`` on its items), carrying
+    the graph as ``plan["graph"]``. ``kw`` goes to ``compile_plan``
+    (library, previous, decisions, settings, base, canvas)."""
+    from engine.ai.pack.plan import compile_plan
+    graph = raw.get("graph") if isinstance(raw, dict) and isinstance(raw.get("graph"), dict) \
+        else raw
+    graph = compile_graph(graph)
+    plan = compile_plan(graph_plan(graph), **kw)
+    plan["graph"] = {k: v for k, v in graph.items() if k not in ("warnings", "bad_refs")}
+    plan["warnings"] = [*graph["warnings"],
+                        *(f"Left out a relation: {b}"
+                          for b in [*graph["dropped"], *graph["bad_refs"]]),
+                        *plan["warnings"]]
+    plan["bad_refs"] = graph["bad_refs"]
+    return plan
+
+
+def graph_answer(plan: dict[str, Any]) -> dict[str, Any]:
+    """The plan's graph in the shape the model wrote it, to replay a
+    hand-edited plan as the model's last answer."""
+    g = plan["graph"]
+    rels = []
+    for r in g["relations"]:
+        dst = r.get("to") or {}
+        rels.append({"kind": r["kind"], "from_slot": r["from"]["slot"],
+                     "from_axis": r["from"]["axis"], "from_value": r["from"]["value"],
+                     "to_slot": dst.get("slot", ""), "to_axis": dst.get("axis", ""),
+                     "to_value": dst.get("value", ""), "factor": r.get("factor", 0),
+                     "var": r.get("var", ""), "text": r.get("text", ""),
+                     "otherwise": r.get("otherwise", "")})
+    var_name = {s["var"]: s["name"] for s in g["slots"]}
+    var_name.update({f["var"]: f["name"] for f in g["fixed"]})
+    return {k: g[k] for k in ("title", "summary", "design", "rating", "style", "model",
+                              "anchor", "questions", "assumptions", "from_images", "research",
+                              "run", "inputs", "sections", "slots", "fixed")} | {
+        "relations": rels,
+        "template": {**g["template"], "order": [var_name.get(v, v)
+                                                for v in g["template"]["order"]]}}
+
+
+def refs_schema(graph: dict[str, Any]) -> dict[str, Any]:
+    """The relation schema with every slot, axis and value field an enum of
+    what the graph declares: the repair call for ``bad_refs`` can only
+    write references that resolve."""
+    slots = [s["name"] for s in graph["slots"]]
+    axes = sorted({a["name"] for s in graph["slots"] for a in s["axes"]}) or [""]
+    values = sorted({v for s in graph["slots"] for a in s["axes"] for v in a["values"]}) or [""]
+    rel = _obj({
+        "kind": {"type": "string", "enum": list(RELATIONS)},
+        "from_slot": {"type": "string", "enum": slots},
+        "from_axis": {"type": "string", "enum": axes},
+        "from_value": {"type": "string", "enum": [*values, ""]},
+        "to_slot": {"type": "string", "enum": [*slots, ""]},
+        "to_axis": {"type": "string", "enum": [*axes, ""]},
+        "to_value": {"type": "string", "enum": [*values, ""]},
+        "factor": {"type": "number"},
+        "var": _STR,
+        "text": _STR,
+        "otherwise": _STR,
+    })
+    return _obj({"relations": {"type": "array", "items": rel}})
+
+
+def refs_prompt(graph: dict[str, Any]) -> str:
+    """The repair ask: the dropped relations and what the graph declares."""
+    lines = ["These relations named a slot, axis or value the graph doesn't declare and "
+             "were dropped:"]
+    lines += [f"- {b}" for b in graph["bad_refs"]]
+    lines.append("The graph declares:")
+    for s in graph["slots"]:
+        axes = "; ".join(f"{a['name']}: {', '.join(a['values'])}" for a in s["axes"]) \
+            or "no axes"
+        lines.append(f"- {s['name']} (${s['var']}): {axes}")
+    lines.append("Write each dropped relation again using only those names, or leave it out "
+                 "when none fits. Answer with the relations to add.")
+    return "\n".join(lines)
+
+
+def with_refs(graph: dict[str, Any], answer: Any) -> dict[str, Any]:
+    """``graph`` with the repair call's relations added (re-checked like
+    the rest; what still doesn't resolve stays out)."""
+    extra = answer.get("relations") if isinstance(answer, dict) else None
+    if not isinstance(extra, list) or not extra:
+        return graph
+    raw = graph_answer({"graph": graph})
+    raw["relations"] = [*raw["relations"], *extra]
+    raw["dropped"] = [*(graph.get("dropped") or []), *graph["bad_refs"]]
+    fixed = compile_graph(raw)
+    fixed["warnings"] = graph.get("warnings", [])
+    return fixed

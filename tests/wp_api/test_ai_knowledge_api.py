@@ -14,6 +14,8 @@ from wp_api import models as _models
 from wp_api import tags as _tags
 from wp_api._model_index import build_hits
 
+pytestmark = pytest.mark.usefixtures("items_planner")
+
 
 def _on(fake_llm):
     ai_config.update({"enabled": True, "provider": "lmstudio",

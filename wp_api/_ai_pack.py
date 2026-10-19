@@ -83,12 +83,32 @@ def _pack_body(
     base: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]] | web.Response:
     """The plan and built items the manager sends back, checked again."""
+    raw = body.get("plan")
     try:
-        plan = ai_pack.compile_plan(body.get("plan"), library=library, base=base,
-                                    canvas=_canvas(body))
+        if isinstance(raw, dict) and isinstance(raw.get("graph"), dict):
+            # A graph plan: its items are compiled from the graph again, and
+            # keep their keys and ids through ``previous``.
+            plan = ai_pack.compile_graph_plan(raw, library=library, base=base,
+                                              canvas=_canvas(body), previous=raw,
+                                              settings=raw.get("settings"))
+        else:
+            plan = ai_pack.compile_plan(raw, library=library, base=base, canvas=_canvas(body))
     except ai_pack.PlanError as e:
         return json_error(f"the plan can't be used: {e}", status=400)
     return plan, ai_pack.parse_built(plan, body.get("built"))
+
+
+async def _repair_refs(cfg: dict[str, Any], plan: dict[str, Any], **kw: Any) -> dict[str, Any]:
+    """One repair call for the relations a graph plan dropped, on an enum
+    of what the graph declares; a failed call keeps the plan as it is."""
+    g = {**plan["graph"], "bad_refs": plan["bad_refs"]}
+    try:
+        fix = await _ai_client.complete_json(
+            cfg, system=ai_pack.GRAPH_SYSTEM, user=ai_pack.refs_prompt(g),
+            schema=ai_pack.refs_schema(g), schema_name="pack_refs", temperature=0.2)
+        return ai_pack.compile_graph_plan(ai_pack.with_refs(g, fix), previous=plan, **kw)
+    except (_ai_client.AIError, ai_pack.PlanError):
+        return plan
 
 
 async def post_pack_plan(request: web.Request) -> web.Response:
@@ -131,9 +151,15 @@ async def post_pack_plan(request: web.Request) -> web.Response:
         # The user may have edited the plan by hand: the model's last answer
         # is replayed as the plan they see now.
         try:
-            shown = ai_pack.compile_plan(previous, library=library, base=base,
-                                         canvas=canvas)
-            turns[-1]["answer"] = ai_pack.plan_answer(shown)
+            if isinstance(previous.get("graph"), dict):
+                shown = ai_pack.compile_graph_plan(previous, library=library, base=base,
+                                                   canvas=canvas, previous=previous,
+                                                   settings=settings)
+                turns[-1]["answer"] = ai_pack.graph_answer(shown)
+            else:
+                shown = ai_pack.compile_plan(previous, library=library, base=base,
+                                             canvas=canvas)
+                turns[-1]["answer"] = ai_pack.plan_answer(shown)
         except ai_pack.PlanError:
             previous = None
     web_on = _ai_search.enabled(cfg)
@@ -168,22 +194,34 @@ async def post_pack_plan(request: web.Request) -> web.Response:
                    "from them unless asked otherwise.")
     answer: Any = None
     retry = ""
+    graph = settings["planner"] == "graph"
     for attempt in range(2):
         try:
             answer = await _ask(
                 cfg, first=first, turns=turns, instruction=follow, extra=retry,
-                system=ai_pack.PLAN_SYSTEM, schema=ai_pack.PLAN_SCHEMA,
-                schema_name="pack_plan", temperature=0.4 if not retry else 0.2,
+                system=ai_pack.GRAPH_SYSTEM if graph else ai_pack.PLAN_SYSTEM,
+                schema=ai_pack.GRAPH_SCHEMA if graph else ai_pack.PLAN_SCHEMA,
+                schema_name="pack_graph" if graph else "pack_plan",
+                temperature=0.4 if not retry else 0.2,
                 images=images or None,
                 image_note=False,  # plan_prompt says how to use them
                 partial=True,  # a cut-off plan keeps the items it finished
             )
-            plan = ai_pack.compile_plan(answer, library=library, previous=previous,
-                                        decisions=decisions, settings=settings, base=base,
-                                        canvas=canvas, request=" ".join(
-                                            [first_text, instruction, sample, *(
-                                                str(d.get("answer") or "") for d in decisions
-                                                if isinstance(d, dict))]))
+            if graph:
+                plan = ai_pack.compile_graph_plan(answer, library=library, previous=previous,
+                                                  decisions=decisions, settings=settings,
+                                                  base=base, canvas=canvas)
+                if plan["bad_refs"]:
+                    plan = await _repair_refs(cfg, plan, library=library, decisions=decisions,
+                                              settings=settings, base=base, canvas=canvas)
+            else:
+                plan = ai_pack.compile_plan(answer, library=library, previous=previous,
+                                            decisions=decisions, settings=settings, base=base,
+                                            canvas=canvas, request=" ".join(
+                                                [first_text, instruction, sample, *(
+                                                    str(d.get("answer") or "")
+                                                    for d in decisions
+                                                    if isinstance(d, dict))]))
             break
         except _ai_client.AIError as e:
             return json_error(e.message, status=e.status)
@@ -356,6 +394,16 @@ async def post_pack_item(request: web.Request) -> web.Response:
         except ai_pack.PlanError as e:
             return json_error(str(e), status=400)
         return json_ok({**out, "repair": "", "model": cfg["model"]})
+    if ai_pack.is_wired(plan, key):
+        # The graph wires this item: no model call.
+        try:
+            wired = ai_pack.wired_payload(plan, key, built)
+        except ai_pack.PlanError as e:
+            return json_error(str(e), status=400)
+        item = next(i for i in plan["items"] if i["key"] == key)
+        return json_ok({"key": key, "id": item["id"], "kind": wired["kind"],
+                        "payload": wired["payload"], "preview": wired["preview"],
+                        "warnings": wired["warnings"], "repair": "", "model": cfg["model"]})
     kinds = await _vocab_kinds(body)
     try:
         req = ai_pack.item_request(plan, key, built, note[:1500], library=library)

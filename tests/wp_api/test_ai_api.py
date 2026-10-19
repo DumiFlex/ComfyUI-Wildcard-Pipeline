@@ -14,6 +14,8 @@ from tests.wp_api._ai_fakes import ANSWER, EDIT_ANSWERS  # noqa: F401 - shared f
 from wp_api import _ai_client
 from wp_api import _ai_turn as ai_turn
 
+pytestmark = pytest.mark.usefixtures("items_planner")
+
 
 async def _chat(wp_client, message, **extra):
     resp = await wp_client.post("/wp/api/ai/chat", json={"message": message, **extra})
