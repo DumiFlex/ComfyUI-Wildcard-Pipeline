@@ -150,11 +150,21 @@ def check_pack(
                 "them say different things")
         else:
             seen.append({"var": i["var"], "vals": vals})
-    relations = pack_graph.verify_relations(plan, built, runs)
+    tpl = _template(plan, built)
+    rendered: list[str] = []
+    if tpl is not None and isinstance(plan.get("graph"), dict):
+        neg0 = built[tpl[0]["key"]]["payload"].get("negative_template") or ""
+        for ctx in runs:
+            try:
+                rendered.append(render(tpl[1], neg0, ctx)[0].lower())
+            except Exception:  # noqa: BLE001 - a failed run is reported elsewhere
+                rendered.append("")
+    relations = pack_graph.verify_relations(plan, built, runs, rendered or None)
     for r in relations:
         if r["checked"] and not r["holds"]:
-            notes.append(f"Rule broken in {r['broken']} of {r['seen']} runs: {r['text']}")
-    tpl = _template(plan, built)
+            notes.append(f"Rule never fired in the {len(runs)} test runs: {r['text']}"
+                         if r.get("why") else
+                         f"Rule broken in {r['broken']} of {r['seen']} runs: {r['text']}")
     prompts: list[dict[str, Any]] = []
     distinct = 0.0
     if tpl is not None:

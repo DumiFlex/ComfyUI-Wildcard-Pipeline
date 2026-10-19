@@ -34,7 +34,7 @@ GRAPH = {
     "relations": [
         {"kind": "exclude", "from_slot": "Race", "from_axis": "kind", "from_value": "elf",
          "to_slot": "Weapon", "to_axis": "type", "to_value": "gun", "factor": 0,
-         "var": "", "text": "", "otherwise": ""},
+         "var": "", "text": "", "otherwise": "", "words": ["musket"]},
         {"kind": "only", "from_slot": "Class", "from_axis": "role", "from_value": "caster",
          "to_slot": "Weapon", "to_axis": "type", "to_value": "staff", "factor": 0,
          "var": "", "text": "", "otherwise": ""},
@@ -54,7 +54,7 @@ GRAPH = {
     ],
     "template": {"lead": "1girl, solo", "order": ["Quality", "$title", "Race", "Class",
                                                   "Weapon", "Season", "Outfit", "nothing"],
-                 "tail": "", "negative": "bad anatomy"},
+                 "tail": "", "negative": "bad anatomy, musket in winter"},
 }
 
 OPTIONS = {
@@ -83,7 +83,14 @@ def test_compile_graph_keeps_what_resolves_and_reports_the_rest():
     assert [r["kind"] for r in g["relations"]] == ["exclude", "only", "agree", "derive",
                                                    "append"]
     assert g["relations"][2]["values"] == ["winter", "summer"]
+    assert g["relations"][0]["words"] == ["musket"]
     assert g["bad_refs"] == ["exclude: Race.kind has no value orc"]
+    # A rule written into the negative is taken out: rules are relations.
+    assert g["template"]["negative"] == "bad anatomy"
+    assert any("out of the negative" in w for w in g["warnings"])
+    # A slot whose only axis is itself gets its options from the axis.
+    assert pg.slot_by_var(g, "season")["self_axis"] == "season"
+    assert pg.slot_by_var(g, "outfit")["self_axis"] == ""
     assert g["template"]["order"] == ["quality", "title", "race", "class", "weapon", "outfit"]
     assert any("doesn't read Season" in w for w in g["warnings"])
     assert any("names nothing" in w for w in g["warnings"])
@@ -116,8 +123,8 @@ def test_graph_plan_items_and_order():
     season = next(i for i in plan["items"] if i["name"] == "Season")
     assert season["use"] == "internal"
     wired = [i["name"] for i in plan["items"] if pg.is_wired(plan, i["key"])]
-    assert set(wired) == {"Quality", "Race → Weapon", "Class → Weapon", "Season → Outfit",
-                          "Title rule", "Outfit rule", "Fantasy heroes"}
+    assert set(wired) == {"Quality", "Season", "Race → Weapon", "Class → Weapon",
+                          "Season → Outfit", "Title rule", "Outfit rule", "Fantasy heroes"}
     assert pg.slot_for(plan, next(i["key"] for i in plan["items"] if i["name"] == "Race"))
 
 
@@ -127,7 +134,7 @@ def _build(plan):
     for key in pack.build_order(plan):
         item = next(i for i in plan["items"] if i["key"] == key)
         slot = pg.slot_for(plan, key)
-        if slot is not None:
+        if slot is not None and not pg.is_wired(plan, key):
             out = pg.compile_slot(g, slot, _answer(slot["name"]))
         else:
             out = pg.wired_payload(plan, key, built)
@@ -169,6 +176,9 @@ def test_wired_payloads_and_a_clean_run():
     by_name = {i["name"]: built[i["key"]]["payload"] for i in plan["items"]}
     assert by_name["Race → Weapon"]["matrix"] == {"elf": {"gun": {"mode": "exclude",
                                                                    "factor": 0}}}
+    season = by_name["Season"]
+    assert [o["value"] for o in season["options"]] == ["winter", "summer"]
+    assert season["tag_group_kinds"] == {"season": "accepts"}
     assert by_name["Class → Weapon"]["matrix"] == {"caster": {"staff": {"mode": "only",
                                                                         "factor": 1}}}
     assert by_name["Season → Outfit"]["matrix"]["winter"] == {"winter": {"mode": "only",
@@ -255,7 +265,7 @@ async def test_run_pack_on_the_graph_planner():
                                  settings={"planner": "graph"})
     assert result["failed"] == []
     assert calls.count("pack_graph") == 1 and calls.count("pack_refs") == 1
-    assert calls.count("pack_slot") == 5  # one per slot; wired items need no call
+    assert calls.count("pack_slot") == 4  # one per slot; Season and wired items need none
     assert result["check"]["problems"] == {}, result["check"]["problems"]
     assert result["check"]["notes"] == []
     assert any("named nothing" in line for line in result["log"])
@@ -372,9 +382,72 @@ def test_verify_relations_on_runs():
 def test_check_pack_notes_a_broken_rule(monkeypatch):
     plan = _plan()
     built = _build(plan)
-    monkeypatch.setattr(pg, "verify_relations", lambda *_: [
+    monkeypatch.setattr(pg, "verify_relations", lambda *_, **__: [
         {"text": "Race elf never gets Weapon gun", "kind": "exclude", "checked": True,
-         "seen": 10, "broken": 2, "holds": False}])
+         "seen": 10, "broken": 2, "holds": False, "why": ""},
+        {"text": "Class caster only gets Weapon staff", "kind": "only", "checked": True,
+         "seen": 0, "broken": 0, "holds": False, "why": "never fired in 40 runs"}])
     report = pack.check_pack(plan, built, seeds=20)
     assert "Rule broken in 2 of 10 runs: Race elf never gets Weapon gun" in report["notes"]
+    assert any(n.startswith("Rule never fired in the") and "only gets" in n
+               for n in report["notes"])
     assert report["relations"][0]["holds"] is False
+
+
+def test_rule_words_must_exist_and_are_read_in_the_prompts():
+    plan = _plan()
+    g = plan["graph"]
+    weapon = pg.slot_by_var(g, "weapon")
+    key = next(i["key"] for i in plan["items"] if i["name"] == "Weapon")
+    assert pg.rule_words(g, weapon) == [("gun", "type", "musket")]
+    assert "Include options that mention musket, tagged gun on type" in \
+        pg.slot_prompt(g, weapon)
+    # No option says the word: a warning the fill call plugs.
+    answer = {"options": [{"text": "flintlock pistol", "weight": 1, "negative": "",
+                           "tags": {"type": ["gun"]}},
+                          {"text": "longsword", "weight": 1, "negative": "",
+                           "tags": {"type": ["blade"]}},
+                          {"text": "oak staff", "weight": 1, "negative": "",
+                           "tags": {"type": ["staff"]}}]}
+    out = pg.compile_slot(g, weapon, answer)
+    assert out["warnings"] == ["No option mentions musket tagged gun on type"]
+    assert pack.repair_note(out["warnings"]) == out["warnings"][0]
+    built = {key: {"id": "weapon01", "payload": out["payload"]}}
+    assert pg.fill_targets(g, weapon, out["payload"]) == {"type": {"gun": ["musket"]}}
+    req = pg.slot_request(plan, key, out["warnings"][0], built)
+    assert req["schema_name"] == "pack_slot_fill"
+    assert "No option mentions musket yet" in req["user"] and "tagged gun on type" in req["user"]
+    assert req["schema"]["properties"]["add"]["items"]["properties"]["tags"]["properties"][
+        "type"]["items"]["enum"] == ["gun"]
+    # With the word there, no warning.
+    assert pg.compile_slot(g, weapon, _answer("Weapon"))["warnings"] == []
+    # The check reads the rendered prompts: a musket in an elf's prompt breaks the rule.
+    built = _build(plan)
+    ctx = {"race": "elf", "class": "knight", "class.role": "martial", "weapon": "longsword",
+           "season": "summer", "season.season": "summer", "outfit": "linen tunic",
+           "title": "Adventurer"}
+    held = pg.verify_relations(plan, built, [ctx], ["1girl, elf, knight, longsword"])
+    assert held[0]["holds"] and held[0]["seen"] == 1
+    broke = pg.verify_relations(plan, built, [ctx], ["1girl, elf, knight, musket, longsword"])
+    assert broke[0]["broken"] == 1 and not broke[0]["holds"]
+    # A rule whose value never fires in the runs doesn't hold either.
+    never = pg.verify_relations(plan, built, [{**ctx, "race": "human"}])
+    assert never[0]["seen"] == 0 and not never[0]["holds"] and "never fired" in never[0]["why"]
+    assert never[0]["text"] == "Race elf never gets Weapon gun (musket)"
+
+
+def test_self_axis_slot_is_written_by_code():
+    plan = _plan()
+    g = plan["graph"]
+    season = pg.slot_by_var(g, "season")
+    out = pg.axis_payload(g, season)
+    assert [o["value"] for o in out["payload"]["options"]] == ["winter", "summer"]
+    assert out["payload"]["tag_groups"] == {"season": ["winter", "summer"]}
+    assert out["warnings"] == []
+    # Season words aren't scope bleed for the other slots.
+    key = next(i["key"] for i in plan["items"] if i["name"] == "Outfit")
+    assert "Season" not in pg.other_texts(plan, _build(plan), key)
+    # The round trip keeps it a self-axis slot.
+    again = pg.compile_graph(pg.graph_answer(plan))
+    assert pg.slot_by_var(again, "season")["self_axis"] == "season"
+    assert again["relations"][0]["words"] == ["musket"]

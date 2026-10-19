@@ -1693,6 +1693,9 @@ export interface AiPackSlot {
   /** Percent of runs that get nothing (0 = never). */
   sometimes_none: number;
   axes: AiPackAxis[];
+  /** The axis this slot IS (a Season slot with axis season): its options
+   *  are the axis values, written by the code. "" otherwise. */
+  self_axis?: string;
 }
 
 export interface AiPackFixed {
@@ -1729,6 +1732,10 @@ export interface AiPackRelation {
   text?: string;
   /** derive: the text for every other pick ("" leaves it unset). */
   otherwise?: string;
+  /** What the relation is about, as an option says it ("sandals"): the
+   *  target slot must hold options saying them, and the check reads the
+   *  prompts for them. */
+  words?: string[];
 }
 
 export interface AiPackGraphTemplate {

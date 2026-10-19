@@ -634,7 +634,11 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           constraint, derivation and the template from the graph, so a rule can only name a slot
           and a value the graph declares; a relation that names something the graph doesn't
           have is dropped, listed under the plan, and the model is asked once to write it
-          again with the names that exist. Click an item to edit its slot (axes, use) or the
+          again with the names that exist. Each relation also names the words it is about
+          ("sandals", "shorts" for "no sandals or shorts in winter"), so the target wildcard
+          is made to hold options saying them and the test run reads the finished prompts
+          for them; a slot whose only axis is itself (a Season slot with a season axis) gets
+          its options from the axis values without a model call. Click an item to edit its slot (axes, use) or the
           relations it compiles from, and <b>Add a relation</b> or <b>Add a slot</b>; the items
           are compiled again from your change. The assistant lists every item it will build,
           grouped by section, and asks what it can't guess. Some questions take several answers; every question has an
@@ -705,9 +709,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           a rule needs, the model is asked only to <b>add</b> options with it, keeping the rest.
           Constraints, rules, fixed values and the template are written by the code from the
           graph, with no request and no way to misname a tag. The test run then checks every
-          relation on real runs (a "never gets" that still co-occurred, an "only" the target
-          left, a rule that didn't write its text) and says how many held; a broken one is a
-          note on the pack. An item
+          relation on real runs (a "never gets" that still co-occurred or whose words showed
+          in a prompt, an "only" the target left, a rule that didn't write its text, a rule
+          that never fired at all) and says how many held; a broken one is a note on the
+          pack. An item
           that takes longer than 4 minutes is stopped and marked; <b>Skip this item</b> moves on
           right away, and the row's buttons retry it, rebuild it with a note, or leave it out.
           If the template's answer fails twice, a plain one that reads every pick is written
