@@ -191,6 +191,26 @@ def test_frame_values_take_numbers_and_refuse_json_junk():
     assert {"type": "integer"} in cond["anyOf"]
 
 
+def test_a_frame_count_test_with_a_small_number_warns():
+    # Chat eval (9B): $iteration_total equals "3" meant the third frame.
+    cat = library_vars.build_catalog(LIBRARY)
+    out = ai_derivation.compile_rules(_drv([
+        _loop_rule("iteration_total", "equals", "3", "third"),
+        _loop_rule("iteration_total", "not_equals", 1, "not first"),
+        _loop_rule("iteration_total", "equals", "24", "a real count"),
+        _loop_rule("iteration", "equals", "3", "the frame"),
+    ]), catalog=cat)
+    assert [r["warnings"] for r in out["rules"]] == [
+        [ai_derivation.FRAME_MIXUP], [ai_derivation.FRAME_MIXUP], [], []]
+    assert ai_derivation.FRAME_MIXUP == (
+        "$iteration_total is the frame count; the current frame is $iteration")
+    # The prompts tell the two apart, with an example each.
+    assert "$iteration is the CURRENT frame" in ai_derivation.SYSTEM_PROMPT
+    assert "$iteration_total is how many frames" in ai_derivation.SYSTEM_PROMPT
+    assert '"1" for the first frame' in library_vars.LOOP_VARS["iteration"]
+    assert 'e.g. "4"' in library_vars.LOOP_VARS["iteration_total"]
+
+
 def test_derivation_actions_pick_from_wildcards_by_name():
     idx = refs.RefIndex([{"id": "c0c0c0c0", "name": "Weapons", "type": "wildcard",
                           "payload": {"sub_categories": ["arcane"], "options": []}}])

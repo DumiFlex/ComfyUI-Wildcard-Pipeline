@@ -180,7 +180,10 @@ $variable the user names: a socket value (a LoRA trigger string, an LLM's \
 text, a number) or a template over other variables. A pack expects such \
 values as inputs; the user may already set others on the canvas.
 - WP Context Loop: runs everything after it N times (frames), a fresh roll \
-each. Sets $iteration (1 to N, as text) and $iteration_total; the user can \
+each. $iteration is the CURRENT frame number as text: "1" in the first \
+frame, "2" in the second (a rule per frame tests it: $iteration equals "2"). \
+$iteration_total is the frame COUNT, the same in every frame: "4" in all \
+four frames of a 4-frame loop (never test it to pick a frame). The user can \
 rename them (e.g. $page, $page_total). Both are internal: rules read them, \
 but a template shows them only if the user turns that off, so put the frame \
 number in a prompt through a derivation or combine. A sequence or story \
@@ -207,8 +210,9 @@ for another node, e.g. $cfg or $steps), WP Debug (shows every variable).
 
 NODES_SHORT = """\
 Nodes: WP Context Injector rows set $variables from outside (LoRA triggers, \
-LLM text). WP Context Loop runs N frames and sets $iteration / \
-$iteration_total (internal, renamable): derivations on $iteration make a \
+LLM text). WP Context Loop runs N frames and sets $iteration (the current \
+frame, "1" first) and $iteration_total (the frame count, e.g. "4"; never a \
+frame test), internal and renamable: derivations on $iteration make a \
 sequence, "hold" keeps a pick for the run; sweep mode runs every combination \
 of ticked options. WP Model Info sets $model_family, $model_variant (pony, \
 illustrious, noobai, animagine or "") and $model_name. <lora:name:0.8> is \

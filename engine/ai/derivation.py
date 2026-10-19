@@ -129,9 +129,13 @@ $class is mage, append @{Weapons:arcane} to $gear"). Condition values are \
 plain text or one $name, never picks.
 
 Use the library's variable names and option texts when the request refers to \
-them. Some variables are set at run time outside the library ($iteration from \
-a WP Context Loop, anything a WP Context Injector brings in); reading them is \
-fine when the request mentions them. A new variable name is fine when the \
+them. Some variables are set at run time outside the library (the WP Context \
+Loop's frame variables, anything a WP Context Injector brings in); reading \
+them is fine when the request mentions them. $iteration is the CURRENT frame \
+number as text: a rule per frame tests it ($iteration equals "1" for the \
+first frame, matches "^[3-4]$" for frames 3 to 4). $iteration_total is how \
+many frames the loop runs in all (e.g. "4"), the same in every frame: never \
+test it to pick a frame. A new variable name is fine when the \
 request asks for one: letters, digits and _ only. Write one rule per \
 independent decision, and a short summary of what each rule does. Don't add \
 commentary; the output is data for the user's own library.\
@@ -216,6 +220,8 @@ _JUNK = re.compile(r"[\s\[\]{}:,\"']+")
 _JUNK_TAIL = re.compile(r"[}\]]\s*[}\],]")
 #: The WP Context Loop's frame variables: numbers written as text.
 _FRAME_VARS = frozenset(library_vars.LOOP_VARS)
+#: A frame count small enough to be a frame number by mistake.
+MAX_FRAME_MIXUP = 12
 
 
 def _flat(text: Any) -> str:
@@ -499,6 +505,9 @@ def _compile_condition(
                     '"value": 1')
     if base in _FRAME_VARS and op not in _NO_VALUE_OPS:
         value = _frame_value(var, op, value)
+        if base == "iteration_total" and op in ("equals", "not_equals") \
+                and value.isdigit() and 1 <= int(value) <= MAX_FRAME_MIXUP:
+            warnings.append(FRAME_MIXUP)
     entry = catalog.get(base)
     if entry is None:
         warnings.append(unset_note(base))
@@ -525,6 +534,12 @@ def _compile_condition(
             elif any(s["kind"] == "wildcard" for s in entry["sources"]):
                 op, value = _near_test(var, op, value, entry, warnings)
     return {"var": var, "op": op, "value": value}
+
+
+#: The card warning (and the model's note) for a test that reads the frame
+#: count where the frame number was meant. Chat eval (9B): "$iteration_total
+#: equals 3" for the third frame, which only a 3-frame loop ever matches.
+FRAME_MIXUP = "$iteration_total is the frame count; the current frame is $iteration"
 
 
 def _frame_value(var: str, op: str, value: str) -> str:
