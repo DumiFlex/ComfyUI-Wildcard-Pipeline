@@ -394,7 +394,7 @@ async def test_pack_graph_plan_wires_items_without_the_model(wp_client, fake_llm
         built[item["key"]] = {"id": out["id"], "payload": out["payload"]}
     slot_calls = [s for s in fake_llm.seen if s["body"].get("response_format", {})
                   .get("json_schema", {}).get("name") == "pack_slot"]
-    assert len(slot_calls) == 5
+    assert len(slot_calls) == 4  # Season is its own axis: written by the code
     assert built[names["Race → Weapon"]["key"]]["payload"]["matrix"] == {
         "elf": {"gun": {"mode": "exclude", "factor": 0}}}
     resp = await wp_client.post("/wp/api/ai/pack/check", json={"plan": plan, "built": built})
