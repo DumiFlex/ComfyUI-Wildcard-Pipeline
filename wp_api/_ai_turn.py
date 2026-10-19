@@ -388,6 +388,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     named = set(meta.get("named") or [])
     if not resume and text:
         named |= lib.named_in(text)
+        # The items the answer they are replying to showed as chips count
+        # as named too ("Now add negatives to the stormy options" after
+        # "You have [[Weather]] …"; chat eval round 4 refused every edit).
+        named |= lib.shown_in(ai_chatlog.last_shown(log))
     if page and isinstance(page.get("id"), str):
         named.add(page["id"])
     for p_ in lib.earlier_proposals.values():
@@ -472,8 +476,13 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             message = "(Stopped early: this answer took too long. Ask me to continue.)"
             break
         except _ai_chat.ToolsUnsupported as e:
-            if fmt == "native" and not any(x.get("kind") == "step" for x in log + new):
-                fmt = "json"  # the server has no tool calling: use the JSON format
+            if fmt == "native" and (e.fallback or not any(
+                    x.get("kind") == "step" for x in log + new)):
+                # The server has no tool calling, or can't read this
+                # model's calls: the same step again in JSON steps, and the
+                # chat stays in them (earlier native steps render as JSON
+                # steps, `_ai_chat.json_answer`).
+                fmt = "json"
                 continue
             switched = meta.get("model") and meta.get("model") != cfg.get("model")
             hint = (" This chat started with another model; start a new chat to keep going "

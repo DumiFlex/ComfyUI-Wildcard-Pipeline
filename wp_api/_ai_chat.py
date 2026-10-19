@@ -73,7 +73,13 @@ def thinking_text(text: Any, reasoning: Any = "") -> str:
 
 
 class ToolsUnsupported(AIError):
-    """The server refused a request with tools in it."""
+    """The server refused a request with tools in it, or (`fallback`) took
+    the tools but could not read the model's call, so this chat goes on in
+    JSON steps from this step."""
+
+    def __init__(self, message: str, *, status: int = 502, fallback: bool = False) -> None:
+        super().__init__(message, status=status)
+        self.fallback = fallback
 
 
 def new_call_id() -> str:
@@ -212,7 +218,34 @@ async def pick_format(cfg: dict[str, Any]) -> str:
     chosen = cfg.get("tool_format")
     if chosen in ("native", "json"):
         return str(chosen)
+    if _model_key(cfg) in _NO_NATIVE:
+        return "json"
     return "native" if await tool_support(cfg) else "json"
+
+
+def _model_key(cfg: dict[str, Any]) -> tuple[str, str]:
+    return (str(cfg.get("base_url") or ""), str(cfg.get("model") or ""))
+
+
+#: (base_url, model) pairs whose server took native tools but could not
+#: parse what the model wrote (LM Studio's "does not match the expected
+#: peg-native format" with the stock Qwen3.5 template): their chats use
+#: JSON steps.
+_NO_NATIVE: set[tuple[str, str]] = set()
+_NATIVE_BROKEN = re.compile(
+    r"does not match the expected \S+ format|peg-native|"
+    r"(?:fail|unable|error)\w* to parse (?:the )?(?:tool|function) call|"
+    r"(?:tool|function)[ _-]call\w* (?:parse|parsing) (?:error|fail)", re.I)
+
+
+def native_broken(cfg: dict[str, Any], e: AIError) -> bool:
+    """Whether the server took the tools but choked on the model's call
+    (a chat-template / parser mismatch, not a refusal of tools); the model
+    is remembered so its next chats start in JSON steps."""
+    if not (400 <= (e.upstream or 0) < 600 and _NATIVE_BROKEN.search(e.message)):
+        return False
+    _NO_NATIVE.add(_model_key(cfg))
+    return True
 
 
 # ── requests ────────────────────────────────────────────────────────────
@@ -235,6 +268,22 @@ def _merge_users(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         else:
             out.append(m)
     return out
+
+
+def json_answer(m: dict[str, Any]) -> dict[str, Any]:
+    """An assistant step as a JSON-mode answer: its own when it was one,
+    else (a native step in a chat that fell back to JSON steps) the step
+    shape built from its text and calls, so the calls stay in the log."""
+    if isinstance(m.get("answer"), dict):
+        return m["answer"]
+    return {"plan": "", "message": m.get("content") or "",
+            "calls": [{"tool": c["tool"], "args": _args_obj(c)} for c in m.get("calls") or []]}
+
+
+def _json_content(m: dict[str, Any]) -> str:
+    if m.get("calls") and not isinstance(m.get("answer"), dict):
+        return chatlog.dumps(json_answer(m))
+    return str(m.get("content") or "")
 
 
 def _json_results(m: dict[str, Any]) -> str:
@@ -288,7 +337,7 @@ def openai_messages(system: str, log: list[dict[str, Any]], fmt: str,
                 out.append({"role": "assistant", "content": m["content"] or "",
                             "tool_calls": calls})
             else:
-                out.append({"role": "assistant", "content": m["content"]})
+                out.append({"role": "assistant", "content": _json_content(m)})
         elif fmt == "native":
             items = m["items"]
             for k, it in enumerate(items):
@@ -375,7 +424,7 @@ def responses_input(log: list[dict[str, Any]], fmt: str, model: str) -> list[dic
                 have = {it.get("call_id") for it in raw if it.get("type") == "function_call"}
             else:
                 if m["content"] or not native_calls:
-                    out.append({"role": "assistant", "content": m["content"]})
+                    out.append({"role": "assistant", "content": _json_content(m)})
                 have = set()
             # Calls salvaged from text, or a step from another model.
             out.extend({"type": "function_call", "call_id": c["id"], "name": c["tool"],
@@ -415,11 +464,9 @@ def anthropic_messages(log: list[dict[str, Any]], fmt: str) -> list[dict[str, An
         if m["role"] == "assistant":
             if fmt == "json":
                 pending = f"toolu_wp{i}"
-                answer = m.get("answer") if isinstance(m.get("answer"), dict) else {
-                    "plan": "", "message": m["content"], "calls": []}
                 out.append({"role": "assistant", "content": [{
                     "type": "tool_use", "id": pending, "name": client._TOOL_NAME,
-                    "input": answer}]})
+                    "input": json_answer(m)}]})
                 continue
             blocks: list[dict[str, Any]] = []
             if m["content"]:
@@ -455,6 +502,38 @@ def anthropic_messages(log: list[dict[str, Any]], fmt: str) -> list[dict[str, An
 # ── answers ─────────────────────────────────────────────────────────────
 
 _TOOL_CALL_XML = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
+#: Qwen's own tool-call text: ``<function=read>`` with ``<parameter=id>…
+#: </parameter>`` pairs (or a JSON object) up to ``</function>``.
+_FUNCTION_XML = re.compile(
+    r"<function=([A-Za-z_][\w.-]*)>\s*(.*?)\s*(?:</function>|(?=<function=)|(?=</tool_call>)|\Z)",
+    re.DOTALL)
+_PARAMETER_XML = re.compile(
+    r"<parameter=([A-Za-z_][\w.-]*)>\s*(.*?)\s*(?:</parameter>|(?=<parameter=)|\Z)", re.DOTALL)
+
+
+def _function_calls(text: str, names: set[str]) -> list[dict[str, Any]]:
+    """Calls written in Qwen's XML form (with or without the
+    ``<tool_call>`` wrapper): each parameter's value is taken as JSON when
+    it is JSON (a number, a list) and as text otherwise."""
+    out: list[dict[str, Any]] = []
+    for name, body in _FUNCTION_XML.findall(text):
+        if name not in names:
+            continue
+        params = _PARAMETER_XML.findall(body)
+        if params:
+            args: dict[str, Any] = {}
+            for k, v in params:
+                parsed = _loads(v)
+                # Lists, objects and booleans as JSON; numbers stay text
+                # (an all-digit id would turn into a number; the registry
+                # turns "3" into 3 where a number is wanted).
+                args[k] = parsed if isinstance(parsed, (dict, list, bool)) else v
+        else:
+            parsed = _loads(body) if body.strip() else {}
+            args = parsed if isinstance(parsed, dict) else {}
+        out.append({"id": new_call_id(), "tool": name, "args": args,
+                    "args_text": chatlog.dumps(args)})
+    return out
 
 
 def _as_call(obj: Any, names: set[str]) -> dict[str, Any] | None:
@@ -489,7 +568,9 @@ _NAME_BEFORE = re.compile(r"([A-Za-z_][\w]*)\s*(?:\[ARGS\])?\s*\(?\s*$")
 
 def salvage_calls(text: str, names: set[str]) -> list[dict[str, Any]]:
     """Tool calls a model wrote as text instead of in the tool format:
-    ``<tool_call>{…}</tool_call>``, Mistral's ``[TOOL_CALLS][…]`` or
+    ``<tool_call>{…}</tool_call>``, Qwen's ``<tool_call><function=read>
+    <parameter=id>…</parameter></function></tool_call>`` (or a JSON object
+    after ``<function=…>``), Mistral's ``[TOOL_CALLS][…]`` or
     ``[TOOL_CALLS]name{…}``, a bare ``{"name", "arguments"}`` (or a list of
     them), our JSON step shape, or a tool's name followed by its arguments
     ("I call: read {"id": …}"), anywhere in the text, in code blocks or
@@ -502,6 +583,10 @@ def salvage_calls(text: str, names: set[str]) -> list[dict[str, Any]]:
         c = _as_call(_loads(x), names)
         if c:
             found.append(c)
+        elif "<function=" in x:
+            found.extend(_function_calls(x, names))
+    if not found and "<function=" in text:
+        found = _function_calls(text, names)
     if found:
         return found
     pos = 0
@@ -965,6 +1050,8 @@ async def step(
         except AIError as e:
             if fmt == "native" and _refused(e):
                 raise ToolsUnsupported(e.message, status=e.status) from e
+            if fmt == "native" and native_broken(cfg, e):
+                raise ToolsUnsupported(e.message, status=e.status, fallback=True) from e
             raise
 
 

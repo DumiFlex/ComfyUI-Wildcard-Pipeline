@@ -72,6 +72,53 @@ def test_salvage_calls():
     assert ac.salvage_calls("Just text.", names) == []
 
 
+def test_salvage_calls_in_qwens_xml_form():
+    """Chat eval round 4 (stock Qwen3.5-9B): the model wrote its calls as
+    <tool_call><function=read><parameter=id>…</parameter></function>
+    </tool_call> in its message, and the user saw raw XML."""
+    names = {"search", "read", "edit_options"}
+    got = ac.salvage_calls("Let me look.\n<tool_call>\n<function=read>\n<parameter=id>\n"
+                           "[[d97da2bb#Lighting]]\n</parameter>\n</function>\n</tool_call>",
+                           names)
+    assert [(c["tool"], c["args"]) for c in got] == [("read", {"id": "[[d97da2bb#Lighting]]"})]
+    # A JSON object after <function=…>, and the wrapper left out.
+    got = ac.salvage_calls('<tool_call> <function=read> {"id": "a1"} </function> </tool_call>',
+                           names)
+    assert [(c["tool"], c["args"]) for c in got] == [("read", {"id": "a1"})]
+    got = ac.salvage_calls("<function=edit_options>\n<parameter=id>12345678</parameter>\n"
+                           "<parameter=remove>[1, 2]</parameter>\n<parameter=count>3"
+                           "</parameter>\n</function>\n<function=search>\n<parameter=query>"
+                           "rain</parameter>\n</function>", names)
+    assert [(c["tool"], c["args"]) for c in got] == [
+        ("edit_options", {"id": "12345678", "remove": [1, 2], "count": "3"}),
+        ("search", {"query": "rain"})]
+    assert ac.salvage_calls("<tool_call><function=rm><parameter=x>1</parameter></function>"
+                            "</tool_call>", names) == []
+    [bare] = ac.salvage_calls("<function=read>", names)
+    assert (bare["tool"], bare["args"], bare["args_text"]) == ("read", {}, "{}")
+
+
+def test_a_native_step_renders_as_a_json_step_after_the_fallback():
+    """A chat that fell back to JSON steps keeps its earlier native calls
+    in the log, as the JSON step shape, for every provider."""
+    msgs = ac.openai_messages("sys", LOG, "json")
+    step = json.loads(msgs[2]["content"])
+    assert step == {"plan": "", "message": "Looking.",
+                    "calls": [{"tool": "search", "args": {"query": "hair"}}]}
+    assert msgs[3]["content"].startswith("Tool results")
+    assert msgs[4]["content"] == "You have Hair."  # no calls: the text as it was
+    items = ac.responses_input(LOG, "json", "m")
+    assert json.loads(items[1]["content"]) == step
+    claude = ac.anthropic_messages(LOG, "json")
+    assert claude[1]["content"][0]["input"] == step
+    # A JSON step keeps its own answer.
+    own = [{"role": "user", "content": "x"},
+           {"role": "assistant", "content": '{"message": "", "calls": []}', "calls": [CALL],
+            "answer": {"plan": "p", "message": "", "calls": [{"tool": "search", "args": "{}"}]}}]
+    assert ac.openai_messages("sys", own, "json")[2]["content"] == '{"message": "", "calls": []}'
+    assert ac.anthropic_messages(own, "json")[1]["content"][0]["input"]["plan"] == "p"
+
+
 def test_native_step_strips_thinking():
     st = ac._native_step("<think>hmm</think>Hello", [], {"search"}, {})
     assert st["message"] == "Hello" and st["calls"] == []

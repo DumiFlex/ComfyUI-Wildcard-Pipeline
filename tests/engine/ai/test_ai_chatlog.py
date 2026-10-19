@@ -103,3 +103,14 @@ def test_events_and_library_changes():
 
 def test_dumps_is_stable():
     assert cl.dumps({"b": 1, "a": "é"}) == '{"a": "é", "b": 1}'
+
+
+def test_last_shown_is_the_answer_the_user_replies_to():
+    assert cl.last_shown([]) == ""
+    log = [cl.user_entry("a", "a"), cl.step_entry("x", []),
+           cl.shown_entry({"message": "You have [[aaaa0001#Weather]]."}),
+           cl.user_entry("b", "b")]
+    assert cl.last_shown(log[:3]) == "You have [[aaaa0001#Weather]]."
+    # After the user wrote again, no answer is being replied to yet.
+    assert cl.last_shown(log) == ""
+

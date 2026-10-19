@@ -11,7 +11,7 @@ from engine.ai import chat as ai_chat
 from engine.ai import config as ai_config
 from engine.ai import pack as ai_pack
 from tests.wp_api._ai_fakes import ANSWER, EDIT_ANSWERS  # noqa: F401 - shared fakes
-from wp_api import _ai_client
+from wp_api import _ai_chat, _ai_client
 from wp_api import _ai_turn as ai_turn
 
 pytestmark = pytest.mark.usefixtures("items_planner")
@@ -571,6 +571,35 @@ async def test_chat_reads_then_proposes(wp_client, fake_llm):
     assert "error: no item 'nope'" in results
 
 
+async def test_the_chat_may_change_an_item_its_last_answer_showed(wp_client, fake_llm):
+    """Chat eval round 4 (weather follow-up): "Make a weather wildcard"
+    pointed at the user's Weather; "now add negatives to the stormy
+    options" then had every edit refused as an item they never named. An
+    item the answer they reply to showed as a chip counts as named."""
+    _src, tgt = await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio", "tool_format": "json",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.extend([
+        {"message": "Changed it.", "calls": [
+            {"tool": "edit_options", "args": json.dumps({"id": tgt, "remove": [1]})}]},
+        {"message": "You already have [[Weapon]]; want it changed?", "calls": []},
+    ])
+    first = await _chat(wp_client, "make a weapon wildcard", page={"route": "wildcards"})
+    assert first["proposals"] == []
+    refusal = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert "is the user's own item and they haven't named it" in refusal
+    assert re.search(r"\[\[[0-9a-f]{8}#Weapon\]\]", first["message"])
+    fake_llm.chat_steps.extend([
+        {"message": "Dropped the staff.", "calls": [
+            {"tool": "edit_options", "args": json.dumps({"id": tgt, "remove": [1]})}]},
+    ])
+    second = await _chat(wp_client, "yes, drop the first one", chat_id=first["chat_id"],
+                         page={"route": "wildcards"})
+    [edit] = second["proposals"]
+    assert edit["op"]["id"] == tgt
+    assert [o["value"] for o in edit["op"]["body"]["payload"]["options"]] == ["longsword"]
+
+
 async def test_chat_uses_the_open_editor_and_the_docs(wp_client, fake_llm):
     _src, tgt = await _two_wildcards(wp_client)
     ai_config.update({"enabled": True, "provider": "lmstudio",
@@ -1088,6 +1117,46 @@ async def test_chat_reports_card_actions_and_library_changes(wp_client, fake_llm
     assert "Library changed since the last message: new: Style (" in sent
     # Proposal ids keep counting across the chat.
     assert second["proposals"][0]["pid"] == "p2"
+
+
+async def test_chat_falls_back_to_json_steps_when_the_server_cant_read_native_calls(
+        wp_client, fake_llm, monkeypatch):
+    """Chat eval round 4: LM Studio with the stock Qwen3.5 template takes
+    the tools, then answers 500 "does not match the expected peg-native
+    format" on what the model wrote, and the turn stopped there. The step
+    is asked again in JSON steps, the chat stays in them with its earlier
+    native calls kept, and that model's next chats start in JSON steps."""
+    monkeypatch.setattr(_ai_chat, "_NO_NATIVE", set())
+    await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "tooly"})
+    fake_llm.chat_steps.extend([
+        {"content": "", "tool_calls": [_tool_call("call_a", "search", {"query": "weapon"})]},
+        {"content": "You have [[Weapon]]."},
+    ])
+    first = await _chat(wp_client, "what weapons do I have?", page={"route": "wildcards"})
+    assert first["format"] == "native"
+    fake_llm.overrides["_peg"] = 1
+    fake_llm.chat_steps.extend([
+        {"plan": "", "message": "", "calls": [{"tool": "search", "args": {"query": "staff"}}]},
+        {"plan": "", "message": "One: the oak staff.", "calls": []},
+    ])
+    second = await _chat(wp_client, "any staffs?", chat_id=first["chat_id"],
+                         page={"route": "wildcards"})
+    assert second["format"] == "json" and second["message"] == "One: the oak staff."
+    assert [s["tool"] for s in second["steps"] if not s.get("think")] == ["search"]
+    # The JSON asks carry the first turn's native call as a JSON step.
+    body = fake_llm.seen[-1]["body"]
+    assert "response_format" in body and "tools" not in body
+    earlier = next(m for m in body["messages"] if m["role"] == "assistant")
+    assert json.loads(earlier["content"])["calls"] == [
+        {"tool": "search", "args": {"query": "weapon"}}]
+    assert any(m["role"] == "user" and m["content"].startswith("Tool results")
+               for m in body["messages"])
+    # The model is remembered: a new chat starts in JSON steps, no probe.
+    fake_llm.chat_steps.append({"plan": "", "message": "Hi.", "calls": []})
+    third = await _chat(wp_client, "hello")
+    assert third["format"] == "json" and "response_format" in fake_llm.seen[-1]["body"]
 
 
 async def test_chat_falls_back_to_json_when_the_server_refuses_tools(wp_client, fake_llm):
