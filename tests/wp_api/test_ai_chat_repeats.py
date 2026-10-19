@@ -35,9 +35,12 @@ async def test_opening_its_own_card_is_no_error_and_an_untested_claim_is_marked(
         {"message": "", "calls": [{"tool": "open", "args": json.dumps({"proposal": "p1"})}]},
         {"message": "I ran a test and every option came up.", "calls": []},
     ])
-    out = await _chat(wp_client, "Make a style wildcard and test it.")
+    # (With "test it" in the message the server would run the test itself:
+    # `_ai_turn._auto_test`, covered in test_ai_api.)
+    out = await _chat(wp_client, "Make a style wildcard and open it.")
     assert all(s["ok"] for s in out["steps"]) and not out["pending"]
     assert "No test ran in this answer" in out["message"]
+    assert not any(s["tool"] == "run_test" for s in out["steps"])
 
 
 async def test_a_failed_change_sent_again_is_not_run_again(wp_client, fake_llm):

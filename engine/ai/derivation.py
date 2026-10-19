@@ -35,7 +35,7 @@ import re
 import secrets
 from typing import Any
 
-from engine.ai import about, adult
+from engine.ai import about, adult, library_vars
 from engine.ai import negation as ai_negation
 from engine.ai import refs as ai_refs
 from engine.modules.derivation_handler import (
@@ -70,10 +70,14 @@ _ACTION = _obj({
     "mode": {"type": "string", "enum": sorted(_VALID_MODES)},
     "value": _STR,
 })
+#: A condition value: text, or a number for a frame test ($iteration
+#: equals 1). Under a JSON grammar small models can't write a digit inside
+#: a string reliably (the 9B wrote "}]}]," for "1"); a bare number is easy.
+_COND_VALUE = {"anyOf": [_STR, {"type": "integer"}]}
 _CONDITION = _obj({
     "var": _STR,
     "op": {"type": "string", "enum": sorted(_VALID_OPS)},
-    "value": _STR,
+    "value": _COND_VALUE,
 })
 
 SCHEMA: dict[str, Any] = _obj({
@@ -125,9 +129,13 @@ $class is mage, append @{Weapons:arcane} to $gear"). Condition values are \
 plain text or one $name, never picks.
 
 Use the library's variable names and option texts when the request refers to \
-them. Some variables are set at run time outside the library ($iteration from \
-a WP Context Loop, anything a WP Context Injector brings in); reading them is \
-fine when the request mentions them. A new variable name is fine when the \
+them. Some variables are set at run time outside the library (the WP Context \
+Loop's frame variables, anything a WP Context Injector brings in); reading \
+them is fine when the request mentions them. $iteration is the CURRENT frame \
+number as text: a rule per frame tests it ($iteration equals "1" for the \
+first frame, matches "^[3-4]$" for frames 3 to 4). $iteration_total is how \
+many frames the loop runs in all (e.g. "4"), the same in every frame: never \
+test it to pick a frame. A new variable name is fine when the \
 request asks for one: letters, digits and _ only. Write one rule per \
 independent decision, and a short summary of what each rule does. Don't add \
 commentary; the output is data for the user's own library.\
@@ -207,6 +215,13 @@ def _cond_var(raw: Any) -> tuple[str, str] | None:
 
 #: A condition value that is only JSON punctuation.
 _JUNK = re.compile(r"[\s\[\]{}:,\"']+")
+#: Two JSON closers in a row inside a value ("1}]", "}],"): the model's
+#: grammar closed the object where the text belonged.
+_JUNK_TAIL = re.compile(r"[}\]]\s*[}\],]")
+#: The WP Context Loop's frame variables: numbers written as text.
+_FRAME_VARS = frozenset(library_vars.LOOP_VARS)
+#: A frame count small enough to be a frame number by mistake.
+MAX_FRAME_MIXUP = 12
 
 
 def _flat(text: Any) -> str:
@@ -483,10 +498,16 @@ def _compile_condition(
     if isinstance(raw_value, (int, float)) and not isinstance(raw_value, bool):
         raw_value = str(raw_value)
     value = "" if op in _NO_VALUE_OPS else _flat(raw_value)[:MAX_VALUE_LEN]
-    if value and _JUNK.fullmatch(value):
+    if value and (_JUNK.fullmatch(value) or _JUNK_TAIL.search(value)):
         # The 9B wrote "}]}], " where "1" belonged ($iteration equals 1).
         raise _Drop(f"the value for ${var} came out as {value!r}, which is JSON, not text; "
-                    'write it as a quoted string, e.g. "value": "1"')
+                    'write it as a quoted string, e.g. "value": "1", or as a bare number, '
+                    '"value": 1')
+    if base in _FRAME_VARS and op not in _NO_VALUE_OPS:
+        value = _frame_value(var, op, value)
+        if base == "iteration_total" and op in ("equals", "not_equals") \
+                and value.isdigit() and 1 <= int(value) <= MAX_FRAME_MIXUP:
+            warnings.append(FRAME_MIXUP)
     entry = catalog.get(base)
     if entry is None:
         warnings.append(unset_note(base))
@@ -513,6 +534,29 @@ def _compile_condition(
             elif any(s["kind"] == "wildcard" for s in entry["sources"]):
                 op, value = _near_test(var, op, value, entry, warnings)
     return {"var": var, "op": op, "value": value}
+
+
+#: The card warning (and the model's note) for a test that reads the frame
+#: count where the frame number was meant. Chat eval (9B): "$iteration_total
+#: equals 3" for the third frame, which only a 3-frame loop ever matches.
+FRAME_MIXUP = "$iteration_total is the frame count; the current frame is $iteration"
+
+
+def _frame_value(var: str, op: str, value: str) -> str:
+    """A frame test's value as the engine compares it: a whole number for
+    equals / not_equals / contains, a pattern with a digit for matches.
+    Anything else is a drop that spells out the expected form, since the
+    model's grammar is what garbled it (never store "}]}],")."""
+    clean = value.strip().strip("\"'")
+    expected = ('write it as text, "value": "1" (or "2"), or "op": "matches" with "value": '
+                '"^[3-4]$" for frames 3 to 4')
+    if op in ("matches", "not_matches"):
+        if clean and re.search(r"\d", clean) and not re.search(r"[{},\"]", clean):
+            return clean
+        raise _Drop(f"the pattern for ${var} came out as {value!r}; {expected}")
+    if clean.isdigit():
+        return str(int(clean)) if op in ("equals", "not_equals") else clean
+    raise _Drop(f"the value for ${var} came out as {value!r}, not a frame number; {expected}")
 
 
 def _near_test(var: str, op: str, value: str, entry: dict[str, Any],

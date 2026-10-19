@@ -849,6 +849,29 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                  for c in last["calls"]], ""))
         if new[-1].get("kind") != "step":
             new.append(_final_step(fmt, message))
+        if proposals and _TEST_ASK.search(text or "") and not any(
+                s_.get("tool") == "run_test" and s_.get("ok") for s_ in steps):
+            # Asked to test and never did (chat eval: the 9B wrote that it
+            # can't): run it here, card and all. The note goes after the
+            # answer, so the log stays append-only for the cache.
+            got = _auto_test(lib, proposals)
+            if got is not None:
+                args_, report = got
+                names_ = [str(lib.names.get(i) or i) for i in args_["stack"]]
+                step_: dict[str, Any] = {
+                    "tool": "run_test", "ok": True, "auto": True,
+                    "note": f"Ran {', '.join(names_[:4])} with the proposed changes"}
+                card = getattr(lib, "last_card", None)
+                if card:
+                    step_["card"] = card
+                    lib.last_card = None
+                steps.append(step_)
+                if emit:
+                    await emit({"type": "tool", "step": step_})
+                new.append(ai_chatlog.note_entry(
+                    AUTO_TEST_NOTE + f"run_test {_json.dumps(args_, sort_keys=True)}:\n"
+                    + ai_budget.clip(report, prof["result_chars"])))
+                message = message.rstrip() + "\n\n" + AUTO_TESTED
     if not pause and _TESTED.search(message or "") and not any(
             s_.get("tool") == "run_test" and s_.get("ok") for s_ in steps):
         # Chat eval round 1: "I ran a test on your Lighting wildcard" after
@@ -964,6 +987,46 @@ _PACK_ASK = re.compile(r"\b(?:plan|make|build|create|design|set up|start)\b[^.?!
 PACK_FIRST = ("the user asked for a whole pack: call plan_pack with its description (what "
               "it makes, its parts and its rules) so the Pack builder plans, checks and "
               "builds it. Only if they asked for just these few items, call this again")
+
+
+#: The user asking for a test of what the answer proposes ("test it
+#: first", "try it", "dry run", "check it", "run a test").
+_TEST_ASK = re.compile(
+    r"\b(?:test(?:s|ed|ing)?|dry[- ]runs?|(?:try|run|check)\s+(?:it|them|that|this|one|"
+    r"first|out)|run\s+(?:a\s+)?tests?)\b", re.I)
+#: Told to the model, after its answer, when the server ran the test it
+#: didn't (the user reads the card; the model reads this next turn).
+AUTO_TEST_NOTE = ("(The user asked for a test and your answer proposed changes without "
+                  "running one, so run_test ran on the proposed changes for them. Its "
+                  "report, for your next answer:)\n\n")
+#: Added to the answer the user sees when that happened.
+AUTO_TESTED = ("*(You asked for a test: the proposed changes ran on the engine; the test card "
+               "shows what they do.)*")
+
+
+def _auto_test(lib: Any, proposals: list[dict[str, Any]]) -> tuple[dict[str, Any], str] | None:
+    """`run_test` on the items this answer's cards change, the way the
+    model's own ``{"stack": […], "proposed": true}`` call runs it. Chat eval
+    (9B): asked to test first, it proposed the change and wrote that it
+    can't run tests. Returns ``(args, report)``, or None when nothing
+    testable was proposed or the run fails (then the answer stands as it
+    was: a check that can't run is no answer's fault)."""
+    ids: list[str] = []
+    for p in proposals:
+        op = p.get("op") if isinstance(p.get("op"), dict) else {}
+        if p.get("tool") not in ai_chat.CHECKABLE_TOOLS:
+            continue
+        iid = op.get("id") if op.get("op") == "update" else (op.get("body") or {}).get("id")
+        if isinstance(iid, str) and iid not in ids:
+            ids.append(iid)
+    if not ids:
+        return None
+    args: dict[str, Any] = {"stack": ids, "proposed": True}
+    try:
+        report = lib.run("run_test", args)
+    except Exception:  # noqa: BLE001 - the answer stands without the check
+        return None
+    return (args, report) if isinstance(report, str) else None
 
 
 #: Added to such an answer when no card came with it.

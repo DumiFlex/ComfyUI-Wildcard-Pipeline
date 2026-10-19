@@ -80,6 +80,23 @@ def test_native_declarations():
     json.dumps(tools.native(tools.TOOLS, "openai"))
 
 
+def test_rule_conditions_take_a_number_as_the_value():
+    # A frame test written as a JSON number ($iteration equals 1): under a
+    # grammar the 9B can't put a digit inside a string reliably.
+    add = tools.BY_NAME["add_rules"]
+    rule = {"branches": [{"conditions": [
+        {"var": "iteration", "op": "equals", "value": 1},
+        {"match": "any", "conditions": [{"var": "iteration", "op": "equals", "value": 2}]},
+    ], "actions": [{"target_var": "shot", "value": "wide"}]}]}
+    args, notes = tools.check_args(add, {"id": "d1", "rules": [rule]})
+    assert args["rules"][0]["branches"][0]["conditions"][0]["value"] == 1
+    assert args["rules"][0]["branches"][0]["conditions"][1]["conditions"][0]["value"] == 2
+    assert notes == []
+    with pytest.raises(tools.ArgsError, match="text or a whole number"):
+        tools.check_args(add, {"id": "d1", "rules": [{"branches": [{"conditions": [
+            {"var": "iteration", "op": "equals", "value": [1]}]}]}]})
+
+
 def test_check_args():
     run = tools.BY_NAME["run_test"]
     args, notes = tools.check_args(run, {"stack": "Hair", "seeds": "50", "proposed": "true",

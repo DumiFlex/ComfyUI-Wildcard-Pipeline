@@ -194,6 +194,21 @@ def test_a_wildcard_with_no_var_sets_one_named_after_it():
     assert not voc["op"]["body"]["payload"].get("var_binding")
 
 
+def test_a_frame_count_test_warns_on_the_card_and_in_the_models_note():
+    # Chat eval (9B): a per-frame cue written on $iteration_total.
+    from engine.ai import derivation as ai_derivation
+
+    lib = _lib()
+    out = lib.run("create_derivation", {"name": "Cue", "rules": [{"branches": [{
+        "conditions": [{"var": "iteration_total", "op": "equals", "value": 3}],
+        "actions": [{"target_var": "shot", "value": "wide"}]}]}]})
+    cond = out["op"]["body"]["payload"]["rules"][0]["branches"][0]["condition"]
+    assert cond == {"var": "iteration_total", "op": "equals", "value": "3"}
+    assert ai_derivation.FRAME_MIXUP in out["warnings"]
+    note = chat.proposal_note("create_derivation", out)
+    assert "The card warns: " in note and ai_derivation.FRAME_MIXUP in note
+
+
 def test_conditions_written_with_match_or_without_var():
     lib = _lib()
     act = [{"target_var": "shot", "value": "close-up"}]

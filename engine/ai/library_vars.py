@@ -43,8 +43,10 @@ _SOURCE_LABEL = {
 }
 #: What the WP Context Loop sets on every iteration (internal by default).
 LOOP_VARS = {
-    "iteration": "this iteration's number, 1 to N",
-    "iteration_total": "how many iterations the loop runs",
+    "iteration": 'the CURRENT frame number as text, "1" for the first frame: a rule per '
+                 'frame tests this one (equals "2" is the second frame)',
+    "iteration_total": 'how many frames the loop runs in all, e.g. "4"; the same in every '
+                       'frame, so it never picks a frame (that is $iteration)',
 }
 
 
