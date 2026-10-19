@@ -661,7 +661,16 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           (the frame count read from the request), and a sweep run with no axis marked asks
           <b>Sweep axes</b> (pick two or three). Their answers land on the plan the moment you
           pick them, with no AI call, and are kept as decisions; <b>Decide for me</b> takes the
-          first choice. The checker also reads your request against the graph: a thing it names
+          first choice. On a graph plan the AI is asked for one part at a time instead of the
+          whole plan again: "Change with AI" under an item rewrites that slot (with the
+          relations that touch it), fixed value, rule or the template on its own small form,
+          the rest of the graph staying as it is, and the changed slot is locked like a hand
+          edit; an image added after the plan is read on the spot ("Reading the new images
+          into the plan…") for what it adds (slots, fixed values, "from your images" lines)
+          and the next update doesn't send it again; and <b>Fix all with AI</b> sends each
+          finding about one item as a change of that item, so only whole-pack findings go to
+          the planner. A rule the code wires (the story beat, the model quality) can't be
+          changed with AI; change the run or the setting instead. The checker also reads your request against the graph: a thing it names
           ("sandals", "parka") that no slot, axis value, rule or fixed text says is a finding,
           sent back to the planner. Click an item to edit its slot (axes, use) or the
           relations it compiles from, and <b>Add a relation</b> or <b>Add a slot</b>; the items

@@ -148,8 +148,9 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   order) and the code wires every constraint, rule and the template from it,
   so a rule can only name what the graph declares; what the run and the settings
   need (story beats, sweep axes, holds, the model's quality tags, option
-  counts, style, rating, sections) is wired by the code too, and what you edit
-  by hand stays as you left it through every update. It matches your library's style,
+  counts, style, rating, sections) is wired by the code too, what you edit
+  by hand stays as you left it through every update, and a change, an added
+  image or a finding about one item asks the AI for that part only. It matches your library's style,
   reuses wildcards you already have, reviews the plan before building, and can
   start from a sample prompt you like. After a wildcard pack import, **Tag and
   connect with AI** has the chat tag the new lists, link them with constraints and

@@ -608,6 +608,7 @@ function stopExtending(): void {
             <p class="wp-pack__dim wp-pack__settings" data-test="pack-settings-note"><template v-if="draft?.graph">Settings land on the plan as you change them (the code caps counts, sets the style and rating, folds sections; no AI call); <b>Update plan</b> asks the AI to rework the rest for them.</template><template v-else>Changes here apply from the next update: <b>Update plan</b> reworks the plan to follow them.</template> A removed image isn't sent again, but what the planner already took from it stays unless you ask it to drop it.</p>
             <PackSettings v-model="pb.settings.value" class="wp-pack__settings" :disabled="convo.loading.value" />
             <AiImagePicker :images="pb.images" :disabled="convo.loading.value" compact class="wp-pack__settings" />
+            <p v-if="pb.changing.value === 'images'" class="wp-pack__dim wp-pack__settings" data-test="pack-reading-images"><LoadingMark decorative /> Reading the new images into the plan…</p>
           </template>
           <label v-if="pb.images.images.value.length" class="wp-pack__resend" data-test="pack-resend-images">
             <WpCheck :model-value="pb.resendImages.value || imagesMentioned" :disabled="imagesMentioned || convo.loading.value" @update:model-value="(v: boolean) => (pb.resendImages.value = v)" />

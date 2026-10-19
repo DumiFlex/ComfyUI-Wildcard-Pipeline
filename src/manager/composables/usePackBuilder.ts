@@ -950,8 +950,23 @@ async function fixFindings(): Promise<void> {
     for (const f of patched) dismissed.add(f.id);
     editDraft(next, { dismissed });
   }
-  const rest = list.filter((f) => !f.patch);
+  let rest = list.filter((f) => !f.patch);
   if (!rest.length) return;
+  if (v?.draft.graph) {
+    // A finding about one item of a graph plan is one narrow change call
+    // on that part (its slot, rule or template); only the whole-pack ones
+    // go to the planner. One the change call can't take joins them.
+    const wide: AiPackFinding[] = [];
+    for (const f of rest) {
+      if (!f.key || !(await changeItem(f.key, f.text))) wide.push(f);
+    }
+    rest = wide;
+    if (!rest.length) {
+      const narrow = list.filter((f) => !f.patch);
+      await settleRound(narrow.map((f) => f.id), narrow.filter((f) => f.by === "model").map((f) => f.text));
+      return;
+    }
+  }
   // Numbered, each with its item, so a small model works through all of
   // them instead of fixing the first and calling it done.
   const items = new Map((plan.value?.items ?? []).map((i) => [i.key, i]));
@@ -985,12 +1000,17 @@ async function fixFindings(): Promise<void> {
       return;
     }
   }
-  // The model's own findings are checked again on the new plan, so one it
-  // didn't fix shows up again instead of quietly disappearing.
-  const recheck = rest.filter((f) => f.by === "model").map((f) => f.text);
+  await settleRound([...sent], rest.filter((f) => f.by === "model").map((f) => f.text));
+}
+
+/** After a Fix all round: the model's own findings sent (`recheck`, their
+ *  texts) are checked again on the new plan, so one it didn't fix shows up
+ *  again instead of quietly disappearing, and one left as it was twice is
+ *  marked as something the AI can't change. */
+async function settleRound(sentIds: string[], recheck: string[]): Promise<void> {
+  const sent = new Set(sentIds);
   if (recheck.length) await reviewPlan(recheck);
   const back = findings.value.filter((f) => sent.has(f.id)).map((f) => f.id);
-  // Left as it was for the second time: the AI can't do this one.
   stuck.value = new Set([...stuck.value, ...back.filter((id) => unfixed.value.has(id))]);
   unfixed.value = new Set(back);
 }
@@ -1005,7 +1025,9 @@ async function changeItem(key: string, instruction: string): Promise<boolean> {
   changing.value = key || "+";
   error.value = "";
   try {
-    const res = await api.ai.packChange(withTarget({ plan: p, ...(key ? { key } : {}), instruction: text }));
+    const res = await api.ai.packChange(withTarget({
+      plan: p, ...(key ? { key } : {}), instruction: text, request: convo.asked.value[0] ?? "",
+    }));
     const fresh = new Map(res.plan.items.map((i) => [i.key, i]));
     // Removed items keep their place; new items go where the server put them.
     const items: AiPackItem[] = [];
@@ -1025,6 +1047,41 @@ async function changeItem(key: string, instruction: string): Promise<boolean> {
     changing.value = "";
   }
 }
+
+/** Reference images added after a graph plan was made: one narrow call
+ *  says what they add (slots, fixed values, "from your images" lines) and
+ *  the code merges it, instead of a whole re-plan with the images. */
+async function readImages(urls: string[], key: string): Promise<void> {
+  const p = plan.value;
+  const v = view.value;
+  if (!p?.graph || !v || changing.value) return;
+  changing.value = "images";
+  error.value = "";
+  try {
+    const res = await api.ai.packImages(withTarget({
+      plan: p, images: urls, request: convo.asked.value[0] ?? "",
+    }));
+    sentImages = key;
+    if (view.value !== v) return;
+    setView({
+      draft: { ...v.draft, ...res.plan, questions: v.draft.questions, research: v.draft.research },
+      review: res.review, edited: true,
+    });
+  } catch (err) {
+    error.value = message(err);
+  } finally {
+    changing.value = "";
+  }
+}
+
+// An image added to a graph plan is read on the spot; the next update
+// then doesn't send the images again.
+watch(() => images.urls()?.join("|") ?? "", (key) => {
+  if (!draft.value?.graph || convo.loading.value || changing.value || !key) return;
+  const seen = new Set(sentImages.split("|").filter(Boolean));
+  const fresh = (images.urls() ?? []).filter((u) => !seen.has(u));
+  if (fresh.length) void readImages(fresh, key);
+});
 
 /** Run the searches the planner asked for (the user allowed them), then
  *  refine the plan with what they found. */

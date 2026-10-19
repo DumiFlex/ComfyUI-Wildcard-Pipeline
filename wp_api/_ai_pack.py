@@ -316,20 +316,80 @@ async def post_pack_change(request: web.Request) -> web.Response:
     key = body.get("key") if isinstance(body.get("key"), str) else ""
     if key and key not in {i["key"] for i in plan["items"]}:
         return json_error("no such item in the plan", status=400)
+    asked = body.get("request") if isinstance(body.get("request"), str) else ""
     try:
-        answer = await _ai_client.complete_json(
-            cfg, system=ai_pack.CHANGE_SYSTEM,
-            user=ai_pack.change_prompt(plan, key, instruction),
-            schema=ai_pack.CHANGE_SCHEMA, schema_name="pack_change", temperature=0.4,
-        )
-        new = ai_pack.apply_change(plan, key, answer, library, base)
+        if isinstance(plan.get("graph"), dict):
+            # A graph plan: one part on its own schema, merged by the code.
+            answer = await _ai_client.complete_json(
+                cfg, system=ai_pack.GRAPH_CHANGE_SYSTEM,
+                user=ai_pack.graph_change_prompt(plan, key, instruction),
+                schema=ai_pack.change_schema(plan, key), schema_name="pack_graph_change",
+                temperature=0.4,
+            )
+            new = ai_pack.apply_graph_change(plan, key, answer, library=library, base=base,
+                                             canvas=_canvas(body), request=asked)
+            if new["bad_refs"]:
+                new = await _repair_refs(cfg, new, library=library, base=base,
+                                         canvas=_canvas(body), request=asked)
+        else:
+            answer = await _ai_client.complete_json(
+                cfg, system=ai_pack.CHANGE_SYSTEM,
+                user=ai_pack.change_prompt(plan, key, instruction),
+                schema=ai_pack.CHANGE_SCHEMA, schema_name="pack_change", temperature=0.4,
+            )
+            new = ai_pack.apply_change(plan, key, answer, library, base)
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
     except ai_pack.PlanError as e:
         return json_error(f"the model's change couldn't be used ({e}). Try again.",
                           status=502)
     return json_ok({"plan": new, "answer": answer, "model": cfg["model"],
-                    "review": ai_pack.review_plan(new, library)})
+                    "review": ai_pack.review_plan(new, library, request=asked)})
+
+
+async def post_pack_images(request: web.Request) -> web.Response:
+    """Body: {plan, images, note?, request?}. Reference images added to a
+    graph plan after it was made: one narrow call says what they add
+    (slots, fixed values, from_images lines), merged into the graph by the
+    code instead of a whole re-plan. Returns {plan, answer, model, review}."""
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
+    if isinstance(body, web.Response):
+        return body
+    images = await _request_images(cfg, body)
+    if isinstance(images, web.Response):
+        return images
+    if not images:
+        return json_error("no images were sent", status=400)
+    library = _reusable(request)
+    base = _pack_base(request, body, library)
+    if isinstance(base, web.Response):
+        return base
+    parsed = _pack_body(body, library, base)
+    if isinstance(parsed, web.Response):
+        return parsed
+    plan, _built = parsed
+    if not isinstance(plan.get("graph"), dict):
+        return json_error("only a graph plan reads images this way", status=400)
+    note = body.get("note") if isinstance(body.get("note"), str) else ""
+    asked = body.get("request") if isinstance(body.get("request"), str) else ""
+    try:
+        answer = await _ai_client.complete_json(
+            cfg, system=ai_pack.IMAGES_SYSTEM, user=ai_pack.images_prompt(plan, note),
+            schema=ai_pack.IMAGES_SCHEMA, schema_name="pack_images", temperature=0.3,
+            images=images,
+        )
+        new = ai_pack.apply_images(plan, answer, library=library, base=base,
+                                   canvas=_canvas(body), request=asked)
+    except _ai_client.AIError as e:
+        return json_error(e.message, status=e.status)
+    except ai_pack.PlanError as e:
+        return json_error(f"the model's answer couldn't be used ({e}). Try again.",
+                          status=502)
+    return json_ok({"plan": new, "answer": answer, "model": cfg["model"],
+                    "review": ai_pack.review_plan(new, library, request=asked)})
 
 
 async def post_pack_review(request: web.Request) -> web.Response:

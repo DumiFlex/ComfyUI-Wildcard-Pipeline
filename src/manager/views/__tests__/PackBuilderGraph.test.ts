@@ -18,7 +18,7 @@ vi.mock("../../api/client", () => ({
   api: {
     ai: {
       config: vi.fn(), packPlan: vi.fn(), packItem: vi.fn(), packCheck: vi.fn(), packInstall: vi.fn(),
-      packReview: vi.fn(), packChange: vi.fn(), packSearch: vi.fn(),
+      packReview: vi.fn(), packChange: vi.fn(), packImages: vi.fn(), packSearch: vi.fn(),
       vision: vi.fn().mockResolvedValue({ vision: true, model: "m" }),
     },
     importExport: { undo: vi.fn() },
@@ -231,6 +231,46 @@ describe("PackBuilder on a graph plan", () => {
     expect(pb.draft.value?.run).toEqual({ mode: "story", frames: 3 });
     expect(pb.draft.value?.questions.length).toBe(0);
     expect(pb.draft.value?.decisions).toEqual([{ question: story.question, answer: "A story of 3 frames" }]);
+  });
+
+  it("reads an added image with one narrow call and fixes an item's finding with another", async () => {
+    vi.mocked(api.ai.packPlan).mockImplementation(async () => {
+      const p = plan();
+      return { ...p, review: [{ id: "m1", key: "i1", level: "fix", text: "Race mixes races and ages", by: "model", type: "mixed_slot" }] };
+    });
+    const { w, pb } = await start();
+    // An image added later is read into the graph, not re-planned.
+    vi.mocked(api.ai.packImages).mockImplementation(async ({ plan: p }) => ({
+      model: "m", review: [],
+      plan: { ...p, from_images: ["a feathered hat"], applied: ["From your images: added Hat"] },
+    }));
+    pb.images.images.value = [{ url: "data:image/jpeg;base64,AAAA", name: "a.jpg", w: 1, h: 1 }] as never;
+    await flushPromises();
+    expect(w.find("[data-test='pack-reading-images']").exists()).toBe(false);
+    const imgCalls = vi.mocked(api.ai.packImages).mock.calls;
+    expect(imgCalls.length).toBe(1);
+    expect(imgCalls[0][0].images).toEqual(["data:image/jpeg;base64,AAAA"]);
+    expect(pb.draft.value?.from_images).toEqual(["a feathered hat"]);
+    expect(pb.draft.value?.applied).toEqual(["From your images: added Hat"]);
+    // The next update doesn't send the image again.
+    pb.convo.instruction.value = "add a cloak";
+    await pb.refinePlan();
+    await flushPromises();
+    const planCalls = vi.mocked(api.ai.packPlan).mock.calls;
+    expect(planCalls.length).toBe(2);
+    expect(planCalls[1][0].images).toBeUndefined();
+    // Fix all: a finding about one item is one change call on that item,
+    // not a whole re-plan; the model's finding is then checked again.
+    vi.mocked(api.ai.packChange).mockImplementation(async ({ plan: p }) => ({ model: "m", review: [], plan: p }));
+    vi.mocked(api.ai.packReview).mockImplementation(async ({ plan: p }) => ({ findings: [], note: "", plan: p }));
+    await pb.fixFindings();
+    await flushPromises();
+    const change = vi.mocked(api.ai.packChange).mock.calls;
+    expect(change.length).toBe(1);
+    expect(change[0][0]).toMatchObject({ key: "i1", instruction: "Race mixes races and ages", request: "fantasy heroes" });
+    expect(vi.mocked(api.ai.packPlan).mock.calls.length).toBe(2);
+    const reviews = vi.mocked(api.ai.packReview).mock.calls;
+    expect(reviews[reviews.length - 1][0]).toMatchObject({ ai: true, recheck: ["Race mixes races and ages"] });
   });
 
   it("applies a settings change to a graph plan through the code, with no AI call", async () => {

@@ -206,6 +206,18 @@ from engine.ai.pack.graph import (
     wired_payload,
     with_refs,
 )
+from engine.ai.pack.graph_change import CHANGE_SYSTEM as GRAPH_CHANGE_SYSTEM
+from engine.ai.pack.graph_change import (
+    IMAGES_SCHEMA,
+    IMAGES_SYSTEM,
+    apply_images,
+    change_schema,
+    change_target,
+    graph_lines,
+    images_prompt,
+)
+from engine.ai.pack.graph_change import apply_change as apply_graph_change
+from engine.ai.pack.graph_change import change_prompt as graph_change_prompt
 from engine.ai.pack.install import (
     _child,
     _new_modules,
@@ -444,6 +456,16 @@ __all__ = [
     "apply_settings",
     "apply_locks",
     "code_questions",
+    "IMAGES_SCHEMA",
+    "IMAGES_SYSTEM",
+    "GRAPH_CHANGE_SYSTEM",
+    "apply_graph_change",
+    "apply_images",
+    "change_schema",
+    "change_target",
+    "graph_change_prompt",
+    "graph_lines",
+    "images_prompt",
     "fill_gaps",
     "fill_targets",
     "other_texts",

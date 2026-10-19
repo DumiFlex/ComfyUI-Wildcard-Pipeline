@@ -408,3 +408,63 @@ async def test_pack_graph_plan_wires_items_without_the_model(wp_client, fake_llm
     assert [(i["key"], i["id"]) for i in again["items"]] == \
         [(i["key"], i["id"]) for i in plan["items"]]
     assert again["graph"]["relations"] == plan["graph"]["relations"]
+
+
+async def test_a_graph_plan_changes_one_part_and_reads_added_images(wp_client, fake_llm):
+    from tests.engine.ai.test_ai_pack_graph import GRAPH
+
+    _on(fake_llm, "eyes")
+    fake_llm.overrides["pack_graph"] = GRAPH
+    fake_llm.overrides["pack_refs"] = {"relations": []}
+    resp = await wp_client.post("/wp/api/ai/pack/plan", json={
+        "instruction": "fantasy heroes", "settings": {"planner": "graph"}})
+    assert resp.status == 200, await resp.text()
+    plan = (await resp.json())["plan"]
+    weapon = next(i for i in plan["items"] if i["name"] == "Weapon")
+    # One slot on its own schema; the plan keeps its graph and the slot is locked.
+    fake_llm.overrides["pack_graph_change"] = {
+        "slot": {**GRAPH["slots"][2], "what": "bows and blades",
+                 "axes": [{"name": "type", "values": ["bow", "blade"]}]},
+        "relations": []}
+    resp = await wp_client.post("/wp/api/ai/pack/change", json={
+        "plan": plan, "key": weapon["key"], "instruction": "bows instead of guns",
+        "request": "fantasy heroes"})
+    assert resp.status == 200, await resp.text()
+    out = await resp.json()
+    sent = fake_llm.seen[-1]["body"]
+    assert sent["response_format"]["json_schema"]["name"] == "pack_graph_change"
+    assert "Change the slot Weapon ($weapon)" in sent["messages"][1]["content"]
+    g = out["plan"]["graph"]
+    assert next(s for s in g["slots"] if s["var"] == "weapon")["what"] == "bows and blades"
+    assert out["plan"]["locks"]["slots"] == ["weapon"]
+    assert next(i for i in out["plan"]["items"] if i["name"] == "Weapon")["key"] == weapon["key"]
+    assert isinstance(out["review"], list)
+    # A rule the code wires can't be changed this way.
+    story = await wp_client.post("/wp/api/ai/pack/review", json={
+        "plan": {**out["plan"], "run": {"mode": "story", "frames": 3},
+                 "graph": {**g, "run": {"mode": "story", "frames": 3}}}})
+    beat = next(i for i in (await story.json())["plan"]["items"] if i["name"] == "Story beat")
+    resp = await wp_client.post("/wp/api/ai/pack/change", json={
+        "plan": (await story.json())["plan"], "key": beat["key"], "instruction": "x"})
+    assert resp.status == 502 and "wired by the code" in await resp.text()
+    # Images added later go through one narrow call, not a re-plan.
+    fake_llm.overrides["pack_images"] = {
+        "from_images": ["a feathered hat"],
+        "slots": [{"name": "Hat", "var": "hat", "what": "hats", "section": "", "count": 4,
+                   "show": "prompt", "pick": "", "hold": False, "sometimes_none": 0,
+                   "axes": []}],
+        "fixed": []}
+    resp = await wp_client.post("/wp/api/ai/pack/images", json={
+        "plan": out["plan"], "images": [_png()], "note": "the hat"})
+    assert resp.status == 200, await resp.text()
+    got = await resp.json()
+    sent = fake_llm.seen[-1]["body"]
+    assert sent["response_format"]["json_schema"]["name"] == "pack_images"
+    content = sent["messages"][1]["content"]
+    assert any(part.get("type") == "image_url" for part in content)
+    assert got["plan"]["from_images"] == ["a feathered hat"]
+    assert [s["var"] for s in got["plan"]["graph"]["slots"]][-1] == "hat"
+    assert "From your images: added Hat" in got["plan"]["applied"]
+    assert got["plan"]["locks"]["slots"] == ["weapon"]
+    resp = await wp_client.post("/wp/api/ai/pack/images", json={"plan": out["plan"]})
+    assert resp.status == 400
