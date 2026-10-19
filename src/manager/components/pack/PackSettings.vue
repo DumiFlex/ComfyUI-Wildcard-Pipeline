@@ -25,6 +25,10 @@ type Field = Exclude<keyof AiPackSettings, "count">;
 /** Each choice with a line saying what it does (shown under the field and
  *  as the option's tooltip). */
 const FIELDS: Array<{ key: Field; label: string; about: string; options: Array<SelectOption & { hint: string }> }> = [
+  { key: "planner", label: "Planner", about: "How the AI plans the pack.", options: [
+    { value: "graph", label: "Shape, wired by code", hint: "The AI writes the pack's shape (slots, what they vary on, what depends on what, the prompt order) and the options; the code wires every rule and the template. Works on small local models." },
+    { value: "items", label: "Every item by the AI", hint: "The AI writes the item list and every rule, constraint and template itself. For large models." },
+  ] },
   { key: "library", label: "Your library", about: "Whether the pack uses what you already have.", options: [
     { value: "reuse", label: "Reuse what fits", hint: "Uses your wildcards and fixed values where they fit (marked yours) and builds the rest." },
     { value: "inspire", label: "New, in its style", hint: "Builds everything fresh, written the way your library is (tags or sentences, tag names)." },

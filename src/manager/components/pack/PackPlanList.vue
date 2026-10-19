@@ -77,7 +77,23 @@ const ADD_KINDS: Array<{ kind: AiPackKind; label: string }> = [
   { kind: "constraint", label: "Constraint" },
 ];
 
+const graphed = computed(() => !!pb.draft.value?.graph);
+
 function add(kind: AiPackKind, section: string): void {
+  if (graphed.value) {
+    // A graph plan: the item appears once the server compiles the graph.
+    if (kind === "wildcard") pb.addSlot(section);
+    else if (kind === "fixed_values") pb.editGraph((g) => ({ ...g, fixed: [...g.fixed, { name: `Fixed ${g.fixed.length + 1}`, var: `fixed_${g.fixed.length + 1}`, text: "text", negative: "" }] }));
+    else if (kind === "constraint" && pb.draft.value!.graph!.slots.length >= 2) {
+      const [a, b] = pb.draft.value!.graph!.slots;
+      pb.addRelation({ kind: "exclude", from: { slot: a.name, axis: "", value: "" }, to: { slot: b.name, axis: "", value: "" } });
+    } else if (kind === "derivation") {
+      const a = pb.draft.value!.graph!.slots[0];
+      pb.addRelation({ kind: "derive", from: { slot: a?.name ?? "", axis: "", value: "" }, var: "new_var", text: "", otherwise: "" });
+    }
+    adding.value = false;
+    return;
+  }
   open.value = pb.addItem(kind, section);
   adding.value = false;
 }
@@ -176,8 +192,8 @@ async function addWithAi(): Promise<void> {
         </div>
         <div class="wp-pack-list__kinds">
           <span class="wp-pack-list__dim">or add a blank one:</span>
-          <button v-for="k in ADD_KINDS" :key="k.kind" type="button" class="wp-pack-list__chip" data-test="pack-add-kind" @click="add(k.kind, '')">{{ k.label }}</button>
-          <button v-if="!items.some((i) => i.kind === 'template')" type="button" class="wp-pack-list__chip" @click="add('template', '')">Template</button>
+          <button v-for="k in ADD_KINDS.filter((k) => !graphed || k.kind !== 'combine')" :key="k.kind" type="button" class="wp-pack-list__chip" data-test="pack-add-kind" @click="add(k.kind, '')">{{ k.label }}</button>
+          <button v-if="!graphed && !items.some((i) => i.kind === 'template')" type="button" class="wp-pack-list__chip" @click="add('template', '')">Template</button>
           <button type="button" class="wp-pack-list__chip wp-pack-list__cancel" @click="adding = false">Cancel</button>
         </div>
       </div>
