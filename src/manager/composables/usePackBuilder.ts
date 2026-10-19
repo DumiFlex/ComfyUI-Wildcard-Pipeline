@@ -23,7 +23,7 @@
 import { computed, ref, shallowRef, watch } from "vue";
 import { api, ApiError } from "../api/client";
 import type {
-  AiPackGraph, AiPackRelation, AiPackSlot,
+  AiPackGraph, AiPackLocks, AiPackRelation, AiPackSlot,
   AiPackBuilt, AiPackCheck, AiPackDecision, AiPackFinding, AiPackInstallResult, AiPackItem,
   AiPackItemResult, AiPackKind, AiPackPatch, AiPackPlan, AiPackPlanResult, AiPackQuestion,
   AiPackSettings,
@@ -594,48 +594,99 @@ function relationsOf(key: string): number[] {
   });
 }
 
-/** Change the graph by hand; the server compiles the items from it again. */
-function editGraph(change: (g: AiPackGraph) => AiPackGraph): void {
+/** A relation's signature, equal to the server's `raw_rel_sig`: what the
+ *  locks name a relation by. */
+export function relSig(r: AiPackRelation): string {
+  return [r.kind, r.from.slot, r.from.axis, r.from.value, r.to?.slot ?? "", r.to?.axis ?? "",
+    r.to?.value ?? "", r.var ?? "", r.text ?? ""].join("|");
+}
+
+const NO_LOCKS: AiPackLocks = { slots: [], relations: [], removed_relations: [], template: [] };
+
+function locksOf(p: AiPackPlan): AiPackLocks {
+  return { ...NO_LOCKS, ...(p.locks ?? {}) };
+}
+
+function withLock<T>(list: T[], add: T[] = [], drop: T[] = []): T[] {
+  const gone = new Set(drop);
+  return [...new Set([...list, ...add])].filter((x) => !gone.has(x));
+}
+
+/** Change the graph by hand; the server compiles the items from it again.
+ *  `lock` records what the edit set, so the model's next answer keeps it. */
+function editGraph(change: (g: AiPackGraph) => AiPackGraph,
+  lock?: (l: AiPackLocks, g: AiPackGraph) => AiPackLocks): void {
   const p = draft.value;
   if (!p?.graph) return;
-  editDraft({ ...p, graph: change(p.graph) });
+  const locks = lock ? lock(locksOf(p), p.graph) : p.locks;
+  editDraft({ ...p, graph: change(p.graph), ...(locks ? { locks } : {}) });
 }
 
 function editSlot(v: string, set: Partial<AiPackSlot>): void {
+  const renamed = set.var !== undefined && set.var !== v ? set.var : "";
   editGraph((g) => {
     const slots = g.slots.map((s) => (s.var === v ? { ...s, ...set } : s));
-    const renamed = set.var !== undefined && set.var !== v ? set.var : "";
     if (!renamed) return { ...g, slots };
     // Relations and the template follow the slot by name; only its
     // variable changed, so nothing else moves.
     return { ...g, slots, template: { ...g.template, order: g.template.order.map((o) => (o === v ? renamed : o)) } };
-  });
+  }, (l) => ({ ...l, slots: withLock(l.slots, [renamed || v], renamed ? [v] : []) }));
 }
 
 function editRelation(n: number, set: Partial<AiPackRelation>): void {
-  editGraph((g) => ({ ...g, relations: g.relations.map((r, i) => (i === n ? { ...r, ...set } : r)) }));
+  editGraph((g) => ({ ...g, relations: g.relations.map((r, i) => (i === n ? { ...r, ...set } : r)) }),
+    (l, g) => {
+      const was = g.relations[n];
+      if (!was) return l;
+      const now = relSig({ ...was, ...set });
+      return { ...l, relations: withLock(l.relations, [now], [relSig(was)]),
+        removed_relations: withLock(l.removed_relations, [], [now]) };
+    });
 }
 
 function removeRelation(n: number): void {
-  editGraph((g) => ({ ...g, relations: g.relations.filter((_, i) => i !== n) }));
+  editGraph((g) => ({ ...g, relations: g.relations.filter((_, i) => i !== n) }), (l, g) => {
+    const was = g.relations[n];
+    if (!was) return l;
+    return { ...l, relations: withLock(l.relations, [], [relSig(was)]),
+      removed_relations: withLock(l.removed_relations, [relSig(was)]) };
+  });
 }
 
 function addRelation(r: AiPackRelation): void {
-  editGraph((g) => ({ ...g, relations: [...g.relations, r] }));
+  editGraph((g) => ({ ...g, relations: [...g.relations, r] }), (l) => ({
+    ...l, relations: withLock(l.relations, [relSig(r)]),
+    removed_relations: withLock(l.removed_relations, [], [relSig(r)]),
+  }));
 }
 
 /** A blank slot added by hand (the server compiles its wildcard). */
 function addSlot(section = ""): void {
-  editGraph((g) => {
-    const taken = new Set(g.slots.map((s) => s.var));
-    let n = g.slots.length + 1;
-    while (taken.has(`slot_${n}`)) n += 1;
-    const slot: AiPackSlot = {
-      name: `Slot ${n}`, var: `slot_${n}`, what: "", section, count: 12, show: "prompt",
-      pick: "", hold: false, sometimes_none: 0, axes: [],
-    };
-    return { ...g, slots: [...g.slots, slot], template: { ...g.template, order: [...g.template.order, slot.var] } };
-  });
+  const p = draft.value;
+  const taken = new Set(p?.graph?.slots.map((s) => s.var) ?? []);
+  let n = taken.size + 1;
+  while (taken.has(`slot_${n}`)) n += 1;
+  const slot: AiPackSlot = {
+    name: `Slot ${n}`, var: `slot_${n}`, what: "", section, count: 12, show: "prompt",
+    pick: "", hold: false, sometimes_none: 0, axes: [],
+  };
+  editGraph((g) => ({ ...g, slots: [...g.slots, slot], template: { ...g.template, order: [...g.template.order, slot.var] } }),
+    (l) => ({ ...l, slots: withLock(l.slots, [slot.var]) }));
+}
+
+/** Whether the user set the slot behind this item by hand (the AI's next
+ *  answer keeps it). */
+function locked(key: string): boolean {
+  const slot = slotOf(key);
+  return !!slot && (draft.value?.locks?.slots ?? []).includes(slot.var);
+}
+
+/** Set template fields by hand (lead, order, tail, negative); each stays
+ *  as set through the model's next answer. */
+function editTemplate(set: Partial<AiPackGraph["template"]>): void {
+  const fields = (Object.keys(set) as Array<keyof AiPackGraph["template"]>);
+  editGraph((g) => ({ ...g, template: { ...g.template, ...set } }),
+    (l) => ({ ...l, template: withLock(l.template, fields) }));
 }
 
 /** Add a blank item by hand; returns its key. */
@@ -669,14 +720,22 @@ function removeItem(key: string): void {
     const slot = slotOf(key);
     const rels = new Set(relationsOf(key));
     if (!i || i.kind === "template") return;
-    editGraph((g) => ({
-      ...g,
-      slots: slot ? g.slots.filter((s) => s.var !== slot.var) : g.slots,
-      fixed: i.kind === "fixed_values" ? g.fixed.filter((f) => f.var !== i.var) : g.fixed,
-      relations: g.relations.filter((r, n) => !rels.has(n)
-        && (!slot || (r.from.slot !== slot.name && r.to?.slot !== slot.name))),
-      template: { ...g.template, order: g.template.order.filter((o) => o !== i.var) },
-    }));
+    const gone = (g: AiPackGraph): AiPackRelation[] => g.relations.filter((r, n) => rels.has(n)
+      || (!!slot && (r.from.slot === slot.name || r.to?.slot === slot.name)));
+    editGraph((g) => {
+      const out = new Set(gone(g));
+      return {
+        ...g,
+        slots: slot ? g.slots.filter((s) => s.var !== slot.var) : g.slots,
+        fixed: i.kind === "fixed_values" ? g.fixed.filter((f) => f.var !== i.var) : g.fixed,
+        relations: g.relations.filter((r) => !out.has(r)),
+        template: { ...g.template, order: g.template.order.filter((o) => o !== i.var) },
+      };
+    }, (l, g) => {
+      const sigs = gone(g).map(relSig);
+      return { ...l, slots: slot ? withLock(l.slots, [], [slot.var]) : l.slots,
+        relations: withLock(l.relations, [], sigs), removed_relations: withLock(l.removed_relations, sigs) };
+    });
     return;
   }
   const next = new Set(v.removed);
@@ -719,6 +778,12 @@ function toggleSelected(id: string): void {
   selected.value = next;
 }
 
+// A settings change lands on a graph plan through the code (counts,
+// style, rating, sections), with no model call.
+watch(settings, () => {
+  if (draft.value?.graph && !convo.loading.value) scheduleRecheck();
+}, { deep: true });
+
 /** Check the edited plan again (the checker, no model) after a pause. */
 function scheduleRecheck(): void {
   if (recheckTimer) clearTimeout(recheckTimer);
@@ -737,7 +802,9 @@ async function recheck(): Promise<void> {
   const v = view.value;
   if (!res || !p || !v) return;
   try {
-    const got = await api.ai.packReview(withTarget({ plan: p, request: convo.asked.value[0] ?? "" }));
+    const got = await api.ai.packReview(withTarget({
+      plan: { ...p, settings: settings.value }, request: convo.asked.value[0] ?? "",
+    }));
     if (convo.result.value !== res || view.value?.draft !== v.draft) return;
     const server = new Map(got.plan.items.map((i) => [i.key, i]));
     // A graph plan's items are whatever the graph compiles to now; an
@@ -749,7 +816,10 @@ async function recheck(): Promise<void> {
       ? got.plan.warnings
       : [...new Set([...v.draft.warnings, ...got.plan.warnings])];
     setView({
-      draft: { ...v.draft, items, warnings, sections: got.plan.sections, ...(got.plan.graph ? { graph: got.plan.graph } : {}) },
+      draft: {
+        ...v.draft, items, warnings, sections: got.plan.sections, settings: got.plan.settings,
+        ...(got.plan.graph ? { graph: got.plan.graph, locks: got.plan.locks, applied: got.plan.applied } : {}),
+      },
       review: got.findings.filter((f) => f.by !== "model"),
     });
   } catch (err) {
@@ -1249,7 +1319,7 @@ export function usePackBuilder() {
     installed, error, builtCount, summary, askPlan, refinePlan, canRefine, awaitingSearch, removeItem, build,
     rebuild, stop, install, undoInstall, backToPlan, reset, sample, findings, reviewing,
     reviewPlan, fixFindings, unfixed, stuck, settings, decisions, picks, questions, answeredCount, choose,
-    setOther, decideFor, decideAll, pickFor, reopenDecision, changeAssumption, editItem, slotOf, relationsOf, editGraph, editSlot, editRelation, removeRelation, addRelation, addSlot, changes, dropped, reopened, resendImages,
+    setOther, decideFor, decideAll, pickFor, reopenDecision, changeAssumption, editItem, slotOf, relationsOf, editGraph, editSlot, editRelation, removeRelation, addRelation, addSlot, editTemplate, locked, changes, dropped, reopened, resendImages,
     addItem, editPlan, applyFinding, dismissFinding, selected, toggleSelected, changeItem,
     changing, research, allowResearch, skipResearch, searching, webResults, images, target,
     extendBundle, skipCurrent, skipItem, dismissNote, dismissedNotes, planThinking,

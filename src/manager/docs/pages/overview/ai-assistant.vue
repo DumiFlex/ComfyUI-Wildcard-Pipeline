@@ -646,7 +646,16 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           place change per frame, a sweep sheet marks two short slots as its axes (or the ones
           you tick in the slot editor) and holds the rest, and <b>Model: Per model family</b>
           adds the quality derivation. <b>Runs as</b> is yours once set: an update never changes
-          it back. The checker also reads your request against the graph: a thing it names
+          it back. The other settings land on the graph the same way, as you change them and
+          with no AI call: <b>Options per wildcard</b> caps every slot's count (a slot that is
+          its own axis keeps its values), <b>Style</b> and <b>Rating</b> replace the planner's,
+          and <b>Structure: One bundle</b> folds the sections; <b>Update plan</b> asks the AI
+          to rework the rest for them. What you edit by hand is locked: a slot you changed or
+          added (marked "yours" in the list), a relation you added or changed, one you took
+          out, and a template field you set all stay as you left them through every update,
+          the AI is told which parts are yours, and a slot its next answer drops is put back.
+          Above the plan, "Wired by the code" lists what the code did on the last compile
+          (counts capped, sections folded, your parts kept). The checker also reads your request against the graph: a thing it names
           ("sandals", "parka") that no slot, axis value, rule or fixed text says is a finding,
           sent back to the planner. Click an item to edit its slot (axes, use) or the
           relations it compiles from, and <b>Add a relation</b> or <b>Add a slot</b>; the items

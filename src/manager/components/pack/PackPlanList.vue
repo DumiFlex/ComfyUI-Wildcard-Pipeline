@@ -153,6 +153,13 @@ async function addWithAi(): Promise<void> {
                   :title="pb.changes.value[i.key].kind === 'new' ? 'Added this round' : `Changed this round: ${pb.changes.value[i.key].what.join(', ')}`"
                   data-test="pack-item-changed"
                 ><i :class="['pi', pb.changes.value[i.key].kind === 'new' ? 'pi-plus' : 'pi-pencil']" aria-hidden="true" />{{ pb.changes.value[i.key].kind === 'new' ? 'new' : pb.changes.value[i.key].what.slice(0, 2).join(', ') }}</span>
+                <span
+                  v-if="pb.locked(i.key)"
+                  class="wp-pack-list__change"
+                  data-change="yours"
+                  title="You set this by hand; the AI's next answer keeps it as it is"
+                  data-test="pack-item-locked"
+                ><i class="pi pi-lock" aria-hidden="true" />yours</span>
               </span>
               <span v-if="i.about" class="wp-pack-list__about">{{ i.about }}</span>
               <span v-if="meta(i).length || i.tags.length" class="wp-pack-list__meta">
@@ -242,6 +249,7 @@ li[data-existing] .wp-pack-list__kind { color: var(--wp-text-muted); background:
   font-size: 10px; font-weight: 500; vertical-align: 1px; color: var(--wp-accent-text); border: 1px solid var(--wp-accent-400);
 }
 .wp-pack-list__change[data-change="new"] { color: var(--wp-success); border-color: color-mix(in srgb, var(--wp-success) 60%, transparent); }
+.wp-pack-list__change[data-change="yours"] { color: var(--wp-text-muted); }
 .wp-pack-list__change .pi { font-size: 9px; }
 .wp-pack-list__about {
   font-size: 12px; color: var(--wp-text-muted); overflow-wrap: anywhere;

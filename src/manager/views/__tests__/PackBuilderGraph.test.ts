@@ -5,7 +5,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import PackBuilder from "../PackBuilder.vue";
 import { api } from "../../api/client";
 import { _resetAiConfigForTests } from "../../composables/useAiConfig";
-import { _resetPackBuilderForTests, usePackBuilder } from "../../composables/usePackBuilder";
+import { _resetPackBuilderForTests, relSig, usePackBuilder } from "../../composables/usePackBuilder";
 import type { AiConfig, AiPackGraph, AiPackItem, AiPackPlan, AiPackPlanResult } from "../../api/types";
 
 const CONFIG = {
@@ -154,5 +154,56 @@ describe("PackBuilder on a graph plan", () => {
     expect(pb.draft.value?.graph?.relations.length).toBe(3);
     pb.editRelation(2, { kind: "only" });
     expect(pb.draft.value?.graph?.relations[2].kind).toBe("only");
+  });
+
+  it("locks hand edits so the next answer keeps them, and shows what the code did", async () => {
+    const { w, pb } = await start();
+    const exclude = relSig(GRAPH.relations[0]);
+    // Each hand edit records what it set: the slot, the relation, the template field.
+    pb.editSlot("race", { what: "fantasy races" });
+    pb.removeRelation(0);
+    pb.addRelation({ kind: "agree", from: { slot: "Race", axis: "kind", value: "" }, to: { slot: "Weapon", axis: "type", value: "" } });
+    pb.editTemplate({ lead: "1boy" });
+    const agree = relSig(pb.draft.value!.graph!.relations[1]);
+    expect(pb.draft.value?.locks).toEqual({ slots: ["race"], relations: [agree], removed_relations: [exclude], template: ["lead"] });
+    // Editing the kept relation moves its lock; adding the removed one back frees it.
+    pb.editRelation(1, { kind: "accepts" });
+    pb.addRelation(GRAPH.relations[0]);
+    expect(pb.draft.value?.locks).toEqual({
+      slots: ["race"], relations: ["accepts|Race|kind||Weapon|type|||", exclude],
+      removed_relations: [], template: ["lead"],
+    });
+    await flushPromises();
+    expect(w.find("[data-test='pack-item-locked']").exists()).toBe(true);
+    // The recheck sends the locks with the plan; the next update sends the
+    // plan as `previous`, locks included.
+    vi.mocked(api.ai.packReview).mockImplementation(async ({ plan: p }) => ({
+      findings: [], note: "", plan: { ...p, applied: ["Kept your Race slot"] },
+    }));
+    vi.advanceTimersByTime(500);
+    await flushPromises();
+    expect(pb.draft.value?.applied).toEqual(["Kept your Race slot"]);
+    expect(w.get("[data-test='pack-applied']").text()).toContain("Kept your Race slot");
+    pb.convo.instruction.value = "add a hat";
+    await pb.refinePlan();
+    await flushPromises();
+    const calls = vi.mocked(api.ai.packPlan).mock.calls;
+    expect(calls[calls.length - 1][0].previous?.locks?.slots).toEqual(["race"]);
+  });
+
+  it("applies a settings change to a graph plan through the code, with no AI call", async () => {
+    const { w, pb } = await start();
+    vi.mocked(api.ai.packReview).mockClear();
+    pb.settings.value = { ...pb.settings.value, count: 4 };
+    await flushPromises();
+    vi.advanceTimersByTime(500);
+    await flushPromises();
+    const calls = vi.mocked(api.ai.packReview).mock.calls;
+    expect(calls.length).toBe(1);
+    expect(calls[0][0].plan.settings.count).toBe(4);
+    expect(vi.mocked(api.ai.packPlan).mock.calls.length).toBe(1);
+    expect(pb.edited.value).toBe(false);
+    await w.find("[data-test='pack-settings-toggle']").trigger("click");
+    expect(w.get("[data-test='pack-settings-note']").text()).toContain("as you change them");
   });
 });

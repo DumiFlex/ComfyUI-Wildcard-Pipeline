@@ -114,7 +114,7 @@ function setFixed(set: { text?: string; negative?: string }): void {
 }
 
 function setTemplate(set: Partial<NonNullable<typeof graph.value>["template"]>): void {
-  pb.editGraph((g) => ({ ...g, template: { ...g.template, ...set } }));
+  pb.editTemplate(set);
 }
 
 function move(v: string, by: number): void {

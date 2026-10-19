@@ -565,3 +565,67 @@ def test_request_words_the_graph_never_says_are_a_finding():
     # The graph plan's rules the code settles stay quiet in the review.
     texts = " | ".join(f["text"] for f in pack.review_plan(plan))
     assert "never empty" not in texts and "Nothing links" not in texts
+
+
+def test_settings_land_on_the_graph_with_no_model_call():
+    plan = pack.compile_graph_plan(
+        _graph(sections=[{"name": "Looks", "about": "the look"}],
+               slots=[{**s, "section": "Looks"} for s in GRAPH["slots"]]),
+        settings={"count": 4, "style": "sentences", "rating": "nsfw", "structure": "flat"})
+    g = plan["graph"]
+    assert g["style"] == "sentences" and g["rating"] == "nsfw"
+    assert plan["style"] == "sentences" and plan["rating"] == "nsfw"
+    assert all(s["count"] <= 4 for s in g["slots"])
+    assert g["sections"] == [] and all(not s["section"] for s in g["slots"])
+    assert plan["applied"] == ["Style sentences, as set", "Rated nsfw, as set",
+                               "4 options: capped Weapon, Outfit",
+                               "One bundle: no sections"]
+    # The same settings on a plan already at them change nothing more.
+    again = pack.compile_graph_plan(plan, settings=plan["settings"])
+    assert again["applied"] == []
+    # A self-axis slot keeps its count: its options are its axis values.
+    big = [{**s, "count": 8} for s in GRAPH["slots"]]
+    plan = pack.compile_graph_plan(_graph(slots=big), settings={"count": 4})
+    counts = {s["var"]: s["count"] for s in plan["graph"]["slots"]}
+    assert counts["season"] == 8 and counts["race"] == 4
+
+
+def test_hand_edits_are_locked_over_the_next_answer():
+    first = pack.compile_graph_plan(_graph())
+    # The user renamed Weapon's purpose, took out a relation and set the lead.
+    first["graph"]["slots"][2]["what"] = "ranged and melee weapons"
+    gone = pg.raw_rel_sig(pg.graph_answer(first)["relations"][0])
+    first["graph"]["relations"] = first["graph"]["relations"][1:]
+    first["graph"]["template"]["lead"] = "1boy, solo"
+    first["locks"] = {"slots": ["weapon"], "removed_relations": [gone], "template": ["lead"],
+                      "relations": [pg.raw_rel_sig(r) for r in pg.graph_answer(first)["relations"]
+                                    if r["kind"] == "agree"]}
+    shown = pack.compile_graph_plan(first, previous=first)
+    assert shown["locks"]["slots"] == ["weapon"] and shown["applied"] == []
+    assert pack.locks_note(shown).startswith("The user set these by hand and they stay")
+    assert "the slots Weapon" in pack.locks_note(shown)
+    assert "1 relation(s) they removed" in pack.locks_note(shown)
+    # The model's next answer drops Weapon, writes the removed exclude again,
+    # loses the agree relation and rewrites the lead: the user's parts win.
+    answer = _graph(slots=[dict(s) for s in GRAPH["slots"] if s["var"] != "weapon"],
+                    relations=[r for r in GRAPH["relations"]
+                               if r["kind"] in ("exclude", "derive") and r["from_value"] != "orc"],
+                    template={**GRAPH["template"], "lead": "1girl, solo, smile"})
+    plan = pack.compile_graph_plan(answer, previous=shown)
+    g = plan["graph"]
+    weapon = next(s for s in g["slots"] if s["var"] == "weapon")
+    assert weapon["what"] == "ranged and melee weapons"
+    kinds = sorted(r["kind"] for r in g["relations"])
+    assert kinds == ["agree", "derive"]
+    assert g["template"]["lead"] == "1boy, solo"
+    assert plan["locks"] == shown["locks"]
+    assert plan["applied"] == ["Kept your Weapon slot", "Kept 1 relation you set",
+                               "Kept the template lead you set"]
+
+
+def test_locks_are_parsed_strictly():
+    assert pg.parse_locks(None) == {"slots": [], "relations": [], "removed_relations": [],
+                                    "template": []}
+    got = pg.parse_locks({"slots": ["a", "a", 3, ""], "template": ["lead", "nope"], "x": 1})
+    assert got["slots"] == ["a"] and got["template"] == ["lead"]
+    assert pack.locks_note({"graph": None, "locks": got}) == ""

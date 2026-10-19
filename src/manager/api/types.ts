@@ -1849,6 +1849,22 @@ export interface AiPackPlan {
   /** The graph the items were compiled from (graph planner): hand edits
    *  change it, and the server compiles the items again. */
   graph?: AiPackGraph;
+  /** The parts of the graph the user set by hand; the server keeps them
+   *  over the model's next answer. */
+  locks?: AiPackLocks;
+  /** What the code did on this compile (settings applied, hand edits
+   *  kept), one line each. */
+  applied?: string[];
+}
+
+/** Hand edits of a graph plan the model's next answer may not undo:
+ *  slots by variable, relations by `relSig`, relations the user took out,
+ *  and template fields (`graph.py::apply_locks`). */
+export interface AiPackLocks {
+  slots: string[];
+  relations: string[];
+  removed_relations: string[];
+  template: Array<"lead" | "order" | "tail" | "negative">;
 }
 
 /** A variable an open ComfyUI canvas sets at run time, as the canvas tab

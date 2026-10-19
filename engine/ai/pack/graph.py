@@ -1719,13 +1719,153 @@ def request_gaps(graph: dict[str, Any], request: str) -> list[str]:
 MAX_GAPS = 8
 
 
+# --- the settings and the user's hand edits, applied by the code ----------
+
+#: What a hand edit may lock: slots by variable, relations by signature,
+#: relations the user took out, and template fields.
+LOCK_KEYS = ("slots", "relations", "removed_relations", "template")
+TEMPLATE_FIELDS = ("lead", "order", "tail", "negative")
+
+
+def parse_locks(raw: Any) -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {k: [] for k in LOCK_KEYS}
+    if isinstance(raw, dict):
+        for k in LOCK_KEYS:
+            v = raw.get(k)
+            if isinstance(v, list):
+                out[k] = list(dict.fromkeys(x for x in v if isinstance(x, str) and x))[:200]
+    out["template"] = [f for f in out["template"] if f in TEMPLATE_FIELDS]
+    return out
+
+
+def raw_rel_sig(r: dict[str, Any]) -> str:
+    """A relation's signature in the model's shape, equal to ``_rel_key``
+    of its compiled form (and to the manager's ``relSig``)."""
+    return "|".join(str(r.get(k) or "") for k in (
+        "kind", "from_slot", "from_axis", "from_value", "to_slot", "to_axis", "to_value",
+        "var", "text"))
+
+
+def apply_locks(raw: dict[str, Any], previous: dict[str, Any],
+                locks: dict[str, list[str]]) -> list[str]:
+    """Put what the user set by hand (``locks``, parts of ``previous``'s
+    graph) back over a new model answer ``raw`` (the model's shape, edited
+    in place): locked slots replace the answer's by variable (added when
+    the answer dropped them), locked relations are added when missing,
+    removed ones are taken out, locked template fields are copied. Returns
+    the lines saying what was kept."""
+    kept: list[str] = []
+    prev = graph_answer({"graph": previous})
+    slots = raw.get("slots") if isinstance(raw.get("slots"), list) else []
+    raw["slots"] = slots
+    for var in locks["slots"]:
+        mine = next((s for s in prev["slots"] if s["var"] == var), None)
+        if mine is None:
+            continue
+        at = next((i for i, s in enumerate(slots)
+                   if isinstance(s, dict) and (_var(s.get("var")) == var
+                                               or str(s.get("name") or "").lower()
+                                               == mine["name"].lower())), -1)
+        if at >= 0:
+            slots[at] = dict(mine)
+        else:
+            slots.append(dict(mine))
+        kept.append(mine["name"])
+    rels = [r for r in (raw.get("relations") if isinstance(raw.get("relations"), list) else [])
+            if isinstance(r, dict)]
+    gone = set(locks["removed_relations"])
+    rels = [r for r in rels if raw_rel_sig(r) not in gone]
+    have = {raw_rel_sig(r) for r in rels}
+    added = 0
+    for sig in locks["relations"]:
+        mine = next((r for r in prev["relations"] if raw_rel_sig(r) == sig), None)
+        if mine is not None and sig not in have:
+            rels.append(dict(mine))
+            have.add(sig)
+            added += 1
+    raw["relations"] = rels
+    lines = []
+    if kept:
+        lines.append("Kept your " + ", ".join(kept) + (" slots" if len(kept) > 1 else " slot"))
+    if added:
+        lines.append(f"Kept {added} relation{'s' if added > 1 else ''} you set")
+    if locks["template"]:
+        tpl = raw.get("template") if isinstance(raw.get("template"), dict) else {}
+        for f in locks["template"]:
+            tpl[f] = prev["template"][f]
+        raw["template"] = tpl
+        lines.append("Kept the template " + ", ".join(locks["template"]) + " you set")
+    return lines
+
+
+def apply_settings(graph: dict[str, Any], settings: Any) -> list[str]:
+    """The pack settings landed on the compiled graph, so nothing the model
+    wrote contradicts them: style and rating when set, the option count as
+    a cap on every slot, no sections for a flat pack. Returns the lines
+    saying what changed."""
+    cfg = parse_settings(settings)
+    lines: list[str] = []
+    if cfg["style"] != "auto" and graph["style"] != cfg["style"]:
+        graph["style"] = cfg["style"]
+        lines.append(f"Style {cfg['style']}, as set")
+    if cfg["rating"] != "auto" and graph["rating"] != cfg["rating"]:
+        graph["rating"] = cfg["rating"]
+        lines.append(f"Rated {cfg['rating']}, as set")
+    if cfg["count"]:
+        capped = []
+        for s in graph["slots"]:
+            if s["count"] > cfg["count"] and not s.get("self_axis"):
+                s["count"] = cfg["count"]
+                capped.append(s["name"])
+        if capped:
+            lines.append(f"{cfg['count']} options: capped " + ", ".join(capped))
+    if cfg["structure"] == "flat" and (graph["sections"] or any(s["section"]
+                                                                 for s in graph["slots"])):
+        graph["sections"] = []
+        for s in graph["slots"]:
+            s["section"] = ""
+        lines.append("One bundle: no sections")
+    return lines
+
+
+def locks_note(plan: dict[str, Any]) -> str:
+    """What a refine tells the model about the parts the user set by hand."""
+    locks = parse_locks(plan.get("locks"))
+    g = plan.get("graph") if isinstance(plan.get("graph"), dict) else None
+    if g is None or not any(locks[k] for k in LOCK_KEYS):
+        return ""
+    bits = []
+    names = [s["name"] for s in g["slots"] if s["var"] in locks["slots"]]
+    if names:
+        bits.append("the slots " + ", ".join(names))
+    if locks["relations"]:
+        bits.append(f"{len(locks['relations'])} relation(s)")
+    if locks["removed_relations"]:
+        bits.append(f"{len(locks['removed_relations'])} relation(s) they removed (don't "
+                    "write them again)")
+    if locks["template"]:
+        bits.append("the template " + ", ".join(locks["template"]))
+    return ("The user set these by hand and they stay as they are: " + "; ".join(bits)
+            + ". Change the rest only.")
+
+
 def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
     """A graph answer as a plan (``compile_plan`` on its items), carrying
-    the graph as ``plan["graph"]``. ``kw`` goes to ``compile_plan``
+    the graph as ``plan["graph"]``, the settings applied to it
+    (``apply_settings``), the user's hand edits kept over a new answer
+    (``apply_locks``, from ``previous["locks"]``) and ``applied``, the
+    lines saying what the code did. ``kw`` goes to ``compile_plan``
     (library, previous, decisions, settings, base, canvas)."""
     from engine.ai.pack.plan import compile_plan
-    graph = raw.get("graph") if isinstance(raw, dict) and isinstance(raw.get("graph"), dict) \
-        else raw
+    sent_back = isinstance(raw, dict) and isinstance(raw.get("graph"), dict)
+    graph = raw["graph"] if sent_back else raw
+    previous = kw.get("previous") if isinstance(kw.get("previous"), dict) else None
+    locks = parse_locks(raw.get("locks") if sent_back else
+                        previous.get("locks") if previous else None)
+    applied: list[str] = []
+    if not sent_back and previous is not None and isinstance(previous.get("graph"), dict) \
+            and isinstance(graph, dict) and not _compiled(graph):
+        applied += apply_locks(graph, previous["graph"], locks)
     graph = compile_graph(graph)
     if isinstance(raw, dict) and isinstance(raw.get("graph"), dict) \
             and isinstance(raw.get("run"), dict):
@@ -1736,9 +1876,12 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
         # A refine: how the pack runs is the user's setting by now, never
         # re-decided by the model's next answer.
         graph["run"] = parse_run(kw["previous"]["run"], graph["run"])
+    applied += apply_settings(graph, kw.get("settings"))
     _story_holds(graph["slots"], parse_run(graph["run"]), graph["warnings"])
     plan = compile_plan(graph_plan(graph, kw.get("settings")), **kw)
     plan["graph"] = {k: v for k, v in graph.items() if k not in ("warnings", "bad_refs")}
+    plan["locks"] = locks
+    plan["applied"] = applied
     plan["warnings"] = [*graph["warnings"],
                         *(f"Left out a relation: {b}"
                           for b in [*graph["dropped"], *graph["bad_refs"]]),

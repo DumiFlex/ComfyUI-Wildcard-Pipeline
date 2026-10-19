@@ -605,7 +605,7 @@ function stopExtending(): void {
             @click="showSettings = !showSettings"
           ><i :class="['pi', showSettings ? 'pi-chevron-down' : 'pi-chevron-right']" aria-hidden="true" /> Settings and images <span class="wp-pack__dim">· {{ settingsLine }}{{ pb.images.images.value.length ? ` · ${pb.images.images.value.length} image${pb.images.images.value.length === 1 ? '' : 's'}` : '' }}</span></button>
           <template v-if="showSettings">
-            <p class="wp-pack__dim wp-pack__settings">Changes here apply from the next update: <b>Update plan</b> reworks the plan to follow them. A removed image isn't sent again, but what the planner already took from it stays unless you ask it to drop it.</p>
+            <p class="wp-pack__dim wp-pack__settings" data-test="pack-settings-note"><template v-if="draft?.graph">Settings land on the plan as you change them (the code caps counts, sets the style and rating, folds sections; no AI call); <b>Update plan</b> asks the AI to rework the rest for them.</template><template v-else>Changes here apply from the next update: <b>Update plan</b> reworks the plan to follow them.</template> A removed image isn't sent again, but what the planner already took from it stays unless you ask it to drop it.</p>
             <PackSettings v-model="pb.settings.value" class="wp-pack__settings" :disabled="convo.loading.value" />
             <AiImagePicker :images="pb.images" :disabled="convo.loading.value" compact class="wp-pack__settings" />
           </template>
@@ -675,6 +675,10 @@ function stopExtending(): void {
         <p v-if="changedCount || pb.dropped.value.length" class="wp-pack__changed" data-test="pack-changed">
           <i class="pi pi-history" aria-hidden="true" />
           <span>This round: <template v-if="changedCount">{{ changedLine }}</template><template v-if="pb.dropped.value.length"><template v-if="changedCount">; </template>removed {{ pb.dropped.value.join(", ") }}</template>.</span>
+        </p>
+        <p v-if="draft?.applied?.length" class="wp-pack__changed" data-test="pack-applied">
+          <i class="pi pi-cog" aria-hidden="true" />
+          <span>Wired by the code: {{ draft.applied.join("; ") }}.</span>
         </p>
         <PackPlanList />
         <div v-if="draft?.inputs?.length" class="wp-pack__inputs" data-test="pack-inputs">

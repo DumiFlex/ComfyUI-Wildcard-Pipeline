@@ -192,6 +192,8 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     if turns and first_images and not images:
         follow += ("\n\nThe reference images aren't attached again; keep what you took "
                    "from them unless asked otherwise.")
+    if turns and previous is not None and ai_pack.locks_note(previous):
+        follow += "\n\n" + ai_pack.locks_note(previous)
     answer: Any = None
     retry = ""
     graph = settings["planner"] == "graph"
