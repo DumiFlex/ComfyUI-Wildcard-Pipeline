@@ -1005,7 +1005,7 @@ async def test_pack_plan_sees_the_library_and_a_sample_and_gets_reviewed(wp_clie
     review = await resp.json()
     mood = ai_pack.finding_id("m", "", "Add a mood.")
     assert review["findings"][-1] == {"id": mood, "key": "", "level": "tip", "text": "Add a mood.",
-                                      "by": "model"}
+                                      "by": "model", "type": "other"}
     assert review["note"].startswith("Revise the plan")
     resp = await wp_client.post("/wp/api/ai/pack/review", json={"plan": body["plan"]})
     assert all(f.get("by") != "model" for f in (await resp.json())["findings"])

@@ -637,7 +637,8 @@ def test_findings_are_typed_so_a_rewording_keeps_its_id():
     # A finding's id is its type and refs, not its wording.
     gaps = pack.review_plan(plan, request="heroes with a parka and a hat")
     gap = next(f for f in gaps if f["type"] == "request_gap")
-    assert gap["id"] == pack.finding_id("r", "", pack.fingerprint("request_gap", ["hat", "heroes", "parka"]))
+    fp = pack.fingerprint("request_gap", ["hat", "heroes", "parka"])
+    assert gap["id"] == pack.finding_id("r", "", fp)
     assert pack.fingerprint("", ["x"]) == ""
     # The model's review can only point at items the pack has, and its
     # typed findings keep their id across rewordings; "other" goes by text.
@@ -646,7 +647,8 @@ def test_findings_are_typed_so_a_rewording_keeps_its_id():
     assert names[0] == "" and "Race" in names and "Weapon" in names
     race = next(i["key"] for i in plan["items"] if i["name"] == "Race")
     first = pack.compile_review({"findings": [
-        {"item": "Race", "type": "mixed_slot", "severity": "fix", "text": "Race mixes races and ages"},
+        {"item": "Race", "type": "mixed_slot", "severity": "fix",
+         "text": "Race mixes races and ages"},
         {"item": "Subject", "type": "missing_slot", "severity": "fix", "text": "No subject slot"},
         {"item": "", "type": "nope", "severity": "tip", "text": "Looks fine otherwise"},
     ]}, plan)
@@ -659,7 +661,8 @@ def test_findings_are_typed_so_a_rewording_keeps_its_id():
     flat = pack.compile_plan({"title": "x", "items": [
         {"kind": "wildcard", "name": "A", "var": "a", "about": "a", "count": 4, "tags": [],
          "section": "", "source": "", "target": "", "use": ""}]})
-    assert pack.compile_review({"findings": [{"item": "Zed", "text": "Add Zed"}]}, flat)[0]["key"] == ""
+    zed = pack.compile_review({"findings": [{"item": "Zed", "text": "Add Zed"}]}, flat)
+    assert zed[0]["key"] == ""
     # The graph review prompt carries the axes and the prompt order.
     prompt = pack.review_prompt(plan, [], "heroes")
     assert "Axes: Race: kind (elf, dwarf, human)" in prompt and "Prompt order: " in prompt
