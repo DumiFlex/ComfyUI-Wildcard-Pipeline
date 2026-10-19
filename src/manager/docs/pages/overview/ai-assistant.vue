@@ -670,7 +670,12 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           and the next update doesn't send it again; and <b>Fix all with AI</b> sends each
           finding about one item as a change of that item, so only whole-pack findings go to
           the planner. A rule the code wires (the story beat, the model quality) can't be
-          changed with AI; change the run or the setting instead. The checker also reads your request against the graph: a thing it names
+          changed with AI; change the run or the setting instead. The wired template reads
+          every prompt slot, fixed value and derived variable (one left out of the order is
+          added, with a note), a <code>{{placeholder}}</code> the planner writes into the lead
+          or tail becomes its variable or goes, single-image runs hold nothing, and a
+          "1girl, solo" lead on a pack whose request names no person but does name a thing
+          (animals, cars, rooms, food) is taken out. The checker also reads your request against the graph: a thing it names
           ("sandals", "parka") that no slot, axis value, rule or fixed text says is a finding,
           sent back to the planner. Click an item to edit its slot (axes, use) or the
           relations it compiles from, and <b>Add a relation</b> or <b>Add a slot</b>; the items

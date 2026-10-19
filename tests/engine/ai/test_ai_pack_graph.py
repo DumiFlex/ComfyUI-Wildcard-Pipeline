@@ -692,3 +692,31 @@ def test_the_code_asks_about_the_run_and_the_sweep_axes():
     marked = [{**s, "sweep": s["var"] == "race"} for s in GRAPH["slots"]]
     plan = pack.compile_graph_plan(_graph(run={"mode": "sweep", "frames": 0}, slots=marked))
     assert all(not x.get("binds") for x in plan["questions"])
+
+
+def test_the_template_reads_every_value_and_single_runs_hold_nothing():
+    held = [{**s, "hold": True} for s in GRAPH["slots"]]
+    tpl = {**GRAPH["template"], "lead": "1girl, solo, {{quality}}, {{mood}}, best",
+           "order": ["Race"]}
+    plan = pack.compile_graph_plan(_graph(slots=held, template=tpl),
+                                   request="animal portraits of lions")
+    t = plan["graph"]["template"]
+    # Every prompt slot, fixed value and derived variable is read; a
+    # placeholder the graph can resolve becomes its variable, the rest goes.
+    assert t["order"] == ["race", "class", "weapon", "outfit", "quality", "title"]
+    assert t["lead"] == "$quality, best"
+    assert any("Took {mood} out of the template text" in w for w in plan["warnings"])
+    # Single images hold nothing, and a person the request never asked for
+    # leaves the lead.
+    assert not any(s["hold"] for s in plan["graph"]["slots"])
+    assert plan["applied"] == ["Single images: nothing held (Race, Class, Weapon, Season, "
+                               "Outfit vary)",
+                               'Took "1girl, solo" out of the lead: the request names no person']
+    # A request with a person keeps its lead; a story keeps its holds.
+    plan = pack.compile_graph_plan(_graph(slots=held, template=tpl), request="elf heroines")
+    assert plan["graph"]["template"]["lead"].startswith("1girl, solo")
+    plan = pack.compile_graph_plan(_graph(slots=held, run={"mode": "story", "frames": 3}),
+                                   request="a 3 frame story of a lion")
+    assert next(s for s in plan["graph"]["slots"] if s["var"] == "race")["hold"] is True
+    assert pg.unasked_lead("1boy, scenery", "mountain landscapes") == ("scenery", ["1boy"])
+    assert pg.unasked_lead("1boy, scenery", "") == ("1boy, scenery", [])

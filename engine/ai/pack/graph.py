@@ -523,6 +523,18 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
         if s["show"] == "prompt" and s["var"] not in order:
             order.append(s["var"])
             warnings.append(f"Added ${s['var']} to the template so {s['name']} shows")
+    # A fixed value and a derived variable exist to be read: the code
+    # owns the template, so none is left out of it.
+    for f in fixed:
+        if f["var"] not in order:
+            order.append(f["var"])
+            warnings.append(f"Added ${f['var']} to the template so {f['name']} shows")
+    for var in dict.fromkeys(r["var"] for r in relations if r["kind"] == "derive"):
+        if var not in order:
+            order.append(var)
+            warnings.append(f"Added ${var} to the template so the rule writing it shows")
+    lead = _placeholders(_clean(raw.get("lead"), MAX_TEXT), by_name, warnings)
+    tail = _placeholders(_clean(raw.get("tail"), MAX_TEXT), by_name, warnings)
     negative = _clean(raw.get("negative"), MAX_TEXT * 2)
     rule_words = {w for r in relations for w in r.get("words") or []}
     if negative and rule_words:
@@ -538,9 +550,71 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
             warnings.append(f"Took \"{', '.join(gone)}\" out of the negative: a rule's words "
                             "belong in a relation, the negative is for defects")
             negative = ", ".join(kept)
-    return {"lead": _clean(raw.get("lead"), MAX_TEXT), "order": order[:MAX_TEMPLATE_PARTS],
-            "tail": _clean(raw.get("tail"), MAX_TEXT),
+    return {"lead": lead, "order": order[:MAX_TEMPLATE_PARTS], "tail": tail,
             "negative": negative}
+
+
+_PLACEHOLDER = re.compile(r"\{\{\s*\$?([A-Za-z][\w ]*?)\s*\}\}|\{\s*\$?([A-Za-z]\w*)\s*\}")
+
+
+def _placeholders(text: str, by_name: dict[str, str], warnings: list[str]) -> str:
+    """``{{quality}}`` / ``{subject}`` written into the lead or tail: a
+    variable the graph has becomes ``$var``; the rest is taken out, since
+    the Assembler would print it as it is."""
+    gone: list[str] = []
+
+    def repl(m: re.Match[str]) -> str:
+        name = (m.group(1) or m.group(2) or "").strip()
+        var = by_name.get(name.lower()) or by_name.get(name.lower().replace(" ", "_"))
+        if var:
+            return f"${var}"
+        gone.append(name)
+        return ""
+
+    out = _PLACEHOLDER.sub(repl, text)
+    if gone:
+        warnings.append(f"Took {', '.join('{' + g + '}' for g in gone)} out of the template "
+                        "text: nothing sets it, and it would print as it is")
+        out = re.sub(r"\s*,\s*(?=,|$)", "", re.sub(r"^\s*,\s*", "", out)).strip()
+        out = re.sub(r",\s*,", ",", out).strip(" ,")
+    return out
+
+
+_PERSON_LEAD = re.compile(r"^\s*(?:\d*\s*(?:girls?|boys?|others?)|solo|\(?looking at viewer"
+                          r"(?::\d+(?:\.\d+)?\)?)?)\s*$", re.I)
+
+
+_PERSON_ASK = re.compile(
+    r"\b(?:subjects?|characters?|people|persons?|figures?|m[ae]n|wom[ae]n|heroe?s?|"
+    r"heroines?|someone|protagonists?|models?|who|\d*girls?|\d*boys?|solo|couples?|"
+    r"pin-?ups?|lingerie|nude|nsfw|lewd|erotic|sexy|ecchi|hentai|waifus?|oc|outfits?|"
+    r"hair\w*|faces?|selfies?|poses?|cosplay\w*|idols?|warriors?|knights?|wizards?|"
+    r"witch\w*|elf|elves|dwar(?:f|ves)|orcs?|maids?|nurses?|pirates?|samurai|ninjas?|"
+    r"soldiers?|athletes?|dancers?|portraits? of (?:a |the )?(?:wom|m|girl|boy|person))\b",
+    re.I)
+_THING_ASK = re.compile(
+    r"\b(?:animals?|wildlife|creatures?|cats?|dogs?|lions?|tigers?|wolves|birds?|horses?|"
+    r"cars?|vehicles?|motorcycles?|ships?|planes?|landscapes?|scenery|sceneries|interiors?|"
+    r"rooms?|architecture|buildings?|cityscapes?|food|dish(?:es)?|meals?|desserts?|drinks?|"
+    r"still life|products?|logos?|patterns?|textures?|plants?|flowers?|weapons? (?:only|alone)|"
+    r"props?|furniture|gadgets?|planets?|space ?ships?|mechs?|robots? only)\b", re.I)
+
+
+def unasked_lead(lead: str, request: str) -> tuple[str, list[str]]:
+    """A person the request never asked for ("1girl, solo" on an animal
+    pack): those parts of the lead are taken out, only when the request
+    names no person and does name a thing (an animal, a car, a room, a
+    dish). Returns the lead and the parts taken."""
+    if not request.strip() or _PERSON_ASK.search(request) or not _THING_ASK.search(request):
+        return lead, []
+    kept, gone = [], []
+    for chunk in lead.split(","):
+        c = chunk.strip()
+        if c and _PERSON_LEAD.match(c):
+            gone.append(c)
+        elif c:
+            kept.append(c)
+    return (", ".join(kept), gone) if gone else (lead, [])
 
 
 def _compiled(raw: dict[str, Any]) -> bool:
@@ -1915,6 +1989,19 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
         # re-decided by the model's next answer.
         graph["run"] = parse_run(kw["previous"]["run"], graph["run"])
     applied += apply_settings(graph, kw.get("settings"))
+    if parse_run(graph["run"])["mode"] == "single":
+        # A hold only means something over a Loop: in single images it
+        # just makes every prompt the same.
+        held = [s["name"] for s in graph["slots"] if s["hold"]]
+        for s in graph["slots"]:
+            s["hold"] = False
+        if held:
+            applied.append("Single images: nothing held (" + ", ".join(held) + " vary)")
+    lead, gone = unasked_lead(graph["template"]["lead"], kw.get("request") or "")
+    if gone:
+        graph["template"]["lead"] = lead
+        applied.append("Took \"" + ", ".join(gone) + "\" out of the lead: the request names "
+                       "no person")
     _story_holds(graph["slots"], parse_run(graph["run"]), graph["warnings"])
     plan = compile_plan(graph_plan(graph, kw.get("settings")), **kw)
     plan["graph"] = {k: v for k, v in graph.items() if k not in ("warnings", "bad_refs")}
