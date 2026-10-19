@@ -20,6 +20,12 @@ needs a running model and takes minutes per request.
 USAGE
 -----
     python scripts/ai_pack_evals.py [--limit N] [--model NAME] [--out report.md]
+                                    [--planner graph|items] [--save DIR]
+
+``--save DIR`` keeps every pack the run built: ``DIR/<n>-<slug>.md`` is a
+readable sheet (items with their options and tags, constraint cells,
+rules, the template, the check and sample prompts) and ``.json`` the plan
+and built payloads, so a pack can be read, or judged, after the run.
 
 Exit 0 always; the report is the result. Reads the AI settings file the
 same way ComfyUI does (`WP_AI_CONFIG_PATH` overrides it).
@@ -29,6 +35,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -144,13 +151,161 @@ def _score(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40] or "pack"
+
+
+def _item_lines(plan: dict[str, Any], built: dict[str, Any], item: dict[str, Any]) -> list[str]:
+    """One readable line per thing an item holds (an option, a cell, a
+    rule), from its built payload."""
+    from engine.ai import derivation as ai_derivation
+    from engine.ai import wildcard as ai_wildcard
+
+    pl = built[item["key"]]["payload"]
+    kind = item["kind"]
+    if kind in ("wildcard", "library"):
+        lines = [ai_wildcard.option_line(o) for o in pl.get("options") or [] if isinstance(o, dict)]
+        groups = pl.get("tag_groups") or {}
+        kinds = pl.get("tag_group_kinds") or {}
+        for name, tags in groups.items():
+            lines.append(f"axis {name} ({kinds.get(name, 'classify')}): {', '.join(tags)}")
+        return lines
+    if kind == "derivation":
+        return [ai_derivation.describe_rule(r) for r in pl.get("rules") or []
+                if isinstance(r, dict)]
+    if kind == "constraint":
+        names = {built[i["key"]]["id"]: i["name"] for i in plan["items"] if i["key"] in built}
+        src = names.get(pl.get("source_wildcard_id"), "?")
+        dst = names.get(pl.get("target_wildcard_id"), "?")
+        lines = [f"{src} → {dst}"]
+        for st, row in (pl.get("matrix") or {}).items():
+            for tt, cell in (row or {}).items():
+                f = cell.get("factor", 1)
+                lines.append(f"{st} → {tt}: {cell.get('mode')}" + (f" ×{f}" if cell.get("mode") in
+                                                                   ("boost", "reduce") else ""))
+        for e in pl.get("exceptions") or []:
+            lines.append(f"{e.get('source_value')} → {e.get('target_value')}: {e.get('mode')}")
+        return lines
+    if kind == "fixed_values":
+        return [f"${v.get('name')} = {v.get('value')}" + (f" [neg: {v['negative']}]"
+                                                           if v.get("negative") else "")
+                for v in pl.get("values") or [] if isinstance(v, dict)]
+    if kind == "combine":
+        return [f"${item['var']} = {pl.get('template')}"]
+    if kind == "template":
+        return [pl.get("template_string") or ""] + (
+            [f"negative: {pl['negative_template']}"] if pl.get("negative_template") else [])
+    return [json.dumps(pl)[:200]]
+
+
+def sample_prompts(plan: dict[str, Any], built: dict[str, Any], n: int = 12) -> list[str]:
+    """``n`` rendered prompts from the built pack, as the check renders them."""
+    import copy
+
+    from engine.pipeline import PipelineEngine
+
+    tpl = pack._template(plan, built)
+    if tpl is None:
+        return []
+    item, text = tpl
+    neg = built[item["key"]]["payload"].get("negative_template") or ""
+    modules = pack.chain_modules(plan, built)
+    rows = [r for r in pack._built_rows(plan, built) if r["type"] == "wildcard"]
+    catalog = pack.ref_catalog(modules, rows)
+    pinned = pack.pins(plan)
+    frames = pack.loop_frames(plan)
+    out = []
+    for seed in range(1, n + 1):
+        try:
+            frame = pack.frame_pins(pack.frame_of(seed, frames), frames) if frames else {}
+            ctx = PipelineEngine().run(copy.deepcopy(modules),
+                                       ctx={**pinned, **frame, "__wp_catalog__": catalog},
+                                       seed=seed)
+            prompt, negative = pack.render(text, neg, ctx)
+            out.append(prompt + (f"  ⟂ {negative}" if negative else ""))
+        except Exception as exc:  # noqa: BLE001 - shown, not raised
+            out.append(f"(seed {seed} failed: {exc})")
+    return out
+
+
+def pack_sheet(request: str, result: dict[str, Any]) -> str:
+    """A readable sheet of one built pack: what the model planned, every
+    item's contents, the check and sample prompts."""
+    plan, built, check = result["plan"], result["built"], result.get("check") or {}
+    lines = [f"# {plan.get('title') or 'Pack'}", "", f"Request: {request}", ""]
+    for key, label in (("summary", "Summary"), ("design", "How it fits together")):
+        if plan.get(key):
+            lines += [f"{label}: {plan[key]}", ""]
+    lines.append(f"Style: {plan.get('style')}; rating: {plan.get('rating')}; "
+                 f"anchor: ${plan.get('anchor') or '-'}; planner: "
+                 f"{'graph' if plan.get('graph') else 'items'}")
+    graph = plan.get("graph")
+    if isinstance(graph, dict):
+        lines += ["", "## Graph", ""]
+        for s in graph["slots"]:
+            axes = "; ".join(f"{a['name']}: {', '.join(a['values'])}" for a in s["axes"])
+            lines.append(f"- slot {s['name']} (${s['var']}, {s['show']}"
+                         + (f", pick {s['pick']}" if s["pick"] else "") + f"): {s['what']}"
+                         + (f" — axes {axes}" if axes else ""))
+        for r in graph["relations"]:
+            lines.append(f"- relation: {pack.graph._slot_rel_words(r)}")
+        for b in plan.get("bad_refs") or []:
+            lines.append(f"- dropped: {b}")
+    problems = check.get("problems") or {}
+    lines += ["", "## Items", ""]
+    for i in plan["items"]:
+        head = f"### {i['name']} ({i['kind']}" + (f", ${i['var']}" if i.get("var") else "") \
+            + (f", use: {i['use']}" if i.get("use") else "") + ")"
+        lines += [head, ""]
+        if i.get("about"):
+            lines.append(f"_{i['about']}_")
+        if i["key"] not in built:
+            lines += ["(not built)", ""]
+            continue
+        lines += [f"- {x}" for x in _item_lines(plan, built, i)]
+        for p in problems.get(i["key"], []):
+            lines.append(f"- ⚠ {p}")
+        lines.append("")
+    lines += ["## Check", ""]
+    if check:
+        lines.append(f"{check.get('runs')} runs, {check.get('failed')} failed, "
+                     f"{sum(len(v) for v in problems.values())} item problems, "
+                     f"{len(check.get('notes') or [])} notes"
+                     + (f", distinct prompts {check['distinct']}" if check.get("distinct") is not
+                        None else ""))
+        lines += [f"- note: {n}" for n in check.get("notes") or []]
+        for r in check.get("relations") or []:
+            mark = "✓" if r["holds"] else ("✗" if r["checked"] else "·")
+            lines.append(f"- {mark} {r['text']}" + (f" ({r['broken']} of {r['seen']} runs broke it)"
+                                                   if r["checked"] and not r["holds"] else ""))
+    else:
+        lines.append("(no check)")
+    lines += ["", "## Sample prompts", ""]
+    lines += [f"{n}. {p}" for n, p in enumerate(sample_prompts(plan, built), 1)]
+    if result.get("log"):
+        lines += ["", "## Build log", ""] + [f"- {x}" for x in result["log"]]
+    return "\n".join(lines) + "\n"
+
+
+def save_pack(folder: Path, n: int, request: str, result: dict[str, Any]) -> Path:
+    folder.mkdir(parents=True, exist_ok=True)
+    base = folder / f"{n:02d}-{_slug(request)}"
+    base.with_suffix(".md").write_text(pack_sheet(request, result), encoding="utf-8")
+    base.with_suffix(".json").write_text(
+        json.dumps({"request": request, "plan": result["plan"], "built": result["built"],
+                    "check": result.get("check"), "log": result.get("log")}, indent=2),
+        encoding="utf-8")
+    return base.with_suffix(".md")
+
+
 async def evaluate(complete: Any, requests: list[Any], *, seeds: int = 100,
-                   settings: dict | None = None) -> list[dict]:
+                   settings: dict | None = None, save: Path | None = None) -> list[dict]:
     """``requests``: text, or ``(text, feature)`` to also score a feature.
     ``settings`` are the pack settings (``planner`` picks the graph or the
-    item-list planner)."""
+    item-list planner). With ``save``, every built pack is written there as
+    a readable sheet and JSON (``save_pack``)."""
     rows = []
-    for entry in requests:
+    for n, entry in enumerate(requests, 1):
         req, feature = entry if isinstance(entry, tuple) else (entry, "")
         started = time.perf_counter()
         try:
@@ -160,6 +315,11 @@ async def evaluate(complete: Any, requests: list[Any], *, seeds: int = 100,
                          "error": f"{type(e).__name__}: {e}",
                          "seconds": round(time.perf_counter() - started, 1)})
             continue
+        if save is not None:
+            try:
+                save_pack(save, n, req, result)
+            except Exception as e:  # noqa: BLE001 - a sheet that fails is said, not fatal
+                print(f"could not save pack {n}: {type(e).__name__}: {e}")
         rows.append({"request": req, "plan": True, **_score(result),
                      **({"feature": feature, "feature_used": bool(FEATURES[feature](result))}
                         if feature else {}),
@@ -214,6 +374,8 @@ def main() -> int:
     ap.add_argument("--model", default="")
     ap.add_argument("--seeds", type=int, default=100)
     ap.add_argument("--out", default="pack-evals.md")
+    ap.add_argument("--save", default="",
+                    help="folder to keep every built pack in (a readable .md and a .json each)")
     ap.add_argument("--planner", choices=("graph", "items"), default="graph",
                     help="graph: the model writes slots, axes and relations and the code "
                          "wires the pack; items: the model writes every item and payload")
@@ -231,7 +393,8 @@ def main() -> int:
         return await _ai_client.complete_json(cfg, **kwargs)
 
     rows = asyncio.run(evaluate(complete, REQUESTS[: args.limit], seeds=args.seeds,
-                                settings={"planner": args.planner}))
+                                settings={"planner": args.planner},
+                                save=Path(args.save) if args.save else None))
     Path(args.out).write_text(report(rows, f"{cfg['model']} ({args.planner} planner)"),
                               encoding="utf-8")
     Path(args.out).with_suffix(".json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
