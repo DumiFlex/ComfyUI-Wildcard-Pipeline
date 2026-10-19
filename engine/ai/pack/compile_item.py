@@ -79,7 +79,8 @@ def compile_item(
         if slot is not None:
             compiled = pack_graph.compile_slot(
                 plan["graph"], slot, answer, existing=(built.get(key) or {}).get("payload"),
-                others=pack_graph.other_texts(plan, built, key))
+                others=pack_graph.other_texts(plan, built, key),
+                refs=pack_graph.draw_refs(plan, built))
         else:
             compiled = ai_wildcard.compile_spec(
                 answer, var=item["var"] or None, refs=idx, self_id=mid, limit=item["count"],

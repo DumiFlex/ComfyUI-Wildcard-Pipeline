@@ -454,7 +454,7 @@ REVIEW_GRAPH_SYSTEM = """\
 You review the design of a Wildcard Pipeline prompt pack before it is built. \
 The pack is a graph: slots (one wildcard each, with axes its rules key on), \
 relations between them (exclude, only, boost, reduce, agree, accepts, \
-derive, append) and a template order. The code writes every option, tag, \
+derive, append, draw) and a template order. The code writes every option, tag, \
 fallback, constraint cell, derivation branch and the template from it, and \
 wires the run style (story beats, sweep axes, holds) and the model setting \
 itself, so never ask for those, for tags or descriptions on items, for \

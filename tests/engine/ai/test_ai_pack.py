@@ -307,11 +307,14 @@ def test_vocabulary_refs_fixed_values_inputs_and_use(wp_db):
     assert any("Injector" in n and "subject" in n for n in ops["notes"])
 
 
-def test_template_with_a_pick_is_refused_and_braces_are_flagged():
+def test_template_with_a_pick_keeps_its_first_branch_and_says_so():
     plan = pack.compile_plan(PLAN2)
     tkey = plan["items"][3]["key"]
-    with pytest.raises(ValueError, match="Assembler doesn't pick"):
-        pack.compile_item(plan, tkey, {}, {"template": "a {red|blue} $scarf", "negative": ""})
+    out = pack.compile_item(plan, tkey, {}, {"template": "a {red|blue} $scarf",
+                                             "negative": "{lowres|blurry}, bad hands"})
+    assert out["payload"]["template_string"] == "a red $scarf"
+    assert out["payload"]["negative_template"] == "lowres, bad hands"
+    assert sum("Assembler can't pick" in w for w in out["warnings"]) == 2
 
 
 def test_eval_features_score_a_built_pack():

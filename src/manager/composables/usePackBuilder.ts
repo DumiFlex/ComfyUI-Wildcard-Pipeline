@@ -624,16 +624,17 @@ function slotOf(key: string): AiPackSlot | null {
   return p.graph.slots.find((s) => s.var === i.var) ?? null;
 }
 
-/** The graph relations behind a plan item: a constraint's pair, or a
- *  derivation's written variable. */
+/** The graph relations behind a plan item: a constraint's pair, a
+ *  derivation's written variable, or the lists a wildcard draws from. */
 function relationsOf(key: string): number[] {
   const p = draft.value;
   const i = p?.items.find((x) => x.key === key);
   if (!p?.graph || !i) return [];
   const byVar = new Map(p.graph.slots.map((s) => [s.var, s.name]));
   return p.graph.relations.flatMap((r, n) => {
-    if (i.kind === "constraint" && r.to && r.from.slot === byVar.get(i.source) && r.to.slot === byVar.get(i.target)) return [n];
+    if (i.kind === "constraint" && r.kind !== "draw" && r.to && r.from.slot === byVar.get(i.source) && r.to.slot === byVar.get(i.target)) return [n];
     if (i.kind === "derivation" && r.var === i.var && !r.to) return [n];
+    if (i.kind === "wildcard" && r.kind === "draw" && r.to?.slot === byVar.get(i.var)) return [n];
     return [];
   });
 }

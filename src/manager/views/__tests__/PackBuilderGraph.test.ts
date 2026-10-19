@@ -154,6 +154,11 @@ describe("PackBuilder on a graph plan", () => {
     expect(pb.draft.value?.graph?.relations.length).toBe(3);
     pb.editRelation(2, { kind: "only" });
     expect(pb.draft.value?.graph?.relations[2].kind).toBe("only");
+    // A draw relation (a shared list in front of each option) belongs to
+    // the wildcard it feeds, not to a constraint.
+    pb.addRelation({ kind: "draw", from: { slot: "Race", axis: "kind", value: "elf" }, to: { slot: "Weapon", axis: "", value: "" } });
+    expect(pb.relationsOf("i2")).toEqual([3]);
+    expect(pb.relationsOf("i3")).toEqual([0, 2]);
   });
 
   it("locks hand edits so the next answer keeps them, and shows what the code did", async () => {

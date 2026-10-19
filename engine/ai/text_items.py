@@ -24,6 +24,8 @@ from engine.ai import about, adult
 from engine.ai import refs as ai_refs
 from engine.modules.combine_handler import CombineHandler
 from engine.modules.fixed_values_handler import FixedValuesHandler
+from engine.syntax.tokenize import tokenize_text
+from engine.syntax.types import TokenKind
 
 MAX_VALUES = 40
 MAX_TEXT = 2000
@@ -246,6 +248,25 @@ def _unbrace(text: str, warnings: list[str]) -> str:
     return re.sub(r"[ \t]{2,}", " ", out).strip() if out != text else out
 
 
+def _first_pick(text: str, warnings: list[str]) -> str:
+    """A ``{a|b}`` pick in a template becomes its first branch, with a
+    warning: the Assembler is seedless, so the pick would print as written
+    and the route used to answer 502 (base 9B, 2026-10-19: one template
+    draft in three wrote one). The choice belongs in a wildcard."""
+    out: list[str] = []
+    for tok in tokenize_text(text or ""):
+        if tok.kind in (TokenKind.DP_BRACE, TokenKind.DP_MULTI):
+            branches = [b.strip() for b in tok.meta.get("branches") or [] if b.strip()]
+            first = branches[0] if branches else ""
+            warnings.append(f"Kept \"{first[:40]}\" from {tok.raw[:40]}: the Assembler can't "
+                            "pick; put the choice in a wildcard or a combine and read its "
+                            "variable")
+            out.append(first)
+        else:
+            out.append(tok.raw)
+    return "".join(out)
+
+
 def unasked(text: str, asked: str, reads_: list[str]) -> str:
     """A warning naming the ``$vars`` the draft reads that the request,
     which spelled out two or more, didn't ask for, or "". Re-test on
@@ -307,12 +328,14 @@ def compile_template(raw: Any, *, catalog: dict[str, Any] | None = None) -> dict
     if not isinstance(raw, dict) or not isinstance(raw.get("template"), str):
         raise ValueError("the answer had no template")
     warnings: list[str] = []
-    text = ai_refs.compile_text(_unbrace(_flat(raw["template"], MAX_TEMPLATE), warnings),
-                                surface="template")
+    text = ai_refs.compile_text(
+        _first_pick(_unbrace(_flat(raw["template"], MAX_TEMPLATE), warnings), warnings),
+        surface="template")
     if not text:
         raise ValueError("the template is empty")
-    negative = ai_refs.compile_text(_unbrace(_flat(raw.get("negative"), MAX_TEMPLATE), warnings),
-                                    surface="template")
+    negative = ai_refs.compile_text(
+        _first_pick(_unbrace(_flat(raw.get("negative"), MAX_TEMPLATE), warnings), warnings),
+        surface="template")
     if adult.sexual_minor(text):
         raise ValueError("it names a minor in a sexual context")
     text = _fix_axes(text, catalog, warnings)

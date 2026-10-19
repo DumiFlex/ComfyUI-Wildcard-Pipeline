@@ -631,8 +631,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           rules, "pick 2", hold, a share of "none"), each slot's <b>axes</b> (the ways its
           options are told apart: a Season axis with winter and summer, a Formality axis), the
           <b>relations</b> between slots (never gets, only gets, favours, rarely gets, agrees
-          with on an axis, accepts, sets a variable, adds to a variable, each from one slot's
-          axis value to another's) and the <b>template order</b>. The code then makes every
+          with on an axis, accepts, sets a variable, adds to a variable, draws from, each from
+          one slot's axis value to another's) and the <b>template order</b>. The code then makes every
           constraint, derivation and the template from the graph, so a rule can only name a slot
           and a value the graph declares; a relation that names something the graph doesn't
           have is dropped, listed under the plan, and the model is asked once to write it
@@ -679,7 +679,20 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           "1girl, solo" lead on a pack whose request names no person but does name a thing
           (animals, cars, rooms, food) is taken out. The checker also reads your request against the graph: a thing it names
           ("sandals", "parka") that no slot, axis value, rule or fixed text says is a finding,
-          sent back to the planner. Click an item to edit its slot (axes, use) or the
+          sent back to the planner. A slot whose pick another slot follows (the source of an
+          agrees-with or only-gets relation) is read as offering its axis values as
+          alternatives: an option tagged with two of them (a mountain biome that is cold and
+          temperate) rolls one each run and only that value's rule fires, so two rules never
+          close the pool together; the test run reports a slot whose rules left nothing in
+          three runs out of ten or more (the fallback stood in) and names the rules to loosen.
+          <b>Draws from</b> puts a fresh pick from a shared list in front of every option of a
+          slot (a scarf, a hat and mittens each in a warm colour from one Colours list, narrowed
+          to an axis value when given); the list itself stays out of the prompt unless the
+          order names it, and the slot's options are written without colours. "2 to 3
+          accessories" in the request makes the matching slot pick 2-3 when the planner left it
+          at one, a request naming two model families ("Pony and Flux") gets the per-family
+          quality rule without the setting, and a fixed preset can carry its own negatives.
+          Click an item to edit its slot (axes, use) or the
           relations it compiles from, and <b>Add a relation</b> or <b>Add a slot</b>; the items
           are compiled again from your change. The assistant lists every item it will build,
           grouped by section, and asks what it can't guess. Some questions take several answers; every question has an

@@ -1,0 +1,279 @@
+"""The pack-sheet round (2026-10-19): rolled sources so rules don't empty
+the pool, the ``draw`` relation (a shared list in front of options), picks
+read off the request, two model families, and the fallback-rate note."""
+from __future__ import annotations
+
+import pytest
+
+from engine.ai import pack
+from engine.ai.pack import check as pack_check
+from engine.ai.pack import graph as pg
+
+
+def _slot(name, var, what, axes, **more):
+    return {"name": name, "var": var, "what": what, "section": "", "count": 4,
+            "show": "prompt", "pick": "", "hold": False, "sometimes_none": 0,
+            "axes": axes, **more}
+
+
+def _rel(kind, from_slot, from_axis="", from_value="", to_slot="", to_axis="", to_value="",
+         **more):
+    return {"kind": kind, "from_slot": from_slot, "from_axis": from_axis,
+            "from_value": from_value, "to_slot": to_slot, "to_axis": to_axis,
+            "to_value": to_value, "factor": 0, "var": "", "text": "", "otherwise": "",
+            "words": [], **more}
+
+
+def _graph(slots, relations, order, **more):
+    return {"title": "Pack", "summary": "", "design": "", "rating": "safe", "style": "tags",
+            "model": "", "anchor": "", "questions": [], "assumptions": [], "from_images": [],
+            "research": [], "run": {"mode": "single", "frames": 0}, "inputs": [],
+            "sections": [], "slots": slots, "fixed": [], "relations": relations,
+            "template": {"lead": "", "order": order, "tail": "", "negative": ""}, **more}
+
+
+def _answer(rows):
+    return {"options": [{"text": t, "weight": 1, "negative": "", "tags": tags}
+                        for t, tags in rows]}
+
+
+def _build(plan, answers):
+    g = plan["graph"]
+    built: dict = {}
+    for key in pack.build_order(plan):
+        item = next(i for i in plan["items"] if i["key"] == key)
+        slot = pg.slot_for(plan, key)
+        if slot is not None and not pg.is_wired(plan, key):
+            out = pg.compile_slot(g, slot, _answer(answers[slot["name"]]),
+                                  refs=pg.draw_refs(plan, built))
+        else:
+            out = pg.wired_payload(plan, key, built)
+        built[key] = {"id": item["id"], "payload": out["payload"]}
+    return built
+
+
+LANDSCAPE = _graph(
+    [_slot("Biome", "biome", "biomes", [{"name": "climate", "values": ["cold", "hot"]}]),
+     _slot("Weather", "weather", "weather", [{"name": "climate", "values": ["cold", "hot"]}])],
+    [_rel("agree", "Biome", "climate", to_slot="Weather", to_axis="climate")],
+    ["Biome", "Weather"])
+LANDSCAPE_OPTIONS = {
+    # A mountain fits both climates: the engine must roll ONE of them, or
+    # the two allow-list rows fire together and nothing is left.
+    "Biome": [("mountain", {"climate": ["cold", "hot"]}), ("desert", {"climate": ["hot"]}),
+              ("tundra", {"climate": ["cold"]})],
+    "Weather": [("snow", {"climate": ["cold"]}), ("sleet", {"climate": ["cold"]}),
+                ("heat haze", {"climate": ["hot"]}), ("dust storm", {"climate": ["hot"]})],
+}
+
+
+def test_an_agree_source_rolls_one_value_so_its_rows_never_empty_the_target():
+    plan = pack.compile_graph_plan(LANDSCAPE)
+    g = plan["graph"]
+    biome, weather = pg.slot_by_var(g, "biome"), pg.slot_by_var(g, "weather")
+    assert pg.axis_kinds(g, biome) == {"climate": "accepts"}
+    assert pg.axis_kinds(g, weather) == {"climate": "classify"}
+    built = _build(plan, LANDSCAPE_OPTIONS)
+    by_name = {i["name"]: built[i["key"]]["payload"] for i in plan["items"]}
+    mountain = next(o for o in by_name["Biome"]["options"] if o["value"] == "mountain")
+    assert mountain["sub_categories"] == ["cold", "hot"]  # alternatives, kept
+    assert by_name["Biome"]["tag_group_kinds"] == {"climate": "accepts"}
+    report = pack.check_pack(plan, built, seeds=60)
+    assert report["failed"] == 0
+    assert report["fallbacks"] == {}, report["problems"]
+    assert [r["holds"] for r in report["relations"]] == [True]
+    for p in report["prompts"]:
+        biome_text, weather_text = p["text"].split(", ")[:2]
+        if biome_text == "tundra":
+            assert weather_text in ("snow", "sleet")
+        if biome_text == "desert":
+            assert weather_text in ("heat haze", "dust storm")
+
+
+def test_picked_tags_follow_the_rolled_value_on_an_accepts_axis():
+    plan = pack.compile_graph_plan(LANDSCAPE)
+    built = _build(plan, LANDSCAPE_OPTIONS)
+    payloads = {pg.slot_for(plan, i["key"])["name"]: built[i["key"]]["payload"]
+                for i in plan["items"] if i["kind"] == "wildcard"}
+    tags, fell = pg._picked_tags(plan["graph"], payloads, "Biome",
+                                 {"biome": "mountain", "biome.climate": "hot"})
+    assert tags == {"hot"} and not fell
+    # A run where the mountain rolled hot but the weather is cold breaks the agree.
+    rels = pg.verify_relations(plan, built, [{"biome": "mountain", "biome.climate": "hot",
+                                             "weather": "sleet"}])
+    assert rels[0]["broken"] == 1
+
+
+def test_an_only_source_rolls_one_value_too():
+    g = pack.compile_graph(_graph(
+        [_slot("Biome", "biome", "biomes", [{"name": "climate", "values": ["cold", "hot"]}]),
+         _slot("Weather", "weather", "weather", [{"name": "kind", "values": ["snow", "sun"]}])],
+        [_rel("only", "Biome", "climate", "cold", "Weather", "kind", "snow"),
+         _rel("only", "Biome", "climate", "hot", "Weather", "kind", "sun")],
+        ["Biome", "Weather"]))
+    assert pg.axis_kinds(g, pg.slot_by_var(g, "biome")) == {"climate": "accepts"}
+    # Exclude sources stay classify: two tags are two statements, both true.
+    g2 = pack.compile_graph(_graph(
+        [_slot("Biome", "biome", "biomes", [{"name": "climate", "values": ["cold", "hot"]}]),
+         _slot("Weather", "weather", "weather", [{"name": "kind", "values": ["snow", "sun"]}])],
+        [_rel("exclude", "Biome", "climate", "hot", "Weather", "kind", "snow")],
+        ["Biome", "Weather"]))
+    assert pg.axis_kinds(g2, pg.slot_by_var(g2, "biome")) == {"climate": "classify"}
+
+
+WINTER = _graph(
+    [_slot("Colours", "colour", "colours", [{"name": "warmth", "values": ["warm", "cool"]}]),
+     _slot("Scarf", "scarf", "scarves", []), _slot("Hat", "hat", "hats", [])],
+    [_rel("draw", "Colours", "warmth", "warm", "Scarf"),
+     _rel("draw", "Colours", to_slot="Hat"),
+     _rel("draw", "Scarf", to_slot="Scarf")],
+    ["Scarf", "Hat"])
+WINTER_OPTIONS = {
+    "Colours": [("red", {"warmth": ["warm"]}), ("orange", {"warmth": ["warm"]}),
+                ("blue", {"warmth": ["cool"]})],
+    "Scarf": [("knitted scarf", {}), ("silk scarf", {})],
+    "Hat": [("beanie", {}), ("beret", {})],
+}
+
+
+def test_a_draw_relation_puts_a_fresh_pick_in_front_of_every_option():
+    g = pack.compile_graph(WINTER)
+    kinds = [r["kind"] for r in g["relations"]]
+    assert kinds == ["draw", "draw"]
+    assert g["bad_refs"] == ["draw: Scarf from itself"]
+    assert g["relations"][0]["from"] == {"slot": "Colours", "axis": "warmth", "value": "warm"}
+    assert g["relations"][0]["to"] == {"slot": "Scarf", "axis": "", "value": ""}
+    # A list only drawn from is no pick of its own: internal, out of the order.
+    assert pg.slot_by_var(g, "colour")["show"] == "internal"
+    assert g["template"]["order"] == ["scarf", "hat"]
+    assert any("Colours is a list" in w for w in g["warnings"])
+    plan = pack.compile_graph_plan(WINTER)
+    assert [i["kind"] for i in plan["items"]].count("constraint") == 0
+    assert [i["name"] for i in plan["items"] if i["kind"] == "wildcard"][0] == "Colours"
+    scarf = pg.slot_by_var(plan["graph"], "scarf")
+    prompt = pg.slot_prompt(plan["graph"], scarf)
+    assert "fresh pick from Colours (warm) in front of every option, so write no colours" \
+        in prompt
+    # Without the list built, the ref can't be written and the slot says so.
+    out = pg.compile_slot(plan["graph"], scarf, _answer(WINTER_OPTIONS["Scarf"]))
+    assert any("isn't built yet" in w for w in out["warnings"])
+    assert out["payload"]["options"][0]["value"] == "knitted scarf"
+    built = _build(plan, WINTER_OPTIONS)
+    by_name = {i["name"]: built[i["key"]] for i in plan["items"]}
+    cid = by_name["Colours"]["id"]
+    assert [o["value"] for o in by_name["Scarf"]["payload"]["options"]] == [
+        f"@{{{cid}:warm}} knitted scarf", f"@{{{cid}:warm}} silk scarf"]
+    assert by_name["Hat"]["payload"]["options"][0]["value"] == f"@{{{cid}}} beanie"
+    assert pg.verify_relations(plan, built, [{"scarf": "red knitted scarf"}]) == [
+        {"text": "Scarf options each start with a fresh Colours pick (warm)", "kind": "draw",
+         "checked": False, "seen": 0, "broken": 0, "holds": True, "why": ""},
+        {"text": "Hat options each start with a fresh Colours pick", "kind": "draw",
+         "checked": False, "seen": 0, "broken": 0, "holds": True, "why": ""}]
+    report = pack.check_pack(plan, built, seeds=30)
+    assert report["failed"] == 0 and report["problems"] == {}, report["problems"]
+    for p in report["prompts"]:
+        scarf_text, hat_text = p["text"].split(", ")
+        assert scarf_text.split(" ")[0] in ("red", "orange")
+        assert hat_text.split(" ")[0] in ("red", "orange", "blue")
+    # The pack's own compile path doesn't call the ref a disagreement.
+    key = next(i["key"] for i in plan["items"] if i["name"] == "Scarf")
+    out = pack.compile_item(plan, key, built, _answer(WINTER_OPTIONS["Scarf"]))
+    assert not any("points at" in w for w in out["warnings"]), out["warnings"]
+    # The eval's feature check sees it.
+    assert ":" in out["payload"]["options"][0]["value"]
+    # A plan sent back keeps the relation.
+    again = pack.compile_graph(pg.graph_answer(plan))
+    assert [r["kind"] for r in again["relations"]] == ["draw", "draw"]
+
+
+def test_picks_the_request_counts_land_on_the_slot():
+    assert pg.request_picks("carrying 2 to 3 accessories each") == [(2, 3, "accessories")]
+    assert pg.request_picks("two or three props, 3-2 charms, three hats") == [
+        (2, 3, "props"), (2, 3, "charms"), (3, 3, "hats")]
+    # How the pack runs is no pick: frames, options, images.
+    assert pg.request_picks(
+        "a 4-frame story with 8 options per wildcard and 3 images") == []
+    assert pg.request_picks("one hat") == []
+    g = _graph([_slot("Hero", "hero", "heroes", []),
+                _slot("Accessories", "accessory", "small items a hero carries", [])],
+               [], ["Hero", "Accessories"])
+    plan = pack.compile_graph_plan(g, request="Fantasy adventurers carrying 2 to 3 "
+                                              "accessories each.")
+    acc = pg.slot_by_var(plan["graph"], "accessory")
+    assert acc["pick"] == "2-3"
+    assert "Accessories: pick 2-3, from the request" in plan["applied"]
+    assert next(i for i in plan["items"] if i["name"] == "Accessories")["use"] == "pick 2-3"
+    assert pg.slot_by_var(plan["graph"], "hero")["pick"] == ""
+    # The model's own pick wins; a slot that is its own axis isn't counted.
+    g["slots"][1]["pick"] = "4"
+    plan = pack.compile_graph_plan(g, request="2 to 3 accessories")
+    assert pg.slot_by_var(plan["graph"], "accessory")["pick"] == "4"
+    assert plan["applied"] == []
+
+
+def test_two_model_families_add_the_quality_rule_without_the_setting():
+    assert pg.model_families({"model": "pony, flux"}) == ["pony", "flux"]
+    assert pg.model_families({"model": "Pony and Flux"}) == ["pony", "flux"]
+    assert pg.model_families({"model": "illustrious"}) == ["illustrious"]
+    assert pg.model_families({"model": ""}) == []
+    g = _graph([_slot("Hero", "hero", "heroes", [])], [], ["Hero"], model="pony, flux")
+    plan = pack.compile_graph_plan(g)
+    q = next(i for i in plan["items"] if i["name"] == "Model quality")
+    assert q["var"] == "quality" and "runs on pony, flux" in q["about"]
+    tpl = next(i for i in plan["items"] if i["kind"] == "template")
+    assert tpl["about"].startswith("Reads $quality, $hero")
+    one = pack.compile_graph_plan(_graph([_slot("Hero", "hero", "heroes", [])], [], ["Hero"],
+                                         model="pony"))
+    assert not any(i["name"] == "Model quality" for i in one["items"])
+
+
+def test_rules_that_empty_the_pool_most_runs_are_a_note():
+    plan = pack.compile_graph_plan(_graph(
+        [_slot("Biome", "biome", "biomes", [{"name": "climate", "values": ["cold", "hot"]}]),
+         _slot("Weather", "weather", "weather", [{"name": "kind", "values": ["snow", "sun"]}])],
+        [_rel("only", "Biome", "climate", "cold", "Weather", "kind", "snow")],
+        ["Biome", "Weather"]))
+    # No weather is snow, so a cold biome always leaves nothing: fallback.
+    built = _build(plan, {"Biome": [("tundra", {"climate": ["cold"]}),
+                                    ("desert", {"climate": ["hot"]})],
+                          "Weather": [("sun", {"kind": ["sun"]}), ("haze", {"kind": ["sun"]})]})
+    report = pack.check_pack(plan, built, seeds=40)
+    wkey = next(i["key"] for i in plan["items"] if i["name"] == "Weather")
+    assert set(report["fallbacks"]) == {wkey} and report["fallbacks"][wkey] >= 10
+    [note] = [n for n in report["notes"] if "fallback stands in" in n]
+    assert note.startswith("Weather: its rules leave nothing in ")
+    assert "Biome cold only gets Weather snow" in note
+    assert pack_check._tight_rules(plan, {wkey: 3}, 40) == []  # under the share
+
+
+def test_eval_scores_the_worst_fallback_share(tmp_path):
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "ai_pack_evals", Path(__file__).resolve().parents[3] / "scripts" / "ai_pack_evals.py")
+    evals = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(evals)
+    result = {"plan": {"items": [{"key": "a", "kind": "wildcard"}]}, "built": {"a": {}},
+              "check": {"runs": 40, "fallbacks": {"a": 30}, "problems": {}, "notes": [],
+                        "relations": [], "prompts": [], "distinct": 1.0}}
+    assert evals._score(result)["fell"] == 0.75
+    result["check"]["fallbacks"] = {}
+    assert evals._score(result)["fell"] == 0
+    text = evals.report([{"request": "x", "plan": True, "built": 1, "items": 1, "problems": 0,
+                          "clean": True, "built_share": 1, "fell": 0.75, "seconds": 1,
+                          "prompts": [], "check": True, "distinct": 1.0, "relations": 0,
+                          "held": 0}], "m")
+    assert "fell back in 30% or more of the runs: 1 / 1" in text
+    assert "| 75% |" in text
+
+
+def test_a_template_pick_becomes_its_first_branch():
+    from engine.ai import text_items
+    out = text_items.compile_template({"template": "$hero, {red|blue} cloak, {2$$ $$a|b|c}",
+                                       "negative": "{lowres|blurry}"})
+    assert out["payload"] == {"template_string": "$hero, red cloak, a",
+                              "negative_template": "lowres"}
+    assert sum("Assembler can't pick" in w for w in out["warnings"]) == 3
+    with pytest.raises(ValueError, match="empty"):
+        text_items.compile_template({"template": "{|}"})

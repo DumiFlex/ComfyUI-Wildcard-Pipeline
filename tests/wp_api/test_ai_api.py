@@ -923,9 +923,14 @@ async def test_text_draft_for_fixed_values_combine_and_template(wp_client, fake_
     body = await resp.json()
     assert body["payload"]["input_vars"] == ["class", "weapon"] and body["warnings"] == []
 
+    # A pick in a template is kept as its first branch (the 9B wrote one in
+    # a third of its template drafts; the route answered 502).
     fake_llm.overrides["prompt_template"] = {"template": "{a|b} $hero", "negative": ""}
     resp = await wp_client.post(url, json={"kind": "template", "instruction": "x", "item": {}})
-    assert resp.status == 502
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    assert body["payload"]["template_string"] == "a $hero"
+    assert any("Assembler can't pick" in w for w in body["warnings"])
     fake_llm.overrides["prompt_template"] = {"template": "$hero, $class",
                                              "negative": "$negatives, lowres"}
     resp = await wp_client.post(url, json={"kind": "template", "instruction": "x", "item": {}})

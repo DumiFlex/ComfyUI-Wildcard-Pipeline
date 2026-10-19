@@ -1707,7 +1707,7 @@ export interface AiPackFixed {
   negative: string;
 }
 
-export type AiPackRelationKind = "exclude" | "only" | "boost" | "reduce" | "agree" | "accepts" | "derive" | "append";
+export type AiPackRelationKind = "exclude" | "only" | "boost" | "reduce" | "agree" | "accepts" | "derive" | "append" | "draw";
 
 /** One side of a relation: a slot, and the axis value it keys on ("" on
  *  an agree / accepts side, which names only the shared axis). */
@@ -1723,7 +1723,8 @@ export interface AiPackRelationSide {
 export interface AiPackRelation {
   kind: AiPackRelationKind;
   from: AiPackRelationSide;
-  /** The target (not on derive / append). */
+  /** The target (not on derive / append). On draw, the slot whose options
+   *  each start with a fresh pick from the source (a shared list). */
   to?: AiPackRelationSide;
   /** agree / accepts: the axis values both slots share. */
   values?: string[];

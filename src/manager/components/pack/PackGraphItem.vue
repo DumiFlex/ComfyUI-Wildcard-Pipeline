@@ -32,6 +32,7 @@ const KINDS: Array<SelectOption & { value: AiPackRelationKind }> = [
   { value: "accepts", label: "accepts (offers values of an axis)" },
   { value: "derive", label: "sets a variable" },
   { value: "append", label: "adds to a variable" },
+  { value: "draw", label: "draws from (a pick in front of each option)" },
 ];
 const SHOW: SelectOption[] = [
   { value: "prompt", label: "In the prompt" },
@@ -79,6 +80,11 @@ function valuesOf(name: string, axis: string): SelectOption[] {
 
 function keyed(r: AiPackRelation): boolean {
   return !["agree", "accepts"].includes(r.kind);
+}
+
+/** Whether the target side names an axis value (draw names the slot only). */
+function toKeyed(r: AiPackRelation): boolean {
+  return keyed(r) && r.kind !== "draw";
 }
 
 function writes(r: AiPackRelation): boolean {
@@ -163,8 +169,8 @@ function move(v: string, by: number): void {
       </div>
     </template>
 
-    <template v-else-if="item.kind === 'constraint' || item.kind === 'derivation'">
-      <span class="wp-pack-graph__label">{{ item.kind === 'constraint' ? 'Rules between these two picks' : 'What writes this variable' }}</span>
+    <template v-if="item.kind === 'constraint' || item.kind === 'derivation' || (slot && relations.length)">
+      <span class="wp-pack-graph__label">{{ item.kind === 'constraint' ? 'Rules between these two picks' : item.kind === 'derivation' ? 'What writes this variable' : 'Lists its options draw from (a fresh pick in front of each)' }}</span>
       <div v-for="{ n, r } in relations" :key="n" class="wp-pack-graph__rel" data-test="pack-relation">
         <Select size="sm" class="wp-pack-graph__rel-slot" :model-value="r.from.slot" :options="slotOptions" :filterable="false" :disabled="busy" aria-label="Source slot" @update:model-value="(v) => setSide(n, r, 'from', { slot: String(v), axis: '', value: '' })" />
         <Select size="sm" :model-value="r.from.axis" :options="axesOf(r.from.slot)" :filterable="false" :disabled="busy" aria-label="Source axis" data-test="pack-relation-axis" @update:model-value="(v) => setSide(n, r, 'from', { axis: String(v), value: '' })" />
@@ -177,17 +183,17 @@ function move(v: string, by: number): void {
         </template>
         <template v-else>
           <Select size="sm" class="wp-pack-graph__rel-slot" :model-value="r.to?.slot ?? ''" :options="slotOptions" :filterable="false" :disabled="busy" aria-label="Target slot" @update:model-value="(v) => setSide(n, r, 'to', { slot: String(v), axis: '', value: '' })" />
-          <Select v-if="keyed(r)" size="sm" :model-value="r.to?.axis ?? ''" :options="axesOf(r.to?.slot ?? '')" :filterable="false" :disabled="busy" aria-label="Target axis" @update:model-value="(v) => setSide(n, r, 'to', { axis: String(v), value: '' })" />
-          <Select v-if="keyed(r)" size="sm" :model-value="r.to?.value ?? ''" :options="valuesOf(r.to?.slot ?? '', r.to?.axis ?? '')" :filterable="false" :disabled="busy" aria-label="Target value" @update:model-value="(v) => setSide(n, r, 'to', { value: String(v) })" />
+          <Select v-if="toKeyed(r)" size="sm" :model-value="r.to?.axis ?? ''" :options="axesOf(r.to?.slot ?? '')" :filterable="false" :disabled="busy" aria-label="Target axis" @update:model-value="(v) => setSide(n, r, 'to', { axis: String(v), value: '' })" />
+          <Select v-if="toKeyed(r)" size="sm" :model-value="r.to?.value ?? ''" :options="valuesOf(r.to?.slot ?? '', r.to?.axis ?? '')" :filterable="false" :disabled="busy" aria-label="Target value" @update:model-value="(v) => setSide(n, r, 'to', { value: String(v) })" />
           <input v-if="r.kind === 'exclude' || r.kind === 'only' || r.kind === 'boost' || r.kind === 'reduce'" class="wp-input wp-input--sm" :value="(r.words ?? []).join(', ')" placeholder="about (sandals, shorts)" :disabled="busy" aria-label="What the rule is about" data-test="pack-relation-words" @change="pb.editRelation(n, { words: words(text($event)) })">
           <Input v-if="r.kind === 'boost' || r.kind === 'reduce'" type="number" size="sm" class="wp-pack-graph__rel-factor" :model-value="r.factor ?? (r.kind === 'boost' ? 3 : 0.3)" :min="0" :max="100" :step="0.1" :disabled="busy" aria-label="Factor" @update:model-value="(v) => pb.editRelation(n, { factor: Number(v) })" />
         </template>
         <button type="button" class="wp-pack-graph__icon" :disabled="busy" aria-label="Remove this rule" title="Remove this rule" data-test="pack-relation-remove" @click="pb.removeRelation(n)"><i class="pi pi-times" aria-hidden="true" /></button>
       </div>
-      <button type="button" class="wp-pack-graph__link" :disabled="busy" data-test="pack-relation-add" @click="addRelation">Add a rule</button>
+      <button v-if="!slot" type="button" class="wp-pack-graph__link" :disabled="busy" data-test="pack-relation-add" @click="addRelation">Add a rule</button>
     </template>
 
-    <template v-else-if="fixed">
+    <template v-if="fixed">
       <label class="wp-pack-graph__field">
         <span>Text, every run</span>
         <input class="wp-input wp-input--sm" :value="fixed.text" :disabled="busy" data-test="pack-fixed-text" @change="setFixed({ text: text($event) })">
