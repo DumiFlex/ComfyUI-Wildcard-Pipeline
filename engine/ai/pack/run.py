@@ -98,7 +98,8 @@ async def run_pack(
         history = [*history, (follow, answer)]
         plan = await compiled(answer, previous=plan, decisions=decisions)
     # The plan review's fixes, as a user pressing "Fix all" would send them.
-    fixes = [f for f in review_plan(plan, library) if f["level"] == "fix"]
+    fixes = [f for f in review_plan(plan, library, request=instruction)
+             if f["level"] == "fix"]
     if fixes:
         log.append(f"plan: fixing {len(fixes)} review finding(s)")
         note = review_note(fixes)
@@ -109,7 +110,8 @@ async def run_pack(
             plan = await compiled(answer, previous=plan, decisions=decisions)
         except PlanError as e:
             log.append(f"plan: the fixed plan couldn't be used ({e}); kept the last one")
-        left = [f["text"] for f in review_plan(plan, library) if f["level"] == "fix"]
+        left = [f["text"] for f in review_plan(plan, library, request=instruction)
+                if f["level"] == "fix"]
         log += [f"plan: still to fix: {t}" for t in left]
     log += [f"plan: {w}" for w in plan["warnings"]]
     built: dict[str, dict[str, Any]] = {}

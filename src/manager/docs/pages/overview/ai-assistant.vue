@@ -638,7 +638,17 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           ("sandals", "shorts" for "no sandals or shorts in winter"), so the target wildcard
           is made to hold options saying them and the test run reads the finished prompts
           for them; a slot whose only axis is itself (a Season slot with a season axis) gets
-          its options from the axis values without a model call. Click an item to edit its slot (axes, use) or the
+          its options from the axis values without a model call, and an axis a relation names
+          on one slot that only the other declares is copied over. What the run and the
+          settings need is wired by the code, never asked of the model: a story gets its
+          <b>Story beat</b> derivation from <code>$iteration</code> (the model writes only the
+          beats), a story where every pick is held lets the ones that aren't the cast or the
+          place change per frame, a sweep sheet marks two short slots as its axes (or the ones
+          you tick in the slot editor) and holds the rest, and <b>Model: Per model family</b>
+          adds the quality derivation. <b>Runs as</b> is yours once set: an update never changes
+          it back. The checker also reads your request against the graph: a thing it names
+          ("sandals", "parka") that no slot, axis value, rule or fixed text says is a finding,
+          sent back to the planner. Click an item to edit its slot (axes, use) or the
           relations it compiles from, and <b>Add a relation</b> or <b>Add a slot</b>; the items
           are compiled again from your change. The assistant lists every item it will build,
           grouped by section, and asks what it can't guess. Some questions take several answers; every question has an
@@ -693,8 +703,14 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           see before it lands) and <b>Dismiss</b>; tick some and press <b>Fix with AI</b>, or
           <b>Fix all with AI</b>. Fix all applies the findings that have their own fix first,
           without the model, and sends only the rest; one the model hands back unchanged is marked
-          "the AI left this unchanged", so you can fix it by hand or dismiss it instead of pressing
-          Fix all again. A long list goes to the model in rounds. <b>Review with AI</b> asks the
+          "the AI left this unchanged", and one it leaves unchanged twice is marked as something
+          the AI couldn't change and is not sent again unless you tick it, so Fix all settles
+          instead of looping. A finding only asks for what the pack can do: a story holds the
+          character or outfit it has (one click each), and a pack with no cast is not asked to
+          hold one. On a graph plan the review leaves out what the code settles itself (fallbacks,
+          library matches, links from the anchor), and <b>Review with AI</b> reviews the design
+          (slots, axes, relations, order) against your request rather than the items. A long
+          list goes to the model in rounds. <b>Review with AI</b> asks the
           model for a second opinion; after Fix all it checks again, repeating the findings still
           there and adding at most two new ones. Notes
           the planner left (items it dropped) have <b>Explain</b>, which asks the chat what they

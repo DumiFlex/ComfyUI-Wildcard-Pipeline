@@ -1690,6 +1690,8 @@ export interface AiPackSlot {
   /** "" for one pick, "2" or "2-3" for several. */
   pick: string;
   hold: boolean;
+  /** A sweep sheet's axis (run mode sweep): the Loop sweeps its options. */
+  sweep?: boolean;
   /** Percent of runs that get nothing (0 = never). */
   sometimes_none: number;
   axes: AiPackAxis[];
@@ -1885,6 +1887,8 @@ export type AiPackPatch = (
   | { op: "remove"; key: string }
   /** A plan-wide field, e.g. pointing a stray anchor at a set variable. */
   | { op: "plan"; set: Partial<Pick<AiPackPlan, "anchor" | "inputs" | "run">> }
+  /** Fields of one slot of a graph plan (hold it, mark it a sweep axis). */
+  | { op: "slot"; var: string; set: Partial<AiPackSlot> }
 ) & {
   /** The button's words when the server picked them ("Use $scene"). */
   label?: string;

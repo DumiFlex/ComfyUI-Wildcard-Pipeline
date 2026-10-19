@@ -119,6 +119,11 @@ export function applyPatch(plan: AiPackPlan, patch: AiPackPatch): AiPackPlan {
     return { ...plan, items: plan.items.filter((i) => i.key !== patch.key) };
   }
   if (patch.op === "plan") return { ...plan, ...patch.set };
+  if (patch.op === "slot") {
+    if (!plan.graph) return plan;
+    const slots = plan.graph.slots.map((s) => (s.var === patch.var ? { ...s, ...patch.set } : s));
+    return { ...plan, graph: { ...plan.graph, slots } };
+  }
   if (patch.op === "edit") {
     return {
       ...plan,
@@ -498,6 +503,7 @@ async function askPlan(): Promise<void> {
   searched.value = [];
   dismissedNotes.value = new Set();
   unfixed.value = new Set();
+  stuck.value = new Set();
   sendPrevious = undefined;
   await convo.ask();
 }
@@ -646,7 +652,11 @@ function addItem(kind: AiPackKind, section = ""): string {
 /** Edit plan-wide fields (title, summary, anchor, rating, style, how it runs). */
 function editPlan(set: Partial<Pick<AiPackPlan, "title" | "summary" | "anchor" | "rating" | "style" | "run">>): void {
   const p = draft.value;
-  if (p) editDraft({ ...p, ...set });
+  if (!p) return;
+  // A graph plan's run lives on the graph too: what the model is shown on
+  // the next update is the run the user set, never the one it last wrote.
+  const graph = p.graph && set.run ? { ...p.graph, run: set.run } : p.graph;
+  editDraft({ ...p, ...set, ...(graph ? { graph } : {}) });
 }
 
 function removeItem(key: string): void {
@@ -727,7 +737,7 @@ async function recheck(): Promise<void> {
   const v = view.value;
   if (!res || !p || !v) return;
   try {
-    const got = await api.ai.packReview(withTarget({ plan: p }));
+    const got = await api.ai.packReview(withTarget({ plan: p, request: convo.asked.value[0] ?? "" }));
     if (convo.result.value !== res || view.value?.draft !== v.draft) return;
     const server = new Map(got.plan.items.map((i) => [i.key, i]));
     // A graph plan's items are whatever the graph compiles to now; an
@@ -801,6 +811,9 @@ export function noteChunks(lines: string[], room: number): string[][] {
 /** Findings Fix all sent to the model that came back unchanged, by id
  *  (ids come from what a finding says, so the same one keeps its id). */
 const unfixed = ref(new Set<string>());
+/** Findings the AI left unchanged twice: Fix all stops sending them (do it
+ *  by hand, dismiss it, or tick it to send it once more on purpose). */
+const stuck = ref(new Set<string>());
 
 /** Fix the ticked findings (or every open one): the ones with a built-in
  *  fix are applied here with no model, the rest go to the planner. Ones
@@ -810,7 +823,8 @@ async function fixFindings(): Promise<void> {
   const open = findings.value;
   const ticked = open.filter((f) => selected.value.has(f.id));
   const fresh = open.filter((f) => !unfixed.value.has(f.id));
-  const list = ticked.length ? ticked : fresh.length ? fresh : open;
+  const again = open.filter((f) => !stuck.value.has(f.id));
+  const list = ticked.length ? ticked : fresh.length ? fresh : again;
   if (!list.length) return;
   selected.value = new Set();
   const v = view.value;
@@ -827,7 +841,7 @@ async function fixFindings(): Promise<void> {
   // Numbered, each with its item, so a small model works through all of
   // them instead of fixing the first and calling it done.
   const items = new Map((plan.value?.items ?? []).map((i) => [i.key, i]));
-  const again = rest.some((f) => unfixed.value.has(f.id));
+  const left = rest.some((f) => unfixed.value.has(f.id));
   const lines = rest.map((f) => {
     const item = f.key ? items.get(f.key) : undefined;
     const what = item ? `${item.name} (${item.kind}${item.var ? `, $${item.var}` : ""}): ` : "";
@@ -836,7 +850,7 @@ async function fixFindings(): Promise<void> {
   const head = "Revise the plan to fix ALL of these, one by one:\n";
   const tail = "\nWhere one asks for a new item (a constraint, a derivation, a wildcard), "
     + "add it to the plan; where one asks to change an item, change that item's fields."
-    + (again ? "\nThe last revision left these exactly as they were: change the plan this time, "
+    + (left ? "\nThe last revision left these exactly as they were: change the plan this time, "
       + "or remove the item they are about if it can't be fixed." : "");
   const own = convo.instruction.value.trim();
   const sent = new Set(rest.map((f) => f.id));
@@ -862,6 +876,8 @@ async function fixFindings(): Promise<void> {
   const recheck = rest.filter((f) => f.by === "model").map((f) => f.text);
   if (recheck.length) await reviewPlan(recheck);
   const back = findings.value.filter((f) => sent.has(f.id)).map((f) => f.id);
+  // Left as it was for the second time: the AI can't do this one.
+  stuck.value = new Set([...stuck.value, ...back.filter((id) => unfixed.value.has(id))]);
   unfixed.value = new Set(back);
 }
 
@@ -1032,6 +1048,7 @@ async function runCheck(p: AiPackPlan, signal: AbortSignal): Promise<AiPackCheck
   check.value = res;
   dismissedNotes.value = new Set();
   unfixed.value = new Set();
+  stuck.value = new Set();
   return res;
 }
 
@@ -1195,6 +1212,7 @@ function reset(): void {
   selected.value = new Set();
   dismissedNotes.value = new Set();
   unfixed.value = new Set();
+  stuck.value = new Set();
   sample.value = "";
   error.value = "";
   images.clear();
@@ -1230,7 +1248,7 @@ export function usePackBuilder() {
     convo, plan, draft, removed, edited, states, phase, working, stage, current, check,
     installed, error, builtCount, summary, askPlan, refinePlan, canRefine, awaitingSearch, removeItem, build,
     rebuild, stop, install, undoInstall, backToPlan, reset, sample, findings, reviewing,
-    reviewPlan, fixFindings, unfixed, settings, decisions, picks, questions, answeredCount, choose,
+    reviewPlan, fixFindings, unfixed, stuck, settings, decisions, picks, questions, answeredCount, choose,
     setOther, decideFor, decideAll, pickFor, reopenDecision, changeAssumption, editItem, slotOf, relationsOf, editGraph, editSlot, editRelation, removeRelation, addRelation, addSlot, changes, dropped, reopened, resendImages,
     addItem, editPlan, applyFinding, dismissFinding, selected, toggleSelected, changeItem,
     changing, research, allowResearch, skipResearch, searching, webResults, images, target,

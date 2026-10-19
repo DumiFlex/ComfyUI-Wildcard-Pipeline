@@ -26,6 +26,7 @@ function patchLabel(f: AiPackFinding): string {
   if (p.op === "plan") return "Apply";
   if (p.op === "add") return `Add ${p.item.kind === "template" ? "a template" : "it"}`;
   if (p.op === "remove") return "Remove it";
+  if (p.op === "slot") return "Apply";
   return p.set.kind === "library" ? "Use yours" : "Apply";
 }
 </script>
@@ -47,7 +48,7 @@ function patchLabel(f: AiPackFinding): string {
         >
         <i :class="['pi', f.level === 'fix' ? 'pi-exclamation-triangle' : 'pi-lightbulb']" aria-hidden="true" />
         <span class="wp-pack-findings__text">
-          <b v-if="f.key && itemName(f.key)">{{ itemName(f.key) }}: </b>{{ f.text }}<span v-if="f.by === 'model'" class="wp-pack-findings__by"> · AI review</span><span v-if="pb.unfixed.value.has(f.id)" class="wp-pack-findings__by" data-test="pack-finding-unfixed"> · the AI left this unchanged</span>
+          <b v-if="f.key && itemName(f.key)">{{ itemName(f.key) }}: </b>{{ f.text }}<span v-if="f.by === 'model'" class="wp-pack-findings__by"> · AI review</span><span v-if="pb.stuck.value.has(f.id)" class="wp-pack-findings__by" data-test="pack-finding-stuck"> · the AI couldn't change this; do it by hand, dismiss it, or tick it to send it again</span><span v-else-if="pb.unfixed.value.has(f.id)" class="wp-pack-findings__by" data-test="pack-finding-unfixed"> · the AI left this unchanged</span>
         </span>
         <span class="wp-pack-findings__acts">
           <button v-if="f.patch" type="button" class="wp-pack-findings__btn" :disabled="busy" data-test="pack-finding-apply" @click="pb.applyFinding(f)">{{ patchLabel(f) }}</button>

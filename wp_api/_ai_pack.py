@@ -195,6 +195,8 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     answer: Any = None
     retry = ""
     graph = settings["planner"] == "graph"
+    asked = " ".join([first_text, instruction, sample,
+                      *(str(d.get("answer") or "") for d in decisions if isinstance(d, dict))])
     for attempt in range(2):
         try:
             answer = await _ask(
@@ -217,11 +219,7 @@ async def post_pack_plan(request: web.Request) -> web.Response:
             else:
                 plan = ai_pack.compile_plan(answer, library=library, previous=previous,
                                             decisions=decisions, settings=settings, base=base,
-                                            canvas=canvas, request=" ".join(
-                                                [first_text, instruction, sample, *(
-                                                    str(d.get("answer") or "")
-                                                    for d in decisions
-                                                    if isinstance(d, dict))]))
+                                            canvas=canvas, request=asked)
             break
         except _ai_client.AIError as e:
             return json_error(e.message, status=e.status)
@@ -247,7 +245,8 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     thought = _ai_client.last_thinking()
     return json_ok({"plan": plan, "model": cfg["model"], "answer": answer,
                     **({"thinking": thought} if thought else {}),
-                    "review": ai_pack.review_plan(plan, library), "web": web_on,
+                    "review": ai_pack.review_plan(plan, library, request=asked),
+                    "web": web_on,
                     "context": await _plan_context(cfg, first, turns, follow, answer,
                                                    len(images))})
 
@@ -348,15 +347,15 @@ async def post_pack_review(request: web.Request) -> web.Response:
     if isinstance(parsed, web.Response):
         return parsed
     plan, _built = parsed
-    findings = ai_pack.review_plan(plan, library)
+    asked = body.get("request") if isinstance(body.get("request"), str) else ""
+    findings = ai_pack.review_plan(plan, library, request=asked)
     if body.get("ai") is True:
-        asked = body.get("request") if isinstance(body.get("request"), str) else ""
         raw = body.get("recheck")
         recheck = [ai_safety.strip_invisible(t).strip()[:300] for t in raw[:ai_pack.MAX_RECHECK]
                    if isinstance(t, str) and t.strip()] if isinstance(raw, list) else None
         try:
             answer = await _ai_client.complete_json(
-                cfg, system=ai_pack.REVIEW_SYSTEM,
+                cfg, system=ai_pack.review_system(plan),
                 user=ai_pack.review_prompt(plan, findings, asked, recheck),
                 schema=ai_pack.REVIEW_SCHEMA, schema_name="pack_review", temperature=0.3,
             )

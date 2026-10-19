@@ -261,8 +261,8 @@ async def test_run_pack_on_the_graph_planner():
         assert "Other wildcards cover" in kw["user"]
         return _answer(name)
 
-    result = await pack.run_pack(complete, "fantasy heroes", seeds=40,
-                                 settings={"planner": "graph"})
+    result = await pack.run_pack(complete, "fantasy race, class and weapon; outfit by season",
+                                 seeds=40, settings={"planner": "graph"})
     assert result["failed"] == []
     assert calls.count("pack_graph") == 1 and calls.count("pack_refs") == 1
     assert calls.count("pack_slot") == 4  # one per slot; Season and wired items need none
@@ -451,3 +451,117 @@ def test_self_axis_slot_is_written_by_code():
     again = pg.compile_graph(pg.graph_answer(plan))
     assert pg.slot_by_var(again, "season")["self_axis"] == "season"
     assert again["relations"][0]["words"] == ["musket"]
+
+
+def _graph(**changes) -> dict:
+    g = {**GRAPH, "relations": [r for r in GRAPH["relations"] if r["from_value"] != "orc"],
+         "slots": [dict(s) for s in GRAPH["slots"]]}
+    g.update(changes)
+    return g
+
+
+def test_a_story_run_is_wired_by_the_code():
+    held = [{**s, "hold": True} for s in GRAPH["slots"]]
+    plan = pack.compile_graph_plan(_graph(run={"mode": "story", "frames": 3}, slots=held))
+    beat = next(i for i in plan["items"] if i["var"] == "beat")
+    assert beat["kind"] == "derivation" and "frame 1 to 3" in beat["about"]
+    assert not pack.is_wired(plan, beat["key"])  # the model writes the beats
+    tpl = next(i for i in plan["items"] if i["kind"] == "template")
+    assert "$outfit, $beat." in tpl["about"]
+    body = pack.wired_payload(plan, tpl["key"], {})["payload"]["template_string"]
+    assert body.endswith("$outfit, $beat")
+    # Everything was held: the cast and the outfit stay, the rest moves per frame.
+    holds = {s["name"]: s["hold"] for s in plan["graph"]["slots"]}
+    assert holds == {"Race": True, "Class": False, "Weapon": False, "Season": True,
+                     "Outfit": True}
+    assert any("Class, Weapon change from frame to frame" in w for w in plan["warnings"])
+    # The review has nothing left to ask for the run.
+    texts = " | ".join(f["text"] for f in pack.review_plan(plan))
+    assert "Story over a Loop" not in texts and "every frame" not in texts
+    # A plan sent back keeps its own run; a refine keeps the user's.
+    again = pack.compile_graph_plan({**plan, "run": {"mode": "single", "frames": 0}})
+    assert again["run"]["mode"] == "single" and not any(i["var"] == "beat"
+                                                       for i in again["items"])
+    refined = pack.compile_graph_plan(_graph(run={"mode": "single", "frames": 0}),
+                                      previous=plan)
+    assert refined["run"] == {"mode": "story", "frames": 3}
+    assert any(i["var"] == "beat" for i in refined["items"])
+
+
+def test_a_sweep_run_marks_the_axes_and_holds_the_rest():
+    plan = pack.compile_graph_plan(_graph(run={"mode": "sweep", "frames": 0}))
+    by = {i["name"]: i for i in plan["items"] if i["kind"] == "wildcard"}
+    assert by["Race"]["about"].endswith("Sweep axis") and by["Class"]["about"].endswith(
+        "Sweep axis")
+    assert "Sweep axis" not in by["Weapon"]["about"] and by["Weapon"]["use"] == "hold"
+    assert by["Season"]["use"] == "internal"  # internal: not swept, not held
+    texts = " | ".join(f["text"] for f in pack.review_plan(plan))
+    assert "sweep axis" not in texts
+    # A slot marked sweep wins and is capped.
+    marked = [{**s, "sweep": s["name"] == "Outfit", "count": 20} for s in GRAPH["slots"]]
+    plan = pack.compile_graph_plan(_graph(run={"mode": "sweep", "frames": 0}, slots=marked))
+    outfit = next(i for i in plan["items"] if i["name"] == "Outfit")
+    assert outfit["count"] == pack.MAX_SWEEP_OPTIONS and outfit["about"].endswith("Sweep axis")
+    assert next(i for i in plan["items"] if i["name"] == "Race")["use"] == "hold"
+
+
+def test_the_model_setting_adds_the_quality_derivation():
+    plan = pack.compile_graph_plan(_graph(), settings={"model": "family"})
+    q = next(i for i in plan["items"] if i["name"] == "Model quality")
+    assert q["var"] == "quality" and "$model_variant" in q["about"]
+    assert not pack.is_wired(plan, q["key"])
+    tpl = next(i for i in plan["items"] if i["kind"] == "template")
+    # $quality is already first in the template, so the order holds.
+    assert tpl["about"].startswith("Reads $quality, $title")
+    assert "Per model family" not in " | ".join(f["text"] for f in pack.review_plan(plan))
+    assert not any(i["name"] == "Model quality"
+                   for i in pack.compile_graph_plan(_graph())["items"])
+
+
+def test_an_axis_named_on_one_side_is_inferred_on_the_other():
+    slots = [dict(s, axes=[]) if s["name"] == "Weapon" else s for s in GRAPH["slots"]]
+    g = pack.compile_graph(_graph(slots=slots))
+    # Nothing declares a type axis anywhere: nothing to copy, and the rules
+    # that need it are reported for the repair call.
+    assert next(s for s in g["slots"] if s["name"] == "Weapon")["axes"] == []
+    assert g["bad_refs"] == ["exclude: Weapon has no axis type", "only: Weapon has no axis type"]
+    # The source has it: the target gets a copy, and the rule resolves.
+    slots = [dict(s, axes=[]) if s["name"] == "Outfit" else s for s in GRAPH["slots"]]
+    rel = {"kind": "exclude", "from_slot": "Season", "from_axis": "season",
+           "from_value": "winter", "to_slot": "Outfit", "to_axis": "season",
+           "to_value": "summer", "factor": 0, "var": "", "text": "", "otherwise": "",
+           "words": ["shorts"]}
+    g = pack.compile_graph(_graph(slots=slots, relations=[rel]))
+    outfit = next(s for s in g["slots"] if s["name"] == "Outfit")
+    assert outfit["axes"] == [{"name": "season", "values": ["winter", "summer"]}]
+    assert g["bad_refs"] == [] and g["relations"][0]["to"]["axis"] == "season"
+    assert any("Outfit: added the season axis" in w for w in g["warnings"])
+
+
+def test_agree_finds_the_shared_axis_under_two_names():
+    slots = [dict(s, axes=[{"name": "fits", "values": ["winter", "summer"]}])
+             if s["name"] == "Outfit" else s for s in GRAPH["slots"]]
+    rel = {"kind": "agree", "from_slot": "Season", "from_axis": "season", "from_value": "",
+           "to_slot": "Outfit", "to_axis": "", "to_value": "", "factor": 0,
+           "var": "", "text": "", "otherwise": ""}
+    g = pack.compile_graph(_graph(slots=slots, relations=[rel]))
+    assert g["bad_refs"] == []
+    assert g["relations"][0]["to"] == {"slot": "Outfit", "axis": "fits", "value": ""}
+    assert g["relations"][0]["values"] == ["winter", "summer"]
+
+
+def test_request_words_the_graph_never_says_are_a_finding():
+    g = pack.compile_graph(_graph())
+    assert pack.request_gaps(g, "") == []
+    assert pack.request_gaps(g, "fantasy races, classes and weapons; outfits by season") == []
+    gaps = pack.request_gaps(g, "Fantasy heroes: no sandals or shorts in winter, never a "
+                                "parka in summer, 2 to 3 accessories each time")
+    assert gaps == ["heroes", "sandals", "shorts", "parka", "accessories"]
+    plan = pack.compile_graph_plan(_graph())
+    [f] = [f for f in pack.review_plan(plan, request="no sandals in winter")
+           if "The request names" in f["text"]]
+    assert f["level"] == "fix" and f["text"].startswith("The request names sandals, and the "
+                                                        "plan says it anywhere")
+    # The graph plan's rules the code settles stay quiet in the review.
+    texts = " | ".join(f["text"] for f in pack.review_plan(plan))
+    assert "never empty" not in texts and "Nothing links" not in texts

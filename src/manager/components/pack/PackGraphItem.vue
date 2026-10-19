@@ -148,6 +148,10 @@ function move(v: string, by: number): void {
           <input type="checkbox" :checked="slot.hold" :disabled="busy" data-test="pack-slot-hold" @change="setSlot({ hold: (($event.target as HTMLInputElement).checked) })">
           <span>Hold the pick across a batch</span>
         </label>
+        <label v-if="pb.draft.value?.run?.mode === 'sweep'" class="wp-pack-graph__check">
+          <input type="checkbox" :checked="slot.sweep === true" :disabled="busy" data-test="pack-slot-sweep" @change="setSlot({ sweep: (($event.target as HTMLInputElement).checked) })">
+          <span>Sweep axis (the Loop sweeps its options)</span>
+        </label>
       </div>
       <div class="wp-pack-graph__axes" data-test="pack-slot-axes">
         <span class="wp-pack-graph__label">Axes (what rules key on; every option gets a value of each)</span>

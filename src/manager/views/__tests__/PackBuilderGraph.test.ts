@@ -122,6 +122,25 @@ describe("PackBuilder on a graph plan", () => {
     expect(pb.draft.value?.warnings).toEqual(["compiled again"]);
   });
 
+  it("holds a slot from a finding's patch, keeps the run on the graph and marks sweep axes", async () => {
+    const { w, pb } = await start();
+    // A hold finding's patch edits the slot, not an item the recompile would drop.
+    pb.applyFinding({ id: "h1", key: "i1", level: "tip", text: "Race changes every frame",
+      patch: { op: "slot", var: "race", set: { hold: true }, label: "Hold it" } });
+    expect(pb.draft.value?.graph?.slots[0].hold).toBe(true);
+    expect(pb.draft.value?.graph?.slots[1].hold).toBe(false);
+    // "Runs as" goes to the graph too, so the model is shown the run the user set.
+    pb.editPlan({ run: { mode: "sweep", frames: 0 } });
+    expect(pb.draft.value?.graph?.run).toEqual({ mode: "sweep", frames: 0 });
+    await flushPromises();
+    // In a sweep run the slot editor offers the sweep-axis box.
+    await w.findAll("[data-test='pack-item-open']")[1].trigger("click");
+    const box = w.get("[data-test='pack-slot-sweep']");
+    await box.setValue(true);
+    expect(pb.draft.value?.graph?.slots[1].sweep).toBe(true);
+    expect(pb.draft.value?.graph?.slots[1].hold).toBe(false);
+  });
+
   it("adds a slot and a rule through the graph", async () => {
     const { w, pb } = await start();
     await w.find("[data-test='pack-add']").trigger("click");
