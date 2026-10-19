@@ -831,6 +831,19 @@ class Library(MoreTools, ManageTools):
                             "isn't in the library yet. Tell the user it needs applying first "
                             f"(or open it unsaved with open {{\"proposal\": \"{pid}\"}}); "
                             "don't guess its id")
+            cat = next((c for c in self.category_rows.values()
+                        if str(c.get("name") or "").lower() == low or c.get("id") == low), None)
+            if cat is not None:
+                # Re-test on d6ac847: read({"id": "Subject"}) for a category.
+                inside = [r for r in [*self.modules.values(), *self.bundles.values(),
+                                      *self.templates.values()]
+                          if r.get("category_id") == cat["id"] and not r.get("_proposed")]
+                shown = ", ".join(self._chip(r) for r in inside[:12])
+                more = f" and {len(inside) - 12} more" if len(inside) > 12 else ""
+                return (f"{cat['name']} is a category, not an item. It holds {len(inside)} "
+                        f"item{'s' if len(inside) != 1 else ''}" + (f": {shown}{more}" if inside
+                                                                     else "") + ". Read one of "
+                        "them by its id, or propose changes with update_many / edit_categories")
             pool = [*self.modules.values(), *self.bundles.values(), *self.templates.values()]
             same = [r for r in pool if str(r.get("name") or "").lower() == low]
             if len(same) > 1:

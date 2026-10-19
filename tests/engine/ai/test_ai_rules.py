@@ -425,3 +425,18 @@ def test_a_catch_all_split_into_a_second_rule_joins_the_first():
                        "actions": [{"target_var": "title", "value": "Frost"}]}],
          "else_actions": [{"target_var": "title", "value": "Wanderer"}]}]}, catalog={})
     assert len(apart["rules"]) == 2
+
+
+def test_else_repair_attaches_to_the_rule_without_one():
+    rules = [x["rule"] for x in ai_derivation.compile_rules({"rules": [{"branches": [{
+        "conditions": [{"var": "class", "op": "equals", "value": "mage"}],
+        "actions": [{"target_var": "title", "value": "Archmage"}]}]}]}, catalog={})["rules"]]
+    added = ai_derivation.attach_else({"otherwise": [
+        {"target_var": "title", "mode": "replace", "value": "\"Adventurer\""}]}, rules, {})
+    assert added == "$title = Adventurer"
+    assert rules[0]["else"]["action"]["value"] == "Adventurer"
+    assert ai_derivation.attach_else({"otherwise": []}, rules, {}) == ""
+    assert ai_derivation.else_schema(["title"])["properties"]["otherwise"]["items"][
+        "properties"]["target_var"]["enum"] == ["title"]
+    assert "anyone else" in ai_derivation.else_prompt(
+        "mage Archmage, anyone else Adventurer", rules)

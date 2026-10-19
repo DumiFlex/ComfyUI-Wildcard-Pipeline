@@ -855,7 +855,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         # its only run_test failed.
         message = message.rstrip() + "\n\n" + NOTHING_TESTED
     if not pause and not proposals and (_CLAIMS.search(message or "")
-                                        or _card_as_text(message)):
+                                        or _card_as_text(message)
+                                        or _ORGANIZE_ASK.search(text or "")):
         # The 9B said "I've created … as a fixed values module" with no card,
         # and wrote "here's the card to apply: …" or an add_rules call as text.
         message = message.rstrip() + "\n\n" + NOTHING_PROPOSED
@@ -935,6 +936,11 @@ def _missing_kinds(message: str, proposals: list[dict[str, Any]]) -> list[str]:
     return [k for k in dict.fromkeys(said) if k not in have]
 
 
+#: A message asking the chat to sort the library: an answer with no card
+#: (re-test on d6ac847: eight categories listed as text) changed nothing.
+_ORGANIZE_ASK = re.compile(r"\b(?:organi[sz]e|tidy(?: up)?|clean(?: ?up)?|sort|file|group)\b"
+                           r"[^.?!\n]{0,60}\b(?:librar(?:y|ies)|items?|wildcards?|modules?|"
+                           r"categor(?:y|ies)|everything|these|them|it)\b", re.I)
 #: An answer that speaks of a card it shows, or spells a change call out.
 _CARD_WORDS = re.compile(r"\bhere(?:'s| is| are)\s+the\s+cards?\b|\bapply\s+(?:the|this|these|"
                          r"that|those)\s+cards?\b|\bcards?\s+(?:below|above)\b|"

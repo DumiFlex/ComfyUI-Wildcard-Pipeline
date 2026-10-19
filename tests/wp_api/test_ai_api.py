@@ -1557,3 +1557,32 @@ async def test_a_medium_model_gets_the_page_tools_and_asks_for_the_rest(wp_clien
     later = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
     assert "create_bundle" in later
     assert out["message"] == "Now I can."
+
+
+async def test_a_dropped_catch_all_is_asked_for_again_and_attached(wp_client, fake_llm):
+    # Re-test on d6ac847 (9B): "anyone else → Adventurer" was dropped in 2 of
+    # 3 drafts. One short second ask for the ELSE alone fills it in.
+    await _two_wildcards(wp_client)
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.overrides["derivation_else"] = {"otherwise": [
+        {"target_var": "title", "mode": "replace", "value": "'Adventurer'"}]}
+    resp = await wp_client.post("/wp/api/ai/derivation/draft", json={
+        "instruction": "mages get the title Archmage, anyone else gets Adventurer",
+        "derivation": {"name": "Titles", "rules": []},
+    })
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    [r] = body["rules"]
+    assert r["rule"]["else"]["action"] == {"target_var": "title", "mode": "replace",
+                                           "value": "Adventurer"}
+    assert any("Added the catch-all" in w for w in body["warnings"])
+    ask = fake_llm.seen[-1]["body"]
+    assert ask["response_format"]["json_schema"]["name"] == "derivation_else"
+    schema = json.dumps(ask["response_format"]["json_schema"]["schema"])
+    assert '"enum": ["title"]' in schema
+    # Without a catch-all in the ask, no second request.
+    n = len(fake_llm.seen)
+    resp = await wp_client.post("/wp/api/ai/derivation/draft", json={
+        "instruction": "mages get the title Archmage", "derivation": {"rules": []}})
+    assert resp.status == 200 and len(fake_llm.seen) == n + 1

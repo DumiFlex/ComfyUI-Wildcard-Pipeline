@@ -120,3 +120,12 @@ async def test_items_asked_again_after_the_pack_steer_are_made(wp_client, fake_l
     ])
     out = await _chat(wp_client, "Make a style wildcard for my anime pack.")
     assert [p["tool"] for p in out["proposals"]] == ["create_wildcard"]
+
+
+async def test_an_organize_ask_answered_without_cards_says_nothing_changed(wp_client, fake_llm):
+    _on(fake_llm)
+    fake_llm.chat_steps.extend([
+        {"message": "Here's how I'd group them: Characters, Gear, Scenes.", "calls": []},
+    ])
+    out = await _chat(wp_client, "Organize my library into categories.")
+    assert "Nothing was proposed" in out["message"]

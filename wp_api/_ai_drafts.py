@@ -311,12 +311,45 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
             status=502,
         )
-    gone = ai_derivation.missing_else(instruction, [x["rule"] for x in result["rules"]])
+    rules_out = [x["rule"] for x in result["rules"]]
+    gone = ai_derivation.missing_else(instruction, rules_out)
     if gone:
-        result["skipped"] = [*result["skipped"], {"text": "a catch-all", "reason": gone}]
+        # Re-test on d6ac847 (9B): the catch-all was dropped in 2 of 3 drafts.
+        # One short second ask for the ELSE alone (verify, then repair).
+        added = await _repair_else(cfg, instruction, result, catalog, refs)
+        if added:
+            for x in result["rules"]:
+                if isinstance(x["rule"].get("else"), dict):
+                    x["summary"] = ai_derivation.describe_rule(x["rule"])
+            result["warnings"] = [*result.get("warnings", []),
+                                  f"Added the catch-all from your request: else {added}"]
+        else:
+            result["skipped"] = [*result["skipped"], {"text": "a catch-all", "reason": gone}]
     result["model"] = cfg["model"]
     result["answer"] = answer
     return json_ok(result)
+
+
+async def _repair_else(cfg: dict[str, Any], instruction: str, result: dict[str, Any],
+                       catalog: dict[str, Any], refs: Any) -> str:
+    """Ask the model for the missing ELSE only and attach it; "" when that
+    fails too (the draft then carries the warning)."""
+    rules = [x["rule"] for x in result["rules"]]
+    targets = sorted({a.get("target_var") for r in rules
+                      for c in [*(r.get("branches") or []), r.get("else")] if isinstance(c, dict)
+                      for a in [c.get("action"), *(c.get("extra_actions") or [])]
+                      if isinstance(a, dict) and isinstance(a.get("target_var"), str)})
+    if not targets:
+        return ""
+    try:
+        answer = await _ai_client.complete_json(
+            cfg, system=ai_derivation.ELSE_SYSTEM,
+            user=ai_derivation.else_prompt(instruction, rules),
+            schema=ai_derivation.else_schema(targets), schema_name="derivation_else",
+            temperature=0.2, max_tokens=512)
+    except _ai_client.AIError:
+        return ""
+    return ai_derivation.attach_else(answer, rules, catalog, refs)
 
 
 _TEXT_KINDS = {
@@ -409,6 +442,10 @@ async def post_text_draft(request: web.Request) -> web.Response:
             gone = text_items.missing_asked(str(body or ""), instruction)
             if gone:
                 result["warnings"] = [*result["warnings"], gone]
+            extra = text_items.unasked(str(body or ""), instruction,
+                                       text_items.reads(str(body or "")))
+            if extra:
+                result["warnings"] = [*result["warnings"], extra]
     except ValueError as e:
         return json_error(
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",

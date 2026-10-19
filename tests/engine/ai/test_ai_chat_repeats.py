@@ -392,3 +392,13 @@ def test_a_combine_ref_refusal_names_the_variable_to_read():
                             "payload": {"var_binding": "hair", "options": []}}])
     with pytest.raises(ValueError, match=r"write \$hair instead of @\{Hair\}, and call"):
         refs.compile_text("@{Hair}, @{aaaa0001}, smile", surface="combine", refs=index)
+
+
+def test_reading_a_category_name_lists_its_items():
+    # Re-test on d6ac847 (9B): read({"id": "Subject"}) for a category.
+    lib = _lib()
+    cat = {"id": "subject", "name": "Subject", "color": None, "icon": None, "sort_order": 0}
+    lib.category_rows[cat["id"]] = cat
+    lib.modules["aaaa0001"]["category_id"] = cat["id"]
+    msg = lib.not_found(cat["name"])
+    assert msg.startswith(f"{cat['name']} is a category, not an item") and "aaaa0001" in msg

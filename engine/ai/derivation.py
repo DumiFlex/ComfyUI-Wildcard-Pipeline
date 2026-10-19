@@ -575,6 +575,59 @@ def missing_else(asked: str, rules: list[dict[str, Any]]) -> str:
             "add one, or ask again")
 
 
+def else_schema(targets: list[str]) -> dict[str, Any]:
+    """The repair answer for a dropped catch-all: only the ELSE actions, the
+    target an enum of what the rules already write (small models choose
+    well and write names badly)."""
+    return _obj({"otherwise": {"type": "array", "items": _obj({
+        "target_var": {"type": "string", "enum": targets},
+        "mode": {"type": "string", "enum": sorted(_VALID_MODES)},
+        "value": _STR,
+    })}})
+
+
+ELSE_SYSTEM = (
+    "You add the missing catch-all to derivation rules. Answer only with the ELSE "
+    "actions: what the variable gets when none of the rule's branches match. Give the "
+    "value exactly as the request says it, no quotes around it.")
+
+
+def else_prompt(instruction: str, rules: list[dict[str, Any]]) -> str:
+    lines = [f"Request: {instruction.strip()}", "", "Rules written so far:"]
+    lines += [f"- {describe_rule(r)}" for r in rules[:8]]
+    lines.append("")
+    lines.append("The request asks for a catch-all (\"anyone else\", \"otherwise\", \"by "
+                 "default\") that none of these rules has. Answer with its actions only.")
+    return "\n".join(lines)
+
+
+def attach_else(answer: Any, rules: list[dict[str, Any]], catalog: dict[str, dict[str, Any]],
+                refs: ai_refs.RefIndex | None = None) -> str:
+    """Put the repair answer's actions on the last rule that tests something
+    and has no ELSE. Returns what was added, or ""."""
+    raw = answer.get("otherwise") if isinstance(answer, dict) else None
+    warnings: list[str] = []
+    try:
+        actions = _compile_actions(raw, catalog, warnings, refs)
+    except _Drop:
+        return ""
+    if not actions:
+        return ""
+    for rule in reversed(rules):
+        if rule.get("branches") and not isinstance(rule.get("else"), dict):
+            clause: dict[str, Any] = {"action": actions[0]}
+            if len(actions) > 1:
+                clause["extra_actions"] = actions[1:]
+            rule["else"] = clause
+            try:
+                DerivationHandler.validate_payload({"rules": [rule]})
+            except ValueError:
+                rule.pop("else", None)
+                return ""
+            return ", ".join(f"${a['target_var']} = {a['value']}" for a in actions)
+    return ""
+
+
 def _compile_actions(
     raw: Any, catalog: dict[str, dict[str, Any]], warnings: list[str],
     refs: ai_refs.RefIndex | None = None,
