@@ -1,6 +1,8 @@
 """How a chat's log becomes each provider's request, and odd answers."""
 from __future__ import annotations
 
+import json
+
 from wp_api import _ai_chat as ac
 
 CALL = {"id": "call_1", "tool": "search", "args": {"query": "hair"},
@@ -109,6 +111,63 @@ def test_salvage_calls_written_as_text():
     assert ac.salvage_calls('```\n{"text": "standing", "tags": ["pose"]}\n```', names) == []
     assert ac.salvage_calls('delete_everything {"all": true}', names) == []
     assert ac.salvage_calls("pick {a|b} or {c|d}", names) == []
+
+
+def test_salvage_calls_takes_a_step_nested_in_a_reply():
+    names = {"read", "run_test", "edit_rules"}
+    rules = [{"summary": "s", "branches": [{"conditions": [
+        {"var": "iteration", "op": "equals", "value": "1"}], "actions": [
+        {"target_var": "shot", "mode": "replace", "value": "wide"}]}]}]
+    step = {"say": "Here is the change.",
+            "calls": [{"tool": "edit_rules", "args": {"id": "d1", "replace": [
+                {"n": 1, "rule": rules[0]}]}}]}
+    # Our step shape inside a longer answer: prose, a fenced block holding
+    # it, more prose (chat eval: an edit_rules call written as JSON text).
+    text = ("I'll change rule 1 to test the first frame.\n\n```json\n"
+            + json.dumps(step, indent=2) + "\n```\n\nApply the card when it shows.")
+    got = ac.salvage_calls(text, names)
+    assert [(c["tool"], c["args"]) for c in got] == [("edit_rules", step["calls"][0]["args"])]
+    # A tool name right before the step names what it calls; the step
+    # object is not that tool's arguments.
+    got = ac.salvage_calls('I call run_test {"say": "t", "calls": [{"tool": "run_test", '
+                           '"args": {"stack": ["A"], "proposed": true}}]}', names)
+    assert [(c["tool"], c["args"]) for c in got] == [
+        ("run_test", {"stack": ["A"], "proposed": True})]
+    # The step one level down, and one call object where the list goes.
+    got = ac.salvage_calls('{"response": {"say": "x", "calls": [{"tool": "read", "args": '
+                           '{"id": "a"}}]}}', names)
+    assert [(c["tool"], c["args"]) for c in got] == [("read", {"id": "a"})]
+    got = ac.salvage_calls('```json\n{"say": "x", "calls": {"tool": "read", "args": '
+                           '{"id": "b"}}}\n```', names)
+    assert [(c["tool"], c["args"]) for c in got] == [("read", {"id": "b"})]
+    # A step that calls nothing is no call; nor is a step calling a tool
+    # this chat doesn't offer.
+    assert ac.salvage_calls('{"say": "Done.", "calls": []}', names) == []
+    assert ac.salvage_calls('{"say": "x", "calls": [{"tool": "rm", "args": {}}]}', names) == []
+
+
+def test_json_step_salvages_a_step_written_into_its_message():
+    names = {"read", "edit_rules"}
+    inner = {"say": "ok", "calls": [{"tool": "read", "args": {"id": "05c54db9"}}]}
+    answer = {"plan": "look first", "message": "Let me read it:\n```json\n"
+              + json.dumps(inner) + "\n```\nThen I'll propose the rule.", "calls": []}
+    st = ac._json_step(json.dumps(answer), answer, {}, names=names)
+    assert [(c["tool"], c["args"]) for c in st["calls"]] == [("read", {"id": "05c54db9"})]
+    assert st["salvaged"] and st["message"] == "" and st["plan"] == "look first"
+    # The log keeps the calls as the step's own, so the results that follow
+    # answer them when the log is replayed.
+    assert st["answer"]["calls"] == [{"tool": "read", "args": {"id": "05c54db9"}}]
+    assert st["answer"]["message"] == "" and json.loads(st["text"]) == st["answer"]
+    # Nothing to salvage: the answer stands, and no names means no salvage.
+    plain = {"plan": "", "message": "You have two rules.", "calls": []}
+    st = ac._json_step(json.dumps(plain), plain, {}, names=names)
+    assert st["message"] == "You have two rules." and st["calls"] == [] and not st["salvaged"]
+    st = ac._json_step(json.dumps(answer), answer, {})
+    assert st["calls"] == [] and st["message"].startswith("Let me read it")
+    # Calls the model made properly are never second-guessed from the text.
+    both = {**answer, "calls": [{"tool": "edit_rules", "args": {"id": "d1"}}]}
+    st = ac._json_step(json.dumps(both), both, {}, names=names)
+    assert [c["tool"] for c in st["calls"]] == ["edit_rules"] and not st["salvaged"]
 
 
 def test_strip_thinking():

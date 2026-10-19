@@ -516,19 +516,40 @@ def salvage_calls(text: str, names: set[str]) -> list[dict[str, Any]]:
             pos = at + 1
             continue
         pos = end
+        step_calls = _step_calls(value)
         named = _NAME_BEFORE.search(text, 0, at)
-        if isinstance(value, dict) and named and named.group(1) in names:
+        if isinstance(value, dict) and step_calls is None and named and named.group(1) in names:
             name = named.group(1)
             found.append({"id": new_call_id(), "tool": name, "args": value,
                           "args_text": chatlog.dumps(value)})
             continue
-        if isinstance(value, dict) and isinstance(value.get("calls"), list):
-            value = value["calls"]
+        if step_calls is not None:
+            value = step_calls
         for item in value if isinstance(value, list) else [value]:
             c = _as_call(item, names)
             if c:
                 found.append(c)
     return found
+
+
+def _step_calls(value: Any) -> list[Any] | None:
+    """The ``calls`` of our JSON step shape written into a reply (``{"say",
+    "calls": […]}``, ``{"plan", "message", "calls"}``), or None. A reply
+    that wraps the step one level down (``{"response": {…, "calls"}}``)
+    counts, and one call object where the list goes is that one call. A
+    tool name right before the step ("I call run_test {…calls…}") names
+    what the step calls, not an argument object, so this wins over it."""
+    if not isinstance(value, dict):
+        return None
+    calls = value.get("calls")
+    if isinstance(calls, list):
+        return calls
+    if isinstance(calls, dict):
+        return [calls]
+    for inner in value.values():
+        if isinstance(inner, dict) and isinstance(inner.get("calls"), (list, dict)):
+            return _step_calls(inner)
+    return None
 
 
 def _usage_openai(data: dict[str, Any]) -> dict[str, Any]:
@@ -588,9 +609,11 @@ def _native_step(text: Any, calls: list[dict[str, Any]], names: set[str],
 
 
 def _json_step(raw_text: str, answer: Any, usage: dict[str, Any],
-               reasoning: Any = "") -> dict[str, Any]:
+               reasoning: Any = "", names: set[str] | None = None) -> dict[str, Any]:
     """A JSON-mode answer as a step. Calls keep `args` as the model's
-    string; the loop parses and checks them."""
+    string; the loop parses and checks them. An answer that calls nothing
+    but writes a step (or a call) into its message text is salvaged like a
+    native reply is: the calls run, and the log keeps them as the step's."""
     if not isinstance(answer, dict):
         raise ValueError("the model's answer wasn't an object")
     message = answer.get("message") if isinstance(answer.get("message"), str) else ""
@@ -602,9 +625,20 @@ def _json_step(raw_text: str, answer: Any, usage: dict[str, Any],
             calls.append({"id": new_call_id(), "tool": c["tool"],
                           "args": raw if isinstance(raw, dict) else None,
                           "args_text": raw if isinstance(raw, str) else chatlog.dumps(raw)})
+    salvaged = False
+    if not calls and names and message.strip():
+        calls = salvage_calls(message, names)
+        if calls:
+            # The 9B (JSON mode) wrote {"say", "calls": [{"tool": "edit_rules", …}]}
+            # inside its message, prose around it, with "calls": [].
+            salvaged = True
+            answer = {**answer, "message": "", "calls": [
+                {"tool": c["tool"], "args": c["args"] if c["args"] is not None
+                 else c["args_text"]} for c in calls]}
+            raw_text, message = chatlog.dumps(answer), ""
     # The step's own "plan" is its short why when the server sent no reasoning.
     return {"text": raw_text, "calls": calls, "answer": answer, "usage": usage,
-            "message": message.strip(), "plan": plan,
+            "message": message.strip(), "plan": plan, "salvaged": salvaged,
             "thinking": thinking_text(raw_text, reasoning) or plan.strip()[:MAX_THINKING]}
 
 
@@ -986,7 +1020,7 @@ async def split_step(
             if act["calls"]:
                 got = act["answer"]
                 answer = {"plan": plan, "message": "", "calls": got.get("calls") or []}
-                st = _json_step(chatlog.dumps(answer), answer, act["usage"])
+                st = _json_step(chatlog.dumps(answer), answer, act["usage"], names=set(names))
                 st["thinking"] = thinking
                 return st
         out = await step(cfg, system=system, log=log, fmt="json", tools=[], names=names,
@@ -995,7 +1029,7 @@ async def split_step(
         got = out["answer"]
         answer = {"plan": plan, "message": got.get("message") if isinstance(
             got.get("message"), str) else "", "calls": []}
-        st = _json_step(chatlog.dumps(answer), answer, out["usage"])
+        st = _json_step(chatlog.dumps(answer), answer, out["usage"], names=set(names))
         st["thinking"] = out["thinking"] or thinking
         return st
     key = (str(cfg.get("base_url") or ""), str(cfg.get("model") or ""))
@@ -1074,11 +1108,11 @@ async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, 
         for block in blocks:
             if block.get("type") == "tool_use":
                 answer = block.get("input")
-                return _json_step(chatlog.dumps(answer), answer, usage, thought)
+                return _json_step(chatlog.dumps(answer), answer, usage, thought, allowed)
         text = client.claude_text(blocks)
         if text.strip():
             # Asked in words (no forced choice), the answer may come as text.
-            return _json_step(text, client._parse_text_json(text), usage, thought)
+            return _json_step(text, client._parse_text_json(text), usage, thought, allowed)
         raise AIError("the model didn't return the expected answer")
     text = "\n".join(str(b.get("text") or "") for b in blocks if b.get("type") == "text")
     calls = [{"id": str(b.get("id") or new_call_id()), "tool": str(b.get("name")),
@@ -1120,7 +1154,8 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
         usage["early"] = True
     if fmt == "json":
         text = msg.get("content") if isinstance(msg.get("content"), str) else ""
-        return _json_step(text, client._parse_text_json(text), usage, msg.get("thinking"))
+        return _json_step(text, client._parse_text_json(text), usage, msg.get("thinking"),
+                          allowed)
     calls = []
     for c in msg.get("tool_calls") or []:
         fn = c.get("function") if isinstance(c, dict) else None
@@ -1214,7 +1249,7 @@ async def _step_responses(cfg: dict[str, Any], system: str, log: list[dict[str, 
         str(x.get("text") or "").strip() for it in output if it.get("type") == "reasoning"
         for x in it.get("summary") or [] if isinstance(x, dict) and x.get("text"))
     if fmt == "json":
-        st = _json_step(text, client._parse_text_json(text), usage, summary)
+        st = _json_step(text, client._parse_text_json(text), usage, summary, allowed)
     else:
         st = _native_step(text, calls, allowed, usage, summary)
     st["raw"] = output
@@ -1280,7 +1315,7 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     if fmt == "json":
         text = message.get("content") if isinstance(message.get("content"), str) else ""
         return _json_step(text, client._parse_text_json(text), usage,
-                          message.get("reasoning_content") or message.get("reasoning"))
+                          message.get("reasoning_content") or message.get("reasoning"), allowed)
     calls = []
     for c in message.get("tool_calls") or []:
         fn = c.get("function") if isinstance(c, dict) else None
