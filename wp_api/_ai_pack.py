@@ -359,7 +359,8 @@ async def post_pack_review(request: web.Request) -> web.Response:
             answer = await _ai_client.complete_json(
                 cfg, system=ai_pack.review_system(plan),
                 user=ai_pack.review_prompt(plan, findings, asked, recheck),
-                schema=ai_pack.REVIEW_SCHEMA, schema_name="pack_review", temperature=0.3,
+                schema=ai_pack.review_schema(plan), schema_name="pack_review",
+                temperature=0.3,
             )
         except _ai_client.AIError as e:
             return json_error(e.message, status=e.status)

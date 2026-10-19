@@ -169,7 +169,7 @@ def test_review_finds_what_would_break_or_clash():
     model = pack.compile_review({"findings": [{"item": "a", "text": "Split it"}, {"x": 1}]}, lone)
     assert model == [{"id": pack.finding_id("m", lone["items"][0]["key"], "Split it"),
                       "key": lone["items"][0]["key"], "level": "tip",
-                      "text": "Split it", "by": "model"}]
+                      "text": "Split it", "by": "model", "type": "other"}]
     assert "A · $a" in pack.review_prompt(lone, [])
 
 

@@ -1920,6 +1920,10 @@ export interface AiPackFinding {
   text: string;
   /** "model" when the model's review found it. */
   by?: "model";
+  /** What kind of finding: the checker's rule ("hold_cast", "request_gap",
+   *  …) or the model's fault type; with the item, it is the finding's
+   *  identity, so a reworded one keeps its id. */
+  type?: string;
   patch?: AiPackPatch;
 }
 

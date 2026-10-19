@@ -714,7 +714,11 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           without the model, and sends only the rest; one the model hands back unchanged is marked
           "the AI left this unchanged", and one it leaves unchanged twice is marked as something
           the AI couldn't change and is not sent again unless you tick it, so Fix all settles
-          instead of looping. A finding only asks for what the pack can do: a story holds the
+          instead of looping. A finding is known by what it is about (its kind and the items
+          it points at), not by its wording, so one that comes back reworded is the same
+          finding: a dismissal holds, and "couldn't change" holds. The AI's review can only
+          name items the plan has (a fault about a subject the pack doesn't have is dropped)
+          and says which kind of fault each finding is. A finding only asks for what the pack can do: a story holds the
           character or outfit it has (one click each), and a pack with no cast is not asked to
           hold one. On a graph plan the review leaves out what the code settles itself (fallbacks,
           library matches, links from the anchor), and <b>Review with AI</b> reviews the design

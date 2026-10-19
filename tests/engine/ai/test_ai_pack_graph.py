@@ -629,3 +629,37 @@ def test_locks_are_parsed_strictly():
     got = pg.parse_locks({"slots": ["a", "a", 3, ""], "template": ["lead", "nope"], "x": 1})
     assert got["slots"] == ["a"] and got["template"] == ["lead"]
     assert pack.locks_note({"graph": None, "locks": got}) == ""
+
+
+def test_findings_are_typed_so_a_rewording_keeps_its_id():
+    held = [{**s, "hold": True} for s in GRAPH["slots"]]
+    plan = pack.compile_graph_plan(_graph(run={"mode": "story", "frames": 3}, slots=held))
+    # A finding's id is its type and refs, not its wording.
+    gaps = pack.review_plan(plan, request="heroes with a parka and a hat")
+    gap = next(f for f in gaps if f["type"] == "request_gap")
+    assert gap["id"] == pack.finding_id("r", "", pack.fingerprint("request_gap", ["hat", "heroes", "parka"]))
+    assert pack.fingerprint("", ["x"]) == ""
+    # The model's review can only point at items the pack has, and its
+    # typed findings keep their id across rewordings; "other" goes by text.
+    schema = pack.review_schema(plan)
+    names = schema["properties"]["findings"]["items"]["properties"]["item"]["enum"]
+    assert names[0] == "" and "Race" in names and "Weapon" in names
+    race = next(i["key"] for i in plan["items"] if i["name"] == "Race")
+    first = pack.compile_review({"findings": [
+        {"item": "Race", "type": "mixed_slot", "severity": "fix", "text": "Race mixes races and ages"},
+        {"item": "Subject", "type": "missing_slot", "severity": "fix", "text": "No subject slot"},
+        {"item": "", "type": "nope", "severity": "tip", "text": "Looks fine otherwise"},
+    ]}, plan)
+    assert [(f["key"], f["type"]) for f in first] == [(race, "mixed_slot"), ("", "other")]
+    again = pack.compile_review({"findings": [
+        {"item": "Race", "type": "mixed_slot", "severity": "fix", "text": "Race holds ages too"},
+    ]}, plan)
+    assert again[0]["id"] == first[0]["id"]
+    # On an item-list plan an unknown item is the whole pack, as before.
+    flat = pack.compile_plan({"title": "x", "items": [
+        {"kind": "wildcard", "name": "A", "var": "a", "about": "a", "count": 4, "tags": [],
+         "section": "", "source": "", "target": "", "use": ""}]})
+    assert pack.compile_review({"findings": [{"item": "Zed", "text": "Add Zed"}]}, flat)[0]["key"] == ""
+    # The graph review prompt carries the axes and the prompt order.
+    prompt = pack.review_prompt(plan, [], "heroes")
+    assert "Axes: Race: kind (elf, dwarf, human)" in prompt and "Prompt order: " in prompt
