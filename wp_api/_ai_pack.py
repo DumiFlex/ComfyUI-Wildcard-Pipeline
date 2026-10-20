@@ -243,12 +243,15 @@ async def post_pack_plan(request: web.Request) -> web.Response:
         # fits the request best (`drafts.pick_draft`); a failed draft is
         # skipped.
         drafts = [(answer, plan)]
+        # The images went once: the other drafts read what the first took
+        # from them instead of reading the images again.
+        seen = ai_pack.images_seen(plan) if images else ""
         for t in ai_pack.DRAFT_TEMPERATURES[1:]:
             try:
-                a = await _ask(cfg, first=first, turns=turns, instruction=follow, extra="",
+                a = await _ask(cfg, first=first, turns=turns, instruction=follow, extra=seen,
                                system=ai_pack.GRAPH_SYSTEM, schema=ai_pack.GRAPH_SCHEMA,
                                schema_name="pack_graph", temperature=t,
-                               images=images or None, image_note=False, partial=True)
+                               images=None, image_note=False, partial=True)
                 if isinstance(a, dict) and a.get(_ai_client.CUT_OFF):
                     continue
                 p = ai_pack.compile_graph_plan(a, library=library, previous=previous,

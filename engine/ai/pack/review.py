@@ -376,9 +376,10 @@ def review_plan(plan: dict[str, Any],
                 + ("none of them" if len(gaps) > 1 else "it") + " anywhere; give each a "
                 "slot of its own, a value on an axis, or put it in the words of the rule it "
                 "is part of", type="request_gap", refs=tuple(gaps))
-    # A new wildcard the library already has. Not on a graph plan: its
-    # items are compiled from the graph, so a kind change would not
-    # survive the next compile (``apply_settings`` says reuse is off there).
+    # A new wildcard the library already has. Not on a graph plan: there
+    # the code swaps a fitting slot for the user's wildcard on every
+    # compile (``graph.library_slots``), and a kind change on an item
+    # would not survive the next one.
     if parse_settings(plan.get("settings"))["library"] == "reuse" and graph is None:
         lib = {}
         for r in library or []:

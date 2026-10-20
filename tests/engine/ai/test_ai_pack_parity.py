@@ -419,13 +419,6 @@ def test_a_graph_slot_lists_every_axis_value():
     assert next(i for i in plan["items"] if i["name"] == "Big")["tags"] == values
 
 
-def test_reuse_says_it_does_not_reach_a_pack_graph():
-    g = _graph([_slot("Hero", "hero", "heroes", [])], [], ["Hero"])
-    plan = pack.compile_graph_plan(g, settings={"library": "reuse"})
-    assert "Reuse what fits: not on a pack graph yet, every slot is a new wildcard" \
-        in plan["applied"]
-
-
 def test_a_recompile_keeps_the_plans_settings_and_decisions():
     g = _graph([_slot("Hero", "hero", "heroes", []),
                 _slot("Pet", "pet", "pets", [])], [], ["Hero", "Pet"])
@@ -481,3 +474,80 @@ def test_a_removed_relation_stays_removed_however_the_model_spells_it():
                         "exclude|season||winter|shoes||summer||")
     assert not pg._sig_like("exclude|Season|season|winter|Shoes|season|summer||",
                             "exclude|Season|season|winter|Shoes|season|winter||")
+
+
+def _wild(mid, name, var, options):
+    return {"id": mid, "type": "wildcard", "name": name, "description": "",
+            "payload": {"var_binding": var, "sub_categories": [], "options": [
+                {"id": f"{mid[:4]}000{n}", "value": o, "weight": 1, "sub_categories": []}
+                for n, o in enumerate(options)]}}
+
+
+def test_reuse_swaps_a_fitting_slot_for_the_users_wildcard():
+    lib = [_wild("aaaa0001", "Weather", "weather", ["rain", "sun"]),
+           _wild("bbbb0001", "Hats", "hat", ["beret", "cap"]),
+           _wild("cccc0001", "Mood", "mood", ["calm"])]
+    g = _graph([_slot("Weather", "sky", "the weather", []),
+                _slot("Hat", "hat", "hats", []),
+                _slot("Mood", "mood", "moods", [{"name": "tone", "values": ["calm", "wild"]}]),
+                _slot("Hero", "hero", "heroes", [])],
+               [_rel("boost", "Mood", "tone", "calm", "Hero", "", "", factor=2)],
+               ["Weather", "Hat", "Mood", "Hero"], anchor="sky")
+    plan = pack.compile_graph_plan(g, library=lib, settings={"library": "reuse"})
+    kinds = {i["name"]: (i["kind"], i["var"], i["library_id"]) for i in plan["items"]}
+    # Matched by name (the variable follows the user's) and by variable.
+    assert kinds["Weather"] == ("library", "weather", "aaaa0001")
+    assert kinds["Hats"] == ("library", "hat", "bbbb0001")
+    # A slot with axes or in a relation keeps its own tags: new.
+    assert kinds["Mood"][0] == "wildcard" and kinds["Hero"][0] == "wildcard"
+    assert plan["graph"]["template"]["order"] == ["weather", "hat", "mood", "hero"]
+    assert plan["graph"]["anchor"] == "weather" and plan["anchor"] == "weather"
+    assert "Weather: your wildcard Weather ($weather) is used as it is" in plan["applied"]
+    assert "Hat: your wildcard Hats ($hat) is used as it is" in plan["applied"]
+    key = next(i["key"] for i in plan["items"] if i["name"] == "Weather")
+    assert pg.slot_for(plan, key) is None and not pg.is_wired(plan, key)
+    out = pack.library_item(plan, key, lib)
+    assert out["id"] == "aaaa0001" and out["warnings"] == ["Uses your wildcard Weather as it is"]
+    # Sent back, the plan keeps the swap; without the setting nothing is swapped.
+    again = pack.compile_graph_plan(plan, library=lib)
+    assert {i["name"]: i["kind"] for i in again["items"]}["Weather"] == "library"
+    plain = pack.compile_graph_plan(g, library=lib, settings={"library": "inspire"})
+    assert all(i["kind"] != "library" for i in plain["items"])
+    assert pg.library_slots(plan["graph"], lib, {"library": "reuse"}).keys() == {"weather",
+                                                                                  "hat"}
+
+
+def test_a_given_input_is_shown_and_a_lora_input_is_not():
+    g = _graph([_slot("Hero", "hero", "heroes", [])], [], ["Hero"],
+               inputs=[{"var": "char_type", "about": "the creature the user gives",
+                        "example": "a fox"},
+                       {"var": "style_lora", "about": "a style LoRA", "example": ""}])
+    plan = pack.compile_graph_plan(g)
+    assert plan["graph"]["template"]["order"] == ["char_type", "hero"]
+    assert "Added $char_type to the template so what the user gives shows" in plan["warnings"]
+    key = next(i["key"] for i in plan["items"] if i["kind"] == "template")
+    assert "$char_type" in pg.wired_payload(plan, key, {})["payload"]["template_string"]
+
+
+def test_an_internal_driver_is_not_asked_into_the_prompt():
+    g = _graph([_slot("Season", "season", "the season",
+                      [{"name": "season", "values": ["winter", "summer"]}], show="internal"),
+                _slot("Outfit", "outfit", "outfits",
+                      [{"name": "season", "values": ["winter", "summer"]}])],
+               [_rel("agree", "Season", "season", "", "Outfit", "", "")], ["Outfit"])
+    plan = pack.compile_graph_plan(g)
+    built = _build(plan, {"Season": [("winter", {"season": ["winter"]}),
+                                     ("summer", {"season": ["summer"]})],
+                          "Outfit": [("parka", {"season": ["winter"]}),
+                                     ("shorts", {"season": ["summer"]})]})
+    problems: dict = {}
+    notes = pack_check.unread_notes(plan, built, problems)
+    assert notes == [] and problems == {}, (notes, problems)
+
+
+def test_the_other_drafts_read_what_the_first_took_from_the_images():
+    from engine.ai.pack import drafts
+    assert drafts.images_seen({"from_images": ["a red cloak", "snow"]}) == (
+        "The reference images were read with the first draft and aren't attached again; "
+        "they showed: a red cloak; snow. Plan from that.")
+    assert "aren't attached again" in drafts.images_seen({"from_images": []})

@@ -27,6 +27,17 @@ from engine.ai.pack.graph import request_gaps
 #: Drafts the "three" setting asks for, and the temperature of each.
 DRAFT_TEMPERATURES = (0.4, 0.7, 0.9)
 
+
+def images_seen(plan: dict[str, Any]) -> str:
+    """What the first draft took from the reference images, for the
+    drafts asked without them (``from_images`` lines)."""
+    lines = [str(x) for x in plan.get("from_images") or [] if str(x).strip()]
+    if not lines:
+        return ("The reference images were read with the first draft; they aren't attached "
+                "again.")
+    return ("The reference images were read with the first draft and aren't attached again; "
+            "they showed: " + "; ".join(lines) + ". Plan from that.")
+
 _RULE_CUE = re.compile(
     r"\b(never|nothing but|only|always|without|except|unless|matching|match(?:es)?|"
     r"goes? with|depends? on|no \w+ (?:in|with|for|on|when)|not \w+ (?:in|with|for|on))\b",

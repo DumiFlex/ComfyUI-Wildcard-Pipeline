@@ -42,7 +42,7 @@ from engine.ai.pack._common import (
     _tag,
     _var,
 )
-from engine.ai.pack.plan import MAX_TAGS, _slug_var
+from engine.ai.pack.plan import MAX_TAGS, _row_var, _slug_var
 from engine.ai.pack.settings import MAX_SWEEP_OPTIONS, parse_run, parse_settings
 
 MAX_SLOTS = 24
@@ -509,6 +509,9 @@ def _rel_key(rel: dict[str, Any]) -> str:
                      rel.get("text", "")])
 
 
+_LORA_INPUT = re.compile(r"lora|lycoris|locon", re.I)
+
+
 def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]],
               relations: list[dict[str, Any]], inputs: list[dict[str, str]],
               warnings: list[str]) -> dict[str, Any]:
@@ -555,6 +558,12 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
         if var not in order:
             order.append(var)
             warnings.append(f"Added ${var} to the template so the rule writing it shows")
+    # What the user gives (a subject, a name) is there to be shown, first;
+    # a LoRA input stands in for a pick and is read by its swap rule.
+    for i in reversed(inputs):
+        if i["var"] not in order and not _LORA_INPUT.search(f"{i['var']} {i['about']}"):
+            order.insert(0, i["var"])
+            warnings.append(f"Added ${i['var']} to the template so what the user gives shows")
     lead = _placeholders(_clean(raw.get("lead"), MAX_TEXT), by_name, warnings)
     tail = _placeholders(_clean(raw.get("tail"), MAX_TEXT), by_name, warnings)
     negative = _clean(raw.get("negative"), MAX_TEXT * 2)
@@ -959,14 +968,65 @@ def run_items(graph: dict[str, Any], settings: Any = None) -> list[dict[str, Any
     return items
 
 
-def graph_plan(graph: dict[str, Any], settings: Any = None) -> dict[str, Any]:
+def library_slots(graph: dict[str, Any], library: list[dict[str, Any]] | None,
+                  settings: Any) -> dict[str, dict[str, Any]]:
+    """Slot variable → the user's own wildcard that stands in for it
+    (settings library "reuse"): a prompt slot with no axes that no relation
+    names, matched by name, else by variable, to exactly one library
+    wildcard. A slot with axes or rules keeps its tags, which the user's
+    wildcard doesn't carry."""
+    if parse_settings(settings)["library"] != "reuse" or not library:
+        return {}
+    rows = [r for r in library if r.get("type") == "wildcard"
+            and isinstance(r.get("payload"), dict) and _row_var(r)]
+    named = {r["from"]["slot"] for r in graph["relations"]} | {
+        r["to"]["slot"] for r in graph["relations"] if r.get("to")}
+    out: dict[str, dict[str, Any]] = {}
+    for s in graph["slots"]:
+        if s["axes"] or s["show"] != "prompt" or s["name"] in named or s.get("self_axis"):
+            continue
+        hits = [r for r in rows if str(r.get("name") or "").lower() == s["name"].lower()]
+        if not hits:
+            hits = [r for r in rows if _row_var(r) == s["var"]]
+        if len(hits) == 1:
+            out[s["var"]] = hits[0]
+    return out
+
+
+def apply_library(graph: dict[str, Any], library: list[dict[str, Any]] | None,
+                  settings: Any) -> list[str]:
+    """Reuse what fits, on the graph: a slot the library already has takes
+    that wildcard's variable (the template and the anchor follow), and the
+    plan item for it is the user's own (``graph_plan``). Returns the lines
+    saying so."""
+    lines: list[str] = []
+    for var, row in library_slots(graph, library, settings).items():
+        slot = slot_by_var(graph, var)
+        mine = _row_var(row)
+        if slot is None:
+            continue
+        if mine != var:
+            slot["var"] = mine
+            graph["template"]["order"] = [mine if v == var else v
+                                          for v in graph["template"]["order"]]
+            if graph["anchor"] == var:
+                graph["anchor"] = mine
+        lines.append(f"{slot['name']}: your wildcard {row.get('name')} (${mine}) is used as "
+                     "it is")
+    return lines
+
+
+def graph_plan(graph: dict[str, Any], settings: Any = None,
+               library: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """The graph as the raw plan ``compile_plan`` takes: one wildcard per
-    slot, fixed values, one derivation per written variable, one constraint
-    per (source, target) slot pair, and the template. A story run adds the
+    slot (the user's own, ``library``, where ``library_slots`` says so),
+    fixed values, one derivation per written variable, one constraint per
+    (source, target) slot pair, and the template. A story run adds the
     story-beat derivation, a sweep run marks its axes and holds the rest,
     and the model setting adds the quality derivation (``run_items``)."""
     slot_by_name = {s["name"]: s for s in graph["slots"]}
     axes = sweep_axes(graph)
+    mine = library_slots(graph, library, settings)
     items: list[dict[str, Any]] = []
     for f in graph["fixed"]:
         items.append({"kind": "fixed_values", "name": f["name"], "var": f["var"],
@@ -985,6 +1045,13 @@ def graph_plan(graph: dict[str, Any], settings: Any = None) -> dict[str, Any]:
             count = min(count, MAX_SWEEP_OPTIONS)
         elif axes and s["show"] == "prompt" and "hold" not in use:
             use = "; ".join(x for x in [use, "hold"] if x)
+        if s["var"] in mine:
+            row = mine[s["var"]]
+            items.append({"kind": "library", "name": str(row.get("name") or s["name"]),
+                          "var": _row_var(row), "section": s["section"],
+                          "about": _clean(about, MAX_ABOUT), "count": 0, "tags": [],
+                          "source": "", "target": "", "use": use})
+            continue
         items.append({"kind": "wildcard", "name": s["name"], "var": s["var"],
                       "section": s["section"], "about": _clean(about, MAX_ABOUT),
                       "count": count, "tags": tags[:MAX_TAGS], "source": "", "target": "",
@@ -2221,8 +2288,6 @@ def apply_settings(graph: dict[str, Any], settings: Any) -> list[str]:
                 capped.append(s["name"])
         if capped:
             lines.append(f"{cfg['count']} options: capped " + ", ".join(capped))
-    if cfg["library"] == "reuse":
-        lines.append("Reuse what fits: not on a pack graph yet, every slot is a new wildcard")
     if cfg["structure"] == "flat" and (graph["sections"] or any(s["section"]
                                                                  for s in graph["slots"])):
         graph["sections"] = []
@@ -2349,12 +2414,13 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
         graph["template"]["lead"] = lead
         applied.append("Took \"" + ", ".join(gone) + "\" out of the lead: the request names "
                        "no person")
+    applied += apply_library(graph, kw.get("library"), kw.get("settings"))
     _story_holds(graph["slots"], parse_run(graph["run"]), graph["warnings"])
     if graph["anchor"] not in {s["var"] for s in graph["slots"]}:
         # The code took the anchor's slot out (a Quality slot now fixed
         # values, a Beat slot the story owns): the first prompt pick leads.
         graph["anchor"] = next((s["var"] for s in graph["slots"] if s["show"] == "prompt"), "")
-    plan = compile_plan(graph_plan(graph, kw.get("settings")), **kw)
+    plan = compile_plan(graph_plan(graph, kw.get("settings"), kw.get("library")), **kw)
     plan["graph"] = {k: v for k, v in graph.items() if k not in ("warnings", "bad_refs")}
     plan["locks"] = locks
     plan["applied"] = applied

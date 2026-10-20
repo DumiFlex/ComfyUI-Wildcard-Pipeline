@@ -170,7 +170,13 @@ from engine.ai.pack.compile_item import (
     _adult_check,
     compile_item,
 )
-from engine.ai.pack.drafts import DRAFT_TEMPERATURES, draft_line, pick_draft, score_plan
+from engine.ai.pack.drafts import (
+    DRAFT_TEMPERATURES,
+    draft_line,
+    images_seen,
+    pick_draft,
+    score_plan,
+)
 from engine.ai.pack.extend import (
     MAX_BASE_LINES,
     base_note,
@@ -181,6 +187,7 @@ from engine.ai.pack.graph import (
     GRAPH_SCHEMA,
     GRAPH_SYSTEM,
     SLOT_SYSTEM,
+    apply_library,
     apply_locks,
     apply_picks,
     apply_request_slots,
@@ -197,6 +204,7 @@ from engine.ai.pack.graph import (
     graph_answer,
     graph_plan,
     is_wired,
+    library_slots,
     locks_note,
     model_families,
     other_texts,
@@ -447,6 +455,7 @@ __all__ = [
     "DRAFT_TEMPERATURES",
     "GRAPH_SCHEMA",
     "draft_line",
+    "images_seen",
     "pick_draft",
     "score_plan",
     "GRAPH_SYSTEM",
@@ -456,12 +465,14 @@ __all__ = [
     "compile_slot",
     "graph_answer",
     "graph_plan",
+    "library_slots",
     "is_wired",
     "parse_locks",
     "locks_note",
     "refs_prompt",
     "request_gaps",
     "request_picks",
+    "apply_library",
     "apply_picks",
     "apply_request_slots",
     "model_families",

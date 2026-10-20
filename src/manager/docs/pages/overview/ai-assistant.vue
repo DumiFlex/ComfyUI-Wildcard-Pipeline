@@ -616,7 +616,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
             :items="[
               { term: 'Planner', desc: 'Pack graph (the default): the model writes slots, axes and relations and the code wires every rule and the template from them. Items one by one: the older planner, where the model writes each rule and the template itself.' },
               { term: 'Plan drafts', desc: 'Best of three: the model drafts the first plan three times and the code keeps the one that fits your request best (every part you named, every rule you gave, nothing pointing at a missing slot). Planning takes about three times as long; small local models gain the most. One: a single draft.' },
-              { term: 'Your library', desc: 'New, in its style (the default: built fresh but written like your library), Reuse what fits (wildcards and fixed values you already have, marked yours), or Everything new.' },
+              { term: 'Your library', desc: 'New, in its style (the default: built fresh but written like your library), Reuse what fits (wildcards and fixed values you already have, marked yours; on a pack graph a slot with no axes that no rule names is swapped for your wildcard of the same name or variable, and the template follows its variable), or Everything new.' },
               { term: 'Negatives', desc: 'Standing + per option (a standing negative in the template and negatives on options that need them), Template only, or None.' },
               { term: 'Structure', desc: 'Sub-bundle per section, or One bundle.' },
               { term: 'Written as', desc: 'Tags or Natural phrases, or let the planner decide from your request and library.' },

@@ -486,6 +486,8 @@ def unread_notes(plan: dict[str, Any], built: dict[str, Any],
         sets = item_io(i, built[i["key"]]["payload"])[1]
         if sets & reads or built[i["key"]].get("id") in drawn:
             continue
+        if sets & ruled and "internal" in (i.get("use") or ""):
+            continue  # a driver kept out of the prompt on purpose
         if sets & ruled and tpl is not None:
             # Other picks follow it, but the image never shows it (a
             # constraint's target that nothing reads changes nothing).
