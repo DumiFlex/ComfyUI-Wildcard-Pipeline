@@ -14,6 +14,7 @@ from engine.ai.pack.graph import (
     GRAPH_SCHEMA,
     GRAPH_SYSTEM,
     compile_graph_plan,
+    fills,
     is_wired,
     refs_prompt,
     refs_schema,
@@ -173,7 +174,8 @@ async def run_pack(
                 continue
             built[key] = {"id": out["id"], "payload": out["payload"]}
             log.extend(f"{key}: {w}" for w in out["warnings"])
-            if out["repair"] and not note:
+            if out["repair"] and (not note or (out.get("fill") and not fills(plan, key, note))):
+                # A rebuilt slot that still misses a value gets one fill.
                 log.append(f"{key} fix: {out['repair']}")
                 return await build(key, out["repair"]) or True
             return True

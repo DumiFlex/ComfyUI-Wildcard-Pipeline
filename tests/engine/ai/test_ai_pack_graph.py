@@ -302,7 +302,17 @@ def test_fill_call_adds_options_for_the_missing_axis_values():
     assert add["season"]["items"]["enum"] == ["summer"]
     assert "No option is summer on season yet" in req["user"]
     assert "fur-lined cloak; wool coat" in req["user"]
-    # Any other note is a full rebuild.
+    # A coverage part makes it a fill whatever else the note says: the
+    # rest rides along for the new options. Any other note is a rebuild.
+    mixed = pg.slot_request(plan, key, "\"red dress\" names what Colours picks; "
+                            + first["warnings"][0], built)
+    assert mixed["schema_name"] == "pack_slot_fill"
+    assert ("The last options had these problems; the new ones must not: \"red dress\" "
+            "names what Colours picks.") in mixed["user"]
+    assert pg.coverage_split("a; No option is summer on season; b") == (
+        ["No option is summer on season"], ["a", "b"])
+    assert pg.fills(plan, key, "No option is summer on season") is True
+    assert pg.fills(plan, key, "it repeats words") is False
     assert pg.slot_request(plan, key, "it repeats words", built)["schema_name"] == "pack_slot"
     assert pg.slot_request(plan, key, "", built)["schema_name"] == "pack_slot"
     answer = {"add": [{"text": "linen tunic", "weight": 1, "negative": "",
@@ -780,3 +790,41 @@ def test_the_template_reads_every_value_and_single_runs_hold_nothing():
     assert next(s for s in plan["graph"]["slots"] if s["var"] == "race")["hold"] is True
     assert pg.unasked_lead("1boy, scenery", "mountain landscapes") == ("scenery", ["1boy"])
     assert pg.unasked_lead("1boy, scenery", "") == ("1boy, scenery", [])
+
+
+async def test_a_rebuilt_slot_that_still_misses_a_value_gets_one_fill():
+    # A rebuild for another reason came back without summer options (9B,
+    # 2026-10-20: rules on values no option carried were most of the
+    # broken ones); the rebuilt slot gets one fill, never a second.
+    outfit_calls: list[str] = []
+
+    async def complete(**kw):
+        if kw["schema_name"] == "pack_graph":
+            return GRAPH
+        if kw["schema_name"] == "pack_refs":
+            return {"relations": []}
+        name = kw["user"].split('"')[1]
+        if name != "Outfit":
+            return _answer(name)
+        outfit_calls.append(kw["schema_name"])
+        if len(outfit_calls) == 1:
+            # Full coverage, but one option names another slot's pick.
+            return {"options": _answer("Outfit")["options"]
+                    + [{"text": "longsword belt", "weight": 1, "negative": "",
+                        "tags": {"season": ["winter"]}}]}
+        if len(outfit_calls) == 2:
+            assert kw["schema_name"] == "pack_slot"
+            return {"options": [{"text": t, "weight": 1, "negative": "", "tags": tags}
+                                for t, tags in OPTIONS["Outfit"][:2]]}
+        assert kw["schema_name"] == "pack_slot_fill"
+        return {"add": [{"text": t, "weight": 1, "negative": "", "tags": tags}
+                        for t, tags in OPTIONS["Outfit"][2:]]}
+
+    result = await pack.run_pack(complete, "fantasy heroes; outfit by season", seeds=10,
+                                 repairs=0, settings={"planner": "graph"})
+    assert outfit_calls == ["pack_slot", "pack_slot", "pack_slot_fill"]
+    outfit = next(i for i in result["plan"]["items"] if i["name"] == "Outfit")
+    values = [o["value"] for o in result["built"][outfit["key"]]["payload"]["options"]]
+    assert "linen tunic" in values and "fur-lined cloak" in values
+    assert any(" fix: " in line and "No option is summer on season" in line
+               for line in result["log"]), result["log"]

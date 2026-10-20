@@ -694,8 +694,14 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           at one, a request naming two model families ("Pony and Flux") gets the per-family
           quality rule without the setting, and a fixed preset can carry its own negatives. A
           Quality slot the planner writes becomes fixed values (quality words don't roll), a
-          Negative slot becomes the template's negative, and a preset asked for "its own
-          negatives" carries the standing negative itself; "Wired by the code" says so.
+          Negative slot becomes the template's negative (whatever its name says negative,
+          with any rule on it), and a preset asked for "its own negatives" carries the
+          standing negative itself; "Wired by the code" says so. A rule that writes a bare
+          number ("1.5" for "long styles more common") is a weight, not text: the options
+          tagged with its value weigh that much more or less and the rule is spent. A rebuilt
+          wildcard that still misses an axis value gets one fill call (the options stay, the
+          missing ones are added), and a fill call is used whenever a value is missing,
+          whatever else the note says.
           Click an item to edit its slot (axes, use) or the
           relations it compiles from, and <b>Add a relation</b> or <b>Add a slot</b>; the items
           are compiled again from your change. The assistant lists every item it will build,

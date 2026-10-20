@@ -232,6 +232,9 @@ def _fix_axes(text: str, catalog: dict[str, Any] | None,
 _ASKED_VAR = re.compile(r"\$([a-zA-Z_][a-zA-Z0-9_]*)")
 #: "{portrait}" or "{ }": braces around plain words, not a pick.
 _STRAY_BRACES = re.compile(r"(?<![@$])\{([^{}|$]*)\}")
+#: A ref or read with nothing inside ("@{ }", "${}"): raw braces in the
+#: prompt (9B, 2026-10-20, pack 14).
+_EMPTY_REF = re.compile(r"[@$]\{\s*\}")
 
 
 def _unbrace(text: str, warnings: list[str]) -> str:
@@ -245,6 +248,9 @@ def _unbrace(text: str, warnings: list[str]) -> str:
                             "written {a|b}")
         return inner
     out = _STRAY_BRACES.sub(sub, text or "")
+    if _EMPTY_REF.search(out):
+        warnings.append("Dropped an empty @{ } / ${ }: it names nothing and prints as written")
+        out = _EMPTY_REF.sub("", out)
     return re.sub(r"[ \t]{2,}", " ", out).strip() if out != text else out
 
 

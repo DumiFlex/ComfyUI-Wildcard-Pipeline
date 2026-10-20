@@ -551,3 +551,55 @@ def test_the_other_drafts_read_what_the_first_took_from_the_images():
         "The reference images were read with the first draft and aren't attached again; "
         "they showed: a red cloak; snow. Plan from that.")
     assert "aren't attached again" in drafts.images_seen({"from_images": []})
+
+
+def test_a_slot_named_like_a_negative_goes_with_its_rules():
+    # compile_plan drops any wildcard _NEGATIVEISH matches; the graph used
+    # to keep "Bad Negatives" in the order (and a rule on it), so the
+    # template read $bad_negatives, which nothing set (7 of 39 packs).
+    g = _graph([_slot("Hero", "hero", "heroes", [{"name": "era", "values": ["old", "new"]}]),
+                _slot("Bad Negatives", "bad_negatives", "lowres, bad hands",
+                      [{"name": "kind", "values": ["anatomy", "style"]}])],
+               [_rel("only", "Hero", "era", "old", "Bad Negatives", "kind", "anatomy")],
+               ["Hero", "Bad Negatives"])
+    plan = pack.compile_graph_plan(g)
+    graph = plan["graph"]
+    assert [s["var"] for s in graph["slots"]] == ["hero"]
+    assert graph["relations"] == []
+    assert graph["template"]["order"] == ["hero"]
+    assert graph["template"]["negative"] == "lowres, bad hands"
+    assert plan["applied"] == ["Bad Negatives is the negative prompt, not a pick: it went to "
+                               "the template's negative (and its 1 rule went with it)"]
+    assert "Bad Negatives" not in {i["name"] for i in plan["items"]}
+
+
+def test_a_rule_that_writes_a_number_is_a_weight_on_the_options():
+    # 9B, pack 7: "$hair_len_prob = 1.5 when Hair.length is long" for "long
+    # styles more common", broken on every run. A number is a weight.
+    g = _graph([_slot("Hair", "hair", "hairstyles",
+                      [{"name": "length", "values": ["long", "short"]}])],
+               [_rel("derive", "Hair", "length", "long", var="hair_len_prob", text="1.5"),
+                _rel("derive", "Hair", "length", "short", var="hair_short", text="x0.5"),
+                _rel("derive", "Hair", "length", "short", var="hair_same", text="1")],
+               ["Hair"])
+    plan = pack.compile_graph_plan(g)
+    graph = plan["graph"]
+    hair = graph["slots"][0]
+    assert graph["relations"] == []
+    assert hair["weights"] == {"long": 1.5, "short": 0.5}
+    assert [i["kind"] for i in plan["items"]] == ["wildcard", "template"]
+    assert ("Hair: long options weigh \u00d71.5 (the rule wrote a number, so it is a weight "
+            "on the options, not text)") in plan["warnings"]
+    out = pack.compile_slot(graph, hair, _answer([("braid", {"length": ["long"]}),
+                                                   ("bob", {"length": ["short"]}),
+                                                   ("ponytail", {"length": ["long"]})]))
+    assert [(o["value"], o["weight"]) for o in out["payload"]["options"]] == [
+        ("braid", 1.5), ("bob", 0.5), ("ponytail", 1.5)]
+    # The weights ride the graph back from the editor; an unknown value or
+    # a factor of 1 is dropped.
+    raw = copy.deepcopy(graph)
+    raw["slots"][0]["weights"] = {"long": 2, "curly": 3, "short": 1}
+    again = pack.compile_graph_plan(raw)
+    assert again["graph"]["slots"][0]["weights"] == {"long": 2.0}
+    raw["slots"][0]["weights"] = {}
+    assert "weights" not in pack.compile_graph_plan(raw)["graph"]["slots"][0]

@@ -257,8 +257,10 @@ def compile_item(
     if plan.get("rating") == "nsfw":
         payload, said = _adult_check(kind, payload, plan)
         warnings += said
+    repair = repair_note(warnings)
     return {"key": key, "id": mid, "kind": kind, "payload": payload,
-            "preview": preview, "warnings": warnings, "repair": repair_note(warnings)}
+            "preview": preview, "warnings": warnings, "repair": repair,
+            "fill": pack_graph.fills(plan, key, repair)}
 
 
 def _adult_check(kind: str, payload: dict[str, Any],

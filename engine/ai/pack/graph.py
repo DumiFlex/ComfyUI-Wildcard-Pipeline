@@ -42,7 +42,7 @@ from engine.ai.pack._common import (
     _tag,
     _var,
 )
-from engine.ai.pack.plan import MAX_TAGS, _row_var, _slug_var
+from engine.ai.pack.plan import _NEGATIVEISH, MAX_TAGS, _row_var, _slug_var
 from engine.ai.pack.settings import MAX_SWEEP_OPTIONS, parse_run, parse_settings
 
 MAX_SLOTS = 24
@@ -217,12 +217,39 @@ def _slots(raw: Any, warnings: list[str], taken_vars: set[str]) -> list[dict[str
             "axes": axes,
             "self_axis": _self_axis(name, var, axes),
         })
+        weights = _weights(s.get("weights"), axes)
+        if weights:
+            out[-1]["weights"] = weights
         names.add(name.lower())
         taken_vars.add(var)
         if len(out) >= MAX_SLOTS:
             warnings.append(f"Kept the first {MAX_SLOTS} slots")
             break
     return out
+
+
+def _weights(raw: Any, axes: list[dict[str, Any]]) -> dict[str, float]:
+    """A slot's per-value weight factors (``{value: factor}``), set by the
+    code from a rule that wrote a number (``_relations``) and kept when
+    the graph comes back from the editor."""
+    if not isinstance(raw, dict):
+        return {}
+    values = {v for a in axes for v in a["values"]}
+    out: dict[str, float] = {}
+    for k, v in raw.items():
+        t = _tag(k)
+        if t in values and isinstance(v, (int, float)) and not isinstance(v, bool) \
+                and 0 < float(v) <= MAX_WEIGHT_FACTOR and float(v) != 1:
+            out[t] = round(float(v), 2)
+    return out
+
+
+#: The most a rule's number can weigh a value's options, up or down.
+MAX_WEIGHT_FACTOR = 20.0
+#: A rule's text that is only a number ("1.5", "x2", "0.5×"): weight intent
+#: written as text (9B, 2026-10-20: "$hair_len_prob = 1.5" for "long
+#: styles more common", broken on every run).
+_WEIGHT_TEXT = re.compile(r"^[x×]?\s*(\d+(?:\.\d+)?)\s*[x×]?$", re.I)
 
 
 def _self_axis(name: str, var: str, axes: list[dict[str, Any]]) -> str:
@@ -390,6 +417,17 @@ def _relations(
         if kind in ("derive", "append"):
             var = _var(r.get("var"))
             text = _clean(r.get("text"), MAX_TEXT)
+            m = _WEIGHT_TEXT.match(text) if kind == "derive" and src["value"] else None
+            if m and 0 < float(m.group(1)) <= MAX_WEIGHT_FACTOR:
+                # A number is a weight, not text: it goes on the options
+                # tagged with the value, and the rule is spent.
+                factor = round(float(m.group(1)), 2)
+                if factor != 1:
+                    src["slot"].setdefault("weights", {})[src["value"]] = factor
+                warnings.append(f"{src['slot']['name']}: {src['value']} options weigh "
+                                f"\u00d7{factor:g} (the rule wrote a number, so it is a weight"
+                                " on the options, not text)")
+                continue
             if not var or not text:
                 bad_refs.append(f"{kind} from {src['slot']['name']}: no variable or text")
                 continue
@@ -1258,6 +1296,10 @@ def _finish_rows(graph: dict[str, Any], slot: dict[str, Any], rows: list[dict[st
     kinds = axis_kinds(graph, slot)
     values = {a["name"]: a["values"] for a in slot["axes"]}
     warnings: list[str] = []
+    for value, factor in (slot.get("weights") or {}).items():
+        for r in rows:
+            if value in r["sub_categories"] and not r.get("is_null"):
+                r["weight"] = round(float(r.get("weight") or 1) * factor, 2)
     narrowed = inbound(graph, slot)
     if narrowed and rows:
         # The option that fits the most of what narrows this slot, and
@@ -1386,6 +1428,22 @@ def _coverage_only(note: str) -> bool:
     """Whether a repair note asks for nothing but axis coverage."""
     parts = [x.strip() for x in note.split(";") if x.strip()]
     return bool(parts) and all(_COVERAGE.match(x) for x in parts)
+
+
+def coverage_split(note: str) -> tuple[list[str], list[str]]:
+    """A repair note's parts: the ones asking for axis coverage (a value
+    or rule word no option carries) and the rest. Coverage is what a fill
+    call adds; the rest rides along as what the new options must mind."""
+    parts = [x.strip() for x in (note or "").split(";") if x.strip()]
+    return ([x for x in parts if _COVERAGE.match(x)],
+            [x for x in parts if not _COVERAGE.match(x)])
+
+
+def fills(plan: dict[str, Any], key: str, note: str) -> bool:
+    """Whether a repair note on a built graph slot would be a fill call
+    (``slot_request``): the route tells the browser, which then gives a
+    rebuilt slot one fill when coverage is still missing."""
+    return slot_for(plan, key) is not None and bool(coverage_split(note)[0])
 
 
 def _norm(text: Any) -> str:
@@ -1908,11 +1966,15 @@ def slot_request(plan: dict[str, Any], key: str, note: str = "",
     from engine.ai import guide as ai_guide
     graph = plan["graph"]
     old = (built or {}).get(key)
+    coverage, rest = coverage_split(note)
+    # A coverage part makes it a fill whatever else the note says: a
+    # value no option carries breaks every rule on it, so the options
+    # that are there stay and the new ones mind the rest of the note.
     targets = fill_targets(graph, slot, old["payload"]) if isinstance(old, dict) \
-        and _coverage_only(note) else {}
+        and coverage else {}
     if targets:
         axis = max(targets, key=lambda a: len(targets[a]))
-        user = fill_prompt(graph, slot, old["payload"], targets, axis)
+        user = fill_prompt(graph, slot, old["payload"], targets, axis, also=rest)
         schema = slot_schema(graph, slot, fill={axis: list(targets[axis])})
         name = "pack_slot_fill"
     else:
@@ -1929,7 +1991,8 @@ def slot_request(plan: dict[str, Any], key: str, note: str = "",
 
 
 def fill_prompt(graph: dict[str, Any], slot: dict[str, Any], payload: dict[str, Any],
-                targets: dict[str, dict[str, list[str]]], axis: str) -> str:
+                targets: dict[str, dict[str, list[str]]], axis: str,
+                also: list[str] | None = None) -> str:
     """The user prompt of a fill call: add options for the values of
     ``axis`` no option carries, and ones saying the rule words no option
     tagged with their value says (``fill_targets``; other axes' gaps are
@@ -1964,6 +2027,9 @@ def fill_prompt(graph: dict[str, Any], slot: dict[str, Any], payload: dict[str, 
     if others:
         lines.append("Other wildcards cover " + ", ".join(others[:12])
                      + ": keep those words out of these options.")
+    if also:
+        lines.append("The last options had these problems; the new ones must not: "
+                     + "; ".join(also)[:400] + ".")
     return "\n".join(lines)
 
 
@@ -2055,17 +2121,26 @@ def apply_request_slots(graph: dict[str, Any], request: str) -> list[str]:
     lines: list[str] = []
     for s in list(graph["slots"]):
         key = _slot_key(s)
-        if s["axes"] or _in_relations(graph, s):
-            continue
-        if key & _NEGATIVE_SLOT:
+        if key & _NEGATIVE_SLOT or _NEGATIVEISH.search(f"{s['name']} {s['var']}"):
+            # The same test ``compile_plan`` drops the wildcard by: a slot
+            # it would drop can't stay in the order or a relation, or the
+            # template reads a variable nothing sets (7 of 39 packs).
             graph["slots"].remove(s)
             graph["template"]["order"] = [v for v in graph["template"]["order"]
                                           if v != s["var"]]
+            gone = [r for r in graph["relations"] if r["from"]["slot"] == s["name"]
+                    or (r.get("to") or {}).get("slot") == s["name"]]
+            graph["relations"] = [r for r in graph["relations"] if r not in gone]
             if not graph["template"]["negative"] and "," in s["what"]:
                 graph["template"]["negative"] = s["what"]
             lines.append(f"{s['name']} is the negative prompt, not a pick: it went to the "
-                         "template's negative")
-        elif key & _QUALITY_SLOT and len(graph["fixed"]) < MAX_FIXED \
+                         "template's negative"
+                         + (f" (and its {len(gone)} rule{'s' if len(gone) > 1 else ''} "
+                            "went with it)" if gone else ""))
+            continue
+        if s["axes"] or _in_relations(graph, s):
+            continue
+        if key & _QUALITY_SLOT and len(graph["fixed"]) < MAX_FIXED \
                 and not any(f["var"] == s["var"] for f in graph["fixed"]):
             words = s["what"] if "," in s["what"] else (
                 "masterpiece, best quality" if graph["style"] == "tags"

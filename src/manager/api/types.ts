@@ -1975,6 +1975,9 @@ export interface AiPackItemResult {
   warnings: string[];
   /** Warnings worth one automatic rebuild, as its note ("" when none). */
   repair: string;
+  /** The repair would be a fill call (a graph slot missing an axis value):
+   *  a rebuilt slot gets one more round for it. */
+  fill?: boolean;
   model: string;
   /** What the model thought while building it, when its server sends it. */
   thinking?: string;

@@ -280,4 +280,27 @@ describe("PackBuilder", () => {
       ["i4", ""], ["i4", "$outfit has no option \"parka\""],
     ]);
   });
+
+  it("gives a rebuilt slot one fill when it still misses a value", async () => {
+    vi.mocked(api.ai.packItem).mockReset().mockImplementation(async ({ key, note }) => {
+      const rebuilt = key === "i4" && note === "it repeats words";
+      return {
+        key, id: `id00000${key.slice(1)}`, kind: "wildcard", payload: { options: [1], rules: [] },
+        preview: [], warnings: [], model: "m",
+        repair: key === "i4" && !note ? "it repeats words"
+          : rebuilt ? "No option is summer on season" : "",
+        fill: rebuilt,
+      };
+    });
+    const { w } = await mountIt();
+    await w.get('[data-test="pack-request"]').setValue("season outfits");
+    await w.get('[data-test="pack-next"]').trigger("click");
+    await w.get('[data-test="pack-plan"]').trigger("click");
+    await flushPromises();
+    await w.get('[data-test="pack-build"]').trigger("click");
+    await flushPromises();
+    const calls = vi.mocked(api.ai.packItem).mock.calls
+      .filter((c) => c[0].key === "i4").map((c) => c[0].note ?? "");
+    expect(calls).toEqual(["", "it repeats words", "No option is summer on season"]);
+  });
 });

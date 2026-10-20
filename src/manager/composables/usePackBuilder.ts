@@ -1213,11 +1213,20 @@ async function buildItem(p: AiPackPlan, item: AiPackItem, signal: AbortSignal): 
     setState(item.key, { status: "retrying" });
     await buildOne(p, item.key, why ? `your last answer failed: ${why}` : "", signal);
   }
-  const repair = states.value[item.key]?.result?.repair;
+  const first = states.value[item.key]?.result;
+  const repair = first?.repair;
   if (repair && states.value[item.key]?.status === "built") {
     stage.value = `Fixing ${item.name}…`;
     setState(item.key, { status: "fixing", fixed: [repair] });
     await buildOne(p, item.key, repair, signal);
+    // A rebuilt slot that still misses an axis value gets one fill: the
+    // options stay and the missing ones are added (never after a fill).
+    const again = states.value[item.key]?.result;
+    if (again?.repair && again.fill && !first?.fill && states.value[item.key]?.status === "built") {
+      stage.value = `Filling ${item.name}…`;
+      setState(item.key, { status: "fixing", fixed: [repair, again.repair] });
+      await buildOne(p, item.key, again.repair, signal);
+    }
   }
 }
 
