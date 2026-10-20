@@ -739,7 +739,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           planner's own account of the pack (which pick decides which, and why each rule is
           there), and with a thinking model the plan and each built item have a folded
           <b>Thinking</b>, so when a pack comes out wrong you can see whether the model misread
-          the request or built its idea wrong.</li>
+          the request or built its idea wrong. A thinking model that spends its whole output
+          limit reasoning (the plan comes back empty, cut off) is asked once more with thinking
+          off, and the plan, item and Draft with AI calls stay that way for that model; the chat
+          keeps the Thinking setting as it is.</li>
         <li><b>Plan review.</b> The plan is checked as you edit it for what would break: a
           template or rule that reads a variable nothing sets, a constraint keyed on a tag
           neither wildcard lists, two constraints that loop, wildcards that ignore the pack's

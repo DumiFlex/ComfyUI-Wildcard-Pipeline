@@ -376,8 +376,9 @@ def review_plan(plan: dict[str, Any],
                 + ("none of them" if len(gaps) > 1 else "it") + " anywhere; give each a "
                 "slot of its own, a value on an axis, or put it in the words of the rule it "
                 "is part of", type="request_gap", refs=tuple(gaps))
-    # A new wildcard the library already has (a graph plan's slots are
-    # matched to the library by the code).
+    # A new wildcard the library already has. Not on a graph plan: its
+    # items are compiled from the graph, so a kind change would not
+    # survive the next compile (``apply_settings`` says reuse is off there).
     if parse_settings(plan.get("settings"))["library"] == "reuse" and graph is None:
         lib = {}
         for r in library or []:
@@ -565,7 +566,12 @@ def compile_review(answer: Any, plan: dict[str, Any],
             else:
                 text = was
         fid = finding_id("m", key, fingerprint(typ) if typ != "other" else text)
-        if any(o["id"] == fid for o in out):
+        same = next((o for o in out if o["id"] == fid), None)
+        if same is not None:
+            # One finding per kind and item: a second of the same kind
+            # joins it rather than vanishing.
+            if not _same(text, same["text"]):
+                same["text"] = f"{same['text']}; {text}"
             continue
         level = "fix" if f.get("severity") == "fix" else "tip"
         out.append({"id": fid, "key": key, "level": level, "text": text, "by": "model",

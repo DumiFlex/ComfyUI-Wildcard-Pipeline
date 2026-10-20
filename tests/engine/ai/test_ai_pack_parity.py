@@ -330,3 +330,97 @@ def test_a_preset_asked_for_its_own_negatives_carries_the_standing_one():
     own = pack.compile_graph_plan(g, request="a preset with its own negatives")
     assert own["graph"]["fixed"][0]["negative"] == "photo"
     assert own["graph"]["template"]["negative"] == "bad anatomy, lowres"
+
+
+def test_the_verifier_sees_a_pick_behind_its_drawn_prefix():
+    # A draw puts "@{id:warm} " in front of every Scarf option; the run's
+    # value is the resolved text, so the match looks past the reference.
+    g = _graph([_slot("Colours", "colour", "colours",
+                      [{"name": "warmth", "values": ["warm", "cool"]}]),
+                _slot("Season", "season", "the season",
+                      [{"name": "season", "values": ["winter", "summer"]}]),
+                _slot("Scarf", "scarf", "scarves",
+                      [{"name": "weight", "values": ["thick", "thin"]}])],
+               [_rel("draw", "Colours", "warmth", "warm", "Scarf"),
+                _rel("exclude", "Season", "season", "summer", "Scarf", "weight", "thick")],
+               ["Season", "Scarf"])
+    plan = pack.compile_graph_plan(g)
+    built = _build(plan, {"Colours": [("red", {"warmth": ["warm"]}),
+                                      ("blue", {"warmth": ["cool"]})],
+                          "Season": [("winter", {"season": ["winter"]}),
+                                     ("summer", {"season": ["summer"]})],
+                          "Scarf": [("wool scarf", {"weight": ["thick"]}),
+                                    ("silk scarf", {"weight": ["thin"]})]})
+    scarf = next(b for b in built.values() if b["payload"].get("options")
+                 and "scarf" in b["payload"]["options"][0]["value"])
+    assert scarf["payload"]["options"][0]["value"].startswith("@{")
+    runs = [{"season": "winter", "season.season": "winter", "scarf": "red wool scarf"},
+            {"season": "summer", "season.season": "summer", "scarf": "red silk scarf"}]
+    rows = pg.verify_relations(plan, built, runs)
+    row = next(r for r in rows if r["kind"] == "exclude")
+    assert (row["seen"], row["broken"], row["holds"]) == (1, 0, True), row
+
+
+def test_one_otherwise_per_variable_in_the_rule_and_the_check():
+    g = _graph([_slot("Class", "class", "classes",
+                      [{"name": "role", "values": ["caster", "martial", "rogue"]}])],
+               [_rel("derive", "Class", "role", "caster", var="title", text="Archmage",
+                     otherwise="Adventurer"),
+                _rel("derive", "Class", "role", "martial", var="title", text="Knight",
+                     otherwise="Wanderer")],
+               ["Class"])
+    plan = pack.compile_graph_plan(g)
+    key = next(i["key"] for i in plan["items"] if i["kind"] == "derivation")
+    out = pg.wired_payload(plan, key, {})
+    assert out["payload"]["rules"][0]["else"]["action"]["value"] == "Adventurer"
+    assert out["warnings"] == ['$title has one "otherwise": kept "Adventurer", not "Wanderer"']
+    built = _build(plan, {"Class": [("mage", {"role": ["caster"]}),
+                                    ("thief", {"role": ["rogue"]})]})
+    runs = [{"class": "thief", "class.role": "rogue", "title": "Adventurer"}]
+    rows = pg.verify_relations(plan, built, runs)
+    # Neither row fired; the else the rule carries is what both expect.
+    assert all(r["broken"] == 0 for r in rows), rows
+
+
+def test_a_repair_that_resolved_nothing_keeps_its_left_out_relations():
+    g = _graph([_slot("Hero", "hero", "heroes", [{"name": "kind", "values": ["elf"]}]),
+                _slot("Pet", "pet", "pets", [])],
+               [_rel("exclude", "Hero", "kind", "elf", "Dragon")], ["Hero", "Pet"])
+    first = pack.compile_graph(g)
+    assert first["bad_refs"] and first["relations"] == []
+    fixed = pack.with_refs(first, {"relations": [
+        _rel("exclude", "Hero", "kind", "elf", "Castle")]})
+    assert fixed["relations"] == [] and len(fixed["bad_refs"]) == 1
+    assert pg._compiled(fixed)
+    plan = pack.compile_graph_plan(fixed)
+    # Both misses are listed (one repair call, no second ask).
+    assert plan["bad_refs"] == []
+    assert sorted(plan["graph"]["dropped"]) == sorted([*first["bad_refs"], *fixed["bad_refs"]])
+    assert sum("Left out a relation" in w for w in plan["warnings"]) == 2
+    # The model's shape and the plan's graph are still read as written.
+    assert not pg._compiled(pg.graph_answer(plan))
+    assert not pg._compiled(plan["graph"])
+
+
+def test_the_anchor_follows_the_slots_the_code_takes_out():
+    g = _graph([_slot("Quality", "quality", "masterpiece, best quality", []),
+                _slot("Hero", "hero", "heroes", [])], [], ["Quality", "Hero"])
+    plan = pack.compile_graph_plan(g)
+    assert plan["graph"]["anchor"] == "hero"
+    assert plan["anchor"] == "hero"
+
+
+def test_a_graph_slot_lists_every_axis_value():
+    values = [f"v{n}" for n in range(20)]
+    g = _graph([_slot("Big", "big", "many", [{"name": "a", "values": values[:10]},
+                                              {"name": "b", "values": values[10:]}]),
+                _slot("Hero", "hero", "heroes", [])], [], ["Big", "Hero"])
+    plan = pack.compile_graph_plan(g)
+    assert next(i for i in plan["items"] if i["name"] == "Big")["tags"] == values
+
+
+def test_reuse_says_it_does_not_reach_a_pack_graph():
+    g = _graph([_slot("Hero", "hero", "heroes", [])], [], ["Hero"])
+    plan = pack.compile_graph_plan(g, settings={"library": "reuse"})
+    assert "Reuse what fits: not on a pack graph yet, every slot is a new wildcard" \
+        in plan["applied"]

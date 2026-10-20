@@ -706,6 +706,12 @@ def test_findings_are_typed_so_a_rewording_keeps_its_id():
         {"item": "Race", "type": "mixed_slot", "severity": "fix", "text": "Race holds ages too"},
     ]}, plan)
     assert again[0]["id"] == first[0]["id"]
+    # Two findings of one kind on one item join; neither is lost.
+    two = pack.compile_review({"findings": [
+        {"item": "", "type": "missing_slot", "severity": "fix", "text": "Add a Lighting slot"},
+        {"item": "", "type": "missing_slot", "severity": "fix", "text": "Add a Pose slot"},
+    ]}, plan)
+    assert [f["text"] for f in two] == ["Add a Lighting slot; Add a Pose slot"]
     # On an item-list plan an unknown item is the whole pack, as before.
     flat = pack.compile_plan({"title": "x", "items": [
         {"kind": "wildcard", "name": "A", "var": "a", "about": "a", "count": 4, "tags": [],

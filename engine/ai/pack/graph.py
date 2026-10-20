@@ -42,7 +42,7 @@ from engine.ai.pack._common import (
     _tag,
     _var,
 )
-from engine.ai.pack.plan import _slug_var
+from engine.ai.pack.plan import MAX_TAGS, _slug_var
 from engine.ai.pack.settings import MAX_SWEEP_OPTIONS, parse_run, parse_settings
 
 MAX_SLOTS = 24
@@ -643,8 +643,12 @@ def _compiled(raw: dict[str, Any]) -> bool:
     """Whether ``raw`` is a graph ``compile_graph`` made (relations carry
     ``from`` objects) rather than one the model wrote."""
     rels = raw.get("relations")
-    return isinstance(rels, list) and any(isinstance(r, dict) and isinstance(r.get("from"), dict)
-                                          for r in rels)
+    if isinstance(rels, list) and any(isinstance(r, dict) and isinstance(r.get("from"), dict)
+                                      for r in rels):
+        return True
+    # No relation at all, but ``bad_refs``: only ``compile_graph`` writes
+    # that key (``graph_answer`` and the plan's graph never carry it).
+    return isinstance(raw.get("bad_refs"), list) and not rels
 
 
 def compile_graph(raw: Any) -> dict[str, Any]:
@@ -983,7 +987,7 @@ def graph_plan(graph: dict[str, Any], settings: Any = None) -> dict[str, Any]:
             use = "; ".join(x for x in [use, "hold"] if x)
         items.append({"kind": "wildcard", "name": s["name"], "var": s["var"],
                       "section": s["section"], "about": _clean(about, MAX_ABOUT),
-                      "count": count, "tags": tags[:16], "source": "", "target": "",
+                      "count": count, "tags": tags[:MAX_TAGS], "source": "", "target": "",
                       "use": use})
     for src, dst in constraint_pairs(graph):
         rels = [r for r in graph["relations"] if r.get("to") and r["from"]["slot"] == src
@@ -1128,7 +1132,7 @@ def wired_payload(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict
     if kind == "derivation":
         rels = [r for r in graph["relations"] if r.get("var") == item["var"]]
         branches = []
-        otherwise = next((r["otherwise"] for r in rels if r.get("otherwise")), "")
+        otherwise = _otherwise(rels)
         for r in rels:
             src = slot_by_var(graph, next(s["var"] for s in graph["slots"]
                                           if s["name"] == r["from"]["slot"]))
@@ -1143,8 +1147,12 @@ def wired_payload(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict
         if otherwise:
             rule["else"] = {"action": {"target_var": item["var"], "mode": "replace",
                                        "value": otherwise}}
+        others = sorted({r["otherwise"] for r in rels
+                         if r.get("otherwise") and r["otherwise"] != otherwise})
         return {"kind": kind, "payload": {"rules": [rule]},
-                "preview": [_slot_rel_words(r) for r in rels], "warnings": []}
+                "preview": [_slot_rel_words(r) for r in rels],
+                "warnings": [f"${item['var']} has one \"otherwise\": kept \"{otherwise}\", not "
+                             + ", ".join(f'"{o}"' for o in others)] if others else []}
     if kind == "template":
         t = graph["template"]
         sep = ", " if graph["style"] == "tags" else ", "
@@ -1515,6 +1523,16 @@ def slot_prompt(graph: dict[str, Any], slot: dict[str, Any], *, note: str = "") 
 
 # --- relations checked on engine runs ----------------------------------------
 
+#: A ``@{…}`` reference inside an option (what a ``draw`` puts in front).
+_REF = re.compile(r"@\{[^}]*\}\s*")
+
+
+def _otherwise(rels: list[dict[str, Any]]) -> str:
+    """The one ``else`` a variable's derive rows compile to: the first
+    given (a rule has one else, however many rows name one)."""
+    return next((r["otherwise"] for r in rels if r.get("otherwise")), "")
+
+
 def _picked_tags(graph: dict[str, Any], payloads: dict[str, dict[str, Any]], slot_name: str,
                  ctx: dict[str, Any]) -> tuple[set[str], bool] | None:
     """The tags the run's pick for a slot carries, and whether that pick
@@ -1533,7 +1551,7 @@ def _picked_tags(graph: dict[str, Any], payloads: dict[str, dict[str, Any]], slo
     for o in payload.get("options") or []:
         if not isinstance(o, dict) or o.get("is_null"):
             continue
-        text = _norm(o.get("value"))
+        text = _norm(_REF.sub("", str(o.get("value") or "")))
         if text and (text == value or text in chunks
                      or re.search(r"(?<!\w)" + re.escape(text) + r"(?!\w)", value)):
             tags |= set(o.get("sub_categories") or [])
@@ -1634,14 +1652,14 @@ def verify_relations(plan: dict[str, Any], built: dict[str, Any],
                     row["seen"] += 1
                     if _norm(r["text"]) not in got:
                         row["broken"] += 1
-                elif kind == "derive" and r.get("otherwise"):
+                elif kind == "derive" and _otherwise(by_var[r["var"]]):
                     fired = False
                     for d in by_var[r["var"]]:
                         t = _picked_tags(graph, payloads, d["from"]["slot"], ctx)
                         fired = fired or bool(t and d["from"]["value"] in t[0])
                     if not fired:
                         row["seen"] += 1
-                        if _norm(r["otherwise"]) not in got:
+                        if _norm(_otherwise(by_var[r["var"]])) not in got:
                             row["broken"] += 1
         if row["checked"] and row["seen"] == 0:
             row["why"] = f"never fired in {len(runs)} runs"
@@ -2185,6 +2203,8 @@ def apply_settings(graph: dict[str, Any], settings: Any) -> list[str]:
                 capped.append(s["name"])
         if capped:
             lines.append(f"{cfg['count']} options: capped " + ", ".join(capped))
+    if cfg["library"] == "reuse":
+        lines.append("Reuse what fits: not on a pack graph yet, every slot is a new wildcard")
     if cfg["structure"] == "flat" and (graph["sections"] or any(s["section"]
                                                                  for s in graph["slots"])):
         graph["sections"] = []
@@ -2298,6 +2318,10 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
         applied.append("Took \"" + ", ".join(gone) + "\" out of the lead: the request names "
                        "no person")
     _story_holds(graph["slots"], parse_run(graph["run"]), graph["warnings"])
+    if graph["anchor"] not in {s["var"] for s in graph["slots"]}:
+        # The code took the anchor's slot out (a Quality slot now fixed
+        # values, a Beat slot the story owns): the first prompt pick leads.
+        graph["anchor"] = next((s["var"] for s in graph["slots"] if s["show"] == "prompt"), "")
     plan = compile_plan(graph_plan(graph, kw.get("settings")), **kw)
     plan["graph"] = {k: v for k, v in graph.items() if k not in ("warnings", "bad_refs")}
     plan["locks"] = locks

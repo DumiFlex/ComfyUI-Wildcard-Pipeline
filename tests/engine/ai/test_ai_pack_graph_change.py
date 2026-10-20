@@ -142,3 +142,29 @@ def test_images_add_what_the_graph_lacks():
     assert again["from_images"] == new["from_images"]
     assert len(again["graph"]["slots"]) == len(new["graph"]["slots"])
     assert "From your images" not in " ".join(again["applied"])
+
+
+def test_a_change_on_a_locked_part_lands_and_stays_yours():
+    plan = _plan()
+    rel = next(r for r in pack.graph.graph_answer(plan)["relations"] if r["kind"] == "exclude")
+    plan["locks"] = {"slots": [], "relations": [pack.graph.raw_rel_sig(rel)],
+                     "removed_relations": [], "template": ["order", "tail"]}
+    plan["graph"]["template"]["tail"] = "by hand"
+    # The user locked the template order and tail, then asked the AI to
+    # change the template: the answer lands, and the fields stay theirs.
+    new = gc.apply_change(plan, _key(plan, "Fantasy heroes"), {"template": {
+        "lead": "1boy", "order": ["Weapon", "Race"], "tail": "cinematic", "negative": ""}})
+    assert new["graph"]["template"]["order"][:2] == ["weapon", "race"]
+    assert new["graph"]["template"]["tail"] == "cinematic"
+    assert set(new["locks"]["template"]) >= {"order", "tail"}
+    # A locked relation the AI was asked to replace is replaced, not
+    # doubled, and the new one is locked in its place.
+    new = gc.apply_change(plan, _key(plan, "Race → Weapon"), {"relations": [
+        {"kind": "only", "from_slot": "Race", "from_axis": "kind", "from_value": "elf",
+         "to_slot": "Weapon", "to_axis": "type", "to_value": "blade", "factor": 0, "var": "",
+         "text": "", "otherwise": "", "words": []}]})
+    words = [pack.graph._slot_rel_words(r) for r in new["graph"]["relations"]]
+    assert "Race elf only gets Weapon blade" in words and not any("gun" in w for w in words)
+    sigs = new["locks"]["relations"]
+    assert pack.graph.raw_rel_sig(rel) not in sigs
+    assert any(s.startswith("only|Race|kind|elf|Weapon|type|blade") for s in sigs)

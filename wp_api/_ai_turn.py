@@ -1002,8 +1002,11 @@ PACK_FIRST = ("the user asked for a whole pack: call plan_pack with its descript
 #: The user asking for a test of what the answer proposes ("test it
 #: first", "try it", "dry run", "check it", "run a test").
 _TEST_ASK = re.compile(
-    r"\b(?:test(?:s|ed|ing)?|dry[- ]runs?|(?:try|run|check)\s+(?:it|them|that|this|one|"
-    r"first|out)|run\s+(?:a\s+)?tests?)\b", re.I)
+    r"(?:^|\b(?:and|then|please|also|can you|could you|now)\s+)test(?:s|ed|ing)?\b"
+    r"|\btest(?:s|ed|ing)?\s+(?:it|them|that|this|the|first|now|again|before|after|out)\b"
+    r"|\btest(?:s|ed|ing)?\s*[.!?]*$"
+    r"|\b(?:dry[- ]runs?|(?:try|run|check)\s+(?:it|them|that|this|one|first|out)"
+    r"|run\s+(?:a\s+)?tests?)\b", re.I)
 #: Told to the model, after its answer, when the server ran the test it
 #: didn't (the user reads the card; the model reads this next turn).
 AUTO_TEST_NOTE = ("(The user asked for a test and your answer proposed changes without "

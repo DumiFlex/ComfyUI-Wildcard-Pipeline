@@ -1726,3 +1726,14 @@ async def test_a_dropped_catch_all_is_asked_for_again_and_attached(wp_client, fa
     resp = await wp_client.post("/wp/api/ai/derivation/draft", json={
         "instruction": "mages get the title Archmage", "derivation": {"rules": []}})
     assert resp.status == 200 and len(fake_llm.seen) == n + 1
+
+
+def test_a_test_ask_is_a_verb_not_a_word_in_the_wildcard():
+    from wp_api import _ai_turn
+
+    for yes in ("Make a hair wildcard and test it.", "test the pack", "then test",
+                "Can you test that?", "Add 3 colours and run a test", "try it out", "Test"):
+        assert _ai_turn._TEST_ASK.search(yes), yes
+    for no in ("make a chemistry lab wildcard: test tubes, beakers, flasks",
+               "a testing ground wildcard with 6 arenas", "the contest winner"):
+        assert not _ai_turn._TEST_ASK.search(no), no

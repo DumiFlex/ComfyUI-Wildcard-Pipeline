@@ -29,6 +29,7 @@ from engine.ai.pack.graph import (
     compile_graph_plan,
     graph_answer,
     parse_locks,
+    raw_rel_sig,
 )
 from engine.ai.pack.prompts import decisions_note, run_note, settings_note
 from engine.ai.pack.settings import parse_run
@@ -192,18 +193,41 @@ def _rename(raw: dict[str, Any], old: str, new: str) -> None:
 
 
 def _recompile(plan: dict[str, Any], raw: dict[str, Any], lock_slots: list[str],
+               touched: str = "", template_fields: list[str] | None = None,
                **kw: Any) -> dict[str, Any]:
     """The edited raw graph compiled as the plan again, with the hand-edit
-    locks kept, the changed slots unlocked for this compile (so the change
-    lands) and then locked (so the next re-plan keeps them)."""
+    locks kept, the changed parts unlocked for this compile (so the change
+    lands: the changed slots, the locked relations on the part ``touched``
+    names, the template fields the answer set) and then locked again (so
+    the next re-plan keeps them)."""
     locks = parse_locks(plan.get("locks"))
-    free = {**locks, "slots": [v for v in locks["slots"] if v not in lock_slots]}
+    old_rels = [r for r in graph_answer(plan)["relations"]
+                if touched and _touches(r, touched)]
+    freed = {raw_rel_sig(r) for r in old_rels} & set(locks["relations"])
+    fields = set(template_fields or [])
+    free = {**locks, "slots": [v for v in locks["slots"] if v not in lock_slots],
+            "relations": [sig for sig in locks["relations"] if sig not in freed],
+            "template": [f for f in locks["template"] if f not in fields]}
     new = compile_graph_plan(raw, previous={**plan, "locks": free},
                              settings=plan.get("settings"), decisions=plan.get("decisions"),
                              **kw)
-    new["locks"] = {**new["locks"], "slots": list(dict.fromkeys(
-        [*locks["slots"], *(v for v in lock_slots
-                            if any(s["var"] == v for s in new["graph"]["slots"]))]))}
+    rel_locks = list(new["locks"]["relations"])
+    if freed:
+        # The user had locked a relation on this part and asked for the
+        # change: what replaced it is theirs too.
+        have = {raw_rel_sig(r) for r in graph_answer(new)["relations"]}
+        rel_locks += [raw_rel_sig(r) for r in raw["relations"]
+                      if isinstance(r, dict) and _touches(r, touched)
+                      and raw_rel_sig(r) in have]
+    new["locks"] = {**new["locks"],
+                    "slots": list(dict.fromkeys(
+                        [*locks["slots"], *(v for v in lock_slots
+                                            if any(s["var"] == v
+                                                   for s in new["graph"]["slots"]))])),
+                    "relations": list(dict.fromkeys(rel_locks)),
+                    "template": list(dict.fromkeys([*new["locks"]["template"],
+                                                    *(f for f in locks["template"]
+                                                      if f in fields)]))}
     return new
 
 
@@ -216,6 +240,8 @@ def apply_change(plan: dict[str, Any], key: str, answer: Any, **kw: Any) -> dict
     kind, what = change_target(plan, key)
     raw = graph_answer(plan)
     lock: list[str] = []
+    touched = ""
+    fields: list[str] = []
     if kind == "slot":
         slot = answer.get("slot")
         if not isinstance(slot, dict):
@@ -229,6 +255,7 @@ def apply_change(plan: dict[str, Any], key: str, answer: Any, **kw: Any) -> dict
             if isinstance(answer.get("relations"), list) else None
         if rels is not None:
             raw["relations"] = [r for r in raw["relations"] if not _touches(r, new_name)] + rels
+            touched = old
         lock = [what]
     elif kind == "fixed":
         fixed = answer.get("fixed")
@@ -242,11 +269,13 @@ def apply_change(plan: dict[str, Any], key: str, answer: Any, **kw: Any) -> dict
             raise PlanError("the answer had no relations")
         raw["relations"] = [r for r in raw["relations"] if not _touches(r, what)] \
             + [r for r in rels if isinstance(r, dict)]
+        touched = what
     elif kind == "template":
         tpl = answer.get("template")
         if not isinstance(tpl, dict):
             raise PlanError("the answer had no template")
         raw["template"] = {**raw["template"], **tpl}
+        fields = [f for f in tpl if isinstance(f, str)]
     else:
         slots = [s for s in (answer.get("slots") or []) if isinstance(s, dict)]
         fixed = [f for f in (answer.get("fixed") or []) if isinstance(f, dict)]
@@ -255,7 +284,7 @@ def apply_change(plan: dict[str, Any], key: str, answer: Any, **kw: Any) -> dict
             raise PlanError("the answer added nothing")
         lock = _add(raw, slots, fixed)
         raw["relations"] += rels
-    return _recompile(plan, raw, lock, **kw)
+    return _recompile(plan, raw, lock, touched=touched, template_fields=fields, **kw)
 
 
 def _add(raw: dict[str, Any], slots: list[dict[str, Any]],
