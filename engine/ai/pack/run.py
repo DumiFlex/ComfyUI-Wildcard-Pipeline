@@ -64,7 +64,7 @@ async def run_pack(
             return compile_plan(answer, library=library, previous=previous,
                                 decisions=decisions, settings=cfg, request=instruction)
         plan = compile_graph_plan(answer, library=library, previous=previous,
-                                  decisions=decisions, settings=cfg)
+                                  decisions=decisions, settings=cfg, request=instruction)
         if plan["bad_refs"]:
             # One repair call, on an enum of what the graph declares.
             log.append(f"plan: {len(plan['bad_refs'])} relation(s) named nothing; asked again")
@@ -72,7 +72,7 @@ async def run_pack(
             fix = await complete(system=GRAPH_SYSTEM, user=refs_prompt(g), schema=refs_schema(g),
                                  schema_name="pack_refs", temperature=0.2)
             plan = compile_graph_plan(with_refs(g, fix), library=library, previous=plan,
-                                      decisions=decisions, settings=cfg)
+                                      decisions=decisions, settings=cfg, request=instruction)
         return plan
 
     lib_note = ai_patterns.note(ai_patterns.summarize(library or []))

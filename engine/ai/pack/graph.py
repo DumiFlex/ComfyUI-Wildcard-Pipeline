@@ -1134,8 +1134,10 @@ def wired_payload(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict
         branches = []
         otherwise = _otherwise(rels)
         for r in rels:
-            src = slot_by_var(graph, next(s["var"] for s in graph["slots"]
-                                          if s["name"] == r["from"]["slot"]))
+            src = next((s for s in graph["slots"] if s["name"] == r["from"]["slot"]), None)
+            if src is None:
+                raise PlanError(f"{item['name']} reads {r['from']['slot']}, which the graph "
+                                "no longer has")
             branches.append({
                 "condition": {"var": f"{src['var']}.{r['from']['axis']}", "op": "equals",
                               "value": r["from"]["value"]},
@@ -1155,9 +1157,8 @@ def wired_payload(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict
                              + ", ".join(f'"{o}"' for o in others)] if others else []}
     if kind == "template":
         t = graph["template"]
-        sep = ", " if graph["style"] == "tags" else ", "
         order = template_order(graph, plan.get("settings"))
-        body = sep.join(x for x in [t["lead"], *(f"${v}" for v in order), t["tail"]] if x)
+        body = ", ".join(x for x in [t["lead"], *(f"${v}" for v in order), t["tail"]] if x)
         return {"kind": kind, "payload": {"template_string": body,
                                          "negative_template": t["negative"] or ""},
                 "preview": [body], "warnings": []}
@@ -2130,6 +2131,23 @@ def raw_rel_sig(r: dict[str, Any]) -> str:
         "var", "text"))
 
 
+def _sig_like(a: str, b: str) -> bool:
+    """Whether two relation signatures name the same relation: the same
+    kind, slots, values, variable and text, case aside, and the same
+    axis where both give one (the model may leave an axis blank, the
+    value finds it)."""
+    pa, pb = a.lower().split("|"), b.lower().split("|")
+    if len(pa) != 9 or len(pb) != 9:
+        return a == b
+    for n, (x, y) in enumerate(zip(pa, pb, strict=True)):
+        if x.strip() == y.strip():
+            continue
+        if n in (2, 5) and (not x.strip() or not y.strip()):
+            continue  # an axis one side left blank
+        return False
+    return True
+
+
 def apply_locks(raw: dict[str, Any], previous: dict[str, Any],
                 locks: dict[str, list[str]]) -> list[str]:
     """Put what the user set by hand (``locks``, parts of ``previous``'s
@@ -2158,12 +2176,12 @@ def apply_locks(raw: dict[str, Any], previous: dict[str, Any],
     rels = [r for r in (raw.get("relations") if isinstance(raw.get("relations"), list) else [])
             if isinstance(r, dict)]
     gone = set(locks["removed_relations"])
-    rels = [r for r in rels if raw_rel_sig(r) not in gone]
+    rels = [r for r in rels if not any(_sig_like(raw_rel_sig(r), g) for g in gone)]
     have = {raw_rel_sig(r) for r in rels}
     added = 0
     for sig in locks["relations"]:
         mine = next((r for r in prev["relations"] if raw_rel_sig(r) == sig), None)
-        if mine is not None and sig not in have:
+        if mine is not None and not any(_sig_like(h, sig) for h in have):
             rels.append(dict(mine))
             have.add(sig)
             added += 1
@@ -2284,6 +2302,12 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
     sent_back = isinstance(raw, dict) and isinstance(raw.get("graph"), dict)
     graph = raw["graph"] if sent_back else raw
     previous = kw.get("previous") if isinstance(kw.get("previous"), dict) else None
+    for field in ("settings", "decisions"):
+        # A caller that leaves them out means the plan's own (a graph plan's
+        # items never carry them, so ``compile_plan`` can't fall back).
+        if kw.get(field) is None:
+            kw[field] = (raw.get(field) if sent_back else None) \
+                or (previous.get(field) if previous else None)
     locks = parse_locks(raw.get("locks") if sent_back else
                         previous.get("locks") if previous else None)
     applied: list[str] = []
@@ -2304,6 +2328,14 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
     applied += code_beat(graph)
     applied += apply_picks(graph, kw.get("request") or "")
     applied += apply_request_slots(graph, kw.get("request") or "")
+    if model_quality(graph, kw.get("settings")):
+        own = [f["name"] for f in graph["fixed"] if f["var"] == QUALITY_VAR]
+        if own:
+            # The per-model-family rule writes $quality; a fixed value of
+            # the same name would be written over every run.
+            graph["fixed"] = [f for f in graph["fixed"] if f["var"] != QUALITY_VAR]
+            applied.append(", ".join(own) + ": the per-model-family rule writes $quality, so "
+                           "the fixed value went")
     if parse_run(graph["run"])["mode"] == "single":
         # A hold only means something over a Loop: in single images it
         # just makes every prompt the same.
@@ -2406,7 +2438,11 @@ def with_refs(graph: dict[str, Any], answer: Any) -> dict[str, Any]:
         return graph
     raw = graph_answer({"graph": graph})
     raw["relations"] = [*raw["relations"], *extra]
-    raw["dropped"] = [*(graph.get("dropped") or []), *graph["bad_refs"]]
+    raw["dropped"] = list(graph.get("dropped") or [])
     fixed = compile_graph(raw)
+    if len(fixed["relations"]) - len(graph["relations"]) < len(graph["bad_refs"]):
+        # Fewer came back than were asked for: the ones not written again
+        # stay listed as left out (which ones, the messages can't say).
+        fixed["dropped"] = list(dict.fromkeys([*fixed["dropped"], *graph["bad_refs"]]))
     fixed["warnings"] = graph.get("warnings", [])
     return fixed

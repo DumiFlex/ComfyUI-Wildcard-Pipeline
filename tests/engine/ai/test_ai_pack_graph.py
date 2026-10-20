@@ -241,7 +241,9 @@ def test_refs_schema_and_repair():
          "var": "", "text": "", "otherwise": ""}]})
     assert len(fixed["relations"]) == len(g["relations"]) + 1
     assert fixed["bad_refs"] == ["exclude: Race.kind has no value orc"]
-    assert fixed["dropped"] == ["exclude: Race.kind has no value orc"]  # the first try's
+    # As many came back as were asked for, so the first try's miss isn't
+    # listed as left out on top of the repair's own.
+    assert fixed["dropped"] == []
     again = pg.compile_graph(fixed)
     assert again["dropped"] == ["exclude: Race.kind has no value orc"]
     assert pg.with_refs(g, {"relations": []}) is g
@@ -261,9 +263,12 @@ async def test_run_pack_on_the_graph_planner():
         assert "Other wildcards cover" in kw["user"]
         return _answer(name)
 
-    result = await pack.run_pack(complete, "fantasy race, class and weapon; outfit by season",
+    result = await pack.run_pack(complete, "fantasy race, class and weapon; outfit by season, "
+                                 "with 2 to 3 weapons each",
                                  seeds=40, settings={"planner": "graph"})
     assert result["failed"] == []
+    # The eval compiles with the request, like the route: the pick is read off it.
+    assert pg.slot_by_var(result["plan"]["graph"], "weapon")["pick"] == "2-3"
     assert calls.count("pack_graph") == 1 and calls.count("pack_refs") == 1
     assert calls.count("pack_slot") == 4  # one per slot; Season and wired items need none
     assert result["check"]["problems"] == {}, result["check"]["problems"]

@@ -161,6 +161,30 @@ describe("PackBuilder on a graph plan", () => {
     expect(pb.relationsOf("i3")).toEqual([0, 2]);
   });
 
+  it("renames a slot in its relations and locks, and keeps a half-written rule through the recheck", async () => {
+    const { pb } = await start();
+    pb.editRelation(0, { to: { slot: "Weapon", axis: "type", value: "blade" } });  // locked by signature
+    pb.editItem("i1", { name: "Folk" });
+    const g = pb.draft.value!.graph!;
+    expect(g.relations.map((r) => r.from.slot)).toEqual(["Folk", "Folk"]);
+    expect(pb.draft.value?.locks?.relations).toEqual([relSig(g.relations[0])]);
+    expect(g.relations[0].from.slot).toBe("Folk");
+    // A rule added by hand names no value yet: the server leaves it out of
+    // its compile, and the draft keeps it (without the server's note).
+    pb.addRelation({ kind: "exclude", from: { slot: "Folk", axis: "", value: "" }, to: { slot: "Weapon", axis: "", value: "" } });
+    vi.mocked(api.ai.packReview).mockImplementation(async ({ plan: p }) => ({
+      findings: [], note: "",
+      plan: { ...p, warnings: ["Left out a relation: exclude: Folk has no axis ?", "other"],
+        graph: { ...p.graph!, relations: p.graph!.relations.filter((r) => r.from.value) } },
+    }));
+    vi.advanceTimersByTime(500);
+    await flushPromises();
+    const after = pb.draft.value!.graph!;
+    expect(after.relations.length).toBe(3);
+    expect(after.relations[2]).toMatchObject({ kind: "exclude", from: { slot: "Folk", axis: "", value: "" } });
+    expect(pb.draft.value?.warnings).toEqual(["other"]);
+  });
+
   it("locks hand edits so the next answer keeps them, and shows what the code did", async () => {
     const { w, pb } = await start();
     const exclude = relSig(GRAPH.relations[0]);
@@ -222,6 +246,25 @@ describe("PackBuilder on a graph plan", () => {
     expect(pb.draft.value?.questions.length).toBe(0);
     expect(pb.decisions.value.length).toBe(2);
     expect(vi.mocked(api.ai.packPlan).mock.calls.length).toBe(1);
+    // With three slots to choose from the question stays open for a third
+    // pick after two, and goes at three.
+    const three = { ...sweep, question: "Which three?", choices: ["Race", "Weapon", "Hat"] };
+    vi.mocked(api.ai.packPlan).mockImplementation(async () => {
+      const p = plan();
+      return { ...p, plan: { ...p.plan, questions: [three] } };
+    });
+    pb.convo.instruction.value = "a sweep of three";
+    await pb.askPlan();
+    await flushPromises();
+    expect(pb.draft.value?.questions.length).toBe(1);
+    pb.choose(three, "Race");
+    pb.choose(three, "Weapon");
+    expect(pb.draft.value?.questions.length).toBe(1);
+    expect(pb.decisions.value.find((d) => d.question === "Which three?")?.answer).toBe("Race, Weapon");
+    pb.choose(three, "Hat");
+    expect(pb.draft.value?.questions.length).toBe(0);
+    expect(pb.decisions.value.find((d) => d.question === "Which three?")?.answer).toBe("Race, Weapon, Hat");
+    expect(vi.mocked(api.ai.packPlan).mock.calls.length).toBe(2);
   });
 
   it("decides the code's questions for the user with the first choices", async () => {

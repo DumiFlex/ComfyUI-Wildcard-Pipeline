@@ -424,3 +424,60 @@ def test_reuse_says_it_does_not_reach_a_pack_graph():
     plan = pack.compile_graph_plan(g, settings={"library": "reuse"})
     assert "Reuse what fits: not on a pack graph yet, every slot is a new wildcard" \
         in plan["applied"]
+
+
+def test_a_recompile_keeps_the_plans_settings_and_decisions():
+    g = _graph([_slot("Hero", "hero", "heroes", []),
+                _slot("Pet", "pet", "pets", [])], [], ["Hero", "Pet"])
+    plan = pack.compile_graph_plan(g, settings={"model": "family"},
+                                   decisions=[{"question": "Q?", "answer": "A"}])
+    assert plan["settings"]["model"] == "family" and plan["decisions"] == [
+        {"question": "Q?", "answer": "A"}]
+    # A route that sends the plan back without naming them again, and a
+    # repair that compiles on the previous plan: both keep them.
+    back = pack.compile_graph_plan(plan)
+    assert back["settings"]["model"] == "family" and back["decisions"] == plan["decisions"]
+    assert any(i["name"] == "Model quality" for i in back["items"])
+    again = pack.compile_graph_plan(pg.graph_answer(plan), previous=plan)
+    assert again["settings"]["model"] == "family" and again["decisions"] == plan["decisions"]
+
+
+def test_one_writer_of_quality_with_the_per_family_rule():
+    g = _graph([_slot("Hero", "hero", "heroes", [])], [], ["Quality", "Hero"],
+               fixed=[{"name": "Quality", "var": "quality", "text": "masterpiece",
+                       "negative": ""}])
+    plan = pack.compile_graph_plan(g, settings={"model": "family"})
+    assert plan["graph"]["fixed"] == []
+    assert "Quality: the per-model-family rule writes $quality, so the fixed value went" \
+        in plan["applied"]
+    kinds = [(i["kind"], i["var"]) for i in plan["items"] if i["var"] == "quality"]
+    assert kinds == [("derivation", "quality")]
+    # A Quality slot the code turns into fixed values goes the same way.
+    g = _graph([_slot("Quality", "quality", "masterpiece, best quality", []),
+                _slot("Hero", "hero", "heroes", [])], [], ["Quality", "Hero"])
+    plan = pack.compile_graph_plan(g, settings={"model": "family"})
+    assert plan["graph"]["fixed"] == [] and plan["graph"]["anchor"] == "hero"
+    # Without the setting the preset stands.
+    assert pack.compile_graph_plan(g)["graph"]["fixed"][0]["var"] == "quality"
+
+
+def test_a_removed_relation_stays_removed_however_the_model_spells_it():
+    g = _graph([_slot("Season", "season", "the season",
+                      [{"name": "season", "values": ["winter", "summer"]}]),
+                _slot("Shoes", "shoes", "footwear",
+                      [{"name": "season", "values": ["winter", "summer"]}])],
+               [_rel("exclude", "Season", "season", "winter", "Shoes", "season", "summer")],
+               ["Season", "Shoes"])
+    plan = pack.compile_graph_plan(g)
+    sig = pg.raw_rel_sig(pg.graph_answer(plan)["relations"][0])
+    plan["locks"] = {"slots": [], "relations": [], "removed_relations": [sig], "template": []}
+    answer = pg.graph_answer(plan)
+    # The next answer writes it again, lower-cased and with the axis left
+    # for the value to find: it stays out.
+    answer["relations"] = [_rel("exclude", "season", "", "winter", "shoes", "", "summer")]
+    again = pack.compile_graph_plan(answer, previous=plan)
+    assert again["graph"]["relations"] == []
+    assert pg._sig_like("exclude|Season|season|winter|Shoes|season|summer||",
+                        "exclude|season||winter|shoes||summer||")
+    assert not pg._sig_like("exclude|Season|season|winter|Shoes|season|summer||",
+                            "exclude|Season|season|winter|Shoes|season|winter||")
