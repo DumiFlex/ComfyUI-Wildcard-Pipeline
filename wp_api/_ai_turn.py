@@ -322,6 +322,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         # The JSON prompt keeps the tools the chat started with: say how
         # the new ones are called here instead.
         perms += "\n" + ai_chat.kinds_section(ai_tools.tools(added)).strip()
+    if not resume and text and _ORGANIZE_ASK.search(text):
+        perms = "\n".join(x for x in (perms, ai_chat.ORGANIZE_HINT) if x)
     if not resume and text:
         # The groups the message asks for by name come loaded: small models
         # rarely call more_tools and fake the missing tool with another.

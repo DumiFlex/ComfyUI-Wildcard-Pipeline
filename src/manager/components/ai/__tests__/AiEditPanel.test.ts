@@ -101,6 +101,16 @@ describe("AiEditPanel", () => {
     expect(w.get('[data-test="ai-run"]').attributes("disabled")).toBeDefined();
   });
 
+  it("shows the model's reason when nothing needs changing", async () => {
+    edit.mockResolvedValue({ action: "retag", model: "m", answer: {}, new_tags: [], skipped: [], changes: [],
+      note: "every option already carries one of those mood tags" });
+    const w = mountEdit("retag");
+    await w.get('[data-test="ai-instruction"]').setValue("tag each by mood");
+    await w.get('[data-test="ai-run"]').trigger("click");
+    await flushPromises();
+    expect(w.get('[data-test="ai-error"]').text()).toContain("changed nothing: every option already carries");
+  });
+
   it("shows a clear message when nothing needs changing", async () => {
     edit.mockResolvedValue({ action: "retag", model: "m", answer: {}, new_tags: [], skipped: [], changes: [] });
     const w = mountEdit("retag");

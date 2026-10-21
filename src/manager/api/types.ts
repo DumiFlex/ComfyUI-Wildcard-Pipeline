@@ -1043,6 +1043,8 @@ export interface AiWildcardDraftResult {
   /** Tag groups the request asked for (older servers leave it out). */
   groups?: AiDraftGroup[];
   skipped: Array<{ text: string; reason: string }>;
+  /** The model's one-line reason when it changed nothing, else "". */
+  note?: string;
   model: string;
   /** The model's raw answer, for a follow-up's `history`. */
   answer: Record<string, unknown>;
@@ -1084,6 +1086,8 @@ export interface AiWildcardEditResult {
   changes: AiWildcardEditChange[];
   new_tags: string[];
   skipped: Array<{ text: string; reason: string }>;
+  /** The model's one-line reason when it changed nothing, else "". */
+  note?: string;
   model: string;
   /** The model's raw answer, for a follow-up's `history`. */
   answer: Record<string, unknown>;
@@ -1108,6 +1112,8 @@ export interface AiDerivationDraftRule {
 export interface AiDerivationDraftResult {
   rules: AiDerivationDraftRule[];
   skipped: Array<{ text: string; reason: string }>;
+  /** The model's one-line reason when it changed nothing, else "". */
+  note?: string;
   model: string;
   /** The model's raw answer, for a follow-up's `history`. */
   answer: Record<string, unknown>;
@@ -1148,6 +1154,8 @@ export interface AiConstraintDraftResult {
   cells: AiConstraintCellDraft[];
   exceptions: AiConstraintExceptionDraft[];
   skipped: Array<{ text: string; reason: string }>;
+  /** The model's one-line reason when it changed nothing, else "". */
+  note?: string;
   model: string;
   /** The model's raw answer, for a follow-up's `history`. */
   answer: Record<string, unknown>;

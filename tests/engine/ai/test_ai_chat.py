@@ -311,3 +311,24 @@ def test_a_wildcard_with_no_variable_nothing_points_at_is_flagged():
     p = lib.run("create_wildcard", {"name": "Pose", "var": "pose",
                                     "options": [{"text": "sitting"}, {"text": "standing"}]})
     assert not any("sets no variable" in w for w in p["warnings"])
+
+
+def test_search_lists_a_category_or_the_items_with_none():
+    # Haiku and the 9B (2026-10-21), "most of my items have no category":
+    # a search per type and per tag until the steps ran out. One listing.
+    lib = _lib()
+    none = lib.search({"query": "", "category": "none"})
+    assert none.startswith("3 matches") and "Season" in none and "Titles" in none
+    assert "Outfit" not in none and "Kit" in none
+    chars = lib.search({"query": "", "category": "characters"})
+    assert chars.startswith("1 match") and "Outfit" in chars
+    with pytest.raises(ValueError, match="no category 'styles'; the categories are: Characters"):
+        lib.search({"query": "", "category": "Styles"})
+    # A category listing goes past the usual 25 lines.
+    many = [{"id": f"cccc{n:04x}", "type": "wildcard", "name": f"W{n}", "tags": [],
+             "payload": {"var_binding": f"w{n}", "sub_categories": [], "options": []}}
+            for n in range(60)]
+    big = chat.Library(many, [], [])
+    out = big.search({"query": "", "category": "none"})
+    assert out.startswith("60 matches") and "more" not in out
+    assert "… 35 more" in big.search({"query": "", "type": "wildcard"})

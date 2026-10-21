@@ -97,7 +97,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         :items="[
           { term: 'Remove', desc: 'Finds options that match what you describe (\'drop anything modern\') and says why. Options other modules point at stay; delete those by hand so you can see what refers to them.' },
           { term: 'Rewrite', desc: 'Changes the wording: tags to sentences, a different style, shorter, typos fixed. A rewrite that would make two options the same is left out.' },
-          { term: 'Retag', desc: 'Sets each option\'s tags (\'tag each by the seasons it suits\'). The new list replaces the old one; new tags are marked and created when you apply. A request over every option (\'each\', \'all\') that comes back with no option is asked once more.' },
+          { term: 'Retag', desc: 'Sets each option\'s tags (\'tag each by the seasons it suits\'). The new list replaces the old one; new tags are marked and created when you apply. A request over every option (\'each\', \'all\') that comes back with no option is asked once more, and when the model still changes nothing it says why ("every option already carries one of those tags").' },
           { term: 'Weights', desc: 'Makes options rarer or more common (\'heavy winter gear rarer\'). 1 is normal, 0.5 half as likely, 2 twice, 0 never.' },
         ]"
       />
@@ -314,7 +314,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         where you would anyway: it opens an item and asks one of its AI panels as if you typed
         it (<b>Describe</b> for the name, description and tags, a wildcard's Add, Remove,
         Rewrite, Retag and Weights tabs, <b>Draft with AI</b> in the other editors), opens
-        <b>Organize with AI</b> on the rows it means, or sets up the Test Runner (the stack,
+        <b>Organize with AI</b> on the rows it means (asked to sort a library it lists the
+        items with no category in one search, up to 100, then proposes the categories and the
+        moves as cards, or hands the rows to Organize), or sets up the Test Runner (the stack,
         how many seeds, a fixed first seed, pinned values, the variable to show) and runs it,
         or saves it as a scenario. Ask it to add a module to the run or take one out and it
         changes the open stack instead, keeping your seeds and pins; a constraint brings its

@@ -125,3 +125,23 @@ def test_retag_leaves_the_wildcards_own_library_tags_off_options():
     both = ed.compile_edit("retag", {"options": [{"id": 1, "tags": ["axis"]}]},
                                 options=opts, registry=["axis"], labels=["axis"])
     assert both["changes"][0]["after"]["tags"] == ["axis"]
+
+
+def test_an_empty_answer_carries_the_models_reason():
+    # Panel eval 2026-10-21: "tag each option with one mood" came back as
+    # [] three times out of three on Haiku and the 9B, and the user could
+    # not tell a judgement from a miss.
+    assert "note" in ed.SCHEMAS["retag"]["properties"]
+    assert "note" in ed.schema_for("retag", ["1", "2"])["properties"]
+    assert 'say why in "note"' in ed.system_prompt("retag")
+    opts = [{"id": "1", "value": "smile", "weight": 1, "sub_categories": ["happy"]}]
+    out = ed.compile_edit("retag", {"options": [], "note": "  every option already\ncarries "
+                                    "one of those mood tags  "}, options=opts, registry=["happy"])
+    assert out["changes"] == [] and out["note"] == "every option already carries one of those " \
+                                                   "mood tags"
+    # With changes the note is dropped: it only explains an empty list.
+    out = ed.compile_edit("retag", {"options": [{"id": 1, "tags": ["calm"]}], "note": "x"},
+                          options=opts, registry=["happy"])
+    assert out["changes"] and out["note"] == ""
+    out = ed.compile_edit("retag", {"options": []}, options=opts, registry=["happy"])
+    assert out["note"] == ""

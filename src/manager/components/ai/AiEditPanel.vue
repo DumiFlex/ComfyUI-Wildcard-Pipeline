@@ -91,7 +91,8 @@ const convo = useAiConversation<AiWildcardEditResult, Ctx>({
   note: (res) => keptNote(res.changes.map(changeLabel), unticked.value),
   emptyMessage: (res) => res.changes.length ? "" : res.skipped.length
     ? "The model's suggestions couldn't be used. Try asking differently."
-    : "The model didn't find anything to change.",
+    : res.note ? `The model changed nothing: ${res.note}`
+      : "The model didn't find anything to change.",
 });
 const { instruction, loading, error, result } = convo;
 /** The chat's `use_panel` (see useAiConversation `chat`). */
