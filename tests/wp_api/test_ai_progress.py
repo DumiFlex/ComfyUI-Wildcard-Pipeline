@@ -56,6 +56,41 @@ async def test_thinking_off_reaches_the_draft_panels_too(streamer):  # noqa: F81
     assert streamer.state["seen"][0]["reasoning_effort"] == "none"
 
 
+async def test_an_answer_that_was_all_thinking_is_asked_again_without(streamer):  # noqa: F811
+    _ai_client._JSON_THINK_OFF.clear()
+    cfg = {**_cfg(streamer), "provider": "lmstudio", "local": True, "thinking": "auto"}
+    answers = [
+        {"choices": [{"message": {"content": "", "reasoning_content": "hmm " * 50},
+                      "finish_reason": "length"}]},
+        {"choices": [{"message": {"content": '{"ok": true}'}, "finish_reason": "stop"}]},
+        {"choices": [{"message": {"content": '{"ok": false}'}, "finish_reason": "stop"}]},
+    ]
+    streamer.state["plain"] = answers[0]
+    seen = streamer.state["seen"]
+
+    real = _ai_client._answer
+
+    async def fake(cfg_, path, body, kind):
+        streamer.state["plain"] = answers[len(seen)]
+        return await real(cfg_, path, body, kind)
+
+    _ai_client._answer = fake
+    try:
+        answer = await _ai_client.complete_json(cfg, system="s", user="u", schema=_SCHEMA,
+                                                schema_name="t")
+        assert answer == {"ok": True}
+        assert "reasoning_effort" not in seen[0] and seen[1]["reasoning_effort"] == "none"
+        # Remembered: the next JSON call for this model starts with it off.
+        answer = await _ai_client.complete_json(cfg, system="s", user="u", schema=_SCHEMA,
+                                                schema_name="t")
+        assert answer == {"ok": False} and seen[2]["reasoning_effort"] == "none"
+    finally:
+        _ai_client._answer = real
+        _ai_client._JSON_THINK_OFF.clear()
+    assert _ai_client._all_thought({"content": "<think>still going"})
+    assert not _ai_client._all_thought({"content": '{"a": 1}', "reasoning": "x"})
+
+
 def test_ids_are_checked_and_old_entries_dropped():
     assert not _ai_progress.valid("../etc") and not _ai_progress.valid("short")
     assert _ai_progress.valid("abcDEF12-_x")

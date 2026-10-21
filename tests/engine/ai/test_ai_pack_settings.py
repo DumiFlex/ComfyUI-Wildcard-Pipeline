@@ -26,7 +26,7 @@ def test_settings_hold_only_pack_wide_preferences():
     for gone in ("run", "loras", "inputs", "frames"):
         assert gone not in cfg
     assert set(pack.SETTINGS) == {"library", "negatives", "structure", "style", "rating",
-                                  "model", "youth_negative", "planner"}
+                                  "model", "youth_negative", "planner", "drafts"}
     assert pack.parse_settings({})["planner"] == "graph"
     for asked in ('ask (header "Subject")', 'Ask (header "Run")', "outfit_lora"):
         assert asked in pack.PLAN_SYSTEM

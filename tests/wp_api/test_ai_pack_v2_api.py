@@ -468,3 +468,23 @@ async def test_a_graph_plan_changes_one_part_and_reads_added_images(wp_client, f
     assert got["plan"]["locks"]["slots"] == ["weapon"]
     resp = await wp_client.post("/wp/api/ai/pack/images", json={"plan": out["plan"]})
     assert resp.status == 400
+
+
+async def test_best_of_three_reads_the_images_once(wp_client, fake_llm):
+    from tests.engine.ai.test_ai_pack_graph import GRAPH
+    _ai_chat._vision.clear()
+    _on(fake_llm, "eyes")
+    fake_llm.overrides["pack_graph"] = {**GRAPH, "from_images": ["a red cloak", "snow"]}
+    resp = await wp_client.post("/wp/api/ai/pack/plan", json={
+        "instruction": "like this", "images": [_png()],
+        "settings": {"planner": "graph", "drafts": "three"}})
+    assert resp.status == 200, await resp.text()
+    plans = [s["body"] for s in fake_llm.seen if s["body"].get("response_format", {})
+             .get("json_schema", {}).get("name") == "pack_graph"]
+    assert len(plans) == 3
+    first = plans[0]["messages"][-1]["content"]
+    assert [p["type"] for p in first] == ["text", "image_url"]
+    for later in plans[1:]:
+        content = later["messages"][-1]["content"]
+        assert isinstance(content, str) and "image_url" not in content
+        assert "they showed: a red cloak; snow" in content

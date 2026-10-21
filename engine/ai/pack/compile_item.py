@@ -5,7 +5,6 @@ import json
 import re
 from typing import Any
 
-from engine.ai import adult as ai_adult
 from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
 from engine.ai import fits as ai_fits
@@ -13,6 +12,7 @@ from engine.ai import text_items
 from engine.ai import wildcard as ai_wildcard
 from engine.ai.pack import graph as pack_graph
 from engine.ai.pack._common import _HEX8, _item, is_wild, new_id
+from engine.ai.pack.adult_pack import adult_check
 from engine.ai.pack.build import (
     _catalog,
     _constraint_sides,
@@ -29,7 +29,6 @@ from engine.ai.pack.build_notes import (
     repair_note,
     tag_commas,
 )
-from engine.ai.pack.settings import parse_settings
 from engine.ai.pack.text_fixes import (
     _ARTICLE_PICK,
     _PLACEHOLDER,
@@ -51,8 +50,31 @@ from engine.ai.pack.text_fixes import (
     _wrap_pipes,
 )
 from engine.modules.constraint_handler import ConstraintHandler
-from engine.modules.derivation_handler import NEGATIVE_MODES, DerivationHandler, clause_actions
+from engine.modules.derivation_handler import DerivationHandler
 from engine.modules.wildcard_handler import WildcardHandler
+
+
+def _quality_otherwise(plan: dict[str, Any], item: dict[str, Any], payload: dict[str, Any]
+                       ) -> tuple[dict[str, Any], list[str]]:
+    """The per-family quality rule the code wires gets an "otherwise": the
+    pack's own quality words (the preset the rule replaced, else the
+    style's usual ones). The model wrote it without one, so with no WP
+    Model Info $quality was never set and the template read nothing (9B,
+    2026-10-21, 9 packs)."""
+    graph = plan.get("graph")
+    if not isinstance(graph, dict) or item.get("var") != pack_graph.QUALITY_VAR:
+        return payload, []
+    rules = payload.get("rules") or []
+    if not rules or any(isinstance(r, dict) and r.get("else") for r in rules):
+        return payload, []
+    words = graph.get("quality_words") or (
+        "masterpiece, best quality" if graph.get("style") == "tags"
+        else "high quality, detailed")
+    first = {**rules[0], "else": {"action": {"target_var": item["var"], "mode": "replace",
+                                             "value": words}}}
+    return ({**payload, "rules": [first, *rules[1:]]},
+            [f"Added an otherwise, \"{words}\": with no model variable set, $quality still "
+             "has the pack's quality words"])
 
 
 def compile_item(
@@ -79,7 +101,8 @@ def compile_item(
         if slot is not None:
             compiled = pack_graph.compile_slot(
                 plan["graph"], slot, answer, existing=(built.get(key) or {}).get("payload"),
-                others=pack_graph.other_texts(plan, built, key))
+                others=pack_graph.other_texts(plan, built, key),
+                refs=pack_graph.draw_refs(plan, built))
         else:
             compiled = ai_wildcard.compile_spec(
                 answer, var=item["var"] or None, refs=idx, self_id=mid, limit=item["count"],
@@ -135,6 +158,8 @@ def compile_item(
                 seen_rules.add(same)
                 rules.append(r["rule"])
         payload = {"rules": rules}
+        payload, said = _quality_otherwise(plan, item, payload)
+        warnings += said
         from engine.ai import pack_tidy
         payload, joined = pack_tidy.merge_lookup(payload)
         warnings += joined
@@ -254,77 +279,13 @@ def compile_item(
         if plan.get("style") == "tags":
             payload = {**payload, "template_string": tag_commas(payload["template_string"])}
     if plan.get("rating") == "nsfw":
-        payload, said = _adult_check(kind, payload, plan)
+        payload, said = adult_check(kind, payload, plan)
         warnings += said
+    repair = repair_note(warnings)
     return {"key": key, "id": mid, "kind": kind, "payload": payload,
-            "preview": preview, "warnings": warnings, "repair": repair_note(warnings)}
+            "preview": preview, "warnings": warnings, "repair": repair,
+            "fill": pack_graph.fills(plan, key, repair)}
 
 
-def _adult_check(kind: str, payload: dict[str, Any],
-                 plan: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
-    """An nsfw pack's item. The pack is a sexual context, so text with a
-    clearly minor word (child, loli, "16 years old") is left out, as
-    `adult.sexual_minor` does everywhere (ValueError, so the item is
-    rebuilt, when nothing would be left). Words an adult can wear or be
-    called too (school uniform, teen) stay, with a warning for the user to
-    judge. The template's negative gets the youth block while the
-    youth_negative setting is on."""
-    why = "an adult pack never names a minor"
-    said: list[str] = []
-
-    def keep(rows: list[Any], text: Any, noun: str) -> list[Any]:
-        bad = [r for r in rows if ai_adult.minor_words(text(r))]
-        kept = [r for r in rows if r not in bad]
-        if bad and not kept:
-            raise ValueError(f"every {noun} names a minor; {why}")
-        if bad:
-            words = ", ".join(dict.fromkeys(w for r in bad for w in ai_adult.minor_words(text(r))))
-            more = f" and {len(bad) - 1} more" if len(bad) > 1 else ""
-            said.append(f"Left out \"{text(bad[0])[:40]}\"{more}: {why} ({words})")
-        return kept
-
-    def writes(rule: dict[str, Any]) -> str:
-        clauses = [*(rule.get("branches") or []), rule.get("else")]
-        return ", ".join(str(a.get("value") or "") for c in clauses for a in clause_actions(c)
-                         if a.get("mode") not in NEGATIVE_MODES)
-
-    texts: list[str] = []
-    if kind == "wildcard":
-        real = [o for o in payload.get("options") or [] if not o.get("is_null")]
-        kept = keep(real, lambda o: str(o.get("value") or ""), "option")
-        if len(kept) < len(real):
-            payload = {**payload, "options": [o for o in payload["options"]
-                                              if o.get("is_null") or o in kept]}
-            WildcardHandler.validate_payload(payload)
-        texts = [str(o.get("value") or "") for o in kept]
-    elif kind == "fixed_values":
-        rows = payload.get("values") or []
-        kept = keep(rows, lambda v: str(v.get("value") or ""), "value")
-        if len(kept) < len(rows):
-            payload = {**payload, "values": kept}
-        texts = [str(v.get("value") or "") for v in kept]
-    elif kind == "derivation":
-        rows = payload.get("rules") or []
-        kept = keep(rows, writes, "rule")
-        if len(kept) < len(rows):
-            payload = {**payload, "rules": kept}
-        texts = [writes(r) for r in kept]
-    elif kind in ("combine", "template"):
-        text = str(payload.get("template" if kind == "combine" else "template_string") or "")
-        if ai_adult.minor_words(text):
-            raise ValueError(f"it names a minor; {why}")
-        texts = [text]
-    flagged = [t for t in texts if ai_adult.youth_words(t)]
-    if flagged:
-        words = ", ".join(dict.fromkeys(w for t in flagged for w in ai_adult.youth_words(t)))
-        more = f" and {len(flagged) - 1} more" if len(flagged) > 1 else ""
-        said.append(f"Check \"{flagged[0][:40]}\"{more}: it says {words} in an adult pack. "
-                    "Make sure every character reads as an adult")
-    if kind == "template" and parse_settings(plan.get("settings"))["youth_negative"] == "on":
-        neg, added = ai_adult.with_youth_negative(str(payload.get("negative_template") or ""),
-                                                  plan.get("style") or "tags")
-        if added:
-            payload = {**payload, "negative_template": neg}
-            said.append("Added " + ", ".join(added) + " to the negative: the pack is rated "
-                        "nsfw (Settings > Youth negative)")
-    return payload, said
+#: The old name of `adult_pack.adult_check`.
+_adult_check = adult_check

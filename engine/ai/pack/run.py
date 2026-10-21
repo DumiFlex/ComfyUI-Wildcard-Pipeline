@@ -4,15 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
+from engine.ai import adult as ai_adult
 from engine.ai import patterns as ai_patterns
 from engine.ai.pack._common import PLAN_SCHEMA, PlanError, _item
 from engine.ai.pack.build import item_request, library_item
 from engine.ai.pack.check import check_pack
 from engine.ai.pack.compile_item import compile_item
+from engine.ai.pack.drafts import DRAFT_TEMPERATURES, draft_line, pick_draft
 from engine.ai.pack.graph import (
     GRAPH_SCHEMA,
     GRAPH_SYSTEM,
     compile_graph_plan,
+    fills,
     is_wired,
     refs_prompt,
     refs_schema,
@@ -50,6 +53,9 @@ async def run_pack(
     "Decide the rest" would. Returns ``{plan, built, check, log, failed}``;
     ``failed`` lists the items that never built. Raises PlanError when the
     plan fails."""
+    refused = ai_adult.refused_request(instruction)
+    if refused:
+        raise PlanError(refused)
     log: list[str] = []
     cfg = parse_settings(settings)
     graph = cfg["planner"] == "graph"
@@ -63,7 +69,7 @@ async def run_pack(
             return compile_plan(answer, library=library, previous=previous,
                                 decisions=decisions, settings=cfg, request=instruction)
         plan = compile_graph_plan(answer, library=library, previous=previous,
-                                  decisions=decisions, settings=cfg)
+                                  decisions=decisions, settings=cfg, request=instruction)
         if plan["bad_refs"]:
             # One repair call, on an enum of what the graph declares.
             log.append(f"plan: {len(plan['bad_refs'])} relation(s) named nothing; asked again")
@@ -71,7 +77,7 @@ async def run_pack(
             fix = await complete(system=GRAPH_SYSTEM, user=refs_prompt(g), schema=refs_schema(g),
                                  schema_name="pack_refs", temperature=0.2)
             plan = compile_graph_plan(with_refs(g, fix), library=library, previous=plan,
-                                      decisions=decisions, settings=cfg)
+                                      decisions=decisions, settings=cfg, request=instruction)
         return plan
 
     lib_note = ai_patterns.note(ai_patterns.summarize(library or []))
@@ -85,6 +91,21 @@ async def run_pack(
         answer = await complete(system=system, user=first + "\n\n" + plan_retry_note(str(e)),
                                 schema=schema, schema_name=schema_name, temperature=0.2)
         plan = await compiled(answer)
+    if graph and cfg["drafts"] == "three":
+        drafts = [(answer, plan)]
+        for t in DRAFT_TEMPERATURES[1:]:
+            try:
+                a = await complete(system=system, user=first, schema=schema,
+                                   schema_name=schema_name, temperature=t)
+                drafts.append((a, await compiled(a)))
+            except Exception as e:  # noqa: BLE001 - a failed draft is skipped
+                log.append(f"plan: a draft failed ({type(e).__name__}: {e})")
+        best, scores = pick_draft([p for _, p in drafts], instruction, library)
+        answer, plan = drafts[best]
+        line = draft_line(best, scores)
+        if line:
+            plan["applied"] = [*plan.get("applied", []), line]
+            log.append(f"plan: {line}")
     history = [(first, answer)]
     decisions: list[dict[str, str]] = []
     if plan["questions"]:
@@ -129,7 +150,7 @@ async def run_pack(
         if is_wired(plan, key):
             try:
                 out = wired_payload(plan, key, built)
-            except PlanError as e:
+            except (PlanError, ValueError) as e:
                 log.append(f"{key}: {e}")
                 return False
             built[key] = {"id": _item(plan, key)["id"], "payload": out["payload"]}
@@ -157,7 +178,8 @@ async def run_pack(
                 continue
             built[key] = {"id": out["id"], "payload": out["payload"]}
             log.extend(f"{key}: {w}" for w in out["warnings"])
-            if out["repair"] and not note:
+            if out["repair"] and (not note or (out.get("fill") and not fills(plan, key, note))):
+                # A rebuilt slot that still misses a value gets one fill.
                 log.append(f"{key} fix: {out['repair']}")
                 return await build(key, out["repair"]) or True
             return True

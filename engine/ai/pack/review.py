@@ -370,14 +370,23 @@ def review_plan(plan: dict[str, Any],
                                "changes as target"), type="dropped_constraint",
                 refs=(str(d.get("name") or ""),))
     if graph is not None:
-        gaps = pack_graph.request_gaps(graph, request)
+        tried = set(plan.get("gaps_tried") or [])
+        gaps = [g for g in pack_graph.request_gaps(graph, request) if g not in tried]
         if gaps:
             add(None, "fix", "The request names " + ", ".join(gaps) + ", and the plan says "
                 + ("none of them" if len(gaps) > 1 else "it") + " anywhere; give each a "
                 "slot of its own, a value on an axis, or put it in the words of the rule it "
                 "is part of", type="request_gap", refs=tuple(gaps))
-    # A new wildcard the library already has (a graph plan's slots are
-    # matched to the library by the code).
+        left = sorted(tried)
+        if left:
+            add(None, "tip", "The request also says " + ", ".join(left) + ", which the planner "
+                "was asked about and found no place for; add it by hand if it is a thing the "
+                "pack should pick, or leave it if it only says how to build the pack",
+                type="request_gap_left", refs=tuple(left))
+    # A new wildcard the library already has. Not on a graph plan: there
+    # the code swaps a fitting slot for the user's wildcard on every
+    # compile (``graph.library_slots``), and a kind change on an item
+    # would not survive the next one.
     if parse_settings(plan.get("settings"))["library"] == "reuse" and graph is None:
         lib = {}
         for r in library or []:
@@ -454,7 +463,7 @@ REVIEW_GRAPH_SYSTEM = """\
 You review the design of a Wildcard Pipeline prompt pack before it is built. \
 The pack is a graph: slots (one wildcard each, with axes its rules key on), \
 relations between them (exclude, only, boost, reduce, agree, accepts, \
-derive, append) and a template order. The code writes every option, tag, \
+derive, append, draw) and a template order. The code writes every option, tag, \
 fallback, constraint cell, derivation branch and the template from it, and \
 wires the run style (story beats, sweep axes, holds) and the model setting \
 itself, so never ask for those, for tags or descriptions on items, for \
@@ -565,7 +574,12 @@ def compile_review(answer: Any, plan: dict[str, Any],
             else:
                 text = was
         fid = finding_id("m", key, fingerprint(typ) if typ != "other" else text)
-        if any(o["id"] == fid for o in out):
+        same = next((o for o in out if o["id"] == fid), None)
+        if same is not None:
+            # One finding per kind and item: a second of the same kind
+            # joins it rather than vanishing.
+            if not _same(text, same["text"]):
+                same["text"] = f"{same['text']}; {text}"
             continue
         level = "fix" if f.get("severity") == "fix" else "tip"
         out.append({"id": fid, "key": key, "level": level, "text": text, "by": "model",

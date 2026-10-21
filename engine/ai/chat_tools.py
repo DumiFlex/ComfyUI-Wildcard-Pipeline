@@ -146,6 +146,13 @@ class MoreTools:
                 # this answer ("Outfit"): the answer means its own card.
                 made = getattr(self, "_created", {})
                 hits = [r for r in hits if r.get("id") in made] or hits
+            if len(hits) > 1:
+                # Three Weather wildcards (9B, 2026-10-21): the one the user
+                # named or this chat already read is the one meant.
+                known = set(getattr(self, "named", None) or ()) | set(
+                    getattr(self, "touched", None) or ())
+                seen = [r for r in hits if r.get("id") in known]
+                hits = seen if len(seen) == 1 else hits
             row = hits[0] if len(hits) == 1 else None
         if row is not None and kinds and self._kind(row) not in kinds:  # type: ignore
             return None

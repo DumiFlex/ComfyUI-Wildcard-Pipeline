@@ -99,15 +99,19 @@ def check_pack(
     else:
         report = run_scenario(modules, seeds=seed_list, catalog=catalog, pins=pinned,
                               sample_limit=0, value_limit=MAX_COUNT + 20)
+    fallbacks: dict[str, int] = {}
     for w in report["warnings"]:
         key = by_id.get(str(w.get("owner_id") or w.get("module_id") or ""))
         detail = w.get("detail") if isinstance(w.get("detail"), dict) else {}
         what = detail.get("hint") or w.get("message") or w.get("type")
         text = f"{what} ({w['count']} of {report['runs']} runs)"
+        if key and w.get("type") == "fallback_used":
+            fallbacks[key] = fallbacks.get(key, 0) + int(w.get("count") or 0)
         if key:
             problems.setdefault(key, []).append(text)
         else:
             notes.append(text)
+    notes += _tight_rules(plan, fallbacks, report["runs"])
     if report["failed"]:
         notes.append(f"{report['failed']} of {report['runs']} runs failed")
     variables = []
@@ -219,7 +223,37 @@ def check_pack(
                                if str(m.get("_uid")) in by_id))
     return {"runs": report["runs"], "failed": report["failed"], "problems": problems,
             "notes": notes, "variables": variables, "prompts": prompts, "quality": quality,
-            "order": order, "relations": relations, "distinct": distinct}
+            "order": order, "relations": relations, "distinct": distinct,
+            "fallbacks": fallbacks}
+
+
+#: The share of runs a slot may fall back in before its rules count as too
+#: tight: a rule that empties the pool most of the time isn't choosing.
+TIGHT_SHARE = 0.3
+
+
+def _tight_rules(plan: dict[str, Any], fallbacks: dict[str, int], runs: int) -> list[str]:
+    """A note per slot whose fallback stood in for ``TIGHT_SHARE`` or more
+    of the runs, naming the relations that narrow it: the pool those leave
+    is empty most of the time, so the pack isn't choosing (landscape,
+    2026-10-19: 84 of 100 runs)."""
+    graph = plan.get("graph")
+    out: list[str] = []
+    if not runs or not isinstance(graph, dict):
+        return out
+    for key, n in fallbacks.items():
+        if n / runs < TIGHT_SHARE:
+            continue
+        item = next((i for i in plan["items"] if i["key"] == key), None)
+        slot = pack_graph.slot_by_var(graph, item["var"]) if item else None
+        if slot is None:
+            continue
+        rules = [pack_graph._slot_rel_words(r) for r in pack_graph.inbound(graph, slot)]
+        out.append(f"{slot['name']}: its rules leave nothing in {n} of {runs} runs, so the "
+                   "fallback stands in; loosen one of them"
+                   + (" (" + "; ".join(rules[:4]) + ")" if rules else "")
+                   + " or add options that fit more of them")
+    return out
 
 
 def _distinct(runs: list[dict[str, Any]], text: str, neg: str) -> float:
@@ -339,6 +373,13 @@ def _overlaps(plan: dict[str, Any], built: dict[str, Any], text: str) -> dict[st
     for a, a_opts in wild:
         a_chunks = {c for o in a_opts for c in _chunks(o)}
         a_heads = {c.split()[-1] for c in a_chunks}
+        # The head noun most of A's options end in ("eyes" for an Eyes
+        # pick) is A's own subject: B's "gentle eyes" borrows it, A's
+        # "blue eyes" doesn't, so no hit on it counts against A (Sonnet 5.5,
+        # 2026-10-21: Fix Eyes with AI could never clear "names what
+        # $expression picks: gentle eyes, half-closed eyes").
+        a_all = [c.split()[-1] for o in a_opts for c in _chunks(o)]
+        a_subject = {h for h in set(a_all) if a_all.count(h) * 2 > len(a_all)}
         for b, b_opts in wild:
             if b is a or a["key"] in out:
                 continue
@@ -346,9 +387,11 @@ def _overlaps(plan: dict[str, Any], built: dict[str, Any], text: str) -> dict[st
             heads = [c.split()[-1] for c in b_chunks]
             # A head noun most of B's options share ("hair") names B's
             # subject, not one pick: only full matches count for it.
-            hits = sorted({c for c, h in zip(b_chunks, heads, strict=True) if c in a_chunks
-                           or (heads.count(h) * 2 <= len(heads) and h in a_heads
-                               and len(h) >= 4)})
+            hits = sorted({c for c, h in zip(b_chunks, heads, strict=True)
+                           if h not in a_subject
+                           and (c in a_chunks
+                                or (heads.count(h) * 2 <= len(heads) and h in a_heads
+                                    and len(h) >= 4))})
             if len(hits) >= 2:
                 out[a["key"]] = (
                     f"its options already name what ${b['var']} ({b['name']}) picks: "
@@ -437,6 +480,12 @@ def unread_notes(plan: dict[str, Any], built: dict[str, Any],
              for v in (c["source"], c["target"])}
     if plan.get("anchor"):
         ruled.add(plan["anchor"])
+    # A list other options draw from (``@{id:tag}``) is read every run.
+    drawn: set[str] = set()
+    for b in built.values():
+        for o in (b.get("payload") or {}).get("options") or []:
+            if isinstance(o, dict) and isinstance(o.get("value"), str):
+                drawn |= set(re.findall(r"@\{([0-9a-f]{8})", o["value"]))
     tpl = next((i for i in plan["items"] if i["kind"] == "template" and i["key"] in built), None)
     notes: list[str] = []
     for i in plan["items"]:
@@ -444,8 +493,10 @@ def unread_notes(plan: dict[str, Any], built: dict[str, Any],
                 or i["kind"] in ("constraint", "template"):
             continue
         sets = item_io(i, built[i["key"]]["payload"])[1]
-        if sets & reads:
+        if sets & reads or built[i["key"]].get("id") in drawn:
             continue
+        if sets & ruled and "internal" in (i.get("use") or ""):
+            continue  # a driver kept out of the prompt on purpose
         if sets & ruled and tpl is not None:
             # Other picks follow it, but the image never shows it (a
             # constraint's target that nothing reads changes nothing).

@@ -66,7 +66,7 @@ export const DEFAULT_SETTINGS: AiPackSettings = {
   // New items by default (Dumi, 2026-10-18): a pack reuses your own only
   // when you pick "Reuse what fits".
   library: "inspire", negatives: "auto", structure: "sections", style: "auto", rating: "auto",
-  count: 0, model: "any", youth_negative: "on", planner: "graph",
+  count: 0, model: "any", youth_negative: "on", planner: "graph", drafts: "one",
 };
 export const DECIDE_ANSWER = "Your call (decide for me)";
 /** Mirrors `engine/ai/pack.py:build_order`: vocabularies (wildcards with
@@ -453,9 +453,12 @@ function settle(q: AiPackQuestion, chosen: string[]): void {
   mergeDecisions([d]);
   const now = draft.value;
   if (!now) return;
+  // A sweep takes two or three slots: the question stays open for a third
+  // (the decision is recorded either way), and goes once three are picked.
+  const open = b.set === "sweep" && chosen.length < 3 && q.choices.length > 2;
   editDraft({
     ...now,
-    questions: now.questions.filter((x) => x.question !== q.question),
+    questions: open ? now.questions : now.questions.filter((x) => x.question !== q.question),
     decisions: [...now.decisions.filter((x) => x.question !== d.question), d],
   });
 }
@@ -624,16 +627,17 @@ function slotOf(key: string): AiPackSlot | null {
   return p.graph.slots.find((s) => s.var === i.var) ?? null;
 }
 
-/** The graph relations behind a plan item: a constraint's pair, or a
- *  derivation's written variable. */
+/** The graph relations behind a plan item: a constraint's pair, a
+ *  derivation's written variable, or the lists a wildcard draws from. */
 function relationsOf(key: string): number[] {
   const p = draft.value;
   const i = p?.items.find((x) => x.key === key);
   if (!p?.graph || !i) return [];
   const byVar = new Map(p.graph.slots.map((s) => [s.var, s.name]));
   return p.graph.relations.flatMap((r, n) => {
-    if (i.kind === "constraint" && r.to && r.from.slot === byVar.get(i.source) && r.to.slot === byVar.get(i.target)) return [n];
+    if (i.kind === "constraint" && r.kind !== "draw" && r.to && r.from.slot === byVar.get(i.source) && r.to.slot === byVar.get(i.target)) return [n];
     if (i.kind === "derivation" && r.var === i.var && !r.to) return [n];
+    if (i.kind === "wildcard" && r.kind === "draw" && r.to?.slot === byVar.get(i.var)) return [n];
     return [];
   });
 }
@@ -668,13 +672,28 @@ function editGraph(change: (g: AiPackGraph) => AiPackGraph,
 
 function editSlot(v: string, set: Partial<AiPackSlot>): void {
   const renamed = set.var !== undefined && set.var !== v ? set.var : "";
+  const g0 = draft.value?.graph;
+  const was = g0?.slots.find((s) => s.var === v)?.name ?? "";
+  const named = set.name !== undefined && set.name !== was ? set.name : "";
+  // Relations name a slot by its name: a renamed slot takes them along
+  // (and the signatures its locks hold), or the server drops them all.
+  const follow = (r: AiPackRelation): AiPackRelation => (named
+    ? { ...r, from: r.from.slot === was ? { ...r.from, slot: named } : r.from,
+      ...(r.to ? { to: r.to.slot === was ? { ...r.to, slot: named } : r.to } : {}) }
+    : r);
+  const resign = (sigs: string[], rels: AiPackRelation[]): string[] =>
+    sigs.map((sig) => { const r = rels.find((x) => relSig(x) === sig); return r ? relSig(follow(r)) : sig; });
   editGraph((g) => {
     const slots = g.slots.map((s) => (s.var === v ? { ...s, ...set } : s));
-    if (!renamed) return { ...g, slots };
-    // Relations and the template follow the slot by name; only its
-    // variable changed, so nothing else moves.
-    return { ...g, slots, template: { ...g.template, order: g.template.order.map((o) => (o === v ? renamed : o)) } };
-  }, (l) => ({ ...l, slots: withLock(l.slots, [renamed || v], renamed ? [v] : []) }));
+    const relations = named ? g.relations.map(follow) : g.relations;
+    if (!renamed) return { ...g, slots, relations };
+    // The template follows the slot by variable.
+    return { ...g, slots, relations, template: { ...g.template, order: g.template.order.map((o) => (o === v ? renamed : o)) } };
+  }, (l, g) => ({
+    ...l,
+    slots: withLock(l.slots, [renamed || v], renamed ? [v] : []),
+    relations: resign(l.relations, g.relations),
+  }));
 }
 
 function editRelation(n: number, set: Partial<AiPackRelation>): void {
@@ -695,6 +714,14 @@ function removeRelation(n: number): void {
     return { ...l, relations: withLock(l.relations, [], [relSig(was)]),
       removed_relations: withLock(l.removed_relations, [relSig(was)]) };
   });
+}
+
+/** A relation the user hasn't finished: no axis value where the kind
+ *  needs one, or a rule with no variable or text yet. */
+export function unfinished(r: AiPackRelation): boolean {
+  if (r.kind === "derive" || r.kind === "append") return !r.from.value || !r.var || !r.text;
+  if (r.kind === "agree" || r.kind === "accepts" || r.kind === "draw") return false;
+  return !r.from.value || !r.to?.value;
 }
 
 function addRelation(r: AiPackRelation): void {
@@ -856,13 +883,23 @@ async function recheck(): Promise<void> {
     const items = v.draft.graph
       ? got.plan.items
       : v.draft.items.map((i) => (v.removed.has(i.key) ? i : server.get(i.key) ?? i));
+    // A rule added by hand and not filled in yet names no axis or value:
+    // the server leaves it out, so it is kept here (without the warning
+    // that says so) until the user finishes it.
+    const blank = v.draft.graph ? v.draft.graph.relations.filter(unfinished) : [];
+    const kept = got.plan.graph
+      ? blank.filter((r) => !got.plan.graph?.relations.some((x) => relSig(x) === relSig(r)))
+      : [];
+    const graph = got.plan.graph && kept.length
+      ? { ...got.plan.graph, relations: [...got.plan.graph.relations, ...kept] }
+      : got.plan.graph;
     const warnings = v.draft.graph
-      ? got.plan.warnings
+      ? got.plan.warnings.filter((w) => !(kept.length && /^Left out a relation: .*(no axis|no value|no variable or text)/.test(w)))
       : [...new Set([...v.draft.warnings, ...got.plan.warnings])];
     setView({
       draft: {
         ...v.draft, items, warnings, sections: got.plan.sections, settings: got.plan.settings,
-        ...(got.plan.graph ? { graph: got.plan.graph, locks: got.plan.locks, applied: got.plan.applied } : {}),
+        ...(graph ? { graph, locks: got.plan.locks, applied: got.plan.applied } : {}),
       },
       review: got.findings.filter((f) => f.by !== "model"),
     });
@@ -1176,11 +1213,20 @@ async function buildItem(p: AiPackPlan, item: AiPackItem, signal: AbortSignal): 
     setState(item.key, { status: "retrying" });
     await buildOne(p, item.key, why ? `your last answer failed: ${why}` : "", signal);
   }
-  const repair = states.value[item.key]?.result?.repair;
+  const first = states.value[item.key]?.result;
+  const repair = first?.repair;
   if (repair && states.value[item.key]?.status === "built") {
     stage.value = `Fixing ${item.name}…`;
     setState(item.key, { status: "fixing", fixed: [repair] });
     await buildOne(p, item.key, repair, signal);
+    // A rebuilt slot that still misses an axis value gets one fill: the
+    // options stay and the missing ones are added (never after a fill).
+    const again = states.value[item.key]?.result;
+    if (again?.repair && again.fill && !first?.fill && states.value[item.key]?.status === "built") {
+      stage.value = `Filling ${item.name}…`;
+      setState(item.key, { status: "fixing", fixed: [repair, again.repair] });
+      await buildOne(p, item.key, again.repair, signal);
+    }
   }
 }
 

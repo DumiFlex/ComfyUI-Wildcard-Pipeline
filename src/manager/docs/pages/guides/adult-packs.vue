@@ -131,13 +131,20 @@ const checklist: string[] = [
       </p>
       <p>
         <b>What the assistant does.</b> In every AI feature (chat, Draft with AI, the Pack
-        builder), an option, value, rule or template that puts a clearly minor word (child,
-        loli, shota, an age under 18) next to a sexual or nude one is left out. In a Pack
-        builder pack rated NSFW, the whole pack counts as that context, so a clearly minor word
-        is left out wherever it is. Words an adult can wear or be called too (school uniform,
-        teen, younger sister) are kept, with a <b>Check</b> warning on the item so you can judge
-        them. <b>Settings › Youth negative</b> (on by default) adds the youth block to the
-        template's negative; turn it off to write your own.
+        builder), an option, value, rule or template that puts a minor word (child, loli,
+        shota, an age under 18) next to a sexual or nude one is left out. Words that name a
+        young person but can be an adult too (teen, schoolgirl, young girl, younger sister)
+        count as minor words in that context: "schoolgirl, nude" is not a costume. In a Pack
+        builder pack rated NSFW, the whole pack counts as that context, so those words are
+        left out wherever they are, in the items the model writes and the ones the pack graph
+        wires: a dropped option takes its tags with it, a rule keyed on such a word goes
+        too, and a word that pushes the image away from adults ("mature", "adult woman") is
+        taken out of every negative, since the youth block and "mature" cannot both stand.
+        A request whose own words ask for that ("an NSFW pack of underage girls") is
+        refused before anything is planned. A costume an adult wears (school uniform) is kept,
+        with a <b>Check</b> warning on the item so you can judge it. <b>Settings › Youth
+        negative</b> (on by default) adds the youth block to the template's negative; turn it
+        off to write your own.
       </p>
       <p>
         <b>For your pack:</b> build the safeguards first, before any content. They are a few

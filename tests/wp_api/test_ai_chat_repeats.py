@@ -132,3 +132,32 @@ async def test_an_organize_ask_answered_without_cards_says_nothing_changed(wp_cl
     ])
     out = await _chat(wp_client, "Organize my library into categories.")
     assert "Nothing was proposed" in out["message"]
+
+
+async def test_an_answer_that_puts_the_rest_off_is_asked_for_it_now(wp_client, fake_llm):
+    from engine.ai import chat as ai_chat
+    _on(fake_llm)
+    rule = {"name": "Title rule", "rules": [{"summary": "mages are Archmage", "branches": [
+        {"match": "all", "conditions": [{"var": "model_style", "op": "equals",
+                                         "value": "anime shading"}],
+         "actions": [{"target_var": "title", "mode": "replace", "value": "Archmage"}]}]}]}
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(STYLE)}]},
+        {"message": "I proposed the Model Style Tags wildcard. Apply it, then I'll propose "
+                    "the derivation for $title.", "calls": []},
+        {"message": "", "calls": [{"tool": "create_derivation", "args": json.dumps(rule)}]},
+    ])
+    out = await _chat(wp_client, "Make a style wildcard and a derivation that sets $title.")
+    assert any(ai_chat.DEFER_NUDGE in r["body"]["messages"][-1]["content"]
+               for r in fake_llm.seen)
+    assert [p["tool"] for p in out["proposals"]] == ["create_wildcard", "create_derivation"]
+    # Nudged once: an answer that still defers stands.
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(STYLE)}]},
+        {"message": "Apply it, then I'll propose the rule.", "calls": []},
+        {"message": "Apply it first, then I'll propose the rule.", "calls": []},
+    ])
+    out = await _chat(wp_client, "Make a style wildcard and a derivation that sets $title.")
+    assert out["message"].startswith("Apply it first")
+    assert ai_chat.defers_rest("Once you apply that, I can add the derivation.")
+    assert not ai_chat.defers_rest("I proposed both; apply them and then test.")

@@ -20,7 +20,8 @@ needs a running model and takes minutes per request.
 USAGE
 -----
     python scripts/ai_pack_evals.py [--limit N] [--model NAME] [--out report.md]
-                                    [--planner graph|items] [--save DIR]
+                                    [--planner graph|items] [--drafts one|three]
+                                    [--save DIR]
 
 ``--save DIR`` keeps every pack the run built: ``DIR/<n>-<slug>.md`` is a
 readable sheet (items with their options and tags, constraint cells,
@@ -112,7 +113,9 @@ def _uses(result: dict[str, Any]) -> str:
 
 #: Whether a built pack used the feature its request calls for.
 FEATURES: dict[str, Any] = {
-    "ref_filter": lambda r: any(":" in o.get("value", "") and "@{" in o.get("value", "")
+    # A draw from a shared list (`@{id}`, or `@{id:tag}` when narrowed): the
+    # request's list holds warm colours only, so no `:filter` is needed.
+    "ref_filter": lambda r: any("@{" in o.get("value", "")
                                 for w in _wildcards(r) for o in w.get("options") or []),
     "accepts": lambda r: any("accepts" in (w.get("tag_group_kinds") or {}).values()
                              for w in _wildcards(r)),
@@ -148,6 +151,10 @@ def _score(result: dict[str, Any]) -> dict[str, Any]:
         # wired: relations that held on the engine runs (graph plans only).
         "relations": len(checked), "held": sum(1 for r in checked if r.get("holds")),
         "distinct": check.get("distinct") if check else None,
+        # fell: the worst slot's share of runs where its rules left nothing
+        # and the fallback stood in (graph plans only).
+        "fell": round(max(check.get("fallbacks", {}).values(), default=0)
+                      / check["runs"], 2) if check and check.get("runs") else None,
     }
 
 
@@ -336,6 +343,7 @@ def report(rows: list[dict], model: str) -> str:
     distinct = sum(r["distinct"] for r in checked) / len(checked) if checked else 0
     held = sum(r.get("held") or 0 for r in planned)
     relations = sum(r.get("relations") or 0 for r in planned)
+    tight = [r for r in planned if (r.get("fell") or 0) >= 0.3]
     lines = [
         f"# Pack builder evals: {model}", "",
         f"- Requests: {len(rows)}",
@@ -346,21 +354,24 @@ def report(rows: list[dict], model: str) -> str:
         f"{sum(1 for r in planned if r.get('feature_used'))} / "
         f"{sum(1 for r in rows if r.get('feature'))}",
         f"- Relations that held on the test runs (wired): {held} / {relations}",
-        f"- Distinct prompts per run (mean): {distinct:.2f}", "",
-        "| # | Request | Plan | Built | Problems | Wired | Distinct | Seconds |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+        f"- Distinct prompts per run (mean): {distinct:.2f}",
+        f"- Packs where a slot fell back in 30% or more of the runs: {len(tight)} / "
+        f"{len(planned)}", "",
+        "| # | Request | Plan | Built | Problems | Wired | Distinct | Fell | Seconds |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for n, r in enumerate(rows, 1):
         req = r["request"][:70].replace("|", "/")
         if not r["plan"]:
-            lines.append(f"| {n} | {req} | no: {r['error'][:60]} | | | | | {r['seconds']} |")
+            lines.append(f"| {n} | {req} | no: {r['error'][:60]} | | | | | | {r['seconds']} |")
             continue
         feat = f" ({r['feature']}: {'used' if r['feature_used'] else 'missing'})" \
             if r.get("feature") else ""
         wired = f"{r['held']}/{r['relations']}" if r.get("relations") else "-"
         distinct_s = f"{r['distinct']:.2f}" if r.get("distinct") is not None else "-"
+        fell = f"{r['fell']:.0%}" if r.get("fell") is not None else "-"
         lines.append(f"| {n} | {req}{feat} | yes | {r['built']}/{r['items']} | "
-                     f"{r['problems']} | {wired} | {distinct_s} | {r['seconds']} |")
+                     f"{r['problems']} | {wired} | {distinct_s} | {fell} | {r['seconds']} |")
     lines += ["", "## Sample prompts", ""]
     for r in planned:
         if r["prompts"]:
@@ -379,6 +390,8 @@ def main() -> int:
     ap.add_argument("--planner", choices=("graph", "items"), default="graph",
                     help="graph: the model writes slots, axes and relations and the code "
                          "wires the pack; items: the model writes every item and payload")
+    ap.add_argument("--drafts", choices=("one", "three"), default="one",
+                    help="plan drafts on the first plan (the Plan drafts setting)")
     args = ap.parse_args()
     from wp_api import _ai_client
 
@@ -393,10 +406,10 @@ def main() -> int:
         return await _ai_client.complete_json(cfg, **kwargs)
 
     rows = asyncio.run(evaluate(complete, REQUESTS[: args.limit], seeds=args.seeds,
-                                settings={"planner": args.planner},
+                                settings={"planner": args.planner, "drafts": args.drafts},
                                 save=Path(args.save) if args.save else None))
-    Path(args.out).write_text(report(rows, f"{cfg['model']} ({args.planner} planner)"),
-                              encoding="utf-8")
+    title = f"{cfg['model']} ({args.planner} planner, drafts: {args.drafts})"
+    Path(args.out).write_text(report(rows, title), encoding="utf-8")
     Path(args.out).with_suffix(".json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
     print(f"Wrote {args.out}")
     return 0

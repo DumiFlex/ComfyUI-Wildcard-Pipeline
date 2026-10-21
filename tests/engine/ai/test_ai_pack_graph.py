@@ -241,7 +241,9 @@ def test_refs_schema_and_repair():
          "var": "", "text": "", "otherwise": ""}]})
     assert len(fixed["relations"]) == len(g["relations"]) + 1
     assert fixed["bad_refs"] == ["exclude: Race.kind has no value orc"]
-    assert fixed["dropped"] == ["exclude: Race.kind has no value orc"]  # the first try's
+    # As many came back as were asked for, so the first try's miss isn't
+    # listed as left out on top of the repair's own.
+    assert fixed["dropped"] == []
     again = pg.compile_graph(fixed)
     assert again["dropped"] == ["exclude: Race.kind has no value orc"]
     assert pg.with_refs(g, {"relations": []}) is g
@@ -261,9 +263,12 @@ async def test_run_pack_on_the_graph_planner():
         assert "Other wildcards cover" in kw["user"]
         return _answer(name)
 
-    result = await pack.run_pack(complete, "fantasy race, class and weapon; outfit by season",
+    result = await pack.run_pack(complete, "fantasy race, class and weapon; outfit by season, "
+                                 "with 2 to 3 weapons each",
                                  seeds=40, settings={"planner": "graph"})
     assert result["failed"] == []
+    # The eval compiles with the request, like the route: the pick is read off it.
+    assert pg.slot_by_var(result["plan"]["graph"], "weapon")["pick"] == "2-3"
     assert calls.count("pack_graph") == 1 and calls.count("pack_refs") == 1
     assert calls.count("pack_slot") == 4  # one per slot; Season and wired items need none
     assert result["check"]["problems"] == {}, result["check"]["problems"]
@@ -297,7 +302,17 @@ def test_fill_call_adds_options_for_the_missing_axis_values():
     assert add["season"]["items"]["enum"] == ["summer"]
     assert "No option is summer on season yet" in req["user"]
     assert "fur-lined cloak; wool coat" in req["user"]
-    # Any other note is a full rebuild.
+    # A coverage part makes it a fill whatever else the note says: the
+    # rest rides along for the new options. Any other note is a rebuild.
+    mixed = pg.slot_request(plan, key, "\"red dress\" names what Colours picks; "
+                            + first["warnings"][0], built)
+    assert mixed["schema_name"] == "pack_slot_fill"
+    assert ("The last options had these problems; the new ones must not: \"red dress\" "
+            "names what Colours picks.") in mixed["user"]
+    assert pg.coverage_split("a; No option is summer on season; b") == (
+        ["No option is summer on season"], ["a", "b"])
+    assert pg.fills(plan, key, "No option is summer on season") is True
+    assert pg.fills(plan, key, "it repeats words") is False
     assert pg.slot_request(plan, key, "it repeats words", built)["schema_name"] == "pack_slot"
     assert pg.slot_request(plan, key, "", built)["schema_name"] == "pack_slot"
     answer = {"add": [{"text": "linen tunic", "weight": 1, "negative": "",
@@ -706,6 +721,12 @@ def test_findings_are_typed_so_a_rewording_keeps_its_id():
         {"item": "Race", "type": "mixed_slot", "severity": "fix", "text": "Race holds ages too"},
     ]}, plan)
     assert again[0]["id"] == first[0]["id"]
+    # Two findings of one kind on one item join; neither is lost.
+    two = pack.compile_review({"findings": [
+        {"item": "", "type": "missing_slot", "severity": "fix", "text": "Add a Lighting slot"},
+        {"item": "", "type": "missing_slot", "severity": "fix", "text": "Add a Pose slot"},
+    ]}, plan)
+    assert [f["text"] for f in two] == ["Add a Lighting slot; Add a Pose slot"]
     # On an item-list plan an unknown item is the whole pack, as before.
     flat = pack.compile_plan({"title": "x", "items": [
         {"kind": "wildcard", "name": "A", "var": "a", "about": "a", "count": 4, "tags": [],
@@ -751,9 +772,11 @@ def test_the_template_reads_every_value_and_single_runs_hold_nothing():
                                    request="animal portraits of lions")
     t = plan["graph"]["template"]
     # Every prompt slot, fixed value and derived variable is read; a
-    # placeholder the graph can resolve becomes its variable, the rest goes.
-    assert t["order"] == ["race", "class", "weapon", "outfit", "quality", "title"]
+    # placeholder the graph can resolve becomes its variable (read in the
+    # lead, so not again in the order), the rest goes.
+    assert t["order"] == ["race", "class", "weapon", "outfit", "title"]
     assert t["lead"] == "$quality, best"
+    assert not any("Added $quality" in w for w in plan["warnings"])
     assert any("Took {mood} out of the template text" in w for w in plan["warnings"])
     # Single images hold nothing, and a person the request never asked for
     # leaves the lead.
@@ -769,3 +792,90 @@ def test_the_template_reads_every_value_and_single_runs_hold_nothing():
     assert next(s for s in plan["graph"]["slots"] if s["var"] == "race")["hold"] is True
     assert pg.unasked_lead("1boy, scenery", "mountain landscapes") == ("scenery", ["1boy"])
     assert pg.unasked_lead("1boy, scenery", "") == ("1boy, scenery", [])
+
+
+async def test_a_rebuilt_slot_that_still_misses_a_value_gets_one_fill():
+    # A rebuild for another reason came back without summer options (9B,
+    # 2026-10-20: rules on values no option carried were most of the
+    # broken ones); the rebuilt slot gets one fill, never a second.
+    outfit_calls: list[str] = []
+
+    async def complete(**kw):
+        if kw["schema_name"] == "pack_graph":
+            return GRAPH
+        if kw["schema_name"] == "pack_refs":
+            return {"relations": []}
+        name = kw["user"].split('"')[1]
+        if name != "Outfit":
+            return _answer(name)
+        outfit_calls.append(kw["schema_name"])
+        if len(outfit_calls) == 1:
+            # Full coverage, but one option names another slot's pick.
+            return {"options": _answer("Outfit")["options"]
+                    + [{"text": "longsword belt", "weight": 1, "negative": "",
+                        "tags": {"season": ["winter"]}}]}
+        if len(outfit_calls) == 2:
+            assert kw["schema_name"] == "pack_slot"
+            return {"options": [{"text": t, "weight": 1, "negative": "", "tags": tags}
+                                for t, tags in OPTIONS["Outfit"][:2]]}
+        assert kw["schema_name"] == "pack_slot_fill"
+        return {"add": [{"text": t, "weight": 1, "negative": "", "tags": tags}
+                        for t, tags in OPTIONS["Outfit"][2:]]}
+
+    result = await pack.run_pack(complete, "fantasy heroes; outfit by season", seeds=10,
+                                 repairs=0, settings={"planner": "graph"})
+    assert outfit_calls == ["pack_slot", "pack_slot", "pack_slot_fill"]
+    outfit = next(i for i in result["plan"]["items"] if i["name"] == "Outfit")
+    values = [o["value"] for o in result["built"][outfit["key"]]["payload"]["options"]]
+    assert "linen tunic" in values and "fur-lined cloak" in values
+    assert any(" fix: " in line and "No option is summer on season" in line
+               for line in result["log"]), result["log"]
+
+
+def test_pick_names_in_the_template_text_are_reads_and_defects_go_to_the_negative():
+    tpl = {**GRAPH["template"], "lead": "Quality, class, ugly, (deformed:1.2), 1girl",
+           "tail": "bad anatomy, cinematic", "order": ["Race"], "negative": "lowres"}
+    plan = pack.compile_graph_plan(_graph(template=tpl), request="elf heroines")
+    t = plan["graph"]["template"]
+    assert t["lead"] == "$quality, $class, 1girl" and t["tail"] == "cinematic"
+    assert t["negative"] == "lowres, ugly, (deformed:1.2), bad anatomy"
+    assert "quality" not in t["order"] and "class" not in t["order"]
+    tpl_key = next(i["key"] for i in plan["items"] if i["kind"] == "template")
+    body = pack.wired_payload(plan, tpl_key, {})["payload"]["template_string"]
+    assert body.startswith("$quality, $class, 1girl, $race") and body.count("$quality") == 1
+    assert any(w.startswith("The template text names Quality, class as words")
+               for w in plan["warnings"])
+    assert any(w.startswith("Moved ugly, (deformed:1.2), bad anatomy from the template text")
+               for w in plan["warnings"])
+    # A look that contains a defect word stays.
+    plan = pack.compile_graph_plan(_graph(template={**GRAPH["template"],
+                                                    "lead": "blurry background, 1girl"}))
+    assert plan["graph"]["template"]["lead"] == "blurry background, 1girl"
+
+
+def test_request_gaps_skip_build_words_and_possessives_and_are_asked_once():
+    g = pg.compile_graph(_graph())
+    # "character's" is the character; how to build the pack is not a gap.
+    assert pack.request_gaps(g, "an elf's race and class; small and specialized, "
+                             "separation of concerns, your call (decide for me), none") == []
+    assert pack.request_gaps(g, "an elf's parka") == ["parka"]
+    first = pack.compile_graph_plan(_graph(), request="an elf with a parka")
+    assert first["request_gaps"] == ["parka"] and first["gaps_tried"] == []
+    assert any(f["type"] == "request_gap" for f in
+               pack.review_plan(first, request="an elf with a parka"))
+    # A refine that still says nothing about it: asked once, then a tip.
+    again = pack.compile_graph_plan(_graph(), previous=first, request="an elf with a parka")
+    assert again["gaps_tried"] == ["parka"]
+    findings = pack.review_plan(again, request="an elf with a parka")
+    assert not any(f["type"] == "request_gap" for f in findings)
+    left = next(f for f in findings if f["type"] == "request_gap_left")
+    assert left["level"] == "tip" and "parka" in left["text"]
+    # The manager sends the plan back: the memory rides on it.
+    back = pack.compile_graph_plan(again, settings=again["settings"],
+                                   request="an elf with a parka")
+    assert back["gaps_tried"] == ["parka"]
+    # A refine that placed it clears it.
+    placed = pack.compile_graph_plan(
+        _graph(template={**GRAPH["template"], "lead": "parka"}), previous=again,
+        request="an elf with a parka")
+    assert placed["request_gaps"] == [] and placed["gaps_tried"] == []

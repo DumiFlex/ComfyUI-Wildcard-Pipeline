@@ -137,8 +137,10 @@ def test_template_create_and_edit():
     assert p["op"]["kind"] == "template" and p["op"]["op"] == "create"
     assert p["op"]["body"]["template_string"] == "$look, $extra"
     assert p["op"]["body"]["negative_template"] == "$negatives, lowres"
-    with pytest.raises(ValueError, match="doesn't pick"):
-        lib.run("create_template", {"name": "Bad", "template": "a {red|blue} $look"})
+    # A pick in a template is kept as its first branch, with a warning.
+    picked = lib.run("create_template", {"name": "Picky", "template": "a {red|blue} $look"})
+    assert picked["op"]["body"]["template_string"] == "a red $look"
+    assert any("Assembler can't pick" in w for w in picked["warnings"])
     e = lib.run("edit_template", {"id": "Portrait", "negative": "lowres"})
     assert e["op"] == {**e["op"], "op": "update", "kind": "template", "id": "tttt0001",
                        "body": {"template_string": "$look, $quality",

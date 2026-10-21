@@ -1668,6 +1668,9 @@ export interface AiPackSettings {
   /** graph: the model writes slots, axes and relations and the code wires
    *  the pack; items: the model writes every item and payload itself. */
   planner: "graph" | "items";
+  /** three: the first plan is drafted three times and the code keeps the
+   *  best fit; one: one draft. */
+  drafts: "one" | "three";
 }
 
 /** One way a slot's options are sorted, for a relation to key on. */
@@ -1707,7 +1710,7 @@ export interface AiPackFixed {
   negative: string;
 }
 
-export type AiPackRelationKind = "exclude" | "only" | "boost" | "reduce" | "agree" | "accepts" | "derive" | "append";
+export type AiPackRelationKind = "exclude" | "only" | "boost" | "reduce" | "agree" | "accepts" | "derive" | "append" | "draw";
 
 /** One side of a relation: a slot, and the axis value it keys on ("" on
  *  an agree / accepts side, which names only the shared axis). */
@@ -1723,7 +1726,8 @@ export interface AiPackRelationSide {
 export interface AiPackRelation {
   kind: AiPackRelationKind;
   from: AiPackRelationSide;
-  /** The target (not on derive / append). */
+  /** The target (not on derive / append). On draw, the slot whose options
+   *  each start with a fresh pick from the source (a shared list). */
   to?: AiPackRelationSide;
   /** agree / accepts: the axis values both slots share. */
   values?: string[];
@@ -1858,6 +1862,9 @@ export interface AiPackPlan {
   /** What the code did on this compile (settings applied, hand edits
    *  kept), one line each. */
   applied?: string[];
+  /** Request words the graph says nowhere (graph plans), and the ones a refine was already asked about and left unplaced: the review asks once, then only notes them. */
+  request_gaps?: string[];
+  gaps_tried?: string[];
 }
 
 /** Hand edits of a graph plan the model's next answer may not undo:
@@ -1971,6 +1978,9 @@ export interface AiPackItemResult {
   warnings: string[];
   /** Warnings worth one automatic rebuild, as its note ("" when none). */
   repair: string;
+  /** The repair would be a fill call (a graph slot missing an axis value):
+   *  a rebuilt slot gets one more round for it. */
+  fill?: boolean;
   model: string;
   /** What the model thought while building it, when its server sends it. */
   thinking?: string;

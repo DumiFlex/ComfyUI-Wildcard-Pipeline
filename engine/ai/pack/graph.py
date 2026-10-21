@@ -42,7 +42,7 @@ from engine.ai.pack._common import (
     _tag,
     _var,
 )
-from engine.ai.pack.plan import _slug_var
+from engine.ai.pack.plan import _NEGATIVEISH, MAX_TAGS, _row_var, _slug_var
 from engine.ai.pack.settings import MAX_SWEEP_OPTIONS, parse_run, parse_settings
 
 MAX_SLOTS = 24
@@ -55,8 +55,17 @@ MAX_TEXT = 200
 MAX_WORDS = 6
 #: Relation kinds. The first four key one slot's pick on another's by tag;
 #: ``agree`` and ``accepts`` are "goes with" on a shared axis; ``derive``
-#: and ``append`` write text from a pick.
-RELATIONS = ("exclude", "only", "boost", "reduce", "agree", "accepts", "derive", "append")
+#: and ``append`` write text from a pick; ``draw`` puts a fresh pick from
+#: one slot (a shared list) in front of every option of another.
+RELATIONS = ("exclude", "only", "boost", "reduce", "agree", "accepts", "derive", "append",
+             "draw")
+#: The kinds that narrow the target's pick (one constraint per slot pair).
+NARROWING = ("exclude", "only", "boost", "reduce", "agree", "accepts")
+#: Source axes the engine reads as ALTERNATIVES (``accepts`` kind): one
+#: value is rolled per pick and only that value's row fires. A classify
+#: source carrying two values would fire two allow-list rows at once and
+#: leave the target nothing (the 84/100 fallback rate of 2026-10-19).
+_ROLLED_SOURCE = ("derive", "append", "accepts", "agree", "only")
 _WEIGHTED = {"boost": 3.0, "reduce": 0.3}
 SHOW = ("prompt", "internal")
 _AXIS_NAME = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
@@ -208,12 +217,39 @@ def _slots(raw: Any, warnings: list[str], taken_vars: set[str]) -> list[dict[str
             "axes": axes,
             "self_axis": _self_axis(name, var, axes),
         })
+        weights = _weights(s.get("weights"), axes)
+        if weights:
+            out[-1]["weights"] = weights
         names.add(name.lower())
         taken_vars.add(var)
         if len(out) >= MAX_SLOTS:
             warnings.append(f"Kept the first {MAX_SLOTS} slots")
             break
     return out
+
+
+def _weights(raw: Any, axes: list[dict[str, Any]]) -> dict[str, float]:
+    """A slot's per-value weight factors (``{value: factor}``), set by the
+    code from a rule that wrote a number (``_relations``) and kept when
+    the graph comes back from the editor."""
+    if not isinstance(raw, dict):
+        return {}
+    values = {v for a in axes for v in a["values"]}
+    out: dict[str, float] = {}
+    for k, v in raw.items():
+        t = _tag(k)
+        if t in values and isinstance(v, (int, float)) and not isinstance(v, bool) \
+                and 0 < float(v) <= MAX_WEIGHT_FACTOR and float(v) != 1:
+            out[t] = round(float(v), 2)
+    return out
+
+
+#: The most a rule's number can weigh a value's options, up or down.
+MAX_WEIGHT_FACTOR = 20.0
+#: A rule's text that is only a number ("1.5", "x2", "0.5×"): weight intent
+#: written as text (9B, 2026-10-20: "$hair_len_prob = 1.5" for "long
+#: styles more common", broken on every run).
+_WEIGHT_TEXT = re.compile(r"^[x×]?\s*(\d+(?:\.\d+)?)\s*[x×]?$", re.I)
 
 
 def _self_axis(name: str, var: str, axes: list[dict[str, Any]]) -> str:
@@ -253,7 +289,7 @@ def _infer_axes(raw: Any, slots: list[dict[str, Any]], warnings: list[str]) -> N
         if not isinstance(r, dict) or r.get("kind") not in RELATIONS:
             continue
         kind = r["kind"]
-        if kind in ("derive", "append"):
+        if kind in ("derive", "append", "draw"):
             continue
         src = _find_slot(_clean(r.get("from_slot"), MAX_NAME), by_name)
         dst = _find_slot(_clean(r.get("to_slot"), MAX_NAME), by_name)
@@ -353,7 +389,8 @@ def _side(r: dict[str, Any], which: str, slots: dict[str, dict[str, Any]],
         return None, f"{slot['name']} has no axis {axis or '?'}"
     if need_value and value not in ax["values"]:
         return None, f"{slot['name']}.{ax['name']} has no value {value or '?'}"
-    return {"slot": slot, "axis": ax["name"], "value": value if need_value else ""}, ""
+    return {"slot": slot, "axis": ax["name"],
+            "value": value if need_value or value in ax["values"] else ""}, ""
 
 
 def _relations(
@@ -368,7 +405,8 @@ def _relations(
         if not isinstance(r, dict) or r.get("kind") not in RELATIONS:
             continue
         kind = r["kind"]
-        src, err = _side(r, "from", by_name, need_value=kind not in ("agree", "accepts"))
+        src, err = _side(r, "from", by_name,
+                         need_value=kind not in ("agree", "accepts", "draw"))
         if src is None:
             bad_refs.append(f"{kind}: {err}")
             continue
@@ -379,6 +417,17 @@ def _relations(
         if kind in ("derive", "append"):
             var = _var(r.get("var"))
             text = _clean(r.get("text"), MAX_TEXT)
+            m = _WEIGHT_TEXT.match(text) if kind == "derive" and src["value"] else None
+            if m and 0 < float(m.group(1)) <= MAX_WEIGHT_FACTOR:
+                # A number is a weight, not text: it goes on the options
+                # tagged with the value, and the rule is spent.
+                factor = round(float(m.group(1)), 2)
+                if factor != 1:
+                    src["slot"].setdefault("weights", {})[src["value"]] = factor
+                warnings.append(f"{src['slot']['name']}: {src['value']} options weigh "
+                                f"\u00d7{factor:g} (the rule wrote a number, so it is a weight"
+                                " on the options, not text)")
+                continue
             if not var or not text:
                 bad_refs.append(f"{kind} from {src['slot']['name']}: no variable or text")
                 continue
@@ -396,6 +445,17 @@ def _relations(
                         "otherwise": _clean(r.get("otherwise"), MAX_TEXT)
                         if kind == "derive" else ""})
             derived.add(var)
+            out.append(rel)
+            continue
+        if kind == "draw":
+            dst, err = _side(r, "to", by_name, need_value=False)
+            if dst is None:
+                bad_refs.append(f"draw: {err}")
+                continue
+            if dst["slot"] is src["slot"]:
+                bad_refs.append(f"draw: {src['slot']['name']} from itself")
+                continue
+            rel["to"] = {"slot": dst["slot"]["name"], "axis": "", "value": ""}
             out.append(rel)
             continue
         if kind in ("agree", "accepts"):
@@ -487,6 +547,9 @@ def _rel_key(rel: dict[str, Any]) -> str:
                      rel.get("text", "")])
 
 
+_LORA_INPUT = re.compile(r"lora|lycoris|locon", re.I)
+
+
 def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]],
               relations: list[dict[str, Any]], inputs: list[dict[str, str]],
               warnings: list[str]) -> dict[str, Any]:
@@ -519,23 +582,40 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
             continue
         if var not in order:
             order.append(var)
+    lead = _placeholders(_clean(raw.get("lead"), MAX_TEXT), by_name, warnings)
+    tail = _placeholders(_clean(raw.get("tail"), MAX_TEXT), by_name, warnings)
+    lead, tail, order, read = _text_reads(lead, tail, order, by_name, warnings)
     for s in slots:
-        if s["show"] == "prompt" and s["var"] not in order:
+        if s["show"] == "prompt" and s["var"] not in order and s["var"] not in read:
             order.append(s["var"])
             warnings.append(f"Added ${s['var']} to the template so {s['name']} shows")
     # A fixed value and a derived variable exist to be read: the code
     # owns the template, so none is left out of it.
     for f in fixed:
-        if f["var"] not in order:
+        if f["var"] not in order and f["var"] not in read:
             order.append(f["var"])
             warnings.append(f"Added ${f['var']} to the template so {f['name']} shows")
     for var in dict.fromkeys(r["var"] for r in relations if r["kind"] == "derive"):
-        if var not in order:
+        if var not in order and var not in read:
             order.append(var)
             warnings.append(f"Added ${var} to the template so the rule writing it shows")
-    lead = _placeholders(_clean(raw.get("lead"), MAX_TEXT), by_name, warnings)
-    tail = _placeholders(_clean(raw.get("tail"), MAX_TEXT), by_name, warnings)
+    # What the user gives (a subject, a name) is there to be shown, first;
+    # a LoRA input stands in for a pick and is read by its swap rule.
+    for i in reversed(inputs):
+        if i["var"] not in order and i["var"] not in read \
+                and not _LORA_INPUT.search(f"{i['var']} {i['about']}"):
+            order.insert(0, i["var"])
+            warnings.append(f"Added ${i['var']} to the template so what the user gives shows")
     negative = _clean(raw.get("negative"), MAX_TEXT * 2)
+    # "{{inputs.neg_prompt}} {{fixed.default_neg}}" or "$neg = ugly, …" in
+    # the negative (9B, 2026-10-21): a placeholder resolves or goes like in
+    # the lead, and an assignment keeps its right-hand side.
+    assigned = re.match(r"^\s*\$?[A-Za-z_]\w*\s*(?:=|:)\s*(?=\S)", negative)
+    if assigned:
+        warnings.append(f"Kept the words of \"{negative[:30]}\" as the negative: it was written "
+                        "as an assignment")
+        negative = negative[assigned.end():]
+    negative = _placeholders(negative, by_name, warnings)
     rule_words = {w for r in relations for w in r.get("words") or []}
     if negative and rule_words:
         # "sandals, shorts in winter" is a relation, not a defect.
@@ -550,11 +630,94 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
             warnings.append(f"Took \"{', '.join(gone)}\" out of the negative: a rule's words "
                             "belong in a relation, the negative is for defects")
             negative = ", ".join(kept)
+    lead, tail, negative = _defects_to_negative(lead, tail, negative, warnings)
     return {"lead": lead, "order": order[:MAX_TEMPLATE_PARTS], "tail": tail,
             "negative": negative}
 
 
-_PLACEHOLDER = re.compile(r"\{\{\s*\$?([A-Za-z][\w ]*?)\s*\}\}|\{\s*\$?([A-Za-z]\w*)\s*\}")
+def _text_reads(lead: str, tail: str, order: list[str], by_name: dict[str, str],
+                warnings: list[str]) -> tuple[str, str, list[str], set[str]]:
+    """A pick's name written as plain text in the lead or tail
+    ("quality_tags, style_preset, pose" led a bikini pack's prompt, 9B
+    NSFW eval 2026-10-21) is a read of it: it becomes ``$var``. A variable
+    the lead or tail reads leaves the order, so nothing prints twice; the
+    set of them is returned so the order isn't told to add them back."""
+    read: list[str] = []
+    bare: list[str] = []
+
+    def fix(text: str) -> str:
+        parts = []
+        for chunk in text.split(","):
+            c = chunk.strip()
+            var = by_name.get(c.lstrip("$").lower()) if c else None
+            if var and _IDENT_PART.match(c):
+                if not c.startswith("$"):
+                    bare.append(c)
+                c = f"${var}"
+                read.append(var)
+            if c:
+                parts.append(c)
+        return ", ".join(parts)
+
+    lead, tail = fix(lead), fix(tail)
+    if bare:
+        warnings.append(f"The template text names {', '.join(bare)} as words: read as "
+                        + ", ".join(f"${by_name[b.lower()]}" for b in bare) + " instead")
+    order = [v for v in order if v not in read]
+    return lead, tail, order, set(read)
+
+
+_IDENT_PART = re.compile(r"^\$?[A-Za-z_][\w ]*$")
+
+#: Standing-negative tags that have no place in a positive prompt. Only
+#: whole comma-parts count ("bad anatomy", "(ugly:1.2)"), never a word
+#: inside a phrase ("blurry background" is a look).
+_DEFECTS = frozenset({
+    "lowres", "low res", "worst quality", "low quality", "normal quality", "bad anatomy",
+    "bad hands", "bad proportions", "bad feet", "bad fingers", "extra fingers", "extra digits",
+    "fewer digits", "missing fingers", "extra limbs", "extra arms", "extra legs",
+    "missing limbs", "mutated", "mutation", "mutated hands", "deformed", "disfigured",
+    "malformed", "ugly", "blurry", "jpeg artifacts", "jpeg artifact", "watermark",
+    "signature", "username", "artist name", "error", "cropped", "out of frame",
+    "poorly drawn", "poorly drawn face", "poorly drawn hands", "long neck", "cloned face",
+    "gross proportions", "bad eyes", "cross-eyed", "dehydrated", "duplicate", "morbid",
+    "mutilated", "text", "logo",
+})
+_WEIGHTED_PART = re.compile(r"^\(\s*(.+?)\s*(?::\s*[\d.]+)?\s*\)$")
+
+
+def _defects_to_negative(lead: str, tail: str, negative: str,
+                         warnings: list[str]) -> tuple[str, str, str]:
+    """Defect tags written into the lead or tail ("ugly, deformed, bad
+    anatomy" in an OC pack's positive prompt, 9B NSFW eval 2026-10-21) go
+    to the negative, where they belong."""
+    moved: list[str] = []
+
+    def fix(text: str) -> str:
+        kept = []
+        for chunk in text.split(","):
+            c = chunk.strip()
+            if not c:
+                continue
+            m = _WEIGHTED_PART.match(c)
+            word = (m.group(1) if m else c).strip().lower().replace("_", " ")
+            if word in _DEFECTS:
+                moved.append(c)
+            else:
+                kept.append(c)
+        return ", ".join(kept)
+
+    lead, tail = fix(lead), fix(tail)
+    if moved:
+        have = {w.strip().lower() for w in negative.split(",")}
+        add = [w for w in moved if w.lower() not in have]
+        negative = ", ".join(x for x in [negative.strip(" ,"), *add] if x)
+        warnings.append(f"Moved {', '.join(moved)} from the template text to the negative: "
+                        "those are defects, not the picture")
+    return lead, tail, negative
+
+
+_PLACEHOLDER = re.compile(r"\{\{\s*\$?([A-Za-z][\w .]*?)\s*\}\}|\{\s*\$?([A-Za-z][\w.]*)\s*\}")
 
 
 def _placeholders(text: str, by_name: dict[str, str], warnings: list[str]) -> str:
@@ -621,8 +784,12 @@ def _compiled(raw: dict[str, Any]) -> bool:
     """Whether ``raw`` is a graph ``compile_graph`` made (relations carry
     ``from`` objects) rather than one the model wrote."""
     rels = raw.get("relations")
-    return isinstance(rels, list) and any(isinstance(r, dict) and isinstance(r.get("from"), dict)
-                                          for r in rels)
+    if isinstance(rels, list) and any(isinstance(r, dict) and isinstance(r.get("from"), dict)
+                                      for r in rels):
+        return True
+    # No relation at all, but ``bad_refs``: only ``compile_graph`` writes
+    # that key (``graph_answer`` and the plan's graph never carry it).
+    return isinstance(raw.get("bad_refs"), list) and not rels
 
 
 def compile_graph(raw: Any) -> dict[str, Any]:
@@ -658,6 +825,7 @@ def compile_graph(raw: Any) -> dict[str, Any]:
     _infer_axes(raw.get("relations"), slots, warnings)
     relations = _relations(raw.get("relations"), slots, {f["var"] for f in fixed},
                            {i["var"] for i in inputs}, warnings, bad_refs)
+    _list_slots(slots, relations, raw.get("template"), warnings)
     template = _template(raw.get("template"), slots, fixed, relations, inputs, warnings)
     _story_holds(slots, parse_run(raw.get("run")), warnings)
     read_by_relation = {r["from"]["slot"] for r in relations} | {
@@ -682,7 +850,10 @@ def compile_graph(raw: Any) -> dict[str, Any]:
     anchor = _var(raw.get("anchor"))
     if anchor and anchor not in {s["var"] for s in slots}:
         anchor = ""
-    return {
+    if not anchor:
+        # The first pick the prompt shows, never a list or a driver.
+        anchor = next((s["var"] for s in slots if s["show"] == "prompt"), "")
+    graph: dict[str, Any] = {
         "title": _clean(raw.get("title"), MAX_NAME) or "AI pack",
         "summary": _clean(raw.get("summary"), 300),
         "design": _clean(raw.get("design"), 900),
@@ -708,12 +879,58 @@ def compile_graph(raw: Any) -> dict[str, Any]:
         "bad_refs": bad_refs,
         "dropped": list(dict.fromkeys(dropped)),
     }
+    if _clean(raw.get("quality_words"), MAX_TEXT):
+        # The pack's own quality words, kept by the code when the per-family
+        # rule takes over $quality: the rule's "otherwise".
+        graph["quality_words"] = _clean(raw.get("quality_words"), MAX_TEXT)
+    return graph
 
 
 # --- the graph as plan items ------------------------------------------------
 
+def _list_slots(slots: list[dict[str, Any]], relations: list[dict[str, Any]],
+                raw_template: Any, warnings: list[str]) -> None:
+    """A slot other slots only draw from is a list, not a pick of its own:
+    it goes internal unless the template names it."""
+    named: set[str] = set()
+    order = raw_template.get("order") if isinstance(raw_template, dict) else None
+    for part in order if isinstance(order, list) else []:
+        named.add(_clean(part, MAX_NAME).lstrip("$").strip().lower())
+    for s in slots:
+        drawn = [r for r in relations if r["kind"] == "draw" and r["from"]["slot"] == s["name"]]
+        other = [r for r in relations if r["kind"] != "draw" and (
+            r["from"]["slot"] == s["name"] or (r.get("to") or {}).get("slot") == s["name"])]
+        if drawn and not other and s["show"] == "prompt" \
+                and not {s["name"].lower(), s["var"].lower()} & named:
+            s["show"] = "internal"
+            warnings.append(f"{s['name']} is a list the others draw from, so it isn't a "
+                            "pick of its own: internal")
+
+
+def draw_sources(graph: dict[str, Any], slot: dict[str, Any]) -> list[dict[str, Any]]:
+    """The ``draw`` relations that put a pick in front of this slot's options."""
+    return [r for r in graph["relations"] if r["kind"] == "draw"
+            and r["to"]["slot"] == slot["name"]]
+
+
+def draw_refs(plan: dict[str, Any], built: dict[str, Any]) -> dict[str, str]:
+    """Slot name → built wildcard id, for the refs a ``draw`` writes."""
+    graph = plan.get("graph")
+    if not isinstance(graph, dict):
+        return {}
+    out: dict[str, str] = {}
+    for s in graph["slots"]:
+        sid = _dep_ids(plan, built, s["var"])
+        if sid:
+            out[s["name"]] = sid
+    return out
+
+
 def _slot_rel_words(rel: dict[str, Any]) -> str:
     src, dst = rel["from"], rel.get("to") or {}
+    if rel["kind"] == "draw":
+        return (f"{dst['slot']} options each start with a fresh {src['slot']} pick"
+                + (f" ({src['value']})" if src["value"] else ""))
     if rel["kind"] in ("agree", "accepts"):
         return (f"{dst['slot']} goes with {src['slot']} on {src['axis']} "
                 f"({', '.join(rel['values'])})")
@@ -751,7 +968,7 @@ def constraint_pairs(graph: dict[str, Any]) -> list[tuple[str, str]]:
     """(source slot, target slot) pairs that get one constraint each."""
     out: list[tuple[str, str]] = []
     for r in graph["relations"]:
-        if r.get("to") and (r["from"]["slot"], r["to"]["slot"]) not in out:
+        if r["kind"] in NARROWING and (r["from"]["slot"], r["to"]["slot"]) not in out:
             out.append((r["from"]["slot"], r["to"]["slot"]))
     return out
 
@@ -815,11 +1032,50 @@ def story_beat(graph: dict[str, Any]) -> bool:
     return parse_run(graph["run"])["mode"] == "story" and BEAT_VAR not in _graph_sets(graph)
 
 
+def model_families(graph: dict[str, Any]) -> list[str]:
+    """The image model families the graph's ``model`` names ("pony, flux"
+    → pony, flux), in the guide's keys."""
+    from engine.ai import guide as ai_guide
+    out: list[str] = []
+    for part in re.split(r"[,/&+]|\band\b|\bor\b", graph.get("model") or ""):
+        fam = ai_guide.family(part.strip())
+        if fam and fam not in out:
+            out.append(fam)
+    return out
+
+
+def request_families(request: str) -> list[str]:
+    """The image model families a request names, in the guide's keys."""
+    from engine.ai import guide as ai_guide
+    return [key for rx, key in ai_guide._FAMILY if rx.search(request or "")]
+
+
+def trim_model(graph: dict[str, Any], request: str) -> list[str]:
+    """The graph's ``model`` keeps only the families the request names when
+    the planner wrote two or more the request didn't ask for ("flux, sd3"
+    on a request naming no model; 9B, 2026-10-21, 9 packs): two families
+    would add the per-family quality rule, and with no WP Model Info the
+    template then read a $quality no run set. Returns the lines saying so."""
+    if not (request or "").strip() or len(model_families(graph)) < 2:
+        return []
+    asked = set(request_families(request))
+    if len(asked & set(model_families(graph))) >= 2:
+        return []
+    from engine.ai import guide as ai_guide
+    parts = [p.strip() for p in re.split(r"[,/&+]|\band\b|\bor\b", graph["model"])
+             if p.strip()]
+    kept = [p for p in parts if ai_guide.family(p) in asked] or parts[:1]
+    was, graph["model"] = graph["model"], ", ".join(kept)
+    return [f"Model: {graph['model']} (the planner wrote \"{was}\", but the request names "
+            "no second family, so there is no per-family quality rule)"]
+
+
 def model_quality(graph: dict[str, Any], settings: Any) -> bool:
     """Whether the code adds the per-model-family quality derivation: the
-    model setting asks for it and nothing in the graph reads the model
+    model setting asks for it, or the request names two families (a pack
+    for Pony and Flux), and nothing in the graph reads the model
     variables."""
-    if parse_settings(settings)["model"] != "family":
+    if parse_settings(settings)["model"] != "family" and len(model_families(graph)) < 2:
         return False
     text = _graph_text(graph)
     return "model_variant" not in text and "model_family" not in text
@@ -856,11 +1112,14 @@ def run_items(graph: dict[str, Any], settings: Any = None) -> list[dict[str, Any
     (the model writes their branches; the code wires the rest)."""
     items: list[dict[str, Any]] = []
     if model_quality(graph, settings):
+        fams = model_families(graph)
         items.append({
             "kind": "derivation", "name": "Model quality", "var": QUALITY_VAR, "section": "",
-            "about": "Sets $quality from $model_variant: pony → score_9, score_8_up, "
-                     "score_7_up; illustrious or noobai → masterpiece, best quality, very "
-                     "aesthetic; else the pack's own quality words.",
+            "about": "Sets $quality from $model_variant"
+                     + (f" (the pack runs on {', '.join(fams)})" if len(fams) > 1 else "")
+                     + ": pony → score_9, score_8_up, score_7_up; illustrious or noobai → "
+                     "masterpiece, best quality, very aesthetic; else the pack's own quality "
+                     "words.",
             "count": 0, "tags": [], "source": "", "target": "", "use": ""})
     if story_beat(graph):
         n = parse_run(graph["run"])["frames"]
@@ -872,20 +1131,72 @@ def run_items(graph: dict[str, Any], settings: Any = None) -> list[dict[str, Any
     return items
 
 
-def graph_plan(graph: dict[str, Any], settings: Any = None) -> dict[str, Any]:
+def library_slots(graph: dict[str, Any], library: list[dict[str, Any]] | None,
+                  settings: Any) -> dict[str, dict[str, Any]]:
+    """Slot variable → the user's own wildcard that stands in for it
+    (settings library "reuse"): a prompt slot with no axes that no relation
+    names, matched by name, else by variable, to exactly one library
+    wildcard. A slot with axes or rules keeps its tags, which the user's
+    wildcard doesn't carry."""
+    if parse_settings(settings)["library"] != "reuse" or not library:
+        return {}
+    rows = [r for r in library if r.get("type") == "wildcard"
+            and isinstance(r.get("payload"), dict) and _row_var(r)]
+    named = {r["from"]["slot"] for r in graph["relations"]} | {
+        r["to"]["slot"] for r in graph["relations"] if r.get("to")}
+    out: dict[str, dict[str, Any]] = {}
+    for s in graph["slots"]:
+        if s["axes"] or s["show"] != "prompt" or s["name"] in named or s.get("self_axis"):
+            continue
+        hits = [r for r in rows if str(r.get("name") or "").lower() == s["name"].lower()]
+        if not hits:
+            hits = [r for r in rows if _row_var(r) == s["var"]]
+        if len(hits) == 1:
+            out[s["var"]] = hits[0]
+    return out
+
+
+def apply_library(graph: dict[str, Any], library: list[dict[str, Any]] | None,
+                  settings: Any) -> list[str]:
+    """Reuse what fits, on the graph: a slot the library already has takes
+    that wildcard's variable (the template and the anchor follow), and the
+    plan item for it is the user's own (``graph_plan``). Returns the lines
+    saying so."""
+    lines: list[str] = []
+    for var, row in library_slots(graph, library, settings).items():
+        slot = slot_by_var(graph, var)
+        mine = _row_var(row)
+        if slot is None:
+            continue
+        if mine != var:
+            slot["var"] = mine
+            graph["template"]["order"] = [mine if v == var else v
+                                          for v in graph["template"]["order"]]
+            if graph["anchor"] == var:
+                graph["anchor"] = mine
+        lines.append(f"{slot['name']}: your wildcard {row.get('name')} (${mine}) is used as "
+                     "it is")
+    return lines
+
+
+def graph_plan(graph: dict[str, Any], settings: Any = None,
+               library: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """The graph as the raw plan ``compile_plan`` takes: one wildcard per
-    slot, fixed values, one derivation per written variable, one constraint
-    per (source, target) slot pair, and the template. A story run adds the
+    slot (the user's own, ``library``, where ``library_slots`` says so),
+    fixed values, one derivation per written variable, one constraint per
+    (source, target) slot pair, and the template. A story run adds the
     story-beat derivation, a sweep run marks its axes and holds the rest,
     and the model setting adds the quality derivation (``run_items``)."""
     slot_by_name = {s["name"]: s for s in graph["slots"]}
     axes = sweep_axes(graph)
+    mine = library_slots(graph, library, settings)
     items: list[dict[str, Any]] = []
     for f in graph["fixed"]:
         items.append({"kind": "fixed_values", "name": f["name"], "var": f["var"],
                       "section": "", "about": f"${f['var']} = {f['text']}", "count": 0,
                       "tags": [], "source": "", "target": "", "use": ""})
-    for s in graph["slots"]:
+    drawn = {r["from"]["slot"] for r in graph["relations"] if r["kind"] == "draw"}
+    for s in sorted(graph["slots"], key=lambda s: 0 if s["name"] in drawn else 1):
         tags = [v for a in s["axes"] for v in a["values"]]
         about = s["what"] or s["name"]
         if s["axes"]:
@@ -897,9 +1208,16 @@ def graph_plan(graph: dict[str, Any], settings: Any = None) -> dict[str, Any]:
             count = min(count, MAX_SWEEP_OPTIONS)
         elif axes and s["show"] == "prompt" and "hold" not in use:
             use = "; ".join(x for x in [use, "hold"] if x)
+        if s["var"] in mine:
+            row = mine[s["var"]]
+            items.append({"kind": "library", "name": str(row.get("name") or s["name"]),
+                          "var": _row_var(row), "section": s["section"],
+                          "about": _clean(about, MAX_ABOUT), "count": 0, "tags": [],
+                          "source": "", "target": "", "use": use})
+            continue
         items.append({"kind": "wildcard", "name": s["name"], "var": s["var"],
                       "section": s["section"], "about": _clean(about, MAX_ABOUT),
-                      "count": count, "tags": tags[:16], "source": "", "target": "",
+                      "count": count, "tags": tags[:MAX_TAGS], "source": "", "target": "",
                       "use": use})
     for src, dst in constraint_pairs(graph):
         rels = [r for r in graph["relations"] if r.get("to") and r["from"]["slot"] == src
@@ -979,14 +1297,16 @@ def axis_kinds(graph: dict[str, Any], slot: dict[str, Any]) -> dict[str, str]:
     partner in an ``accepts`` relation)."""
     kinds = {a["name"]: "classify" for a in slot["axes"]}
     for r in graph["relations"]:
-        if r["from"]["slot"] == slot["name"] and r["kind"] in ("derive", "append", "accepts"):
+        if r["from"]["slot"] == slot["name"] and r["kind"] in _ROLLED_SOURCE \
+                and r["from"]["axis"] in kinds:
             kinds[r["from"]["axis"]] = "accepts"
     return kinds
 
 
 def inbound(graph: dict[str, Any], slot: dict[str, Any]) -> list[dict[str, Any]]:
     """Relations that narrow this slot's pick (it is their target)."""
-    return [r for r in graph["relations"] if r.get("to") and r["to"]["slot"] == slot["name"]]
+    return [r for r in graph["relations"] if r["kind"] in NARROWING
+            and r["to"]["slot"] == slot["name"]]
 
 
 def _dep_ids(plan: dict[str, Any], built: dict[str, Any], var: str) -> str:
@@ -1000,7 +1320,20 @@ def wired_payload(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict
     """``{kind, payload, preview, warnings}`` for an item code writes from
     the graph: a fixed values, a constraint (both wildcards must be built,
     for their ids), a derivation or the template. Raises PlanError when a
-    wildcard it needs isn't built yet."""
+    wildcard it needs isn't built yet. In a pack rated nsfw the item gets
+    the adult pass the model-written items get (`adult_pack.adult_check`:
+    minor words out, the youth negative on the template; ValueError when
+    nothing would be left)."""
+    out = _wired(plan, key, built)
+    if plan.get("rating") == "nsfw":
+        from engine.ai.pack.adult_pack import adult_check
+        payload, said = adult_check(out["kind"], out["payload"], plan)
+        if said:
+            out = {**out, "payload": payload, "warnings": [*out["warnings"], *said]}
+    return out
+
+
+def _wired(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict[str, Any]:
     graph = plan["graph"]
     item = next(i for i in plan["items"] if i["key"] == key)
     kind = item["kind"]
@@ -1041,29 +1374,50 @@ def wired_payload(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict
                 "preview": preview, "warnings": []}
     if kind == "derivation":
         rels = [r for r in graph["relations"] if r.get("var") == item["var"]]
-        branches = []
-        otherwise = next((r["otherwise"] for r in rels if r.get("otherwise")), "")
+        otherwise = _otherwise(rels)
+        # One rule per source axis: rows keyed on a second axis of the slot
+        # (or another slot) ADD to the variable in a rule of their own.
+        # In one if/elif the first axis always won and every row on the
+        # other was "broken" (9B, 2026-10-21, $habitat_preference).
+        groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
         for r in rels:
-            src = slot_by_var(graph, next(s["var"] for s in graph["slots"]
-                                          if s["name"] == r["from"]["slot"]))
-            branches.append({
-                "condition": {"var": f"{src['var']}.{r['from']['axis']}", "op": "equals",
-                              "value": r["from"]["value"]},
-                "action": {"target_var": item["var"],
-                           "mode": "replace" if r["kind"] == "derive" else "append",
-                           "value": r["text"]},
-            })
-        rule: dict[str, Any] = {"id": "rule0001", "branches": branches}
-        if otherwise:
-            rule["else"] = {"action": {"target_var": item["var"], "mode": "replace",
-                                       "value": otherwise}}
-        return {"kind": kind, "payload": {"rules": [rule]},
-                "preview": [_slot_rel_words(r) for r in rels], "warnings": []}
+            groups.setdefault((r["from"]["slot"], r["from"]["axis"]), []).append(r)
+        rules: list[dict[str, Any]] = []
+        warnings: list[str] = []
+        for n, ((_sname, axis), rows) in enumerate(groups.items()):
+            branches = []
+            for r in rows:
+                src = next((s for s in graph["slots"] if s["name"] == r["from"]["slot"]), None)
+                if src is None:
+                    raise PlanError(f"{item['name']} reads {r['from']['slot']}, which the "
+                                    "graph no longer has")
+                branches.append({
+                    "condition": {"var": f"{src['var']}.{axis}", "op": "equals",
+                                  "value": r["from"]["value"]},
+                    "action": {"target_var": item["var"],
+                               "mode": "replace" if r["kind"] == "derive" and n == 0
+                               else "append",
+                               "value": r["text"]},
+                })
+            rule: dict[str, Any] = {"id": f"rule{n + 1:04d}", "branches": branches}
+            if n == 0 and otherwise:
+                rule["else"] = {"action": {"target_var": item["var"], "mode": "replace",
+                                           "value": otherwise}}
+            if n > 0:
+                warnings.append(f"${item['var']} is also written from {_sname}.{axis}: those "
+                                "rows add to it (one rule per axis, so both fire)")
+            rules.append(rule)
+        others = sorted({r["otherwise"] for r in rels
+                         if r.get("otherwise") and r["otherwise"] != otherwise})
+        if others:
+            warnings.append(f"${item['var']} has one \"otherwise\": kept \"{otherwise}\", not "
+                            + ", ".join(f'"{o}"' for o in others))
+        return {"kind": kind, "payload": {"rules": rules},
+                "preview": [_slot_rel_words(r) for r in rels], "warnings": warnings}
     if kind == "template":
         t = graph["template"]
-        sep = ", " if graph["style"] == "tags" else ", "
         order = template_order(graph, plan.get("settings"))
-        body = sep.join(x for x in [t["lead"], *(f"${v}" for v in order), t["tail"]] if x)
+        body = ", ".join(x for x in [t["lead"], *(f"${v}" for v in order), t["tail"]] if x)
         return {"kind": kind, "payload": {"template_string": body,
                                          "negative_template": t["negative"] or ""},
                 "preview": [body], "warnings": []}
@@ -1096,6 +1450,10 @@ def _finish_rows(graph: dict[str, Any], slot: dict[str, Any], rows: list[dict[st
     kinds = axis_kinds(graph, slot)
     values = {a["name"]: a["values"] for a in slot["axes"]}
     warnings: list[str] = []
+    for value, factor in (slot.get("weights") or {}).items():
+        for r in rows:
+            if value in r["sub_categories"] and not r.get("is_null"):
+                r["weight"] = round(float(r.get("weight") or 1) * factor, 2)
     narrowed = inbound(graph, slot)
     if narrowed and rows:
         # The option that fits the most of what narrows this slot, and
@@ -1226,6 +1584,22 @@ def _coverage_only(note: str) -> bool:
     return bool(parts) and all(_COVERAGE.match(x) for x in parts)
 
 
+def coverage_split(note: str) -> tuple[list[str], list[str]]:
+    """A repair note's parts: the ones asking for axis coverage (a value
+    or rule word no option carries) and the rest. Coverage is what a fill
+    call adds; the rest rides along as what the new options must mind."""
+    parts = [x.strip() for x in (note or "").split(";") if x.strip()]
+    return ([x for x in parts if _COVERAGE.match(x)],
+            [x for x in parts if not _COVERAGE.match(x)])
+
+
+def fills(plan: dict[str, Any], key: str, note: str) -> bool:
+    """Whether a repair note on a built graph slot would be a fill call
+    (``slot_request``): the route tells the browser, which then gives a
+    rebuilt slot one fill when coverage is still missing."""
+    return slot_for(plan, key) is not None and bool(coverage_split(note)[0])
+
+
 def _norm(text: Any) -> str:
     return " ".join(str(text or "").split()).lower()
 
@@ -1284,11 +1658,14 @@ def scope_notes(rows: list[dict[str, Any]], others: dict[str, list[str]]
 def compile_slot(
     graph: dict[str, Any], slot: dict[str, Any], answer: Any, *, limit: int | None = None,
     existing: dict[str, Any] | None = None, others: dict[str, list[str]] | None = None,
+    refs: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """The model's options for one slot as a wildcard payload: tags from the
     ``tags`` object (every axis value an option names), tag groups from the
-    slot's axes, a fallback chosen by code on a narrowed slot, and the
-    ``sometimes_none`` share as a null option. A fill answer (``add``
+    slot's axes, a fallback chosen by code on a narrowed slot, the
+    ``sometimes_none`` share as a null option, and the ``@{list:tag}``
+    pick a ``draw`` relation puts in front of every option (``refs``:
+    slot name → built id, ``draw_refs``). A fill answer (``add``
     instead of ``options``) is merged into ``existing``, keeping its
     options and ids. ``others`` (``other_texts``) is what the other slots
     hold, for the scope check. Returns ``{payload, preview, warnings}``.
@@ -1317,8 +1694,8 @@ def compile_slot(
             got = got if isinstance(got, list) else [got] if isinstance(got, str) else []
             hit = [_tag(g) for g in got if _tag(g) in allowed]
             if kinds[axis] == "accepts" and len(hit) > 1 and not any(
-                    r["kind"] == "accepts" and r["from"]["slot"] == slot["name"]
-                    for r in graph["relations"]):
+                    r["kind"] in ("accepts", "agree") and r["from"]["slot"] == slot["name"]
+                    and r["from"]["axis"] == axis for r in graph["relations"]):
                 hit = hit[:1]
             if not hit:
                 missing.append(axis)
@@ -1358,6 +1735,7 @@ def compile_slot(
     warnings += scoped
     if not rows and not kept:
         raise ValueError("every option names what another slot picks: " + "; ".join(scoped[:3]))
+    warnings += _draw_prefix(graph, slot, rows, refs or {})
     rows = [*kept, *rows]
     payload, more = _finish_rows(graph, slot, rows, taken)
     warnings += more
@@ -1365,6 +1743,28 @@ def compile_slot(
     return {"payload": payload,
             "preview": [ai_wildcard.option_line(r) for r in payload["options"]],
             "warnings": warnings}
+
+
+def _draw_prefix(graph: dict[str, Any], slot: dict[str, Any], rows: list[dict[str, Any]],
+                 refs: dict[str, str]) -> list[str]:
+    """The ``@{id:tag}`` pick of every ``draw`` relation on this slot, put
+    in front of each option's text (once: a fill's kept options already
+    carry theirs). A source not built yet is a warning."""
+    warnings: list[str] = []
+    for r in draw_sources(graph, slot):
+        sid = refs.get(r["from"]["slot"])
+        if not sid:
+            warnings.append(f"{r['from']['slot']} isn't built yet, so its pick isn't in "
+                            f"front of {slot['name']}'s options")
+            continue
+        ref = "@{" + sid + (":" + r["from"]["value"] if r["from"]["value"] else "") + "}"
+        for row in rows:
+            if row.get("is_null") or not isinstance(row.get("value"), str):
+                continue
+            if ref in row["value"]:
+                continue
+            row["value"] = f"{ref} {row['value']}".strip()
+    return warnings
 
 
 def slot_prompt(graph: dict[str, Any], slot: dict[str, Any], *, note: str = "") -> str:
@@ -1384,6 +1784,12 @@ def slot_prompt(graph: dict[str, Any], slot: dict[str, Any], *, note: str = "") 
                      + ": keep those words out of these options.")
     for r in inbound(graph, slot):
         lines.append("Rule on it: " + _slot_rel_words(r) + ".")
+    for r in draw_sources(graph, slot):
+        src = next((s for s in graph["slots"] if s["name"] == r["from"]["slot"]), None)
+        what = (src["what"] if src and src["what"] else r["from"]["slot"]).rstrip(".")
+        lines.append(f"The code puts a fresh pick from {r['from']['slot']}"
+                     + (f" ({r['from']['value']})" if r["from"]["value"] else "")
+                     + f" in front of every option, so write no {what.lower()} in them.")
     by_value: dict[tuple[str, str], list[str]] = {}
     for value, axis, word in rule_words(graph, slot):
         by_value.setdefault((value, axis), []).append(word)
@@ -1396,6 +1802,16 @@ def slot_prompt(graph: dict[str, Any], slot: dict[str, Any], *, note: str = "") 
 
 
 # --- relations checked on engine runs ----------------------------------------
+
+#: A ``@{…}`` reference inside an option (what a ``draw`` puts in front).
+_REF = re.compile(r"@\{[^}]*\}\s*")
+
+
+def _otherwise(rels: list[dict[str, Any]]) -> str:
+    """The one ``else`` a variable's derive rows compile to: the first
+    given (a rule has one else, however many rows name one)."""
+    return next((r["otherwise"] for r in rels if r.get("otherwise")), "")
+
 
 def _picked_tags(graph: dict[str, Any], payloads: dict[str, dict[str, Any]], slot_name: str,
                  ctx: dict[str, Any]) -> tuple[set[str], bool] | None:
@@ -1415,14 +1831,18 @@ def _picked_tags(graph: dict[str, Any], payloads: dict[str, dict[str, Any]], slo
     for o in payload.get("options") or []:
         if not isinstance(o, dict) or o.get("is_null"):
             continue
-        text = _norm(o.get("value"))
+        text = _norm(_REF.sub("", str(o.get("value") or "")))
         if text and (text == value or text in chunks
                      or re.search(r"(?<!\w)" + re.escape(text) + r"(?!\w)", value)):
             tags |= set(o.get("sub_categories") or [])
             fallback = fallback or o.get("fallback") is True
+    kinds = axis_kinds(graph, slot)
     for a in slot["axes"]:
         got = ctx.get(f"{slot['var']}.{a['name']}")
         if isinstance(got, str) and got:
+            if kinds.get(a["name"]) == "accepts":
+                # The option offered alternatives; this run rolled one.
+                tags -= set(a["values"])
             tags.add(got)
     return tags, fallback
 
@@ -1463,7 +1883,8 @@ def verify_relations(plan: dict[str, Any], built: dict[str, Any],
     out: list[dict[str, Any]] = []
     for r in graph["relations"]:
         kind, src, dst = r["kind"], r["from"], r.get("to") or {}
-        row = {"text": _slot_rel_words(r), "kind": kind, "checked": kind not in _WEIGHTED,
+        row = {"text": _slot_rel_words(r), "kind": kind,
+               "checked": kind not in _WEIGHTED and kind != "draw",
                "seen": 0, "broken": 0, "holds": True, "why": ""}
         out.append(row)
         if not row["checked"]:
@@ -1488,7 +1909,7 @@ def verify_relations(plan: dict[str, Any], built: dict[str, Any],
                 if not dt and not said:
                     continue
                 row["seen"] += 1
-                if kind == "exclude" and (dst["value"] in dt or said):
+                if kind == "exclude" and not fell and (dst["value"] in dt or said):
                     row["broken"] += 1
                 elif kind == "only" and not fell and not (
                         dt & only_rows[(src["slot"], src["value"], dst["slot"])]):
@@ -1511,14 +1932,14 @@ def verify_relations(plan: dict[str, Any], built: dict[str, Any],
                     row["seen"] += 1
                     if _norm(r["text"]) not in got:
                         row["broken"] += 1
-                elif kind == "derive" and r.get("otherwise"):
+                elif kind == "derive" and _otherwise(by_var[r["var"]]):
                     fired = False
                     for d in by_var[r["var"]]:
                         t = _picked_tags(graph, payloads, d["from"]["slot"], ctx)
                         fired = fired or bool(t and d["from"]["value"] in t[0])
                     if not fired:
                         row["seen"] += 1
-                        if _norm(r["otherwise"]) not in got:
+                        if _norm(_otherwise(by_var[r["var"]])) not in got:
                             row["broken"] += 1
         if row["checked"] and row["seen"] == 0:
             row["why"] = f"never fired in {len(runs)} runs"
@@ -1555,6 +1976,15 @@ by the code from the run, so leave $beat out.
 5. "The user types the subject": inputs [{var: subject, about: who, \
 example: "a red-haired knight"}]; no Subject slot; template order starts \
 with subject.
+6. "A scarf, a hat and mittens, each in a warm colour from one shared colour \
+list": slot Colours (axis warmth: warm, cool; its options are colours), \
+Scarf, Hat, Mittens; relations draw Colours.warmth=warm → Scarf, draw \
+Colours.warmth=warm → Hat, draw Colours.warmth=warm → Mittens; order Scarf, \
+Hat, Mittens (Colours is the list, not a pick of its own).
+7. "An anime style preset with quality tags and its own negatives, for Pony \
+and Flux": model "pony, flux"; fixed [{name: Anime preset, var: preset, \
+text: "anime screencap, clean lineart, flat colors", negative: "photo, \
+realistic, 3d render"}]; order starts with preset.
 """
 
 GRAPH_SYSTEM = """\
@@ -1573,9 +2003,10 @@ is there).
 - rating: "nsfw" if sexual or explicit, else "safe". style: "tags" \
 (comma-separated Danbooru-style tags: Pony, Illustrious, NoobAI) or \
 "sentences" (short natural phrases: Flux, SD3, Qwen-Image); follow the \
-settings, else the request, else "tags". model: the image model family the \
-request names ("pony", "flux") or "". anchor: the slot variable the others \
-follow (setting, class, season), or "".
+settings, else the request, else "tags". model: the image model family or \
+families the request names ("pony", "pony, flux"; two families get a \
+per-family quality rule from the code) or "". anchor: the slot variable the \
+others follow (setting, class, season), or "".
 - questions: up to 4 things you can't guess that would change the pack \
 (header 1-3 words; 2-5 short choices; multi true when several apply \
 together). Never re-ask a question listed under "Decided". [] when nothing \
@@ -1600,7 +2031,8 @@ lighting, …), up to 24. Each: name; var (its variable, letters digits _); \
 what (what its options are, one concept only: poses hold poses, not hair); \
 section; count (options to write, 4-40); show "prompt" (read by the \
 template) or "internal" (a driver rules need but the prompt shouldn't say: \
-a season, a mood, a rating); pick "" for one pick, "2" or "2-3" for several; \
+a season, a mood, a rating); pick "" for one pick, "2" or "2-3" for several \
+("2 to 3 accessories" is pick "2-3" on Accessories); \
 hold true when the pick must stay the same for a whole batch or story; \
 sweep true on the 2 or 3 short slots a sweep sheet compares (run mode \
 sweep only); sometimes_none 0, or the percent of runs that get nothing (a hat 30% of the \
@@ -1613,11 +2045,16 @@ only axis is itself (a Season slot with axis season) gets its options from \
 the axis values by the code, no option call: its options ARE winter, spring, \
 summer, autumn, never outfits.
 - fixed: variables set to the same text every run ({name, var, text, \
-negative}): quality tags, a style preset. Up to 6.
+negative}): quality tags, a style preset. negative is what that preset keeps \
+out of the image (its own negative words), "" when it has none. Up to 6.
 - relations, each with every field ("" / 0 where unused):
   - exclude / only / boost / reduce: from_slot.from_axis = from_value → \
 to_slot.to_axis = to_value, with factor for boost (>1) and reduce (<1). \
-"never" is exclude; "just these" / "goes with" is only.
+"never" is exclude; "just these" / "goes with" is only. "X only in Y" \
+restricts X, so X is the source: "snow only in cold biomes" is only \
+Weather.kind=snow → Biome.climate=cold (the code picks the source first), \
+never only Biome.climate=cold → Weather.kind=snow, which would make every \
+cold biome snow.
   - agree: from_slot and to_slot share an axis (from_axis): the target's \
 pick carries the source's value (shoes for the outfit, outfit for the \
 season). The code adds a fallback so the target is never empty.
@@ -1629,6 +2066,11 @@ from_slot.from_axis = from_value; otherwise (text for every other pick, or \
 "" to leave it unset). Several derive rows on one var are its cases.
   - append: text added to var (a slot's or a derived variable) when \
 from_slot.from_axis = from_value.
+  - draw: every option of to_slot starts with a fresh pick from from_slot, a \
+shared list (colours, materials, names), narrowed to from_axis = from_value \
+when given ("each in a warm colour from one colour list": draw Colours.warmth\
+=warm → Scarf, and the same for Hat and Mittens). The list slot's options are \
+the things drawn; the target's options then say nothing of them.
   Every relation also has words: the things it is about as an option would \
 say them, taken from the request ("sandals", "shorts" for "no sandals or \
 shorts in winter"; "parka"), up to 6, or [] when it is about a whole axis \
@@ -1636,13 +2078,15 @@ value. The code makes the target slot hold options saying those words, \
 tagged with to_value, and checks the finished prompts for them.
   Every slot, axis and value a relation names must be declared on the slot \
 it names: a relation that names something else is dropped.
-- template: lead (always-first words: "1girl, solo", or ""), order (slot \
-names, fixed names, derived variables and inputs in the order the image \
-model should read them: subject and quality first, then character, outfit, \
-pose, setting, lighting, style; internal slots never), tail (always-last \
-words or ""), negative (the standing negative prompt in the pack's style: \
-usual defects only; "" for none). A rule ("no sandals in winter") is never \
-a negative: it is a relation.
+- template: lead (always-first words, never a slot name: for tag models the \
+count the request implies, "1girl, solo" for one woman, "1boy, 1girl" for a \
+couple, "solo" only with one person; or ""), order (slot names, fixed names, \
+derived variables and inputs in the order the image model should read them: \
+subject and quality first, then character, outfit, pose, setting, lighting, \
+style; internal slots never), tail (always-last words or ""), negative (the \
+standing negative prompt in the pack's style: usual defects only, which never \
+go in the lead or tail; "" for none). A rule ("no sandals in winter") is \
+never a negative: it is a relation.
 
 Plan what the request needs. Don't add commentary; the output is data.
 
@@ -1678,11 +2122,15 @@ def slot_request(plan: dict[str, Any], key: str, note: str = "",
     from engine.ai import guide as ai_guide
     graph = plan["graph"]
     old = (built or {}).get(key)
+    coverage, rest = coverage_split(note)
+    # A coverage part makes it a fill whatever else the note says: a
+    # value no option carries breaks every rule on it, so the options
+    # that are there stay and the new ones mind the rest of the note.
     targets = fill_targets(graph, slot, old["payload"]) if isinstance(old, dict) \
-        and _coverage_only(note) else {}
+        and coverage else {}
     if targets:
         axis = max(targets, key=lambda a: len(targets[a]))
-        user = fill_prompt(graph, slot, old["payload"], targets, axis)
+        user = fill_prompt(graph, slot, old["payload"], targets, axis, also=rest)
         schema = slot_schema(graph, slot, fill={axis: list(targets[axis])})
         name = "pack_slot_fill"
     else:
@@ -1699,7 +2147,8 @@ def slot_request(plan: dict[str, Any], key: str, note: str = "",
 
 
 def fill_prompt(graph: dict[str, Any], slot: dict[str, Any], payload: dict[str, Any],
-                targets: dict[str, dict[str, list[str]]], axis: str) -> str:
+                targets: dict[str, dict[str, list[str]]], axis: str,
+                also: list[str] | None = None) -> str:
     """The user prompt of a fill call: add options for the values of
     ``axis`` no option carries, and ones saying the rule words no option
     tagged with their value says (``fill_targets``; other axes' gaps are
@@ -1734,7 +2183,184 @@ def fill_prompt(graph: dict[str, Any], slot: dict[str, Any], payload: dict[str, 
     if others:
         lines.append("Other wildcards cover " + ", ".join(others[:12])
                      + ": keep those words out of these options.")
+    if also:
+        lines.append("The last options had these problems; the new ones must not: "
+                     + "; ".join(also)[:400] + ".")
     return "\n".join(lines)
+
+
+# --- picks the request counts ----------------------------------------------
+
+_NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+                 "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+_NUM = r"(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)"
+#: "2 to 3 accessories", "2-3 accessories", "two or three accessories",
+#: "three accessories each".
+_COUNTED = re.compile(
+    _NUM + r"(?:\s*(?:to|or|-|–)\s*" + _NUM + r")?\s+([a-z][a-z-]{2,})", re.I)
+#: Counted things that are no pick of a slot: how the pack runs, not what
+#: an image holds.
+_NOT_PICKED = frozenset("""
+frames frame images image pictures picture panels panel steps step scenes scene runs run
+options option slots slot items item choices choice values value seeds seed words word
+lines line tags tag sentences sentence prompts prompt variations variation wildcards
+wildcard packs pack times time kinds kind types type sets set lists list axes axis
+""".split())
+
+
+def _count(raw: str) -> int:
+    return int(raw) if raw.isdigit() else _NUMBER_WORDS.get(raw.lower(), 0)
+
+
+def request_picks(request: str) -> list[tuple[int, int, str]]:
+    """``(low, high, noun)`` for every counted thing the request asks for
+    ("2 to 3 accessories" → (2, 3, "accessories")), at least 2 of
+    something, up to 20."""
+    out: list[tuple[int, int, str]] = []
+    for m in _COUNTED.finditer(request or ""):
+        lo, hi, noun = _count(m.group(1)), _count(m.group(2) or m.group(1)), m.group(3).lower()
+        if hi < lo:
+            lo, hi = hi, lo
+        if hi < 2 or hi > 20 or noun in _NOT_PICKED or noun in _REQUEST_STOP:
+            continue
+        out.append((max(1, lo), hi, noun))
+    return out
+
+
+def drop_multi_pick_rules(graph: dict[str, Any]) -> list[str]:
+    """A derive or append rule keyed on a slot that picks several options
+    goes: the engine sets ``$var.axis`` for one pick only, so the rule never
+    fired (9B, 2026-10-21: $animal_biome on a 1-3 pick, broken 11-17 runs
+    in 14-21). A variable nothing writes any more leaves the order."""
+    lines: list[str] = []
+    multi = {s["name"]: s for s in graph["slots"] if s["pick"] and s["pick"] != "1"}
+    gone = [r for r in graph["relations"] if r["kind"] in ("derive", "append")
+            and r["from"]["slot"] in multi]
+    if not gone:
+        return []
+    graph["relations"] = [r for r in graph["relations"] if r not in gone]
+    still = {r["var"] for r in graph["relations"] if r["kind"] == "derive"}
+    for r in gone:
+        s = multi[r["from"]["slot"]]
+        lines.append(f"{s['name']} picks {s['pick']}, so ${r['var']} can't follow one "
+                     f"{s['name']}.{r['from']['axis']} value: that rule went")
+        if r["kind"] == "derive" and r["var"] not in still:
+            graph["template"]["order"] = [v for v in graph["template"]["order"]
+                                          if v != r["var"]]
+    return lines
+
+
+def apply_picks(graph: dict[str, Any], request: str) -> list[str]:
+    """A slot the request counts ("2 to 3 accessories") picks that many
+    when the model left its ``pick`` empty. Returns the lines saying so."""
+    lines: list[str] = []
+    for lo, hi, noun in request_picks(request):
+        stems = _stems(noun)
+        for s in graph["slots"]:
+            if s["pick"] or s.get("self_axis"):
+                continue
+            words = set(re.findall(r"[a-z]+", f"{s['name']} {s['var']} {s['what']}".lower()))
+            if not any(stems & _stems(w) for w in words):
+                continue
+            s["pick"] = f"{lo}-{hi}" if lo != hi else f"{hi}"
+            lines.append(f"{s['name']}: pick {s['pick']}, from the request")
+            break
+    return lines
+
+
+# --- slots that aren't picks -------------------------------------------------
+
+#: Slot names (or variables) that hold what never rolls: quality words
+#: are the same every run, a negative prompt is the template's.
+_QUALITY_SLOT = frozenset({"quality", "qualities", "quality_tags", "quality_tag", "qual"})
+_NEGATIVE_SLOT = frozenset({"negative", "negatives", "negative_prompt", "neg_prompt",
+                            "negative_tags", "neg"})
+_PRESET_NEGATIVES = re.compile(r"\bpresets?\b.{0,80}\b(?:its|their)\s+own\s+negatives?\b"
+                               r"|\b(?:its|their)\s+own\s+negatives?\b.{0,80}\bpresets?\b",
+                               re.I | re.S)
+
+
+def _negative_name(name: str, var: str) -> bool:
+    """Whether a name or variable says negative: ``compile_plan``'s test
+    (``_NEGATIVEISH``) or a bare "neg" word ("default_neg", "neg_tags")."""
+    words = set(re.split(r"[\s_\-]+", f"{name} {var}".lower()))
+    return bool(_NEGATIVEISH.search(f"{name} {var}")) or bool(words & {"neg", "negs"})
+
+
+def _slot_key(slot: dict[str, Any]) -> set[str]:
+    return {slot["var"].lower(), _axis_name(slot["name"]), slot["name"].lower()}
+
+
+def _in_relations(graph: dict[str, Any], slot: dict[str, Any]) -> bool:
+    return any(r["from"]["slot"] == slot["name"] or (r.get("to") or {}).get("slot")
+               == slot["name"] for r in graph["relations"])
+
+
+def apply_request_slots(graph: dict[str, Any], request: str) -> list[str]:
+    """What the code lands when the planner wrote a pick for something
+    that never rolls (an evals finding on small models): a Quality slot
+    is fixed values (its text, or the style's usual quality words), a
+    Negative slot is the template's negative, and a preset asked to
+    carry "its own negatives" carries the standing negative itself
+    instead of the template. A slot that has axes or sits in a relation
+    is left alone: the model meant it. Returns the lines saying so."""
+    lines: list[str] = []
+    for s in list(graph["slots"]):
+        key = _slot_key(s)
+        if key & _NEGATIVE_SLOT or _negative_name(s["name"], s["var"]):
+            # The same test ``compile_plan`` drops the wildcard by: a slot
+            # it would drop can't stay in the order or a relation, or the
+            # template reads a variable nothing sets (7 of 39 packs).
+            graph["slots"].remove(s)
+            graph["template"]["order"] = [v for v in graph["template"]["order"]
+                                          if v != s["var"]]
+            gone = [r for r in graph["relations"] if r["from"]["slot"] == s["name"]
+                    or (r.get("to") or {}).get("slot") == s["name"]]
+            graph["relations"] = [r for r in graph["relations"] if r not in gone]
+            if not graph["template"]["negative"] and "," in s["what"]:
+                graph["template"]["negative"] = s["what"]
+            lines.append(f"{s['name']} is the negative prompt, not a pick: it went to the "
+                         "template's negative"
+                         + (f" (and its {len(gone)} rule{'s' if len(gone) > 1 else ''} "
+                            "went with it)" if gone else ""))
+            continue
+        if s["axes"] or _in_relations(graph, s):
+            continue
+        if key & _QUALITY_SLOT and len(graph["fixed"]) < MAX_FIXED \
+                and not any(f["var"] == s["var"] for f in graph["fixed"]):
+            words = s["what"] if "," in s["what"] else (
+                "masterpiece, best quality" if graph["style"] == "tags"
+                else "high quality, detailed")
+            graph["slots"].remove(s)
+            graph["fixed"].append({"name": s["name"], "var": s["var"], "text": words,
+                                   "negative": ""})
+            lines.append(f"{s['name']} is fixed values: quality words are the same every run")
+    for f in list(graph["fixed"]):
+        if _negative_name(f["name"], f["var"]):
+            # Dropped by compile_plan like the slot above; the graph kept
+            # it in the order, so the template read $neg (9 packs).
+            graph["fixed"].remove(f)
+            graph["template"]["order"] = [v for v in graph["template"]["order"]
+                                          if v != f["var"]]
+            neg = graph["template"]["negative"]
+            if f["text"] and _norm(f["text"]) not in _norm(neg):
+                graph["template"]["negative"] = f"{neg}, {f['text']}" if neg else f["text"]
+            lines.append(f"{f['name']} is the negative prompt, not a preset: its words went "
+                         "to the template's negative")
+    for i in list(graph["inputs"]):
+        if _negative_name(i["var"], i["about"]):
+            graph["inputs"].remove(i)
+            graph["template"]["order"] = [v for v in graph["template"]["order"]
+                                          if v != i["var"]]
+            lines.append(f"${i['var']} is a negative, not an input: negatives are the "
+                         "template's")
+    if _PRESET_NEGATIVES.search(request or "") and graph["fixed"] \
+            and graph["template"]["negative"] and not any(f["negative"] for f in graph["fixed"]):
+        f = graph["fixed"][0]
+        f["negative"] = graph["template"]["negative"]
+        graph["template"]["negative"] = ""
+        lines.append(f"{f['name']} carries its own negative (it was the template's), as asked")
+    return lines
 
 
 # --- the request against the graph -------------------------------------------
@@ -1768,6 +2394,9 @@ tags tagged sentence sentences quality negative negatives preset presets model m
 checkpoint checkpoints family families lora loras works work working pony flux sdxl
 illustrious noobai nsfw sfw safe adult explicit way ways thing things stuff bit kind
 kinds type types sort sorts shared type typed myself itself must empty narrow
+none call decide decides decided either any whatever default defaults small large big
+specialized specialised specific general separation separate separated concern concerns
+structure structured section sections held vary varies varying varied each
 """.split())
 
 
@@ -1787,7 +2416,10 @@ def _stems(word: str) -> set[str]:
 def _content_words(text: str) -> list[str]:
     out: list[str] = []
     for w in re.findall(r"[a-z][a-z'-]*[a-z]|[a-z]", text.lower()):
-        w = w.strip("'-")
+        # "character's" is the character (9B and Sonnet, 2026-10-21: the
+        # possessive never matched the graph's "character" and the gap
+        # came back on every Fix all).
+        w = re.sub(r"'s?$", "", w.strip("'-"))
         if len(w) < 3 or w in _REQUEST_STOP:
             continue
         if w not in out:
@@ -1852,6 +2484,23 @@ def raw_rel_sig(r: dict[str, Any]) -> str:
         "var", "text"))
 
 
+def _sig_like(a: str, b: str) -> bool:
+    """Whether two relation signatures name the same relation: the same
+    kind, slots, values, variable and text, case aside, and the same
+    axis where both give one (the model may leave an axis blank, the
+    value finds it)."""
+    pa, pb = a.lower().split("|"), b.lower().split("|")
+    if len(pa) != 9 or len(pb) != 9:
+        return a == b
+    for n, (x, y) in enumerate(zip(pa, pb, strict=True)):
+        if x.strip() == y.strip():
+            continue
+        if n in (2, 5) and (not x.strip() or not y.strip()):
+            continue  # an axis one side left blank
+        return False
+    return True
+
+
 def apply_locks(raw: dict[str, Any], previous: dict[str, Any],
                 locks: dict[str, list[str]]) -> list[str]:
     """Put what the user set by hand (``locks``, parts of ``previous``'s
@@ -1880,12 +2529,12 @@ def apply_locks(raw: dict[str, Any], previous: dict[str, Any],
     rels = [r for r in (raw.get("relations") if isinstance(raw.get("relations"), list) else [])
             if isinstance(r, dict)]
     gone = set(locks["removed_relations"])
-    rels = [r for r in rels if raw_rel_sig(r) not in gone]
+    rels = [r for r in rels if not any(_sig_like(raw_rel_sig(r), g) for g in gone)]
     have = {raw_rel_sig(r) for r in rels}
     added = 0
     for sig in locks["relations"]:
         mine = next((r for r in prev["relations"] if raw_rel_sig(r) == sig), None)
-        if mine is not None and sig not in have:
+        if mine is not None and not any(_sig_like(h, sig) for h in have):
             rels.append(dict(mine))
             have.add(sig)
             added += 1
@@ -2004,6 +2653,12 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
     sent_back = isinstance(raw, dict) and isinstance(raw.get("graph"), dict)
     graph = raw["graph"] if sent_back else raw
     previous = kw.get("previous") if isinstance(kw.get("previous"), dict) else None
+    for field in ("settings", "decisions"):
+        # A caller that leaves them out means the plan's own (a graph plan's
+        # items never carry them, so ``compile_plan`` can't fall back).
+        if kw.get(field) is None:
+            kw[field] = (raw.get(field) if sent_back else None) \
+                or (previous.get(field) if previous else None)
     locks = parse_locks(raw.get("locks") if sent_back else
                         previous.get("locks") if previous else None)
     applied: list[str] = []
@@ -2022,6 +2677,21 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
         graph["run"] = parse_run(kw["previous"]["run"], graph["run"])
     applied += apply_settings(graph, kw.get("settings"))
     applied += code_beat(graph)
+    applied += apply_picks(graph, kw.get("request") or "")
+    applied += drop_multi_pick_rules(graph)
+    applied += apply_request_slots(graph, kw.get("request") or "")
+    applied += trim_model(graph, kw.get("request") or "")
+    if model_quality(graph, kw.get("settings")):
+        own = [f["name"] for f in graph["fixed"] if f["var"] == QUALITY_VAR]
+        if own:
+            # The per-model-family rule writes $quality; a fixed value of
+            # the same name would be written over every run. Its words
+            # become the rule's "otherwise" (``compile_item``).
+            graph["quality_words"] = next(f["text"] for f in graph["fixed"]
+                                          if f["var"] == QUALITY_VAR)
+            graph["fixed"] = [f for f in graph["fixed"] if f["var"] != QUALITY_VAR]
+            applied.append(", ".join(own) + ": the per-model-family rule writes $quality, so "
+                           "the fixed value went")
     if parse_run(graph["run"])["mode"] == "single":
         # A hold only means something over a Loop: in single images it
         # just makes every prompt the same.
@@ -2035,8 +2705,13 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
         graph["template"]["lead"] = lead
         applied.append("Took \"" + ", ".join(gone) + "\" out of the lead: the request names "
                        "no person")
+    applied += apply_library(graph, kw.get("library"), kw.get("settings"))
     _story_holds(graph["slots"], parse_run(graph["run"]), graph["warnings"])
-    plan = compile_plan(graph_plan(graph, kw.get("settings")), **kw)
+    if graph["anchor"] not in {s["var"] for s in graph["slots"]}:
+        # The code took the anchor's slot out (a Quality slot now fixed
+        # values, a Beat slot the story owns): the first prompt pick leads.
+        graph["anchor"] = next((s["var"] for s in graph["slots"] if s["show"] == "prompt"), "")
+    plan = compile_plan(graph_plan(graph, kw.get("settings"), kw.get("library")), **kw)
     plan["graph"] = {k: v for k, v in graph.items() if k not in ("warnings", "bad_refs")}
     plan["locks"] = locks
     plan["applied"] = applied
@@ -2047,6 +2722,18 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
                           for b in [*graph["dropped"], *graph["bad_refs"]]),
                         *plan["warnings"]]
     plan["bad_refs"] = graph["bad_refs"]
+    # Request words the graph says nowhere, and the ones a refine was
+    # already asked about and left unplaced: the review asks once, then
+    # stops calling them a fix (Sonnet 5.5 and the 9B, 2026-10-21: "give
+    # each a slot" came back on every Fix all).
+    prior = previous if previous is not None else (raw if sent_back else None)
+    gaps = request_gaps(graph, kw.get("request") or "")
+    before = set(prior.get("request_gaps") or []) if isinstance(prior, dict) else set()
+    tried = set(prior.get("gaps_tried") or []) if isinstance(prior, dict) else set()
+    if previous is not None:
+        tried |= before & set(gaps)
+    plan["request_gaps"] = gaps
+    plan["gaps_tried"] = sorted(tried & set(gaps))
     return plan
 
 
@@ -2120,7 +2807,11 @@ def with_refs(graph: dict[str, Any], answer: Any) -> dict[str, Any]:
         return graph
     raw = graph_answer({"graph": graph})
     raw["relations"] = [*raw["relations"], *extra]
-    raw["dropped"] = [*(graph.get("dropped") or []), *graph["bad_refs"]]
+    raw["dropped"] = list(graph.get("dropped") or [])
     fixed = compile_graph(raw)
+    if len(fixed["relations"]) - len(graph["relations"]) < len(graph["bad_refs"]):
+        # Fewer came back than were asked for: the ones not written again
+        # stay listed as left out (which ones, the messages can't say).
+        fixed["dropped"] = list(dict.fromkeys([*fixed["dropped"], *graph["bad_refs"]]))
     fixed["warnings"] = graph.get("warnings", [])
     return fixed

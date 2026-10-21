@@ -9,6 +9,7 @@ from typing import Any
 
 from aiohttp import web
 
+from engine.ai import adult as ai_adult
 from engine.ai import budget as ai_budget
 from engine.ai import bundle_split as ai_split
 from engine.ai import followup as ai_followup
@@ -128,6 +129,9 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     instruction = _instruction(body, "describe the pack first")
     if isinstance(instruction, web.Response):
         return instruction
+    refused = ai_adult.refused_request(instruction)
+    if refused:
+        return json_error(refused, status=400)
     turns = _turns(body)
     if isinstance(turns, web.Response):
         return turns
@@ -198,8 +202,11 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     answer: Any = None
     retry = ""
     graph = settings["planner"] == "graph"
+    # The user's own words: "Your call (decide for me)" is not a thing the
+    # pack must say (its words came back as request gaps on every Fix all).
     asked = " ".join([first_text, ai_pack.own_request(instruction), sample,
-                      *(str(d.get("answer") or "") for d in decisions if isinstance(d, dict))])
+                      *(str(d.get("answer") or "") for d in decisions if isinstance(d, dict)
+                        and d.get("answer") != ai_pack.DECIDE_ANSWER)])
     for attempt in range(2):
         try:
             answer = await _ask(
@@ -238,6 +245,37 @@ async def post_pack_plan(request: web.Request) -> web.Response:
             # A small model now and then answers a plan with no wildcards
             # or no template: asked once more with what was wrong.
             retry = ai_pack.plan_retry_note(str(e))
+    if graph and not turns and settings["drafts"] == "three":
+        # Best of three on the first plan: the code keeps the draft that
+        # fits the request best (`drafts.pick_draft`); a failed draft is
+        # skipped.
+        drafts = [(answer, plan)]
+        # The images went once: the other drafts read what the first took
+        # from them instead of reading the images again.
+        seen = ai_pack.images_seen(plan) if images else ""
+        for t in ai_pack.DRAFT_TEMPERATURES[1:]:
+            try:
+                a = await _ask(cfg, first=first, turns=turns, instruction=follow, extra=seen,
+                               system=ai_pack.GRAPH_SYSTEM, schema=ai_pack.GRAPH_SCHEMA,
+                               schema_name="pack_graph", temperature=t,
+                               images=None, image_note=False, partial=True)
+                if isinstance(a, dict) and a.get(_ai_client.CUT_OFF):
+                    continue
+                p = ai_pack.compile_graph_plan(a, library=library, previous=previous,
+                                               decisions=decisions, settings=settings,
+                                               base=base, canvas=canvas, request=asked)
+                if p["bad_refs"]:
+                    p = await _repair_refs(cfg, p, library=library, decisions=decisions,
+                                           settings=settings, base=base, canvas=canvas,
+                                           request=asked)
+                drafts.append((a, p))
+            except (_ai_client.AIError, ai_pack.PlanError):
+                continue
+        best, scores = ai_pack.pick_draft([p for _, p in drafts], asked, library)
+        answer, plan = drafts[best]
+        line = ai_pack.draft_line(best, scores)
+        if line:
+            plan["applied"] = [*plan.get("applied", []), line]
     if not web_on:
         plan["research"] = []
     plan["research"] = [q for q in plan["research"]
@@ -305,6 +343,9 @@ async def post_pack_change(request: web.Request) -> web.Response:
     instruction = _instruction(body, "say what to change")
     if isinstance(instruction, web.Response):
         return instruction
+    refused = ai_adult.refused_request(instruction)
+    if refused:
+        return json_error(refused, status=400)
     library = _reusable(request)
     base = _pack_base(request, body, library)
     if isinstance(base, web.Response):
@@ -462,7 +503,7 @@ async def post_pack_item(request: web.Request) -> web.Response:
         # The graph wires this item: no model call.
         try:
             wired = ai_pack.wired_payload(plan, key, built)
-        except ai_pack.PlanError as e:
+        except (ai_pack.PlanError, ValueError) as e:
             return json_error(str(e), status=400)
         item = next(i for i in plan["items"] if i["key"] == key)
         return json_ok({"key": key, "id": item["id"], "kind": wired["kind"],
@@ -501,6 +542,11 @@ async def post_pack_item(request: web.Request) -> web.Response:
                 f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
                 status=502,
             )
+    grounded, spelled = ai_pack.ground_item(plan, out["kind"], out["payload"],
+                                            _ai_vocab.lookup, kinds)
+    if spelled:
+        out = {**out, "payload": grounded, "preview": ai_pack.item_preview(out["kind"], grounded),
+               "warnings": [*out["warnings"], spelled]}
     checked = ai_pack.tag_check_note(plan, out["kind"], out["payload"], _ai_vocab.lookup,
                                      kinds)
     if checked:

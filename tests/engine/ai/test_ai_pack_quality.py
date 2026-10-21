@@ -1536,3 +1536,29 @@ def test_a_rule_that_is_a_lookup_table_is_a_problem():
     built[key] = pack.compile_item(plan, key, built, {"rules": [rule]})
     report = pack.check_pack(plan, built, seeds=5)
     assert any("value by value" in p for p in report["problems"].get(key, []))
+
+
+def test_an_overlap_lands_on_the_pick_that_borrows_the_others_subject():
+    # Sonnet 5.5, 2026-10-21: Eyes was told its options name what Expression
+    # picks ("gentle eyes", "half-closed eyes"), and no rebuild of Eyes could
+    # clear it: "eyes" is Eyes' own subject, so Expression is the intruder.
+    raw = _raw(items=[
+        _item(name="Eyes", var="eyes"), _item(name="Expression", var="expression"),
+        _item(kind="template", name="T", about="$eyes, $expression")])
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    keys = {i["var"]: i["key"] for i in plan["items"] if i["var"]}
+    built[keys["eyes"]]["payload"]["options"] = [
+        {"id": "e1", "value": "gentle eyes", "weight": 1},
+        {"id": "e2", "value": "half-closed eyes", "weight": 1},
+        {"id": "e3", "value": "blue eyes", "weight": 1},
+        {"id": "e4", "value": "green eyes", "weight": 1}]
+    built[keys["expression"]]["payload"]["options"] = [
+        {"id": "x1", "value": "gentle eyes, soft smile", "weight": 1},
+        {"id": "x2", "value": "half-closed eyes, smirk", "weight": 1},
+        {"id": "x3", "value": "calm face", "weight": 1},
+        {"id": "x4", "value": "light smile", "weight": 1}]
+    out = pack._overlaps(plan, built, "$eyes, $expression")
+    assert keys["eyes"] not in out
+    said = out[keys["expression"]]
+    assert "gentle eyes" in said and "leave those to Eyes" in said

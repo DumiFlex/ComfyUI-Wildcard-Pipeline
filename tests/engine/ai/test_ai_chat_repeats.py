@@ -324,6 +324,31 @@ def test_the_chat_changes_only_library_items_the_user_named():
     lib.run("edit_options", {"id": "aaaa0001", "negatives": [{"n": 1, "negative": "x"}]})
 
 
+def test_an_item_the_answer_read_may_be_changed_on_a_change_ask():
+    """9B, 2026-10-21 (weather follow-up): it found and showed the user's
+    Weather, then refused to add negatives to it because they "haven't
+    named it". An item the answer read in full is open to a change ask,
+    never to an ask for a new item."""
+    from engine.ai import chat as ai_chat
+    assert ai_chat.creation_ask("make a weather wildcard")
+    assert ai_chat.creation_ask("create me a new outfit list")
+    assert not ai_chat.creation_ask("add negatives to the stormy options")
+    assert not ai_chat.creation_ask("make the season wildcard warmer")
+    lib = _lib()
+    lib.named = set()
+    lib.edit_read = True
+    with pytest.raises(ValueError, match="is the user's own item"):
+        lib.run("edit_options", {"id": "aaaa0001", "negatives": [{"n": 1, "negative": "x"}]})
+    lib.run("read", {"id": "aaaa0001"})
+    lib.run("edit_options", {"id": "aaaa0001", "negatives": [{"n": 1, "negative": "x"}]})
+    lib = _lib()
+    lib.named = set()
+    lib.edit_read = False  # "make a new outfit wildcard"
+    lib.run("read", {"id": "aaaa0001"})
+    with pytest.raises(ValueError, match="is the user's own item"):
+        lib.run("edit_options", {"id": "aaaa0001", "negatives": [{"n": 1, "negative": "x"}]})
+
+
 def test_wrong_kind_refusals_name_the_tool_to_use():
     """All-tools eval: the 9B retried the wrong tool after "is a template,
     not a wildcard", and made wildcards named "Portrait Template"."""
@@ -417,3 +442,18 @@ def test_reading_a_category_name_lists_its_items():
     lib.modules["aaaa0001"]["category_id"] = cat["id"]
     msg = lib.not_found(cat["name"])
     assert msg.startswith(f"{cat['name']} is a category, not an item") and "aaaa0001" in msg
+
+
+def test_a_shared_name_means_the_item_the_chat_already_knows():
+    """9B, 2026-10-21: three Weather wildcards, and the chat asked which
+    one instead of taking the one it had just shown."""
+    import copy
+    lib = _lib()
+    lib.modules["aaaa0009"] = {**copy.deepcopy(lib.modules["aaaa0001"]), "id": "aaaa0009"}
+    lib.named = set()
+    assert lib._find("Outfit") is None
+    lib.touched.append("aaaa0009")
+    assert lib._find("Outfit")["id"] == "aaaa0009"
+    lib.touched.clear()
+    lib.named = {"aaaa0001"}
+    assert lib._find("Outfit")["id"] == "aaaa0001"

@@ -750,7 +750,8 @@ async def _complete_json(
             if ttl > 0:
                 body["ttl"] = ttl
         think_keys: tuple[str, ...] = ()
-        if cfg.get("thinking") == "off":
+        key = (str(cfg.get("base_url") or ""), str(cfg.get("model") or ""))
+        if cfg.get("thinking") == "off" or key in _JSON_THINK_OFF:
             from wp_api import _ai_chat  # imports this module
             off = _ai_chat._no_thinking(cfg)
             body.update(off)
@@ -771,11 +772,46 @@ async def _complete_json(
         message = choices[0].get("message") or {}
         if message.get("refusal"):
             raise AIError("the model declined this request", status=422)
+        cut = choices[0].get("finish_reason") == "length" or _early(data)
+        if cut and not think_keys and _all_thought(message):
+            # The model spent its whole output limit thinking (a 9B under
+            # LM Studio with thinking on lost 32 of 39 pack plans this
+            # way): ask once more with the server's off switch, and keep
+            # it off for this model's JSON calls. The chat keeps the
+            # Thinking setting as it is.
+            from wp_api import _ai_chat  # imports this module
+            off = _ai_chat._no_thinking(cfg)
+            again: Any = None
+            if off:
+                try:
+                    again = await _answer(cfg, "/chat/completions", {**body, **off}, "openai")
+                except AIError as e:
+                    if not (400 <= (e.upstream or 0) < 500):
+                        raise
+            retry = again.get("choices") if isinstance(again, dict) else None
+            if retry and isinstance(retry[0], dict):
+                _JSON_THINK_OFF.add(key)
+                data, choices = again, retry
+                message = choices[0].get("message") or {}
+                cut = choices[0].get("finish_reason") == "length" or _early(data)
         _keep_thinking(message.get("content"),
                        message.get("reasoning_content") or message.get("reasoning"))
-        return _parse_text_json(message.get("content"),
-                                cut_off=choices[0].get("finish_reason") == "length"
-                                or _early(data))
+        return _parse_text_json(message.get("content"), cut_off=cut)
+
+
+#: (base_url, model) pairs whose JSON answer was once all reasoning: their
+#: JSON calls (plans, items, panels) go with the thinking switch off.
+_JSON_THINK_OFF: set[tuple[str, str]] = set()
+
+
+def _all_thought(message: dict[str, Any]) -> bool:
+    """Whether a cut-off answer is reasoning and nothing else: an empty
+    (or never-closed <think>) content next to a reasoning field, or a
+    content that is only an open <think>."""
+    content = message.get("content")
+    text = content if isinstance(content, str) else ""
+    reasoned = bool(message.get("reasoning_content") or message.get("reasoning"))
+    return not strip_think(text).strip() and (reasoned or "<think>" in text.lower())
 
 
 _PROBE_SCHEMA = {

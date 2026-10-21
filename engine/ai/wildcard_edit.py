@@ -110,6 +110,28 @@ def system_prompt(action: str) -> str:
     return _BASE + "\n" + _GUIDES[action]
 
 
+#: A request that covers every option ("tag each by season", "halve all
+#: the weights"): an empty answer to it is a miss, not a judgement.
+_EVERY = re.compile(r"\b(?:each|every|all|everything)\b", re.I)
+
+EMPTY_NUDGE = (
+    "Your last answer listed no option, but the request covers every option in the list. "
+    "Answer again with every option the request changes, by its number, with its complete "
+    "new value. An empty list is only right when the request changes nothing at all."
+)
+
+
+def answered_nothing(action: str, answer: Any, instruction: str) -> bool:
+    """Whether the model's answer to a request that covers every option
+    (`_EVERY`) lists no option at all: a retag, rewrite or re-weight that
+    says "each" or "all" changes something, so the answer is asked for once
+    more with `EMPTY_NUDGE`. A removal is never re-asked: "remove all the
+    modern ones" can rightly remove nothing."""
+    if action == "remove" or not _EVERY.search(instruction or ""):
+        return False
+    return isinstance(answer, dict) and answer.get("options") == []
+
+
 def build_edit_prompt(
     *, action: str, instruction: str, name: str, var_binding: str,
     options: list[dict[str, Any]], tags: list[str],

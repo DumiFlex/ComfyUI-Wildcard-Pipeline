@@ -893,6 +893,15 @@ async def test_pack_validation(wp_client, fake_llm):
                                     json={"plan": plan, "built": {}, **extra})
         assert resp.status == 400, path
     assert (await wp_client.post("/wp/api/ai/pack/check", json={"plan": {}})).status == 400
+    # A request that sexualises a minor is refused before any model call.
+    seen = len(fake_llm.seen)
+    resp = await wp_client.post("/wp/api/ai/pack/plan",
+                                json={"instruction": "nsfw pack of underage girls"})
+    assert resp.status == 400 and "asks for a minor" in (await resp.json())["error"]
+    resp = await wp_client.post("/wp/api/ai/pack/change", json={
+        "plan": plan, "built": {}, "instruction": "make the girls teens, lingerie"})
+    assert resp.status == 400 and "asks for a minor" in (await resp.json())["error"]
+    assert len(fake_llm.seen) == seen
 
 
 async def test_text_draft_for_fixed_values_combine_and_template(wp_client, fake_llm):
@@ -923,9 +932,14 @@ async def test_text_draft_for_fixed_values_combine_and_template(wp_client, fake_
     body = await resp.json()
     assert body["payload"]["input_vars"] == ["class", "weapon"] and body["warnings"] == []
 
+    # A pick in a template is kept as its first branch (the 9B wrote one in
+    # a third of its template drafts; the route answered 502).
     fake_llm.overrides["prompt_template"] = {"template": "{a|b} $hero", "negative": ""}
     resp = await wp_client.post(url, json={"kind": "template", "instruction": "x", "item": {}})
-    assert resp.status == 502
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    assert body["payload"]["template_string"] == "a $hero"
+    assert any("Assembler can't pick" in w for w in body["warnings"])
     fake_llm.overrides["prompt_template"] = {"template": "$hero, $class",
                                              "negative": "$negatives, lowres"}
     resp = await wp_client.post(url, json={"kind": "template", "instruction": "x", "item": {}})
@@ -1626,12 +1640,31 @@ async def test_an_answer_claiming_a_change_with_no_card_says_nothing_changed(
         wp_client, fake_llm):
     ai_config.update({"enabled": True, "provider": "lmstudio",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
-    fake_llm.chat_steps.extend([{"message": "I've created the preset for you.", "calls": []}])
+    # A claim with no call is asked once for the call (9B, 2026-10-21: 3 of
+    # 3 organize and plan-a-pack turns described the change as done).
+    fake_llm.chat_steps.extend([
+        {"message": "I've created the preset for you.", "calls": []},
+        {"message": "Nothing is made yet; want me to propose it?", "calls": []}])
+    body = await (await wp_client.post("/wp/api/ai/chat", json={"message": "a preset"})).json()
+    assert ai_chat.CLAIM_NUDGE in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert body["message"] == "Nothing is made yet; want me to propose it?"
+    # Still claiming after the nudge: the answer says nothing changed.
+    fake_llm.chat_steps.extend([
+        {"message": "I've created the preset for you.", "calls": []},
+        {"message": "I've created it, really.", "calls": []}])
     body = await (await wp_client.post("/wp/api/ai/chat", json={"message": "a preset"})).json()
     assert body["message"].endswith(ai_turn.NOTHING_PROPOSED)
     fake_llm.chat_steps.extend([{"message": "Created means made new.", "calls": []}])
     body = await (await wp_client.post("/wp/api/ai/chat", json={"message": "what"})).json()
     assert ai_turn.NOTHING_PROPOSED not in body["message"]
+    # An organize ask answered with a list and no call gets its own nudge.
+    fake_llm.chat_steps.extend([
+        {"message": "Categories: Characters, Scenes, Styles.", "calls": []},
+        {"message": "Which of these first?", "calls": []}])
+    body = await (await wp_client.post("/wp/api/ai/chat",
+                                       json={"message": "organize my library"})).json()
+    assert ai_chat.ORGANIZE_NUDGE in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert body["message"].startswith("Which of these first?")
 
 
 async def test_native_text_next_to_calls_stays_as_a_note(wp_client, fake_llm):
@@ -1721,3 +1754,43 @@ async def test_a_dropped_catch_all_is_asked_for_again_and_attached(wp_client, fa
     resp = await wp_client.post("/wp/api/ai/derivation/draft", json={
         "instruction": "mages get the title Archmage", "derivation": {"rules": []}})
     assert resp.status == 200 and len(fake_llm.seen) == n + 1
+
+
+def test_a_test_ask_is_a_verb_not_a_word_in_the_wildcard():
+    from wp_api import _ai_turn
+
+    for yes in ("Make a hair wildcard and test it.", "test the pack", "then test",
+                "Can you test that?", "Add 3 colours and run a test", "try it out", "Test"):
+        assert _ai_turn._TEST_ASK.search(yes), yes
+    for no in ("make a chemistry lab wildcard: test tubes, beakers, flasks",
+               "a testing ground wildcard with 6 arenas", "the contest winner"):
+        assert not _ai_turn._TEST_ASK.search(no), no
+
+
+async def test_an_empty_edit_answer_to_a_request_over_every_option_is_asked_once_more(
+        wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    body = {**_edit_body("retag"), "instruction": "tag each option by era"}
+    fake_llm.overrides["wildcard_retag"] = [
+        {"options": []}, {"options": [{"id": 1, "tags": ["medieval"]}]}]
+    seen = len(fake_llm.seen)
+    resp = await wp_client.post("/wp/api/ai/wildcard/edit", json=body)
+    assert resp.status == 200, await resp.text()
+    out = await resp.json()
+    assert out["changes"] == [{"option_id": "aaaa0001", "before": {"tags": []},
+                               "after": {"tags": ["medieval"]}}]
+    assert len(fake_llm.seen) - seen == 2
+    again = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert "listed no option" in again and "tag each option by era" in again
+    # A request about some options, or a removal, takes an empty answer.
+    fake_llm.overrides["wildcard_retag"] = {"options": []}
+    seen = len(fake_llm.seen)
+    resp = await wp_client.post("/wp/api/ai/wildcard/edit",
+                                json={**body, "instruction": "tag the modern ones"})
+    assert resp.status == 200 and (await resp.json())["changes"] == []
+    fake_llm.overrides["wildcard_remove"] = {"remove": []}
+    resp = await wp_client.post("/wp/api/ai/wildcard/edit",
+                                json={**_edit_body("remove"), "instruction": "remove all guns"})
+    assert resp.status == 200 and (await resp.json())["changes"] == []
+    assert len(fake_llm.seen) - seen == 2

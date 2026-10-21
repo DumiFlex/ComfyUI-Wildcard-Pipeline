@@ -97,7 +97,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         :items="[
           { term: 'Remove', desc: 'Finds options that match what you describe (\'drop anything modern\') and says why. Options other modules point at stay; delete those by hand so you can see what refers to them.' },
           { term: 'Rewrite', desc: 'Changes the wording: tags to sentences, a different style, shorter, typos fixed. A rewrite that would make two options the same is left out.' },
-          { term: 'Retag', desc: 'Sets each option\'s tags (\'tag each by the seasons it suits\'). The new list replaces the old one; new tags are marked and created when you apply.' },
+          { term: 'Retag', desc: 'Sets each option\'s tags (\'tag each by the seasons it suits\'). The new list replaces the old one; new tags are marked and created when you apply. A request over every option (\'each\', \'all\') that comes back with no option is asked once more.' },
           { term: 'Weights', desc: 'Makes options rarer or more common (\'heavy winter gear rarer\'). 1 is normal, 0.5 half as likely, 2 twice, 0 never.' },
         ]"
       />
@@ -343,9 +343,14 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         The assistant only changes items of yours that you named in the chat ("add rain to my
         Weather", an id, a chip), that you have open, or that its last answer showed you as a chip
         (after "you already have [[Weather]]", "now add negatives to the stormy options" may change
-        it); asked to make something new, it makes a new item instead of rewriting one you have,
-        and it can still read, search and test your whole library. Cards it proposed itself stay
-        open to change.
+        it), or that it has read in full while answering a request for a change; asked to make
+        something new, it makes a new item instead of rewriting one you have, and it can still
+        read, search and test your whole library. When several items share a name, the one you
+        named or the chat already read is the one meant. Cards it proposed itself stay open to
+        change. An answer that says something was made, tested or opened with no call behind it
+        is sent back once for the call before it stands, and so is one that proposes part of
+        what you asked and puts the rest off until you apply ("then I'll propose the
+        derivation"): cards from one answer are applied together.
         The assistant plans before it acts and checks its work: when it proposes changes to
         modules it runs the stack with them before it answers, so the reply says what the change
         does. It can propose several items that depend on each other in one answer (a wildcard
@@ -615,7 +620,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           <DocKeyList
             :items="[
               { term: 'Planner', desc: 'Pack graph (the default): the model writes slots, axes and relations and the code wires every rule and the template from them. Items one by one: the older planner, where the model writes each rule and the template itself.' },
-              { term: 'Your library', desc: 'New, in its style (the default: built fresh but written like your library), Reuse what fits (wildcards and fixed values you already have, marked yours), or Everything new.' },
+              { term: 'Plan drafts', desc: 'Best of three: the model drafts the first plan three times and the code keeps the one that fits your request best (every part you named, every rule you gave, nothing pointing at a missing slot). Planning takes about three times as long; small local models gain the most. One: a single draft.' },
+              { term: 'Your library', desc: 'New, in its style (the default: built fresh but written like your library), Reuse what fits (wildcards and fixed values you already have, marked yours; on a pack graph a slot with no axes that no rule names is swapped for your wildcard of the same name or variable, and the template follows its variable), or Everything new.' },
               { term: 'Negatives', desc: 'Standing + per option (a standing negative in the template and negatives on options that need them), Template only, or None.' },
               { term: 'Structure', desc: 'Sub-bundle per section, or One bundle.' },
               { term: 'Written as', desc: 'Tags or Natural phrases, or let the planner decide from your request and library.' },
@@ -631,8 +637,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           rules, "pick 2", hold, a share of "none"), each slot's <b>axes</b> (the ways its
           options are told apart: a Season axis with winter and summer, a Formality axis), the
           <b>relations</b> between slots (never gets, only gets, favours, rarely gets, agrees
-          with on an axis, accepts, sets a variable, adds to a variable, each from one slot's
-          axis value to another's) and the <b>template order</b>. The code then makes every
+          with on an axis, accepts, sets a variable, adds to a variable, draws from, each from
+          one slot's axis value to another's) and the <b>template order</b>. The code then makes every
           constraint, derivation and the template from the graph, so a rule can only name a slot
           and a value the graph declares; a relation that names something the graph doesn't
           have is dropped, listed under the plan, and the model is asked once to write it
@@ -679,7 +685,44 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           "1girl, solo" lead on a pack whose request names no person but does name a thing
           (animals, cars, rooms, food) is taken out. The checker also reads your request against the graph: a thing it names
           ("sandals", "parka") that no slot, axis value, rule or fixed text says is a finding,
-          sent back to the planner. Click an item to edit its slot (axes, use) or the
+          sent back to the planner. A slot whose pick another slot follows (the source of an
+          agrees-with or only-gets relation) is read as offering its axis values as
+          alternatives: an option tagged with two of them (a mountain biome that is cold and
+          temperate) rolls one each run and only that value's rule fires, so two rules never
+          close the pool together; the test run reports a slot whose rules left nothing in
+          three runs out of ten or more (the fallback stood in) and names the rules to loosen.
+          <b>Draws from</b> puts a fresh pick from a shared list in front of every option of a
+          slot (a scarf, a hat and mittens each in a warm colour from one Colours list, narrowed
+          to an axis value when given); the list itself stays out of the prompt unless the
+          order names it, and the slot's options are written without colours. "2 to 3
+          accessories" in the request makes the matching slot pick 2-3 when the planner left it
+          at one, a request naming two model families ("Pony and Flux") gets the per-family
+          quality rule without the setting, and a fixed preset can carry its own negatives. A
+          Quality slot the planner writes becomes fixed values (quality words don't roll), a
+          Negative slot becomes the template's negative (whatever its name says negative,
+          with any rule on it), and a preset asked for "its own negatives" carries the
+          standing negative itself; "Wired by the code" says so. A rule that writes a bare
+          number ("1.5" for "long styles more common") is a weight, not text: the options
+          tagged with its value weigh that much more or less and the rule is spent. A rebuilt
+          wildcard that still misses an axis value gets one fill call (the options stay, the
+          missing ones are added), and a fill call is used whenever a value is missing,
+          whatever else the note says. A preset or input named like a negative goes to the
+          template's negative too, and a placeholder or "$neg =" written into the negative is
+          cleaned up like in the lead. The per-model-family quality rule comes only from the
+          setting or from families your request names (not ones the planner guessed), and the
+          code gives it an "otherwise" with the pack's own quality words, so $quality is set
+          even without a WP Model Info node. Rules writing one variable from two axes become
+          one rule per axis (the second adds to it), and a rule keyed on a slot that picks
+          several options is dropped with a note, since only one pick's axis value is readable.
+          A pick's name written as plain words into the template's lead or tail ("quality,
+          pose") is read as that pick, once, and defect tags written there (ugly, bad anatomy)
+          move to the negative. The review's "the request names X, and the plan says it
+          nowhere" counts only your own words (not "decide for me", not how to build the
+          pack: small, specialized, separation of concerns), and asks the planner once; a
+          word it still finds no place for becomes a note to add by hand or ignore. The
+          check's "its options already name what another pick picks" lands on the pick that
+          borrows the other's subject (eye words inside an Expression option, not Eyes
+          itself), so a Fix can clear it. Click an item to edit its slot (axes, use) or the
           relations it compiles from, and <b>Add a relation</b> or <b>Add a slot</b>; the items
           are compiled again from your change. The assistant lists every item it will build,
           grouped by section, and asks what it can't guess. Some questions take several answers; every question has an
@@ -722,7 +765,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           planner's own account of the pack (which pick decides which, and why each rule is
           there), and with a thinking model the plan and each built item have a folded
           <b>Thinking</b>, so when a pack comes out wrong you can see whether the model misread
-          the request or built its idea wrong.</li>
+          the request or built its idea wrong. A thinking model that spends its whole output
+          limit reasoning (the plan comes back empty, cut off) is asked once more with thinking
+          off, and the plan, item and Draft with AI calls stay that way for that model; the chat
+          keeps the Thinking setting as it is.</li>
         <li><b>Plan review.</b> The plan is checked as you edit it for what would break: a
           template or rule that reads a variable nothing sets, a constraint keyed on a tag
           neither wildcard lists, two constraints that loop, wildcards that ignore the pack's
