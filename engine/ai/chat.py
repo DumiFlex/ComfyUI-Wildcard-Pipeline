@@ -249,6 +249,29 @@ def claims_change(said: str) -> bool:
     return bool(_CLAIMED.search(said or ""))
 
 
+#: An answer that proposed part of the ask and puts the rest off to a later
+#: turn (9B chat eval, 2026-10-21, "Class wildcard + $title derivation":
+#: "Apply it, then I'll propose the derivation for $title").
+_DEFERS = re.compile(
+    r"\b(?:then|next|after\s+(?:that|you\s+apply\b[^.?!]*?|applying\b[^.?!]*?)|once\s+(?:it|that|"
+    r"this|you)[^.?!]*?),?\s+I(?:'ll| will| can| could)\s+(?:then\s+)?(?:propose|create|make|"
+    r"add|build|set\s+up|write|draft)\b", re.I)
+
+
+def defers_rest(said: str) -> bool:
+    """Whether an answer puts part of the ask off to a later turn ("Apply
+    it, then I'll propose the derivation"). Cards from one answer can be
+    applied together, so the rest is asked for now (`DEFER_NUDGE`)."""
+    return bool(_DEFERS.search(said or ""))
+
+
+DEFER_NUDGE = (
+    "Your answer puts part of the request off to a later turn. The user asked for all of it "
+    "now, and cards from one answer are applied together (a rule may read a variable a card "
+    "of this answer creates), so nothing needs applying first. Propose the rest now, with "
+    "its calls, then answer.")
+
+
 CLAIM_NUDGE = (
     "Your answer says something was made, changed, tested or opened, but you made no call, so "
     "nothing happened and the user would be misled. Make the call now (the change tool, "

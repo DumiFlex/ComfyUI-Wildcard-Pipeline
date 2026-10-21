@@ -817,6 +817,15 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     ai_chat.ORGANIZE_NUDGE if _ORGANIZE_ASK.search(text or "")
                     and not ai_chat.claims_change(said) else ai_chat.CLAIM_NUDGE))
                 continue
+            # Proposed part of the ask and put the rest off to a later turn
+            # ("Apply it, then I'll propose the derivation"): ask once for
+            # the rest, in this answer.
+            if (proposals and not calls and not nudged and step < ai_chat.MAX_STEPS
+                    and ai_chat.defers_rest(said)):
+                nudged = True
+                set_aside, message = said, ""
+                new.append(ai_chatlog.note_entry(ai_chat.DEFER_NUDGE))
+                continue
             # Asked leave instead of proposing, or met "yes" with more talk:
             # tell it once to act. Small models loop on "Should I proceed?".
             if (not calls and not proposals and not nudged

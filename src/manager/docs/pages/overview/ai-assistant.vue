@@ -97,7 +97,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         :items="[
           { term: 'Remove', desc: 'Finds options that match what you describe (\'drop anything modern\') and says why. Options other modules point at stay; delete those by hand so you can see what refers to them.' },
           { term: 'Rewrite', desc: 'Changes the wording: tags to sentences, a different style, shorter, typos fixed. A rewrite that would make two options the same is left out.' },
-          { term: 'Retag', desc: 'Sets each option\'s tags (\'tag each by the seasons it suits\'). The new list replaces the old one; new tags are marked and created when you apply.' },
+          { term: 'Retag', desc: 'Sets each option\'s tags (\'tag each by the seasons it suits\'). The new list replaces the old one; new tags are marked and created when you apply. A request over every option (\'each\', \'all\') that comes back with no option is asked once more.' },
           { term: 'Weights', desc: 'Makes options rarer or more common (\'heavy winter gear rarer\'). 1 is normal, 0.5 half as likely, 2 twice, 0 never.' },
         ]"
       />
@@ -348,7 +348,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         read, search and test your whole library. When several items share a name, the one you
         named or the chat already read is the one meant. Cards it proposed itself stay open to
         change. An answer that says something was made, tested or opened with no call behind it
-        is sent back once for the call before it stands.
+        is sent back once for the call before it stands, and so is one that proposes part of
+        what you asked and puts the rest off until you apply ("then I'll propose the
+        derivation"): cards from one answer are applied together.
         The assistant plans before it acts and checks its work: when it proposes changes to
         modules it runs the stack with them before it answers, so the reply says what the change
         does. It can propose several items that depend on each other in one answer (a wildcard
@@ -712,7 +714,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           even without a WP Model Info node. Rules writing one variable from two axes become
           one rule per axis (the second adds to it), and a rule keyed on a slot that picks
           several options is dropped with a note, since only one pick's axis value is readable.
-          Click an item to edit its slot (axes, use) or the
+          A pick's name written as plain words into the template's lead or tail ("quality,
+          pose") is read as that pick, once, and defect tags written there (ugly, bad anatomy)
+          move to the negative. Click an item to edit its slot (axes, use) or the
           relations it compiles from, and <b>Add a relation</b> or <b>Add a slot</b>; the items
           are compiled again from your change. The assistant lists every item it will build,
           grouped by section, and asks what it can't guess. Some questions take several answers; every question has an

@@ -772,9 +772,11 @@ def test_the_template_reads_every_value_and_single_runs_hold_nothing():
                                    request="animal portraits of lions")
     t = plan["graph"]["template"]
     # Every prompt slot, fixed value and derived variable is read; a
-    # placeholder the graph can resolve becomes its variable, the rest goes.
-    assert t["order"] == ["race", "class", "weapon", "outfit", "quality", "title"]
+    # placeholder the graph can resolve becomes its variable (read in the
+    # lead, so not again in the order), the rest goes.
+    assert t["order"] == ["race", "class", "weapon", "outfit", "title"]
     assert t["lead"] == "$quality, best"
+    assert not any("Added $quality" in w for w in plan["warnings"])
     assert any("Took {mood} out of the template text" in w for w in plan["warnings"])
     # Single images hold nothing, and a person the request never asked for
     # leaves the lead.
@@ -828,3 +830,24 @@ async def test_a_rebuilt_slot_that_still_misses_a_value_gets_one_fill():
     assert "linen tunic" in values and "fur-lined cloak" in values
     assert any(" fix: " in line and "No option is summer on season" in line
                for line in result["log"]), result["log"]
+
+
+def test_pick_names_in_the_template_text_are_reads_and_defects_go_to_the_negative():
+    tpl = {**GRAPH["template"], "lead": "Quality, class, ugly, (deformed:1.2), 1girl",
+           "tail": "bad anatomy, cinematic", "order": ["Race"], "negative": "lowres"}
+    plan = pack.compile_graph_plan(_graph(template=tpl), request="elf heroines")
+    t = plan["graph"]["template"]
+    assert t["lead"] == "$quality, $class, 1girl" and t["tail"] == "cinematic"
+    assert t["negative"] == "lowres, ugly, (deformed:1.2), bad anatomy"
+    assert "quality" not in t["order"] and "class" not in t["order"]
+    tpl_key = next(i["key"] for i in plan["items"] if i["kind"] == "template")
+    body = pack.wired_payload(plan, tpl_key, {})["payload"]["template_string"]
+    assert body.startswith("$quality, $class, 1girl, $race") and body.count("$quality") == 1
+    assert any(w.startswith("The template text names Quality, class as words")
+               for w in plan["warnings"])
+    assert any(w.startswith("Moved ugly, (deformed:1.2), bad anatomy from the template text")
+               for w in plan["warnings"])
+    # A look that contains a defect word stays.
+    plan = pack.compile_graph_plan(_graph(template={**GRAPH["template"],
+                                                    "lead": "blurry background, 1girl"}))
+    assert plan["graph"]["template"]["lead"] == "blurry background, 1girl"

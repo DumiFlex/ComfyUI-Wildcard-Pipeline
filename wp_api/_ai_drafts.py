@@ -213,16 +213,23 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
         options=rows, tags=tags, axes=axes, description=description, labels=labels,
         refs=refs,
     )
+    ask = dict(
+        cfg=cfg, first=first, turns=turns, instruction=instruction,
+        system=webs.system(ai_edit.system_prompt(action)),
+        schema=webs.schema(ai_edit.schema_for(action, [r["id"] for r in rows])),
+        schema_name=f"wildcard_{action}",
+        # Edits should be faithful to the request, not creative.
+        temperature=0.3,
+        images=images or None,
+    )
     try:
-        answer = await _ask(
-            cfg, first=first, turns=turns, instruction=instruction,
-            system=webs.system(ai_edit.system_prompt(action)),
-            schema=webs.schema(ai_edit.schema_for(action, [r["id"] for r in rows])),
-            schema_name=f"wildcard_{action}",
-            # Edits should be faithful to the request, not creative.
-            temperature=0.3,
-            images=images or None, extra=webs.note,
-        )
+        answer = await _ask(extra=webs.note, **ask)
+        if ai_edit.answered_nothing(action, answer, instruction):
+            # The base 9B answered "tag each by …" with an empty list every
+            # time (panel eval 2026-10-21): the system prompt's "only list
+            # the options you change" read as "change nothing". One re-ask.
+            answer = await _ask(extra="\n\n".join(x for x in (webs.note, ai_edit.EMPTY_NUDGE)
+                                                  if x), **ask)
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
     answer, research = webs.take(answer)

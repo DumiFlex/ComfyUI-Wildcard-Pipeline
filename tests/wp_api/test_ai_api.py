@@ -1765,3 +1765,32 @@ def test_a_test_ask_is_a_verb_not_a_word_in_the_wildcard():
     for no in ("make a chemistry lab wildcard: test tubes, beakers, flasks",
                "a testing ground wildcard with 6 arenas", "the contest winner"):
         assert not _ai_turn._TEST_ASK.search(no), no
+
+
+async def test_an_empty_edit_answer_to_a_request_over_every_option_is_asked_once_more(
+        wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    body = {**_edit_body("retag"), "instruction": "tag each option by era"}
+    fake_llm.overrides["wildcard_retag"] = [
+        {"options": []}, {"options": [{"id": 1, "tags": ["medieval"]}]}]
+    seen = len(fake_llm.seen)
+    resp = await wp_client.post("/wp/api/ai/wildcard/edit", json=body)
+    assert resp.status == 200, await resp.text()
+    out = await resp.json()
+    assert out["changes"] == [{"option_id": "aaaa0001", "before": {"tags": []},
+                               "after": {"tags": ["medieval"]}}]
+    assert len(fake_llm.seen) - seen == 2
+    again = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert "listed no option" in again and "tag each option by era" in again
+    # A request about some options, or a removal, takes an empty answer.
+    fake_llm.overrides["wildcard_retag"] = {"options": []}
+    seen = len(fake_llm.seen)
+    resp = await wp_client.post("/wp/api/ai/wildcard/edit",
+                                json={**body, "instruction": "tag the modern ones"})
+    assert resp.status == 200 and (await resp.json())["changes"] == []
+    fake_llm.overrides["wildcard_remove"] = {"remove": []}
+    resp = await wp_client.post("/wp/api/ai/wildcard/edit",
+                                json={**_edit_body("remove"), "instruction": "remove all guns"})
+    assert resp.status == 200 and (await resp.json())["changes"] == []
+    assert len(fake_llm.seen) - seen == 2

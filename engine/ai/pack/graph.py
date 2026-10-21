@@ -582,28 +582,30 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
             continue
         if var not in order:
             order.append(var)
+    lead = _placeholders(_clean(raw.get("lead"), MAX_TEXT), by_name, warnings)
+    tail = _placeholders(_clean(raw.get("tail"), MAX_TEXT), by_name, warnings)
+    lead, tail, order, read = _text_reads(lead, tail, order, by_name, warnings)
     for s in slots:
-        if s["show"] == "prompt" and s["var"] not in order:
+        if s["show"] == "prompt" and s["var"] not in order and s["var"] not in read:
             order.append(s["var"])
             warnings.append(f"Added ${s['var']} to the template so {s['name']} shows")
     # A fixed value and a derived variable exist to be read: the code
     # owns the template, so none is left out of it.
     for f in fixed:
-        if f["var"] not in order:
+        if f["var"] not in order and f["var"] not in read:
             order.append(f["var"])
             warnings.append(f"Added ${f['var']} to the template so {f['name']} shows")
     for var in dict.fromkeys(r["var"] for r in relations if r["kind"] == "derive"):
-        if var not in order:
+        if var not in order and var not in read:
             order.append(var)
             warnings.append(f"Added ${var} to the template so the rule writing it shows")
     # What the user gives (a subject, a name) is there to be shown, first;
     # a LoRA input stands in for a pick and is read by its swap rule.
     for i in reversed(inputs):
-        if i["var"] not in order and not _LORA_INPUT.search(f"{i['var']} {i['about']}"):
+        if i["var"] not in order and i["var"] not in read \
+                and not _LORA_INPUT.search(f"{i['var']} {i['about']}"):
             order.insert(0, i["var"])
             warnings.append(f"Added ${i['var']} to the template so what the user gives shows")
-    lead = _placeholders(_clean(raw.get("lead"), MAX_TEXT), by_name, warnings)
-    tail = _placeholders(_clean(raw.get("tail"), MAX_TEXT), by_name, warnings)
     negative = _clean(raw.get("negative"), MAX_TEXT * 2)
     # "{{inputs.neg_prompt}} {{fixed.default_neg}}" or "$neg = ugly, …" in
     # the negative (9B, 2026-10-21): a placeholder resolves or goes like in
@@ -628,8 +630,91 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
             warnings.append(f"Took \"{', '.join(gone)}\" out of the negative: a rule's words "
                             "belong in a relation, the negative is for defects")
             negative = ", ".join(kept)
+    lead, tail, negative = _defects_to_negative(lead, tail, negative, warnings)
     return {"lead": lead, "order": order[:MAX_TEMPLATE_PARTS], "tail": tail,
             "negative": negative}
+
+
+def _text_reads(lead: str, tail: str, order: list[str], by_name: dict[str, str],
+                warnings: list[str]) -> tuple[str, str, list[str], set[str]]:
+    """A pick's name written as plain text in the lead or tail
+    ("quality_tags, style_preset, pose" led a bikini pack's prompt, 9B
+    NSFW eval 2026-10-21) is a read of it: it becomes ``$var``. A variable
+    the lead or tail reads leaves the order, so nothing prints twice; the
+    set of them is returned so the order isn't told to add them back."""
+    read: list[str] = []
+    bare: list[str] = []
+
+    def fix(text: str) -> str:
+        parts = []
+        for chunk in text.split(","):
+            c = chunk.strip()
+            var = by_name.get(c.lstrip("$").lower()) if c else None
+            if var and _IDENT_PART.match(c):
+                if not c.startswith("$"):
+                    bare.append(c)
+                c = f"${var}"
+                read.append(var)
+            if c:
+                parts.append(c)
+        return ", ".join(parts)
+
+    lead, tail = fix(lead), fix(tail)
+    if bare:
+        warnings.append(f"The template text names {', '.join(bare)} as words: read as "
+                        + ", ".join(f"${by_name[b.lower()]}" for b in bare) + " instead")
+    order = [v for v in order if v not in read]
+    return lead, tail, order, set(read)
+
+
+_IDENT_PART = re.compile(r"^\$?[A-Za-z_][\w ]*$")
+
+#: Standing-negative tags that have no place in a positive prompt. Only
+#: whole comma-parts count ("bad anatomy", "(ugly:1.2)"), never a word
+#: inside a phrase ("blurry background" is a look).
+_DEFECTS = frozenset({
+    "lowres", "low res", "worst quality", "low quality", "normal quality", "bad anatomy",
+    "bad hands", "bad proportions", "bad feet", "bad fingers", "extra fingers", "extra digits",
+    "fewer digits", "missing fingers", "extra limbs", "extra arms", "extra legs",
+    "missing limbs", "mutated", "mutation", "mutated hands", "deformed", "disfigured",
+    "malformed", "ugly", "blurry", "jpeg artifacts", "jpeg artifact", "watermark",
+    "signature", "username", "artist name", "error", "cropped", "out of frame",
+    "poorly drawn", "poorly drawn face", "poorly drawn hands", "long neck", "cloned face",
+    "gross proportions", "bad eyes", "cross-eyed", "dehydrated", "duplicate", "morbid",
+    "mutilated", "text", "logo",
+})
+_WEIGHTED_PART = re.compile(r"^\(\s*(.+?)\s*(?::\s*[\d.]+)?\s*\)$")
+
+
+def _defects_to_negative(lead: str, tail: str, negative: str,
+                         warnings: list[str]) -> tuple[str, str, str]:
+    """Defect tags written into the lead or tail ("ugly, deformed, bad
+    anatomy" in an OC pack's positive prompt, 9B NSFW eval 2026-10-21) go
+    to the negative, where they belong."""
+    moved: list[str] = []
+
+    def fix(text: str) -> str:
+        kept = []
+        for chunk in text.split(","):
+            c = chunk.strip()
+            if not c:
+                continue
+            m = _WEIGHTED_PART.match(c)
+            word = (m.group(1) if m else c).strip().lower().replace("_", " ")
+            if word in _DEFECTS:
+                moved.append(c)
+            else:
+                kept.append(c)
+        return ", ".join(kept)
+
+    lead, tail = fix(lead), fix(tail)
+    if moved:
+        have = {w.strip().lower() for w in negative.split(",")}
+        add = [w for w in moved if w.lower() not in have]
+        negative = ", ".join(x for x in [negative.strip(" ,"), *add] if x)
+        warnings.append(f"Moved {', '.join(moved)} from the template text to the negative: "
+                        "those are defects, not the picture")
+    return lead, tail, negative
 
 
 _PLACEHOLDER = re.compile(r"\{\{\s*\$?([A-Za-z][\w .]*?)\s*\}\}|\{\s*\$?([A-Za-z][\w.]*)\s*\}")
@@ -1993,13 +2078,15 @@ value. The code makes the target slot hold options saying those words, \
 tagged with to_value, and checks the finished prompts for them.
   Every slot, axis and value a relation names must be declared on the slot \
 it names: a relation that names something else is dropped.
-- template: lead (always-first words: "1girl, solo", or ""), order (slot \
-names, fixed names, derived variables and inputs in the order the image \
-model should read them: subject and quality first, then character, outfit, \
-pose, setting, lighting, style; internal slots never), tail (always-last \
-words or ""), negative (the standing negative prompt in the pack's style: \
-usual defects only; "" for none). A rule ("no sandals in winter") is never \
-a negative: it is a relation.
+- template: lead (always-first words, never a slot name: for tag models the \
+count the request implies, "1girl, solo" for one woman, "1boy, 1girl" for a \
+couple, "solo" only with one person; or ""), order (slot names, fixed names, \
+derived variables and inputs in the order the image model should read them: \
+subject and quality first, then character, outfit, pose, setting, lighting, \
+style; internal slots never), tail (always-last words or ""), negative (the \
+standing negative prompt in the pack's style: usual defects only, which never \
+go in the lead or tail; "" for none). A rule ("no sandals in winter") is \
+never a negative: it is a relation.
 
 Plan what the request needs. Don't add commentary; the output is data.
 
