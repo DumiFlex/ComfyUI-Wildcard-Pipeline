@@ -192,8 +192,11 @@ const skippedSummary = computed(() => {
     @close="cancel"
     :research="convo.research.value"
     :searching="convo.searching.value"
+    :found="convo.web"
     @allow-research="convo.allowResearch"
     @skip-research="convo.skipResearch"
+    @use-found="convo.useFound"
+    @skip-found="convo.skipFound"
   >
     <template #controls>
       <label class="wp-ai-draft__count" for="wp-ai-draft-count">

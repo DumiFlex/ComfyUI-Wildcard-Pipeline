@@ -185,8 +185,11 @@ function fmtWeight(w: number | undefined): string {
     @close="cancel"
     :research="convo.research.value"
     :searching="convo.searching.value"
+    :found="convo.web"
     @allow-research="convo.allowResearch"
     @skip-research="convo.skipResearch"
+    @use-found="convo.useFound"
+    @skip-found="convo.skipFound"
   >
     <template #top>
       <p class="wp-ai-edit__scope" data-test="ai-edit-scope">

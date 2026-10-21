@@ -769,9 +769,11 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           and answers, plan updates and Build wait until you choose: <b>Search and update the
           plan</b> runs the searches and shows <b>What the searches found</b>: each search's
           results with their title, site and snippet, each with a tick box. Nothing goes to the
-          planner until you choose: <b>Use N and update the plan</b> sends only the results you
-          ticked (answers you picked go along), and <b>None of these</b> keeps the plan as it is.
-          A line then says how many results each search gave the planner. <b>Skip the search</b>
+          planner until you choose: <b>Use what fits and update the plan</b> sends every result
+          and the planner keeps only what fits the pack, so you don't have to tick anything;
+          <b>Use N ticked</b> (once you tick some) sends only those; and
+          <b>None of these</b> keeps the plan as it is. Answers you picked go along either way.
+          A line then says what each search gave the planner. <b>Skip the search</b>
           doesn't search at all. Under the request, a meter shows how
           much of the model's context the last plan request took; every update sends the whole
           conversation again, so it grows. <b>Plan 2 of 3</b> flips between plans; updating an
@@ -897,9 +899,11 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         When web search is set up (<b>Settings › AI assistant › Web search</b>), the wildcard and
         text panels may ask to search the web for facts the model doesn't know well (a game's
         characters, an artist's style). The answer shows anyway, with a line naming the searches:
-        <b>Search and refine</b> runs them and revises the answer with what they found, <b>No
-        thanks</b> hides them and the model isn't offered them again. Nothing is searched until
-        you press it.
+        <b>Search</b> runs them, <b>No thanks</b> hides them and the model isn't offered them
+        again. Nothing is searched until you press it. What the searches found then shows in the
+        panel, the same card as the Pack builder's: <b>Use what fits and refine</b> sends every
+        result and the model keeps only what fits, ticking results and <b>Use N ticked</b>
+        sends just those, and <b>None of these</b> sends nothing.
       </p>
     </DocSection>
 

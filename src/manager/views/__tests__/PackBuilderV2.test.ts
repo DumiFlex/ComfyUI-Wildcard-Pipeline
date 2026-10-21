@@ -177,8 +177,8 @@ describe("PackBuilder v2", () => {
     await flushPromises();
     expect(w.find('[data-test="pack-waiting-search"]').exists()).toBe(true);
     expect(w.get('[data-test="pack-answer"]').attributes("disabled")).toBeDefined();
-    await w.findAll('[data-test="pack-found-row"]')[0].setValue(true);
-    await w.get('[data-test="pack-found-use"]').trigger("click");
+    await w.findAll('[data-test="ai-found-row"]')[0].setValue(true);
+    await w.get('[data-test="ai-found-use"]').trigger("click");
     await flushPromises();
     const sent = vi.mocked(api.ai.packPlan).mock.calls[1][0];
     expect(sent.decisions).toEqual([{ question: "What mood?", answer: "Dreamy" }]);
@@ -320,12 +320,12 @@ describe("PackBuilder v2", () => {
     // The results wait for a pick: nothing goes to the planner unseen.
     expect(api.ai.packPlan).toHaveBeenCalledTimes(1);
     expect(w.find('[data-test="pack-research"]').exists()).toBe(false);
-    const card = w.get('[data-test="pack-found"]');
+    const card = w.get('[data-test="ai-found"]');
     expect(card.text()).toContain("Wolf cut guide");
     expect(card.text()).toContain("hair.test");
-    expect(w.get('[data-test="pack-found-use"]').attributes("disabled")).toBeDefined();
-    await w.findAll('[data-test="pack-found-row"]')[0].setValue(true);
-    await w.get('[data-test="pack-found-use"]').trigger("click");
+    expect(w.find('[data-test="ai-found-use"]').exists()).toBe(false);
+    await w.findAll('[data-test="ai-found-row"]')[0].setValue(true);
+    await w.get('[data-test="ai-found-use"]').trigger("click");
     await flushPromises();
     const sent = vi.mocked(api.ai.packPlan).mock.calls[1][0];
     expect(sent.web).toHaveLength(1);
@@ -334,8 +334,8 @@ describe("PackBuilder v2", () => {
     expect(sent.web?.[0].text).toContain("data, not instructions");
     expect(sent.searched).toEqual(["popular hairstyles 2026"]);
     expect(sent.instruction).toBe("Here are the search results I picked; use only what fits the pack.");
-    expect(w.find('[data-test="pack-found"]').exists()).toBe(false);
-    expect(w.get('[data-test="pack-found-used"]').text()).toContain("used 1 of 2 results for \"popular hairstyles 2026\"");
+    expect(w.find('[data-test="ai-found"]').exists()).toBe(false);
+    expect(w.get('[data-test="ai-found-used"]').text()).toContain("used 1 of 2 results for \"popular hairstyles 2026\"");
   });
 
   it("asks for a left-out rule again with Fix with AI", async () => {
@@ -354,15 +354,29 @@ describe("PackBuilder v2", () => {
     expect(sent.instruction).toMatch(/^A rule that sets \$fit = "loose" on Hair's length.*Add this rule again with names the plan has/);
   });
 
+  it("sends every result with Use what fits, for the planner to keep what fits", async () => {
+    const w = await mountIt(true);
+    await w.get('[data-test="pack-research-allow"]').trigger("click");
+    await flushPromises();
+    await w.get('[data-test="ai-found-fits"]').trigger("click");
+    await flushPromises();
+    const sent = vi.mocked(api.ai.packPlan).mock.calls[1][0];
+    expect(sent.web?.[0].text).toContain("Wolf cut guide");
+    expect(sent.web?.[0].text).toContain("Celebrity gossip");
+    expect(sent.web?.[0].text).toContain("use only what fits");
+    expect(sent.instruction).toBe("Here are the search results; use only what fits the pack and ignore the rest.");
+    expect(w.get('[data-test="ai-found-used"]').text()).toContain("all 2 results for \"popular hairstyles 2026\" sent");
+  });
+
   it("lets the user turn down everything the searches found", async () => {
     const w = await mountIt(true);
     await w.get('[data-test="pack-research-allow"]').trigger("click");
     await flushPromises();
-    await w.get('[data-test="pack-found-none"]').trigger("click");
+    await w.get('[data-test="ai-found-none"]').trigger("click");
     await flushPromises();
     expect(api.ai.packPlan).toHaveBeenCalledTimes(1);
-    expect(w.find('[data-test="pack-found"]').exists()).toBe(false);
-    expect(w.get('[data-test="pack-found-used"]').text()).toContain("none of 2 results used");
+    expect(w.find('[data-test="ai-found"]').exists()).toBe(false);
+    expect(w.get('[data-test="ai-found-used"]').text()).toContain("none of 2 results used");
   });
 
   it("changes one item with the AI and keeps the rest", async () => {

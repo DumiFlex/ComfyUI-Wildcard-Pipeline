@@ -14,7 +14,10 @@
  *
  * When web search is set up, an answer may list searches the model would
  * like (`research`). They show as a card under the answer: Search runs them
- * (`api.ai.packSearch`) and refines with the results, Skip hides them. Both
+ * (`api.ai.packSearch`) and shows what they found (`web`, `AiSearchFound`);
+ * nothing goes to the model until the user picks "Use what fits" (all of
+ * it, the model keeps what fits), ticks results, or "None of these". Search
+ * and Skip both
  * go in `searched`, sent with every later request, so the model isn't
  * offered the same searches again. Allowed results go with every later
  * request too (`web`), so the facts outlive the follow-up that used them; a
@@ -23,6 +26,7 @@
 import { computed, ref, shallowRef } from "vue";
 import { api, ApiError } from "../api/client";
 import type { AiTurn, AiWebResult } from "../api/types";
+import { PANEL_FITS, PANEL_PICKED, useSearchFound } from "./searchFound";
 
 /** Turns the server takes; older middle turns are dropped past this. */
 const MAX_TURNS = 8;
@@ -55,8 +59,6 @@ export interface AiConversationOptions<Res, Ctx> {
   emptyMessage?: (result: Res) => string;
 }
 
-/** Follow-up sent after the user allowed the model's searches. */
-export const USE_SEARCHES = "Use what the searches found.";
 
 export function useAiConversation<Res extends { answer: Record<string, unknown>; research?: string[] }, Ctx>(
   opts: AiConversationOptions<Res, Ctx>,
@@ -70,8 +72,10 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
   /** Searches run or skipped in this conversation. */
   const searched = ref<string[]>([]);
   const searching = ref(false);
-  /** Results of every search the user allowed in this conversation. */
+  /** Results the user sent in this conversation. */
   let webResults: AiWebResult[] = [];
+  /** What the last searches found, waiting for the user's pick. */
+  const web = useSearchFound();
   /** The user skipped searches since the last request. */
   let skipped = false;
 
@@ -161,7 +165,7 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
     return request(text, history, cur.ctx, false, index.value);
   }
 
-  /** Run the searches the shown answer asks for, then refine with them. */
+  /** Run the searches the shown answer asks for and show what they found. */
   async function allowResearch(): Promise<void> {
     const queries = research.value;
     if (!queries.length || searching.value) return;
@@ -170,13 +174,27 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
     try {
       const { results } = await api.ai.packSearch({ queries });
       searched.value = [...searched.value, ...queries];
-      webResults = [...webResults, ...results];
-      await followUp(USE_SEARCHES);
+      web.show(results);
     } catch (err) {
       error.value = err instanceof ApiError || err instanceof Error ? err.message : "The search failed";
     } finally {
       searching.value = false;
     }
+  }
+
+  /** Refine with what the searches found: all of it for the model to keep
+   *  what fits, or the ticked results. */
+  async function useFound(fits = false): Promise<void> {
+    if (loading.value || (!fits && !web.picks.value.size)) return;
+    const sent = web.take(fits);
+    if (!sent.length) return;
+    webResults = [...webResults, ...sent];
+    await followUp(fits ? PANEL_FITS : PANEL_PICKED);
+  }
+
+  /** None of the results: nothing is sent. */
+  function skipFound(): void {
+    web.none();
   }
 
   /** Hide the searches; the model isn't offered them again. */
@@ -189,6 +207,7 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
   function forgetSearches(): void {
     searched.value = [];
     webResults = [];
+    web.reset();
     skipped = false;
   }
 
@@ -243,7 +262,7 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
 
   return {
     instruction, loading, error, result, asked, index, count, chain, branchedFrom, research, searching,
-    ask, refine, retry, go, clear, restart, stop, chat, allowResearch, skipResearch,
+    ask, refine, retry, go, clear, restart, stop, chat, allowResearch, skipResearch, web, useFound, skipFound,
   };
 }
 

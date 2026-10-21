@@ -598,11 +598,15 @@ REVIEW_NOTE_HEAD = "Revise the plan to fix ALL of these, one by one:"
 #: (answers given, searches allowed, a hand edit). Not the user's words:
 #: the browser walk of 2026-10-21 read "answered, questions" off the first
 #: one as request gaps. Mirror of the texts in `usePackBuilder.refinePlan`
-#: and `useAiConversation.USE_SEARCHES`.
+#: and `composables/searchFound.ts` (the old "Use what the searches found."
+#: stays so earlier histories still read clean).
 AUTO_TEXTS = (
     "I answered your questions.",
     "Use what the searches found.",
     "Here are the search results I picked; use only what fits the pack.",
+    "Here are the search results; use only what fits the pack and ignore the rest.",
+    "Here are the search results I picked; use only what fits.",
+    "Here are the search results; use only what fits and ignore the rest.",
     "I edited the plan; keep my changes and fill any gaps they leave.",
 )
 

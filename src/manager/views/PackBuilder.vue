@@ -20,6 +20,7 @@ import Card from "../components/ui/Card.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import AiImagePicker from "../components/ai/AiImagePicker.vue";
+import AiSearchFound from "../components/ai/AiSearchFound.vue";
 import AiWorking from "../components/ai/AiWorking.vue";
 import ChatCompletions from "../components/ai/ChatCompletions.vue";
 import PackFindings from "../components/pack/PackFindings.vue";
@@ -295,17 +296,6 @@ function quality(key: string): string[] {
     .map((q) => q.text);
 }
 
-/** "danbooru.donmai.us" from a result's link, for the found card. */
-function siteOf(url: string): string {
-  try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; }
-}
-
-/** "used 2 of 5 results for "x"; none of 3 for "y"" for the folded line. */
-const usedLine = computed(() => pb.usedSearches.value.map((u) => (
-  u.total === 0 ? `nothing found for "${u.query}"`
-    : u.used === 0 ? `none of ${u.total} results used for "${u.query}"`
-      : `used ${u.used} of ${u.total} results for "${u.query}"`)).join("; "));
-
 const STYLE_LABEL = { tags: "Danbooru-style tags", sentences: "natural phrases" } as const;
 const shape = computed(() => {
   const p = draft.value;
@@ -560,61 +550,14 @@ function stopExtending(): void {
             <Button size="sm" variant="primary" icon="pi-search" :loading="pb.searching.value" :disabled="busy" data-test="pack-research-allow" @click="pb.allowResearch">Search and update the plan</Button>
           </div>
         </section>
-        <section v-if="pb.found.value.length" class="wp-pack__found" aria-label="What the web searches found" data-test="pack-found">
-          <header class="wp-pack__ask-web-head">
-            <i class="pi pi-globe" aria-hidden="true" />
-            <span>What the searches found</span>
-          </header>
-          <p class="wp-pack__ask-web-why">Tick what the planner should use. Nothing goes to it until you choose, and it reads what you tick as reference, never as instructions.</p>
-          <div v-for="(r, qi) in pb.found.value" :key="r.query" class="wp-pack__found-query">
-            <p class="wp-pack__found-q"><i class="pi pi-search" aria-hidden="true" /> {{ r.query }}</p>
-            <p v-if="r.error" class="wp-pack__found-none" data-test="pack-found-error">The search failed: {{ r.error }}</p>
-            <p v-else-if="!r.rows?.length" class="wp-pack__found-none">Nothing found.</p>
-            <ul v-else class="wp-pack__found-rows">
-              <li v-for="(row, ri) in r.rows" :key="row.url + ri" :data-picked="pb.foundPicks.value.has(`${qi}:${ri}`) || undefined">
-                <label>
-                  <input
-                    type="checkbox"
-                    :checked="pb.foundPicks.value.has(`${qi}:${ri}`)"
-                    :disabled="busy"
-                    :aria-label="`Use ${row.title}`"
-                    data-test="pack-found-row"
-                    @change="pb.toggleFound(qi, ri)"
-                  />
-                  <span class="wp-pack__found-body">
-                    <span class="wp-pack__found-title">{{ row.title }}</span>
-                    <span class="wp-pack__found-site" :title="row.url">{{ siteOf(row.url) }}</span>
-                    <span v-if="row.snippet" class="wp-pack__found-snippet">{{ row.snippet }}</span>
-                  </span>
-                </label>
-              </li>
-            </ul>
-          </div>
-          <div class="wp-pack__row">
-            <button
-              v-if="pb.foundCount.value > 1"
-              type="button"
-              class="wp-pack__mini"
-              :disabled="busy"
-              data-test="pack-found-all"
-              @click="pb.setAllFound(pb.foundPicks.value.size < pb.foundCount.value)"
-            >{{ pb.foundPicks.value.size < pb.foundCount.value ? "Tick all" : "Untick all" }}</button>
-            <span class="wp-pack__spacer" />
-            <Button size="sm" variant="ghost" :disabled="busy" data-test="pack-found-none" @click="pb.skipFound">None of these</Button>
-            <Button
-              size="sm"
-              variant="primary"
-              icon="pi-check"
-              :disabled="busy || !pb.foundPicks.value.size"
-              data-test="pack-found-use"
-              @click="pb.useFound"
-            >{{ pb.foundPicks.value.size ? `Use ${pb.foundPicks.value.size} and update the plan` : "Tick what to use" }}</button>
-          </div>
-        </section>
-        <p v-else-if="pb.usedSearches.value.length" class="wp-pack__found-used" data-test="pack-found-used">
-          <i class="pi pi-globe" aria-hidden="true" />
-          <span>Web search: {{ usedLine }}.</span>
-        </p>
+        <AiSearchFound
+          :state="pb.web"
+          :busy="busy"
+          who="the planner"
+          then="update the plan"
+          @use="pb.useFound"
+          @none="pb.skipFound"
+        />
         <Card v-if="pb.questions.value.length" :title="`Questions from the assistant · ${pb.questions.value.length}`">
           <PackQuestions />
         </Card>
@@ -1108,24 +1051,6 @@ function stopExtending(): void {
 .wp-pack__shape { margin: 10px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .wp-pack__shape-chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; color: var(--wp-accent-text); background: color-mix(in oklab, var(--wp-accent-500) 10%, transparent); border: 1px solid color-mix(in oklab, var(--wp-accent-500) 30%, transparent); }
 .wp-pack__summary { margin: 4px 0 0; font-size: 13px; line-height: 1.55; color: var(--wp-text-muted); }
-.wp-pack__found {
-  display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 10px;
-  border: 1px solid var(--wp-accent-400); background: linear-gradient(135deg, var(--wp-accent-glow), transparent 70%);
-}
-.wp-pack__found-query { display: flex; flex-direction: column; gap: 4px; }
-.wp-pack__found-q { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--wp-text); display: flex; gap: 6px; align-items: baseline; }
-.wp-pack__found-q .pi { font-size: 11px; color: var(--wp-text-dim); }
-.wp-pack__found-none { margin: 0 0 0 18px; font-size: 12px; color: var(--wp-text-dim); }
-.wp-pack__found-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.wp-pack__found-rows label { display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
-.wp-pack__found-rows li:hover label { background: var(--wp-bg-3); }
-.wp-pack__found-rows li[data-picked] label { background: color-mix(in oklab, var(--wp-accent-500) 10%, transparent); }
-.wp-pack__found-rows input { margin-top: 3px; accent-color: var(--wp-accent-500); }
-.wp-pack__found-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.wp-pack__found-title { font-size: 13px; color: var(--wp-text); overflow-wrap: anywhere; }
-.wp-pack__found-site { font-size: 11.5px; color: var(--wp-success); }
-.wp-pack__found-snippet { font-size: 12px; line-height: 1.45; color: var(--wp-text-muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
-.wp-pack__found-used { margin: 0; display: flex; gap: 6px; align-items: baseline; font-size: 12px; color: var(--wp-text-muted); }
 .wp-pack__toggle { margin-top: 8px; border: 0; background: none; padding: 0; color: var(--wp-text-muted); font: inherit; font-size: 12.5px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
 .wp-pack__toggle:hover { color: var(--wp-text); }
 .wp-pack__toggle + .wp-pack__request { margin-top: 6px; }

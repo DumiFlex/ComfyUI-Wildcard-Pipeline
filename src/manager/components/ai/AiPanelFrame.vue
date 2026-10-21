@@ -13,10 +13,12 @@
 import { computed, ref } from "vue";
 import Button from "../ui/Button.vue";
 import AiImagePicker from "./AiImagePicker.vue";
+import AiSearchFound from "./AiSearchFound.vue";
 import AiWorking from "./AiWorking.vue";
 import ChatCompletions from "./ChatCompletions.vue";
 import { useAiConfig } from "../../composables/useAiConfig";
 import type { AiImages } from "../../composables/useAiImages";
+import type { SearchFound } from "../../composables/searchFound";
 
 interface Props {
   placeholder: string;
@@ -43,9 +45,12 @@ interface Props {
    *  shows under the box, and images pasted into the box are added. */
   images?: AiImages;
   /** Web searches the shown answer asks for; a card lets the user run them
-   *  (then the answer is refined with the results) or skip them. */
+   *  or skip them. */
   research?: string[];
   searching?: boolean;
+  /** What the searches found, for the user to pick from before the
+   *  answer is refined with it (`useAiConversation().web`). */
+  found?: SearchFound;
 }
 /** The instruction box, for its `@` / `$` / tag completions. */
 const box = ref<HTMLTextAreaElement | null>(null);
@@ -63,6 +68,8 @@ const emit = defineEmits<{
   (e: "close"): void;
   (e: "allow-research"): void;
   (e: "skip-research"): void;
+  (e: "use-found", fits: boolean): void;
+  (e: "skip-found"): void;
 }>();
 
 const { config } = useAiConfig();
@@ -186,8 +193,16 @@ function onKeydown(ev: KeyboardEvent): void {
         <q v-for="q in research" :key="q" class="wp-ai-frame__query">{{ q }}</q>
       </span>
       <Button variant="ghost" size="sm" :disabled="searching" data-test="ai-research-skip" @click="emit('skip-research')">No thanks</Button>
-      <Button size="sm" icon="pi-search" :loading="searching" data-test="ai-research-allow" @click="emit('allow-research')">Search and refine</Button>
+      <Button size="sm" icon="pi-search" :loading="searching" data-test="ai-research-allow" @click="emit('allow-research')">Search</Button>
     </div>
+    <AiSearchFound
+      v-if="found && answered"
+      :state="found"
+      :busy="loading"
+      compact
+      @use="(fits) => emit('use-found', fits)"
+      @none="emit('skip-found')"
+    />
     <slot />
   </div>
 </template>
