@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from engine.ai import adult as ai_adult
 from engine.ai import patterns as ai_patterns
 from engine.ai.pack._common import PLAN_SCHEMA, PlanError, _item
 from engine.ai.pack.build import item_request, library_item
@@ -52,6 +53,9 @@ async def run_pack(
     "Decide the rest" would. Returns ``{plan, built, check, log, failed}``;
     ``failed`` lists the items that never built. Raises PlanError when the
     plan fails."""
+    refused = ai_adult.refused_request(instruction)
+    if refused:
+        raise PlanError(refused)
     log: list[str] = []
     cfg = parse_settings(settings)
     graph = cfg["planner"] == "graph"
@@ -146,7 +150,7 @@ async def run_pack(
         if is_wired(plan, key):
             try:
                 out = wired_payload(plan, key, built)
-            except PlanError as e:
+            except (PlanError, ValueError) as e:
                 log.append(f"{key}: {e}")
                 return False
             built[key] = {"id": _item(plan, key)["id"], "payload": out["payload"]}

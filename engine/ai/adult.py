@@ -4,15 +4,24 @@ Two kinds of words:
 
 - clearly minor words (`minor_words`): child, loli, shota, toddler,
   underage, "15 years old", aged down…;
-- words that can also describe an adult (`youth_words` adds them): teen,
-  school uniform, schoolgirl, young girl, younger sister…
+- words that name a young person but can describe an adult too
+  (`_YOUNG_PERSON`): teen, schoolgirl, young girl, little girl, younger
+  sister… Outside a sexual context they are only flagged; IN one (an
+  option next to a nude word, any item of a pack rated nsfw) they count as
+  minor words, since "schoolgirl, nude" is not a costume (NSFW eval
+  2026-10-21: an "underage" request was planned as a Subject Age slot of
+  "schoolgirl, teenager, little girl" with only "child" dropped);
+- costume and adjective words an adult wears or is called (`_COSTUME`):
+  school uniform, childish, childhood. Flagged, never dropped.
 
-An AI-written option, value, rule or template that puts a clearly minor
-word in a sexual context is always left out, in every AI feature
-(`sexual_minor`); in a pack rated nsfw the whole pack is that context. The
-other words are only flagged, so a user can have an adult in a school
-uniform; the Pack builder warns and leaves the call to them. The youth
-negative block (`with_youth_negative`) is a pack setting, on by default.
+An AI-written option, value, rule or template that puts a minor word in a
+sexual context is always left out, in every AI feature (`sexual_minor`);
+in a pack rated nsfw the whole pack is that context. The costume words are
+only flagged, so a user can have an adult in a school uniform; the Pack
+builder warns and leaves the call to them. A pack REQUEST whose own words
+sexualise a minor ("nsfw pack of underage girls") is refused before any
+model call (`refused_request`). The youth negative block
+(`with_youth_negative`) is a pack setting, on by default.
 
 The words are whole-word matches (the engine's blocklist works the same
 way), so "child" is caught but "wild" or "kidney" are not. Words like
@@ -39,14 +48,24 @@ _MINOR = re.compile(
     r")(?![\w-])",
     re.I,
 )
-# Words an adult can wear or be called too (a costume, "teen" for 18-19):
-# flagged, never dropped.
-_YOUTHFUL = re.compile(
+# Words that name a young person but can be an adult too ("teen" for
+# 18-19, a "schoolgirl" of 19): flagged on their own, minor words in a
+# sexual context.
+_YOUNG_PERSON = re.compile(
     r"(?<![\w-])(?:"
-    r"child(?:ish|hood)|kiddos?|teens?|teenage(?:rs?|d)?|"
-    r"school[\s_-]?(?:girls?|boys?|kids?|children|uniforms?|swimsuits?)|"
+    r"kiddos?|teens?|teenage(?:rs?|d)?|"
+    r"school[\s_-]?(?:girls?|boys?|kids?|children)|"
     r"(?:young|little)[\s_-](?:girls?|boys?)|"
     r"younger[\s_-]sister|younger[\s_-]brother"
+    r")(?![\w-])",
+    re.I,
+)
+# A costume an adult wears, or an adjective about one: flagged, never
+# dropped.
+_COSTUME = re.compile(
+    r"(?<![\w-])(?:"
+    r"child(?:ish|hood)|"
+    r"school[\s_-]?(?:uniforms?|swimsuits?)"
     r")(?![\w-])",
     re.I,
 )
@@ -57,7 +76,8 @@ _EXPLICIT = re.compile(
     r"lewd|erotic|porn\w*|hentai|nipples?|areolae?|breasts? out|genitals?|penis|"
     r"vagina|pussy|cum|orgasm\w*|masturbat\w*|fellatio|cunnilingus|"
     r"(?:vaginal|anal|oral)[\s_-]sex|spread[\s_-]legs|undress\w*|lingerie|"
-    r"panties|bondage|bdsm|seductive|aroused)(?![\w-])",
+    r"panties|bondage|bdsm|seductive|aroused|sexy|ecchi|pin-?ups?|boudoir|r-?18|"
+    r"smut|fetish\w*|kinky|striptease|stripping)(?![\w-])",
     re.I,
 )
 _AGE = re.compile(r"(\d{1,2})[\s_-]?(?:yo|y/o|years?[\s_-]old)", re.I)
@@ -83,22 +103,37 @@ def _found(text: str, *patterns: re.Pattern[str]) -> list[str]:
     return out
 
 
-def minor_words(text: str) -> list[str]:
+def minor_words(text: str, *, sexual: bool = False) -> list[str]:
     """The words in ``text`` that only mean a minor ("25 years old" is fine;
-    "16 years old" is not), in order, each once."""
-    return _found(text, _MINOR)
+    "16 years old" is not), in order, each once. In a sexual context
+    (``sexual``) the young-person words count too: "schoolgirl" next to
+    "nude" names a minor, not a costume."""
+    return _found(text, _MINOR, _YOUNG_PERSON) if sexual else _found(text, _MINOR)
 
 
 def youth_words(text: str) -> list[str]:
     """``minor_words`` plus the words an adult can be described with too
     (teen, school uniform), in order, each once."""
-    return _found(text, _MINOR, _YOUTHFUL)
+    return _found(text, _MINOR, _YOUNG_PERSON, _COSTUME)
 
 
 def sexual_minor(text: str) -> bool:
-    """True when ``text`` puts a clearly minor word next to a sexual or nude
-    one."""
-    return bool(minor_words(text)) and bool(_EXPLICIT.search(text or ""))
+    """True when ``text`` puts a minor word (a young-person word counts
+    here) next to a sexual or nude one."""
+    return bool(_EXPLICIT.search(text or "")) and bool(minor_words(text, sexual=True))
+
+
+def refused_request(text: str) -> str:
+    """Why a pack or draft request is refused outright, or "": its own
+    words ask for a minor in a sexual context ("nsfw pack of underage
+    girls", "sexy schoolgirls"). A costume request ("adult school uniform
+    pack, nsfw") is not refused; the items are checked as they are
+    built."""
+    if not sexual_minor(text):
+        return ""
+    words = ", ".join(minor_words(text, sexual=True))
+    return (f"This asks for a minor ({words}) in a sexual context. The assistant never "
+            "writes that: an adult pack is for adults only.")
 
 
 def with_youth_negative(negative: str, style: str) -> tuple[str, list[str]]:

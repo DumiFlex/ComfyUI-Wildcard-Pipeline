@@ -1235,7 +1235,20 @@ def wired_payload(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict
     """``{kind, payload, preview, warnings}`` for an item code writes from
     the graph: a fixed values, a constraint (both wildcards must be built,
     for their ids), a derivation or the template. Raises PlanError when a
-    wildcard it needs isn't built yet."""
+    wildcard it needs isn't built yet. In a pack rated nsfw the item gets
+    the adult pass the model-written items get (`adult_pack.adult_check`:
+    minor words out, the youth negative on the template; ValueError when
+    nothing would be left)."""
+    out = _wired(plan, key, built)
+    if plan.get("rating") == "nsfw":
+        from engine.ai.pack.adult_pack import adult_check
+        payload, said = adult_check(out["kind"], out["payload"], plan)
+        if said:
+            out = {**out, "payload": payload, "warnings": [*out["warnings"], *said]}
+    return out
+
+
+def _wired(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict[str, Any]:
     graph = plan["graph"]
     item = next(i for i in plan["items"] if i["key"] == key)
     kind = item["kind"]

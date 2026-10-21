@@ -9,6 +9,7 @@ from typing import Any
 
 from aiohttp import web
 
+from engine.ai import adult as ai_adult
 from engine.ai import budget as ai_budget
 from engine.ai import bundle_split as ai_split
 from engine.ai import followup as ai_followup
@@ -128,6 +129,9 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     instruction = _instruction(body, "describe the pack first")
     if isinstance(instruction, web.Response):
         return instruction
+    refused = ai_adult.refused_request(instruction)
+    if refused:
+        return json_error(refused, status=400)
     turns = _turns(body)
     if isinstance(turns, web.Response):
         return turns
@@ -336,6 +340,9 @@ async def post_pack_change(request: web.Request) -> web.Response:
     instruction = _instruction(body, "say what to change")
     if isinstance(instruction, web.Response):
         return instruction
+    refused = ai_adult.refused_request(instruction)
+    if refused:
+        return json_error(refused, status=400)
     library = _reusable(request)
     base = _pack_base(request, body, library)
     if isinstance(base, web.Response):
@@ -493,7 +500,7 @@ async def post_pack_item(request: web.Request) -> web.Response:
         # The graph wires this item: no model call.
         try:
             wired = ai_pack.wired_payload(plan, key, built)
-        except ai_pack.PlanError as e:
+        except (ai_pack.PlanError, ValueError) as e:
             return json_error(str(e), status=400)
         item = next(i for i in plan["items"] if i["key"] == key)
         return json_ok({"key": key, "id": item["id"], "kind": wired["kind"],

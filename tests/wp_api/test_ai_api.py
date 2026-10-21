@@ -893,6 +893,15 @@ async def test_pack_validation(wp_client, fake_llm):
                                     json={"plan": plan, "built": {}, **extra})
         assert resp.status == 400, path
     assert (await wp_client.post("/wp/api/ai/pack/check", json={"plan": {}})).status == 400
+    # A request that sexualises a minor is refused before any model call.
+    seen = len(fake_llm.seen)
+    resp = await wp_client.post("/wp/api/ai/pack/plan",
+                                json={"instruction": "nsfw pack of underage girls"})
+    assert resp.status == 400 and "asks for a minor" in (await resp.json())["error"]
+    resp = await wp_client.post("/wp/api/ai/pack/change", json={
+        "plan": plan, "built": {}, "instruction": "make the girls teens, lingerie"})
+    assert resp.status == 400 and "asks for a minor" in (await resp.json())["error"]
+    assert len(fake_llm.seen) == seen
 
 
 async def test_text_draft_for_fixed_values_combine_and_template(wp_client, fake_llm):
