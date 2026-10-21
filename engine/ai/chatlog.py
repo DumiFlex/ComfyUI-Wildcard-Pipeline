@@ -316,12 +316,19 @@ _STATUS_WORDS = {
 }
 
 
+#: Cards with one status in one message that are said together.
+MANY_EVENTS = 3
+
+
 def apply_events(meta: dict[str, Any], events: Any) -> tuple[dict[str, Any], str]:
     """Record what the user did with proposal cards since the last message
     and say it in one line for the model."""
     meta = dict(meta)
     proposals = dict(meta.get("proposals") or {})
     said: list[str] = []
+    #: Plain status changes by status, said as one part per status when a
+    #: group card applies or dismisses many cards at once.
+    plain: dict[str, list[str]] = {}
     for ev in events if isinstance(events, list) else []:
         if not isinstance(ev, dict):
             continue
@@ -350,7 +357,15 @@ def apply_events(meta: dict[str, Any], events: Any) -> tuple[dict[str, Any], str
         if isinstance(left, int) and not isinstance(left, bool) and left > 0 \
                 and status in ("applied", "editor", "opened"):
             part = f" without {left} of its options (the user left them out)"
-        said.append(f"{pid} \"{info.get('title', '')}\" {_STATUS_WORDS[status]}{part}")
+        if part:
+            said.append(f"{pid} \"{info.get('title', '')}\" {_STATUS_WORDS[status]}{part}")
+        else:
+            plain.setdefault(status, []).append(f"{pid} \"{info.get('title', '')}\"")
+    for status, cards in plain.items():
+        if len(cards) >= MANY_EVENTS:
+            said.append(f"{_STATUS_WORDS[status]} {len(cards)} cards: {', '.join(cards)}")
+        else:
+            said.extend(f"{c} {_STATUS_WORDS[status]}" for c in cards)
     meta["proposals"] = proposals
     line = ("Since your last message the user " + "; ".join(said) + ".") if said else ""
     return meta, line

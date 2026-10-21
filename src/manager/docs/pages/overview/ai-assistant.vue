@@ -288,6 +288,19 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         keeps its rules for wildcards that are still cards, and asks you to apply those first.
       </p>
       <p>
+        Three or more cards of one kind in an answer (fourteen new wildcards, options added to
+        eight wildcards) come as one <b>group card</b>: a row per item with its summary, its
+        warnings and how it stands. Untick the rows you don't want and press <b>Apply</b> to apply
+        the ticked ones in order (a row that needs another card applies that one first);
+        <b>Dismiss the other N</b> drops the unticked ones, <b>Undo all</b> takes back what the
+        group applied, newest first, and <b>Fix all</b> runs the fixes the cards can make
+        themselves. Click a row to open it in place, under the row: its options, rules, warnings
+        and their fixes, and Open in editor. One row is open at a time, and the row's tick decides
+        whether it is applied. The magnifier shows the whole card. The assistant hears what you did
+        in one line ("applied 14 cards: …"). Deletes, links and library-wide changes (categories,
+        tags, a change to many items) stay single cards.
+      </p>
+      <p>
         Every card is checked before you see it. Besides what it left out, a card warns when a
         wildcard mixes concepts (a pose list that also sets the camera or body shape), lists an
         option twice, has weights so far apart that some options never come up, when a

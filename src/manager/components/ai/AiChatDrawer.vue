@@ -34,6 +34,8 @@ import { copyText } from "../../utils/clipboard";
 import { plainText } from "../../utils/chat-markdown";
 import AiCardView from "./AiCardView.vue";
 import AiSyntax from "./AiSyntax.vue";
+import AiCardGroup from "./AiCardGroup.vue";
+import { cardGroups, groupOf, type CardGroup } from "../../utils/card-groups";
 import AiTestCard from "./AiTestCard.vue";
 import AiCardPreview from "./AiCardPreview.vue";
 import AiPointer from "./AiPointer.vue";
@@ -472,6 +474,45 @@ function rescued(i: number): number {
   return e?.role === "assistant" ? e.result.tool_use?.salvaged ?? 0 : 0;
 }
 
+/* ── Card groups: many cards of one kind as one (`utils/card-groups.ts`) ── */
+
+const groupCache = new WeakMap<object, Map<string, CardGroup>>();
+
+function groupFor(entry: ChatAssistantEntry, p: AiChatProposal): CardGroup | undefined {
+  let by = groupCache.get(entry.result);
+  if (!by) {
+    by = groupOf(cardGroups(entry.result.proposals));
+    groupCache.set(entry.result, by);
+  }
+  return by.get(p.pid);
+}
+
+/** The group card goes where its first card would be. */
+function groupStart(entry: ChatAssistantEntry, p: AiChatProposal): boolean {
+  return groupFor(entry, p)?.pids[0] === p.pid;
+}
+
+/** The grouped card opened in its row, as "answer:pid" (one per answer). */
+const openInGroup = ref(new Set<string>());
+
+function openIn(i: number): Set<string> {
+  const head = `${i}:`;
+  return new Set([...openInGroup.value].filter((k) => k.startsWith(head)).map((k) => k.slice(head.length)));
+}
+
+function toggleIn(i: number, pid: string): void {
+  const k = `${i}:${pid}`;
+  const was = openInGroup.value.has(k);
+  const next = new Set([...openInGroup.value].filter((x) => !x.startsWith(`${i}:`)));
+  if (!was) next.add(k);
+  openInGroup.value = next;
+}
+
+/** Where a grouped card's body goes inside its row (`AiCardGroup`). */
+function bodyId(i: number, pid: string): string {
+  return `wp-ai-group-${i}-${pid.replace(/[^\w-]/g, "_")}`;
+}
+
 function key(i: number, p: AiChatProposal): string {
   return `${i}:${p.pid}`;
 }
@@ -855,17 +896,31 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             </div>
           </article>
 
+          <template v-for="p in entry.result.proposals" :key="p.pid">
+          <AiCardGroup
+            v-if="groupStart(entry, p)"
+            :entry="entry"
+            :group="groupFor(entry, p)!"
+            :proposals="entry.result.proposals"
+            :open="openIn(i)"
+            :status="{ ...entry.status }"
+            :body-id="(pid) => bodyId(i, pid)"
+            @toggle="(pid) => toggleIn(i, pid)"
+          />
+          <Teleport defer :to="`#${bodyId(i, p.pid)}`" :disabled="!groupFor(entry, p)">
           <article
-            v-for="p in entry.result.proposals"
-            :key="p.pid"
+            v-if="!groupFor(entry, p) || openIn(i).has(p.pid)"
             class="wp-ai-chat__card"
+            :data-in-group="groupFor(entry, p) ? 'true' : undefined"
             :data-status="entry.status[p.pid] ?? 'pending'"
             :data-kind="p.op.op === 'delete' ? 'delete' : undefined"
             data-test="ai-chat-proposal"
           >
             <div class="wp-ai-chat__card-head">
-              <span class="wp-ai-chat__card-title">{{ p.title }}</span>
-              <span class="wp-ai-chat__card-summary">{{ p.summary }}</span>
+              <template v-if="!groupFor(entry, p)">
+                <span class="wp-ai-chat__card-title">{{ p.title }}</span>
+                <span class="wp-ai-chat__card-summary">{{ p.summary }}</span>
+              </template>
               <button
                 type="button"
                 class="wp-ai-chat__zoom"
@@ -973,7 +1028,18 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               </li>
             </ul>
             <p v-if="entry.errors[p.pid]" class="wp-ai-chat__error" role="alert">{{ entry.errors[p.pid] }}</p>
-            <div class="wp-ai-chat__actions">
+            <div v-if="groupFor(entry, p)" class="wp-ai-chat__actions">
+              <Button
+                v-if="!entry.status[p.pid] && canOpenInEditor(p)"
+                variant="secondary"
+                size="sm"
+                icon="pi-pencil"
+                title="Open it in a new editor to check and change it before saving"
+                data-test="ai-chat-open-editor"
+                @click="chat.openInEditor(entry, p)"
+              >Open in editor</Button>
+            </div>
+            <div v-else class="wp-ai-chat__actions">
               <template v-if="p.op.op === 'open'">
                 <Button size="sm" icon="pi-arrow-up-right" data-test="ai-chat-open" @click="openItem(entry, p)">{{ openLabel(p) }}</Button>
               </template>
@@ -1047,6 +1113,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               </template>
             </div>
           </article>
+          </Teleport>
+          </template>
         </div>
       </template>
 
@@ -1310,6 +1378,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__card[data-status="dismissed"], .wp-ai-chat__card[data-status="replaced"] { opacity: 0.6; }
 .wp-ai-chat__card[data-kind="delete"][data-status="pending"] { border-color: color-mix(in oklab, var(--wp-danger) 40%, var(--wp-border)); }
 .wp-ai-chat__confirm { margin-right: auto; font-size: 12px; color: var(--wp-danger); }
+.wp-ai-chat__card[data-in-group] { border: 0; border-radius: 0; background: none; box-shadow: none; }
+.wp-ai-chat__card[data-in-group] .wp-ai-chat__card-head { min-height: 0; }
+.wp-ai-chat__card[data-in-group] .wp-ai-chat__actions:empty { display: none; }
 .wp-ai-chat__card[data-status="failed"] { border-color: color-mix(in oklab, var(--wp-danger) 50%, var(--wp-border)); }
 .wp-ai-chat__card-head { position: relative; display: flex; flex-direction: column; gap: 1px; padding-right: 26px; }
 .wp-ai-chat__card-title { font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
