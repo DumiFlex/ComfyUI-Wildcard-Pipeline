@@ -158,6 +158,21 @@ function cells(line: string): string[] {
   return out;
 }
 
+/** "Tip: … |" or "| Tip: … |" outside a table: the stray pipes go
+ *  (Sonnet probe 2026-10-21: a tip under a table ended in "|"). A line with
+ *  a pipe between cells is left alone. */
+function unpiped(line: string): string {
+  const s = line.trim();
+  const edge = s.startsWith("|") || (s.endsWith("|") && !s.endsWith("\\|"));
+  if (!edge || s === "|") return line;
+  const c = cells(s);
+  return c.length === 1 ? c[0] : line;
+}
+
+/** A one-cell row opening with Tip: / Note: / Warning: under a wider table:
+ *  the note after it, not a row. */
+const NOTE_ROW = /^(\*\*)?(tip|note|warning)\b/i;
+
 function isTableStart(lines: string[], i: number): boolean {
   const head = lines[i];
   const rule = lines[i + 1];
@@ -243,7 +258,10 @@ function parseBlocks(lines: string[], depth: number, inItem = false): Block[] {
       i += 2;
       const rows: Inline[][][] = [];
       while (i < lines.length && !blank(lines[i]) && lines[i].includes("|")) {
-        const row = cells(lines[i++]).slice(0, width);
+        const whole = cells(lines[i]);
+        if (width > 1 && whole.length === 1 && NOTE_ROW.test(whole[0])) break;
+        const row = whole.slice(0, width);
+        i++;
         while (row.length < width) row.push("");
         rows.push(row.map(parseInline));
       }
@@ -282,7 +300,7 @@ function parseBlocks(lines: string[], depth: number, inItem = false): Block[] {
       continue;
     }
 
-    para.push(line);
+    para.push(unpiped(line));
     i++;
     // A block opener ends the paragraph without a blank line.
     if (i < lines.length && !blank(lines[i]) && startsBlock(lines, i)
