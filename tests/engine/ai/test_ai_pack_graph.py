@@ -544,9 +544,17 @@ def test_a_fix_all_request_is_not_the_users_words():
     assert note.startswith(pack.REVIEW_NOTE_HEAD)
     assert pack.own_request("more hats\n" + note) == "more hats"
     assert pack.own_request(note) == ""
+    # The page's own follow-up lines are not the user's words either (the
+    # browser walk of 2026-10-21 asked for "answered, questions" on every
+    # Fix all after the questions were answered).
+    assert pack.own_request("I answered your questions.") == ""
+    assert pack.own_request("Use what the searches found.\n" + note) == ""
+    assert pack.own_request("more hats\nI edited the plan; keep my changes and fill any gaps "
+                            "they leave.") == "more hats"
     # The request-words check sees only the user's words.
     g = pack.compile_graph(_graph())
     assert pack.request_gaps(g, pack.own_request(note)) == []
+    assert pack.request_gaps(g, pack.own_request("I answered your questions.")) == []
 
 
 def test_a_sweep_run_marks_the_axes_and_holds_the_rest():
@@ -622,7 +630,7 @@ def test_request_words_the_graph_never_says_are_a_finding():
     [f] = [f for f in pack.review_plan(plan, request="no sandals in winter")
            if "The request names" in f["text"]]
     assert f["level"] == "fix" and f["text"].startswith("The request names sandals, and the "
-                                                        "plan says it anywhere")
+                                                        "plan says it nowhere")
     # The graph plan's rules the code settles stay quiet in the review.
     texts = " | ".join(f["text"] for f in pack.review_plan(plan))
     assert "never empty" not in texts and "Nothing links" not in texts

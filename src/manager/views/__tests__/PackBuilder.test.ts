@@ -215,6 +215,38 @@ describe("PackBuilder", () => {
     expect(vi.mocked(api.ai.packPlan).mock.calls).toHaveLength(4);
   });
 
+  it("says why a Fix all sent nothing while the web search card is open, and marks nothing", async () => {
+    // Seen on the first browser walk (2026-10-21): the planner asked to
+    // search, Fix all made no call, and the finding was marked "left
+    // unchanged" then "couldn't change this" with Build disabled.
+    vi.mocked(api.ai.packPlan).mockResolvedValue({
+      ...PLAN,
+      plan: { ...PLAN.plan, research: ["beach outfit tags"] },
+      review: [{ id: "r1", key: "", level: "fix", text: "The request names clothes, and the plan says it nowhere", type: "request_gap" }],
+    });
+    const { w } = await mountIt();
+    await w.get('[data-test="pack-request"]').setValue("beach clothes");
+    await w.get('[data-test="pack-next"]').trigger("click");
+    await w.get('[data-test="pack-plan"]').trigger("click");
+    await flushPromises();
+    expect(w.find('[data-test="pack-research-skip"]').exists()).toBe(true);
+    await w.get('[data-test="pack-fix"]').trigger("click");
+    await flushPromises();
+    expect(vi.mocked(api.ai.packPlan).mock.calls).toHaveLength(1);
+    expect(w.get('[data-test="pack-fix-note"]').text()).toContain("Answer the web search first");
+    expect(w.findAll('[data-test="pack-finding-unfixed"]')).toHaveLength(0);
+    expect(w.findAll('[data-test="pack-finding-stuck"]')).toHaveLength(0);
+    // Skipping the search frees the plan: the next Fix all goes out.
+    vi.mocked(api.ai.packPlan).mockResolvedValue({ ...PLAN, plan: { ...PLAN.plan, research: [] } });
+    await w.get('[data-test="pack-research-skip"]').trigger("click");
+    await flushPromises();
+    await w.get('[data-test="pack-fix"]').trigger("click");
+    await flushPromises();
+    expect(w.find('[data-test="pack-fix-note"]').exists()).toBe(false);
+    const sent = vi.mocked(api.ai.packPlan).mock.calls.map((c) => c[0].instruction);
+    expect(sent.some((t) => t.startsWith("Revise the plan to fix ALL of these"))).toBe(true);
+  });
+
   it("sends a long list of findings in rounds under the length cap and keeps the typed text on an error", async () => {
     const many = Array.from({ length: 12 }, (_, n) => ({
       id: `r${n}`, key: "", level: "fix" as const, text: `Problem ${n} ${"x".repeat(240)}` }));

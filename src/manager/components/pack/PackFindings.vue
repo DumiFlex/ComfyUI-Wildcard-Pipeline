@@ -56,6 +56,7 @@ function patchLabel(f: AiPackFinding): string {
         </span>
       </li>
     </ul>
+    <p v-if="pb.notice.value" class="wp-pack-findings__notice" role="status" data-test="pack-fix-note"><i class="pi pi-info-circle" aria-hidden="true" /> {{ pb.notice.value }}</p>
     <div class="wp-pack-findings__row">
       <span class="wp-pack-findings__dim">{{ stuck ? `The AI couldn't fix ${stuck} last time: apply its fix, edit the item, or dismiss it.` : fixes ? `${fixes} to fix before building.` : 'Checked against the authoring guide.' }}</span>
       <Button size="sm" variant="ghost" icon="pi-microchip-ai" :loading="pb.reviewing.value" :disabled="busy" data-test="pack-review-ai" @click="pb.reviewPlan()">Review with AI</Button>
@@ -87,6 +88,7 @@ function patchLabel(f: AiPackFinding): string {
 }
 .wp-pack-findings__dismiss { border-color: transparent; color: var(--wp-text-dim); padding: 2px 5px; }
 .wp-pack-findings__dismiss:hover { color: var(--wp-text); background: var(--wp-bg-2); }
+.wp-pack-findings__notice { margin: 8px 0 0; font-size: 12.5px; color: var(--wp-warn); display: flex; gap: 6px; align-items: center; }
 .wp-pack-findings__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
 .wp-pack-findings__dim { flex: 1; font-size: 12px; color: var(--wp-text-dim); }
 </style>
