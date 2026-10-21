@@ -62,6 +62,15 @@ const { convo } = pb;
 const chat = useAiChat();
 
 /** Ask the chat what a warning means here and what to do about it. */
+/** A rule the planner wrote with a name the plan doesn't have: one narrow
+ *  change call adds it back with the names that exist (the note lists them). */
+const LEFT_OUT = "Left out a rule:";
+function fixLeftOut(note: string): void {
+  void pb.changeItem("", `${note.slice(LEFT_OUT.length).trim()} Add this rule again with names `
+    + "the plan has (one rule per value if it means several), or add nothing if the pack doesn't "
+    + "need it.");
+}
+
 function explain(warning: string, item?: AiPackItem): void {
   const about = item ? ` about ${item.kind.replace("_", " ")} "${item.name}"` : "";
   // The plan isn't in the library yet: without saying so, a small model
@@ -766,6 +775,15 @@ function stopExtending(): void {
         <ul v-if="draft?.warnings.length" class="wp-pack__warnings" data-test="pack-plan-notes">
           <li v-for="(w, j) in draft.warnings" :key="j">
             <i class="pi pi-info-circle" aria-hidden="true" /> <span>{{ w }}</span>
+            <button
+              v-if="w.startsWith(LEFT_OUT)"
+              type="button"
+              class="wp-pack__mini"
+              :disabled="busy || !!pb.changing.value"
+              title="Ask the planner to write this rule again with names the plan has"
+              data-test="pack-left-out-fix"
+              @click="fixLeftOut(w)"
+            >Fix with AI</button>
             <button type="button" class="wp-pack__mini" :disabled="chat.loading.value" title="Ask the assistant what this means" data-test="pack-explain" @click="explain(w)">Explain</button>
           </li>
         </ul>

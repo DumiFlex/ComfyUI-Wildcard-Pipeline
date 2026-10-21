@@ -650,7 +650,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           have is dropped, listed under the plan as "Left out a rule" (which rule, on which
           slot and tag group, why, and the values that group has), and the model is asked once
           to write it again with the names that exist. These notes are about the plan only;
-          nothing in your library is involved, and Add a relation puts the rule back by hand. Each relation also names the words it is about
+          nothing in your library is involved. <b>Fix with AI</b> on the note asks for the rule
+          again with names the plan has (one narrow call), and Add a relation puts it back by
+          hand. A rule that would set a variable a slot already picks is not dropped: it adds
+          its words to that variable instead, and a note says so. Each relation also names the words it is about
           ("sandals", "shorts" for "no sandals or shorts in winter"), so the target wildcard
           is made to hold options saying them and the test run reads the finished prompts
           for them; a slot whose only axis is itself (a Season slot with a season axis) gets

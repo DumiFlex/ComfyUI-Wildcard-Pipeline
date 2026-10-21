@@ -406,7 +406,7 @@ _KIND_WORDS = {
     "agree": "An \"agrees with\" rule", "accepts": "An \"accepts\" rule",
     "draw": "A \"draws from\" rule",
 }
-_REF_VALUE = re.compile(r"^(\w+)(?: from \S+)?: (.+?)\.(\w+)"
+_REF_VALUE = re.compile(r"^(\w+)(?: \$(\w+) \"([^\"]*)\")?(?: from \S+)?: (.+?)\.(\w+)"
                         r"(?: has no value (\S+)|: no value given) \(its values: (.*)\)$")
 _REF_AXIS = re.compile(r"^(\w+)(?: on \S+)?: (.+?)(?: has no axis (\S+)|: no axis given)"
                        r" \(its axes: (.*)\)$")
@@ -422,20 +422,21 @@ def plain_ref(ref: str) -> str:
     2026-10-21)."""
     m = _REF_VALUE.match(ref)
     if m:
-        kind, slot, axis, value, have = m.groups()
+        kind, var, text, slot, axis, value, have = m.groups()
         who = _KIND_WORDS.get(kind, "A rule")
+        if var:
+            who = f"A rule that {'adds' if kind == 'append' else 'sets'} ${var} = \"{text}\""
         why = (f"it names {axis} \"{value}\", which {slot} doesn't have" if value
                else f"it names no {axis} value, so it can't say when it applies")
         return (f"Left out a rule: {who} on {slot}'s {axis}: {why} ({slot}'s {axis} "
-                f"values: {have}). Add it again with Add a relation, or ignore this.")
+                f"values: {have}).")
     m = _REF_AXIS.match(ref)
     if m:
         kind, slot, axis, have = m.groups()
         who = _KIND_WORDS.get(kind, "A rule")
         why = (f"it names a {axis} group {slot} doesn't have" if axis
                else "it names no tag group of it")
-        return (f"Left out a rule: {who} on {slot}: {why} ({slot}'s groups: {have}). Add "
-                "it again with Add a relation, or ignore this.")
+        return f"Left out a rule: {who} on {slot}: {why} ({slot}'s groups: {have})."
     m = _REF_SET.match(ref)
     if m:
         var, owner = m.groups()
@@ -461,7 +462,11 @@ def _relations(
         src, err = _side(r, "from", by_name,
                          need_value=kind not in ("agree", "accepts", "draw"))
         if src is None:
-            bad_refs.append(f"{kind}: {err}")
+            # A rule that writes a variable says which and what, so the note
+            # (and a Fix with AI from it) can name the rule it means.
+            wvar, wtext = _var(r.get("var")), _clean(r.get("text"), 60).replace('"', "'")
+            what = f' ${wvar} "{wtext}"' if kind in ("derive", "append") and wvar else ""
+            bad_refs.append(f"{kind}{what}: {err}")
             continue
         rel: dict[str, Any] = {"kind": kind, "from": {"slot": src["slot"]["name"],
                                                       "axis": src["axis"],
@@ -485,11 +490,15 @@ def _relations(
                 bad_refs.append(f"{kind} from {src['slot']['name']}: no variable or text")
                 continue
             if kind == "derive" and (var in slot_vars or var in fixed_vars or var in input_vars):
+                # A pick can't be overwritten, but the rule's words can still
+                # be added to it: the code turns it into an append instead of
+                # dropping it (Dumi 2026-10-21: "how do we actually fix these?").
                 owner = next((x["name"] for x in slots if x["var"] == var), "")
-                bad_refs.append(f"derive: ${var} is already set by "
-                                + (f"the {owner} slot" if owner else "a slot")
-                                + "; derive a new variable or use append to add to it")
-                continue
+                kind = rel["kind"] = "append"
+                warnings.append(f"{src['slot']['name']} → ${var}: the rule adds its words to "
+                                f"${var} instead of replacing it, since "
+                                + (f"the {owner} slot" if owner else "something else")
+                                + " already sets it")
             if kind == "append" and var not in slot_vars | derived | fixed_vars:
                 bad_refs.append(f"append: nothing sets ${var} before it")
                 continue

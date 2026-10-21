@@ -338,6 +338,22 @@ describe("PackBuilder v2", () => {
     expect(w.get('[data-test="pack-found-used"]').text()).toContain("used 1 of 2 results for \"popular hairstyles 2026\"");
   });
 
+  it("asks for a left-out rule again with Fix with AI", async () => {
+    vi.mocked(api.ai.packPlan).mockImplementation(async () => {
+      const res = plan(++round);
+      res.plan.warnings = ["Left out a rule: A rule that sets $fit = \"loose\" on Hair's length: it names no length value, so it can't say when it applies (Hair's length values: long, short).", "Other note"];
+      return res;
+    });
+    const w = await mountIt();
+    const fixes = w.findAll('[data-test="pack-left-out-fix"]');
+    expect(fixes).toHaveLength(1);
+    await fixes[0].trigger("click");
+    await flushPromises();
+    const sent = vi.mocked(api.ai.packChange).mock.calls[0][0];
+    expect(sent.key).toBeUndefined();
+    expect(sent.instruction).toMatch(/^A rule that sets \$fit = "loose" on Hair's length.*Add this rule again with names the plan has/);
+  });
+
   it("lets the user turn down everything the searches found", async () => {
     const w = await mountIt(true);
     await w.get('[data-test="pack-research-allow"]').trigger("click");

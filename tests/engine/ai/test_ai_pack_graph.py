@@ -954,3 +954,29 @@ def test_a_left_out_relation_reads_as_a_sentence():
         "derive: $outfit is already set by the Outfit slot; derive a new variable or use append")
     assert pg.plain_ref("append: nothing sets $x before it") == \
         "Left out a rule: append: nothing sets $x before it"
+
+
+def test_a_rule_that_would_overwrite_a_pick_adds_to_it_instead():
+    """"set $outfit" from a rule when the Outfit slot already picks it was
+    dropped with a note the user could only read; the code now keeps the
+    rule as an append (Dumi 2026-10-21: "how do we actually fix these?")."""
+    rel = {"kind": "derive", "from_slot": "Season", "from_axis": "season",
+           "from_value": "winter", "to_slot": "", "to_axis": "", "to_value": "", "factor": 0,
+           "var": "outfit", "text": ", thick coat", "otherwise": "a light jacket"}
+    g = pack.compile_graph(_graph(relations=[*GRAPH["relations"][:5], rel]))
+    kept = g["relations"][-1]
+    assert kept["kind"] == "append" and kept["var"] == "outfit" and kept["otherwise"] == ""
+    assert not any("outfit" in b for b in g["bad_refs"])
+    assert any("adds its words to $outfit" in w for w in g["warnings"])
+
+
+def test_a_left_out_rule_names_what_it_would_have_set():
+    rel = {"kind": "derive", "from_slot": "Class", "from_axis": "role", "from_value": "",
+           "to_slot": "", "to_axis": "", "to_value": "", "factor": 0,
+           "var": "fit", "text": "loose cut", "otherwise": ""}
+    g = pack.compile_graph(_graph(relations=[rel]))
+    assert g["bad_refs"] == ['derive $fit "loose cut": Class.role: no value given '
+                             "(its values: caster, martial)"]
+    line = pg.plain_ref(g["bad_refs"][0])
+    assert line.startswith('Left out a rule: A rule that sets $fit = "loose cut" on '
+                           "Class's role: it names no role value")
