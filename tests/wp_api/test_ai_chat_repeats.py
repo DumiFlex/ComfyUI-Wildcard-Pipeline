@@ -199,3 +199,11 @@ async def test_keys_and_variables_nothing_mentions_are_checked_once(wp_client, f
     # The docs' keys, the library's variables and the user's own words pass.
     assert ai_chat.unknown_names("Ctrl + S saves; Ctrl+Shift+X explains.", "") == []
     assert ai_chat.unknown_names("Set $hair and $mood.", "my $mood wildcard", ["hair"]) == []
+
+
+def test_a_sent_back_answer_is_rewritten_whole():
+    # Sonnet 2026-10-21: the claim check's answer replaced a warning with an
+    # apology and lost its Warning box.
+    from engine.ai import chat as ai_chat
+    assert ai_chat.REWRITE_KEEP in ai_chat.CLAIM_NUDGE
+    assert ai_chat.REWRITE_KEEP in ai_chat.facts_nudge(["Ctrl+K"])
