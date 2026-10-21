@@ -113,7 +113,9 @@ def _uses(result: dict[str, Any]) -> str:
 
 #: Whether a built pack used the feature its request calls for.
 FEATURES: dict[str, Any] = {
-    "ref_filter": lambda r: any(":" in o.get("value", "") and "@{" in o.get("value", "")
+    # A draw from a shared list (`@{id}`, or `@{id:tag}` when narrowed): the
+    # request's list holds warm colours only, so no `:filter` is needed.
+    "ref_filter": lambda r: any("@{" in o.get("value", "")
                                 for w in _wildcards(r) for o in w.get("options") or []),
     "accepts": lambda r: any("accepts" in (w.get("tag_group_kinds") or {}).values()
                              for w in _wildcards(r)),
