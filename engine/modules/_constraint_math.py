@@ -21,8 +21,12 @@ other rule in the row keeps that rule, so `only` shuts out the unmentioned and
 leaves the mentioned alone. In a matrix row an `allow` cell does NOT count as
 a mention: the editors show `allow` as the empty "neutral" state, so counting
 it would let an invisible cell through. An `allow` exception is a visible row
-in the exceptions list, so it does count. A payload with no `only` rule never reaches either
-gate, so it folds byte-identically.
+in the exceptions list, so it does count. Inside a target `accepts` axis the
+allow-list is per axis: a member with no rule offers nothing only when the row
+rules on some member of that axis; an axis the row never mentions stays
+neutral (the row is about other tags), so a target that is itself the source
+of another agreement keeps rolling that axis. A payload with no `only` rule
+never reaches either gate, so it folds byte-identically.
 """
 from __future__ import annotations
 
@@ -88,9 +92,13 @@ def _cell_factor(
     if not isinstance(row, dict):
         return 1.0
     # `only` makes the row an allow-list: an option carrying no tag that the
-    # row mentions is shut out. Inside an accepts axis an unmentioned member
-    # then offers nothing (0), rather than the usual neutral 1.0. A neutral
-    # (`allow`) cell is not a mention — see the module docstring.
+    # row mentions is shut out. Inside an accepts axis the row MENTIONS (it
+    # rules on at least one member) an unmentioned member then offers nothing
+    # (0), rather than the usual neutral 1.0; an axis the row never mentions
+    # is not an allow-list and stays neutral, so a target that is also the
+    # SOURCE of another agreement (its own accepts group) is not shut out by
+    # a row about its classify tags. A neutral (`allow`) cell is not a
+    # mention — see the module docstring.
     has_only = _row_has_only(row)
     if has_only:
         row = {
@@ -99,8 +107,11 @@ def _cell_factor(
         }
         if not any(t in row for t in opt_tags):
             return EXCLUDE
-    unruled = 0.0 if has_only else 1.0
     target_axes = target_axes or {}
+    unruled_in = {
+        ax: 0.0 if has_only and any(m in row for m in (members or [])) else 1.0
+        for ax, members in target_axes.items()
+    }
     axis_of = {t: ax for ax, members in target_axes.items() for t in (members or [])}
     factor = 1.0
     axis_members: dict[str, list[str]] = {}
@@ -115,8 +126,9 @@ def _cell_factor(
                 factor *= r
         else:
             axis_members.setdefault(ax, []).append(t)
-    for members in axis_members.values():
+    for ax, members in axis_members.items():
         best = 0.0
+        unruled = unruled_in.get(ax, 1.0)
         for t in members:
             rule = row.get(t)
             r = _apply_rule(rule) if isinstance(rule, dict) else unruled

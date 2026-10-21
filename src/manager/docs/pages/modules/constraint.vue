@@ -14,7 +14,7 @@ const reweightModes = [
   { term: "Exclude", desc: "These options are removed from the pool; everything else remains." },
   { term: "Boost", desc: "These options have their weight increased, making them more likely without removing anything." },
   { term: "Reduce", desc: "These options have their weight decreased, making them less likely without removing anything." },
-  { term: "Only", desc: "Links picks: only these options can be picked, and every option without a rule of its own in the same row is removed. Extensions from before this rule existed refuse community packs that use it and ask you to update." },
+  { term: "Only", desc: "Links picks: only these options can be picked, and every option without a rule of its own in the same row is removed. An accepts group of the target that the row says nothing about keeps rolling freely; the row only narrows a group it rules on. Extensions from before this rule existed refuse community packs that use it and ask you to update." },
 ];
 
 const reachModes = [
