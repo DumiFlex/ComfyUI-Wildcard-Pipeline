@@ -10,6 +10,7 @@ from engine.ai import budget as ai_budget
 from engine.ai import chatlog as ai_chatlog
 from engine.ai import compact as ai_compact
 from engine.ai import config as ai_config
+from engine.ai import examples as ai_examples
 from engine.ai import lint as ai_lint
 from engine.ai import safety as ai_safety
 from engine.db.repositories import (
@@ -108,6 +109,7 @@ async def patch_chat(request: web.Request) -> web.Response:
         if isinstance(events, list) and events:
             meta = dict(chat["meta"])
             seen = dict(meta.get("shown_status") or {})
+            applied: list[dict[str, Any]] = []
             for ev in events[:200]:
                 if not isinstance(ev, dict) or not isinstance(ev.get("pid"), str):
                     continue
@@ -128,6 +130,16 @@ async def patch_chat(request: web.Request) -> web.Response:
                 if isinstance(ev.get("created"), str) and len(ev["created"]) <= 40:
                     entry["created"] = ev["created"]
                 seen[ev["pid"][:12]] = entry
+                if ev["status"] == "applied":
+                    # The request and the call behind an applied card become
+                    # an example for small models (`engine/ai/examples.py`).
+                    ex = (meta.get("examples") or {}).get(ev["pid"][:12])
+                    if isinstance(ex, dict):
+                        applied.append(ex)
+            if applied:
+                ai_examples.remember(applied)
+                meta["examples"] = {k: v for k, v in (meta.get("examples") or {}).items()
+                                    if v not in applied}
             meta["shown_status"] = seen
             repo.set_meta(chat["id"], meta)
     out: dict[str, Any] = {"id": chat["id"], "title": chat["title"], "pinned": chat["pinned"]}

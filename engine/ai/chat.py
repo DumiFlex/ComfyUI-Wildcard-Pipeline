@@ -1521,6 +1521,9 @@ class Library(MoreTools, ManageTools):
     def docs_read(self, args: dict[str, Any]) -> str:
         return ai_docs.read(args.get("page"), args.get("section"))
 
+    def explain(self, args: dict[str, Any]) -> str:
+        return ai_docs.explain(_short(args.get("topic"), 200))
+
     def lookup(self, args: dict[str, Any]) -> str:
         kind = str(args.get("kind") or "").strip().lower()
         kind = {"tag": "tags", "lora": "loras", "embedding": "embeddings"}.get(kind, kind)

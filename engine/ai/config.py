@@ -145,6 +145,10 @@ DEFAULTS: dict[str, Any] = {
     # call, with a warning in Settings).
     "danbooru_lookup": False,
     "web_always_allow": False,
+    # Small and medium models in JSON steps on a local server: name the tool
+    # first, then write only its arguments (Settings › AI assistant ›
+    # Advanced; an experiment, off by default).
+    "choose_first": False,
 }
 TOOL_FORMATS = ("auto", "native", "json")
 THINKING = ("auto", "off")
@@ -313,6 +317,7 @@ def _normalize(raw: Any) -> dict[str, Any]:
         "reader": _normalize_reader(src.get("reader")),
         "danbooru_lookup": src.get("danbooru_lookup") is True,
         "web_always_allow": src.get("web_always_allow") is True,
+        "choose_first": src.get("choose_first") is True,
     }
 
 
@@ -381,6 +386,7 @@ def _active(cfg: dict[str, Any]) -> dict[str, Any]:
         "auto_apply": cfg["auto_apply"],
         "danbooru_lookup": cfg["danbooru_lookup"],
         "web_always_allow": cfg["web_always_allow"],
+        "choose_first": cfg["choose_first"],
         "embed_model": slot["embed_model"],
         "embed_base_url": slot["embed_base_url"],
         "embed_api": slot["embed_api"],
@@ -540,6 +546,17 @@ def load_effective() -> dict[str, Any]:
     return out
 
 
+def cloud_ready() -> list[str]:
+    """Labels of the cloud providers with a key saved (or in the
+    environment), never the keys: the chat may suggest switching to one
+    after a local model struggled."""
+    with _lock:
+        stored = _read()
+    return [PRESETS[pid]["label"] for pid, slot in stored["providers"].items()
+            if pid in PRESETS and not PRESETS[pid]["local"]
+            and (slot["api_key"] or _env_key(pid)[0])]
+
+
 def public_view() -> dict[str, Any]:
     """What the Settings page sees: everything except the key itself."""
     with _lock:
@@ -613,7 +630,7 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
     with _lock:
         cfg = _read()
         for flag in ("enabled", "allow_delete", "auto_apply", "danbooru_lookup",
-                     "web_always_allow"):
+                     "web_always_allow", "choose_first"):
             if flag in patch:
                 if not isinstance(patch[flag], bool):
                     raise ConfigError(f"{flag} must be true or false")

@@ -887,6 +887,8 @@ export interface AiConfig {
   danbooru_lookup: boolean;
   /** Web searches, page reads and Danbooru lookups run without asking. */
   web_always_allow: boolean;
+  /** Advanced: small models name the tool, then fill its args (off when absent). */
+  choose_first?: boolean;
   /** The chat may propose deleting items, categories and tags (each card
    *  still needs its own confirm). Off by default. */
   allow_delete: boolean;
@@ -928,6 +930,7 @@ export interface AiConfigPatch {
   reader_key?: string;
   danbooru_lookup?: boolean;
   web_always_allow?: boolean;
+  choose_first?: boolean;
   allow_delete?: boolean;
   auto_apply?: boolean;
 }
@@ -938,6 +941,9 @@ export interface AiTestResult {
   /** `null` when no model is chosen yet. */
   model_found: boolean | null;
   json_ok: boolean | null;
+  /** A small model's tool step on a local server: whether the server took
+   *  typed arguments and the model picked the right tool (null elsewhere). */
+  tool_steps?: { typed: boolean; picked: boolean; error: string | null } | null;
   latency_ms: number | null;
   /** The context a local server loaded the model with, when it says. */
   context: number | null;

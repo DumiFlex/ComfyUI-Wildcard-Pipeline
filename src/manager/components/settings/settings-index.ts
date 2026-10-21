@@ -74,6 +74,7 @@ const STATIC_ENTRIES: SettingEntry[] = [
   { key: "ai-unload", section: "ai", label: "Unload the model after", hint: "Free the GPU for ComfyUI after a short idle.", keywords: "vram gpu keep alive ttl memory" },
   { key: "ai-thinking", section: "ai", label: "Thinking", hint: "Let a thinking model reason first, or ask it to answer straight away.", keywords: "reasoning think qwen deepseek r1 cut off output limit slow" },
   { key: "ai-embed-key", section: "ai", label: "Embedding server key", hint: "A key for an embedding server other than the chat's, sent only there.", keywords: "embeddings api key token openai" },
+  { key: "ai-choose-first", section: "ai", label: "Choose the tool first", hint: "Small and medium local models name the tool, then write only its arguments.", keywords: "tools small model json choose fill experiment advanced" },
   { key: "ai-tool-format", section: "ai", label: "Tool format", hint: "How the chat calls its tools: native tool calls or the JSON step format.", keywords: "tools function calling json native advanced" },
   { key: "ai-embed-model", section: "ai", label: "Embedding model", hint: "Meaning search: lets the chat find items by what they mean, not only their words. Off when empty.", keywords: "embeddings vector semantic meaning search nomic embeddinggemma rag retrieval" },
   { key: "ai-embed-api", section: "ai", label: "Embedding server type", hint: "Ollama or OpenAI-compatible, for an embedding server other than the chat's.", keywords: "embeddings api ollama openai lm studio voyage openrouter" },

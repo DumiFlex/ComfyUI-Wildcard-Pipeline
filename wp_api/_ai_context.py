@@ -440,7 +440,7 @@ async def _maybe_compact(cfg: dict[str, Any], log: list[dict[str, Any]], meta: d
     masking and dropping still keep the prompt in budget."""
     if not force:
         need = ai_budget.tokens(ai_chatlog.size(ai_chatlog.render(log, meta)) + fixed_chars)
-        if need < ai_compact.threshold(window):
+        if need < ai_compact.threshold(window, prof.get("compact_at")):
             return meta
     cut = ai_compact.best_split(log, meta)
     if cut is None:

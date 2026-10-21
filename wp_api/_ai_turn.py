@@ -14,10 +14,13 @@ from engine.ai import budget as ai_budget
 from engine.ai import chat as ai_chat
 from engine.ai import chatlog as ai_chatlog
 from engine.ai import client_tools as ai_client_tools
+from engine.ai import config as ai_config
+from engine.ai import examples as ai_examples
 from engine.ai import guide as ai_guide
 from engine.ai import lint as ai_lint
 from engine.ai import plan_items as ai_plan
 from engine.ai import react as ai_react
+from engine.ai import recipes as ai_recipes
 from engine.ai import safety as ai_safety
 from engine.ai import tools as ai_tools
 from engine.db.repositories import (
@@ -389,9 +392,15 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         pics = _ai_images.note(len(images)) if images else ""
         model = ai_guide.model_note(text) if text else ""
         plan_hint = ai_plan.HINT if plan_n else ""
+        # Small and medium models: the closest calls that worked before
+        # (`engine/ai/examples.py`).
+        shown_examples = ai_examples.note(ai_examples.pick(text, meta["tools"])) \
+            if text and _splits(cfg, meta, fmt) else ""
+        steps_hint = ai_recipes.recipe(text) if text and not plan_n \
+            and _splits(cfg, meta, fmt) else ""
         sent = ai_safety.strip_invisible(
             "\n\n".join(x for x in (since, changes, perms, text, pics, note, hints, model,
-                                    plan_hint) if x))
+                                    shown_examples, steps_hint, plan_hint) if x))
         new.append(ai_chatlog.user_entry(text, sent, images))
         meta = ai_chatlog.move_images(log + new, meta)
 
@@ -678,7 +687,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             if tool != "more_tools" and tool not in (meta.get("tools") or []):
                 # Only what this chat offers; more_tools unlocks the rest.
                 needs_reply = True
-                result(f"{tool}: error: {tool} isn't available here; call more_tools first")
+                group = next((g for g in spec.groups if g in ai_tools.MORE_GROUPS), "")
+                how = (f'call more_tools with {{"group": "{group}"}} first, then {tool}'
+                       if group else "call more_tools first")
+                result(f"{tool}: error: {tool} isn't available here; {how}")
                 steps.append({"tool": tool, "note": f"{tool} isn't available here", "ok": False})
                 continue
             if at in waiting:
@@ -852,6 +864,12 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 proposals.append(out)
                 if key:
                     proposed[key] = out["pid"]
+                if text and text != "(retry)":
+                    # Kept as an example if the user applies the card.
+                    kept = dict(meta.get("examples") or {})
+                    kept[out["pid"]] = {"ask": ai_budget.clip(text, 300), "tool": tool,
+                                        "args": ai_examples.compact(args)}
+                    meta["examples"] = dict(list(kept.items())[-30:])
                 meta.setdefault("proposals", {})[out["pid"]] = {
                     "title": out["title"], "status": None}
                 if out.get("replaces"):
@@ -1006,6 +1024,11 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                   or max(refused.values(), default=0) >= MAX_REFUSED)
         more = (f"\n\nOnly your first {len(calls)} calls ran; {dropped} more were left out."
                 + ("" if forced else " Make them in your next step.")) if dropped else ""
+        if _splits(cfg, meta, fmt) and step > 1:
+            # What this answer did so far, written by code: a small model
+            # re-reads and re-proposes what scrolled up (research note
+            # "Small model tool use", T7).
+            more += _progress_note(steps, proposals)
         new.append(ai_chatlog.results_entry(
             items, more + _results_tail(text, last=forced, native=fmt == "native",
                                         split=_splits(cfg, meta, fmt))))
@@ -1064,6 +1087,15 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         what = " or ".join(k.replace("_", " ") for k in missing)
         message = (message.rstrip() + f"\n\n*(No {what} card came with this answer, so no "
                    f"{what} was made. Ask me to propose it.)*")
+    if not pause and cfg.get("local") and not meta.get("cloud_offered") and _struggled(
+            message, errors, queue, bool(proposals)):
+        # A local model struggled: say once per chat that a cloud model the
+        # user already set up would likely manage (research note "Small
+        # model tool use", T12). Never switched for them.
+        cloud = ai_config.cloud_ready()
+        if cloud:
+            meta["cloud_offered"] = True
+            message = message.rstrip() + "\n\n" + CLOUD_OFFER.format(name=cloud[0])
     # Chips for the items it names; no bare ids for the user.
     message = lib.link_items(message)
     meta["format"] = fmt
@@ -1225,6 +1257,41 @@ MAX_REFUSED = 2
 
 #: A JSON-mode "plan" this long, with no message and no calls, is the answer.
 PLAN_AS_ANSWER = 80
+
+
+#: Said once per chat after a local model struggled (`_struggled`).
+CLOUD_OFFER = ("*(This was hard for the local model. You have {name} set up: switching to it in "
+               "Settings › AI assistant for asks like this one usually gets them done. Nothing "
+               "goes there unless you switch.)*")
+
+
+def _struggled(message: str, errors: dict[str, int],
+               queue: ai_plan.ItemQueue | None, proposed: bool = False) -> bool:
+    """Whether this answer shows a model out of its depth: out of steps,
+    stuck, stopped early, no answer after only reading, three failed calls,
+    or plan items left unmade."""
+    stuck = re.search(r"ran out of steps|Stopped early|didn't work on your page|"
+                      r"couldn't finish this|model gave no answer|I kept ", message or "")
+    silent = not proposed and (message or "").startswith("Done: ")
+    return (bool(stuck) or silent or sum(errors.values()) >= 3
+            or bool(queue and queue.skipped))
+
+
+def _progress_note(steps: list[dict[str, Any]], proposals: list[dict[str, Any]]) -> str:
+    """One line of what this answer did: its cards, what it read, what
+    failed."""
+    cards = [str(p.get("title") or "") for p in proposals if p.get("title")]
+    looked = [str(s_.get("note") or "") for s_ in steps
+              if s_.get("ok") and s_.get("tool") in ai_tools.READ and s_.get("note")]
+    failed = [str(s_.get("tool")) for s_ in steps if not s_.get("ok") and s_.get("tool")]
+    parts = []
+    if cards:
+        parts.append("proposed " + "; ".join(cards[-8:]) + " (don't propose these again)")
+    if looked:
+        parts.append("looked at " + "; ".join(x[:60] for x in looked[-6:]))
+    if failed:
+        parts.append("failed " + ", ".join(dict.fromkeys(failed[-6:])))
+    return ("\n\nSo far in this answer you " + ". You ".join(parts) + ".") if parts else ""
 
 
 def _plan_args(text: Any) -> Any:

@@ -508,6 +508,10 @@ const testSummary = computed(() => {
   if (t.json_ok === null) return `Connected · ${t.models.length} model${t.models.length === 1 ? "" : "s"} found. Pick one to finish the test.`;
   const parts = ["Connected"];
   parts.push(t.json_ok ? "JSON answers ✓" : "JSON answers ✗ (try another model)");
+  if (t.tool_steps) {
+    parts.push(!t.tool_steps.typed ? "tool steps: arguments as text (the server refused typed ones)"
+      : t.tool_steps.picked ? "tool steps ✓" : "tool steps ✗ (picked the wrong tool)");
+  }
   if (t.latency_ms !== null) parts.push(`${(t.latency_ms / 1000).toFixed(1)} s`);
   if (t.model_found === false) parts.push("model not in the server's list");
   if (t.context_low) parts.push(`only ${Math.round((t.context ?? 0) / 1024)}k context`);
@@ -1151,6 +1155,18 @@ const off = computed(() => !config.value?.enabled);
               aria-label="Tool format"
               data-test="ai-tool-format"
               @update:model-value="setToolFormat"
+            />
+          </SettingRow>
+          <SettingRow
+            label="Choose the tool first"
+            hint="Small and medium models on a local server, in JSON steps: each step first names the tool to call, then writes only that tool's arguments. Can help a model that picks the wrong tool; it costs a little time per step. Off by default."
+            setting-key="ai-choose-first"
+          >
+            <Toggle
+              :model-value="!!config.choose_first"
+              aria-label="Choose the tool first"
+              data-test="ai-choose-first"
+              @update:model-value="(v: boolean) => patch({ choose_first: v })"
             />
           </SettingRow>
         </SettingGroup>

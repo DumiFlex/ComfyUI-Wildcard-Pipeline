@@ -137,6 +137,15 @@ TOOLS: list[Tool] = [
         ("core",),
     ),
     Tool(
+        "explain", "read",
+        "Answer a how-to question from the built-in docs in one call: the best section's "
+        "text, with pointers to related sections.",
+        '{"topic": a few words}: the docs section that best covers it, in full, plus related '
+        "sections to read next. One call instead of docs_search then docs_read.",
+        obj({"topic": s("what to explain, a few words")}, ("topic",)),
+        ("core",),
+    ),
+    Tool(
         "react", "read",
         "Put one emoji on the user's message, like a chat reaction: for thanks, praise or "
         "good news. With nothing else to say, react and write no reply.",
@@ -686,6 +695,9 @@ _GUIDE: dict[str, tuple[str, dict[str, Any] | None]] = {
                     {"query": "constraint reach"}),
     "docs_read": ("docs_search found the page; link it in your answer as Docs › page › "
                   "section.", {"page": "constraints", "section": "Target reach"}),
+    "explain": ("the user asks how a feature, a setting or a node works; one call gives the "
+                "section to answer from. Not for the user's own items (search, read).",
+                {"topic": "constraint reach"}),
     "react": ("thanks, praise or good news; never instead of answering.", {"emoji": "👍"}),
     "run_test": ("you check a change you proposed (proposed: true) or find why something "
                  "never shows; not to show the user the Test Runner (show_test).",
@@ -897,7 +909,7 @@ def sync_delete(names: list[str], allowed: bool, group: tuple[str, ...] = DELETE
 
 #: Always on a shortlist: finding and reading, the docs, a reaction, a
 #: test, a question, and the way to every other tool.
-SHORTLIST_CORE = ("search", "read", "variables", "docs_search", "docs_read", "react",
+SHORTLIST_CORE = ("search", "read", "variables", "explain", "docs_search", "docs_read", "react",
                   "run_test", "ask", "more_tools")
 #: Words that put the page tools on a shortlist.
 _PAGE_WORDS = re.compile(r"\b(?:page|screen|where|open|go to|take me|show me|point|highlight"

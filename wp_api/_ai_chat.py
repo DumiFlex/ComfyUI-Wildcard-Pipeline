@@ -27,6 +27,7 @@ from typing import Any
 
 from engine.ai import budget, chatlog, safety
 from engine.ai.tools import registry
+from engine.ai.tools import tools as registry_tools
 from wp_api import _ai_client as client
 from wp_api._ai_client import AIError
 
@@ -210,6 +211,45 @@ def refused_schema(cfg: dict[str, Any], e: AIError) -> bool:
         return False
     _NO_TYPED.add((str(cfg.get("base_url") or ""), str(cfg.get("model") or "")))
     return True
+
+
+def choose_schema(names: list[str], must_call: bool = False) -> dict[str, Any]:
+    """The choose half of choose-then-fill: a short plan and one tool name
+    (or `answer`, when the step may answer instead)."""
+    return {"type": "object", "additionalProperties": False, "required": ["plan", "tool"],
+            "properties": {"plan": {"type": "string"}, "tool": {
+                "type": "string",
+                "enum": [*names, *([] if must_call else [registry.ANSWER_TOOL])]}}}
+
+
+async def probe_steps(cfg: dict[str, Any]) -> dict[str, Any] | None:
+    """Test connection, for a local server that checks schemas: one small
+    model step the way a small model's chat asks it (typed arguments, one
+    call, thinking off). Says whether the server took the typed schema
+    (a refusal is remembered, so chats send arguments as text) and whether
+    the model picked the right tool for an obvious ask (research note
+    "Small model tool use", T6). None for other servers."""
+    if not cfg.get("local") or not checks_schema(cfg):
+        return None
+    offered = registry_tools(["search", "read", "docs_search"])
+    schema = registry.act_schema([t.name for t in offered], offered, 1, 1)
+    out: dict[str, Any] = {"typed": True, "picked": False, "error": None}
+    log = [{"role": "user", "content": "What wildcards do I have for hair? Find them."}]
+    try:
+        st = await step({**cfg, "thinking": "off"}, system=(
+            "You pick the next tool call for a library assistant. search finds library items "
+            "by subject; read reads one item by id; docs_search searches the app's docs."),
+            log=log, fmt="json", tools=[], names=[t.name for t in offered], schema=schema,
+            temperature=0.15, num_ctx=4096, max_tokens=512)
+        out["picked"] = bool(st["calls"]) and st["calls"][0]["tool"] == "search"
+    except AIError as e:
+        if refused_schema(cfg, e):
+            out["typed"] = False
+        else:
+            out["error"] = e.message
+    except ValueError as e:
+        out["error"] = str(e)
+    return out
 
 
 async def pick_format(cfg: dict[str, Any]) -> str:
@@ -1103,10 +1143,27 @@ async def split_step(
     `answer` tool included). `must_call` (typed JSON): the act ask can't
     come back empty (`engine/ai/plan_items.py` steps)."""
     names = [t.name for t in offered]
+    # Choosing a call needs no long think: a local model's act ask runs with
+    # its thinking off (research note "Small model tool use": thinking hurts
+    # small models' tool picks and spends the output on reasoning).
+    act_cfg = {**cfg, "thinking": "off"} if cfg.get("local") else cfg
     if fmt == "json":
         plan, thinking = "", ""
+        if not answer_only and typed and cfg.get("choose_first") and len(offered) > 1:
+            # Choose, then fill (research note "Small model tool use", T3):
+            # the tool by name first, then only that tool's arguments.
+            pick = await step(act_cfg, system=system, log=log, fmt="json", tools=[], names=names,
+                              schema=choose_schema(names, must_call), temperature=act_temp,
+                              num_ctx=num_ctx, cache_key=cache_key, emit=emit)
+            chosen = pick["answer"].get("tool") if isinstance(pick["answer"], dict) else None
+            if chosen in names:
+                offered = [t for t in offered if t.name == chosen]
+                names, must_call = [chosen], True
+            elif chosen == registry.ANSWER_TOOL:
+                answer_only = True
+                plan = str(pick["answer"].get("plan") or "")
         if not answer_only:
-            act = await step(cfg, system=system, log=log, fmt="json", tools=[], names=names,
+            act = await step(act_cfg, system=system, log=log, fmt="json", tools=[], names=names,
                              schema=registry.act_schema(names, offered if typed else None,
                                                         max_calls if typed else 0,
                                                         1 if typed and must_call else 0),
@@ -1138,13 +1195,13 @@ async def split_step(
                "temperature": act_temp, "num_ctx": num_ctx, "cache_key": cache_key,
                "emit": emit}
         try:
-            act = await step(cfg, **ask, tool_choice=choice)
+            act = await step(act_cfg, **ask, tool_choice=choice)
         except AIError as e:
             if not (choice and _choice_refused(e)):
                 raise
             _NO_CHOICE.add(key)
             choice = None
-            act = await step(cfg, **ask)
+            act = await step(act_cfg, **ask)
         real = [c for c in act["calls"] if c["tool"] != registry.ANSWER_TOOL]
         ready = len(real) < len(act["calls"])
         if real or not ready:
