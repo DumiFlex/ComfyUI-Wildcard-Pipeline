@@ -349,14 +349,24 @@ def facts_nudge(names: list[str]) -> str:
         "Your answer names " + ", ".join(names) + ", which the docs, the library and this "
         "chat never mention. Don't guess keys, variables or how the app behaves: check the "
         "docs (docs tool) or the library first, or leave them out. If one is only an example, "
-        "say so plainly. Then answer again.")
+        "say so plainly.\n" + REWRITE_KEEP)
+
+
+#: How a nudged answer is written again: the user sees only the new one
+#: (Sonnet 2026-10-21: a warning answer came back as a bare apology, its
+#: Warning box gone).
+REWRITE_KEEP = (
+    "If you answer in words, write your WHOLE answer again with only the wrong part "
+    "changed: keep everything else, its formatting (lists, tables, Tip: / Warning: lines) "
+    "included. The user sees only this new answer. No apology, and don't mention the "
+    "correction.")
 
 
 CLAIM_NUDGE = (
     "Your answer says something was made, changed, tested or opened, but you made no call, so "
     "nothing happened and the user would be misled. Make the call now (the change tool, "
     "run_test, or show_test), or answer plainly that it is not done yet. Never describe a "
-    "change as done without its call.")
+    "change as done without its call.\n" + REWRITE_KEEP)
 #: Under an organize ask, in the message tail (`_ai_turn`): Haiku and the
 #: 9B (2026-10-21) searched the library a type and a tag at a time until the
 #: steps ran out, and never called a change tool.
