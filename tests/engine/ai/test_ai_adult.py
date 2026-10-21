@@ -201,3 +201,63 @@ def test_graph_wired_items_get_the_adult_pass():
     # A safe graph is left alone.
     safe = pack.compile_graph_plan({**g, "rating": "safe"})
     assert pack.wired_payload(safe, tpl, {})["payload"]["negative_template"] == "bad anatomy"
+
+
+def test_a_graph_built_from_minor_words_loses_them_everywhere():
+    # The Huihui run (2026-10-21): an "Age Tier" wildcard of tween / preteen
+    # with an age tag group, a rule keyed on the tier, and "mature" in the
+    # standing negative. Every one of those goes, not only the options.
+    from tests.engine.ai.test_ai_pack_graph import GRAPH
+    g = {**GRAPH, "rating": "nsfw", "slots": [
+        {"name": "Age Tier", "var": "tier", "what": "age tiers", "section": "", "count": 4,
+         "show": "prompt", "pick": "", "hold": False, "sometimes_none": 0,
+         "axes": [{"name": "age", "values": ["tween", "preteen", "mature woman", "milf"]}]},
+    ], "relations": [
+        {"kind": "derive", "from_slot": "Age Tier", "from_axis": "age", "from_value": "tween",
+         "to_slot": "", "to_axis": "", "to_value": "", "factor": 0,
+         "var": "girl_type", "text": "petite girl", "otherwise": "curvy woman"},
+    ], "template": {**GRAPH["template"], "order": ["Quality", "Age Tier"],
+                    "negative": "mature, bad anatomy, mature_female"}}
+    plan = pack.compile_graph_plan(g)
+    key = {i["name"]: i["key"] for i in plan["items"]}
+    tier = pack.wired_payload(plan, key["Age Tier"], {})
+    assert [o["value"] for o in tier["payload"]["options"]] == ["mature woman", "milf"]
+    assert tier["payload"]["sub_categories"] == ["mature_woman", "milf"]
+    assert tier["payload"]["tag_groups"] == {"age": ["mature_woman", "milf"]}
+    assert set(tier["payload"]["tag_group_kinds"]) == {"age"}
+    rule = next(i["key"] for i in plan["items"] if i["kind"] == "derivation")
+    with pytest.raises(ValueError, match="every rule names a minor"):
+        pack.wired_payload(plan, rule, {})
+    tpl = next(i["key"] for i in plan["items"] if i["kind"] == "template")
+    out = pack.wired_payload(plan, tpl, {})
+    assert out["payload"]["negative_template"].startswith("bad anatomy, child, loli")
+    assert any(w.startswith("Took \"mature, mature_female\" out of the negative")
+               for w in out["warnings"])
+
+
+def test_adult_check_cleans_every_negative_of_an_nsfw_item():
+    from engine.ai.pack.adult_pack import adult_check, adult_negative
+    assert adult_negative("mature, old photo, milf, adult woman, grown-up") == (
+        "old photo, milf", ["mature", "adult woman", "grown-up"])
+    assert adult_negative("lowres") == ("lowres", [])
+    plan = {"rating": "nsfw", "settings": {}, "style": "tags"}
+    wc, said = adult_check("wildcard", {"var_binding": "x", "options": [
+        {"id": "a", "value": "nude", "weight": 1, "negative": "clothes, mature"},
+        {"id": "b", "value": "dressed", "weight": 1, "negative": "adults"}]}, plan)
+    assert [o.get("negative") for o in wc["options"]] == ["clothes", None]
+    assert any("out of the negative of \"nude\"" in w for w in said)
+    fv, said = adult_check("fixed_values", {"values": [
+        {"id": "a", "name": "censor", "value": "uncensored", "negative": "mature, censored"}]},
+        plan)
+    assert fv["values"][0]["negative"] == "censored"
+    rules, said = adult_check("derivation", {"rules": [{"id": "r1", "branches": [
+        {"condition": {"var": "age", "op": "equals", "value": "milf"},
+         "action": {"target_var": "neg", "mode": "negative", "value": "mature, lowres"}}],
+        "else": {"action": {"target_var": "x", "mode": "replace", "value": "ok"}}}]}, plan)
+    assert rules["rules"][0]["branches"][0]["action"]["value"] == "lowres"
+    assert any("a rule's negative" in w for w in said)
+    # A rule keyed on a minor word goes like one that writes it.
+    with pytest.raises(ValueError, match="every rule names a minor"):
+        adult_check("derivation", {"rules": [{"id": "r1", "branches": [
+            {"condition": {"var": "age", "op": "equals", "value": "preteen"},
+             "action": {"target_var": "x", "mode": "replace", "value": "small"}}]}]}, plan)

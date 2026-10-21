@@ -137,7 +137,10 @@ const checklist: string[] = [
         count as minor words in that context: "schoolgirl, nude" is not a costume. In a Pack
         builder pack rated NSFW, the whole pack counts as that context, so those words are
         left out wherever they are, in the items the model writes and the ones the pack graph
-        wires. A request whose own words ask for that ("an NSFW pack of underage girls") is
+        wires: a dropped option takes its tags with it, a rule keyed on such a word goes
+        too, and a word that pushes the image away from adults ("mature", "adult woman") is
+        taken out of every negative, since the youth block and "mature" cannot both stand.
+        A request whose own words ask for that ("an NSFW pack of underage girls") is
         refused before anything is planned. A costume an adult wears (school uniform) is kept,
         with a <b>Check</b> warning on the item so you can judge it. <b>Settings › Youth
         negative</b> (on by default) adds the youth block to the template's negative; turn it
