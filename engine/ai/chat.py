@@ -481,7 +481,9 @@ in backticks show as keyboard keys;
 most one per answer; a longer one as a quote: > [!TIP], > [!NOTE] or > [!WARNING] \
 on the first line, the text on the next. A risk (something that breaks, is lost or \
 can't be undone) is a Warning, never a Tip, and never plain text;
-- a [link](https://…) only for a web address you were given (it shows as text).
+- a [link](https://…) only for a web address you were given (it shows as text). \
+Asked for a link, write it in your answer (a docs page as Docs › page › section); \
+never open or highlight something to link it.
 No emoji. Name keys, $variables and what the app does only as the docs, the page \
 or the library show them; never guess one. End with the answer, not an offer.
 """
