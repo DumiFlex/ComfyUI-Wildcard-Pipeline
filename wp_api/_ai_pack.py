@@ -202,8 +202,11 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     answer: Any = None
     retry = ""
     graph = settings["planner"] == "graph"
+    # The user's own words: "Your call (decide for me)" is not a thing the
+    # pack must say (its words came back as request gaps on every Fix all).
     asked = " ".join([first_text, ai_pack.own_request(instruction), sample,
-                      *(str(d.get("answer") or "") for d in decisions if isinstance(d, dict))])
+                      *(str(d.get("answer") or "") for d in decisions if isinstance(d, dict)
+                        and d.get("answer") != ai_pack.DECIDE_ANSWER)])
     for attempt in range(2):
         try:
             answer = await _ask(

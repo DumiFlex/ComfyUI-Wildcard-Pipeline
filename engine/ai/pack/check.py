@@ -373,6 +373,13 @@ def _overlaps(plan: dict[str, Any], built: dict[str, Any], text: str) -> dict[st
     for a, a_opts in wild:
         a_chunks = {c for o in a_opts for c in _chunks(o)}
         a_heads = {c.split()[-1] for c in a_chunks}
+        # The head noun most of A's options end in ("eyes" for an Eyes
+        # pick) is A's own subject: B's "gentle eyes" borrows it, A's
+        # "blue eyes" doesn't, so no hit on it counts against A (Sonnet 5.5,
+        # 2026-10-21: Fix Eyes with AI could never clear "names what
+        # $expression picks: gentle eyes, half-closed eyes").
+        a_all = [c.split()[-1] for o in a_opts for c in _chunks(o)]
+        a_subject = {h for h in set(a_all) if a_all.count(h) * 2 > len(a_all)}
         for b, b_opts in wild:
             if b is a or a["key"] in out:
                 continue
@@ -380,9 +387,11 @@ def _overlaps(plan: dict[str, Any], built: dict[str, Any], text: str) -> dict[st
             heads = [c.split()[-1] for c in b_chunks]
             # A head noun most of B's options share ("hair") names B's
             # subject, not one pick: only full matches count for it.
-            hits = sorted({c for c, h in zip(b_chunks, heads, strict=True) if c in a_chunks
-                           or (heads.count(h) * 2 <= len(heads) and h in a_heads
-                               and len(h) >= 4)})
+            hits = sorted({c for c, h in zip(b_chunks, heads, strict=True)
+                           if h not in a_subject
+                           and (c in a_chunks
+                                or (heads.count(h) * 2 <= len(heads) and h in a_heads
+                                    and len(h) >= 4))})
             if len(hits) >= 2:
                 out[a["key"]] = (
                     f"its options already name what ${b['var']} ({b['name']}) picks: "

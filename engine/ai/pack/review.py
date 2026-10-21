@@ -370,12 +370,19 @@ def review_plan(plan: dict[str, Any],
                                "changes as target"), type="dropped_constraint",
                 refs=(str(d.get("name") or ""),))
     if graph is not None:
-        gaps = pack_graph.request_gaps(graph, request)
+        tried = set(plan.get("gaps_tried") or [])
+        gaps = [g for g in pack_graph.request_gaps(graph, request) if g not in tried]
         if gaps:
             add(None, "fix", "The request names " + ", ".join(gaps) + ", and the plan says "
                 + ("none of them" if len(gaps) > 1 else "it") + " anywhere; give each a "
                 "slot of its own, a value on an axis, or put it in the words of the rule it "
                 "is part of", type="request_gap", refs=tuple(gaps))
+        left = sorted(tried)
+        if left:
+            add(None, "tip", "The request also says " + ", ".join(left) + ", which the planner "
+                "was asked about and found no place for; add it by hand if it is a thing the "
+                "pack should pick, or leave it if it only says how to build the pack",
+                type="request_gap_left", refs=tuple(left))
     # A new wildcard the library already has. Not on a graph plan: there
     # the code swaps a fitting slot for the user's wildcard on every
     # compile (``graph.library_slots``), and a kind change on an item

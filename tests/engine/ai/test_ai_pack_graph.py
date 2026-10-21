@@ -851,3 +851,31 @@ def test_pick_names_in_the_template_text_are_reads_and_defects_go_to_the_negativ
     plan = pack.compile_graph_plan(_graph(template={**GRAPH["template"],
                                                     "lead": "blurry background, 1girl"}))
     assert plan["graph"]["template"]["lead"] == "blurry background, 1girl"
+
+
+def test_request_gaps_skip_build_words_and_possessives_and_are_asked_once():
+    g = pg.compile_graph(_graph())
+    # "character's" is the character; how to build the pack is not a gap.
+    assert pack.request_gaps(g, "an elf's race and class; small and specialized, "
+                             "separation of concerns, your call (decide for me), none") == []
+    assert pack.request_gaps(g, "an elf's parka") == ["parka"]
+    first = pack.compile_graph_plan(_graph(), request="an elf with a parka")
+    assert first["request_gaps"] == ["parka"] and first["gaps_tried"] == []
+    assert any(f["type"] == "request_gap" for f in
+               pack.review_plan(first, request="an elf with a parka"))
+    # A refine that still says nothing about it: asked once, then a tip.
+    again = pack.compile_graph_plan(_graph(), previous=first, request="an elf with a parka")
+    assert again["gaps_tried"] == ["parka"]
+    findings = pack.review_plan(again, request="an elf with a parka")
+    assert not any(f["type"] == "request_gap" for f in findings)
+    left = next(f for f in findings if f["type"] == "request_gap_left")
+    assert left["level"] == "tip" and "parka" in left["text"]
+    # The manager sends the plan back: the memory rides on it.
+    back = pack.compile_graph_plan(again, settings=again["settings"],
+                                   request="an elf with a parka")
+    assert back["gaps_tried"] == ["parka"]
+    # A refine that placed it clears it.
+    placed = pack.compile_graph_plan(
+        _graph(template={**GRAPH["template"], "lead": "parka"}), previous=again,
+        request="an elf with a parka")
+    assert placed["request_gaps"] == [] and placed["gaps_tried"] == []

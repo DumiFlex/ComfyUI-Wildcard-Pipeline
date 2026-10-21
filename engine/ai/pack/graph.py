@@ -2394,6 +2394,9 @@ tags tagged sentence sentences quality negative negatives preset presets model m
 checkpoint checkpoints family families lora loras works work working pony flux sdxl
 illustrious noobai nsfw sfw safe adult explicit way ways thing things stuff bit kind
 kinds type types sort sorts shared type typed myself itself must empty narrow
+none call decide decides decided either any whatever default defaults small large big
+specialized specialised specific general separation separate separated concern concerns
+structure structured section sections held vary varies varying varied each
 """.split())
 
 
@@ -2413,7 +2416,10 @@ def _stems(word: str) -> set[str]:
 def _content_words(text: str) -> list[str]:
     out: list[str] = []
     for w in re.findall(r"[a-z][a-z'-]*[a-z]|[a-z]", text.lower()):
-        w = w.strip("'-")
+        # "character's" is the character (9B and Sonnet, 2026-10-21: the
+        # possessive never matched the graph's "character" and the gap
+        # came back on every Fix all).
+        w = re.sub(r"'s?$", "", w.strip("'-"))
         if len(w) < 3 or w in _REQUEST_STOP:
             continue
         if w not in out:
@@ -2716,6 +2722,18 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
                           for b in [*graph["dropped"], *graph["bad_refs"]]),
                         *plan["warnings"]]
     plan["bad_refs"] = graph["bad_refs"]
+    # Request words the graph says nowhere, and the ones a refine was
+    # already asked about and left unplaced: the review asks once, then
+    # stops calling them a fix (Sonnet 5.5 and the 9B, 2026-10-21: "give
+    # each a slot" came back on every Fix all).
+    prior = previous if previous is not None else (raw if sent_back else None)
+    gaps = request_gaps(graph, kw.get("request") or "")
+    before = set(prior.get("request_gaps") or []) if isinstance(prior, dict) else set()
+    tried = set(prior.get("gaps_tried") or []) if isinstance(prior, dict) else set()
+    if previous is not None:
+        tried |= before & set(gaps)
+    plan["request_gaps"] = gaps
+    plan["gaps_tried"] = sorted(tried & set(gaps))
     return plan
 
 

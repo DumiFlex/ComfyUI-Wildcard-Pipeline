@@ -1862,6 +1862,9 @@ export interface AiPackPlan {
   /** What the code did on this compile (settings applied, hand edits
    *  kept), one line each. */
   applied?: string[];
+  /** Request words the graph says nowhere (graph plans), and the ones a refine was already asked about and left unplaced: the review asks once, then only notes them. */
+  request_gaps?: string[];
+  gaps_tried?: string[];
 }
 
 /** Hand edits of a graph plan the model's next answer may not undo:

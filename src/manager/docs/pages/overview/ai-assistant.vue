@@ -716,7 +716,13 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           several options is dropped with a note, since only one pick's axis value is readable.
           A pick's name written as plain words into the template's lead or tail ("quality,
           pose") is read as that pick, once, and defect tags written there (ugly, bad anatomy)
-          move to the negative. Click an item to edit its slot (axes, use) or the
+          move to the negative. The review's "the request names X, and the plan says it
+          nowhere" counts only your own words (not "decide for me", not how to build the
+          pack: small, specialized, separation of concerns), and asks the planner once; a
+          word it still finds no place for becomes a note to add by hand or ignore. The
+          check's "its options already name what another pick picks" lands on the pick that
+          borrows the other's subject (eye words inside an Expression option, not Eyes
+          itself), so a Fix can clear it. Click an item to edit its slot (axes, use) or the
           relations it compiles from, and <b>Add a relation</b> or <b>Add a slot</b>; the items
           are compiled again from your change. The assistant lists every item it will build,
           grouped by section, and asks what it can't guess. Some questions take several answers; every question has an
