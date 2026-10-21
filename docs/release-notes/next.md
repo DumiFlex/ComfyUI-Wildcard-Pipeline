@@ -86,3 +86,6 @@
 - **The assistant is told about every format the chat draws.** Task lists, `> [!NOTE]` / `> [!WARNING]` boxes, "Note:" lines, key combos and links were drawn when written but never mentioned to the model, so they never showed up.
 - **Page pointer captions no longer overlap.** When the assistant points at parts close together, each caption moves beside or under the one before it.
 - **The working line says the same thing everywhere.** The top bar and the page showed different words and drawings for one job ("Sketching…" beside "Doodling…"); they now share the word, drawing and time.
+- **The assistant's questions box shows up.** A model that sent its questions in the same step as opening or reading the page had the whole ask refused, every time, so the questions box never appeared; the page call now waits and the questions show.
+- **No more "Done: Read the page" answers.** A model that read the same part of the page again and again (one pause each) ended on "Done: Read the page: …" with no answer; a repeat read is now answered at once and the model is pushed to reply. Opening a card already on screen counts as a repeat too.
+- **"Remove clothing words" trims instead of deleting.** On a card like Hair Color, "red hair with a leather jacket" now becomes "red hair"; before, the whole option was dropped.

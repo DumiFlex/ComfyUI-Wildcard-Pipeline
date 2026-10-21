@@ -301,6 +301,25 @@ def decisions_text(decisions: Any) -> str:
             + "\n".join(f"- {settled_line(d)}" for d in rows))
 
 
+#: What a page call that waits for a step's ask reads back.
+DEFERRED = ("not run: this step also asks the user, and the ask goes first. Make this "
+            "call again after their answers if you still need it.")
+
+
+def deferred_page_calls(calls: list[dict[str, Any]], *, change: tuple[str, ...],
+                        pause: tuple[str, ...], web: tuple[str, ...]) -> set[int]:
+    """Page calls (open, read_page, highlight…) sent in one step with an
+    ask, which wait so the ask runs alone, else empty. Small models send
+    ``open`` + ``ask`` together every time and the refusal never got them
+    to ask: the questions box never showed. Not with change tools or web
+    tools, which keep their refusal (asking is meant to come before
+    building, and a web call needs the user's Allow)."""
+    tools = [c["tool"] for c in calls]
+    if tools.count("ask") != 1 or any(t in change or t in web for t in tools):
+        return set()
+    return {i for i, t in enumerate(tools) if t != "ask" and t in pause}
+
+
 def step_problem(calls: list[dict[str, Any]], index: int, *, change: tuple[str, ...],
                  pause: tuple[str, ...]) -> str:
     """Why the ask at ``calls[index]`` can't run in this step, else ""."""

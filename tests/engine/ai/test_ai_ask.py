@@ -143,3 +143,19 @@ def test_reopened_chats_show_answered_asks():
     out = chatlog.answered_view(view, meta)
     assert out["answered"] == {"c1": meta["asked"]["c1"]}
     assert chatlog.answered_view(view, {}) is view
+
+
+def test_page_calls_wait_for_a_steps_ask():
+    kw = {"change": ("add_options",), "pause": ("open", "read_page", "ask", "web_search"),
+          "web": ("web_search",)}
+
+    def calls(*tools):
+        return [{"tool": t} for t in tools]
+
+    assert ask.deferred_page_calls(calls("open", "ask"), **kw) == {0}
+    assert ask.deferred_page_calls(calls("read", "read_page", "ask", "open"), **kw) == {1, 3}
+    # Change and web tools keep their refusal; no ask, nothing waits.
+    assert ask.deferred_page_calls(calls("open", "ask", "add_options"), **kw) == set()
+    assert ask.deferred_page_calls(calls("web_search", "ask"), **kw) == set()
+    assert ask.deferred_page_calls(calls("open", "read_page"), **kw) == set()
+    assert ask.deferred_page_calls(calls("ask", "ask", "open"), **kw) == set()
