@@ -108,6 +108,23 @@ EMPTY_NUDGE = (
     "Your last answer was empty. Answer the user's message now: call a tool, or "
     "reply in plain text."
 )
+#: Sent instead of `EMPTY_NUDGE` when the step limit was reached, or a call
+#: on the user's page failed: one more step, words only.
+EMPTY_WORDS_NUDGE = (
+    "Your last answer was empty. No more tool calls: answer the user's message "
+    "now in plain text from what you have."
+)
+PAGE_FAILED_NUDGE = (
+    "Your last answer was empty after a call on the user's page failed. No more "
+    "tool calls: answer the user's message now in plain text from what you know, "
+    "and say plainly if you couldn't show it on the page."
+)
+#: The result of a change call identical to one already proposed in this answer.
+PROPOSED_AGAIN = (
+    "{tool}: you already proposed exactly this as card {pid}; it stands, with "
+    "its warnings. Don't send it again. If a warning is right, send a changed "
+    "call; otherwise go on to the next item the user asked for."
+)
 #: Sent once when an answer stops where it introduces its content.
 UNFINISHED_NUDGE = (
     "Your answer stopped right where it introduced its content (it ends with a "
@@ -276,6 +293,65 @@ DEFER_NUDGE = (
     "its calls, then answer.")
 
 
+#: Keys and $variables an answer names as facts about the app or library.
+_KEYS = re.compile(
+    r"\b(?:Ctrl|Cmd|Alt|Option|Shift|Meta)(?:\s*\+\s*(?:Ctrl|Cmd|Alt|Option|Shift|Meta|Enter|"
+    r"Return|Esc|Escape|Tab|Space|Backspace|Delete|Up|Down|Left|Right|Home|End|F\d{1,2}|"
+    r"[A-Za-z0-9]\b))+", re.I)
+_VARS = re.compile(r"(?<![\w$])\$([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _plus(text: str) -> str:
+    """"Ctrl + S" and "Ctrl+S" read the same."""
+    return re.sub(r"\s*\+\s*", "+", text)
+
+
+def _docs_text() -> str:
+    """All the built-in docs as one lower-case text, keys written "ctrl+s"."""
+    global _DOCS_TEXT
+    if _DOCS_TEXT is None:
+        _DOCS_TEXT = _plus("\n".join(str(sec.get("text") or "") + " " + str(sec.get("title") or "")
+                               for page in ai_docs.pages() for sec in page.get("sections") or []
+                               if isinstance(sec, dict)).lower())
+    return _DOCS_TEXT
+
+
+_DOCS_TEXT: str | None = None
+
+
+def unknown_names(said: str, known: str, variables: Any = ()) -> list[str]:
+    """Keys (Ctrl+S) and $variables an answer names that neither the docs,
+    the library's variables nor the chat so far (`known`: the user's words
+    and every result) mention. Sonnet probe 2026-10-21: a how-to answer
+    gave Ctrl+S and $final_prompt, neither of which exists."""
+    if not said:
+        return []
+    known = _plus(known.lower())
+    docs = _docs_text()
+    out: list[str] = []
+    for m in _KEYS.finditer(said):
+        key = re.compile(r"(?<![a-z0-9+])" + re.escape(_plus(m.group(0).lower()))
+                         + r"(?![a-z0-9+])")
+        if not key.search(docs) and not key.search(known) and m.group(0) not in out:
+            out.append(m.group(0))
+    have = {str(v).lower() for v in variables}
+    for m in _VARS.finditer(said):
+        name = m.group(1)
+        low = name.lower()
+        if low in have or f"${low}" in docs or f"${low}" in known or f"${name}" in out:
+            continue
+        out.append(f"${name}")
+    return out[:6]
+
+
+def facts_nudge(names: list[str]) -> str:
+    return (
+        "Your answer names " + ", ".join(names) + ", which the docs, the library and this "
+        "chat never mention. Don't guess keys, variables or how the app behaves: check the "
+        "docs (docs tool) or the library first, or leave them out. If one is only an example, "
+        "say so plainly. Then answer again.")
+
+
 CLAIM_NUDGE = (
     "Your answer says something was made, changed, tested or opened, but you made no call, so "
     "nothing happened and the user would be misled. Make the call now (the change tool, "
@@ -392,8 +468,10 @@ list of what you can do.
 #: (`AiMessage.vue`); one it is not told about, it never writes.
 FORMATTING = """\
 Write short answers as plain sentences. Use formatting only where it helps:
-- a list (- or 1.) for steps or several separate items;
-- a task list (- [ ] to do, - [x] done) for steps the user ticks off;
+- a list (- or 1.) for several separate items, or steps that explain how \
+something works;
+- a task list (- [ ] to do, - [x] done) for steps the user has to do (a to-do or a \
+checklist), not a plain list;
 - a | table | to compare items;
 - `code` for $variables, option text and prompt syntax; keys like `Ctrl+Enter` \
 in backticks show as keyboard keys;
@@ -401,9 +479,11 @@ in backticks show as keyboard keys;
 - ### headings only in answers longer than about 15 lines;
 - one line starting "Tip:", "Note:" or "Warning:" for the next step or a risk, at \
 most one per answer; a longer one as a quote: > [!TIP], > [!NOTE] or > [!WARNING] \
-on the first line, the text on the next;
+on the first line, the text on the next. A risk (something that breaks, is lost or \
+can't be undone) is a Warning, never a Tip, and never plain text;
 - a [link](https://…) only for a web address you were given (it shows as text).
-No emoji. End with the answer, not an offer.
+No emoji. Name keys, $variables and what the app does only as the docs, the page \
+or the library show them; never guess one. End with the answer, not an offer.
 """
 #: How a JSON-mode model answers.
 FORMAT_JSON = """While you still have calls to make, leave "message" empty. \

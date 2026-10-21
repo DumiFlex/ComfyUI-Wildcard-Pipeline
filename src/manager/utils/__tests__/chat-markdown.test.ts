@@ -93,6 +93,18 @@ describe("chat-markdown blocks", () => {
     });
   });
 
+  it("drops a stray pipe on a note under a table", () => {
+    // Sonnet probe 2026-10-21: "Tip: … |" showed its pipe.
+    const [, tip] = parseMarkdown("| Name | Var |\n|---|---|\n| Hair | `$hair` |\n\nTip: tick the rows you want. |");
+    expect(tip).toEqual(para("Tip: tick the rows you want."));
+    const [table, note] = parseMarkdown("| Name | Var |\n|---|---|\n| Hair | `$hair` |\n| Tip: open a row to see it. |");
+    expect(table.t === "table" && table.rows.length).toBe(1);
+    expect(note).toEqual(para("Tip: open a row to see it."));
+    // Pipes between cells, or inside code, stay.
+    expect(parseMarkdown("a | b |")).toEqual([para("a | b |")]);
+    expect(parseMarkdown("use `{a|b}` here")[0]).toEqual({ t: "p", c: [text("use "), { t: "code", v: "{a|b}" }, text(" here")] });
+  });
+
   it("does not take a line with a pipe for a table", () => {
     expect(parseMarkdown("pick {a|b}\nthen more")).toEqual([para("pick {a|b}\nthen more")]);
   });

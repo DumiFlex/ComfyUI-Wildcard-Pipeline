@@ -433,6 +433,11 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     #: The step whose create calls were turned to plan_pack (`PACK_FIRST`).
     steered_at: int | None = None
     empty_nudged = False
+    #: The step limit: one past `MAX_STEPS` once, for the words-only nudge
+    #: after an empty answer at the limit.
+    limit = ai_chat.MAX_STEPS
+    #: Change calls proposed in this request, by their exact args: the card's pid.
+    proposed: dict[str, str] = {}
     #: Ask the next step with the model's thinking off: set by the empty
     #: nudge, since a thinking model that came back empty once tends to
     #: think itself out of an answer again.
@@ -456,7 +461,9 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
 
     loop = asyncio.get_running_loop()
     deadline = loop.time() + (TURN_SECONDS_LOCAL if cfg.get("local") else TURN_SECONDS)
-    while step < ai_chat.MAX_STEPS:
+    if resume and step >= ai_chat.MAX_STEPS - 1:
+        forced = True  # its results tail already says to answer now
+    while step < limit:
         late = ran > 0 and loop.time() > deadline  # the first step always runs
         if late and (out_of_time or new[-1].get("kind") != "results"):
             message = message or interim or (
@@ -714,6 +721,13 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     result(f"{tool}: you already made this exact call; its results are above. "
                            "Don't repeat it.")
                     continue
+                if tool in ai_chat.CHANGE_TOOLS and key in proposed:
+                    # Sonnet probe 2026-10-21: the same three creates sent
+                    # three times over a warning, then out of steps with two
+                    # of five wildcards never made.
+                    needs_reply = True
+                    result(ai_chat.PROPOSED_AGAIN.format(tool=tool, pid=proposed[key]))
+                    continue
                 if key in failed:
                     repeats += 1
                     needs_reply = True
@@ -778,6 +792,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                         if p_.get("needs"):
                             p_["needs"] = [new_pid if n == old_pid else n for n in p_["needs"]]
                 proposals.append(out)
+                if key:
+                    proposed[key] = out["pid"]
                 meta.setdefault("proposals", {})[out["pid"]] = {
                     "title": out["title"], "status": None}
                 if out.get("replaces"):
@@ -813,13 +829,24 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     # Nudged, and then nothing: the earlier answer stands.
                     message = set_aside
                     break
-                if cut or empty_nudged or step >= ai_chat.MAX_STEPS:
+                if cut or empty_nudged:
                     message = message or interim or (
                         "(The model used up its output limit before answering; thinking "
                         "models do this. Try again, raise the output limit, or turn its "
                         "thinking off.)" if cut else _done_line(steps, first_done))
                     break
                 empty_nudged = think_off = True
+                page_failed = any(not x.get("ok") and str(x.get("note") or "").startswith(
+                    "Couldn't: ") for x in steps)
+                if page_failed or step >= ai_chat.MAX_STEPS:
+                    # Sonnet and Haiku probes 2026-10-21: a highlight that
+                    # failed, then an empty answer with no step left. One
+                    # more step, in words only.
+                    limit = max(limit, step + 1)
+                    forced = True
+                    new.append(ai_chatlog.note_entry(
+                        ai_chat.PAGE_FAILED_NUDGE if page_failed else ai_chat.EMPTY_WORDS_NUDGE))
+                    continue
                 new.append(ai_chatlog.note_entry(ai_chat.EMPTY_NUDGE))
                 continue
             if (not calls and not proposals and not nudged and not cut
@@ -856,6 +883,17 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 nudged = True
                 set_aside, message = said, ""
                 new.append(ai_chatlog.note_entry(ai_chat.DEFER_NUDGE))
+                continue
+            # Named keys or $variables that the docs, the library and the
+            # chat never mention: ask once to check or drop them.
+            unknown = ai_chat.unknown_names(
+                said, ai_chatlog.dumps([e for e in log + new if e.get("kind") not in (
+                    "step", "shown", "note")]), getattr(lib, "catalog", {})) if (
+                not calls and not nudged and step < ai_chat.MAX_STEPS) else []
+            if unknown:
+                nudged = True
+                set_aside, message = said, ""
+                new.append(ai_chatlog.note_entry(ai_chat.facts_nudge(unknown)))
                 continue
             # Asked leave instead of proposing, or met "yes" with more talk:
             # tell it once to act. Small models loop on "Should I proceed?".
@@ -1146,6 +1184,10 @@ def _done_line(steps: list[dict[str, Any]], paused_done: list[str] | None = None
         return f"It's highlighted on the page: {pointed[-1]}."
     if did:
         return "Done: " + "; ".join(did[-3:]) + "."
+    if undone:
+        # The step lines above already say which page call failed.
+        return ("(That didn't work on your page, and the model gave no answer. Try "
+                "again, or ask another way.)")
     return "(The model gave an empty answer. Try again, or ask another way.)"
 
 

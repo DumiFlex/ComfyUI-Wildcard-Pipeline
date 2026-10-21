@@ -161,3 +161,41 @@ async def test_an_answer_that_puts_the_rest_off_is_asked_for_it_now(wp_client, f
     assert out["message"].startswith("Apply it first")
     assert ai_chat.defers_rest("Once you apply that, I can add the derivation.")
     assert not ai_chat.defers_rest("I proposed both; apply them and then test.")
+
+
+async def test_the_same_card_sent_again_is_not_proposed_again(wp_client, fake_llm):
+    # Sonnet probe 2026-10-21: three creates re-sent over a warning until
+    # the steps ran out, and two of five wildcards were never made.
+    from engine.ai import chat as ai_chat
+    _on(fake_llm)
+    crowd = {"name": "Crowd", "var": "crowd", "options": [{"text": "busy street"}]}
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(STYLE)}]},
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(STYLE)}]},
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(crowd)}]},
+        {"message": "Proposed both.", "calls": []},
+    ])
+    out = await _chat(wp_client, "Make a style wildcard and a crowd wildcard.")
+    assert [p["pid"] for p in out["proposals"]] == ["p1", "p2"]
+    again = ai_chat.PROPOSED_AGAIN.format(tool="create_wildcard", pid="p1")
+    assert again in fake_llm.seen[2]["body"]["messages"][-1]["content"]
+    # Not a repeat that ends the tools: the next step could still make Crowd.
+    assert "No more tool calls" not in fake_llm.seen[2]["body"]["messages"][-1]["content"]
+
+
+async def test_keys_and_variables_nothing_mentions_are_checked_once(wp_client, fake_llm):
+    # Sonnet probe 2026-10-21: a how-to answer named Ctrl+K and $final_prompt.
+    from engine.ai import chat as ai_chat
+    _on(fake_llm)
+    fake_llm.chat_steps.extend([
+        {"message": "Press Ctrl+K, then read `$final_prompt`.", "calls": []},
+        {"message": "Press Ctrl+Enter to send; the Assembler's output is the prompt.",
+         "calls": []},
+    ])
+    out = await _chat(wp_client, "How do I see the final prompt?")
+    assert out["message"].startswith("Press Ctrl+Enter")
+    nudge = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert ai_chat.facts_nudge(["Ctrl+K", "$final_prompt"]) in nudge
+    # The docs' keys, the library's variables and the user's own words pass.
+    assert ai_chat.unknown_names("Ctrl + S saves; Ctrl+Shift+X explains.", "") == []
+    assert ai_chat.unknown_names("Set $hair and $mood.", "my $mood wildcard", ["hair"]) == []

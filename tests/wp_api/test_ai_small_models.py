@@ -288,6 +288,54 @@ async def test_an_empty_answer_after_a_highlight_says_what_was_done(wp_client, f
     assert done["pending"] == []
 
 
+async def test_an_empty_answer_after_a_failed_highlight_gets_one_more_step(
+        wp_client, fake_llm):
+    """Sonnet and Haiku probes 2026-10-21: a highlight the page couldn't
+    show, then an empty answer and "The model gave an empty answer"."""
+    _on(fake_llm, model_size="large")
+    page = {"route": "dashboard"}
+    fake_llm.chat_steps.extend([{"message": "", "calls": [{"tool": "read_page", "args": "{}"}]}])
+    first = await _chat(wp_client, "link me the weights guide", page=page)
+    point = {"tool": "highlight", "args": '{"anchor": "weights", "caption": "Weights guide"}'}
+    fake_llm.chat_steps.extend([{"message": "", "calls": [point]}])
+    read = await _resume(wp_client, first["chat_id"],
+                         [{"id": first["pending"][0]["id"], "text": "[weights] Weights"}],
+                         page=page)
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": []},
+        {"message": "The Weights guide is under Docs, Wildcards.", "calls": []},
+    ])
+    n = len(fake_llm.seen)
+    done = await _resume(wp_client, read["chat_id"],
+                         [{"id": read["pending"][0]["id"], "text": "no part weights"}],
+                         page=page)
+    assert done["message"] == "The Weights guide is under Docs, Wildcards."
+    nudge = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert ai_chat.PAGE_FAILED_NUDGE in nudge and len(fake_llm.seen) == n + 2
+    # Empty again: the user is told the page call didn't work.
+    fake_llm.chat_steps.extend([{"message": "", "calls": [point]}])
+    again = await _chat(wp_client, "point at it again", chat_id=done["chat_id"], page=page)
+    fake_llm.chat_steps.extend([{"message": "", "calls": []}, {"message": "", "calls": []}])
+    last = await _resume(wp_client, again["chat_id"],
+                         [{"id": again["pending"][0]["id"], "text": "no part weights"}],
+                         page=page)
+    assert last["message"].startswith("(That didn't work on your page")
+
+
+async def test_an_empty_answer_on_the_last_step_gets_one_more_step(wp_client, fake_llm):
+    _on(fake_llm, model_size="large")
+    search = [{"tool": "search", "args": json.dumps({"query": f"q{n}"})}
+              for n in range(ai_chat.MAX_STEPS - 1)]
+    fake_llm.chat_steps.extend([
+        *({"message": "", "calls": [c]} for c in search),
+        {"message": "", "calls": []},
+        {"message": "Nothing about hats yet.", "calls": []},
+    ])
+    out = await _chat(wp_client, "anything about hats?")
+    assert out["message"] == "Nothing about hats yet."
+    assert ai_chat.EMPTY_WORDS_NUDGE in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+
+
 async def test_highlight_needs_a_read_page_on_this_page(wp_client, fake_llm):
     _on(fake_llm, model_size="large")
     point = {"tool": "highlight", "args": '{"anchor": "settings", "caption": "Settings"}'}

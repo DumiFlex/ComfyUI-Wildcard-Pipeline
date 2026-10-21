@@ -376,7 +376,12 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         comes back garbled is asked for again once, with the problem named. It doesn't ask "should I go
         ahead?" before proposing, since the card is already the asking; if it does, or answers your
         "yes" by asking again, it is told once to make the change. An empty answer, or one that
-        stops at "Here's a summary:" with nothing after it, is asked for again once. A tool call a
+        stops at "Here's a summary:" with nothing after it, is asked for again once, in words
+        only when it was the last step or came after something on your page that didn't work.
+        A card it sends again unchanged in the same answer isn't made twice: it is told the card
+        stands and to go on to the next item. An answer that names a key or a $variable that
+        neither these docs, your library nor the chat mention is sent back once to check it or
+        leave it out. A tool call a
         model writes out as text ("I call: read …") is run as a real call, and a call with broken
         arguments (a list of options where some aren't options) comes back to the model with the
         problem named instead of quietly losing part of it. Asked to open an "item" that is really
