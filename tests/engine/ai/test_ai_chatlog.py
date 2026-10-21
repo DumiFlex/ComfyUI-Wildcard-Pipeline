@@ -114,3 +114,17 @@ def test_last_shown_is_the_answer_the_user_replies_to():
     # After the user wrote again, no answer is being replied to yet.
     assert cl.last_shown(log) == ""
 
+
+
+def test_many_cards_with_one_status_are_said_together():
+    meta = {"proposals": {f"p{n}": {"title": f"Create wildcard W{n}", "status": None}
+                          for n in range(1, 6)}}
+    _, line = cl.apply_events(meta, [
+        *({"pid": f"p{n}", "status": "applied"} for n in (1, 2, 3)),
+        {"pid": "p4", "status": "applied", "left_out": 2},
+        {"pid": "p5", "status": "dismissed"},
+    ])
+    assert line == ('Since your last message the user p4 "Create wildcard W4" applied without 2 '
+                    'of its options (the user left them out); applied 3 cards: '
+                    'p1 "Create wildcard W1", p2 "Create wildcard W2", p3 "Create wildcard W3"; '
+                    'p5 "Create wildcard W5" dismissed.')
