@@ -108,6 +108,24 @@ async def test_reading_the_same_part_twice_is_not_paused_again(wp_client, fake_l
     assert "already read that part" in json.dumps(fake_llm.seen[-1]["body"]["messages"])
 
 
+async def test_an_empty_answer_after_a_failed_page_call_is_asked_for_in_words(
+        wp_client, fake_llm):
+    _on(fake_llm)
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "read_page", "args": "{}"}]},
+        {"message": "", "calls": []},
+        {"message": "", "calls": []},
+    ])
+    first = await _chat(wp_client, "link the guide back to me")
+    done = await _resume(wp_client, first["chat_id"], [
+        {"id": first["pending"][0]["id"], "text": "couldn't: no part \"guide\" on this page"}])
+    nudge = json.dumps(fake_llm.seen[-1]["body"]["messages"])
+    assert "after a page action that didn't work" in nudge
+    # Still nothing: the answer says what was tried, not "an empty answer".
+    assert done["message"].startswith("I tried to do this on the page (read the page")
+    assert "empty answer" not in done["message"]
+
+
 async def test_an_ask_runs_alone_when_page_tools_share_its_step(wp_client, fake_llm):
     _on(fake_llm)
     fake_llm.chat_steps.extend([

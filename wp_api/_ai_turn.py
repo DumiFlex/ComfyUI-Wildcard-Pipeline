@@ -421,6 +421,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     message = ""
     interim = ""
     seen: set[str] = set()
+    #: Change calls sent again unchanged, by call: the first resend is a nudge.
+    resent: dict[str, int] = {}
     #: Change calls that failed, by their exact args: the same call again
     #: fails the same way (round 2: an identical create_wildcard twice).
     failed: dict[str, str] = {}
@@ -707,6 +709,17 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     steered_at = step
                     raise ValueError(PACK_FIRST)
                 key = tool + _json.dumps(args, sort_keys=True, ensure_ascii=False)
+                if tool in ai_chat.CHANGE_TOOLS and key in seen and key not in failed:
+                    # Sonnet 5.5 live, 2026-10-21: three identical creates sent
+                    # again after a card warning, three times, and the last two
+                    # of five wildcards were never made. Once is a nudge to go
+                    # on with the rest; again pushes it to answer.
+                    resent[key] = resent.get(key, 0) + 1
+                    if resent[key] > 1:
+                        repeats += 1
+                    needs_reply = True
+                    result(ai_chat.SAME_CHANGE.format(tool=tool))
+                    continue
                 if tool not in ai_chat.CHANGE_TOOLS and key in seen:
                     # Small models re-run the same search every step.
                     repeats += 1
@@ -820,7 +833,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                         "thinking off.)" if cut else _done_line(steps, first_done))
                     break
                 empty_nudged = think_off = True
-                new.append(ai_chatlog.note_entry(ai_chat.EMPTY_NUDGE))
+                # After a page call that didn't work, models go quiet (both
+                # Haiku and Sonnet, 2026-10-21): ask for the answer in words.
+                new.append(ai_chatlog.note_entry(
+                    ai_chat.EMPTY_AFTER_FAIL if _undone(steps) else ai_chat.EMPTY_NUDGE))
                 continue
             if (not calls and not proposals and not nudged and not cut
                     and step < ai_chat.MAX_STEPS and ai_chat.unfinished(said)):
@@ -1146,7 +1162,17 @@ def _done_line(steps: list[dict[str, Any]], paused_done: list[str] | None = None
         return f"It's highlighted on the page: {pointed[-1]}."
     if did:
         return "Done: " + "; ".join(did[-3:]) + "."
+    if undone:
+        tried = sorted(undone)[-1]
+        return (f"I tried to do this on the page ({tried[:1].lower() + tried[1:]}), but it "
+                "didn't work, and I stopped there. Ask again and I'll answer in words.")
     return "(The model gave an empty answer. Try again, or ask another way.)"
+
+
+def _undone(steps: list[dict[str, Any]]) -> bool:
+    """Whether a page call in this answer came back as not done."""
+    return any(not x.get("ok") and str(x.get("note") or "").startswith("Couldn't: ")
+               for x in steps)
 
 
 def _named_by_answers(lib: Any, paused: dict[str, Any] | None, answers: Any) -> set[str]:

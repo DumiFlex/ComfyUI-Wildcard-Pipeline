@@ -147,6 +147,18 @@ describe("chat-markdown blocks", () => {
   });
 });
 
+describe("chat-markdown stray pipes", () => {
+  it("drops a lone | a model leaves at the end of a sentence after a table", () => {
+    const md = "| A | B |\n|---|---|\n| x | y |\n\nTip: consolidate them. |";
+    const blocks = parseMarkdown(md);
+    expect(blocks[0].t).toBe("table");
+    expect(JSON.stringify(blocks[1])).toContain("consolidate them.\"");
+    expect(JSON.stringify(blocks[1])).not.toContain(". |");
+    // A pipe inside the sentence stays.
+    expect(JSON.stringify(parseMarkdown("pick a | b"))).toContain("a | b");
+  });
+});
+
 describe("chat-markdown GitHub alerts", () => {
   it("tags a quote opening with an alert marker, any case", () => {
     expect(parseMarkdown("> [!NOTE]\n> Keep names short.")).toEqual([

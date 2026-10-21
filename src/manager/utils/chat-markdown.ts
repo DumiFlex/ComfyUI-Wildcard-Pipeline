@@ -282,7 +282,9 @@ function parseBlocks(lines: string[], depth: number, inItem = false): Block[] {
       continue;
     }
 
-    para.push(line);
+    // A lone "|" left at the end of a sentence (models finishing a table
+    // carry it on: "…your scene's needs. |") is not text.
+    para.push(/^[^|]*\S\s+\|\s*$/.test(line) ? line.replace(/\s+\|\s*$/, "") : line);
     i++;
     // A block opener ends the paragraph without a blank line.
     if (i < lines.length && !blank(lines[i]) && startsBlock(lines, i)

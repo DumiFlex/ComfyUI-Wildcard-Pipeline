@@ -161,3 +161,20 @@ async def test_an_answer_that_puts_the_rest_off_is_asked_for_it_now(wp_client, f
     assert out["message"].startswith("Apply it first")
     assert ai_chat.defers_rest("Once you apply that, I can add the derivation.")
     assert not ai_chat.defers_rest("I proposed both; apply them and then test.")
+
+
+async def test_the_same_card_sent_again_is_a_nudge_to_go_on(wp_client, fake_llm):
+    _on(fake_llm)
+    other = {**STYLE, "name": "Lens", "var": "lens"}
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(STYLE)}]},
+        # Sonnet 5.5 live: the same create again, unchanged, after a card warning.
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(STYLE)}]},
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(other)}]},
+        {"message": "Proposed both.", "calls": []},
+    ])
+    out = await _chat(wp_client, "Make a style wildcard and a lens wildcard.")
+    told = json.dumps(fake_llm.seen[2]["body"]["messages"][-1]["content"])
+    assert "you already sent exactly this" in told
+    # Not forced to stop: it went on and made the second one.
+    assert [p["op"]["body"]["name"] for p in out["proposals"]] == ["Model Style Tags", "Lens"]

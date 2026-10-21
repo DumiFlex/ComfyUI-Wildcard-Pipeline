@@ -99,6 +99,11 @@ POINTED_AGAIN = (
     "highlight: already pointed at that; it is still showing on the page. "
     "Don't point again: answer the user now in words (say where it is)."
 )
+SAME_CHANGE = (
+    "{tool}: you already sent exactly this in this answer; its card is on screen and "
+    "sending it again changes nothing. If a warning is right, change what it names; "
+    "otherwise go on with the next item, or answer."
+)
 READ_AGAIN = (
     "read_page: you already read that part in this answer and its result is "
     "above; reading it again shows the same. Answer the user now."
@@ -107,6 +112,12 @@ READ_AGAIN = (
 EMPTY_NUDGE = (
     "Your last answer was empty. Answer the user's message now: call a tool, or "
     "reply in plain text."
+)
+#: Sent instead when the empty answer follows a page call that didn't work.
+EMPTY_AFTER_FAIL = (
+    "Your last answer was empty, after a page action that didn't work. Don't try it "
+    "again: answer the user's message now in plain text, from what you know and "
+    "what you read."
 )
 #: Sent once when an answer stops where it introduces its content.
 UNFINISHED_NUDGE = (
@@ -393,7 +404,9 @@ list of what you can do.
 FORMATTING = """\
 Write short answers as plain sentences. Use formatting only where it helps:
 - a list (- or 1.) for steps or several separate items;
-- a task list (- [ ] to do, - [x] done) for steps the user ticks off;
+- a task list (- [ ] to do, - [x] done) for steps the user does themselves \
+(setting up, wiring nodes, applying cards in order): those are always a task \
+list, never a plain list;
 - a | table | to compare items;
 - `code` for $variables, option text and prompt syntax; keys like `Ctrl+Enter` \
 in backticks show as keyboard keys;
@@ -401,8 +414,10 @@ in backticks show as keyboard keys;
 - ### headings only in answers longer than about 15 lines;
 - one line starting "Tip:", "Note:" or "Warning:" for the next step or a risk, at \
 most one per answer; a longer one as a quote: > [!TIP], > [!NOTE] or > [!WARNING] \
-on the first line, the text on the next;
-- a [link](https://…) only for a web address you were given (it shows as text).
+on the first line, the text on the next. What can break or be lost is a \
+Warning (a line or > [!WARNING]), never a Tip;
+- a [link](https://…) only for a web address you were given (it shows as text). \
+To give the user a link, write it in your answer; never open or highlight it.
 No emoji. End with the answer, not an offer.
 """
 #: How a JSON-mode model answers.
