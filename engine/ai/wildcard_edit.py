@@ -35,6 +35,7 @@ ACTIONS = ("remove", "rewrite", "retag", "reweight")
 #: edited through a selection, which the editor sends instead.
 MAX_EDIT_OPTIONS = 300
 MAX_REASON_LEN = 160
+MAX_NOTE_LEN = 240
 
 
 def _obj(required: dict[str, Any]) -> dict[str, Any]:
@@ -45,7 +46,13 @@ def _obj(required: dict[str, Any]) -> dict[str, Any]:
 
 
 def _list_of(key: str, item: dict[str, Any]) -> dict[str, Any]:
-    return _obj({key: {"type": "array", "items": _obj(item)}})
+    out = _obj({key: {"type": "array", "items": _obj(item)}})
+    # Why the list is empty, when it is: Haiku and the 9B answered "tag
+    # each option with one mood" with [] three times out of three (panel
+    # eval 2026-10-21) and the user saw "didn't find anything to change"
+    # with no way to tell a judgement from a miss.
+    out["properties"]["note"] = {"type": "string"}
+    return out
 
 
 _ID = {"type": "string"}
@@ -80,8 +87,10 @@ You edit wildcard lists for Wildcard Pipeline, a ComfyUI extension that builds \
 image-generation prompts. A wildcard is a list of interchangeable options; each \
 run picks one option (weighted) and puts its text into the prompt. Every option \
 has a number id. Answer only about options in the list, by id, and only list \
-the options you change. If nothing should change, return an empty list. Don't \
-add commentary or disclaimers; the output is data for the user's own library.\
+the options you change. If nothing should change, return an empty list and say \
+why in "note" (one sentence, e.g. every option already carries one of those \
+tags). Don't add commentary or disclaimers; the output is data for the user's \
+own library.\
 """
 
 _GUIDES: dict[str, str] = {
@@ -126,10 +135,16 @@ def answered_nothing(action: str, answer: Any, instruction: str) -> bool:
     (`_EVERY`) lists no option at all: a retag, rewrite or re-weight that
     says "each" or "all" changes something, so the answer is asked for once
     more with `EMPTY_NUDGE`. A removal is never re-asked: "remove all the
-    modern ones" can rightly remove nothing."""
+    modern ones" can rightly remove nothing, and neither is an empty answer
+    that says why in "note": the model judged, and the nudge would push a
+    weaker one into changing tags that were already right (a wildcard
+    already tagged with the asked-for moods, panel eval 2026-10-21)."""
     if action == "remove" or not _EVERY.search(instruction or ""):
         return False
-    return isinstance(answer, dict) and answer.get("options") == []
+    if not isinstance(answer, dict) or answer.get("options") != []:
+        return False
+    note = answer.get("note")
+    return not (isinstance(note, str) and note.strip())
 
 
 def build_edit_prompt(
@@ -196,7 +211,8 @@ def compile_edit(
     are the wildcard's own (library) tags: a retag never copies one onto an
     option unless it is an option tag too.
 
-    Returns ``{"changes": [...], "new_tags": [...], "skipped": [...]}``. Each
+    Returns ``{"changes": [...], "new_tags": [...], "skipped": [...], "note":
+    why nothing changed, or ""}``. Each
     change is ``{"id", "before": {...}, "after": {...}}`` for the edited
     fields (``after`` is ``None`` for a removal, which carries ``reason``).
     ``id`` is the short id; the route maps it back. Raises ValueError when
@@ -207,6 +223,8 @@ def compile_edit(
     key = "remove" if action == "remove" else "options"
     if not isinstance(raw, dict) or not isinstance(raw.get(key), list):
         raise ValueError("the model's answer wasn't the expected list")
+    note = raw.get("note")
+    note = re.sub(r"\s+", " ", note).strip()[:MAX_NOTE_LEN] if isinstance(note, str) else ""
 
     by_id = {o["id"]: o for o in options}
     registry_lower = {t.lower(): t for t in registry}
@@ -313,7 +331,9 @@ def compile_edit(
     used = {t for c in changes if c["after"] and "tags" in c["after"] for t in c["after"]["tags"]}
     new_tags = [t for t in new_tags if t in used]
     _validate_changed(changes, by_id, registry, new_tags)
-    return {"changes": changes, "new_tags": new_tags, "skipped": skipped}
+    # The model's reason only matters when it changed nothing.
+    return {"changes": changes, "new_tags": new_tags, "skipped": skipped,
+            "note": note if not changes else ""}
 
 
 def _validate_changed(

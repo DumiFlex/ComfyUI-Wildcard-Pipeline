@@ -97,7 +97,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         :items="[
           { term: 'Remove', desc: 'Finds options that match what you describe (\'drop anything modern\') and says why. Options other modules point at stay; delete those by hand so you can see what refers to them.' },
           { term: 'Rewrite', desc: 'Changes the wording: tags to sentences, a different style, shorter, typos fixed. A rewrite that would make two options the same is left out.' },
-          { term: 'Retag', desc: 'Sets each option\'s tags (\'tag each by the seasons it suits\'). The new list replaces the old one; new tags are marked and created when you apply. A request over every option (\'each\', \'all\') that comes back with no option is asked once more.' },
+          { term: 'Retag', desc: 'Sets each option\'s tags (\'tag each by the seasons it suits\'). The new list replaces the old one; new tags are marked and created when you apply. A request over every option (\'each\', \'all\') that comes back with no option is asked once more, unless the answer says why nothing changes (\'every option already carries one of those tags\'); that reason shows in the panel.' },
           { term: 'Weights', desc: 'Makes options rarer or more common (\'heavy winter gear rarer\'). 1 is normal, 0.5 half as likely, 2 twice, 0 never.' },
         ]"
       />
@@ -187,7 +187,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         reads your items and these docs itself; the lines above each reply say what it looked at. Its
         search reads what items hold, not only their names and tags: option texts, values and
         rules count, and broad subjects widen on their own, so "characters" also finds hair, eye
-        and outfit wildcards. Replies use Markdown: headings, bold and italic, numbered, nested and
+        and outfit wildcards. The assistant is told about every format below, so it uses
+        them where they help. Replies use Markdown: headings, bold and italic, numbered, nested and
         checklist lists, tables, quotes and code blocks (each with its language and a copy button).
         Links show as text with the address on hover and are never opened. Every item it
         mentions is a chip you click to open it. Prompt syntax in a reply is coloured the way the
@@ -306,7 +307,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         It can <b>show you around</b>. It opens an item's editor, a docs page or a manager page
         (a Settings section, the Test Runner) itself, reads what the page offers, and points at
         a part of it with an outline and a short caption: ask "where do I set the context
-        size?" and it takes you there. Esc or a click anywhere closes the pointer. On a list it
+        size?" and it takes you there. When it points at several parts close together, their
+        captions sit beside or under each other instead of on top. Esc or a click anywhere
+        closes the pointer. On a list it
         can select rows for you.
       </p>
       <p>
@@ -314,7 +317,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         where you would anyway: it opens an item and asks one of its AI panels as if you typed
         it (<b>Describe</b> for the name, description and tags, a wildcard's Add, Remove,
         Rewrite, Retag and Weights tabs, <b>Draft with AI</b> in the other editors), opens
-        <b>Organize with AI</b> on the rows it means, or sets up the Test Runner (the stack,
+        <b>Organize with AI</b> on the rows it means (asked to sort a library it lists the
+        items with no category in one search, up to 100, then proposes the categories and the
+        moves as cards, or hands the rows to Organize), or sets up the Test Runner (the stack,
         how many seeds, a fixed first seed, pinned values, the variable to show) and runs it,
         or saves it as a scenario. Ask it to add a module to the run or take one out and it
         changes the open stack instead, keeping your seeds and pins; a constraint brings its
@@ -377,7 +382,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         Each card lists what it changes and warns about anything it left out (a duplicate option, a
         variable nothing sets). <b>Undo</b> on an applied card puts back what it replaced, or
         deletes what it created. <b>Dismiss</b> tells the assistant you said no. A long card
-        shows its first options, rules, tags and warnings with a "+N more" line; the magnifier
+        shows its first options, rules, tags and warnings with a "+N more" line, and colours the
+        prompt syntax in its options, rules and values the way a reply does; the magnifier
         in its top right corner opens the whole card in a larger window, with the same Apply,
         Open in editor and Dismiss buttons. When two cards
         change the same item, the second builds on the first, so apply them in order. The chat
@@ -641,8 +647,13 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           one slot's axis value to another's) and the <b>template order</b>. The code then makes every
           constraint, derivation and the template from the graph, so a rule can only name a slot
           and a value the graph declares; a relation that names something the graph doesn't
-          have is dropped, listed under the plan, and the model is asked once to write it
-          again with the names that exist. Each relation also names the words it is about
+          have is dropped, listed under the plan as "Left out a rule" (which rule, on which
+          slot and tag group, why, and the values that group has), and the model is asked once
+          to write it again with the names that exist. These notes are about the plan only;
+          nothing in your library is involved. <b>Fix with AI</b> on the note asks for the rule
+          again with names the plan has (one narrow call), and Add a relation puts it back by
+          hand. A rule that would set a variable a slot already picks is not dropped: it adds
+          its words to that variable instead, and a note says so. Each relation also names the words it is about
           ("sandals", "shorts" for "no sandals or shorts in winter"), so the target wildcard
           is made to hold options saying them and the test run reads the finished prompts
           for them; a slot whose only axis is itself (a Season slot with a season axis) gets
@@ -756,14 +767,22 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           the round, removed items included. When web search is set up, the planner may ask to
           search first (a franchise's characters, an era's clothing). The ask sits at the top,
           and answers, plan updates and Build wait until you choose: <b>Search and update the
-          plan</b> runs the searches and revises the plan with what they found (answers you
-          picked go along), <b>Skip the search</b> doesn't. Under the request, a meter shows how
+          plan</b> runs the searches and shows <b>What the searches found</b>: each search's
+          results with their title, site and snippet, each with a tick box. Nothing goes to the
+          planner until you choose: <b>Use what fits and update the plan</b> sends every result
+          and the planner keeps only what fits the pack, so you don't have to tick anything;
+          <b>Use N ticked</b> (once you tick some) sends only those; and
+          <b>None of these</b> keeps the plan as it is. Answers you picked go along either way.
+          A line then says what each search gave the planner. <b>Skip the search</b>
+          doesn't search at all. Under the request, a meter shows how
           much of the model's context the last plan request took; every update sends the whole
           conversation again, so it grows. <b>Plan 2 of 3</b> flips between plans; updating an
           earlier one adds a new plan after the others (it says which plan it came from), so
           nothing is overwritten. Under the plan's title, <b>How it fits together</b> is the
           planner's own account of the pack (which pick decides which, and why each rule is
-          there), and with a thinking model the plan and each built item have a folded
+          there). Chips under it say how options are written, which image model family the pack is
+          for (a family such as Illustrious or Pony, never a checkpoint or LoRA file name) and
+          which pick the others follow. With a thinking model the plan and each built item have a folded
           <b>Thinking</b>, so when a pack comes out wrong you can see whether the model misread
           the request or built its idea wrong. A thinking model that spends its whole output
           limit reasoning (the plan comes back empty, cut off) is asked once more with thinking
@@ -844,7 +863,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         so far. Every few words, and whenever it changes, the word is what the model is really
         doing: reading the prompt, thinking, or writing (with about how many tokens so far). Hover
         it for the whole status. The same line sits in the top bar on every page while any AI
-        request runs, so you can leave the page and still see it working.
+        request runs, so you can leave the page and still see it working; both show the same
+        word, drawing and time.
       </p>
       <DocCallout variant="tip">
         Building a pack takes one request per item, so a local model needs a few minutes. Use a
@@ -879,9 +899,11 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         When web search is set up (<b>Settings › AI assistant › Web search</b>), the wildcard and
         text panels may ask to search the web for facts the model doesn't know well (a game's
         characters, an artist's style). The answer shows anyway, with a line naming the searches:
-        <b>Search and refine</b> runs them and revises the answer with what they found, <b>No
-        thanks</b> hides them and the model isn't offered them again. Nothing is searched until
-        you press it.
+        <b>Search</b> runs them, <b>No thanks</b> hides them and the model isn't offered them
+        again. Nothing is searched until you press it. What the searches found then shows in the
+        panel, the same card as the Pack builder's: <b>Use what fits and refine</b> sends every
+        result and the model keeps only what fits, ticking results and <b>Use N ticked</b>
+        sends just those, and <b>None of these</b> sends nothing.
       </p>
     </DocSection>
 

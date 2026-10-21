@@ -84,7 +84,7 @@ def test_compile_graph_keeps_what_resolves_and_reports_the_rest():
                                                    "append"]
     assert g["relations"][2]["values"] == ["winter", "summer"]
     assert g["relations"][0]["words"] == ["musket"]
-    assert g["bad_refs"] == ["exclude: Race.kind has no value orc"]
+    assert g["bad_refs"] == ["exclude: Race.kind has no value orc (its values: elf, dwarf, human)"]
     # A rule written into the negative is taken out: rules are relations.
     assert g["template"]["negative"] == "bad anatomy"
     assert any("out of the negative" in w for w in g["warnings"])
@@ -240,12 +240,13 @@ def test_refs_schema_and_repair():
          "to_slot": "Weapon", "to_axis": "type", "to_value": "gun", "factor": 0,
          "var": "", "text": "", "otherwise": ""}]})
     assert len(fixed["relations"]) == len(g["relations"]) + 1
-    assert fixed["bad_refs"] == ["exclude: Race.kind has no value orc"]
+    orc = "exclude: Race.kind has no value orc (its values: elf, dwarf, human)"
+    assert fixed["bad_refs"] == [orc]
     # As many came back as were asked for, so the first try's miss isn't
     # listed as left out on top of the repair's own.
     assert fixed["dropped"] == []
     again = pg.compile_graph(fixed)
-    assert again["dropped"] == ["exclude: Race.kind has no value orc"]
+    assert again["dropped"] == [orc]
     assert pg.with_refs(g, {"relations": []}) is g
 
 
@@ -544,9 +545,19 @@ def test_a_fix_all_request_is_not_the_users_words():
     assert note.startswith(pack.REVIEW_NOTE_HEAD)
     assert pack.own_request("more hats\n" + note) == "more hats"
     assert pack.own_request(note) == ""
+    # The page's own follow-up lines are not the user's words either (the
+    # browser walk of 2026-10-21 asked for "answered, questions" on every
+    # Fix all after the questions were answered).
+    assert pack.own_request("I answered your questions.") == ""
+    assert pack.own_request("Use what the searches found.\n" + note) == ""
+    assert pack.own_request("Here are the search results I picked; use only what fits the "
+                            "pack.") == ""
+    assert pack.own_request("more hats\nI edited the plan; keep my changes and fill any gaps "
+                            "they leave.") == "more hats"
     # The request-words check sees only the user's words.
     g = pack.compile_graph(_graph())
     assert pack.request_gaps(g, pack.own_request(note)) == []
+    assert pack.request_gaps(g, pack.own_request("I answered your questions.")) == []
 
 
 def test_a_sweep_run_marks_the_axes_and_holds_the_rest():
@@ -585,7 +596,8 @@ def test_an_axis_named_on_one_side_is_inferred_on_the_other():
     # Nothing declares a type axis anywhere: nothing to copy, and the rules
     # that need it are reported for the repair call.
     assert next(s for s in g["slots"] if s["name"] == "Weapon")["axes"] == []
-    assert g["bad_refs"] == ["exclude: Weapon has no axis type", "only: Weapon has no axis type"]
+    assert g["bad_refs"] == ["exclude: Weapon has no axis type (its axes: none)",
+                          "only: Weapon has no axis type (its axes: none)"]
     # The source has it: the target gets a copy, and the rule resolves.
     slots = [dict(s, axes=[]) if s["name"] == "Outfit" else s for s in GRAPH["slots"]]
     rel = {"kind": "exclude", "from_slot": "Season", "from_axis": "season",
@@ -622,7 +634,7 @@ def test_request_words_the_graph_never_says_are_a_finding():
     [f] = [f for f in pack.review_plan(plan, request="no sandals in winter")
            if "The request names" in f["text"]]
     assert f["level"] == "fix" and f["text"].startswith("The request names sandals, and the "
-                                                        "plan says it anywhere")
+                                                        "plan says it nowhere")
     # The graph plan's rules the code settles stay quiet in the review.
     texts = " | ".join(f["text"] for f in pack.review_plan(plan))
     assert "never empty" not in texts and "Nothing links" not in texts
@@ -879,3 +891,92 @@ def test_request_gaps_skip_build_words_and_possessives_and_are_asked_once():
         _graph(template={**GRAPH["template"], "lead": "parka"}), previous=again,
         request="an elf with a parka")
     assert placed["request_gaps"] == [] and placed["gaps_tried"] == []
+
+
+def test_template_text_a_fixed_value_already_says_goes():
+    # Sonnet walkthrough, 2026-10-21: the Pony+Flux pack's lead repeated
+    # "clean lineart" from its style preset, so every prompt said it twice.
+    fixed = [{"name": "Style preset", "var": "style",
+              "text": "(clean lineart:1.1), flat colors, masterpiece", "negative": ""}]
+    tpl = {**GRAPH["template"], "lead": "clean lineart, 1girl, solo",
+           "tail": "cinematic, flat_colors"}
+    plan = pack.compile_graph_plan(_graph(fixed=[*GRAPH["fixed"], *fixed], template=tpl))
+    t = plan["graph"]["template"]
+    assert t["lead"] == "1girl, solo" and t["tail"] == "cinematic"
+    assert "style" in t["order"]
+    assert any(w.startswith("Took clean lineart (Style preset), flat_colors (Style preset) "
+                            "out of the template text") for w in plan["warnings"])
+
+
+def test_a_scope_rebuild_hears_every_clashing_word_of_its_neighbour():
+    # Sonnet rules pack (2026-10-21): Race and Body both carried skin and
+    # eye words, and each rebuild only heard the words of its own problem,
+    # so they swapped clashes for two rounds.
+    slot = {"section": "", "count": 3, "show": "prompt", "pick": "", "hold": False,
+            "sometimes_none": 0, "axes": []}
+    g = {**GRAPH, "relations": [], "fixed": [],
+         "slots": [{**slot, "name": "Race", "var": "race", "what": "fantasy races"},
+                   {**slot, "name": "Body", "var": "body", "what": "body features"},
+                   {**slot, "name": "Setting", "var": "setting", "what": "places"}],
+         "template": {"lead": "", "order": ["Race", "Body", "Setting"], "tail": "", "negative": ""}}
+    plan = pack.compile_graph_plan(g)
+    keys = {i["name"]: i["key"] for i in plan["items"]}
+
+    def built_of(name, values):
+        opts = [{"id": f"o{n}", "value": v, "weight": 1, "sub_categories": []}
+                for n, v in enumerate(values)]
+        return {"id": f"{name[:4].lower()}0001",
+                "payload": {"var_binding": name.lower(), "options": opts, "sub_categories": []}}
+    built = {
+        keys["Race"]: built_of("Race", ["elf, pointy ears, tan skin, freckles",
+                                        "dwarf, pale skin"]),
+        keys["Body"]: built_of("Body", ["slender, fair skin", "athletic, sharp eyes", "freckles"]),
+        keys["Setting"]: built_of("Setting", ["forest, tall trees", "castle hall"]),
+    }
+    clash = pg.clash_words(plan, built, keys["Body"])
+    assert clash == {"Race": ["tan skin", "freckles", "pale skin"]}
+    req = pg.slot_request(plan, keys["Body"], "its options already name what $race (Race) picks: "
+                          "\"tan skin\"; leave those to Race", built)
+    assert ("Race already says: tan skin, freckles, pale skin. Keep every one of these out"
+            in req["user"])
+    # Not on a rebuild for another reason.
+    assert "already says" not in pg.slot_request(plan, keys["Body"], "more variety", built)["user"]
+
+
+def test_a_left_out_relation_reads_as_a_sentence():
+    """The plan's note says which rule went and why, in words, never
+    "derive: Subject.build has no value ?" (read like a `$subj.build`
+    variable; Dumi 2026-10-21)."""
+    line = pg.plain_ref("derive: Subject.build: no value given (its values: petite, curvy)")
+    assert line.startswith("Left out a rule: A rule that sets a variable on Subject's build")
+    assert "names no build value" in line and "petite, curvy" in line and "?" not in line
+    assert "already picks $outfit" in pg.plain_ref(
+        "derive: $outfit is already set by the Outfit slot; derive a new variable or use append")
+    assert pg.plain_ref("append: nothing sets $x before it") == \
+        "Left out a rule: append: nothing sets $x before it"
+
+
+def test_a_rule_that_would_overwrite_a_pick_adds_to_it_instead():
+    """"set $outfit" from a rule when the Outfit slot already picks it was
+    dropped with a note the user could only read; the code now keeps the
+    rule as an append (Dumi 2026-10-21: "how do we actually fix these?")."""
+    rel = {"kind": "derive", "from_slot": "Season", "from_axis": "season",
+           "from_value": "winter", "to_slot": "", "to_axis": "", "to_value": "", "factor": 0,
+           "var": "outfit", "text": ", thick coat", "otherwise": "a light jacket"}
+    g = pack.compile_graph(_graph(relations=[*GRAPH["relations"][:5], rel]))
+    kept = g["relations"][-1]
+    assert kept["kind"] == "append" and kept["var"] == "outfit" and kept["otherwise"] == ""
+    assert not any("outfit" in b for b in g["bad_refs"])
+    assert any("adds its words to $outfit" in w for w in g["warnings"])
+
+
+def test_a_left_out_rule_names_what_it_would_have_set():
+    rel = {"kind": "derive", "from_slot": "Class", "from_axis": "role", "from_value": "",
+           "to_slot": "", "to_axis": "", "to_value": "", "factor": 0,
+           "var": "fit", "text": "loose cut", "otherwise": ""}
+    g = pack.compile_graph(_graph(relations=[rel]))
+    assert g["bad_refs"] == ['derive $fit "loose cut": Class.role: no value given '
+                             "(its values: caster, martial)"]
+    line = pg.plain_ref(g["bad_refs"][0])
+    assert line.startswith('Left out a rule: A rule that sets $fit = "loose cut" on '
+                           "Class's role: it names no role value")

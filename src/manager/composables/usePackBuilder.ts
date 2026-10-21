@@ -30,6 +30,7 @@ import type {
 } from "../api/types";
 import { pendingResearch, useAiConversation } from "./useAiConversation";
 import { useAiImages } from "./useAiImages";
+import { USE_FITS, USE_PICKED, useSearchFound } from "./searchFound";
 
 export type ItemStatus =
   | "waiting" | "building" | "retrying" | "built" | "fixing" | "failed" | "skipped";
@@ -213,6 +214,11 @@ const picks = ref<Record<string, QuestionPick>>({});
 const webResults = shallowRef<Array<{ query: string; text: string }>>([]);
 /** Searches run or skipped; the planner isn't asked for them again. */
 const searched = ref<string[]>([]);
+/** What the allowed searches found, held until the user says what the
+ *  planner may use (nothing goes to it unseen). */
+const web = useSearchFound();
+/** The line a plan update sends with results (picked, or all for "fits"). */
+let webLine = USE_PICKED;
 const searching = ref(false);
 const images = useAiImages();
 /** Send the reference images with the next update even if they didn't
@@ -548,6 +554,7 @@ async function askPlan(): Promise<void> {
   picks.value = {};
   webResults.value = [];
   searched.value = [];
+  web.reset();
   dismissedNotes.value = new Set();
   unfixed.value = new Set();
   stuck.value = new Set();
@@ -557,15 +564,28 @@ async function askPlan(): Promise<void> {
 
 /** Send this round's answers, the edit box, any allowed search results
  *  and the plan as edited, as a follow-up. */
-async function refinePlan(): Promise<void> {
-  if (!convo.result.value || convo.loading.value || awaitingSearch.value) return;
+/** Why the last Fix all or update sent nothing (the web search card is
+ *  still open, nothing to send); "" once something went out. */
+const notice = ref("");
+
+/** Send the typed text, the answers and the edits to the planner. False
+ *  when nothing went out: the page is busy, there is no plan yet, nothing
+ *  to say, or the planner's web search card is still waiting for an
+ *  answer (`notice` says so, since a silent no-op reads as a loop). */
+async function refinePlan(): Promise<boolean> {
+  notice.value = "";
+  if (awaitingSearch.value) {
+    notice.value = "Answer the web search first: search, or skip it. Nothing was sent.";
+    return false;
+  }
+  if (!convo.result.value || convo.loading.value) return false;
   const answers = pendingDecisions();
   const typed = convo.instruction.value.trim();
   const text = typed
     || (answers.length ? "I answered your questions."
-      : webResults.value.length ? "Use what the searches found."
+      : webResults.value.length ? webLine
         : edited.value ? "I edited the plan; keep my changes and fill any gaps they leave." : "");
-  if (!text) return;
+  if (!text) return false;
   const before = decisions.value;
   const was = reopened.value;
   if (was.size) {
@@ -580,15 +600,16 @@ async function refinePlan(): Promise<void> {
     decisions.value = before;
     reopened.value = was;
     convo.instruction.value = typed;
-    return;
+    return false;
   }
   webResults.value = [];
+  return true;
 }
 
 /** The planner asked to search the web and the user hasn't said yes or
  *  no: what it finds may change the questions and the plan, so answers,
  *  updates and Build wait for it. */
-const awaitingSearch = computed(() => research.value.length > 0);
+const awaitingSearch = computed(() => research.value.length > 0 || web.found.value.length > 0);
 
 /** Ask the model for the next round of questions with no other change. */
 const canRefine = computed(() => !convo.loading.value && !!convo.result.value && !awaitingSearch.value && (
@@ -894,7 +915,7 @@ async function recheck(): Promise<void> {
       ? { ...got.plan.graph, relations: [...got.plan.graph.relations, ...kept] }
       : got.plan.graph;
     const warnings = v.draft.graph
-      ? got.plan.warnings.filter((w) => !(kept.length && /^Left out a relation: .*(no axis|no value|no variable or text)/.test(w)))
+      ? got.plan.warnings.filter((w) => !(kept.length && /^Left out a (?:relation|rule): .*(no axis|no value|names no|no tag group|no variable or text)/.test(w)))
       : [...new Set([...v.draft.warnings, ...got.plan.warnings])];
     setView({
       draft: {
@@ -971,6 +992,13 @@ const stuck = ref(new Set<string>());
  *  the planner hands back unchanged are marked, and the next Fix all
  *  leaves them out instead of sending the same notes round again. */
 async function fixFindings(): Promise<void> {
+  notice.value = "";
+  if (awaitingSearch.value) {
+    // The planner's web search card is open: updates wait for it, and a
+    // Fix all that quietly did nothing read as "the AI left this unchanged".
+    notice.value = "Answer the web search first: search, or skip it. Nothing was sent.";
+    return;
+  }
   const open = findings.value;
   const ticked = open.filter((f) => selected.value.has(f.id));
   const fresh = open.filter((f) => !unfixed.value.has(f.id));
@@ -1030,10 +1058,12 @@ async function fixFindings(): Promise<void> {
   for (const [n, chunk] of rounds.entries()) {
     const note = chunk ? head + chunk.map((l, k) => `${k + 1}. ${l}`).join("\n") + tail : "";
     convo.instruction.value = [n === 0 ? own : "", note].filter(Boolean).join("\n");
-    await refinePlan();
-    if (convo.error.value) {
+    const went = await refinePlan();
+    if (!went) {
       // Put back what the user typed (if it wasn't sent yet), not the note.
+      // Nothing went out, so nothing is marked as left unchanged.
       convo.instruction.value = n === 0 ? own : "";
+      if (!convo.error.value && !notice.value) notice.value = "Nothing was sent: there is no plan to change yet.";
       return;
     }
   }
@@ -1129,19 +1159,36 @@ async function allowResearch(): Promise<void> {
   error.value = "";
   try {
     const res = await api.ai.packSearch({ queries });
-    webResults.value = [...webResults.value, ...res.results];
     searched.value = [...searched.value, ...queries];
+    // The results wait for the user to pick: a search can find nothing
+    // useful, and the planner shouldn't be told to use what nobody saw.
+    web.show(res.results);
   } catch (err) {
     error.value = message(err);
-    return;
   } finally {
     searching.value = false;
   }
-  await refinePlan();
 }
 
 function skipResearch(): void {
   searched.value = [...searched.value, ...research.value];
+}
+
+/** Send the results with a plan update: all of them for the planner to
+ *  keep what fits, or only the ticked ones. */
+async function useFound(fits = false): Promise<void> {
+  if (convo.loading.value || (!fits && !web.picks.value.size)) return;
+  const sent = web.take(fits);
+  if (!sent.length) return;
+  webLine = fits ? USE_FITS : USE_PICKED;
+  webResults.value = [...webResults.value, ...sent];
+  await refinePlan();
+}
+
+/** None of it fits: the plan stays, and the planner isn't asked to search
+ *  for these again. */
+function skipFound(): void {
+  web.none();
 }
 
 /* ── build ───────────────────────────────────────────────────────────── */
@@ -1426,6 +1473,7 @@ function reset(): void {
   picks.value = {};
   webResults.value = [];
   searched.value = [];
+  web.reset();
   selected.value = new Set();
   dismissedNotes.value = new Set();
   unfixed.value = new Set();
@@ -1465,10 +1513,11 @@ export function usePackBuilder() {
     convo, plan, draft, removed, edited, states, phase, working, stage, current, check,
     installed, error, builtCount, summary, askPlan, refinePlan, canRefine, awaitingSearch, removeItem, build,
     rebuild, stop, install, undoInstall, backToPlan, reset, sample, findings, reviewing,
-    reviewPlan, fixFindings, unfixed, stuck, settings, decisions, picks, questions, answeredCount, choose,
+    reviewPlan, fixFindings, unfixed, stuck, notice, settings, decisions, picks, questions, answeredCount, choose,
     setOther, decideFor, decideAll, pickFor, reopenDecision, changeAssumption, editItem, slotOf, relationsOf, editGraph, editSlot, editRelation, removeRelation, addRelation, addSlot, editTemplate, locked, changes, dropped, reopened, resendImages,
     addItem, editPlan, applyFinding, dismissFinding, selected, toggleSelected, changeItem,
     changing, research, allowResearch, skipResearch, searching, webResults, images, target,
+    web, useFound, skipFound,
     extendBundle, skipCurrent, skipItem, dismissNote, dismissedNotes, planThinking,
   };
 }

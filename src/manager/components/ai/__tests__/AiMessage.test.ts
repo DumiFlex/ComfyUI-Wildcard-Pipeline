@@ -11,13 +11,13 @@ describe("AiMessage", () => {
     const w = mount(AiMessage, {
       props: { text: "Use $hair with {red|blue}, @{abcd1234}, <lora:detail:0.6>, embedding:bad_hands and #portrait." },
     });
-    expect(w.find(".wp-ai-msg__var").text()).toBe("$hair");
-    expect(w.find(".wp-ai-msg__var").attributes("style")).toContain("--wp-var-");
-    expect(w.find(".wp-ai-msg__pick").text()).toBe("{red|blue}");
-    expect(w.find(".wp-ai-msg__ref").text()).toBe("@{abcd1234}");
-    expect(w.find(".wp-ai-msg__lora").text()).toBe("<lora:detail:0.6>");
-    expect(w.find(".wp-ai-msg__emb").text()).toBe("embedding:bad_hands");
-    expect(w.find(".wp-ai-msg__tag").text()).toBe("#portrait");
+    expect(w.find(".wp-ai-syn__var").text()).toBe("$hair");
+    expect(w.find(".wp-ai-syn__var").attributes("style")).toContain("--wp-var-");
+    expect(w.find(".wp-ai-syn__pick").text()).toBe("{red|blue}");
+    expect(w.find(".wp-ai-syn__ref").text()).toBe("@{abcd1234}");
+    expect(w.find(".wp-ai-syn__lora").text()).toBe("<lora:detail:0.6>");
+    expect(w.find(".wp-ai-syn__emb").text()).toBe("embedding:bad_hands");
+    expect(w.find(".wp-ai-syn__tag").text()).toBe("#portrait");
   });
 
   it("turns Tip / Warning lines into callouts", () => {
@@ -43,7 +43,7 @@ describe("AiMessage", () => {
     expect(w.findAll("th").map((c) => c.text())).toEqual(["Wildcard", "Variable", "Options"]);
     const cells = w.findAll("tbody tr")[1].findAll("td");
     expect(cells[0].find("strong").text()).toBe("Pose pool — lying");
-    expect(cells[1].find("code .wp-ai-msg__var").text()).toBe("$pose_lying");
+    expect(cells[1].find("code .wp-ai-syn__var").text()).toBe("$pose_lying");
     expect(cells[2].attributes("style")).toContain("text-align: right");
   });
 

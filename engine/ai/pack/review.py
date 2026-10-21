@@ -374,9 +374,10 @@ def review_plan(plan: dict[str, Any],
         gaps = [g for g in pack_graph.request_gaps(graph, request) if g not in tried]
         if gaps:
             add(None, "fix", "The request names " + ", ".join(gaps) + ", and the plan says "
-                + ("none of them" if len(gaps) > 1 else "it") + " anywhere; give each a "
-                "slot of its own, a value on an axis, or put it in the words of the rule it "
-                "is part of", type="request_gap", refs=tuple(gaps))
+                + ("none of them anywhere" if len(gaps) > 1 else "it nowhere") + "; give "
+                + ("each" if len(gaps) > 1 else "it") + " a slot of its own, a value on an "
+                "axis, or put it in the words of the rule it is part of",
+                type="request_gap", refs=tuple(gaps))
         left = sorted(tried)
         if left:
             add(None, "tip", "The request also says " + ", ".join(left) + ", which the planner "
@@ -593,13 +594,32 @@ def compile_review(answer: Any, plan: dict[str, Any],
 REVIEW_NOTE_HEAD = "Revise the plan to fix ALL of these, one by one:"
 
 
+#: What the Pack builder page sends on its own when the user typed nothing
+#: (answers given, searches allowed, a hand edit). Not the user's words:
+#: the browser walk of 2026-10-21 read "answered, questions" off the first
+#: one as request gaps. Mirror of the texts in `usePackBuilder.refinePlan`
+#: and `composables/searchFound.ts` (the old "Use what the searches found."
+#: stays so earlier histories still read clean).
+AUTO_TEXTS = (
+    "I answered your questions.",
+    "Use what the searches found.",
+    "Here are the search results I picked; use only what fits the pack.",
+    "Here are the search results; use only what fits the pack and ignore the rest.",
+    "Here are the search results I picked; use only what fits.",
+    "Here are the search results; use only what fits and ignore the rest.",
+    "I edited the plan; keep my changes and fill any gaps they leave.",
+)
+
+
 def own_request(instruction: str) -> str:
     """The user's own words in a refine instruction: a Fix all request's
     findings list is cut off (browser check 2026-10-19: the request-words
     check read "revise, plan, fix, change…" from it as things the pack
-    should cover)."""
+    should cover), and the page's own follow-up lines (`AUTO_TEXTS`) go."""
     at = instruction.find(REVIEW_NOTE_HEAD)
-    return instruction if at < 0 else instruction[:at].rstrip()
+    text = instruction if at < 0 else instruction[:at].rstrip()
+    lines = [ln for ln in text.splitlines() if ln.strip() not in AUTO_TEXTS]
+    return "\n".join(lines).strip()
 
 
 def review_note(findings: list[dict[str, Any]]) -> str:

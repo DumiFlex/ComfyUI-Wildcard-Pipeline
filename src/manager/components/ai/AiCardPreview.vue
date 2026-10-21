@@ -10,6 +10,7 @@ import Modal from "../ui/Modal.vue";
 import Button from "../ui/Button.vue";
 import AiCardView from "./AiCardView.vue";
 import AiTestCard from "./AiTestCard.vue";
+import AiSyntax from "./AiSyntax.vue";
 import { cardMeta, cardOptions, cardView, otherPreview } from "../../composables/aiCards";
 import type { AiChatProposal, AiTestCard as TestCard } from "../../api/types";
 
@@ -64,17 +65,17 @@ const pending = computed(() => !!p.value && props.canApply !== undefined);
           <h4>{{ options.length }} option{{ options.length === 1 ? "" : "s" }}</h4>
           <ol>
             <li v-for="o in options" :key="o.id" :data-off="skipped?.includes(o.id) || undefined">
-              <span class="wp-ai-preview__opt-text">{{ o.empty ? "∅ nothing" : o.text }}</span>
+              <span class="wp-ai-preview__opt-text"><template v-if="o.empty">∅ nothing</template><AiSyntax v-else :text="o.text" /></span>
               <span v-if="o.weight !== 1" class="wp-ai-preview__dim">×{{ o.weight }}</span>
               <span v-if="o.fallback" class="wp-ai-preview__chip">fallback</span>
               <span v-for="t in o.tags" :key="t" class="wp-ai-preview__chip">#{{ t }}</span>
-              <span v-if="o.negative" class="wp-ai-preview__neg">− {{ o.negative }}</span>
+              <span v-if="o.negative" class="wp-ai-preview__neg">− <AiSyntax :text="o.negative" /></span>
             </li>
           </ol>
         </section>
         <AiCardView v-if="view" :view="view" full />
         <ul v-else-if="lines.length" class="wp-ai-preview__lines">
-          <li v-for="(l, i) in lines" :key="i">{{ l }}</li>
+          <li v-for="(l, i) in lines" :key="i"><AiSyntax :text="l" /></li>
         </ul>
         <ul v-if="p.warnings.length" class="wp-ai-preview__warnings">
           <li v-for="(w, i) in p.warnings" :key="i"><i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ w }}</li>

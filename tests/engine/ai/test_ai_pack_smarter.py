@@ -104,7 +104,7 @@ def test_wildcards_hear_what_reads_them_and_the_style():
     assert "it is the pack's anchor" in req["user"]
     assert "Used by: constraint S2O uses it as its source" in req["user"]
     assert "derivation Scarf: when $season is winter" in req["user"]
-    assert "short natural phrase" in req["user"] and "flux" in req["user"]
+    assert "short natural phrase" in req["user"] and "Flux" in req["user"]
     assert plan["style"] == "sentences" and plan["anchor"] == "season"
     bad = pack.compile_plan({"title": "x", "anchor": "nothing", "items": [
         _item(name="A", var="a")]})

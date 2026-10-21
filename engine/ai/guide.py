@@ -392,6 +392,32 @@ def family(model: str) -> str:
     return ""
 
 
+#: How each family is named to the user ("for Illustrious"); every label
+#: matches its own `_FAMILY` pattern, so `family(label)` gives the key back.
+FAMILY_LABEL = {
+    "pony": "Pony", "noobai": "NoobAI", "illustrious": "Illustrious", "animagine": "Animagine",
+    "anima": "Anima", "flux": "Flux", "sd3": "SD3", "chroma": "Chroma",
+    "qwen_image": "Qwen-Image", "hidream": "HiDream", "lumina2": "Lumina", "wan": "Wan",
+    "sd15": "SD 1.5", "sdxl": "SDXL",
+}
+
+
+def family_names(text: str) -> str:
+    """The image model families ``text`` names, as labels ("pony, flux" →
+    "Pony, Flux"), or "". A checkpoint or LoRA file name becomes its family
+    ("illustriousXLv01_stabilizer_v1.185c" → "Illustrious"), and words that
+    name no family go, so a plan never shows a file name or a cut-off word
+    as its model (Dumi 2026-10-21: "for illustriousXLv01_stabilizer_v1.185c,
+    ani")."""
+    out: list[str] = []
+    for part in re.split(r"[,/&+;]|\band\b|\bor\b", text or ""):
+        key = family(part.strip())
+        label = FAMILY_LABEL.get(key, "")
+        if label and label not in out:
+            out.append(label)
+    return ", ".join(out)
+
+
 def format_line(model: str) -> str:
     """How the named image model reads a prompt, or "" for an unknown one."""
     return FORMATS.get(family(model), "")

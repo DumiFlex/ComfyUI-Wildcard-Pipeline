@@ -1794,3 +1794,48 @@ async def test_an_empty_edit_answer_to_a_request_over_every_option_is_asked_once
                                 json={**_edit_body("remove"), "instruction": "remove all guns"})
     assert resp.status == 200 and (await resp.json())["changes"] == []
     assert len(fake_llm.seen) - seen == 2
+
+
+async def test_the_chat_changes_the_same_named_item_it_showed_not_another(wp_client, fake_llm):
+    """Haiku, 2026-10-21, three wildcards named Weather: the answer showed
+    one, the next turn read and edited another by id. The shown one is the
+    one the user means."""
+    shown = await _wildcard(wp_client, "Weather", "weather", [
+        {"id": "aaaa0001", "value": "rain", "weight": 1, "sub_categories": []}], [])
+    other = await _wildcard(wp_client, "Weather", "weather2", [
+        {"id": "bbbb0001", "value": "snow", "weight": 1, "sub_categories": []}], [])
+    ai_config.update({"enabled": True, "provider": "lmstudio", "tool_format": "json",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.extend([
+        {"message": f"You already have [[{shown}#Weather]] with one option.", "calls": []},
+    ])
+    first = await _chat(wp_client, "make a weather wildcard", page={"route": "wildcards"})
+    assert first["proposals"] == []
+    fake_llm.chat_steps.extend([
+        {"message": "Reading it.", "calls": [
+            {"tool": "read", "args": json.dumps({"id": other})}]},
+        {"message": "Changed it.", "calls": [
+            {"tool": "edit_options", "args": json.dumps({"id": other, "remove": [1]})}]},
+        {"message": "Which Weather do you mean?", "calls": []},
+    ])
+    second = await _chat(wp_client, "now remove the first option", chat_id=first["chat_id"],
+                         page={"route": "wildcards"})
+    assert second["proposals"] == []
+    refusal = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert "is another item named Weather" in refusal and shown in refusal
+    assert "that is the one they mean" in refusal
+    assert second["message"].startswith("Which Weather do you mean?")
+
+
+async def test_an_organize_ask_is_told_how_to_list_and_move_items(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio", "tool_format": "json",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.extend([{"message": "Which of these first?", "calls": []},
+                                {"message": "Which of these first?", "calls": []}])
+    await _chat(wp_client, "Most of my items have no category. Suggest categories and sort them.")
+    sent = fake_llm.seen[-2]["body"]["messages"]
+    assert any(ai_chat.ORGANIZE_HINT in m["content"] for m in sent)
+    fake_llm.chat_steps.extend([{"message": "Hair is fine.", "calls": []}])
+    await _chat(wp_client, "is my hair wildcard ok?")
+    assert not any(ai_chat.ORGANIZE_HINT in m["content"]
+                   for m in fake_llm.seen[-1]["body"]["messages"])

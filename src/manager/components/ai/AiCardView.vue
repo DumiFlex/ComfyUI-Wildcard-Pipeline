@@ -3,13 +3,14 @@
  * AiCardView — what a chat create card makes, laid out the way its editor
  * shows it: a constraint as source → target rule rows, a derivation as
  * IF / ELIF / ELSE per rule, fixed values as a table, a combine or template
- * as its text. Read-only; "Open in editor" is where it gets changed.
+ * as its text, prompt syntax coloured (`AiSyntax`). Read-only; "Open in editor" is where it gets changed.
  *
  * In the chat it stays small: the grid, rules, rows and text are capped
  * (with "+N more") and the card's magnifier shows it `full` in a modal.
  */
 import { computed } from "vue";
 import type { CardView, ConstraintRowView } from "../../composables/aiCards";
+import AiSyntax from "./AiSyntax.vue";
 
 const props = defineProps<{ view: CardView; full?: boolean }>();
 
@@ -87,9 +88,9 @@ function effectText(effect: string, factor: number | null): string {
       <table v-if="pairs.length" class="wp-ai-card-view__table">
         <tbody>
           <tr v-for="(r, i) in cap(pairs, CAP.pairs)" :key="i">
-            <td><span :class="r.byTag ? 'wp-ai-card-view__tag' : undefined">{{ r.from }}</span></td>
+            <td><span :class="r.byTag ? 'wp-ai-card-view__tag' : undefined"><template v-if="r.byTag">{{ r.from }}</template><AiSyntax v-else :text="r.from" /></span></td>
             <td aria-hidden="true">→</td>
-            <td><span :class="r.byTag ? 'wp-ai-card-view__tag' : undefined">{{ r.to }}</span></td>
+            <td><span :class="r.byTag ? 'wp-ai-card-view__tag' : undefined"><template v-if="r.byTag">{{ r.to }}</template><AiSyntax v-else :text="r.to" /></span></td>
             <td class="wp-ai-card-view__effect" :data-effect="r.effect">{{ effectText(r.effect, r.factor) }}</td>
           </tr>
         </tbody>
@@ -103,9 +104,9 @@ function effectText(effect: string, factor: number | null): string {
           <span class="wp-ai-card-view__rule-n">Rule {{ i + 1 }}</span>
           <div v-for="(b, j) in cap(rule, CAP.branches)" :key="j" class="wp-ai-card-view__branch">
             <span class="wp-ai-card-view__kw" :data-kw="b.key">{{ b.key }}</span>
-            <code v-if="b.test" :class="{ 'wp-ai-card-view__clamp': !full }">{{ b.test }}</code>
+            <code v-if="b.test" :class="{ 'wp-ai-card-view__clamp': !full }"><AiSyntax :text="b.test" /></code>
             <ul>
-              <li v-for="(a, k) in cap(b.actions, CAP.actions)" :key="k" :class="{ 'wp-ai-card-view__clamp': !full }">{{ a }}</li>
+              <li v-for="(a, k) in cap(b.actions, CAP.actions)" :key="k" :class="{ 'wp-ai-card-view__clamp': !full }"><AiSyntax :text="a" /></li>
               <li v-if="more(b.actions, CAP.actions)" class="wp-ai-card-view__more">+{{ more(b.actions, CAP.actions) }} more</li>
             </ul>
           </div>
@@ -120,7 +121,7 @@ function effectText(effect: string, factor: number | null): string {
         <tbody>
           <tr v-for="r in cap(view.rows, CAP.rows)" :key="r.name">
             <td><code>${{ r.name }}</code></td>
-            <td :class="{ 'wp-ai-card-view__clamp': !full }">{{ r.value }}<span v-if="r.negative" class="wp-ai-card-view__neg"> − {{ r.negative }}</span></td>
+            <td :class="{ 'wp-ai-card-view__clamp': !full }"><AiSyntax :text="r.value" /><span v-if="r.negative" class="wp-ai-card-view__neg"> − <AiSyntax :text="r.negative" /></span></td>
           </tr>
         </tbody>
       </table>
@@ -130,7 +131,7 @@ function effectText(effect: string, factor: number | null): string {
     <dl v-else class="wp-ai-card-view__text">
       <template v-for="r in view.rows" :key="r.label">
         <dt>{{ r.label }}</dt>
-        <dd :class="{ 'wp-ai-card-view__clamp wp-ai-card-view__clamp--6': !full }">{{ r.text }}</dd>
+        <dd :class="{ 'wp-ai-card-view__clamp wp-ai-card-view__clamp--6': !full }"><AiSyntax :text="r.text" /></dd>
       </template>
     </dl>
   </div>

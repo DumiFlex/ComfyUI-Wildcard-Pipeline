@@ -104,8 +104,11 @@ function close(): void {
     @close="close"
     :research="convo.research.value"
     :searching="convo.searching.value"
+    :found="convo.web"
     @allow-research="convo.allowResearch"
     @skip-research="convo.skipResearch"
+    @use-found="convo.useFound"
+    @skip-found="convo.skipFound"
   >
     <template v-if="result">
       <ul class="wp-ai-text" data-test="ai-text-results">

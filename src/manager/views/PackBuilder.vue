@@ -20,6 +20,7 @@ import Card from "../components/ui/Card.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import AiImagePicker from "../components/ai/AiImagePicker.vue";
+import AiSearchFound from "../components/ai/AiSearchFound.vue";
 import AiWorking from "../components/ai/AiWorking.vue";
 import ChatCompletions from "../components/ai/ChatCompletions.vue";
 import PackFindings from "../components/pack/PackFindings.vue";
@@ -62,9 +63,23 @@ const { convo } = pb;
 const chat = useAiChat();
 
 /** Ask the chat what a warning means here and what to do about it. */
+/** A rule the planner wrote with a name the plan doesn't have: one narrow
+ *  change call adds it back with the names that exist (the note lists them). */
+const LEFT_OUT = "Left out a rule:";
+function fixLeftOut(note: string): void {
+  void pb.changeItem("", `${note.slice(LEFT_OUT.length).trim()} Add this rule again with names `
+    + "the plan has (one rule per value if it means several), or add nothing if the pack doesn't "
+    + "need it.");
+}
+
 function explain(warning: string, item?: AiPackItem): void {
   const about = item ? ` about ${item.kind.replace("_", " ")} "${item.name}"` : "";
-  chat.ask(`Explain this pack builder warning${about} and what I can do about it: "${warning}"`);
+  // The plan isn't in the library yet: without saying so, a small model
+  // searched the library for the names in the note and explained an
+  // unrelated bundle (Dumi 2026-10-21).
+  chat.ask(`Explain this pack builder note${about} and what I can do about it: "${warning}". `
+    + "It is about the pack plan on this page, which is not in my library yet, so answer from "
+    + "the plan (read the page if you need it), not from my library.");
 }
 const { config, ready } = useAiConfig();
 const router = useRouter();
@@ -284,12 +299,12 @@ function quality(key: string): string[] {
 const STYLE_LABEL = { tags: "Danbooru-style tags", sentences: "natural phrases" } as const;
 const shape = computed(() => {
   const p = draft.value;
-  if (!p) return "";
+  if (!p) return [];
   return [
     `Written as ${STYLE_LABEL[p.style] ?? "tags"}`,
-    p.model ? `for ${p.model}` : "",
-    p.anchor ? `everything follows $${p.anchor}` : "",
-  ].filter(Boolean).join(" · ");
+    p.model ? `For ${p.model}` : "",
+    p.anchor ? `Everything follows $${p.anchor}` : "",
+  ].filter(Boolean);
 });
 const showSample = ref(!!pb.sample.value);
 
@@ -535,6 +550,14 @@ function stopExtending(): void {
             <Button size="sm" variant="primary" icon="pi-search" :loading="pb.searching.value" :disabled="busy" data-test="pack-research-allow" @click="pb.allowResearch">Search and update the plan</Button>
           </div>
         </section>
+        <AiSearchFound
+          :state="pb.web"
+          :busy="busy"
+          who="the planner"
+          then="update the plan"
+          @use="pb.useFound"
+          @none="pb.skipFound"
+        />
         <Card v-if="pb.questions.value.length" :title="`Questions from the assistant · ${pb.questions.value.length}`">
           <PackQuestions />
         </Card>
@@ -636,13 +659,15 @@ function stopExtending(): void {
           <span v-if="draft?.rating === 'nsfw'" class="wp-pack__nsfw">NSFW</span>
           <span v-if="pb.edited.value" class="wp-pack__edited" data-test="pack-edited">edited by you</span>
         </p>
-        <p v-if="draft?.summary" class="wp-pack__dim">{{ draft.summary }}</p>
-        <p v-if="draft?.design" class="wp-pack__design" data-test="pack-design"><span class="wp-pack__design-label">How it fits together</span> {{ draft.design }}</p>
+        <p v-if="draft?.summary" class="wp-pack__summary">{{ draft.summary }}</p>
+        <div v-if="draft?.design" class="wp-pack__design" data-test="pack-design"><span class="wp-pack__design-label">How it fits together</span><p>{{ draft.design }}</p></div>
         <details v-if="pb.planThinking.value" class="wp-pack__thought" data-test="pack-thinking">
           <summary>Thinking</summary>
           <p>{{ pb.planThinking.value }}</p>
         </details>
-        <p v-if="shape" class="wp-pack__shape" data-test="pack-shape">{{ shape }}</p>
+        <p v-if="shape.length" class="wp-pack__shape" data-test="pack-shape">
+          <span v-for="part in shape" :key="part" class="wp-pack__shape-chip">{{ part }}</span>
+        </p>
         <div v-if="draft" class="wp-pack__run" data-test="pack-run">
           <span class="wp-pack__dim wp-pack__run-label">Runs as</span>
           <Select
@@ -693,6 +718,15 @@ function stopExtending(): void {
         <ul v-if="draft?.warnings.length" class="wp-pack__warnings" data-test="pack-plan-notes">
           <li v-for="(w, j) in draft.warnings" :key="j">
             <i class="pi pi-info-circle" aria-hidden="true" /> <span>{{ w }}</span>
+            <button
+              v-if="w.startsWith(LEFT_OUT)"
+              type="button"
+              class="wp-pack__mini"
+              :disabled="busy || !!pb.changing.value"
+              title="Ask the planner to write this rule again with names the plan has"
+              data-test="pack-left-out-fix"
+              @click="fixLeftOut(w)"
+            >Fix with AI</button>
             <button type="button" class="wp-pack__mini" :disabled="chat.loading.value" title="Ask the assistant what this means" data-test="pack-explain" @click="explain(w)">Explain</button>
           </li>
         </ul>
@@ -958,7 +992,7 @@ function stopExtending(): void {
   border: 1px solid var(--wp-border); background: var(--wp-bg-2); color: var(--wp-text);
 }
 .wp-pack__choice[aria-pressed="true"] { border-color: var(--wp-accent-400); color: var(--wp-accent-text); background: color-mix(in oklab, var(--wp-accent-500) 16%, var(--wp-bg-2)); }
-.wp-pack__title { margin: 0 0 2px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
+.wp-pack__title { margin: 0 0 2px; font-size: 15px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
 .wp-pack__nsfw { font-size: 10px; padding: 1px 6px; border-radius: 4px; color: var(--wp-danger); border: 1px solid currentColor; }
 .wp-pack__items { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; }
 .wp-pack__item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--wp-border); min-width: 0; }
@@ -971,7 +1005,7 @@ function stopExtending(): void {
   color: var(--wp-kind-wildcard); background: var(--wp-kind-wildcard-bg);
 }
 .wp-pack__kind[data-kind="fixed_values"] { color: var(--wp-kind-fixed); background: var(--wp-kind-fixed-bg); }
-.wp-pack__run { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; font-size: 12.5px; }
+.wp-pack__run { display: flex; align-items: center; gap: 8px; margin: 12px 0 10px; font-size: 12.5px; }
 .wp-pack__run-frames { width: 72px; }
 .wp-pack__run-label { white-space: nowrap; }
 .wp-pack__inputs { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px; }
@@ -1014,7 +1048,9 @@ function stopExtending(): void {
 .wp-pack__bar-label { position: relative; padding: 0 6px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .wp-pack__prompt p { margin: 0 0 4px; font-family: var(--wp-font-mono, monospace); font-size: 12px; overflow-wrap: anywhere; }
 .wp-pack__prompt + .wp-pack__prompt { margin-top: 10px; }
-.wp-pack__shape { margin: 4px 0 0; font-size: 12px; color: var(--wp-accent-text); }
+.wp-pack__shape { margin: 10px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-pack__shape-chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; color: var(--wp-accent-text); background: color-mix(in oklab, var(--wp-accent-500) 10%, transparent); border: 1px solid color-mix(in oklab, var(--wp-accent-500) 30%, transparent); }
+.wp-pack__summary { margin: 4px 0 0; font-size: 13px; line-height: 1.55; color: var(--wp-text-muted); }
 .wp-pack__toggle { margin-top: 8px; border: 0; background: none; padding: 0; color: var(--wp-text-muted); font: inherit; font-size: 12.5px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
 .wp-pack__toggle:hover { color: var(--wp-text); }
 .wp-pack__toggle + .wp-pack__request { margin-top: 6px; }
@@ -1095,8 +1131,9 @@ function stopExtending(): void {
 .wp-pack__warnings li { display: flex; gap: 6px; align-items: baseline; }
 .wp-pack__warnings li > span { min-width: 0; overflow-wrap: anywhere; }
 .wp-pack__summary { margin: 10px 0 0; font-size: 12.5px; color: var(--wp-text-muted); }
-.wp-pack__design { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; }
-.wp-pack__design-label { font-weight: 600; margin-right: 4px; }
+.wp-pack__design { margin: 12px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--wp-bg-1, var(--wp-bg-2)); border: 1px solid var(--wp-border); }
+.wp-pack__design p { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--wp-text); }
+.wp-pack__design-label { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--wp-text-dim); }
 .wp-pack__thought { margin: 6px 0 0; font-size: 12px; color: var(--wp-text-muted); }
 .wp-pack__thought summary { cursor: pointer; font-style: italic; }
 .wp-pack__thought p { white-space: pre-wrap; margin: 4px 0 0; padding-left: 8px; border-left: 2px solid var(--wp-border); max-height: 320px; overflow-y: auto; }

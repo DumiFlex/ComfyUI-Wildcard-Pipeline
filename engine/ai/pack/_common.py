@@ -97,6 +97,14 @@ def _clean(text: Any, limit: int) -> str:
     return s[:limit]
 
 
+def _model(raw: Any) -> str:
+    """The image model families a plan names, as labels (`guide.family_names`):
+    a checkpoint or LoRA file name, or a word cut at the field's length,
+    never shows as the plan's model."""
+    from engine.ai import guide as ai_guide
+    return ai_guide.family_names(raw if isinstance(raw, str) else "")
+
+
 def _var(raw: Any) -> str:
     v = _clean(raw, 70).lstrip("$").strip()
     return v if _IDENT.match(v) and not v.startswith("__") else ""

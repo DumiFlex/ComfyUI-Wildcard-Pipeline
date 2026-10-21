@@ -7,8 +7,9 @@
  * (which then closes nothing else), a click anywhere or a new page closes
  * it. It follows the parts as the page scrolls or resizes. Captions stay
  * inside the page area, left of the chat: they flip above or below the
- * part and slide sideways to fit, and stick to the top or bottom edge with
- * an arrow when the part is scrolled out of sight. No pulse when the user
+ * part and slide sideways to fit, keep off each other and off the other
+ * parts (a caption that would cover one goes beside or under it), and stick to the
+ * top or bottom edge with an arrow when the part is scrolled out of sight. No pulse when the user
  * prefers less motion.
  */
 import { onBeforeUnmount, ref, watch } from "vue";
@@ -63,6 +64,27 @@ function fit(r: DOMRect, pad: number): Box {
   return { top, left, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
 }
 
+function hits(b: Box, others: Box[]): Box | undefined {
+  return others.find((o) => b.left < o.left + o.width && b.left + b.width > o.left
+    && b.top < o.top + o.height && b.top + b.height > o.top);
+}
+
+/** A caption that would cover another part's outline or an earlier
+ *  caption moves: beside the thing it hit when that fits inside the page
+ *  area, else under it. Tried a few times, so captions of parts close
+ *  together end up side by side or stacked, never on a part or each other
+ *  (Dumi 2026-10-21: "1. Pick the model here" sat on the Save button). */
+function apart(top: number, left: number, w: number, h: number, avoid: Box[], right: number, bottom: number): { top: number; left: number } {
+  for (let n = 0; n < 12; n++) {
+    const hit = hits({ top, left, width: w, height: h }, avoid);
+    if (!hit) break;
+    const beside = hit.left + hit.width + GAP;
+    if (beside + w <= right - GAP) left = beside;
+    else top = Math.min(hit.top + hit.height + GAP, bottom - h - GAP);
+  }
+  return { top, left };
+}
+
 function track(): void {
   const list = pointers.value;
   if (list.some((p) => !p.el.isConnected)) {
@@ -71,6 +93,8 @@ function track(): void {
   }
   const a = area();
   const pad = 4;
+  const placed: Box[] = [];
+  const rings = list.map((p) => fit(rectOf(p), pad));
   drawn.value = list.map((p, i) => {
     const r = rectOf(p);
     const cap = caps[i];
@@ -90,9 +114,12 @@ function track(): void {
     else if (r.top - GAP - h >= a.top + GAP) top = r.top - GAP - h;
     // Taller than the window: inside the part, at the top of what shows.
     else top = clamp(r.top + GAP, a.top + GAP, a.bottom - h - GAP);
+    const others = rings.filter((_, j) => j !== i);
+    const at = apart(top, left, w, h, [...others, ...placed], right, a.bottom);
+    placed.push({ top: at.top, left: at.left, width: w, height: h });
     return {
       ring: fit(r, pad),
-      cap: { top, left },
+      cap: at,
       off: "",
     };
   });

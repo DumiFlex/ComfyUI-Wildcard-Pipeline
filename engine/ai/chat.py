@@ -277,6 +277,16 @@ CLAIM_NUDGE = (
     "nothing happened and the user would be misled. Make the call now (the change tool, "
     "run_test, or show_test), or answer plainly that it is not done yet. Never describe a "
     "change as done without its call.")
+#: Under an organize ask, in the message tail (`_ai_turn`): Haiku and the
+#: 9B (2026-10-21) searched the library a type and a tag at a time until the
+#: steps ran out, and never called a change tool.
+ORGANIZE_HINT = (
+    "This is an organize ask. Don't search type by type or tag by tag: one search with "
+    "{\"query\": \"\", \"category\": \"none\"} lists every item with no category (up to "
+    "100), and {\"category\": name} lists a category's items. Then propose the moves in "
+    "this answer: edit_categories for categories that don't exist yet and one update_many "
+    "per group (the user applies the cards), or organize with the ids to have the panel "
+    "suggest categories, tags and ratings. Reuse the user's own categories where they fit.")
 ORGANIZE_NUDGE = (
     "The user asked you to organize their library, but you made no call, so nothing changed: "
     "a list of categories in your message does nothing. Call edit_categories (or the "
@@ -310,6 +320,9 @@ MAX_TURNS = 100
 MAX_TURN_CHARS = 6000
 MAX_OVERVIEW_ITEMS = 150
 MAX_SEARCH = 25
+#: A search by category with no query is a listing (an organize ask reads
+#: every item with no category in one call), so it goes further.
+MAX_SEARCH_LISTING = 100
 _FIELD_NAMES = {"name": "name", "var": "variable", "tags": "tags", "desc": "description",
                 "content": "options/content"}
 MAX_READ_OPTIONS = 150
@@ -370,6 +383,24 @@ on). Answer the user's actual question with what you found: no greeting, no \
 list of what you can do.
 
 """
+#: The Markdown the chat renders, told to the model the same way in both
+#: answer modes. Every element here has a drawing in the drawer
+#: (`AiMessage.vue`); one it is not told about, it never writes.
+FORMATTING = """\
+Write short answers as plain sentences. Use formatting only where it helps:
+- a list (- or 1.) for steps or several separate items;
+- a task list (- [ ] to do, - [x] done) for steps the user ticks off;
+- a | table | to compare items;
+- `code` for $variables, option text and prompt syntax; keys like `Ctrl+Enter` \
+in backticks show as keyboard keys;
+- a ``` block for JSON or a prompt longer than a line (```prompt for prompt text);
+- ### headings only in answers longer than about 15 lines;
+- one line starting "Tip:", "Note:" or "Warning:" for the next step or a risk, at \
+most one per answer; a longer one as a quote: > [!TIP], > [!NOTE] or > [!WARNING] \
+on the first line, the text on the next;
+- a [link](https://…) only for a web address you were given (it shows as text).
+No emoji. End with the answer, not an offer.
+"""
 #: How a JSON-mode model answers.
 FORMAT_JSON = """While you still have calls to make, leave "message" empty. \
 Answer with JSON: {"plan": one or two sentences for yourself: what the \
@@ -382,15 +413,7 @@ Write every library item you mention as [[id#Name]] (its id from read or \
 search, then its name): the user sees a chip with the name that opens it. \
 Never write an id anywhere else, and never ask the user for one: ids mean \
 nothing to them.
-Write short answers as plain sentences. Use formatting only where it helps:
-- a list (- or 1.) for steps or several separate items;
-- a | table | to compare items;
-- `code` for $variables, option text and keys like `Ctrl+Enter`;
-- a ``` block for JSON or a prompt longer than a line (```prompt for prompt text);
-- ### headings only in answers longer than about 15 lines;
-- one line starting "Tip:" or "Warning:" for the next step or a risk, at most \
-one per answer.
-No emoji. End with the answer, not an offer.
+""" + FORMATTING + """\
 Wherever a tool takes an id you can also give \
 the item's exact name. Use page tools (open, highlight) only when the user asks about the app \
 or where something is, never for a greeting.
@@ -412,15 +435,7 @@ Write every library item you mention as [[id#Name]] (its id from read or \
 search, then its name): the user sees a chip with the name that opens it. \
 Never write an id anywhere else, and never ask the user for one: ids mean \
 nothing to them.
-Write short answers as plain sentences. Use formatting only where it helps:
-- a list (- or 1.) for steps or several separate items;
-- a | table | to compare items;
-- `code` for $variables, option text and keys like `Ctrl+Enter`;
-- a ``` block for JSON or a prompt longer than a line (```prompt for prompt text);
-- ### headings only in answers longer than about 15 lines;
-- one line starting "Tip:" or "Warning:" for the next step or a risk, at most \
-one per answer.
-No emoji. End with the answer, not an offer.
+""" + FORMATTING + """\
 Wherever a tool takes an id you can also give \
 the item's exact name. Use page tools (open, highlight) only when the user asks about \
 the app or where something is, never for a greeting.
@@ -841,7 +856,22 @@ class Library(MoreTools, ManageTools):
             return
         row = self.get(item_id)
         if row is None or row.get("_proposed") or item_id in self.named \
-                or item_id == self.editor_id or (self.edit_read and item_id in self.touched):
+                or item_id == self.editor_id:
+            return
+        # Three wildcards named Weather (Haiku, 2026-10-21): the answer
+        # showed one, the next turn read and edited another by id. The one
+        # the user was shown is the one they mean.
+        low = str(row.get("name") or "").strip().lower()
+        twin = next((n for n in self.named if (r2 := self.get(n)) is not None
+                     and str(r2.get("name") or "").strip().lower() == low), None)
+        if twin is not None:
+            shown = self.get(twin)
+            assert shown is not None
+            raise ValueError(
+                f"{self._chip(row)} is another item named {row.get('name')}: the user was "
+                f"shown {self._chip(shown)} in this chat, so that is the one they mean. "
+                "Change that one, or ask which of them they want")
+        if self.edit_read and item_id in self.touched:
             return
         raise ValueError(
             f"{self._chip(row)} is the user's own item and they haven't named it in this chat: "
@@ -1155,14 +1185,19 @@ class Library(MoreTools, ManageTools):
         query = _short(args.get("query"), 100).lower()
         type_ = _short(args.get("type"), 30).lower()
         tag = _short(args.get("tag"), 40).lower().lstrip("#")
+        category = _short(args.get("category"), 60).strip().lower()
+        if category and category != "none" and category not in self.cat_by_lower:
+            cats = ", ".join(sorted(self.categories.values())) or "none yet"
+            raise ValueError(f"no category {category!r}; the categories are: {cats}. "
+                             "Use \"none\" for items with no category")
         own, widened = ai_search.expand(query)
         if self.index is not None and own:
-            return self._search_index(query, type_, tag)
+            return self._search_index(query, type_, tag, category)
         phrase = query.strip()
         ranked: list[tuple[float, int, dict[str, Any], list[str], list[str]]] = []
         rows = [*self.modules.values(), *self.bundles.values(), *self.templates.values()]
         for n, r in enumerate(rows):
-            if not self._fits(r, type_, tag):
+            if not self._fits(r, type_, tag, category):
                 continue
             where: list[str] = []
             snips: list[str] = []
@@ -1178,8 +1213,12 @@ class Library(MoreTools, ManageTools):
         if not ranked:
             return "no matches"
         ranked.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        # A listing by category (an organize ask) is meant to be whole: one
+        # call, not a search per type and per tag until the steps run out
+        # (Haiku and the 9B, 2026-10-21).
+        cap = MAX_SEARCH_LISTING if category and not own else MAX_SEARCH
         hits = [self._hit_line(r, [_FIELD_NAMES[w] for w in where], snips)
-                for _points, _n, r, where, snips in ranked[:MAX_SEARCH]]
+                for _points, _n, r, where, snips in ranked[:cap]]
         total = len(ranked)
         more = f"\n- … {total - len(hits)} more (narrow the query or give a type)" \
             if total > len(hits) else ""
@@ -1188,12 +1227,18 @@ class Library(MoreTools, ManageTools):
             head += " (best first; broad words widened to related ones)"
         return head + ":\n" + "\n".join(hits) + more
 
-    def _fits(self, r: dict[str, Any], type_: str, tag: str) -> bool:
+    def _fits(self, r: dict[str, Any], type_: str, tag: str, category: str = "") -> bool:
         kind = self._kind(r)
         if type_ and type_ not in (kind, kind.replace("_", " ")):
             return False
         tags = [t for t in r.get("tags") or [] if isinstance(t, str)]
-        return not tag or tag in (t.lower() for t in tags)
+        if tag and tag not in (t.lower() for t in tags):
+            return False
+        if category == "none":
+            return not r.get("category_id")
+        if category:
+            return r.get("category_id") == self.cat_by_lower.get(category)
+        return True
 
     def _hit_line(self, r: dict[str, Any], where: list[str], snips: list[str],
                   used: int = 0) -> str:
@@ -1218,22 +1263,22 @@ class Library(MoreTools, ManageTools):
             line += "\n    e.g. " + " | ".join(_short(t, 90) for t in snips)
         return line
 
-    def _search_index(self, query: str, type_: str, tag: str) -> str:
+    def _search_index(self, query: str, type_: str, tag: str, category: str = "") -> str:
         """`search` over the library index (saved items), plus any item this
         chat proposed or the open editor changed, scored the old way."""
         assert self.index is not None
-        fetch = MAX_SEARCH * (4 if tag or type_ else 1) + 1
+        fetch = MAX_SEARCH * (4 if tag or type_ or category else 1) + 1
         qvec, self.qvec = self.qvec, None
         hits = [h for h in self.index.search(query, limit=fetch, qvec=qvec,
                                              model=self.embed_model)
                 if (r := self.get(h.id)) is not None and not r.get("_proposed")
-                and h.id != self.editor_id and self._fits(r, type_, tag)]
+                and h.id != self.editor_id and self._fits(r, type_, tag, category)]
         own, widened = ai_search.expand(query)
         fresh: list[tuple[float, dict[str, Any], list[str], list[str]]] = []
         for r in [*self.modules.values(), *self.bundles.values(), *self.templates.values()]:
             if not (r.get("_proposed") or r.get("id") == self.editor_id):
                 continue
-            if not self._fits(r, type_, tag):
+            if not self._fits(r, type_, tag, category):
                 continue
             entry = ai_search.Entry(r)
             points, where = ai_search.score(entry, own, widened, query.strip())

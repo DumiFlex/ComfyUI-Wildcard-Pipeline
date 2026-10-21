@@ -1562,3 +1562,32 @@ def test_an_overlap_lands_on_the_pick_that_borrows_the_others_subject():
     assert keys["eyes"] not in out
     said = out[keys["expression"]]
     assert "gentle eyes" in said and "leave those to Eyes" in said
+
+
+def test_the_code_wired_story_beat_is_not_a_lookup_table_problem():
+    # Sonnet walkthrough, 2026-10-21: the story beat ($iteration → $beat,
+    # one branch per frame) got "maps $iteration to $beat value by value (6
+    # branches)" at problem level, and Fix with AI could never clear it.
+    from tests.engine.ai import test_ai_pack_graph as tg
+    held = [{**s, "hold": True} for s in tg.GRAPH["slots"]]
+    plan = pack.compile_graph_plan(tg._graph(run={"mode": "story", "frames": 6}, slots=held))
+    beat_key = next(i["key"] for i in plan["items"] if i["var"] == "beat")
+    rule = {"summary": "beats", "else_actions": [], "branches": [
+        {"match": "all", "conditions": [{"var": "iteration", "op": "equals", "value": str(n)}],
+         "actions": [{"target_var": "beat", "mode": "replace", "value": f"beat {n}"}]}
+        for n in range(1, 7)]}
+    built: dict = {}
+    for key in pack.build_order(plan):
+        item = next(i for i in plan["items"] if i["key"] == key)
+        slot = tg.pg.slot_for(plan, key)
+        if key == beat_key:
+            built[key] = pack.compile_item(plan, key, built, {"rules": [rule]})
+        elif slot is not None and not tg.pg.is_wired(plan, key):
+            out = tg.pg.compile_slot(plan["graph"], slot, tg._answer(slot["name"]))
+            built[key] = {"id": item["id"], "payload": out["payload"]}
+        else:
+            wired = tg.pg.wired_payload(plan, key, built)
+            built[key] = {"id": item["id"], "payload": wired["payload"]}
+    report = pack.check_pack(plan, built, seeds=12)
+    assert not any("value by value" in p for p in report["problems"].get(beat_key, [])), \
+        report["problems"]

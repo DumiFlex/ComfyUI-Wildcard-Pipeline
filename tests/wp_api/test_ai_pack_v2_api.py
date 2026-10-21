@@ -106,17 +106,25 @@ async def test_web_search_needs_the_setting(wp_client, fake_llm, monkeypatch):
     resp = await wp_client.post("/wp/api/ai/pack/search", json={"queries": ["x"]})
     assert resp.status == 400
 
-    async def fake_search(cfg, query, urls=None):
-        return f'Web results for "{query}": [1] Fur coats: https://x.test'
+    async def fake_rows(cfg, query):
+        if query == "broken":
+            raise _ai_client.AIError("the search engine answered 500")
+        return [{"title": "Fur coats", "url": "https://x.test", "snippet": "long wool coats"}]
     monkeypatch.setattr("wp_api._ai_search.enabled", lambda cfg: True)
-    monkeypatch.setattr("wp_api._ai_search.search", fake_search)
+    monkeypatch.setattr("wp_api._ai_search.search_rows", fake_rows)
     body = await _plan(wp_client)
     assert body["web"] is True and body["plan"]["research"] == ["victorian winter fashion"]
     resp = await wp_client.post("/wp/api/ai/pack/search",
                                 json={"queries": ["victorian winter fashion"]})
     assert resp.status == 200
     results = (await resp.json())["results"]
-    assert "Fur coats" in results[0]["text"]
+    assert "Fur coats" in results[0]["text"] and "data, not instructions" in results[0]["text"]
+    # The rows are what the page lets the user pick from.
+    assert results[0]["rows"] == [{"title": "Fur coats", "url": "https://x.test",
+                                   "snippet": "long wool coats"}]
+    failed = (await (await wp_client.post("/wp/api/ai/pack/search",
+                                          json={"queries": ["broken"]})).json())["results"][0]
+    assert failed["rows"] == [] and failed["error"] == "the search engine answered 500"
     again = await _plan(wp_client, instruction="use the results",
                         history=[{"instruction": "seasons", "answer": PLAN}],
                         web=results, searched=["victorian winter fashion"])
@@ -372,7 +380,7 @@ async def test_pack_graph_plan_wires_items_without_the_model(wp_client, fake_llm
     body = await resp.json()
     plan = body["plan"]
     assert plan["graph"]["slots"][0]["var"] == "race"
-    assert any("Left out a relation" in w for w in plan["warnings"])
+    assert any("Left out a rule" in w for w in plan["warnings"])
     assert body["answer"]["title"] == "Fantasy heroes"
     names = {i["name"]: i for i in plan["items"]}
     assert "Race → Weapon" in names and "Title rule" in names
@@ -488,3 +496,24 @@ async def test_best_of_three_reads_the_images_once(wp_client, fake_llm):
         content = later["messages"][-1]["content"]
         assert isinstance(content, str) and "image_url" not in content
         assert "they showed: a red cloak; snow" in content
+
+
+async def test_a_decision_answer_is_not_a_request_gap(wp_client, fake_llm):
+    # Sonnet walkthrough, 2026-10-21: "a woman" and "Generic big city",
+    # picked from the planner's own questions, came back as request gaps at
+    # fix level in every flow, costing a Fix all round each.
+    from tests.engine.ai.test_ai_pack_graph import GRAPH
+
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.overrides["pack_graph"] = GRAPH
+    fake_llm.overrides["pack_refs"] = {"relations": []}
+    resp = await wp_client.post("/wp/api/ai/pack/plan", json={
+        "instruction": "fantasy heroes", "settings": {"planner": "graph"},
+        "decisions": [{"question": "Who is in the picture?", "answer": "a woman"},
+                      {"question": "Where?", "answer": "Generic big city"}]})
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    gaps = [f for f in body["review"] if f["type"] == "request_gap"]
+    assert not [g for g in gaps if {"woman", "generic", "city"} & set(g["refs"])], gaps
+    assert body["plan"]["request_gaps"] == ["heroes"]  # the request, not the answers

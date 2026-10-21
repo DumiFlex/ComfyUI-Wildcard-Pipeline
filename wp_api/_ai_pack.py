@@ -38,7 +38,6 @@ from wp_api._ai_common import (
     _instruction,
     _request_images,
     _turns,
-    _web_result,
 )
 from wp_api._ai_context import (
     _vocab_kinds,
@@ -202,11 +201,12 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     answer: Any = None
     retry = ""
     graph = settings["planner"] == "graph"
-    # The user's own words: "Your call (decide for me)" is not a thing the
-    # pack must say (its words came back as request gaps on every Fix all).
-    asked = " ".join([first_text, ai_pack.own_request(instruction), sample,
-                      *(str(d.get("answer") or "") for d in decisions if isinstance(d, dict)
-                        and d.get("answer") != ai_pack.DECIDE_ANSWER)])
+    # The user's own words. A decision's answer is not one of them: picked
+    # from the planner's own choices, it reads "a woman", "Generic big city"
+    # or "your call", and those came back as request gaps at fix level in
+    # every flow of the Sonnet walkthrough (2026-10-21), costing a Fix all
+    # round each. The planner reads the decisions in every request anyway.
+    asked = " ".join([first_text, ai_pack.own_request(instruction), sample])
     for attempt in range(2):
         try:
             answer = await _ask(
@@ -309,7 +309,9 @@ async def _plan_context(cfg: dict[str, Any], first: str, turns: list[dict[str, A
 async def post_pack_search(request: web.Request) -> web.Response:
     """Body: {queries}. Runs the searches the pack planner or a Draft with
     AI panel asked for, after the user allowed them. Returns {results: [{query,
-    text}]}; the text is labelled as untrusted for the model."""
+    text, rows: [{title, url, snippet}], error?}]}; the text is labelled as
+    untrusted for the model, the rows are what the Pack builder lets the user
+    pick from."""
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
@@ -326,7 +328,16 @@ async def post_pack_search(request: web.Request) -> web.Response:
         return json_error(f"send 1 to {ai_pack.MAX_RESEARCH} searches", status=400)
     results = []
     for q in queries:
-        results.append({"query": q, "text": await _web_result(cfg, q)})
+        # The rows let the page show what each search found and let the
+        # user pick what goes to the planner (Dumi 2026-10-21: "use what
+        # the searches found" trusted results nobody had seen).
+        try:
+            rows = await _ai_search.search_rows(cfg, q)
+            results.append({"query": q, "text": "web_search: " + _ai_search.rows_text(q, rows),
+                            "rows": rows})
+        except _ai_client.AIError as e:
+            results.append({"query": q, "text": f"web_search: error: {e.message}", "rows": [],
+                            "error": e.message})
     return json_ok({"results": results})
 
 

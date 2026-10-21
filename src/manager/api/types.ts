@@ -1003,6 +1003,20 @@ export interface AiWebResult {
   text: string;
 }
 
+/** One search hit, as the Pack builder shows it for picking. */
+export interface AiWebRow {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+/** `api.ai.packSearch`'s answer per query: the text for the model, and the
+ *  rows the Pack builder lets the user pick from. */
+export interface AiWebFound extends AiWebResult {
+  rows?: AiWebRow[];
+  error?: string;
+}
+
 export interface AiDraftOption {
   value: string;
   weight: number;
@@ -1043,6 +1057,8 @@ export interface AiWildcardDraftResult {
   /** Tag groups the request asked for (older servers leave it out). */
   groups?: AiDraftGroup[];
   skipped: Array<{ text: string; reason: string }>;
+  /** The model's one-line reason when it changed nothing, else "". */
+  note?: string;
   model: string;
   /** The model's raw answer, for a follow-up's `history`. */
   answer: Record<string, unknown>;
@@ -1084,6 +1100,8 @@ export interface AiWildcardEditResult {
   changes: AiWildcardEditChange[];
   new_tags: string[];
   skipped: Array<{ text: string; reason: string }>;
+  /** The model's one-line reason when it changed nothing, else "". */
+  note?: string;
   model: string;
   /** The model's raw answer, for a follow-up's `history`. */
   answer: Record<string, unknown>;
@@ -1108,6 +1126,8 @@ export interface AiDerivationDraftRule {
 export interface AiDerivationDraftResult {
   rules: AiDerivationDraftRule[];
   skipped: Array<{ text: string; reason: string }>;
+  /** The model's one-line reason when it changed nothing, else "". */
+  note?: string;
   model: string;
   /** The model's raw answer, for a follow-up's `history`. */
   answer: Record<string, unknown>;
@@ -1148,6 +1168,8 @@ export interface AiConstraintDraftResult {
   cells: AiConstraintCellDraft[];
   exceptions: AiConstraintExceptionDraft[];
   skipped: Array<{ text: string; reason: string }>;
+  /** The model's one-line reason when it changed nothing, else "". */
+  note?: string;
   model: string;
   /** The model's raw answer, for a follow-up's `history`. */
   answer: Record<string, unknown>;

@@ -76,13 +76,19 @@ def check_pack(
     notes += unread_notes(plan, built, problems)
     # "Goes with" written as exclude drops options that carry both tags.
     row_by_id = {r.get("id"): r for r in rows}
+    code_vars = {i["var"] for i in pack_graph.run_items(plan["graph"], plan.get("settings"))} \
+        if isinstance(plan.get("graph"), dict) else set()
     for i in plan["items"]:
         if i["kind"] == "constraint" and i["key"] in built:
             for said in ai_lint.exclude_shared_tags(built[i["key"]]["payload"], row_by_id.get):
                 problems.setdefault(i["key"], []).append(said)
         # A rule that maps one pick to another value by value is a wildcard
         # plus a constraint written out longhand (a 22-branch weather table).
-        if i["kind"] == "derivation" and i["key"] in built:
+        # Not the rules the code wires from the run (the story beat is
+        # $iteration → $beat, one branch per frame, by design): a problem
+        # there can't be rebuilt away, so Fix with AI looped on it (Sonnet
+        # walkthrough, 2026-10-21).
+        if i["kind"] == "derivation" and i["key"] in built and i["var"] not in code_vars:
             for said in ai_lint.derivation_shape(i["name"], built[i["key"]]["payload"]):
                 if "value by value" in said:
                     problems.setdefault(i["key"], []).append(said)

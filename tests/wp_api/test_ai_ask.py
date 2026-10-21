@@ -219,3 +219,33 @@ async def test_editing_the_last_message_runs_the_new_text(wp_client, fake_llm):
     refused = await _json(await wp_client.post("/wp/api/ai/chat", json={
         "message": "tag Class", "chat_id": first["chat_id"], "retry": True}), 409)
     assert "undo" in refused["error"]
+
+
+async def test_the_item_an_answer_picks_may_be_changed(wp_client, fake_llm):
+    """Haiku hair eval (2026-10-21): "make a hair colour wildcard" found the
+    user's own, asked whether to trim it, and the user picked "trim it";
+    the edit was then refused as an item they never named, because an
+    answer by button sends no text. The item the picked answer names
+    counts as named."""
+    _src, tgt = await _two_wildcards(wp_client)
+    _on(fake_llm, tool_format="json")
+    ask = {"questions": [{"header": "Weapons", "question": "You already have a weapon list.",
+                          "choices": [f"Trim [[{tgt}#Weapon]]", "Make a new one"]}]}
+    edit = {"message": "Trimmed.", "calls": [
+        {"tool": "edit_options", "args": json.dumps({"id": tgt, "remove": [1]})}]}
+    fake_llm.chat_steps.extend([_ask_step(ask), edit])
+    first = await _chat(wp_client, "make a weapon wildcard", page={"route": "wildcards"})
+    [call] = first["pending"]
+    done = await _resume(wp_client, first["chat_id"], [{"id": call["id"], "answers": [
+        {"q": 0, "picked": [0]}]}])
+    [card] = done["proposals"]
+    assert card["op"]["id"] == tgt
+    assert [o["value"] for o in card["op"]["body"]["payload"]["options"]] == ["longsword"]
+
+    # Leaving it to the assistant names nothing: the edit is still refused.
+    fake_llm.chat_steps.extend([_ask_step(ask), edit, {"message": "Asked instead.", "calls": []}])
+    again = await _chat(wp_client, "make another weapon wildcard", page={"route": "wildcards"})
+    [call2] = again["pending"]
+    left = await _resume(wp_client, again["chat_id"], [{"id": call2["id"], "answers": [
+        {"q": 0, "decide": True}]}])
+    assert left["proposals"] == []

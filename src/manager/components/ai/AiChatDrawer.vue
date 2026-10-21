@@ -33,6 +33,7 @@ import AiAsk from "./AiAsk.vue";
 import { copyText } from "../../utils/clipboard";
 import { plainText } from "../../utils/chat-markdown";
 import AiCardView from "./AiCardView.vue";
+import AiSyntax from "./AiSyntax.vue";
 import AiTestCard from "./AiTestCard.vue";
 import AiCardPreview from "./AiCardPreview.vue";
 import AiPointer from "./AiPointer.vue";
@@ -911,11 +912,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
                       data-test="ai-chat-card-option"
                       @change="chat.toggleOption(entry, p, o.id)"
                     />
-                    <span class="wp-ai-chat__opt-text wp-ai-chat__clamp" :title="o.empty ? undefined : o.text">{{ o.empty ? "∅ nothing" : o.text }}</span>
+                    <span class="wp-ai-chat__opt-text wp-ai-chat__clamp" :title="o.empty ? undefined : o.text"><template v-if="o.empty">∅ nothing</template><AiSyntax v-else :text="o.text" /></span>
                     <span v-if="o.weight !== 1" class="wp-ai-chat__opt-weight">×{{ o.weight }}</span>
                     <span v-if="o.fallback" class="wp-ai-chat__chip" data-tone="accent">fallback</span>
                     <span v-for="t in o.tags" :key="t" class="wp-ai-chat__chip">#{{ t }}</span>
-                    <span v-if="o.negative" class="wp-ai-chat__opt-neg wp-ai-chat__clamp" :title="`Negative: ${o.negative}`">− {{ o.negative }}</span>
+                    <span v-if="o.negative" class="wp-ai-chat__opt-neg wp-ai-chat__clamp" :title="`Negative: ${o.negative}`">− <AiSyntax :text="o.negative" /></span>
                   </label>
                 </li>
               </ul>
@@ -929,7 +930,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             </div>
             <AiCardView v-if="cardView(p)" :view="cardView(p)!" />
             <ul v-else-if="otherLines(i, p).length" class="wp-ai-chat__preview">
-              <li v-for="(line, j) in otherLines(i, p)" :key="j">{{ line }}</li>
+              <li v-for="(line, j) in otherLines(i, p)" :key="j"><AiSyntax :text="line" /></li>
             </ul>
             <button
               v-if="!cardOptions(p) && !cardView(p) && p.preview.length > PREVIEW_LINES"
@@ -1335,7 +1336,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   margin: 0; padding: 6px 8px; border-radius: 6px; background: var(--wp-bg-1);
   font-family: var(--wp-font-mono, monospace); font-size: 12px; overflow-wrap: anywhere;
 }
-.wp-ai-chat__more { align-self: flex-start; border: 0; background: none; padding: 0; font-size: 12px; color: var(--wp-accent-text); cursor: pointer; }
+.wp-ai-chat__more { align-self: flex-start; border: 0; background: none; padding: 2px 0; margin: 2px 0 0; font-size: 12px; color: var(--wp-accent-text); cursor: pointer; }
+.wp-ai-chat__opts .wp-ai-chat__more { margin: 0 8px 4px; }
 .wp-ai-chat__warning-text { display: inline; }
 .wp-ai-chat__warning-text :deep(p) { display: inline; margin: 0; }
 .wp-ai-chat__note { margin: 0; font-size: 12px; color: var(--wp-text-muted); display: flex; align-items: baseline; gap: 6px; }

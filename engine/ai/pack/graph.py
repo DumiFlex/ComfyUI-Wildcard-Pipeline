@@ -38,6 +38,7 @@ from engine.ai.pack._common import (
     STYLES,
     PlanError,
     _clean,
+    _model,
     _obj,
     _tag,
     _var,
@@ -386,11 +387,64 @@ def _side(r: dict[str, Any], which: str, slots: dict[str, dict[str, Any]],
         if len(hits) == 1:
             ax = hits[0]
     if ax is None:
-        return None, f"{slot['name']} has no axis {axis or '?'}"
+        have = ", ".join(a["name"] for a in slot["axes"]) or "none"
+        return None, (f"{slot['name']} has no axis {axis}" if axis else
+                      f"{slot['name']}: no axis given") + f" (its axes: {have})"
     if need_value and value not in ax["values"]:
-        return None, f"{slot['name']}.{ax['name']} has no value {value or '?'}"
+        have = ", ".join(ax["values"][:8])
+        return None, (f"{slot['name']}.{ax['name']} has no value {value}" if value else
+                      f"{slot['name']}.{ax['name']}: no value given") + f" (its values: {have})"
     return {"slot": slot, "axis": ax["name"],
             "value": value if need_value or value in ax["values"] else ""}, ""
+
+
+#: How each relation kind reads to the user, for `plain_ref`.
+_KIND_WORDS = {
+    "derive": "A rule that sets a variable", "append": "A rule that adds words to a variable",
+    "exclude": "A \"never together\" rule", "only": "An \"only these\" rule",
+    "boost": "A \"more likely\" rule", "reduce": "A \"less likely\" rule",
+    "agree": "An \"agrees with\" rule", "accepts": "An \"accepts\" rule",
+    "draw": "A \"draws from\" rule",
+}
+_REF_VALUE = re.compile(r"^(\w+)(?: \$(\w+) \"([^\"]*)\")?(?: from \S+)?: (.+?)\.(\w+)"
+                        r"(?: has no value (\S+)|: no value given) \(its values: (.*)\)$")
+_REF_AXIS = re.compile(r"^(\w+)(?: on \S+)?: (.+?)(?: has no axis (\S+)|: no axis given)"
+                       r" \(its axes: (.*)\)$")
+_REF_SET = re.compile(r"^derive: \$(\w+) is already set by (?:the (.+) slot|a slot)")
+
+
+def plain_ref(ref: str) -> str:
+    """A relation the compile left out, as the plan shows it to the user.
+    `bad_refs` keep the terse form (the repair prompt reads them); this one
+    says which rule, why, and what the slot has, in words: "derive:
+    Subject.build has no value ?" read like a variable called
+    `$subj.build`, and the chat's Explain went looking for one (Dumi
+    2026-10-21)."""
+    m = _REF_VALUE.match(ref)
+    if m:
+        kind, var, text, slot, axis, value, have = m.groups()
+        who = _KIND_WORDS.get(kind, "A rule")
+        if var:
+            who = f"A rule that {'adds' if kind == 'append' else 'sets'} ${var} = \"{text}\""
+        why = (f"it names {axis} \"{value}\", which {slot} doesn't have" if value
+               else f"it names no {axis} value, so it can't say when it applies")
+        return (f"Left out a rule: {who} on {slot}'s {axis}: {why} ({slot}'s {axis} "
+                f"values: {have}).")
+    m = _REF_AXIS.match(ref)
+    if m:
+        kind, slot, axis, have = m.groups()
+        who = _KIND_WORDS.get(kind, "A rule")
+        why = (f"it names a {axis} group {slot} doesn't have" if axis
+               else "it names no tag group of it")
+        return f"Left out a rule: {who} on {slot}: {why} ({slot}'s groups: {have})."
+    m = _REF_SET.match(ref)
+    if m:
+        var, owner = m.groups()
+        by = f"the {owner} slot" if owner else "a slot"
+        return (f"Left out a rule: A rule that sets ${var}: {by} already picks ${var}, and a "
+                "rule can't overwrite a pick. It could add words to it or set a new variable "
+                "instead.")
+    return f"Left out a rule: {ref}"
 
 
 def _relations(
@@ -408,7 +462,11 @@ def _relations(
         src, err = _side(r, "from", by_name,
                          need_value=kind not in ("agree", "accepts", "draw"))
         if src is None:
-            bad_refs.append(f"{kind}: {err}")
+            # A rule that writes a variable says which and what, so the note
+            # (and a Fix with AI from it) can name the rule it means.
+            wvar, wtext = _var(r.get("var")), _clean(r.get("text"), 60).replace('"', "'")
+            what = f' ${wvar} "{wtext}"' if kind in ("derive", "append") and wvar else ""
+            bad_refs.append(f"{kind}{what}: {err}")
             continue
         rel: dict[str, Any] = {"kind": kind, "from": {"slot": src["slot"]["name"],
                                                       "axis": src["axis"],
@@ -432,9 +490,15 @@ def _relations(
                 bad_refs.append(f"{kind} from {src['slot']['name']}: no variable or text")
                 continue
             if kind == "derive" and (var in slot_vars or var in fixed_vars or var in input_vars):
-                bad_refs.append(f"derive: ${var} is already set by a slot; derive a new "
-                                "variable or use append")
-                continue
+                # A pick can't be overwritten, but the rule's words can still
+                # be added to it: the code turns it into an append instead of
+                # dropping it (Dumi 2026-10-21: "how do we actually fix these?").
+                owner = next((x["name"] for x in slots if x["var"] == var), "")
+                kind = rel["kind"] = "append"
+                warnings.append(f"{src['slot']['name']} → ${var}: the rule adds its words to "
+                                f"${var} instead of replacing it, since "
+                                + (f"the {owner} slot" if owner else "something else")
+                                + " already sets it")
             if kind == "append" and var not in slot_vars | derived | fixed_vars:
                 bad_refs.append(f"append: nothing sets ${var} before it")
                 continue
@@ -631,8 +695,48 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
                             "belong in a relation, the negative is for defects")
             negative = ", ".join(kept)
     lead, tail, negative = _defects_to_negative(lead, tail, negative, warnings)
+    lead, tail = _fixed_repeats(lead, tail, fixed, order, read, warnings)
     return {"lead": lead, "order": order[:MAX_TEMPLATE_PARTS], "tail": tail,
             "negative": negative}
+
+
+def _fixed_repeats(lead: str, tail: str, fixed: list[dict[str, Any]], order: list[str],
+                   read: set[str], warnings: list[str]) -> tuple[str, str]:
+    """A part of the lead or tail that a fixed value the template prints
+    already says ("clean lineart" in the lead of a pack whose style preset
+    holds it, Sonnet walkthrough 2026-10-21) prints twice; it goes."""
+    said: dict[str, str] = {}
+    for f in fixed:
+        if f["var"] in order or f["var"] in read:
+            for chunk in f["text"].split(","):
+                c = chunk.strip()
+                m = _WEIGHTED_PART.match(c)
+                word = (m.group(1) if m else c).strip().lower().replace("_", " ")
+                if word:
+                    said.setdefault(word, f["name"])
+    if not said:
+        return lead, tail
+    gone: list[str] = []
+
+    def fix(text: str) -> str:
+        kept = []
+        for chunk in text.split(","):
+            c = chunk.strip()
+            if not c:
+                continue
+            m = _WEIGHTED_PART.match(c)
+            word = (m.group(1) if m else c).strip().lower().replace("_", " ")
+            if word in said:
+                gone.append(f"{c} ({said[word]})")
+            else:
+                kept.append(c)
+        return ", ".join(kept)
+
+    lead, tail = fix(lead), fix(tail)
+    if gone:
+        warnings.append(f"Took {', '.join(gone)} out of the template text: the fixed value "
+                        "already says it, so it printed twice")
+    return lead, tail
 
 
 def _text_reads(lead: str, tail: str, order: list[str], by_name: dict[str, str],
@@ -859,7 +963,7 @@ def compile_graph(raw: Any) -> dict[str, Any]:
         "design": _clean(raw.get("design"), 900),
         "rating": raw.get("rating") if raw.get("rating") in ("safe", "nsfw") else "safe",
         "style": raw.get("style") if raw.get("style") in STYLES else "tags",
-        "model": _clean(raw.get("model"), 40),
+        "model": _model(raw.get("model")),
         "anchor": anchor or slots[0]["var"],
         "questions": questions[:MAX_QUESTIONS],
         "assumptions": [_clean(a, 200) for a in raw.get("assumptions") or []
@@ -1604,6 +1708,35 @@ def _norm(text: Any) -> str:
     return " ".join(str(text or "").split()).lower()
 
 
+#: A rebuild note about scope: this slot names what another slot picks.
+_SCOPE_NOTE = re.compile(r"already name what|names what|leave th(?:ose|at) to", re.I)
+#: The most of another slot's words one rebuild is shown.
+MAX_CLASH_WORDS = 12
+
+
+def clash_words(plan: dict[str, Any], built: dict[str, Any], key: str) -> dict[str, list[str]]:
+    """For a slot being rebuilt over scope: the words of every other built
+    slot that talks about the same things (the same words, or a head noun
+    this slot's options share: "eyes", "skin"), by slot name, at most
+    ``MAX_CLASH_WORDS`` each. The rebuild is told all of them at once; told
+    only the words of the problem it fixes, a rebuild of Body picked up
+    Race's "freckles" right after Race gave up Body's "eyes" (Sonnet rules
+    pack, 2026-10-21: two rounds of ping-pong before it settled)."""
+    own = built.get(key)
+    if not isinstance(own, dict):
+        return {}
+    mine = {c.strip() for o in own["payload"].get("options") or [] if isinstance(o, dict)
+            for c in _norm(o.get("value")).split(",") if c.strip()}
+    heads = {c.split()[-1] for c in mine}
+    out: dict[str, list[str]] = {}
+    for name, texts in other_texts(plan, built, key).items():
+        chunks = list(dict.fromkeys(c.strip() for t in texts for c in t.split(",") if c.strip()))
+        shared = [c for c in chunks if c in mine or c.split()[-1] in heads]
+        if shared:
+            out[name] = shared[:MAX_CLASH_WORDS]
+    return out
+
+
 def other_texts(plan: dict[str, Any], built: dict[str, Any], key: str) -> dict[str, list[str]]:
     """The option texts of every other built slot, by slot name: what a
     slot's options must not repeat (``compile_slot``'s ``others``)."""
@@ -2135,6 +2268,10 @@ def slot_request(plan: dict[str, Any], key: str, note: str = "",
         name = "pack_slot_fill"
     else:
         user = slot_prompt(graph, slot, note=note)
+        if _SCOPE_NOTE.search(note or "") and built:
+            for other, words in clash_words(plan, built, key).items():
+                user += "\n" + (f"{other} already says: {', '.join(words)}. Keep every one of "
+                                f"these out of these options; they are {other}'s.")
         schema = slot_schema(graph, slot)
         name = "pack_slot"
     fmt = ai_guide.format_line(plan.get("model") or "")
@@ -2718,8 +2855,7 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
     plan["questions"] = [*plan["questions"],
                          *code_questions(graph, kw.get("request") or "", plan["decisions"])]
     plan["warnings"] = [*graph["warnings"],
-                        *(f"Left out a relation: {b}"
-                          for b in [*graph["dropped"], *graph["bad_refs"]]),
+                        *(plain_ref(b) for b in [*graph["dropped"], *graph["bad_refs"]]),
                         *plan["warnings"]]
     plan["bad_refs"] = graph["bad_refs"]
     # Request words the graph says nowhere, and the ones a refine was

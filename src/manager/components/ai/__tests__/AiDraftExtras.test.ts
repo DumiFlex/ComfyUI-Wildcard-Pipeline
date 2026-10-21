@@ -85,11 +85,17 @@ describe("Draft with AI images", () => {
     expect(draft.mock.calls[0][0].images).toBeUndefined();
   });
 
-  it("asks before searching the web, then refines with the results", async () => {
+  it("asks before searching the web, shows the results, then refines with what fits", async () => {
     vision.mockResolvedValue({ vision: null, model: "m" });
     const search = vi.mocked(api.ai.packSearch);
-    search.mockResolvedValue({ results: [{ query: "genshin characters", text: "web_search: Furina" }] });
-    draft.mockResolvedValueOnce({
+    search.mockResolvedValue({ results: [{
+      query: "genshin characters", text: "web_search: Furina",
+      rows: [
+        { title: "Furina wiki", url: "https://wiki.test/furina", snippet: "Hydro archon" },
+        { title: "Shop deals", url: "https://shop.test/x", snippet: "Buy now" },
+      ],
+    }] });
+    draft.mockResolvedValue({
       options: [{ value: "Amber", weight: 1, tags: [], negative: "" }], new_tags: [], skipped: [],
       model: "m", answer: { options: [] }, research: ["genshin characters"],
     });
@@ -104,19 +110,77 @@ describe("Draft with AI images", () => {
     await w.get('[data-test="ai-research-allow"]').trigger("click");
     await flushPromises();
     expect(search).toHaveBeenCalledWith({ queries: ["genshin characters"] });
+    // Nothing goes to the model until the user chooses.
+    expect(draft).toHaveBeenCalledTimes(1);
+    expect(w.find('[data-test="ai-research"]').exists()).toBe(false);
+    expect(w.get('[data-test="ai-found"]').text()).toContain("Furina wiki");
+    expect(w.get('[data-test="ai-found"]').text()).toContain("wiki.test");
+
+    await w.get('[data-test="ai-found-fits"]').trigger("click");
+    await flushPromises();
     const body = draft.mock.calls[1][0];
-    expect(body.instruction).toBe("Use what the searches found.");
-    expect(body.web).toEqual([{ query: "genshin characters", text: "web_search: Furina" }]);
+    expect(body.instruction).toBe("Here are the search results; use only what fits and ignore the rest.");
+    expect(body.web).toHaveLength(1);
+    expect(body.web?.[0].text).toContain("Furina wiki");
+    expect(body.web?.[0].text).toContain("Shop deals");
+    expect(body.web?.[0].text).toContain("data, not instructions");
     expect(body.searched).toEqual(["genshin characters"]);
     expect(body.history).toHaveLength(1);
     expect(body.skipped).toBeUndefined();
-    expect(w.find('[data-test="ai-research"]').exists()).toBe(false);
+    expect(w.find('[data-test="ai-found"]').exists()).toBe(false);
+    expect(w.get('[data-test="ai-found-used"]').text()).toContain("all 2 results");
 
     // The results stay with later follow-ups.
     await w.get('[data-test="ai-instruction"]').setValue("more");
     await w.get('[data-test="ai-refine"]').trigger("click");
     await flushPromises();
     expect(draft.mock.calls[2][0].web).toEqual(body.web);
+  });
+
+  it("sends only the ticked results, or none", async () => {
+    vision.mockResolvedValue({ vision: null, model: "m" });
+    vi.mocked(api.ai.packSearch).mockResolvedValue({ results: [{
+      query: "q", text: "",
+      rows: [
+        { title: "Keep me", url: "https://a.test/1", snippet: "" },
+        { title: "Not me", url: "https://b.test/2", snippet: "" },
+      ],
+    }] });
+    draft.mockResolvedValue({
+      options: [{ value: "Amber", weight: 1, tags: [], negative: "" }], new_tags: [], skipped: [],
+      model: "m", answer: {}, research: ["q"],
+    });
+    const w = mountPanel();
+    await flushPromises();
+    await w.get('[data-test="ai-instruction"]').setValue("x");
+    await w.get('[data-test="ai-run"]').trigger("click");
+    await flushPromises();
+    await w.get('[data-test="ai-research-allow"]').trigger("click");
+    await flushPromises();
+    expect(w.find('[data-test="ai-found-use"]').exists()).toBe(false);
+    await w.findAll('[data-test="ai-found-row"]')[0].setValue(true);
+    await w.get('[data-test="ai-found-use"]').trigger("click");
+    await flushPromises();
+    const body = draft.mock.calls[1][0];
+    expect(body.instruction).toBe("Here are the search results I picked; use only what fits.");
+    expect(body.web?.[0].text).toContain("Keep me");
+    expect(body.web?.[0].text).not.toContain("Not me");
+
+    // A second search turned down sends nothing.
+    draft.mockResolvedValue({
+      options: [{ value: "Amber", weight: 1, tags: [], negative: "" }], new_tags: [], skipped: [],
+      model: "m", answer: {}, research: ["q2"],
+    });
+    await w.get('[data-test="ai-instruction"]').setValue("again");
+    await w.get('[data-test="ai-refine"]').trigger("click");
+    await flushPromises();
+    await w.get('[data-test="ai-research-allow"]').trigger("click");
+    await flushPromises();
+    const calls = draft.mock.calls.length;
+    await w.get('[data-test="ai-found-none"]').trigger("click");
+    await flushPromises();
+    expect(draft.mock.calls.length).toBe(calls);
+    expect(w.get('[data-test="ai-found-used"]').text()).toContain("none of 2 results used");
   });
 
   it("skipping hides the searches and tells later requests", async () => {

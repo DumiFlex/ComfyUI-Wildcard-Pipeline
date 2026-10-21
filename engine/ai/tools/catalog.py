@@ -88,15 +88,17 @@ TOOLS: list[Tool] = [
         "Find library items by what they are and what they hold (names, variables, tags, "
         "descriptions, option texts, values, rules), best match first.",
         '{"query": words, "type": optional module type, "bundle" or "template", "tag": '
-        'optional tag}: items ranked by how well their name, variable, tags, description '
+        'optional tag, "category": optional category name, or "none" for items with no '
+        'category}: items ranked by how well their name, variable, tags, description '
         'AND content (option texts, values, rules) match, with matching options as '
         'examples. Broad subjects widen on their own ("character" also finds hair, eyes, '
         'outfits). Search the subject, not the user\'s whole sentence. Empty query lists '
-        'everything of that type.',
+        'everything of that type or category (a category listing goes up to 100).',
         obj({"query": s("the subject, a few words; empty lists everything of the type"),
              "type": s("wildcard, fixed_values, combine, derivation, constraint, bundle or "
                        "template"),
-             "tag": s("only items with this tag")}),
+             "tag": s("only items with this tag"),
+             "category": s("only items in this category; none for items with no category")}),
         ("core",),
     ),
     Tool(
