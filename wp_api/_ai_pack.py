@@ -38,7 +38,6 @@ from wp_api._ai_common import (
     _instruction,
     _request_images,
     _turns,
-    _web_result,
 )
 from wp_api._ai_context import (
     _vocab_kinds,
@@ -310,7 +309,9 @@ async def _plan_context(cfg: dict[str, Any], first: str, turns: list[dict[str, A
 async def post_pack_search(request: web.Request) -> web.Response:
     """Body: {queries}. Runs the searches the pack planner or a Draft with
     AI panel asked for, after the user allowed them. Returns {results: [{query,
-    text}]}; the text is labelled as untrusted for the model."""
+    text, rows: [{title, url, snippet}], error?}]}; the text is labelled as
+    untrusted for the model, the rows are what the Pack builder lets the user
+    pick from."""
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
@@ -327,7 +328,16 @@ async def post_pack_search(request: web.Request) -> web.Response:
         return json_error(f"send 1 to {ai_pack.MAX_RESEARCH} searches", status=400)
     results = []
     for q in queries:
-        results.append({"query": q, "text": await _web_result(cfg, q)})
+        # The rows let the page show what each search found and let the
+        # user pick what goes to the planner (Dumi 2026-10-21: "use what
+        # the searches found" trusted results nobody had seen).
+        try:
+            rows = await _ai_search.search_rows(cfg, q)
+            results.append({"query": q, "text": "web_search: " + _ai_search.rows_text(q, rows),
+                            "rows": rows})
+        except _ai_client.AIError as e:
+            results.append({"query": q, "text": f"web_search: error: {e.message}", "rows": [],
+                            "error": e.message})
     return json_ok({"results": results})
 
 

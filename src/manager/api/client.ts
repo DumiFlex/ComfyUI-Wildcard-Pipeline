@@ -10,7 +10,7 @@ import type {
   AiConfig, AiConfigPatch, AiTestResult, AiIndexStatus, AiWildcardDraftRequest, AiWildcardDraftResult,
   AiWildcardEditRequest,
   AiWildcardEditResult,
-  AiWebResult,
+  AiWebFound,
   AiDerivationDraftRequest,
   AiTextDraftRequest,
   AiTextDraftResult,
@@ -604,7 +604,7 @@ export const api = {
       });
     },
     packSearch(body: { queries: string[] }, signal?: AbortSignal) {
-      return request<{ results: AiWebResult[] }>("/wp/api/ai/pack/search", {
+      return request<{ results: AiWebFound[] }>("/wp/api/ai/pack/search", {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },

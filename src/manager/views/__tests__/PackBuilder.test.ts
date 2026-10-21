@@ -173,8 +173,8 @@ describe("PackBuilder", () => {
     await flushPromises();
     expect(vi.mocked(api.ai.packPlan).mock.calls[0][0]).toEqual({
       instruction: "more like this", sample: "1girl, red hair, beach", settings: PLAN.plan.settings });
-    expect(w.get('[data-test="pack-shape"]').text()).toBe(
-      "Written as Danbooru-style tags · for pony · everything follows $season");
+    expect(w.findAll('[data-test="pack-shape"] span').map((c) => c.text())).toEqual(
+      ["Written as Danbooru-style tags", "For pony", "Everything follows $season"]);
     expect(w.text()).toContain("yours");
     expect(w.get('[data-test="pack-finding"]').text()).toContain("Season → Outfit: keys on #rain");
 

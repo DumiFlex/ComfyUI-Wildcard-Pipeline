@@ -4,10 +4,8 @@
  * with plain elements, and [[Name]] mentions as chips that open the item.
  * A mention the server couldn't match to an item stays a plain label.
  *
- * Prompt syntax in the text is coloured the way the editors colour it:
- * `$variables` in their own hashed colour, `{a|b}` picks, `{2$$, $$…}`
- * multi-picks, `@{…}` references, `<lora:…>` / `embedding:` runs and
- * `#tags`. A line opening with "Tip:", "Note:" or "Warning:" is a callout,
+ * Prompt syntax in the text is coloured the way the editors colour it
+ * (`utils/chat-syntax.ts`, shared with the cards). A line opening with "Tip:", "Note:" or "Warning:" is a callout,
  * and so is a quote opening with a GitHub alert (`> [!NOTE]`, `> [!WARNING]`).
  * A code span that is only a key combo (`Ctrl+Enter`) shows as keys, and a
  * code block longer than FOLD_AT lines folds.
@@ -22,8 +20,7 @@ import { KIND_ICON_MAP } from "../../../components/shared/kind-icons";
 import type { AiChatRef } from "../../api/types";
 import { closeOpen, parseMarkdown, type Block, type Inline, type ListItem, type Tone } from "../../utils/chat-markdown";
 import { copyText } from "../../utils/clipboard";
-import { tokenizeRich } from "@/widgets/richTokenize";
-import { varColorIndex } from "../../../components/shared/var-color";
+import { syntaxNodes as syntax } from "../../utils/chat-syntax";
 
 const props = defineProps<{ text: string; refs?: Record<string, AiChatRef>; live?: boolean }>();
 const router = useRouter();
@@ -135,43 +132,6 @@ function chip(raw: string): VNode {
     title: `Open ${found.name}`,
     onClick: () => { if (route) void router.push({ name: route, params: { id: found.id } }); },
   }, [h("i", { class: icon, "aria-hidden": "true" }), found.name]);
-}
-
-/** `<lora:…>`, `embedding:…` and `#tags`: not tokenizer kinds, so split first. */
-const EXTRA = /<lora:[^>\s]*>|embedding:[^\s,]+|(?<![\w&#/])#[A-Za-z][\w-]*/g;
-
-function tokens(text: string): Array<VNode | string> {
-  const out: Array<VNode | string> = [];
-  for (const t of tokenizeRich(text)) {
-    switch (t.kind) {
-      case "var":
-        out.push(h("span", {
-          class: "wp-ai-msg__var", style: { color: `var(--wp-var-${varColorIndex(t.meta?.name ?? "")})` },
-        }, t.raw));
-        break;
-      case "ref": out.push(h("span", { class: "wp-ai-msg__ref" }, t.raw)); break;
-      case "dp-brace": out.push(h("span", { class: "wp-ai-msg__pick" }, t.raw)); break;
-      case "dp-multi": out.push(h("span", { class: "wp-ai-msg__multi" }, t.raw)); break;
-      case "escape": out.push(h("span", { class: "wp-ai-msg__esc" }, t.raw)); break;
-      default: out.push(t.raw);
-    }
-  }
-  return out;
-}
-
-function syntax(text: string): Array<VNode | string> {
-  const out: Array<VNode | string> = [];
-  let last = 0;
-  for (const m of text.matchAll(EXTRA)) {
-    const at = m.index ?? 0;
-    if (at > last) out.push(...tokens(text.slice(last, at)));
-    const raw = m[0];
-    const cls = raw[0] === "#" ? "wp-ai-msg__tag" : raw[0] === "<" ? "wp-ai-msg__lora" : "wp-ai-msg__emb";
-    out.push(h("span", { class: cls }, raw));
-    last = at + raw.length;
-  }
-  if (last < text.length) out.push(...tokens(text.slice(last)));
-  return out;
 }
 
 function inline(nodes: Inline[]): Array<VNode | string> {
@@ -407,14 +367,6 @@ const Body = () => {
 }
 .wp-ai-msg :deep(.wp-ai-msg__chip i) { font-size: 10px; }
 .wp-ai-msg :deep(.wp-ai-msg__chip:hover) { background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent); }
-.wp-ai-msg :deep(.wp-ai-msg__var) { font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; font-weight: 500; }
-.wp-ai-msg :deep(.wp-ai-msg__ref) { color: var(--wp-accent-text); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; }
-.wp-ai-msg :deep(.wp-ai-msg__pick) { color: var(--wp-warn); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; }
-.wp-ai-msg :deep(.wp-ai-msg__multi) { color: var(--wp-rt-token-good); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; }
-.wp-ai-msg :deep(.wp-ai-msg__esc) { color: var(--wp-text-muted); opacity: 0.75; }
-.wp-ai-msg :deep(.wp-ai-msg__lora) { color: var(--wp-var-6); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; }
-.wp-ai-msg :deep(.wp-ai-msg__emb) { color: var(--wp-var-7); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; }
-.wp-ai-msg :deep(.wp-ai-msg__tag) { color: var(--wp-text-muted); font-weight: 500; }
 .wp-ai-msg :deep(.wp-ai-msg__callout) {
   display: flex; gap: 8px; align-items: baseline; padding: 6px 10px; border-radius: var(--wp-radius-sm);
   background: color-mix(in oklab, var(--wp-accent-500) 8%, transparent);

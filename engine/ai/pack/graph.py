@@ -38,6 +38,7 @@ from engine.ai.pack._common import (
     STYLES,
     PlanError,
     _clean,
+    _model,
     _obj,
     _tag,
     _var,
@@ -386,11 +387,63 @@ def _side(r: dict[str, Any], which: str, slots: dict[str, dict[str, Any]],
         if len(hits) == 1:
             ax = hits[0]
     if ax is None:
-        return None, f"{slot['name']} has no axis {axis or '?'}"
+        have = ", ".join(a["name"] for a in slot["axes"]) or "none"
+        return None, (f"{slot['name']} has no axis {axis}" if axis else
+                      f"{slot['name']}: no axis given") + f" (its axes: {have})"
     if need_value and value not in ax["values"]:
-        return None, f"{slot['name']}.{ax['name']} has no value {value or '?'}"
+        have = ", ".join(ax["values"][:8])
+        return None, (f"{slot['name']}.{ax['name']} has no value {value}" if value else
+                      f"{slot['name']}.{ax['name']}: no value given") + f" (its values: {have})"
     return {"slot": slot, "axis": ax["name"],
             "value": value if need_value or value in ax["values"] else ""}, ""
+
+
+#: How each relation kind reads to the user, for `plain_ref`.
+_KIND_WORDS = {
+    "derive": "A rule that sets a variable", "append": "A rule that adds words to a variable",
+    "exclude": "A \"never together\" rule", "only": "An \"only these\" rule",
+    "boost": "A \"more likely\" rule", "reduce": "A \"less likely\" rule",
+    "agree": "An \"agrees with\" rule", "accepts": "An \"accepts\" rule",
+    "draw": "A \"draws from\" rule",
+}
+_REF_VALUE = re.compile(r"^(\w+)(?: from \S+)?: (.+?)\.(\w+)"
+                        r"(?: has no value (\S+)|: no value given) \(its values: (.*)\)$")
+_REF_AXIS = re.compile(r"^(\w+)(?: on \S+)?: (.+?)(?: has no axis (\S+)|: no axis given)"
+                       r" \(its axes: (.*)\)$")
+_REF_SET = re.compile(r"^derive: \$(\w+) is already set by (?:the (.+) slot|a slot)")
+
+
+def plain_ref(ref: str) -> str:
+    """A relation the compile left out, as the plan shows it to the user.
+    `bad_refs` keep the terse form (the repair prompt reads them); this one
+    says which rule, why, and what the slot has, in words: "derive:
+    Subject.build has no value ?" read like a variable called
+    `$subj.build`, and the chat's Explain went looking for one (Dumi
+    2026-10-21)."""
+    m = _REF_VALUE.match(ref)
+    if m:
+        kind, slot, axis, value, have = m.groups()
+        who = _KIND_WORDS.get(kind, "A rule")
+        why = (f"it names {axis} \"{value}\", which {slot} doesn't have" if value
+               else f"it names no {axis} value, so it can't say when it applies")
+        return (f"Left out a rule: {who} on {slot}'s {axis}: {why} ({slot}'s {axis} "
+                f"values: {have}). Add it again with Add a relation, or ignore this.")
+    m = _REF_AXIS.match(ref)
+    if m:
+        kind, slot, axis, have = m.groups()
+        who = _KIND_WORDS.get(kind, "A rule")
+        why = (f"it names a {axis} group {slot} doesn't have" if axis
+               else "it names no tag group of it")
+        return (f"Left out a rule: {who} on {slot}: {why} ({slot}'s groups: {have}). Add "
+                "it again with Add a relation, or ignore this.")
+    m = _REF_SET.match(ref)
+    if m:
+        var, owner = m.groups()
+        by = f"the {owner} slot" if owner else "a slot"
+        return (f"Left out a rule: A rule that sets ${var}: {by} already picks ${var}, and a "
+                "rule can't overwrite a pick. It could add words to it or set a new variable "
+                "instead.")
+    return f"Left out a rule: {ref}"
 
 
 def _relations(
@@ -432,8 +485,10 @@ def _relations(
                 bad_refs.append(f"{kind} from {src['slot']['name']}: no variable or text")
                 continue
             if kind == "derive" and (var in slot_vars or var in fixed_vars or var in input_vars):
-                bad_refs.append(f"derive: ${var} is already set by a slot; derive a new "
-                                "variable or use append")
+                owner = next((x["name"] for x in slots if x["var"] == var), "")
+                bad_refs.append(f"derive: ${var} is already set by "
+                                + (f"the {owner} slot" if owner else "a slot")
+                                + "; derive a new variable or use append to add to it")
                 continue
             if kind == "append" and var not in slot_vars | derived | fixed_vars:
                 bad_refs.append(f"append: nothing sets ${var} before it")
@@ -899,7 +954,7 @@ def compile_graph(raw: Any) -> dict[str, Any]:
         "design": _clean(raw.get("design"), 900),
         "rating": raw.get("rating") if raw.get("rating") in ("safe", "nsfw") else "safe",
         "style": raw.get("style") if raw.get("style") in STYLES else "tags",
-        "model": _clean(raw.get("model"), 40),
+        "model": _model(raw.get("model")),
         "anchor": anchor or slots[0]["var"],
         "questions": questions[:MAX_QUESTIONS],
         "assumptions": [_clean(a, 200) for a in raw.get("assumptions") or []
@@ -2791,8 +2846,7 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
     plan["questions"] = [*plan["questions"],
                          *code_questions(graph, kw.get("request") or "", plan["decisions"])]
     plan["warnings"] = [*graph["warnings"],
-                        *(f"Left out a relation: {b}"
-                          for b in [*graph["dropped"], *graph["bad_refs"]]),
+                        *(plain_ref(b) for b in [*graph["dropped"], *graph["bad_refs"]]),
                         *plan["warnings"]]
     plan["bad_refs"] = graph["bad_refs"]
     # Request words the graph says nowhere, and the ones a refine was

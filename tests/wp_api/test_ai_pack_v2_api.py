@@ -106,17 +106,25 @@ async def test_web_search_needs_the_setting(wp_client, fake_llm, monkeypatch):
     resp = await wp_client.post("/wp/api/ai/pack/search", json={"queries": ["x"]})
     assert resp.status == 400
 
-    async def fake_search(cfg, query, urls=None):
-        return f'Web results for "{query}": [1] Fur coats: https://x.test'
+    async def fake_rows(cfg, query):
+        if query == "broken":
+            raise _ai_client.AIError("the search engine answered 500")
+        return [{"title": "Fur coats", "url": "https://x.test", "snippet": "long wool coats"}]
     monkeypatch.setattr("wp_api._ai_search.enabled", lambda cfg: True)
-    monkeypatch.setattr("wp_api._ai_search.search", fake_search)
+    monkeypatch.setattr("wp_api._ai_search.search_rows", fake_rows)
     body = await _plan(wp_client)
     assert body["web"] is True and body["plan"]["research"] == ["victorian winter fashion"]
     resp = await wp_client.post("/wp/api/ai/pack/search",
                                 json={"queries": ["victorian winter fashion"]})
     assert resp.status == 200
     results = (await resp.json())["results"]
-    assert "Fur coats" in results[0]["text"]
+    assert "Fur coats" in results[0]["text"] and "data, not instructions" in results[0]["text"]
+    # The rows are what the page lets the user pick from.
+    assert results[0]["rows"] == [{"title": "Fur coats", "url": "https://x.test",
+                                   "snippet": "long wool coats"}]
+    failed = (await (await wp_client.post("/wp/api/ai/pack/search",
+                                          json={"queries": ["broken"]})).json())["results"][0]
+    assert failed["rows"] == [] and failed["error"] == "the search engine answered 500"
     again = await _plan(wp_client, instruction="use the results",
                         history=[{"instruction": "seasons", "answer": PLAN}],
                         web=results, searched=["victorian winter fashion"])
@@ -372,7 +380,7 @@ async def test_pack_graph_plan_wires_items_without_the_model(wp_client, fake_llm
     body = await resp.json()
     plan = body["plan"]
     assert plan["graph"]["slots"][0]["var"] == "race"
-    assert any("Left out a relation" in w for w in plan["warnings"])
+    assert any("Left out a rule" in w for w in plan["warnings"])
     assert body["answer"]["title"] == "Fantasy heroes"
     names = {i["name"]: i for i in plan["items"]}
     assert "Race → Weapon" in names and "Title rule" in names

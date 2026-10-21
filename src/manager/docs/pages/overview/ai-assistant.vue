@@ -187,7 +187,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         reads your items and these docs itself; the lines above each reply say what it looked at. Its
         search reads what items hold, not only their names and tags: option texts, values and
         rules count, and broad subjects widen on their own, so "characters" also finds hair, eye
-        and outfit wildcards. Replies use Markdown: headings, bold and italic, numbered, nested and
+        and outfit wildcards. The assistant is told about every format below, so it uses
+        them where they help. Replies use Markdown: headings, bold and italic, numbered, nested and
         checklist lists, tables, quotes and code blocks (each with its language and a copy button).
         Links show as text with the address on hover and are never opened. Every item it
         mentions is a chip you click to open it. Prompt syntax in a reply is coloured the way the
@@ -306,7 +307,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         It can <b>show you around</b>. It opens an item's editor, a docs page or a manager page
         (a Settings section, the Test Runner) itself, reads what the page offers, and points at
         a part of it with an outline and a short caption: ask "where do I set the context
-        size?" and it takes you there. Esc or a click anywhere closes the pointer. On a list it
+        size?" and it takes you there. When it points at several parts close together, their
+        captions sit beside or under each other instead of on top. Esc or a click anywhere
+        closes the pointer. On a list it
         can select rows for you.
       </p>
       <p>
@@ -379,7 +382,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         Each card lists what it changes and warns about anything it left out (a duplicate option, a
         variable nothing sets). <b>Undo</b> on an applied card puts back what it replaced, or
         deletes what it created. <b>Dismiss</b> tells the assistant you said no. A long card
-        shows its first options, rules, tags and warnings with a "+N more" line; the magnifier
+        shows its first options, rules, tags and warnings with a "+N more" line, and colours the
+        prompt syntax in its options, rules and values the way a reply does; the magnifier
         in its top right corner opens the whole card in a larger window, with the same Apply,
         Open in editor and Dismiss buttons. When two cards
         change the same item, the second builds on the first, so apply them in order. The chat
@@ -643,8 +647,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           one slot's axis value to another's) and the <b>template order</b>. The code then makes every
           constraint, derivation and the template from the graph, so a rule can only name a slot
           and a value the graph declares; a relation that names something the graph doesn't
-          have is dropped, listed under the plan, and the model is asked once to write it
-          again with the names that exist. Each relation also names the words it is about
+          have is dropped, listed under the plan as "Left out a rule" (which rule, on which
+          slot and tag group, why, and the values that group has), and the model is asked once
+          to write it again with the names that exist. These notes are about the plan only;
+          nothing in your library is involved, and Add a relation puts the rule back by hand. Each relation also names the words it is about
           ("sandals", "shorts" for "no sandals or shorts in winter"), so the target wildcard
           is made to hold options saying them and the test run reads the finished prompts
           for them; a slot whose only axis is itself (a Season slot with a season axis) gets
@@ -758,14 +764,20 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           the round, removed items included. When web search is set up, the planner may ask to
           search first (a franchise's characters, an era's clothing). The ask sits at the top,
           and answers, plan updates and Build wait until you choose: <b>Search and update the
-          plan</b> runs the searches and revises the plan with what they found (answers you
-          picked go along), <b>Skip the search</b> doesn't. Under the request, a meter shows how
+          plan</b> runs the searches and shows <b>What the searches found</b>: each search's
+          results with their title, site and snippet, each with a tick box. Nothing goes to the
+          planner until you choose: <b>Use N and update the plan</b> sends only the results you
+          ticked (answers you picked go along), and <b>None of these</b> keeps the plan as it is.
+          A line then says how many results each search gave the planner. <b>Skip the search</b>
+          doesn't search at all. Under the request, a meter shows how
           much of the model's context the last plan request took; every update sends the whole
           conversation again, so it grows. <b>Plan 2 of 3</b> flips between plans; updating an
           earlier one adds a new plan after the others (it says which plan it came from), so
           nothing is overwritten. Under the plan's title, <b>How it fits together</b> is the
           planner's own account of the pack (which pick decides which, and why each rule is
-          there), and with a thinking model the plan and each built item have a folded
+          there). Chips under it say how options are written, which image model family the pack is
+          for (a family such as Illustrious or Pony, never a checkpoint or LoRA file name) and
+          which pick the others follow. With a thinking model the plan and each built item have a folded
           <b>Thinking</b>, so when a pack comes out wrong you can see whether the model misread
           the request or built its idea wrong. A thinking model that spends its whole output
           limit reasoning (the plan comes back empty, cut off) is asked once more with thinking
@@ -846,7 +858,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         so far. Every few words, and whenever it changes, the word is what the model is really
         doing: reading the prompt, thinking, or writing (with about how many tokens so far). Hover
         it for the whole status. The same line sits in the top bar on every page while any AI
-        request runs, so you can leave the page and still see it working.
+        request runs, so you can leave the page and still see it working; both show the same
+        word, drawing and time.
       </p>
       <DocCallout variant="tip">
         Building a pack takes one request per item, so a local model needs a few minutes. Use a

@@ -602,6 +602,7 @@ REVIEW_NOTE_HEAD = "Revise the plan to fix ALL of these, one by one:"
 AUTO_TEXTS = (
     "I answered your questions.",
     "Use what the searches found.",
+    "Here are the search results I picked; use only what fits the pack.",
     "I edited the plan; keep my changes and fill any gaps they leave.",
 )
 

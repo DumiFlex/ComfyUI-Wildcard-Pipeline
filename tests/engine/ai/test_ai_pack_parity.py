@@ -396,7 +396,7 @@ def test_a_repair_that_resolved_nothing_keeps_its_left_out_relations():
     # Both misses are listed (one repair call, no second ask).
     assert plan["bad_refs"] == []
     assert sorted(plan["graph"]["dropped"]) == sorted([*first["bad_refs"], *fixed["bad_refs"]])
-    assert sum("Left out a relation" in w for w in plan["warnings"]) == 2
+    assert sum("Left out a rule" in w for w in plan["warnings"]) == 2
     # The model's shape and the plan's graph are still read as written.
     assert not pg._compiled(pg.graph_answer(plan))
     assert not pg._compiled(plan["graph"])
@@ -642,18 +642,18 @@ def test_the_model_field_keeps_only_the_families_the_request_names():
     g = _graph([_slot("Hero", "hero", "heroes", [])], [], ["Hero"], model="flux, sd3")
     # The planner's own two families on a request naming none: no rule.
     plan = pack.compile_graph_plan(copy.deepcopy(g), request="fantasy heroes")
-    assert plan["graph"]["model"] == "flux"
-    assert plan["applied"] == ["Model: flux (the planner wrote \"flux, sd3\", but the request "
+    assert plan["graph"]["model"] == "Flux"
+    assert plan["applied"] == ["Model: Flux (the planner wrote \"Flux, SD3\", but the request "
                                "names no second family, so there is no per-family quality rule)"]
     assert not any(i["name"] == "Model quality" for i in plan["items"])
     # Named by the request: kept. Without a request: left as written.
     asked = pack.compile_graph_plan(copy.deepcopy(g), request="a pack for flux and sd3")
-    assert asked["graph"]["model"] == "flux, sd3"
+    assert asked["graph"]["model"] == "Flux, SD3"
     assert any(i["name"] == "Model quality" for i in asked["items"])
-    assert pack.compile_graph_plan(copy.deepcopy(g))["graph"]["model"] == "flux, sd3"
+    assert pack.compile_graph_plan(copy.deepcopy(g))["graph"]["model"] == "Flux, SD3"
     # One named of three written: the named one stays.
     g["model"] = "pony, flux, sd3"
-    assert pack.compile_graph_plan(g, request="an sd3 pack")["graph"]["model"] == "sd3"
+    assert pack.compile_graph_plan(g, request="an sd3 pack")["graph"]["model"] == "SD3"
 
 
 def test_the_quality_rule_gets_the_packs_words_as_its_otherwise():
@@ -739,3 +739,14 @@ def test_a_rule_keyed_on_a_multi_pick_slot_goes():
                 ["Animal", "animal_biome"])
     plan = pack.compile_graph_plan(g2, request="2 to 3 animals in their biome")
     assert plan["graph"]["relations"] == [] and plan["graph"]["slots"][0]["pick"] == "2-3"
+
+
+def test_the_model_field_names_families_never_a_file_name():
+    """A LoRA or checkpoint file name, or a word the field length cut off,
+    never shows as the plan's model (Dumi 2026-10-21: "for
+    illustriousXLv01_stabilizer_v1.185c, ani")."""
+    g = _graph([_slot("Hero", "hero", "heroes", [])], [], ["Hero"],
+               model="illustriousXLv01_stabilizer_v1.185c, ani")
+    assert pack.compile_graph_plan(g)["graph"]["model"] == "Illustrious"
+    g["model"] = "anime"
+    assert pack.compile_graph_plan(g)["graph"]["model"] == ""

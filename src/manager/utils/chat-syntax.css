@@ -1,0 +1,9 @@
+/* Coloured prompt syntax in the chat (`chat-syntax.ts`): rendered by `h`, so styled by class, unscoped. */
+.wp-ai-syn__var { font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; font-weight: 500; }
+.wp-ai-syn__ref { color: var(--wp-accent-text); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; }
+.wp-ai-syn__pick { color: var(--wp-warn); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; }
+.wp-ai-syn__multi { color: var(--wp-rt-token-good); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; }
+.wp-ai-syn__esc { color: var(--wp-text-muted); opacity: 0.75; }
+.wp-ai-syn__lora { color: var(--wp-var-6); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; }
+.wp-ai-syn__emb { color: var(--wp-var-7); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; }
+.wp-ai-syn__tag { color: var(--wp-text-muted); font-weight: 500; }

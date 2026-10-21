@@ -64,7 +64,12 @@ const chat = useAiChat();
 /** Ask the chat what a warning means here and what to do about it. */
 function explain(warning: string, item?: AiPackItem): void {
   const about = item ? ` about ${item.kind.replace("_", " ")} "${item.name}"` : "";
-  chat.ask(`Explain this pack builder warning${about} and what I can do about it: "${warning}"`);
+  // The plan isn't in the library yet: without saying so, a small model
+  // searched the library for the names in the note and explained an
+  // unrelated bundle (Dumi 2026-10-21).
+  chat.ask(`Explain this pack builder note${about} and what I can do about it: "${warning}". `
+    + "It is about the pack plan on this page, which is not in my library yet, so answer from "
+    + "the plan (read the page if you need it), not from my library.");
 }
 const { config, ready } = useAiConfig();
 const router = useRouter();
@@ -281,15 +286,26 @@ function quality(key: string): string[] {
     .map((q) => q.text);
 }
 
+/** "danbooru.donmai.us" from a result's link, for the found card. */
+function siteOf(url: string): string {
+  try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; }
+}
+
+/** "used 2 of 5 results for "x"; none of 3 for "y"" for the folded line. */
+const usedLine = computed(() => pb.usedSearches.value.map((u) => (
+  u.total === 0 ? `nothing found for "${u.query}"`
+    : u.used === 0 ? `none of ${u.total} results used for "${u.query}"`
+      : `used ${u.used} of ${u.total} results for "${u.query}"`)).join("; "));
+
 const STYLE_LABEL = { tags: "Danbooru-style tags", sentences: "natural phrases" } as const;
 const shape = computed(() => {
   const p = draft.value;
-  if (!p) return "";
+  if (!p) return [];
   return [
     `Written as ${STYLE_LABEL[p.style] ?? "tags"}`,
-    p.model ? `for ${p.model}` : "",
-    p.anchor ? `everything follows $${p.anchor}` : "",
-  ].filter(Boolean).join(" · ");
+    p.model ? `For ${p.model}` : "",
+    p.anchor ? `Everything follows $${p.anchor}` : "",
+  ].filter(Boolean);
 });
 const showSample = ref(!!pb.sample.value);
 
@@ -535,6 +551,61 @@ function stopExtending(): void {
             <Button size="sm" variant="primary" icon="pi-search" :loading="pb.searching.value" :disabled="busy" data-test="pack-research-allow" @click="pb.allowResearch">Search and update the plan</Button>
           </div>
         </section>
+        <section v-if="pb.found.value.length" class="wp-pack__found" aria-label="What the web searches found" data-test="pack-found">
+          <header class="wp-pack__ask-web-head">
+            <i class="pi pi-globe" aria-hidden="true" />
+            <span>What the searches found</span>
+          </header>
+          <p class="wp-pack__ask-web-why">Tick what the planner should use. Nothing goes to it until you choose, and it reads what you tick as reference, never as instructions.</p>
+          <div v-for="(r, qi) in pb.found.value" :key="r.query" class="wp-pack__found-query">
+            <p class="wp-pack__found-q"><i class="pi pi-search" aria-hidden="true" /> {{ r.query }}</p>
+            <p v-if="r.error" class="wp-pack__found-none" data-test="pack-found-error">The search failed: {{ r.error }}</p>
+            <p v-else-if="!r.rows?.length" class="wp-pack__found-none">Nothing found.</p>
+            <ul v-else class="wp-pack__found-rows">
+              <li v-for="(row, ri) in r.rows" :key="row.url + ri" :data-picked="pb.foundPicks.value.has(`${qi}:${ri}`) || undefined">
+                <label>
+                  <input
+                    type="checkbox"
+                    :checked="pb.foundPicks.value.has(`${qi}:${ri}`)"
+                    :disabled="busy"
+                    :aria-label="`Use ${row.title}`"
+                    data-test="pack-found-row"
+                    @change="pb.toggleFound(qi, ri)"
+                  />
+                  <span class="wp-pack__found-body">
+                    <span class="wp-pack__found-title">{{ row.title }}</span>
+                    <span class="wp-pack__found-site" :title="row.url">{{ siteOf(row.url) }}</span>
+                    <span v-if="row.snippet" class="wp-pack__found-snippet">{{ row.snippet }}</span>
+                  </span>
+                </label>
+              </li>
+            </ul>
+          </div>
+          <div class="wp-pack__row">
+            <button
+              v-if="pb.foundCount.value > 1"
+              type="button"
+              class="wp-pack__mini"
+              :disabled="busy"
+              data-test="pack-found-all"
+              @click="pb.setAllFound(pb.foundPicks.value.size < pb.foundCount.value)"
+            >{{ pb.foundPicks.value.size < pb.foundCount.value ? "Tick all" : "Untick all" }}</button>
+            <span class="wp-pack__spacer" />
+            <Button size="sm" variant="ghost" :disabled="busy" data-test="pack-found-none" @click="pb.skipFound">None of these</Button>
+            <Button
+              size="sm"
+              variant="primary"
+              icon="pi-check"
+              :disabled="busy || !pb.foundPicks.value.size"
+              data-test="pack-found-use"
+              @click="pb.useFound"
+            >{{ pb.foundPicks.value.size ? `Use ${pb.foundPicks.value.size} and update the plan` : "Tick what to use" }}</button>
+          </div>
+        </section>
+        <p v-else-if="pb.usedSearches.value.length" class="wp-pack__found-used" data-test="pack-found-used">
+          <i class="pi pi-globe" aria-hidden="true" />
+          <span>Web search: {{ usedLine }}.</span>
+        </p>
         <Card v-if="pb.questions.value.length" :title="`Questions from the assistant · ${pb.questions.value.length}`">
           <PackQuestions />
         </Card>
@@ -636,13 +707,15 @@ function stopExtending(): void {
           <span v-if="draft?.rating === 'nsfw'" class="wp-pack__nsfw">NSFW</span>
           <span v-if="pb.edited.value" class="wp-pack__edited" data-test="pack-edited">edited by you</span>
         </p>
-        <p v-if="draft?.summary" class="wp-pack__dim">{{ draft.summary }}</p>
-        <p v-if="draft?.design" class="wp-pack__design" data-test="pack-design"><span class="wp-pack__design-label">How it fits together</span> {{ draft.design }}</p>
+        <p v-if="draft?.summary" class="wp-pack__summary">{{ draft.summary }}</p>
+        <div v-if="draft?.design" class="wp-pack__design" data-test="pack-design"><span class="wp-pack__design-label">How it fits together</span><p>{{ draft.design }}</p></div>
         <details v-if="pb.planThinking.value" class="wp-pack__thought" data-test="pack-thinking">
           <summary>Thinking</summary>
           <p>{{ pb.planThinking.value }}</p>
         </details>
-        <p v-if="shape" class="wp-pack__shape" data-test="pack-shape">{{ shape }}</p>
+        <p v-if="shape.length" class="wp-pack__shape" data-test="pack-shape">
+          <span v-for="part in shape" :key="part" class="wp-pack__shape-chip">{{ part }}</span>
+        </p>
         <div v-if="draft" class="wp-pack__run" data-test="pack-run">
           <span class="wp-pack__dim wp-pack__run-label">Runs as</span>
           <Select
@@ -958,7 +1031,7 @@ function stopExtending(): void {
   border: 1px solid var(--wp-border); background: var(--wp-bg-2); color: var(--wp-text);
 }
 .wp-pack__choice[aria-pressed="true"] { border-color: var(--wp-accent-400); color: var(--wp-accent-text); background: color-mix(in oklab, var(--wp-accent-500) 16%, var(--wp-bg-2)); }
-.wp-pack__title { margin: 0 0 2px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
+.wp-pack__title { margin: 0 0 2px; font-size: 15px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
 .wp-pack__nsfw { font-size: 10px; padding: 1px 6px; border-radius: 4px; color: var(--wp-danger); border: 1px solid currentColor; }
 .wp-pack__items { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; }
 .wp-pack__item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--wp-border); min-width: 0; }
@@ -971,7 +1044,7 @@ function stopExtending(): void {
   color: var(--wp-kind-wildcard); background: var(--wp-kind-wildcard-bg);
 }
 .wp-pack__kind[data-kind="fixed_values"] { color: var(--wp-kind-fixed); background: var(--wp-kind-fixed-bg); }
-.wp-pack__run { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; font-size: 12.5px; }
+.wp-pack__run { display: flex; align-items: center; gap: 8px; margin: 12px 0 10px; font-size: 12.5px; }
 .wp-pack__run-frames { width: 72px; }
 .wp-pack__run-label { white-space: nowrap; }
 .wp-pack__inputs { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px; }
@@ -1014,7 +1087,27 @@ function stopExtending(): void {
 .wp-pack__bar-label { position: relative; padding: 0 6px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .wp-pack__prompt p { margin: 0 0 4px; font-family: var(--wp-font-mono, monospace); font-size: 12px; overflow-wrap: anywhere; }
 .wp-pack__prompt + .wp-pack__prompt { margin-top: 10px; }
-.wp-pack__shape { margin: 4px 0 0; font-size: 12px; color: var(--wp-accent-text); }
+.wp-pack__shape { margin: 10px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-pack__shape-chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; color: var(--wp-accent-text); background: color-mix(in oklab, var(--wp-accent-500) 10%, transparent); border: 1px solid color-mix(in oklab, var(--wp-accent-500) 30%, transparent); }
+.wp-pack__summary { margin: 4px 0 0; font-size: 13px; line-height: 1.55; color: var(--wp-text-muted); }
+.wp-pack__found {
+  display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 10px;
+  border: 1px solid var(--wp-accent-400); background: linear-gradient(135deg, var(--wp-accent-glow), transparent 70%);
+}
+.wp-pack__found-query { display: flex; flex-direction: column; gap: 4px; }
+.wp-pack__found-q { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--wp-text); display: flex; gap: 6px; align-items: baseline; }
+.wp-pack__found-q .pi { font-size: 11px; color: var(--wp-text-dim); }
+.wp-pack__found-none { margin: 0 0 0 18px; font-size: 12px; color: var(--wp-text-dim); }
+.wp-pack__found-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.wp-pack__found-rows label { display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+.wp-pack__found-rows li:hover label { background: var(--wp-bg-3); }
+.wp-pack__found-rows li[data-picked] label { background: color-mix(in oklab, var(--wp-accent-500) 10%, transparent); }
+.wp-pack__found-rows input { margin-top: 3px; accent-color: var(--wp-accent-500); }
+.wp-pack__found-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wp-pack__found-title { font-size: 13px; color: var(--wp-text); overflow-wrap: anywhere; }
+.wp-pack__found-site { font-size: 11.5px; color: var(--wp-success); }
+.wp-pack__found-snippet { font-size: 12px; line-height: 1.45; color: var(--wp-text-muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.wp-pack__found-used { margin: 0; display: flex; gap: 6px; align-items: baseline; font-size: 12px; color: var(--wp-text-muted); }
 .wp-pack__toggle { margin-top: 8px; border: 0; background: none; padding: 0; color: var(--wp-text-muted); font: inherit; font-size: 12.5px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
 .wp-pack__toggle:hover { color: var(--wp-text); }
 .wp-pack__toggle + .wp-pack__request { margin-top: 6px; }
@@ -1095,8 +1188,9 @@ function stopExtending(): void {
 .wp-pack__warnings li { display: flex; gap: 6px; align-items: baseline; }
 .wp-pack__warnings li > span { min-width: 0; overflow-wrap: anywhere; }
 .wp-pack__summary { margin: 10px 0 0; font-size: 12.5px; color: var(--wp-text-muted); }
-.wp-pack__design { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; }
-.wp-pack__design-label { font-weight: 600; margin-right: 4px; }
+.wp-pack__design { margin: 12px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--wp-bg-1, var(--wp-bg-2)); border: 1px solid var(--wp-border); }
+.wp-pack__design p { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--wp-text); }
+.wp-pack__design-label { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--wp-text-dim); }
 .wp-pack__thought { margin: 6px 0 0; font-size: 12px; color: var(--wp-text-muted); }
 .wp-pack__thought summary { cursor: pointer; font-style: italic; }
 .wp-pack__thought p { white-space: pre-wrap; margin: 4px 0 0; padding-left: 8px; border-left: 2px solid var(--wp-border); max-height: 320px; overflow-y: auto; }

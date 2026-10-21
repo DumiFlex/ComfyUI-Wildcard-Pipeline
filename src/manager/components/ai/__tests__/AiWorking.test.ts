@@ -21,6 +21,7 @@ describe("AiWorking", () => {
     expect(w.attributes("aria-label")).toBe("Writing…");
     // The logo's sparkles are drawn, not a spinner icon.
     expect(w.findAll(".wp-aiw__star")).toHaveLength(3);
+    w.unmount();
   });
 
   it("mixes playful words with what is really happening", async () => {
@@ -45,7 +46,9 @@ describe("AiWorking", () => {
   it("picks the typing stars most often", () => {
     expect([0, 0.39, 0.45, 0.65, 0.95].map(pickVariant)).toEqual(["typing", "typing", "shuffle", "orbit", "burst"]);
     for (const v of ["typing", "shuffle", "orbit", "burst"] as const) {
-      expect(mount(AiWorking, { props: { text: "x", variant: v } }).findAll(".wp-aiw__star")).toHaveLength(3);
+      const m = mount(AiWorking, { props: { text: "x", variant: v } });
+      expect(m.findAll(".wp-aiw__star")).toHaveLength(3);
+      m.unmount();
     }
   });
 
@@ -87,5 +90,41 @@ describe("AiWorking", () => {
     expect(seen["X-WP-Progress"]).toMatch(/^[0-9a-f]{24}$/);
     expect(during).toBe(1);
     expect(activeAiRequests.value).toHaveLength(0);
+  });
+});
+
+describe("AiWorking lines showing together", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    activeAiRequests.value = [];
+  });
+
+  it("say the same word with the same mark and time", async () => {
+    vi.useFakeTimers();
+    const top = mount(AiWorking, { props: { label: "Planning", inline: true } });
+    const page = mount(AiWorking, { props: { label: "Planning", size: 34 } });
+    const word = (w: typeof top) => w.get('[data-test="ai-working-word"]').text();
+    expect(top.attributes("data-variant")).toBe(page.attributes("data-variant"));
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(3500);
+      await flushPromises();
+      expect(word(top)).toBe(word(page));
+    }
+    expect(top.get('[data-test="ai-working-time"]').text()).toBe(page.get('[data-test="ai-working-time"]').text());
+    // A line that joins later shows the same word and counts from the same start.
+    const late = mount(AiWorking, { props: { label: "Planning" } });
+    await flushPromises();
+    expect(word(late)).toBe(word(page));
+    expect(late.get('[data-test="ai-working-time"]').text()).toBe("14s");
+    expect(late.attributes("data-variant")).toBe(page.attributes("data-variant"));
+    // A fixed drawing still wins for that line.
+    const fixed = mount(AiWorking, { props: { label: "Planning", variant: "burst" } });
+    expect(fixed.attributes("data-variant")).toBe("burst");
+    top.unmount(); page.unmount(); late.unmount(); fixed.unmount();
+    // Once every line is gone the next job starts afresh.
+    const next = mount(AiWorking, { props: { label: "Drafting" } });
+    await flushPromises();
+    expect(next.get('[data-test="ai-working-time"]').text()).toBe("0s");
+    next.unmount();
   });
 });

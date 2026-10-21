@@ -383,6 +383,24 @@ on). Answer the user's actual question with what you found: no greeting, no \
 list of what you can do.
 
 """
+#: The Markdown the chat renders, told to the model the same way in both
+#: answer modes. Every element here has a drawing in the drawer
+#: (`AiMessage.vue`); one it is not told about, it never writes.
+FORMATTING = """\
+Write short answers as plain sentences. Use formatting only where it helps:
+- a list (- or 1.) for steps or several separate items;
+- a task list (- [ ] to do, - [x] done) for steps the user ticks off;
+- a | table | to compare items;
+- `code` for $variables, option text and prompt syntax; keys like `Ctrl+Enter` \
+in backticks show as keyboard keys;
+- a ``` block for JSON or a prompt longer than a line (```prompt for prompt text);
+- ### headings only in answers longer than about 15 lines;
+- one line starting "Tip:", "Note:" or "Warning:" for the next step or a risk, at \
+most one per answer; a longer one as a quote: > [!TIP], > [!NOTE] or > [!WARNING] \
+on the first line, the text on the next;
+- a [link](https://…) only for a web address you were given (it shows as text).
+No emoji. End with the answer, not an offer.
+"""
 #: How a JSON-mode model answers.
 FORMAT_JSON = """While you still have calls to make, leave "message" empty. \
 Answer with JSON: {"plan": one or two sentences for yourself: what the \
@@ -395,15 +413,7 @@ Write every library item you mention as [[id#Name]] (its id from read or \
 search, then its name): the user sees a chip with the name that opens it. \
 Never write an id anywhere else, and never ask the user for one: ids mean \
 nothing to them.
-Write short answers as plain sentences. Use formatting only where it helps:
-- a list (- or 1.) for steps or several separate items;
-- a | table | to compare items;
-- `code` for $variables, option text and keys like `Ctrl+Enter`;
-- a ``` block for JSON or a prompt longer than a line (```prompt for prompt text);
-- ### headings only in answers longer than about 15 lines;
-- one line starting "Tip:" or "Warning:" for the next step or a risk, at most \
-one per answer.
-No emoji. End with the answer, not an offer.
+""" + FORMATTING + """\
 Wherever a tool takes an id you can also give \
 the item's exact name. Use page tools (open, highlight) only when the user asks about the app \
 or where something is, never for a greeting.
@@ -425,15 +435,7 @@ Write every library item you mention as [[id#Name]] (its id from read or \
 search, then its name): the user sees a chip with the name that opens it. \
 Never write an id anywhere else, and never ask the user for one: ids mean \
 nothing to them.
-Write short answers as plain sentences. Use formatting only where it helps:
-- a list (- or 1.) for steps or several separate items;
-- a | table | to compare items;
-- `code` for $variables, option text and keys like `Ctrl+Enter`;
-- a ``` block for JSON or a prompt longer than a line (```prompt for prompt text);
-- ### headings only in answers longer than about 15 lines;
-- one line starting "Tip:" or "Warning:" for the next step or a risk, at most \
-one per answer.
-No emoji. End with the answer, not an offer.
+""" + FORMATTING + """\
 Wherever a tool takes an id you can also give \
 the item's exact name. Use page tools (open, highlight) only when the user asks about \
 the app or where something is, never for a greeting.

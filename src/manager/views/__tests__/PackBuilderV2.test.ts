@@ -77,7 +77,10 @@ describe("PackBuilder v2", () => {
       findings: [], note: "", plan: { ...p, warnings: [] },
     }));
     vi.mocked(api.ai.packSearch).mockReset().mockResolvedValue({
-      results: [{ query: "popular hairstyles 2026", text: "wolf cut, bixie" }],
+      results: [{ query: "popular hairstyles 2026", text: "web_search: wolf cut, bixie", rows: [
+        { title: "Wolf cut guide", url: "https://www.hair.test/wolf", snippet: "the wolf cut is back" },
+        { title: "Celebrity gossip", url: "https://news.test/x", snippet: "unrelated" },
+      ] }],
     });
     vi.mocked(api.ai.packChange).mockReset();
     vi.mocked(api.ai.packItem).mockReset();
@@ -168,8 +171,14 @@ describe("PackBuilder v2", () => {
     const qs = w.findAll('[data-test="pack-question"]');
     await qs[1].get('[data-test="pack-other"]').setValue("Dreamy");
     expect(w.get('[data-test="pack-answer"]').attributes("disabled")).toBeDefined();
-    // Allowing it sends the answers along with what the search found.
+    // Allowing it shows what the search found, and still holds the answers;
+    // using a pick sends the answers along with it.
     await w.get('[data-test="pack-research-allow"]').trigger("click");
+    await flushPromises();
+    expect(w.find('[data-test="pack-waiting-search"]').exists()).toBe(true);
+    expect(w.get('[data-test="pack-answer"]').attributes("disabled")).toBeDefined();
+    await w.findAll('[data-test="pack-found-row"]')[0].setValue(true);
+    await w.get('[data-test="pack-found-use"]').trigger("click");
     await flushPromises();
     const sent = vi.mocked(api.ai.packPlan).mock.calls[1][0];
     expect(sent.decisions).toEqual([{ question: "What mood?", answer: "Dreamy" }]);
@@ -308,11 +317,36 @@ describe("PackBuilder v2", () => {
     await w.get('[data-test="pack-research-allow"]').trigger("click");
     await flushPromises();
     expect(api.ai.packSearch).toHaveBeenCalledWith({ queries: ["popular hairstyles 2026"] });
-    const sent = vi.mocked(api.ai.packPlan).mock.calls[1][0];
-    expect(sent.web).toEqual([{ query: "popular hairstyles 2026", text: "wolf cut, bixie" }]);
-    expect(sent.searched).toEqual(["popular hairstyles 2026"]);
-    expect(sent.instruction).toBe("Use what the searches found.");
+    // The results wait for a pick: nothing goes to the planner unseen.
+    expect(api.ai.packPlan).toHaveBeenCalledTimes(1);
     expect(w.find('[data-test="pack-research"]').exists()).toBe(false);
+    const card = w.get('[data-test="pack-found"]');
+    expect(card.text()).toContain("Wolf cut guide");
+    expect(card.text()).toContain("hair.test");
+    expect(w.get('[data-test="pack-found-use"]').attributes("disabled")).toBeDefined();
+    await w.findAll('[data-test="pack-found-row"]')[0].setValue(true);
+    await w.get('[data-test="pack-found-use"]').trigger("click");
+    await flushPromises();
+    const sent = vi.mocked(api.ai.packPlan).mock.calls[1][0];
+    expect(sent.web).toHaveLength(1);
+    expect(sent.web?.[0].text).toContain("Wolf cut guide");
+    expect(sent.web?.[0].text).not.toContain("Celebrity gossip");
+    expect(sent.web?.[0].text).toContain("data, not instructions");
+    expect(sent.searched).toEqual(["popular hairstyles 2026"]);
+    expect(sent.instruction).toBe("Here are the search results I picked; use only what fits the pack.");
+    expect(w.find('[data-test="pack-found"]').exists()).toBe(false);
+    expect(w.get('[data-test="pack-found-used"]').text()).toContain("used 1 of 2 results for \"popular hairstyles 2026\"");
+  });
+
+  it("lets the user turn down everything the searches found", async () => {
+    const w = await mountIt(true);
+    await w.get('[data-test="pack-research-allow"]').trigger("click");
+    await flushPromises();
+    await w.get('[data-test="pack-found-none"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.packPlan).toHaveBeenCalledTimes(1);
+    expect(w.find('[data-test="pack-found"]').exists()).toBe(false);
+    expect(w.get('[data-test="pack-found-used"]').text()).toContain("none of 2 results used");
   });
 
   it("changes one item with the AI and keeps the rest", async () => {

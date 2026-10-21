@@ -84,7 +84,7 @@ def test_compile_graph_keeps_what_resolves_and_reports_the_rest():
                                                    "append"]
     assert g["relations"][2]["values"] == ["winter", "summer"]
     assert g["relations"][0]["words"] == ["musket"]
-    assert g["bad_refs"] == ["exclude: Race.kind has no value orc"]
+    assert g["bad_refs"] == ["exclude: Race.kind has no value orc (its values: elf, dwarf, human)"]
     # A rule written into the negative is taken out: rules are relations.
     assert g["template"]["negative"] == "bad anatomy"
     assert any("out of the negative" in w for w in g["warnings"])
@@ -240,12 +240,13 @@ def test_refs_schema_and_repair():
          "to_slot": "Weapon", "to_axis": "type", "to_value": "gun", "factor": 0,
          "var": "", "text": "", "otherwise": ""}]})
     assert len(fixed["relations"]) == len(g["relations"]) + 1
-    assert fixed["bad_refs"] == ["exclude: Race.kind has no value orc"]
+    orc = "exclude: Race.kind has no value orc (its values: elf, dwarf, human)"
+    assert fixed["bad_refs"] == [orc]
     # As many came back as were asked for, so the first try's miss isn't
     # listed as left out on top of the repair's own.
     assert fixed["dropped"] == []
     again = pg.compile_graph(fixed)
-    assert again["dropped"] == ["exclude: Race.kind has no value orc"]
+    assert again["dropped"] == [orc]
     assert pg.with_refs(g, {"relations": []}) is g
 
 
@@ -549,6 +550,8 @@ def test_a_fix_all_request_is_not_the_users_words():
     # Fix all after the questions were answered).
     assert pack.own_request("I answered your questions.") == ""
     assert pack.own_request("Use what the searches found.\n" + note) == ""
+    assert pack.own_request("Here are the search results I picked; use only what fits the "
+                            "pack.") == ""
     assert pack.own_request("more hats\nI edited the plan; keep my changes and fill any gaps "
                             "they leave.") == "more hats"
     # The request-words check sees only the user's words.
@@ -593,7 +596,8 @@ def test_an_axis_named_on_one_side_is_inferred_on_the_other():
     # Nothing declares a type axis anywhere: nothing to copy, and the rules
     # that need it are reported for the repair call.
     assert next(s for s in g["slots"] if s["name"] == "Weapon")["axes"] == []
-    assert g["bad_refs"] == ["exclude: Weapon has no axis type", "only: Weapon has no axis type"]
+    assert g["bad_refs"] == ["exclude: Weapon has no axis type (its axes: none)",
+                          "only: Weapon has no axis type (its axes: none)"]
     # The source has it: the target gets a copy, and the rule resolves.
     slots = [dict(s, axes=[]) if s["name"] == "Outfit" else s for s in GRAPH["slots"]]
     rel = {"kind": "exclude", "from_slot": "Season", "from_axis": "season",
@@ -937,3 +941,16 @@ def test_a_scope_rebuild_hears_every_clashing_word_of_its_neighbour():
             in req["user"])
     # Not on a rebuild for another reason.
     assert "already says" not in pg.slot_request(plan, keys["Body"], "more variety", built)["user"]
+
+
+def test_a_left_out_relation_reads_as_a_sentence():
+    """The plan's note says which rule went and why, in words, never
+    "derive: Subject.build has no value ?" (read like a `$subj.build`
+    variable; Dumi 2026-10-21)."""
+    line = pg.plain_ref("derive: Subject.build: no value given (its values: petite, curvy)")
+    assert line.startswith("Left out a rule: A rule that sets a variable on Subject's build")
+    assert "names no build value" in line and "petite, curvy" in line and "?" not in line
+    assert "already picks $outfit" in pg.plain_ref(
+        "derive: $outfit is already set by the Outfit slot; derive a new variable or use append")
+    assert pg.plain_ref("append: nothing sets $x before it") == \
+        "Left out a rule: append: nothing sets $x before it"

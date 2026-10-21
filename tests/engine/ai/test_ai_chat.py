@@ -332,3 +332,17 @@ def test_search_lists_a_category_or_the_items_with_none():
     out = big.search({"query": "", "category": "none"})
     assert out.startswith("60 matches") and "more" not in out
     assert "… 35 more" in big.search({"query": "", "type": "wildcard"})
+
+
+def test_both_answer_modes_name_every_markdown_element_the_drawer_draws():
+    """Every element the chat drawer renders is named in the formatting
+    rules, in both answer modes; what the model is never told about it
+    never writes (task lists, alerts and links went unseen for weeks)."""
+    for fmt in (chat.FORMAT_JSON, chat.FORMAT_NATIVE):
+        for piece in ("task list (- [ ]", "| table |", "`Ctrl+Enter`", "keyboard keys",
+                      "``` block", "### headings", '"Tip:", "Note:" or "Warning:"',
+                      "> [!TIP], > [!NOTE] or > [!WARNING]", "[link](https://",
+                      "[[id#Name]]"):
+            assert piece in fmt, piece
+    assert chat.FORMATTING in chat.system_prompt()
+    assert chat.FORMATTING in chat.system_prompt(slim=True)

@@ -1003,6 +1003,20 @@ export interface AiWebResult {
   text: string;
 }
 
+/** One search hit, as the Pack builder shows it for picking. */
+export interface AiWebRow {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+/** `api.ai.packSearch`'s answer per query: the text for the model, and the
+ *  rows the Pack builder lets the user pick from. */
+export interface AiWebFound extends AiWebResult {
+  rows?: AiWebRow[];
+  error?: string;
+}
+
 export interface AiDraftOption {
   value: string;
   weight: number;

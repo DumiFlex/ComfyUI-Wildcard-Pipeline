@@ -1,4 +1,6 @@
 <script lang="ts">
+import { ref } from "vue";
+
 /** The words the line cycles through, Claude Code style. */
 export const WORKING_WORDS = [
   "Shuffling", "Rolling the dice", "Drawing wildcards", "Weaving", "Mixing", "Conjuring",
@@ -11,6 +13,43 @@ const WORD_EVERY_MS = 3500;
 function pickWord(not: string): string {
   const pool = WORKING_WORDS.filter((w) => w !== not);
   return pool[Math.floor(Math.random() * pool.length)];
+}
+
+/** Every few words the line says what is really happening instead. */
+const REAL_EVERY = 3;
+
+/* ── One ticker for every line ─────────────────────────────────────────
+   The top bar and the page often show a line for the same job. They share
+   one word, one step, one mark and one start, so they never read
+   "Sketching…" beside "Doodling…" with two different drawings. The first
+   line to mount starts the ticker; the last to leave stops it, so the next
+   job gets a fresh word and mark. */
+const shared = {
+  word: ref(pickWord("")),
+  step: ref(0),
+  mark: ref<AiWorkingVariant>("typing"),
+  startedAt: 0,
+  lines: 0,
+  timer: null as ReturnType<typeof setInterval> | null,
+};
+
+function join(): void {
+  if (shared.lines++ === 0) {
+    shared.word.value = pickWord("");
+    shared.step.value = 0;
+    shared.mark.value = pickVariant();
+    shared.startedAt = Date.now();
+    shared.timer = setInterval(() => {
+      shared.step.value += 1;
+      if (shared.step.value % REAL_EVERY !== 0) shared.word.value = pickWord(shared.word.value);
+    }, WORD_EVERY_MS);
+  }
+}
+
+function leave(): void {
+  if (--shared.lines > 0) return;
+  if (shared.timer) clearInterval(shared.timer);
+  shared.timer = null;
 }
 
 export type AiWorkingVariant = "shuffle" | "orbit" | "burst" | "typing";
@@ -27,9 +66,6 @@ export function pickVariant(r = Math.random()): AiWorkingVariant {
   }
   return "typing";
 }
-
-/** Every few words the line says what is really happening instead. */
-const REAL_EVERY = 3;
 
 /** "42s", "3m 05s", "1h 02m". */
 export function formatElapsed(s: number): string {
@@ -49,8 +85,9 @@ export function formatElapsed(s: number): string {
  * "Thinking…", "Writing · 420 tokens…", or the chat's own status). The full
  * status is also the line's accessible name.
  *
- * The mark is one of four drawings of the logo's sparkles, picked per line
- * (`pickVariant`): typing stars (three hop in turn), shuffle (the small
+ * The mark is one of four drawings of the logo's sparkles, picked once per
+ * job and shared by every line showing at the time, like the word and the
+ * time (`shared`; a line's own `variant` prop still wins): typing stars (three hop in turn), shuffle (the small
  * stars swap places round the big one), orbit (the logo's four nodes circle
  * the stars) or burst (the small stars fly out of the big one and back).
  * Its tempo follows the phase: slow while the model reads the prompt,
@@ -60,7 +97,7 @@ export function formatElapsed(s: number): string {
  * (`api/ai-progress.ts`), polling the server for its phase. The chat passes
  * its own `text` and `phase` from its stream.
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, watch } from "vue";
 import { activeAiRequests, fetchAiProgress, type AiPhase, type AiProgress } from "../../api/ai-progress";
 
 const props = withDefaults(defineProps<{
@@ -76,11 +113,11 @@ const props = withDefaults(defineProps<{
   variant?: AiWorkingVariant;
 }>(), { label: "", text: undefined, phase: undefined, size: 22, inline: false, variant: undefined });
 
-const mark = props.variant ?? pickVariant();
+join();
+const mark = computed(() => props.variant ?? shared.mark.value);
 
 const progress = ref<AiProgress | null>(null);
 const elapsed = ref(0);
-const started = Date.now();
 let poll: ReturnType<typeof setInterval> | null = null;
 let tick: ReturnType<typeof setInterval> | null = null;
 
@@ -131,8 +168,8 @@ const real = computed(() => {
   }
 });
 
-const word = ref(pickWord(""));
-const step = ref(0);
+const word = shared.word;
+const step = shared.step;
 const showReal = computed(() => step.value % REAL_EVERY === 0);
 const shown = computed(() => (showReal.value ? real.value : word.value));
 /** What the word transition keys on: a new status animates in, a token
@@ -141,7 +178,6 @@ const wordKey = computed(() => {
   if (!showReal.value) return `w:${word.value}`;
   return props.text !== undefined ? `r:${real.value}` : `r:${shownPhase.value}`;
 });
-let wordTimer: ReturnType<typeof setInterval> | null = null;
 
 /** The words box follows the new word's width smoothly while the old word
  *  fades out over it (a crossfade in place, nothing goes blank). */
@@ -154,16 +190,14 @@ async function fit(): Promise<void> {
 }
 watch(shown, () => { void fit(); });
 
-// A new phase (or chat status) is said straight away.
+// A new phase (or chat status) is said straight away, on every line.
 watch(() => [shownPhase.value, props.text], () => { step.value = 0; });
 
 onMounted(() => {
   void fit();
-  tick = setInterval(() => { elapsed.value = Math.floor((Date.now() - started) / 1000); }, 1000);
-  wordTimer = setInterval(() => {
-    step.value += 1;
-    if (!showReal.value) word.value = pickWord(word.value);
-  }, WORD_EVERY_MS);
+  const count = (): void => { elapsed.value = Math.floor((Date.now() - shared.startedAt) / 1000); };
+  count();
+  tick = setInterval(count, 1000);
   if (watching.value) {
     void read();
     poll = setInterval(() => { void read(); }, 800);
@@ -172,7 +206,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (poll) clearInterval(poll);
   if (tick) clearInterval(tick);
-  if (wordTimer) clearInterval(wordTimer);
+  leave();
 });
 
 const time = computed(() => formatElapsed(elapsed.value));
