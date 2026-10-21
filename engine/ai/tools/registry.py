@@ -45,6 +45,14 @@ class Tool:
     params: dict[str, Any] = field(default_factory=dict)
     #: Groups that offer it to a small model ("core" goes everywhere).
     groups: tuple[str, ...] = ()
+    #: When to pick it, and the look-alike to pick instead when not: tools
+    #: a small model confuses (search/read, create/add/edit, run_test/
+    #: show_test, open/highlight) say it in one line.
+    when: str = ""
+    #: One sample of its arguments, shown under its JSON-mode line: under a
+    #: grammar the schema's descriptions never reach the model, an example
+    #: does.
+    example: dict[str, Any] | None = None
 
 
 def obj(props: dict[str, Any] | None = None, required: tuple[str, ...] = (),
@@ -204,8 +212,23 @@ def check_args(tool: Tool, args: Any) -> tuple[dict[str, Any], list[str]]:
 
 
 def prompt_lines(tools: list[Tool], kind: str) -> str:
-    """The JSON-mode list of one kind of tool, one "- name …" line each."""
-    return "\n".join(f"- {t.name} {t.line}" for t in tools if t.kind == kind)
+    """The JSON-mode list of one kind of tool, one "- name …" line each,
+    with its use-when line and example below it."""
+    out = []
+    for t in tools:
+        if t.kind != kind:
+            continue
+        out.append(f"- {t.name} {t.line}")
+        if t.when:
+            out.append(f"  Use when: {t.when}")
+        if t.example is not None:
+            out.append(f"  Example: {t.name} {json.dumps(t.example, ensure_ascii=False)}")
+    return "\n".join(out)
+
+
+def description(t: Tool) -> str:
+    """A native declaration's description: the summary and its use-when line."""
+    return f"{t.summary} Use when: {t.when}" if t.when else t.summary
 
 
 def _strip_schema(schema: dict[str, Any]) -> dict[str, Any]:
@@ -271,10 +294,11 @@ def native(tools: list[Tool], api: str) -> list[dict[str, Any]]:
         if api == "ollama":
             params = _alias_schema(params)
         if api == "anthropic":
-            out.append({"name": t.name, "description": t.summary, "input_schema": params})
+            out.append({"name": t.name, "description": description(t),
+                        "input_schema": params})
         else:
             out.append({"type": "function", "function": {
-                "name": t.name, "description": t.summary, "parameters": params}})
+                "name": t.name, "description": description(t), "parameters": params}})
     return out
 
 
@@ -296,14 +320,17 @@ def answer_decl(api: str) -> dict[str, Any]:
 
 
 def act_schema(names: list[str], typed: list[Tool] | None = None,
-               max_calls: int = 0) -> dict[str, Any]:
+               max_calls: int = 0, min_calls: int = 0) -> dict[str, Any]:
     """The act half of a split JSON step: a plan and the calls to make,
     none when the model is ready to answer. No message: it writes that in
     the answer half (`ANSWER_SCHEMA`). `max_calls` caps the calls per step
-    (0: no cap, for hosted strict modes that may refuse maxItems)."""
+    (0: no cap, for hosted strict modes that may refuse maxItems);
+    `min_calls` 1 makes it call (a plan step, a plan item's step)."""
     calls = dict(step_schema(names, typed)["properties"]["calls"])
     if max_calls > 0:
         calls["maxItems"] = max_calls
+    if min_calls > 0:
+        calls["minItems"] = min_calls
     return {
         "type": "object", "additionalProperties": False, "required": ["plan", "calls"],
         "properties": {"plan": {"type": "string"}, "calls": calls},

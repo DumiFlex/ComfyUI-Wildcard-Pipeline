@@ -16,6 +16,7 @@ from engine.ai import chatlog as ai_chatlog
 from engine.ai import client_tools as ai_client_tools
 from engine.ai import guide as ai_guide
 from engine.ai import lint as ai_lint
+from engine.ai import plan_items as ai_plan
 from engine.ai import react as ai_react
 from engine.ai import safety as ai_safety
 from engine.ai import tools as ai_tools
@@ -370,6 +371,16 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     prof, fixed = _chat_profile(base_prof, cfg, meta, fmt, snapshot, window)
     if not resume and log:
         meta = await _maybe_compact(cfg, log, meta, prof, num_ctx, window, fixed, emit)
+    # Small and medium local models (split JSON steps with typed args): each
+    # step's grammar offers a shortlist of the chat's tools, and an ask for
+    # several items is planned once and made one item per step
+    # (`engine/ai/plan_items.py`). The prompt keeps every tool either way.
+    guided = (not resume and bool(text) and fmt == "json" and bool(meta.get("typed"))
+              and _ai_chat.checks_schema(cfg) and _splits(cfg, meta, fmt))
+    short = ai_tools.shortlist(meta["tools"], text, route) if guided else None
+    plan_n = ai_plan.multi_ask(text) if guided and not _PACK_ASK.search(text) else 0
+    if plan_n and not any(n in ai_plan.PLANNABLE for n in meta["tools"]):
+        plan_n = 0
     if not resume:
         meta.pop("asks", None)  # ask pauses are counted per user message
         meta.pop("pointed", None)  # so are the parts already highlighted
@@ -377,9 +388,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         hints = await _retrieval(lib, text, meta, prof, cfg) if text else ""
         pics = _ai_images.note(len(images)) if images else ""
         model = ai_guide.model_note(text) if text else ""
+        plan_hint = ai_plan.HINT if plan_n else ""
         sent = ai_safety.strip_invisible(
-            "\n\n".join(x for x in (since, changes, perms, text, pics, note, hints, model)
-                       if x))
+            "\n\n".join(x for x in (since, changes, perms, text, pics, note, hints, model,
+                                    plan_hint) if x))
         new.append(ai_chatlog.user_entry(text, sent, images))
         meta = ai_chatlog.move_images(log + new, meta)
 
@@ -433,9 +445,22 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     #: The step whose create calls were turned to plan_pack (`PACK_FIRST`).
     steered_at: int | None = None
     empty_nudged = False
-    #: The step limit: one past `MAX_STEPS` once, for the words-only nudge
-    #: after an empty answer at the limit.
-    limit = ai_chat.MAX_STEPS
+    #: The steps this answer may take: `MAX_STEPS`, more while a plan of
+    #: items runs (`queue`).
+    cap = ai_chat.MAX_STEPS
+    #: The step limit: one past `cap` once, for the words-only nudge after
+    #: an empty answer at the limit.
+    limit = cap
+    #: A multi-item ask's items, made one per step once planned.
+    queue: ai_plan.ItemQueue | None = None
+    #: The first step was asked to plan (only once).
+    plan_asked = False
+    #: A more_tools call opened every tool the chat has for this answer.
+    widened = False
+    #: Tools called in this answer: a shortlist keeps offering them.
+    called: set[str] = set()
+    #: The model was told its plan is finished.
+    queue_told = False
     #: Change calls proposed in this request, by their exact args: the card's pid.
     proposed: dict[str, str] = {}
     #: Ask the next step with the model's thinking off: set by the empty
@@ -478,6 +503,16 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         rendered = ai_chatlog.render(log + new, meta)
         if emit:
             await emit({"type": "step", "n": step + 1})
+        offer: list[Any] | None = None
+        must_call = False
+        if plan_n and not plan_asked and not forced:
+            plan_asked = must_call = True
+            offer = [ai_plan.plan_tool(meta["tools"], plan_n)]
+        elif queue is not None and queue.active and not forced:
+            must_call = True
+            offer = ai_tools.tools([n for n in queue.allowed() if n in meta["tools"]])
+        elif short and not widened:
+            offer = ai_tools.tools([n for n in meta["tools"] if n in short or n in called])
         try:
             st = await asyncio.wait_for(
                 _chat_step({**cfg, "thinking": "off"} if think_off else cfg,
@@ -485,7 +520,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                            names=meta["tools"], prof=prof, num_ctx=num_ctx,
                            cache_key=cache_key, emit=emit, typed=bool(meta.get("typed")),
                            decls=_decls(cfg, meta, fmt), split=_splits(cfg, meta, fmt),
-                           answer_only=forced),
+                           answer_only=forced, offer=offer, must_call=must_call),
                 timeout=STEP_SECONDS)
         except asyncio.TimeoutError:
             if not steps and not any(x.get("kind") == "step" for x in new):
@@ -569,7 +604,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         # signal at all) a reply that stops mid-sentence.
         cut = bool(said) and not calls and (
             bool(usage.get("cut")) or ai_chat.looks_cut(said))
-        if cut and continued < MAX_CONTINUE and step < ai_chat.MAX_STEPS \
+        if cut and continued < MAX_CONTINUE and step < cap \
                 and not out_of_time:
             # Ask for the rest; the two parts are joined into one answer.
             continued += 1
@@ -601,8 +636,13 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                                              pause=ai_chat.PAUSE_TOOLS,
                                              web=tuple(ai_tools.WEB))
         asked = [c for i, c in enumerate(calls) if i not in waiting]
+        made_before = len(proposals)
+        planned_now = False
         for at, call in enumerate(calls):
             tool = call["tool"]
+            called.add(tool)
+            if tool == "more_tools":
+                widened = True
 
             def result(out: str, call: dict[str, Any] = call,
                        items: list[dict[str, Any]] = items) -> None:
@@ -610,6 +650,24 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 items.append({"id": call["id"], "tool": call["tool"],
                               "text": ai_safety.strip_invisible(out)})
 
+            if tool == ai_plan.TOOL:
+                # The plan of a multi-item ask: code keeps it and asks for
+                # one item per step from here.
+                needs_reply = True
+                got_plan = ai_plan.ItemQueue.from_args(
+                    call["args"] if isinstance(call.get("args"), dict)
+                    else _plan_args(call.get("args_text")), meta["tools"]) \
+                    if plan_n and queue is None else None
+                if got_plan is None:
+                    result(f"{ai_plan.TOOL}: no items to make in it; carry on without a plan")
+                    continue
+                queue, planned_now = got_plan, True
+                cap = min(max(cap, step + queue.steps_left() + 2), ai_plan.MAX_STEPS)
+                limit = max(limit, cap)
+                result(queue.started())
+                steps.append({"tool": ai_plan.TOOL, "ok": True, "note": "Planned "
+                              + ", ".join(it["name"] for it in queue.items)})
+                continue
             spec = ai_tools.BY_NAME.get(tool)
             if spec is None:
                 needs_reply = True
@@ -736,7 +794,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                            "error names, or answer now")
                     continue
                 seen.add(key)
-                if errors.get(tool, 0) >= 3:
+                if errors.get(tool, 0) >= 3 and not (queue is not None and queue.active):
                     raise ValueError("this tool failed three times in this answer; stop "
                                      "calling it and tell the user what went wrong")
                 if tool in ai_chat.CHANGE_TOOLS and len(proposals) >= ai_chat.MAX_PROPOSALS:
@@ -804,6 +862,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 if twin:
                     out.pop("replaces")  # the user never saw the card it replaces
                 steps.append({"tool": tool, "note": out["title"], "ok": True})
+        if queue is not None and queue.active and not planned_now:
+            queue.after_step(len(proposals) > made_before)
         if emit:
             for s_ in steps[sent_steps:]:
                 await emit({"type": "tool", "step": s_})
@@ -838,7 +898,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 empty_nudged = think_off = True
                 page_failed = any(not x.get("ok") and str(x.get("note") or "").startswith(
                     "Couldn't: ") for x in steps)
-                if page_failed or step >= ai_chat.MAX_STEPS:
+                if page_failed or step >= cap:
                     # Sonnet and Haiku probes 2026-10-21: a highlight that
                     # failed, then an empty answer with no step left. One
                     # more step, in words only.
@@ -850,14 +910,14 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 new.append(ai_chatlog.note_entry(ai_chat.EMPTY_NUDGE))
                 continue
             if (not calls and not proposals and not nudged and not cut
-                    and step < ai_chat.MAX_STEPS and ai_chat.unfinished(said)):
+                    and step < cap and ai_chat.unfinished(said)):
                 nudged = True
                 set_aside, message = said, ""
                 new.append(ai_chatlog.note_entry(ai_chat.UNFINISHED_NUDGE))
                 continue
             promised = ai_chat.promised_call(said)
             if (not calls and not proposals and not nudged and promised
-                    and step < ai_chat.MAX_STEPS):
+                    and step < cap):
                 nudged = True
                 set_aside, message = said, ""
                 new.append(ai_chatlog.note_entry(ai_chat.promise_nudge(promised)))
@@ -866,7 +926,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             # it, or answered an organize ask with a list: ask once for the
             # call (9B: 3 of 3 organize and plan-a-pack turns, "the Test
             # Runner is now open" with no run).
-            if (not calls and not proposals and not nudged and step < ai_chat.MAX_STEPS
+            if (not calls and not proposals and not nudged and step < cap
                     and (ai_chat.claims_change(said) or _card_as_text(said)
                          or _ORGANIZE_ASK.search(text or ""))):
                 nudged = True
@@ -878,7 +938,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             # Proposed part of the ask and put the rest off to a later turn
             # ("Apply it, then I'll propose the derivation"): ask once for
             # the rest, in this answer.
-            if (proposals and not calls and not nudged and step < ai_chat.MAX_STEPS
+            if (proposals and not calls and not nudged and step < cap
                     and ai_chat.defers_rest(said)):
                 nudged = True
                 set_aside, message = said, ""
@@ -889,7 +949,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             unknown = ai_chat.unknown_names(
                 said, ai_chatlog.dumps([e for e in log + new if e.get("kind") not in (
                     "step", "shown", "note")]), getattr(lib, "catalog", {})) if (
-                not calls and not nudged and step < ai_chat.MAX_STEPS) else []
+                not calls and not nudged and step < cap) else []
             if unknown:
                 nudged = True
                 set_aside, message = said, ""
@@ -898,7 +958,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             # Asked leave instead of proposing, or met "yes" with more talk:
             # tell it once to act. Small models loop on "Should I proceed?".
             if (not calls and not proposals and not nudged
-                    and step < ai_chat.MAX_STEPS
+                    and step < cap
                     and ai_chat.stalls(said, text, last_answer)):
                 nudged = True
                 # The stalled question isn't the answer, unless nothing better
@@ -908,7 +968,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 continue
             # Changes were proposed but never tried: ask for one check
             # before the answer stands, so "done" means it ran.
-            if (not checked and step < ai_chat.MAX_STEPS
+            if (not checked and step < cap
                     and any(p["tool"] in ai_chat.CHECKABLE_TOOLS for p in proposals)):
                 checked = True
                 tail = "\n\n" + ai_chat.CHECK_NUDGE
@@ -920,16 +980,28 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             if items:
                 new.append(ai_chatlog.results_entry(items, ""))
             break
-        if step >= ai_chat.MAX_STEPS:
+        if step >= cap:
             new.append(ai_chatlog.results_entry(items, ""))
             message = (message or interim
                        or "I ran out of steps before finishing; ask me to continue.")
             break
+        if queue is not None and (queue.active or planned_now):
+            # A plan runs: code says which item is next, and repeats, reads
+            # and refusals count against that item, not the answer.
+            forced = out_of_time or step == cap - 1
+            new.append(ai_chatlog.results_entry(items, queue.note() if not forced else (
+                _results_tail(text, last=True, native=False, split=True))))
+            continue
+        if queue is not None and not queue_told:
+            queue_told = True  # the plan just finished: say so once
+            forced = out_of_time or step == cap - 1
+            new.append(ai_chatlog.results_entry(items, queue.note()))
+            continue
         # Only repeats, read enough, or one step left: no more tools, answer now.
         reads += sum(1 for c in calls if c["tool"] in ai_tools.READ)
         # The same refusal twice: small models loop on it instead of
         # answering, so the next step must answer (with what went wrong).
-        forced = (bool(calls and repeats == len(calls)) or step == ai_chat.MAX_STEPS - 1
+        forced = (bool(calls and repeats == len(calls)) or step == cap - 1
                   or reads >= read_budget or out_of_time
                   or max(refused.values(), default=0) >= MAX_REFUSED)
         more = (f"\n\nOnly your first {len(calls)} calls ran; {dropped} more were left out."
@@ -1153,6 +1225,14 @@ MAX_REFUSED = 2
 
 #: A JSON-mode "plan" this long, with no message and no calls, is the answer.
 PLAN_AS_ANSWER = 80
+
+
+def _plan_args(text: Any) -> Any:
+    """A plan call's args written as text (a server that refused typed args)."""
+    try:
+        return ai_chat.parse_args(text) if isinstance(text, str) else None
+    except ValueError:
+        return None
 
 
 def _stuck_line(steps: list[dict[str, Any]]) -> str:
