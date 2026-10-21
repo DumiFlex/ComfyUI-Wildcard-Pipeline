@@ -52,8 +52,13 @@ describe("AiPointer", () => {
         expect(apart, `caption ${i + 1} overlaps ${j + 1}`).toBe(true);
       }
     }
-    // The first one is where it always was: under its part.
-    expect(boxes[0]).toEqual({ top: 100 + 24 + 8, left: 40 });
+    // No caption covers another part's outline (rings pad 4 px).
+    const parts = [100, 128, 156].map((top) => ({ top: top - 4, left: 36, bottom: top + 28, right: 244 }));
+    boxes.forEach((b, i) => parts.forEach((r, j) => {
+      if (i === j) return;
+      const clear = b.top >= r.bottom || b.top + 30 <= r.top || b.left >= r.right || b.left + 160 <= r.left;
+      expect(clear, `caption ${i + 1} covers part ${j + 1}`).toBe(true);
+    }));
     clearPointer();
     await nextTick();
     w.unmount();
