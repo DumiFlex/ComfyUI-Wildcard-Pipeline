@@ -343,9 +343,12 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         The assistant only changes items of yours that you named in the chat ("add rain to my
         Weather", an id, a chip), that you have open, or that its last answer showed you as a chip
         (after "you already have [[Weather]]", "now add negatives to the stormy options" may change
-        it); asked to make something new, it makes a new item instead of rewriting one you have,
-        and it can still read, search and test your whole library. Cards it proposed itself stay
-        open to change.
+        it), or that it has read in full while answering a request for a change; asked to make
+        something new, it makes a new item instead of rewriting one you have, and it can still
+        read, search and test your whole library. When several items share a name, the one you
+        named or the chat already read is the one meant. Cards it proposed itself stay open to
+        change. An answer that says something was made, tested or opened with no call behind it
+        is sent back once for the call before it stands.
         The assistant plans before it acts and checks its work: when it proposes changes to
         modules it runs the stack with them before it answers, so the reply says what the change
         does. It can propose several items that depend on each other in one answer (a wildcard

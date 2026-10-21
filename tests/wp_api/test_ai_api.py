@@ -1631,12 +1631,31 @@ async def test_an_answer_claiming_a_change_with_no_card_says_nothing_changed(
         wp_client, fake_llm):
     ai_config.update({"enabled": True, "provider": "lmstudio",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
-    fake_llm.chat_steps.extend([{"message": "I've created the preset for you.", "calls": []}])
+    # A claim with no call is asked once for the call (9B, 2026-10-21: 3 of
+    # 3 organize and plan-a-pack turns described the change as done).
+    fake_llm.chat_steps.extend([
+        {"message": "I've created the preset for you.", "calls": []},
+        {"message": "Nothing is made yet; want me to propose it?", "calls": []}])
+    body = await (await wp_client.post("/wp/api/ai/chat", json={"message": "a preset"})).json()
+    assert ai_chat.CLAIM_NUDGE in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert body["message"] == "Nothing is made yet; want me to propose it?"
+    # Still claiming after the nudge: the answer says nothing changed.
+    fake_llm.chat_steps.extend([
+        {"message": "I've created the preset for you.", "calls": []},
+        {"message": "I've created it, really.", "calls": []}])
     body = await (await wp_client.post("/wp/api/ai/chat", json={"message": "a preset"})).json()
     assert body["message"].endswith(ai_turn.NOTHING_PROPOSED)
     fake_llm.chat_steps.extend([{"message": "Created means made new.", "calls": []}])
     body = await (await wp_client.post("/wp/api/ai/chat", json={"message": "what"})).json()
     assert ai_turn.NOTHING_PROPOSED not in body["message"]
+    # An organize ask answered with a list and no call gets its own nudge.
+    fake_llm.chat_steps.extend([
+        {"message": "Categories: Characters, Scenes, Styles.", "calls": []},
+        {"message": "Which of these first?", "calls": []}])
+    body = await (await wp_client.post("/wp/api/ai/chat",
+                                       json={"message": "organize my library"})).json()
+    assert ai_chat.ORGANIZE_NUDGE in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert body["message"].startswith("Which of these first?")
 
 
 async def test_native_text_next_to_calls_stays_as_a_note(wp_client, fake_llm):

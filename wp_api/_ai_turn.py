@@ -401,6 +401,9 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             named.add(op["id"])
     meta["named"] = sorted(named)
     lib.named = named
+    # An item the answer reads in full may be changed when the user asked
+    # for a change ("add negatives to the stormy options"), not a new item.
+    lib.edit_read = bool(text) and not resume and not ai_chat.creation_ask(text)
     lib.decisions = list(meta.get("decisions") or [])  # what `ask` may not ask again
     # Links read_result may open: the same list the searches fill.
     lib.web_urls = meta.setdefault("web_urls", [])
@@ -801,6 +804,19 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 set_aside, message = said, ""
                 new.append(ai_chatlog.note_entry(ai_chat.promise_nudge(promised)))
                 continue
+            # Said it made, tested or opened something with no call behind
+            # it, or answered an organize ask with a list: ask once for the
+            # call (9B: 3 of 3 organize and plan-a-pack turns, "the Test
+            # Runner is now open" with no run).
+            if (not calls and not proposals and not nudged and step < ai_chat.MAX_STEPS
+                    and (ai_chat.claims_change(said) or _card_as_text(said)
+                         or _ORGANIZE_ASK.search(text or ""))):
+                nudged = True
+                set_aside, message = said, ""
+                new.append(ai_chatlog.note_entry(
+                    ai_chat.ORGANIZE_NUDGE if _ORGANIZE_ASK.search(text or "")
+                    and not ai_chat.claims_change(said) else ai_chat.CLAIM_NUDGE))
+                continue
             # Asked leave instead of proposing, or met "yes" with more talk:
             # tell it once to act. Small models loop on "Should I proceed?".
             if (not calls and not proposals and not nudged
@@ -1044,7 +1060,9 @@ def _auto_test(lib: Any, proposals: list[dict[str, Any]]) -> tuple[dict[str, Any
 
 #: Added to such an answer when no card came with it.
 _TESTED = re.compile(r"\b(?:I(?:'ve| have)?\s+(?:just\s+)?(?:ran|run|tested)\b|"
-                     r"\b(?:the\s+)?test\s+(?:ran|run|shows|showed|passed)\b)", re.I)
+                     r"\b(?:the\s+)?test\s+(?:ran|run|shows|showed|passed)\b|"
+                     r"\bthe\s+test\s+runner\s+is\s+(?:now\s+)?open\b|"
+                     r"\bopened\s+the\s+test\s+runner\b)", re.I)
 NOTHING_TESTED = ("*(No test ran in this answer, so what it says about test results is not "
                   "checked. Ask me to run the test.)*")
 NOTHING_PROPOSED = ("*(Nothing was proposed in this answer, so nothing changed. Ask me to "

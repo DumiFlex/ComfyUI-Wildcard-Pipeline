@@ -232,6 +232,50 @@ def promise_nudge(tool: str) -> str:
             f"Call {tool} now with its arguments (not as text in your message).")
 
 
+#: An answer with no call that says a change or a test happened (9B chat
+#: eval, 2026-10-21: "I've created …", "the Test Runner is now open with 20
+#: runs", categories listed as text for an organize ask).
+_CLAIMED = re.compile(
+    r"\b(?:I(?:'ve| have)?|I've now)\s+(?:just\s+)?(?:created|made|added|built|set up|saved|"
+    r"updated|applied|proposed|organi[sz]ed|moved|renamed|ran|run|tested|opened)\b"
+    r"|\bthe\s+test\s+runner\s+is\s+(?:now\s+)?open\b|\bopened\s+the\s+test\s+runner\b"
+    r"|\b(?:the\s+)?test\s+(?:ran|shows|showed|passed)\b", re.I)
+
+
+def claims_change(said: str) -> bool:
+    """Whether an answer talks as if it made a change, ran a test or opened
+    the Test Runner. With no call behind it, the turn is asked once more
+    for the call (`CLAIM_NUDGE`) before the answer stands."""
+    return bool(_CLAIMED.search(said or ""))
+
+
+CLAIM_NUDGE = (
+    "Your answer says something was made, changed, tested or opened, but you made no call, so "
+    "nothing happened and the user would be misled. Make the call now (the change tool, "
+    "run_test, or show_test), or answer plainly that it is not done yet. Never describe a "
+    "change as done without its call.")
+ORGANIZE_NUDGE = (
+    "The user asked you to organize their library, but you made no call, so nothing changed: "
+    "a list of categories in your message does nothing. Call edit_categories (or the "
+    "organize action) with the moves now, or ask one question if you can't decide.")
+
+
+#: A message asking for a NEW item ("make a weather wildcard", "create me
+#: a new outfit list"), as opposed to a change of one that exists.
+_CREATION_ASK = re.compile(
+    r"\b(?:make|create|build|write|generate|set\s+up|add)\s+(?:me\s+)?(?:a|an|another|new|"
+    r"some|\d+)\b|\bnew\s+(?:\w+\s+){0,2}(?:wildcards?|combines?|templates?|derivations?|"
+    r"constraints?|fixed\s+values?|bundles?|lists?|items?|modules?)\b", re.I)
+
+
+def creation_ask(text: str) -> bool:
+    """Whether the user's message asks for a new item rather than a change
+    of one that exists: then an item the answer only read is still not
+    theirs to change (chat eval round 3: "make a weather wildcard" rewrote
+    their Weather)."""
+    return bool(_CREATION_ASK.search(text or ""))
+
+
 TOOLS = READ_TOOLS + CHANGE_TOOLS
 
 MAX_STEPS = 6
@@ -577,6 +621,11 @@ class Library(MoreTools, ManageTools):
         #: Items this answer's read tools looked at, in order: a name several
         #: items share links to the one the model read (`link_items`).
         self.touched: list[str] = []
+        #: Whether an item this answer read in full may be changed: the user
+        #: asked for a change, not a new item (`creation_ask`). The 9B found
+        #: and showed the user's Weather, then refused to add negatives to it
+        #: because "you haven't named it" (2026-10-21).
+        self.edit_read = False
         #: The last run_test as card data (`chat_tools._test_card`), taken by the route.
         self.last_card: dict[str, Any] | None = None
         #: The emoji `react` put on the user's message this turn, else "".
@@ -769,7 +818,7 @@ class Library(MoreTools, ManageTools):
             return
         row = self.get(item_id)
         if row is None or row.get("_proposed") or item_id in self.named \
-                or item_id == self.editor_id:
+                or item_id == self.editor_id or (self.edit_read and item_id in self.touched):
             return
         raise ValueError(
             f"{self._chip(row)} is the user's own item and they haven't named it in this chat: "
