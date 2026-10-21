@@ -199,3 +199,11 @@ def test_use_when_lines_and_examples():
     assert "- search " in lines and "  Use when: you need to find items" in lines
     assert '  Example: search {"query": "hair color", "type": "wildcard"}' in lines
     assert "create_wildcard" not in lines  # another kind
+
+
+def test_a_pick_names_only_the_offered_tools_and_answer():
+    from engine.ai.tools import registry
+    schema = registry.select_schema(["read", "add_options", "read"], 2)
+    assert schema["properties"]["use"]["items"]["enum"] == ["read", "add_options", "answer"]
+    assert schema["properties"]["use"]["maxItems"] == 2
+    assert schema["required"] == ["plan", "use"]
