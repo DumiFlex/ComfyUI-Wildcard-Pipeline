@@ -902,3 +902,38 @@ def test_template_text_a_fixed_value_already_says_goes():
     assert "style" in t["order"]
     assert any(w.startswith("Took clean lineart (Style preset), flat_colors (Style preset) "
                             "out of the template text") for w in plan["warnings"])
+
+
+def test_a_scope_rebuild_hears_every_clashing_word_of_its_neighbour():
+    # Sonnet rules pack (2026-10-21): Race and Body both carried skin and
+    # eye words, and each rebuild only heard the words of its own problem,
+    # so they swapped clashes for two rounds.
+    slot = {"section": "", "count": 3, "show": "prompt", "pick": "", "hold": False,
+            "sometimes_none": 0, "axes": []}
+    g = {**GRAPH, "relations": [], "fixed": [],
+         "slots": [{**slot, "name": "Race", "var": "race", "what": "fantasy races"},
+                   {**slot, "name": "Body", "var": "body", "what": "body features"},
+                   {**slot, "name": "Setting", "var": "setting", "what": "places"}],
+         "template": {"lead": "", "order": ["Race", "Body", "Setting"], "tail": "", "negative": ""}}
+    plan = pack.compile_graph_plan(g)
+    keys = {i["name"]: i["key"] for i in plan["items"]}
+
+    def built_of(name, values):
+        opts = [{"id": f"o{n}", "value": v, "weight": 1, "sub_categories": []}
+                for n, v in enumerate(values)]
+        return {"id": f"{name[:4].lower()}0001",
+                "payload": {"var_binding": name.lower(), "options": opts, "sub_categories": []}}
+    built = {
+        keys["Race"]: built_of("Race", ["elf, pointy ears, tan skin, freckles",
+                                        "dwarf, pale skin"]),
+        keys["Body"]: built_of("Body", ["slender, fair skin", "athletic, sharp eyes", "freckles"]),
+        keys["Setting"]: built_of("Setting", ["forest, tall trees", "castle hall"]),
+    }
+    clash = pg.clash_words(plan, built, keys["Body"])
+    assert clash == {"Race": ["tan skin", "freckles", "pale skin"]}
+    req = pg.slot_request(plan, keys["Body"], "its options already name what $race (Race) picks: "
+                          "\"tan skin\"; leave those to Race", built)
+    assert ("Race already says: tan skin, freckles, pale skin. Keep every one of these out"
+            in req["user"])
+    # Not on a rebuild for another reason.
+    assert "already says" not in pg.slot_request(plan, keys["Body"], "more variety", built)["user"]

@@ -1644,6 +1644,35 @@ def _norm(text: Any) -> str:
     return " ".join(str(text or "").split()).lower()
 
 
+#: A rebuild note about scope: this slot names what another slot picks.
+_SCOPE_NOTE = re.compile(r"already name what|names what|leave th(?:ose|at) to", re.I)
+#: The most of another slot's words one rebuild is shown.
+MAX_CLASH_WORDS = 12
+
+
+def clash_words(plan: dict[str, Any], built: dict[str, Any], key: str) -> dict[str, list[str]]:
+    """For a slot being rebuilt over scope: the words of every other built
+    slot that talks about the same things (the same words, or a head noun
+    this slot's options share: "eyes", "skin"), by slot name, at most
+    ``MAX_CLASH_WORDS`` each. The rebuild is told all of them at once; told
+    only the words of the problem it fixes, a rebuild of Body picked up
+    Race's "freckles" right after Race gave up Body's "eyes" (Sonnet rules
+    pack, 2026-10-21: two rounds of ping-pong before it settled)."""
+    own = built.get(key)
+    if not isinstance(own, dict):
+        return {}
+    mine = {c.strip() for o in own["payload"].get("options") or [] if isinstance(o, dict)
+            for c in _norm(o.get("value")).split(",") if c.strip()}
+    heads = {c.split()[-1] for c in mine}
+    out: dict[str, list[str]] = {}
+    for name, texts in other_texts(plan, built, key).items():
+        chunks = list(dict.fromkeys(c.strip() for t in texts for c in t.split(",") if c.strip()))
+        shared = [c for c in chunks if c in mine or c.split()[-1] in heads]
+        if shared:
+            out[name] = shared[:MAX_CLASH_WORDS]
+    return out
+
+
 def other_texts(plan: dict[str, Any], built: dict[str, Any], key: str) -> dict[str, list[str]]:
     """The option texts of every other built slot, by slot name: what a
     slot's options must not repeat (``compile_slot``'s ``others``)."""
@@ -2175,6 +2204,10 @@ def slot_request(plan: dict[str, Any], key: str, note: str = "",
         name = "pack_slot_fill"
     else:
         user = slot_prompt(graph, slot, note=note)
+        if _SCOPE_NOTE.search(note or "") and built:
+            for other, words in clash_words(plan, built, key).items():
+                user += "\n" + (f"{other} already says: {', '.join(words)}. Keep every one of "
+                                f"these out of these options; they are {other}'s.")
         schema = slot_schema(graph, slot)
         name = "pack_slot"
     fmt = ai_guide.format_line(plan.get("model") or "")

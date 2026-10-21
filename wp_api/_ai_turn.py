@@ -395,6 +395,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         # as named too ("Now add negatives to the stormy options" after
         # "You have [[Weather]] …"; chat eval round 4 refused every edit).
         named |= lib.shown_in(ai_chatlog.last_shown(log))
+    answered_named = _named_by_answers(lib, paused if resume else None, answers)
+    named |= answered_named
     if page and isinstance(page.get("id"), str):
         named.add(page["id"])
     for p_ in lib.earlier_proposals.values():
@@ -405,7 +407,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     lib.named = named
     # An item the answer reads in full may be changed when the user asked
     # for a change ("add negatives to the stormy options"), not a new item.
-    lib.edit_read = bool(text) and not resume and not ai_chat.creation_ask(text)
+    lib.edit_read = (bool(text) and not resume and not ai_chat.creation_ask(text)) \
+        or bool(answered_named)
     lib.decisions = list(meta.get("decisions") or [])  # what `ask` may not ask again
     # Links read_result may open: the same list the searches fill.
     lib.web_urls = meta.setdefault("web_urls", [])
@@ -1118,6 +1121,27 @@ def _done_line(steps: list[dict[str, Any]], paused_done: list[str] | None = None
     if did:
         return "Done: " + "; ".join(did[-3:]) + "."
     return "(The model gave an empty answer. Try again, or ask another way.)"
+
+
+def _named_by_answers(lib: Any, paused: dict[str, Any] | None, answers: Any) -> set[str]:
+    """Library items the user's answer to an ``ask`` names: the picked
+    choice, their own words or the question they answered ("Trim
+    [[764294a5#Hair color]] to 8" picked). Answering by button sends no
+    text, so these never reached ``named`` and the edit the user just chose
+    was refused as "they haven't named it" (Haiku hair eval, 2026-10-21)."""
+    if not paused or not isinstance(answers, list):
+        return set()
+    got = {a["id"]: a for a in answers if isinstance(a, dict) and isinstance(a.get("id"), str)}
+    out: set[str] = set()
+    for c in paused.get("calls") or []:
+        if c.get("tool") not in ai_tools.ASK or c.get("id") not in got:
+            continue
+        for a in ai_ask.answers(c.get("args") or {}, got[c["id"]]):
+            if a.get("by") != "user":
+                continue
+            said = f"{a.get('question', '')} {a.get('answer', '')}"
+            out |= lib.shown_in(said) | lib.named_in(str(a.get("answer") or ""))
+    return out
 
 
 async def _paused_results(
