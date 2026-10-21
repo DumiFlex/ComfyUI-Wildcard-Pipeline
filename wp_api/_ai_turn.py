@@ -373,6 +373,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     if not resume:
         meta.pop("asks", None)  # ask pauses are counted per user message
         meta.pop("pointed", None)  # so are the parts already highlighted
+        meta.pop("page_reads", None)  # and the page parts already read
         hints = await _retrieval(lib, text, meta, prof, cfg) if text else ""
         pics = _ai_images.note(len(images)) if images else ""
         model = ai_guide.model_note(text) if text else ""
@@ -589,6 +590,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         items: list[dict[str, Any]] = []
         needs_reply = False
         repeats = 0
+        waiting = ai_ask.deferred_page_calls(calls, change=ai_chat.CHANGE_TOOLS,
+                                             pause=ai_chat.PAUSE_TOOLS,
+                                             web=tuple(ai_tools.WEB))
+        asked = [c for i, c in enumerate(calls) if i not in waiting]
         for at, call in enumerate(calls):
             tool = call["tool"]
 
@@ -611,12 +616,16 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 result(f"{tool}: error: {tool} isn't available here; call more_tools first")
                 steps.append({"tool": tool, "note": f"{tool} isn't available here", "ok": False})
                 continue
+            if at in waiting:
+                result(f"{tool}: {ai_ask.DEFERRED}")
+                continue
             key = ""
             try:
                 raw = call["args"] if isinstance(call.get("args"), dict) else call["args_text"]
                 args, arg_notes = ai_tools.check_args(spec, ai_chat.parse_args(raw))
                 if tool in ai_tools.ASK:
-                    problem = ai_ask.step_problem(calls, at, change=ai_chat.CHANGE_TOOLS,
+                    problem = ai_ask.step_problem(asked, asked.index(call),
+                                                  change=ai_chat.CHANGE_TOOLS,
                                                   pause=ai_chat.PAUSE_TOOLS)
                     if problem:
                         raise ValueError(problem)
@@ -647,6 +656,12 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                         cargs, label = ai_client_tools.prepare(lib, tool, args)
                     except ai_client_tools.Shown as shown:
                         needs_reply = True
+                        again = tool + _json.dumps(args, sort_keys=True, ensure_ascii=False)
+                        if again in seen:
+                            # Small models "open" the card on screen again
+                            # and again instead of answering.
+                            repeats += 1
+                        seen.add(again)
                         result(str(shown))
                         continue
                     if tool == "highlight":
@@ -660,6 +675,17 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                             result(ai_chat.POINTED_AGAIN)
                             steps.append({"tool": tool, "note": label, "ok": True})
                             continue
+                    if tool == "read_page":
+                        again = _json.dumps(cargs, sort_keys=True, ensure_ascii=False)
+                        read_before = list(meta.get("page_reads") or [])
+                        if again in read_before:
+                            # Live probe 2026-10-21: Haiku read the same part
+                            # five times, one pause each, then said nothing.
+                            repeats += 1
+                            needs_reply = True
+                            result(ai_chat.READ_AGAIN)
+                            continue
+                        meta["page_reads"] = [*read_before, again][-20:]
                     if tool in ai_tools.WEB and _web_pre_allowed(cfg, meta):
                         # Allowed for this chat (or always): run it now.
                         result(await _web_call(cfg, meta, tool, cargs))
@@ -1191,6 +1217,7 @@ async def _paused_results(
             if c["tool"] == "open" and not answer.get("denied"):
                 text += ai_client_tools.open_note(c["args"])
                 meta.pop("page_read", None)  # a new page: read it again
+                meta.pop("page_reads", None)
             if not (answer.get("denied") or answer.get("cancelled")
                     or ai_client_tools.failed(text)):
                 # Its step line was shown when the turn paused, so not

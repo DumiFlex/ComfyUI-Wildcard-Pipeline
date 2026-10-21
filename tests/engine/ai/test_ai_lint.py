@@ -107,6 +107,19 @@ def test_scope_fix_strips_the_other_concept():
     assert after["op"]["body"] == body and card["op"]["body"] == item
 
 
+def test_scope_fix_trims_inside_a_phrase():
+    # Live probe 2026-10-21: "Remove clothing words" on a Hair Color card
+    # dropped "red hair with a leather jacket" whole instead of trimming it.
+    item = _wc("Hair Color", ["red hair with a leather jacket", "blonde hair and a red dress",
+                              "black hair", "a leather jacket"])
+    op = {"op": "create", "body": item}
+    [fix] = [f for f in lint.fixes(op, item, None, lint.check(op, item, _none))
+             if f["key"] == "scope:clothing"]
+    body = lint.apply_fix(item, fix["key"], set(fix["only"]))
+    assert [o["value"] for o in body["payload"]["options"]] == [
+        "red hair", "blonde hair", "black hair"]
+
+
 def test_dupe_and_weight_fixes():
     item = _wc("Weather", ["rain", "Rain", "sun", "fog"],
                **{"sun": {"weight": 100}, "rain": {"weight": 2}})

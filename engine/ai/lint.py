@@ -266,11 +266,32 @@ def check(op: dict[str, Any], item: dict[str, Any],
 FIX_WEIGHT_SHARE = 0.1
 
 
+#: Joins inside one comma part ("red hair with a leather jacket"): a part
+#: that sets the other concept is cut here and its other pieces kept.
+_JOINS = re.compile(r"\s+(?:with|and|wearing|in|plus)\s+|\s*&\s*", re.I)
+
+
 def _strip_concept(text: str, other: str) -> str:
-    """``text`` without its comma parts that set ``other``."""
+    """``text`` without what sets ``other``: its comma parts that do, and
+    inside a part, the pieces after "with", "and", "wearing"… that do.
+    "red hair with a leather jacket" keeps "red hair"; a part that is
+    only the other concept goes."""
     words = CONCEPTS.get(other, ())
-    parts = [p.strip() for p in text.split(",")]
-    keep = [p for p in parts if p and not any(_has(_words(p), w) for w in words)]
+
+    def sets(t: str) -> bool:
+        return any(_has(_words(t), w) for w in words)
+
+    keep: list[str] = []
+    for part in (p.strip() for p in text.split(",")):
+        if not part:
+            continue
+        if not sets(part):
+            keep.append(part)
+            continue
+        pieces = [x.strip() for x in _JOINS.split(part) if x and x.strip()]
+        rest = [x for x in pieces if not sets(x)]
+        if rest and len(pieces) > 1:
+            keep.append(" ".join(rest))
     return ", ".join(keep)
 
 

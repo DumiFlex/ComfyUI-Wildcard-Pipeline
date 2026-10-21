@@ -91,6 +91,39 @@ async def test_pointing_twice_is_turned_into_an_answer(wp_client, fake_llm):
     assert done["message"] == "It's highlighted on the page: Settings button."
 
 
+async def test_reading_the_same_part_twice_is_not_paused_again(wp_client, fake_llm):
+    _on(fake_llm)
+    read = {"tool": "read_page", "args": '{"within": "option-fields"}'}
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [read]},
+        {"message": "", "calls": [read]},  # the same part again
+        {"message": "It has four options.", "calls": []},
+    ])
+    first = await _chat(wp_client, "what does this editor show?")
+    assert first["pending"][0]["tool"] == "read_page"
+    done = await _resume(wp_client, first["chat_id"],
+                         [{"id": first["pending"][0]["id"], "text": "[p-4] Options"}])
+    # No second pause: the model is told it already read that part.
+    assert done["pending"] == [] and done["message"] == "It has four options."
+    assert "already read that part" in json.dumps(fake_llm.seen[-1]["body"]["messages"])
+
+
+async def test_an_ask_runs_alone_when_page_tools_share_its_step(wp_client, fake_llm):
+    _on(fake_llm)
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [
+            {"tool": "open", "args": '{"page": "wildcards"}'},
+            {"tool": "ask", "args": json.dumps({"questions": [
+                {"header": "Rating", "question": "Which rating?",
+                 "choices": ["Safe", "Mature"]}]})},
+        ]},
+    ])
+    first = await _chat(wp_client, "ask me before planning a pack")
+    # Live probe 2026-10-21: the whole ask was refused every time, so the
+    # questions box never showed. Now the page call waits and the ask runs.
+    assert [c["tool"] for c in first["pending"]] == ["ask"]
+
+
 async def test_a_new_message_cancels_what_was_waiting(wp_client, fake_llm):
     _on(fake_llm)
     fake_llm.chat_steps.extend([

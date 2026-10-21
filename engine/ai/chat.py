@@ -99,6 +99,10 @@ POINTED_AGAIN = (
     "highlight: already pointed at that; it is still showing on the page. "
     "Don't point again: answer the user now in words (say where it is)."
 )
+READ_AGAIN = (
+    "read_page: you already read that part in this answer and its result is "
+    "above; reading it again shows the same. Answer the user now."
+)
 #: Sent once when a step comes back empty (no text, no calls).
 EMPTY_NUDGE = (
     "Your last answer was empty. Answer the user's message now: call a tool, or "
