@@ -115,6 +115,8 @@ async def test_a_shortlist_turn_widens_after_more_tools(wp_client, fake_llm):
     ])
     n = len(fake_llm.seen)
     await _chat(wp_client, "what's in my library?")
-    first, second = fake_llm.seen[n], fake_llm.seen[n + 1]
+    acts = [x for x in fake_llm.seen[n:]
+            if "calls" in x["body"]["response_format"]["json_schema"]["schema"]["properties"]]
+    first, second = acts[0], acts[1]
     assert "more_tools" in _offered(first) and "create_template" not in _offered(first)
     assert len(_offered(second)) > len(_offered(first))

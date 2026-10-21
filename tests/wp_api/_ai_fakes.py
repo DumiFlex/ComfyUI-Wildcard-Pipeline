@@ -46,6 +46,17 @@ def _chat_step(schema: dict, chat_steps: list) -> object:
     with calls and leaves a plain reply for the answer ask ({message})."""
     props = schema["properties"]
     nxt = chat_steps[0] if chat_steps else {"message": "Done.", "calls": []}
+    if "use" in props:
+        # The pick before an act ask (`engine/ai/shortlist.py`): the next
+        # step's tools by name (`more_tools` when one isn't listed), or
+        # `answer`. It takes no step; the act ask that follows does.
+        listed = props["use"]["items"]["enum"]
+        if isinstance(nxt, str) or not nxt.get("calls"):
+            return {"plan": "" if isinstance(nxt, str) else nxt.get("plan", ""),
+                    "use": ["answer"]}
+        names = [c["tool"] for c in nxt["calls"]]
+        use = names if all(n in listed for n in names) else ["more_tools"]
+        return {"plan": nxt.get("plan", ""), "use": list(dict.fromkeys(use))[:3]}
     if "calls" in props and "message" not in props:
         if isinstance(nxt, str) or nxt.get("calls"):
             if chat_steps:

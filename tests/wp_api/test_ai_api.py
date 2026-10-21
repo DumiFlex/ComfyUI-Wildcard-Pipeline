@@ -619,6 +619,7 @@ async def test_chat_uses_the_open_editor_and_the_docs(wp_client, fake_llm):
               "payload": {"var_binding": "weapon", "sub_categories": ["blade"], "options": [
                   {"id": "x1", "value": "unsaved spear", "weight": 1, "sub_categories": []},
                   {"id": "x2", "value": "unsaved bow", "weight": 1, "sub_categories": []}]}}
+    n = len(fake_llm.seen)
     body = await _chat(wp_client, "remove the first option",
                        page={"route": "wildcards-edit", "id": tgt, "note": "2 options shown",
                              "editor": editor})
@@ -630,7 +631,7 @@ async def test_chat_uses_the_open_editor_and_the_docs(wp_client, fake_llm):
     assert call["tool"] == "open" and call["args"] == {"doc": "constraint"}
     assert [s["note"] for s in body["steps"][:2]] == [
         'Searched the docs for "constraint exclude"', "Read Weapon (draft)"]
-    first, second = fake_llm.seen[-2:]
+    first, second = fake_llm.seen[n], fake_llm.seen[-1]
     assert "Docs pages (id: title" in first["body"]["messages"][0]["content"]
     asked = first["body"]["messages"][-1]["content"]
     assert "with unsaved changes" in asked and "On screen: 2 options shown" in asked
@@ -1209,7 +1210,8 @@ async def test_a_local_json_chat_gets_each_tools_args_checked_by_the_server(
     out = await _chat(wp_client, "find hair")
     assert out["message"] == "Nothing yet."
     assert [s["tool"] for s in out["steps"] if not s.get("think")] == ["search"]
-    sent = fake_llm.seen[-2]["body"]  # the last act ask (then the answer ask)
+    sent = [x["body"] for x in fake_llm.seen  # the act ask (after its pick)
+            if "calls" in x["body"]["response_format"]["json_schema"]["schema"]["properties"]][-1]
     options = sent["response_format"]["json_schema"]["schema"]["properties"]["calls"][
         "items"]["anyOf"]
     assert ["search"] in [o["properties"]["tool"]["enum"] for o in options]
@@ -1250,14 +1252,17 @@ async def test_a_server_that_cant_take_the_typed_schema_gets_the_string_form(
         wp_client, fake_llm):
     ai_config.update({"enabled": True, "provider": "lmstudio", "tool_format": "json",
                       "base_url": str(fake_llm.make_url("/v1")), "model": "no-grammar"})
-    fake_llm.chat_steps.append({"message": "Hi there.", "calls": []})
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "search", "args": {"query": "hello"}}]},
+        {"message": "Hi there.", "calls": []}])
     out = await _chat(wp_client, "hello")
     assert out["message"] == "Hi there."
-    items = fake_llm.seen[-2]["body"]["response_format"]["json_schema"]["schema"][
-        "properties"]["calls"]["items"]
+    items = [x["body"]["response_format"]["json_schema"]["schema"] for x in fake_llm.seen
+             if "calls" in x["body"]["response_format"]["json_schema"]["schema"][
+                 "properties"]][-1]["properties"]["calls"]["items"]
     assert items["properties"]["args"] == {"type": "string"}
-    # Remembered: the next step goes straight to the string form (an act
-    # ask and an answer ask, nothing refused).
+    # Remembered: the next step goes straight to the string form (a pick
+    # and an answer ask, nothing refused).
     n = len(fake_llm.seen)
     fake_llm.chat_steps.append({"message": "Again.", "calls": []})
     await _chat(wp_client, "again", chat_id=out["chat_id"])
@@ -1720,7 +1725,7 @@ async def test_a_medium_model_gets_the_page_tools_and_asks_for_the_rest(wp_clien
     first = fake_llm.seen[0]["body"]["messages"][0]["content"]
     assert "- create_wildcard " in first and "- create_bundle " not in first
     assert "- more_tools " in first
-    results = fake_llm.seen[1]["body"]["messages"][-1]["content"]
+    results = " ".join(x["body"]["messages"][-1]["content"] for x in fake_llm.seen)
     assert "call more_tools first" in results
     later = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
     assert "create_bundle" in later

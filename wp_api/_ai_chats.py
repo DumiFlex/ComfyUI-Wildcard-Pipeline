@@ -10,6 +10,7 @@ from engine.ai import budget as ai_budget
 from engine.ai import chatlog as ai_chatlog
 from engine.ai import compact as ai_compact
 from engine.ai import config as ai_config
+from engine.ai import examples as ai_examples
 from engine.ai import lint as ai_lint
 from engine.ai import safety as ai_safety
 from engine.db.repositories import (
@@ -128,12 +129,26 @@ async def patch_chat(request: web.Request) -> web.Response:
                 if isinstance(ev.get("created"), str) and len(ev["created"]) <= 40:
                     entry["created"] = ev["created"]
                 seen[ev["pid"][:12]] = entry
+                if ev["status"] == "applied":
+                    _keep_example(meta, ev["pid"][:12])
             meta["shown_status"] = seen
             repo.set_meta(chat["id"], meta)
     out: dict[str, Any] = {"id": chat["id"], "title": chat["title"], "pinned": chat["pinned"]}
     if bodies:
         out["fixed"] = bodies
     return json_ok(out)
+
+
+def _keep_example(meta: dict[str, Any], pid: str) -> None:
+    """An applied card's request and call, kept as a worked example for
+    small and medium models (`engine/ai/examples.py`). Once per card."""
+    card = (meta.get("proposals") or {}).get(pid)
+    ex = card.get("ex") if isinstance(card, dict) else None
+    if not isinstance(ex, dict) or card.get("kept"):
+        return
+    if ai_examples.add(str(ex.get("ask") or ""),
+                       [{"tool": ex.get("tool"), "args": ex.get("args") or {}}]):
+        card["kept"] = True
 
 
 def _record_fix(log: list[dict[str, Any]], meta: dict[str, Any], pid: str,

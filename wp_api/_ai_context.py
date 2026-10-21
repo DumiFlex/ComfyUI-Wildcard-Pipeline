@@ -76,7 +76,7 @@ async def _chat_step(
     names: list[str], prof: dict[str, Any], num_ctx: int, cache_key: str,
     emit: Any = None, typed: bool = False, decls: list[dict[str, Any]] | None = None,
     split: bool = False, answer_only: bool = False,
-    offer: list[Any] | None = None, must_call: bool = False,
+    offer: list[Any] | None = None, must_call: bool = False, pick: bool = False,
 ) -> dict[str, Any]:
     """One model step, asked again once with the problem named when a
     JSON-mode answer isn't usable: small models usually fix a named error.
@@ -87,7 +87,8 @@ async def _chat_step(
     `offer` (typed JSON only): the tools this step's grammar allows instead
     of all of the chat's (a shortlist, a plan, a plan item); the prompt and
     native declarations stay the same, so the cached prefix does too.
-    `must_call`: a split act ask that must call (with `offer`)."""
+    `must_call`: a split act ask that must call (with `offer`). `pick` (a
+    shortlist `offer`): the split act ask first picks tools by name."""
     chosen = ai_tools.tools(names)
     native = decls if decls is not None else ai_tools.native(chosen, cfg["api"])
     typed = typed and fmt == "json" and _ai_chat.checks_schema(cfg)
@@ -110,7 +111,7 @@ async def _chat_step(
                     write_temp=prof.get("write_temp", prof["chat_temp"]),
                     max_calls=int(prof.get("act_calls") or 0), num_ctx=num_ctx,
                     cache_key=cache_key, emit=emit, answer_only=answer_only,
-                    must_call=must_call,
+                    must_call=must_call, pick=pick and typed and bool(offer),
                 )
             return await _ai_chat.step(
                 cfg, system=system, log=asked, fmt=fmt, tools=native,

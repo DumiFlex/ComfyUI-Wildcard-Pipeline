@@ -337,6 +337,22 @@ def act_schema(names: list[str], typed: list[Tool] | None = None,
     }
 
 
+def select_schema(names: list[str], max_picks: int = 3) -> dict[str, Any]:
+    """The pick before a split JSON act ask on a shortlist step: a plan and
+    which of `names` to call next, by name only, or `answer` when ready to
+    reply. Choosing apart from writing the arguments is what small models
+    get right more often (Natural Language Tools, 2025); the act ask that
+    follows then holds only the picked tools' arguments."""
+    pick: dict[str, Any] = {"type": "array", "minItems": 1, "items": {
+        "type": "string", "enum": list(dict.fromkeys([*names, ANSWER_TOOL]))}}
+    if max_picks > 0:
+        pick["maxItems"] = max_picks
+    return {
+        "type": "object", "additionalProperties": False, "required": ["plan", "use"],
+        "properties": {"plan": {"type": "string"}, "use": pick},
+    }
+
+
 #: The answer half of a split JSON step: only the message.
 ANSWER_SCHEMA: dict[str, Any] = {
     "type": "object", "additionalProperties": False, "required": ["message"],

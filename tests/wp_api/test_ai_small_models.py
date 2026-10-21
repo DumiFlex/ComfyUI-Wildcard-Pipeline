@@ -24,8 +24,10 @@ def _schema(seen):
 
 
 def _kind(seen):
-    """"act" or "answer" for a split JSON ask."""
+    """"pick", "act" or "answer" for a split JSON ask."""
     props = _schema(seen)["properties"]
+    if "use" in props:
+        return "pick"
     return "act" if "calls" in props and "message" not in props else (
         "answer" if "calls" not in props else "step")
 
@@ -49,12 +51,18 @@ async def test_after_its_cards_a_split_step_writes_what_it_proposed(wp_client, f
     assert [s["tool"] for s in body["steps"] if not s.get("think")] == [
         "read", "add_options", "run_test"]
     kinds = [_kind(x) for x in fake_llm.seen[n:]]
-    # Three acting asks, one that is ready, then the answer: no prose was
-    # written while choosing, and the answer ask could only write.
-    assert kinds == ["act", "act", "act", "act", "answer"]
-    assert all(x["body"]["temperature"] == 0.15 for x in fake_llm.seen[n:n + 4])
+    # Each step picks its tools by name, then calls only those; the last
+    # pick is "answer", then the answer: no prose was written while
+    # choosing, and the answer ask could only write.
+    assert kinds == ["pick", "act", "pick", "act", "pick", "act", "pick", "answer"]
+    assert all(x["body"]["temperature"] == 0.15 for x in fake_llm.seen[n:-1])
     assert fake_llm.seen[-1]["body"]["temperature"] == 0.4
-    assert _schema(fake_llm.seen[n])["properties"]["calls"]["maxItems"] == 3
+    act = _schema(fake_llm.seen[n + 3])["properties"]["calls"]
+    assert act["maxItems"] == 3
+    # The act ask's grammar holds only the picked tool.
+    assert [c["properties"]["tool"]["enum"] for c in act["items"]["anyOf"]] == [["add_options"]]
+    pick = _schema(fake_llm.seen[n])["properties"]["use"]["items"]["enum"]
+    assert {"read", "add_options", "more_tools", "answer"} <= set(pick)
 
 
 async def test_a_split_turn_out_of_steps_answers_instead_of_stopping(wp_client, fake_llm):
@@ -193,18 +201,22 @@ async def test_more_tools_names_its_groups(wp_client, fake_llm):
         {"message": "", "calls": [{"tool": "more_tools", "args": {"group": "web"}},
                                   {"tool": "more_tools", "args": {"group": "combines"}},
                                   {"tool": "more_tools", "args": {"group": "combines"}}]},
+        {"message": "", "calls": [{"tool": "create_combine", "args": {}}]},
         {"message": "Done.", "calls": []},
     ])
     n = len(fake_llm.seen)
     await _chat(wp_client, "go ahead with it")
-    results = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    results = next(x["body"]["messages"][-1]["content"] for x in fake_llm.seen[n:]
+                   if "web search isn't set up" in x["body"]["messages"][-1]["content"])
     assert "web search isn't set up" in results
     assert "create_combine" in results  # its prompt line, since the JSON prompt stays
     assert "already made this exact call" in results
     # The JSON instructions list only the starting tools, every request.
     assert len({x["body"]["messages"][0]["content"] for x in fake_llm.seen[n:]}) == 1
-    act = _schema(fake_llm.seen[-2])["properties"]["calls"]["items"]
-    assert "create_combine" in json.dumps(act)  # but the grammar takes it now
+    # Not on the message's short list: the pick widens with more_tools,
+    # and the act ask's grammar takes the loaded tool now.
+    act = [x for x in fake_llm.seen[n:] if _kind(x) == "act"][-1]
+    assert "create_combine" in json.dumps(_schema(act)["properties"]["calls"]["items"])
 
 
 def test_the_message_words_name_the_groups_it_needs():
@@ -220,9 +232,9 @@ async def test_a_message_naming_a_kind_loads_its_tools(wp_client, fake_llm):
     fake_llm.chat_steps.append({"message": "Sure.", "calls": []})
     n = len(fake_llm.seen)
     await _chat(wp_client, "make a combine of hair and eyes")
-    act = next(_schema(x)["properties"]["calls"]["items"] for x in fake_llm.seen[n:]
-               if "calls" in _schema(x)["properties"])
-    assert "create_combine" in json.dumps(act)
+    pick = next(_schema(x)["properties"]["use"]["items"]["enum"] for x in fake_llm.seen[n:]
+                if _kind(x) == "pick")
+    assert "create_combine" in pick
     tail = fake_llm.seen[n]["body"]["messages"][-1]["content"]
     assert "create_combine" in tail
 
@@ -391,3 +403,34 @@ async def test_a_permission_in_a_lazy_json_chat_leaves_the_prompt_alone(wp_clien
     # How to call it goes with the message that says it is on.
     assert "- delete_items " in sent[-1]["content"] and "delete stuff" in sent[-1]["content"]
     assert ai_chat.GO_NUDGE not in sent[-1]["content"]
+
+
+async def test_a_split_chat_sees_worked_examples_and_keeps_applied_cards(wp_client, fake_llm):
+    from engine.ai import examples
+    _src, tgt = await _two_wildcards(wp_client)
+    _on(fake_llm)
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "add_options", "args": json.dumps(
+            {"id": tgt, "options": [{"text": "halberd"}]})}]},
+        {"message": "Proposed a halberd.", "calls": []},
+    ])
+    n = len(fake_llm.seen)
+    body = await _chat(wp_client, "add a halberd to my Weapon")
+    asked = fake_llm.seen[n]["body"]["messages"][-1]["content"]
+    # A built-in example like this request rides in the message tail.
+    assert "Requests like this one" in asked and "add a war axe and a spear" in asked
+    [card] = body["proposals"]
+    assert examples.load() == []
+    resp = await wp_client.patch(f"/wp/api/ai/chats/{body['chat_id']}",
+                                 json={"events": [{"pid": card["pid"], "status": "applied"}]})
+    assert resp.status == 200
+    [kept] = examples.load()
+    assert kept["ask"] == "add a halberd to my Weapon"
+    assert kept["calls"] == [{"tool": "add_options", "args": {
+        "id": tgt, "options": [{"text": "halberd"}]}}]
+    # Applied again (a reload): kept once.
+    await wp_client.patch(f"/wp/api/ai/chats/{body['chat_id']}",
+                          json={"events": [{"pid": card["pid"], "status": "applied"}]})
+    assert len(examples.load()) == 1
+    # The next like request shows the user's own first.
+    assert examples.pick("add a glaive to my Weapon")[0]["ask"] == "add a halberd to my Weapon"

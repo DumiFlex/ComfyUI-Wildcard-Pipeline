@@ -14,6 +14,7 @@ from engine.ai import budget as ai_budget
 from engine.ai import chat as ai_chat
 from engine.ai import chatlog as ai_chatlog
 from engine.ai import client_tools as ai_client_tools
+from engine.ai import examples as ai_examples
 from engine.ai import guide as ai_guide
 from engine.ai import lint as ai_lint
 from engine.ai import plan_items as ai_plan
@@ -389,9 +390,14 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         pics = _ai_images.note(len(images)) if images else ""
         model = ai_guide.model_note(text) if text else ""
         plan_hint = ai_plan.HINT if plan_n else ""
+        if text:
+            meta["ask_text"] = text[:2000]  # for the worked example a card keeps
+        # Small and medium models: requests like this one that worked
+        # before, and their calls (`engine/ai/examples.py`).
+        shown = ai_examples.note(ai_examples.pick(text)) if text and meta.get("split") else ""
         sent = ai_safety.strip_invisible(
             "\n\n".join(x for x in (since, changes, perms, text, pics, note, hints, model,
-                                    plan_hint) if x))
+                                    plan_hint, shown) if x))
         new.append(ai_chatlog.user_entry(text, sent, images))
         meta = ai_chatlog.move_images(log + new, meta)
 
@@ -504,7 +510,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         if emit:
             await emit({"type": "step", "n": step + 1})
         offer: list[Any] | None = None
-        must_call = False
+        must_call = pick = False
         if plan_n and not plan_asked and not forced:
             plan_asked = must_call = True
             offer = [ai_plan.plan_tool(meta["tools"], plan_n)]
@@ -513,6 +519,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             offer = ai_tools.tools([n for n in queue.allowed() if n in meta["tools"]])
         elif short and not widened:
             offer = ai_tools.tools([n for n in meta["tools"] if n in short or n in called])
+            pick = True
         try:
             st = await asyncio.wait_for(
                 _chat_step({**cfg, "thinking": "off"} if think_off else cfg,
@@ -520,7 +527,8 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                            names=meta["tools"], prof=prof, num_ctx=num_ctx,
                            cache_key=cache_key, emit=emit, typed=bool(meta.get("typed")),
                            decls=_decls(cfg, meta, fmt), split=_splits(cfg, meta, fmt),
-                           answer_only=forced, offer=offer, must_call=must_call),
+                           answer_only=forced, offer=offer, must_call=must_call,
+                           pick=pick),
                 timeout=STEP_SECONDS)
         except asyncio.TimeoutError:
             if not steps and not any(x.get("kind") == "step" for x in new):
@@ -853,7 +861,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 if key:
                     proposed[key] = out["pid"]
                 meta.setdefault("proposals", {})[out["pid"]] = {
-                    "title": out["title"], "status": None}
+                    "title": out["title"], "status": None,
+                    # Kept as a worked example if the user applies it.
+                    "ex": {"ask": str(meta.get("ask_text") or text or "")[:300],
+                           "tool": tool, "args": ai_examples.compact(args)}}
                 if out.get("replaces"):
                     gone = meta["proposals"].get(out["replaces"])
                     if gone is not None:

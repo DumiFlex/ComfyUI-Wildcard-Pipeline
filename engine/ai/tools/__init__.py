@@ -34,6 +34,7 @@ from engine.ai.tools.registry import (
     description,
     native,
     prompt_lines,
+    select_schema,
     step_schema,
 )
 
@@ -44,5 +45,5 @@ __all__ = ["ANSWER_SCHEMA", "ANSWER_TOOL", "ASK", "BY_NAME", "CHANGE", "CLIENT",
            "Tool",
            "act_schema", "answer_decl", "check_args", "description", "groups_for", "more",
            "native",
-           "prompt_lines",
+           "prompt_lines", "select_schema",
            "shortlist", "step_schema", "sync_delete", "toolset", "tools", "web_allowed"]

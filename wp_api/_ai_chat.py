@@ -1080,12 +1080,28 @@ def _choice_refused(e: AIError) -> bool:
                 and re.search(r"tool_choice|\brequired\b", e.message, re.I))
 
 
+async def _pick(
+    cfg: dict[str, Any], system: str, log: list[dict[str, Any]], offered: list[registry.Tool],
+    temperature: float, max_calls: int, num_ctx: int, cache_key: str, emit: Any,
+) -> tuple[list[registry.Tool], bool, str]:
+    """The pick before a shortlist step's act ask: ``(the tools the act ask
+    may call, ready to answer, plan)``. A pick of nothing usable is ready."""
+    names = [t.name for t in offered]
+    sel = await step(cfg, system=system, log=log, fmt="json", tools=[], names=names,
+                     schema=registry.select_schema(names, max_calls or 3),
+                     temperature=temperature, num_ctx=num_ctx, cache_key=cache_key, emit=emit)
+    got = sel["answer"].get("use") if isinstance(sel["answer"], dict) else None
+    picked = {n for n in got if isinstance(n, str)} if isinstance(got, list) else set()
+    chosen = [t for t in offered if t.name in picked]
+    return (chosen or offered), not chosen, sel["plan"]
+
+
 async def split_step(
     cfg: dict[str, Any], *, system: str, log: list[dict[str, Any]], fmt: str,
     offered: list[registry.Tool], tools: list[dict[str, Any]], typed: bool,
     act_temp: float, write_temp: float, max_calls: int, num_ctx: int,
     cache_key: str = "", emit: Any = None, answer_only: bool = False,
-    must_call: bool = False,
+    must_call: bool = False, pick: bool = False,
 ) -> dict[str, Any]:
     """A small or medium model's step asked in two parts (see
     `/pr-drafts/ai-small-model-plumbing.md`):
@@ -1101,18 +1117,26 @@ async def split_step(
     The result is one ordinary step, so the log and the history the model
     reads keep their shape. `tools` are the native declarations (the
     `answer` tool included). `must_call` (typed JSON): the act ask can't
-    come back empty (`engine/ai/plan_items.py` steps)."""
+    come back empty (`engine/ai/plan_items.py` steps). `pick` (a shortlist
+    step, JSON): the act ask is itself two, a pick of which of `offered` to
+    call, by name only (or `answer`), then the calls in a grammar holding
+    only the picked tools (`_pick`)."""
     names = [t.name for t in offered]
     if fmt == "json":
         plan, thinking = "", ""
-        if not answer_only:
-            act = await step(cfg, system=system, log=log, fmt="json", tools=[], names=names,
-                             schema=registry.act_schema(names, offered if typed else None,
+        use, ready = offered, False
+        if pick and not answer_only and not must_call and len(offered) > 1:
+            use, ready, plan = await _pick(cfg, system, log, offered, act_temp, max_calls,
+                                           num_ctx, cache_key, emit)
+        if not answer_only and not ready:
+            use_names = [t.name for t in use]
+            act = await step(cfg, system=system, log=log, fmt="json", tools=[], names=use_names,
+                             schema=registry.act_schema(use_names, use if typed else None,
                                                         max_calls if typed else 0,
                                                         1 if typed and must_call else 0),
                              temperature=act_temp, num_ctx=num_ctx, cache_key=cache_key,
                              emit=emit)
-            plan = act["plan"]
+            plan = act["plan"] or plan
             thinking = act["thinking"]
             if act["calls"]:
                 got = act["answer"]
