@@ -701,7 +701,14 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           tagged with its value weigh that much more or less and the rule is spent. A rebuilt
           wildcard that still misses an axis value gets one fill call (the options stay, the
           missing ones are added), and a fill call is used whenever a value is missing,
-          whatever else the note says.
+          whatever else the note says. A preset or input named like a negative goes to the
+          template's negative too, and a placeholder or "$neg =" written into the negative is
+          cleaned up like in the lead. The per-model-family quality rule comes only from the
+          setting or from families your request names (not ones the planner guessed), and the
+          code gives it an "otherwise" with the pack's own quality words, so $quality is set
+          even without a WP Model Info node. Rules writing one variable from two axes become
+          one rule per axis (the second adds to it), and a rule keyed on a slot that picks
+          several options is dropped with a note, since only one pick's axis value is readable.
           Click an item to edit its slot (axes, use) or the
           relations it compiles from, and <b>Add a relation</b> or <b>Add a slot</b>; the items
           are compiled again from your change. The assistant lists every item it will build,

@@ -605,6 +605,15 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
     lead = _placeholders(_clean(raw.get("lead"), MAX_TEXT), by_name, warnings)
     tail = _placeholders(_clean(raw.get("tail"), MAX_TEXT), by_name, warnings)
     negative = _clean(raw.get("negative"), MAX_TEXT * 2)
+    # "{{inputs.neg_prompt}} {{fixed.default_neg}}" or "$neg = ugly, …" in
+    # the negative (9B, 2026-10-21): a placeholder resolves or goes like in
+    # the lead, and an assignment keeps its right-hand side.
+    assigned = re.match(r"^\s*\$?[A-Za-z_]\w*\s*(?:=|:)\s*(?=\S)", negative)
+    if assigned:
+        warnings.append(f"Kept the words of \"{negative[:30]}\" as the negative: it was written "
+                        "as an assignment")
+        negative = negative[assigned.end():]
+    negative = _placeholders(negative, by_name, warnings)
     rule_words = {w for r in relations for w in r.get("words") or []}
     if negative and rule_words:
         # "sandals, shorts in winter" is a relation, not a defect.
@@ -623,7 +632,7 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
             "negative": negative}
 
 
-_PLACEHOLDER = re.compile(r"\{\{\s*\$?([A-Za-z][\w ]*?)\s*\}\}|\{\s*\$?([A-Za-z]\w*)\s*\}")
+_PLACEHOLDER = re.compile(r"\{\{\s*\$?([A-Za-z][\w .]*?)\s*\}\}|\{\s*\$?([A-Za-z][\w.]*)\s*\}")
 
 
 def _placeholders(text: str, by_name: dict[str, str], warnings: list[str]) -> str:
@@ -759,7 +768,7 @@ def compile_graph(raw: Any) -> dict[str, Any]:
     if not anchor:
         # The first pick the prompt shows, never a list or a driver.
         anchor = next((s["var"] for s in slots if s["show"] == "prompt"), "")
-    return {
+    graph: dict[str, Any] = {
         "title": _clean(raw.get("title"), MAX_NAME) or "AI pack",
         "summary": _clean(raw.get("summary"), 300),
         "design": _clean(raw.get("design"), 900),
@@ -785,6 +794,11 @@ def compile_graph(raw: Any) -> dict[str, Any]:
         "bad_refs": bad_refs,
         "dropped": list(dict.fromkeys(dropped)),
     }
+    if _clean(raw.get("quality_words"), MAX_TEXT):
+        # The pack's own quality words, kept by the code when the per-family
+        # rule takes over $quality: the rule's "otherwise".
+        graph["quality_words"] = _clean(raw.get("quality_words"), MAX_TEXT)
+    return graph
 
 
 # --- the graph as plan items ------------------------------------------------
@@ -943,6 +957,32 @@ def model_families(graph: dict[str, Any]) -> list[str]:
         if fam and fam not in out:
             out.append(fam)
     return out
+
+
+def request_families(request: str) -> list[str]:
+    """The image model families a request names, in the guide's keys."""
+    from engine.ai import guide as ai_guide
+    return [key for rx, key in ai_guide._FAMILY if rx.search(request or "")]
+
+
+def trim_model(graph: dict[str, Any], request: str) -> list[str]:
+    """The graph's ``model`` keeps only the families the request names when
+    the planner wrote two or more the request didn't ask for ("flux, sd3"
+    on a request naming no model; 9B, 2026-10-21, 9 packs): two families
+    would add the per-family quality rule, and with no WP Model Info the
+    template then read a $quality no run set. Returns the lines saying so."""
+    if not (request or "").strip() or len(model_families(graph)) < 2:
+        return []
+    asked = set(request_families(request))
+    if len(asked & set(model_families(graph))) >= 2:
+        return []
+    from engine.ai import guide as ai_guide
+    parts = [p.strip() for p in re.split(r"[,/&+]|\band\b|\bor\b", graph["model"])
+             if p.strip()]
+    kept = [p for p in parts if ai_guide.family(p) in asked] or parts[:1]
+    was, graph["model"] = graph["model"], ", ".join(kept)
+    return [f"Model: {graph['model']} (the planner wrote \"{was}\", but the request names "
+            "no second family, so there is no per-family quality rule)"]
 
 
 def model_quality(graph: dict[str, Any], settings: Any) -> bool:
@@ -1236,30 +1276,46 @@ def wired_payload(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict
                 "preview": preview, "warnings": []}
     if kind == "derivation":
         rels = [r for r in graph["relations"] if r.get("var") == item["var"]]
-        branches = []
         otherwise = _otherwise(rels)
+        # One rule per source axis: rows keyed on a second axis of the slot
+        # (or another slot) ADD to the variable in a rule of their own.
+        # In one if/elif the first axis always won and every row on the
+        # other was "broken" (9B, 2026-10-21, $habitat_preference).
+        groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
         for r in rels:
-            src = next((s for s in graph["slots"] if s["name"] == r["from"]["slot"]), None)
-            if src is None:
-                raise PlanError(f"{item['name']} reads {r['from']['slot']}, which the graph "
-                                "no longer has")
-            branches.append({
-                "condition": {"var": f"{src['var']}.{r['from']['axis']}", "op": "equals",
-                              "value": r["from"]["value"]},
-                "action": {"target_var": item["var"],
-                           "mode": "replace" if r["kind"] == "derive" else "append",
-                           "value": r["text"]},
-            })
-        rule: dict[str, Any] = {"id": "rule0001", "branches": branches}
-        if otherwise:
-            rule["else"] = {"action": {"target_var": item["var"], "mode": "replace",
-                                       "value": otherwise}}
+            groups.setdefault((r["from"]["slot"], r["from"]["axis"]), []).append(r)
+        rules: list[dict[str, Any]] = []
+        warnings: list[str] = []
+        for n, ((_sname, axis), rows) in enumerate(groups.items()):
+            branches = []
+            for r in rows:
+                src = next((s for s in graph["slots"] if s["name"] == r["from"]["slot"]), None)
+                if src is None:
+                    raise PlanError(f"{item['name']} reads {r['from']['slot']}, which the "
+                                    "graph no longer has")
+                branches.append({
+                    "condition": {"var": f"{src['var']}.{axis}", "op": "equals",
+                                  "value": r["from"]["value"]},
+                    "action": {"target_var": item["var"],
+                               "mode": "replace" if r["kind"] == "derive" and n == 0
+                               else "append",
+                               "value": r["text"]},
+                })
+            rule: dict[str, Any] = {"id": f"rule{n + 1:04d}", "branches": branches}
+            if n == 0 and otherwise:
+                rule["else"] = {"action": {"target_var": item["var"], "mode": "replace",
+                                           "value": otherwise}}
+            if n > 0:
+                warnings.append(f"${item['var']} is also written from {_sname}.{axis}: those "
+                                "rows add to it (one rule per axis, so both fire)")
+            rules.append(rule)
         others = sorted({r["otherwise"] for r in rels
                          if r.get("otherwise") and r["otherwise"] != otherwise})
-        return {"kind": kind, "payload": {"rules": [rule]},
-                "preview": [_slot_rel_words(r) for r in rels],
-                "warnings": [f"${item['var']} has one \"otherwise\": kept \"{otherwise}\", not "
-                             + ", ".join(f'"{o}"' for o in others)] if others else []}
+        if others:
+            warnings.append(f"${item['var']} has one \"otherwise\": kept \"{otherwise}\", not "
+                            + ", ".join(f'"{o}"' for o in others))
+        return {"kind": kind, "payload": {"rules": rules},
+                "preview": [_slot_rel_words(r) for r in rels], "warnings": warnings}
     if kind == "template":
         t = graph["template"]
         order = template_order(graph, plan.get("settings"))
@@ -1755,7 +1811,7 @@ def verify_relations(plan: dict[str, Any], built: dict[str, Any],
                 if not dt and not said:
                     continue
                 row["seen"] += 1
-                if kind == "exclude" and (dst["value"] in dt or said):
+                if kind == "exclude" and not fell and (dst["value"] in dt or said):
                     row["broken"] += 1
                 elif kind == "only" and not fell and not (
                         dt & only_rows[(src["slot"], src["value"], dst["slot"])]):
@@ -2071,6 +2127,29 @@ def request_picks(request: str) -> list[tuple[int, int, str]]:
     return out
 
 
+def drop_multi_pick_rules(graph: dict[str, Any]) -> list[str]:
+    """A derive or append rule keyed on a slot that picks several options
+    goes: the engine sets ``$var.axis`` for one pick only, so the rule never
+    fired (9B, 2026-10-21: $animal_biome on a 1-3 pick, broken 11-17 runs
+    in 14-21). A variable nothing writes any more leaves the order."""
+    lines: list[str] = []
+    multi = {s["name"]: s for s in graph["slots"] if s["pick"] and s["pick"] != "1"}
+    gone = [r for r in graph["relations"] if r["kind"] in ("derive", "append")
+            and r["from"]["slot"] in multi]
+    if not gone:
+        return []
+    graph["relations"] = [r for r in graph["relations"] if r not in gone]
+    still = {r["var"] for r in graph["relations"] if r["kind"] == "derive"}
+    for r in gone:
+        s = multi[r["from"]["slot"]]
+        lines.append(f"{s['name']} picks {s['pick']}, so ${r['var']} can't follow one "
+                     f"{s['name']}.{r['from']['axis']} value: that rule went")
+        if r["kind"] == "derive" and r["var"] not in still:
+            graph["template"]["order"] = [v for v in graph["template"]["order"]
+                                          if v != r["var"]]
+    return lines
+
+
 def apply_picks(graph: dict[str, Any], request: str) -> list[str]:
     """A slot the request counts ("2 to 3 accessories") picks that many
     when the model left its ``pick`` empty. Returns the lines saying so."""
@@ -2101,6 +2180,13 @@ _PRESET_NEGATIVES = re.compile(r"\bpresets?\b.{0,80}\b(?:its|their)\s+own\s+nega
                                re.I | re.S)
 
 
+def _negative_name(name: str, var: str) -> bool:
+    """Whether a name or variable says negative: ``compile_plan``'s test
+    (``_NEGATIVEISH``) or a bare "neg" word ("default_neg", "neg_tags")."""
+    words = set(re.split(r"[\s_\-]+", f"{name} {var}".lower()))
+    return bool(_NEGATIVEISH.search(f"{name} {var}")) or bool(words & {"neg", "negs"})
+
+
 def _slot_key(slot: dict[str, Any]) -> set[str]:
     return {slot["var"].lower(), _axis_name(slot["name"]), slot["name"].lower()}
 
@@ -2121,7 +2207,7 @@ def apply_request_slots(graph: dict[str, Any], request: str) -> list[str]:
     lines: list[str] = []
     for s in list(graph["slots"]):
         key = _slot_key(s)
-        if key & _NEGATIVE_SLOT or _NEGATIVEISH.search(f"{s['name']} {s['var']}"):
+        if key & _NEGATIVE_SLOT or _negative_name(s["name"], s["var"]):
             # The same test ``compile_plan`` drops the wildcard by: a slot
             # it would drop can't stay in the order or a relation, or the
             # template reads a variable nothing sets (7 of 39 packs).
@@ -2149,6 +2235,25 @@ def apply_request_slots(graph: dict[str, Any], request: str) -> list[str]:
             graph["fixed"].append({"name": s["name"], "var": s["var"], "text": words,
                                    "negative": ""})
             lines.append(f"{s['name']} is fixed values: quality words are the same every run")
+    for f in list(graph["fixed"]):
+        if _negative_name(f["name"], f["var"]):
+            # Dropped by compile_plan like the slot above; the graph kept
+            # it in the order, so the template read $neg (9 packs).
+            graph["fixed"].remove(f)
+            graph["template"]["order"] = [v for v in graph["template"]["order"]
+                                          if v != f["var"]]
+            neg = graph["template"]["negative"]
+            if f["text"] and _norm(f["text"]) not in _norm(neg):
+                graph["template"]["negative"] = f"{neg}, {f['text']}" if neg else f["text"]
+            lines.append(f"{f['name']} is the negative prompt, not a preset: its words went "
+                         "to the template's negative")
+    for i in list(graph["inputs"]):
+        if _negative_name(i["var"], i["about"]):
+            graph["inputs"].remove(i)
+            graph["template"]["order"] = [v for v in graph["template"]["order"]
+                                          if v != i["var"]]
+            lines.append(f"${i['var']} is a negative, not an input: negatives are the "
+                         "template's")
     if _PRESET_NEGATIVES.search(request or "") and graph["fixed"] \
             and graph["template"]["negative"] and not any(f["negative"] for f in graph["fixed"]):
         f = graph["fixed"][0]
@@ -2467,12 +2572,17 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
     applied += apply_settings(graph, kw.get("settings"))
     applied += code_beat(graph)
     applied += apply_picks(graph, kw.get("request") or "")
+    applied += drop_multi_pick_rules(graph)
     applied += apply_request_slots(graph, kw.get("request") or "")
+    applied += trim_model(graph, kw.get("request") or "")
     if model_quality(graph, kw.get("settings")):
         own = [f["name"] for f in graph["fixed"] if f["var"] == QUALITY_VAR]
         if own:
             # The per-model-family rule writes $quality; a fixed value of
-            # the same name would be written over every run.
+            # the same name would be written over every run. Its words
+            # become the rule's "otherwise" (``compile_item``).
+            graph["quality_words"] = next(f["text"] for f in graph["fixed"]
+                                          if f["var"] == QUALITY_VAR)
             graph["fixed"] = [f for f in graph["fixed"] if f["var"] != QUALITY_VAR]
             applied.append(", ".join(own) + ": the per-model-family rule writes $quality, so "
                            "the fixed value went")

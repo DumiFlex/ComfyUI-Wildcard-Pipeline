@@ -55,6 +55,29 @@ from engine.modules.derivation_handler import NEGATIVE_MODES, DerivationHandler,
 from engine.modules.wildcard_handler import WildcardHandler
 
 
+def _quality_otherwise(plan: dict[str, Any], item: dict[str, Any], payload: dict[str, Any]
+                       ) -> tuple[dict[str, Any], list[str]]:
+    """The per-family quality rule the code wires gets an "otherwise": the
+    pack's own quality words (the preset the rule replaced, else the
+    style's usual ones). The model wrote it without one, so with no WP
+    Model Info $quality was never set and the template read nothing (9B,
+    2026-10-21, 9 packs)."""
+    graph = plan.get("graph")
+    if not isinstance(graph, dict) or item.get("var") != pack_graph.QUALITY_VAR:
+        return payload, []
+    rules = payload.get("rules") or []
+    if not rules or any(isinstance(r, dict) and r.get("else") for r in rules):
+        return payload, []
+    words = graph.get("quality_words") or (
+        "masterpiece, best quality" if graph.get("style") == "tags"
+        else "high quality, detailed")
+    first = {**rules[0], "else": {"action": {"target_var": item["var"], "mode": "replace",
+                                             "value": words}}}
+    return ({**payload, "rules": [first, *rules[1:]]},
+            [f"Added an otherwise, \"{words}\": with no model variable set, $quality still "
+             "has the pack's quality words"])
+
+
 def compile_item(
     plan: dict[str, Any], key: str, built: dict[str, Any], answer: Any, *,
     taken: set[str] | None = None, item_id: str = "",
@@ -136,6 +159,8 @@ def compile_item(
                 seen_rules.add(same)
                 rules.append(r["rule"])
         payload = {"rules": rules}
+        payload, said = _quality_otherwise(plan, item, payload)
+        warnings += said
         from engine.ai import pack_tidy
         payload, joined = pack_tidy.merge_lookup(payload)
         warnings += joined

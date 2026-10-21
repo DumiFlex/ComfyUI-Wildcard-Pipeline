@@ -603,3 +603,139 @@ def test_a_rule_that_writes_a_number_is_a_weight_on_the_options():
     assert again["graph"]["slots"][0]["weights"] == {"long": 2.0}
     raw["slots"][0]["weights"] = {}
     assert "weights" not in pack.compile_graph_plan(raw)["graph"]["slots"][0]
+
+
+def test_negative_named_presets_and_inputs_go_to_the_template_negative():
+    # 9B, 2026-10-21 (9 packs): compile_plan drops a preset named neg /
+    # default_neg, but the graph's order kept $neg, so the template read a
+    # variable no run set. Inputs named like a negative likewise.
+    g = _graph([_slot("Hero", "hero", "heroes", [])], [], ["default_neg", "neg_prompt", "Hero"],
+               fixed=[{"name": "Default Neg", "var": "default_neg",
+                       "text": "lowres, bad hands", "negative": ""}],
+               inputs=[{"var": "neg_prompt", "about": "extra negatives", "example": ""},
+                       {"var": "subject", "about": "who it is", "example": "a knight"}])
+    g["template"]["negative"] = "ugly"
+    plan = pack.compile_graph_plan(g)
+    graph = plan["graph"]
+    assert graph["fixed"] == [] and [i["var"] for i in graph["inputs"]] == ["subject"]
+    assert graph["template"]["order"] == ["subject", "hero"]
+    assert graph["template"]["negative"] == "ugly, lowres, bad hands"
+    assert plan["applied"] == [
+        "Default Neg is the negative prompt, not a preset: its words went to the template's "
+        "negative",
+        "$neg_prompt is a negative, not an input: negatives are the template's"]
+    assert {i["kind"] for i in plan["items"]} == {"wildcard", "template"}
+
+
+def test_the_negative_drops_placeholders_and_an_assignment():
+    g = _graph([_slot("Hero", "hero", "heroes", [])], [], ["Hero"])
+    g["template"]["negative"] = "$neg = ugly, {{fixed.default_neg}}, blurry, {{Hero}}"
+    plan = pack.compile_graph_plan(g)
+    assert plan["graph"]["template"]["negative"] == "ugly, blurry, $hero"
+    assert any("written as an assignment" in w for w in plan["warnings"])
+    assert any("Took {fixed.default_neg} out" in w for w in plan["warnings"])
+
+
+def test_the_model_field_keeps_only_the_families_the_request_names():
+    assert pg.request_families("a pack for Pony and Flux") == ["pony", "flux"]
+    assert pg.request_families("cute cats") == []
+    g = _graph([_slot("Hero", "hero", "heroes", [])], [], ["Hero"], model="flux, sd3")
+    # The planner's own two families on a request naming none: no rule.
+    plan = pack.compile_graph_plan(copy.deepcopy(g), request="fantasy heroes")
+    assert plan["graph"]["model"] == "flux"
+    assert plan["applied"] == ["Model: flux (the planner wrote \"flux, sd3\", but the request "
+                               "names no second family, so there is no per-family quality rule)"]
+    assert not any(i["name"] == "Model quality" for i in plan["items"])
+    # Named by the request: kept. Without a request: left as written.
+    asked = pack.compile_graph_plan(copy.deepcopy(g), request="a pack for flux and sd3")
+    assert asked["graph"]["model"] == "flux, sd3"
+    assert any(i["name"] == "Model quality" for i in asked["items"])
+    assert pack.compile_graph_plan(copy.deepcopy(g))["graph"]["model"] == "flux, sd3"
+    # One named of three written: the named one stays.
+    g["model"] = "pony, flux, sd3"
+    assert pack.compile_graph_plan(g, request="an sd3 pack")["graph"]["model"] == "sd3"
+
+
+def test_the_quality_rule_gets_the_packs_words_as_its_otherwise():
+    g = _graph([_slot("Hero", "hero", "heroes", [])], [], ["Quality", "Hero"],
+               model="pony, flux",
+               fixed=[{"name": "Quality", "var": "quality", "text": "masterpiece, 8k",
+                       "negative": ""}])
+    plan = pack.compile_graph_plan(g, request="heroes for pony and flux")
+    assert plan["graph"]["quality_words"] == "masterpiece, 8k"
+    assert pack.compile_graph_plan(copy.deepcopy(plan["graph"]))["graph"]["quality_words"] \
+        == "masterpiece, 8k"
+    q = next(i for i in plan["items"] if i["name"] == "Model quality")
+    hero = next(i for i in plan["items"] if i["name"] == "Hero")
+    built = {hero["key"]: {"id": hero["id"], "payload": pg.compile_slot(
+        plan["graph"], plan["graph"]["slots"][0], _answer([("knight", {})]))["payload"]}}
+    out = pack.compile_item(plan, q["key"], built, {"rules": [{
+        "summary": "pony quality", "branches": [{
+            "match": "all",
+            "conditions": [{"var": "model_variant", "op": "equals", "value": "pony"}],
+            "actions": [{"target_var": "quality", "mode": "replace", "value": "score_9"}]}],
+        "else_actions": []}]})
+    [rule] = out["payload"]["rules"]
+    assert rule["else"]["action"] == {"target_var": "quality", "mode": "replace",
+                                      "value": "masterpiece, 8k"}
+    assert any("Added an otherwise" in w for w in out["warnings"])
+    # Written with one: kept as the model wrote it.
+    own = pack.compile_item(plan, q["key"], built, {"rules": [{
+        "summary": "pony quality", "branches": [{
+            "match": "all",
+            "conditions": [{"var": "model_variant", "op": "equals", "value": "pony"}],
+            "actions": [{"target_var": "quality", "mode": "replace", "value": "score_9"}]}],
+        "else_actions": [{"target_var": "quality", "mode": "replace", "value": "best"}]}]})
+    assert own["payload"]["rules"][0]["else"]["action"]["value"] == "best"
+
+
+def test_rows_on_a_second_axis_write_a_rule_of_their_own():
+    # 9B, 2026-10-21 (pack 6): eight rows wrote $habitat, four on each of
+    # two axes, in one if/elif, so the first axis always won.
+    g = _graph([_slot("Animal", "animal", "animals",
+                      [{"name": "temp", "values": ["hot", "cold"]},
+                       {"name": "size", "values": ["big", "small"]}])],
+               [_rel("derive", "Animal", "temp", "hot", var="habitat", text="sunny plains"),
+                _rel("derive", "Animal", "temp", "cold", var="habitat", text="icy tundra"),
+                _rel("derive", "Animal", "size", "big", var="habitat", text="wide open"),
+                _rel("derive", "Animal", "size", "small", var="habitat", text="dense cover")],
+               ["Animal", "habitat"])
+    plan = pack.compile_graph_plan(g)
+    built = _build(plan, {"Animal": [("camel", {"temp": ["hot"], "size": ["big"]}),
+                                     ("vole", {"temp": ["cold"], "size": ["small"]})]})
+    rule = next(i for i in plan["items"] if i["kind"] == "derivation")
+    rules = built[rule["key"]]["payload"]["rules"]
+    assert [r["id"] for r in rules] == ["rule0001", "rule0002"]
+    assert [b["action"]["mode"] for b in rules[0]["branches"]] == ["replace", "replace"]
+    assert [b["action"]["mode"] for b in rules[1]["branches"]] == ["append", "append"]
+    assert rules[1]["branches"][0]["condition"]["var"] == "animal.size"
+    out = pg.wired_payload(plan, rule["key"], built)
+    assert out["warnings"] == ["$habitat is also written from Animal.size: those rows add to "
+                               "it (one rule per axis, so both fire)"]
+    report = pack.check_pack(plan, built, seeds=20)
+    assert all(r["holds"] for r in report["relations"]), report["relations"]
+
+
+def test_a_rule_keyed_on_a_multi_pick_slot_goes():
+    # The engine sets $animal.biome for one pick only, so a derive on a
+    # 1-3 pick never fired (9B, 2026-10-21, pack 6).
+    g = _graph([_slot("Animal", "animal", "animals",
+                      [{"name": "biome", "values": ["forest", "desert"]}], pick="1-3"),
+                _slot("Sky", "sky", "skies", [{"name": "time", "values": ["day", "night"]}])],
+               [_rel("derive", "Animal", "biome", "forest", var="animal_biome", text="woods"),
+                _rel("derive", "Sky", "time", "night", var="light", text="moonlit"),
+                _rel("only", "Animal", "biome", "desert", "Sky", "time", "day")],
+               ["Animal", "animal_biome", "Sky", "light"])
+    plan = pack.compile_graph_plan(g)
+    graph = plan["graph"]
+    assert [r["kind"] for r in graph["relations"]] == ["derive", "only"]
+    assert graph["template"]["order"] == ["animal", "sky", "light"]
+    assert plan["applied"] == ["Animal picks 1-3, so $animal_biome can't follow one "
+                               "Animal.biome value: that rule went"]
+    # The request's own count does the same.
+    g2 = _graph([_slot("Animal", "animal", "animals",
+                       [{"name": "biome", "values": ["forest", "desert"]}])],
+                [_rel("derive", "Animal", "biome", "forest", var="animal_biome", text="woods")],
+                ["Animal", "animal_biome"])
+    plan = pack.compile_graph_plan(g2, request="2 to 3 animals in their biome")
+    assert plan["graph"]["relations"] == [] and plan["graph"]["slots"][0]["pick"] == "2-3"
