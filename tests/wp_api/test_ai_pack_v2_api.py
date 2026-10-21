@@ -488,3 +488,24 @@ async def test_best_of_three_reads_the_images_once(wp_client, fake_llm):
         content = later["messages"][-1]["content"]
         assert isinstance(content, str) and "image_url" not in content
         assert "they showed: a red cloak; snow" in content
+
+
+async def test_a_decision_answer_is_not_a_request_gap(wp_client, fake_llm):
+    # Sonnet walkthrough, 2026-10-21: "a woman" and "Generic big city",
+    # picked from the planner's own questions, came back as request gaps at
+    # fix level in every flow, costing a Fix all round each.
+    from tests.engine.ai.test_ai_pack_graph import GRAPH
+
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.overrides["pack_graph"] = GRAPH
+    fake_llm.overrides["pack_refs"] = {"relations": []}
+    resp = await wp_client.post("/wp/api/ai/pack/plan", json={
+        "instruction": "fantasy heroes", "settings": {"planner": "graph"},
+        "decisions": [{"question": "Who is in the picture?", "answer": "a woman"},
+                      {"question": "Where?", "answer": "Generic big city"}]})
+    assert resp.status == 200, await resp.text()
+    body = await resp.json()
+    gaps = [f for f in body["review"] if f["type"] == "request_gap"]
+    assert not [g for g in gaps if {"woman", "generic", "city"} & set(g["refs"])], gaps
+    assert body["plan"]["request_gaps"] == ["heroes"]  # the request, not the answers

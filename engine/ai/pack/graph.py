@@ -631,8 +631,48 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
                             "belong in a relation, the negative is for defects")
             negative = ", ".join(kept)
     lead, tail, negative = _defects_to_negative(lead, tail, negative, warnings)
+    lead, tail = _fixed_repeats(lead, tail, fixed, order, read, warnings)
     return {"lead": lead, "order": order[:MAX_TEMPLATE_PARTS], "tail": tail,
             "negative": negative}
+
+
+def _fixed_repeats(lead: str, tail: str, fixed: list[dict[str, Any]], order: list[str],
+                   read: set[str], warnings: list[str]) -> tuple[str, str]:
+    """A part of the lead or tail that a fixed value the template prints
+    already says ("clean lineart" in the lead of a pack whose style preset
+    holds it, Sonnet walkthrough 2026-10-21) prints twice; it goes."""
+    said: dict[str, str] = {}
+    for f in fixed:
+        if f["var"] in order or f["var"] in read:
+            for chunk in f["text"].split(","):
+                c = chunk.strip()
+                m = _WEIGHTED_PART.match(c)
+                word = (m.group(1) if m else c).strip().lower().replace("_", " ")
+                if word:
+                    said.setdefault(word, f["name"])
+    if not said:
+        return lead, tail
+    gone: list[str] = []
+
+    def fix(text: str) -> str:
+        kept = []
+        for chunk in text.split(","):
+            c = chunk.strip()
+            if not c:
+                continue
+            m = _WEIGHTED_PART.match(c)
+            word = (m.group(1) if m else c).strip().lower().replace("_", " ")
+            if word in said:
+                gone.append(f"{c} ({said[word]})")
+            else:
+                kept.append(c)
+        return ", ".join(kept)
+
+    lead, tail = fix(lead), fix(tail)
+    if gone:
+        warnings.append(f"Took {', '.join(gone)} out of the template text: the fixed value "
+                        "already says it, so it printed twice")
+    return lead, tail
 
 
 def _text_reads(lead: str, tail: str, order: list[str], by_name: dict[str, str],

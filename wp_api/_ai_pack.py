@@ -202,11 +202,12 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     answer: Any = None
     retry = ""
     graph = settings["planner"] == "graph"
-    # The user's own words: "Your call (decide for me)" is not a thing the
-    # pack must say (its words came back as request gaps on every Fix all).
-    asked = " ".join([first_text, ai_pack.own_request(instruction), sample,
-                      *(str(d.get("answer") or "") for d in decisions if isinstance(d, dict)
-                        and d.get("answer") != ai_pack.DECIDE_ANSWER)])
+    # The user's own words. A decision's answer is not one of them: picked
+    # from the planner's own choices, it reads "a woman", "Generic big city"
+    # or "your call", and those came back as request gaps at fix level in
+    # every flow of the Sonnet walkthrough (2026-10-21), costing a Fix all
+    # round each. The planner reads the decisions in every request anyway.
+    asked = " ".join([first_text, ai_pack.own_request(instruction), sample])
     for attempt in range(2):
         try:
             answer = await _ask(

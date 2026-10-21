@@ -887,3 +887,18 @@ def test_request_gaps_skip_build_words_and_possessives_and_are_asked_once():
         _graph(template={**GRAPH["template"], "lead": "parka"}), previous=again,
         request="an elf with a parka")
     assert placed["request_gaps"] == [] and placed["gaps_tried"] == []
+
+
+def test_template_text_a_fixed_value_already_says_goes():
+    # Sonnet walkthrough, 2026-10-21: the Pony+Flux pack's lead repeated
+    # "clean lineart" from its style preset, so every prompt said it twice.
+    fixed = [{"name": "Style preset", "var": "style",
+              "text": "(clean lineart:1.1), flat colors, masterpiece", "negative": ""}]
+    tpl = {**GRAPH["template"], "lead": "clean lineart, 1girl, solo",
+           "tail": "cinematic, flat_colors"}
+    plan = pack.compile_graph_plan(_graph(fixed=[*GRAPH["fixed"], *fixed], template=tpl))
+    t = plan["graph"]["template"]
+    assert t["lead"] == "1girl, solo" and t["tail"] == "cinematic"
+    assert "style" in t["order"]
+    assert any(w.startswith("Took clean lineart (Style preset), flat_colors (Style preset) "
+                            "out of the template text") for w in plan["warnings"])

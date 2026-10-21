@@ -233,7 +233,7 @@ describe("PackBuilder", () => {
     await w.get('[data-test="pack-fix"]').trigger("click");
     await flushPromises();
     expect(vi.mocked(api.ai.packPlan).mock.calls).toHaveLength(1);
-    expect(w.get('[data-test="pack-fix-note"]').text()).toContain("Answer the web search first");
+    expect(w.get('[data-test="pack-notice"]').text()).toContain("Answer the web search first");
     expect(w.findAll('[data-test="pack-finding-unfixed"]')).toHaveLength(0);
     expect(w.findAll('[data-test="pack-finding-stuck"]')).toHaveLength(0);
     // Skipping the search frees the plan: the next Fix all goes out.
@@ -242,7 +242,7 @@ describe("PackBuilder", () => {
     await flushPromises();
     await w.get('[data-test="pack-fix"]').trigger("click");
     await flushPromises();
-    expect(w.find('[data-test="pack-fix-note"]').exists()).toBe(false);
+    expect(w.find('[data-test="pack-notice"]').exists()).toBe(false);
     const sent = vi.mocked(api.ai.packPlan).mock.calls.map((c) => c[0].instruction);
     expect(sent.some((t) => t.startsWith("Revise the plan to fix ALL of these"))).toBe(true);
   });
