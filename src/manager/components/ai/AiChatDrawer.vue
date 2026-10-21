@@ -23,7 +23,7 @@
  * Images can be attached (button, paste or drop) when the model sees them;
  * they are shrunk in the browser first (`utils/chat-image.ts`).
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowReactive, watch } from "vue";
 import { isNavigationFailure, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import Button from "../ui/Button.vue";
 import Select, { type SelectOption } from "../ui/Select.vue";
@@ -500,6 +500,25 @@ function openIn(i: number): Set<string> {
   return new Set([...openInGroup.value].filter((k) => k.startsWith(head)).map((k) => k.slice(head.length)));
 }
 
+/** The element under each group row that its open card is teleported
+ *  into, by `${i}:${pid}`; until it exists the card draws in place. */
+const groupSlots = shallowReactive(new Map<string, HTMLElement>());
+
+function setGroupSlot(i: number, pid: string, el: HTMLElement | null): void {
+  const k = `${i}:${pid}`;
+  if (el) {
+    if (groupSlots.get(k) !== el) groupSlots.set(k, el);
+  } else groupSlots.delete(k);
+}
+
+function groupSlot(i: number, pid: string): HTMLElement | undefined {
+  return groupSlots.get(`${i}:${pid}`);
+}
+
+function collapseIn(i: number): void {
+  openInGroup.value = new Set([...openInGroup.value].filter((k) => !k.startsWith(`${i}:`)));
+}
+
 function toggleIn(i: number, pid: string): void {
   const k = `${i}:${pid}`;
   const next = new Set(openInGroup.value);
@@ -899,8 +918,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             :proposals="entry.result.proposals"
             :open="openIn(i)"
             :status="{ ...entry.status }"
+            :slot-ref="(pid, el) => setGroupSlot(i, pid, el)"
             @toggle="(pid) => toggleIn(i, pid)"
+            @collapse="collapseIn(i)"
           />
+          <!-- A grouped card opens inside its row (AiCardGroup's slot). -->
+          <Teleport :to="groupSlot(i, p.pid) ?? 'body'" :disabled="!groupFor(entry, p) || !groupSlot(i, p.pid)">
           <article
             v-if="!groupFor(entry, p) || openIn(i).has(p.pid)"
             class="wp-ai-chat__card"
@@ -1093,6 +1116,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               </template>
             </div>
           </article>
+          </Teleport>
           </template>
         </div>
       </template>
@@ -1357,7 +1381,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__card[data-status="dismissed"], .wp-ai-chat__card[data-status="replaced"] { opacity: 0.6; }
 .wp-ai-chat__card[data-kind="delete"][data-status="pending"] { border-color: color-mix(in oklab, var(--wp-danger) 40%, var(--wp-border)); }
 .wp-ai-chat__confirm { margin-right: auto; font-size: 12px; color: var(--wp-danger); }
-.wp-ai-chat__card[data-in-group] { margin-left: 14px; border-style: dashed; }
+/* Inside its group row: the row is its header, so no second frame or title. */
+.wp-ai-chat__card[data-in-group] { margin: 0; border: 0; border-radius: 0; background: transparent; padding: 8px 10px 10px; }
+.wp-ai-chat__card[data-in-group] .wp-ai-chat__card-title,
+.wp-ai-chat__card[data-in-group] .wp-ai-chat__card-summary { display: none; }
 .wp-ai-chat__card[data-status="failed"] { border-color: color-mix(in oklab, var(--wp-danger) 50%, var(--wp-border)); }
 .wp-ai-chat__card-head { position: relative; display: flex; flex-direction: column; gap: 1px; padding-right: 26px; }
 .wp-ai-chat__card-title { font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }

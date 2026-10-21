@@ -166,6 +166,16 @@ describe("AiChatDrawer", () => {
     expect(opened).toHaveLength(1);
     expect(opened[0].attributes("data-in-group")).toBe("true");
     expect(opened[0].text()).toContain("W2 names what W1 picks");
+    // It opens inside its own row, not below the whole group, and a
+    // second open row gets its own card under it.
+    const slots = group.findAll('[data-test="ai-group-card"]');
+    expect(slots[1].find('[data-test="ai-chat-proposal"]').exists()).toBe(true);
+    await group.findAll('[data-test="ai-group-open"]')[2].trigger("click");
+    expect(group.findAll('[data-test="ai-group-card"]')[2].find('[data-test="ai-chat-proposal"]').exists()).toBe(true);
+    expect(group.find('[data-test="ai-group-collapse"]').text()).toBe("Close 2 open");
+    await group.get('[data-test="ai-group-collapse"]').trigger("click");
+    expect(w.findAll('[data-test="ai-chat-proposal"]')).toHaveLength(0);
+    await group.findAll('[data-test="ai-group-open"]')[1].trigger("click");
     await group.get('[data-test="ai-group-apply"]').trigger("click");
     await flushPromises();
     expect(vi.mocked(api.modules.create).mock.calls.map((c) => (c[0] as { name: string }).name)).toEqual(["W1", "W2", "W3", "W4"]);

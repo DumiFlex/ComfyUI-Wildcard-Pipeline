@@ -3,8 +3,10 @@
  * AiCardGroup — several cards of one kind from one answer, as one card
  * (`utils/card-groups.ts`): a row per item with a tick, its summary, its
  * warnings and how it stands, and Apply / Dismiss / Undo for the ticked
- * rows. A row opens that item's own full card below it (the drawer draws
- * it), where its options, fixes and Open in editor are.
+ * rows. A row opens that item's own full card right under it (the drawer
+ * draws the card and teleports it into the row's slot, handed over with
+ * `slotRef`), where its options, fixes and Open in editor are; several
+ * rows can be open at once.
  *
  * Applying goes card by card through `useAiChat`, in the answer's order,
  * with "apply that one first" links honoured (`applyAll`), so a group does
@@ -25,8 +27,11 @@ const props = defineProps<{
   open: Set<string>;
   /** `entry.status` copied, so the group redraws when a card changes. */
   status: Record<string, string>;
+  /** Gets the element under each row that the drawer teleports its card
+   *  into (null when the row goes). */
+  slotRef?: (pid: string, el: HTMLElement | null) => void;
 }>();
-const emit = defineEmits<{ toggle: [pid: string] }>();
+const emit = defineEmits<{ toggle: [pid: string]; collapse: [] }>();
 const chat = useAiChat();
 
 const cards = computed(() => props.group.pids
@@ -43,6 +48,10 @@ const applied = computed(() => cards.value.filter((p) => stateOf(p) === "applied
 const failed = computed(() => cards.value.filter((p) => stateOf(p) === "failed"));
 const warned = computed(() => cards.value.filter((p) => p.warnings.some((w) => !p.notes?.includes(w))).length);
 const fixable = computed(() => pending.value.filter((p) => (p.fixes?.length ?? 0) > 0));
+
+function setSlot(pid: string, el: unknown): void {
+  props.slotRef?.(pid, el instanceof HTMLElement ? el : null);
+}
 
 function tick(pid: string): void {
   const next = new Set(unticked.value);
@@ -112,14 +121,16 @@ const STATE: Record<string, string> = {
         {{ applied.length ? `${applied.length} applied · ` : "" }}{{ failed.length ? `${failed.length} failed (open one to see why and retry) · ` : "" }}{{ pending.length }} to review{{ warned ? ` · ${warned} with warnings` : "" }}
       </span>
     </div>
-    <div v-if="pending.length > 1" class="wp-ai-group__bar">
-      <span>{{ ticked.length }} of {{ pending.length }} ticked</span>
-      <button type="button" class="wp-ai-group__link" data-test="ai-group-tick-all" @click="tickAll(ticked.length < pending.length)">
+    <div v-if="pending.length > 1 || open.size > 1" class="wp-ai-group__bar">
+      <span>{{ pending.length > 1 ? `${ticked.length} of ${pending.length} ticked` : "" }}</span>
+      <button v-if="open.size > 1" type="button" class="wp-ai-group__link" data-test="ai-group-collapse" @click="emit('collapse')">Close {{ open.size }} open</button>
+      <button v-if="pending.length > 1" type="button" class="wp-ai-group__link" data-test="ai-group-tick-all" @click="tickAll(ticked.length < pending.length)">
         {{ ticked.length < pending.length ? "Tick all" : "Untick all" }}
       </button>
     </div>
     <ul class="wp-ai-group__rows">
-      <li v-for="p in cards" :key="p.pid" class="wp-ai-group__row" :data-state="stateOf(p)" data-test="ai-group-row">
+      <li v-for="p in cards" :key="p.pid" class="wp-ai-group__row" :data-state="stateOf(p)" :data-open="open.has(p.pid) || undefined" data-test="ai-group-row">
+        <div class="wp-ai-group__line">
         <input
           v-if="stateOf(p) === 'pending'"
           type="checkbox"
@@ -145,6 +156,13 @@ const STATE: Record<string, string> = {
           <span v-if="entry.errors[p.pid]" class="wp-ai-group__err" role="alert">{{ entry.errors[p.pid] }}</span>
           <i :class="['pi', open.has(p.pid) ? 'pi-chevron-up' : 'pi-chevron-down', 'wp-ai-group__chev']" aria-hidden="true" />
         </button>
+        </div>
+        <div
+          v-show="open.has(p.pid)"
+          :ref="(el) => setSlot(p.pid, el)"
+          class="wp-ai-group__card"
+          data-test="ai-group-card"
+        />
       </li>
     </ul>
     <div class="wp-ai-group__actions">
@@ -167,9 +185,12 @@ const STATE: Record<string, string> = {
 .wp-ai-group__counts { font-size: 12px; color: var(--wp-text-muted); }
 .wp-ai-group__link { border: 0; background: none; padding: 0; font: inherit; font-size: 11px; color: var(--wp-accent-text); cursor: pointer; text-decoration: underline; }
 .wp-ai-group__actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
-.wp-ai-group__bar { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--wp-text-muted); padding: 0 2px; }
+.wp-ai-group__bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12px; color: var(--wp-text-muted); padding: 0 2px; }
 .wp-ai-group__rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm); overflow: hidden; }
-.wp-ai-group__row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-top: 1px solid var(--wp-border); font-size: 12.5px; }
+.wp-ai-group__row { border-top: 1px solid var(--wp-border); font-size: 12.5px; }
+.wp-ai-group__line { display: flex; align-items: center; gap: 8px; padding: 4px 8px; }
+.wp-ai-group__row[data-open] > .wp-ai-group__line { background: var(--wp-bg-3); }
+.wp-ai-group__card { border-top: 1px solid var(--wp-border); }
 .wp-ai-group__row:first-child { border-top: 0; }
 .wp-ai-group__row[data-state="dismissed"], .wp-ai-group__row[data-state="replaced"] { opacity: 0.55; }
 .wp-ai-group__row input { flex: none; margin: 0; accent-color: var(--wp-accent-500); }
