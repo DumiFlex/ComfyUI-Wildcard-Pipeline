@@ -143,7 +143,14 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   one description: it plans the wildcards, fixed values, rules, constraints,
   combines, template, per-use settings and inputs, builds
   them one at a time, tests them on the engine and fixes what fails, then installs
-  everything as one bundle you can undo. It matches your library's style,
+  everything as one bundle you can undo. By default the model writes a small
+  pack graph (slots, their axes, the relations between them and the template
+  order) and the code wires every constraint, rule and the template from it,
+  so a rule can only name what the graph declares; what the run and the settings
+  need (story beats, sweep axes, holds, the model's quality tags, option
+  counts, style, rating, sections) is wired by the code too, what you edit
+  by hand stays as you left it through every update, and a change, an added
+  image or a finding about one item asks the AI for that part only. It matches your library's style,
   reuses wildcards you already have, reviews the plan before building, and can
   start from a sample prompt you like. After a wildcard pack import, **Tag and
   connect with AI** has the chat tag the new lists, link them with constraints and

@@ -1665,6 +1665,112 @@ export interface AiPackSettings {
   /** on: an NSFW pack's template negative gets the youth block (child,
    *  loli, …); off: nothing is added. */
   youth_negative: "on" | "off";
+  /** graph: the model writes slots, axes and relations and the code wires
+   *  the pack; items: the model writes every item and payload itself. */
+  planner: "graph" | "items";
+}
+
+/** One way a slot's options are sorted, for a relation to key on. */
+export interface AiPackAxis {
+  name: string;
+  /** Tags (lowercase words). */
+  values: string[];
+}
+
+/** One choice the image makes: one wildcard, one variable. */
+export interface AiPackSlot {
+  name: string;
+  var: string;
+  /** What its options are (one concept). */
+  what: string;
+  section: string;
+  count: number;
+  /** prompt: the template reads it; internal: a driver rules need. */
+  show: "prompt" | "internal";
+  /** "" for one pick, "2" or "2-3" for several. */
+  pick: string;
+  hold: boolean;
+  /** A sweep sheet's axis (run mode sweep): the Loop sweeps its options. */
+  sweep?: boolean;
+  /** Percent of runs that get nothing (0 = never). */
+  sometimes_none: number;
+  axes: AiPackAxis[];
+  /** The axis this slot IS (a Season slot with axis season): its options
+   *  are the axis values, written by the code. "" otherwise. */
+  self_axis?: string;
+}
+
+export interface AiPackFixed {
+  name: string;
+  var: string;
+  text: string;
+  negative: string;
+}
+
+export type AiPackRelationKind = "exclude" | "only" | "boost" | "reduce" | "agree" | "accepts" | "derive" | "append";
+
+/** One side of a relation: a slot, and the axis value it keys on ("" on
+ *  an agree / accepts side, which names only the shared axis). */
+export interface AiPackRelationSide {
+  slot: string;
+  axis: string;
+  value: string;
+}
+
+/** How one slot's pick changes another's odds, or writes text. The code
+ *  compiles each (source, target) pair into one constraint and each
+ *  written variable into one derivation. */
+export interface AiPackRelation {
+  kind: AiPackRelationKind;
+  from: AiPackRelationSide;
+  /** The target (not on derive / append). */
+  to?: AiPackRelationSide;
+  /** agree / accepts: the axis values both slots share. */
+  values?: string[];
+  /** boost / reduce. */
+  factor?: number;
+  /** derive / append: the variable written and the text. */
+  var?: string;
+  text?: string;
+  /** derive: the text for every other pick ("" leaves it unset). */
+  otherwise?: string;
+  /** What the relation is about, as an option says it ("sandals"): the
+   *  target slot must hold options saying them, and the check reads the
+   *  prompts for them. */
+  words?: string[];
+}
+
+export interface AiPackGraphTemplate {
+  lead: string;
+  /** Variables in reading order. */
+  order: string[];
+  tail: string;
+  negative: string;
+}
+
+/** The pack as the graph planner writes it: the code compiles it into the
+ *  plan's items and writes every payload but the slots' options. */
+export interface AiPackGraph {
+  title: string;
+  summary: string;
+  design: string;
+  rating: "safe" | "nsfw";
+  style: "tags" | "sentences";
+  model: string;
+  anchor: string;
+  questions: AiPackQuestion[];
+  assumptions: string[];
+  from_images: string[];
+  research: string[];
+  run: AiPackRun;
+  inputs: AiPackInput[];
+  sections: AiPackSection[];
+  slots: AiPackSlot[];
+  fixed: AiPackFixed[];
+  relations: AiPackRelation[];
+  template: AiPackGraphTemplate;
+  /** Relations the model wrote that named nothing the graph declares. */
+  dropped?: string[];
 }
 
 export interface AiPackRun {
@@ -1680,6 +1786,9 @@ export interface AiPackQuestion {
   /** More than one choice may be picked. */
   multi: boolean;
   choices: string[];
+  /** A question the code asked: the answer sets this on the plan (the
+   *  run style, or which slots a sweep compares) with no AI call. */
+  binds?: { set: "run"; frames: number } | { set: "sweep" };
 }
 
 /** A question the user already answered; never asked again. */
@@ -1740,6 +1849,25 @@ export interface AiPackPlan {
   base?: { id: string; name: string; nested: boolean; sets: string[] };
   /** Variables the user's open canvas sets (Injector rows, the Loop). */
   canvas?: AiCanvasVar[];
+  /** The graph the items were compiled from (graph planner): hand edits
+   *  change it, and the server compiles the items again. */
+  graph?: AiPackGraph;
+  /** The parts of the graph the user set by hand; the server keeps them
+   *  over the model's next answer. */
+  locks?: AiPackLocks;
+  /** What the code did on this compile (settings applied, hand edits
+   *  kept), one line each. */
+  applied?: string[];
+}
+
+/** Hand edits of a graph plan the model's next answer may not undo:
+ *  slots by variable, relations by `relSig`, relations the user took out,
+ *  and template fields (`graph.py::apply_locks`). */
+export interface AiPackLocks {
+  slots: string[];
+  relations: string[];
+  removed_relations: string[];
+  template: Array<"lead" | "order" | "tail" | "negative">;
 }
 
 /** A variable an open ComfyUI canvas sets at run time, as the canvas tab
@@ -1778,6 +1906,8 @@ export type AiPackPatch = (
   | { op: "remove"; key: string }
   /** A plan-wide field, e.g. pointing a stray anchor at a set variable. */
   | { op: "plan"; set: Partial<Pick<AiPackPlan, "anchor" | "inputs" | "run">> }
+  /** Fields of one slot of a graph plan (hold it, mark it a sweep axis). */
+  | { op: "slot"; var: string; set: Partial<AiPackSlot> }
 ) & {
   /** The button's words when the server picked them ("Use $scene"). */
   label?: string;
@@ -1793,6 +1923,10 @@ export interface AiPackFinding {
   text: string;
   /** "model" when the model's review found it. */
   by?: "model";
+  /** What kind of finding: the checker's rule ("hold_cast", "request_gap",
+   *  …) or the model's fault type; with the item, it is the finding's
+   *  identity, so a reworded one keeps its id. */
+  type?: string;
   patch?: AiPackPatch;
 }
 
@@ -1855,6 +1989,11 @@ export interface AiPackCheck {
   quality: Array<{ key: string; text: string }>;
   /** Item keys in the order they run (and install). */
   order?: string[];
+  /** A graph plan's relations as the check verified them on engine runs
+   *  (boost / reduce are odds, so `checked` is false for them). */
+  relations?: Array<{ text: string; kind: string; checked: boolean; seen: number; broken: number; holds: boolean }>;
+  /** Distinct prompts over the check's runs ÷ runs. */
+  distinct?: number;
   /** Items the check fixed without the model (words the prompt said twice,
    *  pieces another wildcard picks): their new payload and preview, and the
    *  lines to add to their warnings. The report was run on these. */

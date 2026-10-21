@@ -50,12 +50,20 @@ def _text(value: Any, n: int) -> str:
     return " ".join(out.split())[:n]
 
 
-def _row(lib: Any, raw: Any, what: str = "item") -> dict[str, Any]:
+def _row(lib: Any, raw: Any, what: str = "item", proposed: str = "") -> dict[str, Any]:
+    """The library row `raw` names: an id, a chip, "Name (id)" (the way
+    answers write items; all-tools eval: show_test got "Lighting
+    (d97da2bb)"), or a unique name. A proposal of this chat is refused with
+    `proposed` as the way to work on it."""
     row = lib.get(raw) if isinstance(raw, str) else None
+    bare = getattr(lib, "_bare_id", None)
+    if row is None and isinstance(raw, str) and bare is not None:
+        row = lib.get(bare(raw))
     if row is None and isinstance(raw, str):
         row = lib._find(raw)
     if row is not None and row.get("_proposed"):
-        raise ValueError(f"no {what} {_text(raw, 40)!r} (proposed items exist only once applied)")
+        raise ValueError(f"no {what} {_text(raw, 40)!r}: it is a proposal of this chat, not "
+                         f"applied yet{'; ' + proposed if proposed else ''}")
     if row is None:
         finder = getattr(lib, "not_found", None)
         raise ValueError(finder(raw, what) if finder else f"no {what} {_text(raw, 40)!r}")
@@ -252,7 +260,11 @@ def _show_test(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
         raise ValueError("give the stack: names or ids of modules and bundles")
     stack: list[dict[str, str]] = []
     for value in raw[:MAX_STACK]:
-        row = _row(lib, value)
+        # The Test Runner shows what is in the library; the eval's 9B kept
+        # asking it for its own card's items.
+        row = _row(lib, value, proposed="the Test Runner only shows applied items. run_test "
+                   "runs a stack with this chat's proposals swapped in, or ask the user to "
+                   "Apply the card first")
         kind = lib._kind(row)
         if kind == "template":
             raise ValueError(f"{row.get('name')} is a template; the stack takes modules and "

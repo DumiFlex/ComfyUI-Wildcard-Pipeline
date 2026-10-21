@@ -8,6 +8,7 @@ from typing import Any
 
 from engine.ai import guide as ai_guide
 from engine.ai import library_vars
+from engine.ai.pack import graph as pack_graph
 from engine.ai.pack._common import (
     _STR,
     _TAG_REF,
@@ -93,6 +94,29 @@ def _mentions(items: list[dict[str, Any]], var: str) -> bool:
     return any(pat.search(i.get("about") or "") for i in items)
 
 
+#: Slot words of the things a story keeps the same from frame to frame.
+_CAST = {"character", "subject", "person", "girl", "boy", "hero", "protagonist", "race",
+         "outfit", "clothes", "clothing", "attire", "costume", "wear", "hair", "face", "body",
+         "eye", "skin", "species", "creature", "pet", "animal", "car", "vehicle"}
+
+
+def _cast_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The rolled wildcards that name a story's cast (character, outfit,
+    hair…), in plan order."""
+    return [i for i in items if is_wild(i) and not _vocab(i)
+            and "internal" not in (i.get("use") or "")
+            and _slot_words(" ".join([i["var"], i["name"]])) & _CAST]
+
+
+def _hold_patch(plan: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    """The patch that holds one wildcard: its slot on a graph plan, its
+    use on an item plan."""
+    if isinstance(plan.get("graph"), dict):
+        return {"op": "slot", "var": item["var"], "set": {"hold": True}, "label": "Hold it"}
+    use = "; ".join(x for x in [item.get("use") or "", "hold"] if x)
+    return {"op": "edit", "key": item["key"], "set": {"use": use}, "label": "Hold it"}
+
+
 def _lora_slot(items: list[dict[str, Any]], var: str) -> str:
     """The variable a LoRA input stands in for (``outfit_lora`` → $outfit)
     when a wildcard in the pack rolls it, else ""."""
@@ -124,10 +148,15 @@ def _settings_findings(plan: dict[str, Any], add: Any) -> None:
                 {"op": "add", "item": _new_item(
                     plan, "derivation", "Story beat", "beat",
                     f"Sets $beat from $iteration, one branch per frame 1 to {n} (equals "
-                    "\"1\", \"2\", …), each one short step of the story in order.")})
+                    "\"1\", \"2\", …), each one short step of the story in order.")},
+                "story_beat")
         if not any("hold" in (i.get("use") or "") for i in items if is_wild(i)):
-            add(None, "tip", "Nothing is held, so the character and outfit change every "
-                "frame of the story; set the ones that must stay to hold")
+            # Only a pack that has a cast can hold it: a pose-only pack
+            # gets no finding it can't satisfy.
+            for i in _cast_items(items):
+                add(i, "tip", f"{i['name']} changes every frame of the story; hold it so "
+                    "the same one stays through the frames", _hold_patch(plan, i),
+                    "hold_cast", (i["key"],))
     if run["mode"] == "sweep":
         for i in items:
             if i["kind"] == "wildcard" and re.search(r"sweep", i.get("about") or "", re.I) \
@@ -135,10 +164,11 @@ def _settings_findings(plan: dict[str, Any], add: Any) -> None:
                 add(i, "tip", f"{i['name']} is a sweep axis with {i['count']} options; the "
                     f"Loop makes a frame for each ticked one, so keep it to about "
                     f"{MAX_SWEEP_OPTIONS}",
-                    {"op": "edit", "key": i["key"], "set": {"count": MAX_SWEEP_OPTIONS}})
+                    {"op": "edit", "key": i["key"], "set": {"count": MAX_SWEEP_OPTIONS}},
+                    "sweep_count", (i["key"],))
         if not any(re.search(r"sweep", i.get("about") or "", re.I) for i in items):
             add(None, "tip", "No wildcard is marked as a sweep axis; say \"sweep axis\" in "
-                "the about of the 2 or 3 short ones to sweep")
+                "the about of the 2 or 3 short ones to sweep", type="sweep_none")
     # A LoRA input that stands in for a rolled pick needs a rule swapping it
     # in; one nothing reads does nothing.
     for inp in plan.get("inputs") or []:
@@ -153,10 +183,10 @@ def _settings_findings(plan: dict[str, Any], add: Any) -> None:
                 {"op": "add", "item": _new_item(
                     plan, "derivation", f"{label.capitalize()} LoRA", slot,
                     f"When ${var} is set, replace ${slot} with ${var}; otherwise leave the "
-                    "random pick.")})
+                    "random pick.")}, "lora_swap", (var,))
         elif not slot and not _mentions(items, var):
             add(None, "fix", f"Nothing reads the input ${var}; read it in the template "
-                "(or in the rule it belongs to)")
+                "(or in the rule it belongs to)", type="input_unread", refs=(var,))
     if cfg["model"] == "family" and not _mentions(items, "model_variant") \
             and not _mentions(items, "model_family"):
         add(None, "fix", "Per model family needs a derivation keyed on $model_variant "
@@ -165,18 +195,26 @@ def _settings_findings(plan: dict[str, Any], add: Any) -> None:
                 plan, "derivation", "Model quality", "quality",
                 "Sets $quality from $model_variant: pony → score_9, score_8_up, score_7_up; "
                 "illustrious or noobai → masterpiece, best quality, very aesthetic; else the "
-                "pack's own quality words.")})
+                "pack's own quality words.")}, "model_family")
 
 
 def finding_id(prefix: str, key: str, text: str) -> str:
-    """A finding's id from what it says, so the same finding keeps its id
-    across rechecks: a dismissal stays on it instead of hiding whatever
+    """A finding's id from what it says (its fingerprint, else its text),
+    so the same finding keeps its id across rechecks and rewordings: a
+    dismissal or a "stuck" mark stays on it instead of hiding whatever
     finding takes its place in the list (positional ids did)."""
     return prefix + hashlib.sha1(f"{key}|{text}".encode()).hexdigest()[:10]
 
 
+def fingerprint(type: str, refs: tuple[str, ...] | list[str] = ()) -> str:
+    """What a typed finding is about, wording aside: its type and the
+    things it points at. "" for an untyped one (its text is the key)."""
+    return f"{type}|{','.join(sorted(refs))}" if type else ""
+
+
 def review_plan(plan: dict[str, Any],
-                library: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+                library: list[dict[str, Any]] | None = None,
+                request: str = "") -> list[dict[str, Any]]:
     """Check a plan against the guide before anything is built:
     ``[{id, key, level: "fix"|"tip", text, patch?}]``. "fix" findings would
     break the pack or leave a rule doing nothing; "tip" findings make it
@@ -184,17 +222,23 @@ def review_plan(plan: dict[str, Any],
     without the model (``{op: "edit", key, set: {field: value}}``,
     ``{op: "add", item}``, ``{op: "remove", key}`` or ``{op: "plan", set:
     {anchor}, label}`` for a plan-wide field); the others go to the planner
-    when the user asks for them to be fixed. Deterministic."""
+    when the user asks for them to be fixed. Deterministic. On a graph plan
+    the rules the code settles itself (fallbacks, library matches, links
+    from the anchor) stay quiet, and ``request`` adds what the request
+    names that the graph says nowhere."""
     items = plan["items"]
+    graph = plan.get("graph") if isinstance(plan.get("graph"), dict) else None
     out: list[dict[str, Any]] = []
 
     def add(item: dict[str, Any] | None, level: str, text: str,
-            patch: dict[str, Any] | None = None) -> None:
+            patch: dict[str, Any] | None = None, type: str = "",
+            refs: tuple[str, ...] = ()) -> None:
         key = item["key"] if item else ""
-        if any(x["id"] == finding_id("r", key, text) for x in out):
+        fid = finding_id("r", key, fingerprint(type, refs) or text)
+        if any(x["id"] == fid for x in out):
             return  # said already
-        f: dict[str, Any] = {"id": finding_id("r", key, text), "key": key,
-                             "level": level, "text": text}
+        f: dict[str, Any] = {"id": fid, "key": key, "level": level, "text": text,
+                             "type": type or "check"}
         if patch:
             f["patch"] = patch
         out.append(f)
@@ -209,29 +253,31 @@ def review_plan(plan: dict[str, Any],
                 f"{stand_in['name']} (${stand_in['var']}) looks like the same thing, so "
                 "the other picks can follow it instead",
                 {"op": "plan", "set": {"anchor": stand_in["var"]},
-                 "label": f"Use ${stand_in['var']}"})
+                 "label": f"Use ${stand_in['var']}"}, "anchor_unset", (anchor,))
         else:
             add(None, "fix", f"The anchor ${anchor} isn't set by anything in the pack, so "
                 "nothing can follow it; add an item for it (Fix with AI) or clear it",
-                {"op": "plan", "set": {"anchor": ""}, "label": "Clear it"})
+                {"op": "plan", "set": {"anchor": ""}, "label": "Clear it"}, "anchor_unset",
+                (anchor,))
     for role, group in [(r, list(c.values())) for r, c in _split_groups(
             list(wild.values()), _case_namers(items))]:
         add(group[0], "fix", ", ".join(g["name"] for g in group) + f" split one subject "
             f"({role.replace('_', ' ')}) into a wildcard per case, so the prompt either "
             f"lists them all or shows the wrong one; make one {role.replace('_', ' ')} "
             "wildcard with the cases as tags, and a constraint from the pick that decides "
-            "between them")
+            "between them", type="split_subject", refs=tuple(g["key"] for g in group))
     for a, b, what in _twin_picks(list(wild.values())):
         add(b, "fix", f"{a['name']} and {b['name']} both pick the {what}, so the prompt "
             f"shows two; make one wildcard (a colour that varies is more options in "
-            f"it, never a second colour)")
+            f"it, never a second colour)", type="twin_picks", refs=(a["key"], b["key"]))
     for i in items:
         if i["kind"] in ("derivation", "combine", "template"):
             missing = [v for v in _reads(i.get("about") or "") if v not in known
                        and not (v == "negatives" and i["kind"] == "template")]
             if missing:
                 add(i, "fix", f"{i['name']} reads ${', $'.join(missing)}, which nothing in "
-                    "the pack sets; add an item or an input for it")
+                    "the pack sets; add an item or an input for it", type="reads_unset",
+                    refs=tuple(missing))
     for c in (i for i in items if i["kind"] == "constraint"):
         src, tgt = wild.get(c["source"]), wild.get(c["target"])
         if not src or not tgt:
@@ -242,20 +288,24 @@ def review_plan(plan: dict[str, Any],
         stray = sorted(named - known_tags)
         if stray:
             add(c, "fix", f"{c['name']} keys on #{', #'.join(stray)}, which neither "
-                f"{src['name']} nor {tgt['name']} lists in its tags")
+                f"{src['name']} nor {tgt['name']} lists in its tags", type="tag_stray",
+                refs=tuple(stray))
         if not src["tags"] and not named:
             add(c, "tip", f"{src['name']} has no tags, so {c['name']} can only pair "
-                "single options; give it the tags the rule tests")
+                "single options; give it the tags the rule tests", type="no_tags",
+                refs=(src["key"],))
         if _AGREE.search(about) and src["tags"] and tgt["tags"] \
                 and not set(src["tags"]) & set(tgt["tags"]) and not named:
             add(c, "tip", f"To make {tgt['name']} agree with {src['name']}, tag both with "
-                "the same words (or give the target an accepts group) and key the rule on them")
-        if _NARROWS.search(about) and tgt["kind"] == "wildcard" \
+                "the same words (or give the target an accepts group) and key the rule on them",
+                type="agree_tags")
+        if graph is None and _NARROWS.search(about) and tgt["kind"] == "wildcard" \
                 and not re.search(r"never empty|fallback", tgt.get("about") or "", re.I):
             add(tgt, "tip", f"{c['name']} narrows {tgt['name']}; say \"never empty\" in its "
                 "description so it gets a fallback option",
                 {"op": "edit", "key": tgt["key"],
-                 "set": {"about": (tgt.get("about") or "").rstrip(". ") + ". Never empty."}})
+                 "set": {"about": (tgt.get("about") or "").rstrip(". ") + ". Never empty."}},
+                "never_empty", (c["key"],))
     # Constraint loops: the edge that closes one never applies.
     after: dict[str, set[str]] = {v: set() for v in wild}
     for c in (i for i in items if i["kind"] == "constraint"):
@@ -268,7 +318,7 @@ def review_plan(plan: dict[str, Any],
     for c in (i for i in items if i["kind"] == "constraint"):
         if c["source"] in after and reaches(c["source"], c["target"], {c["source"]}):
             add(c, "fix", f"{c['name']} closes a loop of constraints ({c['target']} already "
-                f"comes before {c['source']}), so it can't apply")
+                f"comes before {c['source']}), so it can't apply", type="loop")
     # A preset that also sets what another item sets: one overwrites the other.
     owner = {i["var"]: i for i in items
              if i["var"] and i["kind"] not in ("constraint", "template", "fixed_values")}
@@ -279,13 +329,14 @@ def review_plan(plan: dict[str, Any],
         if clash:
             add(i, "fix", f"{i['name']} also sets ${', $'.join(clash)}, which "
                 f"{', '.join(dict.fromkeys(owner[v]['name'] for v in clash))} already "
-                "set; keep it to values nothing else sets")
+                "set; keep it to values nothing else sets", type="preset_clash",
+                refs=tuple(clash))
     rules = [i for i in items if i["kind"] in ("constraint", "derivation")]
     picks = [i for i in items if i["kind"] in ("wildcard", "library") and i["var"]]
-    if len(picks) >= 3 and not rules:
+    if len(picks) >= 3 and not rules and graph is None:
         add(None, "tip", "Nothing links the picks, so they can clash (a winter scene in "
-            "sandals); add a constraint or a derivation from the anchor")
-    if anchor and anchor in known and len(picks) >= 3:
+            "sandals); add a constraint or a derivation from the anchor", type="unlinked")
+    if anchor and anchor in known and len(picks) >= 3 and graph is None:
         linked = {anchor}
         for _ in range(len(items)):
             for i in rules:
@@ -296,7 +347,8 @@ def review_plan(plan: dict[str, Any],
         loose = [p["name"] for p in picks if p["var"] not in linked]
         if len(loose) >= 2:
             add(None, "tip", f"{', '.join(loose[:4])} don't follow the anchor ${anchor}; "
-                "link the ones that should agree with it")
+                "link the ones that should agree with it", type="loose_anchor",
+                refs=tuple(loose))
     if not any(i["kind"] == "template" for i in items) and not plan.get("base"):
         reads = [f"${i['var']}" for i in items if i["var"] and i["kind"] != "constraint"
                  and not _vocab(i)]
@@ -305,7 +357,7 @@ def review_plan(plan: dict[str, Any],
                 "kind": "template", "name": f"{plan['title']} prompt"[:MAX_NAME], "var": "",
                 "section": "", "count": 0, "tags": [], "source": "", "target": "", "use": "",
                 "about": "The final prompt reading " + ", ".join(reads[:20])
-                + ", in a natural order, with a standing negative."}})
+                + ", in a natural order, with a standing negative."}}, "no_template")
     _settings_findings(plan, add)
     for d in plan.get("dropped") or []:
         if isinstance(d, dict) and d.get("kind") == "constraint":
@@ -315,9 +367,18 @@ def review_plan(plan: dict[str, Any],
                 "nothing; " + (f"plan wildcards for {' and '.join(sides)} so it can apply"
                                if len(sides) == 2 else
                                "give it the wildcard it keys on as source and the one it "
-                               "changes as target"))
-    # A new wildcard the library already has.
-    if parse_settings(plan.get("settings"))["library"] == "reuse":
+                               "changes as target"), type="dropped_constraint",
+                refs=(str(d.get("name") or ""),))
+    if graph is not None:
+        gaps = pack_graph.request_gaps(graph, request)
+        if gaps:
+            add(None, "fix", "The request names " + ", ".join(gaps) + ", and the plan says "
+                + ("none of them" if len(gaps) > 1 else "it") + " anywhere; give each a "
+                "slot of its own, a value on an axis, or put it in the words of the rule it "
+                "is part of", type="request_gap", refs=tuple(gaps))
+    # A new wildcard the library already has (a graph plan's slots are
+    # matched to the library by the code).
+    if parse_settings(plan.get("settings"))["library"] == "reuse" and graph is None:
         lib = {}
         for r in library or []:
             if r.get("type") == "wildcard" and _row_var(r):
@@ -333,19 +394,42 @@ def review_plan(plan: dict[str, Any],
                     "use it instead of a new one",
                     {"op": "edit", "key": i["key"],
                      "set": {"kind": "library", "name": str(r.get("name") or ""),
-                             "var": _row_var(r), "count": 0}})
+                             "var": _row_var(r), "count": 0}}, "library_reuse", (i["key"],))
     if parse_settings(plan.get("settings"))["structure"] == "sections" \
             and len([i for i in items if not _vocab(i)]) >= MIN_SECTIONED * 2 \
             and len({i.get("section") for i in items if i.get("section")}) < 2:
         add(None, "tip", "Everything is in one section; group the items (character, outfit, "
-            "scene…) so each part gets its own sub-bundle")
+            "scene…) so each part gets its own sub-bundle", type="sections")
     return out
 
 
+#: What a model finding can be about; the type (with the item) is its
+#: fingerprint, so a reworded finding on a re-check is the same finding.
+MODEL_TYPES = ("missing_relation", "wrong_relation", "mixed_slot", "axis_mismatch",
+               "missing_slot", "extra_slot", "order", "style", "other")
+#: On a graph plan the code owns names, texts and the template, so the
+#: model's review may only raise the design faults.
+GRAPH_TYPES = MODEL_TYPES[:-1]
+
 REVIEW_SCHEMA: dict[str, Any] = _obj({
     "findings": {"type": "array", "items": _obj({
-        "item": _STR, "severity": {"type": "string", "enum": ["fix", "tip"]}, "text": _STR})},
+        "item": _STR, "type": {"type": "string", "enum": list(MODEL_TYPES)},
+        "severity": {"type": "string", "enum": ["fix", "tip"]}, "text": _STR})},
 })
+
+
+def review_schema(plan: dict[str, Any]) -> dict[str, Any]:
+    """The review schema with ``item`` an enum of the plan's items (and ""
+    for the whole pack), so a finding can only point at what the pack
+    has, never at a subject it doesn't."""
+    names = list(dict.fromkeys(i["name"] for i in plan["items"] if i.get("name")))[:80]
+    item = dict(REVIEW_SCHEMA["properties"]["findings"]["items"])
+    item["properties"] = {**item["properties"], "item": {"type": "string", "enum": ["", *names]}}
+    if isinstance(plan.get("graph"), dict):
+        # A graph plan takes only the design faults: no free "other" nits
+        # (renames, shorter texts, "add X if it isn't there").
+        item["properties"]["type"] = {"type": "string", "enum": list(GRAPH_TYPES)}
+    return _obj({"findings": {"type": "array", "items": item}})
 
 REVIEW_SYSTEM = """\
 You review a plan for a Wildcard Pipeline prompt pack before it is built. \
@@ -358,17 +442,58 @@ slot the request asked for, options in two styles, a wildcard whose \
 options would stray outside its one subject (a pose wildcard with hair \
 colours), a negative setting the plan ignores. item is the item's name, or \
 "" for the whole pack; severity "fix" when it breaks the pack or the \
-request, else "tip". Say exactly what to change. At most 8 findings; [] \
+request, else "tip"; type says what kind of fault it is (missing_relation, \
+wrong_relation, mixed_slot, axis_mismatch, missing_slot, extra_slot, order, \
+style, other). Say exactly what to change. At most 8 findings; [] \
 when the plan is good. Don't repeat the checker's findings; they are listed.
 
 """ + ai_guide.STRUCTURE + "\n" + ai_guide.WHICH + "\n" + ai_guide.NODES + "\n" \
     + ai_guide.COHERENCE
 
+REVIEW_GRAPH_SYSTEM = """\
+You review the design of a Wildcard Pipeline prompt pack before it is built. \
+The pack is a graph: slots (one wildcard each, with axes its rules key on), \
+relations between them (exclude, only, boost, reduce, agree, accepts, \
+derive, append) and a template order. The code writes every option, tag, \
+fallback, constraint cell, derivation branch and the template from it, and \
+wires the run style (story beats, sweep axes, holds) and the model setting \
+itself, so never ask for those, for tags or descriptions on items, for \
+"never empty", or for an item the pack doesn't need (a subject the request \
+never named). Find only design faults against the request: a rule the \
+request states with no relation for it; a relation whose words or values \
+don't match what the request said; a slot mixing two concepts (poses and \
+hair); two slots that should agree on an axis but name it differently; a \
+slot the request asked for that is missing, or one it never asked for; a \
+template order that reads the image model's needs wrongly. A name, a \
+wording, a text's length or what the template reads is the code's business, \
+not a finding. item is the slot's or relation's name as listed, or "" for \
+the whole pack; severity "fix" when the prompts would contradict the \
+request, else "tip". type says what kind of fault it is (missing_relation, \
+wrong_relation, mixed_slot, axis_mismatch, missing_slot, extra_slot, order, \
+style). Say exactly which slot, axis or relation to change and to what. At \
+most 6 findings; [] when the design holds. Don't repeat the checker's \
+findings; they are listed.
+"""
+
+
+def review_system(plan: dict[str, Any]) -> str:
+    """The model review's system prompt for this plan's planner."""
+    return REVIEW_GRAPH_SYSTEM if isinstance(plan.get("graph"), dict) else REVIEW_SYSTEM
+
 
 def review_prompt(plan: dict[str, Any], found: list[dict[str, Any]],
                   request: str = "", recheck: list[str] | None = None) -> str:
     lines = ([f"The user asked: {request.strip()[:1500]}"] if request.strip() else []) \
-        + _plan_lines(plan) + ["", settings_note(plan.get("settings") or {})]
+        + _plan_lines(plan)
+    graph = plan.get("graph") if isinstance(plan.get("graph"), dict) else None
+    if graph is not None:
+        axes = [f"{s['name']}: " + "; ".join(f"{a['name']} ({', '.join(a['values'])})"
+                                          for a in s["axes"])
+                for s in graph["slots"] if s["axes"]]
+        if axes:
+            lines.append("Axes: " + " · ".join(axes))
+        lines.append("Prompt order: " + ", ".join(graph["template"]["order"]))
+    lines += ["", settings_note(plan.get("settings") or {})]
     if plan.get("decisions"):
         lines.append(decisions_note(plan["decisions"]))
     if plan.get("canvas"):
@@ -412,6 +537,7 @@ def compile_review(answer: Any, plan: dict[str, Any],
     rewords an earlier finding keeps the earlier text, so it keeps its id and
     shows as unfixed, and at most MAX_NEW_ON_RECHECK new ones are taken."""
     names = {i["name"].lower(): i["key"] for i in plan["items"]}
+    graph = isinstance(plan.get("graph"), dict)
     out: list[dict[str, Any]] = []
     new = 0
     for f in (answer.get("findings") if isinstance(answer, dict) else None) or []:
@@ -420,7 +546,13 @@ def compile_review(answer: Any, plan: dict[str, Any],
         text = _clean(f.get("text"), 300)
         if not text:
             continue
-        key = names.get(_clean(f.get("item"), MAX_NAME).lower(), "")
+        name = _clean(f.get("item"), MAX_NAME).lower()
+        key = names.get(name, "")
+        if graph and name and not key:
+            continue  # about something the pack doesn't have
+        typ = f.get("type") if f.get("type") in MODEL_TYPES else "other"
+        if graph and typ == "other":
+            continue  # a nit the code's own checks don't back (see GRAPH_TYPES)
         if any((not r.get("key") or not key or r["key"] == key) and _same(text, r["text"])
                for r in found or []):
             continue
@@ -432,19 +564,35 @@ def compile_review(answer: Any, plan: dict[str, Any],
                 new += 1
             else:
                 text = was
-        if any(o["key"] == key and o["text"] == text for o in out):
+        fid = finding_id("m", key, fingerprint(typ) if typ != "other" else text)
+        if any(o["id"] == fid for o in out):
             continue
         level = "fix" if f.get("severity") == "fix" else "tip"
-        out.append({"id": finding_id("m", key, text), "key": key,
-                    "level": level, "text": text, "by": "model"})
+        out.append({"id": fid, "key": key, "level": level, "text": text, "by": "model",
+                    "type": typ})
     return out[:8]
+
+
+#: The first line of a Fix all request (the manager writes the same line,
+#: `usePackBuilder.fixFindings`): what follows it is the findings, not the
+#: user's words.
+REVIEW_NOTE_HEAD = "Revise the plan to fix ALL of these, one by one:"
+
+
+def own_request(instruction: str) -> str:
+    """The user's own words in a refine instruction: a Fix all request's
+    findings list is cut off (browser check 2026-10-19: the request-words
+    check read "revise, plan, fix, change…" from it as things the pack
+    should cover)."""
+    at = instruction.find(REVIEW_NOTE_HEAD)
+    return instruction if at < 0 else instruction[:at].rstrip()
 
 
 def review_note(findings: list[dict[str, Any]]) -> str:
     """Findings as a refine request for the planner."""
     if not findings:
         return ""
-    return ("Revise the plan to fix ALL of these, one by one:\n"
+    return (REVIEW_NOTE_HEAD + "\n"
             + "\n".join(f"{n}. {f['text'].rstrip('. ')}." for n, f in enumerate(findings, 1))
             + "\nWhere one asks for a new item (a constraint, a derivation, a wildcard), add it "
             "to the plan; where one asks to change an item, change that item.")

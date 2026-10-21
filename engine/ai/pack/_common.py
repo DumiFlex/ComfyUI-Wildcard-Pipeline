@@ -27,6 +27,8 @@ MAX_TEMPLATE = 4000
 CHECK_SEEDS = 200
 #: Runs compared to find two variables that are copies of each other.
 TWIN_SEEDS = 12
+#: Runs a graph plan's relations are checked on (``verify_relations``).
+VERIFY_SEEDS = 40
 SAMPLE_PROMPTS = 3
 #: Sections below this many items go in one bundle even when sections are on.
 MIN_SECTIONED = 6

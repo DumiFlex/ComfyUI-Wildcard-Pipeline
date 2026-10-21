@@ -11,6 +11,7 @@ import Select from "../ui/Select.vue";
 import type { SelectOption } from "../ui/select-types";
 import type { AiPackItem } from "../../api/types";
 import { usePackBuilder } from "../../composables/usePackBuilder";
+import PackGraphItem from "./PackGraphItem.vue";
 
 const props = defineProps<{ item: AiPackItem }>();
 const pb = usePackBuilder();
@@ -19,8 +20,12 @@ const ask = ref("");
 const i = computed(() => props.item);
 const busy = computed(() => pb.convo.loading.value || !!pb.changing.value);
 const wild = computed(() => i.value.kind === "wildcard");
-const hasVar = computed(() => !["constraint", "template", "library"].includes(i.value.kind));
-const hasUse = computed(() => i.value.kind !== "constraint" && i.value.kind !== "template"
+/** A graph plan: the item is compiled from the graph, so its rules,
+ *  axes, use and template come from the graph editor below. */
+const graphed = computed(() => !!pb.draft.value?.graph && i.value.kind !== "library");
+const hasVar = computed(() => !["constraint", "template", "library"].includes(i.value.kind)
+  && !(graphed.value && i.value.kind === "derivation"));
+const hasUse = computed(() => !graphed.value && i.value.kind !== "constraint" && i.value.kind !== "template"
   && !(wild.value && !i.value.var));
 const wildcardVars = computed<SelectOption[]>(() => (pb.plan.value?.items ?? [])
   .filter((x) => (x.kind === "wildcard" || (x.kind === "library" && x.library_type !== "fixed_values")) && x.var)
@@ -78,7 +83,7 @@ async function send(): Promise<void> {
         <span>Options</span>
         <Input type="number" size="sm" :model-value="i.count" :min="4" :max="60" :disabled="busy" aria-label="Options" @update:model-value="setCount" />
       </label>
-      <template v-if="i.kind === 'constraint'">
+      <template v-if="i.kind === 'constraint' && !graphed">
         <label class="wp-pack-edit__field">
           <span>When</span>
           <Select size="sm" :model-value="i.source" :options="wildcardVars" :disabled="busy" aria-label="Source wildcard" @update:model-value="(v) => set('source', v)" />
@@ -89,11 +94,12 @@ async function send(): Promise<void> {
         </label>
       </template>
     </div>
-    <label v-if="i.kind !== 'library'" class="wp-pack-edit__field">
+    <label v-if="i.kind !== 'library' && (!graphed || wild)" class="wp-pack-edit__field">
       <span>{{ i.kind === 'derivation' ? 'Rules, in plain words' : i.kind === 'constraint' ? 'What it rules out or favours' : 'What it holds' }}</span>
       <textarea class="wp-textarea wp-pack-edit__about" rows="2" :value="i.about" :disabled="busy" data-test="pack-edit-about" @change="set('about', text($event))" />
     </label>
-    <label v-if="wild" class="wp-pack-edit__field">
+    <PackGraphItem v-if="graphed" :item="i" />
+    <label v-if="wild && !graphed" class="wp-pack-edit__field">
       <span>Tags (rules key on them)</span>
       <input class="wp-input wp-input--sm" :value="i.tags.join(', ')" placeholder="warm, cold, formal" :disabled="busy" data-test="pack-edit-tags" @change="setTags(text($event))">
     </label>

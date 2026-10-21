@@ -321,6 +321,24 @@ def test_run_test_and_show_test_take_the_constraint_alone():
     assert args["notes"]
 
 
+def test_show_test_takes_an_item_as_answers_write_it_and_points_proposals_at_run_test():
+    """All-tools eval (9B): show_test got "Lighting (d97da2bb)" (run_test
+    took it, show_test didn't) and its own card's items ("no item 'Weather
+    Main' (proposed items exist only once applied)"), and kept trying."""
+    from engine.ai import client_tools
+    lib = _lib()
+    name = lib.get("aaaa0001")["name"]
+    args, _ = client_tools.prepare(lib, "show_test", {"stack": [f"{name} (aaaa0001)"],
+                                                      "seeds": 3})
+    assert {"module": "aaaa0001"} in args["stack"]
+    card = lib.run("create_wildcard", {"name": "Weather Main", "var": "wm",
+                                       "options": [{"text": "rain"}]})
+    with pytest.raises(ValueError, match="proposal of this chat.*run_test runs a stack"):
+        client_tools.prepare(lib, "show_test", {"stack": [card["op"]["body"]["id"]]})
+    with pytest.raises(ValueError, match="proposal of this chat.*run_test runs a stack"):
+        client_tools.prepare(lib, "show_test", {"stack": ["Weather Main"]})
+
+
 def test_show_test_add_and_remove_keep_the_open_seeds():
     from engine.ai import client_tools
     lib = _lib()

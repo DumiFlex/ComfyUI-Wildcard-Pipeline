@@ -23,6 +23,7 @@
 import { computed, ref, shallowRef, watch } from "vue";
 import { api, ApiError } from "../api/client";
 import type {
+  AiPackGraph, AiPackLocks, AiPackRelation, AiPackSlot,
   AiPackBuilt, AiPackCheck, AiPackDecision, AiPackFinding, AiPackInstallResult, AiPackItem,
   AiPackItemResult, AiPackKind, AiPackPatch, AiPackPlan, AiPackPlanResult, AiPackQuestion,
   AiPackSettings,
@@ -65,7 +66,7 @@ export const DEFAULT_SETTINGS: AiPackSettings = {
   // New items by default (Dumi, 2026-10-18): a pack reuses your own only
   // when you pick "Reuse what fits".
   library: "inspire", negatives: "auto", structure: "sections", style: "auto", rating: "auto",
-  count: 0, model: "any", youth_negative: "on",
+  count: 0, model: "any", youth_negative: "on", planner: "graph",
 };
 export const DECIDE_ANSWER = "Your call (decide for me)";
 /** Mirrors `engine/ai/pack.py:build_order`: vocabularies (wildcards with
@@ -118,6 +119,11 @@ export function applyPatch(plan: AiPackPlan, patch: AiPackPatch): AiPackPlan {
     return { ...plan, items: plan.items.filter((i) => i.key !== patch.key) };
   }
   if (patch.op === "plan") return { ...plan, ...patch.set };
+  if (patch.op === "slot") {
+    if (!plan.graph) return plan;
+    const slots = plan.graph.slots.map((s) => (s.var === patch.var ? { ...s, ...patch.set } : s));
+    return { ...plan, graph: { ...plan.graph, slots } };
+  }
   if (patch.op === "edit") {
     return {
       ...plan,
@@ -412,7 +418,9 @@ function setPick(q: string, next: QuestionPick): void {
   picks.value = { ...picks.value, [q]: next };
 }
 
-/** Pick (or unpick) a choice; a single-answer question keeps one. */
+/** Pick (or unpick) a choice; a single-answer question keeps one. A
+ *  question the code asked is settled by the code as soon as it has its
+ *  answer (two picks for a sweep). */
 function choose(q: AiPackQuestion, choice: string): void {
   const cur = pickFor(q.question);
   const has = cur.chosen.includes(choice);
@@ -420,6 +428,36 @@ function choose(q: AiPackQuestion, choice: string): void {
     ? (has ? cur.chosen.filter((c) => c !== choice) : [...cur.chosen, choice])
     : (has ? [] : [choice]);
   setPick(q.question, { chosen, other: q.multi ? cur.other : "", decide: false });
+  if (q.binds) settle(q, chosen);
+}
+
+/** Apply a code question's answer to the plan (no AI call) and keep it as
+ *  a decision, so it is not asked again. A sweep needs two slots before
+ *  it is settled; the slots picked so far are marked meanwhile. */
+function settle(q: AiPackQuestion, chosen: string[]): void {
+  const p = draft.value;
+  const b = q.binds;
+  if (!p || !b) return;
+  let done = false;
+  if (b.set === "run" && chosen.length) {
+    const story = chosen[0] !== "Single images";
+    editPlan({ run: story ? { mode: "story", frames: b.frames } : { mode: "single", frames: 0 } });
+    done = true;
+  } else if (b.set === "sweep") {
+    const on = new Set(chosen);
+    editGraph((g) => ({ ...g, slots: g.slots.map((s) => ({ ...s, sweep: on.has(s.name) })) }));
+    done = chosen.length >= 2;
+  }
+  if (!done) return;
+  const d = { question: q.question, answer: chosen.join(", ") };
+  mergeDecisions([d]);
+  const now = draft.value;
+  if (!now) return;
+  editDraft({
+    ...now,
+    questions: now.questions.filter((x) => x.question !== q.question),
+    decisions: [...now.decisions.filter((x) => x.question !== d.question), d],
+  });
 }
 
 /** Type your own answer ("Other…"). A single-answer question drops its
@@ -430,6 +468,14 @@ function setOther(q: AiPackQuestion, text: string): void {
 }
 
 function decideFor(q: AiPackQuestion): void {
+  if (q.binds) {
+    // The code's own question: "decide for me" takes the first choice
+    // (the first two for a sweep).
+    const chosen = q.choices.slice(0, q.multi ? 2 : 1);
+    setPick(q.question, { chosen, other: "", decide: false });
+    settle(q, chosen);
+    return;
+  }
   const cur = pickFor(q.question);
   setPick(q.question, { chosen: [], other: "", decide: !cur.decide });
 }
@@ -438,9 +484,13 @@ function decideFor(q: AiPackQuestion): void {
 function decideAll(): void {
   const next = { ...picks.value };
   for (const q of questions.value) {
-    if (!pickAnswer(next[q.question])) next[q.question] = { chosen: [], other: "", decide: true };
+    if (!q.binds && !pickAnswer(next[q.question])) next[q.question] = { chosen: [], other: "", decide: true };
   }
   picks.value = next;
+  // The code's own questions are settled on the spot.
+  for (const q of [...questions.value]) {
+    if (q.binds) decideFor(q);
+  }
 }
 
 /** The answers given this round, as decisions. */
@@ -497,6 +547,7 @@ async function askPlan(): Promise<void> {
   searched.value = [];
   dismissedNotes.value = new Set();
   unfixed.value = new Set();
+  stuck.value = new Set();
   sendPrevious = undefined;
   await convo.ask();
 }
@@ -546,11 +597,140 @@ function editDraft(next: AiPackPlan, extra: Partial<PlanView> = {}): void {
   scheduleRecheck();
 }
 
-/** Change fields of one item by hand. */
+/** Change fields of one item by hand. On a graph plan the fields a slot
+ *  carries go to its slot; the server compiles the item from it again. */
 function editItem(key: string, set: Partial<Omit<AiPackItem, "key" | "id">>): void {
   const p = draft.value;
   if (!p) return;
+  const slot = slotOf(key);
+  if (p.graph && slot) {
+    const next: Partial<AiPackSlot> = {};
+    if (set.name !== undefined) next.name = set.name;
+    if (set.var !== undefined) next.var = set.var;
+    if (set.about !== undefined) next.what = set.about;
+    if (set.section !== undefined) next.section = set.section;
+    if (set.count !== undefined) next.count = set.count;
+    editSlot(slot.var, next);
+    return;
+  }
   editDraft(applyPatch(p, { op: "edit", key, set }));
+}
+
+/** The graph slot behind a plan item (a wildcard of a graph plan). */
+function slotOf(key: string): AiPackSlot | null {
+  const p = draft.value;
+  const i = p?.items.find((x) => x.key === key);
+  if (!p?.graph || !i || i.kind !== "wildcard") return null;
+  return p.graph.slots.find((s) => s.var === i.var) ?? null;
+}
+
+/** The graph relations behind a plan item: a constraint's pair, or a
+ *  derivation's written variable. */
+function relationsOf(key: string): number[] {
+  const p = draft.value;
+  const i = p?.items.find((x) => x.key === key);
+  if (!p?.graph || !i) return [];
+  const byVar = new Map(p.graph.slots.map((s) => [s.var, s.name]));
+  return p.graph.relations.flatMap((r, n) => {
+    if (i.kind === "constraint" && r.to && r.from.slot === byVar.get(i.source) && r.to.slot === byVar.get(i.target)) return [n];
+    if (i.kind === "derivation" && r.var === i.var && !r.to) return [n];
+    return [];
+  });
+}
+
+/** A relation's signature, equal to the server's `raw_rel_sig`: what the
+ *  locks name a relation by. */
+export function relSig(r: AiPackRelation): string {
+  return [r.kind, r.from.slot, r.from.axis, r.from.value, r.to?.slot ?? "", r.to?.axis ?? "",
+    r.to?.value ?? "", r.var ?? "", r.text ?? ""].join("|");
+}
+
+const NO_LOCKS: AiPackLocks = { slots: [], relations: [], removed_relations: [], template: [] };
+
+function locksOf(p: AiPackPlan): AiPackLocks {
+  return { ...NO_LOCKS, ...(p.locks ?? {}) };
+}
+
+function withLock<T>(list: T[], add: T[] = [], drop: T[] = []): T[] {
+  const gone = new Set(drop);
+  return [...new Set([...list, ...add])].filter((x) => !gone.has(x));
+}
+
+/** Change the graph by hand; the server compiles the items from it again.
+ *  `lock` records what the edit set, so the model's next answer keeps it. */
+function editGraph(change: (g: AiPackGraph) => AiPackGraph,
+  lock?: (l: AiPackLocks, g: AiPackGraph) => AiPackLocks): void {
+  const p = draft.value;
+  if (!p?.graph) return;
+  const locks = lock ? lock(locksOf(p), p.graph) : p.locks;
+  editDraft({ ...p, graph: change(p.graph), ...(locks ? { locks } : {}) });
+}
+
+function editSlot(v: string, set: Partial<AiPackSlot>): void {
+  const renamed = set.var !== undefined && set.var !== v ? set.var : "";
+  editGraph((g) => {
+    const slots = g.slots.map((s) => (s.var === v ? { ...s, ...set } : s));
+    if (!renamed) return { ...g, slots };
+    // Relations and the template follow the slot by name; only its
+    // variable changed, so nothing else moves.
+    return { ...g, slots, template: { ...g.template, order: g.template.order.map((o) => (o === v ? renamed : o)) } };
+  }, (l) => ({ ...l, slots: withLock(l.slots, [renamed || v], renamed ? [v] : []) }));
+}
+
+function editRelation(n: number, set: Partial<AiPackRelation>): void {
+  editGraph((g) => ({ ...g, relations: g.relations.map((r, i) => (i === n ? { ...r, ...set } : r)) }),
+    (l, g) => {
+      const was = g.relations[n];
+      if (!was) return l;
+      const now = relSig({ ...was, ...set });
+      return { ...l, relations: withLock(l.relations, [now], [relSig(was)]),
+        removed_relations: withLock(l.removed_relations, [], [now]) };
+    });
+}
+
+function removeRelation(n: number): void {
+  editGraph((g) => ({ ...g, relations: g.relations.filter((_, i) => i !== n) }), (l, g) => {
+    const was = g.relations[n];
+    if (!was) return l;
+    return { ...l, relations: withLock(l.relations, [], [relSig(was)]),
+      removed_relations: withLock(l.removed_relations, [relSig(was)]) };
+  });
+}
+
+function addRelation(r: AiPackRelation): void {
+  editGraph((g) => ({ ...g, relations: [...g.relations, r] }), (l) => ({
+    ...l, relations: withLock(l.relations, [relSig(r)]),
+    removed_relations: withLock(l.removed_relations, [], [relSig(r)]),
+  }));
+}
+
+/** A blank slot added by hand (the server compiles its wildcard). */
+function addSlot(section = ""): void {
+  const p = draft.value;
+  const taken = new Set(p?.graph?.slots.map((s) => s.var) ?? []);
+  let n = taken.size + 1;
+  while (taken.has(`slot_${n}`)) n += 1;
+  const slot: AiPackSlot = {
+    name: `Slot ${n}`, var: `slot_${n}`, what: "", section, count: 12, show: "prompt",
+    pick: "", hold: false, sometimes_none: 0, axes: [],
+  };
+  editGraph((g) => ({ ...g, slots: [...g.slots, slot], template: { ...g.template, order: [...g.template.order, slot.var] } }),
+    (l) => ({ ...l, slots: withLock(l.slots, [slot.var]) }));
+}
+
+/** Whether the user set the slot behind this item by hand (the AI's next
+ *  answer keeps it). */
+function locked(key: string): boolean {
+  const slot = slotOf(key);
+  return !!slot && (draft.value?.locks?.slots ?? []).includes(slot.var);
+}
+
+/** Set template fields by hand (lead, order, tail, negative); each stays
+ *  as set through the model's next answer. */
+function editTemplate(set: Partial<AiPackGraph["template"]>): void {
+  const fields = (Object.keys(set) as Array<keyof AiPackGraph["template"]>);
+  editGraph((g) => ({ ...g, template: { ...g.template, ...set } }),
+    (l) => ({ ...l, template: withLock(l.template, fields) }));
 }
 
 /** Add a blank item by hand; returns its key. */
@@ -567,12 +747,41 @@ function addItem(kind: AiPackKind, section = ""): string {
 /** Edit plan-wide fields (title, summary, anchor, rating, style, how it runs). */
 function editPlan(set: Partial<Pick<AiPackPlan, "title" | "summary" | "anchor" | "rating" | "style" | "run">>): void {
   const p = draft.value;
-  if (p) editDraft({ ...p, ...set });
+  if (!p) return;
+  // A graph plan's run lives on the graph too: what the model is shown on
+  // the next update is the run the user set, never the one it last wrote.
+  const graph = p.graph && set.run ? { ...p.graph, run: set.run } : p.graph;
+  editDraft({ ...p, ...set, ...(graph ? { graph } : {}) });
 }
 
 function removeItem(key: string): void {
   const v = view.value;
   if (!v) return;
+  if (v.draft.graph) {
+    // A graph plan's items come from the graph: leaving one out means
+    // taking its slot, fixed values or relations out of the graph.
+    const i = v.draft.items.find((x) => x.key === key);
+    const slot = slotOf(key);
+    const rels = new Set(relationsOf(key));
+    if (!i || i.kind === "template") return;
+    const gone = (g: AiPackGraph): AiPackRelation[] => g.relations.filter((r, n) => rels.has(n)
+      || (!!slot && (r.from.slot === slot.name || r.to?.slot === slot.name)));
+    editGraph((g) => {
+      const out = new Set(gone(g));
+      return {
+        ...g,
+        slots: slot ? g.slots.filter((s) => s.var !== slot.var) : g.slots,
+        fixed: i.kind === "fixed_values" ? g.fixed.filter((f) => f.var !== i.var) : g.fixed,
+        relations: g.relations.filter((r) => !out.has(r)),
+        template: { ...g.template, order: g.template.order.filter((o) => o !== i.var) },
+      };
+    }, (l, g) => {
+      const sigs = gone(g).map(relSig);
+      return { ...l, slots: slot ? withLock(l.slots, [], [slot.var]) : l.slots,
+        relations: withLock(l.relations, [], sigs), removed_relations: withLock(l.removed_relations, sigs) };
+    });
+    return;
+  }
   const next = new Set(v.removed);
   if (next.has(key)) next.delete(key);
   else next.add(key);
@@ -613,6 +822,12 @@ function toggleSelected(id: string): void {
   selected.value = next;
 }
 
+// A settings change lands on a graph plan through the code (counts,
+// style, rating, sections), with no model call.
+watch(settings, () => {
+  if (draft.value?.graph && !convo.loading.value) scheduleRecheck();
+}, { deep: true });
+
 /** Check the edited plan again (the checker, no model) after a pause. */
 function scheduleRecheck(): void {
   if (recheckTimer) clearTimeout(recheckTimer);
@@ -631,13 +846,24 @@ async function recheck(): Promise<void> {
   const v = view.value;
   if (!res || !p || !v) return;
   try {
-    const got = await api.ai.packReview(withTarget({ plan: p }));
+    const got = await api.ai.packReview(withTarget({
+      plan: { ...p, settings: settings.value }, request: convo.asked.value[0] ?? "",
+    }));
     if (convo.result.value !== res || view.value?.draft !== v.draft) return;
     const server = new Map(got.plan.items.map((i) => [i.key, i]));
-    const items = v.draft.items.map((i) => (v.removed.has(i.key) ? i : server.get(i.key) ?? i));
-    const warnings = [...new Set([...v.draft.warnings, ...got.plan.warnings])];
+    // A graph plan's items are whatever the graph compiles to now; an
+    // item-list plan keeps items the server left out (still being typed).
+    const items = v.draft.graph
+      ? got.plan.items
+      : v.draft.items.map((i) => (v.removed.has(i.key) ? i : server.get(i.key) ?? i));
+    const warnings = v.draft.graph
+      ? got.plan.warnings
+      : [...new Set([...v.draft.warnings, ...got.plan.warnings])];
     setView({
-      draft: { ...v.draft, items, warnings, sections: got.plan.sections },
+      draft: {
+        ...v.draft, items, warnings, sections: got.plan.sections, settings: got.plan.settings,
+        ...(got.plan.graph ? { graph: got.plan.graph, locks: got.plan.locks, applied: got.plan.applied } : {}),
+      },
       review: got.findings.filter((f) => f.by !== "model"),
     });
   } catch (err) {
@@ -699,6 +925,9 @@ export function noteChunks(lines: string[], room: number): string[][] {
 /** Findings Fix all sent to the model that came back unchanged, by id
  *  (ids come from what a finding says, so the same one keeps its id). */
 const unfixed = ref(new Set<string>());
+/** Findings the AI left unchanged twice: Fix all stops sending them (do it
+ *  by hand, dismiss it, or tick it to send it once more on purpose). */
+const stuck = ref(new Set<string>());
 
 /** Fix the ticked findings (or every open one): the ones with a built-in
  *  fix are applied here with no model, the rest go to the planner. Ones
@@ -708,7 +937,8 @@ async function fixFindings(): Promise<void> {
   const open = findings.value;
   const ticked = open.filter((f) => selected.value.has(f.id));
   const fresh = open.filter((f) => !unfixed.value.has(f.id));
-  const list = ticked.length ? ticked : fresh.length ? fresh : open;
+  const again = open.filter((f) => !stuck.value.has(f.id));
+  const list = ticked.length ? ticked : fresh.length ? fresh : again;
   if (!list.length) return;
   selected.value = new Set();
   const v = view.value;
@@ -720,12 +950,27 @@ async function fixFindings(): Promise<void> {
     for (const f of patched) dismissed.add(f.id);
     editDraft(next, { dismissed });
   }
-  const rest = list.filter((f) => !f.patch);
+  let rest = list.filter((f) => !f.patch);
   if (!rest.length) return;
+  if (v?.draft.graph) {
+    // A finding about one item of a graph plan is one narrow change call
+    // on that part (its slot, rule or template); only the whole-pack ones
+    // go to the planner. One the change call can't take joins them.
+    const wide: AiPackFinding[] = [];
+    for (const f of rest) {
+      if (!f.key || !(await changeItem(f.key, f.text))) wide.push(f);
+    }
+    rest = wide;
+    if (!rest.length) {
+      const narrow = list.filter((f) => !f.patch);
+      await settleRound(narrow.map((f) => f.id), narrow.filter((f) => f.by === "model").map((f) => f.text));
+      return;
+    }
+  }
   // Numbered, each with its item, so a small model works through all of
   // them instead of fixing the first and calling it done.
   const items = new Map((plan.value?.items ?? []).map((i) => [i.key, i]));
-  const again = rest.some((f) => unfixed.value.has(f.id));
+  const left = rest.some((f) => unfixed.value.has(f.id));
   const lines = rest.map((f) => {
     const item = f.key ? items.get(f.key) : undefined;
     const what = item ? `${item.name} (${item.kind}${item.var ? `, $${item.var}` : ""}): ` : "";
@@ -734,7 +979,7 @@ async function fixFindings(): Promise<void> {
   const head = "Revise the plan to fix ALL of these, one by one:\n";
   const tail = "\nWhere one asks for a new item (a constraint, a derivation, a wildcard), "
     + "add it to the plan; where one asks to change an item, change that item's fields."
-    + (again ? "\nThe last revision left these exactly as they were: change the plan this time, "
+    + (left ? "\nThe last revision left these exactly as they were: change the plan this time, "
       + "or remove the item they are about if it can't be fixed." : "");
   const own = convo.instruction.value.trim();
   const sent = new Set(rest.map((f) => f.id));
@@ -755,11 +1000,18 @@ async function fixFindings(): Promise<void> {
       return;
     }
   }
-  // The model's own findings are checked again on the new plan, so one it
-  // didn't fix shows up again instead of quietly disappearing.
-  const recheck = rest.filter((f) => f.by === "model").map((f) => f.text);
+  await settleRound([...sent], rest.filter((f) => f.by === "model").map((f) => f.text));
+}
+
+/** After a Fix all round: the model's own findings sent (`recheck`, their
+ *  texts) are checked again on the new plan, so one it didn't fix shows up
+ *  again instead of quietly disappearing, and one left as it was twice is
+ *  marked as something the AI can't change. */
+async function settleRound(sentIds: string[], recheck: string[]): Promise<void> {
+  const sent = new Set(sentIds);
   if (recheck.length) await reviewPlan(recheck);
   const back = findings.value.filter((f) => sent.has(f.id)).map((f) => f.id);
+  stuck.value = new Set([...stuck.value, ...back.filter((id) => unfixed.value.has(id))]);
   unfixed.value = new Set(back);
 }
 
@@ -773,7 +1025,9 @@ async function changeItem(key: string, instruction: string): Promise<boolean> {
   changing.value = key || "+";
   error.value = "";
   try {
-    const res = await api.ai.packChange(withTarget({ plan: p, ...(key ? { key } : {}), instruction: text }));
+    const res = await api.ai.packChange(withTarget({
+      plan: p, ...(key ? { key } : {}), instruction: text, request: convo.asked.value[0] ?? "",
+    }));
     const fresh = new Map(res.plan.items.map((i) => [i.key, i]));
     // Removed items keep their place; new items go where the server put them.
     const items: AiPackItem[] = [];
@@ -793,6 +1047,41 @@ async function changeItem(key: string, instruction: string): Promise<boolean> {
     changing.value = "";
   }
 }
+
+/** Reference images added after a graph plan was made: one narrow call
+ *  says what they add (slots, fixed values, "from your images" lines) and
+ *  the code merges it, instead of a whole re-plan with the images. */
+async function readImages(urls: string[], key: string): Promise<void> {
+  const p = plan.value;
+  const v = view.value;
+  if (!p?.graph || !v || changing.value) return;
+  changing.value = "images";
+  error.value = "";
+  try {
+    const res = await api.ai.packImages(withTarget({
+      plan: p, images: urls, request: convo.asked.value[0] ?? "",
+    }));
+    sentImages = key;
+    if (view.value !== v) return;
+    setView({
+      draft: { ...v.draft, ...res.plan, questions: v.draft.questions, research: v.draft.research },
+      review: res.review, edited: true,
+    });
+  } catch (err) {
+    error.value = message(err);
+  } finally {
+    changing.value = "";
+  }
+}
+
+// An image added to a graph plan is read on the spot; the next update
+// then doesn't send the images again.
+watch(() => images.urls()?.join("|") ?? "", (key) => {
+  if (!draft.value?.graph || convo.loading.value || changing.value || !key) return;
+  const seen = new Set(sentImages.split("|").filter(Boolean));
+  const fresh = (images.urls() ?? []).filter((u) => !seen.has(u));
+  if (fresh.length) void readImages(fresh, key);
+});
 
 /** Run the searches the planner asked for (the user allowed them), then
  *  refine the plan with what they found. */
@@ -930,6 +1219,7 @@ async function runCheck(p: AiPackPlan, signal: AbortSignal): Promise<AiPackCheck
   check.value = res;
   dismissedNotes.value = new Set();
   unfixed.value = new Set();
+  stuck.value = new Set();
   return res;
 }
 
@@ -1093,6 +1383,7 @@ function reset(): void {
   selected.value = new Set();
   dismissedNotes.value = new Set();
   unfixed.value = new Set();
+  stuck.value = new Set();
   sample.value = "";
   error.value = "";
   images.clear();
@@ -1128,8 +1419,8 @@ export function usePackBuilder() {
     convo, plan, draft, removed, edited, states, phase, working, stage, current, check,
     installed, error, builtCount, summary, askPlan, refinePlan, canRefine, awaitingSearch, removeItem, build,
     rebuild, stop, install, undoInstall, backToPlan, reset, sample, findings, reviewing,
-    reviewPlan, fixFindings, unfixed, settings, decisions, picks, questions, answeredCount, choose,
-    setOther, decideFor, decideAll, pickFor, reopenDecision, changeAssumption, editItem, changes, dropped, reopened, resendImages,
+    reviewPlan, fixFindings, unfixed, stuck, settings, decisions, picks, questions, answeredCount, choose,
+    setOther, decideFor, decideAll, pickFor, reopenDecision, changeAssumption, editItem, slotOf, relationsOf, editGraph, editSlot, editRelation, removeRelation, addRelation, addSlot, editTemplate, locked, changes, dropped, reopened, resendImages,
     addItem, editPlan, applyFinding, dismissFinding, selected, toggleSelected, changeItem,
     changing, research, allowResearch, skipResearch, searching, webResults, images, target,
     extendBundle, skipCurrent, skipItem, dismissNote, dismissedNotes, planThinking,

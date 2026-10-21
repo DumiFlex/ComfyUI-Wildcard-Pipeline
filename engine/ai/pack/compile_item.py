@@ -11,6 +11,7 @@ from engine.ai import derivation as ai_derivation
 from engine.ai import fits as ai_fits
 from engine.ai import text_items
 from engine.ai import wildcard as ai_wildcard
+from engine.ai.pack import graph as pack_graph
 from engine.ai.pack._common import _HEX8, _item, is_wild, new_id
 from engine.ai.pack.build import (
     _catalog,
@@ -74,10 +75,16 @@ def compile_item(
     preview: list[str] = []
     if kind == "wildcard":
         idx = ref_index(plan, {k: v for k, v in built.items() if k != key}, library)
-        compiled = ai_wildcard.compile_spec(
-            answer, var=item["var"] or None, refs=idx, self_id=mid, limit=item["count"],
-            existing_payload={"options": [], "sub_categories": list(item["tags"])},
-        )
+        slot = pack_graph.slot_for(plan, key)
+        if slot is not None:
+            compiled = pack_graph.compile_slot(
+                plan["graph"], slot, answer, existing=(built.get(key) or {}).get("payload"),
+                others=pack_graph.other_texts(plan, built, key))
+        else:
+            compiled = ai_wildcard.compile_spec(
+                answer, var=item["var"] or None, refs=idx, self_id=mid, limit=item["count"],
+                existing_payload={"options": [], "sub_categories": list(item["tags"])},
+            )
         payload = compiled["payload"]
         if plan.get("style") != "tags":
             # Booru tags are written with underscores on purpose.

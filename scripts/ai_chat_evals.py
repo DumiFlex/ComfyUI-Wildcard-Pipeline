@@ -40,6 +40,7 @@ import shutil
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -226,8 +227,13 @@ def report(rows: list[dict[str, Any]], model: str, note: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-async def evaluate(scenarios: list[dict[str, Any]], runs: int) -> list[dict[str, Any]]:
-    from aiohttp import web
+async def evaluate(scenarios: list[dict[str, Any]], runs: int,
+                   partial: Callable[[list[dict[str, Any]]], None] | None = None,
+                   ) -> list[dict[str, Any]]:
+    """Every scenario ``runs`` times. No client timeout: a slow turn on a
+    shared or wordy model must not lose the run. ``partial`` gets the rows
+    so far after each scenario, so a killed run still leaves a report."""
+    from aiohttp import ClientTimeout, web
     from aiohttp.test_utils import TestClient, TestServer
 
     import wp_api
@@ -235,13 +241,15 @@ async def evaluate(scenarios: list[dict[str, Any]], runs: int) -> list[dict[str,
     wp_api._start_backups = lambda: None  # type: ignore[attr-defined]
     app = web.Application(client_max_size=32 * 1024 * 1024)
     wp_api.register_routes(app)
-    rows = []
-    async with TestClient(TestServer(app)) as client:
+    rows: list[dict[str, Any]] = []
+    async with TestClient(TestServer(app), timeout=ClientTimeout(None)) as client:
         for run in range(1, runs + 1):
             for sc in scenarios:
                 print(f"run {run} · {sc['name']}", flush=True)
                 rows.append({"name": sc["name"], "run": run,
                              "turns": await run_scenario(client, sc)})
+                if partial is not None:
+                    partial(rows)
     return rows
 
 
@@ -279,10 +287,12 @@ def main() -> int:
     only = {s.strip() for s in args.only.split(",") if s.strip()}
     scenarios = [s for s in SCENARIOS if not only or s["name"] in only]
     print(f"Library copy and settings in {work}; model {cfg['model']}", flush=True)
-    rows = asyncio.run(evaluate(scenarios, args.runs))
-    Path(args.out).write_text(report(rows, cfg["model"], args.note), encoding="utf-8")
-    Path(args.out).with_suffix(".json").write_text(
-        json.dumps(rows, indent=2, ensure_ascii=False), encoding="utf-8")
+    def write(rows: list[dict[str, Any]]) -> None:
+        Path(args.out).write_text(report(rows, cfg["model"], args.note), encoding="utf-8")
+        Path(args.out).with_suffix(".json").write_text(
+            json.dumps(rows, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    write(asyncio.run(evaluate(scenarios, args.runs, partial=write)))
     print(f"Wrote {args.out}")
     return 0
 

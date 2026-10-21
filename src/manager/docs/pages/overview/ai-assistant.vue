@@ -44,7 +44,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           { term: 'Unload after', desc: 'For local servers: how long an idle model stays loaded before it leaves the GPU, so ComfyUI gets its memory back. Pick a preset (right after each answer, 30 seconds up to 1 hour) or Custom to type the seconds.' },
           { term: 'Model size', desc: 'How much the assistant asks of the model. Small models (under 20B) get shorter instructions, smaller tool results and steadier settings. Small and medium models are offered the tools for the page you are on (medium ones also the wildcard, rule, constraint and test tools everywhere) and load the rest one group at a time when a job needs them (web search, the Danbooru lookup and the list tools are always loaded this way), since fewer tools to choose from means fewer wrong picks; a loaded group goes at the end of the list, so what the server has already read stays in its cache. Large ones and hosted models get everything. Small and medium models also answer each step in two parts: first, at a steady setting, what to call next or that they are ready; then, once ready, the reply, with the tools out of reach. So they never decide while they write, can\'t stop halfway to ask “should I go ahead?”, and a step told to answer can only answer. Automatic reads the size from the model\'s name; set it when the name doesn\'t say.' },
           { term: 'Most context to use', desc: 'Tokens of context the assistant uses (16384 by default). Ollama gets exactly this much for the whole chat, because changing it reloads the model and throws away what it already read; drafts ask for what they need, up to this. Ollama\'s own default is far smaller and silently cuts the instructions off. Lower it if the model no longer fits on your GPU. Presets go from 4k to 128k (1k is 1024 tokens); Custom takes any number. A new chat also checks how much context the model really has (LM Studio and llama.cpp report it) and, when the full instructions and every tool wouldn\'t leave room to answer, starts leaner: fewer tools up front (the rest stay one call away) and a shorter library summary. If the server still says the request is too long, the chat tries once more with less and otherwise tells you how much context to load the model with.' },
-          { term: 'Tool format', desc: 'Under Advanced: how the chat calls its tools. Native tool calls are what most models are trained for; JSON steps work with any model. Automatic asks the server whether the model supports tool calls (Ollama, LM Studio and llama.cpp say so; Claude and OpenAI always do) and falls back to JSON steps when a server refuses them. In JSON steps on a local server (Ollama, LM Studio, llama.cpp, other OpenAI-compatible) the server also checks the arguments of each tool call as the model writes them. A chat keeps the format it started with. OpenAI itself is spoken to through its Responses API, which its newest models (GPT-6.1 Sol, GPT-6 Astra) need for tool calls; their reasoning is carried from step to step in encrypted form, so they keep their train of thought while they search and read, and Thinking: Off asks them not to reason where the model allows it.' },
+          { term: 'Tool format', desc: 'Under Advanced: how the chat calls its tools. Native tool calls are what most models are trained for; JSON steps work with any model. Automatic uses JSON steps for a small or medium local model (Model size): a 9B on LM Studio did twice as well in JSON steps as with native calls, in half the time per turn, because the server and the model disagree on how a call is written. For a large local model it asks the server whether the model supports tool calls (Ollama, LM Studio and llama.cpp say so; Claude and OpenAI always do) and falls back to JSON steps when a server refuses them, or when it takes them but cannot read what the model wrote (LM Studio answers &quot;does not match the expected peg-native format&quot; with the stock Qwen3.5 template): the step is asked again in JSON steps, the chat stays in them, and new chats with that model start in them. A call a model writes into its text instead (the Qwen &lt;tool_call&gt; XML, a JSON call, &quot;I call: read {…}&quot;) still runs. In JSON steps on a local server (Ollama, LM Studio, llama.cpp, other OpenAI-compatible) the server also checks the arguments of each tool call as the model writes them. A chat keeps the format it started with. OpenAI itself is spoken to through its Responses API, which its newest models (GPT-6.1 Sol, GPT-6 Astra) need for tool calls; their reasoning is carried from step to step in encrypted form, so they keep their train of thought while they search and read, and Thinking: Off asks them not to reason where the model allows it.' },
           { term: 'Embedding model', desc: 'Under Search: turns on meaning search, so the chat also finds items by what they mean (“warm colors” finds a wildcard of amber and crimson). Pick a small embedding model your server has, such as nomic-embed-text or embeddinggemma on Ollama, or text-embedding-3-small on OpenAI; the list shows the names that look like embedding models, and Type a name takes any other. Off (the default) keeps search to words, which already covers most questions. Claude has no embeddings API, so it is not offered there. Your library is embedded in the background a few dozen items at a time, so a chat never waits for it.' },
           { term: 'Embedding server', desc: 'Shown once an embedding model is picked. Leave it empty to use the server above; a llama.cpp server only serves embeddings when started with --embeddings, so run a second one and put its address here.' },
           { term: 'Library index', desc: 'How many items the chat\'s search index holds and, with meaning search on, how many are searchable by meaning. The index lives next to your library database (wildcard-pipeline.ai-index.db) and keeps itself up to date; Rebuild throws it away and builds it again.' },
@@ -341,9 +341,11 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       </p>
       <p>
         The assistant only changes items of yours that you named in the chat ("add rain to my
-        Weather", an id, a chip) or that you have open; asked to make something new, it makes a new
-        item instead of rewriting one you have, and it can still read, search and test your whole
-        library. Cards it proposed itself stay open to change.
+        Weather", an id, a chip), that you have open, or that its last answer showed you as a chip
+        (after "you already have [[Weather]]", "now add negatives to the stormy options" may change
+        it); asked to make something new, it makes a new item instead of rewriting one you have,
+        and it can still read, search and test your whole library. Cards it proposed itself stay
+        open to change.
         The assistant plans before it acts and checks its work: when it proposes changes to
         modules it runs the stack with them before it answers, so the reply says what the change
         does. It can propose several items that depend on each other in one answer (a wildcard
@@ -612,6 +614,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           what a pack is about (its subject, LoRAs, a story) comes from your description:
           <DocKeyList
             :items="[
+              { term: 'Planner', desc: 'Pack graph (the default): the model writes slots, axes and relations and the code wires every rule and the template from them. Items one by one: the older planner, where the model writes each rule and the template itself.' },
               { term: 'Your library', desc: 'New, in its style (the default: built fresh but written like your library), Reuse what fits (wildcards and fixed values you already have, marked yours), or Everything new.' },
               { term: 'Negatives', desc: 'Standing + per option (a standing negative in the template and negatives on options that need them), Template only, or None.' },
               { term: 'Structure', desc: 'Sub-bundle per section, or One bundle.' },
@@ -622,8 +625,64 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
             ]"
           />
         </li>
-        <li><b>Plan.</b> The assistant lists every item it will build, grouped by section, and
-          asks what it can't guess. Some questions take several answers; every question has an
+        <li><b>Plan.</b> With the <b>Pack graph</b> planner the model writes a small graph
+          rather than the items: a <b>slot</b> per choice the image makes (one wildcard each,
+          with what it holds, how many options, whether it shows in the prompt or only feeds
+          rules, "pick 2", hold, a share of "none"), each slot's <b>axes</b> (the ways its
+          options are told apart: a Season axis with winter and summer, a Formality axis), the
+          <b>relations</b> between slots (never gets, only gets, favours, rarely gets, agrees
+          with on an axis, accepts, sets a variable, adds to a variable, each from one slot's
+          axis value to another's) and the <b>template order</b>. The code then makes every
+          constraint, derivation and the template from the graph, so a rule can only name a slot
+          and a value the graph declares; a relation that names something the graph doesn't
+          have is dropped, listed under the plan, and the model is asked once to write it
+          again with the names that exist. Each relation also names the words it is about
+          ("sandals", "shorts" for "no sandals or shorts in winter"), so the target wildcard
+          is made to hold options saying them and the test run reads the finished prompts
+          for them; a slot whose only axis is itself (a Season slot with a season axis) gets
+          its options from the axis values without a model call, and an axis a relation names
+          on one slot that only the other declares is copied over. What the run and the
+          settings need is wired by the code, never asked of the model: a story gets its
+          <b>Story beat</b> derivation from <code>$iteration</code> (the model writes only the
+          beats), a story where every pick is held lets the ones that aren't the cast or the
+          place change per frame, a sweep sheet marks two short slots as its axes (or the ones
+          you tick in the slot editor) and holds the rest, and <b>Model: Per model family</b>
+          adds the quality derivation. <b>Runs as</b> is yours once set: an update never changes
+          it back. The other settings land on the graph the same way, as you change them and
+          with no AI call: <b>Options per wildcard</b> caps every slot's count (a slot that is
+          its own axis keeps its values), <b>Style</b> and <b>Rating</b> replace the planner's,
+          and <b>Structure: One bundle</b> folds the sections; <b>Update plan</b> asks the AI
+          to rework the rest for them. What you edit by hand is locked: a slot you changed or
+          added (marked "yours" in the list), a relation you added or changed, one you took
+          out, and a template field you set all stay as you left them through every update,
+          the AI is told which parts are yours, and a slot its next answer drops is put back.
+          Above the plan, "Wired by the code" lists what the code did on the last compile
+          (counts capped, sections folded, your parts kept). The code asks its own questions
+          when the graph has a fork the request didn't settle, marked "applied by the code":
+          a request that reads like a story on a single-image plan asks <b>Story or single</b>
+          (the frame count read from the request), and a sweep run with no axis marked asks
+          <b>Sweep axes</b> (pick two or three). Their answers land on the plan the moment you
+          pick them, with no AI call, and are kept as decisions; <b>Decide for me</b> takes the
+          first choice. On a graph plan the AI is asked for one part at a time instead of the
+          whole plan again: "Change with AI" under an item rewrites that slot (with the
+          relations that touch it), fixed value, rule or the template on its own small form,
+          the rest of the graph staying as it is, and the changed slot is locked like a hand
+          edit; an image added after the plan is read on the spot ("Reading the new images
+          into the plan…") for what it adds (slots, fixed values, "from your images" lines)
+          and the next update doesn't send it again; and <b>Fix all with AI</b> sends each
+          finding about one item as a change of that item, so only whole-pack findings go to
+          the planner. A rule the code wires (the story beat, the model quality) can't be
+          changed with AI; change the run or the setting instead. The wired template reads
+          every prompt slot, fixed value and derived variable (one left out of the order is
+          added, with a note), a <code v-pre>{{placeholder}}</code> the planner writes into the lead
+          or tail becomes its variable or goes, single-image runs hold nothing, and a
+          "1girl, solo" lead on a pack whose request names no person but does name a thing
+          (animals, cars, rooms, food) is taken out. The checker also reads your request against the graph: a thing it names
+          ("sandals", "parka") that no slot, axis value, rule or fixed text says is a finding,
+          sent back to the planner. Click an item to edit its slot (axes, use) or the
+          relations it compiles from, and <b>Add a relation</b> or <b>Add a slot</b>; the items
+          are compiled again from your change. The assistant lists every item it will build,
+          grouped by section, and asks what it can't guess. Some questions take several answers; every question has an
           <b>Other</b> box for your own answer and <b>Decide for me</b>; <b>Decide the rest</b>
           leaves the open ones to the model. <b>Send answers</b> updates the plan. Answered
           questions show as chips under <b>You decided</b> and are never asked again (click one
@@ -675,15 +734,36 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           see before it lands) and <b>Dismiss</b>; tick some and press <b>Fix with AI</b>, or
           <b>Fix all with AI</b>. Fix all applies the findings that have their own fix first,
           without the model, and sends only the rest; one the model hands back unchanged is marked
-          "the AI left this unchanged", so you can fix it by hand or dismiss it instead of pressing
-          Fix all again. A long list goes to the model in rounds. <b>Review with AI</b> asks the
+          "the AI left this unchanged", and one it leaves unchanged twice is marked as something
+          the AI couldn't change and is not sent again unless you tick it, so Fix all settles
+          instead of looping. A finding is known by what it is about (its kind and the items
+          it points at), not by its wording, so one that comes back reworded is the same
+          finding: a dismissal holds, and "couldn't change" holds. The AI's review can only
+          name items the plan has (a fault about a subject the pack doesn't have is dropped)
+          and says which kind of fault each finding is. A finding only asks for what the pack can do: a story holds the
+          character or outfit it has (one click each), and a pack with no cast is not asked to
+          hold one. On a graph plan the review leaves out what the code settles itself (fallbacks,
+          library matches, links from the anchor), and <b>Review with AI</b> reviews the design
+          (slots, axes, relations, order) against your request rather than the items. A long
+          list goes to the model in rounds. <b>Review with AI</b> asks the
           model for a second opinion; after Fix all it checks again, repeating the findings still
           there and adding at most two new ones. Notes
           the planner left (items it dropped) have <b>Explain</b>, which asks the chat what they
           mean.</li>
         <li><b>Build &amp; check.</b> Each item is written in its own request, wildcards first so
           rules can use their tags; every item has its id reserved in the plan, so references,
-          nested wildcards and linked constraints point at items before they are built. An item
+          nested wildcards and linked constraints point at items before they are built. On a
+          graph plan only the wildcards ask the model: each option must be tagged with one of
+          the slot's own axis values (the answer form allows nothing else), an option that is
+          one of another slot's options is left out, one that names another slot's pick inside
+          its text is flagged and the slot rebuilt once, and when no option carries an axis value
+          a rule needs, the model is asked only to <b>add</b> options with it, keeping the rest.
+          Constraints, rules, fixed values and the template are written by the code from the
+          graph, with no request and no way to misname a tag. The test run then checks every
+          relation on real runs (a "never gets" that still co-occurred or whose words showed
+          in a prompt, an "only" the target left, a rule that didn't write its text, a rule
+          that never fired at all) and says how many held; a broken one is a note on the
+          pack. An item
           that takes longer than 4 minutes is stopped and marked; <b>Skip this item</b> moves on
           right away, and the row's buttons retry it, rebuild it with a note, or leave it out.
           If the template's answer fails twice, a plain one that reads every pick is written

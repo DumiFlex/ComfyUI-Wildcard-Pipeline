@@ -12,6 +12,7 @@ from engine.ai import guide as ai_guide
 from engine.ai import library_vars, text_items
 from engine.ai import refs as ai_refs
 from engine.ai import wildcard as ai_wildcard
+from engine.ai.pack import graph as pack_graph
 from engine.ai.pack._common import _HEX8, PlanError, _item, is_wild, module_type
 from engine.ai.pack.plan import _vocab
 from engine.ai.pack.prompts import _score
@@ -211,6 +212,8 @@ def _item_request(
     kind = item["kind"]
     if kind == "library":
         raise PlanError(f"{item['name']} comes from the library; nothing to write")
+    if pack_graph.slot_for(plan, key) is not None:
+        return pack_graph.slot_request(plan, key, note, built)
     fix = f"\n\nThe last version had these problems; fix them: {note.strip()}" \
         if note.strip() else ""
     if kind == "wildcard":

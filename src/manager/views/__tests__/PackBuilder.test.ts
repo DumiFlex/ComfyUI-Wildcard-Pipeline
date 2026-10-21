@@ -43,7 +43,7 @@ const PLAN: AiPackPlanResult = {
     style: "tags", model: "", anchor: "season",
     questions: [{ header: "Size", question: "How many?", multi: false, choices: ["Few", "Many"] }],
     assumptions: ["Daytime only"], research: [], decisions: [], sections: [],
-    settings: { library: "inspire", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, model: "any", youth_negative: "on" },
+    settings: { library: "inspire", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, model: "any", youth_negative: "on", planner: "graph" },
     inputs: [],
     items: [
       item("i1", "template", "Scene"),
@@ -202,6 +202,17 @@ describe("PackBuilder", () => {
     await flushPromises();
     expect(vi.mocked(api.ai.packPlan).mock.calls[2][0].instruction).toContain(
       "The last revision left these exactly as they were");
+    // Left as they were a second time: stuck, and Fix all stops sending them.
+    expect(w.findAll('[data-test="pack-finding-stuck"]')).toHaveLength(2);
+    expect(w.findAll('[data-test="pack-finding-unfixed"]')).toHaveLength(0);
+    await w.get('[data-test="pack-fix"]').trigger("click");
+    await flushPromises();
+    expect(vi.mocked(api.ai.packPlan).mock.calls).toHaveLength(3);
+    // Ticked on purpose, one goes once more.
+    await w.findAll('input[type="checkbox"]')[0].setValue(true);
+    await w.get('[data-test="pack-fix"]').trigger("click");
+    await flushPromises();
+    expect(vi.mocked(api.ai.packPlan).mock.calls).toHaveLength(4);
   });
 
   it("sends a long list of findings in rounds under the length cap and keeps the typed text on an error", async () => {

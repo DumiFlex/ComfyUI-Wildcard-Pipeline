@@ -592,8 +592,14 @@ export const api = {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },
-    async packChange(body: { plan: AiPackPlan; key?: string; instruction: string }, signal?: AbortSignal) {
+    async packChange(body: { plan: AiPackPlan; key?: string; instruction: string; request?: string }, signal?: AbortSignal) {
       return request<AiPackChangeResult>("/wp/api/ai/pack/change", {
+        method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
+      });
+    },
+    /** What reference images added to a graph plan add to it (one narrow call). */
+    async packImages(body: { plan: AiPackPlan; images: string[]; note?: string; request?: string }, signal?: AbortSignal) {
+      return request<AiPackChangeResult>("/wp/api/ai/pack/images", {
         method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
       });
     },

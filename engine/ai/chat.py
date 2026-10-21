@@ -258,6 +258,7 @@ _OWN_SKIP = frozenset({"wildcard", "wildcards", "template", "templates", "deriva
                        "to", "with", "so", "for", "in", "of", "it", "a", "is"})
 _IDENT = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$")
 _HEX_ID = re.compile(r"\b[0-9a-f]{8}\b")
+_CHIP_ID = re.compile(r"\[\[([0-9a-f]{8})#")
 #: "A → B": a model writing a constraint as a wildcard.
 _ARROW = re.compile(r"\S\s*(?:→|->|⟶|=>)\s*\S")
 
@@ -755,6 +756,11 @@ class Library(MoreTools, ManageTools):
                             w in have or w.rstrip("s") in have for w in words):
                         out.add(r["id"])
         return out
+
+    def shown_in(self, message: str) -> set[str]:
+        """Ids of library items an answer showed as chips (``[[id#Name]]``)."""
+        return set(_CHIP_ID.findall(message or "")) & {
+            *self.modules, *self.bundles, *self.templates}
 
     def _check_named(self, tool: str, item_id: Any) -> None:
         """Refuse an edit of a library item the user never pointed at (chat

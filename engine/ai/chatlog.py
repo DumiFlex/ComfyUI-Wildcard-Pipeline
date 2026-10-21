@@ -124,6 +124,16 @@ def shown_entry(view: dict[str, Any]) -> dict[str, Any]:
     return {"kind": "shown", "view": view}
 
 
+def last_shown(entries: list[dict[str, Any]]) -> str:
+    """The message of the last answer the user saw (what they reply to)."""
+    for e in reversed(entries):
+        if e.get("kind") == "shown" and isinstance(e.get("view"), dict):
+            return str(e["view"].get("message") or "")
+        if e.get("kind") == "user":
+            return ""
+    return ""
+
+
 def aside_entry(text: str, reaction: str) -> dict[str, Any]:
     return {"kind": "aside", "text": text, "reaction": reaction}
 

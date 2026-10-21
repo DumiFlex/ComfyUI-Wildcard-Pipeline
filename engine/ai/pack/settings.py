@@ -36,10 +36,14 @@ SETTINGS: dict[str, tuple[str, ...]] = {
     # on: an nsfw pack's template negative gets the youth block (child,
     # loli, …); off: nothing added (the user's call).
     "youth_negative": ("on", "off"),
+    # graph: the model writes slots, axes and relations and the code wires
+    # the pack; items: the model writes the item list and every payload.
+    "planner": ("graph", "items"),
 }
 DEFAULT_SETTINGS: dict[str, Any] = {
     "library": "inspire", "negatives": "auto", "structure": "sections", "style": "auto",
     "rating": "auto", "count": 0, "model": "any", "youth_negative": "on",
+    "planner": "graph",
 }
 #: Most options a sweep axis should have (the Loop sweeps every ticked one).
 MAX_SWEEP_OPTIONS = 6

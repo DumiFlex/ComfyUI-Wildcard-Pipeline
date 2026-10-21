@@ -26,7 +26,8 @@ def test_settings_hold_only_pack_wide_preferences():
     for gone in ("run", "loras", "inputs", "frames"):
         assert gone not in cfg
     assert set(pack.SETTINGS) == {"library", "negatives", "structure", "style", "rating",
-                                  "model", "youth_negative"}
+                                  "model", "youth_negative", "planner"}
+    assert pack.parse_settings({})["planner"] == "graph"
     for asked in ('ask (header "Subject")', 'Ask (header "Run")', "outfit_lora"):
         assert asked in pack.PLAN_SYSTEM
 
@@ -68,7 +69,11 @@ def test_review_asks_for_what_the_run_and_loras_need():
     found = pack.review_plan(plan)
     texts = " | ".join(f["text"] for f in found)
     assert "Story over a Loop needs a derivation" in texts
-    assert "Nothing is held" in texts
+    # Only the cast can be held, one finding each, applied without the model.
+    held = [f for f in found if "changes every frame of the story" in f["text"]]
+    assert [f["key"] for f in held] == [plan["items"][0]["key"], plan["items"][1]["key"]]
+    assert held[0]["patch"] == {"op": "edit", "key": plan["items"][0]["key"],
+                                "set": {"use": "hold"}, "label": "Hold it"}
     assert "Per model family" in texts
     beat = next(f for f in found if f["text"].startswith("Story over"))
     assert beat["patch"]["op"] == "add" and beat["patch"]["item"]["var"] == "beat"
@@ -94,7 +99,7 @@ def test_review_asks_for_what_the_run_and_loras_need():
     ], inputs=[{"var": "outfit_lora", "about": "LoRA", "example": "<lora:x:0.8>"}],
         run={"mode": "story", "frames": 4})
     texts = " | ".join(f["text"] for f in pack.review_plan(done))
-    for gone in ("Story over", "Nothing is held", "outfit_lora", "Per model family",
+    for gone in ("Story over", "changes every frame", "outfit_lora", "Per model family",
                  "isn't set", "nothing in the pack sets"):
         assert gone not in texts
 
@@ -138,3 +143,12 @@ def test_story_check_plays_every_frame():
     assert not report["problems"]
     assert any("WP Context Loop before the Context, count 3" in n
                for n in pack.wiring_notes(plan))
+
+
+def test_a_story_with_no_cast_asks_for_no_hold():
+    plan = _plan({}, [_item(name="Pose", var="pose", about="explicit poses"),
+                      _item(name="Angle", var="angle", about="camera angles"),
+                      _item(kind="template", name="T", about="$pose, $angle")],
+                 run={"mode": "story", "frames": 4})
+    texts = " | ".join(f["text"] for f in pack.review_plan(plan))
+    assert "changes every frame" not in texts and "hold it" not in texts

@@ -344,6 +344,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         meta["page_note"] = note
     new: list[dict[str, Any]] = []
     first_steps: list[dict[str, Any]] = []
+    first_done: list[str] = []
     step = 0
     if paused:
         # Every paused call gets its result before anything else: the
@@ -352,7 +353,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         meta.pop("pending", None)
         got = {a["id"]: a for a in (answers or []) if isinstance(a, dict)
                and isinstance(a.get("id"), str)} if resume else {}
-        items, first_steps = await _paused_results(cfg, meta, paused, got)
+        items, first_steps, first_done = await _paused_results(cfg, meta, paused, got)
         tail = ""
         if resume:
             step = int(paused.get("step") or 0)
@@ -388,6 +389,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     named = set(meta.get("named") or [])
     if not resume and text:
         named |= lib.named_in(text)
+        # The items the answer they are replying to showed as chips count
+        # as named too ("Now add negatives to the stormy options" after
+        # "You have [[Weather]] …"; chat eval round 4 refused every edit).
+        named |= lib.shown_in(ai_chatlog.last_shown(log))
     if page and isinstance(page.get("id"), str):
         named.add(page["id"])
     for p_ in lib.earlier_proposals.values():
@@ -472,8 +477,13 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
             message = "(Stopped early: this answer took too long. Ask me to continue.)"
             break
         except _ai_chat.ToolsUnsupported as e:
-            if fmt == "native" and not any(x.get("kind") == "step" for x in log + new):
-                fmt = "json"  # the server has no tool calling: use the JSON format
+            if fmt == "native" and (e.fallback or not any(
+                    x.get("kind") == "step" for x in log + new)):
+                # The server has no tool calling, or can't read this
+                # model's calls: the same step again in JSON steps, and the
+                # chat stays in them (earlier native steps render as JSON
+                # steps, `_ai_chat.json_answer`).
+                fmt = "json"
                 continue
             switched = meta.get("model") and meta.get("model") != cfg.get("model")
             hint = (" This chat started with another model; start a new chat to keep going "
@@ -773,7 +783,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                     message = message or interim or (
                         "(The model used up its output limit before answering; thinking "
                         "models do this. Try again, raise the output limit, or turn its "
-                        "thinking off.)" if cut else _done_line(steps))
+                        "thinking off.)" if cut else _done_line(steps, first_done))
                     break
                 empty_nudged = think_off = True
                 new.append(ai_chatlog.note_entry(ai_chat.EMPTY_NUDGE))
@@ -840,7 +850,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         if not message and not (lib.reaction and not proposals and not interim):
             message = interim if interim and proposals else (
                 "Here's what I'd change." if proposals else interim or set_aside
-                or _done_line(steps))
+                or _done_line(steps, first_done))
         # Every call gets a result and the turn ends on an answer.
         last = new[-1]
         if last.get("kind") == "step" and last.get("calls"):
@@ -849,6 +859,29 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                  for c in last["calls"]], ""))
         if new[-1].get("kind") != "step":
             new.append(_final_step(fmt, message))
+        if proposals and _TEST_ASK.search(text or "") and not any(
+                s_.get("tool") == "run_test" and s_.get("ok") for s_ in steps):
+            # Asked to test and never did (chat eval: the 9B wrote that it
+            # can't): run it here, card and all. The note goes after the
+            # answer, so the log stays append-only for the cache.
+            got = _auto_test(lib, proposals)
+            if got is not None:
+                args_, report = got
+                names_ = [str(lib.names.get(i) or i) for i in args_["stack"]]
+                step_: dict[str, Any] = {
+                    "tool": "run_test", "ok": True, "auto": True,
+                    "note": f"Ran {', '.join(names_[:4])} with the proposed changes"}
+                card = getattr(lib, "last_card", None)
+                if card:
+                    step_["card"] = card
+                    lib.last_card = None
+                steps.append(step_)
+                if emit:
+                    await emit({"type": "tool", "step": step_})
+                new.append(ai_chatlog.note_entry(
+                    AUTO_TEST_NOTE + f"run_test {_json.dumps(args_, sort_keys=True)}:\n"
+                    + ai_budget.clip(report, prof["result_chars"])))
+                message = message.rstrip() + "\n\n" + AUTO_TESTED
     if not pause and _TESTED.search(message or "") and not any(
             s_.get("tool") == "run_test" and s_.get("ok") for s_ in steps):
         # Chat eval round 1: "I ran a test on your Lighting wildcard" after
@@ -966,6 +999,46 @@ PACK_FIRST = ("the user asked for a whole pack: call plan_pack with its descript
               "builds it. Only if they asked for just these few items, call this again")
 
 
+#: The user asking for a test of what the answer proposes ("test it
+#: first", "try it", "dry run", "check it", "run a test").
+_TEST_ASK = re.compile(
+    r"\b(?:test(?:s|ed|ing)?|dry[- ]runs?|(?:try|run|check)\s+(?:it|them|that|this|one|"
+    r"first|out)|run\s+(?:a\s+)?tests?)\b", re.I)
+#: Told to the model, after its answer, when the server ran the test it
+#: didn't (the user reads the card; the model reads this next turn).
+AUTO_TEST_NOTE = ("(The user asked for a test and your answer proposed changes without "
+                  "running one, so run_test ran on the proposed changes for them. Its "
+                  "report, for your next answer:)\n\n")
+#: Added to the answer the user sees when that happened.
+AUTO_TESTED = ("*(You asked for a test: the proposed changes ran on the engine; the test card "
+               "shows what they do.)*")
+
+
+def _auto_test(lib: Any, proposals: list[dict[str, Any]]) -> tuple[dict[str, Any], str] | None:
+    """`run_test` on the items this answer's cards change, the way the
+    model's own ``{"stack": […], "proposed": true}`` call runs it. Chat eval
+    (9B): asked to test first, it proposed the change and wrote that it
+    can't run tests. Returns ``(args, report)``, or None when nothing
+    testable was proposed or the run fails (then the answer stands as it
+    was: a check that can't run is no answer's fault)."""
+    ids: list[str] = []
+    for p in proposals:
+        op = p.get("op") if isinstance(p.get("op"), dict) else {}
+        if p.get("tool") not in ai_chat.CHECKABLE_TOOLS:
+            continue
+        iid = op.get("id") if op.get("op") == "update" else (op.get("body") or {}).get("id")
+        if isinstance(iid, str) and iid not in ids:
+            ids.append(iid)
+    if not ids:
+        return None
+    args: dict[str, Any] = {"stack": ids, "proposed": True}
+    try:
+        report = lib.run("run_test", args)
+    except Exception:  # noqa: BLE001 - the answer stands without the check
+        return None
+    return (args, report) if isinstance(report, str) else None
+
+
 #: Added to such an answer when no card came with it.
 _TESTED = re.compile(r"\b(?:I(?:'ve| have)?\s+(?:just\s+)?(?:ran|run|tested)\b|"
                      r"\b(?:the\s+)?test\s+(?:ran|run|shows|showed|passed)\b)", re.I)
@@ -997,14 +1070,15 @@ def _stuck_line(steps: list[dict[str, Any]]) -> str:
             + "\n\nTell me which way to go, or ask for one part at a time.")
 
 
-def _done_line(steps: list[dict[str, Any]]) -> str:
+def _done_line(steps: list[dict[str, Any]], paused_done: list[str] | None = None) -> str:
     """The answer when the model said nothing after acting: what it did,
     never a bare "Done."."""
     undone = {str(x.get("note"))[len("Couldn't: "):] for x in steps
               if not x.get("ok") and str(x.get("note") or "").startswith("Couldn't: ")}
-    did = [str(x.get("note")) for x in steps
-           if x.get("ok") and x.get("note") and not x.get("say") and not x.get("think")
-           and x.get("note") not in undone]
+    did = [*(paused_done or []),
+           *(str(x.get("note")) for x in steps
+             if x.get("ok") and x.get("note") and not x.get("say") and not x.get("think")
+             and x.get("note") not in undone)]
     pointed = [n[len("Pointed at "):] for n in did if n.startswith("Pointed at ")]
     if pointed:
         # "Where is X?" answered by pointing: say so in words.
@@ -1022,6 +1096,7 @@ async def _paused_results(
     server results made before the pause plus each paused call's answer."""
     by_id = {it["id"]: it for it in paused.get("items") or [] if isinstance(it, dict)}
     steps: list[dict[str, Any]] = []
+    done: list[str] = []
     for c in paused.get("calls") or []:
         answer = got.get(c["id"], {"cancelled": True})
         if c["tool"] in ai_tools.WEB and answer.get("approve") in ("once", "chat"):
@@ -1060,10 +1135,17 @@ async def _paused_results(
             if c["tool"] == "open" and not answer.get("denied"):
                 text += ai_client_tools.open_note(c["args"])
                 meta.pop("page_read", None)  # a new page: read it again
+            if not (answer.get("denied") or answer.get("cancelled")
+                    or ai_client_tools.failed(text)):
+                # Its step line was shown when the turn paused, so not
+                # again; an empty final answer still says what was done
+                # (browser check 2026-10-19: a highlight that worked ended
+                # on "The model gave an empty answer").
+                done.append(str(c.get("label") or c["tool"]))
         by_id[c["id"]] = {"id": c["id"], "tool": c["tool"], "text": text}
     order = [i for i in paused.get("order") or [] if i in by_id]
     order += [i for i in by_id if i not in order]
-    return [by_id[i] for i in order], steps
+    return [by_id[i] for i in order], steps, done
 
 
 #: Most result links a chat remembers for read_result.

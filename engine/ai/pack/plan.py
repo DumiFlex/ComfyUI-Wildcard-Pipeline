@@ -72,6 +72,10 @@ _GENERIC = {"character", "subject", "person", "input", "name", "prompt", "text",
             "main", "user", "custom", "given"}
 
 
+#: Tags a plan item lists (a graph slot lists every axis value).
+MAX_TAGS = 48
+
+
 def _names_input(var: str, request: str) -> bool:
     """Whether the request names what the input is ("my character's
     gender" for $character_gender): its own words, or its generic word
@@ -560,7 +564,7 @@ def compile_plan(
             "var": var, "section": match, "about": about,
             "count": max(MIN_COUNT, min(MAX_COUNT, count)) if kind == "wildcard" else 0,
             "tags": list(dict.fromkeys(
-                t for t in (_tag(x) for x in it.get("tags") or []) if t))[:16]
+                t for t in (_tag(x) for x in it.get("tags") or []) if t))[:MAX_TAGS]
             if kind == "wildcard" else [],
             "source": _var(it.get("source")) if kind == "constraint" else "",
             "target": _var(it.get("target")) if kind == "constraint" else "",

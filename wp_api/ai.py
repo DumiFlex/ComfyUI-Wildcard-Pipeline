@@ -19,6 +19,7 @@
                                     server keeps the chat (`ai_chats`)
     POST /wp/api/ai/pack/plan       pack builder: an outline from a request
     POST /wp/api/ai/pack/change     pack builder: rewrite or add one plan item
+    POST /wp/api/ai/pack/images     pack builder: what added images add to a graph plan
     POST /wp/api/ai/pack/search     pack builder: run web searches the user allowed
     POST /wp/api/ai/pack/review     check a plan against the guide (+ model review)
     POST /wp/api/ai/pack/item       build one planned item (not saved)
@@ -102,6 +103,7 @@ from wp_api._ai_pack import (
     post_bundle_split,
     post_pack_change,
     post_pack_check,
+    post_pack_images,
     post_pack_install,
     post_pack_item,
     post_pack_plan,
@@ -281,6 +283,7 @@ def register(router: web.UrlDispatcher) -> None:
     add("POST", "/wp/api/ai/chats/{chat_id}/compact", post_compact)
     add("POST", "/wp/api/ai/pack/plan", post_pack_plan)
     add("POST", "/wp/api/ai/pack/change", post_pack_change)
+    add("POST", "/wp/api/ai/pack/images", post_pack_images)
     add("POST", "/wp/api/ai/pack/search", post_pack_search)
     add("POST", "/wp/api/ai/pack/item", post_pack_item)
     add("POST", "/wp/api/ai/pack/check", post_pack_check)

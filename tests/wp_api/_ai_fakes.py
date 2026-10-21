@@ -89,6 +89,14 @@ async def fake_llm(aiohttp_server):
                 "n_prompt_tokens": 17339, "n_ctx": 16384}})
             return web.json_response(
                 {"error": "Engine protocol predict request returned 400: " + detail}, status=500)
+        if "tools" in body and overrides.get("_peg"):
+            # LM Studio with a chat template its tool-call parser can't
+            # read (the stock Qwen3.5 template): it takes the tools, then
+            # fails on what the model wrote.
+            overrides["_peg"] -= 1
+            return web.json_response({"error": (
+                "The model produced output that does not match the expected peg-native "
+                "format. Error: Unexpected token at position 0")}, status=500)
         if "tools" in body and body.get("model") == "refuser":
             return web.json_response({"error": {"message": "this model has no tool support"}},
                                      status=400)
@@ -171,7 +179,7 @@ async def fake_llm(aiohttp_server):
 
     async def lmstudio_model(request):
         mid = request.match_info["mid"]
-        caps = ["tool_use"] if mid == "tooly" else []
+        caps = ["tool_use"] if mid.startswith("tooly") else []
         # A roomy window unless a test sets a small one (`overrides["_ctx"]`).
         out = {"id": mid, "loaded_context_length": overrides.get("_ctx", 65536),
                "capabilities": caps}

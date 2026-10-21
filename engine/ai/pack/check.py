@@ -7,11 +7,13 @@ import re
 from typing import Any
 
 from engine.ai import lint as ai_lint
+from engine.ai.pack import graph as pack_graph
 from engine.ai.pack._common import (
     CHECK_SEEDS,
     MAX_COUNT,
     SAMPLE_PROMPTS,
     TWIN_SEEDS,
+    VERIFY_SEEDS,
     _chunks,
     _reads,
     is_wild,
@@ -39,8 +41,10 @@ def check_pack(
 ) -> dict[str, Any]:
     """Run the pack on the engine. Returns ``{runs, failed, problems:
     {key: [text]}, notes: [text], variables: [{var, distinct, top}],
-    prompts: [{seed, text, negative}], order: [key]}`` (``order``: the
-    items in run order). ``problems`` are what an item's
+    prompts: [{seed, text, negative}], order: [key], relations: [...],
+    distinct}`` (``order``: the items in run order; ``relations``: a graph
+    plan's relations as ``verify_relations`` checked them, a broken one is
+    also a note; ``distinct``: distinct prompts ÷ runs). ``problems`` are what an item's
     repair gets told; ``notes`` are pack-wide. Inputs are pinned to their
     examples; refs resolve against the pack and ``library``. With ``base``
     the bundle being extended runs too, as it will after install."""
@@ -125,7 +129,8 @@ def check_pack(
     owned = [i for i in plan["items"] if i["var"] and i["key"] in built
              and i["kind"] not in ("constraint", "template")]
     runs: list[dict[str, Any]] = []
-    for seed in seed_list[:TWIN_SEEDS]:
+    # A graph plan's relations are checked on these runs too: more of them.
+    for seed in seed_list[:VERIFY_SEEDS if isinstance(plan.get("graph"), dict) else TWIN_SEEDS]:
         try:
             runs.append(PipelineEngine().run(copy.deepcopy(modules),
                                              ctx={**pinned, "__wp_catalog__": catalog}, seed=seed))
@@ -146,7 +151,22 @@ def check_pack(
         else:
             seen.append({"var": i["var"], "vals": vals})
     tpl = _template(plan, built)
+    rendered: list[str] = []
+    if tpl is not None and isinstance(plan.get("graph"), dict):
+        neg0 = built[tpl[0]["key"]]["payload"].get("negative_template") or ""
+        for ctx in runs:
+            try:
+                rendered.append(render(tpl[1], neg0, ctx)[0].lower())
+            except Exception:  # noqa: BLE001 - a failed run is reported elsewhere
+                rendered.append("")
+    relations = pack_graph.verify_relations(plan, built, runs, rendered or None)
+    for r in relations:
+        if r["checked"] and not r["holds"]:
+            notes.append(f"Rule never fired in the {len(runs)} test runs: {r['text']}"
+                         if r.get("why") else
+                         f"Rule broken in {r['broken']} of {r['seen']} runs: {r['text']}")
     prompts: list[dict[str, Any]] = []
+    distinct = 0.0
     if tpl is not None:
         item, text = tpl
         set_vars = set(report["variables"]) | set(pinned) | (
@@ -169,6 +189,7 @@ def check_pack(
                 prompts.append({"seed": seed, "text": prompt, "negative": negative})
             except Exception as exc:  # noqa: BLE001 - shown, not raised
                 prompts.append({"seed": seed, "text": f"(failed: {exc})", "negative": ""})
+        distinct = _distinct(runs, text, neg)
         for k, said in _repeats(plan, built, runs, text, neg).items():
             problems.setdefault(k, []).append(said)
         for k, said in _overlaps(plan, built, text).items():
@@ -198,7 +219,19 @@ def check_pack(
                                if str(m.get("_uid")) in by_id))
     return {"runs": report["runs"], "failed": report["failed"], "problems": problems,
             "notes": notes, "variables": variables, "prompts": prompts, "quality": quality,
-            "order": order}
+            "order": order, "relations": relations, "distinct": distinct}
+
+
+def _distinct(runs: list[dict[str, Any]], text: str, neg: str) -> float:
+    """Distinct prompts over the runs ÷ runs: a pack that collapsed to one
+    prompt scores near 0, one that never repeats 1."""
+    shown: set[str] = set()
+    for ctx in runs:
+        try:
+            shown.add(render(text, neg, ctx)[0].strip().lower())
+        except Exception:  # noqa: BLE001 - a failed run is reported elsewhere
+            continue
+    return round(len(shown) / len(runs), 2) if runs else 0.0
 
 
 def _lists_all(plan: dict[str, Any], built: dict[str, Any],
