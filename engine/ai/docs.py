@@ -227,6 +227,23 @@ def retrieve(query: str, *, seen: set[str], limit: int = 2) -> tuple[str, list[s
     return "\n".join(lines), keys
 
 
+def explain(topic: str) -> str:
+    """docs_search and docs_read in one call: the best section's text, and
+    the next hits as pointers (a small model often stopped after the search
+    and answered from the snippets)."""
+    scored = _scored(topic)
+    if not scored:
+        return "no docs section matches; the pages are:\n" + contents()
+    _score, _share, p, sec = scored[0]
+    text = sec["text"]
+    if len(text) > MAX_READ:
+        text = text[:MAX_READ] + " …"
+    more = [f"- {q['id']} › {t['title']}" for _s, _h, q, t in scored[1:4]]
+    tail = ("\n\nAlso about this (docs_read for more):\n" + "\n".join(more)) if more else ""
+    return (f"Docs › {p['title']} › {sec['title']} (page id {p['id']}):\n{text}{tail}\n\n"
+            f"Link it in your answer as Docs › {p['title']} › {sec['title']}.")
+
+
 def read(page_id: Any, section: Any = None) -> str:
     p = page(page_id)
     if p is None:

@@ -156,6 +156,7 @@ async def post_test(request: web.Request) -> web.Response:
     result = await _ai_client.probe(cfg)
     result["embed"] = await _ai_embed.check(cfg) if result.get("ok") else None
     result["prefix"] = await _prefix(request, cfg) if result.get("json_ok") else None
+    result["tool_steps"] = await _ai_chat.probe_steps(cfg) if result.get("json_ok") else None
     return json_ok(result)
 
 

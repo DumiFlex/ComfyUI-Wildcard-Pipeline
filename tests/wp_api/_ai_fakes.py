@@ -46,6 +46,10 @@ def _chat_step(schema: dict, chat_steps: list) -> object:
     with calls and leaves a plain reply for the answer ask ({message})."""
     props = schema["properties"]
     nxt = chat_steps[0] if chat_steps else {"message": "Done.", "calls": []}
+    if "tool" in props and "calls" not in props:
+        # Choose-then-fill's choose ask: the next step's first tool, or answer.
+        calls = [] if isinstance(nxt, str) else nxt.get("calls") or []
+        return {"plan": "", "tool": calls[0]["tool"] if calls else "answer"}
     if "calls" in props and "message" not in props:
         if isinstance(nxt, str) or nxt.get("calls"):
             if chat_steps:

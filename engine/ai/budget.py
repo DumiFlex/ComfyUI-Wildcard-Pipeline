@@ -37,12 +37,12 @@ PROFILES: dict[str, dict[str, Any]] = {
     # that calls again can't happen.
     "small": {"chat_temp": 0.15, "result_chars": 3500, "history_chars": 14000, "slim": True,
               "scoped": True, "split": True, "act_temp": 0.15, "write_temp": 0.4,
-              "act_calls": 1},
+              "act_calls": 1, "compact_at": 0.5},
     # Medium models pick better among fewer tools too: the page's tools plus
     # the common ones, the rest one more_tools call away.
     "medium": {"chat_temp": 0.25, "result_chars": 7000, "history_chars": 30000, "slim": False,
                "scoped": True, "split": True, "act_temp": 0.15, "write_temp": 0.4,
-               "act_calls": 3},
+               "act_calls": 3, "compact_at": 0.65},
     "large": {"chat_temp": 0.4, "result_chars": 14000, "history_chars": 90000, "slim": False,
               "scoped": False},
 }

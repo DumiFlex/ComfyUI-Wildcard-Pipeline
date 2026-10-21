@@ -1721,7 +1721,7 @@ async def test_a_medium_model_gets_the_page_tools_and_asks_for_the_rest(wp_clien
     assert "- create_wildcard " in first and "- create_bundle " not in first
     assert "- more_tools " in first
     results = fake_llm.seen[1]["body"]["messages"][-1]["content"]
-    assert "call more_tools first" in results
+    assert 'call more_tools with {"group": "bundles"} first, then create_bundle' in results
     later = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
     assert "create_bundle" in later
     assert out["message"] == "Now I can."

@@ -54,10 +54,13 @@ SCHEMA = {
 _ID = re.compile(r"\b[0-9a-f]{8}\b")
 
 
-def threshold(window: int) -> int:
-    """Prompt tokens past which the chat is compacted: 75% of the window, or
-    less so the answer keeps OUTPUT_RESERVE (never under half the window)."""
-    return int(max(window * 0.5, min(window * TRIGGER, window - OUTPUT_RESERVE)))
+def threshold(window: int, trigger: float | None = None) -> int:
+    """Prompt tokens past which the chat is compacted: `trigger` (75% by
+    default; a small model's profile sets less, since it reads a long
+    context worse well before it is full) of the window, or less so the
+    answer keeps OUTPUT_RESERVE (never under half the window)."""
+    at = TRIGGER if trigger is None else trigger
+    return int(max(window * 0.5, min(window * at, window - OUTPUT_RESERVE)))
 
 
 def split_point(entries: list[dict[str, Any]], meta: dict[str, Any],

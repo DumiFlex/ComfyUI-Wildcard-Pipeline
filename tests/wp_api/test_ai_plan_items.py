@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 
+from engine.ai import docs, examples, recipes
 from engine.ai import plan_items as plan
 from engine.ai import tools as ai_tools
 from tests.wp_api.test_ai_api import _chat
@@ -118,3 +119,115 @@ async def test_a_shortlist_turn_widens_after_more_tools(wp_client, fake_llm):
     first, second = fake_llm.seen[n], fake_llm.seen[n + 1]
     assert "more_tools" in _offered(first) and "create_template" not in _offered(first)
     assert len(_offered(second)) > len(_offered(first))
+
+
+def test_examples_pick_the_closest_calls_the_chat_can_make(tmp_path, monkeypatch):
+    monkeypatch.setenv("WP_AI_CONFIG_PATH", str(tmp_path / "ai.json"))
+    tools = ["search", "read", "create_wildcard", "add_options"]
+    got = examples.pick("make a hair wildcard", tools)
+    assert got and got[0]["tool"] == "create_wildcard"
+    assert all(e["tool"] in tools for e in got)
+    assert examples.pick("and how many options?", tools) == []
+    examples.remember([{"ask": "make a hair color wildcard", "tool": "create_wildcard",
+                        "args": {"name": "Hair", "options": [{"text": f"o{i}"}
+                                                             for i in range(9)]}}])
+    kept = examples.load()
+    assert len(kept[0]["args"]["options"]) == 3  # cut to a few
+    assert examples.pick("make a hair wildcard", tools)[0]["ask"] == "make a hair color wildcard"
+    assert 'make a hair color wildcard" → create_wildcard {' in examples.note(kept)
+
+
+async def test_an_applied_card_becomes_an_example(wp_client, fake_llm):
+    _on(fake_llm)
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(
+            {"name": "Mood", "var": "mood", "options": [{"text": "calm"}, {"text": "tense"}]})}]},
+        {"message": "", "calls": [{"tool": "run_test", "args": json.dumps(
+            {"stack": ["Mood"], "proposed": True})}]},
+        {"message": "Proposed Mood.", "calls": []},
+    ])
+    out = await _chat(wp_client, "make me a mood wildcard for portraits")
+    pid = out["proposals"][0]["pid"]
+    r = await wp_client.patch(f"/wp/api/ai/chats/{out['chat_id']}",
+                              json={"events": [{"pid": pid, "status": "applied"}]})
+    assert r.status == 200
+    assert examples.load()[-1]["ask"] == "make me a mood wildcard for portraits"
+    fake_llm.chat_steps.append({"message": "Sure.", "calls": []})
+    n = len(fake_llm.seen)
+    await _chat(wp_client, "make a portrait lighting wildcard")
+    asked = fake_llm.seen[n]["body"]["messages"][-1]["content"]
+    assert "Calls that worked for similar requests" in asked
+    assert '"make me a mood wildcard for portraits" → create_wildcard' in asked
+
+
+async def test_later_split_steps_say_what_the_answer_did(wp_client, fake_llm):
+    _on(fake_llm)
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "search", "args": json.dumps({"query": "x"})}]},
+        {"message": "", "calls": [{"tool": "search", "args": json.dumps({"query": "y"})}]},
+        {"message": "Nothing.", "calls": []},
+    ])
+    n = len(fake_llm.seen)
+    await _chat(wp_client, "look for x and y")
+    later = fake_llm.seen[n + 2]["body"]["messages"][-1]["content"]
+    assert "So far in this answer you looked at" in later
+
+
+def test_a_recipe_fits_the_ask():
+    assert "run_test" in recipes.recipe("why do I never get red hair?")
+    assert "edit_options" in recipes.recipe("make rain rarer")
+    assert "explain" in recipes.recipe("how do constraints work")
+    assert recipes.recipe("make a hair wildcard") == ""
+
+
+def test_explain_reads_the_best_docs_section():
+    out = docs.explain("constraint target reach")
+    assert out.startswith("Docs › ") and "Link it in your answer" in out
+    assert "no docs section matches" in docs.explain("zzqx")
+
+
+async def test_choose_first_names_the_tool_then_fills_only_its_args(wp_client, fake_llm):
+    _on(fake_llm, choose_first=True)
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "search", "args": json.dumps({"query": "hair"})}]},
+        {"message": "You have no hair items.", "calls": []},
+    ])
+    n = len(fake_llm.seen)
+    body = await _chat(wp_client, "what do I have for hair?")
+    asks = fake_llm.seen[n:]
+    first = _schema(asks[0])["properties"]
+    assert "tool" in first and "answer" in first["tool"]["enum"]
+    assert _offered(asks[1]) == ["search"]  # the fill ask: that tool only
+    assert body["message"] == "You have no hair items."
+
+
+def test_a_struggling_local_answer_offers_a_cloud_model_once():
+    from wp_api import _ai_turn
+    assert _ai_turn._struggled("I ran out of steps before finishing; ask me to continue.",
+                               {}, None)
+    assert _ai_turn._struggled("Done.", {"create_wildcard": 3}, None)
+    assert not _ai_turn._struggled("Here you go.", {"read": 1}, None)
+
+
+async def test_cloud_offer_names_a_provider_with_a_key(wp_client, fake_llm):
+    from engine.ai import config as ai_config
+    ai_config.update({"provider": "anthropic", "api_key": "sk-ant-test"})
+    assert ai_config.cloud_ready() == ["Claude"]
+    _on(fake_llm)
+    fake_llm.chat_steps.extend(
+        [{"message": "", "calls": [{"tool": "search", "args": json.dumps({"query": f"q{i}"})}]}
+         for i in range(5)])
+    fake_llm.chat_steps.append({"message": "", "calls": []})
+    fake_llm.chat_steps.append({"message": "", "calls": []})
+    body = await _chat(wp_client, "loop")
+    assert "You have Claude set up" in body["message"]
+
+
+async def test_test_connection_tries_a_small_model_tool_step(wp_client, fake_llm):
+    _on(fake_llm)
+    fake_llm.chat_steps.append(
+        {"message": "", "calls": [{"tool": "search", "args": json.dumps({"query": "hair"})}]})
+    body = await (await wp_client.post("/wp/api/ai/test")).json()
+    assert body["tool_steps"] == {"typed": True, "picked": True, "error": None}
+    probe = fake_llm.seen[-1]["body"]
+    assert probe["reasoning_effort"] == "none"  # thinking off, as a chat's act ask
