@@ -76,17 +76,26 @@ async def _chat_step(
     names: list[str], prof: dict[str, Any], num_ctx: int, cache_key: str,
     emit: Any = None, typed: bool = False, decls: list[dict[str, Any]] | None = None,
     split: bool = False, answer_only: bool = False,
+    offer: list[Any] | None = None, must_call: bool = False,
 ) -> dict[str, Any]:
     """One model step, asked again once with the problem named when a
     JSON-mode answer isn't usable: small models usually fix a named error.
     `typed`: JSON-mode args follow each tool's schema (local servers); a
     server that can't take that schema is asked again with the string form.
     `split`: asked in two parts, act then answer (`_ai_chat.split_step`);
-    `answer_only` skips the act part (the step is told to answer)."""
+    `answer_only` skips the act part (the step is told to answer).
+    `offer` (typed JSON only): the tools this step's grammar allows instead
+    of all of the chat's (a shortlist, a plan, a plan item); the prompt and
+    native declarations stay the same, so the cached prefix does too.
+    `must_call`: a split act ask that must call (with `offer`)."""
     chosen = ai_tools.tools(names)
     native = decls if decls is not None else ai_tools.native(chosen, cfg["api"])
     typed = typed and fmt == "json" and _ai_chat.checks_schema(cfg)
-    schema = ai_tools.step_schema(names, chosen if typed else None)
+    if typed and offer:
+        chosen = list(offer)
+    else:
+        must_call = False
+    schema = ai_tools.step_schema([t.name for t in chosen], chosen if typed else None)
     problem = ""
     attempt = 0
     while attempt < 2:
@@ -101,9 +110,11 @@ async def _chat_step(
                     write_temp=prof.get("write_temp", prof["chat_temp"]),
                     max_calls=int(prof.get("act_calls") or 0), num_ctx=num_ctx,
                     cache_key=cache_key, emit=emit, answer_only=answer_only,
+                    must_call=must_call,
                 )
             return await _ai_chat.step(
-                cfg, system=system, log=asked, fmt=fmt, tools=native, names=names,
+                cfg, system=system, log=asked, fmt=fmt, tools=native,
+                names=[t.name for t in chosen],
                 schema=schema, temperature=prof["chat_temp"], num_ctx=num_ctx,
                 cache_key=cache_key, emit=emit,
             )
@@ -111,6 +122,7 @@ async def _chat_step(
             raise
         except _ai_client.AIError as e:
             if typed and _ai_chat.refused_schema(cfg, e):
+                chosen, must_call = ai_tools.tools(names), False
                 typed, schema = False, ai_tools.step_schema(names)
                 continue  # the same ask, args as a string
             if attempt or fmt != "json" or "JSON" not in e.message:

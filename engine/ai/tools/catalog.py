@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from dataclasses import replace
+from typing import Any
 
 from engine.ai.chat_manage import CATEGORY_ICONS
 from engine.ai.tools.registry import Tool, any_of, arr, b, n, obj, s
@@ -668,6 +670,90 @@ TOOLS: list[Tool] = [
     ),
 ]
 
+#: When to pick each easily confused tool, the look-alike to pick when not,
+#: and one sample call (research note "Small model tool use", T4: a small
+#: model picks better from use-when lines and examples than from the
+#: schema, which a grammar never shows it).
+_GUIDE: dict[str, tuple[str, dict[str, Any] | None]] = {
+    "search": ("you need to find items by subject; not for an item you already know by name "
+               "or id (read it).", {"query": "hair color", "type": "wildcard"}),
+    "read": ("you need an item's options or rules before you change or explain it; not to "
+             "find items (search).", {"id": "Weather"}),
+    "variables": ("you need which variables exist, or what sets and reads one; not for an "
+                  "item's content (read).", {"var": "hair_color"}),
+    "docs_search": ("the user asks how the app, a setting or a feature works; then docs_read "
+                    "the best hit. Not for the user's own items (search).",
+                    {"query": "constraint reach"}),
+    "docs_read": ("docs_search found the page; link it in your answer as Docs › page › "
+                  "section.", {"page": "constraints", "section": "Target reach"}),
+    "react": ("thanks, praise or good news; never instead of answering.", {"emoji": "👍"}),
+    "run_test": ("you check a change you proposed (proposed: true) or find why something "
+                 "never shows; not to show the user the Test Runner (show_test).",
+                 {"stack": ["Season", "Weather"], "proposed": True}),
+    "more_tools": ("the job needs a tool you don't have; never fake one item type with "
+                   "another's tool.", {"group": "templates"}),
+    "create_wildcard": ("a new list of options picked one per run; not new options for a "
+                        "wildcard that exists (add_options), text that never changes "
+                        "(create_fixed_values) or variables joined (create_combine).",
+                        {"name": "Weather", "var": "weather",
+                         "options": [{"text": "light rain"}, {"text": "clear sky", "weight": 2}]}),
+    "add_options": ("new options for a wildcard that exists; not to change its options "
+                    "(edit_options).", {"id": "Weather", "options": [{"text": "thick fog"}]}),
+    "edit_options": ("you change, remove, retag or reweight options a wildcard has, by the "
+                     "numbers read shows; read it first.",
+                     {"id": "Weather", "weights": [{"n": 2, "weight": 5}], "remove": [4]}),
+    "create_derivation": ("a variable is set or changed from others with IF / ELSE; not to "
+                          "change a wildcard's odds (create_constraint).",
+                          {"name": "Rain gear", "rules": [{
+                              "summary": "an umbrella when it rains",
+                              "branches": [{"conditions": [{"var": "weather", "op": "contains",
+                                                            "value": "rain"}],
+                                            "actions": [{"target_var": "props", "mode": "append",
+                                                         "value": "umbrella"}]}]}]}),
+    "add_rules": ("new rules for a derivation that exists; to change its rules use "
+                  "edit_rules.", None),
+    "edit_rules": ("you change, move or remove a derivation's rules by the numbers read "
+                   "shows; new rules go in add_rules.",
+                   {"id": "Rain gear", "remove": [2]}),
+    "create_constraint": ("one wildcard's pick should rule out, lower, raise or limit "
+                          "another's options; not to set a variable (create_derivation).",
+                          {"name": "No snow in summer", "source_id": "Season",
+                           "target_id": "Weather", "rules": [
+                               {"source": "summer", "target": "snow", "effect": "exclude"}]}),
+    "create_fixed_values": ("variables that are the same text every run (quality tags, a "
+                            "style line); not a list to pick from (create_wildcard).",
+                            {"name": "Quality", "values": [
+                                {"name": "quality", "value": "masterpiece, best quality"}]}),
+    "create_combine": ("one variable built from others ($top, $shoes); not text that never "
+                       "changes (create_fixed_values).",
+                       {"name": "Outfit line", "var": "outfit",
+                        "template": "$top, $bottom, $shoes"}),
+    "create_template": ("the final prompt the Prompt Assembler writes from variables.", None),
+    "update_info": ("you rename, describe, tag, file or rate ONE item; many items: "
+                    "update_many; option tags: edit_options.",
+                    {"id": "Weather", "tags_add": ["scene"]}),
+    "update_many": ("one change (category, tags, rating) to many items at once.", None),
+    "plan_pack": ("a whole pack or a set of modules for one subject; one to a few items: "
+                  "the create tools.", None),
+    "open": ("the user asks to go to an item, a docs page or a settings page; never to answer "
+             "a question or to give a link (write the link in your answer).",
+             {"doc": "constraints"}),
+    "read_page": ("the user asks about what is on their screen, or before highlight; not for "
+                  "library items (read).", {}),
+    "highlight": ("the user asks where something is on their page; read_page first for its "
+                  "anchors.", {"anchor": "s2", "caption": "Target reach"}),
+    "draft_options": ("the user wants option ideas to pick from; when you know the options, "
+                      "add_options.", None),
+    "show_test": ("the user wants to see a run on the Test Runner page; to check results "
+                  "yourself, run_test.", {"stack": ["Weather"], "seeds": 20}),
+    "use_panel": ("the user asks for an editor's AI panel, or wants to look before anything "
+                  "changes; otherwise propose with the change tools.", None),
+    "ask": ("the answer changes what you build and you can't read it anywhere; never for "
+            "permission.", None),
+}
+TOOLS = [replace(t, when=_GUIDE[t.name][0], example=_GUIDE[t.name][1])
+         if t.name in _GUIDE else t for t in TOOLS]
+
 BY_NAME: dict[str, Tool] = {t.name: t for t in TOOLS}
 READ = tuple(t.name for t in TOOLS if t.kind == "read")
 CHANGE = tuple(t.name for t in TOOLS if t.kind == "change")
@@ -807,6 +893,56 @@ def sync_delete(names: list[str], allowed: bool, group: tuple[str, ...] = DELETE
     if not allowed:
         return [n for n in names if n not in group]
     return [*names, *(t.name for t in TOOLS if t.name in group and t.name not in have)]
+
+
+#: Always on a shortlist: finding and reading, the docs, a reaction, a
+#: test, a question, and the way to every other tool.
+SHORTLIST_CORE = ("search", "read", "variables", "docs_search", "docs_read", "react",
+                  "run_test", "ask", "more_tools")
+#: Words that put the page tools on a shortlist.
+_PAGE_WORDS = re.compile(r"\b(?:page|screen|where|open|go to|take me|show me|point|highlight"
+                         r"|button|field|section|this|here|link)\b", re.I)
+_INFO_WORDS = re.compile(r"\b(?:rename|describ\w*|description|name it|call it)\b", re.I)
+_WORD = re.compile(r"[a-z]{4,}")
+
+
+def _stems(text: str) -> set[str]:
+    return {w.rstrip("s") for w in _WORD.findall(text.lower())}
+
+
+def shortlist(names: list[str], text: str, route: str | None = None,
+              extra: int = 3) -> list[str] | None:
+    """The tools one message's steps offer a small model (research note
+    "Small model tool use", T2): the core reads, the groups the message
+    names (else the page's main group), the page tools when it talks about
+    the page, and the `extra` tools whose names and use-when lines share
+    the most words with it. The prompt still lists all of the chat's
+    tools, and `more_tools` (always offered) opens the rest for the turn,
+    so a miss costs one step. None when it would offer everything anyway."""
+    if not text:
+        return None
+    key = str(route or "")
+    for suffix in ("-new", "-edit"):
+        if key.endswith(suffix):
+            key = key[: -len(suffix)]
+    groups = set(groups_for(text) or PAGE_GROUPS.get(key, DEFAULT_GROUPS)[:1])
+    want = set(SHORTLIST_CORE)
+    if _PAGE_WORDS.search(text):
+        want |= {"open", "read_page", "highlight"}
+    if _INFO_WORDS.search(text) or "lists" in groups:
+        want.add("update_info")
+    if re.search(r"\bpacks?\b", text, re.I):
+        want.add("plan_pack")  # the turn steers a pack ask to it (`PACK_FIRST`)
+    have = tools(names)
+    want |= {t.name for t in have if groups.intersection(t.groups)}
+    words = _stems(text)
+    scored = sorted(
+        ((3 * len(words & _stems(t.name.replace("_", " ")))
+          + len(words & _stems(t.when or t.summary)), i, t.name)
+         for i, t in enumerate(have) if t.name not in want), reverse=True)
+    want |= {n for score, _, n in scored[:extra] if score >= 2}
+    out = [n for n in names if n in want]
+    return None if len(out) >= len(names) else out
 
 
 def tools(names: list[str]) -> list[Tool]:

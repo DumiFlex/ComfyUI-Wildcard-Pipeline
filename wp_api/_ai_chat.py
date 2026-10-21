@@ -1085,6 +1085,7 @@ async def split_step(
     offered: list[registry.Tool], tools: list[dict[str, Any]], typed: bool,
     act_temp: float, write_temp: float, max_calls: int, num_ctx: int,
     cache_key: str = "", emit: Any = None, answer_only: bool = False,
+    must_call: bool = False,
 ) -> dict[str, Any]:
     """A small or medium model's step asked in two parts (see
     `/pr-drafts/ai-small-model-plumbing.md`):
@@ -1099,14 +1100,16 @@ async def split_step(
     Both asks send the same messages, so the second is a full cache hit.
     The result is one ordinary step, so the log and the history the model
     reads keep their shape. `tools` are the native declarations (the
-    `answer` tool included)."""
+    `answer` tool included). `must_call` (typed JSON): the act ask can't
+    come back empty (`engine/ai/plan_items.py` steps)."""
     names = [t.name for t in offered]
     if fmt == "json":
         plan, thinking = "", ""
         if not answer_only:
             act = await step(cfg, system=system, log=log, fmt="json", tools=[], names=names,
                              schema=registry.act_schema(names, offered if typed else None,
-                                                        max_calls if typed else 0),
+                                                        max_calls if typed else 0,
+                                                        1 if typed and must_call else 0),
                              temperature=act_temp, num_ctx=num_ctx, cache_key=cache_key,
                              emit=emit)
             plan = act["plan"]

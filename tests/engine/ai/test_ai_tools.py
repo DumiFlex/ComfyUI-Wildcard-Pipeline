@@ -6,6 +6,7 @@ import json
 import pytest
 
 from engine.ai import chat, client_tools, tools
+from engine.ai.tools import catalog
 
 
 def test_every_tool_has_code_and_a_matching_prompt_line():
@@ -75,8 +76,9 @@ def test_native_declarations():
     assert oa[0]["type"] == "function" and oa[0]["function"]["name"] == "search"
     assert oa[1]["function"]["parameters"]["required"] == ["id"]
     an = tools.native(chosen, "anthropic")
-    assert an[1] == {"name": "read", "description": chosen[1].summary,
+    assert an[1] == {"name": "read", "description": tools.description(chosen[1]),
                      "input_schema": chosen[1].params}
+    assert an[1]["description"].startswith(chosen[1].summary + " Use when: ")
     json.dumps(tools.native(tools.TOOLS, "openai"))
 
 
@@ -180,3 +182,20 @@ def test_open_with_nothing_to_open_is_refused_with_a_reason():
     lib = chat.Library([], [], [])
     with pytest.raises(ValueError, match="already on screen"):
         client_tools.prepare(lib, "open", {"id": " "})
+
+
+def test_use_when_lines_and_examples():
+    """T4: confusable tools say when to pick them and show a sample call;
+    every sample is a call check_args takes as it is."""
+    for t in catalog.TOOLS:
+        if t.example is not None:
+            args, notes = tools.check_args(t, t.example)
+            assert notes == [], t.name
+            assert args == t.example, t.name
+    for name in ("search", "read", "create_wildcard", "add_options", "edit_options",
+                 "run_test", "show_test", "open", "highlight", "update_info"):
+        assert catalog.BY_NAME[name].when, name
+    lines = tools.prompt_lines(tools.tools(["search", "read", "create_wildcard"]), "read")
+    assert "- search " in lines and "  Use when: you need to find items" in lines
+    assert '  Example: search {"query": "hair color", "type": "wildcard"}' in lines
+    assert "create_wildcard" not in lines  # another kind
