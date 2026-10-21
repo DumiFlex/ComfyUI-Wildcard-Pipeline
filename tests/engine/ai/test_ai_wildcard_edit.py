@@ -145,3 +145,8 @@ def test_an_empty_answer_carries_the_models_reason():
     assert out["changes"] and out["note"] == ""
     out = ed.compile_edit("retag", {"options": []}, options=opts, registry=["happy"])
     assert out["note"] == ""
+    # An empty answer with a reason is a judgement, so "each" doesn't re-ask it.
+    ask = "tag each option with one mood"
+    assert ed.answered_nothing("retag", {"options": []}, ask)
+    assert not ed.answered_nothing("retag", {"options": [], "note": "all tagged already"}, ask)
+    assert ed.answered_nothing("retag", {"options": [], "note": "  "}, ask)

@@ -135,10 +135,16 @@ def answered_nothing(action: str, answer: Any, instruction: str) -> bool:
     (`_EVERY`) lists no option at all: a retag, rewrite or re-weight that
     says "each" or "all" changes something, so the answer is asked for once
     more with `EMPTY_NUDGE`. A removal is never re-asked: "remove all the
-    modern ones" can rightly remove nothing."""
+    modern ones" can rightly remove nothing, and neither is an empty answer
+    that says why in "note": the model judged, and the nudge would push a
+    weaker one into changing tags that were already right (a wildcard
+    already tagged with the asked-for moods, panel eval 2026-10-21)."""
     if action == "remove" or not _EVERY.search(instruction or ""):
         return False
-    return isinstance(answer, dict) and answer.get("options") == []
+    if not isinstance(answer, dict) or answer.get("options") != []:
+        return False
+    note = answer.get("note")
+    return not (isinstance(note, str) and note.strip())
 
 
 def build_edit_prompt(
