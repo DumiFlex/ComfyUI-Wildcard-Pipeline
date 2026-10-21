@@ -144,6 +144,35 @@ describe("AiChatDrawer", () => {
     return { w, router };
   }
 
+  it("shows many cards of one kind as one group card that applies them all", async () => {
+    const make = (n: number) => ({
+      pid: `g${n}`, tool: "create_wildcard", title: `Create wildcard W${n}`, summary: `$w${n} with 2 options`,
+      preview: ["a", "b"], warnings: n === 2 ? ["W2 names what W1 picks"] : [], after: null,
+      op: { op: "create" as const, kind: "module" as const, new_category: "",
+        body: { type: "wildcard" as const, name: `W${n}`, category_id: null, tags: [], payload: {} } },
+    });
+    vi.mocked(api.ai.chat).mockResolvedValueOnce({ ...RESULT, proposals: [1, 2, 3, 4].map(make) });
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("make four wildcards");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    const group = w.get('[data-test="ai-chat-group"]');
+    expect(group.text()).toContain("Create 4 wildcards");
+    expect(group.findAll('[data-test="ai-group-row"]')).toHaveLength(4);
+    // The full cards stay folded until a row opens one.
+    expect(w.findAll('[data-test="ai-chat-proposal"]')).toHaveLength(0);
+    await group.findAll('[data-test="ai-group-open"]')[1].trigger("click");
+    const opened = w.findAll('[data-test="ai-chat-proposal"]');
+    expect(opened).toHaveLength(1);
+    expect(opened[0].attributes("data-in-group")).toBe("true");
+    expect(opened[0].text()).toContain("W2 names what W1 picks");
+    await group.get('[data-test="ai-group-apply"]').trigger("click");
+    await flushPromises();
+    expect(vi.mocked(api.modules.create).mock.calls.map((c) => (c[0] as { name: string }).name)).toEqual(["W1", "W2", "W3", "W4"]);
+    expect(w.get('[data-test="ai-group-counts"]').text()).toContain("4 applied");
+    expect(w.get('[data-test="ai-group-undo"]').text()).toContain("Undo all 4");
+  });
+
   it("sends the chat, shows steps and proposal cards, applies in order", async () => {
     const { w, router } = await mountIt();
     expect(w.find('[data-test="ai-chat-empty"]').exists()).toBe(true);

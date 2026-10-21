@@ -34,6 +34,8 @@ import { copyText } from "../../utils/clipboard";
 import { plainText } from "../../utils/chat-markdown";
 import AiCardView from "./AiCardView.vue";
 import AiSyntax from "./AiSyntax.vue";
+import AiCardGroup from "./AiCardGroup.vue";
+import { cardGroups, groupOf, type CardGroup } from "../../utils/card-groups";
 import AiTestCard from "./AiTestCard.vue";
 import AiCardPreview from "./AiCardPreview.vue";
 import AiPointer from "./AiPointer.vue";
@@ -472,6 +474,40 @@ function rescued(i: number): number {
   return e?.role === "assistant" ? e.result.tool_use?.salvaged ?? 0 : 0;
 }
 
+/* ── Card groups: many cards of one kind as one (`utils/card-groups.ts`) ── */
+
+const groupCache = new WeakMap<object, Map<string, CardGroup>>();
+
+function groupFor(entry: ChatAssistantEntry, p: AiChatProposal): CardGroup | undefined {
+  let by = groupCache.get(entry.result);
+  if (!by) {
+    by = groupOf(cardGroups(entry.result.proposals));
+    groupCache.set(entry.result, by);
+  }
+  return by.get(p.pid);
+}
+
+/** The group card goes where its first card would be. */
+function groupStart(entry: ChatAssistantEntry, p: AiChatProposal): boolean {
+  return groupFor(entry, p)?.pids[0] === p.pid;
+}
+
+/** Grouped cards opened below their row, as "answer:pid". */
+const openInGroup = ref(new Set<string>());
+
+function openIn(i: number): Set<string> {
+  const head = `${i}:`;
+  return new Set([...openInGroup.value].filter((k) => k.startsWith(head)).map((k) => k.slice(head.length)));
+}
+
+function toggleIn(i: number, pid: string): void {
+  const k = `${i}:${pid}`;
+  const next = new Set(openInGroup.value);
+  if (next.has(k)) next.delete(k);
+  else next.add(k);
+  openInGroup.value = next;
+}
+
 function key(i: number, p: AiChatProposal): string {
   return `${i}:${p.pid}`;
 }
@@ -855,10 +891,20 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             </div>
           </article>
 
+          <template v-for="p in entry.result.proposals" :key="p.pid">
+          <AiCardGroup
+            v-if="groupStart(entry, p)"
+            :entry="entry"
+            :group="groupFor(entry, p)!"
+            :proposals="entry.result.proposals"
+            :open="openIn(i)"
+            :status="{ ...entry.status }"
+            @toggle="(pid) => toggleIn(i, pid)"
+          />
           <article
-            v-for="p in entry.result.proposals"
-            :key="p.pid"
+            v-if="!groupFor(entry, p) || openIn(i).has(p.pid)"
             class="wp-ai-chat__card"
+            :data-in-group="groupFor(entry, p) ? 'true' : undefined"
             :data-status="entry.status[p.pid] ?? 'pending'"
             :data-kind="p.op.op === 'delete' ? 'delete' : undefined"
             data-test="ai-chat-proposal"
@@ -1047,6 +1093,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               </template>
             </div>
           </article>
+          </template>
         </div>
       </template>
 
@@ -1310,6 +1357,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__card[data-status="dismissed"], .wp-ai-chat__card[data-status="replaced"] { opacity: 0.6; }
 .wp-ai-chat__card[data-kind="delete"][data-status="pending"] { border-color: color-mix(in oklab, var(--wp-danger) 40%, var(--wp-border)); }
 .wp-ai-chat__confirm { margin-right: auto; font-size: 12px; color: var(--wp-danger); }
+.wp-ai-chat__card[data-in-group] { margin-left: 14px; border-style: dashed; }
 .wp-ai-chat__card[data-status="failed"] { border-color: color-mix(in oklab, var(--wp-danger) 50%, var(--wp-border)); }
 .wp-ai-chat__card-head { position: relative; display: flex; flex-direction: column; gap: 1px; padding-right: 26px; }
 .wp-ai-chat__card-title { font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
