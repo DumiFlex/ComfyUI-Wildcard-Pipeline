@@ -12,7 +12,7 @@ import asyncio
 import json
 import zipfile
 
-from aiohttp import web
+from aiohttp import BodyPartReader, web
 
 from engine.wildcard_files import (
     MAX_FILE_BYTES,
@@ -58,6 +58,8 @@ async def convert_wildcard_files(request: web.Request) -> web.Response:
     try:
         reader = await request.multipart()
         async for part in reader:
+            if not isinstance(part, BodyPartReader):
+                continue
             if part.name == "meta":
                 meta = json.loads(await part.text())
                 continue
