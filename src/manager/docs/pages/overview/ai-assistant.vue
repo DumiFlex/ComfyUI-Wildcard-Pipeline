@@ -445,7 +445,11 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         writes between its steps ("Now I'll add the constraint…") stays folded under the steps as
         a <b>Working note</b>, and when its server sends the model's reasoning (most thinking
         models do, unless Thinking is Off), each step has a folded <b>Thinking</b> you can open to
-        see why it did what it did. Neither is sent back to the model. <b>Stop</b> ends the
+        see why it did what it did. Neither is sent back to the model. To see only the replies
+        and their cards, turn off <b>Show thinking</b>, <b>Show working notes</b> or <b>Show what it
+        did</b> (the read and search lines) under Settings › AI assistant › Chat, each on its own;
+        they only change what you see. A reaction to your message shows as soon as it is
+        decided, not when the answer is done. <b>Stop</b> ends the
         answer. <b>Try again</b> under the last reply asks the same message again for a new
         answer, which replaces the old one; it waits until you undo any change you applied from
         that answer.

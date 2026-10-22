@@ -944,6 +944,42 @@ const off = computed(() => !config.value?.enabled);
               @update:model-value="(v: boolean) => ui.setExplainChip(v)"
             />
           </SettingRow>
+          <SettingRow
+            label="Show thinking"
+            hint="A folded Thinking line with what a thinking model reasoned before each step. Off hides it; the model still thinks as Thinking above says. Saved in this browser."
+            setting-key="ai-chat-show-thinking"
+          >
+            <Toggle
+              :model-value="ui.chatThinking"
+              aria-label="Show thinking"
+              data-test="ai-chat-show-thinking"
+              @update:model-value="(v: boolean) => ui.setChatShow('thinking', v)"
+            />
+          </SettingRow>
+          <SettingRow
+            label="Show working notes"
+            hint="Text the model wrote between steps (“Let me check the docs first”), folded above the reply. Saved in this browser."
+            setting-key="ai-chat-show-notes"
+          >
+            <Toggle
+              :model-value="ui.chatNotes"
+              aria-label="Show working notes"
+              data-test="ai-chat-show-notes"
+              @update:model-value="(v: boolean) => ui.setChatShow('notes', v)"
+            />
+          </SettingRow>
+          <SettingRow
+            label="Show what it did"
+            hint="The lines above a reply that list what the assistant read, searched and ran (“Read the docs: What the assistant can do”). Off shows only the reply and its cards. Saved in this browser."
+            setting-key="ai-chat-show-steps"
+          >
+            <Toggle
+              :model-value="ui.chatSteps"
+              aria-label="Show what it did"
+              data-test="ai-chat-show-steps"
+              @update:model-value="(v: boolean) => ui.setChatShow('steps', v)"
+            />
+          </SettingRow>
         </SettingGroup>
 
         <SettingGroup title="Permissions" note="The assistant can't change these itself.">

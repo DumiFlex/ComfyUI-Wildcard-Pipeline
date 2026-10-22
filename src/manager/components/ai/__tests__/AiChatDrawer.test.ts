@@ -699,6 +699,24 @@ describe("AiChatDrawer", () => {
     w.unmount();
   });
 
+  it("hides thinking and the steps it took when Settings says so", async () => {
+    const { useUiStore } = await import("../../../stores/uiStore");
+    const ui = useUiStore();
+    ui.setChatShow("thinking", false);
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("hi");
+    await w.get('[data-test="ai-chat-input"]').trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(w.find('[data-test="ai-chat-thought"]').exists()).toBe(false);
+    expect(w.get('[data-test="ai-chat-steps"]').text()).toContain('Searched "outfit"');
+    ui.setChatShow("steps", false);
+    await flushPromises();
+    expect(w.find('[data-test="ai-chat-steps"]').exists()).toBe(false);
+    ui.setChatShow("thinking", true);
+    ui.setChatShow("steps", true);
+    w.unmount();
+  });
+
   it("changes thinking from the header", async () => {
     const { w } = await mountIt();
     await w.get('[data-test="ai-chat-thinking"] [data-test="select-trigger"]').trigger("click");

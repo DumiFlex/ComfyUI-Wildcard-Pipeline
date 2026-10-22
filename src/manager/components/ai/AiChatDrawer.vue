@@ -50,6 +50,7 @@ import { useAiChat, type ChatAssistantEntry, type SearchApproval } from "../../c
 import { clearPointer, EDIT_ROUTES } from "../../composables/useAiActions";
 import { useAiConfig } from "../../composables/useAiConfig";
 import { THINKING_OPTIONS, isThinking } from "../../utils/ai-thinking";
+import { useUiStore } from "../../stores/uiStore";
 import { useAiChatWidth } from "../../composables/useAiChatWidth";
 import type { AiCardFix, AiChatCardPart, AiChatPage, AiChatProposal, AiChatStep, AiTestCard as TestCard } from "../../api/types";
 import { currentPageNote, editorForPage } from "../../composables/useOpenEditor";
@@ -183,6 +184,14 @@ async function pickModel(v: string | number | null): Promise<void> {
 }
 
 watch(() => chat.entries.value.length, () => { modelNote.value = ""; });
+
+/* ── What the chat shows (Settings › AI assistant › Chat) ── */
+
+const ui = useUiStore();
+/** The steps above a reply, without the kinds the user hid. */
+function shownSteps(steps: AiChatStep[]): AiChatStep[] {
+  return steps.filter((s) => (s.think ? ui.chatThinking : s.say ? ui.chatNotes : ui.chatSteps));
+}
 
 /* ── Thinking picker (the same setting as Settings › AI › Thinking) ── */
 
@@ -854,8 +863,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
           >
             <i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ rescued(i) }} tool call{{ rescued(i) === 1 ? "" : "s" }} written as text
           </p>
-          <ul v-if="entry.result.steps.length" class="wp-ai-chat__steps" data-test="ai-chat-steps">
-            <template v-for="(s, j) in entry.result.steps" :key="j">
+          <ul v-if="shownSteps(entry.result.steps).length" class="wp-ai-chat__steps" data-test="ai-chat-steps">
+            <template v-for="(s, j) in shownSteps(entry.result.steps)" :key="j">
               <li v-if="s.think" class="wp-ai-chat__said wp-ai-chat__thought" data-test="ai-chat-thought">
                 <details>
                   <summary>Thinking</summary>
@@ -1026,7 +1035,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               >{{ expanded.has(key(i, p)) ? "Show less" : `Show all ${cardOptions(p)!.length}` }}</button>
             </div>
             <AiCardView v-if="cardView(p)" :view="cardView(p)!" />
-            <ol v-else-if="cardSteps(p)" class="wp-ai-chat__steps" data-test="ai-chat-card-steps">
+            <ol v-else-if="cardSteps(p)" class="wp-ai-chat__card-steps" data-test="ai-chat-card-steps">
               <li v-for="(part, j) in cardSteps(p)" :key="j">
                 <span class="wp-ai-chat__step-title">{{ part.title }}</span>
                 <ul class="wp-ai-chat__preview">
@@ -1169,8 +1178,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
       </template>
 
       <div v-if="chat.loading.value && !chat.asking.value.size" class="wp-ai-chat__reply wp-ai-chat__live" data-test="ai-chat-live">
-        <ul v-if="chat.live.value.steps.length" class="wp-ai-chat__steps">
-          <template v-for="(s, j) in chat.live.value.steps" :key="j">
+        <ul v-if="shownSteps(chat.live.value.steps).length" class="wp-ai-chat__steps">
+          <template v-for="(s, j) in shownSteps(chat.live.value.steps)" :key="j">
             <li v-if="s.think" class="wp-ai-chat__said wp-ai-chat__thought"><details><summary>Thinking</summary><p class="wp-ai-chat__thought-text">{{ s.note }}</p></details></li>
             <li v-else-if="s.say" class="wp-ai-chat__said"><details><summary>Working note</summary><AiMessage :text="s.note" /></details></li>
             <li v-else :data-ok="s.ok ? 'true' : 'false'">
@@ -1452,8 +1461,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__icon-btn:hover, .wp-ai-chat__icon-btn:focus-visible { color: var(--wp-text); background: var(--wp-bg-3); }
 .wp-ai-chat__zoom:hover { color: var(--wp-text); background: var(--wp-bg-3); }
 .wp-ai-chat__card-summary { font-size: 12px; color: var(--wp-text-muted); }
-.wp-ai-chat__steps { margin: 4px 0; padding-left: 20px; display: grid; gap: 4px; }
-.wp-ai-chat__steps > li::marker { color: var(--wp-text-dim); font-size: 11px; }
+.wp-ai-chat__card-steps { margin: 4px 0; padding-left: 20px; display: grid; gap: 4px; }
+.wp-ai-chat__card-steps > li::marker { color: var(--wp-text-dim); font-size: 11px; }
 .wp-ai-chat__step-title { font-size: 12px; font-weight: 600; color: var(--wp-text); }
 .wp-ai-chat__preview {
   margin: 0; padding: 6px 8px 6px 22px; font-size: 12px; border-radius: 6px;
