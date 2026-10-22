@@ -80,16 +80,16 @@ You stack **modules** inside a **WP Context** node. Each module sets one or more
 | **Constraint** | Makes an earlier pick change the odds of a later one, or rule options out entirely. |
 | **Bundle** | A saved group of modules you can drop in as one piece. |
 
-Options can point at other modules with `@name`, so a wildcard can nest another
-one. If the module you want doesn't exist yet, pick **Placeholder** from the `@`
-list and connect it later.
+An option can draw from another wildcard: type `@` in the option and pick it from
+the list, and it goes in as a reference chip (`@{…}`). If the module you want
+doesn't exist yet, pick **Placeholder** from the `@` list and connect it later.
 
 ### Nodes
 
 | Node | What it does |
 |---|---|
 | **WP Context** | Holds your module stack and outputs the picked variables. Chain several together. |
-| **WP Prompt Assembler** | Fills `$variables` in a template. Also supports inline `{a\|b\|c}` picks. |
+| **WP Prompt Assembler** | Fills `$variables` in a template and collects their negative words into a second output. |
 | **WP Context Loop** + **WP Seed List** | Run the whole chain N times from one Generate, each with its own prompt and seed, or sweep every combination of chosen wildcard options. |
 | **WP Context Injector** | Turns any ComfyUI output (text, a number) into a `$variable`. |
 | **WP Model Info** | Reads the loaded checkpoint into `$model_family` / `$model_variant` (Pony, Illustrious, …) so rules can pick LoRAs and tags per model. |
@@ -122,52 +122,15 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
 - **Community:** browse and install modules other people have shared on the
   [community site](https://wp.dumiflex.dev/?utm_source=github&utm_medium=readme), and publish your own.
 - **Import / Export:** move modules between machines as JSON files, or bring in
-  wildcard packs from A1111 or Forge on the **Wildcard packs** tab. Dynamic Prompts,
-  PPP and Impact Pack `.txt`, `.yaml` and `.json` files (or a `.zip` of them) become
-  wildcards, with `__references__` turned into links. A folder of related lists merges
-  into one wildcard whose options are tagged by list, with a tag group per folder level.
-  You review the plan first (each wildcard's role, what was merged and how exactly it
-  carries over), and the pack's entry points are filed into bundles per folder.
+  wildcard packs from A1111 or Forge (Dynamic Prompts, PPP and Impact Pack `.txt`,
+  `.yaml`, `.json` or a `.zip`) on the **Wildcard packs** tab. You review the plan
+  before anything is imported.
 - **AI assistant (optional, off by default):** connect a model you run yourself
-  (Ollama, LM Studio, llama.cpp) or your own Claude or OpenAI key under
-  **Settings → AI assistant**, then press **AI** in the wildcard editor to write
-  new options in the style of the ones you have, or to remove, rewrite, retag or
-  re-weight the ones there (options can pick with `{a|b}` and draw from other
-  wildcards by name, `@{Colors:warm}`). In the fixed values, combine, template,
-  derivation and constraint editors, describe what you want and it writes it
-  using your library's variables, options and tags. **Describe** in any editor writes a description and tags for it, and
-  **Organize with AI** sorts a selection of library items into categories, tags and
-  ratings. The **AI** button in the top bar opens a chat that reads your library
-  and the built-in docs to answer questions (or explain a docs page in simpler
-  words), sees the page you're on, runs stacks on the engine to check its work,
-  and proposes new wildcards, fixed values, combines, rules, constraints,
-  templates, bundles and edits as cards you apply one by one, with Undo. In the
-  Test Runner it explains a run, fixes its warnings or says why an option never
-  comes up. Changes to the
-  item open in an editor go into that editor, to keep with Save. **Pack builder** makes a whole pack from
-  one description: it plans the wildcards, fixed values, rules, constraints,
-  combines, template, per-use settings and inputs, builds
-  them one at a time, tests them on the engine and fixes what fails, then installs
-  everything as one bundle you can undo. By default the model writes a small
-  pack graph (slots, their axes, the relations between them and the template
-  order) and the code wires every constraint, rule and the template from it,
-  so a rule can only name what the graph declares; what the run and the settings
-  need (story beats, sweep axes, holds, the model's quality tags, option
-  counts, style, rating, sections) is wired by the code too, what you edit
-  by hand stays as you left it through every update, and a change, an added
-  image or a finding about one item asks the AI for that part only. It matches your library's style,
-  reuses wildcards you already have, reviews the plan before building, and can
-  start from a sample prompt you like. After a wildcard pack import, **Tag and
-  connect with AI** has the chat tag the new lists, link them with constraints and
-  bundle them. The assistant knows how the nodes work (the Loop, Injector,
-  Model Info) and, while their autocomplete is on, your Danbooru tag list,
-  LoRAs and embeddings; the pack builder reads stories over a Loop,
-  sweep sheets and LoRA inputs from your description, and can adapt to the
-  model family. Optional web search, page reading and a
-  Danbooru tag lookup each ask before anything leaves your PC. If an
-  answer is close, type a follow-up and press **Refine** to revise it instead of
-  starting over. You review every change first, and nothing is saved until you
-  press Save.
+  (Ollama, LM Studio, llama.cpp) or your own Claude or OpenAI key. It drafts and
+  edits modules in every editor, answers questions about your library in a chat,
+  explains Test Runner runs, organizes your library and builds whole packs from a
+  description. Every change comes back for you to review, and nothing is saved
+  until you apply it.
 - **Constraint preview:** a table of each target option's chance for every
   source option, so you can see what a constraint does before running it.
 - **Documentation:** the full guide, built into the app.

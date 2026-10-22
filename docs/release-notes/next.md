@@ -1,42 +1,40 @@
-This release adds an AI assistant that works with a model you choose, fixes how random picks share their seeds, and moves the Community tab into its own frame. The full list of changes, with every detail, is on the wiki: [Changes in 2.21](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Changes-in-2.21).
+This release adds an AI assistant that runs on a model you choose, gives every random pick its own seed sequence, and moves the Community tab into its own frame. Every change, in full, is on the wiki: [Changes in 2.21](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Changes-in-2.21).
 
 > [!WARNING]
-> **Saved seeds can give a different prompt once.** Every random pick now rolls on its own sequence (see Fixes). Locked seeds still reproduce what you locked and Hold still holds, but a seed you saved before updating may land on a different prompt the first time.
+> **A saved seed can give a different prompt once.** Each random pick now rolls on its own sequence (see Fixes). Locked seeds still reproduce what you locked and Hold still holds, but a seed you saved before updating may land on a different prompt the first time.
 
 ### AI assistant
 
-The assistant is new and **off by default**. Turn it on under **Settings › AI assistant** and connect it to Ollama, LM Studio, llama.cpp or any OpenAI-compatible server on your PC, or to the Claude or OpenAI API with your own key. The key stays on ComfyUI's side and is never sent back to the browser. **Test connection** checks the model, its context size and whether it can call tools, and the page suggests models for the provider you picked.
+The assistant is new and **off by default**. Turn it on in **Settings › AI assistant**. It works with Ollama, LM Studio, llama.cpp or any OpenAI-compatible server on your PC, or with the Claude or OpenAI API and your own key. Keys stay on ComfyUI's side and never go back to the browser. **Test connection** checks the model, its context size and whether it can use tools. Local models need at least 16k of context, and 32k is recommended for chats that take several steps.
 
-**Draft with AI.** Every editor has an **AI** button. In the wildcard editor it writes new options in the style of the ones you have, or removes, rewrites, retags and re-weights the ones you select, always as a list to tick through first. Fixed values, combines, templates, derivations and constraints get drafts too, with a preview of what a constraint changes. Panels take reference images and, with web search set up, can ask to look something up; nothing leaves your machine until you allow it.
-
-**The chat.** The **AI** button in the top bar opens a chat that searches and reads your library, runs stacks on the real engine, and answers from the built-in docs. Changes come back as cards you **Apply** or **Dismiss**, with **Undo**; many cards of one kind arrive as one group card. It sees the page you're on, can point at parts of it, and answers questions about the Test Runner's last run. Type **@** to name an item and **$** to complete a variable. Select any text in the manager to have it explained. The chat header has a **Thinking** picker next to the model: Off, or Low, Medium or High for models that reason in levels (also in Settings). Changes to one item in one answer come as one card that lists each step, and a new category comes with the card that files items into it. Settings can hide the model's thinking, its working notes and the list of what it did, each on its own. Settings › AI marks the recommended choice for each setting (context: at least 16k, 32k for chats that take several steps), and Reset to recommended puts them all back (your provider, keys and models stay; a bigger context is kept). It also warns when ComfyUI is open to your network (--listen), and Allow for this chat now lasts 8 hours. Small and medium local models keep one thinking setting for a whole answer, so LM Studio no longer reads the whole prompt again (about 20 s) partway through each answer.
-
-**Pack builder.** In the sidebar, the Pack builder makes a whole pack from one description. It plans a graph of choices and the rules between them, asks a few questions, builds every item, tests the pack on 200 seeds, fixes what failed and installs it as one bundle with one Undo. It knows how each image model reads a prompt (Pony, Illustrious, Flux and more), can plan a story over a Context Loop or a sweep sheet, and can extend or split an existing bundle.
-
-**Small local models.** A 9B model on a 16 GB card is a supported setup. The assistant sizes its instructions and tools to the model and its context, plans multi-item asks one step at a time, and gets worked examples for common jobs.
-
-**Safety.** No AI feature keeps content that puts a minor in a sexual context, and a pack request that asks for it is refused before anything is planned. Web calls (search, reading a result page, Danbooru tag lookup) each ask first.
+- **Draft with AI.** Every editor has an **AI** button. In the wildcard editor it writes new options in the style of yours, or rewrites, retags, re-weights or removes the ones you select. You tick through a list before anything changes. Fixed values, combines, templates, derivations and constraints get drafts too.
+- **Chat.** The **AI** button in the top bar opens a chat that can search your library, test stacks on the real engine and answer from these docs. Changes come back as cards you **Apply** or **Dismiss**, with **Undo**. Type **@** to name an item or **$** for a variable, or select any text in the manager to have it explained.
+- **Pack builder.** In the sidebar. Describe a pack and it plans the choices and rules, asks a few questions, builds every item, tests it on 200 seeds, fixes what failed and installs it as one bundle with one Undo. It knows how each image model reads a prompt (Pony, Illustrious, Flux and more) and can plan a story over a Context Loop.
+- **Small local models.** A 9B model on a 16 GB card is a supported setup. The assistant fits its instructions and tools to the model and works through bigger asks one step at a time.
+- **Settings.** Settings mark the recommended choice for each option, and **Reset to recommended** puts them back without touching your provider, keys or models (a context window bigger than 16k is kept). A warning shows when ComfyUI is open to your network (`--listen`).
+- **Safety.** Web search, reading a result page and Danbooru tag lookups each ask first; **Allow for this chat** lasts 8 hours. No AI feature writes content that puts a minor in a sexual context.
 
 ### Editors and nodes
 
-- **Variables are coloured text.** `$variables` in combine, derivation, negative and template text are plain words in their own colour instead of chips.
-- **Negatives on the node and in bundles.** A fixed value's or combine's negative can be changed for one use, with a reset to the library's.
+- **Variables are coloured text** in combine, derivation, negative and template text, instead of chips.
+- **Negatives can change per use.** On the node and in bundles, a fixed value's or combine's negative can be changed for one use and reset to the library's.
 - **Constraint preview.** The constraint editor shows each target option's chance for every source option before you run anything.
-- **New docs guides.** Recommended pack structure, writing prompts per image model, and adult (NSFW) packs.
-- **A new loading mark** replaces the spinners across the manager.
+- **Docs rewritten in plain words.** Every docs page and node help panel is shorter, with new screenshots of the current nodes. New **How to** pages cover variations in one click, making two picks agree, keeping something the same, sharing a pack and fixing common problems. The AI docs are split into short pages, and importing A1111/Forge wildcard packs has its own page.
+- **New guides** for pack structure, writing prompts per image model, and adult (NSFW) packs.
+- **A new loading mark** replaces the spinners in the manager.
 
 ### Community
 
-- **The Community tab runs in its own frame** from the community site, so nothing it loads can reach ComfyUI or other custom nodes, and your community sign-in no longer sits in ComfyUI's storage. An existing sign-in moves over on its own.
-- **Broken packs are refused before anything is installed.** Import, Community install and dependency downloads check every item and name the one that's wrong.
+- **The Community tab runs in its own frame**, so nothing it loads can reach ComfyUI or other custom nodes. Your community sign-in moves over on its own.
+- **Broken packs are refused before install.** Import, Community install and dependency downloads check every item and name the one that's wrong.
 
 ### Fixes
 
-- **Every random pick rolls on its own.** Derivations, fixed values and each pick inside a module used to share random sequences, so changing one could move another. This is the change behind the seed warning above.
-- **Constraints hold on multi-picks.** `{2$$…}` picks from a nested wildcard and `2-3` picks no longer bring back options a constraint or a weight of 0 shut out.
-- **Clear template clears the negative too.** The Assembler's Clear template button now empties the negative template along with the template.
-- **Cleaner prompts from empty variables.** The Assembler drops leftover commas, dangling joining words ("wearing with,") and doubled articles.
+- **Every random pick rolls on its own.** Picks used to share random sequences, so changing one could move another. This is the change behind the seed warning above.
+- **Constraints hold on multi-picks.** `{2$$…}` picks and `2-3` picks no longer bring back options a constraint or a weight of 0 shut out.
+- **Clear template clears the negative too** on the Assembler.
+- **Cleaner prompts when a variable is empty.** The Assembler drops leftover commas, dangling joining words and doubled articles.
 - **`!warm` and `{2$$a|b|c}` work** the way other tools write them.
 - **Rules and runs.** A linked-picks rule no longer empties a wildcard that links onward, a bundle inserted twice keeps each copy's constraints to itself, a held wildcard stays put over a Loop, and a later derivation rule reads what an earlier one wrote.
 - **Clearer warnings.** A deleted pinned option says **Pinned option missing**, recipe wildcards no longer warn on every run, and Hide/Hold no longer show "unknown field".
-- **Long sessions stay fast.** Deleting a node now shuts its widget down, and WP Context no longer leaves a database connection open on every run.
+- **Long sessions stay fast.** Deleting a node shuts its widget down, and WP Context no longer leaves a database connection open on every run.

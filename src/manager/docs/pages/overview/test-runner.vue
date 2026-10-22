@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
@@ -19,10 +20,15 @@ import VarToken from "../../../components/docs/VarToken.vue";
     <DocSection title="What it's for">
       <p>
         The Test Runner, in the manager sidebar, runs a stack of your library modules through the
-        real engine, one chain seed per run, and shows what comes out. Use it to check that a
+        real engine, once per seed, and shows what comes out. Use it to check that a
         wildcard's options all come up, that a constraint actually fires, or that a combine reads
         the variables you think it does, before you wire anything on the canvas.
       </p>
+      <DocImage
+        src="images/docs/test-runner.png"
+        ratio="2 / 1"
+        caption="An empty Test Runner: saved scenarios on the left, the stack and pinned values in the middle, and Range / Random seeds with Run at the top."
+      />
       <DocFlow figure="test-runner-flow"
         :stages="[
           { icon: 'pi pi-box', name: 'Scenario', sub: 'stack + pins + seeds', tone: 'neutral' },

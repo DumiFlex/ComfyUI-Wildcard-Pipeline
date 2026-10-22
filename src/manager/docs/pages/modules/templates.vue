@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
@@ -14,53 +15,48 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
     title="Templates"
     icon="pi pi-file-edit"
     tone="neutral"
-    blurb="Save a reusable prompt template — a string of $variables and literal text — and load it into the WP Prompt Assembler in one click."
+    blurb="Save an Assembler prompt to your library and load it into another Assembler in one click."
   >
     <DocSection title="What a template is">
       <p>
-        A prompt template is just the text you feed the <b>WP Prompt Assembler</b>: a mix of literal
-        words and <VarToken>$variable</VarToken> placeholders like
-        <VarToken>$scene, $style, $accent, masterpiece, highly detailed</VarToken>. At runtime the
-        Assembler swaps each <VarToken>$var</VarToken> for whatever your modules produced and emits
-        the finished prompt.
+        A template is the text you write in the <b>WP Prompt Assembler</b>: words and
+        <VarToken>$variables</VarToken>, such as
+        <VarToken>$scene, $style, $accent, masterpiece, highly detailed</VarToken>. The Assembler
+        fills in each variable every run.
       </p>
       <p>
-        Templates aren't a module kind and they don't sit in a Context stack — they're saved
-        Assembler strings you can name, reuse across workflows, and edit in one place. Think of them
-        as the prompt-shaped counterpart to a bundle: a bundle reuses a set of modules, a template
-        reuses the wording that stitches their <VarToken>$variables</VarToken> together.
+        Saved templates live in your library next to modules, but they don't go on a Context. A
+        bundle reuses a set of modules; a template reuses the wording around their variables.
       </p>
-      <DocCallout variant="tip">
-        <b>Use a template</b> for a prompt skeleton you reuse: one per model family (a tag
-        skeleton, a prose skeleton), or a fixed system prompt a model needs. <b>Not for</b>
-        variety: a template holds no variables of its own and rolls nothing, and in the Assembler
-        <VarToken kind="inline">{a|b}</VarToken> prints exactly as typed and
-        <VarToken kind="ref">@{}</VarToken> prints nothing. Put choices in wildcards. See
-        <DocRef id="prompt-writing" /> for the order each family wants.
-      </DocCallout>
+      <DocUseWhen
+        :good="[
+          'A prompt skeleton you reuse, one per model family (tags or prose)',
+          'A fixed system prompt a model needs',
+        ]"
+        :better="[
+          'Variety: a template rolls nothing, and {a|b} prints as typed in the Assembler. Put choices in wildcards',
+        ]"
+      />
+      <p>See <DocRef id="prompt-writing" /> for the order each model family wants.</p>
     </DocSection>
 
     <DocSection title="How it pairs with the Assembler">
       <p>
-        In a workflow, the <b>WP Prompt Assembler</b> node holds the template string. Saving that
-        string to your library makes a Template; loading a Template back into the Assembler drops the
-        whole string in at once. The Assembler's toolbar has Save and Load buttons wired directly to
-        this library.
+        The Assembler's toolbar has <b>Save</b> and <b>Load</b>. Save puts its template in your
+        library; Load replaces the template with one from the library.
       </p>
       <DocCallout variant="tip">
-        Any <VarToken>$var</VarToken> in the template must be produced by a module upstream of the
-        Assembler. If a placeholder has no matching variable at runtime it resolves to empty (the
-        assembler preview underlines it) so you can spot the gap — add a module (or fix the name)
-        that sets it.
+        A variable in the template needs a module before the Assembler that sets it. If none
+        does, it prints nothing and is underlined in the preview; add the module or fix the
+        name.
       </DocCallout>
     </DocSection>
 
     <DocSection title="Try it">
       <p>
-        Create the starter prompt template —
-        <VarToken>$scene, $style, $accent, masterpiece, highly detailed</VarToken> — the wording that
-        ties the rest of the starter set together. Load it into a WP Prompt Assembler and it fills
-        in from the starter modules.
+        Create the starter template,
+        <VarToken>$scene, $style, $accent, masterpiece, highly detailed</VarToken>. Load it into a WP
+        Prompt Assembler and the starter modules fill it in.
       </p>
       <StarterButton slot="template" />
     </DocSection>

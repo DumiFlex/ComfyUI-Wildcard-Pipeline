@@ -15,173 +15,151 @@ import DocRef from "../../../components/docs/DocRef.vue";
     title="The $variable pipeline"
     icon="pi pi-share-alt"
     tone="neutral"
-    blurb="How modules produce $vars and the Assembler fills templates — syntax, surfaces, and gating."
+    blurb="How modules fill $variables and the Assembler turns them into a prompt, and which syntax works where."
   >
-    <DocSection title="The pipeline">
+    <DocSection title="How it works">
       <p>
-        When a <b>WP Context</b> runs, it works through its module stack from top to bottom. Each
-        module produces one or more <VarToken>name = value</VarToken> bindings. Those bindings
-        build up inside the Context and are then passed downstream to Assemblers, other Contexts,
-        or Debug nodes. The Assembler's job is to take your prompt template and swap in the
-        values — every <VarToken>$name</VarToken> token becomes the value that was set upstream.
+        A <b>WP Context</b> runs its modules from top to bottom. Each one writes a value into a
+        <VarToken>$variable</VarToken>: the wildcard picks "a fox" for
+        <VarToken>$subject</VarToken>, the fixed value sets <VarToken>$style</VarToken> to
+        "watercolor". The finished set of variables goes to the next node. The
+        <b>WP Prompt Assembler</b> then swaps every <VarToken>$name</VarToken> in your template for
+        its value.
       </p>
     </DocSection>
 
-    <DocSection title="Syntax reference">
-      <p>The following constructs are recognised inside template strings and wildcard option text:</p>
+    <DocSection title="What you can write">
       <table class="wp-doc-syntax-table">
         <thead>
           <tr>
-            <th>Syntax</th>
-            <th>Where it works</th>
+            <th>Write</th>
             <th>What it does</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td><VarToken>$name</VarToken></td>
-            <td>combine, derivation, assembler</td>
-            <td>Reads the named variable from the Context and inserts its value. For a multi-pick
-              variable, bare <VarToken>$name</VarToken> joins the whole list with its separator.</td>
+            <td>The variable's value. If the wildcard picked several options, all of them, joined by
+              its separator.</td>
           </tr>
           <tr>
-            <td><VarToken>$name.K</VarToken></td>
-            <td>combine, derivation, assembler</td>
-            <td>Indexes a single item out of a multi-pick result — <code>K</code> is 0-based, so
-              <VarToken>$colors.0</VarToken> is the first pick. Out-of-range indices resolve to empty.</td>
+            <td><VarToken>$name.0</VarToken></td>
+            <td>One of several picks, counting from 0: <VarToken>$colors.0</VarToken> is the first.
+              A number past the end prints nothing.</td>
           </tr>
           <tr>
-            <td><VarToken>$name.AXIS</VarToken></td>
-            <td>combine, derivation, assembler</td>
-            <td>Reads the tag an <b>accepts</b> axis named <code>AXIS</code> rolled on the source
-              wildcard — e.g. <VarToken>$outfit.SHOES</VarToken> is the shoe tag chosen this run.
-              Rolled once when the option is picked, so it's the same value in every template,
-              module and chained node. For a multi-pick source, <VarToken>$name.K.AXIS</VarToken> is
-              the K-th pick's (index and axis compose in either order). A tag that was never promoted
-              to an accepts axis — or one in a classify group — resolves to empty and is flagged.</td>
+            <td><VarToken>$name.GROUP</VarToken></td>
+            <td>The tag rolled from an accepts tag group: <VarToken>$outfit.SHOES</VarToken> is the
+              shoe that goes with this run's outfit. It's rolled once, so it's the same everywhere.
+              With several picks, <VarToken>$outfit.0.SHOES</VarToken> is the first one's. A group
+              that isn't accepts prints nothing and gets a warning.</td>
           </tr>
           <tr>
-            <td><VarToken kind="ref">@{8hexchars}</VarToken></td>
-            <td>wildcard options, derivation actions</td>
-            <td>
-              Nested module reference — resolves to the picked value of the target wildcard.
-              Segments are optional and combinable: <VarToken kind="inline">#name</VarToken>
-              caches a display name (shown only if the row is missing),
-              <VarToken kind="inline">:filter</VarToken> narrows a referenced wildcard's pool by a
-              sub-category boolean expression (e.g. <code>warm or cool</code>), and
-              <VarToken kind="inline">!null</VarToken> drops the null option. Full form:
-              <VarToken kind="ref">@{abcd1234#Mood:calm or intense!null}</VarToken>. Filter grammar:
-              <DocRef id="chips-and-references" />.
-            </td>
+            <td><VarToken>$name.neg</VarToken></td>
+            <td>The variable's negative words. See <DocRef id="negatives" />.</td>
+          </tr>
+          <tr>
+            <td><VarToken kind="ref">@{…}</VarToken></td>
+            <td>A fresh pick from another wildcard. Type <b>@</b> to insert one; it shows as a chip.
+              It can narrow the pick to some tags (<code>warm or cool</code>) or leave out the null
+              option. Written out it looks like
+              <VarToken kind="ref">@{abcd1234#Mood:calm or intense!null}</VarToken>: the 8-letter
+              id, then an optional name, filter and <code>!null</code>. More in
+              <DocRef id="chips-and-references" />.</td>
           </tr>
           <tr>
             <td><VarToken kind="inline">{a|b|c}</VarToken></td>
-            <td>all text fields</td>
-            <td>Picks one alternative at render time. Weight an arm with <code>N::value</code>
-              (e.g. <VarToken kind="inline">{3::cat|dog}</VarToken> makes cat 3× as likely). The
-              Assembler has no seed, so it leaves picks literal.</td>
+            <td>Picks one part each run. <VarToken kind="inline">{3::cat|dog}</VarToken> makes cat
+              three times as likely.</td>
           </tr>
           <tr>
-            <td><VarToken kind="inline">{N$$sep$$a|b|c}</VarToken></td>
-            <td>all text fields</td>
-            <td>Multi-pick: picks <em>N</em> items joined by <em>sep</em>. Without a separator
-              (<code>{2$$a|b|c}</code>) they are joined by a comma.
-              <VarToken kind="inline">{N-M$$sep$$…}</VarToken> picks a random count in the
-              <em>N–M</em> range. Default is UNIQUE (no repeats); add <code>~</code>
-              (<VarToken kind="inline">{N~$$…}</VarToken> / <VarToken kind="inline">{N-M~$$…}</VarToken>)
-              for INDEPENDENT picks with replacement, which may repeat.</td>
+            <td><VarToken kind="inline">{2$$a|b|c}</VarToken></td>
+            <td>Picks two different parts, joined by a comma.
+              <VarToken kind="inline">{2$$ and $$a|b|c}</VarToken> joins them with " and ";
+              <VarToken kind="inline">{1-3$$a|b|c}</VarToken> picks between one and three. Add
+              <code>~</code> (<VarToken kind="inline">{2~$$a|b|c}</VarToken>) to allow the same
+              part twice.</td>
           </tr>
           <tr>
             <td><VarToken kind="inline">$$</VarToken> · <VarToken kind="inline">@@</VarToken> · <VarToken kind="inline">&#123;&#123;</VarToken></td>
-            <td>all text fields</td>
-            <td>Escapes — produce a literal <code>$</code>, <code>@</code>, or <code>&#123;</code>
-              instead of starting a token.</td>
+            <td>Print a plain <code>$</code>, <code>@</code> or <code>&#123;</code>.</td>
           </tr>
         </tbody>
       </table>
       <DocCallout variant="tip">
-        An inline pick's arms are resolved <b>recursively</b>, so an arm can itself contain
-        <VarToken>$vars</VarToken>, <VarToken kind="ref">@{}</VarToken> refs, and further
-        <VarToken kind="inline">{…}</VarToken> picks — for example
-        <VarToken kind="inline">{a @{abcd1234} cat|{2$$, $$red|blue|green} sky}</VarToken>. What
-        each nested token resolves to still depends on the surface it sits on — see the gate below.
+        These nest: a part of <VarToken kind="inline">{…}</VarToken> can hold a reference or another
+        choice, such as <VarToken kind="inline">{a @{abcd1234} cat|{2$$, $$red|blue|green} sky}</VarToken>.
       </DocCallout>
-      <p style="margin-top: 10px; font-size: 12.5px; color: var(--wp-text-muted);">
-        Variable names must match <code>^[A-Za-z_][A-Za-z0-9_]*$</code>, be at most 64 characters,
-        and must not start with <code>__</code> (reserved for internal use).
-        Ref UUIDs are exactly 8 lowercase hex characters.
+      <p>
+        <b>Naming a variable:</b> letters, digits and underscores, starting with a letter or
+        underscore, up to 64 characters. Names starting with two underscores are kept for the
+        engine.
       </p>
     </DocSection>
 
-    <DocSection title="The per-surface gate">
+    <DocSection title="Which syntax works where">
       <p>
-        Not every token resolves on every surface — each module resolves only what makes sense for
-        it; anything else stays literal text. "Dropped" means the token prints nothing and WP
-        Debug notes it.
+        Not every field reads everything. Anything a field doesn't read prints as typed, except
+        where the table says "nothing" (it prints nothing and WP Debug notes it).
       </p>
       <table class="wp-doc-syntax-table wp-doc-gate-table">
         <thead>
           <tr>
-            <th>Surface</th>
-            <th><VarToken>$var</VarToken> read</th>
-            <th><VarToken kind="ref">@{uuid}</VarToken> ref</th>
-            <th><VarToken kind="inline">{a|b}</VarToken> pick</th>
+            <th>Field</th>
+            <th><VarToken>$var</VarToken></th>
+            <th><VarToken kind="ref">@{…}</VarToken></th>
+            <th><VarToken kind="inline">{a|b}</VarToken></th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td>Wildcard option value</td>
+            <td>Wildcard option</td>
             <td>—</td>
             <td>✓</td>
+            <td>✓</td>
+          </tr>
+          <tr>
+            <td>Fixed value</td>
+            <td>—</td>
+            <td>—</td>
             <td>✓</td>
           </tr>
           <tr>
             <td>Combine template</td>
             <td>✓</td>
-            <td>dropped</td>
+            <td>nothing</td>
             <td>✓</td>
           </tr>
           <tr>
-            <td>Derivation action value</td>
+            <td>Derivation "then" value</td>
             <td>✓</td>
             <td>✓</td>
             <td>✓</td>
           </tr>
           <tr>
-            <td>Derivation condition value</td>
+            <td>Derivation "if" value</td>
             <td>—</td>
             <td>—</td>
             <td>—</td>
           </tr>
           <tr>
-            <td>Fixed Values value</td>
-            <td>—</td>
-            <td>—</td>
+            <td>Assembler template</td>
             <td>✓</td>
-          </tr>
-          <tr>
-            <td>Prompt Assembler template</td>
-            <td>✓</td>
-            <td>dropped</td>
-            <td>literal</td>
+            <td>nothing</td>
+            <td>as typed</td>
           </tr>
         </tbody>
       </table>
       <DocCallout variant="warn">
-        Wildcards and fixed values are <b>producers</b> — their option text doesn't read
-        <VarToken>$var</VarToken> at all. So a wildcard can't pull in a value another module set,
-        no matter the order. To build a value from earlier picks, add a <b>combine</b> or
-        <b>derivation</b> after the producers — those surfaces do read <VarToken>$var</VarToken>.
+        Wildcard options and fixed values can't read a <VarToken>$variable</VarToken>, wherever
+        they sit. To build text from earlier picks, use a <b>Combine</b> or a <b>Derivation</b>
+        below them.
       </DocCallout>
       <DocCallout variant="tip">
-        The Assembler is <b>seedless</b>: any leftover <VarToken kind="inline">{a|b}</VarToken>
-        picks in the final template render verbatim and <VarToken kind="ref">@{}</VarToken> refs
-        print nothing, so roll the value upstream and reference its <VarToken>$var</VarToken>.
-        Derivation <b>action</b> values resolve <VarToken kind="ref">@{}</VarToken> refs too —
-        a rule can inject a nested wildcard's pick — while a derivation <b>condition</b> tests one
-        variable (<VarToken>$name.K</VarToken>, <VarToken>$name.AXIS</VarToken> and
-        <VarToken>$name.neg</VarToken> included) against plain text: the value it compares to
-        never resolves anything.
+        The Assembler doesn't roll anything, so put choices in a wildcard or combine and print its
+        variable. A derivation's "if" compares one variable (<VarToken>$name.0</VarToken>,
+        <VarToken>$name.GROUP</VarToken> and <VarToken>$name.neg</VarToken> work too) with plain
+        text.
       </DocCallout>
     </DocSection>
 

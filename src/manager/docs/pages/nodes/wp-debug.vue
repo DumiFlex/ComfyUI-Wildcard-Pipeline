@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
 const tabs = [
-  { term: "Variables", desc: "Every $variable and its resolved value at this point in the chain, with the step that set it — the quickest way to check that your wildcards rolled what you expected. A variable's negative words sit under its value in red, naming the module they came from when it isn't the variable's own, and the tab bar counts the variables that carry negatives." },
-  { term: "Trace", desc: "Every step in run order, grouped by Context node. Open a step to see why it did what it did: a wildcard's odds and the constraints that re-weighted it, which derivation branch fired (an Add to negative action reads “negative: …”), and the negative each write left on its variable." },
-  { term: "Warnings", desc: "Runtime notices: missing variables referenced in templates, constraints that never fired, invalid bindings, and similar issues. Check here first when something looks off." },
-  { term: "Raw", desc: "The whole snapshot as JSON, including the negatives table. The download button saves it." },
+  { term: "Variables", desc: "Every $variable and its value at this point, with the module that set it. The quickest way to check what your wildcards picked. Negative words show under the value in red, with the module they came from when it isn't the variable's own." },
+  { term: "Trace", desc: "Every module in the order it ran, grouped by Context. Open one to see why it did what it did: a wildcard's odds and the constraints that changed them, which derivation branch ran, and the negative each one left." },
+  { term: "Warnings", desc: "What came up during the run, such as missing variables or a constraint that changed nothing. Look here first when something seems off." },
+  { term: "Raw", desc: "Everything as JSON, with a download button. Handy for bug reports." },
 ];
 </script>
 
@@ -21,50 +22,47 @@ const tabs = [
     icon="pi pi-eye"
     tone="node"
     node-id="WP_Debug"
-    blurb="See inside your pipeline at any point. Drop it anywhere in the chain and get a tabbed view of every $variable, every wildcard pick, and any runtime warnings — after every run."
+    blurb="See what your pipeline picked: every $variable, every pick and every warning, after each run."
   >
     <DocSection title="What it's for">
       <p>
-        Drop a <b>WP Debug</b> node anywhere and wire a Context output into it. After each
-        Generate the built-in viewer fills with a tabbed snapshot of everything that flowed
-        through that point. It has no output — it is a read-only observation tool that
-        updates every run so you always see fresh data.
+        Wire a Context's output into a <b>WP Debug</b>. After each Generate it shows everything
+        that reached that point. It has no output and changes nothing.
       </p>
       <DocImage
         src="images/docs/wp-debug-viewer.png"
-        ratio="16 / 8"
-        caption="A WP Context expanding the Starter set bundle (6 modules) into a WP Debug. Debug's Snapshot tab is selected from the four-tab strip (Snapshot / Trace / Picks / Warnings) and the JSON pane lists this run's resolved $vars: subject=tiger, mood=dramatic, style=oil painting, scene=dramatic tiger, accent=cinematic lighting — exactly what every downstream Assembler will see."
+        ratio="2 / 1"
+        caption="A WP Context with the Starter set bundle and Hair, feeding WP Debug. The Variables tab lists each variable, its value, its tags and which module set it."
       />
     </DocSection>
 
     <DocSection title="When to use it">
-      <DocCallout variant="tip">
-        <b>Use WP Debug</b> to see why one run came out as it did: every variable, the trace of
-        which module wrote what (later writes that replaced earlier ones included), each pick and
-        every warning, such as a reference that found no wildcard. <b>Not for</b> how often
-        options show up over many seeds. That is the Test Runner's job.
-      </DocCallout>
+      <DocUseWhen
+        :good="[
+          'Seeing why one run came out as it did: every variable, who wrote it, each pick and warning',
+        ]"
+        :better="[
+          'How often options come up over many seeds: use the Test Runner',
+        ]"
+      />
     </DocSection>
 
-    <DocSection title="Viewer tabs">
+    <DocSection title="The tabs">
       <DocKeyList :items="tabs" />
       <DocCallout variant="tip">
-        Use the filter box at the top of each tab to search by variable name or warning type
-        when the list is long.
+        The filter box at the top of each tab searches by variable name or warning.
       </DocCallout>
     </DocSection>
 
-    <DocSection title="Placement tips">
+    <DocSection title="Where to put it">
       <p>
-        Wire the debug node after a specific Context to inspect that stage of the chain, or
-        wire it after the final Context to see the complete resolved map. You can have multiple
-        debug nodes at different points in the same workflow — each shows what it sees at its
-        own position.
+        After one Context to check that step, or after the last to see everything. Use as many as
+        you like; each shows what it sees at its own spot.
       </p>
       <DocImage
         src="images/docs/wp-debug-two.png"
-        ratio="16 / 5"
-        caption="Two debug points on the same workflow. Left pair: WP Context with the Starter set bundle expanded → WP Debug snapshot reads subject=wolf, mood=dramatic, style=oil painting, scene=dramatic wolf, accent=cinematic lighting. Right pair: a downstream WP Context layering the Alt starter set bundle on top (Alt style / scene / accent rows carry green OVERRIDE pills) → its WP Debug snapshot reads the same wolf + dramatic but with style=concept art …, scene=golden hour cargo dirigible, accent=atmospheric haze, plus the alt-bundle's $vehicle + $weather. Same workflow, two snapshots, one per chain stage."
+        ratio="2 / 1"
+        caption="Two Context → Debug pairs. The second Debug shows a negative ('umbrella') riding along with $weather."
       />
     </DocSection>
 

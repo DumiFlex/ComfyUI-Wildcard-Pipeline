@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
@@ -8,26 +10,11 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
 
 const overridable = [
-  {
-    term: "Wildcard options",
-    desc: "Change which options a frame may roll, their weights or the category filter. Tick only \"red\" on frame #3 and that frame lands on red while the others stay random. A single ticked option still obeys constraints, so keep a fallback enabled if a constraint could exclude it.",
-  },
-  {
-    term: "Combine template / Fixed value",
-    desc: "Give a frame its own template string or fixed value — e.g. a different caption on the last frame.",
-  },
-  {
-    term: "Constraint reach + matrix tweaks",
-    desc: "Adjust a constraint's instance settings for one frame.",
-  },
-  {
-    term: "Seed lock",
-    desc: "Lock a module's seed on one frame only, so just that frame reproduces while the others vary. See the per-frame seed lock below.",
-  },
-  {
-    term: "Enable / disable",
-    desc: "Run a module only on some frames, or skip it on others. See per-frame enable/disable below.",
-  },
+  { term: "Wildcard options", desc: "Which options a frame may pick, their weights, or the tag filter. Tick only \"red\" on frame #3 and that frame is red while the others stay random. A constraint can still rule a ticked option out, so keep a fallback." },
+  { term: "Combine template or fixed value", desc: "A frame's own text, such as a different caption on the last frame." },
+  { term: "Constraint", desc: "Its reach and rules for one frame." },
+  { term: "Lock pick", desc: "Lock a pick on one frame only. See below." },
+  { term: "On / off", desc: "Run a module on some frames only. See below." },
 ];
 </script>
 
@@ -37,95 +24,89 @@ const overridable = [
     title="Per-iteration overrides"
     icon="pi pi-images"
     tone="neutral"
-    blurb="Give individual frames of a WP Context Loop run their own settings (a narrowed wildcard, a tweaked template, a locked seed, or a skipped module) without disturbing the rest of the batch."
+    blurb="Give one frame of a WP Context Loop its own settings, such as a fixed pick, a different caption or a module switched off, while the other frames stay as they are."
   >
-    <DocSection title="Base vs. per-frame">
+    <DocSection title="What it does">
       <p>
-        A <b>WP Context Loop</b> fans your chain out into N passes (“frames”). By default every
-        frame resolves from the same module settings — the <b>base</b>. An <b>override</b> is a
-        per-frame exception: a single frame gets a different value while all the others keep using
-        the base. Think of it as a keyframe — most of the run follows the base, and you override only the
-        spots that need to differ.
+        A <b>WP Context Loop</b> runs your Contexts several times, one <b>frame</b> each. Normally
+        every frame uses the same settings, called the <b>base</b>. An override changes something
+        for one frame only. Think of it as a keyframe: most frames follow the base, and you change
+        just the ones that need it.
       </p>
       <DocFlow figure="iteration-overrides-flow"
         :stages="[
           { icon: 'pi pi-sitemap', name: 'Base settings', sub: 'apply to all frames', tone: 'node' },
-          { icon: 'pi pi-images', name: 'Frame #k override', sub: 'patches just frame k', tone: 'neutral' },
-          { icon: 'pi pi-replay', name: 'Resolved frames', sub: 'base, except where overridden', tone: 'node' },
+          { icon: 'pi pi-images', name: 'Frame #k override', sub: 'changes just frame k', tone: 'neutral' },
+          { icon: 'pi pi-replay', name: 'Each frame', sub: 'base, except where overridden', tone: 'node' },
         ]"
-        :arrows="['default', 'per-frame patch']"
-        caption="Each frame resolves from the base, then any override recorded for that frame is layered on top."
+        :arrows="['default', 'per-frame change']"
+        caption="Each frame starts from the base, then that frame's overrides are applied on top."
       />
     </DocSection>
 
     <DocSection title="Editing a frame">
       <p>
-        The loop widget carries an <b>edit frame</b> row of chips: <code>base</code>, then
-        <code>#1 #2 #3 …</code> up to the count. Pick a frame chip and the module editors switch to
-        “editing frame #k”: open any module, change it, and the change is recorded as that frame's
-        override — not the base. Switch back to <code>base</code> and you're editing the default
-        that every frame without an override uses.
+        The loop has an <b>Edit frame</b> row of chips: <code>base</code>, then
+        <code>#1 #2 #3 …</code>. Click a frame chip and every row editor now edits that frame: what
+        you change is saved for that frame only. Click <code>base</code> to go back to editing all
+        frames.
       </p>
+      <DocImage
+        src="images/docs/loop-frames.png"
+        ratio="16 / 7"
+        caption="The loop's Edit frame chips (base, #1 to #4) above the Context it drives."
+      />
       <p>
-        Overrides are sparse: a frame stores only the fields you actually changed, so a four-frame
-        run with one overridden wildcard carries one tiny patch, not four full copies. Each overridden field
-        shows a small badge on its module row so you can see at a glance which frames diverge, and a
-        <b>revert to base</b> control clears a frame's override and returns it to the default.
+        A frame keeps only what you changed. Rows with a change show a badge, and <b>Revert to
+        base</b> clears a frame's changes. Adding or removing options, or anything else that
+        changes the module itself, always edits the base.
       </p>
-      <DocCallout variant="tip">
-        Overrides are <b>instance-level</b> — they patch how a module resolves for a frame (the
-        pick, the lock, the template text, enable/disable), not its underlying structure. Adding or
-        removing a wildcard option, or changing a module's identity, always edits the base and
-        applies to every frame.
-      </DocCallout>
     </DocSection>
 
-    <DocSection title="What you can override">
+    <DocSection title="What you can change per frame">
       <DocKeyList :items="overridable" />
       <DocCallout variant="warn">
-        Per-frame overrides live in the workflow, on the canvas. They are not saved into bundles
-        and the Test Runner doesn't run them. For a rule over frames that ships in a pack, use a
-        Frame wildcard with Match variable on <code>iteration</code> plus a constraint, or a
-        derivation that tests <code>$iteration</code>. See <DocRef id="pack-structure" />.
+        Frame changes live in the workflow. They aren't saved in bundles, and the Test Runner
+        doesn't use them. For a frame rule you can share, use a wildcard with Match variable on
+        <code>iteration</code> plus a constraint, or a derivation that tests
+        <code>$iteration</code>. See <DocRef id="pack-structure" />.
       </DocCallout>
-      <DocCallout variant="tip">
-        <b>Use overrides</b> for a few named beats on one canvas (frame #1 is the establishing
-        shot). <b>Not for</b> a pattern that runs over all frames, or anything you'll share.
-      </DocCallout>
+      <DocUseWhen
+        :good="[
+          'A few named beats on one canvas (frame #1 is the establishing shot)',
+        ]"
+        :better="[
+          'A pattern over all frames: a derivation on $iteration',
+          'Anything you\'ll share: frame changes aren\'t saved in bundles',
+        ]"
+      />
     </DocSection>
 
-    <DocSection title="Per-frame enable / disable">
+    <DocSection title="Switch a module on or off per frame">
       <p>
-        Every module row has an enable checkbox that's <b>frame-aware</b>. The effective state for a
-        frame is the per-frame setting if you've set one, otherwise the module's base on/off. That
-        makes both directions work:
+        The tick box on a row works per frame too. A frame uses its own setting if it has one,
+        otherwise the base. So both of these work:
       </p>
       <ul>
-        <li><b>Base on, frame off</b> — the module runs everywhere except the frames you switch off.</li>
-        <li><b>Base off, frame on</b> — the module is dormant except on the frames you switch on, so a run can introduce an extra element on just a couple of frames.</li>
+        <li><b>On in the base, off on a frame:</b> the module runs everywhere except that frame.</li>
+        <li><b>Off in the base, on on a frame:</b> the module only runs on that frame, so an extra
+          element shows up just there.</li>
       </ul>
       <p>
-        A skipped frame still produces an image — the module simply contributes nothing to that
-        pass. In <b>WP Debug</b> a frame turned off by a per-frame switch reads differently from a
-        module that's off at the base, so you can tell intentional per-frame skips from a
-        globally-disabled module.
+        A frame with a module off still makes an image; the module just adds nothing. WP Debug
+        shows whether a module was off for that frame or off everywhere.
       </p>
     </DocSection>
 
-    <DocSection title="Per-frame seed lock">
+    <DocSection title="Lock a pick on one frame">
       <p>
-        Seed locks are frame-aware too. Locking a module's seed while a frame chip is active pins
-        the seed for <em>that frame only</em> — the others keep varying. This is the difference
-        between “hold this one element steady across the whole batch” (lock at the base) and “make
-        frame #4 reproducible but let the rest roam” (lock on frame #4). Unlocking a frame whose
-        base is locked records an explicit per-frame unlock, so a single frame can break free of a
-        base lock.
+        Lock a row while a frame chip is active and only that frame keeps its pick; the others
+        still change. Lock it on <code>base</code> to keep it on every frame. Unlocking on one frame
+        while the base is locked frees just that frame.
       </p>
-      <DocCallout variant="warn">
-        While a frame chip is active, the run-level toggles (<b>Hide from prompt</b>,
-        <b>Hold across run</b>) are disabled — those apply to every frame, so you switch back to
-        <code>base</code> to change them. Only the per-frame things (pick, seed lock, enable) are
-        editable on a frame.
+      <DocCallout variant="tip">
+        <b>Hide from prompt</b> and <b>Hold across run</b> apply to every frame, so they're greyed
+        out while a frame chip is active. Switch back to <code>base</code> to change them.
       </DocCallout>
     </DocSection>
 

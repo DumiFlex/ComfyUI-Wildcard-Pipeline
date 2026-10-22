@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
@@ -8,22 +9,22 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
 
 const ports = [
-  { term: "prompt (in)", desc: "The text to clean. Typically from a WP Prompt Assembler, but works with any STRING source." },
-  { term: "cleaner widget", desc: "Configure the cleaning rules: pick a mode, set an intensity preset, toggle individual rules on or off, and manage the blocklist. The widget also shows run-stats after each execution." },
-  { term: "negative (in)", desc: "Optional. A negative prompt to clean alongside the prompt — type it in the box or wire one in, typically the Assembler's negative output. Left empty, the negative output is empty." },
-  { term: "prompt (out)", desc: "The cleaned text, ready to wire into a CLIP Text Encode or any other text consumer. Stays output 0." },
+  { term: "prompt (in)", desc: "The text to clean, usually from a WP Prompt Assembler. Any text works." },
+  { term: "cleaner widget", desc: "Pick a mode and a preset, switch single rules on or off, and edit the blocklist. After a run it shows how many fixes each rule made." },
+  { term: "negative (in)", desc: "Optional. A negative to clean too: type it or wire in the Assembler's negative. Left empty, the negative output is empty." },
+  { term: "prompt (out)", desc: "The cleaned prompt, for CLIP Text Encode." },
   { term: "negative (out)", desc: "The cleaned negative, using the negative column's rules. Wire it into your negative CLIP Text Encode." },
 ];
 
 const presets = [
-  { term: "Gentle", desc: "Whitespace normalization only — collapses extra spaces, strips leading/trailing gaps. Safest option when you want minimal changes." },
-  { term: "Balanced", desc: "Adds empty-group removal, LoRA tag spacing, punctuation cleanup and exact tag deduplication on top of gentle. None of these change what the prompt means. Good default for most prompt workflows." },
-  { term: "Aggressive", desc: "Also merges nested weights and enables fuzzy deduplication, which catches near-duplicate tags that differ by pluralisation or minor spelling. May occasionally merge things you intended to keep separate." },
-  { term: "Custom", desc: "No preset — a Custom badge lights up when your per-rule toggles diverge from the active preset level." },
+  { term: "Gentle", desc: "Only tidies spaces: removes doubled spaces and spaces at the ends. The safest choice." },
+  { term: "Balanced", desc: "Also removes empty brackets, tidies LoRA tags and stray punctuation, and drops exact duplicate tags. None of these change what the prompt means. A good default." },
+  { term: "Aggressive", desc: "Also merges stacked weights and drops near-duplicates (\"bad hand\" and \"bad hands\"). Now and then it removes something you meant to keep." },
+  { term: "Custom", desc: "Shown when you've switched single rules away from the preset." },
 ];
 
 const syntaxRules = [
-  { term: "Empty groups", desc: "Removes brackets with nothing inside: (), [], ( , ), (:1.2), and groups left empty once those go. red (), dress becomes red, dress. The usual source is a weighted ref that resolved to nothing: (@{hat}:1.2) becomes (:1.2). On from Balanced." },
+  { term: "Empty groups", desc: "Removes brackets with nothing inside: (), [], ( , ), (:1.2), and groups left empty once those go. red (), dress becomes red, dress. The usual cause is a weighted reference that printed nothing: (@{hat}:1.2) becomes (:1.2). On from Balanced." },
   { term: "Merge weights", desc: "Folds stacked weights into one group by multiplying them, as ComfyUI does (a bare ( ) counts as 1.1): ((a:1.1):1.2) becomes (a:1.32), (((a))) becomes (a:1.33), and (a:1.0) becomes plain a. Only merges when the inner group is everything inside the outer one, rounds to 2 decimals, and never touches [ ]. On in Aggressive." },
   { term: "LoRA spacing", desc: "Tidies <lora:…> tags (and lyco, locon, hypernet, <embedding:…>): < lora : x : 0.8 > becomes <lora:x:0.8>, and girl<lora:x:1> becomes girl <lora:x:1>. Spaces inside a file name stay. On from Balanced." },
 ];
@@ -36,54 +37,56 @@ const syntaxRules = [
     icon="pi pi-ban"
     tone="node"
     node-id="WP_PromptCleaner"
-    blurb="Polish any prompt string before it reaches your sampler — remove duplicates, strip stray punctuation, and block unwanted words, all with a single configurable node."
+    blurb="Tidy a prompt before the sampler: drop duplicates and stray commas, fix brackets and LoRA tags, and block words you never want."
   >
     <DocSection title="What it's for">
       <p>
-        Wire any prompt string — typically from a <b>WP Prompt Assembler</b> — into the
-        Cleaner and it applies a configurable set of rules: whitespace normalization, prompt
-        syntax tidying (empty groups, nested weights, LoRA tags), tag deduplication, fuzzy
-        matching, and an optional blocklist. The cleaned text comes out
-        the other side ready to wire into a CLIP Text Encode. It works on text alone and
-        needs no Context connection.
+        Wire a prompt, usually from a <b>WP Prompt Assembler</b>, into the Cleaner. It tidies
+        spaces, empty brackets, stacked weights and LoRA tags, drops duplicate tags, and removes
+        words on your blocklist. The clean text goes on to CLIP Text Encode. It needs no Context.
       </p>
+      <DocUseWhen
+        :good="[
+          'Removing duplicates and near-duplicates after the Assembler',
+          'Merging weights, spacing LoRA tags, blocking words',
+        ]"
+        :better="[
+          'Fixing a pack: if it often removes something, fix the option that wrote it',
+        ]"
+      />
       <DocCallout variant="tip">
-        <b>Use the Cleaner</b> after the Assembler to remove duplicates and near-duplicates, merge
-        weights, space LoRA tags and block words. Text mode on Gentle suits prose prompts; tags
-        mode splits on commas, so it would split sentences. <b>Not for</b> fixing a pack: if it
-        often removes something, fix the option that produced it. Never blocklist or fuzzy-dedupe a
-        LoRA's trigger words, or the LoRA stops working. The blocklist matches whole words, so
-        list every form of a word you block (see <DocRef id="adult-packs" />).
+        Never blocklist or fuzzy-dedupe a LoRA's trigger words, or the LoRA stops working. The
+        blocklist matches whole words, so list every form of a word you block (see
+        <DocRef id="adult-packs" />). For prose prompts use text mode on Gentle: tags mode splits on
+        commas, so it would split sentences.
       </DocCallout>
       <DocImage
         src="images/docs/wp-prompt-cleaner.png"
-        ratio="16 / 5"
-        caption="WP Prompt Cleaner fed a deliberately messy 40-word / 297-char tag dump (duplicate 'highly detailed', orphan '!!' + '---' punctuation, near-duplicates like 'ultra realistic' vs 'ultra-realistic', blocklist hits watermark / low quality / bad anatomy / signature). Mode = tags · Intensity = aggressive. Rules pane lists hits per family — whitespace 3 · punctuation 6 · tag dedupe 3 · fuzzy dedupe 3 · blocklist 4 — plus a 'Blocklist · 4 entries · list' button. The Show Any node on the right renders the cleaned single-line output."
+        ratio="16 / 7"
+        caption="A messy tag list goes into WP Prompt Cleaner and comes out without the doubled tags and stray commas. Each rule shows how many fixes it made."
       />
     </DocSection>
 
-    <DocSection title="Inputs &amp; output">
+    <DocSection title="Inputs and outputs">
       <DocKeyList :items="ports" />
     </DocSection>
 
     <DocSection title="Mode">
       <p>
-        Choose <b>Tags</b> mode when your prompt is a comma-separated tag list (the default
-        for most SD workflows). The cleaner splits on commas, applies all rules per-tag, and
-        reassembles. Choose <b>Text</b> mode for prose-style prompts — tag-only rules like
-        deduplication are disabled, and the blocklist removes matched words without pulling
-        the whole phrase.
+        <b>Tags</b> is for comma-separated tag lists, the usual SD style: the Cleaner works tag by
+        tag. <b>Text</b> is for sentences: tag rules such as duplicate removal are off, and the
+        blocklist removes just the word, not the whole phrase.
       </p>
     </DocSection>
 
-    <DocSection title="Intensity presets">
+    <DocSection title="Presets">
       <DocKeyList :items="presets" />
     </DocSection>
 
     <DocSection title="Prompt syntax rules">
       <p>
-        Three rules read the prompt the way ComfyUI does. They work in both modes and run
-        first, so the commas and spaces they leave behind are tidied in the same run.
+        Three rules read brackets and tags the way ComfyUI does. They work in both modes and run
+        first, so anything they leave behind is tidied in the same run.
       </p>
       <DocKeyList :items="syntaxRules" />
       <DocCallout variant="tip">
@@ -95,11 +98,10 @@ const syntaxRules = [
 
     <DocSection title="Cleaning the negative">
       <p>
-        With a negative wired in, one Cleaner cleans both prompts. The rule list gets a second
-        column of checkboxes for the negative, with its own defaults: the same as the prompt
-        column's, except fuzzy dedupe and the blocklist are off. Near-duplicates in a negative ("bad hands", "bad hand") are usually
-        deliberate, and the blocklist's words are often exactly what belongs in a negative.
-        Presets set both columns; changing a negative checkbox marks the preset as custom.
+        With a negative wired in, one Cleaner cleans both. The rule list gets a second column of
+        tick boxes for the negative. It follows the prompt column, except near-duplicate removal
+        and the blocklist are off: near-duplicates in a negative are usually on purpose, and
+        blocked words often belong in a negative.
       </p>
       <p>
         <b>Drop negative tags also in prompt</b> (off by default) removes a tag from the negative
@@ -114,19 +116,17 @@ const syntaxRules = [
       </p>
       <ul>
         <li>
-          <b>List</b> — comma or newline-separated words, matched case-insensitively. In tags
-          mode the entire tag containing the match is removed; in text mode only the matched
-          word is removed and any orphan punctuation cleaned up around it.
+          <b>List:</b> words separated by commas or new lines; capitals don't matter. In Tags mode
+          the whole tag with the word goes; in Text mode just the word.
         </li>
         <li>
-          <b>Regex</b> — one pattern per line. Patterns are matched case-insensitively.
-          Invalid patterns are skipped and reported in run-stats.
+          <b>Regex:</b> one pattern per line; capitals don't matter. A broken pattern is skipped
+          and named in the run stats.
         </li>
       </ul>
       <DocCallout variant="tip">
-        Hover any rule toggle for an inline explanation. After each run, the stat counters
-        next to each active rule show exactly what was dropped — a quick sanity check that
-        your rules are working as expected.
+        Hover a rule for what it does. After a run, the count next to each rule shows what it
+        removed.
       </DocCallout>
     </DocSection>
 

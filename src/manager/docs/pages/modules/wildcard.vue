@@ -1,55 +1,43 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
+import DocDetails from "../../../components/docs/DocDetails.vue";
 import StarterButton from "../../../components/docs/StarterButton.vue";
 
 const tagGroupKinds = [
-  { term: "classify (default)", desc: "The tags describe what the option IS — casual, t-shirt, skirt. Several are true at once, so a constraint on this group uses all of them together (AND). This is how every group has always behaved; leaving it alone changes nothing." },
-  { term: "accepts", desc: "The tags are alternatives the option OFFERS — an outfit that works with sneakers, heels or sandals. Exactly one is rolled at pick time and read as $var.AXIS, and it's that single rolled tag a constraint keys on — so a diagonal “same tag wins” constraint pins the target to exactly the shoe that was rolled, not the whole accepted set." },
+  { term: "classify (default)", desc: "The tags describe what the option is: casual, t-shirt, skirt. All of them are true at once, and a constraint on the group uses them together." },
+  { term: "accepts", desc: "The tags are choices the option offers: an outfit that goes with sneakers, heels or sandals. One of them is rolled with the pick, you can print it as $outfit.SHOES, and a constraint reacts to that one tag." },
 ];
 
 const optionFields = [
-  { term: "Value", desc: 'The text that goes into the prompt when this option is picked — for example, "a cat", "a dog", or "a fox".' },
-  { term: "Weight", desc: "How likely this option is to be chosen relative to the others. A weight of 2 is twice as likely as a weight of 1. Set to 0 to disable without deleting — and if every option ends up at 0, whether you set them or a constraint excluded them, the wildcard resolves to nothing (or to its fallback, below) rather than quietly using the first one." },
-  { term: "Sub-categories", desc: 'Zero or more labels on an option (e.g. "feline", "warm") — an option can carry several at once. They group options in the editor, form the Constraint matrix axes, power bulk selection, and back the per-use category filter below. Tags can be organised into axes (e.g. species, temperature) so the editor shows grouped pills.' },
-  { term: "Null option", desc: 'Marks this option as the "no pick" result — the wildcard resolves to an empty string. At most one option per wildcard can be a null option.' },
-  { term: "Fallback", desc: 'Hover an option\'s probability and click "set as fallback". The fallback rolls like any other option, with its own weight, and is also used when nothing is left to pick: constraints (an Only rule included) excluded every option, the fallback included, or every weight is 0. Give it weight 0 if it should only ever stand in. Without one the wildcard resolves to nothing in that case. One per wildcard; the null option can\'t be the fallback. Turning the fallback off for one use (its checkbox on the node) keeps the empty result there. WP Debug and the Test Runner say "Fallback used" when it kicks in. Shared wildcards with a fallback are stamped schema 9.' },
+  { term: "Value", desc: 'The text that goes into the prompt, such as "a cat". It can hold {a|b} choices and @{} references to other wildcards.' },
+  { term: "Weight", desc: "How likely the option is next to the others: weight 2 comes up twice as often as weight 1. 0 switches it off without deleting it." },
+  { term: "Sub-categories (tags)", desc: 'Labels on an option, such as "feline" or "warm". An option can have several. Constraints and the category filter work with them, and you can sort them into groups (species, temperature).' },
+  { term: "Null option", desc: 'An option that prints nothing, for "sometimes leave this out". At most one per wildcard.' },
+  { term: "Fallback", desc: 'Hover an option\'s probability and click "set as fallback". It rolls like any other option, and is also used when nothing else is left to pick (constraints ruled everything out, or every weight is 0). Give it weight 0 if it should only ever stand in. One per wildcard. WP Debug and the Test Runner say "Fallback used" when it kicks in.' },
 ];
 
 const instanceOptions = [
   { term: "Variable binding", desc: "The variable this use writes. It starts as the library's; change it to use the same wildcard twice ($hair and $hair_b) without one overwriting the other." },
-  { term: "Option toggles", desc: "Untick options this use may not roll. Ticking a single option is how you fix one value for a node: it still obeys constraints, so it can come out empty if a constraint excludes it. Keep an enabled fallback for that case." },
+  { term: "Option toggles", desc: "Untick options this use may not pick. Leaving one ticked fixes the value, though a constraint can still rule it out (keep a fallback for that)." },
   { term: "Per-use weights", desc: "Change an option's weight for this use only. The library editor doesn't show them." },
-  { term: "Category filter", desc: 'A boolean sub-category expression (and, or, not, parentheses, and comma as shorthand for "or", e.g. "feline and warm, not lynx") that narrows the pool to matching options before the pick. Build it from grouped pills or type it in the advanced editor; it never applies to the null option.' },
-  { term: "Pick, separator, Allow repeats", desc: "Draw several options at once. See Multi-pick below." },
-  { term: "Exclude null", desc: "Drops the null option for this use, so the wildcard always resolves to real text. Only shown when the wildcard actually has a null option to exclude." },
-  { term: "Fallback", desc: "The fallback's checkbox on the node turns it off for this use, which keeps the empty result there." },
-  { term: "Match variable", desc: "Under Runtime in the node settings. Instead of rolling, pick the option whose text equals a variable's value (ignoring case and outer spaces), e.g. model_variant from WP Model Info. It compares the option's raw text, so options holding {a|b} or @{} never match. No match uses the fallback option; without one the wildcard rolls as usual and WP Debug notes it. This is how a variable drives a constraint: the matched pick is a normal source pick." },
-  { term: "Lock pick", desc: "Freezes this use's pick: the same result on every Generate and every Loop frame, until you unlock it or change the options. Useful for holding one element (e.g. the art style) while the rest varies." },
-  { term: "Hold across run", desc: "The same pick for every frame of one WP Context Loop run, and a new pick on the next run. Use it for a character that must stay the same through a story." },
-  { term: "Hide from prompt", desc: "Writes the variable as internal: constraints, combines and derivations still read it, but the Assembler leaves it out. A later write without Hide from prompt makes it print again." },
+  { term: "Category filter", desc: 'Only pick options with certain tags, e.g. "feline and warm, not lynx" (a comma means or). Click the tag pills or type it under Advanced.' },
+  { term: "Pick, separator, Allow repeats", desc: "Pick several options at once. See below." },
+  { term: "Exclude null", desc: "Leaves the null option out for this use, so something always prints." },
+  { term: "Fallback", desc: "Untick the fallback to switch it off for this use; then nothing prints when nothing is left." },
+  { term: "Match variable", desc: "Instead of rolling, pick the option whose text equals a variable's value (case doesn't matter), e.g. $model_variant from WP Model Info. No match uses the fallback, or rolls as usual. This is how a variable can drive a constraint." },
+  { term: "Lock pick", desc: "Keeps the same pick on every Generate and loop frame until you unlock it. Good for an art style you've settled on." },
+  { term: "Hold across run", desc: "The same pick on every frame of one loop run, a new one next Generate. Good for a character who stays the same through a story." },
+  { term: "Hide from prompt", desc: "The variable prints nothing, but constraints, combines and derivations can still use it." },
 ];
 
-const importRules = [
-  { term: "Lists and their names", desc: "Each list is named by its path the way __name__ finds it: animals/cats.txt is animals/cats, and a YAML key clothing: { tops: [...] } is clothing/tops. A list that isn't merged becomes its own wildcard, and its variable is the last part ($cats, $tops)." },
-  { term: "Merging related lists", desc: "With Merge related lists ticked (the default), a folder of small lists becomes one wildcard, like one you'd build by hand: hair/colors/red.txt, hair/colors/blonde.txt and hair/colors/dark.txt become one hair/colors wildcard whose options are tagged red, blonde and dark. Each folder level is a tag group, and lists with the same name in sibling folders share a tag: female/footwear and male/footwear give a gender group (female, male) and a footwear tag, like the axes of a hand-built wildcard. A folder merges when it holds at least two lists and up to 1,000 options over at most three levels; a bigger folder is split into its subfolders. Entry points stay separate, and so does a list that points at another list in the same folder, because a wildcard can't reference itself." },
-  { term: "Keep separate", desc: "Merged rows show a lists chip. Open one to see each list with its tag and the tag groups, and click Keep these lists separate to import that folder as one wildcard per list again; Merge again under the settings undoes it. Untick Merge related lists to keep every list separate." },
-  { term: "Roles", desc: "The review sorts every wildcard by what it does in the pack. Entry points build a prompt from other wildcards and nothing else uses them: these are what you drop on a Context. Compositions build on other wildcards and are used by one. Vocabulary is a plain list. Groups are made for globs and folder references." },
-  { term: "Carries over", desc: "Each wildcard is marked Exact, Close (same outputs, but a setting or label didn't carry over) or Needs a look (some text no longer renders as it did, like a dropped if-condition). Open a row to see why." },
-  { term: "Domains", desc: "The top folders (or YAML top keys) of the pack. Pick one to review it on its own. Each wildcard goes in a category named after its domain, unless you type one category for all." },
-  { term: "Library tag", desc: "Every module gets the library tag, which starts as the pack's name, so the whole pack sits together on the Tags page." },
-  { term: "Bundles", desc: "With Bundle the entry points ticked (the default) the entry points go into one bundle per domain, inside one pack bundle. Lists stay in the library, where the entry points reach them through references, so dropping a bundle rolls the prompts the pack was written to make, not every list. A pack of plain lists gets no bundles." },
-  { term: "References", desc: "__other__ references become @{} chips that point at the imported wildcard. A reference to a list that was merged points at the merged wildcard, filtered by that list's tags (female and footwear), so it still draws from that list only. A glob like __animals/*__, or a parent key like __clothing__ in Impact packs, becomes a group wildcard that picks one of the matching wildcards, weighted by how many options each has. PPP filters such as __colors'warm'__ become a category filter on the chip." },
-  { term: "Choice syntax", desc: "{a|b}, weights like {2::a|b} and multi-pick like {2$$a|b|c} keep working, and so does __2$$name__: it picks two different values of name. Open ranges like {-2$$a|b} get their missing end filled in, samplers like {~a|b} pick at random, and the default separator is a comma." },
-  { term: "Weights, labels and fallbacks", desc: "Weighted lines (3::text), PPP labels ('summer, casual'::text) and PPP's else choice carry over as option weights, sub-categories and the wildcard's fallback. A line written twice becomes one option with twice the weight, so the odds stay the same." },
-  { term: "Comments and encoding", desc: "Lines starting with # are skipped and kept as the module's description, as is the # text inside multi-line YAML prompts. Text after a # with a space before it is cut (so C# survives). Files saved as UTF-8 or Windows-1252 both read correctly." },
-];
 </script>
 
 <template>
@@ -58,185 +46,134 @@ const importRules = [
     title="Wildcard"
     icon="pi pi-sparkles"
     tone="wildcard"
-    blurb="Pick one option at random from a pool and write it to a $variable. The core building block of any pipeline."
+    blurb="A list of options. Each run picks one and writes it to a $variable. The building block of every pipeline."
   >
     <DocSection title="What it does">
       <p>
-        A Wildcard module holds a list of options — "a cat", "a dog", "a fox" — and picks one (or
-        several) each run. The result is written to a <VarToken>$variable</VarToken> you name, so
-        later modules (and your prompt template) can use it. Options can carry weights so some are
-        more likely than others, you can tag them with several sub-category labels to filter on the
-        fly, and an option's text can even embed another wildcard — see Multi-pick and Nested
-        references below.
+        A wildcard holds options such as "a cat", "a dog", "a fox" and picks one each run. The pick
+        goes into a <VarToken>$variable</VarToken> you name, so your template and later modules can
+        use it. Weights make some options more likely, and tags let constraints and filters work
+        with groups of options.
       </p>
+      <DocUseWhen
+        :good="[
+          'Any choice something else reacts to: a constraint, a derivation, Match variable, a sweep',
+          'Any list you want weights, tags, a fallback or Test Runner counts on',
+          'A shared vocabulary with no variable, drawn through @{} references',
+        ]"
+        :better="[
+          'Always-on text: use Fixed Values',
+          'A tiny variant inside one option: an inline {a|b}',
+          'A phrase built from other picks: use a Combine',
+        ]"
+      />
       <DocImage
         src="images/docs/wildcard-editor.png"
-        ratio="16 / 7"
-        caption="The Starter subject wildcard modal open on the $subject variable. Two sub-category chips (feline · 2, canine · 2) sit above a four-row pool: cat + tiger tagged FELINE, dog + wolf tagged CANINE, each row showing a 25% probability bar and a weight of 1. Footer carries the Lock pick + Hide from prompt runtime toggles plus the Save to library / Save split."
+        ratio="2 / 1"
+        caption="The Starter subject wildcard: four options with weights, chances and categories, and the Runtime buttons (Lock pick, Hide from prompt, Hold across run, Match variable)."
       />
-      <DocCallout variant="tip">
-        <b>Use a wildcard</b> for any choice something else reacts to (a constraint, a derivation,
-        Match variable, a sweep or a second template reads it), and for any list you want weights,
-        tags, a fallback or Test Runner counts on. A wildcard with no variable is a vocabulary,
-        drawn through <VarToken kind="ref">@{}</VarToken> references.
-        <b>Not for</b> always-on text (use Fixed Values), a tiny cosmetic variant inside one option
-        (an inline <VarToken kind="inline">{a|b}</VarToken>), or a phrase built from other picks
-        (use a Combine). See <DocRef id="pack-structure" />.
-      </DocCallout>
+    </DocSection>
+
+    <DocSection title="Make one">
+      <ol>
+        <li>In the manager, use <b>Quick create → Wildcard</b> on the dashboard, or the new button on
+          the Wildcards page.</li>
+        <li>Give it a name. The variable name follows it (<VarToken>$subject</VarToken>).</li>
+        <li>Add options, one per row, or paste a list with <b>Bulk edit</b>.</li>
+        <li>Save, then add it to a WP Context with <b>Add module</b>.</li>
+      </ol>
     </DocSection>
 
     <DocSection title="Option fields">
       <DocKeyList :items="optionFields" />
     </DocSection>
 
-    <DocSection title="Per-use options">
+    <DocSection title="Change it for one node">
       <p>
-        When you add a wildcard to a Context you can change how it behaves for that use without
-        touching the shared library entry:
+        Open the row's editor on the node to change how this one use behaves. The library entry stays
+        as it is.
       </p>
       <DocKeyList :items="instanceOptions" />
       <DocCallout variant="tip">
-        There is no pin control: to fix a value for one node, untick every other option, or use
-        Lock pick. Only a WP Context Loop sweep pins a pick, and a swept pick skips constraints.
+        To fix one value on a node, untick every other option or use Lock pick.
       </DocCallout>
     </DocSection>
 
-    <DocSection title="Multi-pick">
+    <DocSection title="Pick several at once">
       <p>
-        By default a wildcard makes a single pick, but a use can draw several at once. Set the
-        <b>Pick</b> count to a range — a low and a high (make them equal for a fixed count, e.g.
-        2–2) — and the wildcard rolls that many options. A <b>separator</b> joins them, and
-        <b>Allow repeats</b> decides whether a draw can land on the same option twice: off (the
-        default) keeps the picks distinct, on draws with replacement so repeats are possible.
-      </p>
-      <p>
-        A multi-pick produces a <em>list</em> value. Reference the joined list with a bare
-        <VarToken>$name</VarToken> (it uses the separator), or pull out a single item with
-        <VarToken>$name.K</VarToken> — <code>K</code> is 0-based, so
-        <VarToken>$colors.0</VarToken> is the first pick. For example, a
-        <VarToken>$colors</VarToken> wildcard set to Pick 2–3 with separator <code>, </code> might
-        resolve to "red, blue, green", while <VarToken>$colors.0</VarToken> is just "red".
+        Set <b>Pick</b> to a range, e.g. 2–3, and the wildcard picks that many options, joined by the
+        <b>separator</b>. <b>Allow repeats</b> lets the same option come up twice.
+        <VarToken>$colors</VarToken> prints them all ("red, blue, green");
+        <VarToken>$colors.0</VarToken> is just the first ("red").
       </p>
       <DocCallout variant="tip">
-        In multi-pick the null option leaves the pool — set the minimum to <code>0</code> when you
-        want "maybe nothing" (a use that sometimes picks fewer, or none). The text-field equivalent
-        of multi-pick is the inline pick syntax, covered on
-        <DocRef id="variable-pipeline" />.
+        When picking several, the null option is left out. Set the lower end to 0 for "maybe none".
       </DocCallout>
     </DocSection>
 
-    <DocSection title="Nested references">
+    <DocSection title="Wildcards inside wildcards">
       <p>
-        An option's value isn't limited to plain text — it can embed a reference to another
-        wildcard with <VarToken kind="ref">@{uuid}</VarToken>, so picking that option pulls in a
-        fresh pick from the referenced "nested" wildcard. The reference can narrow what the nested
-        wildcard may roll with a <VarToken kind="inline">:filter</VarToken> sub-category expression
-        and drop its null option with <VarToken kind="inline">!null</VarToken> — for example
-        <VarToken kind="ref">@{abcd1234:warm}</VarToken> rolls the nested wildcard but only from its
-        warm-tagged options. Inline <VarToken kind="inline">{a|b}</VarToken> picks work in option
-        text too. Type <b>@</b> to insert one; the chip states, the full filter grammar
-        (<code>not</code> / <code>and</code> / <code>or</code> / parentheses) and why plain
-        <code>@name</code> stays text are on <DocRef id="chips-and-references" />.
+        An option can hold a reference to another wildcard: type <b>@</b> and pick it. Picking
+        "<VarToken kind="ref">@{color}</VarToken> jeans" then also picks a color. A reference can
+        narrow what it draws, such as only the warm colors. See
+        <DocRef id="chips-and-references" />.
       </p>
       <DocCallout variant="warn">
-        A wildcard is a <b>producer</b>: on its option text,
-        <VarToken kind="ref">@{}</VarToken> references and <VarToken kind="inline">{a|b}</VarToken>
-        picks resolve, but <VarToken>$name</VarToken> reads do <b>not</b> — an option can't pull in
-        a value another module set, no matter the order. To build a value from earlier picks, use a
-        Combine or Derivation. The full token grammar and the per-surface gate live on
-        <DocRef id="variable-pipeline" />.
+        Option text can't read a <VarToken>$variable</VarToken>: <code>$mood</code> in an option
+        prints as typed. To build text from other picks, use a Combine.
       </DocCallout>
     </DocSection>
 
-    <DocSection title="What a tag is, and the two kinds">
+    <DocSection title="Tags you can read as variables">
       <p>
-        A sub-category is a <b>label on an option</b>. It filters the pool and drives the
-        Constraint matrix. It is not a variable, and until you say otherwise nothing outside those
-        two places can read it.
-      </p>
-      <p>
-        Every tag group carries a kind, chosen on the group's header:
+        Each tag group has a kind, set on its header:
       </p>
       <DocKeyList :items="tagGroupKinds" />
       <p>
-        The test is what the tag says about the option. <i>"Is this outfit casual?"</i> is
-        classify. <i>"Which shoes go with this outfit?"</i> is accepts.
+        Ask what the tag says about the option. "Is this outfit casual?" is classify. "Which shoes go
+        with this outfit?" is accepts.
       </p>
-      <p>
-        An <b>accepts</b> group can be read as a variable. If a
-        <VarToken>$outfit</VarToken> wildcard has an accepts group named
-        <VarToken kind="inline">SHOES</VarToken>, then
-        <VarToken>$outfit.SHOES</VarToken> is the tag rolled for this run — the same value in
-        every template, every module and every chained node, because it is rolled once when the
-        option is picked rather than each time it is read. When the wildcard picks more than one
-        option, <VarToken>$outfit.0.SHOES</VarToken> is the first pick's.
-      </p>
-      <DocCallout variant="warn">
-        Only <b>accepts</b> groups are readable. Ungrouped tags, and tags in a classify group,
-        stay editor-only — <VarToken>$outfit.SHOES</VarToken> renders as nothing if
-        <VarToken kind="inline">SHOES</VarToken> was never promoted, and the conflict scanner
-        flags it. An accepts group's name is read as
-        <VarToken>$var.NAME</VarToken>, so it must be letters, digits and underscores starting
-        with a letter; renaming one can strand a template that reads it.
-      </DocCallout>
+      <DocDetails title="Reading an accepts group">
+        <p>
+          If <VarToken>$outfit</VarToken> has an accepts group named
+          <VarToken kind="inline">SHOES</VarToken>, then <VarToken>$outfit.SHOES</VarToken> is the
+          shoe rolled with this run's outfit. It is rolled once, so it reads the same everywhere.
+          With several picks, <VarToken>$outfit.0.SHOES</VarToken> is the first pick's. Only accepts
+          groups can be read this way; anything else prints nothing and gets a warning. The group
+          name must be letters, digits and underscores, and renaming it breaks templates that read
+          it.
+        </p>
+      </DocDetails>
     </DocSection>
 
-    <DocSection title="Constraint interaction">
+    <DocSection title="With constraints">
       <p>
-        A <b>Constraint</b> module placed between a source wildcard and this one can tilt the
-        option weights — for example, making "stormy" more likely when the subject was "ocean".
-        The constraint must sit <em>after</em> the source wildcard and <em>before</em> this
-        wildcard in the stack. See the Constraint page for the full picture.
-      </p>
-      <p>
-        Constraints read picks, not variables. To steer one from a variable (the loaded
-        checkpoint, an injected value), give the source wildcard options that spell the
-        variable's values and set <b>Match variable</b> on it. See WP Model Info for a worked
-        example.
+        A <b>Constraint</b> can change this wildcard's odds based on another pick, such as making
+        "stormy" likelier when the subject is "ocean". It must sit after the source wildcard and
+        before this one.
       </p>
       <DocImage
         src="images/docs/wildcard-constraint-order.png"
         ratio="16 / 6"
-        caption="A WP Context node showing the canonical source → constraint → target stack: Starter subject ($subject · 4 options), Starter pairing (#1 $subject → $mood · 2×2 matrix), Starter mood ($mood · 4 options). The pink left-border on the constraint + target row visually pairs them; the constraint claims the first instance of $mood downstream of itself."
+        caption="Source wildcard, then the constraint, then the target wildcard. The #1 badges link the constraint to its target."
       />
+      <p>
+        Constraints react to picks, not variables. To steer one from a variable (such as the loaded
+        model), give a wildcard options that spell the variable's values and set <b>Match
+        variable</b> on it. WP Model Info has an example.
+      </p>
     </DocSection>
 
-    <DocSection title="Importing wildcard packs">
+    <DocSection title="Coming from A1111 or Forge?">
       <p>
-        Coming from A1111 or Forge? Open <b>Import / Export → Wildcard packs</b> and choose a folder,
-        files or a <code>.zip</code>, or drop them on the page. It reads Dynamic Prompts,
-        Prompt Post-Processor (PPP) and Impact Pack wildcards: <code>.txt</code> lists,
-        <code>.yaml</code> / <code>.yml</code> and <code>.json</code> files, and <code>.zip</code>
-        packs of them. Dropping a pack on the Import tab opens it here too.
+        Your wildcard packs can be imported: see <DocRef id="wildcard-import" />.
       </p>
-      <p>
-        You go through three steps: load the pack, review the plan, then pick what to import with
-        the usual import picker (everything starts selected).
-      </p>
-      <DocKeyList :items="importRules" />
-      <DocImage
-        src="images/docs/wildcard-import.png"
-        ratio="1148 / 695"
-        caption="Billions of Wildcards in review: 2,653 lists become 935 wildcards, 1,896 of them merged into 190 tagged wildcards. Open here is clothings/regular, 12 lists merged into one wildcard with a gender tag group (female, male, unisex) and a garment group; each list shows the tags that pick it, and Keep these lists separate undoes the merge."
-      />
-      <p>
-        Importing the same pack again finds the wildcards you already have instead of adding copies.
-      </p>
-      <DocCallout variant="warn">
-        <b>What doesn't carry over.</b> Rows marked <b>Needs a look</b> list what changed. PPP
-        <code>if</code> conditions are removed (the choice stays). Dynamic Prompts variables like
-        <code>${name}</code> stay as plain text, because a wildcard can't read a variable: rebuild
-        that part with a Combine, which can. Template arguments like
-        <code>__name(var=value)__</code> are dropped, and a reference to a wildcard the pack doesn't
-        contain stays as plain text.
-      </DocCallout>
     </DocSection>
 
     <DocSection title="Try it">
       <p>
-        Create a ready-made <VarToken>$subject</VarToken> wildcard in your library — four options
-        ("cat", "tiger", "dog", "wolf") split across two sub-categories. It lands as the first
-        piece of the starter set you can build into a full pipeline.
+        Create a ready-made <VarToken>$subject</VarToken> wildcard with four options (cat, tiger,
+        dog, wolf) in two categories. It's the first piece of the starter set.
       </p>
       <StarterButton slot="subject" />
     </DocSection>
@@ -246,6 +183,7 @@ const importRules = [
         :links="[
           { id: 'variable-pipeline', label: 'The $variable pipeline', icon: 'pi pi-share-alt', tone: 'neutral' },
           { id: 'constraint', label: 'Constraint', icon: 'pi pi-filter', tone: 'constraint' },
+          { id: 'wildcard-import', label: 'Import wildcard packs', icon: 'pi pi-download', tone: 'wildcard' },
           { id: 'wp-context', label: 'WP Context', icon: 'pi pi-sitemap', tone: 'node' },
         ]"
       />

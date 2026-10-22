@@ -9,34 +9,43 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
 interface WarningRow { label: string; severity: string; desc: string }
 
 const runtimeWarnings: WarningRow[] = [
-  { label: "Unknown variable", severity: "warn", desc: "A $variable used in a template or combine was never set by any module, so it resolved to empty." },
-  { label: "Unresolved reference", severity: "warn", desc: "An @{…} nested reference couldn't be resolved — its target wildcard wasn't found, or wasn't upstream." },
-  { label: "Reference nested too deep", severity: "warn", desc: "Nested @{…} references went past the depth limit and stopped expanding." },
-  { label: "Circular reference", severity: "warn", desc: "A loop of @{…} references pointed back at itself; it was broken to avoid hanging." },
-  { label: "Variable used where it can't be", severity: "warn", desc: "A $variable was read somewhere that doesn't support one (for example, inside a wildcard option)." },
-  { label: "Sub-category filter matched nothing", severity: "warn", desc: "An @{…} sub-category filter matched no options, so the reference resolved to nothing (empty)." },
-  { label: "Fixed Values override unreadable", severity: "warn", desc: "A Fixed Values instance's per-instance overrides couldn't be read, so they were ignored." },
-  { label: "Unknown constraint mode", severity: "warn", desc: "A constraint used a reweight mode that isn't recognised; that entry was skipped." },
-  { label: "Factor ignored (Allow)", severity: "info", desc: "A factor was set together with mode Allow, where the factor has no effect." },
-  { label: "Constraint source missing at run", severity: "warn", desc: "The constraint's source wildcard wasn't present in the stack when the run reached it." },
-  { label: "Constraint excluded everything", severity: "warn", desc: "Reweighting zeroed out every option on the target, so it resolved to nothing. Give the target a fallback option to have it stand in instead (Debug then shows \"Fallback used\")." },
-  { label: "Constraint never fired", severity: "info", desc: "A constraint was set up but its target wildcard never came up this run, so it had no effect." },
+  { label: "Unknown variable", severity: "warn", desc: "A template or combine used a $variable nothing set, so it printed nothing." },
+  { label: "Reference not found", severity: "warn", desc: "An @{…} reference points at a wildcard that wasn't found on the node or in the library." },
+  { label: "Filter matched no options", severity: "warn", desc: "A reference's tag filter left no options, so it printed nothing." },
+  { label: "Reference not allowed here", severity: "warn", desc: "An @{…} reference sits somewhere that can't use one, such as a combine or the Assembler, so it printed nothing." },
+  { label: "Variable not allowed here", severity: "warn", desc: "A $variable was written somewhere that can't read one, such as a wildcard option. It printed as typed." },
+  { label: "Unknown tag axis", severity: "warn", desc: "A $name.GROUP read names a group that isn't an accepts group on that wildcard, so it printed nothing." },
+  { label: "Pick has no tag on this axis", severity: "info", desc: "The picked option has no tag from the accepts group being read, so $name.GROUP printed nothing." },
+  { label: "References nested too deep", severity: "warn", desc: "References inside references went too many levels deep, so the deepest ones were left out." },
+  { label: "Reference cycle", severity: "warn", desc: "References pointed back at each other in a circle; the circle was cut so the run could finish." },
+  { label: "Constraint never applied", severity: "info", desc: "The constraint's target never ran after it (or wasn't drawn this run), so it changed nothing." },
+  { label: "Constraint partial reach", severity: "info", desc: "A constraint set to reach the next N (or picked) uses of its target found fewer than that." },
+  { label: "Constraint source missing", severity: "warn", desc: "The constraint's source wildcard hadn't run yet when the constraint was reached." },
+  { label: "Constraint excluded every option", severity: "warn", desc: "The constraint ruled out every option of the target and there was no fallback, so it printed nothing." },
+  { label: "Fallback used", severity: "info", desc: "Nothing was left to pick, so the wildcard's fallback option stood in." },
+  { label: "No option matches the variable", severity: "info", desc: "A wildcard set to Match variable found no option equal to the variable's value and has no fallback, so it rolled as usual." },
+  { label: "Pinned option missing", severity: "warn", desc: "A sweep frame (or other pin) points at an option the wildcard no longer has, so that frame rolled instead." },
+  { label: "Constraint factor ignored (allow)", severity: "info", desc: "A rule set to Allow also has a number; Allow ignores it." },
+  { label: "Unknown constraint mode", severity: "warn", desc: "A constraint rule has a mode this version doesn't know (probably from a newer pack), so the rule was skipped." },
+  { label: "Fixed-values overrides malformed", severity: "warn", desc: "The node-only changes on a Fixed Values row couldn't be read, so the library values were used." },
+  { label: "Constraint failed to register", severity: "warn", desc: "A constraint couldn't be set up, usually because its data is damaged. It was skipped." },
+  { label: "Module failed", severity: "warn", desc: "A module hit an error and was skipped. The message says which." },
   { label: "Invalid injector name", severity: "warn", desc: "A WP Context Injector row used a variable name that isn't valid." },
-  { label: "Reserved injector name", severity: "warn", desc: "A WP Context Injector row tried to use a name starting with __, which is reserved internally." },
+  { label: "Reserved injector name", severity: "warn", desc: "A WP Context Injector row name starts with two underscores, which are kept for the engine." },
 ];
 
 const scannerRules: WarningRow[] = [
-  { label: "Shadowed variable", severity: "info", desc: "An upstream Context already sets this variable; this one overrides it (last write wins). Normal when chaining — shown so the override is visible." },
-  { label: "Duplicate variable", severity: "warn", desc: "Two modules in the same Context set the same variable name; the lower one wins." },
-  { label: "Missing variable in template", severity: "warn", desc: "The Prompt Assembler template references a $variable that no upstream module produces." },
+  { label: "Shadowed variable", severity: "info", desc: "An earlier Context already sets this variable, and this one replaces it. Normal when chaining; shown so you know." },
+  { label: "Duplicate variable", severity: "warn", desc: "Two modules on the same Context set the same variable; the lower one wins." },
+  { label: "Missing variable in template", severity: "warn", desc: "The Assembler template uses a $variable nothing before it sets (or one that is hidden)." },
   { label: "Constraint source not found", severity: "warn", desc: "A constraint points at a source wildcard that isn't in your library." },
   { label: "Constraint target not found", severity: "warn", desc: "A constraint points at a target wildcard that isn't in your library." },
-  { label: "Constraint source not upstream", severity: "warn", desc: "The constraint's source wildcard doesn't appear before the constraint in the chain, so it can't read a pick from it." },
-  { label: "Constraint target not downstream", severity: "warn", desc: "No copy of the target wildcard appears after the constraint. Each constraint needs its own downstream target — N constraints on the same wildcard need N copies." },
-  { label: "Rules out all (no fallback)", severity: "warn", desc: "For some value of the constraint's source, every option of the target ends up excluded or weighted 0, and the target has no fallback, so it would come out empty. The hover message lists those source values. Allow at least one option for them, or set a fallback on the target wildcard." },
-  { label: "Injector binding unmatched", severity: "warn", desc: "A WP Context Injector row names a variable that nothing upstream produces." },
-  { label: "Unknown tag axis", severity: "warn", desc: "A $var.AXIS read names an accepts axis the wildcard doesn't declare, so it resolves to empty. Promote that tag group to accepts, or fix the axis name in the read." },
-  { label: "Option misses its accepts-axis tag", severity: "info", desc: "Some options of an accepts-axis wildcard carry none of the axis's tags, so $var.AXIS is empty on the runs those options are picked. Add a tag from the axis to those options, or leave it if empty is intended." },
+  { label: "Constraint source not upstream", severity: "warn", desc: "The source wildcard isn't above the constraint, so there's no pick for it to react to." },
+  { label: "Constraint target not downstream", severity: "warn", desc: "The target wildcard isn't below the constraint (or the constraint's reach covers none of its uses), so it can't change anything." },
+  { label: "Rules out all (no fallback)", severity: "warn", desc: "For some source picks, every option of the target is ruled out and there's no fallback, so it would print nothing. The hover message names those picks. Allow at least one option for them, or set a fallback." },
+  { label: "Injector binding unmatched", severity: "warn", desc: "A WP Context Injector row names a variable that nothing before it sets." },
+  { label: "Unknown tag group", severity: "warn", desc: "A $name.GROUP read names a group that isn't an accepts group on that wildcard, so it prints nothing. Make the tag group accepts, or fix the name." },
+  { label: "Option missing an accepts tag", severity: "info", desc: "Some options have no tag from an accepts group, so $name.GROUP is empty when they're picked. Tag them, or leave it if empty is fine." },
 ];
 </script>
 
@@ -46,17 +55,16 @@ const scannerRules: WarningRow[] = [
     title="Warning &amp; conflict types"
     icon="pi pi-list"
     tone="neutral"
-    blurb="Every condition the canvas flags as you build, and every warning a run can produce — with how serious it is and what it means."
+    blurb="What each warning on the canvas and in WP Debug means, and what to do about it."
   >
     <DocCallout variant="tip">
-      You don't look these up by name — on the canvas each shows as a coloured dot + short label on
-      the node (hover for the message), and after a run they're listed in the <b>WP Debug</b> node's
-      <b>Warnings</b> tab. Everything here is <b>advisory</b>: it reports, it never blocks a run.
-      Blue = info, amber = worth a look.
+      On the canvas each one shows as a coloured dot and a short label on the node; hover for the
+      message. After a run they're listed in WP Debug's <b>Warnings</b> tab. None of them stops a
+      run. Blue is for your information, amber is worth a look.
     </DocCallout>
 
     <DocSection title="As you build (canvas)">
-      <p>The scanner watches your graph and flags these straight away:</p>
+      <p>These show on the nodes while you build:</p>
       <div class="wp-doc-warn-table-wrap">
         <table class="wp-doc-warn-table">
           <thead>
@@ -80,7 +88,7 @@ const scannerRules: WarningRow[] = [
     </DocSection>
 
     <DocSection title="After a run (WP Debug → Warnings)">
-      <p>These only become clear during an actual generation:</p>
+      <p>These show up once you run. The labels match what WP Debug shows.</p>
       <div class="wp-doc-warn-table-wrap">
         <table class="wp-doc-warn-table">
           <thead>

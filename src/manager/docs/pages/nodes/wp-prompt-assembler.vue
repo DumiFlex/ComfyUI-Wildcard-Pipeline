@@ -1,18 +1,21 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocDetails from "../../../components/docs/DocDetails.vue";
+import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
 const ports = [
-  { term: "context (in)", desc: "The resolved variable map from any WP Context chain. Required — without it the node has no values to substitute." },
-  { term: "template", desc: "Your prompt template. Type free text and insert $variable names wherever you want a wildcard pick or fixed value to appear. The multiline editor supports the full variable syntax." },
-  { term: "negative_template", desc: "Optional. The negative template, in the collapsible negative section under the preview. $negatives marks where the collected negative words go; it reads $vars too. Leave it empty to output just the collected words. Like the template, it can be turned into an input and wired from any STRING." },
-  { term: "prompt (out)", desc: "The fully resolved prompt string. Wire it directly into a CLIP Text Encode, a WP Prompt Cleaner, or any other node that accepts a STRING. Stays output 0, so existing links never move." },
-  { term: "negative (out)", desc: "The negative words of every variable the template rendered, filled into the negative template. Wire it into your negative CLIP Text Encode (or the Cleaner's negative input)." },
+  { term: "context (in)", desc: "The variables from a WP Context (or anything that ends in one)." },
+  { term: "template", desc: "Your prompt with $variables in it." },
+  { term: "negative_template", desc: "Optional, in the collapsible negative section. Your standing negative, with $negatives where the collected negative words go." },
+  { term: "prompt (out)", desc: "The finished prompt. Wire it into CLIP Text Encode or a WP Prompt Cleaner." },
+  { term: "negative (out)", desc: "The negative words of the variables this template printed, plus your negative template. Wire it into your negative CLIP Text Encode." },
 ];
 </script>
 
@@ -23,114 +26,84 @@ const ports = [
     icon="pi pi-align-left"
     tone="node"
     node-id="WP_PromptAssembler"
-    blurb="Turn a $variable map into a finished prompt. Write a template with $placeholders and the node fills them in from the upstream Context every run."
+    blurb="Write a template with $variables and get a finished prompt, plus a matching negative."
   >
-    <DocSection title="What it's for">
+    <DocSection title="What it does">
       <p>
-        Write a template like
-        <VarToken>a $style portrait of $subject, $lighting</VarToken>
-        and the Assembler substitutes every <VarToken>$variable</VarToken> from the upstream
-        Context. The result is a plain text string you send straight to a CLIP Text Encode or
-        any other text consumer. Variables marked as internal in the Context are kept out of
-        the rendered prompt automatically.
+        Write <VarToken>a $style portrait of $subject, $lighting</VarToken> and the Assembler puts
+        each variable's value in its place, every run. The result is plain text for CLIP Text
+        Encode. Variables you set to <b>Hide from prompt</b> print nothing.
       </p>
+      <DocUseWhen
+        :good="[
+          'One per prompt you need: the main prompt, a face detailer, one per region',
+          'Each reads the same Context, so their picks agree',
+        ]"
+        :better="[
+          'Rolling anything: it has no seed. Pick in a wildcard and use its $variable',
+        ]"
+      />
       <DocImage
         src="images/docs/wp-prompt-assembler.png"
         ratio="16 / 7"
-        caption="WP Prompt Assembler with template '$mood, $subject, $style, $accent, masterpiece, highly detailed'. The variables strip below the template lists 3 upstream chips ($style, $scene, $accent) on the left + 2 dashed-orange missing chips ($mood, $subject) on the right, with a hover tooltip 'Click to remove $mood from template · Right-click for more'. Header counters read '3 upstream · 2 missing'. Resolved preview shows the upstream chips filled in ('oil painting', 'cinematic lighting') while the missing slots stay literal as '$mood, $subject' so the gap is obvious."
+        caption="The Assembler with a template, its variable chips and the resolved preview. A variable nothing sets is underlined and shown as a dashed chip."
       />
     </DocSection>
 
-    <DocSection title="Inputs &amp; output">
-      <DocKeyList :items="ports" />
-    </DocSection>
-
-    <DocSection title="Writing templates">
-      <p>
-        The Assembler's one job is to drop <VarToken>$variable</VarToken> values into your text:
-      </p>
+    <DocSection title="Write a template">
       <ul>
-        <li>
-          <VarToken>$varname</VarToken> — replaced with the value from the Context.
-          If no binding exists, the placeholder resolves to empty and the canvas preview
-          highlights it with an amber underline so you can spot the gap before running.
-          The output is tidied after: commas left at the start or end, and a joining word
-          left with nothing after it because its variable came out empty ("shadows with, rain"),
-          are dropped. Words your own text ends on ("shirt tucked in") and emoticon tags
-          (":d", "!?") are kept as written.
-        </li>
-        <li>
-          <VarToken kind="inline">$$</VarToken> — a literal dollar sign, in case you need one in the output text.
-        </li>
+        <li>Type <code>$</code> and pick a variable, or click a chip in the <b>variables</b> strip
+          to insert it at the cursor.</li>
+        <li>A variable nothing sets is underlined in amber and shows as a dashed chip, and prints
+          nothing when you run. Click the chip to remove it from the template.</li>
+        <li><code>$$</code> prints a single dollar sign.</li>
+        <li><b>Save</b> and <b>Load</b> in the toolbar keep templates in your library (see
+          <DocRef id="templates" />).</li>
       </ul>
       <DocCallout variant="warn">
-        Inline picks like <VarToken kind="inline">{a|b|c}</VarToken> are <b>not</b> rolled here.
-        The Assembler has no seed of its own, so a pick would freeze on the same branch every
-        run — instead it leaves the <VarToken kind="inline">{a|b|c}</VarToken> in the prompt
-        verbatim. To get a real random pick, produce the value in a <em>seeded</em> module — a
-        <b>Wildcard</b>, <b>Combine</b>, or <b>Derivation</b> inside a WP Context — and reference
-        its <VarToken>$variable</VarToken> in the template instead.
+        The Assembler doesn't roll. <code>{a|b|c}</code> prints exactly as typed and
+        <code>@{…}</code> prints nothing. Put choices in a wildcard or combine and print its
+        variable.
       </DocCallout>
-      <DocCallout variant="warn">
-        <VarToken kind="ref">@{}</VarToken> references are dropped in the template: they print
-        nothing and WP Debug notes it. Put a reference in a wildcard option and print that
-        wildcard's variable.
-      </DocCallout>
-      <DocCallout variant="warn">
-        The tidy only closes gaps left by empty variables. It is not a cleaner: it never removes
-        duplicate tags, and it keeps the template's own words. With <VarToken>$hat</VarToken>,
-        <VarToken>$scarf</VarToken> and <VarToken>$place</VarToken> empty,
-        <code>a girl wearing $hat with $scarf, $pose, in the $place</code> renders "a girl
-        wearing, sitting": the joining words go, the verb stays. Write templates that read well
-        when a variable is empty (put the verb inside a combine), and use WP Prompt Cleaner after
-        the Assembler to remove duplicates.
-      </DocCallout>
-      <DocCallout variant="tip">
-        <b>Use one Assembler</b> per prompt you need: the main prompt, a detailer prompt that
-        renders only the face slots, one per region for regional prompting. Each reads the same
-        Context, so their picks agree. <b>Not for</b> rolling anything: it has no seed.
-      </DocCallout>
-      <DocCallout variant="tip">
-        The <b>Variables</b> strip below the template lists every upstream binding — click any
-        chip to insert <VarToken>$name</VarToken> at the cursor position rather than typing it by hand.
-      </DocCallout>
+      <DocDetails title="How empty variables are tidied">
+        <p>
+          When a variable comes out empty, the commas around it and a joining word left with nothing
+          after it ("with", "and") are removed. Your own words stay: with
+          <VarToken>$hat</VarToken>, <VarToken>$scarf</VarToken> and <VarToken>$place</VarToken>
+          empty, <code>a girl wearing $hat with $scarf, $pose, in the $place</code> gives "a girl
+          wearing, sitting". Write templates that still read well when something is empty (put the
+          verb inside a combine), and use WP Prompt Cleaner to remove duplicates. Emoticon tags such
+          as <code>:d</code> are kept.
+        </p>
+      </DocDetails>
     </DocSection>
 
     <DocSection title="The negative output">
       <p>
-        Options, fixed values, combines and derivations can carry negative words for the variable
-        they set. The <code>negative</code> output collects them, but only for the variables this
-        template actually rendered, so a detailer Assembler that renders just
-        <VarToken>$face</VarToken> never picks up the hair negatives. Internal variables add
-        nothing.
+        Wildcard options, fixed values, combines and derivations can carry negative words. The
+        <code>negative</code> output collects them, but only for variables this template printed: an
+        Assembler for a face detailer that prints just <VarToken>$face</VarToken> never gets the
+        hair negatives.
       </p>
+      <DocImage
+        src="images/docs/assembler-negative.png"
+        ratio="16 / 7"
+        caption="Hair, Weather and Quality feed an Assembler with both outputs wired. The negative preview shows the words collected from the variables the template printed."
+      />
       <ul>
-        <li>
-          <VarToken>$negatives</VarToken> in the negative template marks where the collected words
-          go, e.g. <code>lowres, bad anatomy, $negatives</code>.
-        </li>
-        <li>An empty negative template outputs just the collected words.</li>
-        <li>A negative template without <VarToken>$negatives</VarToken> gets them appended at the end.</li>
-        <li>
-          Repeated tags are dropped (case-insensitive, and weight wraps like
-          <code>(blurry:1.2)</code> count as the plain tag), including tags already in the negative
-          template. A <VarToken>$var</VarToken> in the negative template adds its text, not its own
-          negatives.
-        </li>
+        <li>Put your standing negative in the negative template, e.g.
+          <code>lowres, bad anatomy, $negatives</code>.</li>
+        <li>Leave it empty to output only the collected words. Without
+          <VarToken>$negatives</VarToken> they're added at the end.</li>
+        <li>Repeated tags are dropped, also when written with a weight like
+          <code>(blurry:1.2)</code>.</li>
+        <li><b>Clear template</b> empties the negative template too.</li>
       </ul>
-      <DocCallout variant="tip">
-        Keep your standing negative (<code>lowres, bad anatomy</code>) in the negative template and
-        let <VarToken>$negatives</VarToken> add the words this run's picks call for. See
-        <b>Negatives</b> for where negative words come from.
-      </DocCallout>
+      <p>More in <DocRef id="negatives" />.</p>
     </DocSection>
 
-    <DocSection title="Save &amp; Load template">
-      <p>
-        The toolbar buttons let you save the current template to the <b>Templates</b> library
-        or load a previously saved one. After loading, the next Save defaults to updating that
-        same library entry. Manage all templates in the SPA <b>Templates</b> tab.
-      </p>
+    <DocSection title="Inputs and outputs">
+      <DocKeyList :items="ports" />
     </DocSection>
 
     <DocSection title="Works with">

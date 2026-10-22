@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
@@ -8,19 +9,19 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
 const sources = [
-  { term: "Wildcard option", desc: "Each option has an optional Negative line under its value. When that option is picked, its words attach to the wildcard's $variable. A multi-pick attaches each picked option's words to its own pick. The null option has no negative." },
-  { term: "Fixed value", desc: "Each value has the same Negative line. A fixed value always applies, so its negative travels with the variable wherever it is used. Handy for style presets: $style brings “photo, 3d render” along with it. On a Context node (and in the bundle editor) each row shows its negative under the value: change it there for that use only, clear it, or add one to a row you added; the reset button brings back the library's." },
-  { term: "Combine", desc: "A combine carries the negatives of every variable its template read, with no setup. On top of that it has one optional Negative of its own, for words that belong to the phrase as a whole. Like its template, that negative can be changed on a Context node or in the bundle editor for that use only, with a reset button to go back to the library's." },
-  { term: "Derivation “Add to negative”", desc: "A fourth action next to Replace, Append and Prepend. It leaves the target variable's text alone and adds the value to that variable's negatives, so a rule like “when $mood is gloomy, add ‘smiling’” follows $mood wherever it goes. With + And, one branch can replace a variable and add to its negative in the same step. “Replace negative” is the fifth action: it drops the variable's negative words and uses the value instead." },
-  { term: "Context Injector row", desc: "Socket rows and template rows can carry a Negative, written with the same $slot grammar as the row template. It replaces whatever negatives the variable carried before, so injecting $character over a picked one swaps the pick's negative for the row's." },
+  { term: "Wildcard option", desc: "Each option has a Negative line under its value. When the option is picked, its words go with the wildcard's variable. With several picks, each pick brings its own. The null option has none." },
+  { term: "Fixed value", desc: "Same Negative line. A fixed value always applies, so its negative always comes along: a $style of \"oil painting\" can bring \"photo, 3d render\". On a Context node each row shows its negative under the value; change it there for that node only, and the reset button brings back the library's." },
+  { term: "Combine", desc: "A combine brings along the negatives of every variable it reads, with no setup. It can also have a Negative of its own for the phrase as a whole, which you can change per node too." },
+  { term: "Derivation", desc: "Two extra actions: Add to negative keeps the variable's text and adds words to its negative (\"when $mood is gloomy, add smiling\"). Replace negative swaps its negative for new words. Use + And to change the text and the negative in one rule." },
+  { term: "WP Context Injector row", desc: "A row can have a Negative, which can use the row's input. It replaces any negative the variable had before." },
 ];
 
 const rules = [
-  { term: "A write replaces, an append keeps", desc: "When a module writes a variable, the old value's negatives go with it. A derivation Replace swaps them for the negatives of whatever its new text read; Append and Prepend keep the old ones and add the new." },
-  { term: "Index and axis accessors", desc: "$props.0 carries only the first pick's negative. Bare $props and $props.AXIS carry every pick's." },
-  { term: "Internal variables add nothing", desc: "An internal variable never renders in a prompt, so its negatives never reach a negative output, even though they are kept for downstream modules that read it." },
-  { term: "Variables in the negative template", desc: "A $var you write in the Assembler's negative template adds its text, not its own negatives." },
-  { term: "Reading a variable's negatives: $name.neg", desc: "$pose.neg is the negative words $pose carries at that point in the chain, and $props.1.neg only pick 1's. It works wherever $vars do: hand one variable's negatives to another with “Add to negative” and the value $pose_portrait.neg, use it in a combine or the Assembler's negative template, or test it in a condition. Reading .neg is not a use of $pose, so it never pulls $pose's words in a second time." },
+  { term: "Setting a variable drops its old negative", desc: "When a module writes a variable again, the old negative goes with the old value. Append and Prepend keep it and add the new one." },
+  { term: "One pick, one negative", desc: "$props.0 brings only the first pick's negative. $props and $props.GROUP bring every pick's." },
+  { term: "Hidden variables add nothing", desc: "A hidden variable never prints, so its negative never reaches the negative output. Later modules that read it still get it." },
+  { term: "Words you type in the negative template", desc: "A $variable you write in the Assembler's negative template adds its text, not its negative." },
+  { term: "Reading a negative: $name.neg", desc: "$pose.neg is the negative $pose has at that point, and $props.1.neg the second pick's. Use it like any variable: in a combine, in the Assembler's negative template, in a derivation's \"if\", or to copy one variable's negative to another with Add to negative. Reading .neg doesn't count as printing $pose, so its words don't come in twice." },
 ];
 </script>
 
@@ -30,25 +31,25 @@ const rules = [
     title="Negatives"
     icon="pi pi-minus-circle"
     tone="neutral"
-    blurb="Send words to the negative prompt from the pick that needs them. Pick “strawberry blonde” hair and “strawberry, fruit” lands in the negative, so the model doesn't paint fruit."
+    blurb="Send words to the negative prompt from the pick that needs them. Pick “strawberry blonde” hair and “strawberry, fruit” goes to the negative, so the model doesn't paint fruit."
   >
     <DocSection title="The idea">
       <p>
         A negative belongs to the <VarToken>$variable</VarToken> it came with, and only reaches an
-        Assembler that actually uses that variable. The main Assembler that renders
-        <VarToken>$hair</VarToken>, <VarToken>$mood</VarToken> and <VarToken>$face</VarToken> gets all
-        three variables' negative words; a face detailer Assembler that only renders
-        <VarToken>$face</VarToken> gets only the face words from the same Context.
+        Assembler that prints that variable. The main Assembler that prints
+        <VarToken>$hair</VarToken>, <VarToken>$mood</VarToken> and <VarToken>$face</VarToken> gets
+        all three negatives; a face detailer Assembler that prints only
+        <VarToken>$face</VarToken> gets only the face words.
       </p>
       <DocFlow figure="negatives-flow"
         :stages="[
           { icon: 'pi pi-sparkles', name: 'Wildcard option', sub: 'negative: fruit', tone: 'wildcard' },
           { icon: 'pi pi-sitemap', name: '$hair', sub: 'carries it', tone: 'node' },
-          { icon: 'pi pi-align-left', name: 'Assembler', sub: 'renders $hair', tone: 'node' },
+          { icon: 'pi pi-align-left', name: 'Assembler', sub: 'prints $hair', tone: 'node' },
           { icon: 'pi pi-minus-circle', name: 'negative output', sub: 'fruit', tone: 'neutral' },
         ]"
         :arrows="['picked', 'used', 'collected']"
-        caption="Negatives follow usage: words only reach a negative output when their variable was rendered."
+        caption="Negative words only reach an Assembler that printed their variable."
       />
     </DocSection>
 
@@ -56,8 +57,8 @@ const rules = [
       <DocKeyList :items="sources" />
     </DocSection>
 
-    <DocSection title="What each negative field accepts">
-      <p>A negative field takes the same syntax as the value field next to it.</p>
+    <DocSection title="What you can write in a negative">
+      <p>A negative takes the same syntax as the value next to it.</p>
       <table class="wp-doc-syntax-table">
         <thead>
           <tr><th>Field</th><th>Accepts</th></tr>
@@ -81,20 +82,19 @@ const rules = [
           </tr>
           <tr>
             <td>Injector row negative</td>
-            <td>the row's <VarToken>$input_N</VarToken> slots, like the row template</td>
+            <td>the row's input, like the row template</td>
           </tr>
           <tr>
             <td>Assembler negative template</td>
-            <td><VarToken>$vars</VarToken> and the reserved <VarToken>$negatives</VarToken> slot</td>
+            <td><VarToken>$vars</VarToken> and <VarToken>$negatives</VarToken> (where the collected words go)</td>
           </tr>
         </tbody>
       </table>
       <DocCallout variant="tip">
-        Negatives never change your picks. Negative text rolls on its own seed stream, and an
-        <VarToken kind="ref">@{ref}</VarToken> inside a negative resolves quietly: it doesn't count as
-        a pick, isn't logged in the Test Runner trace, doesn't trigger constraints, and the picked
-        option's own negative is ignored. Adding or editing a negative leaves every seed's prompt
-        exactly as it was.
+        Negatives never change your picks. Adding or editing one leaves every seed's prompt exactly
+        as it was. A reference inside a negative rolls on its own and isn't counted as a pick: it
+        doesn't show in the Test Runner, doesn't trigger constraints, and brings no negative of its
+        own.
       </DocCallout>
     </DocSection>
 
@@ -104,29 +104,33 @@ const rules = [
 
     <DocSection title="The Assembler's negative output">
       <p>
-        <b>WP Prompt Assembler</b> has a second output, <code>negative</code>, next to
-        <code>prompt</code>. Wire it into your negative CLIP Text Encode. Under the preview sits a
-        collapsible negative template:
+        <b>WP Prompt Assembler</b> has a second output, <code>negative</code>. Wire it into your
+        negative CLIP Text Encode. Its negative template sits in a fold-out section under the
+        preview:
       </p>
+      <DocImage
+        src="images/docs/assembler-negative.png"
+        ratio="16 / 7"
+        caption="The Assembler's negative preview and output next to the prompt."
+      />
       <ul>
         <li><VarToken>$negatives</VarToken> marks where the collected words go, e.g. <code>lowres, bad anatomy, $negatives</code>.</li>
         <li>An empty template outputs just the collected words.</li>
-        <li>A template without <VarToken>$negatives</VarToken> gets the collected words appended at the end.</li>
+        <li>Without <VarToken>$negatives</VarToken>, the collected words go at the end.</li>
       </ul>
       <p>
-        Repeated tags are dropped (case-insensitive, and <code>(blurry:1.2)</code> counts as
-        <code>blurry</code>), including tags you already typed in the template.
+        Repeated words are dropped, also when written differently: <code>(blurry:1.2)</code> counts
+        as <code>blurry</code>, and so does one you already typed in the template.
       </p>
     </DocSection>
 
     <DocSection title="Cleaning both prompts">
       <p>
-        <b>WP Prompt Cleaner</b> takes an optional <code>negative</code> input and returns a cleaned
-        <code>negative</code> output beside the prompt. Its rule list has a second column for the
-        negative: it follows the prompt column's preset, except fuzzy dedupe and the blocklist are
-        off. The extra rule <b>Drop negative tags also in prompt</b> (off by default)
-        removes a tag from the negative when the prompt asks for it too; either way the report
-        names the overlap.
+        <b>WP Prompt Cleaner</b> has an optional <code>negative</code> input and a cleaned
+        <code>negative</code> output. Its rule list has a second column for the negative, which
+        follows the prompt's preset except fuzzy dedupe and the blocklist. Switch on <b>Drop
+        negative tags also in prompt</b> to remove a word from the negative when the prompt asks for
+        it; the report names the overlap either way.
       </p>
     </DocSection>
 
@@ -153,21 +157,18 @@ const rules = [
 
     <DocSection title="Seeing where each word came from">
       <p>
-        <b>WP Debug</b> lists a variable's negative words under its value, naming the module when
-        they came from elsewhere (a derivation's Add to negative, a combine inheriting from
+        <b>WP Debug</b> lists each variable's negative under its value, and names the module when
+        the words came from somewhere else (a derivation, or a combine reading
         <VarToken>$hair</VarToken>). The <b>Test Runner</b> shows a NEG line under each output,
-        tinted by the variable each word came from, adds a Negative column to Samples, and
-        Compare lists a seed whose negative changed.
+        coloured by the variable each word came from, and a Negative column in Samples.
       </p>
     </DocSection>
 
     <DocSection title="Sharing">
-      <DocCallout variant="warn">
-        A module or bundle that uses a negative (or an “Add to negative” action) is stamped
-        <b>schema 8</b> when you publish it. Older versions of the extension refuse schema 8 packs
-        and ask you to update, instead of silently dropping the negatives. Injector rows and
-        Cleaner settings live in the workflow, not the library, so they need no schema bump.
-      </DocCallout>
+      <p>
+        A pack that uses negatives needs an extension version that knows them. An older version
+        asks you to update instead of dropping the words.
+      </p>
     </DocSection>
 
     <DocSection title="Works with">

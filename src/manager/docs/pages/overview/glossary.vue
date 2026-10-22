@@ -5,70 +5,34 @@ import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
 const terms = [
-  {
-    term: "Module",
-    desc: "A named piece of pipeline logic you author in the manager — for example a wildcard list or a fixed value. Modules live in your library and can be reused across many different WP Context nodes.",
-  },
-  {
-    term: "Wildcard",
-    desc: "A module that holds a list of options. Each time the pipeline runs, one option is picked at random (weighted by the numbers you set). The picked value is stored in the context under a $variable name.",
-  },
-  {
-    term: "Sub-category (tag)",
-    desc: "A label on a wildcard option — e.g. \"warm\", \"sneakers\". An option can carry several. Tags filter the pool and drive constraint matrices, and can be grouped into named groups; they are editor-only unless a group is marked accepts.",
-  },
-  {
-    term: "Library tag",
-    desc: "A label on a whole module, bundle or template — e.g. \"outfit\", \"portrait\". An item can carry several, so a tag works as a collection: the sidebar lists the most-used ones and the Tags page renames, merges or deletes them. Library tags only organise your library; they never change what a pipeline picks. Not the same as a wildcard option's sub-categories.",
-  },
-  {
-    term: "Axis (accepts group)",
-    desc: "A tag group marked accepts: its tags are alternatives the option offers, and exactly one is rolled per pick. Read it anywhere with $var.AXIS (e.g. $outfit.SHOES). A constraint from an accepts source keys on that single rolled tag, and an accepts target agrees with it under a diagonal.",
-  },
-  {
-    term: "Classify group",
-    desc: "The default tag-group kind: the tags describe what the option is, all true at once. Not readable as a variable; a constraint on a classify group uses all its tags together (AND).",
-  },
-  {
-    term: "$variable",
-    desc: "A named slot in the context that holds a text value. Wildcards, Fixed Values, and Combines all write into $variables. Your template reads from them — for example $subject or $style.",
-  },
-  {
-    term: "Chip",
-    desc: "The small tinted pill a text field shows for a $variable or an @{…} reference, so it edits as one unit. A chip is resolved (points at something real), filtered (a funnel: the reference narrows its pool), or broken (red ?: its target isn't in your library).",
-  },
-  {
-    term: "Reference (@{…})",
-    desc: "An embedded fresh pick from another module, written @{uuid#name:filter!null} with only the 8-character id required. Plain @name is not a reference; it stays literal text.",
-  },
-  {
-    term: "Filter expression",
-    desc: "The :filter part of a reference: sub-category names joined with not, and, or (or a comma), grouped with parentheses, e.g. not warm and (low or high).",
-  },
-  {
-    term: "Combine",
-    desc: "A module that joins two or more $variables (and any fixed text) into a new $variable. Useful for building phrases like \"$style portrait of $subject\".",
-  },
-  {
-    term: "Constraint",
-    desc: "A module that changes the odds of a later wildcard's options based on what an earlier wildcard picked: boost, reduce, exclude, or allow only some. Lets you say things like \"when $style picks cinematic, $lighting picks only low-key options\". It reads picks, not variables, and sets no variable itself.",
-  },
-  {
-    term: "Bundle",
-    desc: "A named group of modules stored together. You can drop an entire bundle into a WP Context at once. Saving a module in the library updates it inside library bundles; a bundle already placed in a workflow keeps its snapshot and shows \"library updated\" until you pull the change with Reset to library snapshot.",
-  },
-  {
-    term: "Seed",
-    desc: "A number that controls which options get picked. Same seed + same modules = same result. Change the seed to get a different set of picks. Each WP Context node has its own seed widget.",
-  },
-  {
-    term: "Context",
-    desc: "The WP Context node. It holds your modules, runs them in order on each Generate, and produces a map of $variables that the Assembler can read.",
-  },
-  {
-    term: "Template",
-    desc: "A text string with $variable placeholders that the WP Prompt Assembler fills in. For example: \"A $style portrait of $subject\" becomes \"A cinematic portrait of a fox\" after resolution.",
-  },
+  { term: "Module", desc: "One piece you build in the manager, such as a wildcard or a fixed value. It lives in your library and you can add it to any WP Context." },
+  { term: "Library", desc: "Everything you've saved in the manager: modules, bundles and templates." },
+  { term: "$variable", desc: "A named value, such as $subject. Modules write variables; your template reads them." },
+  { term: "Wildcard", desc: "A list of options. Each run picks one and writes it to a $variable." },
+  { term: "Weight", desc: "How likely an option is next to the others. Weight 2 comes up twice as often as weight 1; 0 switches it off." },
+  { term: "Null option", desc: "A wildcard option that prints nothing, for \"sometimes leave this out\"." },
+  { term: "Fallback", desc: "The option a wildcard uses when nothing else is left to pick, for example after a constraint ruled everything out." },
+  { term: "Sub-category (tag)", desc: "A label on a wildcard option, such as \"warm\". Filters and constraints work with tags." },
+  { term: "Tag group", desc: "Tags sorted under a name, such as species or temperature. A group is either classify (the tags describe the option) or accepts (see below)." },
+  { term: "Accepts group", desc: "A tag group whose tags are choices the option offers, such as shoes that go with an outfit. One is rolled with each pick, and $outfit.SHOES prints it." },
+  { term: "Library tag", desc: "A label on a whole module, bundle or template, used only to organise your library. It never changes a pick." },
+  { term: "Fixed Values", desc: "A module that sets variables to text you type. Nothing is rolled." },
+  { term: "Combine", desc: "A module that builds a new variable from text and other variables, such as \"$style portrait of $subject\"." },
+  { term: "Derivation", desc: "A module with if/then rules: when a variable says one thing, set another variable." },
+  { term: "Constraint", desc: "A module that changes a later wildcard's odds based on an earlier pick, such as \"ocean makes stormy likelier\"." },
+  { term: "Bundle", desc: "Several modules saved together, so you can add them to a WP Context in one go." },
+  { term: "Template", desc: "Your prompt with $variables in it, such as \"a $style portrait of $subject\". The WP Prompt Assembler fills it in." },
+  { term: "Reference (@{…})", desc: "A fresh pick from another wildcard, written inside an option. Type @ to insert one." },
+  { term: "Chip", desc: "The small pill a text field shows for a $variable or an @{…} reference. A red one points at something missing." },
+  { term: "Inline choice ({a|b})", desc: "A quick random choice written straight into an option, fixed value or combine. Picks one of the parts each run. The Assembler prints it as typed." },
+  { term: "Seed", desc: "The number behind every random pick. Same seed and same modules give the same result." },
+  { term: "WP Context", desc: "The node that holds your modules, rolls them on every Generate and passes the variables on." },
+  { term: "Chaining", desc: "Wiring one WP Context into another. The second starts with the first one's variables and can add to or replace them." },
+  { term: "Hide from prompt", desc: "A variable that prints nothing, while other modules can still use it. The globe button on a row." },
+  { term: "Lock pick", desc: "Keeps the same pick on every Generate until you unlock it." },
+  { term: "Hold across run", desc: "The same pick on every frame of one loop run, and a new one next Generate." },
+  { term: "Negative", desc: "Words that go to the negative prompt when a variable is printed. Options, fixed values, combines and derivations can carry them." },
+  { term: "Loop", desc: "The WP Context Loop node: runs your pipeline several times in one Generate, one frame each." },
 ];
 </script>
 
@@ -78,7 +42,7 @@ const terms = [
     title="Glossary"
     icon="pi pi-book"
     tone="neutral"
-    blurb="Plain-language definitions for the terms you will see throughout the docs."
+    blurb="The words you'll see in these docs, one line each."
   >
     <DocSection title="Terms">
       <DocKeyList :items="terms" />

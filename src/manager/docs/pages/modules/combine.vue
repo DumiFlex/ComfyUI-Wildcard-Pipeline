@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
@@ -9,12 +10,12 @@ import VarToken from "../../../components/docs/VarToken.vue";
 import StarterButton from "../../../components/docs/StarterButton.vue";
 
 const instanceOptions = [
-  { term: "Template override", desc: "Replace the entire template for this particular use without changing the shared library entry." },
-  { term: "Output variable", desc: "Change which $variable name this combine writes to for this use." },
-  { term: "Negative override", desc: "Replace the combine's negative for this use. An empty one clears it." },
-  { term: "Lock seed", desc: "Freezes the template's inline {a|b} picks on every Generate and every Loop frame." },
-  { term: "Hold across run", desc: "Keeps the result the same for every frame of one Loop run." },
-  { term: "Hide from prompt", desc: "Writes the output as internal: other modules read it, the Assembler leaves it out." },
+  { term: "Template override", desc: "Change the template on this node only." },
+  { term: "Output variable", desc: "Write to a different $variable on this node." },
+  { term: "Negative override", desc: "Change the combine's negative on this node. An empty one clears it." },
+  { term: "Lock seed", desc: "Keeps the template's {a|b} choices the same on every Generate." },
+  { term: "Hold across run", desc: "Keeps the result the same for one loop run." },
+  { term: "Hide from prompt", desc: "The result prints nothing; other modules can still read it." },
 ];
 </script>
 
@@ -24,15 +25,13 @@ const instanceOptions = [
     title="Combine"
     icon="pi pi-link"
     tone="combine"
-    blurb="Fill a template with $variables from earlier modules and write the result to a new $variable. The tool for assembling multi-part values."
+    blurb="Build a new $variable from text and earlier variables, such as “$style portrait of $subject”."
   >
     <DocSection title="What it does">
       <p>
-        A Combine module takes a template string you write — like
-        <VarToken>$style portrait of $subject, $mood lighting</VarToken> — and fills in the
-        <VarToken>$variable</VarToken> placeholders with whatever was picked or set earlier in the
-        stack. The filled-in result is written to a single output variable (e.g.
-        <VarToken>$prompt_fragment</VarToken>) that your prompt assembler or further modules can use.
+        Write a template such as <VarToken>$style portrait of $subject, $mood lighting</VarToken>.
+        The combine fills in the variables set above it and writes the result to one new variable,
+        such as <VarToken>$shot</VarToken>, for the Assembler or later modules.
       </p>
       <p>
         You can also sprinkle <VarToken kind="inline">{a|b|c}</VarToken> inline picks directly
@@ -40,30 +39,34 @@ const instanceOptions = [
       </p>
       <DocImage
         src="images/docs/combine.png"
-        ratio="16 / 7"
-        caption="The Starter scene Combine modal binding to $prompt_fragment. Template reads '$style portrait of $subject, $mood lighting' with the three detected vars listed below ($style $subject $mood). Preview replays the template verbatim; Resolved swaps in static picks → 'oil painting portrait of cat, serene lighting'. Footer carries Lock seed + Hide from prompt runtime toggles."
+        ratio="2 / 1"
+        caption="The Starter scene combine: '$mood $subject' resolves to 'serene cat' and is stored as $scene. The Negative field sends words to the Assembler's negative."
       />
-      <DocCallout variant="tip">
-        <b>Use a Combine</b> to join picks into one phrase (<VarToken>wearing $outfit and
-        $shoes</VarToken>), to print a hidden driver inside a phrase, or to read an accepts group
-        as text. <b>Not for</b> making a pick (a combine's text is not a pick, so nothing can
-        constrain it) or for text that depends on a condition (use a Derivation).
-      </DocCallout>
+      <DocUseWhen
+        :good="[
+          'Joining picks into one phrase: “wearing $outfit and $shoes”',
+          'Printing a hidden driver inside a phrase',
+          'Reading an accepts group as text',
+        ]"
+        :better="[
+          'Making a pick: a combine isn\'t a pick, so nothing can constrain it. Use a Wildcard',
+          'Text that depends on a condition: use a Derivation',
+        ]"
+      />
     </DocSection>
 
     <DocSection title="What you type in the template">
       <ul>
         <li>
-          <VarToken>$variablename</VarToken> — substituted with whatever that variable holds at
-          this point in the stack. The variable must have been set by an earlier module.
+          <VarToken>$name</VarToken> prints what that variable holds at this point. A module above
+          must set it.
         </li>
         <li>
-          <VarToken kind="inline">{a|b|c}</VarToken> — picks one of the options at random inline.
-          Good for small variations you don't need a full wildcard for.
+          <VarToken kind="inline">{a|b|c}</VarToken> picks one part each run, for small variations
+          that don't need a wildcard.
         </li>
         <li>
-          <VarToken kind="inline">$$</VarToken> — a literal <code>$</code> character in the output (escape if you need
-          to write a dollar sign that shouldn't be treated as a variable).
+          <VarToken kind="inline">$$</VarToken> prints a plain <code>$</code>.
         </li>
         <li>
           <VarToken>$name.0</VarToken>, <VarToken>$outfit.SHOES</VarToken> and
@@ -76,13 +79,12 @@ const instanceOptions = [
         </li>
       </ul>
       <DocCallout variant="tip">
-        The manager shows you which <VarToken>$variables</VarToken> your template reads as chips
-        below the template field. If a chip is highlighted as missing, add an upstream module that
-        sets that variable.
+        The variables your template reads show as chips under it. A chip marked missing means no
+        module above sets that variable.
       </DocCallout>
     </DocSection>
 
-    <DocSection title="Per-use options">
+    <DocSection title="Change it for one node">
       <DocKeyList :items="instanceOptions" />
     </DocSection>
 
@@ -90,7 +92,7 @@ const instanceOptions = [
       <p>
         Create a starter Combine that fills <VarToken>$mood $subject</VarToken> into a single
         <VarToken>$scene</VarToken> variable. It reads the starter subject and mood wildcards, so
-        build those first (or just use "Build starter bundle" to get the whole set at once).
+        build those first, or use "Build starter bundle" to get the whole set.
       </p>
       <StarterButton slot="scene" />
     </DocSection>

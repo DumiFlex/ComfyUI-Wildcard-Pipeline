@@ -1,20 +1,20 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
+import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
 const controls = [
-  { term: "Base seed", desc: "The starting point for the seed series. Change it for a different batch of seeds; keep it the same to reproduce the same set. Right-click → Convert widget to input to drive it from another seed node." },
-  { term: "Count", desc: "How many seeds to emit in one run (1–999). When you wire a WP Context Loop into loop_config, the count auto-mirrors the loop's count so the two lists stay the same length." },
-  { term: "Strategy", desc: "How the per-iteration seeds are spread out — Hashed (default), Sequential (base, base+1, base+2 …), or Stride (large prime jumps). Picks a chip inside the node's DOM widget." },
-  { term: "Override base seed from loop", desc: "When ON and loop_config is wired, the node uses the loop's base seed instead of the local widget. Independent of the count + strategy toggles so you can mix sources." },
-  { term: "Override count from loop", desc: "When ON and loop_config is wired, the node uses the loop's count. Auto-flips ON the moment you connect a loop_config wire — flip it off manually if you want a different count." },
-  { term: "Override strategy from loop", desc: "When ON and loop_config is wired, the node uses the loop's strategy. Also auto-flips ON when you connect the wire." },
-  { term: "loop_config (in)", desc: "Optional WP Context Loop side-output. Wire it in to have the seed series mirror the loop's shape automatically." },
-  { term: "seed (out)", desc: "List of N derived seeds — one per iteration. Connect it to a KSampler's seed input (or anything that takes INT) and the downstream node fans out across the series in lockstep with the loop's prompts." },
+  { term: "base_seed", desc: "Where the seed list starts. Same base, same seeds." },
+  { term: "count", desc: "How many seeds it gives (1–999). Follows the loop's count while Override count from loop is on." },
+  { term: "Strategy", desc: "hash, sequential (base, base+1 …) or stride. It changes which numbers you get, not how varied the images are." },
+  { term: "Per-iteration seeds", desc: "Lock single seeds, Lock all, Copy / Paste, or Prev to keep the seed a frame used last run." },
+  { term: "Override … from loop", desc: "Three switches: take the base seed, the count and the strategy from the wired loop. Count and strategy switch on by themselves when you connect loop_config; base seed stays yours unless you switch it on." },
 ];
 </script>
 
@@ -25,114 +25,66 @@ const controls = [
     icon="pi pi-clone"
     tone="node"
     node-id="WP_SeedList"
-    blurb="Emit a list of seeds — one per loop iteration — so a downstream KSampler gets a different seed each pass. The cleanest way to keep every (prompt, image) pair unique inside a WP Context Loop batch."
+    blurb="Gives a sampler one seed per loop frame, so every frame of a WP Context Loop makes its own image."
   >
-    <DocSection title="What it's for">
+    <DocSection title="What it does">
       <p>
-        A standard <b>KSampler</b> takes a single INT seed. When a <b>WP Context Loop</b> emits N
-        prompts, the sampler runs N times but reads the same seed every pass — so two iterations
-        that happen to roll the exact same prompt string would produce the exact same image.
-        Drop a <b>WP Seed List</b> between the loop and your sampler: it emits a list of N
-        derived seeds, pairing one with each prompt, so every iteration gets its own
-        (prompt, seed) combo.
+        A plain KSampler takes one seed and uses it for every frame of a loop. Two frames that roll
+        the same prompt then make the same image. WP Seed List gives the sampler a list of seeds
+        instead, one per frame: frame 1 gets seed 1, frame 2 gets seed 2, and so on.
       </p>
-      <p>
-        The node works standalone too — even without a loop wired in, the widget controls
-        produce a stable, reproducible series of N seeds you can fan out across any node that
-        accepts INT.
-      </p>
+      <DocUseWhen
+        :good="[
+          'Giving each loop frame its own sampler seed',
+          'Keeping an image you liked reproducible (lock its seed)',
+        ]"
+        :better="[
+          'Prompt variety: it never changes a prompt. The Context seed and the Loop do that',
+        ]"
+      />
     </DocSection>
 
-    <DocSection title="The controls">
-      <DocKeyList :items="controls" />
-    </DocSection>
-
-    <DocSection title="The flow with WP Context Loop">
+    <DocSection title="Set it up">
       <DocFlow figure="wp-seed-list-flow"
         :stages="[
           { icon: 'pi pi-replay', name: 'WP Context Loop', sub: 'N prompts', tone: 'node' },
           { icon: 'pi pi-clone', name: 'WP Seed List', sub: 'N seeds', tone: 'node' },
-          { icon: 'pi pi-image', name: 'KSampler', sub: 'N unique images', tone: 'neutral' },
+          { icon: 'pi pi-image', name: 'KSampler', sub: 'N different images', tone: 'neutral' },
         ]"
-        :arrows="['loop_config', 'paired by index']"
-        caption="The loop's side-output drives the seed list's count + strategy; the loop's prompt list and the seed list pair up one-to-one downstream so every iteration gets a unique seed."
+        :arrows="['loop_config', 'paired in order']"
+        caption="Wire the loop's loop_config into the Seed List and its seed output into the sampler's seed."
       />
-      <p style="margin-top: 14px;">
-        Wire the loop's <code>loop_config</code> side-output into the seed list's
-        <code>loop_config</code> input and the override-count + override-strategy toggles auto-flip
-        ON. From that point on the seed series matches the loop's length and shape without you
-        touching the widgets. Flip <b>Override base seed from loop</b> on as well if you want the
-        loop's base seed to anchor the series too; leave it off to keep a different sampler base.
-      </p>
-      <DocCallout variant="tip">
-        Disconnecting the loop_config wire leaves the override toggles where they are — the
-        widget values stay as the fallback so the node keeps running standalone. Re-connecting
-        the wire auto-arms the toggles again.
-      </DocCallout>
+      <ol style="margin-top: 14px;">
+        <li>Wire the loop's <code>loop_config</code> output into the Seed List.</li>
+        <li>Wire the Seed List's <code>seed</code> output into your sampler's seed input (right-click
+          the sampler and convert seed to an input if needed).</li>
+      </ol>
+      <p>The count now follows the loop, so the two lists always line up.</p>
+      <DocImage
+        src="images/docs/wp-seed-list.png"
+        ratio="16 / 7"
+        caption="WP Context Loop's loop_config wired into WP Seed List, whose seed output drives the KSampler's seed."
+      />
     </DocSection>
 
-    <DocSection title="Variation strategies">
-      <p>
-        Same three strategies as <b>WP Context Loop</b>, applied to the seed series instead of
-        per-iteration Context seeds:
-      </p>
-      <ul>
-        <li>
-          <b>Hashed</b> (default) — each iteration gets a seed spread out from the base by a hash.
-        </li>
-        <li>
-          <b>Sequential</b> — base, base+1, base+2 … Easy to read out and quote to someone.
-          Neighbouring seeds still give unrelated images.
-        </li>
-        <li>
-          <b>Stride</b> — large prime jumps through the seed space. Wide spread, deterministic.
-        </li>
-      </ul>
-      <p>
-        The strategy only changes which seeds you get. No strategy makes the images more or less
-        varied.
-      </p>
-      <p>
-        Every emitted seed is masked to 50 bits so it stays inside the range ComfyUI's frontend
-        produces when you press the seed randomise button — you can copy any seed back into a
-        standalone sampler and it'll reproduce identically.
-      </p>
-    </DocSection>
-
-    <DocSection title="Per-iteration seed locks">
-      <p>
-        The <b>Per-iteration seeds</b> button opens the seed list, where you can pin any iteration
-        to a fixed seed while the rest stay derived — handy for keeping a couple of results you
-        liked while the others keep exploring. <b>Lock all</b> / <b>Unlock all</b>, <b>Copy</b> /
-        <b>Paste</b> (as <code>#N: seed</code> text), and a per-row <b>Prev</b> button round it out.
-      </p>
+    <DocSection title="The controls">
+      <DocKeyList :items="controls" />
       <DocCallout variant="tip">
-        <b>Prev</b> locks the seed an iteration actually used on the <em>previous</em> run, not the
-        upcoming one — the right choice when control-after-generate is randomising the base. The
-        Seed List captures its series on every run, so Prev lights up after the first generate.
+        Prev is the one to use after a run you liked: the list shows the seeds for the next run,
+        and Prev locks the seed the frame actually used.
       </DocCallout>
     </DocSection>
 
     <DocSection title="Good to know">
-      <DocCallout variant="tip">
-        The seed list pairs with the loop by <em>list index</em>, not by any wire-based handshake.
-        As long as the counts match (which the auto-on override guarantees when you wire
-        loop_config), iteration <em>N</em>'s prompt always gets paired with seed <em>N</em>.
-      </DocCallout>
-      <DocCallout variant="warn">
-        Without a loop wired in, the seed list still emits N seeds — useful for fanning a single
-        sampler out N ways from one click. But if you connect it to a non-loop chain that
-        expects a single seed, ComfyUI will iterate the downstream node N times anyway. Set the
-        count to 1 to collapse to single-seed behaviour without removing the node.
-      </DocCallout>
-      <DocCallout variant="tip">
-        <b>Use Seed List</b> only for sampler seeds: when you loop prompts and want each frame's
-        image seed to follow the same frames (WP Image Filter's Send to Loop, or keeping a found
-        image reproducible). <b>Not for</b> prompt variety. It never changes a prompt: the Context
-        seed and the Loop already vary those. Prompt and sampler seeds are separate, so
-        reproducing a frame needs both the loop's seed lock (with Override seed on) and the Seed
-        List's lock. A fixed sampler seed with varying prompts is a valid comparison too.
-      </DocCallout>
+      <ul>
+        <li>Without a loop it still gives <b>count</b> seeds, so the sampler runs that many times.
+          Set count to 1 for a single seed.</li>
+        <li>Unplugging <code>loop_config</code> leaves the switches as they were; the node falls
+          back to its own values.</li>
+        <li>Seeds stay in the range ComfyUI's own randomize button uses, so you can copy one into a
+          plain sampler and get the same image.</li>
+        <li>More on seeds: <DocRef id="seeds-and-loops" />.</li>
+      </ul>
     </DocSection>
 
     <DocSection title="Works with">

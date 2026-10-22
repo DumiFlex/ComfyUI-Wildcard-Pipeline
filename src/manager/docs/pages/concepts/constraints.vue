@@ -2,52 +2,16 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
-import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
-import DocFigure from "../../../components/docs/DocFigure.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
+import DocRef from "../../../components/docs/DocRef.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
-const modes = [
-  {
-    term: "Allow",
-    desc: "No change. Shown as Neutral in the matrix: the pair rolls as if there were no rule.",
-  },
-  {
-    term: "Exclude",
-    desc: "Remove matching options from the target pool before it rolls.",
-  },
-  {
-    term: "Boost",
-    desc: "Multiply the weight of matching options by the factor you set (> 1 = more likely).",
-  },
-  {
-    term: "Reduce",
-    desc: "Multiply the weight of matching options by a factor less than 1 (= less likely).",
-  },
-  {
-    term: "Only",
-    desc: "Link picks. When the source rolls this, only targets that have a rule of their own in the same row can be picked. Everything else in the row is removed.",
-  },
-];
-
 const reachModes = [
-  {
-    term: "All",
-    desc: "Default. Re-weight every target instance the constraint can reach downstream — direct rows and instances reached through nested refs alike.",
-  },
-  {
-    term: "First",
-    desc: "Re-weight only the first reachable target instance; every later one rolls unconstrained.",
-  },
-  {
-    term: "Next N",
-    desc: "Re-weight the next N reachable instances (you set the count, minimum 1); the rest roll unconstrained.",
-  },
-  {
-    term: "Pick",
-    desc: "Re-weight only the instances you tick from a checklist of reachable targets — direct rows, or nested-ref carrier options that resolve to the target.",
-  },
+  { term: "All", desc: "The default. Every use of the target below the constraint." },
+  { term: "First", desc: "Only the first use below it; later ones roll freely." },
+  { term: "Next N", desc: "The next N uses below it (you set N); the rest roll freely." },
+  { term: "Pick", desc: "Only the uses you tick from a list of the ones it can reach." },
 ];
 </script>
 
@@ -57,191 +21,81 @@ const reachModes = [
     title="Constraints in depth"
     icon="pi pi-share-alt"
     tone="neutral"
-    blurb="Source→target pairing, matrix vs exception rules, the target reach selectors, and ordering requirements."
+    blurb="For bigger packs: how several constraints combine, how far a constraint reaches, tag axes on either side, and wildcards used inside references."
   >
-    <DocSection title="What a constraint does">
+    <DocSection title="Before you read this">
       <p>
-        A <b>Constraint</b> module links a <em>source</em> wildcard to a <em>target</em> wildcard.
-        After the source rolls its pick, the constraint adjusts the target's option pool — boosting
-        some choices, excluding others, or narrowing it to a specific set — before the target rolls.
-        The constraint itself does not set any <VarToken>$variable</VarToken>; it only shapes the
-        odds for the target.
-      </p>
-      <p>
-        A classic use: the source wildcard picks a season, and the constraint makes warm-toned
-        lighting far more likely when the source rolled "summer", while cool tones become more
-        likely when it rolled "winter".
-      </p>
-      <DocFigure figure="constraints-figure" caption="Source rolls → constraint adjusts target pool → target rolls.">
-        <div class="wp-doc-constraint-flow">
-          <div class="wp-doc-constraint-box wp-doc-constraint-box--source">
-            <span class="wp-doc-constraint-label">Source wildcard</span>
-            <span class="wp-doc-constraint-sub">rolls first</span>
-          </div>
-          <div class="wp-doc-constraint-arrow">→</div>
-          <div class="wp-doc-constraint-box wp-doc-constraint-box--constraint">
-            <span class="wp-doc-constraint-label">Constraint</span>
-            <span class="wp-doc-constraint-sub">adjusts target pool</span>
-          </div>
-          <div class="wp-doc-constraint-arrow">→</div>
-          <div class="wp-doc-constraint-box wp-doc-constraint-box--target">
-            <span class="wp-doc-constraint-label">Target wildcard</span>
-            <span class="wp-doc-constraint-sub">rolls with adjusted weights</span>
-          </div>
-        </div>
-      </DocFigure>
-    </DocSection>
-
-    <DocSection title="Order matters">
-      <p>
-        The module stack runs top to bottom. The <em>source</em> wildcard must come before the
-        Constraint, and the Constraint must come before the <em>target</em> wildcard. A constraint
-        whose source has not yet rolled is silently skipped for that iteration.
+        This page builds on the <DocRef id="constraint" /> page, which covers making a constraint,
+        the rule modes, Only, the preview and the order in the stack. You only need what's below
+        when one wildcard is used several times, constraints overlap, or you use tag axes.
       </p>
     </DocSection>
 
-    <DocSection title="Matrix and exceptions">
+    <DocSection title="Several constraints on one target">
       <p>
-        A constraint's rules come in two layers that work together:
+        Every constraint that reaches a target applies, and their effects multiply: a ×3 boost and a
+        ×0.5 reduce give ×1.5. An Exclude from any of them wins. You can add several constraints for
+        the same source and target, one per rule, each with its own reach.
       </p>
-      <ul>
-        <li>
-          <b>Matrix</b> — rules that apply to whole <em>subcategory</em> pairs. For example: when
-          source subcategory "season/warm" rolled, boost all target options in subcategory
-          "lighting/warm".
-        </li>
-        <li>
-          <b>Exceptions</b> — rules that apply to specific individual option pairs. These override
-          the matrix for exact combinations.
-        </li>
-      </ul>
-      <DocCallout variant="tip">
-        When a matrix rule and an exception both match a given pair, the <b>exception wins</b>.
-        This lets you set broad subcategory behaviour and then fine-tune individual combinations
-        on top.
-      </DocCallout>
-      <p>Each rule has a <b>mode</b>:</p>
-      <DocKeyList :items="modes" />
-      <DocImage
-        src="images/docs/constraints-matrix.png"
-        ratio="16 / 7"
-        caption="The SPA's full Edit constraint page for the Starter pairing entry (breadcrumb Library › Constraints › Starter pairing, Unsaved badge). Wildcards section pins Starter subject as source + Starter mood as target. Rule matrix grids feline/canine × calm/intense with feline×intense + canine×calm at ↑×3 and the mismatched diagonals at ↓×0.3. Exceptions table below carries one row: tiger → sleepy · Exclude · — — the EXTRA exception wins over the matrix when both apply."
-      />
     </DocSection>
 
-    <DocSection title="Linking picks with Only">
+    <DocSection title="How far a constraint reaches">
       <p>
-        <b>Only</b> ties one wildcard's pick to another's. Add an exception
-        <em>maid → frilled apron</em> in Only mode, and whenever the source rolls "maid" the target
-        can only roll "frilled apron". You don't list every outfit to exclude, and an outfit you
-        add to the target later is shut out too.
-      </p>
-      <ul>
-        <li>
-          <b>On an exception</b>, Only links exact values. Several Only exceptions for the same
-          source value make a short list: "maid" can pick "frilled apron" or "kimono" and nothing
-          else. A target with any other exception of its own for that source (a Boost, say) stays
-          in the pool with that rule.
-        </li>
-        <li>
-          <b>In the matrix</b>, Only links subcategories. An Only cell summer → open means a summer
-          pick can only reach targets tagged open (or tagged with anything else that has a rule in
-          the summer row). The other cells in that row show a faint × so you can see what is shut
-          out. A Neutral cell does not count as a rule here.
-        </li>
-      </ul>
-      <DocCallout variant="tip">
-        Only rows and exceptions for other source values are unaffected. A "biker" pick in the
-        example above still rolls every outfit.
-      </DocCallout>
-    </DocSection>
-
-    <DocSection title="Accepts axes as a source or target">
-      <p>
-        When a wildcard group is marked <b>accepts</b> — an <em>axis</em>, read as
-        <VarToken>$var.AXIS</VarToken> — the matrix folds differently on whichever side of the
-        constraint the axis sits, so the tag you read always agrees with the tag the constraint
-        acts on.
-      </p>
-      <ul>
-        <li>
-          <b>Accepts source.</b> The axis rolls exactly one tag per pick, so the constraint keys on
-          that <em>single rolled tag</em> — not every tag the source option carries. A source outfit
-          tagged sneakers · heels · sandals that rolls <em>sandals</em> makes a diagonal
-          “same tag wins” matrix pin the target to sandals, so <VarToken>$outfit.SHOES</VarToken>
-          and the shoe that gets picked match. A <b>classify</b> source keeps the older behaviour:
-          all its tags apply together (AND), so a multi-tag classify option under a strict diagonal
-          can exclude the whole target pool.
-        </li>
-        <li>
-          <b>Accepts target.</b> A target option's tags inside an accepts axis are alternatives, so
-          the option stays in the pool when the source allows <em>any</em> of them, and the target's
-          own axis roll is then restricted to the allowed tag. A target shoe tagged sandals · heels
-          isn't dropped just because heels is excluded — it survives as sandals and rolls sandals.
-        </li>
-      </ul>
-      <DocCallout variant="tip">
-        Put the two together — an accepts source, an accepts target, and a diagonal matrix — and
-        <VarToken>$source.AXIS</VarToken> always equals <VarToken>$target.AXIS</VarToken>: the two
-        wildcards agree on the axis every run.
-      </DocCallout>
-    </DocSection>
-
-    <DocSection title="Target reach">
-      <p>
-        A constraint is not a one-shot. By default it re-weights <em>every</em> target wildcard
-        instance it can reach downstream — including instances reached through nested
-        <VarToken kind="ref">@{uuid}</VarToken> refs. The per-instance <b>Target reach</b> selector
-        lets you narrow that scope when re-weighting every match is too broad:
+        A constraint isn't used up after one pick. By default it changes the odds of
+        <em>every</em> use of its target below it in the run, including uses inside references. Each
+        use of a constraint in a Context has a <b>Target reach</b> setting to narrow that:
       </p>
       <DocKeyList :items="reachModes" />
       <p>
-        Reach is always measured <em>downstream</em> of the constraint: it can only see — and count
-        toward First / Next N — target instances that come after it in the run. A
-        <b>Pick</b> selection names each instance the same way the engine matches it: a direct row
-        by its per-instance id, or a nested ref by its carrier row plus the option that hosts the
-        <VarToken kind="ref">@{uuid}</VarToken>.
+        Reach only looks downwards: First and Next N count from the constraint's own position. Pick
+        names each use by its row, or, for a use inside a reference, by the row and option that hold
+        the reference.
       </p>
       <DocCallout variant="warn">
-        If a constraint's reach covers zero reachable targets — its only target sits above it, the
-        count overshoots what's downstream, or a picked instance no longer exists — it is flagged
-        <VarToken>constraint_orphan_target</VarToken> so a dead pairing surfaces instead of silently
-        doing nothing. Separately, a constraint that reaches fewer instances than a Next N / Pick
-        selector asked for is noted as a partial reach.
-      </DocCallout>
-      <DocCallout variant="warn">
-        A constraint can also rule out <em>every</em> option of its target for some source value
-        (each one excluded, shut out by an Only rule, or weighted 0). If the target has no fallback
-        it would come out empty, so the constraint row gets a <b>rules out all</b> badge before you
-        run; hover it to see which source values do it. Allow an option for those values, or mark
-        one of the target's options as its fallback.
-      </DocCallout>
-      <DocCallout variant="tip">
-        You can still add multiple Constraint modules for the same source→target pair — one per
-        distinct rule — and give each its own reach. Stack position plus each module's reach decide
-        which instances every constraint claims.
+        If a constraint reaches nothing (its only target sits above it, the count is larger than
+        what's below, or a picked row is gone), the canvas flags it so a dead pairing doesn't go
+        unnoticed. If it reaches fewer uses than Next N or Pick asked for, WP Debug notes a partial
+        reach after the run.
       </DocCallout>
     </DocSection>
 
-    <DocSection title="Constraints reach through nested refs">
+    <DocSection title="Targets used inside references">
       <p>
-        If the target wildcard appears only inside another wildcard's option text (via a
-        <VarToken kind="ref">@{uuid}</VarToken> nested reference), the constraint still applies —
-        it follows the reference chain to find the target. Each such reachable instance counts as
-        one target for the reach selector above, and a <b>Pick</b> entry can name it by its carrier
-        row plus the hosting option. A safeguard counts each downstream instance only once even when
-        multiple reference paths converge on it.
+        If the target wildcard only appears inside another wildcard's option text, as an
+        <VarToken kind="ref">@{…}</VarToken> reference, the constraint still applies: it follows the
+        reference to find the target. Each such use counts once for the reach setting, even when
+        several references lead to it.
       </p>
     </DocSection>
 
-    <DocSection title="When a source or target is missing">
+    <DocSection title="Tag axes on either side">
       <p>
-        A constraint refers to its source and target wildcards by id. If one isn't in your library —
-        you installed the constraint without its wildcards, or deleted one — that axis is
-        <b>stranded</b>: the editor shows the dead id with its remembered name and keeps the rule
-        matrix read-only until you heal it. <b>Reattach</b> re-points the axis at a local wildcard
-        (or downloads the missing one from the community), then remaps the matrix and exceptions onto
-        the new wildcard's sub-categories.
+        A tag group marked <b>accepts</b> (an axis, read as <VarToken>$var.AXIS</VarToken>) lists
+        alternatives: one of its tags is rolled per pick. Constraints treat it so the tag you read
+        always agrees with the tag the constraint acts on.
+      </p>
+      <ul>
+        <li><b>Accepts source.</b> The constraint uses the one tag that was rolled, not every tag on
+          the option. An outfit tagged sneakers · heels · sandals that rolls sandals makes a
+          “same tag wins” matrix pin the target to sandals, so <VarToken>$outfit.SHOES</VarToken>
+          and the shoe that gets picked match.</li>
+        <li><b>Classify source</b> (the default kind): all the option's tags apply together. With a
+          strict diagonal matrix, an option carrying several tags can rule out the whole target.</li>
+        <li><b>Accepts target.</b> A target option stays in the pool if the source allows any of its
+          axis tags, and its own axis roll is then limited to the allowed tag. A shoe tagged
+          sandals · heels isn't dropped because heels is excluded; it stays and rolls sandals.</li>
+      </ul>
+      <p>
+        An accepts source, an accepts target and a diagonal matrix together make
+        <VarToken>$source.AXIS</VarToken> equal <VarToken>$target.AXIS</VarToken> on every run.
+      </p>
+    </DocSection>
+
+    <DocSection title="Constraints across chained Contexts">
+      <p>
+        A constraint in one Context also applies to its target in a later, chained Context. You can
+        keep all your pairing rules in a separate "constraints" Context placed before the one with
+        the wildcards.
       </p>
     </DocSection>
 
@@ -250,6 +104,7 @@ const reachModes = [
         :links="[
           { id: 'constraint', label: 'Constraint', icon: 'pi pi-filter', tone: 'constraint' },
           { id: 'wildcard', label: 'Wildcard', icon: 'pi pi-sparkles', tone: 'wildcard' },
+          { id: 'context-chaining', label: 'Context chaining', icon: 'pi pi-share-alt', tone: 'neutral' },
         ]"
       />
     </DocSection>

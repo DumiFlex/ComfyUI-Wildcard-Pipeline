@@ -1,27 +1,22 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
+import DocRef from "../../../components/docs/DocRef.vue";
 import StarterButton from "../../../components/docs/StarterButton.vue";
 
 const reweightModes = [
-  { term: "Allow", desc: "No change (shown as Neutral in the matrix). The pair rolls as if there were no rule." },
-  { term: "Exclude", desc: "These options are removed from the pool; everything else remains." },
-  { term: "Boost", desc: "These options have their weight increased, making them more likely without removing anything." },
-  { term: "Reduce", desc: "These options have their weight decreased, making them less likely without removing anything." },
-  { term: "Only", desc: "Links picks: only these options can be picked, and every option without a rule of its own in the same row is removed. An accepts group of the target that the row says nothing about keeps rolling freely; the row only narrows a group it rules on. Extensions from before this rule existed refuse community packs that use it and ask you to update." },
-];
-
-const reachModes = [
-  { term: "All", desc: "Default — re-weight every matching target instance downstream of the constraint." },
-  { term: "First", desc: "Only the first target instance after the constraint; later ones roll unconstrained." },
-  { term: "Next N", desc: "The next N target instances (you set the count); the rest roll unconstrained." },
-  { term: "Pick", desc: "Only specific target rows you tick — direct instances, or nested-ref carrier options that reach the target." },
+  { term: "Neutral", desc: "No rule. The pair rolls as if the constraint weren't there." },
+  { term: "Boost", desc: "Makes the target options more likely, by the factor you set." },
+  { term: "Reduce", desc: "Makes them less likely, without removing them." },
+  { term: "Exclude", desc: "Removes them from the pool for this source pick." },
+  { term: "Only", desc: "An allow-list: when the source picks this, the target can only pick options with a rule of their own in this row. Everything else is shut out, including options you add to the target later." },
 ];
 </script>
 
@@ -31,39 +26,46 @@ const reachModes = [
     title="Constraint"
     icon="pi pi-filter"
     tone="constraint"
-    blurb="Tilt a downstream wildcard's odds based on what an earlier wildcard picked. Sets no $variables itself — it only influences what the target wildcard rolls."
+    blurb="Make one wildcard's pick change the odds of another's: boost, reduce, rule out or allow only some options. It sets no $variable itself."
   >
     <DocSection title="What it does">
       <p>
-        A Constraint module watches the pick made by a <em>source</em> wildcard and then adjusts
-        the option weights of a <em>target</em> wildcard further down the stack — before that
-        target makes its own pick. The constraint itself sets no
-        <VarToken>$variables</VarToken> and produces no text; its entire effect is the nudge it
-        gives to the target.
+        A constraint watches the pick of a <em>source</em> wildcard and changes the odds of a
+        <em>target</em> wildcard below it, before the target rolls. The target still picks at
+        random; you're only shifting the odds.
       </p>
       <p>
-        For example: source wildcard <VarToken>$weather</VarToken> picked "stormy" → boost
-        "dramatic" and "moody" in <VarToken>$mood</VarToken>, reduce "sunny" and "cheerful".
-        The target still picks randomly — you're just shifting the odds.
+        Example: when <VarToken>$weather</VarToken> picks "stormy", boost "dramatic" and "moody" in
+        <VarToken>$mood</VarToken> and reduce "sunny" and "cheerful".
       </p>
       <DocImage
         src="images/docs/constraint-matrix.png"
-        ratio="16 / 7"
-        caption="The Starter pairing constraint modal — source Starter subject (feline/canine sub-categories) → target Starter mood (calm/intense). The 2×2 rule matrix boosts feline×intense + canine×calm by ×3.0 and reduces the mismatched diagonals to ×0.3. One Exceptions row below overrides tiger → sleepy to EXCLUDE so the EXTRA-tagged exception wins over the matrix boost when both apply."
+        ratio="2 / 1"
+        caption="The Starter pairing constraint: feline subjects lean intense, canine subjects lean calm. Below are exceptions and the target reach (First, Next N, All, Pick)."
       />
-      <DocCallout variant="tip">
-        <b>Use a Constraint</b> when two picks must agree: the tag matrix for whole families
-        (winter rules out summer clothes), exceptions for single pairs, Only for allow-lists, and
-        a fallback option on the target so it never comes out empty. It reaches targets used only
-        inside <VarToken kind="ref">@{}</VarToken> references too. <b>Not for</b> adding text (use
-        a Derivation) or a narrowing that never changes (a category filter or
-        <VarToken kind="ref">@{X:tag}</VarToken> does that). The source must be a wildcard in the
-        stack: a pick made only inside a reference sets no variable, so a constraint on it never
-        applies.
-      </DocCallout>
+      <DocUseWhen
+        :good="[
+          'Two picks that must agree (winter rules out summer clothes)',
+          'Whole families of options with the tag matrix, single pairs with exceptions',
+          'Allow-lists with Only',
+        ]"
+        :better="[
+          'Adding text: use a Derivation',
+          'A narrowing that never changes: a category filter or @{X:tag}',
+        ]"
+      />
     </DocSection>
 
-    <DocSection title="The flow">
+    <DocSection title="Make one">
+      <ol>
+        <li>Create a constraint and pick the <b>Source wildcard</b> (the one that decides) and the
+          <b>Target wildcard</b> (the one that follows).</li>
+        <li>In the <b>Rule matrix</b>, set a rule for whole tag pairs: rows are the source's tags,
+          columns the target's. For example, winter × summer clothes = Exclude.</li>
+        <li>Add <b>Exceptions</b> for single option pairs. An exception wins over the matrix.</li>
+        <li>Check the <b>Preview</b>, save, and add the constraint to your WP Context between the two
+          wildcards.</li>
+      </ol>
       <DocFlow figure="constraint-flow"
         :stages="[
           { icon: 'pi pi-sparkles', name: 'Source wildcard', sub: 'its pick', tone: 'wildcard' },
@@ -71,98 +73,78 @@ const reachModes = [
           { icon: 'pi pi-sparkles', name: 'Target wildcard', sub: 'picks to match', tone: 'wildcard' },
         ]"
         :arrows="['if it lands on X', 'limits']"
-        caption="The constraint nudges the odds of its downstream target instances — every match by default, or a narrower set you choose. It sets no $vars itself."
+        caption="Order in the stack: source, then constraint, then target."
       />
+      <DocCallout variant="warn">
+        Order matters: the source sits above the constraint, and the target below it. The source
+        must be a wildcard in the stack; a pick made only inside a reference sets no variable, so a
+        constraint on it never applies.
+      </DocCallout>
     </DocSection>
 
-    <DocSection title="Reweight modes">
+    <DocSection title="Rule modes">
       <DocKeyList :items="reweightModes" />
-      <DocCallout variant="tip">
-        Exception rules (per-option pairs) win over sub-category matrix rules when both apply to
-        the same option. Use exceptions for precise overrides and the matrix for broad category
-        nudges.
-      </DocCallout>
     </DocSection>
 
-    <DocSection title="Stack order matters">
+    <DocSection title="Linking picks with Only">
       <p>
-        The Constraint module must sit <em>after</em> its source wildcard and <em>before</em> its
-        target wildcard in the stack. The engine runs modules top-to-bottom, so position controls
-        the source → constraint → target chain.
+        Only ties one wildcard's pick to another's. Add an exception maid → frilled apron in Only
+        mode, and whenever the source picks "maid" the target can only pick "frilled apron". You
+        don't list every outfit to rule out.
       </p>
-      <DocCallout variant="tip">
-        By default a Constraint re-weights <em>every</em> matching target instance below it. Use
-        the <strong>Target reach</strong> selector (below) to narrow that to the first, the next N,
-        or a hand-picked set — and remember that position in the stack decides which instances are
-        even reachable, since a constraint only sees targets after it.
-      </DocCallout>
-    </DocSection>
-
-    <DocSection title="Target reach">
-      <p>
-        By default a constraint re-weights <em>every</em> matching target instance it can reach
-        downstream. The per-instance <strong>Target reach</strong> selector narrows that scope:
-      </p>
-      <DocKeyList :items="reachModes" />
-      <DocCallout variant="warn">
-        If a constraint's reach lands on zero reachable targets — e.g. its only target sits above
-        it, or you picked rows that aren't downstream — the editor flags it
-        <VarToken>constraint_orphan_target</VarToken> so the dead pairing doesn't fail silently.
-      </DocCallout>
-      <DocCallout variant="warn">
-        A constraint can also rule out <em>every</em> option of its target for some source value
-        (each one excluded, shut out by an Only rule, or weighted 0). If the target has no fallback
-        it would come out empty, so the constraint row gets a <b>rules out all</b> badge before you
-        run; hover it to see which source values do it. Allow an option for those values, or mark
-        one of the target's options as its fallback.
-      </DocCallout>
+      <ul>
+        <li>Several Only exceptions for the same source value make a short list: "maid" can pick
+          "frilled apron" or "kimono" and nothing else.</li>
+        <li>In the matrix, Only works on tags: summer → open means a summer pick can only reach
+          targets tagged open. The rest of that row shows a faint × so you can see what's shut out. A
+          Neutral cell doesn't count as a rule.</li>
+        <li>Other source values are unaffected: a "biker" pick still rolls every outfit.</li>
+      </ul>
     </DocSection>
 
     <DocSection title="Preview">
       <p>
-        The <b>Preview</b> card under the exceptions shows what the constraint does in numbers:
-        one row per source option, one column per target option, and in each cell the chance that
-        target option is picked when the source picked that row. It counts the target's own
-        weights, the matrix and the exceptions. A dash means the option is ruled out; a row marked
-        <b>nothing left</b> would leave the target empty, and <b>fallback</b> means the target's
-        fallback option stands in. Other constraints, filters and toggles are left out.
+        The <b>Preview</b> card shows the constraint in numbers: one row per source option, one
+        column per target option, and in each cell the chance of that target option when the source
+        picked that row. A dash means ruled out. A row marked <b>nothing left</b> would leave the
+        target empty, and <b>fallback</b> means the target's fallback option stands in. Other
+        constraints, filters and toggles aren't included.
       </p>
     </DocSection>
 
-    <DocSection title="Reattach a broken axis">
+    <DocSection title="When it rules out everything">
       <p>
-        A constraint points at two wildcards by id — its <em>source</em> and its <em>target</em>.
-        If one of those isn't in your library (you installed the constraint without its wildcards,
-        or deleted one later), that axis is <strong>stranded</strong>: the editor shows the dead id
-        with its remembered name and locks the rule matrix read-only until you fix it.
-      </p>
-      <p>
-        Use <strong>Reattach</strong> to re-point the stranded axis at a local wildcard — or
-        <strong>Download from community</strong> to pull the missing one. The matrix and exceptions
-        then remap onto the new wildcard's sub-categories; any rows that don't exist there are
-        dropped (the editor previews the count before you confirm).
+        If, for some source value, every target option is excluded or shut out, the target would come
+        out empty. The constraint row then shows a <b>rules out all</b> badge before you run; hover
+        it to see which source values do it. Allow an option for those values, or mark one of the
+        target's options as its <b>fallback</b>.
       </p>
     </DocSection>
 
-    <DocSection title="Deeper topics">
+    <DocSection title="A missing source or target">
       <p>
-        Full constraint mechanics — matrix vs exception priority, how constraints carry through
-        nested references, the Target reach selectors in detail, and the "never fired" runtime
-        notice — are covered on the Constraints concept page.
+        If the constraint's source or target isn't in your library (you installed it without its
+        wildcards, or deleted one), the editor shows the missing wildcard's name and locks the
+        matrix. <b>Reattach</b> points it at a wildcard you have, or <b>Download from community</b>
+        fetches the missing one. The rules are then mapped onto the new wildcard's tags; rules for
+        tags it doesn't have are dropped, and the editor shows how many first.
       </p>
     </DocSection>
 
     <DocSection title="Try it">
       <p>
-        Create a starter Constraint that pairs the subject and mood wildcards: feline subjects lean
-        intense, canine subjects lean calm. Clicking this also creates the two wildcards it needs
-        (<VarToken>$subject</VarToken> and <VarToken>$mood</VarToken>) if they aren't in your
-        library yet, so the pairing always wires up correctly.
+        Create a starter constraint: feline subjects lean intense, canine subjects lean calm. It also
+        creates the two wildcards it needs (<VarToken>$subject</VarToken> and
+        <VarToken>$mood</VarToken>) if you don't have them yet.
       </p>
       <StarterButton slot="pairing" />
     </DocSection>
 
     <DocSection title="Works with">
+      <p>
+        Several constraints on one target, reaching only some uses of a wildcard, tag axes and
+        wildcards used inside references: see <DocRef id="constraints" />.
+      </p>
       <CrossLinks
         :links="[
           { id: 'constraints', label: 'Constraints in depth', icon: 'pi pi-share-alt', tone: 'neutral' },
