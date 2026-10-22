@@ -5,6 +5,7 @@
  * `settingKey` is the anchor the Settings search jumps to (`#<key>`) and the
  * row briefly highlights when it is the target. `stacked` puts the control
  * under the text, for wide controls (a colour picker, a path list).
+ * `recommended` names the value most people should pick ("On", "Off").
  */
 import { computed } from "vue";
 import { useRoute } from "vue-router";
@@ -17,6 +18,7 @@ const props = defineProps<{
   form?: boolean;
   /** Control id, so the label is a real <label for>. */
   for?: string;
+  recommended?: string;
 }>();
 
 const route = useRoute();
@@ -34,6 +36,7 @@ const targeted = computed(() => !!props.settingKey && route?.hash === `#${props.
       <label v-if="props.for" class="wp-set-row__label" :for="props.for">{{ label }}<slot name="badge" /></label>
       <span v-else class="wp-set-row__label">{{ label }}<slot name="badge" /></span>
       <p v-if="hint" class="wp-set-row__hint">{{ hint }}</p>
+      <p v-if="recommended" class="wp-set-row__rec" data-test="setting-recommended">Recommended: {{ recommended }}</p>
       <slot name="extra" />
     </div>
     <div class="wp-set-row__control">
@@ -73,6 +76,11 @@ const targeted = computed(() => !!props.settingKey && route?.hash === `#${props.
   line-height: 1.45;
   color: var(--wp-text-dim);
 }
+.wp-set-row__rec {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--wp-accent-300, var(--wp-text-muted));
+}
 .wp-set-row__control {
   flex: none;
   display: flex;
@@ -97,12 +105,14 @@ const targeted = computed(() => !!props.settingKey && route?.hash === `#${props.
 .wp-set-row--form .wp-set-row__label { grid-column: 1; grid-row: 1; font-weight: 500; color: var(--wp-text-muted); }
 .wp-set-row--form .wp-set-row__control { grid-column: 2; grid-row: 1; max-width: none; justify-content: flex-start; }
 .wp-set-row--form .wp-set-row__hint { grid-column: 2; grid-row: 2; margin: 0; }
+.wp-set-row--form .wp-set-row__rec { grid-column: 2; grid-row: 3; margin: 0; }
 .wp-set-row--form :deep(.wp-set-row__extra) { grid-column: 1 / -1; }
 /* Page area narrower than 520px (usePageWidth; the chat can take the rest). */
 .wp-content[data-lt~="520"] .wp-set-row--form { grid-template-columns: minmax(0, 1fr); }
 .wp-content[data-lt~="520"] .wp-set-row--form .wp-set-row__label,
 .wp-content[data-lt~="520"] .wp-set-row--form .wp-set-row__control,
-.wp-content[data-lt~="520"] .wp-set-row--form .wp-set-row__hint { grid-column: 1; grid-row: auto; }
+.wp-content[data-lt~="520"] .wp-set-row--form .wp-set-row__hint,
+.wp-content[data-lt~="520"] .wp-set-row--form .wp-set-row__rec { grid-column: 1; grid-row: auto; }
 .wp-content[data-lt~="520"] .wp-set-row { flex-direction: column; align-items: stretch; }
 .wp-content[data-lt~="520"] .wp-set-row__control { max-width: none; }
 </style>

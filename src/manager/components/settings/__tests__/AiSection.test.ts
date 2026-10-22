@@ -189,6 +189,19 @@ describe("Settings › AI assistant", () => {
     expect(api.ai.saveConfig).toHaveBeenCalledWith({ auto_apply: true });
   });
 
+  it("says what most people should pick", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const rec = (key: string) => w.get(`#${key} [data-test="setting-recommended"]`).text();
+    expect(rec("ai-allow-delete")).toBe("Recommended: Off");
+    expect(rec("ai-chat-show-steps")).toBe("Recommended: On");
+    const labels = (test: string) => w.findAllComponents(Select)
+      .find((c) => c.attributes("data-test") === test)?.props("options").map((o) => o.label) ?? [];
+    expect(labels("ai-thinking")).toContain("As the model does (recommended)");
+    expect(labels("ai-tool-format")).toContain("Automatic (recommended)");
+  });
+
   it("marks cloud providers that already have a saved key", async () => {
     vi.mocked(api.ai.config).mockResolvedValue(cfg({ keys_saved: ["anthropic"] }));
     const w = mount(AiSection, { global: { plugins: [router] } });

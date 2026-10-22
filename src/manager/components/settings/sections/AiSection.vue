@@ -136,7 +136,7 @@ const SIZE_LABEL: Record<string, string> = {
   small: "Small (under 20B)", medium: "Medium (20-60B)", large: "Large (over 60B, or a cloud model)",
 };
 const sizeOptions = computed<SelectOption[]>(() => [
-  { value: "auto", label: `Automatic · ${SIZE_LABEL[config.value?.model_size_auto ?? "medium"]}` },
+  { value: "auto", label: `Automatic · ${SIZE_LABEL[config.value?.model_size_auto ?? "medium"]} (recommended)` },
   ...(["small", "medium", "large"] as const).map((v) => ({ value: v, label: SIZE_LABEL[v] })),
 ]);
 async function setSize(v: string | number | null): Promise<void> {
@@ -172,7 +172,7 @@ const UNLOAD_PRESETS: Array<[number, string]> = [
 ];
 const unloadCustom = ref(false);
 const unloadOptions: SelectOption[] = [
-  ...UNLOAD_PRESETS.map(([value, label]) => ({ value, label })),
+  ...UNLOAD_PRESETS.map(([value, label]) => ({ value, label: value === 60 ? `${label} (recommended)` : label })),
   { value: CUSTOM, label: "Custom…" },
 ];
 const unloadChoice = computed(() =>
@@ -192,11 +192,13 @@ async function commitContext(): Promise<void> {
 }
 
 const toolFormatOptions: SelectOption[] = [
-  { value: "auto", label: "Automatic" },
+  { value: "auto", label: "Automatic (recommended)" },
   { value: "native", label: "Native tool calls" },
   { value: "json", label: "JSON steps" },
 ];
-const thinkingOptions: SelectOption[] = THINKING_OPTIONS.map(({ value, label }) => ({ value, label }));
+const thinkingOptions: SelectOption[] = THINKING_OPTIONS.map(({ value, label }) => ({
+  value, label: value === "auto" ? `${label} (recommended)` : label,
+}));
 async function setThinking(v: string | number | null): Promise<void> {
   if (!isThinking(v) || v === config.value?.thinking) return;
   await patch({ thinking: v });
@@ -362,7 +364,9 @@ async function removeSearchKey(): Promise<void> {
  * Crawl4AI / Firecrawl server. Every preset is listed whatever is set up. */
 const readerOptions = computed<SelectOption[]>(() => [
   { value: "off", label: "Off" },
-  ...Object.entries(config.value?.reader_engines ?? {}).map(([id, e]) => ({ value: id, label: e.label })),
+  ...Object.entries(config.value?.reader_engines ?? {}).map(([id, e]) => ({
+    value: id, label: id === "builtin" ? `${e.label} (recommended)` : e.label,
+  })),
 ]);
 const reader = computed(() => {
   const id = config.value?.reader_engine;
@@ -934,6 +938,7 @@ const off = computed(() => !config.value?.enabled);
         <SettingGroup title="Chat">
           <SettingRow
             label="Show Explain on selected text"
+            recommended="On"
             hint="Select text anywhere in the manager (docs, replies, warnings) and a small Explain / Ask bar appears above it. Ctrl+Shift+X explains the selection without it. The browser's right-click menu is left alone. Saved in this browser."
             setting-key="ai-explain-chip"
           >
@@ -946,6 +951,7 @@ const off = computed(() => !config.value?.enabled);
           </SettingRow>
           <SettingRow
             label="Show thinking"
+            recommended="Off"
             hint="A folded Thinking line with what a thinking model reasoned before each step. Off hides it; the model still thinks as Thinking above says. Saved in this browser."
             setting-key="ai-chat-show-thinking"
           >
@@ -958,6 +964,7 @@ const off = computed(() => !config.value?.enabled);
           </SettingRow>
           <SettingRow
             label="Show working notes"
+            recommended="On"
             hint="Text the model wrote between steps (“Let me check the docs first”), folded above the reply. Saved in this browser."
             setting-key="ai-chat-show-notes"
           >
@@ -970,6 +977,7 @@ const off = computed(() => !config.value?.enabled);
           </SettingRow>
           <SettingRow
             label="Show what it did"
+            recommended="On"
             hint="The lines above a reply that list what the assistant read, searched and ran (“Read the docs: What the assistant can do”). Off shows only the reply and its cards. Saved in this browser."
             setting-key="ai-chat-show-steps"
           >
@@ -985,6 +993,7 @@ const off = computed(() => !config.value?.enabled);
         <SettingGroup title="Permissions" note="The assistant can't change these itself.">
           <SettingRow
             label="Let the assistant delete items"
+            recommended="Off"
             hint="The chat can propose deleting modules, bundles, templates, categories and tags. Each delete card still asks you to confirm, and Undo brings everything back. Off by default."
             setting-key="ai-allow-delete"
           >
@@ -997,6 +1006,7 @@ const off = computed(() => !config.value?.enabled);
           </SettingRow>
           <SettingRow
             label="Apply small changes automatically"
+            recommended="Off"
             hint="New descriptions, tags and categories from the chat are applied without a click. Each card says it was applied and keeps its Undo. Ratings, content, renames and deletes always wait for you. Off by default."
             setting-key="ai-auto-apply"
           >
@@ -1130,6 +1140,7 @@ const off = computed(() => !config.value?.enabled);
 
           <SettingRow
             label="Danbooru tag lookup"
+            recommended="On if your image model uses Danbooru tags (Illustrious, Pony, NoobAI)"
             hint="Lets the chat look a tag up on danbooru.donmai.us: what it means (wiki), its aliases, what it implies and the tags used with it most. Read only, tags and wiki only, never posts or images, one request a second. Each lookup asks you first. For spellings and post counts the downloaded tag list is enough and stays offline."
             setting-key="ai-danbooru"
           >
@@ -1143,6 +1154,7 @@ const off = computed(() => !config.value?.enabled);
 
           <SettingRow
             label="Don't ask before web calls"
+            recommended="Off"
             hint="Web searches, page reads and Danbooru lookups run without the Allow card. The chat then decides what leaves your machine; you still see each one in its steps."
             setting-key="ai-web-always"
           >
@@ -1193,6 +1205,7 @@ const off = computed(() => !config.value?.enabled);
           </SettingRow>
           <SettingRow
             label="Choose the tool first"
+            recommended="Off, unless a small model keeps picking the wrong tool"
             hint="Small and medium models on a local server, in JSON steps: each step first names the tool to call, then writes only that tool's arguments. Can help a model that picks the wrong tool; it costs a little time per step. Off by default."
             setting-key="ai-choose-first"
           >
