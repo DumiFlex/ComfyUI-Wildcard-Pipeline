@@ -328,3 +328,14 @@ async def test_a_page_call_that_did_nothing_shows_failed_and_the_model_is_told(
     done = await _resume(wp_client, second["chat_id"], [
         {"id": second["pending"][0]["id"], "text": "couldn't: no part \"Core idea\""}])
     assert "highlighted" not in done["message"]
+
+
+def test_allow_for_this_chat_expires(monkeypatch):
+    from wp_api import _ai_turn
+    now = 1_000_000.0
+    monkeypatch.setattr(_ai_turn.time, "time", lambda: now)
+    assert _ai_turn._web_pre_allowed({}, {"web_ok": now - 60})
+    assert not _ai_turn._web_pre_allowed({}, {"web_ok": now - _ai_turn.WEB_OK_SECONDS - 1})
+    # A chat allowed before allows had a time asks again.
+    assert not _ai_turn._web_pre_allowed({}, {"web_ok": True})
+    assert _ai_turn._web_pre_allowed({"web_always_allow": True}, {})

@@ -202,6 +202,15 @@ describe("Settings › AI assistant", () => {
     expect(labels("ai-tool-format")).toContain("Automatic (recommended)");
   });
 
+  it("warns when ComfyUI is open to the network", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ provider: "openrouter", listen_exposed: "0.0.0.0" }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const note = w.get('[data-test="ai-lan-exposed"]').text();
+    expect(note).toContain("0.0.0.0");
+    expect(note).toContain("your key's credits");
+  });
+
   it("marks cloud providers that already have a saved key", async () => {
     vi.mocked(api.ai.config).mockResolvedValue(cfg({ keys_saved: ["anthropic"] }));
     const w = mount(AiSection, { global: { plugins: [router] } });

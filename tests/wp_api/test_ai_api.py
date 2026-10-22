@@ -1894,3 +1894,18 @@ async def test_a_reaction_streams_as_soon_as_it_is_decided(wp_client, fake_llm):
     assert kinds.index("reaction") < kinds.index("step")
     assert events[kinds.index("reaction")]["emoji"] == "🎉"
     assert events[-1]["result"]["reaction"] == "🎉"
+
+
+def test_listen_exposed_names_a_non_loopback_address(monkeypatch):
+    import sys
+    import types
+
+    from wp_api import ai as ai_routes
+    fake = types.ModuleType("comfy.cli_args")
+    monkeypatch.setitem(sys.modules, "comfy", types.ModuleType("comfy"))
+    monkeypatch.setitem(sys.modules, "comfy.cli_args", fake)
+    for listen, want in (("127.0.0.1", ""), ("::1,127.0.0.1", ""), ("localhost", ""),
+                         ("0.0.0.0", "0.0.0.0"),
+                         ("127.0.0.1,192.168.1.5", "127.0.0.1,192.168.1.5")):
+        fake.args = types.SimpleNamespace(listen=listen)  # type: ignore[attr-defined]
+        assert ai_routes.listen_exposed() == want

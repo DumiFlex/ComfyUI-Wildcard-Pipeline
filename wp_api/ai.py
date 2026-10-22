@@ -44,6 +44,7 @@ registration. The handlers live by feature: `_ai_drafts.py` (editor panels),
 """
 from __future__ import annotations
 
+import ipaddress
 import json as _json
 from typing import Any
 
@@ -116,8 +117,32 @@ from wp_api._ai_turn import (
 from wp_api._helpers import cancel_on_disconnect, db_session, json_error, json_ok
 
 
+def listen_exposed() -> str:
+    """The addresses ComfyUI listens on when any isn't loopback ("0.0.0.0",
+    a LAN address), else "". Anyone who can reach them can use the
+    assistant, and a cloud key's credits, since ComfyUI has no login."""
+    try:
+        from comfy.cli_args import args  # noqa: PLC0415 - ComfyUI only
+    except Exception:  # noqa: BLE001 - outside ComfyUI (tests, scripts)
+        return ""
+    raw = str(getattr(args, "listen", "") or "127.0.0.1")
+    hosts = [h.strip() for h in raw.split(",") if h.strip()]
+    for h in hosts:
+        try:
+            if not ipaddress.ip_address(h).is_loopback:
+                return raw
+        except ValueError:
+            if h.lower() != "localhost":
+                return raw
+    return ""
+
+
+def _view(view: dict[str, Any]) -> dict[str, Any]:
+    return {**view, "listen_exposed": listen_exposed()}
+
+
 async def get_config(request: web.Request) -> web.Response:
-    return json_ok(ai_config.public_view())
+    return json_ok(_view(ai_config.public_view()))
 
 
 async def put_config(request: web.Request) -> web.Response:
@@ -125,7 +150,7 @@ async def put_config(request: web.Request) -> web.Response:
     if isinstance(body, web.Response):
         return body
     try:
-        return json_ok(ai_config.update(body))
+        return json_ok(_view(ai_config.update(body)))
     except ai_config.ConfigError as e:
         return json_error(str(e), status=400)
     except OSError as e:

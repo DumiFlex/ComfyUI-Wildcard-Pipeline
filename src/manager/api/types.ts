@@ -865,6 +865,8 @@ export interface AiConfig {
   /** A key is saved (or set in the environment) for another address, so it
    *  isn't sent to this one: the host it belongs to. */
   key_for_host: string | null;
+  /** The addresses ComfyUI listens on when any isn't loopback, else "". */
+  listen_exposed?: string;
   /** Providers that already have a key (saved or from the environment).
    *  Each provider keeps its own address, model and key. */
   keys_saved: AiProviderId[];

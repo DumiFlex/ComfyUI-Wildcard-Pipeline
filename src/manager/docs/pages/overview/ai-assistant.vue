@@ -511,7 +511,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       <p>
         Every search asks you first. The chat shows the exact words it wants to search for, with
         <b>Allow once</b>, <b>Allow for this chat</b> (later searches in the same chat run without
-        asking) and <b>Deny</b>. Only the search words leave your PC. Five short result snippets
+        asking for the next 8 hours) and <b>Deny</b>. Only the search words leave your PC. Five short result snippets
         come back with their links; the assistant cites results as [1], [2] with the link, and
         treats what it found as information, never as instructions.
       </p>
@@ -1123,7 +1123,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         That stops a website from reaching your ComfyUI through a look-alike domain (DNS
         rebinding). If you reach ComfyUI through your own domain name, add it to the
         <code>WP_AI_ALLOWED_HOSTS</code> environment variable (comma-separated) and restart
-        ComfyUI. Each answer stops after 10 minutes, and Stop ends the model's work straight
+        ComfyUI. Started with <code>--listen</code>, ComfyUI is open to your network and anyone
+        who can reach it can use the assistant; Settings › AI warns you when that is the case.
+        Each answer stops after 10 minutes, and Stop ends the model's work straight
         away.
       </p>
     </DocSection>

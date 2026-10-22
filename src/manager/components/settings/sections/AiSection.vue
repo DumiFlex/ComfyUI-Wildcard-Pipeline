@@ -1234,6 +1234,11 @@ const off = computed(() => !config.value?.enabled);
             content; use a local model for NSFW packs.
           </p>
           <p class="wp-ai-set__muted">The assistant only proposes changes. Nothing is saved until you press Save.</p>
+          <p v-if="config?.listen_exposed" class="wp-ai-set__lan" role="note" data-test="ai-lan-exposed">
+            <strong>Open to your network.</strong> ComfyUI listens on {{ config.listen_exposed }} (--listen),
+            and it has no login, so anyone who can reach this address can use the assistant{{ isLocal ? "" : " and your key's credits" }}.
+            Use it only on a network you trust, or start ComfyUI without --listen.
+          </p>
         </section>
 
         <section v-if="suggestions" class="wp-ai-set__card wp-ai-set__card--models" data-test="ai-suggested-models" :data-group="suggestions.key">
@@ -1360,6 +1365,7 @@ p.wp-ai-set__muted:has(.wp-ai-set__link) { padding: var(--wp-space-2) var(--wp-s
   margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--wp-text-dim);
 }
 .wp-ai-set__muted { color: var(--wp-text-dim); font-size: 12px; }
+.wp-ai-set__lan { margin: 0; font-size: 12px; line-height: 1.45; color: var(--wp-warn); }
 .wp-ai-set__card code { font-family: var(--wp-font-mono); font-size: 12px; color: var(--wp-text); }
 .wp-ai-set__card--models { gap: var(--wp-space-2); line-height: 1.45; }
 .wp-ai-set__model-group { margin-top: var(--wp-space-3); }

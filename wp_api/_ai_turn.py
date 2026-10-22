@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json as _json
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -1657,7 +1658,7 @@ async def _paused_results(
         answer = got.get(c["id"], {"cancelled": True})
         if c["tool"] in ai_tools.WEB and answer.get("approve") in ("once", "chat"):
             if answer["approve"] == "chat":
-                meta["web_ok"] = True
+                meta["web_ok"] = time.time()
             # Its step line was shown when the turn paused: not again.
             text = await _web_call(cfg, meta, c["tool"], c["args"])
         elif c["tool"] in ai_tools.ASK:
@@ -1722,7 +1723,15 @@ async def _web_call(cfg: dict[str, Any], meta: dict[str, Any], tool: str,
     return out
 
 
+#: How long "Allow for this chat" lasts: a chat reopened the next day asks again.
+WEB_OK_SECONDS = 8 * 3600
+
+
 def _web_pre_allowed(cfg: dict[str, Any], meta: dict[str, Any]) -> bool:
-    """Web calls run without a card: allowed for this chat, or the user
-    chose "Don't ask before web calls" in Settings."""
-    return bool(meta.get("web_ok") or cfg.get("web_always_allow"))
+    """Web calls run without a card: allowed for this chat in the last
+    `WEB_OK_SECONDS` (an older chat's `True` has expired), or the user chose
+    "Don't ask before web calls" in Settings."""
+    at = meta.get("web_ok")
+    recent = isinstance(at, (int, float)) and not isinstance(at, bool) \
+        and 0 <= time.time() - at < WEB_OK_SECONDS
+    return bool(recent or cfg.get("web_always_allow"))
