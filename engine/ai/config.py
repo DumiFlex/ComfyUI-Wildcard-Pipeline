@@ -133,7 +133,8 @@ DEFAULTS: dict[str, Any] = {
     "tool_format": "auto",
     # Thinking models (Qwen3, DeepSeek R1, …): "auto" leaves it to the model,
     # "off" asks the server to skip the reasoning (faster, and it can't use
-    # up the output limit before the answer).
+    # up the output limit before the answer), "low" / "medium" / "high" ask
+    # for that much reasoning.
     "thinking": "auto",
     # Permissions (Settings › AI assistant › Permissions). No tool can read
     # or change these.
@@ -151,7 +152,11 @@ DEFAULTS: dict[str, Any] = {
     "choose_first": False,
 }
 TOOL_FORMATS = ("auto", "native", "json")
-THINKING = ("auto", "off")
+#: "auto" leaves thinking to the server or model; "off" asks it to skip;
+#: a level asks a thinking model for that much reasoning, where the
+#: provider has levels (where it has only on/off, any level means on).
+THINKING = ("auto", "off", "low", "medium", "high")
+THINKING_LEVELS = ("low", "medium", "high")
 
 #: Web search engines the user can bring (Settings › AI assistant › Web
 #: search). Off by default. SearXNG runs at the user's own address; the
@@ -696,7 +701,7 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
             cfg["tool_format"] = patch["tool_format"]
         if "thinking" in patch:
             if patch["thinking"] not in THINKING:
-                raise ConfigError("thinking must be auto or off")
+                raise ConfigError("thinking must be auto, off, low, medium or high")
             cfg["thinking"] = patch["thinking"]
         if "api_key" in patch:
             key = patch["api_key"]

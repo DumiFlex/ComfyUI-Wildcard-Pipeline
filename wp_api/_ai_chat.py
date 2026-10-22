@@ -26,6 +26,7 @@ import urllib.parse
 from typing import Any
 
 from engine.ai import budget, chatlog, safety
+from engine.ai.config import THINKING_LEVELS
 from engine.ai.tools import registry
 from engine.ai.tools import tools as registry_tools
 from wp_api import _ai_client as client
@@ -1059,6 +1060,27 @@ def _no_thinking(cfg: dict[str, Any]) -> dict[str, Any]:
 _THINK_KEYS = ("reasoning", "reasoning_effort", "chat_template_kwargs")
 
 
+#: Ollama models whose `think` takes a level instead of true/false.
+_OLLAMA_LEVELS = re.compile(r"gpt-oss", re.I)
+
+
+def _thinking_fields(cfg: dict[str, Any]) -> dict[str, Any]:
+    """The request fields for the Thinking setting on an OpenAI-style
+    server: nothing for "auto", `_no_thinking` for "off", and for a level
+    the same switches set to it. llama.cpp's and vLLM's template switch has
+    no levels, so a level there just turns thinking on."""
+    level = cfg.get("thinking") or "auto"
+    if level == "auto":
+        return {}
+    if level == "off":
+        return _no_thinking(cfg)
+    if cfg.get("provider") in ("openai", "lmstudio"):
+        return {"reasoning_effort": level}
+    if client.is_openrouter(str(cfg.get("base_url") or "")):
+        return {"reasoning": {"effort": level}}
+    return {"chat_template_kwargs": {"enable_thinking": True}}
+
+
 def _refused(e: AIError) -> bool:
     return e.status == 502 and bool(re.search(r"answered 4\d\d.*\btool", e.message, re.I))
 
@@ -1235,6 +1257,11 @@ async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, 
         "cache_control": {"type": "ephemeral"},
         "messages": anthropic_messages(log, fmt),
     }
+    if cfg.get("thinking") in THINKING_LEVELS:
+        # Claude's effort setting: how much it thinks and writes. "off"
+        # sends nothing: older Claude models think only when asked, and the
+        # newest always think (they refuse thinking "disabled").
+        body["output_config"] = {"effort": cfg["thinking"]}
     if fmt == "native":
         body["tools"] = tools
     else:
@@ -1293,6 +1320,9 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     }
     if cfg.get("thinking") == "off":
         body["think"] = False
+    elif cfg.get("thinking") in THINKING_LEVELS:
+        # gpt-oss takes a level; other thinking models only true.
+        body["think"] = cfg["thinking"] if _OLLAMA_LEVELS.search(str(cfg["model"])) else True
     if fmt == "native":
         body["tools"] = tools
     else:
@@ -1356,11 +1386,14 @@ async def _step_responses(cfg: dict[str, Any], system: str, log: list[dict[str, 
         body["prompt_cache_key"] = cache_key
     if cfg.get("thinking") == "off":
         body["reasoning"] = {"effort": "none"}
+    elif cfg.get("thinking") in THINKING_LEVELS:
+        body["reasoning"] = {"effort": cfg["thinking"]}
     try:
         data = await _post(cfg, "/responses", body, kind="responses", emit=emit,
                            show=fmt == "native")
     except AIError as e:
-        # A model that must reason refuses effort "none": ask again as is.
+        # A model that must reason refuses effort "none" (or one without
+        # levels refuses a level): ask again as is.
         if not ("reasoning" in body and 400 <= (e.upstream or 0) < 500
                 and re.search(r"reasoning|effort", e.message, re.I)):
             raise
@@ -1433,8 +1466,7 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
         # mid-sentence.
         body["temperature"] = temperature
         body["max_tokens"] = max_tokens
-    if cfg.get("thinking") == "off":
-        body.update(_no_thinking(cfg))
+    body.update(_thinking_fields(cfg))
     if cfg.get("local"):
         ttl = int(cfg.get("unload_after_s", 60))
         if ttl > 0:
@@ -1448,7 +1480,7 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     except AIError as e:
         # A server or model that won't take the thinking switch (a model that
         # must reason, a template without enable_thinking): ask again as is.
-        if not (cfg.get("thinking") == "off" and 400 <= (e.upstream or 0) < 500
+        if not (cfg.get("thinking", "auto") != "auto" and 400 <= (e.upstream or 0) < 500
                 and any(k in body for k in _THINK_KEYS)):
             raise
         for k in _THINK_KEYS:

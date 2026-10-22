@@ -1525,6 +1525,47 @@ async def test_thinking_off_uses_each_local_servers_switch(wp_client, fake_llm):
     assert fake_llm.seen[-1]["body"]["reasoning_effort"] == "none"
 
 
+async def test_a_thinking_level_uses_each_servers_switch(wp_client, fake_llm):
+    for provider, key, want in (("lmstudio", "reasoning_effort", "high"),
+                                ("llamacpp", "chat_template_kwargs", {"enable_thinking": True})):
+        ai_config.update({"enabled": True, "provider": provider, "thinking": "high",
+                          "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+        await _chat(wp_client, "hi")
+        assert fake_llm.seen[-1]["body"][key] == want
+    _openai(fake_llm, thinking="low")
+    await _chat(wp_client, "hi")
+    assert fake_llm.seen[-1]["body"]["reasoning"] == {"effort": "low"}
+
+
+async def test_a_thinking_level_sets_claudes_effort(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "anthropic", "api_key": "sk-ant",
+                      "base_url": str(fake_llm.make_url("/anthropic")),
+                      "model": "claude-opus-5-5", "thinking": "medium"})
+    out = await _chat(wp_client, "hello")
+    assert out["message"] == "Hi from Claude."
+    body = fake_llm.seen[-1]["body"]
+    assert body["output_config"] == {"effort": "medium"} and "thinking" not in body
+    ai_config.update({"thinking": "off"})
+    await _chat(wp_client, "hello")
+    assert "output_config" not in fake_llm.seen[-1]["body"]
+
+
+def test_thinking_fields_per_server():
+    from wp_api import _ai_chat
+    assert _ai_chat._thinking_fields({"provider": "lmstudio", "thinking": "auto"}) == {}
+    assert _ai_chat._thinking_fields({"provider": "openai", "thinking": "off"}) == {}
+    assert _ai_chat._thinking_fields({"provider": "custom", "thinking": "medium",
+                                      "base_url": "https://openrouter.ai/api/v1"}) == {
+        "reasoning": {"effort": "medium"}}
+
+
+def test_claude_without_effort_is_asked_again_without_it():
+    from wp_api import _ai_client
+    e = _ai_client.AIError("the server answered 400: output_config.effort: Extra inputs "
+                           "are not permitted")
+    assert _ai_client.claude_refused(e) == "output_config"
+
+
 def test_responses_input_rebuilds_steps_it_cannot_replay():
     from wp_api import _ai_chat
     log = [

@@ -844,8 +844,9 @@ export interface AiConfig {
   /** How the chat calls tools: native tool calls, the JSON step format, or
    *  automatic (native where the server says the model takes tools). */
   tool_format: AiToolFormat;
-  /** "off" asks the server to skip a thinking model's reasoning. */
-  thinking: "auto" | "off";
+  /** "off" asks the server to skip a thinking model's reasoning; a level
+   *  asks for that much of it. */
+  thinking: AiThinking;
   /** Meaning search: the embedding model ("" = off). */
   embed_model: string;
   /** Where the embedding model runs ("" = the server address). */
@@ -902,6 +903,8 @@ export type AiReaderId = "builtin" | "crawl4ai" | "firecrawl";
 
 export type AiModelSize = "small" | "medium" | "large";
 export type AiToolFormat = "auto" | "native" | "json";
+/** The Thinking setting: left to the model, off, or a reasoning level. */
+export type AiThinking = "auto" | "off" | "low" | "medium" | "high";
 
 export interface AiConfigPatch {
   enabled?: boolean;
@@ -912,7 +915,7 @@ export interface AiConfigPatch {
   context_max?: number;
   model_size?: "auto" | AiModelSize;
   tool_format?: AiToolFormat;
-  thinking?: "auto" | "off";
+  thinking?: AiThinking;
   embed_model?: string;
   embed_base_url?: string;
   embed_api?: AiEmbedApi;

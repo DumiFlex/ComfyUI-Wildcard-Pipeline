@@ -72,7 +72,7 @@ const STATIC_ENTRIES: SettingEntry[] = [
   { key: "ai-model-size", section: "ai", label: "Model size", hint: "How much the assistant asks of the model: shorter instructions for small ones.", keywords: "small medium large parameters 12b 27b profile" },
   { key: "ai-context", section: "ai", label: "Most context to use", hint: "The context the assistant asks Ollama for, in tokens.", keywords: "num_ctx context window tokens ollama memory vram" },
   { key: "ai-unload", section: "ai", label: "Unload the model after", hint: "Free the GPU for ComfyUI after a short idle.", keywords: "vram gpu keep alive ttl memory" },
-  { key: "ai-thinking", section: "ai", label: "Thinking", hint: "Let a thinking model reason first, or ask it to answer straight away.", keywords: "reasoning think qwen deepseek r1 cut off output limit slow" },
+  { key: "ai-thinking", section: "ai", label: "Thinking", hint: "Let a thinking model reason first, ask it to answer straight away, or pick how much it reasons.", keywords: "reasoning think effort level low medium high qwen deepseek r1 claude cut off output limit slow" },
   { key: "ai-embed-key", section: "ai", label: "Embedding server key", hint: "A key for an embedding server other than the chat's, sent only there.", keywords: "embeddings api key token openai" },
   { key: "ai-choose-first", section: "ai", label: "Choose the tool first", hint: "Small and medium local models name the tool, then write only its arguments.", keywords: "tools small model json choose fill experiment advanced" },
   { key: "ai-tool-format", section: "ai", label: "Tool format", hint: "How the chat calls its tools: native tool calls or the JSON step format.", keywords: "tools function calling json native advanced" },

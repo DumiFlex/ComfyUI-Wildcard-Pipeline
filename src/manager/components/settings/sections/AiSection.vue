@@ -19,6 +19,7 @@ import type { AiConfigPatch, AiEmbedApi, AiIndexStatus, AiModelSize, AiProviderI
 import { useAiConfig } from "../../../composables/useAiConfig";
 import { SUGGESTIONS_SOURCE_NOTE, hfRepo, suggestionsFor, type SuggestedModel } from "../ai-models";
 import { useUiStore } from "../../../stores/uiStore";
+import { THINKING_OPTIONS, isThinking } from "../../../utils/ai-thinking";
 
 const ui = useUiStore();
 const { config, error, save } = useAiConfig();
@@ -195,12 +196,9 @@ const toolFormatOptions: SelectOption[] = [
   { value: "native", label: "Native tool calls" },
   { value: "json", label: "JSON steps" },
 ];
-const thinkingOptions: SelectOption[] = [
-  { value: "auto", label: "As the model does" },
-  { value: "off", label: "Off: answer straight away" },
-];
+const thinkingOptions: SelectOption[] = THINKING_OPTIONS.map(({ value, label }) => ({ value, label }));
 async function setThinking(v: string | number | null): Promise<void> {
-  if ((v !== "auto" && v !== "off") || v === config.value?.thinking) return;
+  if (!isThinking(v) || v === config.value?.thinking) return;
   await patch({ thinking: v });
 }
 async function setToolFormat(v: string | number | null): Promise<void> {
@@ -760,7 +758,7 @@ const off = computed(() => !config.value?.enabled);
           <SettingRow
             form
             label="Thinking"
-            hint="Thinking models (Qwen3, DeepSeek R1, …) reason before they answer, which takes time and counts against the reply's limit: a long think can leave a cut-off answer. Off asks the server to skip it (Ollama, llama.cpp, LM Studio, OpenRouter and OpenAI understand this; a model that must reason ignores it)."
+            hint="Thinking models (Qwen3, DeepSeek R1, …) reason before they answer, which takes time and counts against the reply's limit: a long think can leave a cut-off answer. Off asks the server to skip it, and Low, Medium or High ask for that much reasoning (Ollama, llama.cpp, LM Studio, OpenRouter, OpenAI and Claude understand this; where a server has only on and off, any level means on, and a model that must reason ignores Off). You can also change it from the chat header."
             setting-key="ai-thinking"
           >
             <Select

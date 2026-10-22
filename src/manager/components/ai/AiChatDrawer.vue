@@ -49,6 +49,7 @@ import type { AiPhase } from "../../api/ai-progress";
 import { useAiChat, type ChatAssistantEntry, type SearchApproval } from "../../composables/useAiChat";
 import { clearPointer, EDIT_ROUTES } from "../../composables/useAiActions";
 import { useAiConfig } from "../../composables/useAiConfig";
+import { THINKING_OPTIONS, isThinking } from "../../utils/ai-thinking";
 import { useAiChatWidth } from "../../composables/useAiChatWidth";
 import type { AiCardFix, AiChatPage, AiChatProposal, AiChatStep, AiTestCard as TestCard } from "../../api/types";
 import { currentPageNote, editorForPage } from "../../composables/useOpenEditor";
@@ -182,6 +183,22 @@ async function pickModel(v: string | number | null): Promise<void> {
 }
 
 watch(() => chat.entries.value.length, () => { modelNote.value = ""; });
+
+/* ── Thinking picker (the same setting as Settings › AI › Thinking) ── */
+
+const thinking = computed(() => config.value?.thinking ?? "auto");
+const thinkingOptions: SelectOption[] = THINKING_OPTIONS.map(({ value, short }) => ({
+  value, label: short,
+}));
+async function pickThinking(v: string | number | null): Promise<void> {
+  if (!isThinking(v) || v === thinking.value || chat.loading.value) return;
+  try {
+    await saveConfig({ thinking: v });
+    modelNote.value = "";
+  } catch (err) {
+    modelNote.value = `Couldn't change thinking: ${err instanceof Error ? err.message : String(err)}`;
+  }
+}
 
 /* ── Stored chats ── */
 
@@ -712,6 +729,22 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
           :disabled="chat.loading.value"
           :aria-label="`Model: ${modelLabel}`"
           @update:model-value="pickModel"
+        />
+      </span>
+      <span
+        class="wp-ai-chat__think"
+        title="Thinking: how much a thinking model reasons before it answers (also in Settings › AI assistant)"
+        data-test="ai-chat-thinking"
+      >
+        <i class="pi pi-lightbulb" aria-hidden="true" />
+        <Select
+          :model-value="thinking"
+          :options="thinkingOptions"
+          :filterable="false"
+          size="sm"
+          :disabled="chat.loading.value"
+          aria-label="Thinking"
+          @update:model-value="pickThinking"
         />
       </span>
       <span class="wp-ai-chat__spacer" />
@@ -1277,6 +1310,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 }
 .wp-ai-chat__model :deep(.wp-select) { width: 100%; }
 .wp-ai-chat__model :deep(button) { font-family: var(--wp-font-mono, monospace); font-size: 11px; }
+.wp-ai-chat__think { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; color: var(--wp-text-muted); }
+.wp-ai-chat__think :deep(.wp-select) { width: 92px; }
+.wp-ai-chat__think :deep(button) { font-size: 11px; }
 .wp-ai-chat__model-note {
   margin: 0; padding: 6px 12px; font-size: 12px; color: var(--wp-text-muted);
   border-bottom: 1px solid var(--wp-border); background: var(--wp-bg-2);

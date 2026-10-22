@@ -673,6 +673,18 @@ describe("AiChatDrawer", () => {
     w.unmount();
   });
 
+  it("changes thinking from the header", async () => {
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-thinking"] [data-test="select-trigger"]').trigger("click");
+    await flushPromises();
+    const rows = [...document.querySelectorAll<HTMLElement>("[role='option']")];
+    expect(rows.map((r) => r.textContent?.trim())).toEqual(["Auto", "Off", "Low", "Medium", "High"]);
+    rows[4].dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ thinking: "high" });
+    w.unmount();
+  });
+
   it("applies a card and the cards it needs, in order", async () => {
     const { w } = await mountIt();
     await w.get('[data-test="ai-chat-input"]').setValue("make weather and more outfits");

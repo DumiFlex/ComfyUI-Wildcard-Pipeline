@@ -155,6 +155,9 @@ def claude_body(cfg: dict[str, Any], body: dict[str, Any], *,
     out = dict(body)
     if "temperature" in dropped or _CLAUDE_NO_SAMPLING.search(model):
         out.pop("temperature", None)
+    if "output_config" in dropped:
+        # An older model without the effort setting: its default.
+        out.pop("output_config", None)
     if forced_tool:
         if "tool_choice" in dropped or _CLAUDE_NO_FORCED_TOOL.search(model):
             out["tool_choice"] = {"type": "auto"}
@@ -178,6 +181,8 @@ def claude_refused(e: AIError) -> str | None:
     m = e.message.lower()
     if "tool_choice" in m:
         return "tool_choice"
+    if re.search(r"effort|output_config", m):
+        return "output_config"
     if re.search(r"temperature|top_p|top_k|sampling", m):
         return "temperature"
     return None
@@ -751,9 +756,10 @@ async def _complete_json(
                 body["ttl"] = ttl
         think_keys: tuple[str, ...] = ()
         key = (str(cfg.get("base_url") or ""), str(cfg.get("model") or ""))
-        if cfg.get("thinking") == "off" or key in _JSON_THINK_OFF:
+        if cfg.get("thinking", "auto") != "auto" or key in _JSON_THINK_OFF:
             from wp_api import _ai_chat  # imports this module
-            off = _ai_chat._no_thinking(cfg)
+            off = (_ai_chat._no_thinking(cfg) if key in _JSON_THINK_OFF
+                   else _ai_chat._thinking_fields(cfg))
             body.update(off)
             think_keys = tuple(off)
         try:
