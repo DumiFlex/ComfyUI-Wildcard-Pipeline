@@ -7,6 +7,7 @@
   color: var(--wp-accent-text); font-size: 0.95em; line-height: 1.45; vertical-align: baseline;
 }
 .wp-ai-syn__ref > i { font-size: 0.8em; }
+.wp-ai-syn__ref-text { color: var(--wp-accent-text); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; }
 .wp-ai-syn__ref-filter { color: var(--wp-text-muted); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.9em; }
 .wp-ai-syn__pick { color: var(--wp-warn); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; }
 .wp-ai-syn__multi { color: var(--wp-rt-token-good); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; }

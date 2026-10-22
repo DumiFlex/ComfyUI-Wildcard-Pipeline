@@ -63,6 +63,7 @@
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius-lg);
   padding: 22px 20px;
+  container: wp-doc-diagram / inline-size;
 }
 .wp-doc-diagram__cap {
   text-align: center;
@@ -188,6 +189,22 @@
 .wp-doc-diagram__vchip--a { color: var(--wp-accent-text); border-color: color-mix(in oklab, var(--wp-accent-500) 40%, transparent); }
 .wp-doc-diagram__vchip--b { color: #67e8f9; border-color: color-mix(in oklab, #22d3ee 40%, transparent); }
 .wp-doc-diagram__vchip--c { color: #86efac; border-color: color-mix(in oklab, #34d399 40%, transparent); }
+/* Too narrow for one row (the docs beside an open chat): the flow runs top
+   to bottom, each arrow pointing down with its label beside it. */
+@container wp-doc-diagram (max-width: 620px) {
+  .wp-doc-diagram__flow { flex-direction: column; gap: 4px; }
+  .wp-doc-diagram__arrow { flex-direction: row-reverse; gap: 8px; min-width: 0; padding: 2px 0; }
+  .wp-doc-diagram__arrow-lbl { margin: 0; width: 0; overflow: visible; white-space: nowrap; }
+  .wp-doc-diagram__arrow-ln {
+    width: 2px; height: 22px;
+    background: linear-gradient(180deg, transparent, var(--wp-border-strong) 20%, var(--wp-border-strong) 80%, transparent);
+  }
+  .wp-doc-diagram__arrow-ln::after {
+    right: auto; left: -3px; top: auto; bottom: -4px;
+    border-left-color: transparent; border-top-color: var(--wp-border-strong);
+  }
+  .wp-doc-diagram__varchips { max-width: none; }
+}
 .wp-doc-diagram__var-label {
   font-size: 9.5px;
   letter-spacing: 0.05em;

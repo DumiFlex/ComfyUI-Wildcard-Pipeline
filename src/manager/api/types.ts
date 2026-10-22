@@ -1574,6 +1574,8 @@ export interface AiChatResult {
   /** Tool calls this answer made, and how many of them the server rescued
    *  from text (a native-mode model that wrote its calls out). */
   tool_use?: { calls: number; salvaged: number };
+  /** How long the answer took, pauses for page tools and questions left out. */
+  elapsed_ms?: number;
   usage?: AiChatUsage;
   /** [[Name]] mentions in `message` that name a real item. */
   refs?: Record<string, AiChatRef>;

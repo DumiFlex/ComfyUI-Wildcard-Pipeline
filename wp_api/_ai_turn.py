@@ -25,6 +25,7 @@ from engine.ai import react as ai_react
 from engine.ai import recipes as ai_recipes
 from engine.ai import safety as ai_safety
 from engine.ai import tools as ai_tools
+from engine.ai.step_fields import strip_step_fields
 from engine.db.repositories import (
     BundleRepository,
     CategoryRepository,
@@ -196,6 +197,9 @@ class _Turn:
     first_done: list[str]
     step: int
     deadline: float
+    #: When this request started working (`time.monotonic`), for the
+    #: answer's "took" time.
+    started: float = field(default_factory=time.monotonic)
     proposals: list[dict[str, Any]] = field(default_factory=list)
     tool_use: dict[str, int] = field(default_factory=lambda: {"calls": 0, "salvaged": 0})
     steps: list[dict[str, Any]] = field(default_factory=list)
@@ -657,6 +661,9 @@ def _scope_edits(lib: Any, meta: dict[str, Any], ask: _Ask, log: list[dict[str, 
             named.add(op["id"])
     meta["named"] = sorted(named)
     lib.named = named
+    if not ask.resume and text:
+        meta["ref_asks"] = sorted(ai_chat.ref_asks(text))
+    lib.ref_asks = set(meta.get("ref_asks") or [])
     # An item the answer reads in full may be changed when the user asked
     # for a change ("add negatives to the stormy options"), not a new item.
     lib.edit_read = (bool(text) and not ask.resume and not ai_chat.creation_ask(text)) \
@@ -743,14 +750,16 @@ async def _model_step(t: _Turn) -> dict[str, Any] | str | web.Response:
 def _said(t: _Turn, st: dict[str, Any], calls: list[dict[str, Any]]) -> str:
     """The step's words: its message, or the plan / native text a small
     model wrote them into instead."""
-    said = ai_safety.strip_invisible(st["message"])[:ai_chat.MAX_MESSAGE]
+    # A JSON step's other fields written into its message ("calls: []").
+    said = strip_step_fields(ai_safety.strip_invisible(st["message"]))[:ai_chat.MAX_MESSAGE]
     plan_text = (st.get("answer") or {}).get("plan") if isinstance(
         st.get("answer"), dict) else ""
     if not said and not calls and isinstance(plan_text, str) \
             and len(plan_text.strip()) >= PLAN_AS_ANSWER:
         # Small models write the whole explanation in "plan" and leave
         # "message" empty: that showed as an empty answer.
-        said = ai_safety.strip_invisible(plan_text.strip())[:ai_chat.MAX_MESSAGE]
+        said = strip_step_fields(ai_safety.strip_invisible(plan_text.strip()))[
+            :ai_chat.MAX_MESSAGE]
     native_note = st.get("plan") if t.fmt == "native" else ""
     if not said and calls and isinstance(native_note, str) and native_note.strip():
         # Native text written next to calls ("I've proposed the two
@@ -1355,9 +1364,14 @@ async def _close(t: _Turn) -> web.Response:
     meta["format"] = t.fmt
     meta["fingerprint"] = t.fp_now
     meta["model"] = t.cfg.get("model")
+    # How long the answer took: this request, plus the earlier requests of a
+    # turn that paused on a page tool, a search or a question.
+    took = int((time.monotonic() - t.started) * 1000)
+    meta["turn_ms"] = took + (int(meta.get("turn_ms") or 0) if t.ask.resume else 0)
     out: dict[str, Any] = {
         "message": message, "proposals": proposals, "steps": t.steps,
         "model": t.cfg["model"], "format": t.fmt, "usage": t.usage, "tool_use": t.tool_use,
+        "elapsed_ms": meta["turn_ms"],
         # Card warnings name items too ("$coat is already set by [[id#Coat]]").
         "refs": t.lib.message_refs("\n".join([message, *(w for p_ in proposals
                                                             for w in p_.get("warnings") or [])])),
@@ -1372,7 +1386,7 @@ async def _close(t: _Turn) -> web.Response:
     # reads it).
     t.new.append(ai_chatlog.shown_entry({k: out[k] for k in (
         "message", "proposals", "steps", "refs", "model", "pending", "format", "tool_use",
-        "reaction") if k in out}))
+        "elapsed_ms", "reaction") if k in out}))
     out["context"] = _context(t.cfg, meta, t.log + t.new, t.fixed, t.usage, t.window)
     chat = t.chat
     with db_session(t.request) as conn:

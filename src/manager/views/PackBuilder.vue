@@ -23,6 +23,7 @@ import AiImagePicker from "../components/ai/AiImagePicker.vue";
 import AiSearchFound from "../components/ai/AiSearchFound.vue";
 import AiWorking from "../components/ai/AiWorking.vue";
 import ChatCompletions from "../components/ai/ChatCompletions.vue";
+import ChatInputMarks from "../components/ai/ChatInputMarks.vue";
 import PackFindings from "../components/pack/PackFindings.vue";
 import PackPlanList from "../components/pack/PackPlanList.vue";
 import PackQuestions from "../components/pack/PackQuestions.vue";
@@ -472,6 +473,7 @@ function stopExtending(): void {
           :disabled="convo.loading.value"
           @keydown="onKey($event, toSettings)"
         ></textarea>
+        <ChatInputMarks :target="requestBox" :text="convo.instruction.value" />
         <ChatCompletions :target="requestBox" />
         <button
           type="button"
@@ -491,6 +493,7 @@ function stopExtending(): void {
             data-test="pack-sample"
             :disabled="convo.loading.value"
           ></textarea>
+          <ChatInputMarks :target="sampleBox" :text="pb.sample.value" />
           <ChatCompletions :target="sampleBox" />
           <p class="wp-pack__dim">The plan splits it into slots, reuses your wildcards where they fit and builds the rest, so the pack makes more prompts like it.</p>
         </template>
@@ -618,6 +621,7 @@ function stopExtending(): void {
             :disabled="convo.loading.value"
             @keydown="onKey($event, pb.refinePlan)"
           ></textarea>
+          <ChatInputMarks :target="editBox" :text="convo.instruction.value" />
           <ChatCompletions :target="editBox" />
           <p v-if="flash" class="wp-pack__flash-note" role="status" data-test="pack-edit-note"><i class="pi pi-arrow-up" aria-hidden="true" /> {{ flash }}</p>
           <button

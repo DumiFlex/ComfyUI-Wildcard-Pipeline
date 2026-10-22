@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter, RouterView } from "vue-router";
 import AiChatDrawer from "../AiChatDrawer.vue";
 import { api } from "../../../api/client";
-import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
+import { _resetAiConfigForTests, useAiConfig } from "../../../composables/useAiConfig";
 import { _resetAiChatForTests, useAiChat } from "../../../composables/useAiChat";
 import { _resetPackBuilderForTests, usePackBuilder } from "../../../composables/usePackBuilder";
 import type { AiChatRequest, AiChatResult, AiConfig } from "../../../api/types";
@@ -471,7 +471,7 @@ describe("AiChatDrawer", () => {
     await router.push("/docs/combine");
     const w = mount(AiChatDrawer, { global: { plugins: [router] }, attachTo: document.body });
     await flushPromises();
-    expect(w.findAll('[data-test="ai-chat-suggestion"]')[0].text()).toBe("Explain this page in simpler words");
+    expect(w.findAll('[data-test="ai-chat-suggestion"]')[0].text()).toBe('Explain the docs page "Combine" in simpler words');
     await w.get('[data-test="ai-chat-input"]').setValue("explain");
     await w.get('[data-test="ai-chat-send"]').trigger("click");
     await flushPromises();
@@ -688,6 +688,26 @@ describe("AiChatDrawer", () => {
       .dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     await flushPromises();
     expect(w.get('[data-test="ai-chat-model-note"]').text()).toContain("reads this chat again");
+    w.unmount();
+  });
+
+  it("lists the new provider's models after the provider changes", async () => {
+    const { w } = await mountIt();
+    vi.mocked(api.ai.models).mockResolvedValue({ models: ["claude-sonnet-5-5", "claude-haiku-5-5"] });
+    vi.mocked(api.ai.saveConfig).mockResolvedValueOnce({
+      ...CONFIG, provider: "anthropic", model: "claude-sonnet-5-5",
+      presets: { anthropic: { label: "Claude", api: "anthropic", local: false, needs_key: true, base_url: "" } },
+    } as unknown as AiConfig);
+    await useAiConfig().save({ provider: "anthropic", model: "claude-sonnet-5-5" });
+    await flushPromises();
+    await w.get('[data-test="ai-chat-model"] [data-test="select-trigger"]').trigger("click");
+    await flushPromises();
+    const lists = document.querySelectorAll("[role='listbox']");
+    const rows = [...lists[lists.length - 1].querySelectorAll<HTMLElement>("[role='option']")];
+    expect(rows.map((r) => r.textContent?.trim())).toEqual(["claude-sonnet-5-5", "claude-haiku-5-5"]);
+    // Pick one, which closes the list for the tests after this one.
+    rows[0].dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await flushPromises();
     w.unmount();
   });
 

@@ -7,6 +7,11 @@ const push = vi.fn();
 vi.mock("vue-router", () => ({ useRouter: () => ({ push }) }));
 
 describe("AiMessage", () => {
+  it("shows a reference in a reply as its name, with its filter", () => {
+    const w = mount(AiMessage, { props: { text: "Write `@{Colors:warm!null}` or @{fe224375#color}." } });
+    expect(w.findAll(".wp-ai-syn__ref-text").map((n) => n.text())).toEqual(["@{Colors:warm!null}", "@{color}"]);
+    expect(w.find(".wp-ai-syn__ref").exists()).toBe(false);
+  });
   it("colours prompt syntax the way the editors do", () => {
     const w = mount(AiMessage, {
       props: { text: "Use $hair with {red|blue}, @{abcd1234}, <lora:detail:0.6>, embedding:bad_hands and #portrait." },
@@ -14,7 +19,9 @@ describe("AiMessage", () => {
     expect(w.find(".wp-ai-syn__var").text()).toBe("$hair");
     expect(w.find(".wp-ai-syn__var").attributes("style")).toContain("--wp-var-");
     expect(w.find(".wp-ai-syn__pick").text()).toBe("{red|blue}");
-    expect(w.find(".wp-ai-syn__ref").attributes("title")).toBe("@{abcd1234}");
+    // A reference stays text in a reply (chips are for cards).
+    expect(w.find(".wp-ai-syn__ref").exists()).toBe(false);
+    expect(w.find(".wp-ai-syn__ref-text").attributes("title")).toBe("@{abcd1234}");
     expect(w.find(".wp-ai-syn__lora").text()).toBe("<lora:detail:0.6>");
     expect(w.find(".wp-ai-syn__emb").text()).toBe("embedding:bad_hands");
     expect(w.find(".wp-ai-syn__tag").text()).toBe("#portrait");

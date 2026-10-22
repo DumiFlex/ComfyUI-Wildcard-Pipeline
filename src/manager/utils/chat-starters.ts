@@ -16,7 +16,18 @@ export interface StarterLibrary {
 export const WHAT_CAN_YOU_DO = "What can you do?";
 const MAX = 3;
 
-const DOC = ["Explain this page in simpler words", "Show me a small example of this"];
+/** Starters for a docs page. They name the page, so a question sent after
+ *  the user has moved on to another page still asks about this one. */
+export function docStarters(title?: string): string[] {
+  return title
+    ? [docExplainPrompt(title), `Show me a small example of ${title}`]
+    : ["Explain this page in simpler words", "Show me a small example of this"];
+}
+
+/** "Explain the docs page …" for the page's title. */
+export function docExplainPrompt(title: string): string {
+  return `Explain the docs page "${title}" in simpler words`;
+}
 const TEST = ["Explain this run", "Why do I never get some of these options?"];
 const NEW_ITEM = ["Help me fill this in", "What should this one set up?"];
 
@@ -87,10 +98,12 @@ function home(lib: StarterLibrary): string[] {
 }
 
 /** Up to three starters for a page; "What can you do?" fills any gap. */
-export function starterQuestions(route: { name?: string; hasId?: boolean }, lib: StarterLibrary): string[] {
+export function starterQuestions(
+  route: { name?: string; hasId?: boolean; docTitle?: string }, lib: StarterLibrary,
+): string[] {
   const name = route.name ?? "";
   let out: string[];
-  if (name === "documentation-page" || name === "documentation") out = DOC;
+  if (name === "documentation-page" || name === "documentation") out = docStarters(route.docTitle);
   else if (route.hasId && name.endsWith("-edit")) out = editor(name.slice(0, -"-edit".length));
   else if (name.endsWith("-new")) out = NEW_ITEM;
   else out = listPage(name, lib);

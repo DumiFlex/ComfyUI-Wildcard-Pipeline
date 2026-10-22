@@ -8,7 +8,7 @@ import json
 from engine.ai import chat as ai_chat
 from engine.ai import client_tools
 from engine.ai import config as ai_config
-from tests.wp_api.test_ai_api import _chat, _two_wildcards
+from tests.wp_api.test_ai_api import _chat, _two_wildcards, _wildcard
 from tests.wp_api.test_ai_client_tools import _resume, searx  # noqa: F401,F811 - fixture
 from wp_api import _ai_chat
 
@@ -407,3 +407,57 @@ async def test_a_permission_in_a_lazy_json_chat_leaves_the_prompt_alone(wp_clien
     # How to call it goes with the message that says it is on.
     assert "- delete_items " in sent[-1]["content"] and "delete stuff" in sent[-1]["content"]
     assert ai_chat.GO_NUDGE not in sent[-1]["content"]
+
+
+async def test_step_fields_written_into_the_message_are_not_shown(wp_client, fake_llm):
+    """Qwen3.6 35B in JSON steps, 2026-10-22: the answer to "What can you
+    do?" ended with a "calls: []" line."""
+    _on(fake_llm, model_size="large")
+    fake_llm.chat_steps.extend([{"message": "I can draft and organize.\n\n**calls**: []",
+                                 "calls": []}])
+    done = await _chat(wp_client, "What can you do?")
+    assert done["message"] == "I can draft and organize."
+    # How long it took, kept for reopening the chat.
+    assert isinstance(done["elapsed_ms"], int) and done["elapsed_ms"] >= 0
+
+
+async def test_a_wildcard_leaving_out_a_reference_the_user_asked_for_is_told(
+        wp_client, fake_llm):
+    """A 9B, 2026-10-22: asked for shirts with "a nested reference of
+    @color", it wrote plain options and said they drew from color."""
+    color = await _wildcard(wp_client, "color", "color", [
+        {"id": "cccc0001", "value": "red", "weight": 1, "sub_categories": []},
+        {"id": "cccc0002", "value": "teal", "weight": 1, "sub_categories": []},
+    ], [])
+    _on(fake_llm, model_size="large")
+    plain = {"name": "Shirt Style", "var": "shirt_style",
+             "options": [{"text": "loose V-neck tee"}, {"text": "boxy crew neck tee"}]}
+    nested = {**plain, "options": [{"text": "loose @{color} V-neck tee"},
+                                   {"text": "boxy @{color} crew neck tee"}]}
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(plain)}]},
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(nested)}]},
+        {"message": "Shirt Style draws its colour from color.", "calls": []},
+    ])
+    n = len(fake_llm.seen)
+    body = await _chat(wp_client, "make a shirt wildcard, but decide the colors using a "
+                                  f"nested reference of [[{color}#color]]")
+    told = json.dumps(fake_llm.seen[n + 1]["body"]["messages"][-1])
+    assert "no option draws from it" in told and "@{color}" in told
+    values = [o["value"] for o in body["proposals"][0]["op"]["body"]["payload"]["options"]]
+    assert all(f"@{{{color}" in v for v in values)
+    assert not any("no option draws" in w for w in body["proposals"][0]["warnings"])
+
+
+async def test_no_reference_warning_when_none_was_asked_for(wp_client, fake_llm):
+    color = await _wildcard(wp_client, "color", "color", [
+        {"id": "cccc0001", "value": "red", "weight": 1, "sub_categories": []}], [])
+    _on(fake_llm, model_size="large")
+    plain = {"name": "Shirt Style", "var": "shirt_style",
+             "options": [{"text": "loose V-neck tee"}, {"text": "boxy crew neck tee"}]}
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(plain)}]},
+        {"message": "Done.", "calls": []},
+    ])
+    body = await _chat(wp_client, f"make a shirt wildcard that goes with [[{color}#color]]")
+    assert not any("no option draws" in w for w in body["proposals"][0]["warnings"])

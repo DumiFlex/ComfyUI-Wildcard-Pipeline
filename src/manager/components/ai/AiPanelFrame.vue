@@ -16,6 +16,7 @@ import AiImagePicker from "./AiImagePicker.vue";
 import AiSearchFound from "./AiSearchFound.vue";
 import AiWorking from "./AiWorking.vue";
 import ChatCompletions from "./ChatCompletions.vue";
+import ChatInputMarks from "./ChatInputMarks.vue";
 import { useAiConfig } from "../../composables/useAiConfig";
 import type { AiImages } from "../../composables/useAiImages";
 import type { SearchFound } from "../../composables/searchFound";
@@ -154,6 +155,7 @@ function onKeydown(ev: KeyboardEvent): void {
       @keydown="onKeydown"
       @paste="onPaste"
     ></textarea>
+    <ChatInputMarks :target="box" :text="instruction" />
     <ChatCompletions :target="box" />
     <AiImagePicker v-if="images" :images="images" :disabled="loading" compact />
     <div class="wp-ai-frame__controls">
