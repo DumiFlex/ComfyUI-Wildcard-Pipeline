@@ -7,7 +7,7 @@ import type {
   CategoryCreateInput, CategoryRow,
   DatabaseConfig, DatabaseConfigUpdate,
   BackupEntry, BackupList, ServerSettings, ServerSettingsPatch,
-  AiConfig, AiConfigPatch, AiTestResult, AiIndexStatus, AiWildcardDraftRequest, AiWildcardDraftResult,
+  AiConfig, AiConfigPatch, AiTestResult, AiThinkingInfo, AiIndexStatus, AiWildcardDraftRequest, AiWildcardDraftResult,
   AiWildcardEditRequest,
   AiWildcardEditResult,
   AiWebFound,
@@ -486,6 +486,10 @@ export const api = {
     },
     test() {
       return request<AiTestResult>("/wp/api/ai/test", { method: "POST" });
+    },
+    /** What the chosen model takes for Thinking. */
+    thinking() {
+      return request<AiThinkingInfo>("/wp/api/ai/thinking", { method: "POST" });
     },
     index() {
       return request<AiIndexStatus>("/wp/api/ai/index", { method: "GET" });

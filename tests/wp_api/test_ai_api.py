@@ -1501,7 +1501,7 @@ async def test_openai_chat_tools_and_reasoning_carry_over(wp_client, fake_llm):
 
 
 async def test_openai_thinking_off_asks_for_no_reasoning_then_drops_it(wp_client, fake_llm):
-    _openai(fake_llm, thinking="off")
+    _openai(fake_llm, thinking="off", model="gpt-5.2")
     first = await _chat(wp_client, "hi")
     assert fake_llm.seen[-1]["body"]["reasoning"] == {"effort": "none"}
     assert first["message"] == "Done."
@@ -1545,7 +1545,12 @@ async def test_a_thinking_level_sets_claudes_effort(wp_client, fake_llm):
     assert out["message"] == "Hi from Claude."
     body = fake_llm.seen[-1]["body"]
     assert body["output_config"] == {"effort": "medium"} and "thinking" not in body
+    # Opus 5.5 always thinks: Off asks for its lowest effort.
     ai_config.update({"thinking": "off"})
+    await _chat(wp_client, "hello")
+    assert fake_llm.seen[-1]["body"]["output_config"] == {"effort": "low"}
+    # An older model that thinks only when asked: Off sends nothing.
+    ai_config.update({"model": "claude-opus-4-8"})
     await _chat(wp_client, "hello")
     assert "output_config" not in fake_llm.seen[-1]["body"]
 

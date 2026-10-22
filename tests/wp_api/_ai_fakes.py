@@ -67,6 +67,9 @@ def _chat_step(schema: dict, chat_steps: list) -> object:
 @pytest.fixture(autouse=True)
 def _isolated_ai(tmp_path, monkeypatch):
     monkeypatch.setenv("WP_AI_CONFIG_PATH", str(tmp_path / "ai.json"))
+    from wp_api import _ai_thinking
+    _ai_thinking._cache.clear()
+    _ai_thinking._refused.clear()
     for var in ("WP_AI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
         monkeypatch.delenv(var, raising=False)
 
@@ -101,6 +104,16 @@ async def fake_llm(aiohttp_server):
             return web.json_response({"error": (
                 "The model produced output that does not match the expected peg-native "
                 "format. Error: Unexpected token at position 0")}, status=500)
+        if overrides.get("_thought_out") and body.get("reasoning_effort") != "none":
+            # A thinking model that spent the whole output limit reasoning.
+            overrides["_thought_out"] -= 1
+            return web.json_response({"choices": [{"message": {
+                "content": "", "reasoning_content": "Let me think. " * 50},
+                "finish_reason": "length"}]})
+        if body.get("model") == "no-effort" and "reasoning_effort" in body:
+            # A server that takes no thinking field for this model.
+            return web.json_response({"error": {
+                "message": "Invalid 'reasoning_effort' for this model."}}, status=400)
         if "tools" in body and body.get("model") == "refuser":
             return web.json_response({"error": {"message": "this model has no tool support"}},
                                      status=400)
@@ -191,6 +204,17 @@ async def fake_llm(aiohttp_server):
             out["type"] = "vlm" if mid == "eyes" else "llm"
         return web.json_response(out)
 
+    async def lmstudio_v1_models(request):
+        # LM Studio 0.4's native list: each model's thinking options.
+        return web.json_response({"models": [
+            {"key": "hybrid", "type": "llm", "capabilities": {
+                "reasoning": {"allowed_options": ["off", "on"], "default": "on"}}},
+            {"key": "leveled", "type": "llm", "capabilities": {
+                "reasoning": {"allowed_options": ["off", "low", "medium", "high"],
+                              "default": "medium"}}},
+            {"key": "plain", "type": "llm", "capabilities": {"vision": False}},
+        ]})
+
     async def ollama_tags(request):
         return web.json_response({"models": [{"name": "qwen:9b"}]})
 
@@ -235,6 +259,7 @@ async def fake_llm(aiohttp_server):
     app.router.add_post("/v1/chat/completions", openai_chat)
     app.router.add_post("/v1/responses", openai_responses)
     app.router.add_get("/api/v0/models/{mid}", lmstudio_model)
+    app.router.add_get("/api/v1/models", lmstudio_v1_models)
     app.router.add_get("/api/tags", ollama_tags)
     app.router.add_post("/api/chat", ollama_chat)
     app.router.add_get("/anthropic/v1/models", anthropic_models)
