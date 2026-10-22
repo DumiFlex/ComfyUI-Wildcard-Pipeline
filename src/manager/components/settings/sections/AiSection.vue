@@ -62,6 +62,49 @@ async function patch(p: Parameters<typeof save>[0]): Promise<boolean> {
   }
 }
 
+/* ── Reset to recommended ───────────────────────────────────────────────
+ * Every choice goes back to what its row recommends. What the user set up
+ * stays: the provider, addresses, keys, models, embedding and web search,
+ * and the Danbooru lookup (its recommendation depends on the image model). */
+const RECOMMENDED = {
+  model_size: "auto", context_max: 16384, thinking: "auto", unload_after_s: 60,
+  tool_format: "auto", choose_first: false, allow_delete: false, auto_apply: false,
+  web_always_allow: false,
+} as const;
+const RECOMMENDED_UI = { explainChip: true, chatThinking: false, chatNotes: true, chatSteps: true } as const;
+const RESET_LABELS: Record<string, string> = {
+  model_size: "Model size", context_max: "Most context to use", thinking: "Thinking",
+  unload_after_s: "Unload the model after", tool_format: "Tool format",
+  choose_first: "Choose the tool first", allow_delete: "Let the assistant delete items",
+  auto_apply: "Apply small changes automatically", web_always_allow: "Don't ask before web calls",
+  explainChip: "Show Explain on selected text", chatThinking: "Show thinking",
+  chatNotes: "Show working notes", chatSteps: "Show what it did",
+};
+const resetChanges = computed<string[]>(() => {
+  const c = config.value;
+  if (!c) return [];
+  const server = (Object.keys(RECOMMENDED) as Array<keyof typeof RECOMMENDED>)
+    .filter((k) => (c[k] ?? RECOMMENDED[k]) !== RECOMMENDED[k]);
+  const local = (Object.keys(RECOMMENDED_UI) as Array<keyof typeof RECOMMENDED_UI>)
+    .filter((k) => ui[k] !== RECOMMENDED_UI[k]);
+  return [...server, ...local].map((k) => RESET_LABELS[k] ?? k);
+});
+const resetAsk = ref(false);
+async function resetToRecommended(): Promise<void> {
+  const c = config.value;
+  if (!c) return;
+  const p: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(RECOMMENDED)) if ((c[k as keyof typeof RECOMMENDED] ?? v) !== v) p[k] = v;
+  if (Object.keys(p).length && !(await patch(p as Parameters<typeof save>[0]))) return;
+  ui.setExplainChip(RECOMMENDED_UI.explainChip);
+  ui.setChatShow("thinking", RECOMMENDED_UI.chatThinking);
+  ui.setChatShow("notes", RECOMMENDED_UI.chatNotes);
+  ui.setChatShow("steps", RECOMMENDED_UI.chatSteps);
+  contextCustom.value = false;
+  unloadCustom.value = false;
+  resetAsk.value = false;
+}
+
 /* ── Address ─────────────────────────────────────────────────────────── */
 const addressDraft = ref("");
 watch(() => config.value?.base_url, (v) => { addressDraft.value = v ?? ""; }, { immediate: true });
@@ -570,6 +613,24 @@ const off = computed(() => !config.value?.enabled);
               data-test="ai-enabled"
               @update:model-value="setEnabled"
             />
+          </SettingRow>
+          <SettingRow
+            label="Reset to recommended"
+            :hint="resetChanges.length
+              ? 'Puts every choice on this page back to its recommended value. Your provider, addresses, keys, models, meaning search and web search stay as they are.'
+              : 'Every choice on this page is at its recommended value.'"
+            setting-key="ai-reset"
+          >
+            <Button v-if="!resetAsk" size="sm" variant="ghost" :disabled="!resetChanges.length" data-test="ai-reset" @click="resetAsk = true">Reset…</Button>
+            <template v-else>
+              <Button size="sm" data-test="ai-reset-confirm" @click="resetToRecommended">Reset</Button>
+              <Button size="sm" variant="ghost" data-test="ai-reset-cancel" @click="resetAsk = false">Cancel</Button>
+            </template>
+            <template #extra>
+              <p v-if="resetAsk" class="wp-set-row__hint wp-ai-set__reset-list" data-test="ai-reset-list">
+                Changes: {{ resetChanges.join(", ") }}.
+              </p>
+            </template>
           </SettingRow>
         </SettingGroup>
 
@@ -1365,6 +1426,7 @@ p.wp-ai-set__muted:has(.wp-ai-set__link) { padding: var(--wp-space-2) var(--wp-s
   margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--wp-text-dim);
 }
 .wp-ai-set__muted { color: var(--wp-text-dim); font-size: 12px; }
+.wp-ai-set__reset-list { margin: 3px 0 0; font-size: 12px; color: var(--wp-text-dim); }
 .wp-ai-set__lan { margin: 0; font-size: 12px; line-height: 1.45; color: var(--wp-warn); }
 .wp-ai-set__card code { font-family: var(--wp-font-mono); font-size: 12px; color: var(--wp-text); }
 .wp-ai-set__card--models { gap: var(--wp-space-2); line-height: 1.45; }

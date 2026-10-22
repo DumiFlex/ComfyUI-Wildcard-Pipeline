@@ -211,6 +211,24 @@ describe("Settings › AI assistant", () => {
     expect(note).toContain("your key's credits");
   });
 
+  it("resets every choice to its recommended value, keeping what was set up", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({
+      enabled: true, model: "qwen", thinking: "high", tool_format: "json", allow_delete: true,
+      context_max: 32768, danbooru_lookup: true,
+    }));
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg({ enabled: true, model: "qwen", ...(p as Partial<AiConfig>) }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    await w.get('[data-test="ai-reset"]').trigger("click");
+    expect(w.get('[data-test="ai-reset-list"]').text()).toContain("Thinking");
+    await w.get('[data-test="ai-reset-confirm"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({
+      context_max: 16384, thinking: "auto", tool_format: "auto", allow_delete: false,
+    });
+    expect(w.get('[data-test="ai-reset"]').attributes("disabled")).toBeDefined();
+  });
+
   it("marks cloud providers that already have a saved key", async () => {
     vi.mocked(api.ai.config).mockResolvedValue(cfg({ keys_saved: ["anthropic"] }));
     const w = mount(AiSection, { global: { plugins: [router] } });
