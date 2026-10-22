@@ -28,11 +28,11 @@ pnpm install
 | Frontend tests | `pnpm test` |
 | Python tests | `pytest` |
 | Type check | `pnpm typecheck` |
-| Lint | `pnpm lint` |
+| Lint | `pnpm lint` (a11y rules and `!` assertions are errors outside `eslint-baseline.json`; after fixing old warnings run `pnpm lint:baseline` to drop those files) |
 | Bundle-size gate | `pnpm size` |
 | CSS isolation check | `pnpm check:css-isolation` |
 | Python lint | `ruff check .` |
-| Python types | `pyright` (see `[tool.pyright]` in `pyproject.toml`) |
+| Python types | `pyright engine wp_nodes wp_api` (settings in `[tool.pyright]` in `pyproject.toml`; CI runs it) |
 | Engine-parity fixtures | `python scripts/dump_engine_shapes.py` after any payload shape change |
 | Docs search index | `pnpm docs:index` after editing a docs page |
 
