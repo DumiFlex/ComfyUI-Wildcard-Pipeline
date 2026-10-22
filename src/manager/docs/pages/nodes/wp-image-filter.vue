@@ -7,6 +7,7 @@ import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import DocFigureText from "../../../components/docs/DocFigureText.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
 import picksDiagram from "../../images/how-picks-carry-over.webp";
 
 const ports = [
@@ -90,6 +91,11 @@ const settings = [
     </DocSection>
 
     <DocSection title="The picker">
+      <DocImage
+        src="images/docs/wp-image-filter-picker.png"
+        ratio="1720 / 1088"
+        caption="The picker for a 12-frame sweep with Fit on: each frame is labelled with its number and the options it pinned. Three images are picked."
+      />
       <DocKeyList :items="keys" />
       <p>
         <b>Keep all</b> sends everything on. <b>Stop branch</b> stops the nodes after this one;
@@ -112,6 +118,11 @@ const settings = [
         <b>Split by</b>, one small grid per value. Click a row, column or group name to pick all of
         it. <b>Frames</b> in the header switches back to the list.
       </p>
+      <DocImage
+        src="images/docs/wp-image-filter-grid.png"
+        ratio="1720 / 676"
+        caption="A sweep of $time × $medium × $mood as a grid: rows and columns, split by $mood."
+      />
       <p>
         <b>Send to Loop</b> writes your picks back to the loop: the picked frames' seeds are
         locked (when the loop overrides seeds) and every other frame is bypassed, so the next run
@@ -134,6 +145,11 @@ const settings = [
         <li>A painted mask goes to the <code>masks</code> output, resized to the image. Images you
           don't paint keep the incoming mask, or an empty one when nothing is wired in.</li>
       </ul>
+      <DocImage
+        src="images/docs/wp-image-filter-refine.png"
+        ratio="1720 / 910"
+        caption="Zoom & refine on frame 5 with Details open: the frame's values, its prompt with each value marked, the negative, and Paint for a mask."
+      />
       <figure class="wp-doc-figure">
         <img :src="picksDiagram" alt="How the picks carry over: images, latents, masks, conditioning and prompt text of picked frames go on; an edited prompt is re-encoded and a painted mask goes to the masks output." loading="lazy">
       </figure>
@@ -141,6 +157,11 @@ const settings = [
     </DocSection>
 
     <DocSection title="Settings on the node">
+      <DocImage
+        src="images/docs/wp-image-filter.png"
+        ratio="2 / 1"
+        caption="WP Image Filter after a run, next to a Preview Image of the three images it kept."
+      />
       <DocKeyList :items="settings" />
       <p>The <b>Last run</b> strip under the settings shows what the last run kept.</p>
     </DocSection>

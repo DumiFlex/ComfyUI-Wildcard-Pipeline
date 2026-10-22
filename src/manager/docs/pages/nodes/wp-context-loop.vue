@@ -120,8 +120,8 @@ const controls = [
       </p>
       <DocImage
         src="images/docs/wp-context-loop-grid.png"
-        ratio="16 / 7"
-        caption="A full looped workflow with a WP Seed List on the sampler: four portraits labelled 'iteration 1 of 4' to 'iteration 4 of 4', each with its own prompt and seed."
+        ratio="1720 / 752"
+        caption="A full looped workflow: the loop's loop_config feeds a WP Seed List on the sampler, so each of the four frames gets its own prompt and its own seed."
       />
     </DocSection>
 

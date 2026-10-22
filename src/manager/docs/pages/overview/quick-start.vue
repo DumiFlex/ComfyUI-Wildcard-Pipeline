@@ -36,7 +36,7 @@ function createStarterWildcard(): void {
       </div>
       <DocImage
         src="images/docs/quick-start-starter.png"
-        ratio="2 / 1"
+        ratio="1720 / 1625"
         caption="The New wildcard form filled in by the button: a subject wildcard with a cat, a dog and a fox. Nothing is saved until you press Save."
       />
     </DocSection>
