@@ -454,7 +454,9 @@ TOOLS: list[Tool] = [
         "color, icon).",
         '{"create": [name or {"name", "color", "icon"}], "rename": [{"from": name, "to": new '
         'name (optional), "color", "icon"}]}: makes, renames or restyles categories. Color: '
-        "#rrggbb or a word like teal; icon: one of " + ", ".join(CATEGORY_ICONS) + ". Put "
+        "#rrggbb or a word like teal; icon: one of " + ", ".join(CATEGORY_ICONS) + ". Give "
+        "each new category a color and an icon that fit what it holds (left out, one is "
+        "picked from its name). Put "
         "items in a category with update_info or update_many.",
         obj({"create": arr(any_of(s("category name"), obj(
                 {"name": s("category name"), "color": s("#rrggbb or a color word"),

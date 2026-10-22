@@ -42,7 +42,7 @@ from engine.ai import use as ai_use
 from engine.ai import vocab as ai_vocab
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_wildcard_edit
-from engine.ai.chat_manage import ManageTools, bulk_key
+from engine.ai.chat_manage import ManageTools, bulk_key, default_style
 from engine.ai.chat_tools import MoreTools, _num, _reach, _reach_text
 from engine.modules.constraint_handler import ConstraintHandler
 from engine.modules.derivation_handler import DerivationHandler
@@ -2417,6 +2417,10 @@ class Library(MoreTools, ManageTools):
         elif self._fold(proposal):
             after = proposal.get("after")
         self._absorb_category(proposal)
+        if op.get("new_category") and "new_category_style" not in op:
+            # A new category gets an icon and a color, as the page offers.
+            op["new_category_style"] = default_style(
+                str(op["new_category"]), self._taken_colors())
         # A change that points at an item proposed earlier in this answer
         # (a constraint between two new wildcards, a bundle of new modules)
         # waits for that one: its id only exists once it is applied.
@@ -2478,17 +2482,22 @@ class Library(MoreTools, ManageTools):
         answer makes takes that card's place: it creates the category as it
         applies (`new_category`), so "create Outfit" and "put Shirt in
         Outfit" are one card (Dumi, 2026-10-22). Only a Categories card that
-        makes just that one category, with no colour, icon or rename."""
+        makes just that one category and renames or restyles nothing."""
         name = str((proposal["op"]).get("new_category") or "").strip()
         if not name:
             return
         pid, _ = self.proposed_categories.get(name.lower(), ("", ""))
         card = self._answer_cards.get(pid)
         cop = (card or {}).get("op") or {}
+        styles = cop.get("styles") or []
         if (card is None or cop.get("op") != "categories" or cop.get("rename")
-                or cop.get("styles") or [n.lower() for n in cop.get("create") or []]
-                != [name.lower()]):
+                or any("id" in st for st in styles)
+                or [n.lower() for n in cop.get("create") or []] != [name.lower()]):
             return
+        # The card's color and icon come along.
+        look = next((st for st in styles if st.get("name", "").lower() == name.lower()), {})
+        proposal["op"]["new_category_style"] = {
+            k: look[k] for k in ("color", "icon") if look.get(k)}
         proposal["absorbs"] = [*proposal.get("absorbs", []), pid]
         proposal["parts"] = _join_parts(_card_parts(card), _card_parts(proposal))
         if card.get("risk") != "low":

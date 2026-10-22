@@ -769,12 +769,15 @@ async function applyAll(entry: ChatAssistantEntry, p: AiChatProposal): Promise<v
   await apply(entry, p);
 }
 
-async function categoryId(name: string | undefined): Promise<string | null | undefined> {
+/** The id of the category called `name`, made (with the card's icon and
+ *  color) when there is none. */
+async function categoryId(name: string | undefined,
+  style?: { color?: string; icon?: string }): Promise<string | null | undefined> {
   if (!name) return undefined;
   const cats = useCategoryStore();
   const found = cats.items.find((c) => c.name.toLowerCase() === name.toLowerCase());
   if (found) return found.id;
-  return (await cats.create({ name })).id;
+  return (await cats.create({ name, ...style })).id;
 }
 
 /** Tick or untick one of a card's new options. */
@@ -853,7 +856,7 @@ async function openInEditor(entry: ChatAssistantEntry, p: AiChatProposal): Promi
         return;
       }
       const body = { ...op.body };
-      if (op.new_category) body.category_id = (await categoryId(op.new_category)) ?? null;
+      if (op.new_category) body.category_id = (await categoryId(op.new_category, op.new_category_style)) ?? null;
       ed.write(body);
       entry.editorSnap = editorJson();
       entry.status[p.pid] = "editor";
@@ -1010,7 +1013,7 @@ async function apply(entry: ChatAssistantEntry, p0: AiChatProposal): Promise<voi
       touch();
       return;
     } else if (op.op === "create") {
-      const cid = await categoryId(op.new_category);
+      const cid = await categoryId(op.new_category, op.new_category_style);
       const extra = cid === undefined ? {} : { category_id: cid };
       const row = op.kind === "bundle" ? await bundles.create({ ...op.body, ...extra })
         : op.kind === "template" ? await templates.create({ ...op.body, ...extra })
@@ -1022,7 +1025,7 @@ async function apply(entry: ChatAssistantEntry, p0: AiChatProposal): Promise<voi
       return;
     } else if (op.op === "update") {
       const body = { ...op.body };
-      if (op.new_category) body.category_id = (await categoryId(op.new_category)) ?? null;
+      if (op.new_category) body.category_id = (await categoryId(op.new_category, op.new_category_style)) ?? null;
       const ed = op.basis === "editor" ? openEditor() : null;
       if (ed && ed.id === op.id) {
         ed.write(body);

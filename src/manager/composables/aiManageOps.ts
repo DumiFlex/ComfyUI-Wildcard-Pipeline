@@ -102,7 +102,7 @@ export async function applyManage(op: ManageOp): Promise<string[]> {
         if (!op.new_category) return null;
         const have = cats.items.find((c) => sameName(c.name, op.new_category));
         if (have) { catId = have.id; return null; }
-        const row = await cats.create({ name: op.new_category });
+        const row = await cats.create({ name: op.new_category, ...op.new_category_style });
         catId = row.id;
         made.push(row.id);
         return () => cats.remove(row.id);

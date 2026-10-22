@@ -1444,15 +1444,19 @@ export interface AiChatUsage {
   cut?: boolean;
 }
 
+/** The icon and color a card's new category is made with. */
+export interface AiNewCategoryStyle { color?: string; icon?: string }
+
 export type AiChatOp =
-  | { op: "create"; kind: "module"; new_category: string; body: ModuleCreateInput }
-  | { op: "create"; kind: "bundle"; new_category: string; body: BundleCreateInput }
-  | { op: "create"; kind: "template"; new_category: string; body: TemplateCreateInput }
+  | { op: "create"; kind: "module"; new_category: string; new_category_style?: AiNewCategoryStyle; body: ModuleCreateInput }
+  | { op: "create"; kind: "bundle"; new_category: string; new_category_style?: AiNewCategoryStyle; body: BundleCreateInput }
+  | { op: "create"; kind: "template"; new_category: string; new_category_style?: AiNewCategoryStyle; body: TemplateCreateInput }
   | {
       op: "update"; kind: "module" | "bundle" | "template"; type: string; id: string;
       name: string; body: ModuleUpdateInput & BundleUpdateInput & TemplateUpdateInput;
       before: ModuleUpdateInput & BundleUpdateInput & TemplateUpdateInput;
       new_category?: string;
+      new_category_style?: AiNewCategoryStyle;
       /** "editor": built on the open editor's unsaved version; goes into it. */
       basis?: "editor";
     }
@@ -1474,7 +1478,7 @@ export type AiChatOp =
   /** One change to many items (`update_many`). `to_new`: into the
    *  category the card creates (`new_category`). */
   | {
-      op: "bulk"; kind: "bulk"; new_category: string;
+      op: "bulk"; kind: "bulk"; new_category: string; new_category_style?: AiNewCategoryStyle;
       items: Array<{
         kind: "module" | "bundle" | "template"; id: string; name: string; to_new?: boolean;
         body: { category_id?: string | null; tags?: string[]; content_rating?: "safe" | "nsfw" };

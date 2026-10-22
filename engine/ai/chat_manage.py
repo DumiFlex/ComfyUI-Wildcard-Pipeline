@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from typing import Any
 
 from engine.ai import describe as ai_describe
@@ -43,6 +44,61 @@ COLOR_WORDS = {
     "purple": "#a855f7", "pink": "#ec4899", "rose": "#f43f5e", "gray": "#6b7280",
     "grey": "#6b7280", "brown": "#92400e", "white": "#e5e7eb", "black": "#111827",
 }
+
+#: An icon and a color for a new category the model gave none, by what the
+#: name means: the first rule with a word that starts a word of the name
+#: (Dumi, 2026-10-22: new categories came with no icon or color though the
+#: Categories page has both).
+_STYLE_RULES = (
+    (("eye",), "eye", "#38bdf8"),
+    (("expression", "emotion", "mood", "face"), "face-smile", "#fbbf24"),
+    (("group", "couple", "people", "crowd"), "users", "#a78bfa"),
+    (("character", "person", "subject", "girl", "boy", "woman", "man", "body", "hair",
+      "skin", "species", "race", "role"), "user", "#a78bfa"),
+    (("outfit", "cloth", "wear", "fashion", "costume", "shirt", "dress", "shoe"), "star",
+     "#f472b6"),
+    (("accessor", "jewel", "hat", "crown", "royal"), "crown", "#eab308"),
+    (("love", "romance", "relationship"), "heart", "#f43f5e"),
+    (("style", "art", "aesthetic", "color", "colour", "palette", "medium"), "palette",
+     "#e879f9"),
+    (("quality", "detail", "effect", "magic"), "sparkles", "#c084fc"),
+    (("camera", "shot", "angle", "lens", "composition", "framing", "view"), "camera",
+     "#94a3b8"),
+    (("light", "time", "day", "season"), "sun", "#f59e0b"),
+    (("night", "dark"), "moon", "#6366f1"),
+    (("photo", "image", "picture"), "image", "#60a5fa"),
+    (("weather", "sky", "climate"), "cloud", "#7dd3fc"),
+    (("city", "urban", "building", "architecture"), "building", "#9ca3af"),
+    (("home", "room", "interior", "house"), "home", "#fb923c"),
+    (("world", "country", "culture", "nation"), "globe", "#2dd4bf"),
+    (("place", "location", "setting", "scene", "background", "environment", "landscape",
+      "nature"), "map-marker", "#34d399"),
+    (("vehicle", "car", "transport"), "car", "#ef4444"),
+    (("pose", "action", "activity", "motion", "movement"), "bolt", "#f97316"),
+    (("nsfw", "adult", "explicit", "private"), "lock", "#dc2626"),
+    (("negative", "safety", "guard"), "shield", "#64748b"),
+    (("prompt", "template", "text", "story", "lore"), "book", "#a3e635"),
+    (("tag", "label"), "tags", "#22d3ee"),
+    (("tool", "utility", "util", "misc"), "wrench", "#94a3b8"),
+)
+#: Colors for a name no rule knows, picked so siblings differ.
+_PALETTE = ("#a78bfa", "#60a5fa", "#34d399", "#fbbf24", "#f472b6", "#22d3ee", "#fb923c",
+            "#a3e635", "#f87171", "#818cf8", "#2dd4bf", "#e879f9")
+
+
+def default_style(name: str, taken: set[str] | None = None) -> dict[str, str]:
+    """An icon and a color for a new category from what its name means;
+    for a name no rule knows, `folder` and the first palette color no other
+    category has (by the name's hash when all are taken)."""
+    words = re.findall(r"[a-z]+", name.lower())
+    for keys, icon, color in _STYLE_RULES:
+        if any(w.startswith(k) for w in words for k in keys):
+            return {"color": color, "icon": icon}
+    used = {c.lower() for c in taken or set()}
+    free = [c for c in _PALETTE if c not in used]
+    color = free[0] if free else _PALETTE[sum(map(ord, name)) % len(_PALETTE)]
+    return {"color": color, "icon": "folder"}
+
 
 DELETE_OFF = ("deleting is turned off: the user allows it in Settings › AI assistant › "
               "Permissions. Tell them; don't try another way")
@@ -91,7 +147,17 @@ def bulk_key(item_id: str, body: dict[str, Any], new_cat: str = "") -> tuple[str
     return item_id, json.dumps({**body, "_new": new}, sort_keys=True, default=str)
 
 
-class ManageTools:
+class _Colors:
+    """The colors categories have, for picking a new one's."""
+
+    category_rows: dict[str, dict[str, Any]]
+
+    def _taken_colors(self, styles: list[dict[str, Any]] | None = None) -> set[str]:
+        out = {str(c.get("color")) for c in self.category_rows.values() if c.get("color")}
+        return out | {str(st["color"]) for st in styles or [] if st.get("color")}
+
+
+class ManageTools(_Colors):
     """Needs `modules`, `bundles`, `templates`, `category_rows`, `get`,
     `_find`, `_used_by`, `_kind`, `not_found` and `tags` from Library."""
 
@@ -176,7 +242,10 @@ class ManageTools:
                 notes.append(f"{name!r} needs a letter or digit")
                 continue
             creates.append(name)
-            style({"name": name}, x)
+            # The model's color and icon, else ones that fit the name.
+            fill = default_style(name, self._taken_colors(styles))
+            style({"name": name}, {"color": x.get("color") or fill["color"],
+                                   "icon": x.get("icon") or fill["icon"]})
         renames: list[dict[str, Any]] = []
         for x in _got if isinstance(_got := args.get("rename"), list) else []:
             if not isinstance(x, dict):
