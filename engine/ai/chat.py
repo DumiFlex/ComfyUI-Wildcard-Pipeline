@@ -2476,6 +2476,9 @@ class Library(MoreTools, ManageTools):
         op = proposal["op"]
         prev = self._answer_cards.get(str(proposal.get("after")))
         prev_op = (prev or {}).get("op") or {}
+        if (prev is not None and op.get("op") == "update" and prev_op.get("op") == "create"
+                and (prev_op.get("body") or {}).get("id") == op.get("id")):
+            return self._fold_into_create(proposal, prev)
         if (prev is None or op.get("op") != "update" or prev.get("tool") != proposal["tool"]
                 or prev_op.get("op") != "update" or prev_op.get("id") != op.get("id")):
             return False
@@ -2492,6 +2495,39 @@ class Library(MoreTools, ManageTools):
         proposal["after"] = prev.get("after")
         if prev.get("needs"):
             proposal["needs"] = prev["needs"]
+        return True
+
+    def _fold_into_create(self, proposal: dict[str, Any], prev: dict[str, Any]) -> bool:
+        """An edit to an item a create card of this answer makes becomes
+        that create card, with the edit in it: one card for a new wildcard
+        and its nested refs, not "create" then "add the refs" (Dumi,
+        2026-10-22)."""
+        op, prev_op, pid = proposal["op"], prev["op"], proposal["pid"]
+        body = copy.deepcopy(prev_op.get("body") or {})
+        for key, value in (op.get("body") or {}).items():
+            if key == "payload" and isinstance(value, dict):
+                body["payload"] = {**(body.get("payload") or {}), **copy.deepcopy(value)}
+            else:
+                body[key] = copy.deepcopy(value)
+        op.clear()
+        op.update({"op": "create", "kind": prev_op.get("kind", "module"),
+                   "new_category": prev_op.get("new_category", ""), "body": body})
+        proposal["title"] = prev.get("title") or proposal.get("title")
+        proposal["preview"] = list(dict.fromkeys(
+            [*(prev.get("preview") or []), *(proposal.get("preview") or [])]))
+        proposal["replaces"] = prev["pid"]
+        proposal["after"] = prev.get("after")
+        if prev.get("needs"):
+            proposal["needs"] = prev["needs"]
+        iid = body["id"]
+        rows = self.modules if op["kind"] == "module" else (
+            self.bundles if op["kind"] == "bundle" else self.templates)
+        rows[iid] = {**copy.deepcopy(body), "_proposed": pid}
+        if op["kind"] == "module":
+            self.names[iid] = str(body.get("name") or "")
+            self._catalog = None
+            self._pending[iid] = (pid, rows[iid])
+        self._created[iid] = pid
         return True
 
 

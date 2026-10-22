@@ -410,3 +410,24 @@ def test_new_template_editor_registers_blank_row():
                     "template_string": "$look"})
     assert lib.editor_id == "feed0003"
     assert lib.templates["feed0003"]["template_string"] == "$look"
+
+
+def test_edit_of_a_new_wildcard_folds_into_its_create_card():
+    """create_wildcard then edit_options on it in one answer: one create card
+    holding the edit (a new wildcard and its nested refs in one go)."""
+    lib = _lib()
+    made = lib.run("create_wildcard", {"name": "Shirt", "var": "shirt", "options": [
+        {"text": "linen shirt"}, {"text": "oxford shirt"}]})
+    new_id = made["op"]["body"]["id"]
+    second = lib.run("edit_options", {"id": new_id, "rewrite": [
+        {"n": 1, "text": "@{Season} linen shirt"}]})
+    assert second["op"]["op"] == "create"
+    assert second["replaces"] == made["pid"]
+    assert second["op"]["body"]["id"] == new_id
+    texts = [o["value"] for o in second["op"]["body"]["payload"]["options"]]
+    assert texts[0].startswith("@{aaaa0002") and texts[0].endswith("linen shirt")
+    assert texts[1] == "oxford shirt"
+    # A third change still lands on the one card.
+    third = lib.run("edit_options", {"id": new_id, "weights": [{"n": 2, "weight": 3}]})
+    assert third["op"]["op"] == "create" and third["replaces"] == second["pid"]
+    assert third["op"]["body"]["payload"]["options"][1]["weight"] == 3

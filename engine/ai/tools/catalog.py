@@ -21,7 +21,9 @@ _META = {
     "category": s("category name, or \"\" for none"),
 }
 _OPTION = obj({
-    "text": s("the option text"), "weight": n("relative odds, default 1"),
+    "text": s("the option text; @{Name} puts in a pick from another wildcard, "
+              "@{Name:tag} one of its options tagged tag"),
+    "weight": n("relative odds, default 1"),
     "tags": arr(s(), "option tags"), "negative": s("negative prompt text, or \"\""),
     "fallback": b("taken when nothing else is live"),
 }, ("text",))
@@ -210,7 +212,8 @@ TOOLS: list[Tool] = [
     Tool(
         "create_wildcard", "change",
         "Propose a new wildcard: options picked one per run, bound to a $variable (or a "
-        "vocabulary with no variable, only when other options point at it with @{Name}).",
+        "vocabulary with no variable, only when other options point at it with @{Name}). "
+        "Options that point at other wildcards carry their @{Name} here, in the same card.",
         '{"name", "var": variable name without $ ("" for a vocabulary), "description", '
         '"tags": [library tags], "category": name or "", "options": [{"text", "weight": 1, '
         '"tags": [option tags], "negative": "", "fallback": false}], "axes": [{"name", '
