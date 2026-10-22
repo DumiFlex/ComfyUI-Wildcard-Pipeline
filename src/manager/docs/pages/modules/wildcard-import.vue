@@ -45,8 +45,8 @@ const importRules = [
       </p>
       <DocImage
         src="images/docs/wildcard-import.png"
-        ratio="1148 / 695"
-        caption="Billions of Wildcards in review: 2,653 lists become 935 wildcards, 1,896 of them merged into 190 tagged wildcards. Open here is clothings/regular, 12 lists merged into one wildcard with a gender tag group (female, male, unisex) and a garment group; each list shows the tags that pick it, and Keep these lists separate undoes the merge."
+        ratio="8 / 5"
+        caption="A small fantasy pack in review: 49 files become 11 wildcards, 43 lists merged into 5 tagged wildcards. Open here is characters, 11 lists merged into one wildcard; each list shows the tags that pick it, and Keep these lists separate undoes the merge."
       />
     </DocSection>
 
