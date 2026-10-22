@@ -34,6 +34,7 @@ The assistant is new and **off by default**. Turn it on under **Settings › AI 
 
 - **Every random pick rolls on its own.** Derivations, fixed values and each pick inside a module used to share random sequences, so changing one could move another. This is the change behind the seed warning above.
 - **Constraints hold on multi-picks.** `{2$$…}` picks from a nested wildcard and `2-3` picks no longer bring back options a constraint or a weight of 0 shut out.
+- **Clear template clears the negative too.** The Assembler's Clear template button now empties the negative template along with the template.
 - **Cleaner prompts from empty variables.** The Assembler drops leftover commas, dangling joining words ("wearing with,") and doubled articles.
 - **`!warm` and `{2$$a|b|c}` work** the way other tools write them.
 - **Rules and runs.** A linked-picks rule no longer empties a wildcard that links onward, a bundle inserted twice keeps each copy's constraints to itself, a held wildcard stays put over a Loop, and a later derivation rule reads what an earlier one wrote.

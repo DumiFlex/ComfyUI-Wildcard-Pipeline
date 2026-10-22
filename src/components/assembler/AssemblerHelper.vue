@@ -489,9 +489,9 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             v-if="onClearTemplate"
             type="button"
             class="wp-asm-toolbtn wp-asm-toolbtn--danger"
-            :disabled="!props.template"
+            :disabled="!props.template && !props.negativeTemplate"
             data-test="asm-clear-template-icon"
-            :title="props.template ? 'Clear the entire template' : 'Template already empty'"
+            :title="props.template || props.negativeTemplate ? 'Clear the template and the negative template' : 'Template already empty'"
             aria-label="Clear template"
             @click="onClearTemplate"
           >
