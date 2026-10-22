@@ -151,6 +151,8 @@ function onEvent(ev: AiChatStreamEvent): void {
   else if (ev.type === "text") live.value = { ...cur, text: ev.v, thinking: false };
   else if (ev.type === "thinking") live.value = { ...cur, thinking: true };
   else if (ev.type === "status") live.value = { ...cur, status: ev.v };
+  // As soon as it is decided, not when the answer is done.
+  else if (ev.type === "reaction") react(ev.emoji);
   else if (ev.type === "tool") {
     // A "say" step is the text that just streamed: it moves into the list.
     live.value = { ...cur, steps: [...cur.steps, ev.step], ...(ev.step.say ? { text: "" } : {}) };
@@ -175,13 +177,19 @@ function touch(): void {
   triggerRef(entries);
 }
 
+/** Put `emoji` on the user's newest message. */
+function react(emoji: string): void {
+  const at = lastUserIndex();
+  const user = entries.value[at];
+  if (user?.role === "user" && user.reaction !== emoji) {
+    entries.value[at] = { ...user, reaction: emoji };
+    triggerRef(entries);
+  }
+}
+
 /** Show an answer, then apply its small changes when auto-apply is on. */
 async function pushAnswer(result: AiChatResult, snap?: { id: string; json: string }): Promise<void> {
-  if (result.reaction) {
-    const at = lastUserIndex();
-    const user = entries.value[at];
-    if (user?.role === "user") entries.value[at] = { ...user, reaction: result.reaction };
-  }
+  if (result.reaction) react(result.reaction);
   if (result.aside) {
     // Only thanks: the reaction is the whole answer.
     const last = entries.value[entries.value.length - 1];

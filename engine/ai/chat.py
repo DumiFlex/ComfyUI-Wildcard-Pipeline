@@ -764,6 +764,9 @@ class Library(MoreTools, ManageTools):
         self.last_card: dict[str, Any] | None = None
         #: The emoji `react` put on the user's message this turn, else "".
         self.reaction = ""
+        #: Put on the message as it was sent (`react.opening`); the model's
+        #: own `react` replaces it.
+        self.opening_reaction = ""
         #: Create cards from earlier answers the user hasn't applied, by pid:
         #: edits to them come back as a card that replaces them.
         self._earlier_ops: dict[str, dict[str, Any]] = {}

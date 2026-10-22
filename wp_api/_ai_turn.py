@@ -93,7 +93,8 @@ async def post_chat(request: web.Request) -> web.StreamResponse:
     comes as NDJSON events while it is worked out: `step` (a model step
     starts), `status` (what's happening, e.g. a summary), `thinking`,
     `text` (the answer so far, replacing the last), `tool` (a step the
-    lines above the reply list), then `done` with the same JSON the plain
+    lines above the reply list), `reaction` (an emoji on the user's message,
+    as soon as it is decided), then `done` with the same JSON the plain
     request returns, or `error`."""
     body = await _body(request)
     if isinstance(body, web.Response):
@@ -351,6 +352,12 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     lib.vocab, lib.vocab_kinds = _ai_vocab.lookup, vocab_kinds
     t = await _prepare(request, body, emit, cfg, ask, lib, chat, log, meta, snapshot, fmt,
                        prof, fp_now, retried_from, paused, vocab_kinds)
+    if not ask.resume and ask.text:
+        # "perfect, now add boots": its reaction shows as the message is
+        # sent, not once the answer is done (Dumi, 2026-10-22).
+        lib.opening_reaction = ai_react.opening(ask.text)
+        if lib.opening_reaction and emit:
+            await emit({"type": "reaction", "emoji": lib.opening_reaction})
     while t.step < t.limit:
         got = await _step(t)
         if isinstance(got, web.Response):
@@ -957,6 +964,9 @@ async def _run_call(t: _Turn, run: _Calls, at: int, call: dict[str, Any]) -> Non
         run.result(call, f"{tool} {_json.dumps(args, ensure_ascii=False, sort_keys=True)[:200]}:\n"
                    + ai_budget.clip(out, t.prof["result_chars"]) + extra)
         if tool == "react":
+            if t.emit and t.lib.reaction:
+                # On the user's message now, not when the answer is done.
+                await t.emit({"type": "reaction", "emoji": t.lib.reaction})
             return  # shown on the user's message, not as a step
         step_ = {"tool": tool, "note": ai_chat.args_note(tool, args, t.lib), "ok": True}
         card = getattr(t.lib, "last_card", None) if tool == "run_test" else None
@@ -1354,8 +1364,9 @@ async def _close(t: _Turn) -> web.Response:
         # turn goes on; it posts their results back as `results`.
         "pending": [{k: c[k] for k in ("id", "tool", "args", "label")} for c in t.pause],
     }
-    if t.lib.reaction:
-        out["reaction"] = t.lib.reaction  # on the user's message
+    if t.lib.reaction or t.lib.opening_reaction:
+        # On the user's message.
+        out["reaction"] = t.lib.reaction or t.lib.opening_reaction
     # What the user saw, for reopening the chat later (the model never
     # reads it).
     t.new.append(ai_chatlog.shown_entry({k: out[k] for k in (

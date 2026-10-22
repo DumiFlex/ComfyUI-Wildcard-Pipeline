@@ -1880,3 +1880,17 @@ async def test_an_organize_ask_is_told_how_to_list_and_move_items(wp_client, fak
     await _chat(wp_client, "is my hair wildcard ok?")
     assert not any(ai_chat.ORGANIZE_HINT in m["content"]
                    for m in fake_llm.seen[-1]["body"]["messages"])
+
+
+async def test_a_reaction_streams_as_soon_as_it_is_decided(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.append({"message": "Sure.", "calls": []})
+    resp = await wp_client.post("/wp/api/ai/chat",
+                                json={"message": "perfect, now add boots", "stream": True})
+    events = [json.loads(line) for line in (await resp.text()).splitlines() if line]
+    kinds = [e["type"] for e in events]
+    # Before the model's first step, not with the answer.
+    assert kinds.index("reaction") < kinds.index("step")
+    assert events[kinds.index("reaction")]["emoji"] == "🎉"
+    assert events[-1]["result"]["reaction"] == "🎉"

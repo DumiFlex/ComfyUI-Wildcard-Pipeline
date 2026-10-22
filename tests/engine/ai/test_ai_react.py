@@ -44,3 +44,19 @@ def test_asides_are_never_rendered_but_are_displayed():
     turns = chatlog.display(log, {})
     assert turns[0] == {"role": "user", "text": "make hair", "reaction": "🎉"}
     assert turns[2] == {"role": "user", "text": "thanks!", "reaction": "❤️", "aside": True}
+
+
+@pytest.mark.parametrize(("text", "emoji"), [
+    ("perfect, now add boots", "🎉"), ("thanks! can you also make a hat", "❤️"),
+    ("Great job. Next, a weather wildcard", "🎉"),
+])
+def test_praise_before_a_request_reacts_at_once(text, emoji):
+    assert react.opening(text) == emoji
+
+
+@pytest.mark.parametrize("text", [
+    "great, but it's broken", "thanks!", "add boots, then a hat", "ok, do it",
+    "perfect", "",
+])
+def test_no_opening_reaction(text):
+    assert react.opening(text) == ""

@@ -1635,6 +1635,8 @@ export type AiChatStreamEvent =
   | { type: "thinking" }
   | { type: "text"; v: string }
   | { type: "tool"; step: AiChatStep }
+  /** An emoji on the user's message, sent as soon as it is decided. */
+  | { type: "reaction"; emoji: string }
   | { type: "done"; result: AiChatResult }
   | { type: "error"; status: number; message: string };
 
