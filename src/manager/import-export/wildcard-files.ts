@@ -21,7 +21,8 @@ export interface WildcardSource {
 
 export interface WildcardFileEntry {
   path: string;
-  status: "ok" | "error" | "empty" | "excluded";
+  /** `axes`: an Umi AI `Yaml Tags.txt`, read as tag groups. */
+  status: "ok" | "error" | "empty" | "excluded" | "axes";
   wildcards: number;
   error?: string;
   duplicates?: number;
@@ -33,8 +34,12 @@ export interface WildcardNote {
   examples: Array<{ wildcard: string; detail: string }>;
 }
 
-/** What a wildcard is for in its pack, from the reference graph. */
-export type PlanRole = "entry" | "composition" | "vocabulary" | "group";
+/** What a wildcard is for in its pack, from the reference graph.
+ *  `stack`: modules the import built to run together (a bundle);
+ *  `stack part`: a wildcard built for a stack; `copy`: a list filled in
+ *  for one set of template arguments. */
+export type PlanRole =
+  | "entry" | "composition" | "vocabulary" | "group" | "stack" | "copy" | "stack part";
 
 /** How faithfully it came across, from the notes it raised. */
 export type PlanFidelity = "exact" | "close" | "lossy";
@@ -61,6 +66,23 @@ export interface PlanItem {
   merged_from?: Array<{ name: string; tag: string; options: number }>;
   /** … and the tag groups the folder levels became. */
   tag_groups?: Array<{ name: string; tags: number }>;
+  /** What `keepSeparate` takes to undo the merge (`root/<star>/leaf` for a
+   *  table, the folder otherwise). */
+  separate_key?: string;
+  /** `table`: one list name repeated across subfolders; `folder`: the
+   *  lists of one folder. */
+  structure?: "table" | "folder";
+  /** Module type; `bundle` for a stack. */
+  type?: string;
+  /** For a stack: what built it, the variable it renders and its
+   *  modules in run order. */
+  stack_kind?: "variables" | "model" | "copies";
+  output?: string;
+  children?: Array<{ id: string; name: string; type: string; instance?: Record<string, unknown> }>;
+  /** A few engine rolls of the entry point or stack. */
+  samples?: string[];
+  /** Warnings those rolls raised (they make the row lossy). */
+  roll_warnings?: Array<{ type: string; message: string }>;
 }
 
 export interface WildcardFilesReport {
@@ -73,8 +95,48 @@ export interface WildcardFilesReport {
   /** Merged wildcards, and how many lists went into them. */
   merged?: number;
   merged_lists?: number;
+  /** The tool the pack was converted for (detected unless forced) … */
+  dialect?: WildcardDialect;
+  /** … what detection alone found … */
+  dialect_detected?: WildcardDialect;
+  /** … and how many items gave each tool away. */
+  dialect_evidence?: Partial<Record<WildcardDialect, number>>;
+  /** Stacks built, and the logic modules in them. */
+  stacks?: number;
+  constraints?: number;
+  combines?: number;
+  bundle_mode?: BundleMode;
   plan: PlanItem[];
 }
+
+/** Which bundles the import makes. */
+export type BundleMode = "stacks" | "entries" | "none";
+
+export const BUNDLE_MODE_LABELS: Record<BundleMode, string> = {
+  stacks: "Stacks only",
+  entries: "Stacks + entry points by folder",
+  none: "None",
+};
+
+/** A wildcard folder of another extension found on this machine. */
+export interface WildcardFolder {
+  id: string;
+  label: string;
+  path: string;
+  files: number;
+}
+
+/** Source tools the converter knows. `mixed` = plain lists every tool
+ *  reads the same way. */
+export type WildcardDialect = "dynamicprompts" | "ppp" | "impact" | "umi" | "mixed";
+
+export const DIALECT_LABELS: Record<WildcardDialect, string> = {
+  dynamicprompts: "Dynamic Prompts",
+  ppp: "Prompt-PostProcessor",
+  impact: "Impact Pack / LoRA Manager",
+  umi: "Umi AI",
+  mixed: "Plain lists (any tool)",
+};
 
 export interface WildcardFilesResult {
   payload: RawPayload;
@@ -98,6 +160,17 @@ export interface WildcardImportOptions {
   merge?: boolean;
   /** Folders (a plan row's `merge_root`) whose lists stay separate. */
   keepSeparate?: string[];
+  /** Read the pack as this tool does instead of detecting it. */
+  dialect?: WildcardDialect;
+  /** Which bundles to make (default `stacks`). */
+  bundleMode?: BundleMode;
+  /** Tag group renames per merged wildcard: `{name: {old: new}}`. */
+  axisNames?: Record<string, Record<string, string>>;
+  /** Fold entry points that differ by one tag. On unless false. */
+  foldCopies?: boolean;
+  /** Read this folder on the machine (a `WildcardFolder.id`) instead of
+   *  uploaded files. */
+  folder?: string;
 }
 
 export function isWildcardFileName(name: string): boolean {
@@ -197,6 +270,11 @@ export function buildWildcardForm(
     pack_name: opts.packName?.trim() || undefined,
     merge: opts.merge !== false,
     keep_separate: opts.keepSeparate ?? [],
+    dialect: opts.dialect,
+    bundle_mode: opts.bundleMode,
+    axis_names: opts.axisNames && Object.keys(opts.axisNames).length ? opts.axisNames : undefined,
+    fold_copies: opts.foldCopies !== false,
+    folder: opts.folder,
   }));
   for (const s of sources) form.append("file", s.file, s.file.name);
   return form;
@@ -226,16 +304,31 @@ const NOTE_TEXT: Record<string, string> = {
   duplicate_value: "Repeated values became one option with a higher weight",
   duplicate_wildcard: "Wildcards defined twice kept their first file",
   empty_wildcard: "Empty wildcards were skipped",
-  default_params_dropped: "Wildcard default settings (count, separator, prefix/suffix) were dropped",
-  condition_dropped: "PPP if-conditions were removed (the choice was kept)",
+  default_params_dropped: "Wildcard default settings with no home here (cyclical sampler, container) were dropped",
+  affixes_per_pick: "A multi-pick reference now puts the wildcard's prefix/suffix around each value instead of around all of them",
+  suffix_pooled: "A bare name found in several folders picks from all of them, as Impact Pack does",
+  resolved_from_library: "References to wildcards from an earlier import of this pack link to the library copy",
+  ppp_directive_kept_as_text: "PPP commands with no match here stay as plain text",
+  tag_query_kept_as_text: "Umi tag queries like <[tag]> stay as plain text (no Umi YAML in the pack)",
+  tag_query_no_match: "Umi tag queries that match no entry render nothing",
+  condition_dropped: "PPP if-conditions that test something nothing in the pack rolls once were removed (the choice was kept)",
+  negative_moved_to_option: "Send-to-negative text inside a {…} choice now applies whenever the option is picked",
+  negative_dropped: "Send-to-negative text that holds a reference was dropped from a stack's Combine",
+  immediate_variable_as_macro: "A variable rolled once (${x=!…}) outside an entry point rolls again at each read",
+  variable_read_in_nested_list: "A list reads a variable rolled once in the line that uses it: it rolls its own value",
+  specialised_copy: "Template arguments made filled-in copies of the lists that read them",
+  too_many_copies: "Too many filled-in copies: later template references use the plain list",
+  template_slot: "A variable nothing in the pack sets: give it a value upstream of the stack",
+  line_became_stack: "Lines that roll a variable once became stacks (setters + a Combine)",
+  copies_folded: "Entry points that differ by one tag became one wildcard steered by a choice",
   label_dropped: "Some labels couldn't become tags",
   extra_else_dropped: "Only the first else choice became the fallback",
   inline_else_dropped: "else inside {…} choices was ignored",
   unsupported_item: "Items that aren't text were skipped",
   command_dropped: "PPP commands other than include were dropped",
   unresolved_reference: "References to wildcards that weren't found stay as plain text",
-  template_args_dropped: "Template arguments like __name(var=value)__ were dropped",
-  variable_kept_as_text: "Variables like ${name} stay as plain text: wildcards can't read variables, so rebuild that part with a Combine",
+  template_args_dropped: "Template arguments for a list that reads no variables were ignored",
+  variable_kept_as_text: "Variables nothing sets stay as plain text",
   wrap_kept_as_text: "Wrap commands %{…} stay as plain text",
   multi_pick_range_capped: "Open-ended repeating picks like __r2-$$name__ were capped at the list size",
   filter_dropped: "Some reference filters couldn't be kept",
@@ -253,6 +346,9 @@ const ATTENTION = new Set([
   "variable_kept_as_text",
   "wrap_kept_as_text", "filter_dropped",
   "default_params_dropped", "command_dropped",
+  "ppp_directive_kept_as_text", "tag_query_kept_as_text",
+  "tag_query_no_match", "negative_dropped", "variable_read_in_nested_list",
+  "too_many_copies",
 ]);
 
 export function noteNeedsAttention(kind: string): boolean {
@@ -264,13 +360,19 @@ export const ROLE_LABEL: Record<PlanRole, string> = {
   composition: "Composition",
   vocabulary: "Vocabulary",
   group: "Group",
+  stack: "Stack",
+  copy: "Filled-in copy",
+  "stack part": "Stack part",
 };
 
 export const ROLE_HINT: Record<PlanRole, string> = {
-  entry: "Builds a prompt from other wildcards and nothing else uses it. These go into bundles.",
+  entry: "Builds a prompt from other wildcards and nothing else uses it. Drop it on a Context.",
   composition: "Builds on other wildcards and is used by one. Reached through references.",
   vocabulary: "A plain list of values. Stays in the library, reached through references.",
   group: "Made for a glob or folder reference: picks from every matching wildcard.",
+  stack: "Modules that run together, in order, as one bundle: what rolls a variable once, the constraints that follow it, and what renders the prompt.",
+  copy: "A list with its variables filled in, made for a template reference like __name(var=value)__.",
+  "stack part": "A small wildcard the import built for a stack: it rolls a variable or holds a piece of the prompt.",
 };
 
 export const FIDELITY_LABEL: Record<PlanFidelity, string> = {
@@ -279,7 +381,11 @@ export const FIDELITY_LABEL: Record<PlanFidelity, string> = {
   lossy: "Needs a look",
 };
 
-export const PLAN_ROLES: PlanRole[] = ["entry", "composition", "vocabulary", "group"];
+export const PLAN_ROLES: PlanRole[] = [
+  "entry", "stack", "composition", "vocabulary", "group", "copy", "stack part",
+];
+/** Roles explained on the empty drop zone. */
+export const MAIN_ROLES: PlanRole[] = ["entry", "stack", "composition", "vocabulary", "group"];
 export const PLAN_FIDELITIES: PlanFidelity[] = ["exact", "close", "lossy"];
 
 export interface PlanSummary {
@@ -290,7 +396,9 @@ export interface PlanSummary {
 }
 
 export function summarizePlan(plan: PlanItem[]): PlanSummary {
-  const roles: Record<PlanRole, number> = { entry: 0, composition: 0, vocabulary: 0, group: 0 };
+  const roles: Record<PlanRole, number> = {
+    entry: 0, composition: 0, vocabulary: 0, group: 0, stack: 0, copy: 0, "stack part": 0,
+  };
   const fidelity: Record<PlanFidelity, number> = { exact: 0, close: 0, lossy: 0 };
   const byDomain = new Map<string, { name: string; count: number; entries: number; lossy: number }>();
   for (const item of plan) {
@@ -302,7 +410,7 @@ export function summarizePlan(plan: PlanItem[]): PlanSummary {
       byDomain.set(item.domain, d);
     }
     d.count += 1;
-    if (item.role === "entry") d.entries += 1;
+    if (item.role === "entry" || item.role === "stack") d.entries += 1;
     if (item.fidelity === "lossy") d.lossy += 1;
   }
   const domains = [...byDomain.values()].sort((a, b) =>
@@ -322,16 +430,47 @@ export interface PlanFilter {
  *  that need a look, then by name, so the parts a user acts on lead. */
 export function filterPlan(plan: PlanItem[], f: PlanFilter): PlanItem[] {
   const q = f.query.trim().toLowerCase();
-  const order: Record<PlanRole, number> = { entry: 0, composition: 1, group: 2, vocabulary: 3 };
+  const order: Record<PlanRole, number> = {
+    stack: 0, entry: 1, composition: 2, group: 3, copy: 4, vocabulary: 5, "stack part": 6,
+  };
   return plan
     .filter((p) =>
       (f.domain === null || p.domain === f.domain)
       && (f.roles.size === 0 || f.roles.has(p.role))
       && (f.fidelities.size === 0 || f.fidelities.has(p.fidelity))
       && (!q || p.name.toLowerCase().includes(q)
-        || (p.merged_from ?? []).some((m) => m.name.toLowerCase().includes(q))))
+        || (p.merged_from ?? []).some((m) => m.name.toLowerCase().includes(q))
+        || (p.children ?? []).some((c) => c.name.toLowerCase().includes(q))))
     .sort((a, b) =>
       order[a.role] - order[b.role]
       || Number(b.fidelity === "lossy") - Number(a.fidelity === "lossy")
       || a.name.localeCompare(b.name));
+}
+
+/** The original (server-generated) name of a tag group currently shown
+ *  as `current`, given the renames already asked for. */
+export function originalAxisName(renames: Record<string, string> | undefined, current: string): string {
+  for (const [orig, now] of Object.entries(renames ?? {})) if (now === current) return orig;
+  return current;
+}
+
+/** Ask for tag group `current` of wildcard `name` to be called `next`.
+ *  Renaming back to the generated name drops the entry. */
+export function renameAxis(
+  all: Record<string, Record<string, string>>, name: string, current: string, next: string,
+): Record<string, Record<string, string>> {
+  const mine = { ...(all[name] ?? {}) };
+  const orig = originalAxisName(mine, current);
+  const want = next.trim();
+  if (!want || want === orig) delete mine[orig];
+  else mine[orig] = want;
+  const out = { ...all };
+  if (Object.keys(mine).length) out[name] = mine;
+  else delete out[name];
+  return out;
+}
+
+/** How a kept-separate key reads: `clothes/<star>/top` → "clothes/…/top". */
+export function separateKeyLabel(key: string): string {
+  return key.includes("/*/") ? key.replace("/*/", "/…/") : `${key}/`;
 }

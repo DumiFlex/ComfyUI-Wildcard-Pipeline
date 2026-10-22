@@ -2,8 +2,14 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const wildcardFiles = vi.fn();
+const wildcardFolders = vi.fn(() => Promise.resolve({ folders: [] as unknown[] }));
 vi.mock("../../api/client", () => ({
-  api: { importExport: { wildcardFiles: (form: FormData) => wildcardFiles(form) } },
+  api: {
+    importExport: {
+      wildcardFiles: (form: FormData) => wildcardFiles(form),
+      wildcardFolders: () => wildcardFolders(),
+    },
+  },
 }));
 
 import ImportTab from "../ImportTab.vue";
@@ -14,6 +20,8 @@ import {
   filterPlan,
   isWildcardFileName,
   looksLikeWpExport,
+  renameAxis,
+  separateKeyLabel,
   sourcesFromFileList,
   suggestPackName,
   suggestPackTag,
@@ -97,11 +105,30 @@ describe("wildcard-files helpers", () => {
     const meta = JSON.parse(String(form.get("meta")));
     expect(meta).toEqual({
       paths: ["x/a.txt"], pack_tag: "pack", exclude: ["x/b.txt"], bundles: false, pack_name: "Pack",
-      merge: true, keep_separate: [],
+      merge: true, keep_separate: [], fold_copies: true,
+    });
+    const more = JSON.parse(String(buildWildcardForm([], {
+      bundleMode: "entries", axisNames: { hair: { colors: "Hair" } }, foldCopies: false, folder: "impact",
+    }).get("meta")));
+    expect(more).toMatchObject({
+      bundle_mode: "entries", axis_names: { hair: { colors: "Hair" } }, fold_copies: false, folder: "impact",
     });
     const off = JSON.parse(String(buildWildcardForm([], { merge: false, keepSeparate: ["hair"] }).get("meta")));
     expect(off).toMatchObject({ merge: false, keep_separate: ["hair"] });
+    expect(meta).not.toHaveProperty("dialect");
+    const forced = JSON.parse(String(buildWildcardForm([], { dialect: "impact" }).get("meta")));
+    expect(forced.dialect).toBe("impact");
     expect(form.getAll("file")).toHaveLength(1);
+  });
+
+  it("renames tag groups by their original name and labels kept keys", () => {
+    let names = renameAxis({}, "hair/colors", "colors", "tone");
+    expect(names).toEqual({ "hair/colors": { colors: "tone" } });
+    names = renameAxis(names, "hair/colors", "tone", "shade");
+    expect(names).toEqual({ "hair/colors": { colors: "shade" } });
+    expect(renameAxis(names, "hair/colors", "shade", "colors")).toEqual({});
+    expect(separateKeyLabel("clothes/*/top")).toBe("clothes/…/top");
+    expect(separateKeyLabel("hair")).toBe("hair/");
   });
 
   it("describes every note kind in plain words", () => {
@@ -120,7 +147,7 @@ describe("plan helpers", () => {
 
   it("counts roles, fidelity and domains, loose files last", () => {
     const s = summarizePlan(plan);
-    expect(s.roles).toEqual({ entry: 1, composition: 0, vocabulary: 3, group: 0 });
+    expect(s.roles).toMatchObject({ entry: 1, composition: 0, vocabulary: 3, group: 0, stack: 0 });
     expect(s.fidelity).toEqual({ exact: 3, close: 0, lossy: 1 });
     expect(s.domains.map((d) => [d.name, d.count, d.entries, d.lossy])).toEqual([
       ["a", 2, 1, 1], ["b", 1, 0, 0], ["", 1, 0, 0],
@@ -263,18 +290,77 @@ describe("PackConverter", () => {
     expect(rows).toHaveLength(1);
     await rows[0].trigger("click");
     const detail = wrap.find("[data-test='pack-merge-detail']");
-    expect(detail.text()).toContain("colors (2)");
+    const axes = detail.findAll("[data-test='pack-axis-name']");
+    expect(axes.map((a) => (a.element as HTMLInputElement).value)).toEqual(["colors", "colors (2)"]);
     expect(detail.findAll(".wp-pack__member-tag").map((t) => t.text())).toEqual(["warm + red", "dark"]);
-    await wrap.find("[data-test='pack-keep-separate']").trigger("click");
+    await axes[1].setValue("tone");
+    await axes[1].trigger("change");
     await flushPromises();
     expect(wildcardFiles).toHaveBeenCalledTimes(2);
-    const meta = JSON.parse(String((wildcardFiles.mock.calls[1][0] as FormData).get("meta")));
+    const renamed = JSON.parse(String((wildcardFiles.mock.calls[1][0] as FormData).get("meta")));
+    expect(renamed.axis_names).toBeTruthy();
+    expect(JSON.stringify(renamed.axis_names)).toContain("tone");
+    if (!wrap.find("[data-test='pack-keep-separate']").exists()) {
+      await wrap.findAll("[data-test='pack-row']")[0].trigger("click");
+    }
+    await wrap.find("[data-test='pack-keep-separate']").trigger("click");
+    await flushPromises();
+    expect(wildcardFiles).toHaveBeenCalledTimes(3);
+    const meta = JSON.parse(String((wildcardFiles.mock.calls[2][0] as FormData).get("meta")));
     expect(meta).toMatchObject({ merge: true, keep_separate: ["hair/colors"] });
     expect(wrap.find("[data-test='pack-kept']").text()).toContain("hair/colors/");
     await wrap.find("[data-test='pack-kept'] button").trigger("click");
     await flushPromises();
-    const again = JSON.parse(String((wildcardFiles.mock.calls[2][0] as FormData).get("meta")));
+    const again = JSON.parse(String((wildcardFiles.mock.calls[3][0] as FormData).get("meta")));
     expect(again.keep_separate).toEqual([]);
+  });
+
+  it("converts an installed extension's wildcard folder", async () => {
+    wildcardFolders.mockResolvedValueOnce({
+      folders: [
+        { id: "impact", label: "Impact Pack (wildcards)", path: "/c/impact/wildcards", files: 3 },
+        { id: "empty", label: "Empty (wildcards)", path: "/c/empty", files: 0 },
+      ],
+    });
+    const wrap = mount(PackConverter);
+    await flushPromises();
+    expect(wrap.findAll("[data-test='pack-folders'] li")).toHaveLength(1);
+    await wrap.find("[data-test='pack-folder-impact']").trigger("click");
+    await flushPromises();
+    const form = wildcardFiles.mock.calls[0][0] as FormData;
+    const meta = JSON.parse(String(form.get("meta")));
+    expect(meta).toMatchObject({ folder: "impact", pack_name: "Impact Pack", bundle_mode: "stacks" });
+    expect(form.getAll("file")).toHaveLength(0);
+  });
+
+  it("shows a stack's modules and its sample rolls", async () => {
+    const stacked = result();
+    stacked.report.plan.push(item({
+      id: "33333333", name: "scene", domain: "", role: "stack", type: "bundle",
+      stack_kind: "variables", output: "scene",
+      children: [
+        { id: "a1", name: "scene · season", type: "wildcard" },
+        { id: "a2", name: "scene", type: "combine" },
+      ],
+      samples: ["winter, snow"],
+      roll_warnings: [{ type: "x", message: "Something odd" }],
+    }));
+    wildcardFiles.mockResolvedValue(stacked);
+    const wrap = await loaded();
+    const row = wrap.findAll("[data-test='pack-row']").find((r) => r.text().includes("scene"));
+    expect(row?.find("[data-test='pack-stack-chip']").text()).toBe("2 modules");
+    await row?.trigger("click");
+    const detail = wrap.find("[data-test='pack-stack-detail']");
+    expect(detail.text()).toContain("$scene");
+    expect(detail.findAll(".wp-pack__stack-item")).toHaveLength(2);
+    const samples = wrap.find("[data-test='pack-samples']").text();
+    expect(samples).toContain("winter, snow");
+    expect(samples).toContain("Something odd");
+    await wrap.find("[data-test='pack-bundles']").setValue("entries");
+    await wrap.find("[data-test='pack-apply']").trigger("click");
+    await flushPromises();
+    const meta = JSON.parse(String((wildcardFiles.mock.calls[1][0] as FormData).get("meta")));
+    expect(meta.bundle_mode).toBe("entries");
   });
 
   it("folds into a bar once the picker shows, with a way back", async () => {

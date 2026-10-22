@@ -23,6 +23,7 @@ vi.mock("../api/client", () => {
         build: vi.fn(),
         commit: vi.fn(),
         undo: vi.fn(),
+        wildcardFolders: vi.fn().mockResolvedValue({ folders: [] }),
       },
       ai: { config: vi.fn().mockRejectedValue(new Error("off")) },
     },

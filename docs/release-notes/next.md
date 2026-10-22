@@ -23,6 +23,18 @@ The assistant is new and **off by default**. Turn it on in **Settings › AI ass
 - **New guides** for pack structure, writing prompts per image model, and adult (NSFW) packs.
 - **A new loading mark** replaces the spinners in the manager.
 
+### Wildcard pack import
+
+- **Pack logic carries over.** Dynamic Prompts and PPP variables, template arguments like `__outfit(season=winter)__` and PPP `if` blocks used to be dropped or left as text. They now become stacks: bundles that roll each variable once, keep picks consistent with constraints and write the prompt with a Combine.
+- **Model checks.** A PPP test on the model, like `_is_sdxl` or `_is_pony`, becomes a stack that reads **WP Model Info**.
+- **Negatives and LoRAs.** PPP `<ppp:stn>` and Umi `**text**` go to the option's negative, and PPP LoRA commands become `<lora:…>` text.
+- **Umi AI packs.** Umi YAML entries keep their tags, and tag queries like `<[female][casual]>` pick from the matching entries.
+- **Tables.** Subfolders that repeat the same list names become one wildcard per list name, tagged by folder. Tag groups can be renamed in the review.
+- **Template copies fold.** Entry points that are copies of one template, differing by one value, become one wildcard steered by a choice.
+- **Sample rolls.** The review shows a few prompts each stack and entry point makes, rolled on the real engine.
+- **Installed folders.** The wildcard folders of Impact Pack, Dynamic Prompts, Easy-Use, PPP and LoRA Manager are listed for a one-click convert.
+- **Bundles are stacks only by default.** The old bundle per folder is still under **Bundles** in the settings.
+
 ### Community
 
 - **The Community tab runs in its own frame**, so nothing it loads can reach ComfyUI or other custom nodes. Your community sign-in moves over on its own.
