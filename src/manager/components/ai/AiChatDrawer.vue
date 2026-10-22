@@ -52,7 +52,8 @@ import type { AiPhase } from "../../api/ai-progress";
 import { useAiChat, type ChatAssistantEntry, type SearchApproval } from "../../composables/useAiChat";
 import { clearPointer, EDIT_ROUTES } from "../../composables/useAiActions";
 import { useAiConfig } from "../../composables/useAiConfig";
-import { THINKING_OPTIONS, isThinking } from "../../utils/ai-thinking";
+import { isThinking, thinkingChoices } from "../../utils/ai-thinking";
+import { useAiThinking } from "../../composables/useAiThinking";
 import { useUiStore } from "../../stores/uiStore";
 import { deletedIds } from "../../composables/useLibraryChanged";
 import { useAiChatWidth } from "../../composables/useAiChatWidth";
@@ -219,9 +220,16 @@ function shownSteps(steps: AiChatStep[]): AiChatStep[] {
 /* ── Thinking picker (the same setting as Settings › AI › Thinking) ── */
 
 const thinking = computed(() => config.value?.thinking ?? "auto");
-const thinkingOptions: SelectOption[] = THINKING_OPTIONS.map(({ value, short }) => ({
-  value, label: short,
-}));
+const { info: thinkingInfo, refresh: refreshThinking } = useAiThinking();
+const thinkingOptions = computed<SelectOption[]>(() =>
+  thinkingChoices(thinkingInfo.value, thinking.value, true));
+const thinkingTitle = computed(() => [
+  "Thinking: how much a thinking model reasons before it answers (also in Settings › AI assistant)",
+  thinkingInfo.value?.note ?? "",
+].filter(Boolean).join("\n"));
+// A turn can teach the server something about the model (a refused level,
+// a reply spent thinking): show it once the turn ends.
+watch(() => chat.loading.value, (busy, was) => { if (was && !busy) void refreshThinking(); });
 async function pickThinking(v: string | number | null): Promise<void> {
   if (!isThinking(v) || v === thinking.value || chat.loading.value) return;
   try {
@@ -778,7 +786,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
       </span>
       <span
         class="wp-ai-chat__think"
-        title="Thinking: how much a thinking model reasons before it answers (also in Settings › AI assistant)"
+        :title="thinkingTitle"
         data-test="ai-chat-thinking"
       >
         <i class="pi pi-lightbulb" aria-hidden="true" />

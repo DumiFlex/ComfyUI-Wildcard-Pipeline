@@ -30,6 +30,7 @@ from engine.ai.config import THINKING_LEVELS
 from engine.ai.tools import registry
 from engine.ai.tools import tools as registry_tools
 from wp_api import _ai_client as client
+from wp_api import _ai_thinking
 from wp_api._ai_client import AIError
 
 FORMATS = ("auto", "native", "json")
@@ -82,6 +83,26 @@ class ToolsUnsupported(AIError):
     def __init__(self, message: str, *, status: int = 502, fallback: bool = False) -> None:
         super().__init__(message, status=status)
         self.fallback = fallback
+
+
+class ThoughtOut(AIError):
+    """The model spent its whole output limit thinking and wrote nothing."""
+
+    def __init__(self) -> None:
+        super().__init__("the model used its whole output limit thinking and wrote no "
+                         "answer. Turn its thinking off, or raise the output limit.")
+
+
+def _step_json(text: str, usage: dict[str, Any]) -> Any:
+    """A JSON step's answer; `ThoughtOut` when the server cut it off with
+    nothing but thinking written."""
+    if usage.get("cut") and not client.strip_think(text or "").strip():
+        raise ThoughtOut()
+    return client._parse_text_json(text)
+
+
+def _thought_out(st: dict[str, Any]) -> bool:
+    return bool(st["usage"].get("cut")) and not st["calls"] and not st["message"]
 
 
 def new_call_id() -> str:
@@ -1013,7 +1034,8 @@ async def _post(cfg: dict[str, Any], path: str, body: dict[str, Any], *, kind: s
         plain = await client.stream_request(cfg, path, body=streamed, on_obj=on)
     except AIError as e:
         if e.upstream is not None and 400 <= e.upstream < 500 and e.upstream not in (
-                401, 403, 404, 429) and not (kind == "anthropic" and client.claude_refused(e)):
+                401, 403, 404, 429) and not (kind == "anthropic" and client.claude_refused(e)) \
+                and not _THINK_REFUSAL.search(e.message):
             # Maybe it's the streaming it refused: ask once more without,
             # and remember only when that works.
             plain = await client._request(cfg, "POST", path, body=body,
@@ -1058,27 +1080,37 @@ def _no_thinking(cfg: dict[str, Any]) -> dict[str, Any]:
 
 
 _THINK_KEYS = ("reasoning", "reasoning_effort", "chat_template_kwargs")
-
-
-#: Ollama models whose `think` takes a level instead of true/false.
-_OLLAMA_LEVELS = re.compile(r"gpt-oss", re.I)
+#: A 4xx about the thinking fields, not the stream (`_post`).
+_THINK_REFUSAL = re.compile(r"reasoning|effort|enable_thinking|\bthink", re.I)
 
 
 def _thinking_fields(cfg: dict[str, Any]) -> dict[str, Any]:
     """The request fields for the Thinking setting on an OpenAI-style
-    server: nothing for "auto", `_no_thinking` for "off", and for a level
-    the same switches set to it. llama.cpp's and vLLM's template switch has
-    no levels, so a level there just turns thinking on."""
+    server, already fitted to the model (`_ai_thinking.fitted`): nothing
+    for "auto", `_no_thinking` for "off", the server's on switch for "on",
+    and its effort field for a level. llama.cpp's and vLLM's template switch
+    has no levels, so a level there just turns thinking on."""
     level = cfg.get("thinking") or "auto"
     if level == "auto":
         return {}
     if level == "off":
         return _no_thinking(cfg)
-    if cfg.get("provider") in ("openai", "lmstudio"):
-        return {"reasoning_effort": level}
     if client.is_openrouter(str(cfg.get("base_url") or "")):
-        return {"reasoning": {"effort": level}}
-    return {"chat_template_kwargs": {"enable_thinking": True}}
+        return {"reasoning": {"enabled": True} if level == "on" else {"effort": level}}
+    if cfg.get("provider") == "openai":
+        return {} if level == "on" else {"reasoning_effort": level}
+    if cfg.get("provider") == "lmstudio":
+        if level == "on":
+            # LM Studio's on/off models: any effort but "none" turns
+            # thinking on (checked against 0.4.26, Qwen3.8-27B). Nothing
+            # to send when on is already the model's default.
+            return {} if cfg.get("thinking_default") == "on" else {"reasoning_effort": "medium"}
+        return {"reasoning_effort": level}
+    # llama.cpp and vLLM hand these to the chat template: a template with
+    # its own effort variable (Qwen 3.8) takes the level there.
+    if level == "on" or cfg.get("thinking_kind") != "levels":
+        return {"chat_template_kwargs": {"enable_thinking": True}}
+    return {"chat_template_kwargs": {"enable_thinking": True, "reasoning_effort": level}}
 
 
 def _refused(e: AIError) -> bool:
@@ -1100,22 +1132,38 @@ async def step(
     schema. `tool_choice` ("required" / "none") is sent to OpenAI-style
     servers in native mode only (`split_step`)."""
     client._require_model(cfg)
+    cfg = await _ai_thinking.fitted(cfg)
     allowed = set(names)
     if client._semaphore.locked():
         raise AIError("the assistant is already busy with two requests", status=429)
+    async def ask(c: dict[str, Any]) -> dict[str, Any]:
+        if c["api"] == "anthropic":
+            return await _step_anthropic(c, system, log, fmt, tools, schema, temperature,
+                                         max_tokens, allowed, emit)
+        if uses_responses(c):
+            return await _step_responses(c, system, log, fmt, tools, schema, cache_key,
+                                         allowed, emit)
+        if c["api"] == "ollama":
+            return await _step_ollama(c, system, log, fmt, tools, schema, temperature,
+                                      num_ctx, allowed, emit)
+        return await _step_openai(c, system, log, fmt, tools, schema, temperature,
+                                  max_tokens, cache_key, allowed, emit, tool_choice)
+
     async with client._semaphore:
         try:
-            if cfg["api"] == "anthropic":
-                return await _step_anthropic(cfg, system, log, fmt, tools, schema, temperature,
-                                             max_tokens, allowed, emit)
-            if uses_responses(cfg):
-                return await _step_responses(cfg, system, log, fmt, tools, schema, cache_key,
-                                             allowed, emit)
-            if cfg["api"] == "ollama":
-                return await _step_ollama(cfg, system, log, fmt, tools, schema, temperature,
-                                          num_ctx, allowed, emit)
-            return await _step_openai(cfg, system, log, fmt, tools, schema, temperature,
-                                      max_tokens, cache_key, allowed, emit, tool_choice)
+            try:
+                st = await ask(cfg)
+            except ThoughtOut:
+                st = None
+            if (st is None or _thought_out(st)) and cfg.get("thinking") != "off":
+                # Thinking took the whole reply (Qwen 3.8 27B under LM Studio
+                # with thinking on, 2026-10-22): ask once more with it off,
+                # and keep it off for this model.
+                _ai_thinking.thought_out(cfg)
+                st = await ask(await _ai_thinking.fitted(_ai_thinking.unfitted(cfg, "off")))
+            if st is None:
+                raise ThoughtOut()
+            return st
         except AIError as e:
             if fmt == "native" and _refused(e):
                 raise ToolsUnsupported(e.message, status=e.status) from e
@@ -1146,7 +1194,7 @@ def split_thinking(cfg: dict[str, Any]) -> dict[str, Any]:
     off here: choosing a call needs no long think, and thinking hurts small
     models' tool picks (research note "Small model tool use"). A level the
     user picked applies to both asks."""
-    if cfg.get("local") and cfg.get("thinking", "auto") not in THINKING_LEVELS:
+    if cfg.get("local") and cfg.get("thinking", "auto") in ("auto", "off"):
         return {**cfg, "thinking": "off"}
     return cfg
 
@@ -1304,7 +1352,7 @@ async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, 
         text = client.claude_text(blocks)
         if text.strip():
             # Asked in words (no forced choice), the answer may come as text.
-            return _json_step(text, client._parse_text_json(text), usage, thought, allowed)
+            return _json_step(text, _step_json(text, usage), usage, thought, allowed)
         raise AIError("the model didn't return the expected answer")
     text = "\n".join(str(b.get("text") or "") for b in blocks if b.get("type") == "text")
     calls = [{"id": str(b.get("id") or new_call_id()), "tool": str(b.get("name")),
@@ -1331,14 +1379,27 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     }
     if cfg.get("thinking") == "off":
         body["think"] = False
+    elif cfg.get("thinking") == "on":
+        body["think"] = True
     elif cfg.get("thinking") in THINKING_LEVELS:
-        # gpt-oss takes a level; other thinking models only true.
-        body["think"] = cfg["thinking"] if _OLLAMA_LEVELS.search(str(cfg["model"])) else True
+        # Fitted to the model: a level only where `think` takes one (gpt-oss).
+        body["think"] = cfg["thinking"] if cfg.get("thinking_kind") in ("levels", None) else True
     if fmt == "native":
         body["tools"] = tools
     else:
         body["format"] = schema
-    data = await _post(cfg, "/api/chat", body, kind="ollama", emit=emit, show=fmt == "native")
+    try:
+        data = await _post(cfg, "/api/chat", body, kind="ollama", emit=emit,
+                           show=fmt == "native")
+    except AIError as e:
+        # A model that doesn't think (or takes no level): ask again as is.
+        if not ("think" in body and 400 <= (e.upstream or 0) < 500
+                and re.search(r"think", e.message, re.I)):
+            raise
+        body.pop("think")
+        data = await _post(cfg, "/api/chat", body, kind="ollama", emit=emit,
+                           show=fmt == "native")
+        _ai_thinking.refused(cfg, str(cfg.get("thinking")))
     msg = data.get("message") if isinstance(data, dict) else None
     if not isinstance(msg, dict):
         raise AIError("the model didn't return an answer")
@@ -1349,7 +1410,7 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
         usage["early"] = True
     if fmt == "json":
         text = _got if isinstance(_got := msg.get("content"), str) else ""
-        return _json_step(text, client._parse_text_json(text), usage, msg.get("thinking"),
+        return _json_step(text, _step_json(text, usage), usage, msg.get("thinking"),
                           allowed)
     calls = []
     for c in msg.get("tool_calls") or []:
@@ -1411,6 +1472,7 @@ async def _step_responses(cfg: dict[str, Any], system: str, log: list[dict[str, 
         body.pop("reasoning")
         data = await _post(cfg, "/responses", body, kind="responses", emit=emit,
                            show=fmt == "native")
+        _ai_thinking.refused(cfg, str(cfg.get("thinking")))
     if not isinstance(data, dict):
         raise AIError("the model didn't return an answer")
     if data.get("status") == "failed":
@@ -1447,7 +1509,7 @@ async def _step_responses(cfg: dict[str, Any], system: str, log: list[dict[str, 
         str(x.get("text") or "").strip() for it in output if it.get("type") == "reasoning"
         for x in it.get("summary") or [] if isinstance(x, dict) and x.get("text"))
     if fmt == "json":
-        st = _json_step(text, client._parse_text_json(text), usage, summary, allowed)
+        st = _json_step(text, _step_json(text, usage), usage, summary, allowed)
     else:
         st = _native_step(text, calls, allowed, usage, summary)
     st["raw"] = output
@@ -1498,6 +1560,8 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
             body.pop(k, None)
         data = await _post(cfg, "/chat/completions", body, kind="openai", emit=emit,
                            show=fmt == "native")
+        # It answered without them: later steps skip the failing ask.
+        _ai_thinking.refused(cfg, str(cfg.get("thinking")))
     choices = data.get("choices") if isinstance(data, dict) else None
     if not choices or not isinstance(choices[0], dict):
         raise AIError("the model didn't return an answer")
@@ -1511,7 +1575,7 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
         usage["early"] = True
     if fmt == "json":
         text = _got if isinstance(_got := message.get("content"), str) else ""
-        return _json_step(text, client._parse_text_json(text), usage,
+        return _json_step(text, _step_json(text, usage), usage,
                           message.get("reasoning_content") or message.get("reasoning"), allowed)
     calls = []
     for c in message.get("tool_calls") or []:

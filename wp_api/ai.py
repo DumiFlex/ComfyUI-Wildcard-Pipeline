@@ -4,6 +4,8 @@
     PUT  /wp/api/ai/config          partial update; `api_key` is write-only
     POST /wp/api/ai/models          list the server's models (uses saved config)
     POST /wp/api/ai/test            Test connection: models + a tiny JSON call
+    POST /wp/api/ai/thinking        what the Thinking setting can be for the
+                                    chosen model (uses saved config)
     POST /wp/api/ai/wildcard/draft  new options for a wildcard (not saved)
     POST /wp/api/ai/wildcard/edit   remove / rewrite / retag / re-weight
                                     options (a before/after list, not saved)
@@ -66,6 +68,7 @@ from wp_api import (
     _ai_embed,
     _ai_progress,
     _ai_search,
+    _ai_thinking,
 )
 from wp_api._ai_chats import (
     delete_chat,
@@ -150,7 +153,11 @@ async def put_config(request: web.Request) -> web.Response:
     if isinstance(body, web.Response):
         return body
     try:
-        return json_ok(_view(ai_config.update(body)))
+        view = _view(ai_config.update(body))
+        if "thinking" in body:
+            # A new choice gets a fresh try on this model.
+            _ai_thinking.forget(ai_config.load_effective())
+        return json_ok(view)
     except ai_config.ConfigError as e:
         return json_error(str(e), status=400)
     except OSError as e:
@@ -172,6 +179,15 @@ async def post_models(request: web.Request) -> web.Response:
         return json_ok({"models": await _ai_client.list_models(cfg)})
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
+
+
+async def post_thinking(request: web.Request) -> web.Response:
+    """What the chosen model takes for Thinking (`_ai_thinking.describe`):
+    the choices to show, what each one sends, and a line saying so."""
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    return json_ok(await _ai_thinking.describe(cfg))
 
 
 async def post_test(request: web.Request) -> web.Response:
@@ -290,6 +306,7 @@ def register(router: web.UrlDispatcher) -> None:
     add("POST", "/wp/api/ai/index/rebuild", post_index_rebuild, cut_short=False)
     add("POST", "/wp/api/ai/models", post_models)
     add("POST", "/wp/api/ai/test", post_test)
+    add("POST", "/wp/api/ai/thinking", post_thinking)
     add("POST", "/wp/api/ai/wildcard/draft", post_wildcard_draft)
     add("POST", "/wp/api/ai/pack/review", post_pack_review)
     add("POST", "/wp/api/ai/bundle/split", post_bundle_split)

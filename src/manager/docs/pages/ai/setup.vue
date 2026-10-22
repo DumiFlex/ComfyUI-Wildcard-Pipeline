@@ -53,7 +53,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           { term: 'API key', desc: 'Stored on the ComfyUI side and never shown again; Remove deletes it. A key is only sent to the address it was saved for.' },
           { term: 'Model', desc: 'Picked from your server\'s list (refresh after downloading a new one), or typed in.' },
           { term: 'Unload after', desc: 'For local servers: how long an idle model stays loaded, so ComfyUI gets the GPU memory back. From right after each answer up to 1 hour, or Custom.' },
-          { term: 'Thinking', desc: 'How much a thinking model reasons before it answers: As the model does, Off (faster), Low, Medium or High. The same picker sits in the chat header. For a small or medium local model, As the model does means Off, and a level you pick holds for the whole answer (switching between steps made LM Studio re-read the whole prompt).' },
+          { term: 'Thinking', desc: 'How much a thinking model reasons before it answers. The list shows what the chosen model takes: Off and On for a model with an on/off switch, or its own levels (Low to Max) for a model with levels, and a line under it says which. The same picker sits in the chat header. For a small or medium local model, As the model does means Off, and a choice you pick holds for the whole answer (switching between steps made LM Studio re-read the whole prompt).' },
         ]"
       />
       <p>
@@ -89,10 +89,37 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         </p>
         <p>
           OpenAI is reached through its Responses API, which its newest models need for tool
-          calls; their reasoning is carried between steps in encrypted form. Thinking levels:
-          OpenAI, OpenRouter, LM Studio and Claude take the level; llama.cpp, vLLM and most Ollama
-          models only have on and off (Ollama's gpt-oss takes the level). The newest Claude models
-          always think a little, so Off leaves them at their default.
+          calls; their reasoning is carried between steps in encrypted form.
+        </p>
+        <p>
+          <b>Thinking per model.</b> The assistant asks the server what the model takes: LM Studio
+          and Ollama list each model's options, OpenRouter and Claude list each model's levels, and
+          OpenAI models are known by name. A model with only on and off (Qwen 3 under LM Studio,
+          most Ollama models) shows Off and On; a level you picked for another model counts as On.
+          A model that must think (the newest Claude and GPT models) has no Off, so Off asks for
+          its lowest level. A level a model doesn't have becomes the nearest one it has. If the
+          server refuses a choice, the assistant asks again without it and remembers that for the
+          model. If thinking uses up a whole reply, it asks again with thinking off and keeps it off
+          for that model until you change Thinking.
+        </p>
+        <p>
+          LM Studio turns a model's thinking only on or off: it never hands a level to the model's
+          chat template. A template with its own levels (Qwen 3.8: low, medium, xhigh) then always
+          runs at its default, so On there means the template's default effort. llama.cpp does
+          hand the level to the template.
+        </p>
+        <p>
+          To get the levels in LM Studio, give the model a small <code>model.yaml</code> that
+          declares them. Make a folder such as
+          <code>~/.lmstudio/hub/models/you/qwen3.8-27b-effort/</code> with a
+          <code>model.yaml</code> whose <code>base</code> names the GGUF you already have, and add
+          a <code>customFields</code> entry: a <code>select</code> with the template's levels
+          (<code>low</code>, <code>medium</code>, <code>xhigh</code>) and the effect
+          <code>setJinjaVariable</code> on <code>reasoning_effort</code>. It shows up as a second
+          model that uses the same file, so nothing is stored twice. LM Studio then lists its
+          levels and the Thinking picker offers them. The new model doesn't take the old one's
+          load settings, so put its context length, KV cache and thinking budget in the yaml too
+          (a <code>config</code> section), or a full-precision cache can make it too slow to answer.
         </p>
       </DocDetails>
     </DocSection>

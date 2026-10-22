@@ -642,6 +642,8 @@ async def complete_json(
     says the caller can use what came before the cut (marked `CUT_OFF`).
     """
     _THOUGHT.set("")
+    from wp_api import _ai_thinking  # imports this module
+    cfg = await _ai_thinking.fitted(cfg)
     answer = await _complete_json(
         cfg, system=system, user=user, schema=schema, schema_name=schema_name,
         temperature=temperature, max_tokens=max_tokens, history=history,
@@ -772,6 +774,9 @@ async def _complete_json(
             for k in think_keys:
                 body.pop(k, None)
             data = await _answer(cfg, "/chat/completions", body, "openai")
+            if key not in _JSON_THINK_OFF:
+                from wp_api import _ai_thinking  # imports this module
+                _ai_thinking.refused(cfg, str(cfg.get("thinking")))
         choices = data.get("choices") if isinstance(data, dict) else None
         if not choices or not isinstance(choices[0], dict):
             raise AIError("the model didn't return an answer")

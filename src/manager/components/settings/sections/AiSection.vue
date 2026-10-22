@@ -19,7 +19,8 @@ import type { AiConfigPatch, AiEmbedApi, AiIndexStatus, AiModelSize, AiProviderI
 import { useAiConfig } from "../../../composables/useAiConfig";
 import { SUGGESTIONS_SOURCE_NOTE, hfRepo, suggestionsFor, type SuggestedModel } from "../ai-models";
 import { useUiStore } from "../../../stores/uiStore";
-import { THINKING_OPTIONS, isThinking } from "../../../utils/ai-thinking";
+import { isThinking, thinkingChoices } from "../../../utils/ai-thinking";
+import { useAiThinking } from "../../../composables/useAiThinking";
 
 const ui = useUiStore();
 const { config, error, save } = useAiConfig();
@@ -245,9 +246,11 @@ const toolFormatOptions: SelectOption[] = [
   { value: "native", label: "Native tool calls" },
   { value: "json", label: "JSON steps" },
 ];
-const thinkingOptions: SelectOption[] = THINKING_OPTIONS.map(({ value, label }) => ({
-  value, label: value === "auto" ? `${label} (recommended)` : label,
-}));
+const { info: thinkingInfo } = useAiThinking();
+const thinkingOptions = computed<SelectOption[]>(() =>
+  thinkingChoices(thinkingInfo.value, config.value?.thinking ?? "auto").map(({ value, label }) => ({
+    value, label: value === "auto" ? `${label} (recommended)` : label,
+  })));
 async function setThinking(v: string | number | null): Promise<void> {
   if (!isThinking(v) || v === config.value?.thinking) return;
   await patch({ thinking: v });
@@ -830,7 +833,7 @@ const off = computed(() => !config.value?.enabled);
           <SettingRow
             form
             label="Thinking"
-            hint="Thinking models (Qwen3, DeepSeek R1, …) reason before they answer, which takes time and counts against the reply's limit: a long think can leave a cut-off answer. Off asks the server to skip it, and Low, Medium or High ask for that much reasoning (Ollama, llama.cpp, LM Studio, OpenRouter, OpenAI and Claude understand this; where a server has only on and off, any level means on, and a model that must reason ignores Off). You can also change it from the chat header."
+            hint="Thinking models (Qwen3, DeepSeek R1, …) reason before they answer, which takes time and counts against the reply's limit: a long think can leave a cut-off answer. The list shows what the chosen model takes: only Off and On for models with an on/off switch, its own levels for models with levels (Claude, OpenAI, OpenRouter and Ollama say which). A model that must think has no Off. If thinking uses up a whole reply, the assistant asks again with it off and keeps it off for that model until you change this. You can also change it from the chat header."
             setting-key="ai-thinking"
           >
             <Select
@@ -842,6 +845,11 @@ const off = computed(() => !config.value?.enabled);
               class="wp-ai-set__fill"
               @update:model-value="setThinking"
             />
+            <template #extra>
+              <p v-if="thinkingInfo?.note" class="wp-ai-set__think-note" data-test="ai-thinking-note">
+                {{ thinkingInfo.note }}
+              </p>
+            </template>
           </SettingRow>
 
           <SettingRow
@@ -1392,6 +1400,16 @@ const off = computed(() => !config.value?.enabled);
 .wp-ai-set__result[data-tone="warn"] { color: var(--wp-warn); }
 .wp-ai-set__result i { font-size: 12px; flex: none; }
 .wp-ai-set__ctx code { font-family: var(--wp-font-mono); font-size: 12px; }
+/* What the chosen model takes for Thinking: under the hint, like
+ * SettingRow's "Recommended" line. */
+.wp-ai-set__think-note {
+  grid-column: 2;
+  grid-row: 3;
+  margin: 0;
+  font-size: 12px;
+  color: var(--wp-accent-300, var(--wp-text-muted));
+}
+.wp-content[data-lt~="520"] .wp-ai-set__think-note { grid-column: 1; grid-row: auto; }
 .wp-ai-set__prefix {
   margin: 0;
   padding: var(--wp-space-4) var(--wp-space-6);

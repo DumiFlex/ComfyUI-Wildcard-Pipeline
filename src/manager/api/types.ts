@@ -905,8 +905,31 @@ export type AiReaderId = "builtin" | "crawl4ai" | "firecrawl";
 
 export type AiModelSize = "small" | "medium" | "large";
 export type AiToolFormat = "auto" | "native" | "json";
-/** The Thinking setting: left to the model, off, or a reasoning level. */
-export type AiThinking = "auto" | "off" | "low" | "medium" | "high";
+/** The Thinking setting: left to the model, off, on, or a reasoning level. */
+export type AiThinking = "auto" | "off" | "on" | "low" | "medium" | "high" | "xhigh" | "max";
+/** A reasoning level, least to most. */
+export type AiThinkingLevel = "low" | "medium" | "high" | "xhigh" | "max";
+
+/** What the chosen model takes for Thinking (`POST /wp/api/ai/thinking`). */
+export interface AiThinkingInfo {
+  /** "levels": the efforts in `options`; "switch": only off and on; "none":
+   * no thinking setting; "unknown": sent as picked. */
+  kind: "levels" | "switch" | "none" | "unknown";
+  options: AiThinkingLevel[];
+  can_off: boolean;
+  default: string | null;
+  /** "server" (it said), "name" (known by the model's name), "guess". */
+  source: string;
+  /** The choices to offer, in order. */
+  shown: AiThinking[];
+  /** What each choice sends this model ("auto" = nothing). */
+  sends: Partial<Record<AiThinking, string>>;
+  /** Values the server refused for this model this session. */
+  refused: string[];
+  /** It spent a whole reply thinking, so it answers with thinking off. */
+  thought_out: boolean;
+  note: string;
+}
 
 export interface AiConfigPatch {
   enabled?: boolean;
