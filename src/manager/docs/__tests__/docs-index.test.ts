@@ -17,7 +17,7 @@ import { SECTIONS, SETTING_ENTRIES } from "../../components/settings/settings-in
 const OUT = resolve(__dirname, "../../../../engine/ai/docs_index.json");
 const BLOCK = new Set([
   "P", "LI", "H1", "H2", "H3", "H4", "TR", "DT", "DD", "PRE", "BLOCKQUOTE", "FIGCAPTION",
-  "UL", "OL", "TABLE", "DL", "SECTION", "ARTICLE", "HEADER",
+  "UL", "OL", "TABLE", "DL", "SECTION", "ARTICLE", "HEADER", "DETAILS", "SUMMARY",
 ]);
 const SKIP = new Set(["SCRIPT", "STYLE", "SVG", "BUTTON", "IMG", "FIGURE"]);
 

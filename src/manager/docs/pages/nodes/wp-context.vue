@@ -1,17 +1,28 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocDetails from "../../../components/docs/DocDetails.vue";
+import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
 const ports = [
-  { term: "upstream (in)", desc: "Connect an earlier WP Context here to chain them together. Its variables flow through and can be overridden by modules in this node. Leave unconnected to start a fresh chain." },
-  { term: "seed", desc: "Controls the random picks inside this node. Change it to get a different roll; right-click → Convert widget to input to drive it from a seed widget or the WP Context Loop." },
-  { term: "modules", desc: "The stack of modules inside this node — wildcards, fixed values, combines, constraints, and bundles. Add modules by clicking the + button. Drag rows to reorder." },
-  { term: "context (out)", desc: "The resolved variable map produced by this node. Wire it into a WP Prompt Assembler, WP Debug, WP Context Injector, or another WP Context." },
+  { term: "upstream (in)", desc: "Optional. Another WP Context, an Injector, Model Info or a Loop. This node starts with their variables and can add to them or replace them." },
+  { term: "seed", desc: "Decides every random pick in this node. See Seeds & loops." },
+  { term: "context (out)", desc: "The variables. Wire it into a WP Prompt Assembler, a WP Debug or another WP Context." },
+];
+
+const markers = [
+  { term: "Coloured dot or label", desc: "Something to look at, such as MISSING VAR or a variable set twice. Blue is for your information, amber is worth a look. Hover for the message. Nothing here stops a run." },
+  { term: "drift", desc: "The library entry changed after you added it. Right-click → Refresh from library to take the change. On a bundle it reads library updated; right-click the bundle → Reset to library snapshot." },
+  { term: "missing", desc: "The entry isn't in your library (deleted, or the workflow came from someone else). The row still works from its own copy; right-click → Save to library to add it." },
+  { term: "mod", desc: "You changed this row on the node, so it differs from the library." },
+  { term: "held", desc: "Hold across run is on." },
+  { term: "Lock / globe / bin", desc: "The row buttons: lock the pick, hide the variable from the prompt, remove the row." },
 ];
 </script>
 
@@ -22,84 +33,75 @@ const ports = [
     icon="pi pi-sitemap"
     tone="node"
     node-id="WP_Context"
-    blurb="The heart of the pipeline. Build a stack of modules, roll them with a seed, and send resolved $variables downstream to an Assembler or Debug node."
+    blurb="The heart of the pipeline. Stack modules from your library, roll them with a seed, and send the $variables on to an Assembler."
   >
-    <DocSection title="What it's for">
+    <DocSection title="What it does">
       <p>
-        A <b>WP Context</b> is where you define the named values that power your prompt.
-        Add a wildcard module and it becomes <VarToken>$subject</VarToken>. Add a fixed-value
-        module and it becomes <VarToken>$style</VarToken>. When you press Generate the node
-        rolls every module with your seed and hands a complete map of
-        <VarToken>$variable</VarToken> → value to whatever is wired downstream.
+        Add a wildcard and the node rolls it into <VarToken>$subject</VarToken>; add a fixed value
+        and you get <VarToken>$style</VarToken>. On every Generate the node runs its modules from
+        top to bottom and passes the finished list of variables to the next node.
       </p>
-      <p>
-        Chain two Context nodes together — the downstream one can add new variables or
-        override ones set above. The last write wins, so a downstream
-        <VarToken>$subject</VarToken> replaces the upstream one.
-      </p>
+      <DocUseWhen
+        :good="[
+          'One per pack or per character',
+          'A second, chained Context that adds to or replaces the first',
+        ]"
+        :better="[
+          'Text typed onto the canvas or an LLM caption: use WP Context Injector',
+        ]"
+      />
       <DocImage
         src="images/docs/wp-context.png"
-        ratio="16 / 6"
-        caption="A WP Context with three modules in its stack (Starter subject wildcard, Starter scene combine flagged orange MISSING VAR because $mood isn't published, Starter style fixed) wired into a WP Prompt Assembler. The assembler chip strip lists the three upstream $vars; the resolved preview shows 'cat, oil painting,, masterpiece, highly detailed' — the empty slot where $scene would have rendered makes the missing-var warning concrete."
+        ratio="16 / 7"
+        caption="A WP Context with a few modules, wired into the next node."
       />
     </DocSection>
 
-    <DocSection title="Inputs &amp; outputs">
+    <DocSection title="Use it">
+      <ol>
+        <li>Click <b>Add module</b> and pick from your library, or <b>Add Bundle</b> for a saved
+          group.</li>
+        <li>Mind the order: modules run top to bottom. A combine that reads
+          <VarToken>$mood</VarToken> goes below the wildcard that picks it, and a constraint goes
+          between its two wildcards.</li>
+        <li>Wire <code>context</code> into a <b>WP Prompt Assembler</b> and write a template such as
+          <VarToken>a photo of $subject</VarToken>.</li>
+      </ol>
+      <p>
+        Drag a row by its handle to reorder it or move it to another Context. Untick a row to switch
+        it off. Right-click a row for Edit, Duplicate, Hold across run, Save to library and more.
+      </p>
+    </DocSection>
+
+    <DocSection title="Inputs and outputs">
       <DocKeyList :items="ports" />
     </DocSection>
 
-    <DocSection title="Per-module behaviour in a loop">
-      <p>
-        When a <b>WP Context Loop</b> drives this node, each module chooses how it behaves across
-        the batch through its Runtime settings:
-      </p>
-      <ul>
-        <li>
-          <b>Hold across run</b> — the module resolves once at the first frame and reuses that exact
-          value on every frame of the run (the resolved value, not just the seed — constrained
-          picks and nested <code>@{}</code> refs stay frozen too), then re-rolls next run. The
-          “keep this element steady for the whole batch” switch. Flip it from the module's Runtime
-          settings, or right-click the row and pick <b>Hold across run</b> for a two-click toggle.
-          A <b>derivation</b> is the exception: it still checks its conditions on every frame, and
-          only the <code>{a|b}</code> and <code>@{}</code> rolls inside each branch are held.
-        </li>
-        <li>
-          <b>Per-frame overrides</b> — using the loop's <b>edit frame</b> selector you can give one
-          frame its own options, seed lock, or enable/disable for any module in the stack, leaving
-          the rest of the batch on the base. They stay on the canvas: bundles don't save them.
-        </li>
-      </ul>
+    <DocSection title="What the row markers mean">
+      <DocKeyList :items="markers" />
     </DocSection>
 
     <DocSection title="Good to know">
+      <ul>
+        <li><b>Chaining:</b> a later Context can set the same variable again, and the later value
+          wins. See <DocRef id="context-chaining" />.</li>
+        <li><b>Keep a pick steady:</b> Lock pick / Lock seed keeps it for good, Hold across run for
+          one Generate. See <DocRef id="seeds-and-loops" />.</li>
+        <li><b>Duplicate</b> renames the copy's variable (<code>$hair</code> becomes
+          <code>$hair_2</code>) so the copy rolls on its own.</li>
+        <li><b>Rows are copies.</b> Editing a module in the library doesn't change the workflow until
+          you Refresh the row, so a saved workflow keeps giving the same results.</li>
+      </ul>
+      <DocDetails title="Where @{} references look">
+        <p>
+          A reference such as <VarToken>@{color}</VarToken> looks for its wildcard among this node's
+          rows first (even a switched-off row), then in the library of the machine that runs the
+          workflow. Keep the wildcards a reference needs on the node and a workflow you share works
+          on someone else's machine too. WP Debug shows where each pick came from.
+        </p>
+      </DocDetails>
       <DocCallout variant="tip">
-        Lock a module's seed (Lock pick on a wildcard) to freeze that pick on every Generate and
-        every <b>WP Context Loop</b> frame, handy for holding the art style steady while the
-        subject varies. Hold across run keeps it for one run only.
-      </DocCallout>
-      <DocCallout variant="tip">
-        Modules you add to a WP Context are <b>snapshots</b>, not live links. If you edit a module
-        in the library afterward, the Context doesn't change under you — it flags that row as
-        <b>drifted</b> so you can pull the updated version with <b>Refresh from library</b> when
-        you're ready. That keeps a saved workflow reproducible: it won't silently change because you
-        edited a module somewhere else.
-      </DocCallout>
-      <DocCallout variant="tip">
-        Rows on the node are also the vocabulary for <code>@{}</code> references. A reference
-        looks for its wildcard among the node's rows first (even a disabled row) and only then in
-        the library of the machine that runs the graph. So a workflow you share keeps working
-        elsewhere if the vocabularies it references sit on the node, and later library edits
-        don't reach them. WP Debug shows where each pool came from.
-      </DocCallout>
-      <DocCallout variant="tip">
-        <b>Duplicate</b> on a row renames the copy's variable (<code>$hair</code> becomes
-        <code>$hair_2</code>), so the copy rolls on its own. Two rows you set to the same variable
-        by hand overwrite each other: the later one wins.
-      </DocCallout>
-      <DocCallout variant="tip">
-        <b>Use one WP Context</b> per pack or per character, and chain a second one when a later
-        part of the graph should add to or override the first. <b>Not for</b> text typed straight
-        onto the canvas or an LLM's caption: that is WP Context Injector's job.
+        Wire a <b>WP Debug</b> to the output to see exactly what each module picked.
       </DocCallout>
     </DocSection>
 

@@ -1,55 +1,45 @@
 # WP Prompt Assembler
 
-Fill-in-the-blank prompt template. Anywhere you write `$variable`, the assembler substitutes the matching value from the upstream Context.
+Write a prompt with `$variables` in it and get the finished prompt, plus a matching negative.
 
 ## Inputs
 
-- **context** — `PIPELINE_CONTEXT` from any WP node.
-- **template** — your prompt text. Use `$varname` to reference bound values.
-- **negative_template** — optional negative template (collapsible section under the preview). `$negatives` marks where the collected negative words go; it reads `$vars` too.
+- **context**: the variables, from a WP Context (or any WP node with a context output).
+- **template**: your prompt, such as `A $style portrait of $subject, $lighting`.
+- **negative_template**: optional, in the fold-out section under the preview. Your standing negative, with `$negatives` where the collected negative words go.
 
 ## Outputs
 
-- **prompt** — the resolved STRING. Feed into CLIP encoders, WP Prompt Cleaner, etc.
-- **negative** — the negative words of every variable the template rendered, filled into the negative template. Feed into your negative CLIP encoder.
-
-## Negative output
-
-Wildcard options, fixed values, combines, derivation "Add to negative" actions and Injector rows can carry negative words for the variable they set. The negative output only takes the words of variables this template actually rendered, so a detailer Assembler that renders just `$face` gets only the face words. Internal variables add nothing.
-
-- `lowres, bad anatomy, $negatives` puts the collected words at the slot.
-- An empty negative template outputs just the collected words.
-- A negative template without `$negatives` gets them appended at the end.
-- Repeated tags are dropped (case-insensitive, `(blurry:1.2)` counts as `blurry`), including tags already in the negative template.
+- **prompt**: the finished prompt. Wire it into CLIP Text Encode or a WP Prompt Cleaner.
+- **negative**: the negative words of the variables this template printed, plus your negative template. Wire it into your negative CLIP Text Encode.
 
 ## How to use
 
-1. Wire a WP Context (or chain) into the context input.
-2. Write your template:
-   ```
-   A $style portrait of $subject, $lighting
-   ```
-3. Run the workflow. Each `$var` gets replaced with its current value.
+1. Wire a WP Context into **context**.
+2. Write the template. Type `$` to pick a variable, or click a chip in the **variables** strip.
+3. Run. Each `$name` becomes its value.
 
-## Helper widget
+In the preview, picked values are highlighted. A variable nothing sets gets an amber wavy underline and prints nothing.
 
-Below the template, the **Variables** strip lists every value available from upstream — click any chip to insert `$name` at the cursor.
+## The negative output
 
-**Preview** color-codes the resolved prompt:
-- purple highlight = resolved value
-- amber wavy underline = missing variable (will render empty)
+Wildcard options, fixed values, combines, derivations and Injector rows can carry negative words. The negative output only takes the words of variables this template printed, so a face-detailer Assembler that prints just `$face` gets only the face words. Hidden variables add nothing.
 
-## Save / Load template
+- `lowres, bad anatomy, $negatives` puts the collected words at that spot.
+- An empty negative template gives just the collected words.
+- Without `$negatives`, the collected words go at the end.
+- Repeated words are dropped, also when written differently: `(blurry:1.2)` counts as `blurry`.
 
-Two toolbar buttons next to **Clear template**:
+## Toolbar
 
-- **Load** — opens a library picker with search plus category / tags / favorites filters. Click a template to load it; this replaces the current template (confirms first if you've already typed something). The assembler remembers which template you loaded.
-- **Save** — opens a save dialog (name, category, tags, description, live preview). When the name matches an existing template — or you loaded one — you get two actions: **Update existing** (overwrite that library entry) and **Save as new entry** (create a fresh copy, auto-suffixed). Otherwise it's a plain **Save**. After saving, the assembler tracks that entry so the next Save defaults to updating it.
+- **Clear template** empties the template and the negative template.
+- **Load** picks a saved template from your library (it asks first if you've typed something).
+- **Save** keeps the template in your library. If it came from the library you can update that entry or save a new one.
 
-Any `$vars` the loaded template needs that aren't in the upstream chain show as the usual amber "missing" markers. Manage saved templates in the SPA **Templates** tab.
+Saved templates are on the manager's **Templates** page.
 
 ## Tips
 
-- Use `$$` for a literal `$` in your prompt.
-- Variable names: letters, numbers, underscores only.
-- Pre-flight warning toasts surface missing `$vars` at queue time.
+- `$$` prints a plain `$`.
+- The Assembler doesn't roll: `{a|b}` prints as typed and `@{…}` prints nothing. Put choices in a wildcard and print its variable.
+- When you queue, a warning names any `$variable` nothing sets.

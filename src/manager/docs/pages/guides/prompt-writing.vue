@@ -405,6 +405,23 @@ const mistakes: string[][] = [
     tone="neutral"
     blurb="Each model family wants its prompt written its own way. What to write, in which order, which settings matter, and what that means for how you build a pack."
   >
+    <DocSection title="Pick your model first">
+      <p>Find your model, then write your options in its style:</p>
+      <ul>
+        <li><b>Tags, comma-separated</b> (<i>1girl, red dress, smiling</i>): Illustrious, NoobAI,
+          Pony V6, Animagine and SD 1.5 anime models.</li>
+        <li><b>Sentences</b> (<i>a woman in a flowing red dress, smiling</i>): Flux, Krea 2,
+          Chroma, Qwen-Image, Z-Image, SD 3.5, HiDream and video models like Wan and LTX.</li>
+        <li><b>A bit of both:</b> SDXL base, Pony V7 and Anima.</li>
+      </ul>
+      <p>
+        Tag models also want quality tags (Pony's score tags, Illustrious's "masterpiece, best
+        quality") and usually a negative. Most sentence models skip the negative. The sections
+        below go family by family; <DocRef id="wp-model-info" /> lets one pack switch between
+        them.
+      </p>
+    </DocSection>
+
     <DocSection title="Read this first">
       <p>
         A wildcard pack is a prompt writer. The same pack can render tags for an anime model or

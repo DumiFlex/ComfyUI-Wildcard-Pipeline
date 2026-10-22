@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
@@ -55,13 +56,16 @@ const settings = [
         to an image travels with it, so the upscaler gets each picked image's own latent,
         conditioning and prompt.
       </p>
-      <DocCallout variant="tip">
-        <b>Use Image Filter</b> for a human pick before an expensive second pass (hires, upscale,
-        a detailer, video), to curate a sweep grid, or to inpaint a picked image in the same run.
-        <b>Not for</b> unattended runs: the queue waits while it is open. Set it to pass all, or
-        give it a timeout that keeps everything. An edited or inpainted prompt is a new prompt,
-        so in an adult pack it must carry the adult anchors.
-      </DocCallout>
+      <DocUseWhen
+        :good="[
+          'A human pick before an expensive second pass (hires, upscale, detailer, video)',
+          'Curating a sweep grid',
+          'Inpainting a picked image in the same run',
+        ]"
+        :better="[
+          'Unattended runs: the queue waits while the picker is open. Set it to pass all, or give it a timeout',
+        ]"
+      />
     </DocSection>
 
     <DocSection title="Where it goes">

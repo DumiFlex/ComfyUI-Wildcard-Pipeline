@@ -9,26 +9,11 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
 // User-facing descriptions of the most common things you'll see flagged —
 // described by what they MEAN + what to do, not by the internal rule names.
 const commonFlags = [
-  {
-    term: "Shadowed variable",
-    desc: "An earlier WP Context already sets this variable and yours overrides it. Normal when you chain Contexts — it's shown (as info, not a warning) so the override is on purpose, not a surprise.",
-  },
-  {
-    term: "Duplicate variable",
-    desc: "Two modules in the same Context produce the same variable. The lower one wins. Rename one, or reorder them if the wrong value is coming through.",
-  },
-  {
-    term: "Missing variable",
-    desc: "Your Prompt Assembler template uses a $variable that nothing upstream produces — it resolves to empty (the canvas preview underlines the token so you can spot it). Add a module that sets it, or drop the token.",
-  },
-  {
-    term: "Constraint not wired",
-    desc: "A constraint can't find one of its two wildcards, or they're in the wrong order — the constraint has to sit between its source and target wildcard to fire.",
-  },
-  {
-    term: "Constraint never fired",
-    desc: "A constraint was set up correctly but its target wildcard never came up on this run, so it had no effect. Often fine — just letting you know it didn't do anything.",
-  },
+  { term: "Shadowed variable", desc: "An earlier WP Context already sets this variable and this one replaces it. Normal when you chain Contexts; shown in blue so you know it's happening." },
+  { term: "Duplicate variable", desc: "Two modules on the same Context set the same variable, and the lower one wins. Rename one, or reorder them if the wrong value comes through." },
+  { term: "Missing variable", desc: "The Assembler template uses a $variable nothing sets (or a hidden one), so it prints nothing. The token is underlined in the template. Add a module that sets it, or remove the token." },
+  { term: "Constraint can't reach", desc: "A constraint can't find one of its wildcards, or they're in the wrong order. It must sit after the source wildcard and before the target." },
+  { term: "Constraint never applied", desc: "The constraint's target never ran after it, so it changed nothing. Often fine; it's just telling you." },
 ];
 </script>
 
@@ -38,53 +23,40 @@ const commonFlags = [
     title="Conflicts &amp; warnings"
     icon="pi pi-share-alt"
     tone="neutral"
-    blurb="As you build, Wildcard Pipeline quietly flags possible issues on the node itself. After a run, WP Debug lists what actually happened. Nothing here ever blocks a generation."
+    blurb="Possible problems show on the node while you build, and WP Debug lists what happened after a run. Nothing here stops a run."
   >
     <DocSection title="Where you'll see them">
-      <p>
-        You never have to go looking — problems come to you in two places:
-      </p>
       <ul>
-        <li>
-          <b>On the node, while you build</b> — the WP Context shows small coloured dots with a
-          short label (e.g. a duplicate variable, a missing one). Hover any dot for the full,
-          plain-English message. A Subgraph that contains WP nodes gets a single badge summarising
-          the worst issue inside it, so you can spot trouble without opening it.
-        </li>
-        <li>
-          <b>In WP Debug, after a run</b> — open the <b>Warnings</b> tab on a WP Debug node to see
-          what came up during the actual generation, in order, one line each.
-        </li>
+        <li><b>On the node, while you build.</b> A WP Context shows a small coloured dot and a short
+          label on the row, such as MISSING VAR. Hover it for the message. A subgraph with WP nodes
+          inside gets one badge with the worst issue, so you don't have to open it.</li>
+        <li><b>In WP Debug, after a run.</b> The <b>Warnings</b> tab lists what came up during the
+          run, one line each.</li>
       </ul>
       <DocImage
         src="images/docs/conflicts-warning.png"
         ratio="16 / 6"
-        caption="A three-node chain showing both sides of the warning system. WP Context (Starter subject + Starter style + Starter pairing, the pairing row outlined in amber with a TGT MISSING badge because its target wildcard isn't in the chain) → WP Debug with the Warnings tab open on CONSTRAINT_NEVER_APPLIED → WP Prompt Assembler still resolving 'A picture of a cat, in the style of oil painting'. Warnings are advisory; the run carries on."
+        caption="The Starter scene combine reads $mood, which nothing sets, so its row shows MISSING VAR. The run still goes ahead."
       />
     </DocSection>
 
-    <DocSection title="Reading the colour">
-      <p>
-        The dot's colour tells you how much to care — the wording in the hover message tells you
-        exactly what:
-      </p>
+    <DocSection title="What the colours mean">
       <ul>
-        <li><b>Blue (info)</b> — just so you know. Usually nothing to fix (an intended override, a constraint that didn't come up).</li>
-        <li><b>Amber (warning)</b> — worth a look. Something probably isn't doing what you meant (a duplicate, a missing variable, a mis-ordered constraint).</li>
-        <li><b>Red</b> — something won't resolve as written (a reference that points nowhere). The run still completes; that piece just won't take effect.</li>
+        <li><b>Blue:</b> for your information, usually nothing to fix.</li>
+        <li><b>Amber:</b> worth a look; something probably isn't doing what you meant.</li>
+        <li><b>Red:</b> something points nowhere, such as a reference to a deleted wildcard. The run
+          still finishes; that piece just does nothing.</li>
       </ul>
       <DocCallout variant="tip">
-        Every flag here is <b>advisory</b>. It never blocks generation or raises an error. Writing a
-        variable twice is perfectly valid — the later write wins; the dot just makes the override
-        visible so it's a choice, not an accident.
+        None of these ever stops a run. Setting a variable twice is fine, for example; the later
+        one wins and the dot just shows it.
       </DocCallout>
     </DocSection>
 
     <DocSection title="Common things it flags">
       <DocKeyList :items="commonFlags" />
       <p style="margin-top: 14px;">
-        That's the short list. The <b>Warning &amp; conflict types</b> reference page has the full
-        set with what each one means and what to do about it.
+        The full list is on <b>Warning &amp; conflict types</b>.
       </p>
     </DocSection>
 

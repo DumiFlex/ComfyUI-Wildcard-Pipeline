@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
@@ -8,11 +9,11 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
 const controls = [
-  { term: "context (in)", desc: "The upstream Context carrying the $variable you want to read." },
-  { term: "var_name", desc: "Pick the $variable to parse from the dropdown. The list updates automatically with every variable available in the upstream Context." },
-  { term: "index", desc: "Which number to extract when the variable contains more than one. 0 gives the first, 1 the second, and so on. Leave at 0 for single-value variables." },
-  { term: "default", desc: "The value to use when the variable is missing, has no numbers in it, or the index is beyond what was found. The node never errors — it always falls back to this." },
-  { term: "value (out)", desc: "The extracted float, ready to wire into any node that accepts FLOAT — CFG scale, denoising strength, and similar inputs." },
+  { term: "context (in)", desc: "The Context that holds the $variable." },
+  { term: "var_name", desc: "The $variable to read. The list shows every variable the wired Context has." },
+  { term: "index", desc: "Which number to take when there are several: 0 is the first, 1 the second. Usually 0." },
+  { term: "default", desc: "Used when the variable is missing, has no number, or has fewer numbers than the index. The node never stops the run; it uses this instead." },
+  { term: "value (out)", desc: "The number, for any FLOAT input: CFG, denoise, a LoRA strength and so on." },
 ];
 </script>
 
@@ -23,30 +24,33 @@ const controls = [
     icon="pi pi-hashtag"
     tone="node"
     node-id="WP_VarToFloat"
-    blurb="Pull a decimal number out of a $variable and use it as a real FLOAT. Ideal for driving CFG scale, denoising strength, or any decimal input from a wildcard pick."
+    blurb="Turn a number in a $variable into a decimal input, such as CFG or denoise."
   >
     <DocSection title="What it's for">
       <p>
-        When a wildcard pick contains a decimal value — <VarToken>0.75</VarToken>,
-        <VarToken>cfg 7.5</VarToken>, or even a plain integer like <VarToken>8</VarToken>
-        — <b>WP Var → Float</b> extracts it and emits it as a proper float you can wire
-        into any node that expects one. Plain integers match too, so you can use this node
-        wherever you need FLOAT output even if your variable only ever holds whole numbers.
-        Missing variables or ones with no recognisable number quietly return the default.
+        A pick can hold a number such as <VarToken>0.75</VarToken>, <VarToken>cfg 7.5</VarToken>
+        or <VarToken>8</VarToken>. <b>WP Var → Float</b> takes it out and gives it to any node
+        that wants a decimal. Whole numbers work too. If there's no number, it gives your
+        default.
       </p>
       <DocImage
         src="images/docs/wp-var-to-float.png"
-        ratio="16 / 5"
-        caption="WP Var → Float reading $cfg, picker dropdown open over upstream chips ($subject, $mood, $style, $resolution, $cfg-highlighted, $scene, $accent). Index 0, default 0.00, last execute → 7.5 'parsed from 7.5'. The FLOAT output wires into the cfg input on a KSampler (steps 20, sampler_name euler, scheduler simple) sitting alongside it; a Show Any node renders 7.5 to confirm."
+        ratio="16 / 6"
+        caption="WP Var → Float reads $cfg (7.5) and sends it to the KSampler's cfg."
       />
     </DocSection>
 
     <DocSection title="When to use it">
+      <DocUseWhen
+        :good="[
+          'A pick that drives a decimal: $cfg, a LoRA strength, a denoise',
+        ]"
+        :better="[
+          'Text that should stay in the prompt',
+        ]"
+      />
       <DocCallout variant="tip">
-        <b>Use it for</b> a pick that drives a decimal in the graph: <code>$cfg</code>, a LoRA strength, a denoise. Read a variable with Hide from prompt on, so the value never
-        reaches the prompt; a derivation can write it from another pick ("if
-        <code>$model_family</code> is flux, <code>$cfg</code> is 1"). <b>Not for</b> text that
-        stays in the prompt. The node re-runs only when the value it reads changes.
+        Hide the variable it reads (the globe on its row), so the value doesn't print in the prompt. A derivation can write it from another pick (“if $model_family is flux, $cfg is 1”). The node re-runs only when that value changes.
       </DocCallout>
     </DocSection>
 
@@ -54,21 +58,16 @@ const controls = [
       <DocKeyList :items="controls" />
     </DocSection>
 
-    <DocSection title="How the extraction works">
+    <DocSection title="How it finds the number">
       <p>
-        The node scans the variable's text for decimal and scientific-notation numbers.
-        Whole integers match too:
+        The node finds every number in the text, in order, and <b>index</b> picks one:
       </p>
       <ul>
-        <li><VarToken>cfg 7.5</VarToken> — index 0 → 7.5</li>
-        <li><VarToken>1920x1080</VarToken> — index 0 → 1920.0, index 1 → 1080.0</li>
-        <li><VarToken>1.5e-3</VarToken> — index 0 → 0.0015</li>
-        <li><VarToken>hello</VarToken> — no numbers found → returns default</li>
+        <li><VarToken>cfg 7.5</VarToken>: index 0 gives 7.5</li>
+        <li><VarToken>1920x1080</VarToken>: index 0 gives 1920.0, index 1 gives 1080.0</li>
+        <li><VarToken>1.5e-3</VarToken>: index 0 gives 0.0015</li>
+        <li><VarToken>hello</VarToken>: no number, so the default</li>
       </ul>
-      <DocCallout variant="tip">
-        Because whole integers match the float pattern, WP Var → Float works as a drop-in
-        when you need a FLOAT output from a variable that holds a whole number.
-      </DocCallout>
     </DocSection>
 
     <DocSection title="Works with">

@@ -1,19 +1,19 @@
 # WP Var → Int
 
-Reads a `$var` from the upstream **PipelineContext** and emits an `INT`.
+Reads a `$variable` from the upstream Context and emits an `INT`.
 
 ## Inputs
 
 | Name | Type | Notes |
 |---|---|---|
-| `context` | `PIPELINE_CONTEXT` | Required. Comes from a `WP Context` chain. |
+| `context` | context | Required. From a WP Context. |
 | `var_name` | dropdown | Pick from upstream `$vars`. Stored as `"$seed"`. |
 | `index` | `INT` | Which integer match in the var's value (0-based). |
 | `default` | `INT` | Returned when the var is missing or no Nth match. |
 
 ## Parsing rule
 
-Scans the var's value for substrings matching `-?\d+`, returns the Nth match.
+Finds the whole numbers in the value, in order, and returns the one at `index` (0 is the first).
 
 - `"1920x1080"` index `0` → `1920`
 - `"1920x1080"` index `1` → `1080`

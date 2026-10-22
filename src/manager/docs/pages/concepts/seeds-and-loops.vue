@@ -4,22 +4,20 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocDetails from "../../../components/docs/DocDetails.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
+const keepSteady = [
+  { term: "Nothing (default)", desc: "The module rolls again on every Generate and on every loop frame." },
+  { term: "Hold across run", desc: "The module rolls once per Generate and keeps that result on every loop frame. The next Generate rolls again. Good for keeping one character or outfit through a batch." },
+  { term: "Lock pick / Lock seed", desc: "The module keeps the same result on every frame and every Generate until you unlock it. Good for an art style you've settled on. Wildcards call it Lock pick, other modules Lock seed." },
+];
+
 const strategies = [
-  {
-    term: "Hashed (default)",
-    desc: "Each iteration gets an unrelated seed derived from the base. Produces the most variety — neighbouring iterations look nothing alike.",
-  },
-  {
-    term: "Sequential",
-    desc: "Seeds walk seed, seed+1, seed+2 … each frame rolls fresh picks: neighbouring seeds are no more alike than random ones, the numbers are just easy to find again.",
-  },
-  {
-    term: "Prime stride",
-    desc: "Takes large even jumps through the seed space. Good for sampling widely spread results from a known base.",
-  },
+  { term: "hash (default)", desc: "Each frame gets a seed worked out from the base seed. The seeds look random." },
+  { term: "sequential", desc: "Seeds count up: base, base+1, base+2 … Easy to read out and type back in." },
+  { term: "stride", desc: "Seeds take large even jumps from the base." },
 ];
 </script>
 
@@ -29,207 +27,126 @@ const strategies = [
     title="Seeds &amp; loops"
     icon="pi pi-share-alt"
     tone="neutral"
-    blurb="How the seed drives per-module randomness, what locked seeds do, and how WP Context Loop generates batches."
+    blurb="How the seed decides every pick, how to keep something steady, and how to make many variations in one click."
   >
-    <DocSection title="The seed and per-module randomness">
+    <DocSection title="The seed decides the picks">
       <p>
-        Every <b>WP Context</b> node has a <code>seed</code> input. At generation time, each
-        module in the stack gets its own independent random stream derived from that seed — so
-        changing the seed changes every module's picks together, but reordering modules does not
-        disturb each other's results.
+        Every <b>WP Context</b> has a <code>seed</code>. The seed decides what each wildcard picks.
+        Same seed, same picks; a new seed, new picks. With <b>control after generate</b> on
+        <i>randomize</i> (ComfyUI's default), every Generate gives you a fresh set.
       </p>
       <p>
-        Inside a module every pick rolls on its own stream too: each fixed value, each derivation
-        rule, and each <code>{a|b}</code> or <code>@{…}</code> in a piece of text. Adding a value,
-        firing another rule or giving another pick more options never changes a roll you already
-        like, and two copies of one module roll independently.
-      </p>
-      <p>
-        The seed advances automatically after each generation, so you get a fresh set of picks
-        every time you press Generate without editing anything manually.
+        Each module rolls on its own, so moving modules around, adding an option to one wildcard or
+        adding a new module never changes what the others picked. To get back a prompt you liked,
+        set the seed back to the number it used (WP Debug shows it).
       </p>
     </DocSection>
 
-    <DocSection title="Locked seeds">
+    <DocSection title="Keep something steady">
       <p>
-        Any module can have its seed locked. When a module's seed is locked, it always makes the
-        same pick regardless of what the Context seed is doing — perfect for holding a background
-        style or an art direction steady while everything else randomises. Locked modules are also
-        unaffected by the WP Context Loop seed strategies, so they do not vary between iterations.
+        Open a module's editor (or right-click its row) and use the <b>Runtime</b> buttons:
       </p>
+      <DocKeyList :items="keepSteady" />
       <DocCallout variant="tip">
-        Lock one module and leave the rest free to compare how different random picks combine with
-        a fixed element — useful for testing whether a style works with a variety of subjects.
+        Lock the style and leave the subject free to see how one style looks across many subjects.
       </DocCallout>
+      <DocDetails title="How Hold across run works">
+        <p>
+          Hold keeps the finished text, not just the seed. A wildcard holds its option even when a
+          constraint changes the odds later in the batch, and a reference inside it is held too: an
+          outfit of <VarToken>@{color} jeans</VarToken> that lands on "green jeans" stays "green
+          jeans" for the whole run. It is worked out with the first frame's inputs, so a constraint
+          that follows <VarToken>$iteration</VarToken> doesn't move it on later frames.
+        </p>
+        <p>
+          A held <b>derivation</b> still picks its rule from the current inputs on every frame. What
+          it holds is the random part of each rule, so a rule that fires again gives the same text it
+          gave on the first frame.
+        </p>
+      </DocDetails>
     </DocSection>
 
-    <DocSection title="Seed scope: vary vs hold">
+    <DocSection title="Many variations in one click">
       <p>
-        Inside a loop, each module decides whether it rides the per-iteration seed or the run's
-        base seed. Every wildcard, combine, fixed-values and derivation module has a
-        <b>Hold across run</b> toggle in its Runtime settings:
+        Put a <b>WP Context Loop</b> in front of your first WP Context and set its <b>count</b>.
+        One Generate then runs the workflow that many times, each frame with its own picks.
       </p>
-      <ul>
-        <li>
-          <b>Vary</b> (default) — the module re-rolls every iteration, so its pick changes across
-          the batch.
-        </li>
-        <li>
-          <b>Hold across run</b> — the module resolves once at the first iteration and reuses that
-          exact <em>value</em> on every iteration of the run, then re-rolls on the next run. It
-          holds the resolved value, not just the seed: a constrained wildcard keeps its option even
-          as the constraint reshapes the pool, and any nested <code>@{}</code> ref is frozen too —
-          an outfit of <VarToken>@{color} jeans</VarToken> that lands on “green jeans” stays
-          “green jeans” all run. It is resolved with the first iteration's inputs too, so a
-          constraint whose source follows <VarToken>$iteration</VarToken> (in this Context or
-          an earlier one) doesn't move it on later iterations. A held <b>derivation</b> works a little differently: it freezes
-          each rule branch's random roll, not <em>which</em> branch fires — the conditions still
-          pick the branch from the current inputs, but a chosen branch always resolves to the same
-          value it landed on at the first iteration. No manual seed lock needed. Flip it from the
-          module's Runtime settings, or right-click the row and pick <b>Hold across run</b> for a
-          two-click toggle.
-        </li>
-      </ul>
-      <p>
-        Hold answers “keep the identity or outfit steady across this batch, but let it re-roll next
-        time.” That's different from a <b>locked seed</b>, which freezes the pick for good — same
-        every run, not just within one run.
-      </p>
-    </DocSection>
-
-    <DocSection title="The flow">
       <DocFlow figure="seeds-and-loops-flow"
         :stages="[
-          { icon: 'pi pi-replay', name: 'WP Context Loop', sub: 'emits N', tone: 'node' },
-          { icon: 'pi pi-sitemap', name: 'WP Context', sub: 'fresh roll each pass', tone: 'node' },
+          { icon: 'pi pi-replay', name: 'WP Context Loop', sub: 'count N', tone: 'node' },
+          { icon: 'pi pi-sitemap', name: 'WP Context', sub: 'new picks each frame', tone: 'node' },
           { icon: 'pi pi-align-left', name: 'Prompt Assembler', sub: 'N prompts', tone: 'node' },
         ]"
-        :arrows="['iteration 1…N', '$vars']"
-        caption="The loop fans the chain out into N passes — one resolved prompt per iteration."
+        :arrows="['frame 1…N', '$vars']"
+        caption="The loop runs the chain N times and you get one prompt per frame."
       />
+      <p style="margin-top: 14px;">
+        Inside a loop you can use <VarToken>$iteration</VarToken> (the frame number, from 1) and
+        <VarToken>$iteration_total</VarToken> (the count). Both are hidden from the prompt at first. To print
+        them, switch off the globe button (for <VarToken>$iteration</VarToken>) and the Σ button
+        (for <VarToken>$iteration_total</VarToken>) next to <b>Iteration var</b> on the loop.
+      </p>
     </DocSection>
 
-    <DocSection title="Sampler seeds inside a loop">
+    <DocSection title="Give each image its own sampler seed">
       <p>
-        The loop emits a <b>list of prompts</b> — one per iteration — and ComfyUI runs the
-        downstream sampler once per prompt. But a standard <b>KSampler</b> takes a single INT
-        seed, not a list, so every iteration would be sampled with that same seed. If two
-        iterations happen to roll the exact same prompt (e.g. your wildcards landed on the same
-        options twice), the sampler produces the <em>same image</em> for both.
-      </p>
-      <p>
-        The cleanest fix is to also emit a list of seeds. Drop a <b>WP Seed List</b> between the
-        loop and your sampler:
+        A plain KSampler uses one seed for every frame. If two frames roll the same prompt, you get
+        the same image twice. Add a <b>WP Seed List</b> and wire the loop's
+        <code>loop_config</code> into it: it gives the sampler one seed per frame and matches the
+        loop's count by itself.
       </p>
       <DocFlow figure="seeds-and-loops-flow-2"
         :stages="[
           { icon: 'pi pi-replay', name: 'WP Context Loop', sub: 'N prompts', tone: 'node' },
           { icon: 'pi pi-clone', name: 'WP Seed List', sub: 'N seeds', tone: 'node' },
-          { icon: 'pi pi-image', name: 'KSampler', sub: 'N unique images', tone: 'neutral' },
+          { icon: 'pi pi-image', name: 'KSampler', sub: 'N different images', tone: 'neutral' },
         ]"
-        :arrows="['loop_config', 'paired by index']"
-        caption="Wire the loop's loop_config side-output into the Seed List; downstream the prompt list and seed list pair up by index so each iteration gets its own seed."
+        :arrows="['loop_config', 'paired in order']"
+        caption="Prompt 1 goes with seed 1, prompt 2 with seed 2, and so on."
       />
       <p style="margin-top: 14px;">
-        Connecting <code>loop_config</code> auto-matches the seed list's count + strategy to the
-        loop's, so the two lists stay the same length without manual setup. Two other workarounds
-        work too: bake <VarToken>$iteration</VarToken> into the prompt template (the prompt text
-        itself never repeats), or wire <VarToken>$iteration</VarToken> through a
-        <b>WP Var → Int</b> into the sampler's seed input — both fine for simple cases, but the
-        Seed List scales better when you want a deterministic, reproducible series.
+        Simpler options: put <VarToken>$iteration</VarToken> in the prompt so no two prompts match,
+        or send <VarToken>$iteration</VarToken> through <b>WP Var → Int</b> into the sampler's seed.
       </p>
     </DocSection>
 
-    <DocSection title="WP Context Loop">
+    <DocSection title="Make a batch you can repeat">
       <p>
-        Add a <b>WP Context Loop</b> before your WP Context and one Generate runs the whole chain
-        N times in a single click — each iteration with its own seed and its own fresh roll of
-        your wildcards. The <b>Variation strategy</b> controls how those per-iteration seeds are
-        spread:
+        Turn on <b>Override Context seed</b> on the loop. The loop then works out every frame's
+        seed from its own seed, so the same loop seed always gives the same batch. The
+        <b>strategy</b> buttons choose how those seeds are spread. It only changes which numbers are
+        used; every strategy gives each frame its own picks.
       </p>
       <DocKeyList :items="strategies" />
       <p style="margin-top: 14px;">
-        The <b>Override seed</b> toggle on the loop controls whether these strategies apply. When
-        <b>on</b>, the loop derives N seeds from the base and sets each iteration's seed
-        accordingly, making the whole batch reproducible from that one base seed. When <b>off</b>
-        (the default), each downstream Context uses its own widget seed independently and the loop
-        only provides per-iteration variation on top.
-      </p>
-      <p>
-        To compare chosen options instead of random rolls, use the loop's
-        <b>Sweep combinations</b> menu: it runs every combination of the wildcard options you pick,
-        one iteration each, and can hold everything else steady. See
-        <b>WP Context Loop</b> for details.
+        With it off (the default), each WP Context uses its own seed and the loop changes it a
+        little per frame.
       </p>
     </DocSection>
 
-    <DocSection title="Per-iteration seed locks">
+    <DocSection title="Keep the frames you liked">
       <p>
-        Both <b>WP Context Loop</b> and <b>WP Seed List</b> carry a <b>Per-iteration seeds</b>
-        button that opens a list of the seed each iteration will use. From there you can:
+        <b>Per-iteration seeds</b> (on the loop and on WP Seed List) lists the seed each frame will
+        use. Lock a frame's seed to keep it while the rest keep changing. <b>Lock all</b>,
+        <b>Copy</b> and <b>Paste</b> (as <code>#N: seed</code> lines) work on the whole list.
       </p>
-      <ul>
-        <li>
-          Lock any single iteration to a fixed seed (the rest stay derived), or <b>Lock all</b> /
-          <b>Unlock all</b> at once.
-        </li>
-        <li>
-          <b>Copy</b> / <b>Paste</b> the whole list as <code>#N: seed</code> text to reproduce a
-          series elsewhere — Alt-click <b>Copy</b> grabs only the locked rows.
-        </li>
-        <li>
-          <b>Prev</b> — lock the seed an iteration <em>actually used on the previous run</em>,
-          rather than the upcoming one.
-        </li>
-      </ul>
       <DocCallout variant="tip">
-        Reach for <b>Prev</b> after a run you liked. The list normally shows the seeds for the
-        <em>next</em> run; with control-after-generate set to <em>randomize</em>, the base seed has
-        already rotated, so those upcoming seeds won't reproduce what you just saw. Prev pins the
-        seed that iteration rolled last time — greyed out until a run has happened (and, on the
-        loop, until <b>Override seed</b> is on). So: run once, then lock the iterations worth
-        keeping.
+        After a run you liked, use <b>Prev</b>. The list shows the seeds for the next run, and with
+        randomize on those have already moved. Prev locks the seed the frame used last time. On the
+        loop it needs Override Context seed on.
       </DocCallout>
     </DocSection>
 
-    <DocSection title="Iteration variables">
-      <p>
-        Inside each loop iteration, two variables are available for your templates:
-      </p>
+    <DocSection title="Good to know">
       <ul>
-        <li>
-          <VarToken>$iteration</VarToken> — which run you are on, starting at 1 (so 1, 2, 3 … up
-          to the count).
-        </li>
-        <li>
-          <VarToken>$iteration_total</VarToken> — the total number of runs, constant across every
-          iteration.
-        </li>
+        <li><b>Count 1</b> or the loop's <b>Bypass loop</b> switch runs a single frame without
+          unwiring anything.</li>
+        <li>To drive the seed from another node, right-click the node and convert <code>seed</code>
+          to an input.</li>
+        <li>To compare chosen options instead of random ones, use the loop's
+          <b>Sweep combinations</b> (see WP Context Loop).</li>
+        <li>To change one frame on its own, see Per-iteration overrides.</li>
       </ul>
-      <p>
-        By default both are hidden from the rendered prompt. You can turn off the
-        <b>internal</b> flag for either one in the loop settings if you want them to appear in the
-        output text — for example to label each iteration's output as "frame 1 of 4".
-      </p>
-      <DocCallout variant="warn">
-        These variables are injected as internal by default, so they will not appear in your prompt
-        unless you deliberately expose them.
-      </DocCallout>
-    </DocSection>
-
-    <DocSection title="Turning the loop off">
-      <DocCallout variant="tip">
-        The loop has a <b>Bypass</b> switch that collapses it to a single run while keeping the
-        node wired — handy for comparing looped vs single output without rebuilding the graph.
-      </DocCallout>
-    </DocSection>
-
-    <DocSection title="Connecting an external seed">
-      <p>
-        You can convert the <code>seed</code> widget to an input socket and connect any integer
-        source — a Primitive node, or any other INT output. This lets you synchronise the loop
-        seed with an upstream sampler or another node.
-      </p>
     </DocSection>
 
     <DocSection title="Works with">

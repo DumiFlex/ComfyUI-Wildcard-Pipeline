@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
@@ -9,17 +10,17 @@ import VarToken from "../../../components/docs/VarToken.vue";
 import StarterButton from "../../../components/docs/StarterButton.vue";
 
 const rowFields = [
-  { term: "Name", desc: 'The $variable name to set — for example, "style" sets $style.' },
-  { term: "Value", desc: "The text to assign. You can use inline {a|b|c} pick syntax here to add a touch of randomness, but you cannot read other $variables — use Combine for that." },
-  { term: "Enable / disable", desc: "Turn a row off without deleting it. Useful for toggling optional extras like a quality booster or a negative-prompt fragment." },
+  { term: "Name", desc: 'The variable to set: "style" sets $style.' },
+  { term: "Value", desc: "The text. A {a|b|c} choice adds a little variety; other $variables can't be read here (use a Combine)." },
+  { term: "Enable / disable", desc: "Switch a row off without deleting it, such as an optional quality booster." },
 ];
 
 const instanceOptions = [
-  { term: "Value override", desc: "Replace the value of any row for this particular use, without changing the shared library entry. A row's negative can be overridden too: an empty negative clears it, and leaving it alone keeps the library's." },
-  { term: "Row toggles", desc: "Turn rows on or off for this use only, e.g. a quality booster on one node and not another." },
-  { term: "Lock seed", desc: "Freezes any inline {a|b|c} picks, so the value is the same on every Generate and every Loop frame." },
-  { term: "Hold across run", desc: "Keeps the inline picks the same for every frame of one Loop run, and rolls again next run." },
-  { term: "Hide from prompt", desc: "Writes the variables as internal: other modules read them, the Assembler leaves them out." },
+  { term: "Value override", desc: "Change a row's value, or its negative, on this node only. An empty negative clears it." },
+  { term: "Row toggles", desc: "Switch rows on or off on this node only." },
+  { term: "Lock seed", desc: "Keeps any {a|b|c} choice the same on every Generate." },
+  { term: "Hold across run", desc: "Keeps the choices the same for one loop run, and rolls again next Generate." },
+  { term: "Hide from prompt", desc: "The variables print nothing; other modules can still read them." },
 ];
 </script>
 
@@ -29,32 +30,38 @@ const instanceOptions = [
     title="Fixed Values"
     icon="pi pi-tag"
     tone="fixed_values"
-    blurb="Set one or more $variables to exact text values. The simplest way to inject a constant into the pipeline."
+    blurb="Set $variables to text you type. Nothing is rolled."
   >
     <DocSection title="What it does">
       <p>
-        A Fixed Values module lets you write plain name = value pairs into the Context. Every time
-        the pipeline runs, those <VarToken>$variables</VarToken> are set to whatever text you typed.
-        Nothing is picked at random (unless you use inline <VarToken kind="inline">{a|b|c}</VarToken>
-        syntax inside the value), and nothing depends on other modules — it just stamps the values in.
+        Fixed Values sets each <VarToken>$variable</VarToken> to the text you typed, every run.
+        Nothing is picked at random unless you write a <VarToken kind="inline">{a|b|c}</VarToken>
+        choice in the value.
       </p>
       <p>
-        Use it for anything that should stay constant: an artist style like "oil painting", a
-        quality booster like "8k, masterpiece", or a reusable negative-prompt fragment. Drop it at
-        the top of your stack and every module below can read those variables.
+        Use it for text that stays the same: a style like "oil painting", quality tags like "8k,
+        masterpiece", or words you always want in the negative. Put it at the top so every module
+        below can read it.
       </p>
       <DocImage
         src="images/docs/fixed-values.png"
-        ratio="16 / 6"
-        caption="The Starter style Fixed Values modal — two name → value rows ($style = oil painting, $quality = 8k, masterpiece) each with their own enable checkbox, footer reading '2 of 2 enabled · 1 added' to flag the instance-added row over the library baseline. Lock seed + Hide from prompt runtime toggles below. Behind the modal: a WP Context stack with Starter style (MOD-flagged orange border), Starter scene, Starter accent."
+        ratio="2 / 1"
+        caption="The Starter style fixed value: $style = oil painting, with a + negative button for negative words."
       />
-      <DocCallout variant="tip">
-        <b>Use Fixed Values</b> for constants: style and quality tags, a model's required prefix,
-        a standing negative, a switch you flip by hand. <b>Not for</b> real variety: an inline
-        <VarToken kind="inline">{watercolor|oil painting}</VarToken> here has no weights, tags,
-        constraints, fallback or Test Runner counts, so make it a Wildcard. And never let a
-        fixed value and a wildcard write the same variable: whichever runs later wins without a
-        word.
+      <DocUseWhen
+        :good="[
+          'Style and quality tags that never change',
+          'A model\'s required prefix or a standing negative',
+          'A switch you flip by hand',
+        ]"
+        :better="[
+          'Real variety: use a Wildcard (it has weights, tags, constraints and Test Runner counts)',
+          'Text built from other picks: use a Combine',
+        ]"
+      />
+      <DocCallout variant="warn">
+        Don't let a fixed value and a wildcard write the same variable: whichever runs later wins,
+        without a warning.
       </DocCallout>
     </DocSection>
 
@@ -62,23 +69,18 @@ const instanceOptions = [
       <DocKeyList :items="rowFields" />
     </DocSection>
 
-    <DocSection title="Per-use options">
-      <p>
-        When you add a Fixed Values module to a Context you can adjust it for that use:
-      </p>
+    <DocSection title="Change it for one node">
       <DocKeyList :items="instanceOptions" />
       <DocCallout variant="tip">
-        Fixed Values cannot read <VarToken>$variables</VarToken> that other modules have set — it
-        is a producer, not a consumer. If you need to build a value from earlier picks, use a
-        Combine module instead.
+        A fixed value can't read <VarToken>$variables</VarToken> other modules set. To build a value
+        from earlier picks, use a Combine.
       </DocCallout>
     </DocSection>
 
     <DocSection title="Try it">
       <p>
         Create a starter Fixed Values module that sets <VarToken>$style</VarToken> to "oil
-        painting". It's the constant the starter set's prompt template reuses every run — drop it in
-        and every module below can read it.
+        painting". The starter template prints it every run.
       </p>
       <StarterButton slot="style" />
     </DocSection>

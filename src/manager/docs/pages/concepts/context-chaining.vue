@@ -14,74 +14,57 @@ import VarToken from "../../../components/docs/VarToken.vue";
     title="Context chaining"
     icon="pi pi-share-alt"
     tone="neutral"
-    blurb="Layer multiple Contexts together — each one inherits the upstream map and overrides what it needs. Last write wins."
+    blurb="Wire one WP Context into another. The second starts with the first one's variables and can add to them or replace them."
   >
-    <DocSection title="The flow">
+    <DocSection title="How it works">
+      <p>
+        Wire a WP Context's <code>context</code> output into another Context's
+        <code>upstream</code> input. The second Context starts with every variable the first one
+        made, then runs its own modules. If it sets a variable that already exists, its value
+        wins. Everything it doesn't touch passes through as it was.
+      </p>
       <DocFlow figure="context-chaining-flow"
         :stages="[
           { icon: 'pi pi-sitemap', name: 'WP Context A', sub: 'rolls $vars', tone: 'node' },
-          { icon: 'pi pi-sitemap', name: 'WP Context B', sub: 'adds / overrides', tone: 'node' },
+          { icon: 'pi pi-sitemap', name: 'WP Context B', sub: 'adds / replaces', tone: 'node' },
           { icon: 'pi pi-align-left', name: 'Prompt Assembler', sub: 'fills template', tone: 'node' },
         ]"
         :arrows="['feeds', 'merged $vars']"
-        caption="Each Context inherits the upstream map; the last write for any $var wins."
+        caption="Each Context starts with the variables before it; the last one to set a variable wins."
       />
-    </DocSection>
-
-    <DocSection title="How chaining works">
       <p>
-        A <b>WP Context</b> node has an optional upstream input. When you connect one Context into
-        another, the downstream Context starts with all the variables the upstream already produced,
-        then runs its own modules on top. Any variable the downstream modules set replaces the
-        upstream value for that name. Variables that the downstream does not touch pass through
-        unchanged.
+        A common setup: one Context for the character and the place, a second that only sets
+        <VarToken>$style</VarToken>. Swap or bypass the second to try another style while the rest
+        stays the same. Chain as many as you like.
       </p>
-      <p>
-        This makes it easy to build a base Context (character, setting) and then add a second
-        Context that overrides only <VarToken>$style</VarToken>, leaving everything else alone.
-        You can chain as many Contexts as you like — the last value written for any variable is
-        what the Assembler receives.
-      </p>
-      <DocCallout variant="tip">
-        Use <b>WP Context Injector</b> for one-off variable overrides without adding a full new
-        Context node — it lets you route any node output into a named
-        <VarToken>$variable</VarToken> slot.
-      </DocCallout>
       <DocImage
         src="images/docs/context-chaining.png"
-        ratio="16 / 7"
-        caption="Two WP Context nodes chained into a Prompt Assembler. The upstream Context publishes Starter subject + Starter style. The downstream Context holds a single Override Style row (OVERRIDE badge) that writes $style again. Last write wins, so the assembler reads the override $style while $subject flows through unchanged, resolving 'A picture of a cat, in the style of minimalist line art'."
+        ratio="16 / 6"
+        caption="Two chained WP Contexts: the first sets $subject and $mood, the second adds $hair and $pose, and one Assembler reads all four."
       />
-    </DocSection>
-
-    <DocSection title="Internal variables survive the chain">
-      <p>
-        When you mark a variable as <b>internal</b> in a module's settings, it travels through
-        the chain to downstream Contexts and combine/derivation modules — it is only hidden at
-        the very end, when the Assembler renders the final prompt string. This means a variable
-        you need for intermediate calculations can be internal from the start, passing through as
-        many chained Contexts as you like, and it still will not appear in the rendered prompt.
-      </p>
-    </DocSection>
-
-    <DocSection title="Constraint modules cross chain boundaries">
-      <p>
-        A constraint module placed in one Context can still apply to a wildcard in a later
-        Context downstream. You can even create a dedicated "constraints" Context that does nothing
-        but hold constraint modules, and chain it before the Context with the target wildcards —
-        the constraints fire when those wildcards roll, exactly as if they were in the same Context.
-      </p>
       <DocCallout variant="tip">
-        Separating constraints into their own Context keeps your module stacks readable when you
-        have complex pairing rules across many wildcards.
+        To add a single value from the canvas, such as typed text or a caption, a
+        <b>WP Context Injector</b> is lighter than a whole Context.
       </DocCallout>
+    </DocSection>
+
+    <DocSection title="Good to know">
+      <ul>
+        <li><b>Hidden variables</b> stay hidden down the whole chain, and later Contexts can still
+          read them.</li>
+        <li><b>Constraints</b> work across Contexts: a constraint in one Context can change the odds
+          of a wildcard in a later one, as long as the source wildcard comes before the constraint.
+          You can keep all your constraints in a Context of their own, between the one with the
+          sources and the one with the targets.</li>
+        <li>WP Debug shows which Context set each variable.</li>
+      </ul>
     </DocSection>
 
     <DocSection title="Works with">
       <CrossLinks
         :links="[
           { id: 'wp-context', label: 'WP Context', icon: 'pi pi-sitemap', tone: 'node' },
-          { id: 'internal-variables', label: 'Internal variables', icon: 'pi pi-share-alt', tone: 'neutral' },
+          { id: 'internal-variables', label: 'Hidden variables', icon: 'pi pi-share-alt', tone: 'neutral' },
           { id: 'constraints', label: 'Constraints in depth', icon: 'pi pi-share-alt', tone: 'neutral' },
         ]"
       />

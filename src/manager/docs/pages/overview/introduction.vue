@@ -17,16 +17,16 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
     title="Introduction"
     icon="pi pi-compass"
     tone="neutral"
-    blurb="Wildcard Pipeline is a ComfyUI extension that builds varied, structured prompts from a set of named modules — no manual editing between generations."
+    blurb="Wildcard Pipeline builds a different prompt every run from lists and rules you set up once."
   >
     <div class="wp-doc-starter-cta">
       <div class="wp-doc-starter-cta__body">
         <span class="wp-doc-starter-cta__eyebrow"><i class="pi pi-bolt" aria-hidden="true" /> New here?</span>
         <h2 class="wp-doc-starter-cta__title">Build a runnable starter set in one click</h2>
         <p class="wp-doc-starter-cta__sub">
-          Creates a complete, working example — two wildcards, a fixed value, a combine, a
-          derivation, and a constraint, packaged into a bundle (plus a matching prompt template).
-          Drop it into a WP Context and generate, then open any piece to see how it's built.
+          Makes a small working example: two wildcards, a fixed value, a combine, a derivation and a
+          constraint in one bundle, plus a template. Add it to a WP Context, generate, then open any
+          piece to see how it's built.
         </p>
       </div>
       <StarterButton slot="bundle" />
@@ -34,74 +34,66 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
 
     <DocSection title="What does it do?">
       <p>
-        Each time you press Generate, Wildcard Pipeline randomly picks from your
-        lists, combines the results, and drops them into a prompt template. You
-        get a different, meaningful prompt every run without touching the text.
+        Each time you press Generate, Wildcard Pipeline picks from your lists, follows your rules
+        and fills in your prompt. You get a different prompt every run without typing.
       </p>
       <p>
-        A simple example: you have a wildcard called "subject" with options
-        <em>a cat</em>, <em>a dog</em>, and <em>a fox</em>. Your template reads
-        <VarToken>A photo of $subject</VarToken>. Each generation picks one
-        animal and assembles the final prompt for you.
+        For example: a wildcard called "subject" holds <em>a cat</em>, <em>a dog</em> and <em>a
+        fox</em>. Your template says <VarToken>A photo of $subject</VarToken>. Each run picks one
+        animal and writes the prompt.
       </p>
     </DocSection>
 
     <DocSection title="How the pieces fit together">
       <p>
-        There are three nodes you connect in ComfyUI:
+        You wire three nodes in ComfyUI:
       </p>
       <ul>
         <li>
-          <b>WP Context</b> — holds your modules (wildcards, fixed values,
-          combines, etc.) and resolves them into a map of
-          <VarToken>$variables</VarToken> on every run.
+          <b>WP Context</b> holds your modules (wildcards, fixed values, combines and so on) and
+          turns them into <VarToken>$variables</VarToken> every run.
         </li>
         <li>
-          <b>WP Prompt Assembler</b> — takes the variable map and fills your
-          template string, producing a ready-to-use prompt.
+          <b>WP Prompt Assembler</b> fills your template with those variables.
         </li>
         <li>
-          <b>CLIP Text Encode</b> (standard ComfyUI node) — receives the
-          assembled prompt and feeds it into your sampler.
+          <b>CLIP Text Encode</b>, the normal ComfyUI node, takes the prompt to your sampler.
         </li>
       </ul>
-      <DocFigure figure="introduction-figure" caption="Modules resolve inside WP Context → named $variables → WP Prompt Assembler → CLIP.">
+      <DocFigure figure="introduction-figure" caption="Modules run in the WP Context, which passes $variables to the Assembler, which passes the prompt to CLIP.">
         <PipelineDiagram />
       </DocFigure>
     </DocSection>
 
     <DocSection title="What are modules?">
       <p>
-        Modules are the building blocks you author in this manager. Each module
-        produces (or shapes) one <VarToken>$variable</VarToken> in the context:
+        Modules are the pieces you build in this manager. Each one sets or changes
+        <VarToken>$variables</VarToken>:
       </p>
       <ul>
-        <li><DocRef id="wildcard" /> — a list of options; one is picked at random each run.</li>
-        <li><DocRef id="fixed-values" /> — always outputs the same value.</li>
-        <li><DocRef id="combine" /> — joins several variables into one string.</li>
-        <li><DocRef id="derivation" /> — IF/ELSE rules that write or change variables based on what was picked.</li>
-        <li><DocRef id="constraint" /> — changes the odds of a later wildcard's options based on what an earlier wildcard picked: boost, reduce, exclude or allow only some.</li>
+        <li><DocRef id="wildcard" />: a list of options; one is picked each run.</li>
+        <li><DocRef id="fixed-values" />: text that stays the same.</li>
+        <li><DocRef id="combine" />: builds one phrase from several variables.</li>
+        <li><DocRef id="derivation" />: if/then rules that change variables based on what was picked.</li>
+        <li><DocRef id="constraint" />: makes some options of a later wildcard likelier or rule them out, based on an earlier pick.</li>
       </ul>
       <DocCallout variant="tip">
-        You create and edit modules here in the manager. You then add them to a
-        WP Context node on the ComfyUI canvas.
+        Make and edit modules here in the manager, then add them to a WP Context on the canvas.
       </DocCallout>
     </DocSection>
 
     <DocSection title="A finished graph">
       <DocImage
         src="images/docs/introduction-graph.png"
-        ratio="16 / 6"
-        caption="The smallest working pipeline, end to end. WP Context with one Starter subject wildcard → WP Prompt Assembler holding template 'picture of a $subject' (resolved preview shows 'picture of a cat') → CLIP Text Encode (Prompt) → KSampler. Four nodes, one wildcard, one prompt: everything else in the docs is variations on this skeleton."
+        ratio="16 / 7"
+        caption="The whole pipeline: a WP Context holding the Starter set bundle, then WP Prompt Assembler, CLIP Text Encode and KSampler."
       />
     </DocSection>
 
     <DocSection title="Good to know">
       <DocCallout variant="tip">
-        Right-click is your friend. Most WP nodes — and the rows inside their widgets — carry a
-        context menu: push a module to the library, sync a drifted one, bypass, duplicate, and
-        more. If something looks interactive, try right-clicking it too; a lot of the handy stuff
-        is tucked in there.
+        Try right-clicking. Most WP nodes, and the rows inside them, have a menu: save a row to
+        the library, pull in a library change, duplicate, and more.
       </DocCallout>
     </DocSection>
 

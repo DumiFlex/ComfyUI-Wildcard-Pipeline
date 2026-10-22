@@ -463,8 +463,24 @@ const antiPatterns: string[] = [
     title="Recommended pack structure"
     icon="pi pi-th-large"
     tone="neutral"
-    blurb="How to lay out a pack so every feature does the job it is best at: which part is a decision, a detail, a rule or a constant, which feature fits which job, and blueprints to copy."
+    blurb="Plan a pack, pick the right feature for each job, and copy a blueprint."
   >
+    <DocSection title="Plan your first pack">
+      <ol>
+        <li><b>Write one prompt you like</b> by hand, such as "a woman with red hair in a raincoat,
+          rainy street at night, film photo".</li>
+        <li><b>Mark what should change.</b> Hair colour, outfit, place, time of day: each becomes a
+          wildcard. What stays (film photo) becomes a fixed value.</li>
+        <li><b>Mark what must fit together.</b> A raincoat goes with rain, not a beach. That's a
+          constraint, or a derivation when it only adds words.</li>
+        <li><b>Write the template</b> with the variables in place:
+          <VarToken>a woman with $hair hair in $outfit, $place, $style</VarToken>.</li>
+        <li><b>Test it</b> in the Test Runner over a few hundred seeds and fix what looks wrong.
+          Then save the modules as a bundle.</li>
+      </ol>
+      <p>The rest of this page is the longer version, with blueprints to copy.</p>
+    </DocSection>
+
     <DocSection title="The idea in one minute">
       <p>
         A pack works best when each feature does one kind of job. Sort every part of your prompt

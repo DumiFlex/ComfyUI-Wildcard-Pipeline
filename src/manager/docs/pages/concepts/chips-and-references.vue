@@ -18,7 +18,7 @@ const chipStates = [
   },
   {
     term: "Broken",
-    desc: "A red chip with a ? icon: the reference points at a module id that isn't in your library (a placeholder, a deleted module, or one never imported here). Hover shows the name it carries, when the reference stored one. Click it to point it at another module. The editors also outline the field and mark its row (an option, a derivation branch) in red, so you can find it in a long table. At run time it produces nothing and the run reports an \"Unresolved reference\" warning.",
+    desc: "A red chip with a ? icon: the reference points at a module id that isn't in your library (a placeholder, a deleted module, or one never imported here). Hover shows the name it carries, when the reference stored one. Click it to point it at another module. The editors also outline the field and mark its row (an option, a derivation branch) in red, so you can find it in a long table. At run time it produces nothing and the run reports a \"Reference not found\" warning.",
   },
 ];
 </script>
@@ -29,7 +29,7 @@ const chipStates = [
     title="Chips & references"
     icon="pi pi-tag"
     tone="neutral"
-    blurb="How text fields show variables (coloured text) and references (chips), the three states a chip shows, the @{…} reference syntax, and the sub-category filter grammar (not / and / or / parentheses)."
+    blurb="How text fields show $variables and @{…} references, what a red chip means, and how to write a tag filter (not, and, or, brackets)."
   >
     <DocSection title="Variables and chips">
       <p>
@@ -62,12 +62,12 @@ const chipStates = [
     <DocSection title="The three states">
       <DocKeyList :items="chipStates" />
       <DocCallout variant="tip">
-        A variable never turns red in the library just because nothing produces it yet:
-        variables can be set at run time (by an injector, a loop, or a Context further up the
-        chain). Its hover says <i>binds at runtime</i>. On the canvas, where the graph is known,
-        a name nothing upstream writes is red with a wavy underline and its hover says <i>no
-        upstream producer</i>. An accessor like <VarToken>$outfit.SHOES</VarToken> whose axis
-        the wildcard doesn't declare is underlined too, because it would render empty.
+        In the library a variable never turns red just because nothing sets it yet: an Injector,
+        a loop or an earlier Context may set it when it runs. Its hover says <i>binds at
+        runtime</i>. On the canvas, where the wiring is known, a name nothing before it sets gets
+        a red wavy underline (hover: <i>no upstream producer</i>). So does
+        <VarToken>$outfit.SHOES</VarToken> when SHOES isn't an accepts group, because it would
+        print nothing.
       </DocCallout>
     </DocSection>
 
@@ -87,7 +87,7 @@ const chipStates = [
         <VarToken>$</VarToken> and the name, e.g. <VarToken>$lighting</VarToken>, then a space or
         a comma (or press Enter when the list is empty). The name is
         filled in by
-        whatever module later writes <VarToken>$lighting</VarToken>. Until then it renders empty
+        whatever module later writes <VarToken>$lighting</VarToken>. Until then it prints nothing
         and the Assembler marks it as missing, which is a handy to-do marker while you build a
         template ahead of its modules.
       </p>
@@ -120,8 +120,8 @@ const chipStates = [
           <tr>
             <td>id</td>
             <td><VarToken kind="ref">@{abcd1234}</VarToken></td>
-            <td>The module's 8 lowercase hex characters. This is what the engine resolves, so
-              renaming the target never breaks the reference.</td>
+            <td>The module's 8-character id. The reference follows the id, so renaming the
+              wildcard never breaks it.</td>
           </tr>
           <tr>
             <td><code>#name</code></td>
@@ -145,17 +145,17 @@ const chipStates = [
       </table>
       <p>
         Where a plain name is enough, reach for a variable instead: <VarToken>$mood</VarToken>
-        reads the value an upstream wildcard already picked, while
+        reads the value a wildcard above already picked, while
         <VarToken kind="ref">@{…}</VarToken> rolls the referenced wildcard again, on the spot,
         from its (optionally filtered) pool.
       </p>
     </DocSection>
 
-    <DocSection title="Filter expression grammar">
+    <DocSection title="Writing a filter">
       <p>
-        A filter is plain boolean English over the referenced wildcard's sub-category names. Each
-        option is tested against its own tags, and it stays in the pool when the expression is
-        true.
+        A filter is a short sentence of tag names joined by <code>not</code>, <code>and</code> and
+        <code>or</code>. Each option is checked against its own tags and stays in when the
+        sentence is true.
       </p>
       <table class="wp-doc-syntax-table">
         <thead>
@@ -193,7 +193,7 @@ const chipStates = [
       </table>
       <ul>
         <li>
-          <b>Precedence:</b> <code>not</code> binds tightest, then <code>and</code>, then
+          <b>Order:</b> <code>not</code> goes first, then <code>and</code>, then
           <code>or</code>. So <code>a or b and c</code> means <code>a or (b and c)</code>. Use
           parentheses whenever you mean something else; they nest to any depth.
         </li>
@@ -216,8 +216,8 @@ const chipStates = [
         The filter picker checks the expression as you type. It shows how the expression
         <b>reads as</b> (fully parenthesised where it matters), how many options match, and flags
         an unknown sub-category with a <i>did you mean</i> fix. If a valid filter matches no
-        option, the reference resolves to empty at run time and raises a
-        <i>Sub-category filter matched nothing</i> warning that lists the tags the pool actually
+        option, the reference prints nothing when you run and raises a
+        <i>Filter matched no options</i> warning that lists the tags the wildcard actually
         has (see <DocRef id="warning-types" />).
       </p>
     </DocSection>

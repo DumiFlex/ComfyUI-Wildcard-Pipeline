@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 </script>
@@ -9,70 +9,49 @@ import VarToken from "../../../components/docs/VarToken.vue";
 <template>
   <DocPage
     group="How it connects"
-    title="Internal variables"
+    title="Hidden variables"
     icon="pi pi-share-alt"
     tone="neutral"
-    blurb="Mark a $variable as internal to keep it out of the rendered prompt while still making it available for downstream combine/derivation logic."
+    blurb="Hide a $variable from the prompt while other modules can still use it."
   >
-    <DocSection title="What internal means">
+    <DocSection title="What it does">
       <p>
-        When you mark a module as <b>internal</b> in its settings, all the variables it produces
-        are hidden from the final rendered prompt. They still travel through the whole pipeline —
-        you can read them in combine and derivation modules further down the chain — but they are
-        removed just before the Assembler turns the template into text, so they never appear in
-        the output.
+        Click the <b>globe</b> on a row (or switch on <b>Hide from prompt</b> in its editor) and the
+        row's variables print nothing in the prompt. Combines, derivations, constraints and later
+        Contexts can still read them. The docs and older messages also call this <i>internal</i>.
       </p>
       <p>
-        A typical use: a wildcard picks a lighting key code like
-        <VarToken>$_lighting_key</VarToken>, marked internal. A derivation module then uses that
-        key to produce a human-readable <VarToken>$lighting</VarToken> description. Only the
-        description reaches the prompt; the key code stays hidden.
+        An example: a hidden <VarToken>$season</VarToken> wildcard picks "winter". A combine below
+        it writes <VarToken>$coat</VarToken> as "a $season coat", and a derivation sets
+        <VarToken>$weather</VarToken> to "snowing" when the season is winter. The prompt gets the coat
+        and the weather, but never the bare word "winter".
       </p>
-    </DocSection>
-
-    <DocSection title="Internal variables survive chaining">
-      <p>
-        Internal variables are only removed at the <em>render</em> step inside the Assembler —
-        not when a Context passes its output to the next node. This means a variable set as
-        internal in <b>Context A</b> is still readable by a derivation in <b>Context B</b>
-        downstream. Only the final Assembler hides it from the prompt.
-      </p>
-      <DocCallout variant="tip">
-        You can set a variable internal in an early Context and use it as a building block in
-        every subsequent Context in the chain — it will never pollute your rendered prompt.
-      </DocCallout>
+      <DocUseWhen
+        :good="[
+          'A pick that decides other picks but shouldn\'t print, like a season, a class or a rating level',
+          'Numbers a WP Var node reads',
+        ]"
+        :better="[
+          'Leaving a variable out of one template: just don\'t write it in that template',
+        ]"
+      />
     </DocSection>
 
     <DocSection title="Good to know">
       <ul>
-        <li>In a module's settings the switch is called <b>Hide from prompt</b>.</li>
-        <li>
-          The flag belongs to the write, not the name. If a later module writes the same variable
-          without Hide from prompt, the variable prints again.
-        </li>
-        <li>
-          An internal variable in the Assembler template renders nothing, and the Assembler warns
-          about an unknown variable. To print a driver, read it in a combine
-          (<VarToken>$_season coat</VarToken>) and print the combine's variable.
-        </li>
-        <li>Internal variables add nothing to the Assembler's negative output.</li>
+        <li>A hidden variable stays hidden through chained Contexts. Only the Assembler drops it,
+          so a later Context can still read it.</li>
+        <li>Hiding belongs to the row that wrote the value. If a later module writes the same
+          variable without hiding it, it prints again.</li>
+        <li>Written in an Assembler template, a hidden variable prints nothing and shows as
+          missing. To print something built from it, use a combine and print the combine's
+          variable.</li>
+        <li>A hidden variable adds nothing to the Assembler's negative output.</li>
+        <li>WP Context Loop's <VarToken>$iteration</VarToken> and
+          <VarToken>$iteration_total</VarToken> are hidden by default. Click their globe buttons on
+          the loop to print them, for example to caption a frame "1 of 4".</li>
+        <li>WP Model Info's variables are hidden by default too; switch them on the same way.</li>
       </ul>
-      <DocCallout variant="tip">
-        <b>Use it for</b> drivers: a pick that decides other picks (through constraints) but
-        should not print itself, like a season, a class or a rating level, and for numbers a WP
-        Var node reads. <b>Not for</b> hiding a variable from one template only: simply leave it
-        out of that template.
-      </DocCallout>
-    </DocSection>
-
-    <DocSection title="Loop iteration variable flags">
-      <p>
-        The <VarToken>$iteration</VarToken> and <VarToken>$iteration_total</VarToken> variables
-        injected by <b>WP Context Loop</b> each have their own internal flag in the loop
-        configuration. By default both are internal, so they do not show up in the rendered
-        prompt. Turn off the flag for either one if you want it to appear — for example, to
-        caption outputs with "frame 1 of 4".
-      </p>
     </DocSection>
 
     <DocSection title="Works with">
@@ -80,6 +59,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
         :links="[
           { id: 'context-chaining', label: 'Context chaining', icon: 'pi pi-share-alt', tone: 'neutral' },
           { id: 'wp-prompt-assembler', label: 'WP Prompt Assembler', icon: 'pi pi-align-left', tone: 'node' },
+          { id: 'combine', label: 'Combine', icon: 'pi pi-link', tone: 'combine' },
         ]"
       />
     </DocSection>

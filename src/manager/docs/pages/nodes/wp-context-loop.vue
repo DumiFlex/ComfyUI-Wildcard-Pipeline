@@ -1,18 +1,25 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocDetails from "../../../components/docs/DocDetails.vue";
+import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
 const controls = [
-  { term: "Count", desc: "How many variations to make in one run (1–999). Set it to 1 to switch looping off without removing the node." },
-  { term: "Seed", desc: "The starting point for the batch. Change it for a different set of variations; keep it the same to reproduce the same batch. Right-click → Convert widget to input to drive it from another seed node." },
-  { term: "Override seed", desc: "On: the loop chooses the seed for every iteration, so the whole batch is reproducible from this one seed. Off (default): each WP Context keeps using its own seed and the loop just nudges it per iteration." },
-  { term: "Variation strategy", desc: "How the per-iteration seeds are worked out. Hashed (default) spreads them with a hash; Sequential walks seed, seed+1, seed+2… so the seeds are easy to read out and quote; Prime stride takes large even jumps. The strategy changes which seeds are used, not how varied the results are: every strategy gives each frame its own unrelated roll." },
-  { term: "Bypass", desc: "The node's own on/off switch. When on, the loop collapses to a single run but stays wired, so you can flip it back without rebuilding the graph." },
+  { term: "seed", desc: "The loop's own seed. Only used when Override Context seed is on." },
+  { term: "count", desc: "How many frames one Generate makes (1–999). 1 switches looping off without unwiring the node." },
+  { term: "Strategy", desc: "hash, sequential or stride: how the frame seeds are worked out when Override Context seed is on. See Seeds & loops." },
+  { term: "Per-iteration seeds", desc: "The seed each frame will use. Lock single frames, Lock all, Copy / Paste, or Prev to keep the seed a frame used last run. Locks need Override Context seed on." },
+  { term: "Sweep combinations", desc: "Run every combination of the options you pick instead of random rolls. See below." },
+  { term: "Edit frame", desc: "The base / #1 #2 … chips. Pick a frame to change just that frame (see Per-iteration overrides). Ctrl-click skips a frame, Alt-click locks its seed." },
+  { term: "Override Context seed", desc: "On: the loop sets every frame's seed from its own seed, so the batch can be repeated. Off (default): each WP Context keeps its own seed and the loop changes it a little per frame." },
+  { term: "Iteration var", desc: "The name of the frame-number variable ($iteration). The globe and Σ buttons hide or show $iteration and $iteration_total in the prompt." },
+  { term: "Bypass loop", desc: "Runs a single frame while the node stays wired." },
 ];
 </script>
 
@@ -23,158 +30,108 @@ const controls = [
     icon="pi pi-replay"
     tone="node"
     node-id="WP_ContextLoop"
-    blurb="Generate several variations in one click. Place it before your WP Context and a single Generate runs the whole workflow N times automatically."
+    blurb="Make several variations in one click. Put it before your WP Context and one Generate runs the workflow N times."
   >
-    <DocSection title="What it's for">
+    <DocSection title="What it does">
       <p>
-        Normally one Generate runs the whole chain once — one WP Context, one resolved prompt.
-        Put a <b>WP Context Loop</b> in front of your WP Context and a single Generate re-runs the
-        chain N times instead, re-rolling your wildcards each pass, so one click yields N different
-        Contexts and prompts (and whatever your sampler renders downstream from each). Set the count
-        to 8, press Generate once, and compare eight variations. No repeated queueing, no batch node
-        to wire.
+        Set the <b>count</b> to 8, press Generate once, and you get eight prompts (and eight images
+        from your sampler), each with its own picks. No queueing the same workflow by hand.
       </p>
+      <DocUseWhen
+        :good="[
+          'A batch of variations from one click',
+          'A story told over several frames',
+          'Comparing chosen options side by side (Sweep)',
+        ]"
+        :better="[
+          'Just giving the sampler a new seed per frame: add WP Seed List',
+        ]"
+      />
       <DocImage
         src="images/docs/wp-context-loop-graph.png"
-        ratio="16 / 6"
-        caption="WP Context Loop (seed 42 fixed, count 4, hash strategy, $iteration var) → WP Context (Starter subject + Starter style) → WP Prompt Assembler with template '$iteration of $iteration_total: A picture of a $subject, in the style of $style' → Show Any. Show Any prints four numbered lines side-by-side: '1 of 4: A picture of a cat, in the style of oil painting', dog, dog, wolf — one resolved prompt per loop pass before the chain hands them downstream to a sampler."
+        ratio="16 / 7"
+        caption="WP Context Loop (count 4) → WP Context → WP Prompt Assembler using $iteration of $iteration_total → one prompt per frame."
       />
+    </DocSection>
+
+    <DocSection title="Set it up">
+      <ol>
+        <li>Add <b>WP Context Loop</b> and wire its <code>context</code> output into your first
+          WP Context's <code>upstream</code>.</li>
+        <li>Set <b>count</b>.</li>
+        <li>Optional: add a <b>WP Seed List</b> on <code>loop_config</code> so each image also gets
+          its own sampler seed.</li>
+      </ol>
+      <DocCallout variant="warn">
+        Without a Seed List, a plain KSampler uses one seed for every frame. Two frames that roll the
+        same prompt then give the same image.
+      </DocCallout>
     </DocSection>
 
     <DocSection title="The controls">
       <DocKeyList :items="controls" />
     </DocSection>
 
-    <DocSection title="Per-iteration control">
-      <p>
-        Two more controls open finer, per-iteration tuning of the batch:
-      </p>
-      <ul>
-        <li>
-          <b>Per-iteration seeds</b> — the seed list for the run. Lock individual iterations,
-          <b>Lock all</b> / <b>Unlock all</b>, <b>Copy</b> / <b>Paste</b> the series as
-          <code>#N: seed</code> text, or <b>Prev</b> to lock the seed an iteration actually used on
-          the previous run. These locks take effect when <b>Override seed</b> is on.
-        </li>
-        <li>
-          <b>Edit frame</b> — the <code>base / #1 #2 …</code> chip row. Pick a frame and the module
-          editors switch to editing just that frame, recording a per-frame override — narrowed
-          wildcard options, a tweaked template, a per-frame seed lock, or a per-frame enable/disable.
-          <code>base</code> edits the default every frame without an override uses. Ctrl-click a
-          frame chip to bypass that frame (the kept frames keep their numbers), and Alt-click it to
-          lock its seed. Overrides stay on the canvas: bundles don't save them and the Test Runner
-          doesn't run them.
-        </li>
-      </ul>
-    </DocSection>
-
     <DocSection title="Sweep combinations">
       <p>
-        Open <b>Sweep combinations</b> from the loop node and switch it on to compare options side
-        by side instead of rolling them. Pick one or more wildcards from the WP Context nodes after the loop, choose which of their
-        options to include, and the loop runs <em>every combination</em>, one frame each. Sweep
-        <VarToken>$hair</VarToken> (3 options) against <VarToken>$mood</VarToken> (2 options) and a
-        single Generate makes 6 frames: red + calm, red + sad, blue + calm, and so on. The menu
-        shows the total and lists every frame before you run, the node's button shows the frame
-        count, and the count widget follows it. Above each wildcard's options, <b>all</b> ticks
-        every option, <b>none</b> clears them so you can tick just the few you want, and
-        <b>enabled only</b> goes back to the options enabled in the wildcard. A wildcard with
-        nothing ticked sweeps nothing until you tick one.
+        Instead of random rolls, run every combination of the options you choose. Open
+        <b>Sweep combinations</b>, switch it on and add wildcards from the WP Contexts after the
+        loop. Sweep <VarToken>$hair</VarToken> (3 options) against <VarToken>$mood</VarToken>
+        (2 options) and one Generate makes 6 frames: red + calm, red + sad, blue + calm, and so on.
+        The window shows the total and lists every frame before you run.
       </p>
-      <ul>
-        <li>
-          <b>Order</b> — the first wildcard changes slowest and the last one fastest, so a
-          two-wildcard sweep reads like a grid: one row per option of the first, one column per
-          option of the second. Use the arrow to reorder.
-        </li>
-        <li>
-          <b>Limit</b> — the most frames a sweep runs (64 by default, up to 999). When the
-          combinations outnumber it, the loop runs the first ones in order and says so.
-        </li>
-        <li>
-          <b>Hold other picks</b> (on by default) — everything you are not sweeping keeps the same
-          pick on every frame, so the only thing that changes is what you swept. Turn it off to let
-          the rest re-roll per frame as in a normal loop.
-        </li>
-      </ul>
-      <p>
-        Each frame pins the swept wildcards (the sweep is the only thing that pins a pick; the
-        node has no pin control), so their tag axes still roll and constraints they drive still
-        apply downstream. A swept wildcard is not itself re-weighted by constraints, because the
-        sweep decides its pick: sweeping a constraint target shows pairs the pack forbids. Frame bypass and
-        per-frame overrides work as usual. Changing the sweep moves each seed lock and bypassed
-        frame with its combination, and drops it when that combination no longer runs; lowering
-        the count drops the ones past it.
-      </p>
+      <DocImage
+        src="images/docs/loop-sweep.png"
+        ratio="2 / 1"
+        caption="The Sweep window: $subject (4 options) × $hair (4 options) = 16 combinations, each listed as a frame."
+      />
+      <DocKeyList
+        :items="[
+          { term: 'all / none / enabled only', desc: 'Quick ways to tick a wildcard\'s options. A wildcard with nothing ticked isn\'t swept.' },
+          { term: 'Order', desc: 'The first wildcard changes slowest, so two wildcards read like a grid. Use the arrows to reorder.' },
+          { term: 'Limit', desc: 'The most frames a sweep runs (64 by default, up to 999). Past it, the first combinations run and the window says so.' },
+          { term: 'Hold other picks', desc: 'On by default: everything you aren\'t sweeping keeps one pick on every frame, so only the swept part changes.' },
+        ]"
+      />
       <DocCallout variant="tip">
-        For a clean comparison, keep the sampler on one fixed seed (a plain KSampler already does),
-        so the image only changes where the prompt does.
+        Keep the sampler on one fixed seed for a clean comparison, so the image only changes where
+        the prompt does.
       </DocCallout>
+      <DocDetails>
+        <p>
+          A swept wildcard's pick is set by the sweep, so constraints don't change its odds. That
+          means sweeping a constraint's target can show pairs your pack normally rules out.
+          Constraints it drives still apply to the wildcards after it, and its tags still roll.
+        </p>
+        <p>
+          Skipped frames and seed locks move with their combination when you change the sweep, and
+          are dropped when that combination no longer runs.
+        </p>
+      </DocDetails>
     </DocSection>
 
-    <DocSection title="Iteration variables">
+    <DocSection title="Frame numbers in the prompt">
       <p>
-        Each run, the loop hands you two variables to drop into your prompt template or any combine:
-      </p>
-      <ul>
-        <li>
-          <VarToken>$iteration</VarToken> — which run you're on, starting at 1 (1, 2, 3 … up to the
-          count). Handy for labelling outputs.
-        </li>
-        <li>
-          <VarToken>$iteration_total</VarToken> — the total number of runs. Same on every iteration.
-        </li>
-      </ul>
-      <p>
-        For example, a template of
-        <VarToken>frame $iteration of $iteration_total — $subject</VarToken> renders
-        “frame 1 of 4 — a fox”, “frame 2 of 4 — a cat”, and so on. These two variables stay out of
-        the rendered prompt by default — switch their <b>internal</b> flag off in the loop config
-        if you want them to appear in the text.
+        <VarToken>$iteration</VarToken> is the frame number (from 1) and
+        <VarToken>$iteration_total</VarToken> the count. A template of
+        <VarToken>frame $iteration of $iteration_total, $subject</VarToken> gives "frame 1 of 4, a
+        fox", "frame 2 of 4, a cat" and so on. Both are hidden from the prompt until you switch off
+        the globe and Σ buttons; while hidden you can still use them in derivation rules.
       </p>
       <DocImage
         src="images/docs/wp-context-loop-grid.png"
         ratio="16 / 7"
-        caption="The full looped workflow rendered: WP Context Loop + WP Context + WP Prompt Assembler feed a KSampler whose seeds come from a WP Seed List on the loop's config, and a second assembler ('iteration $iteration of $iteration_total') drives an Add Text Overlay. The result is a 2×2 grid of four portraits (a dog, a cat, a dog, a wolf) labelled 'iteration 1 of 4' through 'iteration 4 of 4': one image per pass, each with its own prompt and seed."
+        caption="A full looped workflow with a WP Seed List on the sampler: four portraits labelled 'iteration 1 of 4' to 'iteration 4 of 4', each with its own prompt and seed."
       />
     </DocSection>
 
     <DocSection title="Good to know">
-      <DocCallout variant="tip">
-        A module with a <b>locked seed</b> (Lock pick on a wildcard) ignores the loop: it makes
-        the same pick every iteration, and on every Generate. Useful for holding one thing steady
-        (say, the art style) while everything else varies. <b>Hold across run</b> does the same
-        for one run and rolls again on the next.
-      </DocCallout>
-      <DocCallout variant="tip">
-        <b>Use the loop</b> for a batch of variations, a story told over frames, or a sweep that
-        compares options side by side. <b>Not for</b> sampler seeds alone: WP Seed List gives each
-        frame its own sampler seed, and the loop's Override seed plus seed locks keep keeper
-        frames reproducible (the locks are ignored while Override seed is off).
-      </DocCallout>
-      <DocCallout variant="warn">
-        The loop emits a <b>list of prompts</b> — one per iteration. Downstream samplers run once
-        per prompt, but a standard <b>KSampler</b> takes a <em>single</em> seed (not a list), so
-        every iteration is sampled with that same seed. If two iterations happen to roll the exact
-        same prompt string (e.g. your wildcards landed on the same options twice), the sampler
-        produces the <em>same image</em> for both. Three ways to keep every output distinct:
-        <ul style="margin-top: 8px; margin-bottom: 0;">
-          <li>
-            Drop a <b>WP Seed List</b> between the loop and your sampler (cleanest). It emits
-            a list of N seeds — one per iteration — that pairs with the loop's prompts so each
-            (prompt, seed) combination is unique. Wire its <code>loop_config</code> input from
-            the loop's side output and it auto-matches the loop's count + strategy.
-          </li>
-          <li>
-            Bake <VarToken>$iteration</VarToken> into the prompt template — it never repeats,
-            so the prompt text is always unique.
-          </li>
-          <li>
-            Wire <VarToken>$iteration</VarToken> through a <b>WP Var → Int</b> into the
-            sampler's seed input so each iteration also gets its own seed.
-          </li>
-        </ul>
-      </DocCallout>
+      <ul>
+        <li>A module on <b>Lock pick</b> / <b>Lock seed</b> keeps its pick on every frame.
+          <b>Hold across run</b> keeps it for one Generate. See <DocRef id="seeds-and-loops" />.</li>
+        <li>Per-frame changes stay on the canvas: bundles don't save them and the Test Runner
+          doesn't run them.</li>
+      </ul>
     </DocSection>
 
     <DocSection title="Works with">

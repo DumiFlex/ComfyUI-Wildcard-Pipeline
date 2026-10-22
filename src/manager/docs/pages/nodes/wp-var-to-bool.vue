@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
@@ -8,11 +9,11 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
 const controls = [
-  { term: "context (in)", desc: "The upstream Context carrying the $variable you want to read." },
-  { term: "var_name", desc: "Pick the $variable to parse from the dropdown. The list updates automatically with every variable available in the upstream Context." },
-  { term: "index", desc: "Which boolean token to use when the variable contains more than one recognised value. 0 gives the first match, 1 the second. Words like \"maybe\" or numbers like 1.5 are ignored and do not count toward the index." },
-  { term: "default", desc: "The value to use when the variable is missing or contains no recognised boolean words. The node never errors — it always falls back to this." },
-  { term: "value (out)", desc: "The parsed boolean, ready to wire into any node that accepts BOOLEAN — sampler toggles, switch nodes, and so on." },
+  { term: "context (in)", desc: "The Context that holds the $variable." },
+  { term: "var_name", desc: "The $variable to read. The list shows every variable the wired Context has." },
+  { term: "index", desc: "Which yes/no word to use when there are several: 0 is the first, 1 the second. Other words don't count." },
+  { term: "default", desc: "Used when the variable is missing or has no yes/no word. The node never stops the run; it uses this instead." },
+  { term: "value (out)", desc: "True or false, for any BOOLEAN input: a switch node, a toggle and so on." },
 ];
 </script>
 
@@ -23,30 +24,33 @@ const controls = [
     icon="pi pi-check-square"
     tone="node"
     node-id="WP_VarToBool"
-    blurb="Parse a true/false decision from a $variable. Use a wildcard with on/off options to make any ComfyUI boolean input probabilistic."
+    blurb="Turn a yes/no in a $variable into a true/false input. A wildcard with on and off can flip any switch at random."
   >
     <DocSection title="What it's for">
       <p>
-        <b>WP Var → Bool</b> reads a <VarToken>$variable</VarToken> from the upstream
-        Context and interprets its text as a boolean. Words like <code>true</code>,
-        <code>yes</code>, <code>on</code>, and <code>1</code> become <code>true</code>;
-        words like <code>false</code>, <code>no</code>, <code>off</code>, and <code>0</code>
-        become <code>false</code>. Wire the output into any node that accepts BOOLEAN — a
-        sampler toggle, a switch, a boolean math node — to make that switch probabilistic.
+        <b>WP Var → Bool</b> reads a <VarToken>$variable</VarToken> as true or false.
+        <code>true</code>, <code>yes</code>, <code>on</code> and <code>1</code> are true;
+        <code>false</code>, <code>no</code>, <code>off</code> and <code>0</code> are false. Wire
+        it into a switch or toggle, and a wildcard pick decides whether it's on.
       </p>
       <DocImage
         src="images/docs/wp-var-to-bool.png"
-        ratio="16 / 5"
-        caption="WP Var → Bool reading $true_or_false, picker dropdown open over upstream chips ($subject, $mood, $style, $resolution, $cfg, $true_or_false-highlighted, $scene, $accent). Index 0, default false. Last execute → True 'parsed from yes' — the parser accepts yes/no/on/off/1/0/true/false. The value output feeds a comfyui-kjnodes BOOL Constant and a Show Any; both Show Any nodes print True."
+        ratio="16 / 6"
+        caption="WP Var → Bool reads $hires ('yes') and outputs True."
       />
     </DocSection>
 
     <DocSection title="When to use it">
+      <DocUseWhen
+        :good="[
+          'A pick that flips a switch in the graph: $hires into a switch node, a detailer on or off',
+        ]"
+        :better="[
+          'Text that should stay in the prompt',
+        ]"
+      />
       <DocCallout variant="tip">
-        <b>Use it for</b> a pick that flips a switch in the graph: <code>$hires</code> into a switch node, a detailer on or off. Read a variable with Hide from prompt on, so the value never
-        reaches the prompt; a derivation can write it from another pick ("if
-        <code>$model_family</code> is flux, <code>$cfg</code> is 1"). <b>Not for</b> text that
-        stays in the prompt. The node re-runs only when the value it reads changes.
+        Hide the variable it reads (the globe on its row), so the value doesn't print in the prompt. The node re-runs only when that value changes.
       </DocCallout>
     </DocSection>
 
@@ -54,25 +58,23 @@ const controls = [
       <DocKeyList :items="controls" />
     </DocSection>
 
-    <DocSection title="How the parsing works">
+    <DocSection title="How it reads the text">
       <p>
-        The node splits the variable's value on spaces, commas, semicolons, pipes, and
-        slashes, then checks each piece against the recognised word lists
-        (case-insensitive). Words that match neither list are skipped entirely — they do
-        not advance the index:
+        The node splits the text at spaces, commas, semicolons, pipes and slashes and checks each
+        word (capitals don't matter). Other words are skipped and don't count for the index:
       </p>
       <ul>
-        <li>Truthy words: <code>true</code>, <code>yes</code>, <code>on</code>, <code>1</code></li>
-        <li>Falsy words: <code>false</code>, <code>no</code>, <code>off</code>, <code>0</code></li>
+        <li>True: <code>true</code>, <code>yes</code>, <code>on</code>, <code>1</code></li>
+        <li>False: <code>false</code>, <code>no</code>, <code>off</code>, <code>0</code></li>
         <li>Everything else (e.g. <code>maybe</code>, <code>1.5</code>, <code>hello</code>) is ignored</li>
       </ul>
       <p>
-        So a variable value of <VarToken>true maybe false</VarToken> has two boolean
-        tokens: index 0 → <code>true</code>, index 1 → <code>false</code>.
+        So <VarToken>true maybe false</VarToken> has two: index 0 is <code>true</code>, index 1 is
+        <code>false</code>.
       </p>
       <DocCallout variant="tip">
-        Add a wildcard with options <code>on</code> / <code>off</code> and wire it through
-        WP Var → Bool to randomly enable or disable any boolean input in your workflow.
+        A wildcard with options <code>on</code> and <code>off</code> through WP Var → Bool switches
+        any true/false input at random. Weights set how often.
       </DocCallout>
     </DocSection>
 

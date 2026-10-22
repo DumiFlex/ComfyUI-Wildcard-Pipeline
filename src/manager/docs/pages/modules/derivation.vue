@@ -1,39 +1,38 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
-import DocRef from "../../../components/docs/DocRef.vue";
+import DocDetails from "../../../components/docs/DocDetails.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 import StarterButton from "../../../components/docs/StarterButton.vue";
 
 const conditionOps = [
-  { term: "equals / not equals", desc: "Matches when the variable's value is (or isn't) exactly the text you provide. Case-sensitive." },
-  { term: "contains / does not contain", desc: "Matches when the variable's value includes the text you provide somewhere inside it (or doesn't)." },
-  { term: "matches / does not match", desc: "Matches using a regular expression — for flexible pattern-based conditions. A broken pattern never matches either way." },
-  { term: "NOT", desc: "The NOT switch next to a test turns it around: is → is not, contains → does not contain, matches → does not match, exists → does not exist. Does not contain and does not match need schema 10, so a pack using them installs only on this version or newer." },
-  { term: "exists / not exists", desc: "Matches when the variable is present in the Context (or absent), regardless of its value. Under exists, a switch narrows it: any, is empty (present but empty, e.g. a wildcard that rolled its null option) or has value. Under NOT exists there is nothing to narrow, so the switch is hidden. An older test stored as is unset (missing or empty) still shows the switch on has value, so it keeps its meaning until you pick any." },
-  { term: "is set / is unset", desc: "is set matches when the variable is present and non-empty; is unset matches when it's absent or empty." },
+  { term: "equals", desc: "The value is exactly this text. Capitals count." },
+  { term: "contains", desc: "The text appears somewhere in the value. Capitals count." },
+  { term: "matches", desc: "The value fits a regular expression (a text pattern). A broken pattern never matches." },
+  { term: "exists", desc: "The variable is there at all. A second switch narrows it: any, is empty (there but empty, such as a wildcard that rolled its null option) or has value." },
+  { term: "is set / is unset", desc: "Is set: there and not empty. Is unset: missing or empty." },
+  { term: "NOT", desc: "The NOT switch turns any test around: equals becomes not equals, contains does not contain, and so on. Does not contain and does not match need this version or newer." },
 ];
 
 const actionModes = [
-  { term: "Replace", desc: "Overwrite the variable's current value entirely with the action text." },
-  { term: "Append", desc: "Add the action text to the end of the variable's current value. Nothing is put in between, so start the text with its own separator (\", with a scarf\")." },
-  { term: "Prepend", desc: "Insert the action text before the variable's current value. End the text with its own separator (\"wet, \")." },
-  { term: "Add to negative", desc: "Leave the variable's text alone and add the action text to its negative words, so they follow the variable into any Assembler that renders it. The value takes $vars, @{refs} and {a|b}; refs resolve quietly and never change a pick." },
-  { term: "Replace negative", desc: "Like Add to negative, but the action text becomes the variable's only negative words: whatever it carried before is dropped. The variable's own text is still left alone." },
+  { term: "Replace", desc: "The variable becomes the action text." },
+  { term: "Append", desc: "Adds the text at the end. Nothing goes in between, so start it with its own comma (\", with a scarf\")." },
+  { term: "Prepend", desc: "Adds the text at the start. End it with its own comma (\"wet, \")." },
+  { term: "Add to negative", desc: "Leaves the variable's text alone and adds the words to its negative, so they go wherever the variable is printed." },
+  { term: "Replace negative", desc: "Like Add to negative, but the words replace whatever negative the variable had." },
 ];
 
 const instanceOptions = [
-  { term: "Disable a rule", desc: "Skip one of the top-level IF/ELIF/ELSE rules for this use without removing it from the library entry." },
-  { term: "Disable a branch", desc: "Skip a specific IF, ELIF, or ELSE branch within a rule for this use." },
-  { term: "Value override", desc: "Replace the text that a specific branch action writes, or the value a condition compares against, for this use only. A branch that combines tests gets one condition field per test." },
-  { term: "Rule order", desc: "Reorder the rules for this use without changing the shared library entry." },
-  { term: "Lock seed", desc: "Freezes the {a|b} and @{} rolls inside the actions on every Generate and every Loop frame." },
-  { term: "Hold across run", desc: "Freezes those rolls for one Loop run. The conditions are still checked on every frame, so a frame whose test changes takes a different branch; only the dice inside each branch stay the same." },
-  { term: "Hide from prompt", desc: "Writes the variables the rules set as internal: other modules read them, the Assembler leaves them out." },
+  { term: "Switch off a rule or branch", desc: "Skip one rule, or one IF, ELIF or ELSE, on this node only." },
+  { term: "Change a value", desc: "Change what an action writes, or the text a test compares with, on this node only." },
+  { term: "Rule order", desc: "Reorder the rules on this node." },
+  { term: "Lock seed", desc: "Keeps the {a|b} and @{} rolls inside the actions the same on every Generate." },
+  { term: "Hold across run", desc: "Keeps those rolls the same for one loop run. The tests still run every frame, so a frame can still take another branch." },
+  { term: "Hide from prompt", desc: "The variables the rules set print nothing; other modules can still read them." },
 ];
 </script>
 
@@ -43,168 +42,107 @@ const instanceOptions = [
     title="Derivation"
     icon="pi pi-arrow-right-arrow-left"
     tone="derivation"
-    blurb="IF/ELIF/ELSE rules that read what's been picked so far and update the Context accordingly. Add conditional logic to your pipeline."
+    blurb="If/then rules: when a variable says one thing, change another. Runs after the picks it reads."
   >
     <DocSection title="What it does">
       <p>
-        A Derivation module runs a set of IF/ELIF/ELSE rules after earlier modules have made their
-        picks. Each rule checks a <VarToken>$variable</VarToken> already in the Context and, if the
-        condition matches, changes one or more variables — replacing, appending to, or prepending
-        to their current values.
-      </p>
-      <p>
-        For example: IF <VarToken>$subject</VarToken> equals "ocean" → append ", with crashing
-        waves" to <VarToken>$mood</VarToken>. If not, the rule does nothing and the next rule is
-        checked.
+        A derivation checks variables that earlier modules set and changes others to match. For
+        example: IF <VarToken>$subject</VarToken> equals "ocean", append ", with crashing waves"
+        to <VarToken>$mood</VarToken>.
       </p>
       <DocImage
         src="images/docs/derivation.png"
-        ratio="16 / 7"
-        caption="The Starter accent Derivation modal — a single Rule 1 condition reading '$mood = dramatic → $accent = cinematic lighting' (the engine falls through to the rule's else branch when $mood resolves to anything else). Footer carries Lock seed + Hide from prompt toggles. Behind the modal: a WP Context with Starter scene + Starter accent stacked, the accent row's orange left-border matching the derivation kind colour."
+        ratio="2 / 1"
+        caption="The Starter accent derivation: when $mood is dramatic, $accent becomes cinematic lighting."
       />
-      <DocCallout variant="tip">
-        <b>Use a Derivation</b> for text that follows from a pick ("if winter, add a scarf"), a
-        draw that only happens in some cases (an action holding
-        <VarToken kind="ref">@{Accessories:winter}</VarToken>), a LoRA or injected value replacing
-        a rolled pick, story text on <VarToken>$iteration</VarToken>, and negatives that depend on
-        a pick. <b>Not for</b> changing the odds of another pick (use a Constraint), a long lookup
-        of equals → Replace branches from one pick to another (a constraint on a tagged list), or
-        overwriting a variable a constrained wildcard sets: the last write wins and the pick is
-        thrown away.
-      </DocCallout>
+      <DocUseWhen
+        :good="[
+          'Text that follows from a pick (“if winter, add a scarf”)',
+          'A pick that only happens sometimes (an action holding @{Accessories:winter})',
+          'A LoRA or injected value replacing a rolled pick',
+          'Story text on $iteration, and negatives that depend on a pick',
+        ]"
+        :better="[
+          'Changing the odds of another pick: use a Constraint',
+          'A long lookup from one pick to another: a constraint on a tagged list',
+          'Overwriting a variable a constrained wildcard sets: the pick is thrown away',
+        ]"
+      />
     </DocSection>
 
-    <DocSection title="How rules work">
+    <DocSection title="How rules run">
       <p>
-        Each Derivation module can hold multiple rules. Every rule is checked from top to bottom —
-        even if an earlier rule fired, the next one is still evaluated independently. Within a
-        single rule, only the first matching branch (IF, ELIF, or ELSE) runs.
+        A derivation can hold several rules, and every rule is checked, top to bottom, even when an
+        earlier one fired. Inside one rule only the first branch that matches runs: IF, then each
+        ELIF, then ELSE. Several small rules are easier to read than one big one.
       </p>
-      <DocCallout variant="tip">
-        Because rules are independent, you can chain several simple rules instead of writing one
-        very complex one. It also means two rules can both fire in the same run if their conditions
-        are both true.
-      </DocCallout>
     </DocSection>
 
-    <DocSection title="Condition operators">
+    <DocSection title="Tests">
       <DocKeyList :items="conditionOps" />
+      <p>
+        A test compares with plain text. <VarToken>$variable</VarToken>,
+        <VarToken kind="ref">@{}</VarToken> and <VarToken kind="inline">&#123;a|b&#125;</VarToken>
+        written there are not read. To compare two variables, test one and write the other's values
+        as branches. You can test <VarToken>$colors.0</VarToken>, <VarToken>$outfit.SHOES</VarToken>
+        or <VarToken>$hair.neg</VarToken> like any variable.
+      </p>
     </DocSection>
 
-    <DocSection title="Combining tests with AND / OR">
+    <DocSection title="Several tests in one branch">
       <p>
-        A branch can check more than one thing. Click <b>+ Condition</b> under a test to add
-        another; the connector between them reads <b>AND</b> (every test must match) and one click
-        flips it to <b>OR</b> (any test may match).
+        Click <b>+ Condition</b> to add another test. The word between them reads <b>AND</b> (all
+        must match); click it to make it <b>OR</b> (any may match). AND groups tighter than OR, the
+        way it reads, and tests joined by AND are drawn in a box so you see what goes together.
       </p>
       <p>
-        Each connector flips on its own, and AND binds tighter than OR, the way it reads. Turn the
-        second connector of "a AND b AND c" to OR and you get (a AND b) OR c: the tests still joined
-        by AND are drawn as a boxed group, so the page always shows what runs. Flip it back and the
-        box goes away.
+        <b>+ Group</b> adds a box yourself: IF <VarToken>$time</VarToken> equals "night" AND
+        (<VarToken>$weather</VarToken> equals "rain" OR <VarToken>$weather</VarToken> equals
+        "fog"). Groups nest up to three deep.
       </p>
-      <p>
-        You can also build the box yourself with <b>+ Group</b>. A group is a boxed list of its own
-        with the opposite connector, so IF <VarToken>$time</VarToken> equals "night" AND
-        (<VarToken>$weather</VarToken> equals "rain" OR <VarToken>$weather</VarToken> equals "fog")
-        is one test plus a group of two. <b>+ Group</b> nests up to three levels deep.
-      </p>
-      <DocCallout variant="tip">
-        Removing tests until one is left turns the branch back into a plain single test, so a
-        derivation only needs the newer format when it really combines tests. An older Wildcard
-        Pipeline refuses a shared pack that does and asks for an update.
-      </DocCallout>
     </DocSection>
 
-    <DocSection title="Action modes">
+    <DocSection title="Actions">
       <DocKeyList :items="actionModes" />
-      <DocCallout variant="tip">
-        Negatives travel with the value. Replace swaps the variable's negatives for those of the
-        variables its new text read; Append and Prepend keep the old ones and add. For example,
-        IF <VarToken>$mood</VarToken> equals "gloomy" → Add to negative "bright colors, smiling"
-        keeps smiles out of every image that renders <VarToken>$mood</VarToken>. A derivation that
-        uses Add to negative is shared as schema 8, which older versions refuse with a request to
-        update.
-      </DocCallout>
-    </DocSection>
-
-    <DocSection title="Several actions in one branch">
       <p>
-        Click <b>+ And</b> under a branch's action to add another. The actions run in order when the
-        branch fires, and each one sees what the one before it wrote. For example, IF
-        <VarToken>$tier</VarToken> equals "warmup" THEN <VarToken>$pose</VarToken> Replace
-        <VarToken>$pose_portrait</VarToken> AND <VarToken>$pose</VarToken> Add to negative
-        <VarToken>$pose_portrait.neg</VarToken>. The ELSE branch works the same way. On the canvas,
-        each action gets its own value override.
-      </p>
-      <DocCallout variant="tip">
-        A branch with more than one action is shared as schema 8, which older versions refuse with a
-        request to update.
-      </DocCallout>
-    </DocSection>
-
-    <DocSection title="Nested references in actions">
-      <p>
-        An action's value isn't limited to plain text. When a rule fires, its action value is fully
-        resolved before it's written — so it can embed a <VarToken kind="ref">@{uuid}</VarToken>
-        reference to another wildcard, an inline <VarToken kind="inline">&#123;a|b&#125;</VarToken>
-        pick, and <VarToken>$variable</VarToken> reads, all in the same string. A reference can carry
-        the same segments as anywhere else: a <VarToken kind="inline">:filter</VarToken> sub-category
-        expression to narrow the nested wildcard's pool and <VarToken kind="inline">!null</VarToken>
-        to drop its null option.
+        Click <b>+ And</b> under an action to add another. They run in order, and each sees what the
+        one before wrote: IF <VarToken>$tier</VarToken> equals "warmup", set
+        <VarToken>$pose</VarToken> to <VarToken>$pose_portrait</VarToken> AND add
+        <VarToken>$pose_portrait.neg</VarToken> to its negative.
       </p>
       <p>
-        For example, an action <VarToken>$accent</VarToken> = <code>cinematic lighting,
-        @{abcd1234:dramatic}</code> writes "cinematic lighting," followed by a fresh pick from the
-        nested <VarToken kind="ref">@{abcd1234}</VarToken> wildcard, drawn only from its
-        dramatic-tagged options. This lets a rule conditionally pull in a whole nested wildcard's
-        result rather than a fixed phrase.
+        An action's text can hold <VarToken>$variables</VarToken>, a <VarToken kind="inline">&#123;a|b&#125;</VarToken>
+        choice or a <VarToken kind="ref">@{}</VarToken> reference with a filter, so a rule can pull a
+        fresh pick: <code>cinematic lighting, @{Lighting:dramatic}</code> writes "cinematic
+        lighting," plus a pick from the dramatic lights.
       </p>
-      <DocCallout variant="warn">
-        Actions and conditions are <b>not</b> symmetric. An action value resolves
-        <VarToken kind="ref">@{}</VarToken> refs and <VarToken kind="inline">&#123;a|b&#125;</VarToken>
-        picks; a <b>condition</b> value (the text you compare against) does not. It is always
-        plain text: <VarToken>$variable</VarToken>, <VarToken kind="ref">@{}</VarToken> and
-        <VarToken kind="inline">&#123;a|b&#125;</VarToken> stay verbatim there and won't match
-        what you expect. To compare two variables, test one and write the other's possible values
-        as branches, or use a constraint. This mirrors the per-surface gate on
-        <DocRef id="variable-pipeline" />.
-      </DocCallout>
-    </DocSection>
-
-    <DocSection title="Reading multi-pick variables">
-      <p>
-        A rule can read a multi-pick result the same way templates do. Reference the joined list with
-        a bare <VarToken>$colors</VarToken> (it uses the variable's separator), or pull out a single
-        item with <VarToken>$colors.0</VarToken> — <code>K</code> in <VarToken>$name.K</VarToken> is
-        0-based, so <VarToken>$colors.0</VarToken> is the first pick. In a condition, put it in the
-        variable you test; in an action, write it in the value. The full grammar lives on
-        <DocRef id="variable-pipeline" />.
-      </p>
+      <DocDetails title="What happens to negatives">
+        <p>
+          Replace swaps the variable's negative for those of the variables its new text read;
+          Append and Prepend keep the old one and add. A reference inside Add to negative never
+          changes a pick.
+        </p>
+      </DocDetails>
     </DocSection>
 
     <DocSection title="LoRA by model">
       <p>
-        The <b>LoRA by model</b> button in the editor adds a ready-made rule for use with the
-        WP Model Info node: if <VarToken>$model_variant</VarToken> is pony it sets
-        <VarToken>$loras</VarToken> to a Pony LoRA tag, if illustrious to an Illustrious one, and
-        otherwise to nothing. Replace the placeholder LoRA names with yours, add a branch per
-        variant you use, and put <VarToken>$loras</VarToken> in your Assembler template.
+        <b>LoRA by model</b> in the editor adds a ready-made rule for WP Model Info: if
+        <VarToken>$model_variant</VarToken> is pony, <VarToken>$loras</VarToken> gets a Pony LoRA
+        tag; if illustrious, an Illustrious one; otherwise nothing. Put your LoRA names in, add a
+        branch per model you use, and write <VarToken>$loras</VarToken> in your template.
       </p>
     </DocSection>
 
-    <DocSection title="Per-use options">
-      <p>
-        When you add a Derivation to a Context you can tune which rules are active for that use:
-      </p>
+    <DocSection title="Change it for one node">
       <DocKeyList :items="instanceOptions" />
     </DocSection>
 
     <DocSection title="Try it">
       <p>
-        Create a starter Derivation that sets <VarToken>$accent</VarToken> based on the mood: if
+        Create a starter derivation that sets <VarToken>$accent</VarToken> from the mood: if
         <VarToken>$mood</VarToken> is "dramatic" it writes "cinematic lighting", otherwise "soft
-        lighting". A one-rule example of conditional logic reacting to an upstream pick.
+        lighting".
       </p>
       <StarterButton slot="accent" />
     </DocSection>
