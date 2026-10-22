@@ -213,7 +213,7 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
         options=rows, tags=tags, axes=axes, description=description, labels=labels,
         refs=refs,
     )
-    ask = dict(
+    ask: dict[str, Any] = dict(
         cfg=cfg, first=first, turns=turns, instruction=instruction,
         system=webs.system(ai_edit.system_prompt(action)),
         schema=webs.schema(ai_edit.schema_for(action, [r["id"] for r in rows])),
@@ -342,7 +342,7 @@ async def _repair_else(cfg: dict[str, Any], instruction: str, result: dict[str, 
     """Ask the model for the missing ELSE only and attach it; "" when that
     fails too (the draft then carries the warning)."""
     rules = [x["rule"] for x in result["rules"]]
-    targets = sorted({a.get("target_var") for r in rules
+    targets = sorted({str(a.get("target_var")) for r in rules
                       for c in [*(r.get("branches") or []), r.get("else")] if isinstance(c, dict)
                       for a in [c.get("action"), *(c.get("extra_actions") or [])]
                       if isinstance(a, dict) and isinstance(a.get("target_var"), str)})

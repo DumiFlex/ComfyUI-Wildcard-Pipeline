@@ -230,7 +230,7 @@ def _resolve_negative(tok: Token, ctx: ResolveContext) -> str:
     variables have none. Only an unbound name that also has none warns."""
     name = str(tok.meta.get("name", ""))
     index = tok.meta.get("index")
-    getter = getattr(ctx, "get_negative", None)
+    getter: Any = getattr(ctx, "get_negative", None)
     got = getter(name, index if isinstance(index, int) else None) if callable(getter) else None
     if got is None and ctx.get_var(name) is None:
         _push_warning(
@@ -528,8 +528,8 @@ def _resolve_multi_pick(
             # a real `pick` entry, so a deeper `@{X}` falls back to
             # positional first/next/all (design: multi-pick children aren't
             # individually pickable). Restore the enclosing carrier after.
-            get_carrier = getattr(ctx, "get_carrier", None)
-            set_carrier = getattr(ctx, "set_carrier", None)
+            get_carrier: Any = getattr(ctx, "get_carrier", None)
+            set_carrier: Any = getattr(ctx, "set_carrier", None)
             saved_carrier = (
                 get_carrier() if callable(get_carrier) else None
             )
@@ -702,8 +702,8 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
     fallback = find_fallback(options)
     any_applied = False
 
-    get_constraints = getattr(ctx, "get_constraints", None)
-    get_picks = getattr(ctx, "get_picks", None)
+    get_constraints: Any = getattr(ctx, "get_constraints", None)
+    get_picks: Any = getattr(ctx, "get_picks", None)
     if callable(get_constraints) and callable(get_picks):
         constraints = get_constraints()
         if constraints:
@@ -722,9 +722,9 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
             # selector's `nested` occurrence matches on it; first / next
             # / all ignore it. None when no carrier is set (a ref at the
             # surface root) — then `pick` simply won't cover.
-            get_hits = getattr(ctx, "get_constraint_hits", None)
+            get_hits: Any = getattr(ctx, "get_constraint_hits", None)
             hits = get_hits() if callable(get_hits) else {}
-            get_carrier_ctx = getattr(ctx, "get_carrier_ctx", None)
+            get_carrier_ctx: Any = getattr(ctx, "get_carrier_ctx", None)
             carrier_ctx = get_carrier_ctx() if callable(get_carrier_ctx) else None
             options, any_applied = apply_constraints_for_target(
                 options, uuid, constraints, get_picks(), ctx.warnings,
@@ -752,7 +752,7 @@ def _log_ref_pick(
     context carries one (the Test Runner seeds it; canvas runs don't).
     Returns the stored row so the caller can add the expanded `value`
     after recursing, or None when nothing is being logged."""
-    log_ref = getattr(ctx, "log_ref", None)
+    log_ref: Any = getattr(ctx, "log_ref", None)
     if not callable(log_ref):
         return None
     module = ctx.get_module(uuid)
@@ -866,8 +866,8 @@ def _resolve_ref(
     # Opt-in ref log (Test Runner): record this pick before recursing so
     # the log reads in pre-order, then fill in what it expanded to.
     logged = _log_ref_pick(ctx, uuid, chosen.get("id"), depth, chosen_value)
-    get_carrier = getattr(ctx, "get_carrier", None)
-    set_carrier = getattr(ctx, "set_carrier", None)
+    get_carrier: Any = getattr(ctx, "get_carrier", None)
+    set_carrier: Any = getattr(ctx, "set_carrier", None)
     if callable(get_carrier) and callable(set_carrier):
         saved_carrier = get_carrier()
         set_carrier(uuid, chosen.get("id"))

@@ -199,6 +199,7 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     if turns and previous is not None and ai_pack.locks_note(previous):
         follow += "\n\n" + ai_pack.locks_note(previous)
     answer: Any = None
+    plan: Any = None  # set by the loop, which returns when it can't
     retry = ""
     graph = settings["planner"] == "graph"
     # The user's own words. A decision's answer is not one of them: picked
