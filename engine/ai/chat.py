@@ -2180,7 +2180,8 @@ class Library(MoreTools, ManageTools):
                     preview.append("Category: none")
             else:
                 cid, new_cat = self._category(args["category"])
-                if (cid or new_cat) and cid != r.get("category_id"):
+                # A new category is a change even for an item in none.
+                if new_cat or (cid and cid != r.get("category_id")):
                     body["category_id"], before["category_id"] = cid, r.get("category_id")
                     preview.append(f"Category: {args['category'].strip()}"
                                    + (" (new)" if new_cat else ""))
@@ -2412,6 +2413,7 @@ class Library(MoreTools, ManageTools):
                 return proposal
         elif self._fold(proposal):
             after = proposal.get("after")
+        self._absorb_category(proposal)
         # A change that points at an item proposed earlier in this answer
         # (a constraint between two new wildcards, a bundle of new modules)
         # waits for that one: its id only exists once it is applied.
@@ -2468,29 +2470,67 @@ class Library(MoreTools, ManageTools):
         self._answer_cards[pid] = proposal
         return proposal
 
+    def _absorb_category(self, proposal: dict[str, Any]) -> None:
+        """A card that files items into a category a Categories card of this
+        answer makes takes that card's place: it creates the category as it
+        applies (`new_category`), so "create Outfit" and "put Shirt in
+        Outfit" are one card (Dumi, 2026-10-22). Only a Categories card that
+        makes just that one category, with no colour, icon or rename."""
+        name = str((proposal["op"]).get("new_category") or "").strip()
+        if not name:
+            return
+        pid, _ = self.proposed_categories.get(name.lower(), ("", ""))
+        card = self._answer_cards.get(pid)
+        cop = (card or {}).get("op") or {}
+        if (card is None or cop.get("op") != "categories" or cop.get("rename")
+                or cop.get("styles") or [n.lower() for n in cop.get("create") or []]
+                != [name.lower()]):
+            return
+        proposal["absorbs"] = [*proposal.get("absorbs", []), pid]
+        proposal["parts"] = _join_parts(_card_parts(card), _card_parts(proposal))
+        if card.get("risk") != "low":
+            proposal.pop("risk", None)
+        del self._answer_cards[pid]
+        self.proposed_categories[name.lower()] = (proposal["pid"], name)
+
     def _fold(self, proposal: dict[str, Any]) -> bool:
-        """Fold a second change to the same item by the same tool in this
-        answer into one card: it was built on the first card's result, so it
-        holds both changes. Re-test on 367a6a5 (9B): edit_bundle three times,
-        two near-identical cards left on screen."""
+        """Fold a later change to the same item in this answer into one
+        card, whatever the tool: it was built on the earlier card's result,
+        so it holds both changes. The card keeps each step in `parts`, in
+        order (Dumi, 2026-10-22: category, fallback and re-weight on one
+        wildcard as one card). Re-test on 367a6a5 (9B): edit_bundle three
+        times, two near-identical cards left on screen."""
         op = proposal["op"]
         prev = self._answer_cards.get(str(proposal.get("after")))
         prev_op = (prev or {}).get("op") or {}
         if (prev is not None and op.get("op") == "update" and prev_op.get("op") == "create"
                 and (prev_op.get("body") or {}).get("id") == op.get("id")):
             return self._fold_into_create(proposal, prev)
-        if (prev is None or op.get("op") != "update" or prev.get("tool") != proposal["tool"]
+        if (prev is None or op.get("op") != "update"
                 or prev_op.get("op") != "update" or prev_op.get("id") != op.get("id")):
             return False
+        parts = _join_parts(_card_parts(prev), _card_parts(proposal))
+        later = op.get("body") or {}
         op["body"] = {**copy.deepcopy(prev_op.get("body") or {}), **(op.get("body") or {})}
-        if "before" in prev_op:
-            op["before"] = copy.deepcopy(prev_op["before"])
+        # The earliest value of each key is what the library holds.
+        op["before"] = {**(op.get("before") or {}), **copy.deepcopy(prev_op.get("before") or {})}
+        if "category_id" not in later:
+            # Only the earlier step set the category.
+            op["new_category"] = prev_op.get("new_category") or ""
         proposal["preview"] = list(dict.fromkeys(
             [*(prev.get("preview") or []), *(proposal.get("preview") or [])]))
-        start = re.match(r"(\d+) → ", str(prev.get("summary") or ""))
-        end = re.match(r"\d+ → (.*)", str(proposal.get("summary") or ""))
-        if start and end:
-            proposal["summary"] = f"{start.group(1)} → {end.group(1)}"
+        if len({part["tool"] for part in parts}) > 1:
+            proposal["title"] = f"Change {op.get('name') or prev_op.get('name') or ''}".strip()
+            proposal["summary"] = " · ".join(dict.fromkeys(
+                str(part["summary"]) for part in parts if part["summary"]))
+        else:
+            start = re.match(r"(\d+) → ", str(prev.get("summary") or ""))
+            end = re.match(r"\d+ → (.*)", str(proposal.get("summary") or ""))
+            if start and end:
+                proposal["summary"] = f"{start.group(1)} → {end.group(1)}"
+        proposal["parts"] = parts
+        if prev.get("risk") != "low":
+            proposal.pop("risk", None)
         proposal["replaces"] = prev["pid"]
         proposal["after"] = prev.get("after")
         if prev.get("needs"):
@@ -2509,9 +2549,12 @@ class Library(MoreTools, ManageTools):
                 body["payload"] = {**(body.get("payload") or {}), **copy.deepcopy(value)}
             else:
                 body[key] = copy.deepcopy(value)
+        # A later step that sets the category decides it.
+        new_cat = (op.get("new_category") or "") if "category_id" in (op.get("body") or {}) \
+            else prev_op.get("new_category", "")
         op.clear()
         op.update({"op": "create", "kind": prev_op.get("kind", "module"),
-                   "new_category": prev_op.get("new_category", ""), "body": body})
+                   "new_category": new_cat, "body": body})
         proposal["title"] = prev.get("title") or proposal.get("title")
         proposal["preview"] = list(dict.fromkeys(
             [*(prev.get("preview") or []), *(proposal.get("preview") or [])]))
@@ -2552,6 +2595,30 @@ def _same_item(row: dict[str, Any], body: dict[str, Any]) -> bool:
     return all(bare(row.get(k)) == bare(body.get(k)) for k in keys)
 
 
+def _card_parts(card: dict[str, Any]) -> list[dict[str, Any]]:
+    """A card's steps: its own `parts` once it holds several changes, else
+    itself as one."""
+    if card.get("parts"):
+        return list(card["parts"])
+    return [{"tool": card.get("tool"), "title": card.get("title") or "",
+             "summary": card.get("summary") or "", "preview": list(card.get("preview") or [])}]
+
+
+def _join_parts(first: list[dict[str, Any]],
+                then: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Two cards' steps in order; the same tool twice in a row is one step
+    (its second call built on the first, so it holds both)."""
+    out = [dict(p) for p in first]
+    for part in then:
+        if out and out[-1]["tool"] == part["tool"]:
+            last = out[-1]
+            last["preview"] = list(dict.fromkeys([*last["preview"], *part["preview"]]))
+            last["summary"] = part["summary"] or last["summary"]
+        else:
+            out.append(dict(part))
+    return out
+
+
 def proposal_note(tool: str, proposal: dict[str, Any]) -> str:
     """What the model is told after a change tool: a card, not a change.
     Small models read "proposal shown" as done, then search the library for
@@ -2568,6 +2635,9 @@ def proposal_note(tool: str, proposal: dict[str, Any]) -> str:
     if proposal.get("replaces"):
         head += (f". It replaces card {proposal['replaces']} (the same item): there is one "
                  "card for it, don't propose it again")
+    if proposal.get("absorbs"):
+        head += (f". It also creates the category {op.get('new_category')}, so card"
+                 f" {', '.join(proposal['absorbs'])} is gone: this one card does both")
     needs = proposal.get("needs") or ([proposal["after"]] if proposal.get("after") else [])
     if needs:
         head += (f". It needs card{'s' if len(needs) > 1 else ''} {', '.join(needs)} applied "

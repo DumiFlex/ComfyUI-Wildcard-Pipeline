@@ -673,6 +673,32 @@ describe("AiChatDrawer", () => {
     w.unmount();
   });
 
+  it("lists each change a merged card holds as a numbered step", async () => {
+    vi.mocked(api.ai.chat).mockResolvedValueOnce({
+      chat_id: "c1", message: "Done.", model: "m", steps: [],
+      proposals: [{
+        pid: "p2", tool: "update_info", title: "Change Outfit", summary: "weights · module info",
+        preview: ["wool coat ×1 → ×4", "Category: Clothes (new)"], warnings: [], after: null,
+        parts: [
+          { tool: "edit_options", title: "Change options in Outfit", summary: "weights", preview: ["wool coat ×1 → ×4"] },
+          { tool: "update_info", title: "Update Outfit", summary: "module info", preview: ["Category: Clothes (new)"] },
+        ],
+        op: {
+          op: "update", kind: "module", type: "wildcard", id: "m1", name: "Outfit", new_category: "Clothes",
+          body: { description: "x" }, before: { description: "" },
+        },
+      }],
+    });
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("tidy outfit");
+    await w.get('[data-test="ai-chat-input"]').trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    const steps = w.get('[data-test="ai-chat-card-steps"]').findAll(":scope > li");
+    expect(steps.map((s) => s.get(".wp-ai-chat__step-title").text())).toEqual(["Change options in Outfit", "Update Outfit"]);
+    expect(steps[1].text()).toContain("Clothes (new)");
+    w.unmount();
+  });
+
   it("changes thinking from the header", async () => {
     const { w } = await mountIt();
     await w.get('[data-test="ai-chat-thinking"] [data-test="select-trigger"]').trigger("click");

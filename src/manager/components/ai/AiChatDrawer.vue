@@ -51,7 +51,7 @@ import { clearPointer, EDIT_ROUTES } from "../../composables/useAiActions";
 import { useAiConfig } from "../../composables/useAiConfig";
 import { THINKING_OPTIONS, isThinking } from "../../utils/ai-thinking";
 import { useAiChatWidth } from "../../composables/useAiChatWidth";
-import type { AiCardFix, AiChatPage, AiChatProposal, AiChatStep, AiTestCard as TestCard } from "../../api/types";
+import type { AiCardFix, AiChatCardPart, AiChatPage, AiChatProposal, AiChatStep, AiTestCard as TestCard } from "../../api/types";
 import { currentPageNote, editorForPage } from "../../composables/useOpenEditor";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 import { useCategoryStore } from "../../stores/categoryStore";
@@ -563,6 +563,15 @@ function shownOptions(i: number, p: AiChatProposal): CardOption[] {
   return expanded.value.has(key(i, p)) ? opts : opts.slice(0, PREVIEW_LINES);
 }
 
+/** The steps of a card that holds several changes to one item, or null. */
+function cardSteps(p: AiChatProposal): AiChatCardPart[] | null {
+  return p.op.op !== "create" && !cardOptions(p) && (p.parts?.length ?? 0) > 1 ? p.parts! : null;
+}
+
+function stepLines(i: number, p: AiChatProposal, part: AiChatCardPart): string[] {
+  return expanded.value.has(key(i, p)) ? part.preview : part.preview.slice(0, PREVIEW_LINES);
+}
+
 /** Preview lines the structured parts above don't already show. */
 function otherLines(i: number, p: AiChatProposal): string[] {
   const opts = cardOptions(p);
@@ -1017,6 +1026,14 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               >{{ expanded.has(key(i, p)) ? "Show less" : `Show all ${cardOptions(p)!.length}` }}</button>
             </div>
             <AiCardView v-if="cardView(p)" :view="cardView(p)!" />
+            <ol v-else-if="cardSteps(p)" class="wp-ai-chat__steps" data-test="ai-chat-card-steps">
+              <li v-for="(part, j) in cardSteps(p)" :key="j">
+                <span class="wp-ai-chat__step-title">{{ part.title }}</span>
+                <ul class="wp-ai-chat__preview">
+                  <li v-for="(line, k) in stepLines(i, p, part)" :key="k"><AiSyntax :text="line" /></li>
+                </ul>
+              </li>
+            </ol>
             <ul v-else-if="otherLines(i, p).length" class="wp-ai-chat__preview">
               <li v-for="(line, j) in otherLines(i, p)" :key="j"><AiSyntax :text="line" /></li>
             </ul>
@@ -1435,6 +1452,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__icon-btn:hover, .wp-ai-chat__icon-btn:focus-visible { color: var(--wp-text); background: var(--wp-bg-3); }
 .wp-ai-chat__zoom:hover { color: var(--wp-text); background: var(--wp-bg-3); }
 .wp-ai-chat__card-summary { font-size: 12px; color: var(--wp-text-muted); }
+.wp-ai-chat__steps { margin: 4px 0; padding-left: 20px; display: grid; gap: 4px; }
+.wp-ai-chat__steps > li::marker { color: var(--wp-text-dim); font-size: 11px; }
+.wp-ai-chat__step-title { font-size: 12px; font-weight: 600; color: var(--wp-text); }
 .wp-ai-chat__preview {
   margin: 0; padding: 6px 8px 6px 22px; font-size: 12px; border-radius: 6px;
   background: var(--wp-bg-1); display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere;

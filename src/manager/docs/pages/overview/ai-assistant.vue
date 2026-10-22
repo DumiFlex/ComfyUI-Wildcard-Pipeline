@@ -405,8 +405,13 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         shows its first options, rules, tags and warnings with a "+N more" line, and colours the
         prompt syntax in its options, rules and values the way a reply does; the magnifier
         in its top right corner opens the whole card in a larger window, with the same Apply,
-        Open in editor and Dismiss buttons. When two cards
-        change the same item, the second builds on the first, so apply them in order. The chat
+        Open in editor and Dismiss buttons. Changes one answer makes to the
+        same item come as one card: a new wildcard with its nested refs is one create card, and
+        re-weighting, a fallback and a category for one wildcard are one <b>Change</b> card that
+        lists each step in order, with one Apply and one Undo. A new category the card files the
+        item into is made as it applies, so "create Outfit and put Shirt in it" is one card too.
+        An applied card shows in the item's editor straight away if it is open; a card made
+        before the item changed is blocked, so it can't undo the newer change. The chat
         stays when you close the drawer; <b>New chat</b> starts over with an empty message box.
       </p>
       <p>

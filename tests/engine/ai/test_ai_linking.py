@@ -71,7 +71,8 @@ def test_an_edit_of_an_unapplied_card_replaces_it_at_the_same_id():
 
 def test_warnings_that_only_inform_are_notes_without_ask_to_fix():
     lib = _lib()
-    lib.run("add_options", {"id": "aaaa0001", "options": [{"text": "sword"}]})
+    # A change waiting on a card this answer can't fold into.
+    lib._pending["aaaa0001"] = ("p9", lib.get("aaaa0001"))
     p = lib.run("edit_options", {"id": "aaaa0001", "weights": [{"n": 1, "weight": 2}]})
     first = p["warnings"][0]
     assert first.startswith("Builds on the earlier change")

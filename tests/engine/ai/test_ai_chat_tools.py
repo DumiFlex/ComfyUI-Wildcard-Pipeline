@@ -431,3 +431,46 @@ def test_edit_of_a_new_wildcard_folds_into_its_create_card():
     third = lib.run("edit_options", {"id": new_id, "weights": [{"n": 2, "weight": 3}]})
     assert third["op"]["op"] == "create" and third["replaces"] == second["pid"]
     assert third["op"]["body"]["payload"]["options"][1]["weight"] == 3
+
+
+def test_different_changes_to_one_item_are_one_card_with_steps():
+    """Re-weight then describe then categorise one wildcard in one answer:
+    one card that holds every step, in order (Dumi, 2026-10-22)."""
+    lib = _lib()
+    first = lib.run("edit_options", {"id": "aaaa0001", "weights": [{"n": 1, "weight": 4}]})
+    second = lib.run("update_info", {"id": "aaaa0001", "description": "What they wear"})
+    third = lib.run("update_info", {"id": "aaaa0001", "category": "Clothes"})
+    assert second["replaces"] == first["pid"] and third["replaces"] == second["pid"]
+    assert third["title"] == "Change Outfit"
+    assert [p["tool"] for p in third["parts"]] == ["edit_options", "update_info"]
+    body, before = third["op"]["body"], third["op"]["before"]
+    assert body["payload"]["options"][0]["weight"] == 4
+    assert body["description"] == "What they wear"
+    assert third["op"]["new_category"] == "Clothes"
+    # What the library holds now, for Undo and the stale-card check.
+    assert before["payload"]["options"][0]["weight"] == 1
+    assert before["description"] == ""
+    assert "risk" not in third  # a re-weight isn't a low-risk change
+
+
+def test_a_new_category_card_folds_into_the_card_that_files_into_it():
+    lib = _lib()
+    cats = lib.run("edit_categories", {"create": ["Clothes"]})
+    filed = lib.run("update_info", {"id": "aaaa0001", "category": "Clothes"})
+    assert filed["absorbs"] == [cats["pid"]]
+    assert filed["op"]["new_category"] == "Clothes"
+    assert [p["tool"] for p in filed["parts"]] == ["edit_categories", "update_info"]
+    assert "creates the category Clothes" in chat.proposal_note("update_info", filed)
+    # A card that makes two categories stays a card of its own.
+    lib = _lib()
+    lib.run("edit_categories", {"create": ["Clothes", "Weather"]})
+    filed = lib.run("update_info", {"id": "aaaa0001", "category": "Clothes"})
+    assert "absorbs" not in filed
+
+
+def test_a_new_wildcard_keeps_the_category_a_later_step_gives_it():
+    lib = _lib()
+    made = lib.run("create_wildcard", {"name": "Shirt", "var": "shirt", "options": [
+        {"text": "linen shirt"}]})
+    filed = lib.run("update_info", {"id": made["op"]["body"]["id"], "category": "Clothes"})
+    assert filed["op"]["op"] == "create" and filed["op"]["new_category"] == "Clothes"

@@ -1509,12 +1509,22 @@ export interface AiTagMember {
 }
 
 /** A change the assistant proposes. Nothing is saved until Apply. */
+export interface AiChatCardPart {
+  tool: string;
+  title: string;
+  summary: string;
+  preview: string[];
+}
+
 export interface AiChatProposal {
   pid: string;
   tool: string;
   title: string;
   summary: string;
   preview: string[];
+  /** Each change the card holds, in order, once it holds more than one
+   *  (several tools on one item in one answer fold into one card). */
+  parts?: AiChatCardPart[];
   warnings: string[];
   /** The proposal this one builds on (same item); apply that first. */
   after: string | null;

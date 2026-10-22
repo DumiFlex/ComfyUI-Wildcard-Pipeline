@@ -1114,6 +1114,18 @@ def _add_card(t: _Turn, run: _Calls, call: dict[str, Any], args: dict[str, Any],
                 p_["after"] = new_pid
             if p_.get("needs"):
                 p_["needs"] = [new_pid if n == old_pid else n for n in p_["needs"]]
+    for gone_pid in out.get("absorbs") or []:
+        # A card from this answer this one does the work of (a new
+        # category it creates as it files the item): the user gets one.
+        proposals[:] = [p_ for p_ in proposals if p_["pid"] != gone_pid]
+        for p_ in proposals:
+            if p_.get("after") == gone_pid:
+                p_["after"] = out["pid"]
+            if p_.get("needs"):
+                p_["needs"] = [out["pid"] if n == gone_pid else n for n in p_["needs"]]
+        gone = t.meta.get("proposals", {}).get(gone_pid)
+        if gone is not None:
+            t.meta["proposals"][gone_pid] = {**gone, "status": "replaced"}
     proposals.append(out)
     if key:
         t.proposed[key] = out["pid"]
@@ -1132,6 +1144,7 @@ def _add_card(t: _Turn, run: _Calls, call: dict[str, Any], args: dict[str, Any],
     run.result(call, ai_chat.proposal_note(tool, out) + extra)
     if twin:
         out.pop("replaces")  # the user never saw the card it replaces
+    out.pop("absorbs", None)
     t.steps.append({"tool": tool, "note": out["title"], "ok": True})
 
 
