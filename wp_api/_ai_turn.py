@@ -342,7 +342,7 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
     else:
         meta = dict(chat["meta"])
         snapshot = chat["snapshot"]
-        fmt = meta.get("format") if meta.get("format") in ("native", "json") else "json"
+        fmt = str(meta.get("format")) if meta.get("format") in ("native", "json") else "json"
         if cfg.get("tool_format") in ("native", "json") and cfg["tool_format"] != fmt \
                 and not any(e.get("kind") == "step" for e in log):
             fmt = cfg["tool_format"]

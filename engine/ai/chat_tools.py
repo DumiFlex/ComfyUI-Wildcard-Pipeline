@@ -440,8 +440,8 @@ class MoreTools:
         clash = self.var_clash(var)  # type: ignore[attr-defined]
         if clash:
             notes.append(clash)
-        readers = [x for x in self.readers(was) if x.get("id") != self_id] if was \
-            else []  # type: ignore[attr-defined]
+        readers = [x for x in self.readers(was)  # type: ignore[attr-defined]
+                   if x.get("id") != self_id] if was else []
         if readers:
             notes.append(f"Still read as ${was} by "
                          + ", ".join(self._chip(x) for x in readers[:6])  # type: ignore
@@ -468,7 +468,7 @@ class MoreTools:
         }
 
     def edit_template(self, args: dict[str, Any]) -> dict[str, Any]:
-        r = self.templates.get(args.get("id")) if isinstance(args.get("id"), str) else None
+        r = self.templates.get(tid) if isinstance(tid := args.get("id"), str) else None
         if r is None:
             raise ValueError(f"no template with id {_short(args.get('id'), 20)!r}")
         r = self._current(r["id"])[0] or r  # type: ignore[attr-defined]
@@ -507,7 +507,7 @@ class MoreTools:
                 continue
             compiled = ai_derivation.compile_rules(
                 {"rules": [x.get("rule")]}, catalog=self.catalog,  # type: ignore
-                refs=self.refs, taken_ids={y.get("id") for y in rules})
+                refs=self.refs, taken_ids={str(y["id"]) for y in rules if y.get("id")})
             if not compiled["rules"]:
                 warnings += [f"Left out rule {n}: {s['reason']}" for s in compiled["skipped"]]
                 continue

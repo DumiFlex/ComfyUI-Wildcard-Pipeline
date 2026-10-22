@@ -1191,8 +1191,8 @@ class Library(MoreTools, ManageTools):
             if r.get("type") != "constraint" or r.get("_proposed"):
                 continue
             p = _got if isinstance(_got := r.get("payload"), dict) else {}
-            src = str((self.modules.get(p.get("source_wildcard_id")) or {}).get("name") or "")
-            tgt = str((self.modules.get(p.get("target_wildcard_id")) or {}).get("name") or "")
+            src = str((self.modules.get(str(p.get("source_wildcard_id"))) or {}).get("name") or "")
+            tgt = str((self.modules.get(str(p.get("target_wildcard_id"))) or {}).get("name") or "")
             name = str(r.get("name") or "").lower()
             if (src.lower() == la and tgt.lower() == lb) or name in (
                     f"{la} to {lb}", f"{la} → {lb}", f"{la} -> {lb}"):

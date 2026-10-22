@@ -8,7 +8,7 @@ Each function:
 """
 
 import re
-from typing import Protocol
+from typing import Any, Protocol
 
 from engine.syntax.types import deref_var_value, split_var_accessor
 
@@ -83,5 +83,5 @@ def lookup_var(context: _CtxLike, name: str) -> str:
     if not bare:
         return ""
     base, index = split_var_accessor(bare)
-    raw = context.context.get(base) if context and getattr(context, "context", None) else None
+    raw: Any = context.context.get(base) if context and getattr(context, "context", None) else None
     return deref_var_value(raw, index)

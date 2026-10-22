@@ -365,7 +365,7 @@ def fixes(op: dict[str, Any], item: dict[str, Any],
     old = ((base or {}).get("payload") or {}).get("options") or []
     known = {o.get("id") for o in old if isinstance(o, dict)}
     opts = [o for o in payload.get("options") or [] if isinstance(o, dict)]
-    added = {o.get("id") for o in opts if o.get("id") not in known}
+    added = {i for o in opts if isinstance(i := o.get("id"), str) and i not in known}
     wanted: list[tuple[str, str, str]] = []
     for other, hits in bleeding(name, var, [o for o in opts if o.get("id") in added]).items():
         wanted.append((_bleed_text(name, other, hits), f"scope:{other}", f"Remove {other} words"))

@@ -115,13 +115,11 @@ def _join_tidy(parts: list[str], empty_refs: list[int]) -> str:
     for i in empty_refs:
         left = next((j for j in range(i - 1, -1, -1) if out[j]), None)
         right = next((j for j in range(i + 1, len(out)) if out[j]), None)
-        if left is None and right is None:
-            continue
-        if left is None:
-            out[right] = _strip_lead(out[right])
-            continue
-        if right is None:
-            out[left] = _strip_trail(out[left])
+        if left is None or right is None:
+            if right is not None:
+                out[right] = _strip_lead(out[right])
+            elif left is not None:
+                out[left] = _strip_trail(out[left])
             continue
         if out[left].rstrip(_HWS).endswith(",") and out[right].lstrip(_HWS).startswith(","):
             out[right] = out[right].lstrip(_HWS)[1:]
@@ -231,7 +229,7 @@ def _resolve_negative(tok: Token, ctx: ResolveContext) -> str:
     name = str(tok.meta.get("name", ""))
     index = tok.meta.get("index")
     getter: Any = getattr(ctx, "get_negative", None)
-    got = getter(name, index if isinstance(index, int) else None) if callable(getter) else None
+    got: Any = getter(name, index if isinstance(index, int) else None) if callable(getter) else None
     if got is None and ctx.get_var(name) is None:
         _push_warning(
             ctx,
@@ -530,7 +528,7 @@ def _resolve_multi_pick(
             # individually pickable). Restore the enclosing carrier after.
             get_carrier: Any = getattr(ctx, "get_carrier", None)
             set_carrier: Any = getattr(ctx, "set_carrier", None)
-            saved_carrier = (
+            saved_carrier: Any = (
                 get_carrier() if callable(get_carrier) else None
             )
             if callable(set_carrier):
@@ -705,7 +703,7 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
     get_constraints: Any = getattr(ctx, "get_constraints", None)
     get_picks: Any = getattr(ctx, "get_picks", None)
     if callable(get_constraints) and callable(get_picks):
-        constraints = get_constraints()
+        constraints: Any = get_constraints()
         if constraints:
             from engine.modules._constraints import (
                 apply_constraints_for_target,
@@ -726,8 +724,9 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
             hits = get_hits() if callable(get_hits) else {}
             get_carrier_ctx: Any = getattr(ctx, "get_carrier_ctx", None)
             carrier_ctx = get_carrier_ctx() if callable(get_carrier_ctx) else None
+            picks: Any = get_picks()
             options, any_applied = apply_constraints_for_target(
-                options, uuid, constraints, get_picks(), ctx.warnings,
+                options, uuid, constraints, picks, ctx.warnings,
                 hits=hits, firing_uid=None, carrier_ctx=carrier_ctx,
                 # TARGET-side accepts axes for a nested @{} target, so its
                 # multi-tag accepts option survives when the source allows any
@@ -756,13 +755,14 @@ def _log_ref_pick(
     if not callable(log_ref):
         return None
     module = ctx.get_module(uuid)
-    return log_ref({
+    row: Any = log_ref({
         "uuid": uuid,
         "name": (module or {}).get("name") or uuid,
         "option_id": option_id,
         "depth": depth,
         "raw": raw,
     })
+    return row
 
 
 def _resolve_ref(
@@ -869,7 +869,7 @@ def _resolve_ref(
     get_carrier: Any = getattr(ctx, "get_carrier", None)
     set_carrier: Any = getattr(ctx, "set_carrier", None)
     if callable(get_carrier) and callable(set_carrier):
-        saved_carrier = get_carrier()
+        saved_carrier: Any = get_carrier()
         set_carrier(uuid, chosen.get("id"))
         try:
             out = _resolve_tokens(

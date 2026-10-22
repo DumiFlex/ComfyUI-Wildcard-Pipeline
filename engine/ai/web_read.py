@@ -199,7 +199,7 @@ def danbooru_result(tag: str, *, info: Any, alias_to: str | None, wiki: Any,
     if alias_to:
         lines.append(f"{tag} is an alias: Danbooru uses {alias_to}.")
     if row:
-        cat = CATEGORIES.get(row.get("category"), "")
+        cat = CATEGORIES.get(c, "") if isinstance(c := row.get("category"), int) else ""
         count = row.get("post_count") or 0
         lines.append(f"{name}: {count:,} posts" + (f", {cat} tag" if cat else "")
                      + (" (deprecated)" if row.get("is_deprecated") else "") + ".")
@@ -224,7 +224,7 @@ def danbooru_result(tag: str, *, info: Any, alias_to: str | None, wiki: Any,
     for r in rel or []:
         t = _tag_obj(r)
         if t and t["name"] != name:
-            cat = CATEGORIES.get(t.get("category"), "")
+            cat = CATEGORIES.get(c, "") if isinstance(c := t.get("category"), int) else ""
             names.append(t["name"] + (f" ({cat})" if cat and cat != "general" else ""))
         if len(names) >= MAX_RELATED:
             break

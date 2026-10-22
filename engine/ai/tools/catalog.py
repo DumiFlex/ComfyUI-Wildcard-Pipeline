@@ -943,7 +943,7 @@ def shortlist(names: list[str], text: str, route: str | None = None,
         if key.endswith(suffix):
             key = key[: -len(suffix)]
     groups = set(groups_for(text) or PAGE_GROUPS.get(key, DEFAULT_GROUPS)[:1])
-    want = set(SHORTLIST_CORE)
+    want: set[str] = set(SHORTLIST_CORE)
     if _PAGE_WORDS.search(text):
         want |= {"open", "read_page", "highlight"}
     if _INFO_WORDS.search(text) or "lists" in groups:

@@ -21,7 +21,7 @@ the instance (`instance_key`), and each value rolls on its own stream.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, cast
 
 from engine import negatives
 from engine.modules import build_resolve_ctx
@@ -185,7 +185,7 @@ class FixedValuesHandler(ModuleHandler):
         module_key = instance_key(ctx, "fixed_values")
         rng = derive_module_rng(effective_seed, module_key)
 
-        ctx_local = {**ctx, "__wp_rng__": rng}
+        ctx_local = {**cast("dict[str, Any]", ctx), "__wp_rng__": rng}
         resolve_ctx = build_resolve_ctx(ctx_local, surface="fixed_values")
 
         # Negatives follow the value: an override row with its own

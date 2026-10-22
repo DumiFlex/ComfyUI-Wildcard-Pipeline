@@ -560,7 +560,7 @@ def compile_review(answer: Any, plan: dict[str, Any],
         key = names.get(name, "")
         if graph and name and not key:
             continue  # about something the pack doesn't have
-        typ = f.get("type") if f.get("type") in MODEL_TYPES else "other"
+        typ = str(f.get("type")) if f.get("type") in MODEL_TYPES else "other"
         if graph and typ == "other":
             continue  # a nit the code's own checks don't back (see GRAPH_TYPES)
         if any((not r.get("key") or not key or r["key"] == key) and _same(text, r["text"])

@@ -397,7 +397,7 @@ def _constraint_sides(
     for var, prefix in ((item["source"], "S"), (item["target"], "T")):
         w = by_var.get(var)
         b = built.get(w["key"]) if w else None
-        if not isinstance(b, dict):
+        if not w or not isinstance(b, dict):
             raise PlanError(f"build ${var} before {item['name']}")
         sides.append(ai_constraint.side_view(_wildcard_view(w, b), prefix))
     return sides[0], sides[1]

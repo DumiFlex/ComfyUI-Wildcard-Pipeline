@@ -26,7 +26,7 @@ Empty chain or any malformed step → empty resolved map (never 500).
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from aiohttp import web
 
@@ -125,7 +125,7 @@ def _expand_with_db(
     finally:
         # Every preview request used to leave this connection open.
         conn.close()
-    return walk.snapshots
+    return cast("dict[str, dict[str, Any]]", walk.snapshots)
 
 
 def _jsonify_resolved(resolved: dict[str, Any]) -> dict[str, Any]:

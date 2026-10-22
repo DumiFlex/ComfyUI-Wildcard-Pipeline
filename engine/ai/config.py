@@ -254,7 +254,7 @@ def _clamp_int(value: Any, lo: int, hi: int, default: int) -> int:
     return max(lo, min(hi, int(value)))
 
 
-def _normalize_slot(raw: Any) -> dict[str, str]:
+def _normalize_slot(raw: Any) -> dict[str, Any]:
     src = raw if isinstance(raw, dict) else {}
     base_url = _got if isinstance(_got := src.get("base_url"), str) else ""
     try:
@@ -273,8 +273,7 @@ def _normalize_slot(raw: Any) -> dict[str, str]:
         embed_url = ""
     key_origin = _got if isinstance(_got := src.get("key_origin"), str) else None
     embed_key = _got if isinstance(_got := src.get("embed_api_key"), str) else ""
-    embed_origin = src.get("embed_key_origin") \
-        if isinstance(src.get("embed_key_origin"), str) else ""
+    embed_origin = _got if isinstance(_got := src.get("embed_key_origin"), str) else ""
     return {"base_url": base_url, "model": model.strip()[:200], "api_key": key.strip(),
             # None: a key saved before keys were bound; bound on read.
             "key_origin": key_origin if key.strip() else "",

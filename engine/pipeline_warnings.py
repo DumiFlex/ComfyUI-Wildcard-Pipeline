@@ -361,5 +361,5 @@ def finalize_constraint_warnings(ctx: dict[str, Any], modules: Sequence[Any]) ->
     constraints_bucket = ctx.get("__wp_constraints__") or []
     hits = ctx.get("__wp_constraint_hits__") or {}
     catalog = ctx.get("__wp_catalog__")
-    _warn_never_applied(ctx, modules, constraints_bucket, hits, catalog)
+    _warn_never_applied(ctx, list(modules), constraints_bucket, hits, catalog)
     _warn_partial_reach(ctx, constraints_bucket, hits)

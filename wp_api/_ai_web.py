@@ -29,11 +29,6 @@ from typing import Any
 import aiohttp
 from aiohttp.abc import AbstractResolver
 
-try:
-    from aiohttp.abc import ResolveResult
-except ImportError:  # aiohttp before 3.9 typed it as a plain dict
-    ResolveResult = dict  # type: ignore[misc,assignment]
-
 from engine.ai import web_read
 from wp_api import _ai_client as client
 
@@ -97,7 +92,7 @@ class _PublicResolver(AbstractResolver):
         self._inner = aiohttp.ThreadedResolver()
 
     async def resolve(self, host: str, port: int = 0,
-                      family: socket.AddressFamily = socket.AF_INET) -> list[ResolveResult]:
+                      family: socket.AddressFamily = socket.AF_INET) -> list[Any]:
         found = await self._inner.resolve(host, port, family)
         ok = [r for r in found if _public_ip(str(r["host"]))]
         if not ok:

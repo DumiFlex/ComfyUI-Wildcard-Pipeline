@@ -265,7 +265,7 @@ def _split_sides(rules: list[Any], views: tuple[dict[str, Any], dict[str, Any]] 
             several = isinstance(raw, str) and (raw.count("#") > 1 or (
                 views is not None and re.search(r",|/|\band\b|\bor\b|\+", raw) is not None
                 and _side(raw, views[i], {t.lower(): t for t in views[i]["tags"]}) is None))
-            parts = [p.strip() for p in re.split(r"\s*(?:,|/|\bor\b|\band\b|\+)\s*", raw)
+            parts = [p.strip() for p in re.split(r"\s*(?:,|/|\bor\b|\band\b|\+)\s*", str(raw))
                      if p.strip()] if several else []
             sides.append(parts or [raw])
         for a in sides[0]:

@@ -29,6 +29,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]" pytest-cov
       - run: ruff check .
+      # Basic-mode type check; settings in [tool.pyright] in pyproject.toml.
+      - if: matrix.python-version == '3.12'
+        run: pip install pyright==1.1.414 && pyright engine wp_nodes wp_api
       # --cov makes [tool.coverage.report] fail_under in pyproject.toml apply.
       - run: >
           pytest --ignore=tests/syntax/test_fuzz.py --ignore=tests/syntax/test_perf.py
