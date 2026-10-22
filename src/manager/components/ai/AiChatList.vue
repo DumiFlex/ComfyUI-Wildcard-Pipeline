@@ -10,6 +10,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import Input from "../ui/Input.vue";
 import { api } from "../../api/client";
 import type { AiChatSummary } from "../../api/types";
+import { plainMentions } from "../../utils/chat-completions";
 
 const props = defineProps<{ current: string | null }>();
 const emit = defineEmits<{
@@ -86,7 +87,7 @@ async function pin(c: AiChatSummary): Promise<void> {
 function startRename(c: AiChatSummary): void {
   confirming.value = null;
   renaming.value = c.id;
-  draft.value = c.title;
+  draft.value = plainMentions(c.title);
   void nextTick(() => renameBox.value?.[0]?.select());
 }
 
@@ -153,7 +154,7 @@ function turnsLabel(n: number): string {
           data-test="ai-chats-row"
         >
           <template v-if="confirming === c.id">
-            <span class="wp-ai-chats__ask">Delete "{{ c.title }}"? This can't be undone.</span>
+            <span class="wp-ai-chats__ask">Delete "{{ plainMentions(c.title) }}"? This can't be undone.</span>
             <button type="button" class="wp-ai-chats__btn" data-test="ai-chats-keep" @click="confirming = null">Keep</button>
             <button type="button" class="wp-ai-chats__btn wp-ai-chats__btn--danger" data-test="ai-chats-confirm" @click="remove(c)">Delete</button>
           </template>
@@ -170,8 +171,8 @@ function turnsLabel(n: number): string {
             />
           </template>
           <template v-else>
-            <button type="button" class="wp-ai-chats__open" :title="c.title" data-test="ai-chats-open" @click="emit('pick', c.id)">
-              <span class="wp-ai-chats__title">{{ c.title }}</span>
+            <button type="button" class="wp-ai-chats__open" :title="plainMentions(c.title)" data-test="ai-chats-open" @click="emit('pick', c.id)">
+              <span class="wp-ai-chats__title">{{ plainMentions(c.title) }}</span>
               <span class="wp-ai-chats__meta">{{ turnsLabel(c.turns) }}</span>
             </button>
             <span class="wp-ai-chats__tools">

@@ -26,6 +26,7 @@ import urllib.parse
 from typing import Any
 
 from engine.ai import budget, chatlog, safety
+from engine.ai.config import THINKING_LEVELS
 from engine.ai.tools import registry
 from engine.ai.tools import tools as registry_tools
 from wp_api import _ai_client as client
@@ -427,7 +428,7 @@ def responses_raw(output: Any, keep_calls: set[str]) -> list[dict[str, Any]]:
             if not it.get("encrypted_content") or not it.get("id"):
                 continue
             out.append({"type": "reasoning", "id": it["id"],
-                        "summary": it.get("summary") if isinstance(it.get("summary"), list) else [],
+                        "summary": _got if isinstance(_got := it.get("summary"), list) else [],
                         "encrypted_content": it["encrypted_content"]})
         elif kind == "function_call":
             if it.get("call_id") in keep_calls:
@@ -494,7 +495,7 @@ def responses_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
     optional fields strict mode refuses."""
     out = []
     for t in tools:
-        fn = t.get("function") if isinstance(t.get("function"), dict) else t
+        fn = _got if isinstance(_got := t.get("function"), dict) else t
         out.append({"type": "function", "name": fn.get("name"),
                     "description": fn.get("description") or "",
                     "parameters": fn.get("parameters") or {"type": "object", "properties": {}},
@@ -685,19 +686,19 @@ def _step_calls(value: Any) -> list[Any] | None:
 
 
 def _usage_openai(data: dict[str, Any]) -> dict[str, Any]:
-    u = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+    u = _got if isinstance(_got := data.get("usage"), dict) else {}
     details = u.get("prompt_tokens_details") if isinstance(u.get("prompt_tokens_details"),
                                                            dict) else {}
     out = {"prompt": u.get("prompt_tokens"), "output": u.get("completion_tokens"),
            "cached": details.get("cached_tokens")}
-    timings = data.get("timings") if isinstance(data.get("timings"), dict) else {}
+    timings = _got if isinstance(_got := data.get("timings"), dict) else {}
     if out["cached"] is None and isinstance(timings.get("cache_n"), int):
         out["cached"] = timings["cache_n"]
     return {k: v for k, v in out.items() if isinstance(v, int)}
 
 
 def _usage_responses(data: dict[str, Any]) -> dict[str, Any]:
-    u = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+    u = _got if isinstance(_got := data.get("usage"), dict) else {}
     details = u.get("input_tokens_details") if isinstance(u.get("input_tokens_details"),
                                                           dict) else {}
     out = {"prompt": u.get("input_tokens"), "output": u.get("output_tokens"),
@@ -711,7 +712,7 @@ def _usage_ollama(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _usage_anthropic(data: dict[str, Any]) -> dict[str, Any]:
-    u = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+    u = _got if isinstance(_got := data.get("usage"), dict) else {}
     read = u.get("cache_read_input_tokens") or 0
     wrote = u.get("cache_creation_input_tokens") or 0
     fresh = u.get("input_tokens") or 0
@@ -748,10 +749,10 @@ def _json_step(raw_text: str, answer: Any, usage: dict[str, Any],
     native reply is: the calls run, and the log keeps them as the step's."""
     if not isinstance(answer, dict):
         raise ValueError("the model's answer wasn't an object")
-    message = answer.get("message") if isinstance(answer.get("message"), str) else ""
-    plan = answer.get("plan") if isinstance(answer.get("plan"), str) else ""
+    message = _got if isinstance(_got := answer.get("message"), str) else ""
+    plan = _got if isinstance(_got := answer.get("plan"), str) else ""
     calls = []
-    for c in answer.get("calls") if isinstance(answer.get("calls"), list) else []:
+    for c in _got if isinstance(_got := answer.get("calls"), list) else []:
         if isinstance(c, dict) and isinstance(c.get("tool"), str):
             raw = c.get("args", "")
             calls.append({"id": new_call_id(), "tool": c["tool"],
@@ -861,7 +862,7 @@ def _openai_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
             for tc in d.get("tool_calls") or []:
                 if not isinstance(tc, dict):
                     continue
-                fn = tc.get("function") if isinstance(tc.get("function"), dict) else {}
+                fn = _got if isinstance(_got := tc.get("function"), dict) else {}
                 idx = tc.get("index")
                 # By index; else a new id starts a call; else it continues
                 # the last one (llama.cpp may send a call whole, no index).
@@ -923,7 +924,7 @@ def _ollama_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
     async def on(obj: dict[str, Any]) -> None:
         if obj.get("error"):
             raise client._upstream_error(500, obj)
-        m = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+        m = _got if isinstance(_got := obj.get("message"), dict) else {}
         if m.get("thinking"):
             await live.thinking()
             if isinstance(m["thinking"], str):
@@ -963,7 +964,7 @@ def _anthropic_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
             partial[len(data["content"]) - 1] = ""
         elif kind == "content_block_delta" and isinstance(obj.get("delta"), dict):
             d = obj["delta"]
-            i = obj.get("index") if isinstance(obj.get("index"), int) else len(data["content"]) - 1
+            i = _got if isinstance(_got := obj.get("index"), int) else len(data["content"]) - 1
             if not 0 <= i < len(data["content"]):
                 return
             block = data["content"][i]
@@ -978,14 +979,14 @@ def _anthropic_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
                 if isinstance(d.get("thinking"), str):
                     block["thinking"] = str(block.get("thinking") or "") + d["thinking"]
         elif kind == "content_block_stop":
-            i = obj.get("index") if isinstance(obj.get("index"), int) else -1
+            i = _got if isinstance(_got := obj.get("index"), int) else -1
             if 0 <= i < len(data["content"]) and partial.get(i):
                 try:
                     data["content"][i]["input"] = json.loads(partial[i])
                 except ValueError:
                     data["content"][i]["input"] = {}
         elif kind == "message_delta":
-            d = obj.get("delta") if isinstance(obj.get("delta"), dict) else {}
+            d = _got if isinstance(_got := obj.get("delta"), dict) else {}
             if d.get("stop_reason"):
                 data["stop_reason"] = d["stop_reason"]
             data["usage"].update(obj.get("usage") or {})
@@ -1059,6 +1060,27 @@ def _no_thinking(cfg: dict[str, Any]) -> dict[str, Any]:
 _THINK_KEYS = ("reasoning", "reasoning_effort", "chat_template_kwargs")
 
 
+#: Ollama models whose `think` takes a level instead of true/false.
+_OLLAMA_LEVELS = re.compile(r"gpt-oss", re.I)
+
+
+def _thinking_fields(cfg: dict[str, Any]) -> dict[str, Any]:
+    """The request fields for the Thinking setting on an OpenAI-style
+    server: nothing for "auto", `_no_thinking` for "off", and for a level
+    the same switches set to it. llama.cpp's and vLLM's template switch has
+    no levels, so a level there just turns thinking on."""
+    level = cfg.get("thinking") or "auto"
+    if level == "auto":
+        return {}
+    if level == "off":
+        return _no_thinking(cfg)
+    if cfg.get("provider") in ("openai", "lmstudio"):
+        return {"reasoning_effort": level}
+    if client.is_openrouter(str(cfg.get("base_url") or "")):
+        return {"reasoning": {"effort": level}}
+    return {"chat_template_kwargs": {"enable_thinking": True}}
+
+
 def _refused(e: AIError) -> bool:
     return e.status == 502 and bool(re.search(r"answered 4\d\d.*\btool", e.message, re.I))
 
@@ -1115,6 +1137,20 @@ def split_native(cfg: dict[str, Any]) -> bool:
     return cfg.get("api") == "openai" and bool(cfg.get("local"))
 
 
+def split_thinking(cfg: dict[str, Any]) -> dict[str, Any]:
+    """The thinking both asks of a local model's split step use. One setting
+    for both, since switching thinking on or off changes the head of the
+    prompt (the chat template writes it into the system block) and a local
+    server then reads the whole prompt again: 15-18k tokens, about 20 s, on
+    every step that switched (LM Studio measurements, 2026-10-22). Auto is
+    off here: choosing a call needs no long think, and thinking hurts small
+    models' tool picks (research note "Small model tool use"). A level the
+    user picked applies to both asks."""
+    if cfg.get("local") and cfg.get("thinking", "auto") not in THINKING_LEVELS:
+        return {**cfg, "thinking": "off"}
+    return cfg
+
+
 def _choice_refused(e: AIError) -> bool:
     return bool(re.search(r"answered 4\d\d", e.message)
                 and re.search(r"tool_choice|\brequired\b", e.message, re.I))
@@ -1143,16 +1179,13 @@ async def split_step(
     `answer` tool included). `must_call` (typed JSON): the act ask can't
     come back empty (`engine/ai/plan_items.py` steps)."""
     names = [t.name for t in offered]
-    # Choosing a call needs no long think: a local model's act ask runs with
-    # its thinking off (research note "Small model tool use": thinking hurts
-    # small models' tool picks and spends the output on reasoning).
-    act_cfg = {**cfg, "thinking": "off"} if cfg.get("local") else cfg
+    cfg = split_thinking(cfg)
     if fmt == "json":
         plan, thinking = "", ""
         if not answer_only and typed and cfg.get("choose_first") and len(offered) > 1:
             # Choose, then fill (research note "Small model tool use", T3):
             # the tool by name first, then only that tool's arguments.
-            pick = await step(act_cfg, system=system, log=log, fmt="json", tools=[], names=names,
+            pick = await step(cfg, system=system, log=log, fmt="json", tools=[], names=names,
                               schema=choose_schema(names, must_call), temperature=act_temp,
                               num_ctx=num_ctx, cache_key=cache_key, emit=emit)
             chosen = pick["answer"].get("tool") if isinstance(pick["answer"], dict) else None
@@ -1163,7 +1196,7 @@ async def split_step(
                 answer_only = True
                 plan = str(pick["answer"].get("plan") or "")
         if not answer_only:
-            act = await step(act_cfg, system=system, log=log, fmt="json", tools=[], names=names,
+            act = await step(cfg, system=system, log=log, fmt="json", tools=[], names=names,
                              schema=registry.act_schema(names, offered if typed else None,
                                                         max_calls if typed else 0,
                                                         1 if typed and must_call else 0),
@@ -1195,13 +1228,13 @@ async def split_step(
                "temperature": act_temp, "num_ctx": num_ctx, "cache_key": cache_key,
                "emit": emit}
         try:
-            act = await step(act_cfg, **ask, tool_choice=choice)
+            act = await step(cfg, **ask, tool_choice=choice)
         except AIError as e:
             if not (choice and _choice_refused(e)):
                 raise
             _NO_CHOICE.add(key)
             choice = None
-            act = await step(act_cfg, **ask)
+            act = await step(cfg, **ask)
         real = [c for c in act["calls"] if c["tool"] != registry.ANSWER_TOOL]
         ready = len(real) < len(act["calls"])
         if real or not ready:
@@ -1235,6 +1268,11 @@ async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, 
         "cache_control": {"type": "ephemeral"},
         "messages": anthropic_messages(log, fmt),
     }
+    if cfg.get("thinking") in THINKING_LEVELS:
+        # Claude's effort setting: how much it thinks and writes. "off"
+        # sends nothing: older Claude models think only when asked, and the
+        # newest always think (they refuse thinking "disabled").
+        body["output_config"] = {"effort": cfg["thinking"]}
     if fmt == "native":
         body["tools"] = tools
     else:
@@ -1270,7 +1308,7 @@ async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, 
         raise AIError("the model didn't return the expected answer")
     text = "\n".join(str(b.get("text") or "") for b in blocks if b.get("type") == "text")
     calls = [{"id": str(b.get("id") or new_call_id()), "tool": str(b.get("name")),
-              "args": b.get("input") if isinstance(b.get("input"), dict) else {},
+              "args": _got if isinstance(_got := b.get("input"), dict) else {},
               "args_text": chatlog.dumps(b.get("input") or {})}
              for b in blocks if b.get("type") == "tool_use"]
     st = _native_step(text, calls, allowed, usage)
@@ -1293,6 +1331,9 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     }
     if cfg.get("thinking") == "off":
         body["think"] = False
+    elif cfg.get("thinking") in THINKING_LEVELS:
+        # gpt-oss takes a level; other thinking models only true.
+        body["think"] = cfg["thinking"] if _OLLAMA_LEVELS.search(str(cfg["model"])) else True
     if fmt == "native":
         body["tools"] = tools
     else:
@@ -1307,7 +1348,7 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     if data.get("_early"):
         usage["early"] = True
     if fmt == "json":
-        text = msg.get("content") if isinstance(msg.get("content"), str) else ""
+        text = _got if isinstance(_got := msg.get("content"), str) else ""
         return _json_step(text, client._parse_text_json(text), usage, msg.get("thinking"),
                           allowed)
     calls = []
@@ -1356,11 +1397,14 @@ async def _step_responses(cfg: dict[str, Any], system: str, log: list[dict[str, 
         body["prompt_cache_key"] = cache_key
     if cfg.get("thinking") == "off":
         body["reasoning"] = {"effort": "none"}
+    elif cfg.get("thinking") in THINKING_LEVELS:
+        body["reasoning"] = {"effort": cfg["thinking"]}
     try:
         data = await _post(cfg, "/responses", body, kind="responses", emit=emit,
                            show=fmt == "native")
     except AIError as e:
-        # A model that must reason refuses effort "none": ask again as is.
+        # A model that must reason refuses effort "none" (or one without
+        # levels refuses a level): ask again as is.
         if not ("reasoning" in body and 400 <= (e.upstream or 0) < 500
                 and re.search(r"reasoning|effort", e.message, re.I)):
             raise
@@ -1370,7 +1414,7 @@ async def _step_responses(cfg: dict[str, Any], system: str, log: list[dict[str, 
     if not isinstance(data, dict):
         raise AIError("the model didn't return an answer")
     if data.get("status") == "failed":
-        err = data.get("error") if isinstance(data.get("error"), dict) else {}
+        err = _got if isinstance(_got := data.get("error"), dict) else {}
         raise AIError(f"the model failed: {str(err.get('message') or 'no reason given')[:200]}")
     output = [it for it in data.get("output") or [] if isinstance(it, dict)]
     usage = _usage_responses(data)
@@ -1433,8 +1477,7 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
         # mid-sentence.
         body["temperature"] = temperature
         body["max_tokens"] = max_tokens
-    if cfg.get("thinking") == "off":
-        body.update(_no_thinking(cfg))
+    body.update(_thinking_fields(cfg))
     if cfg.get("local"):
         ttl = int(cfg.get("unload_after_s", 60))
         if ttl > 0:
@@ -1448,7 +1491,7 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     except AIError as e:
         # A server or model that won't take the thinking switch (a model that
         # must reason, a template without enable_thinking): ask again as is.
-        if not (cfg.get("thinking") == "off" and 400 <= (e.upstream or 0) < 500
+        if not (cfg.get("thinking", "auto") != "auto" and 400 <= (e.upstream or 0) < 500
                 and any(k in body for k in _THINK_KEYS)):
             raise
         for k in _THINK_KEYS:
@@ -1467,7 +1510,7 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     if data.get("_early"):
         usage["early"] = True
     if fmt == "json":
-        text = message.get("content") if isinstance(message.get("content"), str) else ""
+        text = _got if isinstance(_got := message.get("content"), str) else ""
         return _json_step(text, client._parse_text_json(text), usage,
                           message.get("reasoning_content") or message.get("reasoning"), allowed)
     calls = []

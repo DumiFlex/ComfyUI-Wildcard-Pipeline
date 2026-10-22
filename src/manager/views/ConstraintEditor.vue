@@ -221,6 +221,7 @@ const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
 // stays on Save. A new item takes the payload of a draft the chat staged.
 const fillFromChat = registerOpenEditor({
   id: props.id, type: "constraint", dirty: () => dirty.value,
+  rebase: () => { baseline.value = snapshot(); },
   name, description, tags, categoryId, contentRating,
   ...(props.id ? {} : {
     setPayload: (p: Record<string, unknown>) => loadPayload(p as Partial<ConstraintPayload>),

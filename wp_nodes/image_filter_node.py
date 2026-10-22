@@ -184,7 +184,7 @@ def _decode_mask(url: str, height: int, width: int) -> Any:
     else:
         img = src.convert("L")
     if img.size != (width, height):
-        img = img.resize((width, height), Image.BILINEAR)
+        img = img.resize((width, height), Image.Resampling.BILINEAR)
     return torch.from_numpy(np.asarray(img, dtype=np.float32) / 255.0)
 
 

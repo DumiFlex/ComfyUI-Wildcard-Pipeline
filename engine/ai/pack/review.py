@@ -227,7 +227,7 @@ def review_plan(plan: dict[str, Any],
     from the anchor) stay quiet, and ``request`` adds what the request
     names that the graph says nowhere."""
     items = plan["items"]
-    graph = plan.get("graph") if isinstance(plan.get("graph"), dict) else None
+    graph = _got if isinstance(_got := plan.get("graph"), dict) else None
     out: list[dict[str, Any]] = []
 
     def add(item: dict[str, Any] | None, level: str, text: str,
@@ -495,7 +495,7 @@ def review_prompt(plan: dict[str, Any], found: list[dict[str, Any]],
                   request: str = "", recheck: list[str] | None = None) -> str:
     lines = ([f"The user asked: {request.strip()[:1500]}"] if request.strip() else []) \
         + _plan_lines(plan)
-    graph = plan.get("graph") if isinstance(plan.get("graph"), dict) else None
+    graph = _got if isinstance(_got := plan.get("graph"), dict) else None
     if graph is not None:
         axes = [f"{s['name']}: " + "; ".join(f"{a['name']} ({', '.join(a['values'])})"
                                           for a in s["axes"])
@@ -560,7 +560,7 @@ def compile_review(answer: Any, plan: dict[str, Any],
         key = names.get(name, "")
         if graph and name and not key:
             continue  # about something the pack doesn't have
-        typ = f.get("type") if f.get("type") in MODEL_TYPES else "other"
+        typ = str(f.get("type")) if f.get("type") in MODEL_TYPES else "other"
         if graph and typ == "other":
             continue  # a nit the code's own checks don't back (see GRAPH_TYPES)
         if any((not r.get("key") or not key or r["key"] == key) and _same(text, r["text"])

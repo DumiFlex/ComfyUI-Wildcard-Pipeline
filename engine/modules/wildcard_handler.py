@@ -18,7 +18,7 @@ emitted.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, cast
 
 from engine import negatives
 from engine.modules import build_resolve_ctx
@@ -1140,6 +1140,8 @@ class WildcardHandler(ModuleHandler):
                 locked_seed = None
         else:
             effective_seed = chain_seed
+        # The warnings write above already needs a dict here.
+        ctx = cast("dict[str, Any]", ctx)
         ikey = instance_key(ctx, binding)
         rng = _derive_module_rng(effective_seed, ikey)
 
@@ -1173,7 +1175,7 @@ class WildcardHandler(ModuleHandler):
             if use_fallback:
                 # One fallback, never repeated: it stands in for the whole
                 # pick, so a `2-3` range doesn't render "hair, hair".
-                picks = [fallback] if hi > 0 else []
+                picks = [fallback] if hi > 0 and fallback is not None else []
             elif independent:
                 # SP2c: independent multi-pick draws WITH replacement (repeats
                 # allowed), mirroring the inline `~` flag — so the count is the
@@ -1231,7 +1233,9 @@ class WildcardHandler(ModuleHandler):
                 if independent:
                     detail["independent"] = True
             _record_axes(ctx, binding, rolled_list, payload)
-            return {binding: ListVar(items, sep)}
+            # A ListVar renders as text wherever a value is read.
+            bound: dict[str, Any] = {binding: ListVar(items, sep)}
+            return bound
 
         # The fallback is taken without a draw, so no rng is consumed where
         # the pre-v9 path returned empty.

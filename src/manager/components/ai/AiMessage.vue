@@ -16,6 +16,7 @@
  */
 import { computed, h, ref, watch, type VNode } from "vue";
 import { useRouter } from "vue-router";
+import { deletedIds } from "../../composables/useLibraryChanged";
 import { KIND_ICON_MAP } from "../../../components/shared/kind-icons";
 import type { AiChatRef } from "../../api/types";
 import { closeOpen, parseMarkdown, type Block, type Inline, type ListItem, type Tone } from "../../utils/chat-markdown";
@@ -118,6 +119,12 @@ function chip(raw: string): VNode {
   }
   // `[[id#Name]]`: the name is what reads when the id is unknown.
   if (!found) return h("span", { class: "wp-ai-msg__chip", "data-missing": "true" }, label.includes("#") ? label.slice(label.indexOf("#") + 1) : label);
+  if (deletedIds.value.has(found.id)) {
+    return h("span", {
+      class: "wp-ai-msg__chip", "data-missing": "true", "data-deleted": "true", "data-test": "ai-msg-chip-deleted",
+      title: `${found.name} was deleted after this was written`,
+    }, found.name);
+  }
   if (found.pending) {
     const icon0 = KIND_ICON_MAP[found.type as keyof typeof KIND_ICON_MAP] ?? "pi pi-circle";
     return h("span", {
@@ -403,5 +410,6 @@ const Body = () => {
   .wp-ai-msg--live :deep(.wp-ai-msg__new), .wp-ai-msg--live > :deep(:last-child:not(.wp-ai-msg__codeblock)) { animation: none; }
 }
 .wp-ai-msg :deep(.wp-ai-msg__chip[data-missing]) { cursor: default; color: var(--wp-text-muted); background: transparent; border-color: var(--wp-border); }
+.wp-ai-msg :deep(.wp-ai-msg__chip[data-deleted]) { text-decoration: line-through; }
 .wp-ai-msg :deep(.wp-ai-msg__chip[data-pending]) { cursor: default; border-style: dashed; }
 </style>

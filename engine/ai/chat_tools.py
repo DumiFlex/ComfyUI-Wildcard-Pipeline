@@ -50,7 +50,7 @@ def constraint_rows(p: dict[str, Any]) -> list[tuple[str, Any, Any, dict[str, An
     (``("cell", src_tag, tgt_tag, cell)``), then exceptions
     (``("exception", index, None, exc)``)."""
     rows: list[tuple[str, Any, Any, dict[str, Any]]] = []
-    matrix = p.get("matrix") if isinstance(p.get("matrix"), dict) else {}
+    matrix = _got if isinstance(_got := p.get("matrix"), dict) else {}
     for src, row in matrix.items():
         if isinstance(row, dict):
             for tgt, cell in row.items():
@@ -176,7 +176,7 @@ class MoreTools:
             a, b = (self._find_loose(x) for x in pair)
             if a is not None and b is not None:
                 for m in reversed(list(self.modules.values())):
-                    p = m.get("payload") if isinstance(m.get("payload"), dict) else {}
+                    p = _got if isinstance(_got := m.get("payload"), dict) else {}
                     if m.get("type") == "constraint" and (p.get("source_wildcard_id"),
                                                           p.get("target_wildcard_id")) \
                             == (a["id"], b["id"]):
@@ -222,7 +222,7 @@ class MoreTools:
     def _used_by(self, mid: str) -> list[str]:
         out = []
         for m in self.modules.values():
-            p = m.get("payload") if isinstance(m.get("payload"), dict) else {}
+            p = _got if isinstance(_got := m.get("payload"), dict) else {}
             if m.get("type") == "constraint":
                 if p.get("source_wildcard_id") == mid:
                     out.append(f"constraint {m.get('name')} (source)")
@@ -238,7 +238,7 @@ class MoreTools:
     # ── read ─────────────────────────────────────────────────────────────
 
     def read_body(self, kind: str, r: dict[str, Any]) -> list[str]:
-        p = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        p = _got if isinstance(_got := r.get("payload"), dict) else {}
         if kind == "wildcard":
             return self._read_wildcard(r, p)
         if kind == "fixed_values":
@@ -280,7 +280,7 @@ class MoreTools:
             kids = [c for c in r.get("children") or [] if isinstance(c, dict)]
             lines = [f"Runs in this order ({len(kids)}):"]
             for n, c in enumerate(kids, 1):
-                meta = c.get("meta") if isinstance(c.get("meta"), dict) else {}
+                meta = _got if isinstance(_got := c.get("meta"), dict) else {}
                 inner = self.get(c.get("id")) if c.get("type") == "bundle" else None  # type: ignore
                 cname = meta.get("name") or self.names.get(str(c.get("id")), "") \
                     or (inner or {}).get("name") or c.get("id")
@@ -296,7 +296,7 @@ class MoreTools:
                 lines.append(line)
                 for g in (inner or {}).get("children") or []:
                     if isinstance(g, dict):
-                        gm = g.get("meta") if isinstance(g.get("meta"), dict) else {}
+                        gm = _got if isinstance(_got := g.get("meta"), dict) else {}
                         gname = gm.get("name") or self.names.get(str(g.get("id")), "") \
                             or g.get("id")
                         lines.append(f"   - {g.get('type')} {gname}"
@@ -316,8 +316,8 @@ class MoreTools:
         lines.append(f"Variable: ${var}" if var else
                      f"Variable: none (a vocabulary: options elsewhere point at it with "
                      f"@{{{r.get('name')}}})")
-        groups = p.get("tag_groups") if isinstance(p.get("tag_groups"), dict) else {}
-        kinds = p.get("tag_group_kinds") if isinstance(p.get("tag_group_kinds"), dict) else {}
+        groups = _got if isinstance(_got := p.get("tag_groups"), dict) else {}
+        kinds = _got if isinstance(_got := p.get("tag_group_kinds"), dict) else {}
         grouped: set[str] = set()
         for g, members in groups.items():
             kind = kinds.get(g, "classify")
@@ -360,7 +360,7 @@ class MoreTools:
 
     def edit_values(self, args: dict[str, Any]) -> dict[str, Any]:
         r = self._module(args, "fixed_values")  # type: ignore[attr-defined]
-        old = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        old = _got if isinstance(_got := r.get("payload"), dict) else {}
         payload = copy.deepcopy(old)
         preview: list[str] = []
         warnings: list[str] = []
@@ -414,7 +414,7 @@ class MoreTools:
 
     def edit_combine(self, args: dict[str, Any]) -> dict[str, Any]:
         r = self._module(args, "combine")  # type: ignore[attr-defined]
-        old = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        old = _got if isinstance(_got := r.get("payload"), dict) else {}
         raw = {"template": args["template"] if isinstance(args.get("template"), str)
                else old.get("template", ""),
                "negative": args["negative"] if isinstance(args.get("negative"), str)
@@ -440,8 +440,8 @@ class MoreTools:
         clash = self.var_clash(var)  # type: ignore[attr-defined]
         if clash:
             notes.append(clash)
-        readers = [x for x in self.readers(was) if x.get("id") != self_id] if was \
-            else []  # type: ignore[attr-defined]
+        readers = [x for x in self.readers(was)  # type: ignore[attr-defined]
+                   if x.get("id") != self_id] if was else []
         if readers:
             notes.append(f"Still read as ${was} by "
                          + ", ".join(self._chip(x) for x in readers[:6])  # type: ignore
@@ -468,7 +468,7 @@ class MoreTools:
         }
 
     def edit_template(self, args: dict[str, Any]) -> dict[str, Any]:
-        r = self.templates.get(args.get("id")) if isinstance(args.get("id"), str) else None
+        r = self.templates.get(tid) if isinstance(tid := args.get("id"), str) else None
         if r is None:
             raise ValueError(f"no template with id {_short(args.get('id'), 20)!r}")
         r = self._current(r["id"])[0] or r  # type: ignore[attr-defined]
@@ -492,7 +492,7 @@ class MoreTools:
 
     def edit_rules(self, args: dict[str, Any]) -> dict[str, Any]:
         r = self._module(args, "derivation")  # type: ignore[attr-defined]
-        old = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        old = _got if isinstance(_got := r.get("payload"), dict) else {}
         rules = [copy.deepcopy(x) for x in old.get("rules") or [] if isinstance(x, dict)]
         preview: list[str] = []
         warnings: list[str] = []
@@ -507,7 +507,7 @@ class MoreTools:
                 continue
             compiled = ai_derivation.compile_rules(
                 {"rules": [x.get("rule")]}, catalog=self.catalog,  # type: ignore
-                refs=self.refs, taken_ids={y.get("id") for y in rules})
+                refs=self.refs, taken_ids={str(y["id"]) for y in rules if y.get("id")})
             if not compiled["rules"]:
                 warnings += [f"Left out rule {n}: {s['reason']}" for s in compiled["skipped"]]
                 continue
@@ -576,7 +576,7 @@ class MoreTools:
 
     def edit_constraint(self, args: dict[str, Any]) -> dict[str, Any]:
         r = self._module(args, "constraint")  # type: ignore[attr-defined]
-        old = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        old = _got if isinstance(_got := r.get("payload"), dict) else {}
         payload = copy.deepcopy(old)
         preview: list[str] = []
         warnings: list[str] = []
@@ -680,7 +680,7 @@ class MoreTools:
                 warnings.append(f"Left out {row.get('name')}: {why}")
                 return None
             return {"id": row["id"], "type": "bundle", "enabled": True, "name": row.get("name")}
-        p = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        p = _got if isinstance(_got := row.get("payload"), dict) else {}
         inst, notes = ai_use.parse_use(use, kind=kind, tags=p.get("sub_categories")
                                        if kind == "wildcard" else None, payload=p)
         warnings += [f"{row.get('name')}: {n}" for n in notes]
@@ -775,7 +775,7 @@ class MoreTools:
 
     @staticmethod
     def _kid_line(n: int, k: dict[str, Any]) -> str:
-        meta = k.get("meta") if isinstance(k.get("meta"), dict) else {}
+        meta = _got if isinstance(_got := k.get("meta"), dict) else {}
         line = f"{n}. {k['type']} {k.get('name') or meta.get('name') or k['id']}"
         use = ai_use.describe(k.get("instance"), k.get("payload")
                               if isinstance(k.get("payload"), dict) else None)
@@ -797,7 +797,7 @@ class MoreTools:
                 warnings.append(f"Left out use for {x.get('n')}: not a module in the bundle")
                 continue
             k = kids[n - 1]
-            p = k.get("payload") if isinstance(k.get("payload"), dict) else {}
+            p = _got if isinstance(_got := k.get("payload"), dict) else {}
             inst, notes = ai_use.parse_use(x.get("use"), kind=k["type"],
                                            tags=p.get("sub_categories")
                                            if k["type"] == "wildcard" else None,
@@ -876,7 +876,7 @@ class MoreTools:
             row = self.modules.get(cid)
             if not row or row.get("type") != "constraint":
                 continue
-            p = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+            p = _got if isinstance(_got := row.get("payload"), dict) else {}
             src = str(p.get("source_wildcard_id") or "")
             tgt = str(p.get("target_wildcard_id") or "")
             added = []
@@ -942,7 +942,7 @@ class MoreTools:
             if kind == "bundle":
                 modules += self._expand(row, uid, get)
                 continue
-            p = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+            p = _got if isinstance(_got := row.get("payload"), dict) else {}
             inst, notes = ai_use.parse_use(use, kind=kind, tags=p.get("sub_categories")
                                            if kind == "wildcard" else None, payload=p)
             warnings += notes
@@ -981,7 +981,7 @@ class MoreTools:
         return out
 
     def _kid_entry(self, c: dict[str, Any], uid: str, origin: str) -> dict[str, Any]:
-        meta = c.get("meta") if isinstance(c.get("meta"), dict) else {}
+        meta = _got if isinstance(_got := c.get("meta"), dict) else {}
         row = {"id": c.get("id"), "type": c.get("type"), "payload": c.get("payload") or {},
                "name": meta.get("name") or self.names.get(str(c.get("id")), "")}
         return self._entry(row, uid, dict(c.get("instance") or {}), origin)
@@ -1152,7 +1152,7 @@ class MoreTools:
         report instead). Its stack holds the saved items, so "Open in Test
         Runner" can run the same thing there."""
         stack: list[dict[str, str]] = []
-        for x in (args.get("stack") if isinstance(args.get("stack"), list) else [])[:MAX_STACK]:
+        for x in (_got if isinstance(_got := args.get("stack"), list) else [])[:MAX_STACK]:
             ref = x.get("item") or x.get("id") if isinstance(x, dict) else x
             row = self._find_loose(ref)
             if row is None or row.get("_proposed"):
@@ -1193,7 +1193,7 @@ class MoreTools:
                               "more": max(0, len(miss) - 8)})
         warnings = []
         for w in report["warnings"][:6]:
-            detail = w.get("detail") if isinstance(w.get("detail"), dict) else {}
+            detail = _got if isinstance(_got := w.get("detail"), dict) else {}
             warnings.append({"text": _short(detail.get("hint") or w.get("message")
                                             or w.get("type"), 160), "count": w["count"]})
         prompts = [{"p": _short(pr, 300), **({"n": _short(ng, 160)} if ng else {})}
@@ -1243,7 +1243,7 @@ class MoreTools:
                              + ", ".join(_short(self._show(x), 40) for x in never[:8])
                              + (f" (+{len(never) - 8})" if len(never) > 8 else ""))
         for w in report["warnings"][:10]:
-            detail = w.get("detail") if isinstance(w.get("detail"), dict) else {}
+            detail = _got if isinstance(_got := w.get("detail"), dict) else {}
             what = detail.get("hint") or w.get("message") or w.get("type")
             lines.append(f"Warning: {_short(what, 200)} ({w['count']} of {runs} runs)")
         for prompt, negative in report.get("prompts") or []:

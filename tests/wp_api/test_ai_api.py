@@ -1525,6 +1525,47 @@ async def test_thinking_off_uses_each_local_servers_switch(wp_client, fake_llm):
     assert fake_llm.seen[-1]["body"]["reasoning_effort"] == "none"
 
 
+async def test_a_thinking_level_uses_each_servers_switch(wp_client, fake_llm):
+    for provider, key, want in (("lmstudio", "reasoning_effort", "high"),
+                                ("llamacpp", "chat_template_kwargs", {"enable_thinking": True})):
+        ai_config.update({"enabled": True, "provider": provider, "thinking": "high",
+                          "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+        await _chat(wp_client, "hi")
+        assert fake_llm.seen[-1]["body"][key] == want
+    _openai(fake_llm, thinking="low")
+    await _chat(wp_client, "hi")
+    assert fake_llm.seen[-1]["body"]["reasoning"] == {"effort": "low"}
+
+
+async def test_a_thinking_level_sets_claudes_effort(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "anthropic", "api_key": "sk-ant",
+                      "base_url": str(fake_llm.make_url("/anthropic")),
+                      "model": "claude-opus-5-5", "thinking": "medium"})
+    out = await _chat(wp_client, "hello")
+    assert out["message"] == "Hi from Claude."
+    body = fake_llm.seen[-1]["body"]
+    assert body["output_config"] == {"effort": "medium"} and "thinking" not in body
+    ai_config.update({"thinking": "off"})
+    await _chat(wp_client, "hello")
+    assert "output_config" not in fake_llm.seen[-1]["body"]
+
+
+def test_thinking_fields_per_server():
+    from wp_api import _ai_chat
+    assert _ai_chat._thinking_fields({"provider": "lmstudio", "thinking": "auto"}) == {}
+    assert _ai_chat._thinking_fields({"provider": "openai", "thinking": "off"}) == {}
+    assert _ai_chat._thinking_fields({"provider": "custom", "thinking": "medium",
+                                      "base_url": "https://openrouter.ai/api/v1"}) == {
+        "reasoning": {"effort": "medium"}}
+
+
+def test_claude_without_effort_is_asked_again_without_it():
+    from wp_api import _ai_client
+    e = _ai_client.AIError("the server answered 400: output_config.effort: Extra inputs "
+                           "are not permitted")
+    assert _ai_client.claude_refused(e) == "output_config"
+
+
 def test_responses_input_rebuilds_steps_it_cannot_replay():
     from wp_api import _ai_chat
     log = [
@@ -1839,3 +1880,32 @@ async def test_an_organize_ask_is_told_how_to_list_and_move_items(wp_client, fak
     await _chat(wp_client, "is my hair wildcard ok?")
     assert not any(ai_chat.ORGANIZE_HINT in m["content"]
                    for m in fake_llm.seen[-1]["body"]["messages"])
+
+
+async def test_a_reaction_streams_as_soon_as_it_is_decided(wp_client, fake_llm):
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.chat_steps.append({"message": "Sure.", "calls": []})
+    resp = await wp_client.post("/wp/api/ai/chat",
+                                json={"message": "perfect, now add boots", "stream": True})
+    events = [json.loads(line) for line in (await resp.text()).splitlines() if line]
+    kinds = [e["type"] for e in events]
+    # Before the model's first step, not with the answer.
+    assert kinds.index("reaction") < kinds.index("step")
+    assert events[kinds.index("reaction")]["emoji"] == "🎉"
+    assert events[-1]["result"]["reaction"] == "🎉"
+
+
+def test_listen_exposed_names_a_non_loopback_address(monkeypatch):
+    import sys
+    import types
+
+    from wp_api import ai as ai_routes
+    fake = types.ModuleType("comfy.cli_args")
+    monkeypatch.setitem(sys.modules, "comfy", types.ModuleType("comfy"))
+    monkeypatch.setitem(sys.modules, "comfy.cli_args", fake)
+    for listen, want in (("127.0.0.1", ""), ("::1,127.0.0.1", ""), ("localhost", ""),
+                         ("0.0.0.0", "0.0.0.0"),
+                         ("127.0.0.1,192.168.1.5", "127.0.0.1,192.168.1.5")):
+        fake.args = types.SimpleNamespace(listen=listen)  # type: ignore[attr-defined]
+        assert ai_routes.listen_exposed() == want

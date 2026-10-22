@@ -29,6 +29,11 @@ export interface OpenEditor {
   read(): AiChatEditorState;
   /** Put changes into the editor's draft. */
   write(body: ModuleUpdateInput): void;
+  /** The editor has unsaved changes. */
+  dirty(): boolean;
+  /** Take the editor's current state as saved (after the chat wrote a
+   *  change the server already has, so it doesn't count as unsaved). */
+  rebase(): void;
 }
 
 export interface OpenEditorSpec {
@@ -43,6 +48,12 @@ export interface OpenEditorSpec {
   /** The payload as Save would store it. Leave out to share only the info. */
   payload?: () => Record<string, unknown>;
   setPayload?: (payload: Record<string, unknown>) => void;
+  /** Fields outside the payload the editor shows (a template's text, a
+   *  bundle's children): read with the item, written from any body. */
+  extra?: () => Record<string, unknown>;
+  setExtra?: (body: Record<string, unknown>) => void;
+  /** Mark the current state as saved: `baseline = snapshot()`. */
+  rebase?: () => void;
 }
 
 const editor = shallowRef<OpenEditor | null>(null);
@@ -82,6 +93,7 @@ function write(spec: OpenEditorSpec, body: ModuleUpdateInput): void {
   if (body.category_id !== undefined) spec.categoryId.value = body.category_id;
   if (body.content_rating !== undefined) spec.contentRating.value = body.content_rating;
   if (body.payload !== undefined && spec.setPayload) spec.setPayload(body.payload);
+  spec.setExtra?.(body as Record<string, unknown>);
 }
 
 /** The new item's editor, while one is registered, and whether the chat
@@ -109,10 +121,13 @@ export function registerOpenEditor(spec: OpenEditorSpec): () => StagedDraft | nu
         category_id: spec.categoryId.value,
         content_rating: spec.contentRating.value,
         ...(spec.payload ? { payload: spec.payload() } : {}),
+        ...spec.extra?.(),
         dirty: spec.dirty(),
       };
     },
     write: (body) => write(spec, body),
+    dirty: () => spec.dirty(),
+    rebase: () => spec.rebase?.(),
   };
   editor.value = entry;
   if (isNew) fresh = { entry, read: false };

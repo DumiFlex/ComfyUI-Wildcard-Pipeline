@@ -21,7 +21,9 @@ _META = {
     "category": s("category name, or \"\" for none"),
 }
 _OPTION = obj({
-    "text": s("the option text"), "weight": n("relative odds, default 1"),
+    "text": s("the option text; @{Name} puts in a pick from another wildcard, "
+              "@{Name:tag} one of its options tagged tag"),
+    "weight": n("relative odds, default 1"),
     "tags": arr(s(), "option tags"), "negative": s("negative prompt text, or \"\""),
     "fallback": b("taken when nothing else is live"),
 }, ("text",))
@@ -210,7 +212,8 @@ TOOLS: list[Tool] = [
     Tool(
         "create_wildcard", "change",
         "Propose a new wildcard: options picked one per run, bound to a $variable (or a "
-        "vocabulary with no variable, only when other options point at it with @{Name}).",
+        "vocabulary with no variable, only when other options point at it with @{Name}). "
+        "Options that point at other wildcards carry their @{Name} here, in the same card.",
         '{"name", "var": variable name without $ ("" for a vocabulary), "description", '
         '"tags": [library tags], "category": name or "", "options": [{"text", "weight": 1, '
         '"tags": [option tags], "negative": "", "fallback": false}], "axes": [{"name", '
@@ -451,7 +454,9 @@ TOOLS: list[Tool] = [
         "color, icon).",
         '{"create": [name or {"name", "color", "icon"}], "rename": [{"from": name, "to": new '
         'name (optional), "color", "icon"}]}: makes, renames or restyles categories. Color: '
-        "#rrggbb or a word like teal; icon: one of " + ", ".join(CATEGORY_ICONS) + ". Put "
+        "#rrggbb or a word like teal; icon: one of " + ", ".join(CATEGORY_ICONS) + ". Give "
+        "each new category a color and an icon that fit what it holds (left out, one is "
+        "picked from its name). Put "
         "items in a category with update_info or update_many.",
         obj({"create": arr(any_of(s("category name"), obj(
                 {"name": s("category name"), "color": s("#rrggbb or a color word"),
@@ -938,7 +943,7 @@ def shortlist(names: list[str], text: str, route: str | None = None,
         if key.endswith(suffix):
             key = key[: -len(suffix)]
     groups = set(groups_for(text) or PAGE_GROUPS.get(key, DEFAULT_GROUPS)[:1])
-    want = set(SHORTLIST_CORE)
+    want: set[str] = set(SHORTLIST_CORE)
     if _PAGE_WORDS.search(text):
         want |= {"open", "read_page", "highlight"}
     if _INFO_WORDS.search(text) or "lists" in groups:

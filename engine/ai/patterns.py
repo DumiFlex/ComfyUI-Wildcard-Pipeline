@@ -54,7 +54,7 @@ def summarize(modules: list[dict[str, Any]], bundles: list[dict[str, Any]] | Non
     for m in wilds:
         p = m["payload"]
         opts = [o for o in p.get("options") or [] if isinstance(o, dict)]
-        texts += [o.get("value") for o in opts if isinstance(o.get("value"), str)]
+        texts += [v for o in opts if isinstance(v := o.get("value"), str)]
         for o in opts:
             tags.update(t for t in o.get("sub_categories") or [] if isinstance(t, str))
         axes.update(k for k in (p.get("tag_groups") or {}) if isinstance(k, str))

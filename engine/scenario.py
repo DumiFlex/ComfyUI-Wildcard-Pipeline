@@ -267,7 +267,7 @@ def run_scenario(
     names: dict[str, str] = {}
     for m in modules:
         if isinstance(m, dict):
-            meta = m.get("meta") if isinstance(m.get("meta"), dict) else {}
+            meta = _got if isinstance(_got := m.get("meta"), dict) else {}
             name = str(m.get("name") or meta.get("name") or "")
             for key in (m.get("_uid"), m.get("id")):
                 if isinstance(key, str) and key:

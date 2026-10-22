@@ -42,6 +42,11 @@ const STORAGE_KEY_MOTION = "wp-motion";
 const STORAGE_KEY_WHATS_NEW = "wp-whats-new-after-update";
 /** The "Explain" chip over selected text (AI assistant). */
 const STORAGE_KEY_EXPLAIN_CHIP = "wp-explain-chip";
+/** What the chat shows besides its replies (Settings › AI assistant ›
+ *  Chat): the model's thinking, its working notes, the steps it took. */
+const STORAGE_KEY_CHAT_THINKING = "wp-ai-chat-show-thinking";
+const STORAGE_KEY_CHAT_NOTES = "wp-ai-chat-show-notes";
+const STORAGE_KEY_CHAT_STEPS = "wp-ai-chat-show-steps";
 /** Anonymous usage pings from the Community tab (passed to the embed). */
 const STORAGE_KEY_USAGE_STATS = "wp-usage-stats";
 export const STORAGE_KEY_LAST_SEEN_VERSION = "wp-last-seen-version";
@@ -248,6 +253,9 @@ export const useUiStore = defineStore("ui", () => {
   const motion = ref<MotionMode>(readStoredEnum(STORAGE_KEY_MOTION, MOTION_MODES, "auto"));
   const whatsNewAfterUpdate = ref<boolean>(readStoredEnum(STORAGE_KEY_WHATS_NEW, ["1", "0"] as const, "1") === "1");
   const explainChip = ref<boolean>(readStoredEnum(STORAGE_KEY_EXPLAIN_CHIP, ["1", "0"] as const, "1") === "1");
+  const chatThinking = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_THINKING, ["1", "0"] as const, "1") === "1");
+  const chatNotes = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_NOTES, ["1", "0"] as const, "1") === "1");
+  const chatSteps = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_STEPS, ["1", "0"] as const, "1") === "1");
   const usageStats = ref<boolean>(readStoredEnum(STORAGE_KEY_USAGE_STATS, ["1", "0"] as const, "1") === "1");
   const testRunnerDefaults = ref<TestRunnerDefaults>(readTestRunnerDefaults());
   const maxRefDepth = ref<number>(readStoredMaxRefDepth());
@@ -364,6 +372,13 @@ export const useUiStore = defineStore("ui", () => {
     try { localStorage.setItem(STORAGE_KEY_EXPLAIN_CHIP, v ? "1" : "0"); } catch { /* ignore */ }
   }
 
+  function setChatShow(what: "thinking" | "notes" | "steps", v: boolean): void {
+    const [r, key] = what === "thinking" ? [chatThinking, STORAGE_KEY_CHAT_THINKING]
+      : what === "notes" ? [chatNotes, STORAGE_KEY_CHAT_NOTES] : [chatSteps, STORAGE_KEY_CHAT_STEPS];
+    r.value = v;
+    try { localStorage.setItem(key, v ? "1" : "0"); } catch { /* ignore */ }
+  }
+
   function setUsageStats(v: boolean): void {
     usageStats.value = v;
     try { localStorage.setItem(STORAGE_KEY_USAGE_STATS, v ? "1" : "0"); } catch { /* ignore */ }
@@ -445,6 +460,10 @@ export const useUiStore = defineStore("ui", () => {
     setWhatsNewAfterUpdate,
     explainChip,
     setExplainChip,
+    chatThinking,
+    chatNotes,
+    chatSteps,
+    setChatShow,
     usageStats,
     setUsageStats,
     testRunnerDefaults,

@@ -180,7 +180,7 @@ def _tag_obj(raw: Any) -> dict[str, Any] | None:
     """A related-tag entry in either API shape: ``{tag: {...}}`` (now) or
     ``[name, category]`` (older servers)."""
     if isinstance(raw, dict):
-        t = raw.get("tag") if isinstance(raw.get("tag"), dict) else raw
+        t = _got if isinstance(_got := raw.get("tag"), dict) else raw
         if isinstance(t.get("name"), str):
             return t
     if isinstance(raw, list) and raw and isinstance(raw[0], str):
@@ -199,7 +199,7 @@ def danbooru_result(tag: str, *, info: Any, alias_to: str | None, wiki: Any,
     if alias_to:
         lines.append(f"{tag} is an alias: Danbooru uses {alias_to}.")
     if row:
-        cat = CATEGORIES.get(row.get("category"), "")
+        cat = CATEGORIES.get(c, "") if isinstance(c := row.get("category"), int) else ""
         count = row.get("post_count") or 0
         lines.append(f"{name}: {count:,} posts" + (f", {cat} tag" if cat else "")
                      + (" (deprecated)" if row.get("is_deprecated") else "") + ".")
@@ -224,7 +224,7 @@ def danbooru_result(tag: str, *, info: Any, alias_to: str | None, wiki: Any,
     for r in rel or []:
         t = _tag_obj(r)
         if t and t["name"] != name:
-            cat = CATEGORIES.get(t.get("category"), "")
+            cat = CATEGORIES.get(c, "") if isinstance(c := t.get("category"), int) else ""
             names.append(t["name"] + (f" ({cat})" if cat and cat != "general" else ""))
         if len(names) >= MAX_RELATED:
             break

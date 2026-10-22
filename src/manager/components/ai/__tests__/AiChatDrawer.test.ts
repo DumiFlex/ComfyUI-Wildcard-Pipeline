@@ -38,7 +38,7 @@ vi.mock("../../../api/client", () => {
         patchChat: vi.fn(() => Promise.resolve({})), chats: vi.fn(), getChat: vi.fn(),
         deleteChat: vi.fn(), compactChat: vi.fn(), vision: vi.fn(), packPlan: vi.fn(), models: vi.fn(), saveConfig: vi.fn(),
       },
-      modules: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+      modules: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), get: vi.fn() },
       bundles: { update: vi.fn() },
       categories: { create: vi.fn() },
     },
@@ -131,6 +131,7 @@ describe("AiChatDrawer", () => {
     vi.mocked(api.modules.update).mockReset().mockImplementation(
       async (id, body) => ({ id, ...body }) as never);
     vi.mocked(api.modules.delete).mockReset().mockResolvedValue(undefined as never);
+    vi.mocked(api.modules.get).mockReset().mockResolvedValue(undefined as never);
     vi.mocked(api.categories.create).mockReset().mockResolvedValue({
       id: "c9", name: "Scenes", color: null, icon: null, sort_order: 0,
     });
@@ -358,6 +359,74 @@ describe("AiChatDrawer", () => {
     editorHost.unmount();
   });
 
+  it("shows a change saved behind the open editor there, clean or not", async () => {
+    const options = ref<unknown[]>([1, 2]);
+    const dirty = ref(false);
+    const rebase = vi.fn(() => { dirty.value = false; });
+    const host = defineComponent({
+      setup() {
+        registerOpenEditor({
+          id: "m1", type: "wildcard", dirty: () => dirty.value,
+          name: ref("Outfit"), description: ref(""), tags: ref<string[]>([]),
+          categoryId: ref<string | null>(null), contentRating: ref<"safe" | "nsfw">("safe"),
+          payload: () => ({ options: options.value }),
+          setPayload: (p) => { options.value = p.options as unknown[]; },
+          rebase,
+        });
+        return {};
+      },
+      template: "<div />",
+    });
+    const editorHost = mount(host);
+    // The card was made before the editor opened: it writes the saved row
+    // (still the version it was made from), then the editor shows it.
+    const row = (options: unknown[]) =>
+      ({ id: "m1", name: "Outfit", type: "wildcard", tags: ["warm"], payload: { options, history: [{ at: 1 }] } }) as never;
+    vi.mocked(api.modules.get).mockResolvedValueOnce(row([1, 2])).mockResolvedValue(row([1, 2, 3]));
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("add a parka");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    const cards = w.findAll('[data-test="ai-chat-proposal"]');
+    await cards[1].get('[data-test="ai-chat-apply"]').trigger("click");
+    await flushPromises();
+    expect(api.modules.update).toHaveBeenCalledWith("m1", { payload: { options: [1, 2, 3] } });
+    expect(options.value).toEqual([1, 2, 3]);
+    expect(rebase).toHaveBeenCalledOnce();
+    // Unsaved work in the editor: Undo would write over it, so it waits.
+    dirty.value = true;
+    options.value = [1, 2, 3, "mine"];
+    await cards[1].get('[data-test="ai-chat-undo"]').trigger("click");
+    await flushPromises();
+    expect(options.value).toEqual([1, 2, 3, "mine"]);
+    expect(cards[1].text()).toContain("unsaved changes in its editor");
+    // Saved since by someone else: Undo would throw that away.
+    dirty.value = false;
+    vi.mocked(api.modules.get).mockResolvedValue(row([1, 2, 3, 4]));
+    vi.mocked(api.modules.update).mockClear();
+    await cards[1].get('[data-test="ai-chat-undo"]').trigger("click");
+    await flushPromises();
+    expect(api.modules.update).not.toHaveBeenCalled();
+    expect(cards[1].text()).toContain("changed since this card was applied");
+    w.unmount();
+    editorHost.unmount();
+  });
+
+  it("won't apply a card whose item changed since it was made", async () => {
+    vi.mocked(api.modules.get).mockResolvedValue(
+      { id: "m1", name: "Outfit", type: "wildcard", tags: [], payload: { options: [1, 2, 9] } } as never);
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("add a parka");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    const card = w.findAll('[data-test="ai-chat-proposal"]')[1];
+    await card.get('[data-test="ai-chat-apply"]').trigger("click");
+    await flushPromises();
+    expect(api.modules.update).not.toHaveBeenCalled();
+    expect(card.text()).toContain("Outfit changed since this card was made (its content)");
+    w.unmount();
+  });
+
   it("starts a new chat with an empty box", async () => {
     const { w } = await mountIt();
     await w.get('[data-test="ai-chat-input"]').setValue("hello");
@@ -456,6 +525,24 @@ describe("AiChatDrawer", () => {
     await chips[0].trigger("click");
     await flushPromises();
     expect(router.currentRoute.value.fullPath).toBe("/wildcards/w1/edit");
+    w.unmount();
+  });
+
+  it("says when an item an answer points at was deleted after it", async () => {
+    vi.mocked(api.ai.chat).mockResolvedValueOnce({
+      chat_id: "c1", message: "[[Shirt]] already does that.", model: "m", steps: [], proposals: [],
+      refs: { Shirt: { id: "w9", type: "wildcard", name: "Shirt" } },
+    });
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("make a shirt");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    expect(w.find('[data-test="ai-chat-gone"]').exists()).toBe(false);
+    const { markDeleted } = await import("../../../composables/useLibraryChanged");
+    markDeleted(["w9"]);
+    await flushPromises();
+    expect(w.get('[data-test="ai-chat-gone"]').text()).toContain("Shirt was deleted after this answer");
+    expect(w.find('[data-test="ai-msg-chip-deleted"]').exists()).toBe(true);
     w.unmount();
   });
 
@@ -601,6 +688,62 @@ describe("AiChatDrawer", () => {
       .dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     await flushPromises();
     expect(w.get('[data-test="ai-chat-model-note"]').text()).toContain("reads this chat again");
+    w.unmount();
+  });
+
+  it("lists each change a merged card holds as a numbered step", async () => {
+    vi.mocked(api.ai.chat).mockResolvedValueOnce({
+      chat_id: "c1", message: "Done.", model: "m", steps: [],
+      proposals: [{
+        pid: "p2", tool: "update_info", title: "Change Outfit", summary: "weights · module info",
+        preview: ["wool coat ×1 → ×4", "Category: Clothes (new)"], warnings: [], after: null,
+        parts: [
+          { tool: "edit_options", title: "Change options in Outfit", summary: "weights", preview: ["wool coat ×1 → ×4"] },
+          { tool: "update_info", title: "Update Outfit", summary: "module info", preview: ["Category: Clothes (new)"] },
+        ],
+        op: {
+          op: "update", kind: "module", type: "wildcard", id: "m1", name: "Outfit", new_category: "Clothes",
+          body: { description: "x" }, before: { description: "" },
+        },
+      }],
+    });
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("tidy outfit");
+    await w.get('[data-test="ai-chat-input"]').trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    const steps = w.get('[data-test="ai-chat-card-steps"]').findAll(":scope > li");
+    expect(steps.map((s) => s.get(".wp-ai-chat__step-title").text())).toEqual(["Change options in Outfit", "Update Outfit"]);
+    expect(steps[1].text()).toContain("Clothes (new)");
+    w.unmount();
+  });
+
+  it("hides thinking and the steps it took when Settings says so", async () => {
+    const { useUiStore } = await import("../../../stores/uiStore");
+    const ui = useUiStore();
+    ui.setChatShow("thinking", false);
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("hi");
+    await w.get('[data-test="ai-chat-input"]').trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(w.find('[data-test="ai-chat-thought"]').exists()).toBe(false);
+    expect(w.get('[data-test="ai-chat-steps"]').text()).toContain('Searched "outfit"');
+    ui.setChatShow("steps", false);
+    await flushPromises();
+    expect(w.find('[data-test="ai-chat-steps"]').exists()).toBe(false);
+    ui.setChatShow("thinking", true);
+    ui.setChatShow("steps", true);
+    w.unmount();
+  });
+
+  it("changes thinking from the header", async () => {
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-thinking"] [data-test="select-trigger"]').trigger("click");
+    await flushPromises();
+    const rows = [...document.querySelectorAll<HTMLElement>("[role='option']")];
+    expect(rows.map((r) => r.textContent?.trim())).toEqual(["Auto", "Off", "Low", "Medium", "High"]);
+    rows[4].dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ thinking: "high" });
     w.unmount();
   });
 

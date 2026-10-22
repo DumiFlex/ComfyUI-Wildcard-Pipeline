@@ -6,7 +6,7 @@
  * `#tags` each their class. Plain words stay plain strings.
  */
 import { h, type VNode } from "vue";
-import { tokenizeRich } from "@/widgets/richTokenize";
+import { splitRefFilter, tokenizeRich } from "@/widgets/richTokenize";
 import { varColorIndex } from "../../components/shared/var-color";
 import "./chat-syntax.css";
 
@@ -15,6 +15,38 @@ const EXTRA = /<lora:[^>\s]*>|embedding:[^\s,]+|(?<![\w&#/])#[A-Za-z][\w-]*/g;
 
 /** What `syntaxNodes` may colour; a quick gate for plain text. */
 const ANY = /[$@{}<#\\]|embedding:/;
+
+/** A `@{id#Name:filter!null}` reference as a chip: the name, then the
+ *  filter and the no-empty marker, with the raw reference on hover. */
+function refChip(raw: string, name: string | undefined): VNode {
+  const body = /^@\{[^}:]*:([^}]*)\}$/.exec(raw)?.[1];
+  const filter = body === undefined ? null : splitRefFilter(body);
+  const id = /^@\{([0-9a-f]{8})/.exec(raw)?.[1] ?? "";
+  return h("span", { class: "wp-ai-syn__ref", title: raw }, [
+    h("i", { class: "pi pi-sparkles", "aria-hidden": "true" }),
+    h("span", null, name?.trim() || id),
+    ...(filter?.expr ? [h("span", { class: "wp-ai-syn__ref-filter" }, filter.expr)] : []),
+    ...(filter?.excludeNull ? [h("span", { class: "wp-ai-syn__ref-filter", title: "Never empty" }, "!∅")] : []),
+  ]);
+}
+
+/** `@{Name}` / `@{Name:filter}`, the way a card's preview names a ref
+ *  (the tokenizer only takes the `@{id…}` form). */
+const NAME_REF = /@\{([^}#:{]+?)(?::[^}]*)?\}/g;
+
+function nameRefs(text: string): Array<VNode | string> {
+  if (!text.includes("@{")) return [text];
+  const out: Array<VNode | string> = [];
+  let last = 0;
+  for (const m of text.matchAll(NAME_REF)) {
+    const at = m.index ?? 0;
+    if (at > last) out.push(text.slice(last, at));
+    out.push(refChip(m[0], m[1]));
+    last = at + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
 
 function tokens(text: string): Array<VNode | string> {
   const out: Array<VNode | string> = [];
@@ -25,11 +57,11 @@ function tokens(text: string): Array<VNode | string> {
           class: "wp-ai-syn__var", style: { color: `var(--wp-var-${varColorIndex(t.meta?.name ?? "")})` },
         }, t.raw));
         break;
-      case "ref": out.push(h("span", { class: "wp-ai-syn__ref" }, t.raw)); break;
+      case "ref": out.push(refChip(t.raw, t.meta?.name)); break;
       case "dp-brace": out.push(h("span", { class: "wp-ai-syn__pick" }, t.raw)); break;
       case "dp-multi": out.push(h("span", { class: "wp-ai-syn__multi" }, t.raw)); break;
       case "escape": out.push(h("span", { class: "wp-ai-syn__esc" }, t.raw)); break;
-      default: out.push(t.raw);
+      default: out.push(...nameRefs(t.raw));
     }
   }
   return out;

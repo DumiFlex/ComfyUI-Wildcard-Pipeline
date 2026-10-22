@@ -172,7 +172,7 @@ def quiet_resolve(text: str, resolve_ctx: Any, rng: random.Random) -> str:
     from engine.syntax import resolve_text  # noqa: PLC0415 - import cycle
 
     if dataclasses.is_dataclass(resolve_ctx) and not isinstance(resolve_ctx, type):
-        quiet = dataclasses.replace(
+        quiet: Any = dataclasses.replace(
             resolve_ctx,
             rng=rng,
             _constraints=[],

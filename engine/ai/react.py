@@ -7,8 +7,11 @@ Two ways in:
   a rule-based bot answers a thank-you intent without a model call. The
   server stores it as an ``aside`` log entry that `chatlog.render` skips, so
   the model's prefix (and the prompt cache) stays the same.
+- `opening(text)`: a message that opens with thanks or praise and then asks
+  for more ("perfect, now add boots") gets its reaction as soon as it is
+  sent, before the model answers.
 - the `react` tool: the model puts one emoji on the user's message, with or
-  without a reply.
+  without a reply. It shows as soon as the tool runs.
 
 "yes", "ok", "sure", "do it" never count: they answer a question.
 """
@@ -78,6 +81,23 @@ def quick(text: str) -> str:
     if emoji:
         return _EMOJI[emoji[0]]
     return "❤️" if "thanks" in kinds else "🎉"
+
+
+_TURN = re.compile(r"^(?:but|however|except|although|though|yet|still|not)\b")
+
+
+def opening(text: str) -> str:
+    """The reaction for a message whose first part is thanks or praise and
+    which goes on to ask for more ("thanks! can you add boots too"), else "".
+    "great, but it's broken" doesn't count."""
+    t = (text or "").strip()
+    m = re.match(r"([^,.!;:\n]{1,40})[,.!;:\n]+\s*(.+)", t, re.S)
+    if not m or quick(t):
+        return ""
+    head, rest = m.group(1), m.group(2).strip().lower()
+    if not rest or _TURN.match(rest):
+        return ""
+    return quick(head)
 
 
 def clean(emoji: object) -> str:

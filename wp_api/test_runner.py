@@ -7,7 +7,7 @@ optional pinned ``$var`` values and a seed spec — through the real
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, cast
 
 from aiohttp import web
 
@@ -66,7 +66,7 @@ def _bundle_entries(
 
     def stamp(child: dict[str, Any], child_uid: str, origin: str, on: bool) -> None:
         entry = dict(child)
-        meta = entry.get("meta") if isinstance(entry.get("meta"), dict) else {}
+        meta = _got if isinstance(_got := entry.get("meta"), dict) else {}
         entry["_uid"] = child_uid
         entry["bundle_origin"] = origin
         entry["enabled"] = on and bool(entry.get("enabled", True))
@@ -169,7 +169,8 @@ def _build_catalog(conn, modules: list[dict[str, Any]]) -> dict[str, dict[str, A
     roots = list(embedded) + sorted(u for u in ref_seed_uuids(modules) if u not in embedded)
     if not roots:
         return {}
-    return walk_transitive_refs(roots, fetch_module=_fetch).snapshots
+    return cast("dict[str, dict[str, Any]]",
+                walk_transitive_refs(roots, fetch_module=_fetch).snapshots)
 
 
 def _bounded_int(body: dict, key: str, default: int, upper: int) -> int:

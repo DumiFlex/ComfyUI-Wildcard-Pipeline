@@ -133,7 +133,8 @@ DEFAULTS: dict[str, Any] = {
     "tool_format": "auto",
     # Thinking models (Qwen3, DeepSeek R1, …): "auto" leaves it to the model,
     # "off" asks the server to skip the reasoning (faster, and it can't use
-    # up the output limit before the answer).
+    # up the output limit before the answer), "low" / "medium" / "high" ask
+    # for that much reasoning.
     "thinking": "auto",
     # Permissions (Settings › AI assistant › Permissions). No tool can read
     # or change these.
@@ -151,7 +152,11 @@ DEFAULTS: dict[str, Any] = {
     "choose_first": False,
 }
 TOOL_FORMATS = ("auto", "native", "json")
-THINKING = ("auto", "off")
+#: "auto" leaves thinking to the server or model; "off" asks it to skip;
+#: a level asks a thinking model for that much reasoning, where the
+#: provider has levels (where it has only on/off, any level means on).
+THINKING = ("auto", "off", "low", "medium", "high")
+THINKING_LEVELS = ("low", "medium", "high")
 
 #: Web search engines the user can bring (Settings › AI assistant › Web
 #: search). Off by default. SearXNG runs at the user's own address; the
@@ -249,27 +254,26 @@ def _clamp_int(value: Any, lo: int, hi: int, default: int) -> int:
     return max(lo, min(hi, int(value)))
 
 
-def _normalize_slot(raw: Any) -> dict[str, str]:
+def _normalize_slot(raw: Any) -> dict[str, Any]:
     src = raw if isinstance(raw, dict) else {}
-    base_url = src.get("base_url") if isinstance(src.get("base_url"), str) else ""
+    base_url = _got if isinstance(_got := src.get("base_url"), str) else ""
     try:
         base_url = check_base_url(base_url)
     except ConfigError:
         base_url = ""
-    model = src.get("model") if isinstance(src.get("model"), str) else ""
-    key = src.get("api_key") if isinstance(src.get("api_key"), str) else ""
+    model = _got if isinstance(_got := src.get("model"), str) else ""
+    key = _got if isinstance(_got := src.get("api_key"), str) else ""
     size = src.get("model_size") if src.get("model_size") in MODEL_SIZES else "auto"
-    embed_model = src.get("embed_model") if isinstance(src.get("embed_model"), str) else ""
-    embed_url = src.get("embed_base_url") if isinstance(src.get("embed_base_url"), str) else ""
+    embed_model = _got if isinstance(_got := src.get("embed_model"), str) else ""
+    embed_url = _got if isinstance(_got := src.get("embed_base_url"), str) else ""
     embed_api_ = src.get("embed_api") if src.get("embed_api") in EMBED_APIS else "auto"
     try:
         embed_url = check_base_url(embed_url)
     except ConfigError:
         embed_url = ""
-    key_origin = src.get("key_origin") if isinstance(src.get("key_origin"), str) else None
-    embed_key = src.get("embed_api_key") if isinstance(src.get("embed_api_key"), str) else ""
-    embed_origin = src.get("embed_key_origin") \
-        if isinstance(src.get("embed_key_origin"), str) else ""
+    key_origin = _got if isinstance(_got := src.get("key_origin"), str) else None
+    embed_key = _got if isinstance(_got := src.get("embed_api_key"), str) else ""
+    embed_origin = _got if isinstance(_got := src.get("embed_key_origin"), str) else ""
     return {"base_url": base_url, "model": model.strip()[:200], "api_key": key.strip(),
             # None: a key saved before keys were bound; bound on read.
             "key_origin": key_origin if key.strip() else "",
@@ -286,7 +290,7 @@ def _normalize(raw: Any) -> dict[str, Any]:
     provider = src.get("provider")
     if provider not in PRESETS:
         provider = DEFAULTS["provider"]
-    raw_slots = src.get("providers") if isinstance(src.get("providers"), dict) else {}
+    raw_slots = _got if isinstance(_got := src.get("providers"), dict) else {}
     slots = {pid: _normalize_slot(raw_slots.get(pid)) for pid in PRESETS}
     if "providers" not in src and any(k in src for k in ("base_url", "model", "api_key")):
         # A file from before per-provider slots: its flat fields belong to
@@ -324,17 +328,17 @@ def _normalize(raw: Any) -> dict[str, Any]:
 def _normalize_search(raw: Any) -> dict[str, Any]:
     src = raw if isinstance(raw, dict) else {}
     engine = src.get("engine") if src.get("engine") in SEARCH_ENGINES else "off"
-    url = src.get("base_url") if isinstance(src.get("base_url"), str) else ""
+    url = _got if isinstance(_got := src.get("base_url"), str) else ""
     try:
         url = check_base_url(url)
     except ConfigError:
         url = ""
     keys: dict[str, dict[str, str]] = {}
-    raw_keys = src.get("keys") if isinstance(src.get("keys"), dict) else {}
+    raw_keys = _got if isinstance(_got := src.get("keys"), dict) else {}
     for eid in SEARCH_ENGINES:
-        k = raw_keys.get(eid) if isinstance(raw_keys.get(eid), dict) else {}
-        key = k.get("api_key") if isinstance(k.get("api_key"), str) else ""
-        org = k.get("key_origin") if isinstance(k.get("key_origin"), str) else ""
+        k = _got if isinstance(_got := raw_keys.get(eid), dict) else {}
+        key = _got if isinstance(_got := k.get("api_key"), str) else ""
+        org = _got if isinstance(_got := k.get("key_origin"), str) else ""
         if key.strip():
             keys[eid] = {"api_key": key.strip(), "key_origin": org}
     return {"engine": engine, "base_url": url, "keys": keys}
@@ -343,17 +347,17 @@ def _normalize_search(raw: Any) -> dict[str, Any]:
 def _normalize_reader(raw: Any) -> dict[str, Any]:
     src = raw if isinstance(raw, dict) else {}
     engine = src.get("engine") if src.get("engine") in (*READERS, "off") else "builtin"
-    url = src.get("base_url") if isinstance(src.get("base_url"), str) else ""
+    url = _got if isinstance(_got := src.get("base_url"), str) else ""
     try:
         url = check_base_url(url)
     except ConfigError:
         url = ""
     keys: dict[str, dict[str, str]] = {}
-    raw_keys = src.get("keys") if isinstance(src.get("keys"), dict) else {}
+    raw_keys = _got if isinstance(_got := src.get("keys"), dict) else {}
     for eid in READERS:
-        k = raw_keys.get(eid) if isinstance(raw_keys.get(eid), dict) else {}
-        key = k.get("api_key") if isinstance(k.get("api_key"), str) else ""
-        org = k.get("key_origin") if isinstance(k.get("key_origin"), str) else ""
+        k = _got if isinstance(_got := raw_keys.get(eid), dict) else {}
+        key = _got if isinstance(_got := k.get("api_key"), str) else ""
+        org = _got if isinstance(_got := k.get("key_origin"), str) else ""
         if key.strip():
             keys[eid] = {"api_key": key.strip(), "key_origin": org}
     return {"engine": engine, "base_url": url, "keys": keys}
@@ -696,7 +700,7 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
             cfg["tool_format"] = patch["tool_format"]
         if "thinking" in patch:
             if patch["thinking"] not in THINKING:
-                raise ConfigError("thinking must be auto or off")
+                raise ConfigError("thinking must be auto, off, low, medium or high")
             cfg["thinking"] = patch["thinking"]
         if "api_key" in patch:
             key = patch["api_key"]

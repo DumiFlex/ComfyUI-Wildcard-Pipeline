@@ -108,7 +108,7 @@ def check_pack(
     fallbacks: dict[str, int] = {}
     for w in report["warnings"]:
         key = by_id.get(str(w.get("owner_id") or w.get("module_id") or ""))
-        detail = w.get("detail") if isinstance(w.get("detail"), dict) else {}
+        detail = _got if isinstance(_got := w.get("detail"), dict) else {}
         what = detail.get("hint") or w.get("message") or w.get("type")
         text = f"{what} ({w['count']} of {report['runs']} runs)"
         if key and w.get("type") == "fallback_used":

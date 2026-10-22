@@ -127,3 +127,14 @@ def test_tool_format(tmp_path, monkeypatch):
     assert ai_config.load_effective()["tool_format"] == "json"
     with pytest.raises(ai_config.ConfigError):
         ai_config.update({"tool_format": "xml"})
+
+
+def test_thinking_levels(tmp_path, monkeypatch):
+    monkeypatch.setenv("WP_AI_CONFIG_PATH", str(tmp_path / "ai.json"))
+    assert ai_config.public_view()["thinking"] == "auto"
+    for level in ("off", "low", "medium", "high", "auto"):
+        assert ai_config.update({"thinking": level})["thinking"] == level
+    ai_config.update({"thinking": "high"})
+    assert ai_config.load_effective()["thinking"] == "high"
+    with pytest.raises(ai_config.ConfigError):
+        ai_config.update({"thinking": "max"})

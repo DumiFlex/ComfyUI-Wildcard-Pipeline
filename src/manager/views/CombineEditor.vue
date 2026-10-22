@@ -287,6 +287,7 @@ function loadPayload(p: Partial<CombinePayload>, itemName: string): void {
 // stays on Save. A new item takes the payload of a draft the chat staged.
 const fillFromChat = registerOpenEditor({
   id: props.id, type: "combine", dirty: () => dirty.value,
+  rebase: () => { baseline.value = snapshot(); },
   name, description, tags, categoryId, contentRating,
   ...(props.id ? {} : {
     setPayload: (p: Record<string, unknown>) => loadPayload(p as Partial<CombinePayload>, name.value),

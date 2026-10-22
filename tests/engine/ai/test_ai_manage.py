@@ -76,8 +76,10 @@ def test_an_item_proposed_in_this_answer_cant_be_deleted():
 def test_edit_categories_creates_are_low_risk_renames_are_not():
     lib = _lib()
     p = lib.run("edit_categories", {"create": ["Weather", "places", "Weather", "!!"]})
+    # A new category without a color or icon gets ones that fit its name.
     assert p["op"] == {"op": "categories", "kind": "categories", "create": ["Weather"],
-                       "rename": []}
+                       "rename": [], "styles": [
+                           {"name": "Weather", "color": "#7dd3fc", "icon": "cloud"}]}
     assert p["risk"] == "low" and "places exists already" in p["warnings"]
     p = lib.run("edit_categories", {"rename": [{"from": "Clothes", "to": "Outfits"}]})
     assert p["op"]["rename"] == [{"id": "clothes", "from": "Clothes", "to": "Outfits"}]
@@ -121,3 +123,17 @@ def test_update_many_skips_items_an_earlier_card_already_moves():
     # Another new category is another change.
     other = lib.run("update_many", {"ids": ["aaaa0002"], "category": "Weather"})
     assert [it["id"] for it in other["op"]["items"]] == ["aaaa0002"]
+
+
+def test_a_new_category_gets_an_icon_and_color_that_fit_its_name():
+    from engine.ai.chat_manage import default_style
+    assert default_style("Clothing") == {"color": "#f472b6", "icon": "star"}
+    assert default_style("Time of day") == {"color": "#f59e0b", "icon": "sun"}
+    # A name no rule knows: a folder in a color no category has yet.
+    assert default_style("Zorp", {"#a78bfa"}) == {"color": "#60a5fa", "icon": "folder"}
+    # The model's own choice wins.
+    p = _lib().run("edit_categories", {"create": [{"name": "Weather", "color": "red"}]})
+    assert p["op"]["styles"] == [{"name": "Weather", "color": "#ef4444", "icon": "cloud"}]
+    # A category a card files an item into comes with its look too.
+    filed = _lib().run("update_info", {"id": next(iter(_lib().modules)), "category": "Lighting"})
+    assert filed["op"]["new_category_style"] == {"color": "#f59e0b", "icon": "sun"}

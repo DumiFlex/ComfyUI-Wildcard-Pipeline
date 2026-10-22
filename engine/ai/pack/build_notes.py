@@ -123,7 +123,7 @@ def _sibling_refs(plan: dict[str, Any], built: dict[str, Any], key: str,
               if is_wild(i) and i["key"] in built and i["key"] != key}
     # A graph's ``draw`` relation puts a fresh pick in front of every
     # option on purpose: that list is not a disagreement.
-    graph = plan.get("graph") if isinstance(plan.get("graph"), dict) else None
+    graph = _got if isinstance(_got := plan.get("graph"), dict) else None
     this = next((i for i in plan["items"] if i["key"] == key), None)
     if graph and this:
         drawn = {r["from"]["slot"] for r in graph["relations"] if r["kind"] == "draw"

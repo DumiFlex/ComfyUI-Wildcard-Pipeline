@@ -142,7 +142,7 @@ def _hydrate_from_pack(payload: dict, pack_wildcards: dict[str, dict]) -> None:
     if not isinstance(excs, list):
         return
     for side in ("source", "target"):
-        opts = (pack_wildcards.get(payload.get(f"{side}_wildcard_id")) or {}).get("options")
+        opts = (pack_wildcards.get(str(payload.get(f"{side}_wildcard_id"))) or {}).get("options")
         if not isinstance(opts, list):
             continue
         by_id = {o.get("id"): o.get("value") for o in opts if isinstance(o, dict)}

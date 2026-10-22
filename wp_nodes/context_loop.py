@@ -10,6 +10,7 @@ handler level, untouched by this node).
 """
 
 import json
+from typing import Any
 
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
@@ -26,7 +27,7 @@ from wp_nodes.types import (
 _STRATEGIES = {"sequential", "hash_index", "prime_stride"}
 
 
-def _parse_config(raw: str) -> dict[str, object]:
+def _parse_config(raw: str) -> dict[str, Any]:
     """Recovery-friendly JSON parse for the DOM widget value.
 
     Unknown keys ignored; missing keys backfilled from defaults; type
@@ -34,7 +35,7 @@ def _parse_config(raw: str) -> dict[str, object]:
     so a workflow with a malformed widget value still loads instead of
     crashing the run.
     """
-    defaults: dict[str, object] = {
+    defaults: dict[str, Any] = {
         "strategy": "hash_index",
         "override_seed": False,
         "iteration_var_name": "iteration",
@@ -268,7 +269,7 @@ class WPContextLoop(io.ComfyNode):
             # otherwise the values would be meaningless (downstream uses
             # widget seeds). WP_Debug renders this only when present.
             if has_override:
-                internals["__wp_loop_seeds__"] = list(derived)
+                internals["__wp_loop_seeds__"] = list(derived or [])
             if sweep_pins:
                 internals[PIN_KEY] = dict(sweep_pins[idx])
                 internals[HOLD_KEY] = bool(sweep["hold_others"])

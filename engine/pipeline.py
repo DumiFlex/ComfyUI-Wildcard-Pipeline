@@ -13,7 +13,8 @@ import copy
 import dataclasses
 import logging
 import random
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, TypeAlias
 
 from engine import negatives, prefs
 from engine.context import Context
@@ -31,6 +32,10 @@ from engine.pipeline_warnings import (  # noqa: F401  (re-exported)
     finalize_constraint_warnings,
 )
 from engine.sweep import apply_pin_override
+
+#: What a run takes: module dicts as the library stores them, or the legacy
+#: dataclass modules (`coerce_legacy_module` turns them into dicts).
+ModuleLike: TypeAlias = Module | dict[str, Any]
 
 logger = logging.getLogger(__name__)
 
@@ -510,7 +515,7 @@ class PipelineEngine:
 
     def run(
         self,
-        modules: list[Module],
+        modules: Sequence[ModuleLike],
         ctx: Context | None = None,
         seed: int = 0,
         hold_seed: int | None = None,
@@ -561,7 +566,7 @@ class PipelineEngine:
     # ── hold-the-value base pass ──────────────────────────────────────────
 
     def _hold_base_pass(
-        self, modules: list[Module], ctx: Context, loop_index: int,
+        self, modules: Sequence[ModuleLike], ctx: Context, loop_index: int,
     ) -> None:
         """"Hold the value" base pass.
 
@@ -605,7 +610,7 @@ class PipelineEngine:
 
     @staticmethod
     def _carry_held_state(
-        modules: list[Module], ctx: Context, base_ctx: Context,
+        modules: Sequence[ModuleLike], ctx: Context, base_ctx: Context,
     ) -> None:
         """Carry the base pass's pick, axis and hit state for held modules.
 
@@ -660,7 +665,7 @@ class PipelineEngine:
     # ── one module ────────────────────────────────────────────────────────
 
     def _run_module(
-        self, index: int, module: Module, ctx: Context, explain: bool,
+        self, index: int, module: ModuleLike, ctx: Context, explain: bool,
     ) -> None:
         """Gate, coerce, dispatch and trace one module."""
         h = _read_header(module)
@@ -760,7 +765,7 @@ class PipelineEngine:
     def _trace(
         ctx: Context,
         h: _ModuleHeader,
-        module: Module,
+        module: ModuleLike,
         warn_mark: int,
         explain: bool,
         *,

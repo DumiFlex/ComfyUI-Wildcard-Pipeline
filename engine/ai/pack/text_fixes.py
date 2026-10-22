@@ -156,9 +156,10 @@ def _combine_notes(plan: dict[str, Any], item: dict[str, Any], payload: dict[str
     shown = set(_reads(tpl.get("about") or "")) if tpl is not None else set()
     for c in plan["items"]:
         if c["kind"] != "combine" or c is item or c["key"] not in (built or {}) \
-                or c["var"] not in shown or item["var"] in _combine_inputs(plan, built, c["var"]):
+                or c["var"] not in shown \
+                or item["var"] in _combine_inputs(plan, built or {}, c["var"]):
             continue
-        dup = sorted(reads & set(_combine_inputs(plan, built, c["var"])))
+        dup = sorted(reads & set(_combine_inputs(plan, built or {}, c["var"])))
         if dup:
             said.append(f"It also reads ${', $'.join(dup)}, which ${c['var']} ({c['name']}) "
                         "already joins, so the prompt shows it twice; leave it out")
@@ -322,7 +323,7 @@ def _kin_options(plan: dict[str, Any], item: dict[str, Any],
             continue
         for a, b in _ONLY_WITH.findall(c.get("about") or ""):
             a = a.lower()
-            kin = re.compile(r"\b(?:" + _KIN_WORDS.get(a.rstrip("s"), re.escape(a) + r"\w*")
+            kin = re.compile(r"\b(?:" + str(_KIN_WORDS.get(a.rstrip("s"), re.escape(a) + r"\w*"))
                              + r")\b", re.I)
             hits = [o for o in opts if kin.search(o["value"])
                     and a not in (o.get("sub_categories") or [])]
@@ -530,7 +531,7 @@ def _second_rolls(plan: dict[str, Any], payload: dict[str, Any],
             note = (f"Left out a write of ${var} with a new pick (@{{…}}): it rolled {name} "
                     "a second time; the wildcard picks it, a constraint narrows it")
         elif a.get("mode") in ("append", "prepend") and {
-                c.split()[-1] for c in _chunks(value)} & heads.get(var, set()):
+                c.split()[-1] for c in _chunks(value)} & heads.get(str(var), set()):
             note = (f"Left out adding more {name} to ${var}: it put two in the prompt; the "
                     "wildcard picks one, a constraint narrows it")
         else:

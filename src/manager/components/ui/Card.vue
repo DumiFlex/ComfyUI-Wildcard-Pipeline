@@ -20,11 +20,16 @@ const slots = useSlots();
 const root = ref<HTMLElement | null>(null);
 const stickyEl = ref<HTMLElement | null>(null);
 let ro: ResizeObserver | null = null;
+/** The stuck region is taller than a third of the window (an AI draft or a
+ *  bulk-add box open in the subheader): it would cover the list it belongs
+ *  to and the page couldn't scroll past it, so it scrolls with the card. */
+const tooTall = ref(false);
 
 function syncStickyHeight(): void {
   if (!root.value || !stickyEl.value) return;
   const h = Math.round(stickyEl.value.getBoundingClientRect().height);
-  root.value.style.setProperty("--wp-card-header-h", `${h}px`);
+  tooTall.value = typeof window !== "undefined" && window.innerHeight > 0 && h > window.innerHeight / 3;
+  root.value.style.setProperty("--wp-card-header-h", tooTall.value ? "0px" : `${h}px`);
 }
 
 onMounted(() => {
@@ -34,12 +39,17 @@ onMounted(() => {
     ro = new ResizeObserver(syncStickyHeight);
     ro.observe(stickyEl.value);
   }
+  window.addEventListener("resize", syncStickyHeight);
 });
-onBeforeUnmount(() => { ro?.disconnect(); ro = null; });
+onBeforeUnmount(() => {
+  ro?.disconnect();
+  ro = null;
+  window.removeEventListener("resize", syncStickyHeight);
+});
 </script>
 
 <template>
-  <section ref="root" class="wp-card" :class="{ 'wp-card--sticky-header': stickyHeader }">
+  <section ref="root" class="wp-card" :class="{ 'wp-card--sticky-header': stickyHeader && !tooTall }">
     <div ref="stickyEl" class="wp-card__sticky">
       <header v-if="title || slots.actions" class="wp-card__header">
         <div class="wp-card__title-wrap">

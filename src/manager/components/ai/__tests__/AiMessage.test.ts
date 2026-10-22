@@ -14,7 +14,7 @@ describe("AiMessage", () => {
     expect(w.find(".wp-ai-syn__var").text()).toBe("$hair");
     expect(w.find(".wp-ai-syn__var").attributes("style")).toContain("--wp-var-");
     expect(w.find(".wp-ai-syn__pick").text()).toBe("{red|blue}");
-    expect(w.find(".wp-ai-syn__ref").text()).toBe("@{abcd1234}");
+    expect(w.find(".wp-ai-syn__ref").attributes("title")).toBe("@{abcd1234}");
     expect(w.find(".wp-ai-syn__lora").text()).toBe("<lora:detail:0.6>");
     expect(w.find(".wp-ai-syn__emb").text()).toBe("embedding:bad_hands");
     expect(w.find(".wp-ai-syn__tag").text()).toBe("#portrait");

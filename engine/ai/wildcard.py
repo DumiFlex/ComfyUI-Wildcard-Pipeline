@@ -476,7 +476,7 @@ def compile_spec(
         raise ValueError("the model's answer wasn't a wildcard")
     base = existing_payload or {"options": [], "sub_categories": []}
     compiled = compile_options(
-        {"options": raw.get("options") if isinstance(raw.get("options"), list) else []},
+        {"options": _got if isinstance(_got := raw.get("options"), list) else []},
         existing_payload=base, limit=limit, refs=refs, self_id=self_id,
     )
     warnings: list[str] = []

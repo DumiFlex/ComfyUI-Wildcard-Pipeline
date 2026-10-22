@@ -844,8 +844,9 @@ export interface AiConfig {
   /** How the chat calls tools: native tool calls, the JSON step format, or
    *  automatic (native where the server says the model takes tools). */
   tool_format: AiToolFormat;
-  /** "off" asks the server to skip a thinking model's reasoning. */
-  thinking: "auto" | "off";
+  /** "off" asks the server to skip a thinking model's reasoning; a level
+   *  asks for that much of it. */
+  thinking: AiThinking;
   /** Meaning search: the embedding model ("" = off). */
   embed_model: string;
   /** Where the embedding model runs ("" = the server address). */
@@ -864,6 +865,8 @@ export interface AiConfig {
   /** A key is saved (or set in the environment) for another address, so it
    *  isn't sent to this one: the host it belongs to. */
   key_for_host: string | null;
+  /** The addresses ComfyUI listens on when any isn't loopback, else "". */
+  listen_exposed?: string;
   /** Providers that already have a key (saved or from the environment).
    *  Each provider keeps its own address, model and key. */
   keys_saved: AiProviderId[];
@@ -902,6 +905,8 @@ export type AiReaderId = "builtin" | "crawl4ai" | "firecrawl";
 
 export type AiModelSize = "small" | "medium" | "large";
 export type AiToolFormat = "auto" | "native" | "json";
+/** The Thinking setting: left to the model, off, or a reasoning level. */
+export type AiThinking = "auto" | "off" | "low" | "medium" | "high";
 
 export interface AiConfigPatch {
   enabled?: boolean;
@@ -912,7 +917,7 @@ export interface AiConfigPatch {
   context_max?: number;
   model_size?: "auto" | AiModelSize;
   tool_format?: AiToolFormat;
-  thinking?: "auto" | "off";
+  thinking?: AiThinking;
   embed_model?: string;
   embed_base_url?: string;
   embed_api?: AiEmbedApi;
@@ -1253,6 +1258,11 @@ export interface AiChatEditorState {
   content_rating: "safe" | "nsfw";
   /** Absent for editors that only share the item's info. */
   payload?: Record<string, unknown>;
+  /** A template editor's text. */
+  template_string?: string;
+  negative_template?: string | null;
+  /** A bundle editor's children. */
+  children?: Array<Record<string, unknown>>;
   dirty: boolean;
 }
 
@@ -1436,15 +1446,19 @@ export interface AiChatUsage {
   cut?: boolean;
 }
 
+/** The icon and color a card's new category is made with. */
+export interface AiNewCategoryStyle { color?: string; icon?: string }
+
 export type AiChatOp =
-  | { op: "create"; kind: "module"; new_category: string; body: ModuleCreateInput }
-  | { op: "create"; kind: "bundle"; new_category: string; body: BundleCreateInput }
-  | { op: "create"; kind: "template"; new_category: string; body: TemplateCreateInput }
+  | { op: "create"; kind: "module"; new_category: string; new_category_style?: AiNewCategoryStyle; body: ModuleCreateInput }
+  | { op: "create"; kind: "bundle"; new_category: string; new_category_style?: AiNewCategoryStyle; body: BundleCreateInput }
+  | { op: "create"; kind: "template"; new_category: string; new_category_style?: AiNewCategoryStyle; body: TemplateCreateInput }
   | {
       op: "update"; kind: "module" | "bundle" | "template"; type: string; id: string;
       name: string; body: ModuleUpdateInput & BundleUpdateInput & TemplateUpdateInput;
       before: ModuleUpdateInput & BundleUpdateInput & TemplateUpdateInput;
       new_category?: string;
+      new_category_style?: AiNewCategoryStyle;
       /** "editor": built on the open editor's unsaved version; goes into it. */
       basis?: "editor";
     }
@@ -1466,7 +1480,7 @@ export type AiChatOp =
   /** One change to many items (`update_many`). `to_new`: into the
    *  category the card creates (`new_category`). */
   | {
-      op: "bulk"; kind: "bulk"; new_category: string;
+      op: "bulk"; kind: "bulk"; new_category: string; new_category_style?: AiNewCategoryStyle;
       items: Array<{
         kind: "module" | "bundle" | "template"; id: string; name: string; to_new?: boolean;
         body: { category_id?: string | null; tags?: string[]; content_rating?: "safe" | "nsfw" };
@@ -1501,12 +1515,22 @@ export interface AiTagMember {
 }
 
 /** A change the assistant proposes. Nothing is saved until Apply. */
+export interface AiChatCardPart {
+  tool: string;
+  title: string;
+  summary: string;
+  preview: string[];
+}
+
 export interface AiChatProposal {
   pid: string;
   tool: string;
   title: string;
   summary: string;
   preview: string[];
+  /** Each change the card holds, in order, once it holds more than one
+   *  (several tools on one item in one answer fold into one card). */
+  parts?: AiChatCardPart[];
   warnings: string[];
   /** The proposal this one builds on (same item); apply that first. */
   after: string | null;
@@ -1617,6 +1641,8 @@ export type AiChatStreamEvent =
   | { type: "thinking" }
   | { type: "text"; v: string }
   | { type: "tool"; step: AiChatStep }
+  /** An emoji on the user's message, sent as soon as it is decided. */
+  | { type: "reaction"; emoji: string }
   | { type: "done"; result: AiChatResult }
   | { type: "error"; status: number; message: string };
 

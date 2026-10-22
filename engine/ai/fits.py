@@ -82,7 +82,7 @@ def compile_answer(raw: Any, *, source: dict[str, Any],
         if si is None or si in picked:
             continue
         tis = []
-        for t in entry.get("targets") if isinstance(entry.get("targets"), list) else []:
+        for t in _got if isinstance(_got := entry.get("targets"), list) else []:
             ti = _index(t, len(t_opts))
             if ti is not None and ti not in tis:
                 tis.append(ti)

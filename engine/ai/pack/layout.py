@@ -138,7 +138,7 @@ def _merge_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _module_sets(m: dict[str, Any]) -> list[str]:
     """Variables one module sets."""
-    p = m.get("payload") if isinstance(m.get("payload"), dict) else {}
+    p = _got if isinstance(_got := m.get("payload"), dict) else {}
     kind = m.get("type")
     if kind == "wildcard":
         return [p["var_binding"]] if isinstance(p.get("var_binding"), str) \
@@ -155,7 +155,7 @@ def _module_sets(m: dict[str, Any]) -> list[str]:
 
 
 def _module_name(m: dict[str, Any]) -> str:
-    meta = m.get("meta") if isinstance(m.get("meta"), dict) else {}
+    meta = _got if isinstance(_got := m.get("meta"), dict) else {}
     return str(meta.get("name") or meta.get("library_name") or m.get("name") or m.get("id"))
 
 
@@ -163,9 +163,9 @@ def _base_module(m: dict[str, Any], n: int) -> dict[str, Any]:
     payload = copy.deepcopy(m["payload"])
     return {"id": m["id"], "_uid": f"base.{n}", "enabled": m.get("enabled", True) is not False,
             "type": m["type"], "name": _module_name(m),
-            "meta": m.get("meta") if isinstance(m.get("meta"), dict) else {},
+            "meta": _got if isinstance(_got := m.get("meta"), dict) else {},
             "payload": payload, "payload_hash": m.get("payload_hash") or payload_hash(payload),
-            "instance": m.get("instance") if isinstance(m.get("instance"), dict) else {}}
+            "instance": _got if isinstance(_got := m.get("instance"), dict) else {}}
 
 
 def _before_target(seq: list[dict[str, Any]], m: dict[str, Any]) -> int | None:

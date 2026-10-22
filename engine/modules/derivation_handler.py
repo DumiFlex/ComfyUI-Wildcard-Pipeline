@@ -376,13 +376,13 @@ def _apply_action(
     # the `option_id` the SP3 nested-occurrence model matches a `pick` against.
     # Save/restore around the resolve, mirroring the resolver's own carrier
     # save/restore for nested recursion.
-    set_carrier = getattr(resolve_ctx, "set_carrier", None)
-    get_carrier = getattr(resolve_ctx, "get_carrier", None)
+    set_carrier: Any = getattr(resolve_ctx, "set_carrier", None)
+    get_carrier: Any = getattr(resolve_ctx, "get_carrier", None)
     if carrier_key is not None and callable(set_carrier) and callable(get_carrier):
         module_uid = None
         if isinstance(ctx, dict):
             module_uid = ctx.get("__wp_current_module_uid__") or ctx.get("__wp_current_module_id__")
-        prev = get_carrier()
+        prev: Any = get_carrier()
         set_carrier(module_uid, carrier_key)
         try:
             with negatives.collecting(resolve_ctx) as col:

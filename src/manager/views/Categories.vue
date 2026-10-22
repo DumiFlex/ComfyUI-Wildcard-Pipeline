@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { libraryVersion } from "../composables/useLibraryChanged";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
@@ -54,6 +55,8 @@ async function refresh() {
 }
 
 onMounted(refresh);
+// A chat card applied or undone: counts and names may have moved.
+watch(libraryVersion, () => { void refresh(); });
 
 function moduleCount(row: CategoryRow): number {
   return countsByCategory.value.get(row.id) ?? 0;

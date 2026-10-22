@@ -21,7 +21,7 @@ import { useModuleStore } from "../../stores/moduleStore";
 import { useBundleStore } from "../../stores/bundleStore";
 import { collectLibraryVarHints } from "../../utils/library-suggestions";
 import {
-  applyRow, matchItems, matchVars, mentionItems, probeChat, rowText,
+  applyRow, matchItems, matchVars, mentionItems, probeChat, rememberMention, rowText,
   type ChatProbe, type ChatRow, type MentionItem, type VarItem,
 } from "../../utils/chat-completions";
 import { textareaCaretRect } from "../../utils/textarea-caret";
@@ -155,6 +155,8 @@ function pick(row: ChatRow): void {
   if (!el || !p) return;
   const suffix = row.source === "tag" && autocompleteSeparatorEnabled() ? ", " : "";
   const next = applyRow(el.value, el.selectionStart, p, row, suffix);
+  // The box shows `@Name`; the id goes with the message (`withMentionIds`).
+  if (row.source === "item") rememberMention(row.item);
   el.focus();
   el.setRangeText(next.insert, next.from, next.to, "end");
   picking = true;
@@ -278,6 +280,8 @@ function rowTitle(row: ChatRow): string {
     >
       <template v-for="s in sections" :key="s.label">
         <div class="wp-ai-ac__head">{{ s.label }}</div>
+        <!-- A combobox option: the composer keeps focus and moves through the rows with the arrow keys (aria-activedescendant). -->
+        <!-- eslint-disable-next-line vuejs-accessibility/interactive-supports-focus, vuejs-accessibility/mouse-events-have-key-events -->
         <div
           v-for="e in s.rows"
           :id="`${listId}-${e.index}`"

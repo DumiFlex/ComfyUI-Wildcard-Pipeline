@@ -129,10 +129,11 @@ def test_changes_to_one_item_build_on_each_other():
     assert second["op"]["before"]["payload"]["options"][-1]["value"] == "sundress"
     assert second["summary"].startswith("2 → 4")
     assert not any("apply that one first" in w for w in second["warnings"])
-    # Another tool on it still builds on the card.
+    # Another tool on it lands on the same card too, as its next step.
     third = lib.run("edit_options", {"id": "aaaa0001", "weights": [{"n": 1, "weight": 2}]})
-    assert third["after"] == second["pid"]
-    assert "apply that one first" in third["warnings"][0]
+    assert third["replaces"] == second["pid"] and not third["after"]
+    assert [p["tool"] for p in third["parts"]] == ["add_options", "edit_options"]
+    assert not any("apply that one first" in w for w in third["warnings"])
     with pytest.raises(ValueError):
         lib.run("add_options", {"id": "aaaa0003", "options": [{"text": "x"}]})
 

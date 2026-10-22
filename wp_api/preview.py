@@ -26,7 +26,7 @@ Empty chain or any malformed step → empty resolved map (never 500).
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from aiohttp import web
 
@@ -58,7 +58,7 @@ def _build_catalog(modules: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         payload = m.get("payload")
         if not isinstance(payload, dict):
             continue
-        meta = m.get("meta") if isinstance(m.get("meta"), dict) else {}
+        meta = _got if isinstance(_got := m.get("meta"), dict) else {}
         catalog[mid] = {
             "snapshot_version": 1,
             "uuid": mid,
@@ -125,7 +125,7 @@ def _expand_with_db(
     finally:
         # Every preview request used to leave this connection open.
         conn.close()
-    return walk.snapshots
+    return cast("dict[str, dict[str, Any]]", walk.snapshots)
 
 
 def _jsonify_resolved(resolved: dict[str, Any]) -> dict[str, Any]:

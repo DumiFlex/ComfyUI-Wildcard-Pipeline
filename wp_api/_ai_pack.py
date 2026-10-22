@@ -88,7 +88,7 @@ def _pack_body(
         if isinstance(raw, dict) and isinstance(raw.get("graph"), dict):
             # A graph plan: its items are compiled from the graph again, and
             # keep their keys and ids through ``previous``.
-            asked = body.get("request") if isinstance(body.get("request"), str) else ""
+            asked = _got if isinstance(_got := body.get("request"), str) else ""
             plan = ai_pack.compile_graph_plan(raw, library=library, base=base,
                                               canvas=_canvas(body), previous=raw,
                                               settings=raw.get("settings"), request=asked)
@@ -137,7 +137,7 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     images = await _request_images(cfg, body)
     if isinstance(images, web.Response):
         return images
-    sample = body.get("sample") if isinstance(body.get("sample"), str) else ""
+    sample = _got if isinstance(_got := body.get("sample"), str) else ""
     settings = ai_pack.parse_settings(body.get("settings"))
     decisions = ai_pack.parse_decisions(body.get("decisions"))
     with db_session(request) as conn:
@@ -149,7 +149,7 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     base = _pack_base(request, body, library)
     if isinstance(base, web.Response):
         return base
-    previous = body.get("previous") if isinstance(body.get("previous"), dict) else None
+    previous = _got if isinstance(_got := body.get("previous"), dict) else None
     canvas = _canvas(body) or []
     if turns and previous is not None:
         # The user may have edited the plan by hand: the model's last answer
@@ -199,6 +199,7 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     if turns and previous is not None and ai_pack.locks_note(previous):
         follow += "\n\n" + ai_pack.locks_note(previous)
     answer: Any = None
+    plan: Any = None  # set by the loop, which returns when it can't
     retry = ""
     graph = settings["planner"] == "graph"
     # The user's own words. A decision's answer is not one of them: picked
@@ -365,10 +366,10 @@ async def post_pack_change(request: web.Request) -> web.Response:
     if isinstance(parsed, web.Response):
         return parsed
     plan, _built = parsed
-    key = body.get("key") if isinstance(body.get("key"), str) else ""
+    key = _got if isinstance(_got := body.get("key"), str) else ""
     if key and key not in {i["key"] for i in plan["items"]}:
         return json_error("no such item in the plan", status=400)
-    asked = body.get("request") if isinstance(body.get("request"), str) else ""
+    asked = _got if isinstance(_got := body.get("request"), str) else ""
     try:
         if isinstance(plan.get("graph"), dict):
             # A graph plan: one part on its own schema, merged by the code.
@@ -425,8 +426,8 @@ async def post_pack_images(request: web.Request) -> web.Response:
     plan, _built = parsed
     if not isinstance(plan.get("graph"), dict):
         return json_error("only a graph plan reads images this way", status=400)
-    note = body.get("note") if isinstance(body.get("note"), str) else ""
-    asked = body.get("request") if isinstance(body.get("request"), str) else ""
+    note = _got if isinstance(_got := body.get("note"), str) else ""
+    asked = _got if isinstance(_got := body.get("request"), str) else ""
     try:
         answer = await _ai_client.complete_json(
             cfg, system=ai_pack.IMAGES_SYSTEM, user=ai_pack.images_prompt(plan, note),
@@ -463,7 +464,7 @@ async def post_pack_review(request: web.Request) -> web.Response:
     if isinstance(parsed, web.Response):
         return parsed
     plan, _built = parsed
-    asked = body.get("request") if isinstance(body.get("request"), str) else ""
+    asked = _got if isinstance(_got := body.get("request"), str) else ""
     findings = ai_pack.review_plan(plan, library, request=asked)
     if body.get("ai") is True:
         raw = body.get("recheck")
@@ -501,7 +502,7 @@ async def post_pack_item(request: web.Request) -> web.Response:
         return parsed
     plan, built = parsed
     key = body.get("key")
-    note = body.get("note") if isinstance(body.get("note"), str) else ""
+    note = _got if isinstance(_got := body.get("note"), str) else ""
     if not isinstance(key, str) or key not in {i["key"] for i in plan["items"]}:
         return json_error("no such item in the plan", status=400)
     if next(i for i in plan["items"] if i["key"] == key)["kind"] == "library":
@@ -664,8 +665,8 @@ async def post_bundle_split(request: web.Request) -> web.Response:
         return json_error("a bundle needs at least 3 children to split", status=400)
     if len(children) > ai_split.MAX_CHILDREN:
         return json_error(f"at most {ai_split.MAX_CHILDREN} children", status=400)
-    name = body.get("name") if isinstance(body.get("name"), str) else ""
-    instruction = body.get("instruction") if isinstance(body.get("instruction"), str) else ""
+    name = _got if isinstance(_got := body.get("name"), str) else ""
+    instruction = _got if isinstance(_got := body.get("instruction"), str) else ""
     try:
         answer = await _ai_client.complete_json(
             cfg, system=ai_split.SYSTEM,

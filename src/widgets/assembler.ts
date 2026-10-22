@@ -572,7 +572,7 @@ export function mountHelper(node: AssemblerNode) {
             onClearTemplate: () => {
               askConfirm({
                 title: "Clear the template?",
-                body: "This wipes the entire template text. This can't be undone.",
+                body: "This wipes the template and the negative template. This can't be undone.",
                 variant: "danger",
                 confirmLabel: "Clear template",
                 action: () => {
@@ -728,7 +728,9 @@ function escapeRegex(s: string): string {
 }
 
 /** Wipe the entire template string. */
-function clearTemplate(node: AssemblerNode) {
+/** Empties the template and, with it, the negative template. */
+export function clearTemplate(node: AssemblerNode) {
   const w = templateWidget(node);
   if (w) w.value = "";
+  writeNegativeTemplate(node, "");
 }

@@ -19,6 +19,7 @@ import type { AiConfigPatch, AiEmbedApi, AiIndexStatus, AiModelSize, AiProviderI
 import { useAiConfig } from "../../../composables/useAiConfig";
 import { SUGGESTIONS_SOURCE_NOTE, hfRepo, suggestionsFor, type SuggestedModel } from "../ai-models";
 import { useUiStore } from "../../../stores/uiStore";
+import { THINKING_OPTIONS, isThinking } from "../../../utils/ai-thinking";
 
 const ui = useUiStore();
 const { config, error, save } = useAiConfig();
@@ -59,6 +60,55 @@ async function patch(p: Parameters<typeof save>[0]): Promise<boolean> {
     saveError.value = err instanceof Error ? err.message : "Could not save";
     return false;
   }
+}
+
+/* ── Reset to recommended ───────────────────────────────────────────────
+ * Every choice goes back to what its row recommends. What the user set up
+ * stays: the provider, addresses, keys, models, embedding and web search,
+ * and the Danbooru lookup (its recommendation depends on the image model). */
+const RECOMMENDED = {
+  model_size: "auto", thinking: "auto", unload_after_s: 60,
+  tool_format: "auto", choose_first: false, allow_delete: false, auto_apply: false,
+  web_always_allow: false,
+} as const;
+/* Context is a floor, not a pick: under 16k the chat's instructions don't
+ * fit, so Reset raises a smaller window to 32k and leaves a bigger one. */
+const CONTEXT_MIN = 16384;
+const CONTEXT_RESET = 32768;
+const RECOMMENDED_UI = { explainChip: true, chatThinking: false, chatNotes: true, chatSteps: true } as const;
+const RESET_LABELS: Record<string, string> = {
+  model_size: "Model size", context_max: "Most context to use", thinking: "Thinking",
+  unload_after_s: "Unload the model after", tool_format: "Tool format",
+  choose_first: "Choose the tool first", allow_delete: "Let the assistant delete items",
+  auto_apply: "Apply small changes automatically", web_always_allow: "Don't ask before web calls",
+  explainChip: "Show Explain on selected text", chatThinking: "Show thinking",
+  chatNotes: "Show working notes", chatSteps: "Show what it did",
+};
+const resetChanges = computed<string[]>(() => {
+  const c = config.value;
+  if (!c) return [];
+  const server = (Object.keys(RECOMMENDED) as Array<keyof typeof RECOMMENDED>)
+    .filter((k) => (c[k] ?? RECOMMENDED[k]) !== RECOMMENDED[k]);
+  if ((c.context_max ?? CONTEXT_MIN) < CONTEXT_MIN) server.push("context_max" as never);
+  const local = (Object.keys(RECOMMENDED_UI) as Array<keyof typeof RECOMMENDED_UI>)
+    .filter((k) => ui[k] !== RECOMMENDED_UI[k]);
+  return [...server, ...local].map((k) => RESET_LABELS[k] ?? k);
+});
+const resetAsk = ref(false);
+async function resetToRecommended(): Promise<void> {
+  const c = config.value;
+  if (!c) return;
+  const p: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(RECOMMENDED)) if ((c[k as keyof typeof RECOMMENDED] ?? v) !== v) p[k] = v;
+  if ((c.context_max ?? CONTEXT_MIN) < CONTEXT_MIN) p.context_max = CONTEXT_RESET;
+  if (Object.keys(p).length && !(await patch(p as Parameters<typeof save>[0]))) return;
+  ui.setExplainChip(RECOMMENDED_UI.explainChip);
+  ui.setChatShow("thinking", RECOMMENDED_UI.chatThinking);
+  ui.setChatShow("notes", RECOMMENDED_UI.chatNotes);
+  ui.setChatShow("steps", RECOMMENDED_UI.chatSteps);
+  contextCustom.value = false;
+  unloadCustom.value = false;
+  resetAsk.value = false;
 }
 
 /* ── Address ─────────────────────────────────────────────────────────── */
@@ -135,7 +185,7 @@ const SIZE_LABEL: Record<string, string> = {
   small: "Small (under 20B)", medium: "Medium (20-60B)", large: "Large (over 60B, or a cloud model)",
 };
 const sizeOptions = computed<SelectOption[]>(() => [
-  { value: "auto", label: `Automatic · ${SIZE_LABEL[config.value?.model_size_auto ?? "medium"]}` },
+  { value: "auto", label: `Automatic · ${SIZE_LABEL[config.value?.model_size_auto ?? "medium"]} (recommended)` },
   ...(["small", "medium", "large"] as const).map((v) => ({ value: v, label: SIZE_LABEL[v] })),
 ]);
 async function setSize(v: string | number | null): Promise<void> {
@@ -152,7 +202,7 @@ const contextCustom = ref(false);
 const contextOptions = computed<SelectOption[]>(() => [
   ...CONTEXT_PRESETS.map((n) => ({
     value: n,
-    label: `${n / 1024}k · ${n.toLocaleString("en-US")} tokens${n === 16384 ? " (recommended)" : ""}`,
+    label: `${n / 1024}k · ${n.toLocaleString("en-US")} tokens${n === CONTEXT_MIN ? " (minimum)" : n === CONTEXT_RESET ? " (recommended)" : ""}`,
   })),
   { value: CUSTOM, label: "Custom…" },
 ]);
@@ -171,7 +221,7 @@ const UNLOAD_PRESETS: Array<[number, string]> = [
 ];
 const unloadCustom = ref(false);
 const unloadOptions: SelectOption[] = [
-  ...UNLOAD_PRESETS.map(([value, label]) => ({ value, label })),
+  ...UNLOAD_PRESETS.map(([value, label]) => ({ value, label: value === 60 ? `${label} (recommended)` : label })),
   { value: CUSTOM, label: "Custom…" },
 ];
 const unloadChoice = computed(() =>
@@ -191,16 +241,15 @@ async function commitContext(): Promise<void> {
 }
 
 const toolFormatOptions: SelectOption[] = [
-  { value: "auto", label: "Automatic" },
+  { value: "auto", label: "Automatic (recommended)" },
   { value: "native", label: "Native tool calls" },
   { value: "json", label: "JSON steps" },
 ];
-const thinkingOptions: SelectOption[] = [
-  { value: "auto", label: "As the model does" },
-  { value: "off", label: "Off: answer straight away" },
-];
+const thinkingOptions: SelectOption[] = THINKING_OPTIONS.map(({ value, label }) => ({
+  value, label: value === "auto" ? `${label} (recommended)` : label,
+}));
 async function setThinking(v: string | number | null): Promise<void> {
-  if ((v !== "auto" && v !== "off") || v === config.value?.thinking) return;
+  if (!isThinking(v) || v === config.value?.thinking) return;
   await patch({ thinking: v });
 }
 async function setToolFormat(v: string | number | null): Promise<void> {
@@ -364,7 +413,9 @@ async function removeSearchKey(): Promise<void> {
  * Crawl4AI / Firecrawl server. Every preset is listed whatever is set up. */
 const readerOptions = computed<SelectOption[]>(() => [
   { value: "off", label: "Off" },
-  ...Object.entries(config.value?.reader_engines ?? {}).map(([id, e]) => ({ value: id, label: e.label })),
+  ...Object.entries(config.value?.reader_engines ?? {}).map(([id, e]) => ({
+    value: id, label: id === "builtin" ? `${e.label} (recommended)` : e.label,
+  })),
 ]);
 const reader = computed(() => {
   const id = config.value?.reader_engine;
@@ -569,6 +620,24 @@ const off = computed(() => !config.value?.enabled);
               @update:model-value="setEnabled"
             />
           </SettingRow>
+          <SettingRow
+            label="Reset to recommended"
+            :hint="resetChanges.length
+              ? 'Puts every choice on this page back to its recommended value. Your provider, addresses, keys, models, meaning search and web search stay as they are.'
+              : 'Every choice on this page is at its recommended value.'"
+            setting-key="ai-reset"
+          >
+            <Button v-if="!resetAsk" size="sm" variant="ghost" :disabled="!resetChanges.length" data-test="ai-reset" @click="resetAsk = true">Reset…</Button>
+            <template v-else>
+              <Button size="sm" data-test="ai-reset-confirm" @click="resetToRecommended">Reset</Button>
+              <Button size="sm" variant="ghost" data-test="ai-reset-cancel" @click="resetAsk = false">Cancel</Button>
+            </template>
+            <template #extra>
+              <p v-if="resetAsk" class="wp-set-row__hint wp-ai-set__reset-list" data-test="ai-reset-list">
+                Changes: {{ resetChanges.join(", ") }}.
+              </p>
+            </template>
+          </SettingRow>
         </SettingGroup>
 
         <SettingGroup title="Provider" :note="off ? 'You can set this up before turning the assistant on. Test connection works once it is on.' : undefined">
@@ -729,6 +798,7 @@ const off = computed(() => !config.value?.enabled);
             v-if="isLocal"
             form
             label="Most context to use"
+            recommended="At least 16k; 32k or more for chats that take several steps"
             hint="Tokens of context the assistant uses. Ollama gets this much for the whole chat (changing it reloads the model, which throws away what it already read); drafts ask for what they need, up to this. Lower it if the model runs out of GPU memory; 16k or more keeps the chat's instructions whole. LM Studio and llama.cpp set this when the model loads, so set it there too."
             setting-key="ai-context"
             for="ai-context"
@@ -760,7 +830,7 @@ const off = computed(() => !config.value?.enabled);
           <SettingRow
             form
             label="Thinking"
-            hint="Thinking models (Qwen3, DeepSeek R1, …) reason before they answer, which takes time and counts against the reply's limit: a long think can leave a cut-off answer. Off asks the server to skip it (Ollama, llama.cpp, LM Studio, OpenRouter and OpenAI understand this; a model that must reason ignores it)."
+            hint="Thinking models (Qwen3, DeepSeek R1, …) reason before they answer, which takes time and counts against the reply's limit: a long think can leave a cut-off answer. Off asks the server to skip it, and Low, Medium or High ask for that much reasoning (Ollama, llama.cpp, LM Studio, OpenRouter, OpenAI and Claude understand this; where a server has only on and off, any level means on, and a model that must reason ignores Off). You can also change it from the chat header."
             setting-key="ai-thinking"
           >
             <Select
@@ -936,6 +1006,7 @@ const off = computed(() => !config.value?.enabled);
         <SettingGroup title="Chat">
           <SettingRow
             label="Show Explain on selected text"
+            recommended="On"
             hint="Select text anywhere in the manager (docs, replies, warnings) and a small Explain / Ask bar appears above it. Ctrl+Shift+X explains the selection without it. The browser's right-click menu is left alone. Saved in this browser."
             setting-key="ai-explain-chip"
           >
@@ -946,11 +1017,51 @@ const off = computed(() => !config.value?.enabled);
               @update:model-value="(v: boolean) => ui.setExplainChip(v)"
             />
           </SettingRow>
+          <SettingRow
+            label="Show thinking"
+            recommended="Off"
+            hint="A folded Thinking line with what a thinking model reasoned before each step. Off hides it; the model still thinks as Thinking above says. Saved in this browser."
+            setting-key="ai-chat-show-thinking"
+          >
+            <Toggle
+              :model-value="ui.chatThinking"
+              aria-label="Show thinking"
+              data-test="ai-chat-show-thinking"
+              @update:model-value="(v: boolean) => ui.setChatShow('thinking', v)"
+            />
+          </SettingRow>
+          <SettingRow
+            label="Show working notes"
+            recommended="On"
+            hint="Text the model wrote between steps (“Let me check the docs first”), folded above the reply. Saved in this browser."
+            setting-key="ai-chat-show-notes"
+          >
+            <Toggle
+              :model-value="ui.chatNotes"
+              aria-label="Show working notes"
+              data-test="ai-chat-show-notes"
+              @update:model-value="(v: boolean) => ui.setChatShow('notes', v)"
+            />
+          </SettingRow>
+          <SettingRow
+            label="Show what it did"
+            recommended="On"
+            hint="The lines above a reply that list what the assistant read, searched and ran (“Read the docs: What the assistant can do”). Off shows only the reply and its cards. Saved in this browser."
+            setting-key="ai-chat-show-steps"
+          >
+            <Toggle
+              :model-value="ui.chatSteps"
+              aria-label="Show what it did"
+              data-test="ai-chat-show-steps"
+              @update:model-value="(v: boolean) => ui.setChatShow('steps', v)"
+            />
+          </SettingRow>
         </SettingGroup>
 
         <SettingGroup title="Permissions" note="The assistant can't change these itself.">
           <SettingRow
             label="Let the assistant delete items"
+            recommended="Off"
             hint="The chat can propose deleting modules, bundles, templates, categories and tags. Each delete card still asks you to confirm, and Undo brings everything back. Off by default."
             setting-key="ai-allow-delete"
           >
@@ -963,6 +1074,7 @@ const off = computed(() => !config.value?.enabled);
           </SettingRow>
           <SettingRow
             label="Apply small changes automatically"
+            recommended="Off"
             hint="New descriptions, tags and categories from the chat are applied without a click. Each card says it was applied and keeps its Undo. Ratings, content, renames and deletes always wait for you. Off by default."
             setting-key="ai-auto-apply"
           >
@@ -1096,6 +1208,7 @@ const off = computed(() => !config.value?.enabled);
 
           <SettingRow
             label="Danbooru tag lookup"
+            recommended="On if your image model uses Danbooru tags (Illustrious, Pony, NoobAI)"
             hint="Lets the chat look a tag up on danbooru.donmai.us: what it means (wiki), its aliases, what it implies and the tags used with it most. Read only, tags and wiki only, never posts or images, one request a second. Each lookup asks you first. For spellings and post counts the downloaded tag list is enough and stays offline."
             setting-key="ai-danbooru"
           >
@@ -1109,6 +1222,7 @@ const off = computed(() => !config.value?.enabled);
 
           <SettingRow
             label="Don't ask before web calls"
+            recommended="Off"
             hint="Web searches, page reads and Danbooru lookups run without the Allow card. The chat then decides what leaves your machine; you still see each one in its steps."
             setting-key="ai-web-always"
           >
@@ -1159,6 +1273,7 @@ const off = computed(() => !config.value?.enabled);
           </SettingRow>
           <SettingRow
             label="Choose the tool first"
+            recommended="Off, unless a small model keeps picking the wrong tool"
             hint="Small and medium models on a local server, in JSON steps: each step first names the tool to call, then writes only that tool's arguments. Can help a model that picks the wrong tool; it costs a little time per step. Off by default."
             setting-key="ai-choose-first"
           >
@@ -1187,6 +1302,11 @@ const off = computed(() => !config.value?.enabled);
             content; use a local model for NSFW packs.
           </p>
           <p class="wp-ai-set__muted">The assistant only proposes changes. Nothing is saved until you press Save.</p>
+          <p v-if="config?.listen_exposed" class="wp-ai-set__lan" role="note" data-test="ai-lan-exposed">
+            <strong>Open to your network.</strong> ComfyUI listens on {{ config.listen_exposed }} (--listen),
+            and it has no login, so anyone who can reach this address can use the assistant{{ isLocal ? "" : " and your key's credits" }}.
+            Use it only on a network you trust, or start ComfyUI without --listen.
+          </p>
         </section>
 
         <section v-if="suggestions" class="wp-ai-set__card wp-ai-set__card--models" data-test="ai-suggested-models" :data-group="suggestions.key">
@@ -1313,6 +1433,8 @@ p.wp-ai-set__muted:has(.wp-ai-set__link) { padding: var(--wp-space-2) var(--wp-s
   margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--wp-text-dim);
 }
 .wp-ai-set__muted { color: var(--wp-text-dim); font-size: 12px; }
+.wp-ai-set__reset-list { margin: 3px 0 0; font-size: 12px; color: var(--wp-text-dim); }
+.wp-ai-set__lan { margin: 0; font-size: 12px; line-height: 1.45; color: var(--wp-warn); }
 .wp-ai-set__card code { font-family: var(--wp-font-mono); font-size: 12px; color: var(--wp-text); }
 .wp-ai-set__card--models { gap: var(--wp-space-2); line-height: 1.45; }
 .wp-ai-set__model-group { margin-top: var(--wp-space-3); }

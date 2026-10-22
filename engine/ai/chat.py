@@ -42,7 +42,7 @@ from engine.ai import use as ai_use
 from engine.ai import vocab as ai_vocab
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_wildcard_edit
-from engine.ai.chat_manage import ManageTools, bulk_key
+from engine.ai.chat_manage import ManageTools, bulk_key, default_style
 from engine.ai.chat_tools import MoreTools, _num, _reach, _reach_text
 from engine.modules.constraint_handler import ConstraintHandler
 from engine.modules.derivation_handler import DerivationHandler
@@ -694,9 +694,9 @@ def parse_args(raw: Any) -> dict[str, Any]:
 def parse_step(raw: Any) -> tuple[str, list[dict[str, Any]]]:
     if not isinstance(raw, dict):
         raise ValueError("the model's answer wasn't an object")
-    message = raw.get("message") if isinstance(raw.get("message"), str) else ""
+    message = _got if isinstance(_got := raw.get("message"), str) else ""
     calls: list[dict[str, Any]] = []
-    for c in raw.get("calls") if isinstance(raw.get("calls"), list) else []:
+    for c in _got if isinstance(_got := raw.get("calls"), list) else []:
         if isinstance(c, dict) and c.get("tool") in TOOLS:
             calls.append({"tool": c["tool"], "args": c.get("args", "")})
     return message.strip()[:MAX_MESSAGE], calls[:MAX_CALLS_PER_STEP]
@@ -764,6 +764,9 @@ class Library(MoreTools, ManageTools):
         self.last_card: dict[str, Any] | None = None
         #: The emoji `react` put on the user's message this turn, else "".
         self.reaction = ""
+        #: Put on the message as it was sent (`react.opening`); the model's
+        #: own `react` replaces it.
+        self.opening_reaction = ""
         #: Create cards from earlier answers the user hasn't applied, by pid:
         #: edits to them come back as a card that replaces them.
         self._earlier_ops: dict[str, dict[str, Any]] = {}
@@ -801,11 +804,13 @@ class Library(MoreTools, ManageTools):
     def use_editor(self, editor: Any) -> None:
         """Read the open editor's version of its item instead of the saved
         row: the fields it sends (name, description, tags, category_id,
-        content_rating, payload) replace the saved ones."""
+        content_rating, payload; a template's text, a bundle's children)
+        replace the saved ones."""
         if not isinstance(editor, dict) or not isinstance(editor.get("id"), str):
             return
         item_id = editor["id"]
-        saved = self.modules.get(item_id) or self.bundles.get(item_id)
+        saved = (self.modules.get(item_id) or self.bundles.get(item_id)
+                 or self.templates.get(item_id))
         if saved is None and editor.get("new") is True:
             saved = self._add_unsaved(item_id, editor.get("type"))
         if saved is None:
@@ -823,10 +828,18 @@ class Library(MoreTools, ManageTools):
             if isinstance(saved.get("payload"), dict) and "history" in saved["payload"]:
                 payload.setdefault("history", saved["payload"]["history"])
             row["payload"] = payload
+        if item_id in self.templates:
+            for key in ("template_string", "negative_template"):
+                if isinstance(editor.get(key), str):
+                    row[key] = editor[key]
+        if isinstance(editor.get("children"), list) and item_id in self.bundles:
+            row["children"] = copy.deepcopy(editor["children"])
         if item_id in self.modules:
             self.modules[item_id] = row
             self.names[item_id] = row.get("name") or ""
             self._catalog = None
+        elif item_id in self.templates:
+            self.templates[item_id] = row
         else:
             self.bundles[item_id] = row
         self.editor_id = item_id
@@ -844,6 +857,9 @@ class Library(MoreTools, ManageTools):
             self.bundles[item_id] = row = {**row, "children": []}
         elif kind in ("wildcard", "fixed_values", "combine", "derivation", "constraint"):
             self.modules[item_id] = row = {**row, "type": kind, "payload": {}}
+        elif kind == "template":
+            self.templates[item_id] = row = {**row, "template_string": "",
+                                             "negative_template": ""}
         else:
             return None
         self.editor_new = True
@@ -1174,9 +1190,9 @@ class Library(MoreTools, ManageTools):
         for r in self.modules.values():
             if r.get("type") != "constraint" or r.get("_proposed"):
                 continue
-            p = r.get("payload") if isinstance(r.get("payload"), dict) else {}
-            src = str((self.modules.get(p.get("source_wildcard_id")) or {}).get("name") or "")
-            tgt = str((self.modules.get(p.get("target_wildcard_id")) or {}).get("name") or "")
+            p = _got if isinstance(_got := r.get("payload"), dict) else {}
+            src = str((self.modules.get(str(p.get("source_wildcard_id"))) or {}).get("name") or "")
+            tgt = str((self.modules.get(str(p.get("target_wildcard_id"))) or {}).get("name") or "")
             name = str(r.get("name") or "").lower()
             if (src.lower() == la and tgt.lower() == lb) or name in (
                     f"{la} to {lb}", f"{la} → {lb}", f"{la} -> {lb}"):
@@ -1462,7 +1478,7 @@ class Library(MoreTools, ManageTools):
 
     @staticmethod
     def _writes(r: dict[str, Any]) -> set[str]:
-        p = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        p = _got if isinstance(_got := r.get("payload"), dict) else {}
         out = {p.get("var_binding"), p.get("output_var")}
         out |= {v.get("name") for v in p.get("values") or [] if isinstance(v, dict)}
         if r.get("type") == "derivation":
@@ -1546,7 +1562,7 @@ class Library(MoreTools, ManageTools):
     def _meta(self, args: dict[str, Any]) -> dict[str, Any]:
         tags: list[str] = []
         lower = {t.lower(): t for t in self.tags}
-        for t in args.get("tags") if isinstance(args.get("tags"), list) else []:
+        for t in _got if isinstance(_got := args.get("tags"), list) else []:
             tag = _short(t, ai_describe.MAX_TAG_LEN).lstrip("#")
             if tag:
                 tag = lower.get(tag.lower(), tag.lower())
@@ -1563,8 +1579,8 @@ class Library(MoreTools, ManageTools):
         return _short(args.get("name"), 120) or fallback
 
     def _spec(self, args: dict[str, Any]) -> dict[str, Any]:
-        return {"options": args.get("options") if isinstance(args.get("options"), list) else [],
-                "axes": args.get("axes") if isinstance(args.get("axes"), list) else [],
+        return {"options": _got if isinstance(_got := args.get("options"), list) else [],
+                "axes": _got if isinstance(_got := args.get("axes"), list) else [],
                 "null_weight": args.get("null_weight", 0)}
 
     def create_wildcard(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -1643,7 +1659,7 @@ class Library(MoreTools, ManageTools):
 
     @staticmethod
     def _writes_var(r: dict[str, Any], var: str) -> bool:
-        p = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        p = _got if isinstance(_got := r.get("payload"), dict) else {}
         return (p.get("var_binding") == var or p.get("output_var") == var
                 or any(isinstance(v, dict) and v.get("name") == var
                        for v in p.get("values") or []))
@@ -1667,11 +1683,11 @@ class Library(MoreTools, ManageTools):
         and name (and variable for a wildcard, source and target for a
         constraint). Its card is replaced at the same id (`run`); a
         wildcard's variable may change."""
-        body = op.get("body") if isinstance(op.get("body"), dict) else {}
+        body = _got if isinstance(_got := op.get("body"), dict) else {}
         if op.get("op") != "create" or op.get("kind") not in ("module", "bundle"):
             return None
         rows = self.modules if op["kind"] == "module" else self.bundles
-        p = body.get("payload") if isinstance(body.get("payload"), dict) else {}
+        p = _got if isinstance(_got := body.get("payload"), dict) else {}
 
         def key(r: dict[str, Any], q: dict[str, Any]) -> tuple[Any, ...]:
             if r.get("type") == "constraint":
@@ -1683,7 +1699,7 @@ class Library(MoreTools, ManageTools):
 
         want = key(body, p)
         for r in reversed(list(rows.values())):
-            q = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+            q = _got if isinstance(_got := r.get("payload"), dict) else {}
             if r.get("_proposed") and key(r, q) == want:
                 return r
         return None
@@ -1744,7 +1760,7 @@ class Library(MoreTools, ManageTools):
 
     def add_options(self, args: dict[str, Any]) -> dict[str, Any]:
         r = self._module(args, "wildcard")
-        old = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        old = _got if isinstance(_got := r.get("payload"), dict) else {}
         spec = self._spec(args)
         spec["null_weight"] = 0
         out = ai_wildcard.compile_spec(spec, var=old.get("var_binding") or None, refs=self.refs,
@@ -1775,7 +1791,7 @@ class Library(MoreTools, ManageTools):
 
     def edit_options(self, args: dict[str, Any]) -> dict[str, Any]:
         r = self._module(args, "wildcard")
-        old = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        old = _got if isinstance(_got := r.get("payload"), dict) else {}
         opts = [o for o in old.get("options") or [] if isinstance(o, dict)]
         shown = [
             {"id": str(n), "value": "" if o.get("is_null") else str(o.get("value") or ""),
@@ -1787,7 +1803,7 @@ class Library(MoreTools, ManageTools):
         nulls = {str(n) for n, o in enumerate(opts, start=1) if o.get("is_null")}
 
         def _numbered(key: str, field: str) -> list[dict[str, Any]]:
-            rows = args.get(key) if isinstance(args.get(key), list) else []
+            rows = _got if isinstance(_got := args.get(key), list) else []
             return [{"id": str(x.get("n")), field: x.get(field)}
                     for x in rows if isinstance(x, dict)]
 
@@ -1876,7 +1892,7 @@ class Library(MoreTools, ManageTools):
             # Saved constraints keyed by these tags keep the old names (an
             # unapplied constraint card gets its own warning, `_broken_links`).
             for m in self.modules.values():
-                cp = m.get("payload") if isinstance(m.get("payload"), dict) else {}
+                cp = _got if isinstance(_got := m.get("payload"), dict) else {}
                 if (m.get("type") == "constraint" and not m.get("_proposed")
                         and r["id"] in (cp.get("source_wildcard_id"),
                                         cp.get("target_wildcard_id"))):
@@ -2007,7 +2023,7 @@ class Library(MoreTools, ManageTools):
 
     def _rules(self, args: dict[str, Any], taken: set[str]) -> dict[str, Any]:
         compiled = ai_derivation.compile_rules(
-            {"rules": args.get("rules") if isinstance(args.get("rules"), list) else []},
+            {"rules": _got if isinstance(_got := args.get("rules"), list) else []},
             catalog=self.catalog, taken_ids=taken, refs=self.refs,
         )
         if not compiled["rules"]:
@@ -2055,7 +2071,7 @@ class Library(MoreTools, ManageTools):
 
     def add_rules(self, args: dict[str, Any]) -> dict[str, Any]:
         r = self._module(args, "derivation")
-        old = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        old = _got if isinstance(_got := r.get("payload"), dict) else {}
         old_rules = [x for x in old.get("rules") or [] if isinstance(x, dict)]
         compiled = self._rules(args, {x["id"] for x in old_rules if isinstance(x.get("id"), str)})
         payload = copy.deepcopy(old)
@@ -2081,7 +2097,7 @@ class Library(MoreTools, ManageTools):
         source = ai_constraint.side_view(src, "S")
         target = ai_constraint.side_view(tgt, "T")
         compiled = ai_constraint.compile_rules(
-            {"rules": args.get("rules") if isinstance(args.get("rules"), list) else []},
+            {"rules": _got if isinstance(_got := args.get("rules"), list) else []},
             source=source, target=target,
         )
         if not compiled["cells"] and not compiled["exceptions"]:
@@ -2167,7 +2183,8 @@ class Library(MoreTools, ManageTools):
                     preview.append("Category: none")
             else:
                 cid, new_cat = self._category(args["category"])
-                if (cid or new_cat) and cid != r.get("category_id"):
+                # A new category is a change even for an item in none.
+                if new_cat or (cid and cid != r.get("category_id")):
                     body["category_id"], before["category_id"] = cid, r.get("category_id")
                     preview.append(f"Category: {args['category'].strip()}"
                                    + (" (new)" if new_cat else ""))
@@ -2257,7 +2274,7 @@ class Library(MoreTools, ManageTools):
         with. An edit to it comes back as a card that replaces the old one
         (`run`), so "now add negatives" works before anything is applied."""
         op = proposal.get("op") or {}
-        body = op.get("body") if isinstance(op.get("body"), dict) else None
+        body = _got if isinstance(_got := op.get("body"), dict) else None
         pid = proposal.get("pid")
         if op.get("op") == "categories" and isinstance(pid, str):
             self._note_categories(op, pid)
@@ -2296,9 +2313,9 @@ class Library(MoreTools, ManageTools):
         """A change to a wildcard that cards not yet applied rely on (a new
         constraint's rules name its options and tags): which rules it
         breaks, so nothing resets silently."""
-        body = op.get("body") if isinstance(op.get("body"), dict) else {}
+        body = _got if isinstance(_got := op.get("body"), dict) else {}
         wid = op.get("id") if op.get("op") == "update" else body.get("id")
-        payload = body.get("payload") if isinstance(body.get("payload"), dict) else None
+        payload = _got if isinstance(_got := body.get("payload"), dict) else None
         if not isinstance(wid, str) or payload is None or "options" not in payload:
             return []
         ids = {o.get("id") for o in payload.get("options") or [] if isinstance(o, dict)}
@@ -2307,14 +2324,14 @@ class Library(MoreTools, ManageTools):
         for r in self.modules.values():
             if r.get("type") != "constraint" or not r.get("_proposed"):
                 continue
-            cp = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+            cp = _got if isinstance(_got := r.get("payload"), dict) else {}
             side = ("source" if cp.get("source_wildcard_id") == wid else
                     "target" if cp.get("target_wildcard_id") == wid else "")
             if not side:
                 continue
             lost = [str(e.get(side)) for e in cp.get("exceptions") or []
                     if isinstance(e, dict) and e.get(f"{side}_id") not in ids]
-            matrix = cp.get("matrix") if isinstance(cp.get("matrix"), dict) else {}
+            matrix = _got if isinstance(_got := cp.get("matrix"), dict) else {}
             used = (set(matrix) if side == "source" else
                     {t for cells in matrix.values() if isinstance(cells, dict) for t in cells})
             lost += [f"#{t}" for t in sorted(used - tags)]
@@ -2399,6 +2416,11 @@ class Library(MoreTools, ManageTools):
                 return proposal
         elif self._fold(proposal):
             after = proposal.get("after")
+        self._absorb_category(proposal)
+        if op.get("new_category") and "new_category_style" not in op:
+            # A new category gets an icon and a color, as the page offers.
+            op["new_category_style"] = default_style(
+                str(op["new_category"]), self._taken_colors())
         # A change that points at an item proposed earlier in this answer
         # (a constraint between two new wildcards, a bundle of new modules)
         # waits for that one: its id only exists once it is applied.
@@ -2455,30 +2477,112 @@ class Library(MoreTools, ManageTools):
         self._answer_cards[pid] = proposal
         return proposal
 
+    def _absorb_category(self, proposal: dict[str, Any]) -> None:
+        """A card that files items into a category a Categories card of this
+        answer makes takes that card's place: it creates the category as it
+        applies (`new_category`), so "create Outfit" and "put Shirt in
+        Outfit" are one card (Dumi, 2026-10-22). Only a Categories card that
+        makes just that one category and renames or restyles nothing."""
+        name = str((proposal["op"]).get("new_category") or "").strip()
+        if not name:
+            return
+        pid, _ = self.proposed_categories.get(name.lower(), ("", ""))
+        card = self._answer_cards.get(pid)
+        cop = (card or {}).get("op") or {}
+        styles = cop.get("styles") or []
+        if (card is None or cop.get("op") != "categories" or cop.get("rename")
+                or any("id" in st for st in styles)
+                or [n.lower() for n in cop.get("create") or []] != [name.lower()]):
+            return
+        # The card's color and icon come along.
+        look = next((st for st in styles if st.get("name", "").lower() == name.lower()), {})
+        proposal["op"]["new_category_style"] = {
+            k: look[k] for k in ("color", "icon") if look.get(k)}
+        proposal["absorbs"] = [*proposal.get("absorbs", []), pid]
+        proposal["parts"] = _join_parts(_card_parts(card), _card_parts(proposal))
+        if card.get("risk") != "low":
+            proposal.pop("risk", None)
+        del self._answer_cards[pid]
+        self.proposed_categories[name.lower()] = (proposal["pid"], name)
+
     def _fold(self, proposal: dict[str, Any]) -> bool:
-        """Fold a second change to the same item by the same tool in this
-        answer into one card: it was built on the first card's result, so it
-        holds both changes. Re-test on 367a6a5 (9B): edit_bundle three times,
-        two near-identical cards left on screen."""
+        """Fold a later change to the same item in this answer into one
+        card, whatever the tool: it was built on the earlier card's result,
+        so it holds both changes. The card keeps each step in `parts`, in
+        order (Dumi, 2026-10-22: category, fallback and re-weight on one
+        wildcard as one card). Re-test on 367a6a5 (9B): edit_bundle three
+        times, two near-identical cards left on screen."""
         op = proposal["op"]
         prev = self._answer_cards.get(str(proposal.get("after")))
         prev_op = (prev or {}).get("op") or {}
-        if (prev is None or op.get("op") != "update" or prev.get("tool") != proposal["tool"]
+        if (prev is not None and op.get("op") == "update" and prev_op.get("op") == "create"
+                and (prev_op.get("body") or {}).get("id") == op.get("id")):
+            return self._fold_into_create(proposal, prev)
+        if (prev is None or op.get("op") != "update"
                 or prev_op.get("op") != "update" or prev_op.get("id") != op.get("id")):
             return False
+        parts = _join_parts(_card_parts(prev), _card_parts(proposal))
+        later = op.get("body") or {}
         op["body"] = {**copy.deepcopy(prev_op.get("body") or {}), **(op.get("body") or {})}
-        if "before" in prev_op:
-            op["before"] = copy.deepcopy(prev_op["before"])
+        # The earliest value of each key is what the library holds.
+        op["before"] = {**(op.get("before") or {}), **copy.deepcopy(prev_op.get("before") or {})}
+        if "category_id" not in later:
+            # Only the earlier step set the category.
+            op["new_category"] = prev_op.get("new_category") or ""
         proposal["preview"] = list(dict.fromkeys(
             [*(prev.get("preview") or []), *(proposal.get("preview") or [])]))
-        start = re.match(r"(\d+) → ", str(prev.get("summary") or ""))
-        end = re.match(r"\d+ → (.*)", str(proposal.get("summary") or ""))
-        if start and end:
-            proposal["summary"] = f"{start.group(1)} → {end.group(1)}"
+        if len({part["tool"] for part in parts}) > 1:
+            proposal["title"] = f"Change {op.get('name') or prev_op.get('name') or ''}".strip()
+            proposal["summary"] = " · ".join(dict.fromkeys(
+                str(part["summary"]) for part in parts if part["summary"]))
+        else:
+            start = re.match(r"(\d+) → ", str(prev.get("summary") or ""))
+            end = re.match(r"\d+ → (.*)", str(proposal.get("summary") or ""))
+            if start and end:
+                proposal["summary"] = f"{start.group(1)} → {end.group(1)}"
+        proposal["parts"] = parts
+        if prev.get("risk") != "low":
+            proposal.pop("risk", None)
         proposal["replaces"] = prev["pid"]
         proposal["after"] = prev.get("after")
         if prev.get("needs"):
             proposal["needs"] = prev["needs"]
+        return True
+
+    def _fold_into_create(self, proposal: dict[str, Any], prev: dict[str, Any]) -> bool:
+        """An edit to an item a create card of this answer makes becomes
+        that create card, with the edit in it: one card for a new wildcard
+        and its nested refs, not "create" then "add the refs" (Dumi,
+        2026-10-22)."""
+        op, prev_op, pid = proposal["op"], prev["op"], proposal["pid"]
+        body = copy.deepcopy(prev_op.get("body") or {})
+        for key, value in (op.get("body") or {}).items():
+            if key == "payload" and isinstance(value, dict):
+                body["payload"] = {**(body.get("payload") or {}), **copy.deepcopy(value)}
+            else:
+                body[key] = copy.deepcopy(value)
+        # A later step that sets the category decides it.
+        new_cat = (op.get("new_category") or "") if "category_id" in (op.get("body") or {}) \
+            else prev_op.get("new_category", "")
+        op.clear()
+        op.update({"op": "create", "kind": prev_op.get("kind", "module"),
+                   "new_category": new_cat, "body": body})
+        proposal["title"] = prev.get("title") or proposal.get("title")
+        proposal["preview"] = list(dict.fromkeys(
+            [*(prev.get("preview") or []), *(proposal.get("preview") or [])]))
+        proposal["replaces"] = prev["pid"]
+        proposal["after"] = prev.get("after")
+        if prev.get("needs"):
+            proposal["needs"] = prev["needs"]
+        iid = body["id"]
+        rows = self.modules if op["kind"] == "module" else (
+            self.bundles if op["kind"] == "bundle" else self.templates)
+        rows[iid] = {**copy.deepcopy(body), "_proposed": pid}
+        if op["kind"] == "module":
+            self.names[iid] = str(body.get("name") or "")
+            self._catalog = None
+            self._pending[iid] = (pid, rows[iid])
+        self._created[iid] = pid
         return True
 
 
@@ -2503,6 +2607,30 @@ def _same_item(row: dict[str, Any], body: dict[str, Any]) -> bool:
     return all(bare(row.get(k)) == bare(body.get(k)) for k in keys)
 
 
+def _card_parts(card: dict[str, Any]) -> list[dict[str, Any]]:
+    """A card's steps: its own `parts` once it holds several changes, else
+    itself as one."""
+    if card.get("parts"):
+        return list(card["parts"])
+    return [{"tool": card.get("tool"), "title": card.get("title") or "",
+             "summary": card.get("summary") or "", "preview": list(card.get("preview") or [])}]
+
+
+def _join_parts(first: list[dict[str, Any]],
+                then: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Two cards' steps in order; the same tool twice in a row is one step
+    (its second call built on the first, so it holds both)."""
+    out = [dict(p) for p in first]
+    for part in then:
+        if out and out[-1]["tool"] == part["tool"]:
+            last = out[-1]
+            last["preview"] = list(dict.fromkeys([*last["preview"], *part["preview"]]))
+            last["summary"] = part["summary"] or last["summary"]
+        else:
+            out.append(dict(part))
+    return out
+
+
 def proposal_note(tool: str, proposal: dict[str, Any]) -> str:
     """What the model is told after a change tool: a card, not a change.
     Small models read "proposal shown" as done, then search the library for
@@ -2511,7 +2639,7 @@ def proposal_note(tool: str, proposal: dict[str, Any]) -> str:
     pid, title = proposal.get("pid"), proposal.get("title")
     head = (f"{tool}: card {pid} ({title}) is waiting for the user's Apply. NOTHING has "
             "changed yet")
-    body = op.get("body") if isinstance(op.get("body"), dict) else {}
+    body = _got if isinstance(_got := op.get("body"), dict) else {}
     if op.get("op") == "create" and isinstance(body.get("id"), str):
         name = re.sub(r"[\[\]\n#]", " ", str(body.get("name") or "")).strip()
         head += (f": it will be created as [[{body['id']}#{name}]]. Point at it by that id "
@@ -2519,6 +2647,9 @@ def proposal_note(tool: str, proposal: dict[str, Any]) -> str:
     if proposal.get("replaces"):
         head += (f". It replaces card {proposal['replaces']} (the same item): there is one "
                  "card for it, don't propose it again")
+    if proposal.get("absorbs"):
+        head += (f". It also creates the category {op.get('new_category')}, so card"
+                 f" {', '.join(proposal['absorbs'])} is gone: this one card does both")
     needs = proposal.get("needs") or ([proposal["after"]] if proposal.get("after") else [])
     if needs:
         head += (f". It needs card{'s' if len(needs) > 1 else ''} {', '.join(needs)} applied "
@@ -2570,10 +2701,10 @@ def args_note(tool: str, args: dict[str, Any], lib: Library | None = None) -> st
         sec = f" › {_short(args.get('section'), 30)}" if args.get("section") else ""
         return f"Read the docs: {title}{sec}"
     if tool == "run_test":
-        stack = args.get("stack") if isinstance(args.get("stack"), list) else []
+        stack = _got if isinstance(_got := args.get("stack"), list) else []
         names = [_short(x.get("item") if isinstance(x, dict) else x, 30) for x in stack[:4]]
         more = f" +{len(stack) - 4}" if len(stack) > 4 else ""
-        n = args.get("seeds") if isinstance(args.get("seeds"), int) else 100
+        n = _got if isinstance(_got := args.get("seeds"), int) else 100
         return f"Ran {', '.join(names)}{more} on {n} seeds" + (
             " with the proposed changes" if args.get("proposed") else "")
     if tool == "find_duplicates":

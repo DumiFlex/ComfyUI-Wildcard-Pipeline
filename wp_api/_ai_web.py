@@ -29,11 +29,6 @@ from typing import Any
 import aiohttp
 from aiohttp.abc import AbstractResolver
 
-try:
-    from aiohttp.abc import ResolveResult
-except ImportError:  # aiohttp before 3.9 typed it as a plain dict
-    ResolveResult = dict  # type: ignore[misc,assignment]
-
 from engine.ai import web_read
 from wp_api import _ai_client as client
 
@@ -97,7 +92,7 @@ class _PublicResolver(AbstractResolver):
         self._inner = aiohttp.ThreadedResolver()
 
     async def resolve(self, host: str, port: int = 0,
-                      family: socket.AddressFamily = socket.AF_INET) -> list[ResolveResult]:
+                      family: socket.AddressFamily = socket.AF_INET) -> list[Any]:
         found = await self._inner.resolve(host, port, family)
         ok = [r for r in found if _public_ip(str(r["host"]))]
         if not ok:
@@ -190,8 +185,8 @@ async def _firecrawl(reader: dict[str, Any], url: str) -> tuple[str, str]:
     md = page.get("markdown") if isinstance(page, dict) else None
     if not isinstance(md, str):
         raise WebError("Firecrawl gave no page text")
-    meta = page.get("metadata") if isinstance(page.get("metadata"), dict) else {}
-    title = meta.get("title") if isinstance(meta.get("title"), str) else ""
+    meta = _got if isinstance(_got := page.get("metadata"), dict) else {}
+    title = _got if isinstance(_got := meta.get("title"), str) else ""
     return title, md
 
 

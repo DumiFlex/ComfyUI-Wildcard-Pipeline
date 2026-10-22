@@ -49,8 +49,11 @@ import type { AiPhase } from "../../api/ai-progress";
 import { useAiChat, type ChatAssistantEntry, type SearchApproval } from "../../composables/useAiChat";
 import { clearPointer, EDIT_ROUTES } from "../../composables/useAiActions";
 import { useAiConfig } from "../../composables/useAiConfig";
+import { THINKING_OPTIONS, isThinking } from "../../utils/ai-thinking";
+import { useUiStore } from "../../stores/uiStore";
+import { deletedIds } from "../../composables/useLibraryChanged";
 import { useAiChatWidth } from "../../composables/useAiChatWidth";
-import type { AiCardFix, AiChatPage, AiChatProposal, AiChatStep, AiTestCard as TestCard } from "../../api/types";
+import type { AiCardFix, AiChatCardPart, AiChatPage, AiChatProposal, AiChatStep, AiTestCard as TestCard } from "../../api/types";
 import { currentPageNote, editorForPage } from "../../composables/useOpenEditor";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 import { useCategoryStore } from "../../stores/categoryStore";
@@ -182,6 +185,38 @@ async function pickModel(v: string | number | null): Promise<void> {
 }
 
 watch(() => chat.entries.value.length, () => { modelNote.value = ""; });
+
+/** Items an answer points at that were deleted since it was written. */
+function goneNames(entry: ChatAssistantEntry): string[] {
+  const gone = deletedIds.value;
+  if (!gone.size) return [];
+  return [...new Set(Object.values(entry.result.refs ?? {})
+    .filter((r) => r.id && gone.has(r.id)).map((r) => r.name))];
+}
+
+/* ── What the chat shows (Settings › AI assistant › Chat) ── */
+
+const ui = useUiStore();
+/** The steps above a reply, without the kinds the user hid. */
+function shownSteps(steps: AiChatStep[]): AiChatStep[] {
+  return steps.filter((s) => (s.think ? ui.chatThinking : s.say ? ui.chatNotes : ui.chatSteps));
+}
+
+/* ── Thinking picker (the same setting as Settings › AI › Thinking) ── */
+
+const thinking = computed(() => config.value?.thinking ?? "auto");
+const thinkingOptions: SelectOption[] = THINKING_OPTIONS.map(({ value, short }) => ({
+  value, label: short,
+}));
+async function pickThinking(v: string | number | null): Promise<void> {
+  if (!isThinking(v) || v === thinking.value || chat.loading.value) return;
+  try {
+    await saveConfig({ thinking: v });
+    modelNote.value = "";
+  } catch (err) {
+    modelNote.value = `Couldn't change thinking: ${err instanceof Error ? err.message : String(err)}`;
+  }
+}
 
 /* ── Stored chats ── */
 
@@ -546,6 +581,16 @@ function shownOptions(i: number, p: AiChatProposal): CardOption[] {
   return expanded.value.has(key(i, p)) ? opts : opts.slice(0, PREVIEW_LINES);
 }
 
+/** The steps of a card that holds several changes to one item, or null. */
+function cardSteps(p: AiChatProposal): AiChatCardPart[] | null {
+  const parts = p.parts ?? [];
+  return p.op.op !== "create" && !cardOptions(p) && parts.length > 1 ? parts : null;
+}
+
+function stepLines(i: number, p: AiChatProposal, part: AiChatCardPart): string[] {
+  return expanded.value.has(key(i, p)) ? part.preview : part.preview.slice(0, PREVIEW_LINES);
+}
+
 /** Preview lines the structured parts above don't already show. */
 function otherLines(i: number, p: AiChatProposal): string[] {
   const opts = cardOptions(p);
@@ -666,6 +711,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 </script>
 
 <template>
+  <!-- The drawer is a drop target for images; the composer's image button is the keyboard way in. -->
+  <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
   <aside
     class="wp-ai-chat"
     role="dialog"
@@ -712,6 +759,22 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
           :disabled="chat.loading.value"
           :aria-label="`Model: ${modelLabel}`"
           @update:model-value="pickModel"
+        />
+      </span>
+      <span
+        class="wp-ai-chat__think"
+        title="Thinking: how much a thinking model reasons before it answers (also in Settings › AI assistant)"
+        data-test="ai-chat-thinking"
+      >
+        <i class="pi pi-lightbulb" aria-hidden="true" />
+        <Select
+          :model-value="thinking"
+          :options="thinkingOptions"
+          :filterable="false"
+          size="sm"
+          :disabled="chat.loading.value"
+          aria-label="Thinking"
+          @update:model-value="pickThinking"
         />
       </span>
       <span class="wp-ai-chat__spacer" />
@@ -812,8 +875,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
           >
             <i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ rescued(i) }} tool call{{ rescued(i) === 1 ? "" : "s" }} written as text
           </p>
-          <ul v-if="entry.result.steps.length" class="wp-ai-chat__steps" data-test="ai-chat-steps">
-            <template v-for="(s, j) in entry.result.steps" :key="j">
+          <ul v-if="shownSteps(entry.result.steps).length" class="wp-ai-chat__steps" data-test="ai-chat-steps">
+            <template v-for="(s, j) in shownSteps(entry.result.steps)" :key="j">
               <li v-if="s.think" class="wp-ai-chat__said wp-ai-chat__thought" data-test="ai-chat-thought">
                 <details>
                   <summary>Thinking</summary>
@@ -841,6 +904,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
           />
           <p v-if="testError" class="wp-ai-chat__warning" role="status">{{ testError }}</p>
           <AiMessage :text="entry.result.message" :refs="entry.result.refs" />
+          <p v-if="goneNames(entry).length" class="wp-ai-chat__note" data-test="ai-chat-gone">
+            <i class="pi pi-info-circle" aria-hidden="true" />
+            {{ goneNames(entry).join(", ") }} {{ goneNames(entry).length === 1 ? "was" : "were" }} deleted after this answer, so what it says about {{ goneNames(entry).length === 1 ? "it" : "them" }} no longer holds. Your next message tells the assistant.
+          </p>
           <AiAsk
             v-for="c in chat.askCalls(entry)"
             :key="c.id"
@@ -984,6 +1051,14 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               >{{ expanded.has(key(i, p)) ? "Show less" : `Show all ${cardOptions(p)!.length}` }}</button>
             </div>
             <AiCardView v-if="cardView(p)" :view="cardView(p)!" />
+            <ol v-else-if="cardSteps(p)" class="wp-ai-chat__card-steps" data-test="ai-chat-card-steps">
+              <li v-for="(part, j) in cardSteps(p)" :key="j">
+                <span class="wp-ai-chat__step-title">{{ part.title }}</span>
+                <ul class="wp-ai-chat__preview">
+                  <li v-for="(line, k) in stepLines(i, p, part)" :key="k"><AiSyntax :text="line" /></li>
+                </ul>
+              </li>
+            </ol>
             <ul v-else-if="otherLines(i, p).length" class="wp-ai-chat__preview">
               <li v-for="(line, j) in otherLines(i, p)" :key="j"><AiSyntax :text="line" /></li>
             </ul>
@@ -1119,8 +1194,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
       </template>
 
       <div v-if="chat.loading.value && !chat.asking.value.size" class="wp-ai-chat__reply wp-ai-chat__live" data-test="ai-chat-live">
-        <ul v-if="chat.live.value.steps.length" class="wp-ai-chat__steps">
-          <template v-for="(s, j) in chat.live.value.steps" :key="j">
+        <ul v-if="shownSteps(chat.live.value.steps).length" class="wp-ai-chat__steps">
+          <template v-for="(s, j) in shownSteps(chat.live.value.steps)" :key="j">
             <li v-if="s.think" class="wp-ai-chat__said wp-ai-chat__thought"><details><summary>Thinking</summary><p class="wp-ai-chat__thought-text">{{ s.note }}</p></details></li>
             <li v-else-if="s.say" class="wp-ai-chat__said"><details><summary>Working note</summary><AiMessage :text="s.note" /></details></li>
             <li v-else :data-ok="s.ok ? 'true' : 'false'">
@@ -1277,6 +1352,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 }
 .wp-ai-chat__model :deep(.wp-select) { width: 100%; }
 .wp-ai-chat__model :deep(button) { font-family: var(--wp-font-mono, monospace); font-size: 11px; }
+.wp-ai-chat__think { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; color: var(--wp-text-muted); }
+.wp-ai-chat__think :deep(.wp-select) { width: 92px; }
+.wp-ai-chat__think :deep(button) { font-size: 11px; }
 .wp-ai-chat__model-note {
   margin: 0; padding: 6px 12px; font-size: 12px; color: var(--wp-text-muted);
   border-bottom: 1px solid var(--wp-border); background: var(--wp-bg-2);
@@ -1399,6 +1477,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__icon-btn:hover, .wp-ai-chat__icon-btn:focus-visible { color: var(--wp-text); background: var(--wp-bg-3); }
 .wp-ai-chat__zoom:hover { color: var(--wp-text); background: var(--wp-bg-3); }
 .wp-ai-chat__card-summary { font-size: 12px; color: var(--wp-text-muted); }
+.wp-ai-chat__card-steps { margin: 4px 0; padding-left: 20px; display: grid; gap: 4px; }
+.wp-ai-chat__card-steps > li::marker { color: var(--wp-text-dim); font-size: 11px; }
+.wp-ai-chat__step-title { font-size: 12px; font-weight: 600; color: var(--wp-text); }
 .wp-ai-chat__preview {
   margin: 0; padding: 6px 8px 6px 22px; font-size: 12px; border-radius: 6px;
   background: var(--wp-bg-1); display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere;

@@ -42,9 +42,10 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           { term: 'API key', desc: 'Only needed for Claude, OpenAI or a server that asks for one. It is stored on ComfyUI\'s side and never shown again; Remove deletes it. A key is only ever sent to the address it was saved for: change the Server address and the key stays saved but is not sent (Settings says which address it belongs to) until you paste it again or change the address back. ANTHROPIC_API_KEY and OPENAI_API_KEY in the environment work too and only go to Claude\'s or OpenAI\'s own address; WP_AI_API_KEY goes to the provider\'s usual address, or to the one in WP_AI_API_KEY_HOST.' },
           { term: 'Model', desc: 'Picked from the list your server reports (refresh after downloading a new one), or typed in.' },
           { term: 'Unload after', desc: 'For local servers: how long an idle model stays loaded before it leaves the GPU, so ComfyUI gets its memory back. Pick a preset (right after each answer, 30 seconds up to 1 hour) or Custom to type the seconds.' },
-          { term: 'Model size', desc: 'How much the assistant asks of the model. Small models (under 20B) get shorter instructions, smaller tool results and steadier settings. Small and medium models are offered the tools for the page you are on (medium ones also the wildcard, rule, constraint and test tools everywhere) and load the rest one group at a time when a job needs them (web search, the Danbooru lookup and the list tools are always loaded this way), since fewer tools to choose from means fewer wrong picks; a loaded group goes at the end of the list, so what the server has already read stays in its cache. Large ones and hosted models get everything. Small and medium models also answer each step in two parts: first, at a steady setting, what to call next or that they are ready; then, once ready, the reply, with the tools out of reach. So they never decide while they write, can\'t stop halfway to ask “should I go ahead?”, and a step told to answer can only answer. On a local server each of their steps offers a shortlist of the tools that fit your message (finding and reading, the docs, the kinds of item you name; asking for more opens the rest), and an ask for several items (“make five wildcards for a city”) is listed first and then made one item per step, with the code keeping count, so none are forgotten when the steps run out. Every tool\'s description says when to use it, which look-alike to use instead, and shows a sample call. They also get, with your message, up to three calls that worked for similar requests (from cards you applied, kept in ai-examples.json beside ai.json on your machine, plus a few built-in ones), the steps that work for common asks (why an option never comes up, fixing warnings, negatives, weights, how-to questions), and a line on what the answer has done so far. Their tool steps run with thinking off, and their chat is summarised sooner (at half the window for a small model), since small models read a long context worse well before it is full. When a local model struggles (out of steps, stuck, no answer) and you have a cloud provider set up, the answer says once per chat that switching to it would likely help; nothing switches by itself. Test connection also tries one small-model tool step and says whether it worked. Automatic reads the size from the model\'s name; set it when the name doesn\'t say.' },
+          { term: 'Model size', desc: 'How much the assistant asks of the model. Small models (under 20B) get shorter instructions, smaller tool results and steadier settings; small and medium models also get the extra help described under Small local models below. Large ones and hosted models get everything at once. Automatic reads the size from the model\'s name; set it when the name doesn\'t say.' },
           { term: 'Most context to use', desc: 'Tokens of context the assistant uses (16384 by default). Ollama gets exactly this much for the whole chat, because changing it reloads the model and throws away what it already read; drafts ask for what they need, up to this. Ollama\'s own default is far smaller and silently cuts the instructions off. Lower it if the model no longer fits on your GPU. Presets go from 4k to 128k (1k is 1024 tokens); Custom takes any number. A new chat also checks how much context the model really has (LM Studio and llama.cpp report it) and, when the full instructions and every tool wouldn\'t leave room to answer, starts leaner: fewer tools up front (the rest stay one call away) and a shorter library summary. If the server still says the request is too long, the chat tries once more with less and otherwise tells you how much context to load the model with.' },
           { term: 'Tool format', desc: 'Under Advanced: how the chat calls its tools. Native tool calls are what most models are trained for; JSON steps work with any model. Automatic uses JSON steps for a small or medium local model (Model size): a 9B on LM Studio did twice as well in JSON steps as with native calls, in half the time per turn, because the server and the model disagree on how a call is written. For a large local model it asks the server whether the model supports tool calls (Ollama, LM Studio and llama.cpp say so; Claude and OpenAI always do) and falls back to JSON steps when a server refuses them, or when it takes them but cannot read what the model wrote (LM Studio answers &quot;does not match the expected peg-native format&quot; with the stock Qwen3.5 template): the step is asked again in JSON steps, the chat stays in them, and new chats with that model start in them. A call a model writes into its text instead (the Qwen &lt;tool_call&gt; XML, a JSON call, &quot;I call: read {…}&quot;) still runs. In JSON steps on a local server (Ollama, LM Studio, llama.cpp, other OpenAI-compatible) the server also checks the arguments of each tool call as the model writes them. A chat keeps the format it started with. OpenAI itself is spoken to through its Responses API, which its newest models (GPT-6.1 Sol, GPT-6 Astra) need for tool calls; their reasoning is carried from step to step in encrypted form, so they keep their train of thought while they search and read, and Thinking: Off asks them not to reason where the model allows it.' },
+          { term: 'Thinking', desc: 'How much a thinking model reasons before it answers. As the model does sends nothing; Off asks the server to skip the reasoning (faster, and a long think can\'t use up the reply\'s limit); Low, Medium and High ask for that much. OpenAI, OpenRouter, LM Studio and Claude (its effort setting) take the level; llama.cpp, vLLM and most Ollama models have only on and off, so any level turns thinking on (Ollama\'s gpt-oss takes the level). The newest Claude models always think a little, so Off leaves them at their default. For a small or medium local model, As the model does means Off, and a level applies to every step of an answer: switching thinking on and off between steps made LM Studio read the whole prompt again each time. The same picker sits in the chat header, next to the model, so you can change it between messages.' },
           { term: 'Choose the tool first', desc: 'Under Advanced, off by default: a small or medium model in JSON steps on a local server names the tool it will call first, then writes only that tool\'s arguments. Some models pick better this way; each step takes a little longer.' },
           { term: 'Embedding model', desc: 'Under Search: turns on meaning search, so the chat also finds items by what they mean (“warm colors” finds a wildcard of amber and crimson). Pick a small embedding model your server has, such as nomic-embed-text or embeddinggemma on Ollama, or text-embedding-3-small on OpenAI; the list shows the names that look like embedding models, and Type a name takes any other. Off (the default) keeps search to words, which already covers most questions. Claude has no embeddings API, so it is not offered there. Your library is embedded in the background a few dozen items at a time, so a chat never waits for it.' },
           { term: 'Embedding server', desc: 'Shown once an embedding model is picked. Leave it empty to use the server above; a llama.cpp server only serves embeddings when started with --embeddings, so run a second one and put its address here.' },
@@ -404,8 +405,13 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         shows its first options, rules, tags and warnings with a "+N more" line, and colours the
         prompt syntax in its options, rules and values the way a reply does; the magnifier
         in its top right corner opens the whole card in a larger window, with the same Apply,
-        Open in editor and Dismiss buttons. When two cards
-        change the same item, the second builds on the first, so apply them in order. The chat
+        Open in editor and Dismiss buttons. Changes one answer makes to the
+        same item come as one card: a new wildcard with its nested refs is one create card, and
+        re-weighting, a fallback and a category for one wildcard are one <b>Change</b> card that
+        lists each step in order, with one Apply and one Undo. A new category the card files the
+        item into is made as it applies, so "create Outfit and put Shirt in it" is one card too.
+        An applied card shows in the item's editor straight away if it is open; a card made
+        before the item changed is blocked, so it can't undo the newer change. The chat
         stays when you close the drawer; <b>New chat</b> starts over with an empty message box.
       </p>
       <p>
@@ -439,7 +445,13 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         writes between its steps ("Now I'll add the constraint…") stays folded under the steps as
         a <b>Working note</b>, and when its server sends the model's reasoning (most thinking
         models do, unless Thinking is Off), each step has a folded <b>Thinking</b> you can open to
-        see why it did what it did. Neither is sent back to the model. <b>Stop</b> ends the
+        see why it did what it did. Neither is sent back to the model. To see only the replies
+        and their cards, turn off <b>Show thinking</b>, <b>Show working notes</b> or <b>Show what it
+        did</b> (the read and search lines) under Settings › AI assistant › Chat, each on its own;
+        they only change what you see. A reaction to your message shows as soon as it is
+        decided, not when the answer is done. If you delete an item while the assistant is answering,
+        or after, its chip in the answer is struck through and a line under the answer says
+        what it said about that item no longer holds; your next message tells the assistant. <b>Stop</b> ends the
         answer. <b>Try again</b> under the last reply asks the same message again for a new
         answer, which replaces the old one; it waits until you undo any change you applied from
         that answer.
@@ -499,7 +511,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       <p>
         Every search asks you first. The chat shows the exact words it wants to search for, with
         <b>Allow once</b>, <b>Allow for this chat</b> (later searches in the same chat run without
-        asking) and <b>Deny</b>. Only the search words leave your PC. Five short result snippets
+        asking for the next 8 hours) and <b>Deny</b>. Only the search words leave your PC. Five short result snippets
         come back with their links; the assistant cites results as [1], [2] with the link, and
         treats what it found as information, never as instructions.
       </p>
@@ -949,6 +961,59 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       </p>
     </DocSection>
 
+    <DocSection title="Small local models">
+      <p>
+        A 9B model on a 16 GB card can run the chat. With <b>Model size</b> on small or medium,
+        the assistant changes how it works so a smaller model makes fewer wrong turns:
+      </p>
+      <ul>
+        <li>
+          <b>Fewer tools at a time.</b> The model starts with the tools for the page you are on
+          (medium models also get the wildcard, rule, constraint and test tools everywhere) and
+          loads more one group at a time when a job needs them. On a local server each step also
+          offers a shortlist of the tools that fit your message; asking for more opens the rest.
+          Every tool's description says when to use it, which look-alike to use instead, and shows
+          a sample call.
+        </li>
+        <li>
+          <b>Decide, then write.</b> Each step comes in two parts: first, at a steady setting,
+          what to call next or that it is ready; then the reply, with the tools out of reach. So
+          it can't stop halfway to ask "should I go ahead?". Tool steps run with thinking off.
+        </li>
+        <li>
+          <b>Several items, one per step.</b> An ask for several items ("make five wildcards for a
+          city") is listed first and then made one item per step, with the code keeping count, so
+          none are forgotten when the steps run out.
+        </li>
+        <li>
+          <b>Worked examples.</b> With your message the model gets up to three calls that worked
+          for similar requests. They come from cards you applied, kept in
+          <code>ai-examples.json</code> beside <code>ai.json</code> on your machine, plus a few
+          built-in ones.
+        </li>
+        <li>
+          <b>Recipes.</b> Common asks (why an option never comes up, fixing warnings, negatives,
+          weights, how-to questions) come with the short list of steps that works for them, and a
+          docs question can be answered with one <b>explain</b> call.
+        </li>
+        <li>
+          <b>A progress note.</b> Each later step gets one line saying what the answer has done so
+          far, so the model doesn't repeat a step or forget one.
+        </li>
+        <li>
+          <b>Shorter memory.</b> The chat is summarised sooner (at half the window for a small
+          model), since small models read a long context worse well before it is full.
+        </li>
+      </ul>
+      <p>
+        <b>Test connection</b> tries one small-model tool step and says whether it worked. When a
+        local model struggles (out of steps, stuck, no answer) and you have a cloud provider set
+        up, the answer says once per chat that switching to it would likely help; nothing switches
+        by itself. <b>Choose the tool first</b> under Advanced makes the model name the tool before
+        writing its arguments, which helps some models pick better at the cost of a slower step.
+      </p>
+    </DocSection>
+
     <DocSection title="Which model">
       <p>
         <b>Settings › AI assistant › Suggested models</b> lists picks for the provider you
@@ -981,7 +1046,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       <DocCallout variant="tip">
         With two models, keep a writer selected for drafting and switch to a builder in Settings
         when you organize a library, chat or build a whole pack. Load local models with at least
-        16k of context.
+        16k of context, and 32k or more for chats that take several steps: a multi-step answer
+        on a 27B model often reaches 20 to 26k tokens.
       </DocCallout>
       <DocCallout variant="warn">
         In Ollama, a Qwen 3.5 / 3.6 model pulled straight from Hugging Face
@@ -1058,7 +1124,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         That stops a website from reaching your ComfyUI through a look-alike domain (DNS
         rebinding). If you reach ComfyUI through your own domain name, add it to the
         <code>WP_AI_ALLOWED_HOSTS</code> environment variable (comma-separated) and restart
-        ComfyUI. Each answer stops after 10 minutes, and Stop ends the model's work straight
+        ComfyUI. Started with <code>--listen</code>, ComfyUI is open to your network and anyone
+        who can reach it can use the assistant; Settings › AI warns you when that is the case.
+        Each answer stops after 10 minutes, and Stop ends the model's work straight
         away.
       </p>
     </DocSection>

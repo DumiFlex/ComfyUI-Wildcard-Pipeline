@@ -11,6 +11,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
+import AiSyntax from "./AiSyntax.vue";
 import { useAiImages } from "../../composables/useAiImages";
 import { api } from "../../api/client";
 import type {
@@ -218,16 +219,16 @@ function fmtWeight(w: number | undefined): string {
               @change="toggle(i)"
             />
             <template v-if="action === 'remove'">
-              <span class="wp-ai-edit__old" data-removed="true">{{ c.before.value }}</span>
+              <span class="wp-ai-edit__old" data-removed="true"><AiSyntax :text="c.before.value ?? ''" /></span>
               <span v-if="c.reason" class="wp-ai-edit__reason">{{ c.reason }}</span>
             </template>
             <template v-else-if="action === 'rewrite'">
-              <span class="wp-ai-edit__old">{{ c.before.value }}</span>
+              <span class="wp-ai-edit__old"><AiSyntax :text="c.before.value ?? ''" /></span>
               <i class="pi pi-arrow-right wp-ai-edit__arrow" aria-hidden="true" />
-              <span class="wp-ai-edit__new">{{ c.after?.value }}</span>
+              <span class="wp-ai-edit__new"><AiSyntax :text="c.after?.value ?? ''" /></span>
             </template>
             <template v-else>
-              <span class="wp-ai-edit__label">{{ options.find((o) => o.id === c.option_id)?.value }}</span>
+              <span class="wp-ai-edit__label"><AiSyntax :text="options.find((o) => o.id === c.option_id)?.value ?? ''" /></span>
               <span class="wp-ai-edit__delta">
                 <template v-if="action === 'retag'">
                   <span v-if="!c.before.tags?.length" class="wp-ai-edit__none">no tags</span>

@@ -16,6 +16,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
 import Input from "../ui/Input.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
+import AiSyntax from "./AiSyntax.vue";
 import { useAiImages } from "../../composables/useAiImages";
 import { api } from "../../api/client";
 import type { AiDraftGroup, AiDraftOption, AiWildcardDraftResult } from "../../api/types";
@@ -225,7 +226,7 @@ const skippedSummary = computed(() => {
               :checked="!unticked.has(i)"
               @change="toggle(i)"
             />
-            <span class="wp-ai-draft__value">{{ o.value }}</span>
+            <span class="wp-ai-draft__value"><AiSyntax :text="o.value" /></span>
           </label>
           <span v-if="o.weight !== 1" class="wp-ai-draft__weight" title="Weight">×{{ o.weight }}</span>
           <span
@@ -235,7 +236,7 @@ const skippedSummary = computed(() => {
             :data-new="newTagSet.has(t) ? 'true' : 'false'"
             :title="newTagSet.has(t) ? 'New tag' : 'Existing tag'"
           >#{{ t }}</span>
-          <span v-if="o.negative" class="wp-ai-draft__neg" title="Negative">− {{ o.negative }}</span>
+          <span v-if="o.negative" class="wp-ai-draft__neg" title="Negative">− <AiSyntax :text="o.negative" /></span>
         </li>
       </ul>
       <p class="wp-ai-draft__summary">

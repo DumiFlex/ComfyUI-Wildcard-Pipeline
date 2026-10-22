@@ -684,7 +684,7 @@ def _compile_actions(
         if target is None:
             raise _Drop(f"{a.get('target_var')!r} isn't a variable name")
         mode = a.get("mode") if a.get("mode") in _VALID_MODES else "replace"
-        value = a.get("value") if isinstance(a.get("value"), str) else ""
+        value = _got if isinstance(_got := a.get("value"), str) else ""
         value = _unquote(re.sub(r"\s+", " ", value).strip())[:MAX_VALUE_LEN]
         # The engine joins append / prepend text as written: "tie" + "watch"
         # is "tiewatch". A list piece gets its comma.

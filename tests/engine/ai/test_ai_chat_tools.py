@@ -389,3 +389,88 @@ def test_a_name_proposed_again_in_this_answer_means_its_own_card():
     for raw in (made["pid"], new_id):
         with pytest.raises(client_tools.Shown, match="already on screen"):
             client_tools.prepare(lib, "open", {"proposal": raw})
+
+
+def test_template_editor_version_is_the_basis():
+    """An open template editor's unsaved text is what the chat reads and
+    edits, and its card goes into that editor."""
+    lib = _lib()
+    lib.use_editor({"id": "tttt0001", "name": "Portrait", "dirty": True,
+                    "template_string": "$look, soft light", "negative_template": "blurry"})
+    assert lib.editor_id == "tttt0001"
+    assert lib.templates["tttt0001"]["template_string"] == "$look, soft light"
+    p = lib.run("edit_template", {"id": "tttt0001", "negative": "blurry, lowres"})
+    assert p["op"]["basis"] == "editor"
+    assert p["op"]["before"]["template_string"] == "$look, soft light"
+
+
+def test_new_template_editor_registers_blank_row():
+    lib = _lib()
+    lib.use_editor({"id": "feed0003", "new": True, "type": "template", "name": "Fresh",
+                    "template_string": "$look"})
+    assert lib.editor_id == "feed0003"
+    assert lib.templates["feed0003"]["template_string"] == "$look"
+
+
+def test_edit_of_a_new_wildcard_folds_into_its_create_card():
+    """create_wildcard then edit_options on it in one answer: one create card
+    holding the edit (a new wildcard and its nested refs in one go)."""
+    lib = _lib()
+    made = lib.run("create_wildcard", {"name": "Shirt", "var": "shirt", "options": [
+        {"text": "linen shirt"}, {"text": "oxford shirt"}]})
+    new_id = made["op"]["body"]["id"]
+    second = lib.run("edit_options", {"id": new_id, "rewrite": [
+        {"n": 1, "text": "@{Season} linen shirt"}]})
+    assert second["op"]["op"] == "create"
+    assert second["replaces"] == made["pid"]
+    assert second["op"]["body"]["id"] == new_id
+    texts = [o["value"] for o in second["op"]["body"]["payload"]["options"]]
+    assert texts[0].startswith("@{aaaa0002") and texts[0].endswith("linen shirt")
+    assert texts[1] == "oxford shirt"
+    # A third change still lands on the one card.
+    third = lib.run("edit_options", {"id": new_id, "weights": [{"n": 2, "weight": 3}]})
+    assert third["op"]["op"] == "create" and third["replaces"] == second["pid"]
+    assert third["op"]["body"]["payload"]["options"][1]["weight"] == 3
+
+
+def test_different_changes_to_one_item_are_one_card_with_steps():
+    """Re-weight then describe then categorise one wildcard in one answer:
+    one card that holds every step, in order (Dumi, 2026-10-22)."""
+    lib = _lib()
+    first = lib.run("edit_options", {"id": "aaaa0001", "weights": [{"n": 1, "weight": 4}]})
+    second = lib.run("update_info", {"id": "aaaa0001", "description": "What they wear"})
+    third = lib.run("update_info", {"id": "aaaa0001", "category": "Clothes"})
+    assert second["replaces"] == first["pid"] and third["replaces"] == second["pid"]
+    assert third["title"] == "Change Outfit"
+    assert [p["tool"] for p in third["parts"]] == ["edit_options", "update_info"]
+    body, before = third["op"]["body"], third["op"]["before"]
+    assert body["payload"]["options"][0]["weight"] == 4
+    assert body["description"] == "What they wear"
+    assert third["op"]["new_category"] == "Clothes"
+    # What the library holds now, for Undo and the stale-card check.
+    assert before["payload"]["options"][0]["weight"] == 1
+    assert before["description"] == ""
+    assert "risk" not in third  # a re-weight isn't a low-risk change
+
+
+def test_a_new_category_card_folds_into_the_card_that_files_into_it():
+    lib = _lib()
+    cats = lib.run("edit_categories", {"create": ["Clothes"]})
+    filed = lib.run("update_info", {"id": "aaaa0001", "category": "Clothes"})
+    assert filed["absorbs"] == [cats["pid"]]
+    assert filed["op"]["new_category"] == "Clothes"
+    assert [p["tool"] for p in filed["parts"]] == ["edit_categories", "update_info"]
+    assert "creates the category Clothes" in chat.proposal_note("update_info", filed)
+    # A card that makes two categories stays a card of its own.
+    lib = _lib()
+    lib.run("edit_categories", {"create": ["Clothes", "Weather"]})
+    filed = lib.run("update_info", {"id": "aaaa0001", "category": "Clothes"})
+    assert "absorbs" not in filed
+
+
+def test_a_new_wildcard_keeps_the_category_a_later_step_gives_it():
+    lib = _lib()
+    made = lib.run("create_wildcard", {"name": "Shirt", "var": "shirt", "options": [
+        {"text": "linen shirt"}]})
+    filed = lib.run("update_info", {"id": made["op"]["body"]["id"], "category": "Clothes"})
+    assert filed["op"]["op"] == "create" and filed["op"]["new_category"] == "Clothes"

@@ -28,6 +28,9 @@ env:
 
 jobs:
   publish:
+    # Betas stay on GitHub. The Registry has no prerelease channel, so a beta
+    # published there would reach every Manager user.
+    if: ${{ !github.event.release.prerelease }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

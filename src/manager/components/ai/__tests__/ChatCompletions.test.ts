@@ -58,13 +58,13 @@ describe("ChatCompletions", () => {
     expect(box.getAttribute("aria-expanded")).toBe("true");
     box.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     await nextTick();
-    expect(wrap.find('[data-test="text"]').text()).toBe("more options for [[aaaa0001#Hairstyle]]");
+    expect(wrap.find('[data-test="text"]').text()).toBe("more options for @Hairstyle");
     expect(wrap.find('[data-test="sent"]').text()).toBe("");
     expect(document.querySelector('[data-test="ai-ac"]')).toBeNull();
     // Closed again: Enter is the box's own.
     box.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     await nextTick();
-    expect(wrap.find('[data-test="sent"]').text()).toContain("[[aaaa0001#Hairstyle]]");
+    expect(wrap.find('[data-test="sent"]').text()).toContain("@Hairstyle");
     wrap.unmount();
   });
 

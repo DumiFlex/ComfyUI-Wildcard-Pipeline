@@ -2,7 +2,8 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    # `beta` cuts prereleases (see .releaserc.js).
+    branches: [main, beta]
     # Tooling-only pushes must not be able to cut a release, whatever their
     # commit type says.
     #

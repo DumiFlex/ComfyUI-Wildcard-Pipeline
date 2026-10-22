@@ -109,7 +109,7 @@ def summarize(kind: str, payload: Any, *, names: dict[str, str] | None = None) -
                 continue
             cname = child.get("name") or "(unnamed)"
             ctype = child.get("type") or "module"
-            cdesc = child.get("description") if isinstance(child.get("description"), str) else ""
+            cdesc = _got if isinstance(_got := child.get("description"), str) else ""
             lines.append(f"- {ctype} {cname}" + (f": {cdesc[:120]}" if cdesc else ""))
     elif kind == "template":
         lines.append(str(payload)[:_SUMMARY_LIMIT] if not isinstance(payload, dict) else
@@ -170,7 +170,7 @@ def compile_answer(raw: Any, *, current: list[str], library: list[str]) -> dict[
     have = {t.lower() for t in current}
     tags: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for item in raw.get("tags") if isinstance(raw.get("tags"), list) else []:
+    for item in _got if isinstance(_got := raw.get("tags"), list) else []:
         tag = _clean_tag(item)
         if tag is None or tag.lower() in seen:
             continue

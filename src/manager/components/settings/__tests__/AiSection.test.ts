@@ -189,6 +189,62 @@ describe("Settings › AI assistant", () => {
     expect(api.ai.saveConfig).toHaveBeenCalledWith({ auto_apply: true });
   });
 
+  it("says what most people should pick", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const rec = (key: string) => w.get(`#${key} [data-test="setting-recommended"]`).text();
+    expect(rec("ai-allow-delete")).toBe("Recommended: Off");
+    expect(rec("ai-chat-show-steps")).toBe("Recommended: On");
+    const labels = (test: string) => w.findAllComponents(Select)
+      .find((c) => c.attributes("data-test") === test)?.props("options").map((o) => o.label) ?? [];
+    expect(labels("ai-thinking")).toContain("As the model does (recommended)");
+    expect(labels("ai-tool-format")).toContain("Automatic (recommended)");
+  });
+
+  it("warns when ComfyUI is open to the network", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ provider: "openrouter", listen_exposed: "0.0.0.0" }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const note = w.get('[data-test="ai-lan-exposed"]').text();
+    expect(note).toContain("0.0.0.0");
+    expect(note).toContain("your key's credits");
+  });
+
+  it("resets every choice to its recommended value, keeping what was set up", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({
+      enabled: true, model: "qwen", thinking: "high", tool_format: "json", allow_delete: true,
+      context_max: 32768, danbooru_lookup: true,
+    }));
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg({ enabled: true, model: "qwen", ...(p as Partial<AiConfig>) }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    await w.get('[data-test="ai-reset"]').trigger("click");
+    expect(w.get('[data-test="ai-reset-list"]').text()).toContain("Thinking");
+    await w.get('[data-test="ai-reset-confirm"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({
+      thinking: "auto", tool_format: "auto", allow_delete: false,
+    });
+    expect(w.get('[data-test="ai-reset"]').attributes("disabled")).toBeDefined();
+  });
+
+  it("treats 16k context as a floor: Reset raises a smaller window and keeps a bigger one", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, context_max: 8192 }));
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg({ enabled: true, ...(p as Partial<AiConfig>) }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const labels = w.findAllComponents(Select)
+      .find((c) => c.attributes("data-test") === "ai-context-preset")?.props("options").map((o) => o.label) ?? [];
+    expect(labels).toContain("16k · 16,384 tokens (minimum)");
+    expect(labels).toContain("32k · 32,768 tokens (recommended)");
+    await w.get('[data-test="ai-reset"]').trigger("click");
+    expect(w.get('[data-test="ai-reset-list"]').text()).toContain("Most context to use");
+    await w.get('[data-test="ai-reset-confirm"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ context_max: 32768 });
+  });
+
   it("marks cloud providers that already have a saved key", async () => {
     vi.mocked(api.ai.config).mockResolvedValue(cfg({ keys_saved: ["anthropic"] }));
     const w = mount(AiSection, { global: { plugins: [router] } });

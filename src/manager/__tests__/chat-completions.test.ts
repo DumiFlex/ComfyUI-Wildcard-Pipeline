@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyRow, matchItems, matchVars, mentionItems, mentionRefs, probeChat, type ChatRow, type MentionItem,
+  _resetMentionsForTests, applyRow, matchItems, matchVars, mentionItems, mentionRefs, probeChat,
+  plainMentions, rememberMention, withMentionIds, withMentionLabels, type ChatRow, type MentionItem,
 } from "../utils/chat-completions";
 
 const ITEMS: MentionItem[] = [
@@ -43,12 +44,14 @@ describe("applyRow", () => {
     const p = probeChat(text, 15)!;
     const row: ChatRow = { source: "item", item: ITEMS[0] };
     const r = applyRow(text, 15, p, row);
-    expect(r.text).toBe("add more to [[aaaa0001#Hairstyle]] please");
-    expect(r.caret).toBe("add more to [[aaaa0001#Hairstyle]]".length);
+    expect(r.text).toBe("add more to @Hairstyle please");
+    expect(r.caret).toBe("add more to @Hairstyle".length);
   });
   it("drops brackets from a name so the mention cannot end early", () => {
+    expect(rememberMention(ITEMS[2])).toBe("@Outfit winter");
+    expect(withMentionIds("@Outfit winter")).toBe("[[aaaa0003#Outfit winter]]");
     const p = probeChat("@out", 4)!;
-    expect(applyRow("@out", 4, p, { source: "item", item: ITEMS[2] }).text).toBe("[[aaaa0003#Outfit winter]] ");
+    expect(applyRow("@out", 4, p, { source: "item", item: ITEMS[2] }).text).toBe("@Outfit winter ");
   });
   it("eats the rest of a word when picking mid-word", () => {
     const p = probeChat("$haxx", 3)!;
@@ -89,5 +92,29 @@ describe("mentionItems", () => {
       { id: "aaaa0004", name: "Rule", kind: "derivation" },
       { id: "bbbb0001", name: "Pack", kind: "bundle" },
     ]);
+  });
+});
+
+describe("mention labels", () => {
+  it("sends picked @Name labels as id mentions, longest name first", () => {
+    _resetMentionsForTests();
+    expect(withMentionIds("@Hairstyle")).toBe("@Hairstyle");
+    rememberMention(ITEMS[0]);
+    rememberMention({ id: "aaaa0009", name: "Hairstyle long" });
+    expect(withMentionIds("mix @Hairstyle long with @Hairstyle, not @Hairstyles or a@Hairstyle"))
+      .toBe("mix [[aaaa0009#Hairstyle long]] with [[aaaa0001#Hairstyle]], not @Hairstyles or a@Hairstyle");
+  });
+  it("shows a sent message's mentions as labels again", () => {
+    _resetMentionsForTests();
+    const back = withMentionLabels("describe [[aaaa0002#Hair Color]] and [[aaaa0003]]");
+    expect(back).toBe("describe @Hair Color and [[aaaa0003]]");
+    expect(withMentionIds(back)).toBe("describe [[aaaa0002#Hair Color]] and [[aaaa0003]]");
+  });
+});
+
+describe("plainMentions", () => {
+  it("shows mentions and refs by name", () => {
+    expect(plainMentions("Describe [[fe224375#color]] and @{fe224375#Colors:warm!null}, [[aaaa0001]]"))
+      .toBe("Describe color and Colors, [[aaaa0001]]");
   });
 });

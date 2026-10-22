@@ -8,7 +8,7 @@
  *
  * Validation enforces unique, identifier-clean `$name` per row.
  */
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState } from "../components/EditorFrame.types";
 import { useRouter } from "vue-router";
@@ -200,6 +200,7 @@ function loadPayload(p: Record<string, unknown>): void {
 // stays on Save. A new item takes the payload of a draft the chat staged.
 const fillFromChat = registerOpenEditor({
   id: props.id, type: "fixed_values", dirty: () => dirty.value,
+  rebase: () => { baseline.value = snapshot(); },
   name, description, tags, categoryId, contentRating,
   ...(props.id ? {} : {
     setPayload: (p: Record<string, unknown>) => { if (Array.isArray(p.values)) loadPayload(p); },
@@ -367,6 +368,10 @@ function moveValuesTo(target: MoveTarget): void {
 }
 
 const bulkAddOpen = ref(false);
+// Bulk add and the AI panel show one at a time (Dumi, 2026-10-22: both
+// open filled the screen); the hidden one keeps what it holds.
+watch(bulkAddOpen, (open) => { if (open) aiOpen.value = false; });
+watch(aiOpen, (open) => { if (open) bulkAddOpen.value = false; });
 const existingValueNames = computed(() =>
   values.value.map((v) => v.name).filter((n) => n.trim().length > 0),
 );
@@ -666,26 +671,8 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
         </Button>
       </template>
       <template #subheader>
-      <div v-if="bulkAddOpen || (aiOpen && ai.config.value?.enabled) || (bulkActive && bulkCount > 0)" class="wpc-bulk-controls">
-        <AiTextPanel
-          ref="aiPanelRef"
-          v-if="aiOpen && ai.config.value?.enabled"
-          kind="fixed_values"
-          :item="{ id: props.id, name, description, tags, payload: { values: aiValues } }"
-          @use="useAiValues"
-          @close="aiOpen = false"
-          @update:pending="(v: boolean) => (aiPending = v)"
-        />
-        <BulkAddPanel
-          v-if="bulkAddOpen"
-          mode="values"
-          :existing-values="existingValueNames"
-          @commit-values="commitBulkValues"
-          @cancel="bulkAddOpen = false"
-          @update:pending="(v: boolean) => (bulkPending = v)"
-        />
+      <div v-if="bulkActive && bulkCount > 0" class="wpc-bulk-controls">
         <BulkDeleteToolbar
-          v-if="bulkActive && bulkCount > 0"
           :count="bulkCount"
           noun="values"
           reorderable
@@ -696,6 +683,34 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
         />
       </div>
       </template>
+      <!-- Not in the sticky subheader: a tall panel there covered the values
+           and the page couldn't scroll past it. One shows at a time; each
+           keeps what it holds while hidden. -->
+      <div
+        v-if="(ai.config.value?.enabled && (aiOpen || aiPending)) || bulkAddOpen || bulkPending"
+        v-show="aiOpen || bulkAddOpen"
+        class="wpc-bulk-controls wpc-panel-controls"
+      >
+        <AiTextPanel
+          ref="aiPanelRef"
+          v-if="ai.config.value?.enabled && (aiOpen || aiPending)"
+          v-show="aiOpen"
+          kind="fixed_values"
+          :item="{ id: props.id, name, description, tags, payload: { values: aiValues } }"
+          @use="useAiValues"
+          @close="aiOpen = false"
+          @update:pending="(v: boolean) => (aiPending = v)"
+        />
+        <BulkAddPanel
+          v-if="bulkAddOpen || bulkPending"
+          v-show="bulkAddOpen"
+          mode="values"
+          :existing-values="existingValueNames"
+          @commit-values="commitBulkValues"
+          @cancel="bulkAddOpen = false; bulkPending = false"
+          @update:pending="(v: boolean) => (bulkPending = v)"
+        />
+      </div>
       <table class="wp-table wp-options-table">
         <thead>
           <tr>
@@ -874,6 +889,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
   gap: 10px;
   padding: 12px 16px 14px;
 }
+.wpc-panel-controls { border-bottom: 1px solid var(--wp-border); }
 .fv-col-trash { width: 40px; }
 .fv-row__err {
   font-size: var(--wp-text-xs);

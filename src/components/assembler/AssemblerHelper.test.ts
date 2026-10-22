@@ -330,6 +330,14 @@ describe("AssemblerHelper var-color rendering", () => {
     expect(btn.element.disabled).toBe(true);
   });
 
+  it("clear-template button works when only the negative template has text", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: { upstreamVars: ["mood"], template: "", negativeTemplate: "blurry", onClearTemplate: () => {} },
+    });
+    const btn = wrapper.find<HTMLButtonElement>('[data-test="asm-clear-template-icon"]');
+    expect(btn.element.disabled).toBe(false);
+  });
+
   it("preview area shows empty-state ghost when template is empty", () => {
     const wrapper = mount(AssemblerHelper, {
       props: { upstreamVars: ["mood"], template: "" },
