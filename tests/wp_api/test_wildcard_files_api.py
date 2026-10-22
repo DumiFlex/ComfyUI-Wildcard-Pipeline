@@ -11,7 +11,7 @@ pytestmark = pytest.mark.asyncio
 
 
 def _form(files: list[tuple[str, bytes]], **meta) -> FormData:
-    form = FormData()
+    form = FormData(default_to_multipart=True)
     form.add_field("meta", json.dumps({"paths": [p for p, _ in files], **meta}))
     for path, data in files:
         form.add_field("file", data, filename=path.split("/")[-1])
@@ -58,7 +58,7 @@ async def test_converted_payload_commits(wp_client):
         ("scenes/field.txt", b"__animals/*__ in a field\n"),
         ("scenes/nap.txt", b"__animals/cats__ asleep\n"),
         ("pets.txt", b"__animals/dogs__\n"),
-    ]))
+    ], bundle_mode="entries"))
     payload = (await resp.json())["payload"]
     # Only the entry points (nothing references them) are bundled.
     assert [b["name"] for b in payload["bundles"]] == ["Imported wildcards", "scenes"]
@@ -116,3 +116,54 @@ async def test_bad_zip_is_a_clean_error(wp_client):
     ]))
     assert resp.status == 400
     assert "pack.zip" in (await resp.json())["error"]
+
+
+async def test_stacks_with_logic_modules_commit(wp_client):
+    resp = await wp_client.post("/wp/api/import/wildcard-files", data=_form([
+        ("w/seasons.txt", b"winter\nsummer\n"),
+        ("w/clothes.yaml", b"clothes:\n  - {text: coat, if: \"season eq 'winter'\"}\n"
+                           b"  - {text: shorts, if: \"season eq 'summer'\"}\n"),
+        ("w/scene.txt", b"${season=!__seasons__} a ${season} day, __clothes__\n"),
+        ("w/look.txt", b"girl <ppp:if _is_sdxl>score_9<ppp:else>masterpiece<ppp:/if>\n"),
+    ], merge=False))
+    assert resp.status == 200
+    body = await resp.json()
+    payload = body["payload"]
+    assert payload["combines"] and payload["constraints"]
+    adds = [{"kind": "category", "entity": c} for c in payload["categories"]]
+    for bucket, kind in (
+        ("wildcards", "wildcard"), ("combines", "combine"), ("derivations", "derivation"),
+        ("constraints", "constraint"), ("bundles", "bundle"),
+    ):
+        adds += [{"kind": kind, "entity": e} for e in payload[bucket]]
+    commit = await wp_client.post("/wp/api/import/commit", json={"adds": adds})
+    assert commit.status == 200, await commit.text()
+    listed = await wp_client.get("/wp/api/bundles")
+    names = {b["name"] for b in (await listed.json())["items"]}
+    assert {"scene", "Model checks (family)"} <= names
+
+
+async def test_lists_and_reads_wildcard_folders(wp_client, tmp_path, monkeypatch):
+    from wp_api import wildcard_files as route
+
+    cn = tmp_path / "custom_nodes"
+    wild = cn / "ComfyUI-Impact-Pack" / "wildcards" / "hair"
+    wild.mkdir(parents=True)
+    (wild / "color.txt").write_text("red\nblonde\n")
+    (cn / "ComfyUI-Impact-Pack" / "wildcards" / "look.txt").write_text("__hair/color__ hair\n")
+    secret = tmp_path / "secret.txt"
+    secret.write_text("token\n")
+    (wild / "linked.txt").symlink_to(secret)  # never read through a link
+    monkeypatch.setattr(route, "_custom_nodes_dirs", lambda: [cn])
+    monkeypatch.setattr(route, "_lora_manager_dirs", lambda: [])
+    resp = await wp_client.get("/wp/api/import/wildcard-folders")
+    folders = (await resp.json())["folders"]
+    assert [(f["id"], f["files"]) for f in folders] == [("impact:wildcards", 2)]
+    resp = await wp_client.post(
+        "/wp/api/import/wildcard-files", data=_form([], folder="impact:wildcards"),
+    )
+    assert resp.status == 200, await resp.text()
+    names = {r["name"] for r in (await resp.json())["payload"]["wildcards"]}
+    assert names == {"hair/color", "look"}
+    bad = await wp_client.post("/wp/api/import/wildcard-files", data=_form([], folder="/etc"))
+    assert bad.status == 400

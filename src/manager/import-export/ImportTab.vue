@@ -296,7 +296,7 @@ function handleParse(raw: string, source: "file" | "paste"): void {
     <template v-else>
       <p class="wp-import-tab__lead">
         Import a Wildcard Pipeline export file or paste an export payload below.
-        For Dynamic Prompts, Prompt-PostProcessor or Impact Pack wildcards, use
+        For Dynamic Prompts, Prompt-PostProcessor, Impact Pack or Umi AI wildcards, use
         <button
           type="button"
           class="wp-import-tab__link"

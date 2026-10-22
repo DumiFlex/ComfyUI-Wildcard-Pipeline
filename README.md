@@ -122,9 +122,10 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
 - **Community:** browse and install modules other people have shared on the
   [community site](https://wp.dumiflex.dev/?utm_source=github&utm_medium=readme), and publish your own.
 - **Import / Export:** move modules between machines as JSON files, or bring in
-  wildcard packs from A1111 or Forge (Dynamic Prompts, PPP and Impact Pack `.txt`,
-  `.yaml`, `.json` or a `.zip`) on the **Wildcard packs** tab. You review the plan
-  before anything is imported.
+  wildcard packs from A1111 or Forge (Dynamic Prompts, PPP, Impact Pack and Umi AI
+  `.txt`, `.yaml`, `.json` or a `.zip`, or an installed extension's wildcard folder)
+  on the **Wildcard packs** tab. Variables, template arguments and if-conditions
+  become stacks. You review the plan and sample prompts before anything is imported.
 - **AI assistant (optional, off by default):** connect a model you run yourself
   (Ollama, LM Studio, llama.cpp) or your own Claude or OpenAI key. It drafts and
   edits modules in every editor, answers questions about your library in a chat,

@@ -1,7 +1,7 @@
 import { aiRequestContext } from "../utils/ai-context";
 import type { CommitOk, CommitPayload } from "../import-export/commit";
 import { endAiRequest, startAiRequest, watchesProgress } from "./ai-progress";
-import type { WildcardFilesResult } from "../import-export/wildcard-files";
+import type { WildcardFilesResult, WildcardFolder } from "../import-export/wildcard-files";
 import type {
   BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
   CategoryCreateInput, CategoryRow,
@@ -727,6 +727,10 @@ export const api = {
       return request<WildcardFilesResult>("/wp/api/import/wildcard-files", {
         method: "POST", body: form,
       });
+    },
+    /** Wildcard folders of other extensions found on this machine. */
+    wildcardFolders() {
+      return request<{ folders: WildcardFolder[] }>("/wp/api/import/wildcard-folders");
     },
   },
 };
