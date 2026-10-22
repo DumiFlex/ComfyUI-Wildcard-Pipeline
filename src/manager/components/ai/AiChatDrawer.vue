@@ -42,6 +42,9 @@ import AiPointer from "./AiPointer.vue";
 import AiChatList from "./AiChatList.vue";
 import AiWorking from "./AiWorking.vue";
 import ChatCompletions from "./ChatCompletions.vue";
+import ChatInputMarks from "./ChatInputMarks.vue";
+import { tookLabel } from "../../utils/chat-took";
+import { findPage } from "../../docs/registry";
 import { mentionItems, mentionRefs } from "../../utils/chat-completions";
 import { useModuleStore } from "../../stores/moduleStore";
 import { useBundleStore } from "../../stores/bundleStore";
@@ -162,13 +165,24 @@ const modelOptions = computed<SelectOption[]>(() => {
   return names.map((m) => ({ value: m, label: m, dot }));
 });
 
+let modelsSeq = 0;
 async function loadModels(): Promise<void> {
+  const seq = ++modelsSeq;
   try {
-    models.value = (await api.ai.models()).models;
+    const got = (await api.ai.models()).models;
+    if (seq === modelsSeq) models.value = got;
   } catch {
-    models.value = []; // the picker still shows the current model
+    if (seq === modelsSeq) models.value = []; // the picker still shows the current model
   }
 }
+// Another provider or server (Settings › AI assistant): its own models, not
+// the last one's. Cleared at once so the old list never shows meanwhile.
+watch(() => [config.value?.provider, config.value?.base_url], (now, old) => {
+  // The first load of the settings is not a change (mounting fetched them).
+  if (old[0] === undefined || (now[0] === old[0] && now[1] === old[1])) return;
+  models.value = [];
+  void loadModels();
+});
 
 async function pickModel(v: string | number | null): Promise<void> {
   if (typeof v !== "string" || !v || v === modelLabel.value || chat.loading.value) return;
@@ -414,7 +428,8 @@ const starterLibrary = computed<StarterLibrary>(() => {
 });
 
 const suggestions = computed(() => starterQuestions(
-  { name: String(route.name ?? ""), hasId: typeof route.params.id === "string" && !!route.params.id },
+  { name: String(route.name ?? ""), hasId: typeof route.params.id === "string" && !!route.params.id,
+    docTitle: typeof route.params.page === "string" ? findPage(route.params.page)?.title : undefined },
   starterLibrary.value,
 ));
 
@@ -917,7 +932,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             @answer="(a) => chat.answerAsk(c.id, a)"
           />
           <div
-            v-if="entry.result.message.trim() || (canRetry && i === chat.entries.value.length - 1)"
+            v-if="entry.result.message.trim() || (canRetry && i === chat.entries.value.length - 1) || tookLabel(entry.result.elapsed_ms)"
             class="wp-ai-chat__msg-tools"
           >
             <button
@@ -939,6 +954,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               data-test="ai-chat-retry"
               @click="retry"
             >Try again</Button>
+            <span
+              v-if="tookLabel(entry.result.elapsed_ms)"
+              class="wp-ai-chat__took"
+              title="How long this answer took (time waiting on you left out)"
+              data-test="ai-chat-took"
+            ><i class="pi pi-clock" aria-hidden="true" /> {{ tookLabel(entry.result.elapsed_ms) }}</span>
           </div>
 
           <article
@@ -1244,6 +1265,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         @keydown="onKeydown"
         @paste="onPaste"
       ></textarea>
+      <ChatInputMarks :target="box" :text="chat.input.value" />
       <ChatCompletions :target="box" />
       <input ref="picker" type="file" accept="image/*" multiple hidden aria-label="Attach images" data-test="ai-chat-file" @change="onPick" />
       <div class="wp-ai-chat__controls">
@@ -1470,6 +1492,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__user:hover .wp-ai-chat__edit, .wp-ai-chat__edit:focus-visible { opacity: 1; }
 .wp-ai-chat__editing { margin: 0 0 4px; font-size: 12px; color: var(--wp-text-muted); display: flex; gap: 8px; }
 .wp-ai-chat__msg-tools { display: flex; align-items: center; gap: 4px; margin-top: -4px; }
+.wp-ai-chat__took { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; font-size: 11px; color: var(--wp-text-dim); }
+.wp-ai-chat__took .pi { font-size: 10px; }
 .wp-ai-chat__icon-btn {
   display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
   border: 0; border-radius: 4px; background: none; color: var(--wp-text-dim); cursor: pointer; font-size: 12px;

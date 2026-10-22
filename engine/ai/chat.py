@@ -714,6 +714,20 @@ KIND_TOOLS = {"wildcard": ("edit_options", "wildcards"),
 _OTHER_KIND = re.compile(r"\b(templates?|bundles?|fixed[ -]values?|combines?)\b", re.I)
 
 
+#: A message that asks to point at an item it picks ("nested reference of
+#: @color", "draw the colours from @color").
+_REF_ASK = re.compile(r"\b(?:nest\w*|referenc\w*|refs?|draws?(?:ing)? from|picks? from|"
+                      r"pulls? from)\b|@\{", re.I)
+_PICKED = re.compile(r"\[\[([0-9a-f]{8})(?:#[^\]]*)?\]\]")
+
+
+def ref_asks(text: str) -> set[str]:
+    """Ids the user picked in a message that asks for a reference."""
+    if not isinstance(text, str) or not _REF_ASK.search(text):
+        return set()
+    return set(_PICKED.findall(text))
+
+
 def use_instead(kind: str, create: bool = False) -> str:
     """The pointer a wrong-kind refusal ends with, so the model calls the
     right tool instead of retrying this one (all-tools eval)."""
@@ -742,6 +756,10 @@ class Library(MoreTools, ManageTools):
         #: earlier card changed: the only ones the edit tools may change.
         #: None (tests, other callers) leaves every item open.
         self.named: set[str] | None = None
+        #: Wildcards the user picked by id in a message asking to point at
+        #: them ("a nested reference of [[id#color]]"): a new wildcard that
+        #: never does is told so (`_unused_ref_ask`).
+        self.ref_asks: set[str] = set()
         self.cat_by_lower = {c["name"].lower(): c["id"] for c in categories}
         self.names = {i: m.get("name") or "" for i, m in self.modules.items()}
         self.tags = ai_describe.library_tags([*modules, *bundles, *(templates or [])])
@@ -1628,7 +1646,8 @@ class Library(MoreTools, ManageTools):
                    else "an earlier card of this chat proposes")
                 + f": reuse it (change it with edit_options {{\"id\": \"{twin['id']}\"}}) "
                 "or pick another variable name")
-        warnings = [w for w in [self.var_clash(var, skip_name=name)] if w]
+        warnings = [w for w in [self.var_clash(var, skip_name=name),
+                                self._unused_ref_ask(payload)] if w]
         if defaulted:
             warnings.insert(0, f"Sets ${defaulted}, named after it (no \"var\" was given; "
                                "\"var\": \"\" makes a vocabulary with no variable)")
@@ -1642,6 +1661,23 @@ class Library(MoreTools, ManageTools):
             "op": {"op": "create", "kind": "module", "new_category": meta["new_category"],
                    "body": {"type": "wildcard", "name": name, **meta["body"], "payload": payload}},
         }
+
+    def _unused_ref_ask(self, payload: dict[str, Any]) -> str:
+        """The warning for a wildcard that leaves out a reference the user
+        asked for, so the model fixes it in the same answer: a 9B asked for
+        "a nested reference of [[id#color]]" wrote plain options and said
+        they drew from color (2026-10-22)."""
+        texts = " ".join(str(o.get("value") or "") for o in payload.get("options") or []
+                         if isinstance(o, dict))
+        for wid in sorted(self.ref_asks):
+            row = self.modules.get(wid)
+            if row is None or row.get("type") != "wildcard" or f"@{{{wid}" in texts:
+                continue
+            name = str(row.get("name") or wid)
+            return (f"You were asked to point at {self._chip(row)}, but no option draws from "
+                    f"it: write @{{{name}}} inside the option text (e.g. \"oversized "
+                    f"@{{{name}}} tee\") and propose it again")
+        return ""
 
     def _default_var(self, name: str) -> str:
         """The variable a wildcard made without "var" sets: the one library

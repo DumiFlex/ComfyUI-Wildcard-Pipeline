@@ -153,6 +153,24 @@ export function withMentionIds(text: string): string {
   return re ? text.replace(re, (l) => picked.get(l) ?? l) : text;
 }
 
+/** `text` cut into runs, with each picked `@Name` its own run, so the box
+ *  can draw those as chips while the user types (`ChatInputMarks.vue`).
+ *  The runs join back to `text` exactly. */
+export function mentionSpans(text: string): Array<{ text: string; mention: boolean }> {
+  const re = labelPattern();
+  if (!re || !text) return text ? [{ text, mention: false }] : [];
+  const out: Array<{ text: string; mention: boolean }> = [];
+  let at = 0;
+  for (const m of text.matchAll(re)) {
+    const i = m.index ?? 0;
+    if (i > at) out.push({ text: text.slice(at, i), mention: false });
+    out.push({ text: m[0], mention: true });
+    at = i + m[0].length;
+  }
+  if (at < text.length) out.push({ text: text.slice(at), mention: false });
+  return out;
+}
+
 /** The other way, for a sent message put back into a box: `[[id#Name]]`
  *  shows as `@Name` again (and sends as the same mention). */
 export function withMentionLabels(text: string): string {

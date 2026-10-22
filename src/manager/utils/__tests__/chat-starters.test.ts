@@ -30,6 +30,9 @@ describe("starterQuestions", () => {
     expect(starterQuestions({ name: "constraints-edit", hasId: true }, FULL)[0]).toBe("Explain what this does");
     expect(starterQuestions({ name: "wildcards-new" }, FULL)[0]).toBe("Help me fill this in");
     expect(starterQuestions({ name: "documentation-page" }, FULL)[0]).toBe("Explain this page in simpler words");
+    // Named, so switching pages before sending still asks about this one.
+    expect(starterQuestions({ name: "documentation-page", docTitle: "Chat" }, FULL).slice(0, 2)).toEqual([
+      'Explain the docs page "Chat" in simpler words', "Show me a small example of Chat"]);
     for (const name of ["dashboard", "wildcards", "tags", "settings", "test", "nope"]) {
       expect(starterQuestions({ name }, FULL).length).toBeLessThanOrEqual(3);
     }

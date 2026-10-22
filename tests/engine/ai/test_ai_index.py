@@ -115,9 +115,16 @@ def test_mentioned_names_the_picked_items(idx):
     assert "- Hair Color (aaaa0001, wildcard, $hair, 3 options)" in block
     assert "- Weather (aaaa0002, wildcard, $weather, 3 options)" in block
     assert "- ffffffff: not in the library" in block
+    # A picked wildcard comes with how to point at it from an option.
+    assert "write @{Hair Color} in the option text" in block
     # Repeats count once; plain text names nothing.
     assert ai_index.mentioned(idx, "[[aaaa0001]] [[aaaa0001#x]]", full=False)[1] == ["aaaa0001"]
     assert ai_index.mentioned(idx, "more hair colors", full=True) == ("", [])
+
+
+def test_mentioned_says_how_to_reference_only_for_wildcards(idx):
+    block, _ = ai_index.mentioned(idx, "look at [[aaaa0004#Character]]", full=False)
+    assert "@{" not in block
 
 
 def test_index_file_survives_and_rebuilds_on_format_change(tmp_path, monkeypatch):

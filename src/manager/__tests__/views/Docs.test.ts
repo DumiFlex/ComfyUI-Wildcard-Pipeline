@@ -66,7 +66,8 @@ describe("Docs.vue", () => {
     await w.get('[data-test="doc-ask-ai"]').trigger("click");
     const chat = useAiChat();
     expect(chat.open.value).toBe(true);
-    expect(chat.input.value).toBe("Explain this page in simpler words");
+    // Named, so moving to another page before sending still asks about this one.
+    expect(chat.input.value).toBe('Explain the docs page "WP Context" in simpler words');
     const sel = vi.spyOn(window, "getSelection").mockReturnValue(
       { toString: () => "  the  Context node " } as unknown as Selection);
     await w.get('[data-test="doc-ask-ai"]').trigger("click");

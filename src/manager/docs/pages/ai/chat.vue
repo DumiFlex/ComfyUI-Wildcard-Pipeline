@@ -45,6 +45,13 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         completion on, a few letters also offer Danbooru tags, LoRAs and embeddings. This works in
         the chat box, every Draft with AI box and the Pack builder.
       </p>
+      <p>
+        A picked item shows as a chip in the box while you type, so you can see it will go as that
+        exact item. A name you type yourself without picking it stays plain text and goes as words.
+        Pick a wildcard and ask for a "reference" or a "nested" pick of it, and the assistant puts
+        <code>@{Name}</code> in the new options; if it leaves that out, it is told and fixes it
+        before it answers.
+      </p>
     </DocSection>
 
     <DocSection title="When it asks you first">
@@ -141,8 +148,9 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       </p>
       <p>
         It answers questions about Wildcard Pipeline from these docs and names the page it used. It
-        doesn't guess: if the docs don't cover something, it says so. On any docs page, <b>Ask the
-        assistant</b> explains the page in simpler words.
+        doesn't guess: if the docs don't cover something, it says so. On any docs page, <b>Ask about
+        this page</b> (top right, it stays there as you scroll) puts a question naming the page in
+        the chat box, so it still asks about that page if you move on before sending.
       </p>
       <p>
         Select text anywhere in the manager and a small bar appears: <b>Explain</b> sends it to the
@@ -159,6 +167,7 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
           { term: 'Try again', desc: 'Asks the same message again; the new answer replaces the old one. It waits until you undo changes you applied from that answer.' },
           { term: 'Edit', desc: 'The pencil on your last message puts it back in the box to change and send again (Esc cancels).' },
           { term: 'Copy', desc: 'Copies an answer as Markdown.' },
+          { term: 'Time', desc: 'Beside Copy, how long the answer took. Time spent waiting on you (a question, a web search to allow) is left out.' },
           { term: 'Chats', desc: 'Your saved chats, newest first, with search. Rename, pin or delete each. ComfyUI keeps the newest 100 plus every pinned one.' },
           { term: 'New chat', desc: 'Starts over with an empty box.' },
           { term: 'Model menu', desc: 'The model name in the header: switch models from the next message on. If the new model can\'t carry on, start a new chat.' },
@@ -220,7 +229,8 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
           reply says what the change does. An answer that claims something was made or tested
           with no call behind it, puts part of your request off until later, comes back empty or
           garbled, or names a setting or variable that nothing mentions is sent back once to fix
-          it. A tool call written as text ("I call: read …") still runs. It doesn't ask "should I go
+          it. A tool call written as text ("I call: read …") still runs, and the leftovers of a
+          JSON step ("calls: []") never show in the reply. It doesn't ask "should I go
           ahead?", since the card is already the asking.
         </p>
         <p>

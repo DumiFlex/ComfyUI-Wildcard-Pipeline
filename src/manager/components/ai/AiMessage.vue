@@ -10,6 +10,9 @@
  * A code span that is only a key combo (`Ctrl+Enter`) shows as keys, and a
  * code block longer than FOLD_AT lines folds.
  *
+ * Step fields a JSON-mode reply wrote into its text ("calls: []") are left
+ * out (`utils/chat-step-fields.ts`).
+ *
  * `live`: the answer is still streaming. Open `**` / `` ` `` / `[[` at the
  * end are closed first (`closeOpen`), and the words added since the last
  * update fade in (never inside code; off with reduced motion).
@@ -21,7 +24,8 @@ import { KIND_ICON_MAP } from "../../../components/shared/kind-icons";
 import type { AiChatRef } from "../../api/types";
 import { closeOpen, parseMarkdown, type Block, type Inline, type ListItem, type Tone } from "../../utils/chat-markdown";
 import { copyText } from "../../utils/clipboard";
-import { syntaxNodes as syntax } from "../../utils/chat-syntax";
+import { syntaxNodes } from "../../utils/chat-syntax";
+import { stripStepFields } from "../../utils/chat-step-fields";
 
 const props = defineProps<{ text: string; refs?: Record<string, AiChatRef>; live?: boolean }>();
 const router = useRouter();
@@ -64,8 +68,14 @@ function markAt(text: string, before: string): number {
   return at < start + line.length && /\s/.test(text[at]) ? at : -1;
 }
 
+/** The text without step fields a JSON-mode reply wrote into it ("calls: []"). */
+const text = computed(() => stripStepFields(props.text));
+
+/** References stay text in a reply; chips are for cards (`chat-syntax.ts`). */
+const syntax = (v: string): Array<VNode | string> => syntaxNodes(v, { chips: false });
+
 let before = "";
-watch(() => props.text, (_now, old) => { before = old ?? ""; }, { flush: "sync" });
+watch(text, (_now, old) => { before = old ?? ""; }, { flush: "sync" });
 
 /** Render state: past the marker yet, and how many fade spans so far.
  *  Spans are keyed by where the marker sits, so only new words replay. */
@@ -297,11 +307,11 @@ function block(b: Block): VNode {
 }
 
 const parsed = computed((): { blocks: Block[]; at: number } => {
-  if (!props.live) return { blocks: parseMarkdown(props.text), at: -1 };
-  const at = markAt(props.text, before);
-  const closed = closeOpen(props.text);
+  if (!props.live) return { blocks: parseMarkdown(text.value), at: -1 };
+  const at = markAt(text.value, before);
+  const closed = closeOpen(text.value);
   // closeOpen only changes the end; the marker goes in when it's before that.
-  const ok = at >= 0 && at < closed.length && closed.startsWith(props.text.slice(0, at));
+  const ok = at >= 0 && at < closed.length && closed.startsWith(text.value.slice(0, at));
   return { blocks: parseMarkdown(ok ? closed.slice(0, at) + MARK + closed.slice(at) : closed), at: ok ? at : -1 };
 });
 const Body = () => {

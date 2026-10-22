@@ -6,6 +6,7 @@ import { GITHUB_WIKI } from "../config/links";
 import { useAiConfig } from "../composables/useAiConfig";
 import { useAiChat } from "../composables/useAiChat";
 import { explainPrompt, selectedText } from "../composables/useSelectionAsk";
+import { docExplainPrompt } from "../utils/chat-starters";
 
 const props = defineProps<{ page?: string }>();
 
@@ -13,10 +14,13 @@ const ai = useAiConfig();
 const chat = useAiChat();
 
 /** Open the assistant chat with a question about this page (or the text the
- *  user selected on it), ready to send or edit. */
+ *  user selected on it), ready to send or edit. The question names the page,
+ *  so it still asks about this one when the user moves on before sending. */
 function askAssistant(): void {
   const picked = selectedText();
-  chat.input.value = picked ? explainPrompt(picked) : "Explain this page in simpler words";
+  const title = activeMeta.value?.title;
+  chat.input.value = picked ? explainPrompt(picked)
+    : title ? docExplainPrompt(title) : "Explain this page in simpler words";
   chat.open.value = true;
 }
 
@@ -64,17 +68,6 @@ watch(
           aria-label="Search documentation"
         />
       </div>
-      <button
-        v-if="ai.ready.value"
-        type="button"
-        class="wp-doc__ask"
-        data-test="doc-ask-ai"
-        title="Select text on the page first to ask about just that part"
-        @mousedown.prevent
-        @click="askAssistant"
-      >
-        <i class="pi pi-microchip-ai" aria-hidden="true" /> Ask the assistant
-      </button>
       <template v-for="g in DOC_GROUPS" :key="g.id">
         <div v-if="groupPages(g.id).length" class="wp-doc__grp">{{ g.label }}</div>
         <RouterLink
@@ -108,6 +101,19 @@ watch(
       </a>
     </aside>
     <main ref="contentEl" class="wp-doc__content">
+      <!-- Pinned to the top right of the page as it scrolls. -->
+      <div v-if="ai.ready.value" class="wp-doc__askbar">
+        <button
+          type="button"
+          class="wp-doc__ask"
+          data-test="doc-ask-ai"
+          title="Ask about this page. Select text on it first to ask about just that part"
+          @mousedown.prevent
+          @click="askAssistant"
+        >
+          <i class="pi pi-microchip-ai" aria-hidden="true" /> Ask about this page
+        </button>
+      </div>
       <component :is="resolvedComponent" v-if="resolvedComponent" />
     </main>
   </div>
@@ -147,15 +153,27 @@ watch(
   font: inherit;
   font-size: 12px;
 }
+/* Sticky, and no height of its own, so the button floats over the crumb row
+   at the top right instead of pushing the page down. */
+.wp-doc__askbar {
+  position: sticky;
+  top: 10px;
+  z-index: 3;
+  height: 0;
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: none;
+}
 .wp-doc__ask {
+  pointer-events: auto;
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
   height: 30px;
-  padding: 0 9px;
-  margin: -6px 0 6px;
-  background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent);
+  padding: 0 11px;
+  margin-top: -6px;
+  background: color-mix(in oklab, var(--wp-accent-500) 18%, var(--wp-bg-1));
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, var(--wp-border));
   border-radius: 7px;
   color: var(--wp-text);
@@ -163,7 +181,7 @@ watch(
   font-size: 12px;
   cursor: pointer;
 }
-.wp-doc__ask:hover { background: color-mix(in oklab, var(--wp-accent-500) 20%, transparent); }
+.wp-doc__ask:hover { background: color-mix(in oklab, var(--wp-accent-500) 28%, var(--wp-bg-1)); }
 .wp-doc__ask:focus-visible { outline: 2px solid var(--wp-accent-500); outline-offset: 2px; }
 .wp-doc__grp {
   font-size: 10px;

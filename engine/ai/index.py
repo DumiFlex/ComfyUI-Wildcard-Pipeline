@@ -655,6 +655,14 @@ def mentioned(idx: Index, message: str, *, full: bool) -> tuple[str, list[str]]:
             continue
         lines.append("- " + facts_line(mid, f, full=full))
         known.append(mid)
+    wild = next((f for m in known if (f := idx.facts(m) or {}).get("kind") == "wildcard"), None)
+    if wild:
+        # A 9B asked for "a nested reference of [[id#color]]" wrote plain
+        # options and the mention into the description (2026-10-22).
+        name = wild.get("name") or "Name"
+        lines.append(f"To draw from a picked wildcard inside another wildcard's options, "
+                     f"write @{{{name}}} in the option text (e.g. \"red @{{{name}}} shirt\"); "
+                     f"[[id#Name]] only names an item in chat and is not a reference.")
     return "\n".join(lines), known
 
 

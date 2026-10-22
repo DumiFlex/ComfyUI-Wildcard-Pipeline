@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   _resetMentionsForTests, applyRow, matchItems, matchVars, mentionItems, mentionRefs, probeChat,
-  plainMentions, rememberMention, withMentionIds, withMentionLabels, type ChatRow, type MentionItem,
+  mentionSpans, plainMentions, rememberMention, withMentionIds, withMentionLabels, type ChatRow, type MentionItem,
 } from "../utils/chat-completions";
 
 const ITEMS: MentionItem[] = [
@@ -116,5 +116,18 @@ describe("plainMentions", () => {
   it("shows mentions and refs by name", () => {
     expect(plainMentions("Describe [[fe224375#color]] and @{fe224375#Colors:warm!null}, [[aaaa0001]]"))
       .toBe("Describe color and Colors, [[aaaa0001]]");
+  });
+});
+
+describe("mentionSpans", () => {
+  it("cuts out picked labels only, and joins back to the text", () => {
+    _resetMentionsForTests();
+    expect(mentionSpans("a @color shirt")).toEqual([{ text: "a @color shirt", mention: false }]);
+    rememberMention({ id: "aaaa0007", name: "color" });
+    const text = "a @color shirt, not @colors, @color";
+    const runs = mentionSpans(text);
+    expect(runs.filter((r) => r.mention).map((r) => r.text)).toEqual(["@color", "@color"]);
+    expect(runs.map((r) => r.text).join("")).toBe(text);
+    expect(mentionSpans("")).toEqual([]);
   });
 });
