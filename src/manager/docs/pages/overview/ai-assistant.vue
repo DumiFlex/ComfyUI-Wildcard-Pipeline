@@ -1046,7 +1046,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       <DocCallout variant="tip">
         With two models, keep a writer selected for drafting and switch to a builder in Settings
         when you organize a library, chat or build a whole pack. Load local models with at least
-        16k of context.
+        16k of context, and 32k or more for chats that take several steps: a multi-step answer
+        on a 27B model often reaches 20 to 26k tokens.
       </DocCallout>
       <DocCallout variant="warn">
         In Ollama, a Qwen 3.5 / 3.6 model pulled straight from Hugging Face

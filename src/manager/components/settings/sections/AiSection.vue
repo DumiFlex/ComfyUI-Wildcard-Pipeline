@@ -67,10 +67,14 @@ async function patch(p: Parameters<typeof save>[0]): Promise<boolean> {
  * stays: the provider, addresses, keys, models, embedding and web search,
  * and the Danbooru lookup (its recommendation depends on the image model). */
 const RECOMMENDED = {
-  model_size: "auto", context_max: 16384, thinking: "auto", unload_after_s: 60,
+  model_size: "auto", thinking: "auto", unload_after_s: 60,
   tool_format: "auto", choose_first: false, allow_delete: false, auto_apply: false,
   web_always_allow: false,
 } as const;
+/* Context is a floor, not a pick: under 16k the chat's instructions don't
+ * fit, so Reset raises a smaller window to 32k and leaves a bigger one. */
+const CONTEXT_MIN = 16384;
+const CONTEXT_RESET = 32768;
 const RECOMMENDED_UI = { explainChip: true, chatThinking: false, chatNotes: true, chatSteps: true } as const;
 const RESET_LABELS: Record<string, string> = {
   model_size: "Model size", context_max: "Most context to use", thinking: "Thinking",
@@ -85,6 +89,7 @@ const resetChanges = computed<string[]>(() => {
   if (!c) return [];
   const server = (Object.keys(RECOMMENDED) as Array<keyof typeof RECOMMENDED>)
     .filter((k) => (c[k] ?? RECOMMENDED[k]) !== RECOMMENDED[k]);
+  if ((c.context_max ?? CONTEXT_MIN) < CONTEXT_MIN) server.push("context_max" as never);
   const local = (Object.keys(RECOMMENDED_UI) as Array<keyof typeof RECOMMENDED_UI>)
     .filter((k) => ui[k] !== RECOMMENDED_UI[k]);
   return [...server, ...local].map((k) => RESET_LABELS[k] ?? k);
@@ -95,6 +100,7 @@ async function resetToRecommended(): Promise<void> {
   if (!c) return;
   const p: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(RECOMMENDED)) if ((c[k as keyof typeof RECOMMENDED] ?? v) !== v) p[k] = v;
+  if ((c.context_max ?? CONTEXT_MIN) < CONTEXT_MIN) p.context_max = CONTEXT_RESET;
   if (Object.keys(p).length && !(await patch(p as Parameters<typeof save>[0]))) return;
   ui.setExplainChip(RECOMMENDED_UI.explainChip);
   ui.setChatShow("thinking", RECOMMENDED_UI.chatThinking);
@@ -196,7 +202,7 @@ const contextCustom = ref(false);
 const contextOptions = computed<SelectOption[]>(() => [
   ...CONTEXT_PRESETS.map((n) => ({
     value: n,
-    label: `${n / 1024}k · ${n.toLocaleString("en-US")} tokens${n === 16384 ? " (recommended)" : ""}`,
+    label: `${n / 1024}k · ${n.toLocaleString("en-US")} tokens${n === CONTEXT_MIN ? " (minimum)" : n === CONTEXT_RESET ? " (recommended)" : ""}`,
   })),
   { value: CUSTOM, label: "Custom…" },
 ]);
@@ -792,6 +798,7 @@ const off = computed(() => !config.value?.enabled);
             v-if="isLocal"
             form
             label="Most context to use"
+            recommended="At least 16k; 32k or more for chats that take several steps"
             hint="Tokens of context the assistant uses. Ollama gets this much for the whole chat (changing it reloads the model, which throws away what it already read); drafts ask for what they need, up to this. Lower it if the model runs out of GPU memory; 16k or more keeps the chat's instructions whole. LM Studio and llama.cpp set this when the model loads, so set it there too."
             setting-key="ai-context"
             for="ai-context"

@@ -224,9 +224,25 @@ describe("Settings › AI assistant", () => {
     await w.get('[data-test="ai-reset-confirm"]').trigger("click");
     await flushPromises();
     expect(api.ai.saveConfig).toHaveBeenCalledWith({
-      context_max: 16384, thinking: "auto", tool_format: "auto", allow_delete: false,
+      thinking: "auto", tool_format: "auto", allow_delete: false,
     });
     expect(w.get('[data-test="ai-reset"]').attributes("disabled")).toBeDefined();
+  });
+
+  it("treats 16k context as a floor: Reset raises a smaller window and keeps a bigger one", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, context_max: 8192 }));
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg({ enabled: true, ...(p as Partial<AiConfig>) }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const labels = w.findAllComponents(Select)
+      .find((c) => c.attributes("data-test") === "ai-context-preset")?.props("options").map((o) => o.label) ?? [];
+    expect(labels).toContain("16k · 16,384 tokens (minimum)");
+    expect(labels).toContain("32k · 32,768 tokens (recommended)");
+    await w.get('[data-test="ai-reset"]').trigger("click");
+    expect(w.get('[data-test="ai-reset-list"]').text()).toContain("Most context to use");
+    await w.get('[data-test="ai-reset-confirm"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ context_max: 32768 });
   });
 
   it("marks cloud providers that already have a saved key", async () => {
