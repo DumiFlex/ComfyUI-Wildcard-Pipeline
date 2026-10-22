@@ -2725,6 +2725,8 @@ input, textarea, select { font: inherit; }
   overflow: hidden;
   animation: wp-modal-pop 160ms cubic-bezier(.2,.7,.3,1.2);
 }
+/* The dialog takes focus only when nothing in it can (see Modal.vue). */
+.wp-modal:focus { outline: none; }
 .wp-modal--sm { max-width: 360px; }
 .wp-modal--md { max-width: 560px; }
 .wp-modal--lg { max-width: 880px; }

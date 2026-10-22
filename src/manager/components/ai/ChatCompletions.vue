@@ -280,6 +280,8 @@ function rowTitle(row: ChatRow): string {
     >
       <template v-for="s in sections" :key="s.label">
         <div class="wp-ai-ac__head">{{ s.label }}</div>
+        <!-- A combobox option: the composer keeps focus and moves through the rows with the arrow keys (aria-activedescendant). -->
+        <!-- eslint-disable-next-line vuejs-accessibility/interactive-supports-focus, vuejs-accessibility/mouse-events-have-key-events -->
         <div
           v-for="e in s.rows"
           :id="`${listId}-${e.index}`"

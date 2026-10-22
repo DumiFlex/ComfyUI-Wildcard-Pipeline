@@ -583,7 +583,8 @@ function shownOptions(i: number, p: AiChatProposal): CardOption[] {
 
 /** The steps of a card that holds several changes to one item, or null. */
 function cardSteps(p: AiChatProposal): AiChatCardPart[] | null {
-  return p.op.op !== "create" && !cardOptions(p) && (p.parts?.length ?? 0) > 1 ? p.parts! : null;
+  const parts = p.parts ?? [];
+  return p.op.op !== "create" && !cardOptions(p) && parts.length > 1 ? parts : null;
 }
 
 function stepLines(i: number, p: AiChatProposal, part: AiChatCardPart): string[] {
@@ -710,6 +711,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 </script>
 
 <template>
+  <!-- The drawer is a drop target for images; the composer's image button is the keyboard way in. -->
+  <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
   <aside
     class="wp-ai-chat"
     role="dialog"

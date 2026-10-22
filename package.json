@@ -17,6 +17,7 @@
     "docs:figures": "node scripts/build-flow-figures.mjs",
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint \"src/**/*.{ts,vue}\"",
+    "lint:baseline": "node scripts/lint-baseline.mjs",
     "size": "node scripts/check-bundle-size.mjs",
     "check:css-isolation": "node scripts/check-css-isolation.mjs",
     "check:spacing": "node scripts/check-spacing-tokens.mjs",
