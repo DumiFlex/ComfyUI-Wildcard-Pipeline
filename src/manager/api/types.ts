@@ -1253,6 +1253,11 @@ export interface AiChatEditorState {
   content_rating: "safe" | "nsfw";
   /** Absent for editors that only share the item's info. */
   payload?: Record<string, unknown>;
+  /** A template editor's text. */
+  template_string?: string;
+  negative_template?: string | null;
+  /** A bundle editor's children. */
+  children?: Array<Record<string, unknown>>;
   dirty: boolean;
 }
 

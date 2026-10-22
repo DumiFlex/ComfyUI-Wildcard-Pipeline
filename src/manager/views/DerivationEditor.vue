@@ -165,6 +165,7 @@ const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
 let chatDraft: StagedDraft | null = null;
 const fillFromChat = registerOpenEditor({
   id: props.id, type: "derivation", dirty: () => dirty.value,
+  rebase: () => { baseline.value = snapshot(); },
   name, description, tags, categoryId, contentRating,
   payload: () => currentPayload() as unknown as Record<string, unknown>,
   setPayload: (p) => {

@@ -87,11 +87,17 @@ function loadContent(src: { template_string?: unknown; negative_template?: unkno
 
 /** Templates carry no rating; the chat spec wants one, so it stays "safe". */
 const contentRating = ref<"safe" | "nsfw">("safe");
-// The chat reads and edits this item's info here; its text stays on Save.
+// The chat reads and edits this item here, text included.
 // A new template fills from a draft the chat staged (see onMounted).
 const fillFromChat = registerOpenEditor({
   id: editingId.value ?? undefined, type: "template", dirty: () => dirty.value,
   name, description, tags, categoryId, contentRating,
+  extra: () => ({ template_string: templateString.value, negative_template: negativeTemplate.value }),
+  setExtra: (body) => {
+    if (typeof body.template_string === "string") templateString.value = body.template_string;
+    if (typeof body.negative_template === "string") negativeTemplate.value = body.negative_template;
+  },
+  rebase: () => { baseline.value = snapshot(); },
 });
 // The chat's `use_panel`: Describe, or ask the Draft with AI panel.
 const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);

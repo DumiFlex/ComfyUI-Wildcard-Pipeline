@@ -5,10 +5,12 @@
  * popover itself is `components/ai/ChatCompletions.vue`. Research and the
  * reasoning behind each choice: /pr-drafts/editor-polish.md.
  *
- * - `@word`  → a library item (any module kind or a bundle). Inserts
- *   `[[id#Name]]`, the same mention form the chat writes in its own answers,
- *   so the model gets the exact id and the server can hand it the item's facts
- *   (`engine/ai/index.py::mentioned`) without a search.
+ * - `@word`  → a library item (any module kind or a bundle). The box shows
+ *   `@Name`; the item's id is remembered, and `withMentionIds` turns it into
+ *   `[[id#Name]]` (the mention form the chat writes in its own answers) when
+ *   the message is sent, so the model gets the exact id and the server can
+ *   hand it the item's facts (`engine/ai/index.py::mentioned`) without a
+ *   search. The raw `[[id#Name]]` in the box read as noise.
  * - `$word`  → a variable some library item writes. Inserts `$name`.
  * - `<lora:` / `embedding:` → that kind of model file. Inserts its path.
  * - a bare word (3+ letters) → booru tags, LoRAs and embeddings, when those
@@ -119,10 +121,61 @@ function mentionName(name: string): string {
   return name.replace(/[[\]]/g, "").trim();
 }
 
+/** What the box shows for a picked item. */
+export function mentionLabel(name: string): string {
+  return `@${mentionName(name)}`;
+}
+
+/** Labels picked from the `@` menu this session, to the mention each sends
+ *  as. Module-level: a message put back in a box (an edit, a failed send)
+ *  turns into labels again and finds its ids here. */
+const picked = new Map<string, string>();
+
+/** Remember a picked item; returns the label the box shows. */
+export function rememberMention(item: { id: string; name: string }): string {
+  const label = mentionLabel(item.name);
+  picked.set(label, `[[${item.id}#${mentionName(item.name)}]]`);
+  return label;
+}
+
+function labelPattern(): RegExp | null {
+  if (!picked.size) return null;
+  // Longest first, so "@Hair style" wins over "@Hair".
+  const alts = [...picked.keys()].sort((a, b) => b.length - a.length)
+    .map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(`(?<![\\w@])(?:${alts.join("|")})(?![\\w])`, "g");
+}
+
+/** The text to send: each picked `@Name` as its `[[id#Name]]` mention.
+ *  A label the user typed by hand, or edited, goes as written. */
+export function withMentionIds(text: string): string {
+  const re = labelPattern();
+  return re ? text.replace(re, (l) => picked.get(l) ?? l) : text;
+}
+
+/** The other way, for a sent message put back into a box: `[[id#Name]]`
+ *  shows as `@Name` again (and sends as the same mention). */
+export function withMentionLabels(text: string): string {
+  return text.replace(/\[\[([0-9a-f]{8})#([^[\]\n]+)\]\]/g, (_m, id: string, name: string) =>
+    rememberMention({ id, name }));
+}
+
+/** Text with each mention or ref shown by its name, for places that draw
+ *  plain text (a saved chat's title). */
+export function plainMentions(text: string): string {
+  return text.replace(/\[\[[0-9a-f]{8}#([^[\]\n]+)\]\]|@\{[0-9a-f]{8}#([^}:!\n]+)[^}\n]*\}/g,
+    (_m, a: string | undefined, b: string | undefined) => a ?? b ?? "");
+}
+
+/** Test seam. */
+export function _resetMentionsForTests(): void {
+  picked.clear();
+}
+
 /** What a picked row puts in the box (without any trailing separator). */
 export function rowText(row: ChatRow, probe: ChatProbe): string {
   switch (row.source) {
-    case "item": return `[[${row.item.id}#${mentionName(row.item.name)}]]`;
+    case "item": return mentionLabel(row.item.name);
     case "var": return `$${row.v.name}`;
     case "tag": return row.tag.name;
     default:

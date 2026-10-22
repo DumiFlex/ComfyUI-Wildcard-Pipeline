@@ -24,11 +24,12 @@
  * (`retry`), and older turns summarised to make room (`compact`).
  */
 import { markLibraryChanged } from "./useLibraryChanged";
-import { computed, ref, shallowRef, triggerRef } from "vue";
+import { computed, nextTick, ref, shallowRef, triggerRef } from "vue";
 import { api, ApiError } from "../api/client";
 import type {
   AiChatStep, AiTestCard, AiCallAnswer, AiChatContext, AiChatEvent, AiChatStatusEvent, AiChatPage, AiChatProposal, AiChatResult,
   AiChatRetry, AiChatRequest, AiChatResume, AiChatStreamEvent, AiPendingCall, AiAskAnswer, AiAskAnswered, AiAskQuestion,
+  ModuleUpdateInput,
 } from "../api/types";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
@@ -36,11 +37,12 @@ import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { openEditor, stageDraft } from "./useOpenEditor";
 import { useAiConfig } from "./useAiConfig";
-import { applyManage, isManageOp, undoManage } from "./aiManageOps";
+import { applyManage, isManageOp, undoManage, type ManageOp } from "./aiManageOps";
 import { EDIT_ROUTES, runCall, type AiActionHost } from "./useAiActions";
 import { cardOptions, draftRoute, draftType, withoutOptions } from "./aiCards";
 import { MAX_IMAGES, prepareImage, type ChatImage } from "../utils/chat-image";
 import { isWebCall } from "../utils/web-calls";
+import { withMentionIds, withMentionLabels } from "../utils/chat-completions";
 
 /** The user's answer to a web search the model asked for. */
 export type SearchApproval = "once" | "chat" | "deny";
@@ -239,7 +241,8 @@ function editorJson(): { id: string; json: string } | undefined {
 }
 
 async function send(page?: AiChatPage): Promise<void> {
-  const text = input.value.trim();
+  // `@Name` picked from the menu goes as its `[[id#Name]]` mention.
+  const text = withMentionIds(input.value.trim());
   const pics = attachments.value;
   if ((!text && !pics.length) || loading.value) return;
   if (editing.value && text) {
@@ -356,7 +359,7 @@ async function retry(page?: AiChatPage, text = ""): Promise<void> {
     if (entries.value.length === lastUserIndex() + 1) entries.value = before;
     if (text && !input.value) {
       // The edit didn't run: back in the box to send again.
-      input.value = text;
+      input.value = withMentionLabels(text);
       editing.value = true;
     }
     if (err instanceof DOMException && err.name === "AbortError") return;
@@ -416,7 +419,7 @@ async function compact(): Promise<string> {
 function unsent(next: ChatEntry[], text: string, pics: ChatImage[] = []): void {
   if (entries.value[entries.value.length - 1] === next[next.length - 1]) {
     entries.value = entries.value.slice(0, -1);
-    input.value = text;
+    input.value = withMentionLabels(text);
     attachments.value = pics;
   }
 }
@@ -609,7 +612,7 @@ function editLast(): void {
   if (loading.value || editBlocked()) return;
   const last = entries.value[lastUserIndex()];
   if (last?.role !== "user") return;
-  input.value = last.text;
+  input.value = withMentionLabels(last.text);
   editing.value = true;
 }
 
@@ -890,6 +893,94 @@ async function waitForEditor(id: string): Promise<ReturnType<typeof openEditor>>
   return null;
 }
 
+/** JSON with sorted keys, without the payload's edit history and empty
+ *  values, so two copies of one version of an item compare equal. */
+function canonical(v: unknown): string {
+  const walk = (x: unknown, top: boolean): unknown => {
+    if (Array.isArray(x)) return x.map((y) => walk(y, false));
+    if (!x || typeof x !== "object") return x ?? null;
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(x).sort()) {
+      const y = (x as Record<string, unknown>)[k];
+      if (y === undefined || y === null || (top && k === "history")) continue;
+      out[k] = walk(y, false);
+    }
+    return out;
+  };
+  return JSON.stringify(walk(v, true));
+}
+
+/** Why a card that writes the saved row can't go now: the item changed
+ *  since the card was made (another card, a Save, a draft), so writing it
+ *  would throw that change away. `basis` is what the card expects the row
+ *  to hold (its `before`, or its `body` for an Undo). "" = it can go. */
+async function staleReason(kind: string, id: string, keys: string[],
+  basis: object, name: string): Promise<string> {
+  const want = basis as Record<string, unknown>;
+  const ed = openEditor();
+  const deep = keys.some((k) => !["name", "description", "tags", "category_id", "content_rating"].includes(k));
+  if (deep && ed && ed.id === id && ed.dirty()) {
+    return `${name} has unsaved changes in its editor: save or discard them first, then ask again`;
+  }
+  let row: Record<string, unknown>;
+  try {
+    const got: object | undefined = kind === "bundle" ? await useBundleStore().get(id)
+      : kind === "template" ? await useTemplateStore().get(id)
+        : await useModuleStore().get(id);
+    if (!got) return "";
+    row = { ...got };
+  } catch {
+    // Can't read it (offline): the write itself will say.
+    return "";
+  }
+  const changed = keys.filter((k) => k in want && canonical(row[k]) !== canonical(want[k]));
+  if (!changed.length) return "";
+  return `${name} changed since this card was made (${changed.join(", ").replace("payload", "its content")}); `
+    + "applying it would undo that change. Ask again so it builds on the current version";
+}
+
+/** Show a change the chat saved in the editor that has that item open, so
+ *  it doesn't take a reload. With no unsaved work the editor takes the saved
+ *  row and stays clean; with unsaved work only the fields the change set go
+ *  in (`body`, when known), next to the user's own edits. `id` undefined:
+ *  any open item (a tag rename or a delete can touch it without naming it). */
+async function showInEditor(id: string | undefined, body?: ModuleUpdateInput): Promise<void> {
+  const ed = openEditor();
+  if (!ed || ed.isNew || (id !== undefined && ed.id !== id)) return;
+  try {
+    if (ed.dirty()) {
+      if (body) ed.write(body);
+      return;
+    }
+    const row = ed.type === "bundle" ? await useBundleStore().get(ed.id)
+      : ed.type === "template" ? await useTemplateStore().get(ed.id)
+        : await useModuleStore().get(ed.id);
+    if (openEditor() !== ed) return;
+    ed.write(row);
+    // Let the editor's watchers settle before taking this as saved.
+    await nextTick();
+    ed.rebase();
+  } catch {
+    // Gone (a delete) or offline: the editor keeps what it shows.
+  }
+}
+
+/** The items a management card changes, with what it sets on each (when
+ *  it says); undefined = it can touch any item. */
+function manageTargets(op: ManageOp): Map<string, ModuleUpdateInput> | undefined {
+  if (op.op === "bulk") return new Map(op.items.map((it) => [it.id, it.to_new ? {} : it.body]));
+  if (op.op === "categories") return new Map();
+  return undefined;
+}
+
+async function showManageInEditor(op: ManageOp): Promise<void> {
+  const ed = openEditor();
+  if (!ed) return;
+  const targets = manageTargets(op);
+  if (!targets) await showInEditor(undefined);
+  else if (targets.has(ed.id)) await showInEditor(ed.id, targets.get(ed.id));
+}
+
 async function apply(entry: ChatAssistantEntry, p0: AiChatProposal): Promise<void> {
   const skip = skipped(entry, p0);
   const p = skip.size ? { ...p0, op: withoutOptions(p0.op, skip) } : p0;
@@ -905,6 +996,7 @@ async function apply(entry: ChatAssistantEntry, p0: AiChatProposal): Promise<voi
       // The categories it made, so Undo removes only those (kept for this
       // session; a reopened chat's Undo finds them by name).
       entry.created[p.pid] = made.join(",");
+      await showManageInEditor(op);
       entry.status[p.pid] = "applied";
       record(p.pid, "applied", undefined, skip.size);
       touch();
@@ -932,9 +1024,17 @@ async function apply(entry: ChatAssistantEntry, p0: AiChatProposal): Promise<voi
         touch();
         return;
       }
+      const keys = Object.keys(op.body).filter((k) => k !== "category_id" || !op.new_category);
+      const stale = await staleReason(op.kind, op.id, keys, op.before, op.name);
+      if (stale) {
+        entry.errors[p.pid] = stale;
+        touch();
+        return;
+      }
       if (op.kind === "module") await modules.update(op.id, body);
       else if (op.kind === "template") await templates.update(op.id, body);
       else await bundles.update(op.id, body);
+      await showInEditor(op.id, body);
     }
     entry.status[p.pid] = "applied";
     record(p.pid, "applied", undefined, skip.size);
@@ -968,18 +1068,27 @@ async function undo(entry: ChatAssistantEntry, p: AiChatProposal): Promise<void>
       const made = entry.created[p.pid];
       await undoManage(op, made === undefined ? undefined : made.split(",").filter(Boolean));
       delete entry.created[p.pid];
+      await showInEditor(undefined);
     } else if (op.op === "create") {
       const id = entry.created[p.pid];
       if (id && op.kind === "bundle") await useBundleStore().remove(id);
       else if (id && op.kind === "template") await useTemplateStore().remove(id);
       else if (id) await useModuleStore().remove(id);
       delete entry.created[p.pid];
-    } else if (op.kind === "module") {
-      await useModuleStore().update(op.id, op.before);
-    } else if (op.kind === "template") {
-      await useTemplateStore().update(op.id, op.before);
     } else {
-      await useBundleStore().update(op.id, op.before);
+      // Undo writes `before` back: only while the row still holds `body`.
+      const keys = Object.keys(op.before).filter((k) => k !== "category_id" || !op.new_category);
+      const stale = await staleReason(op.kind, op.id, keys, op.body, op.name);
+      if (stale) {
+        entry.errors[p.pid] = stale.replace("this card was made", "this card was applied")
+          .replace("applying it", "undoing it");
+        touch();
+        return;
+      }
+      if (op.kind === "module") await useModuleStore().update(op.id, op.before);
+      else if (op.kind === "template") await useTemplateStore().update(op.id, op.before);
+      else await useBundleStore().update(op.id, op.before);
+      await showInEditor(op.id, op.before);
     }
     delete entry.status[p.pid];
     if (entry.auto) delete entry.auto[p.pid];

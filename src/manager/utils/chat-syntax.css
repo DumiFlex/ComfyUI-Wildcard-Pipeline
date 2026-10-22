@@ -1,6 +1,13 @@
 /* Coloured prompt syntax in the chat (`chat-syntax.ts`): rendered by `h`, so styled by class, unscoped. */
 .wp-ai-syn__var { font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; font-weight: 500; }
-.wp-ai-syn__ref { color: var(--wp-accent-text); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; }
+.wp-ai-syn__ref {
+  display: inline-flex; align-items: baseline; gap: 4px; max-width: 100%; padding: 0 6px; border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--wp-accent-500) 45%, transparent);
+  background: color-mix(in srgb, var(--wp-accent-500) 14%, transparent);
+  color: var(--wp-accent-text); font-size: 0.95em; line-height: 1.45; vertical-align: baseline;
+}
+.wp-ai-syn__ref > i { font-size: 0.8em; }
+.wp-ai-syn__ref-filter { color: var(--wp-text-muted); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.9em; }
 .wp-ai-syn__pick { color: var(--wp-warn); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; }
 .wp-ai-syn__multi { color: var(--wp-rt-token-good); font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; }
 .wp-ai-syn__esc { color: var(--wp-text-muted); opacity: 0.75; }

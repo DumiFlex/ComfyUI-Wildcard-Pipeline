@@ -389,3 +389,24 @@ def test_a_name_proposed_again_in_this_answer_means_its_own_card():
     for raw in (made["pid"], new_id):
         with pytest.raises(client_tools.Shown, match="already on screen"):
             client_tools.prepare(lib, "open", {"proposal": raw})
+
+
+def test_template_editor_version_is_the_basis():
+    """An open template editor's unsaved text is what the chat reads and
+    edits, and its card goes into that editor."""
+    lib = _lib()
+    lib.use_editor({"id": "tttt0001", "name": "Portrait", "dirty": True,
+                    "template_string": "$look, soft light", "negative_template": "blurry"})
+    assert lib.editor_id == "tttt0001"
+    assert lib.templates["tttt0001"]["template_string"] == "$look, soft light"
+    p = lib.run("edit_template", {"id": "tttt0001", "negative": "blurry, lowres"})
+    assert p["op"]["basis"] == "editor"
+    assert p["op"]["before"]["template_string"] == "$look, soft light"
+
+
+def test_new_template_editor_registers_blank_row():
+    lib = _lib()
+    lib.use_editor({"id": "feed0003", "new": True, "type": "template", "name": "Fresh",
+                    "template_string": "$look"})
+    assert lib.editor_id == "feed0003"
+    assert lib.templates["feed0003"]["template_string"] == "$look"

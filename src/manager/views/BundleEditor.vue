@@ -349,11 +349,23 @@ const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => bundleSnapshot() !== bundleBaseline.value,
 );
 
-// The chat reads and edits this item's info here; its children stay on Save.
+// The chat reads and edits this item's info here; its children stay on
+// Save, but a change the chat saved to them shows here too.
 // A new bundle fills from a draft the chat staged (see onMounted).
 const fillFromChat = registerOpenEditor({
   id: props.id, type: "bundle", dirty: () => dirty.value,
   name, description, tags, categoryId, contentRating,
+  setExtra: (body) => {
+    if (!Array.isArray(body.children) && typeof body.color !== "string") return;
+    loadContent({
+      children: Array.isArray(body.children) ? body.children : children.value,
+      color: typeof body.color === "string" ? body.color : color.value,
+    });
+  },
+  rebase: () => {
+    baselineByChildId.value = snapshotBaseline(children.value);
+    bundleBaseline.value = bundleSnapshot();
+  },
 });
 // The chat's `use_panel`: a bundle has only Describe.
 const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);

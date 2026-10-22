@@ -380,13 +380,17 @@ _FILLER = re.compile(
     re.IGNORECASE,
 )
 TITLE_CHARS = 60
+#: A mention (`[[id#Name]]`) or a ref (`@{id#Name:filter}`): its name is the
+#: readable part.
+_TITLE_MENTION = re.compile(r"\[\[[0-9a-f]{8}#([^\]\n]+)\]\]|@\{[0-9a-f]{8}#([^}:!\n]+)[^}\n]*\}")
 
 
 def title_for(text: str) -> str:
     """A chat's title from its first message: its first line without the
     polite opener, cut at a word. The model isn't asked: that would be a
     second request on a local GPU (or a paid one) for every chat."""
-    t = _TITLE_WS.sub(" ", (text or "").strip().split("\n", 1)[0]).strip()
+    text = _TITLE_MENTION.sub(lambda m: m.group(1) or m.group(2), text or "")
+    t = _TITLE_WS.sub(" ", text.strip().split("\n", 1)[0]).strip()
     short = _FILLER.sub("", t).strip(" ,.!?")
     if len(short) >= 4:
         t = short[0].upper() + short[1:]

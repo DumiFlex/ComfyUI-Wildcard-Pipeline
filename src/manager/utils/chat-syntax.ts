@@ -6,7 +6,7 @@
  * `#tags` each their class. Plain words stay plain strings.
  */
 import { h, type VNode } from "vue";
-import { tokenizeRich } from "@/widgets/richTokenize";
+import { splitRefFilter, tokenizeRich } from "@/widgets/richTokenize";
 import { varColorIndex } from "../../components/shared/var-color";
 import "./chat-syntax.css";
 
@@ -15,6 +15,20 @@ const EXTRA = /<lora:[^>\s]*>|embedding:[^\s,]+|(?<![\w&#/])#[A-Za-z][\w-]*/g;
 
 /** What `syntaxNodes` may colour; a quick gate for plain text. */
 const ANY = /[$@{}<#\\]|embedding:/;
+
+/** A `@{id#Name:filter!null}` reference as a chip: the name, then the
+ *  filter and the no-empty marker, with the raw reference on hover. */
+function refChip(raw: string, name: string | undefined): VNode {
+  const body = /^@\{[^}:]*:([^}]*)\}$/.exec(raw)?.[1];
+  const filter = body === undefined ? null : splitRefFilter(body);
+  const id = /^@\{([0-9a-f]{8})/.exec(raw)?.[1] ?? "";
+  return h("span", { class: "wp-ai-syn__ref", title: raw }, [
+    h("i", { class: "pi pi-sparkles", "aria-hidden": "true" }),
+    h("span", null, name?.trim() || id),
+    ...(filter?.expr ? [h("span", { class: "wp-ai-syn__ref-filter" }, filter.expr)] : []),
+    ...(filter?.excludeNull ? [h("span", { class: "wp-ai-syn__ref-filter", title: "Never empty" }, "!∅")] : []),
+  ]);
+}
 
 function tokens(text: string): Array<VNode | string> {
   const out: Array<VNode | string> = [];
@@ -25,7 +39,7 @@ function tokens(text: string): Array<VNode | string> {
           class: "wp-ai-syn__var", style: { color: `var(--wp-var-${varColorIndex(t.meta?.name ?? "")})` },
         }, t.raw));
         break;
-      case "ref": out.push(h("span", { class: "wp-ai-syn__ref" }, t.raw)); break;
+      case "ref": out.push(refChip(t.raw, t.meta?.name)); break;
       case "dp-brace": out.push(h("span", { class: "wp-ai-syn__pick" }, t.raw)); break;
       case "dp-multi": out.push(h("span", { class: "wp-ai-syn__multi" }, t.raw)); break;
       case "escape": out.push(h("span", { class: "wp-ai-syn__esc" }, t.raw)); break;

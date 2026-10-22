@@ -200,6 +200,7 @@ function loadPayload(p: Record<string, unknown>): void {
 // stays on Save. A new item takes the payload of a draft the chat staged.
 const fillFromChat = registerOpenEditor({
   id: props.id, type: "fixed_values", dirty: () => dirty.value,
+  rebase: () => { baseline.value = snapshot(); },
   name, description, tags, categoryId, contentRating,
   ...(props.id ? {} : {
     setPayload: (p: Record<string, unknown>) => { if (Array.isArray(p.values)) loadPayload(p); },
@@ -666,10 +667,15 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
         </Button>
       </template>
       <template #subheader>
-      <div v-if="bulkAddOpen || (aiOpen && ai.config.value?.enabled) || (bulkActive && bulkCount > 0)" class="wpc-bulk-controls">
+      <div
+        v-if="bulkAddOpen || (ai.config.value?.enabled && (aiOpen || aiPending)) || (bulkActive && bulkCount > 0)"
+        v-show="bulkAddOpen || aiOpen || (bulkActive && bulkCount > 0)"
+        class="wpc-bulk-controls"
+      >
         <AiTextPanel
           ref="aiPanelRef"
-          v-if="aiOpen && ai.config.value?.enabled"
+          v-if="ai.config.value?.enabled && (aiOpen || aiPending)"
+          v-show="aiOpen"
           kind="fixed_values"
           :item="{ id: props.id, name, description, tags, payload: { values: aiValues } }"
           @use="useAiValues"

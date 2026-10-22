@@ -63,7 +63,7 @@ def test_new_bundle_and_bad_new_editors():
     # A saved item's id, a non-hex id, an unknown type or no `new` flag: ignored.
     for ed in ({"id": "aaaa0001", "new": True, "type": "wildcard", "name": "X"},
                {"id": "nothex!!", "new": True, "type": "wildcard"},
-               {"id": "feed0003", "new": True, "type": "template"},
+               {"id": "feed0003", "new": True, "type": "pack"},
                {"id": "feed0004", "type": "wildcard"}):
         other = _lib()
         other.use_editor(ed)

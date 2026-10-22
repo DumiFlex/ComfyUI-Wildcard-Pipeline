@@ -246,6 +246,7 @@ const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
 let chatDraft: StagedDraft | null = null;
 const fillFromChat = registerOpenEditor({
   id: props.id, type: "wildcard", dirty: () => dirty.value,
+  rebase: () => { baseline.value = snapshot(); },
   name, description, tags, categoryId, contentRating,
   payload: () => currentPayload() as unknown as Record<string, unknown>,
   setPayload: (p) => {
@@ -1806,8 +1807,9 @@ defineExpose({
           :variant="aiDraftOpen ? 'secondary' : 'ghost'"
           icon="pi-microchip-ai"
           data-test="wc-ai-draft" data-ai-anchor="ai-panel-button" data-ai-label="AI button (draft or edit options)"
+          :title="!aiDraftOpen && aiPending ? 'Your AI draft is waiting here' : undefined"
           @click="aiDraftOpen = !aiDraftOpen"
-        >AI</Button>
+        >{{ !aiDraftOpen && aiPending ? "AI · draft" : "AI" }}</Button>
         <Button
           size="sm"
           variant="ghost"
@@ -1821,25 +1823,6 @@ defineExpose({
         </Button>
       </template>
       <template #subheader>
-      <div v-if="aiDraftOpen && ai.config.value?.enabled" class="wpc-bulk-controls">
-        <AiWildcardPanel
-          ref="aiPanel"
-          :name="name"
-          :var-binding="varBinding"
-          :options="options"
-          :selected-ids="selectedIds"
-          :existing-tags="subCategories"
-          :tag-groups="tagGroups"
-          :tag-group-kinds="tagGroupKinds"
-          :description="description"
-          :labels="tags"
-          @commit-groups="commitAiGroups"
-          @commit-options="commitAiDraft"
-          @apply-edits="applyAiEdits"
-          @cancel="aiDraftOpen = false"
-          @update:pending="(v: boolean) => (aiPending = v)"
-        />
-      </div>
       <div v-if="bulkMode && (bulkAddOpen || selectedCount > 0 || bulkNote)" class="wpc-bulk-controls">
         <BulkAddPanel
           v-if="bulkAddOpen"
@@ -1877,6 +1860,32 @@ defineExpose({
         <p v-if="bulkNote" class="wpc-bulk-note" role="status">{{ bulkNote }}</p>
       </div>
       </template>
+      <!-- Not in the sticky subheader: a tall draft there covered the
+           options and the page couldn't scroll past it. -->
+      <!-- Kept (hidden) while it holds a draft: Close used to throw it away. -->
+      <div
+        v-if="ai.config.value?.enabled && (aiDraftOpen || aiPending)"
+        v-show="aiDraftOpen"
+        class="wpc-bulk-controls wpc-ai-controls"
+      >
+        <AiWildcardPanel
+          ref="aiPanel"
+          :name="name"
+          :var-binding="varBinding"
+          :options="options"
+          :selected-ids="selectedIds"
+          :existing-tags="subCategories"
+          :tag-groups="tagGroups"
+          :tag-group-kinds="tagGroupKinds"
+          :description="description"
+          :labels="tags"
+          @commit-groups="commitAiGroups"
+          @commit-options="commitAiDraft"
+          @apply-edits="applyAiEdits"
+          @cancel="aiDraftOpen = false"
+          @update:pending="(v: boolean) => (aiPending = v)"
+        />
+      </div>
       <table class="wp-table wp-options-table" data-ai-anchor="options" data-ai-label="Options list">
         <thead>
           <tr>
@@ -2178,6 +2187,7 @@ defineExpose({
   gap: 10px;
   padding: 12px 16px 14px;
 }
+.wpc-ai-controls { border-bottom: 1px solid var(--wp-border); }
 .wpc-bulk-note {
   margin: 0;
   font-size: 12px;

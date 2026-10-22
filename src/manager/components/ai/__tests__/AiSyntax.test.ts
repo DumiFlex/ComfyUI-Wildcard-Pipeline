@@ -12,10 +12,15 @@ describe("AiSyntax", () => {
     expect(w.find(".wp-ai-syn__var").text()).toBe("$hair");
     expect(w.find(".wp-ai-syn__var").attributes("style")).toContain("--wp-var-");
     expect(w.find(".wp-ai-syn__pick").text()).toBe("{snowflakes|frost on glass}");
-    expect(w.find(".wp-ai-syn__ref").text()).toBe("@{abcd1234}");
+    expect(w.find(".wp-ai-syn__ref").text()).toBe("abcd1234");
+    expect(w.find(".wp-ai-syn__ref").attributes("title")).toBe("@{abcd1234}");
     expect(w.find(".wp-ai-syn__lora").text()).toBe("<lora:ice:0.6>");
     expect(w.find(".wp-ai-syn__tag").text()).toBe("#cold");
-    expect(w.text()).toBe("$hair in {snowflakes|frost on glass} with @{abcd1234} <lora:ice:0.6> #cold");
+    expect(w.text()).toBe("$hair in {snowflakes|frost on glass} with abcd1234 <lora:ice:0.6> #cold");
+    // A named, filtered ref shows its name and filter as a chip.
+    const ref = mount(AiSyntax, { props: { text: "@{abcd1234#Colors:warm and !dark!null} shirt" } }).find(".wp-ai-syn__ref");
+    expect(ref.text()).toBe("Colorswarm and !dark!∅");
+    expect(ref.findAll(".wp-ai-syn__ref-filter").map((x) => x.text())).toEqual(["warm and !dark", "!∅"]);
     // Plain text stays one string, no spans.
     expect(mount(AiSyntax, { props: { text: "red scarf" } }).findAll("span").length).toBe(1);
   });

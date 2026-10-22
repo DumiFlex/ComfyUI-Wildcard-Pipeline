@@ -801,11 +801,13 @@ class Library(MoreTools, ManageTools):
     def use_editor(self, editor: Any) -> None:
         """Read the open editor's version of its item instead of the saved
         row: the fields it sends (name, description, tags, category_id,
-        content_rating, payload) replace the saved ones."""
+        content_rating, payload; a template's text, a bundle's children)
+        replace the saved ones."""
         if not isinstance(editor, dict) or not isinstance(editor.get("id"), str):
             return
         item_id = editor["id"]
-        saved = self.modules.get(item_id) or self.bundles.get(item_id)
+        saved = (self.modules.get(item_id) or self.bundles.get(item_id)
+                 or self.templates.get(item_id))
         if saved is None and editor.get("new") is True:
             saved = self._add_unsaved(item_id, editor.get("type"))
         if saved is None:
@@ -823,10 +825,18 @@ class Library(MoreTools, ManageTools):
             if isinstance(saved.get("payload"), dict) and "history" in saved["payload"]:
                 payload.setdefault("history", saved["payload"]["history"])
             row["payload"] = payload
+        if item_id in self.templates:
+            for key in ("template_string", "negative_template"):
+                if isinstance(editor.get(key), str):
+                    row[key] = editor[key]
+        if isinstance(editor.get("children"), list) and item_id in self.bundles:
+            row["children"] = copy.deepcopy(editor["children"])
         if item_id in self.modules:
             self.modules[item_id] = row
             self.names[item_id] = row.get("name") or ""
             self._catalog = None
+        elif item_id in self.templates:
+            self.templates[item_id] = row
         else:
             self.bundles[item_id] = row
         self.editor_id = item_id
@@ -844,6 +854,9 @@ class Library(MoreTools, ManageTools):
             self.bundles[item_id] = row = {**row, "children": []}
         elif kind in ("wildcard", "fixed_values", "combine", "derivation", "constraint"):
             self.modules[item_id] = row = {**row, "type": kind, "payload": {}}
+        elif kind == "template":
+            self.templates[item_id] = row = {**row, "template_string": "",
+                                             "negative_template": ""}
         else:
             return None
         self.editor_new = True

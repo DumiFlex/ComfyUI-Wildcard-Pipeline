@@ -58,6 +58,9 @@ def test_last_reply_and_title():
     assert cl.title_for("Hi, can you please add weather") == "Add weather"
     assert cl.title_for("Can I add hair?") == "Can I add hair"
     assert cl.title_for("hey") == "hey"
+    assert cl.title_for("Describe this wildcard [[fe224375#color]]") == \
+        "Describe this wildcard color"
+    assert cl.title_for("mix @{fe224375#Colors:warm!null} in") == "Mix Colors in"
     long = cl.title_for("word " * 40)
     assert len(long) <= 60 and long.endswith("word…")
     assert len(cl.title_for("x" * 200)) == 60
