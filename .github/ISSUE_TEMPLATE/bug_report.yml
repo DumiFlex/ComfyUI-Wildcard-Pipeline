@@ -37,12 +37,16 @@ body:
         - WP Prompt Cleaner
         - WP Debug
         - WP Var → Int / Float / Bool
+        - WP Image Filter
+        - WP Model Info
         - Manager SPA — Library list views
         - Manager SPA — Module editor (wildcard / fixed / combine / derivation / constraint)
         - Manager SPA — Bundle editor
         - Manager SPA — Test Runner
         - Manager SPA — Import / Export
         - Manager SPA — Documentation tab
+        - Manager SPA — AI assistant (chat, Draft with AI, Pack builder)
+        - Manager SPA — Community tab
         - Engine (runtime — pure-Python resolution)
         - Build / install (manual install path)
         - Other (describe in repro)

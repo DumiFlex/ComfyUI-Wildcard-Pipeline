@@ -302,6 +302,12 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // gzip) that loads only when something is installed. dev sat at 485,671
 // bytes; the branch at 502,904.
 const TOTAL_LIMIT = 496 * 1024;     // 496 KB
+// The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
+// two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
+// `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
+// warning means "raise the budget in this PR with a line above saying why";
+// a failure means something grew by far more than one feature should.
+const TOTAL_FAIL_LIMIT = Math.round(TOTAL_LIMIT * 1.05);
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;
@@ -342,6 +348,8 @@ for (const file of files) {
   console.log(`  ${rel.padEnd(40)}  ${(size / 1024).toFixed(2).padStart(7)} KB`);
 }
 manifest.total = total;
+manifest.budget = TOTAL_LIMIT;
+manifest.failAt = TOTAL_FAIL_LIMIT;
 console.log(`  ${"TOTAL".padEnd(40)}  ${(total / 1024).toFixed(2).padStart(7)} KB`);
 
 const entry = files.find((f) => f.endsWith("main.js"));
@@ -356,9 +364,15 @@ if (entry) {
   }
 }
 
-if (total > TOTAL_LIMIT) {
-  console.error(`✗ Total js/ gzip ${total} bytes exceeds budget ${TOTAL_LIMIT}`);
+if (total > TOTAL_FAIL_LIMIT) {
+  console.error(
+    `✗ Total js/ gzip ${total} bytes exceeds budget ${TOTAL_LIMIT} by more than 5% (fails above ${TOTAL_FAIL_LIMIT})`,
+  );
   failed = true;
+} else if (total > TOTAL_LIMIT) {
+  const msg = `Total js/ gzip ${total} bytes is over the ${TOTAL_LIMIT}-byte budget (fails above ${TOTAL_FAIL_LIMIT}); raise TOTAL_LIMIT in scripts/check-bundle-size.mjs with a note saying why`;
+  console.warn(`⚠ ${msg}`);
+  if (process.env.GITHUB_ACTIONS) console.log(`::warning title=Bundle size::${msg}`);
 } else {
   console.log(`✓ Total within budget (${total} / ${TOTAL_LIMIT} bytes gzipped)`);
 }
