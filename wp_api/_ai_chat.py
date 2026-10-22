@@ -1137,6 +1137,20 @@ def split_native(cfg: dict[str, Any]) -> bool:
     return cfg.get("api") == "openai" and bool(cfg.get("local"))
 
 
+def split_thinking(cfg: dict[str, Any]) -> dict[str, Any]:
+    """The thinking both asks of a local model's split step use. One setting
+    for both, since switching thinking on or off changes the head of the
+    prompt (the chat template writes it into the system block) and a local
+    server then reads the whole prompt again: 15-18k tokens, about 20 s, on
+    every step that switched (LM Studio measurements, 2026-10-22). Auto is
+    off here: choosing a call needs no long think, and thinking hurts small
+    models' tool picks (research note "Small model tool use"). A level the
+    user picked applies to both asks."""
+    if cfg.get("local") and cfg.get("thinking", "auto") not in THINKING_LEVELS:
+        return {**cfg, "thinking": "off"}
+    return cfg
+
+
 def _choice_refused(e: AIError) -> bool:
     return bool(re.search(r"answered 4\d\d", e.message)
                 and re.search(r"tool_choice|\brequired\b", e.message, re.I))
@@ -1165,16 +1179,13 @@ async def split_step(
     `answer` tool included). `must_call` (typed JSON): the act ask can't
     come back empty (`engine/ai/plan_items.py` steps)."""
     names = [t.name for t in offered]
-    # Choosing a call needs no long think: a local model's act ask runs with
-    # its thinking off (research note "Small model tool use": thinking hurts
-    # small models' tool picks and spends the output on reasoning).
-    act_cfg = {**cfg, "thinking": "off"} if cfg.get("local") else cfg
+    cfg = split_thinking(cfg)
     if fmt == "json":
         plan, thinking = "", ""
         if not answer_only and typed and cfg.get("choose_first") and len(offered) > 1:
             # Choose, then fill (research note "Small model tool use", T3):
             # the tool by name first, then only that tool's arguments.
-            pick = await step(act_cfg, system=system, log=log, fmt="json", tools=[], names=names,
+            pick = await step(cfg, system=system, log=log, fmt="json", tools=[], names=names,
                               schema=choose_schema(names, must_call), temperature=act_temp,
                               num_ctx=num_ctx, cache_key=cache_key, emit=emit)
             chosen = pick["answer"].get("tool") if isinstance(pick["answer"], dict) else None
@@ -1185,7 +1196,7 @@ async def split_step(
                 answer_only = True
                 plan = str(pick["answer"].get("plan") or "")
         if not answer_only:
-            act = await step(act_cfg, system=system, log=log, fmt="json", tools=[], names=names,
+            act = await step(cfg, system=system, log=log, fmt="json", tools=[], names=names,
                              schema=registry.act_schema(names, offered if typed else None,
                                                         max_calls if typed else 0,
                                                         1 if typed and must_call else 0),
@@ -1217,13 +1228,13 @@ async def split_step(
                "temperature": act_temp, "num_ctx": num_ctx, "cache_key": cache_key,
                "emit": emit}
         try:
-            act = await step(act_cfg, **ask, tool_choice=choice)
+            act = await step(cfg, **ask, tool_choice=choice)
         except AIError as e:
             if not (choice and _choice_refused(e)):
                 raise
             _NO_CHOICE.add(key)
             choice = None
-            act = await step(act_cfg, **ask)
+            act = await step(cfg, **ask)
         real = [c for c in act["calls"] if c["tool"] != registry.ANSWER_TOOL]
         ready = len(real) < len(act["calls"])
         if real or not ready:

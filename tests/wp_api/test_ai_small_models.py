@@ -57,6 +57,22 @@ async def test_after_its_cards_a_split_step_writes_what_it_proposed(wp_client, f
     assert _schema(fake_llm.seen[n])["properties"]["calls"]["maxItems"] == 3
 
 
+async def test_a_split_turn_keeps_one_thinking_setting(wp_client, fake_llm):
+    # Switching thinking between the act and answer asks changes the head of
+    # the prompt, and LM Studio read 15-18k tokens again (2026-10-22).
+    for thinking, want in (("auto", "none"), ("high", "high")):
+        _on(fake_llm, thinking=thinking)
+        fake_llm.chat_steps.extend([
+            {"message": "", "calls": [{"tool": "search", "args": json.dumps({"query": "hair"})}]},
+            {"message": "No hair yet.", "calls": []},
+        ])
+        n = len(fake_llm.seen)
+        await _chat(wp_client, "find hair")
+        asks = fake_llm.seen[n:]
+        assert [_kind(x) for x in asks][-1] == "answer"
+        assert {x["body"].get("reasoning_effort") for x in asks} == {want}
+
+
 async def test_a_split_turn_out_of_steps_answers_instead_of_stopping(wp_client, fake_llm):
     _on(fake_llm)
     fake_llm.chat_steps.extend(
