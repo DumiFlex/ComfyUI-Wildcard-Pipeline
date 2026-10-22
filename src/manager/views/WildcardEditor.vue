@@ -13,7 +13,7 @@
  * Save flow appends a snapshot to `payload.history` (utils/history.ts) so
  * the EditorFrame's history button works on the next mount.
  */
-import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter, useRoute } from "vue-router";
@@ -1113,6 +1113,10 @@ function clearOptionFilter(): void {
 }
 
 const bulkAddOpen = ref(false);
+// Bulk add and the AI panel show one at a time (Dumi, 2026-10-22: both
+// open filled the screen); the hidden one keeps what it holds.
+watch(bulkAddOpen, (open) => { if (open) aiDraftOpen.value = false; });
+watch(aiDraftOpen, (open) => { if (open) bulkAddOpen.value = false; });
 const selectedIds = ref<Set<string>>(new Set());
 const bulkNote = ref("");
 
@@ -1823,16 +1827,7 @@ defineExpose({
         </Button>
       </template>
       <template #subheader>
-      <div v-if="bulkMode && (bulkAddOpen || selectedCount > 0 || bulkNote)" class="wpc-bulk-controls">
-        <BulkAddPanel
-          v-if="bulkAddOpen"
-          mode="options"
-          :existing-values="existingOptionValues"
-          :existing-tags="subCategories"
-          @commit-options="commitBulkAddOptions"
-          @cancel="bulkAddOpen = false"
-          @update:pending="(v: boolean) => (bulkPending = v)"
-        />
+      <div v-if="bulkMode && (selectedCount > 0 || bulkNote)" class="wpc-bulk-controls">
         <SelectionToolbar
           v-if="selectedCount > 0"
           :count="selectedCount"
@@ -1860,8 +1855,23 @@ defineExpose({
         <p v-if="bulkNote" class="wpc-bulk-note" role="status">{{ bulkNote }}</p>
       </div>
       </template>
-      <!-- Not in the sticky subheader: a tall draft there covered the
-           options and the page couldn't scroll past it. -->
+      <!-- Not in the sticky subheader: a tall panel there covered the
+           options and the page couldn't scroll past it. Bulk add and the AI
+           panel show one at a time; each keeps what it holds while hidden. -->
+      <div
+        v-if="bulkMode && (bulkAddOpen || bulkPending)"
+        v-show="bulkAddOpen"
+        class="wpc-bulk-controls wpc-ai-controls"
+      >
+        <BulkAddPanel
+          mode="options"
+          :existing-values="existingOptionValues"
+          :existing-tags="subCategories"
+          @commit-options="commitBulkAddOptions"
+          @cancel="bulkAddOpen = false; bulkPending = false"
+          @update:pending="(v: boolean) => (bulkPending = v)"
+        />
+      </div>
       <!-- Kept (hidden) while it holds a draft: Close used to throw it away. -->
       <div
         v-if="ai.config.value?.enabled && (aiDraftOpen || aiPending)"

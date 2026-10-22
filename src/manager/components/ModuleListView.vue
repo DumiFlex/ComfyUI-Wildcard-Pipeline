@@ -1588,9 +1588,16 @@ defineExpose({
  * the filter panel. Active state mirrors the chip selection in the
  * filter-panel's tag row. */
 .wp-row-tag-btn {
-  display: inline-flex;
-  align-items: center;
+  /* One line, cut with "…" when the column is narrow (a long tag wrapped
+   * into three lines inside its 20px chip with the chat open); the full
+   * tag is in the title. */
+  display: inline-block;
   height: 20px;
+  line-height: 18px;
+  max-width: 10em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 0 var(--wp-space-4);
   border: 1px solid var(--wp-border);
   border-radius: 999px;

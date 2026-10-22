@@ -21,7 +21,7 @@
  * we actually want.
  */
 import { computed, onMounted, ref, watch } from "vue";
-import { libraryVersion } from "../composables/useLibraryChanged";
+import { libraryVersion, markDeleted } from "../composables/useLibraryChanged";
 import { useRoute, useRouter } from "vue-router";
 import { useListUrlState } from "../composables/useListUrlState";
 import { useLoadError } from "../composables/useLoadError";
@@ -310,6 +310,7 @@ async function del(row: LibraryRow) {
     } else {
       await api.modules.delete(row.id);
     }
+    markDeleted([row.id]);
     toast.push({ severity: "success", summary: "Deleted", detail: row.name, life: 2000 });
     await fetchAll();
   } catch (e) {

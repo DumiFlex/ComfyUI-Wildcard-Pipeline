@@ -30,6 +30,24 @@ function refChip(raw: string, name: string | undefined): VNode {
   ]);
 }
 
+/** `@{Name}` / `@{Name:filter}`, the way a card's preview names a ref
+ *  (the tokenizer only takes the `@{id…}` form). */
+const NAME_REF = /@\{([^}#:{]+?)(?::[^}]*)?\}/g;
+
+function nameRefs(text: string): Array<VNode | string> {
+  if (!text.includes("@{")) return [text];
+  const out: Array<VNode | string> = [];
+  let last = 0;
+  for (const m of text.matchAll(NAME_REF)) {
+    const at = m.index ?? 0;
+    if (at > last) out.push(text.slice(last, at));
+    out.push(refChip(m[0], m[1]));
+    last = at + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
 function tokens(text: string): Array<VNode | string> {
   const out: Array<VNode | string> = [];
   for (const t of tokenizeRich(text)) {
@@ -43,7 +61,7 @@ function tokens(text: string): Array<VNode | string> {
       case "dp-brace": out.push(h("span", { class: "wp-ai-syn__pick" }, t.raw)); break;
       case "dp-multi": out.push(h("span", { class: "wp-ai-syn__multi" }, t.raw)); break;
       case "escape": out.push(h("span", { class: "wp-ai-syn__esc" }, t.raw)); break;
-      default: out.push(t.raw);
+      default: out.push(...nameRefs(t.raw));
     }
   }
   return out;

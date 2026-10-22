@@ -449,7 +449,9 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         and their cards, turn off <b>Show thinking</b>, <b>Show working notes</b> or <b>Show what it
         did</b> (the read and search lines) under Settings › AI assistant › Chat, each on its own;
         they only change what you see. A reaction to your message shows as soon as it is
-        decided, not when the answer is done. <b>Stop</b> ends the
+        decided, not when the answer is done. If you delete an item while the assistant is answering,
+        or after, its chip in the answer is struck through and a line under the answer says
+        what it said about that item no longer holds; your next message tells the assistant. <b>Stop</b> ends the
         answer. <b>Try again</b> under the last reply asks the same message again for a new
         answer, which replaces the old one; it waits until you undo any change you applied from
         that answer.

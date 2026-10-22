@@ -528,6 +528,24 @@ describe("AiChatDrawer", () => {
     w.unmount();
   });
 
+  it("says when an item an answer points at was deleted after it", async () => {
+    vi.mocked(api.ai.chat).mockResolvedValueOnce({
+      chat_id: "c1", message: "[[Shirt]] already does that.", model: "m", steps: [], proposals: [],
+      refs: { Shirt: { id: "w9", type: "wildcard", name: "Shirt" } },
+    });
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("make a shirt");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    expect(w.find('[data-test="ai-chat-gone"]').exists()).toBe(false);
+    const { markDeleted } = await import("../../../composables/useLibraryChanged");
+    markDeleted(["w9"]);
+    await flushPromises();
+    expect(w.get('[data-test="ai-chat-gone"]').text()).toContain("Shirt was deleted after this answer");
+    expect(w.find('[data-test="ai-msg-chip-deleted"]').exists()).toBe(true);
+    w.unmount();
+  });
+
   describe("page tools and web search", () => {
     const DONE: AiChatResult = { chat_id: "c1", message: "There it is.", model: "m", steps: [], proposals: [] };
 

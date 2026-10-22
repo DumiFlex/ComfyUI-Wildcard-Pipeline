@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import AiSyntax from "../AiSyntax.vue";
 import AiCardView from "../AiCardView.vue";
 import AiCardPreview from "../AiCardPreview.vue";
-import type { CardView } from "../../../composables/aiCards";
+import { cardOptions, otherPreview, type CardView } from "../../../composables/aiCards";
 import type { AiChatProposal } from "../../../api/types";
 
 describe("AiSyntax", () => {
@@ -21,7 +21,10 @@ describe("AiSyntax", () => {
     const ref = mount(AiSyntax, { props: { text: "@{abcd1234#Colors:warm and !dark!null} shirt" } }).find(".wp-ai-syn__ref");
     expect(ref.text()).toBe("Colorswarm and !dark!∅");
     expect(ref.findAll(".wp-ai-syn__ref-filter").map((x) => x.text())).toEqual(["warm and !dark", "!∅"]);
-    // Plain text stays one string, no spans.
+    // A card's preview names a ref by name only: a chip too.
+    const named = mount(AiSyntax, { props: { text: "@{color:warm} oversized tee [×2.5 #casual]" } }).find(".wp-ai-syn__ref");
+    expect(named.text()).toBe("colorwarm");
+        // Plain text stays one string, no spans.
     expect(mount(AiSyntax, { props: { text: "red scarf" } }).findAll("span").length).toBe(1);
   });
 
@@ -47,5 +50,17 @@ describe("AiSyntax", () => {
     const m = mount(AiCardPreview, { props: { proposal: p }, global: { stubs: { Teleport: true } } });
     expect(m.find(".wp-ai-preview__opt-text .wp-ai-syn__pick").text()).toBe("{snowflakes|frost on glass}");
     expect(m.find(".wp-ai-preview__neg .wp-ai-syn__var").text()).toBe("$fog");
+  });
+
+  it("doesn't list an option with a ref a second time under its ticks", () => {
+    const p = {
+      pid: "p1", tool: "create_wildcard", title: "Create wildcard Shirt", summary: "", warnings: [], after: null,
+      preview: ["@{color} oversized tee [×2.5 #casual]", "Group casual"],
+      op: { op: "create", kind: "module", new_category: "", body: {
+        id: "aaaa0009", type: "wildcard", name: "Shirt",
+        payload: { options: [{ id: "o1", value: "@{fe224375#color} oversized tee", weight: 2.5 }] },
+      } },
+    } as unknown as AiChatProposal;
+    expect(otherPreview(p, cardOptions(p))).toEqual(["Group casual"]);
   });
 });

@@ -1,3 +1,4 @@
+import { markDeleted } from "../composables/useLibraryChanged";
 import { defineStore } from "pinia";
 import { computed, reactive, ref } from "vue";
 import { api } from "../api/client";
@@ -80,6 +81,7 @@ export const useModuleStore = defineStore("modules", () => {
 
   async function remove(id: string) {
     await api.modules.delete(id);
+    markDeleted([id]);
     items.value = items.value.filter((i) => i.id !== id);
     catalog.value = catalog.value.filter((i) => i.id !== id);
   }

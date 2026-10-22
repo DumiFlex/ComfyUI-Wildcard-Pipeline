@@ -51,6 +51,7 @@ import { clearPointer, EDIT_ROUTES } from "../../composables/useAiActions";
 import { useAiConfig } from "../../composables/useAiConfig";
 import { THINKING_OPTIONS, isThinking } from "../../utils/ai-thinking";
 import { useUiStore } from "../../stores/uiStore";
+import { deletedIds } from "../../composables/useLibraryChanged";
 import { useAiChatWidth } from "../../composables/useAiChatWidth";
 import type { AiCardFix, AiChatCardPart, AiChatPage, AiChatProposal, AiChatStep, AiTestCard as TestCard } from "../../api/types";
 import { currentPageNote, editorForPage } from "../../composables/useOpenEditor";
@@ -184,6 +185,14 @@ async function pickModel(v: string | number | null): Promise<void> {
 }
 
 watch(() => chat.entries.value.length, () => { modelNote.value = ""; });
+
+/** Items an answer points at that were deleted since it was written. */
+function goneNames(entry: ChatAssistantEntry): string[] {
+  const gone = deletedIds.value;
+  if (!gone.size) return [];
+  return [...new Set(Object.values(entry.result.refs ?? {})
+    .filter((r) => r.id && gone.has(r.id)).map((r) => r.name))];
+}
 
 /* ── What the chat shows (Settings › AI assistant › Chat) ── */
 
@@ -892,6 +901,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
           />
           <p v-if="testError" class="wp-ai-chat__warning" role="status">{{ testError }}</p>
           <AiMessage :text="entry.result.message" :refs="entry.result.refs" />
+          <p v-if="goneNames(entry).length" class="wp-ai-chat__note" data-test="ai-chat-gone">
+            <i class="pi pi-info-circle" aria-hidden="true" />
+            {{ goneNames(entry).join(", ") }} {{ goneNames(entry).length === 1 ? "was" : "were" }} deleted after this answer, so what it says about {{ goneNames(entry).length === 1 ? "it" : "them" }} no longer holds. Your next message tells the assistant.
+          </p>
           <AiAsk
             v-for="c in chat.askCalls(entry)"
             :key="c.id"

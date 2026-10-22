@@ -130,8 +130,15 @@ export function otherPreview(p: AiChatProposal, options: CardOption[] | null): s
   return p.preview.filter((line) => {
     if (line.startsWith("Group ")) return true;
     if (line.startsWith("∅")) return !options.some((o) => o.empty);
-    return !options.some((o) => o.text && line.includes(o.text));
+    const plain = withoutRefs(line);
+    return !options.some((o) => o.text && plain.includes(withoutRefs(o.text)));
   });
+}
+
+/** Text with its `@{…}` references taken out: a card's option holds
+ *  `@{id#Color}` where its preview line says `@{Color}`. */
+function withoutRefs(text: string): string {
+  return text.replace(/@\{[^}]*\}/g, "").replace(/\s+/g, " ").trim();
 }
 
 /* ── Card views by kind ─────────────────────────────────────────────────
