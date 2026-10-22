@@ -17,6 +17,36 @@ sections and the library work as before. ``wired_payload`` writes the
 payload of every item but a slot without a model; ``slot_schema`` and
 ``compile_slot`` are the per-slot content call (options tagged on an enum
 of the slot's own axis values).
+
+How a request becomes a graph (``compile_graph_plan``, in order):
+
+1. The model's answer is cleaned: ``compile_graph`` runs ``_slots`` (names,
+   variables, pick ranges), ``_infer_axes`` (axes a relation names but no
+   slot declared), ``_fixed``, ``_relations`` (each side checked against
+   the graph's own names; a miss goes to ``bad_refs``) and ``_template``.
+   On a refine, ``apply_locks`` first puts back what the user locked.
+2. Code then corrects what models get wrong, each step adding a line to
+   ``applied`` so the plan says what changed: the pack settings
+   (``apply_settings``), a story's beat (``code_beat``), pick counts the
+   request names ("two accessories", ``apply_picks``; ``_COUNTED`` and
+   ``_NOT_PICKED``), rules a multi-pick can't take (``drop_multi_pick_rules``),
+   quality / negative slots that should be fixed values or the run's own
+   (``apply_request_slots``), model-family rules the request never asked for
+   (``trim_model``), a person lead on a request with no person
+   (``unasked_lead``; ``_PERSON_ASK`` / ``_THING_ASK``) and existing library
+   items to reuse (``apply_library``).
+3. ``graph_plan`` turns the graph into plan items and ``compile_plan`` gives
+   them keys and reserved ids. ``request_gaps`` lists request words the graph
+   says nowhere (content words after ``_REQUEST_STOP`` and ``_stems``), which
+   the review asks about once.
+4. Building: ``wired_payload`` writes constraints, derivations and the
+   template from the graph; each slot's options come from the model through
+   ``slot_prompt`` / ``slot_schema`` / ``compile_slot``. After the test run,
+   ``verify_relations`` checks every relation against the rendered prompts.
+
+The word lists and regexes are tuned from real model answers; the tests
+(``test_ai_pack_graph*.py``, ``test_ai_pack_quality.py``) are their record,
+so change one together with the test that shows why.
 """
 from __future__ import annotations
 

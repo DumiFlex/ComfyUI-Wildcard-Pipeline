@@ -28,6 +28,11 @@ fresh prompt that still hangs together.
 
 ## Install
 
+Needs a ComfyUI with the V3 node API and Python 3.10 or newer. The canvas
+side is built against ComfyUI frontend 1.42 (the
+`@comfyorg/comfyui-frontend-types` version in `package.json`); it uses some
+frontend internals, so a much older or newer frontend may break parts of it.
+
 - **ComfyUI Manager (recommended):** search for **Wildcard Pipeline** by
   **dumiflex**, click **Install** and restart ComfyUI.
 - **By hand:** download the zip from the

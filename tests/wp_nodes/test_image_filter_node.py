@@ -202,3 +202,66 @@ def test_frame_labels_carry_the_frames_variables_as_text():
     assert label["vars"]["hair"] == "red hair"
     assert "empty" not in label["vars"] and "__trace__" not in label["vars"]
     assert len(label["vars"]["long"]) == node_mod._MAX_VAR_TEXT
+
+
+def _fake_server(monkeypatch, reply=None, interrupt=False):
+    """ComfyUI's PromptServer and interrupt check, and no preview files. The
+    picker answers `reply` as soon as the request goes out."""
+    sent = []
+
+    class Server:
+        def send_sync(self, event, data):
+            sent.append((event, data))
+            if event == node_mod.EVENT_REQUEST and reply is not None:
+                f.PENDING.answer(data["token"], reply)
+
+    srv = types.ModuleType("server")
+    srv.PromptServer = types.SimpleNamespace(instance=Server())
+    mm = types.ModuleType("comfy.model_management")
+
+    def check():
+        if interrupt:
+            raise RuntimeError("interrupted")
+    mm.throw_exception_if_processing_interrupted = check
+    monkeypatch.setitem(sys.modules, "server", srv)
+    monkeypatch.setitem(sys.modules, "comfy", types.ModuleType("comfy"))
+    monkeypatch.setitem(sys.modules, "comfy.model_management", mm)
+    monkeypatch.setattr(node_mod, "_save_previews", lambda images: [[{"filename": "x.png"}]])
+    monkeypatch.setattr(node_mod, "POLL_SECONDS", 0.01)
+    return sent
+
+
+async def test_ask_waits_for_the_picker_and_closes_the_request(monkeypatch):
+    sent = _fake_server(monkeypatch, reply={"action": "picks", "picks": [[0, 1]]})
+    answer = await WPImageFilter._ask(
+        [FakeBatch("a", [0, 1])], [{}], [2],
+        {"timeout": 30, "send_as": "list", "on_timeout": "keep_all"}, "12")
+    assert answer.action == "picks" and answer.picks == ((0, 1),)
+    (ev, req), (done, info) = sent
+    assert ev == node_mod.EVENT_REQUEST and req["frames"] == [[{"filename": "x.png"}]]
+    assert done == node_mod.EVENT_DONE and info["token"] == req["token"]
+    assert f.PENDING.pending() == []
+
+
+async def test_ask_times_out_to_the_chosen_fallback(monkeypatch):
+    sent = _fake_server(monkeypatch, reply={"action": "nonsense"})
+    answer = await WPImageFilter._ask(
+        [FakeBatch("a", [0, 1])], [{}], [2],
+        {"timeout": 1, "send_as": "list", "on_timeout": "keep_first"}, "12")
+    # The malformed answer was ignored; the timeout kept the first image.
+    assert answer.action == "picks" and answer.picks == ((0, 0),)
+    assert sent[-1][0] == node_mod.EVENT_DONE
+
+
+async def test_cancelling_the_run_ends_the_wait(monkeypatch):
+    sent = _fake_server(monkeypatch, interrupt=True)
+    with pytest.raises(RuntimeError, match="interrupted"):
+        await WPImageFilter._ask(
+            [FakeBatch("a", [0])], [{}], [1],
+            {"timeout": 0, "send_as": "list", "on_timeout": "keep_all"}, "12")
+    assert sent[-1][0] == node_mod.EVENT_DONE and f.PENDING.pending() == []
+
+
+def test_fingerprint_never_matches():
+    fp = WPImageFilter.fingerprint_inputs()
+    assert fp != fp
