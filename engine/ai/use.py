@@ -314,7 +314,7 @@ def constraint_rule_keys(p: dict[str, Any]) -> list[tuple[str, str, str]]:
     (``disabled_matrix_cells``), then the option pairs
     (``disabled_exception_keys``)."""
     rows: list[tuple[str, str, str]] = []
-    matrix = p.get("matrix") if isinstance(p.get("matrix"), dict) else {}
+    matrix = _got if isinstance(_got := p.get("matrix"), dict) else {}
     for src, row in matrix.items():
         if isinstance(row, dict):
             for tgt, cell in row.items():

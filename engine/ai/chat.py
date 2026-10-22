@@ -694,9 +694,9 @@ def parse_args(raw: Any) -> dict[str, Any]:
 def parse_step(raw: Any) -> tuple[str, list[dict[str, Any]]]:
     if not isinstance(raw, dict):
         raise ValueError("the model's answer wasn't an object")
-    message = raw.get("message") if isinstance(raw.get("message"), str) else ""
+    message = _got if isinstance(_got := raw.get("message"), str) else ""
     calls: list[dict[str, Any]] = []
-    for c in raw.get("calls") if isinstance(raw.get("calls"), list) else []:
+    for c in _got if isinstance(_got := raw.get("calls"), list) else []:
         if isinstance(c, dict) and c.get("tool") in TOOLS:
             calls.append({"tool": c["tool"], "args": c.get("args", "")})
     return message.strip()[:MAX_MESSAGE], calls[:MAX_CALLS_PER_STEP]
@@ -1174,7 +1174,7 @@ class Library(MoreTools, ManageTools):
         for r in self.modules.values():
             if r.get("type") != "constraint" or r.get("_proposed"):
                 continue
-            p = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+            p = _got if isinstance(_got := r.get("payload"), dict) else {}
             src = str((self.modules.get(p.get("source_wildcard_id")) or {}).get("name") or "")
             tgt = str((self.modules.get(p.get("target_wildcard_id")) or {}).get("name") or "")
             name = str(r.get("name") or "").lower()
@@ -1462,7 +1462,7 @@ class Library(MoreTools, ManageTools):
 
     @staticmethod
     def _writes(r: dict[str, Any]) -> set[str]:
-        p = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        p = _got if isinstance(_got := r.get("payload"), dict) else {}
         out = {p.get("var_binding"), p.get("output_var")}
         out |= {v.get("name") for v in p.get("values") or [] if isinstance(v, dict)}
         if r.get("type") == "derivation":
@@ -1546,7 +1546,7 @@ class Library(MoreTools, ManageTools):
     def _meta(self, args: dict[str, Any]) -> dict[str, Any]:
         tags: list[str] = []
         lower = {t.lower(): t for t in self.tags}
-        for t in args.get("tags") if isinstance(args.get("tags"), list) else []:
+        for t in _got if isinstance(_got := args.get("tags"), list) else []:
             tag = _short(t, ai_describe.MAX_TAG_LEN).lstrip("#")
             if tag:
                 tag = lower.get(tag.lower(), tag.lower())
@@ -1563,8 +1563,8 @@ class Library(MoreTools, ManageTools):
         return _short(args.get("name"), 120) or fallback
 
     def _spec(self, args: dict[str, Any]) -> dict[str, Any]:
-        return {"options": args.get("options") if isinstance(args.get("options"), list) else [],
-                "axes": args.get("axes") if isinstance(args.get("axes"), list) else [],
+        return {"options": _got if isinstance(_got := args.get("options"), list) else [],
+                "axes": _got if isinstance(_got := args.get("axes"), list) else [],
                 "null_weight": args.get("null_weight", 0)}
 
     def create_wildcard(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -1643,7 +1643,7 @@ class Library(MoreTools, ManageTools):
 
     @staticmethod
     def _writes_var(r: dict[str, Any], var: str) -> bool:
-        p = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        p = _got if isinstance(_got := r.get("payload"), dict) else {}
         return (p.get("var_binding") == var or p.get("output_var") == var
                 or any(isinstance(v, dict) and v.get("name") == var
                        for v in p.get("values") or []))
@@ -1667,11 +1667,11 @@ class Library(MoreTools, ManageTools):
         and name (and variable for a wildcard, source and target for a
         constraint). Its card is replaced at the same id (`run`); a
         wildcard's variable may change."""
-        body = op.get("body") if isinstance(op.get("body"), dict) else {}
+        body = _got if isinstance(_got := op.get("body"), dict) else {}
         if op.get("op") != "create" or op.get("kind") not in ("module", "bundle"):
             return None
         rows = self.modules if op["kind"] == "module" else self.bundles
-        p = body.get("payload") if isinstance(body.get("payload"), dict) else {}
+        p = _got if isinstance(_got := body.get("payload"), dict) else {}
 
         def key(r: dict[str, Any], q: dict[str, Any]) -> tuple[Any, ...]:
             if r.get("type") == "constraint":
@@ -1683,7 +1683,7 @@ class Library(MoreTools, ManageTools):
 
         want = key(body, p)
         for r in reversed(list(rows.values())):
-            q = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+            q = _got if isinstance(_got := r.get("payload"), dict) else {}
             if r.get("_proposed") and key(r, q) == want:
                 return r
         return None
@@ -1744,7 +1744,7 @@ class Library(MoreTools, ManageTools):
 
     def add_options(self, args: dict[str, Any]) -> dict[str, Any]:
         r = self._module(args, "wildcard")
-        old = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        old = _got if isinstance(_got := r.get("payload"), dict) else {}
         spec = self._spec(args)
         spec["null_weight"] = 0
         out = ai_wildcard.compile_spec(spec, var=old.get("var_binding") or None, refs=self.refs,
@@ -1775,7 +1775,7 @@ class Library(MoreTools, ManageTools):
 
     def edit_options(self, args: dict[str, Any]) -> dict[str, Any]:
         r = self._module(args, "wildcard")
-        old = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        old = _got if isinstance(_got := r.get("payload"), dict) else {}
         opts = [o for o in old.get("options") or [] if isinstance(o, dict)]
         shown = [
             {"id": str(n), "value": "" if o.get("is_null") else str(o.get("value") or ""),
@@ -1787,7 +1787,7 @@ class Library(MoreTools, ManageTools):
         nulls = {str(n) for n, o in enumerate(opts, start=1) if o.get("is_null")}
 
         def _numbered(key: str, field: str) -> list[dict[str, Any]]:
-            rows = args.get(key) if isinstance(args.get(key), list) else []
+            rows = _got if isinstance(_got := args.get(key), list) else []
             return [{"id": str(x.get("n")), field: x.get(field)}
                     for x in rows if isinstance(x, dict)]
 
@@ -1876,7 +1876,7 @@ class Library(MoreTools, ManageTools):
             # Saved constraints keyed by these tags keep the old names (an
             # unapplied constraint card gets its own warning, `_broken_links`).
             for m in self.modules.values():
-                cp = m.get("payload") if isinstance(m.get("payload"), dict) else {}
+                cp = _got if isinstance(_got := m.get("payload"), dict) else {}
                 if (m.get("type") == "constraint" and not m.get("_proposed")
                         and r["id"] in (cp.get("source_wildcard_id"),
                                         cp.get("target_wildcard_id"))):
@@ -2007,7 +2007,7 @@ class Library(MoreTools, ManageTools):
 
     def _rules(self, args: dict[str, Any], taken: set[str]) -> dict[str, Any]:
         compiled = ai_derivation.compile_rules(
-            {"rules": args.get("rules") if isinstance(args.get("rules"), list) else []},
+            {"rules": _got if isinstance(_got := args.get("rules"), list) else []},
             catalog=self.catalog, taken_ids=taken, refs=self.refs,
         )
         if not compiled["rules"]:
@@ -2055,7 +2055,7 @@ class Library(MoreTools, ManageTools):
 
     def add_rules(self, args: dict[str, Any]) -> dict[str, Any]:
         r = self._module(args, "derivation")
-        old = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        old = _got if isinstance(_got := r.get("payload"), dict) else {}
         old_rules = [x for x in old.get("rules") or [] if isinstance(x, dict)]
         compiled = self._rules(args, {x["id"] for x in old_rules if isinstance(x.get("id"), str)})
         payload = copy.deepcopy(old)
@@ -2081,7 +2081,7 @@ class Library(MoreTools, ManageTools):
         source = ai_constraint.side_view(src, "S")
         target = ai_constraint.side_view(tgt, "T")
         compiled = ai_constraint.compile_rules(
-            {"rules": args.get("rules") if isinstance(args.get("rules"), list) else []},
+            {"rules": _got if isinstance(_got := args.get("rules"), list) else []},
             source=source, target=target,
         )
         if not compiled["cells"] and not compiled["exceptions"]:
@@ -2257,7 +2257,7 @@ class Library(MoreTools, ManageTools):
         with. An edit to it comes back as a card that replaces the old one
         (`run`), so "now add negatives" works before anything is applied."""
         op = proposal.get("op") or {}
-        body = op.get("body") if isinstance(op.get("body"), dict) else None
+        body = _got if isinstance(_got := op.get("body"), dict) else None
         pid = proposal.get("pid")
         if op.get("op") == "categories" and isinstance(pid, str):
             self._note_categories(op, pid)
@@ -2296,9 +2296,9 @@ class Library(MoreTools, ManageTools):
         """A change to a wildcard that cards not yet applied rely on (a new
         constraint's rules name its options and tags): which rules it
         breaks, so nothing resets silently."""
-        body = op.get("body") if isinstance(op.get("body"), dict) else {}
+        body = _got if isinstance(_got := op.get("body"), dict) else {}
         wid = op.get("id") if op.get("op") == "update" else body.get("id")
-        payload = body.get("payload") if isinstance(body.get("payload"), dict) else None
+        payload = _got if isinstance(_got := body.get("payload"), dict) else None
         if not isinstance(wid, str) or payload is None or "options" not in payload:
             return []
         ids = {o.get("id") for o in payload.get("options") or [] if isinstance(o, dict)}
@@ -2307,14 +2307,14 @@ class Library(MoreTools, ManageTools):
         for r in self.modules.values():
             if r.get("type") != "constraint" or not r.get("_proposed"):
                 continue
-            cp = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+            cp = _got if isinstance(_got := r.get("payload"), dict) else {}
             side = ("source" if cp.get("source_wildcard_id") == wid else
                     "target" if cp.get("target_wildcard_id") == wid else "")
             if not side:
                 continue
             lost = [str(e.get(side)) for e in cp.get("exceptions") or []
                     if isinstance(e, dict) and e.get(f"{side}_id") not in ids]
-            matrix = cp.get("matrix") if isinstance(cp.get("matrix"), dict) else {}
+            matrix = _got if isinstance(_got := cp.get("matrix"), dict) else {}
             used = (set(matrix) if side == "source" else
                     {t for cells in matrix.values() if isinstance(cells, dict) for t in cells})
             lost += [f"#{t}" for t in sorted(used - tags)]
@@ -2511,7 +2511,7 @@ def proposal_note(tool: str, proposal: dict[str, Any]) -> str:
     pid, title = proposal.get("pid"), proposal.get("title")
     head = (f"{tool}: card {pid} ({title}) is waiting for the user's Apply. NOTHING has "
             "changed yet")
-    body = op.get("body") if isinstance(op.get("body"), dict) else {}
+    body = _got if isinstance(_got := op.get("body"), dict) else {}
     if op.get("op") == "create" and isinstance(body.get("id"), str):
         name = re.sub(r"[\[\]\n#]", " ", str(body.get("name") or "")).strip()
         head += (f": it will be created as [[{body['id']}#{name}]]. Point at it by that id "
@@ -2570,10 +2570,10 @@ def args_note(tool: str, args: dict[str, Any], lib: Library | None = None) -> st
         sec = f" › {_short(args.get('section'), 30)}" if args.get("section") else ""
         return f"Read the docs: {title}{sec}"
     if tool == "run_test":
-        stack = args.get("stack") if isinstance(args.get("stack"), list) else []
+        stack = _got if isinstance(_got := args.get("stack"), list) else []
         names = [_short(x.get("item") if isinstance(x, dict) else x, 30) for x in stack[:4]]
         more = f" +{len(stack) - 4}" if len(stack) > 4 else ""
-        n = args.get("seeds") if isinstance(args.get("seeds"), int) else 100
+        n = _got if isinstance(_got := args.get("seeds"), int) else 100
         return f"Ran {', '.join(names)}{more} on {n} seeds" + (
             " with the proposed changes" if args.get("proposed") else "")
     if tool == "find_duplicates":

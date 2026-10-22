@@ -190,8 +190,8 @@ async def _firecrawl(reader: dict[str, Any], url: str) -> tuple[str, str]:
     md = page.get("markdown") if isinstance(page, dict) else None
     if not isinstance(md, str):
         raise WebError("Firecrawl gave no page text")
-    meta = page.get("metadata") if isinstance(page.get("metadata"), dict) else {}
-    title = meta.get("title") if isinstance(meta.get("title"), str) else ""
+    meta = _got if isinstance(_got := page.get("metadata"), dict) else {}
+    title = _got if isinstance(_got := meta.get("title"), str) else ""
     return title, md
 
 

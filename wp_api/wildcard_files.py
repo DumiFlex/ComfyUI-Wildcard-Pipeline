@@ -81,10 +81,10 @@ async def convert_wildcard_files(request: web.Request) -> web.Response:
     if not isinstance(paths, list):
         paths = []
     exclude = {p for p in meta.get("exclude") or [] if isinstance(p, str)}
-    pack_tag = meta.get("pack_tag") if isinstance(meta.get("pack_tag"), str) else None
-    category = meta.get("category") if isinstance(meta.get("category"), str) else None
+    pack_tag = _got if isinstance(_got := meta.get("pack_tag"), str) else None
+    category = _got if isinstance(_got := meta.get("category"), str) else None
     make_bundles = meta.get("bundles") is not False
-    pack_name = meta.get("pack_name") if isinstance(meta.get("pack_name"), str) else None
+    pack_name = _got if isinstance(_got := meta.get("pack_name"), str) else None
     merge = meta.get("merge") is not False
     keep_separate = {p for p in meta.get("keep_separate") or [] if isinstance(p, str)}
 

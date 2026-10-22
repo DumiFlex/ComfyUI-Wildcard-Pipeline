@@ -235,7 +235,7 @@ def check(op: dict[str, Any], item: dict[str, Any],
     change: an update's patch laid over ``base``, the row before it). An edit
     is only checked for what it adds, so old choices aren't nagged about."""
     kind = item.get("type")
-    payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
+    payload = _got if isinstance(_got := item.get("payload"), dict) else {}
     name = str(item.get("name") or "This item")
     out: list[str] = []
     if kind == "wildcard":
@@ -301,7 +301,7 @@ def apply_fix(body: dict[str, Any], key: str,
     changes nothing. ``only`` limits a scope fix to those option ids (an
     edit fixes only the options it adds)."""
     import copy
-    payload = body.get("payload") if isinstance(body.get("payload"), dict) else None
+    payload = _got if isinstance(_got := body.get("payload"), dict) else None
     opts = payload.get("options") if payload else None
     if not isinstance(opts, list):
         return None
@@ -358,8 +358,8 @@ def fixes(op: dict[str, Any], item: dict[str, Any],
     may touch). Warnings left out here are fixed by asking the model."""
     if item.get("type") != "wildcard":
         return []
-    body = op.get("body") if isinstance(op.get("body"), dict) else {}
-    payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
+    body = _got if isinstance(_got := op.get("body"), dict) else {}
+    payload = _got if isinstance(_got := item.get("payload"), dict) else {}
     name = str(item.get("name") or "This item")
     var = str(payload.get("var_binding") or "")
     old = ((base or {}).get("payload") or {}).get("options") or []
@@ -390,8 +390,8 @@ def fixes(op: dict[str, Any], item: dict[str, Any],
 def fixed_body(proposal: dict[str, Any], keys: list[str]) -> dict[str, Any] | None:
     """The card's op body with the fixes ``keys`` made in order (each key
     one of its own ``fixes``), or None when none changes anything."""
-    op = proposal.get("op") if isinstance(proposal.get("op"), dict) else {}
-    body = op.get("body") if isinstance(op.get("body"), dict) else None
+    op = _got if isinstance(_got := proposal.get("op"), dict) else {}
+    body = _got if isinstance(_got := op.get("body"), dict) else None
     if body is None:
         return None
     known = {f.get("key"): f for f in proposal.get("fixes") or [] if isinstance(f, dict)}

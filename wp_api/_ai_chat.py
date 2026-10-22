@@ -427,7 +427,7 @@ def responses_raw(output: Any, keep_calls: set[str]) -> list[dict[str, Any]]:
             if not it.get("encrypted_content") or not it.get("id"):
                 continue
             out.append({"type": "reasoning", "id": it["id"],
-                        "summary": it.get("summary") if isinstance(it.get("summary"), list) else [],
+                        "summary": _got if isinstance(_got := it.get("summary"), list) else [],
                         "encrypted_content": it["encrypted_content"]})
         elif kind == "function_call":
             if it.get("call_id") in keep_calls:
@@ -494,7 +494,7 @@ def responses_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
     optional fields strict mode refuses."""
     out = []
     for t in tools:
-        fn = t.get("function") if isinstance(t.get("function"), dict) else t
+        fn = _got if isinstance(_got := t.get("function"), dict) else t
         out.append({"type": "function", "name": fn.get("name"),
                     "description": fn.get("description") or "",
                     "parameters": fn.get("parameters") or {"type": "object", "properties": {}},
@@ -685,19 +685,19 @@ def _step_calls(value: Any) -> list[Any] | None:
 
 
 def _usage_openai(data: dict[str, Any]) -> dict[str, Any]:
-    u = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+    u = _got if isinstance(_got := data.get("usage"), dict) else {}
     details = u.get("prompt_tokens_details") if isinstance(u.get("prompt_tokens_details"),
                                                            dict) else {}
     out = {"prompt": u.get("prompt_tokens"), "output": u.get("completion_tokens"),
            "cached": details.get("cached_tokens")}
-    timings = data.get("timings") if isinstance(data.get("timings"), dict) else {}
+    timings = _got if isinstance(_got := data.get("timings"), dict) else {}
     if out["cached"] is None and isinstance(timings.get("cache_n"), int):
         out["cached"] = timings["cache_n"]
     return {k: v for k, v in out.items() if isinstance(v, int)}
 
 
 def _usage_responses(data: dict[str, Any]) -> dict[str, Any]:
-    u = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+    u = _got if isinstance(_got := data.get("usage"), dict) else {}
     details = u.get("input_tokens_details") if isinstance(u.get("input_tokens_details"),
                                                           dict) else {}
     out = {"prompt": u.get("input_tokens"), "output": u.get("output_tokens"),
@@ -711,7 +711,7 @@ def _usage_ollama(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _usage_anthropic(data: dict[str, Any]) -> dict[str, Any]:
-    u = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+    u = _got if isinstance(_got := data.get("usage"), dict) else {}
     read = u.get("cache_read_input_tokens") or 0
     wrote = u.get("cache_creation_input_tokens") or 0
     fresh = u.get("input_tokens") or 0
@@ -748,10 +748,10 @@ def _json_step(raw_text: str, answer: Any, usage: dict[str, Any],
     native reply is: the calls run, and the log keeps them as the step's."""
     if not isinstance(answer, dict):
         raise ValueError("the model's answer wasn't an object")
-    message = answer.get("message") if isinstance(answer.get("message"), str) else ""
-    plan = answer.get("plan") if isinstance(answer.get("plan"), str) else ""
+    message = _got if isinstance(_got := answer.get("message"), str) else ""
+    plan = _got if isinstance(_got := answer.get("plan"), str) else ""
     calls = []
-    for c in answer.get("calls") if isinstance(answer.get("calls"), list) else []:
+    for c in _got if isinstance(_got := answer.get("calls"), list) else []:
         if isinstance(c, dict) and isinstance(c.get("tool"), str):
             raw = c.get("args", "")
             calls.append({"id": new_call_id(), "tool": c["tool"],
@@ -861,7 +861,7 @@ def _openai_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
             for tc in d.get("tool_calls") or []:
                 if not isinstance(tc, dict):
                     continue
-                fn = tc.get("function") if isinstance(tc.get("function"), dict) else {}
+                fn = _got if isinstance(_got := tc.get("function"), dict) else {}
                 idx = tc.get("index")
                 # By index; else a new id starts a call; else it continues
                 # the last one (llama.cpp may send a call whole, no index).
@@ -923,7 +923,7 @@ def _ollama_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
     async def on(obj: dict[str, Any]) -> None:
         if obj.get("error"):
             raise client._upstream_error(500, obj)
-        m = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+        m = _got if isinstance(_got := obj.get("message"), dict) else {}
         if m.get("thinking"):
             await live.thinking()
             if isinstance(m["thinking"], str):
@@ -963,7 +963,7 @@ def _anthropic_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
             partial[len(data["content"]) - 1] = ""
         elif kind == "content_block_delta" and isinstance(obj.get("delta"), dict):
             d = obj["delta"]
-            i = obj.get("index") if isinstance(obj.get("index"), int) else len(data["content"]) - 1
+            i = _got if isinstance(_got := obj.get("index"), int) else len(data["content"]) - 1
             if not 0 <= i < len(data["content"]):
                 return
             block = data["content"][i]
@@ -978,14 +978,14 @@ def _anthropic_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
                 if isinstance(d.get("thinking"), str):
                     block["thinking"] = str(block.get("thinking") or "") + d["thinking"]
         elif kind == "content_block_stop":
-            i = obj.get("index") if isinstance(obj.get("index"), int) else -1
+            i = _got if isinstance(_got := obj.get("index"), int) else -1
             if 0 <= i < len(data["content"]) and partial.get(i):
                 try:
                     data["content"][i]["input"] = json.loads(partial[i])
                 except ValueError:
                     data["content"][i]["input"] = {}
         elif kind == "message_delta":
-            d = obj.get("delta") if isinstance(obj.get("delta"), dict) else {}
+            d = _got if isinstance(_got := obj.get("delta"), dict) else {}
             if d.get("stop_reason"):
                 data["stop_reason"] = d["stop_reason"]
             data["usage"].update(obj.get("usage") or {})
@@ -1270,7 +1270,7 @@ async def _step_anthropic(cfg: dict[str, Any], system: str, log: list[dict[str, 
         raise AIError("the model didn't return the expected answer")
     text = "\n".join(str(b.get("text") or "") for b in blocks if b.get("type") == "text")
     calls = [{"id": str(b.get("id") or new_call_id()), "tool": str(b.get("name")),
-              "args": b.get("input") if isinstance(b.get("input"), dict) else {},
+              "args": _got if isinstance(_got := b.get("input"), dict) else {},
               "args_text": chatlog.dumps(b.get("input") or {})}
              for b in blocks if b.get("type") == "tool_use"]
     st = _native_step(text, calls, allowed, usage)
@@ -1307,7 +1307,7 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     if data.get("_early"):
         usage["early"] = True
     if fmt == "json":
-        text = msg.get("content") if isinstance(msg.get("content"), str) else ""
+        text = _got if isinstance(_got := msg.get("content"), str) else ""
         return _json_step(text, client._parse_text_json(text), usage, msg.get("thinking"),
                           allowed)
     calls = []
@@ -1370,7 +1370,7 @@ async def _step_responses(cfg: dict[str, Any], system: str, log: list[dict[str, 
     if not isinstance(data, dict):
         raise AIError("the model didn't return an answer")
     if data.get("status") == "failed":
-        err = data.get("error") if isinstance(data.get("error"), dict) else {}
+        err = _got if isinstance(_got := data.get("error"), dict) else {}
         raise AIError(f"the model failed: {str(err.get('message') or 'no reason given')[:200]}")
     output = [it for it in data.get("output") or [] if isinstance(it, dict)]
     usage = _usage_responses(data)
@@ -1467,7 +1467,7 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
     if data.get("_early"):
         usage["early"] = True
     if fmt == "json":
-        text = message.get("content") if isinstance(message.get("content"), str) else ""
+        text = _got if isinstance(_got := message.get("content"), str) else ""
         return _json_step(text, client._parse_text_json(text), usage,
                           message.get("reasoning_content") or message.get("reasoning"), allowed)
     calls = []

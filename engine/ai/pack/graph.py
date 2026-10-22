@@ -177,7 +177,7 @@ def _slots(raw: Any, warnings: list[str], taken_vars: set[str]) -> list[dict[str
             continue
         axes: list[dict[str, Any]] = []
         used_values: set[str] = set()
-        for a in s.get("axes") if isinstance(s.get("axes"), list) else []:
+        for a in _got if isinstance(_got := s.get("axes"), list) else []:
             if not isinstance(a, dict):
                 continue
             aname = _axis_name(a.get("name"))
@@ -186,7 +186,7 @@ def _slots(raw: Any, warnings: list[str], taken_vars: set[str]) -> list[dict[str
                     warnings.append(f"{name}: a second axis named {aname}")
                 continue
             values = []
-            for v in a.get("values") if isinstance(a.get("values"), list) else []:
+            for v in _got if isinstance(_got := a.get("values"), list) else []:
                 t = _tag(v)
                 if not t or t in values:
                     continue
@@ -635,7 +635,7 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
     internal = {s["var"] for s in slots if s["show"] == "internal"} | {
         s["name"].lower() for s in slots if s["show"] == "internal"}
     order: list[str] = []
-    for part in raw.get("order") if isinstance(raw.get("order"), list) else []:
+    for part in _got if isinstance(_got := raw.get("order"), list) else []:
         p = _clean(part, MAX_NAME).lstrip("$").strip()
         var = by_name.get(p.lower())
         if var is None:
@@ -915,7 +915,7 @@ def compile_graph(raw: Any) -> dict[str, Any]:
     warnings: list[str] = []
     bad_refs: list[str] = []
     inputs: list[dict[str, str]] = []
-    for i in raw.get("inputs") if isinstance(raw.get("inputs"), list) else []:
+    for i in _got if isinstance(_got := raw.get("inputs"), list) else []:
         if isinstance(i, dict) and _var(i.get("var")) and len(inputs) < MAX_INPUTS \
                 and not any(x["var"] == _var(i.get("var")) for x in inputs):
             inputs.append({"var": _var(i.get("var")), "about": _clean(i.get("about"), 200),
@@ -939,12 +939,12 @@ def compile_graph(raw: Any) -> dict[str, Any]:
             warnings.append(f"{s['name']} is internal but no relation reads it: it does "
                             "nothing")
     sections: list[dict[str, str]] = []
-    for sec in raw.get("sections") if isinstance(raw.get("sections"), list) else []:
+    for sec in _got if isinstance(_got := raw.get("sections"), list) else []:
         if isinstance(sec, dict) and _clean(sec.get("name"), 40) and len(sections) < MAX_SECTIONS:
             sections.append({"name": _clean(sec.get("name"), 40),
                              "about": _clean(sec.get("about"), 200)})
     questions = []
-    for q in raw.get("questions") if isinstance(raw.get("questions"), list) else []:
+    for q in _got if isinstance(_got := raw.get("questions"), list) else []:
         if isinstance(q, dict) and _clean(q.get("question"), 300):
             questions.append({"header": _clean(q.get("header"), 60),
                               "question": _clean(q.get("question"), 300),
@@ -971,7 +971,7 @@ def compile_graph(raw: Any) -> dict[str, Any]:
         "from_images": [_clean(a, 200) for a in raw.get("from_images") or []
                         if _clean(a, 200)][:4],
         "research": [_clean(a, 200) for a in raw.get("research") or [] if _clean(a, 200)][:2],
-        "run": raw.get("run") if isinstance(raw.get("run"), dict) else {"mode": "single",
+        "run": _got if isinstance(_got := raw.get("run"), dict) else {"mode": "single",
                                                                        "frames": 0},
         "inputs": inputs,
         "sections": sections,
@@ -1820,7 +1820,7 @@ def compile_slot(
         if not isinstance(o, dict):
             continue
         tags: list[str] = []
-        picked = o.get("tags") if isinstance(o.get("tags"), dict) else {}
+        picked = _got if isinstance(_got := o.get("tags"), dict) else {}
         missing = []
         for axis, allowed in values.items():
             got = picked.get(axis)
@@ -2648,7 +2648,7 @@ def apply_locks(raw: dict[str, Any], previous: dict[str, Any],
     the lines saying what was kept."""
     kept: list[str] = []
     prev = graph_answer({"graph": previous})
-    slots = raw.get("slots") if isinstance(raw.get("slots"), list) else []
+    slots = _got if isinstance(_got := raw.get("slots"), list) else []
     raw["slots"] = slots
     for var in locks["slots"]:
         mine = next((s for s in prev["slots"] if s["var"] == var), None)
@@ -2682,7 +2682,7 @@ def apply_locks(raw: dict[str, Any], previous: dict[str, Any],
     if added:
         lines.append(f"Kept {added} relation{'s' if added > 1 else ''} you set")
     if locks["template"]:
-        tpl = raw.get("template") if isinstance(raw.get("template"), dict) else {}
+        tpl = _got if isinstance(_got := raw.get("template"), dict) else {}
         for f in locks["template"]:
             tpl[f] = prev["template"][f]
         raw["template"] = tpl
@@ -2723,7 +2723,7 @@ def apply_settings(graph: dict[str, Any], settings: Any) -> list[str]:
 def locks_note(plan: dict[str, Any]) -> str:
     """What a refine tells the model about the parts the user set by hand."""
     locks = parse_locks(plan.get("locks"))
-    g = plan.get("graph") if isinstance(plan.get("graph"), dict) else None
+    g = _got if isinstance(_got := plan.get("graph"), dict) else None
     if g is None or not any(locks[k] for k in LOCK_KEYS):
         return ""
     bits = []
@@ -2789,7 +2789,7 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
     from engine.ai.pack.plan import compile_plan
     sent_back = isinstance(raw, dict) and isinstance(raw.get("graph"), dict)
     graph = raw["graph"] if sent_back else raw
-    previous = kw.get("previous") if isinstance(kw.get("previous"), dict) else None
+    previous = _got if isinstance(_got := kw.get("previous"), dict) else None
     for field in ("settings", "decisions"):
         # A caller that leaves them out means the plan's own (a graph plan's
         # items never carry them, so ``compile_plan`` can't fall back).

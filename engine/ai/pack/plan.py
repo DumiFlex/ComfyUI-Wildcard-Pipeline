@@ -221,7 +221,7 @@ REUSABLE = ("wildcard", "fixed_values")
 
 
 def _row_var(row: dict[str, Any]) -> str:
-    p = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+    p = _got if isinstance(_got := row.get("payload"), dict) else {}
     if row.get("type") == "wildcard":
         return str(p.get("var_binding") or "")
     vals = [v.get("name") for v in p.get("values") or [] if isinstance(v, dict)]
@@ -290,7 +290,7 @@ def compile_plan(
                   and isinstance(p.get("kind"), str)]
     warnings: list[str] = []
     questions = []
-    for q in raw.get("questions") if isinstance(raw.get("questions"), list) else []:
+    for q in _got if isinstance(_got := raw.get("questions"), list) else []:
         if not isinstance(q, dict):
             continue
         text = _clean(q.get("question"), 200)
@@ -312,7 +312,7 @@ def compile_plan(
         _clean(x, 120) for x in (raw.get("research") if isinstance(raw.get("research"), list)
                                  else [])) if q))[:MAX_RESEARCH]
     sections: list[dict[str, str]] = []
-    for s in raw.get("sections") if isinstance(raw.get("sections"), list) else []:
+    for s in _got if isinstance(_got := raw.get("sections"), list) else []:
         name = _clean(s.get("name") if isinstance(s, dict) else s, 40)
         if name and not any(x["name"].lower() == name.lower() for x in sections):
             sections.append({"name": name,
@@ -530,7 +530,7 @@ def compile_plan(
         prev = _match_previous(it, kind, name, var, prev_items, used_prev)
         if prev is not None:
             used_prev.add(prev["key"])
-        key = it.get("key") if isinstance(it.get("key"), str) and _KEY.match(it["key"]) else ""
+        key = _got if isinstance(_got := it.get("key"), str) and _KEY.match(it["key"]) else ""
         if (not key or key in keys) and prev is not None and prev["key"] not in keys:
             key = prev["key"]
         if not key or key in keys:
@@ -543,7 +543,7 @@ def compile_plan(
         if lib_row is not None:
             mid = lib_row["id"]
         else:
-            mid = it.get("id") if isinstance(it.get("id"), str) and _HEX8.match(it["id"]) \
+            mid = _got if isinstance(_got := it.get("id"), str) and _HEX8.match(it["id"]) \
                 else ""
             if (not mid or mid in ids or mid in taken_ids) and prev is not None \
                     and _HEX8.match(str(prev.get("id") or "")):
@@ -614,7 +614,7 @@ def compile_plan(
     # Ones left out of an earlier pass (the manager sends the plan back) stay
     # listed until a constraint between the same two variables is planned.
     have = {(i["source"], i["target"]) for i in kept if i["kind"] == "constraint"}
-    for d in raw.get("dropped") if isinstance(raw.get("dropped"), list) else []:
+    for d in _got if isinstance(_got := raw.get("dropped"), list) else []:
         if isinstance(d, dict) and d.get("kind") == "constraint":
             entry = {k: _clean(d.get(k), MAX_ABOUT) for k in
                      ("name", "source", "target", "about", "why")}

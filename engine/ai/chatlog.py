@@ -341,7 +341,7 @@ def apply_events(meta: dict[str, Any], events: Any) -> tuple[dict[str, Any], str
             if fix not in done and len(done) < 8:
                 info["fixes"] = [*done, fix]
                 proposals[pid] = info
-                label = ev.get("label") if isinstance(ev.get("label"), str) else fix
+                label = _got if isinstance(_got := ev.get("label"), str) else fix
                 said.append(f"{pid} \"{info.get('title', '')}\": used the card's fix "
                             f"\"{label[:60]}\" (the card changed; the user still has to apply it)")
             continue

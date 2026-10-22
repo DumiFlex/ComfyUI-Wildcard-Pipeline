@@ -248,7 +248,7 @@ def _draft_options(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]
     instruction = _text(args.get("instruction"), 1000)
     if len(instruction) < 3:
         raise ValueError("say what options to write")
-    count = args.get("count") if isinstance(args.get("count"), int) else 10
+    count = _got if isinstance(_got := args.get("count"), int) else 10
     count = max(1, min(50, count))
     return ({"id": row["id"], "instruction": instruction, "count": count},
             f"Drafting {count} options for {row.get('name')}")
@@ -278,7 +278,7 @@ def _show_test(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
     if needs is not None and change != "remove":
         ids, added = needs([x.get("module") or x.get("bundle") or "" for x in stack])
         stack = [{"bundle": i} if i in lib.bundles else {"module": i} for i in ids][:MAX_STACK]
-    seeds = args.get("seeds") if isinstance(args.get("seeds"), int) else 20
+    seeds = _got if isinstance(_got := args.get("seeds"), int) else 20
     out: dict[str, Any] = {"stack": stack, "seeds": max(1, min(500, seeds))}
     if change != "replace":
         out["change"] = change

@@ -58,7 +58,7 @@ def _build_catalog(modules: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         payload = m.get("payload")
         if not isinstance(payload, dict):
             continue
-        meta = m.get("meta") if isinstance(m.get("meta"), dict) else {}
+        meta = _got if isinstance(_got := m.get("meta"), dict) else {}
         catalog[mid] = {
             "snapshot_version": 1,
             "uuid": mid,

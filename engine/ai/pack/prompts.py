@@ -31,7 +31,7 @@ NEGATIVE_LINES = {
 
 
 def _score(row: dict[str, Any], words: set[str]) -> int:
-    p = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+    p = _got if isinstance(_got := row.get("payload"), dict) else {}
     text = " ".join([str(row.get("name") or ""), _row_var(row),
                      *[t for t in p.get("sub_categories") or [] if isinstance(t, str)],
                      str(row.get("description") or "")]).lower()

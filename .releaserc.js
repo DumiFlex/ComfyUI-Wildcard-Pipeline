@@ -34,7 +34,10 @@ try {
 }
 
 export default {
-  branches: ["main"],
+  // `beta` cuts prereleases (2.21.0-beta.1, -beta.2, ...) from whatever is
+  // pushed to it. GitHub marks them as prereleases, so the in-app update check
+  // and the Registry publish both skip them; only `main` ships to everyone.
+  branches: ["main", { name: "beta", prerelease: true }],
   plugins: [
     [
       "@semantic-release/commit-analyzer",
@@ -129,9 +132,10 @@ export default {
         //    with the right version in its name.
         // 3. Clear the consumed highlights file so the next release starts
         //    from a clean slate (the content already lives in this release's
-        //    notes + CHANGELOG.md).
+        //    notes + CHANGELOG.md). A beta keeps it: the final release reuses
+        //    the same notes. `nextRelease.channel` is empty on `main`.
         prepareCmd:
-          "node -e \"const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.version='${nextRelease.version}';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\\n');const t=fs.readFileSync('pyproject.toml','utf8').replace(/^version = \\\".+?\\\"/m,'version = \\\"${nextRelease.version}\\\"');fs.writeFileSync('pyproject.toml',t);\" && node -e \"require('fs').writeFileSync('docs/release-notes/next.md','')\" && pnpm build && node scripts/pack-release.mjs ${nextRelease.version}",
+          "node -e \"const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.version='${nextRelease.version}';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\\n');const t=fs.readFileSync('pyproject.toml','utf8').replace(/^version = \\\".+?\\\"/m,'version = \\\"${nextRelease.version}\\\"');fs.writeFileSync('pyproject.toml',t);\" && node -e \"if(!process.argv[1])require('fs').writeFileSync('docs/release-notes/next.md','')\" \"${nextRelease.channel || ''}\" && pnpm build && node scripts/pack-release.mjs ${nextRelease.version}",
       },
     ],
     [

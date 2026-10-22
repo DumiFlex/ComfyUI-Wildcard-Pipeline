@@ -180,7 +180,7 @@ def _body(row: dict[str, Any], kind: str) -> str:
 
 def _axes(row: dict[str, Any]) -> list[str]:
     p = _payload(row)
-    kinds = p.get("tag_group_kinds") if isinstance(p.get("tag_group_kinds"), dict) else {}
+    kinds = _got if isinstance(_got := p.get("tag_group_kinds"), dict) else {}
     return [k for k in kinds if isinstance(k, str)]
 
 

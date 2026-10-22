@@ -104,7 +104,7 @@ def item_view(row: dict[str, Any], kind: str, short: str, *,
         summary = summary[:_SUMMARY_LEN] + " …"
     tags = [t for t in row.get("tags") or [] if isinstance(t, str) and t.strip()]
     rating = row.get("content_rating") if row.get("content_rating") in RATINGS else "safe"
-    desc = row.get("description") if isinstance(row.get("description"), str) else ""
+    desc = _got if isinstance(_got := row.get("description"), str) else ""
     return {
         "id": short, "kind": kind, "type": type_,
         "name": str(row.get("name") or "(unnamed)"),
@@ -220,7 +220,7 @@ def compile_answer(
                 change["category"] = {"name": known or cat,
                                       "new": cat.lower() not in cat_by_lower}
         have = {t.lower() for t in it["tags"]}
-        adds = entry.get("tags_add") if isinstance(entry.get("tags_add"), list) else []
+        adds = _got if isinstance(_got := entry.get("tags_add"), list) else []
         added: set[str] = set()
         for t in adds:
             tag = _clean(t, describe.MAX_TAG_LEN)
@@ -231,7 +231,7 @@ def compile_answer(
             change["tags_add"].append({"tag": known or tag.lower(), "new": known is None})
             if len(change["tags_add"]) >= MAX_TAGS_ADD:
                 break
-        removes = entry.get("tags_remove") if isinstance(entry.get("tags_remove"), list) else []
+        removes = _got if isinstance(_got := entry.get("tags_remove"), list) else []
         exact = {t.lower(): t for t in it["tags"]}
         for t in removes:
             tag = _clean(t, describe.MAX_TAG_LEN)

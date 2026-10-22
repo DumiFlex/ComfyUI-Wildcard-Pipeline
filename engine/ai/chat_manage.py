@@ -157,7 +157,7 @@ class ManageTools:
                                **({"before": {"color": had.get("color"), "icon": had.get("icon")}}
                                   if had is not None else {})})
 
-        for raw in args.get("create") if isinstance(args.get("create"), list) else []:
+        for raw in _got if isinstance(_got := args.get("create"), list) else []:
             x = raw if isinstance(raw, dict) else {"name": raw}
             name = _short(x.get("name"), 40).strip(" .")
             if not name or name.lower() in seen:
@@ -178,7 +178,7 @@ class ManageTools:
             creates.append(name)
             style({"name": name}, x)
         renames: list[dict[str, Any]] = []
-        for x in args.get("rename") if isinstance(args.get("rename"), list) else []:
+        for x in _got if isinstance(_got := args.get("rename"), list) else []:
             if not isinstance(x, dict):
                 continue
             cat = self._category_by_name(x.get("from"))
@@ -287,7 +287,7 @@ class ManageTools:
     def update_many(self, args: dict[str, Any]) -> dict[str, Any]:
         """One card that moves many items into a category (or out of one),
         adds or removes library tags on them, or sets their rating."""
-        raw = args.get("ids") if isinstance(args.get("ids"), list) else []
+        raw = _got if isinstance(_got := args.get("ids"), list) else []
         if not raw:
             raise ValueError("give ids: the items to change")
         if len(raw) > MAX_BULK:
@@ -382,7 +382,7 @@ class ManageTools:
         notes: list[str] = []
         touched = 0
         done: set[str] = set()
-        for x in args.get("rename") if isinstance(args.get("rename"), list) else []:
+        for x in _got if isinstance(_got := args.get("rename"), list) else []:
             if not isinstance(x, dict):
                 continue
             tag = self._tag(x.get("from"))

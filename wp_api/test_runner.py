@@ -66,7 +66,7 @@ def _bundle_entries(
 
     def stamp(child: dict[str, Any], child_uid: str, origin: str, on: bool) -> None:
         entry = dict(child)
-        meta = entry.get("meta") if isinstance(entry.get("meta"), dict) else {}
+        meta = _got if isinstance(_got := entry.get("meta"), dict) else {}
         entry["_uid"] = child_uid
         entry["bundle_origin"] = origin
         entry["enabled"] = on and bool(entry.get("enabled", True))

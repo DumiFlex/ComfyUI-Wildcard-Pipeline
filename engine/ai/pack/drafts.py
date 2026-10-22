@@ -65,7 +65,7 @@ def score_plan(plan: dict[str, Any], request: str,
     problem the code can see, each problem takes points off."""
     from engine.ai.pack.review import review_plan
 
-    graph = plan.get("graph") if isinstance(plan.get("graph"), dict) else None
+    graph = _got if isinstance(_got := plan.get("graph"), dict) else None
     reasons: list[str] = []
     score = 0
     bad = len(plan.get("bad_refs") or [])

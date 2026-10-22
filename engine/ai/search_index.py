@@ -124,7 +124,7 @@ class Entry:
     def __init__(self, row: dict[str, Any]) -> None:
         self.row = row
         tags = [t for t in row.get("tags") or [] if isinstance(t, str)]
-        p = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        p = _got if isinstance(_got := row.get("payload"), dict) else {}
         var = " ".join(str(x) for x in (p.get("var_binding"), p.get("output_var")) if x)
         self.texts = content(row)
         self.fields = {

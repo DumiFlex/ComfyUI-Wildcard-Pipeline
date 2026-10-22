@@ -105,14 +105,14 @@ def _clean_options(options: Any) -> list[dict[str, Any]]:
         if not isinstance(value, str) or not value.strip():
             continue
         tags = [t for t in o.get("sub_categories") or [] if isinstance(t, str)]
-        oid = o.get("id") if isinstance(o.get("id"), str) else ""
+        oid = _got if isinstance(_got := o.get("id"), str) else ""
         out.append({"id": oid, "value": value, "tags": tags})
     return out[:MAX_OPTIONS_SHOWN]
 
 
 def side_view(wildcard: dict[str, Any], prefix: str) -> dict[str, Any]:
     """A wildcard row as one side of the prompt: numbered options + tags."""
-    payload = wildcard.get("payload") if isinstance(wildcard.get("payload"), dict) else {}
+    payload = _got if isinstance(_got := wildcard.get("payload"), dict) else {}
     options = _clean_options(payload.get("options"))
     for i, o in enumerate(options, 1):
         o["short"] = f"{prefix}{i}"
@@ -126,8 +126,8 @@ def side_view(wildcard: dict[str, Any], prefix: str) -> dict[str, Any]:
               for g, members in raw_groups.items() if isinstance(members, list) and members]
     description, labels = about.clean(wildcard.get("description"), wildcard.get("tags"))
     return {
-        "name": wildcard.get("name") if isinstance(wildcard.get("name"), str) else "",
-        "var": payload.get("var_binding") if isinstance(payload.get("var_binding"), str) else "",
+        "name": _got if isinstance(_got := wildcard.get("name"), str) else "",
+        "var": _got if isinstance(_got := payload.get("var_binding"), str) else "",
         "options": options,
         "tags": tags,
         "groups": groups,
@@ -170,7 +170,7 @@ def build_prompt(
 def describe_existing(payload: dict[str, Any]) -> list[str]:
     """The constraint's current rules as prompt lines."""
     out: list[str] = []
-    matrix = payload.get("matrix") if isinstance(payload.get("matrix"), dict) else {}
+    matrix = _got if isinstance(_got := payload.get("matrix"), dict) else {}
     for src, row in matrix.items():
         if not isinstance(row, dict):
             continue
@@ -324,7 +324,7 @@ def compile_rules(
     if not isinstance(raw, dict) or not isinstance(raw.get("rules"), list):
         raise ValueError("the model's answer wasn't a list of rules")
     existing = existing or {}
-    old_matrix = existing.get("matrix") if isinstance(existing.get("matrix"), dict) else {}
+    old_matrix = _got if isinstance(_got := existing.get("matrix"), dict) else {}
     old_pairs = {
         p for e in existing.get("exceptions") or []
         if isinstance(e, dict) and (p := exception_pair(e))
@@ -367,7 +367,7 @@ def compile_rules(
             if key in seen_cells:
                 continue
             seen_cells.add(key)
-            row = old_matrix.get(s[1]) if isinstance(old_matrix.get(s[1]), dict) else {}
+            row = _got if isinstance(_got := old_matrix.get(s[1]), dict) else {}
             old = row.get(t[1])
             cells.append({
                 "source_tag": s[1], "target_tag": t[1],

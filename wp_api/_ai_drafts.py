@@ -71,26 +71,26 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     if isinstance(turns, web.Response):
         return turns
 
-    wc = body.get("wildcard") if isinstance(body.get("wildcard"), dict) else {}
-    payload = wc.get("payload") if isinstance(wc.get("payload"), dict) else {}
-    options = payload.get("options") if isinstance(payload.get("options"), list) else []
+    wc = _got if isinstance(_got := body.get("wildcard"), dict) else {}
+    payload = _got if isinstance(_got := wc.get("payload"), dict) else {}
+    options = _got if isinstance(_got := payload.get("options"), list) else []
     existing_texts = [
         o["value"].strip() for o in options
         if isinstance(o, dict) and isinstance(o.get("value"), str) and o["value"].strip()
     ][:5000]
     tags = _str_list(payload.get("sub_categories"), limit=500)
-    raw_groups = payload.get("tag_groups") if isinstance(payload.get("tag_groups"), dict) else {}
+    raw_groups = _got if isinstance(_got := payload.get("tag_groups"), dict) else {}
     axes = {
         str(k): _str_list(v, limit=200) for k, v in list(raw_groups.items())[:50]
     }
     raw_kinds = payload.get("tag_group_kinds") \
         if isinstance(payload.get("tag_group_kinds"), dict) else {}
     kinds = {str(k): "accepts" for k, v in raw_kinds.items() if v == "accepts" and k in axes}
-    name = wc.get("name") if isinstance(wc.get("name"), str) else ""
-    var = wc.get("var_binding") if isinstance(wc.get("var_binding"), str) else ""
+    name = _got if isinstance(_got := wc.get("name"), str) else ""
+    var = _got if isinstance(_got := wc.get("var_binding"), str) else ""
 
     description, labels = ai_about.clean(wc.get("description"), wc.get("tags"))
-    self_id = wc.get("id") if isinstance(wc.get("id"), str) else None
+    self_id = _got if isinstance(_got := wc.get("id"), str) else None
     refs = _ref_index(_wildcards(request), self_id, payload, name)
     existing_texts = [ai_refs.display_text(t, refs) for t in existing_texts]
     first = ai_wildcard.build_user_prompt(kinds=kinds,
@@ -168,9 +168,9 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     if isinstance(turns, web.Response):
         return turns
 
-    wc = body.get("wildcard") if isinstance(body.get("wildcard"), dict) else {}
-    payload = wc.get("payload") if isinstance(wc.get("payload"), dict) else {}
-    raw_opts = payload.get("options") if isinstance(payload.get("options"), list) else []
+    wc = _got if isinstance(_got := body.get("wildcard"), dict) else {}
+    payload = _got if isinstance(_got := wc.get("payload"), dict) else {}
+    raw_opts = _got if isinstance(_got := payload.get("options"), list) else []
     rows: list[dict] = []
     real_ids: dict[str, str] = {}
     for o in raw_opts:
@@ -199,13 +199,13 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
             status=400,
         )
     tags = _str_list(payload.get("sub_categories"), limit=500)
-    raw_groups = payload.get("tag_groups") if isinstance(payload.get("tag_groups"), dict) else {}
+    raw_groups = _got if isinstance(_got := payload.get("tag_groups"), dict) else {}
     axes = {str(k): _str_list(v, limit=200) for k, v in list(raw_groups.items())[:50]}
-    name = wc.get("name") if isinstance(wc.get("name"), str) else ""
-    var = wc.get("var_binding") if isinstance(wc.get("var_binding"), str) else ""
+    name = _got if isinstance(_got := wc.get("name"), str) else ""
+    var = _got if isinstance(_got := wc.get("var_binding"), str) else ""
 
     description, labels = ai_about.clean(wc.get("description"), wc.get("tags"))
-    self_id = wc.get("id") if isinstance(wc.get("id"), str) else None
+    self_id = _got if isinstance(_got := wc.get("id"), str) else None
     refs = _ref_index(_wildcards(request), self_id, payload, name)
     first = ai_edit.build_edit_prompt(
         action=action, instruction=ai_followup.first_instruction(turns, instruction),
@@ -279,9 +279,9 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
     turns = _turns(body)
     if isinstance(turns, web.Response):
         return turns
-    drv = body.get("derivation") if isinstance(body.get("derivation"), dict) else {}
+    drv = _got if isinstance(_got := body.get("derivation"), dict) else {}
     rules = [r for r in drv.get("rules") or [] if isinstance(r, dict)][:200]
-    name = drv.get("name") if isinstance(drv.get("name"), str) else ""
+    name = _got if isinstance(_got := drv.get("name"), str) else ""
 
     with db_session(request) as conn:
         modules = ModuleRepository(conn).list()
@@ -395,9 +395,9 @@ async def post_text_draft(request: web.Request) -> web.Response:
     turns = _turns(body)
     if isinstance(turns, web.Response):
         return turns
-    item = body.get("item") if isinstance(body.get("item"), dict) else {}
-    payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
-    name = item.get("name") if isinstance(item.get("name"), str) else ""
+    item = _got if isinstance(_got := body.get("item"), dict) else {}
+    payload = _got if isinstance(_got := item.get("payload"), dict) else {}
+    name = _got if isinstance(_got := item.get("name"), str) else ""
     out_var = ""
     if kind == "fixed_values":
         current = "\n".join(
@@ -405,7 +405,7 @@ async def post_text_draft(request: web.Request) -> web.Response:
             + (f"  (negative: {v['negative']})" if v.get("negative") else "")
             for v in payload.get("values") or [] if isinstance(v, dict))
     elif kind == "combine":
-        out_var = payload.get("output_var") if isinstance(payload.get("output_var"), str) else ""
+        out_var = _got if isinstance(_got := payload.get("output_var"), str) else ""
         out_var = out_var.strip().lstrip("$")
         if not out_var:
             return json_error("name the variable the combine sets first", status=400)
@@ -419,7 +419,7 @@ async def post_text_draft(request: web.Request) -> web.Response:
 
     with db_session(request) as conn:
         modules = ModuleRepository(conn).list()
-    item_id = item.get("id") if isinstance(item.get("id"), str) else None
+    item_id = _got if isinstance(_got := item.get("id"), str) else None
     catalog = library_vars.build_catalog([m for m in modules if m.get("id") != item_id])
     description, labels = ai_about.clean(item.get("description"), item.get("tags"))
     first = text_items.build_prompt(
@@ -487,7 +487,7 @@ async def post_constraint_draft(request: web.Request) -> web.Response:
     turns = _turns(body)
     if isinstance(turns, web.Response):
         return turns
-    cons = body.get("constraint") if isinstance(body.get("constraint"), dict) else {}
+    cons = _got if isinstance(_got := body.get("constraint"), dict) else {}
     src_id, tgt_id = cons.get("source_wildcard_id"), cons.get("target_wildcard_id")
     if not isinstance(src_id, str) or not isinstance(tgt_id, str) or not src_id or not tgt_id:
         return json_error("pick the source and target wildcards first", status=400)
@@ -504,11 +504,11 @@ async def post_constraint_draft(request: web.Request) -> web.Response:
     if not source["options"] or not target["options"]:
         return json_error("both wildcards need options first", status=400)
     existing = {
-        "matrix": cons.get("matrix") if isinstance(cons.get("matrix"), dict) else {},
+        "matrix": _got if isinstance(_got := cons.get("matrix"), dict) else {},
         "exceptions": [e for e in cons.get("exceptions") or [] if isinstance(e, dict)][:2000],
     }
     description, labels = ai_about.clean(cons.get("description"), cons.get("tags"))
-    cname = cons.get("name") if isinstance(cons.get("name"), str) else ""
+    cname = _got if isinstance(_got := cons.get("name"), str) else ""
     first = ai_constraint.build_prompt(
         instruction=ai_followup.first_instruction(turns, instruction), source=source, target=target,
         name=cname[:200], description=description, labels=labels,
@@ -553,9 +553,9 @@ async def post_describe(request: web.Request) -> web.Response:
     kind = body.get("kind")
     if kind not in ai_describe.KINDS:
         return json_error("unknown kind", status=400)
-    name = body.get("name") if isinstance(body.get("name"), str) else ""
+    name = _got if isinstance(_got := body.get("name"), str) else ""
     description, tags = ai_about.clean(body.get("description"), body.get("tags"))
-    hint = body.get("hint") if isinstance(body.get("hint"), str) else ""
+    hint = _got if isinstance(_got := body.get("hint"), str) else ""
     if len(hint) > ai_wildcard.MAX_INSTRUCTION_LEN:
         return json_error("that request is too long", status=400)
     turns = _turns(body)
@@ -604,13 +604,13 @@ async def post_organize(request: web.Request) -> web.Response:
     body = await _body(request)
     if isinstance(body, web.Response):
         return body
-    hint = body.get("instruction") if isinstance(body.get("instruction"), str) else ""
+    hint = _got if isinstance(_got := body.get("instruction"), str) else ""
     if len(hint) > ai_wildcard.MAX_INSTRUCTION_LEN:
         return json_error("that request is too long", status=400)
     turns = _turns(body)
     if isinstance(turns, web.Response):
         return turns
-    wanted = body.get("items") if isinstance(body.get("items"), list) else []
+    wanted = _got if isinstance(_got := body.get("items"), list) else []
     refs: list[tuple[str, str]] = []
     for w in wanted:
         if isinstance(w, dict) and w.get("kind") in ("module", "bundle") \

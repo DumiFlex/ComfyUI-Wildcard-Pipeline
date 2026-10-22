@@ -74,14 +74,20 @@ ignore = []
 # conftest.py prepends the project root to sys.path; mirror that for Pyright
 # so `from engine.template import ...` resolves in tests and editor.
 extraPaths = ["."]
-include = ["engine", "wp_nodes", "tests", "conftest.py"]
+include = ["engine", "wp_nodes", "wp_api", "tests", "conftest.py"]
 exclude = ["node_modules", "js", "web", ".venv", "**/__pycache__"]
+# CI runs `pyright engine wp_nodes wp_api` (see .github/workflows/ci.yml).
+# ComfyUI and torch aren't installed there; their imports stay unresolved.
+reportMissingImports = "none"
+# The code reads untrusted JSON as `x.get(k) if isinstance(x.get(k), dict)
+# else {}`, which is safe but which Pyright can't narrow (a second `.get`
+# call). These four rules flag that idiom hundreds of times and nothing else
+# of note; every other basic-mode rule is on.
+reportOptionalMemberAccess = "none"
+reportOptionalSubscript = "none"
+reportOptionalIterable = "none"
+reportOptionalOperand = "none"
 
-# Dispatch-pattern handlers (engine.handlers.handle_*) share a uniform
-# signature `(module, ctx, rng) -> Context`; handlers that don't consume
-# randomness still accept rng for parity. Suppress the unused-param warning
-# at the project level instead of decorating every handler.
-reportUnusedParameter = "none"
 
 [tool.pytest.ini_options]
 minversion = "8.0"

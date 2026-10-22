@@ -180,7 +180,7 @@ def _tag_obj(raw: Any) -> dict[str, Any] | None:
     """A related-tag entry in either API shape: ``{tag: {...}}`` (now) or
     ``[name, category]`` (older servers)."""
     if isinstance(raw, dict):
-        t = raw.get("tag") if isinstance(raw.get("tag"), dict) else raw
+        t = _got if isinstance(_got := raw.get("tag"), dict) else raw
         if isinstance(t.get("name"), str):
             return t
     if isinstance(raw, list) and raw and isinstance(raw[0], str):

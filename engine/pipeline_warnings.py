@@ -10,6 +10,7 @@ helpers stay importable from there too.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from typing import Any
 
 # `@{uuid}` ref matcher — mirror of engine.syntax.tokenize._REF_RE
@@ -354,7 +355,7 @@ def _warn_partial_reach(
         })
 
 
-def finalize_constraint_warnings(ctx: dict[str, Any], modules: list[Any]) -> None:
+def finalize_constraint_warnings(ctx: dict[str, Any], modules: Sequence[Any]) -> None:
     """Emit the end-of-run constraint warnings (never_applied /
     source_missing, then partial_reach) into ``ctx["__wp_warnings__"]``."""
     constraints_bucket = ctx.get("__wp_constraints__") or []

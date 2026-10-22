@@ -124,9 +124,9 @@ def build_catalog(
     for m in modules:
         if not isinstance(m, dict):
             continue
-        p = m.get("payload") if isinstance(m.get("payload"), dict) else {}
-        mname = m.get("name") if isinstance(m.get("name"), str) else ""
-        desc = m.get("description") if isinstance(m.get("description"), str) else ""
+        p = _got if isinstance(_got := m.get("payload"), dict) else {}
+        mname = _got if isinstance(_got := m.get("name"), str) else ""
+        desc = _got if isinstance(_got := m.get("description"), str) else ""
         desc = " ".join(desc.split())
         desc = desc if len(desc) <= MAX_ABOUT else desc[:MAX_ABOUT - 1] + "…"
         kind = m.get("type")
@@ -137,7 +137,7 @@ def build_catalog(
                 and isinstance(o.get("value"), str) and o["value"].strip()
             ]
             tags = [t for t in p.get("sub_categories") or [] if isinstance(t, str)]
-            kinds = p.get("tag_group_kinds") if isinstance(p.get("tag_group_kinds"), dict) else {}
+            kinds = _got if isinstance(_got := p.get("tag_group_kinds"), dict) else {}
             axes = [k for k, v in kinds.items() if v == "accepts" and isinstance(k, str)]
             _add(out, p.get("var_binding") or "", "wildcard", mname, values, tags, desc, axes)
             # Which options carry each tag, so a test on a tag ("elf") can

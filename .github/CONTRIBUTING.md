@@ -51,7 +51,7 @@ Conventional Commits, enforced by commitlint. Examples:
 ## Pull requests
 
 - Branch from `dev` and open the PR against `dev`. Only `dev` → `main` merges
-  cut a release.
+  cut a release; pushing `dev` to `beta` cuts a GitHub prerelease for testing.
 - One logical change per PR.
 - All CI checks must pass (Python matrix + frontend + bundle-size gate).
 - A visible change comes with a screenshot, and a feature updates the in-app
