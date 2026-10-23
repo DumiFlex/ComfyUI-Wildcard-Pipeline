@@ -113,11 +113,13 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           declares them. Make a folder such as
           <code>~/.lmstudio/hub/models/you/qwen3.8-27b-effort/</code> with a
           <code>model.yaml</code> whose <code>base</code> names the GGUF you already have, and add
-          a <code>customFields</code> entry: a <code>select</code> with the template's levels
-          (<code>low</code>, <code>medium</code>, <code>xhigh</code>) and the effect
-          <code>setJinjaVariable</code> on <code>reasoning_effort</code>. It shows up as a second
-          model that uses the same file, so nothing is stored twice. LM Studio then lists its
-          levels and the Thinking picker offers them. The new model doesn't take the old one's
+          two <code>customFields</code> entries, each with the effect <code>setJinjaVariable</code>:
+          a <code>boolean</code> on <code>enable_thinking</code> (without it, thinking can't be
+          turned off) and a <code>select</code> on <code>reasoning_effort</code> with the
+          template's levels (<code>low</code>, <code>medium</code>, <code>xhigh</code>). It shows
+          up as a second model that uses the same file, so nothing is stored twice. LM Studio then
+          lists its levels and the Thinking picker offers them. A level only counts while thinking
+          is on: in LM Studio's own chat, turn its Thinking switch on as well. The new model doesn't take the old one's
           load settings, so put its context length, KV cache and thinking budget in the yaml too
           (a <code>config</code> section), or a full-precision cache can make it too slow to answer.
         </p>

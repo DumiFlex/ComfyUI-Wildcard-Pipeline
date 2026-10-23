@@ -148,6 +148,18 @@ async def test_a_reply_spent_thinking_is_asked_again_with_thinking_off(wp_client
     assert not body["thought_out"]
 
 
+async def test_the_route_sees_a_reloaded_model_at_once(wp_client, fake_llm):
+    # The model reloaded without an off switch, then with it again
+    # (Dumi's model.yaml, 2026-10-23): Settings shows Off again right away.
+    _lms(fake_llm, "leveled", "auto")
+    fake_llm.overrides["_leveled_options"] = ["low", "medium", "high"]
+    body = await (await wp_client.post("/wp/api/ai/thinking")).json()
+    assert "off" not in body["shown"]
+    fake_llm.overrides["_leveled_options"] = ["off", "low", "medium", "high"]
+    body = await (await wp_client.post("/wp/api/ai/thinking")).json()
+    assert "off" in body["shown"]
+
+
 def test_a_chat_templates_own_effort_is_read_from_it():
     # Qwen 3.8's template: enable_thinking plus its own reasoning_effort.
     qwen38 = ("{%- if enable_thinking is undefined or enable_thinking is true %}"

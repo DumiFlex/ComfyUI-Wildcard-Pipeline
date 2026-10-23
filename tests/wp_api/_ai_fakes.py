@@ -210,7 +210,8 @@ async def fake_llm(aiohttp_server):
             {"key": "hybrid", "type": "llm", "capabilities": {
                 "reasoning": {"allowed_options": ["off", "on"], "default": "on"}}},
             {"key": "leveled", "type": "llm", "capabilities": {
-                "reasoning": {"allowed_options": ["off", "low", "medium", "high"],
+                "reasoning": {"allowed_options": overrides.get(
+                    "_leveled_options", ["off", "low", "medium", "high"]),
                               "default": "medium"}}},
             {"key": "plain", "type": "llm", "capabilities": {"vision": False}},
         ]})

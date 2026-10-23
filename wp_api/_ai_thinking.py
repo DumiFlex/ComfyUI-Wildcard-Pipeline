@@ -243,12 +243,14 @@ async def _ask_server(cfg: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-async def choices(cfg: dict[str, Any]) -> dict[str, Any]:
-    """What the model takes, asked once per 10 minutes per server + model."""
+async def choices(cfg: dict[str, Any], fresh: bool = False) -> dict[str, Any]:
+    """What the model takes, asked once per 10 minutes per server + model,
+    or now when `fresh` (Settings and the chat header ask fresh, so a model
+    reloaded with other options shows them at once)."""
     if not cfg.get("model"):
         return UNKNOWN
     key = (str(cfg.get("api")), str(cfg.get("base_url") or ""), str(cfg.get("model")))
-    hit = _cache.get(key)
+    hit = None if fresh else _cache.get(key)
     if hit and time.monotonic() - hit[0] < _TTL_S:
         return hit[1]
     try:
@@ -341,10 +343,10 @@ async def fitted(cfg: dict[str, Any]) -> dict[str, Any]:
             "thinking_default": info["default"]}
 
 
-async def describe(cfg: dict[str, Any]) -> dict[str, Any]:
+async def describe(cfg: dict[str, Any], fresh: bool = False) -> dict[str, Any]:
     """For Settings and the chat header: what the model takes, what each
     choice becomes, and a line saying so."""
-    info = await choices(cfg)
+    info = await choices(cfg, fresh)
     shown = ["auto", "off", *LEVELS[:3]] if info["kind"] == "unknown" else (
         ["auto"] if info["kind"] == "none" else
         ["auto", "off", "on"] if info["kind"] == "switch" else
