@@ -376,14 +376,36 @@ const livePhase = computed<AiPhase>(() => {
   return l.text ? "writing" : l.thinking ? "thinking" : "reading";
 });
 
+/** Seconds since the model was asked with nothing back yet. A server
+ *  sends nothing while it is busy with another request, loads the model or
+ *  reads the prompt, and can't say which; past WAIT_HINT_S the line says so. */
+const WAIT_HINT_S = 10;
+const now = ref(Date.now());
+let clock: ReturnType<typeof setInterval> | null = null;
+watch(() => chat.loading.value, (on) => {
+  if (clock) clearInterval(clock);
+  clock = on ? setInterval(() => { now.value = Date.now(); }, 1000) : null;
+}, { immediate: true });
+onBeforeUnmount(() => { if (clock) clearInterval(clock); });
+const waitedS = computed(() => {
+  const since = chat.live.value.waitingSince;
+  return since === undefined ? 0 : Math.max(0, Math.floor((now.value - since) / 1000));
+});
+
 const liveStatus = computed(() => {
   const l = chat.live.value;
   if (chat.running.value) return `${chat.running.value}…`;
   if (l.status) return `${l.status}…`;
   if (l.text) return "Writing…";
   if (l.thinking) return "Thinking…";
+  if (waitedS.value >= WAIT_HINT_S) {
+    return "Waiting for the model… nothing back yet: it may be busy with another request, "
+      + "loading, or still reading the prompt.";
+  }
   return "Working… it may read a few items first.";
 });
+/** The reasoning as it streams, while Type out replies and Show thinking are on. */
+const liveThought = computed(() => (ui.chatTyping && ui.chatThinking ? chat.live.value.thought ?? "" : ""));
 
 /** Compact is offered from here; amber from where it happens by itself. */
 const OFFER_COMPACT = 0.5;
@@ -1223,7 +1245,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
       </template>
 
       <div v-if="chat.loading.value && !chat.asking.value.size" class="wp-ai-chat__reply wp-ai-chat__live" data-test="ai-chat-live">
-        <ul v-if="shownSteps(chat.live.value.steps).length" class="wp-ai-chat__steps">
+        <ul v-if="shownSteps(chat.live.value.steps).length || liveThought" class="wp-ai-chat__steps">
           <template v-for="(s, j) in shownSteps(chat.live.value.steps)" :key="j">
             <li v-if="s.think" class="wp-ai-chat__said wp-ai-chat__thought"><details><summary>Thinking</summary><p class="wp-ai-chat__thought-text">{{ s.note }}</p></details></li>
             <li v-else-if="s.say" class="wp-ai-chat__said"><details><summary>Working note</summary><AiMessage :text="s.note" /></details></li>
@@ -1232,6 +1254,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               {{ s.note }}
             </li>
           </template>
+          <li v-if="liveThought" class="wp-ai-chat__said wp-ai-chat__thought" data-test="ai-chat-live-thought">
+            <details open><summary>Thinking</summary><p class="wp-ai-chat__thought-text">{{ liveThought }}</p></details>
+          </li>
         </ul>
         <AiMessage v-if="chat.live.value.text" :text="chat.live.value.text" live />
         <AiWorking class="wp-ai-chat__status" :text="liveStatus" :phase="livePhase" :size="22" data-test="ai-chat-loading" />

@@ -181,6 +181,11 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         folds into a <b>Working note</b>, and a thinking model's reasoning folds into
         <b>Thinking</b>. To see only replies and cards, turn off <b>Show thinking</b>, <b>Show
         working notes</b> or <b>Show what it did</b> under <b>Settings › AI assistant › Chat</b>.
+        The reply arrives whole when it is done; turn on <b>Type out replies</b> there to watch it
+        appear word by word instead (and the Thinking box fill as the model thinks). When nothing
+        has come back for ten seconds the line says so: the model may be busy with another
+        request (LM Studio answers one at a time unless its model allows more in parallel),
+        still loading, or reading a long prompt. The server can't tell which.
       </p>
       <p>
         A thanks or a 👍 gets an emoji reaction straight away, without asking the model. If you

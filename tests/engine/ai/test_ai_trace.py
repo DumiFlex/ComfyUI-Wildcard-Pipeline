@@ -40,6 +40,11 @@ def test_step_and_turn_records():
     assert st == {"n": 1, "called": ["read"], "offered": ["read", "search"], "prompt": 9000,
                   "cached": 8800, "output": 40}
     assert "offered" not in ai_trace.step_record(2, None, [], {})
+    slow = ai_trace.step_record(3, None, [], {"output": 300, "thought": 290}, 12.345)
+    assert slow["thought"] == 290 and slow["seconds"] == 12.3
+    stuck = ai_trace.timed_out_record(4, ["read"], 240.0)
+    assert stuck == {"n": 4, "called": [], "offered": ["read"], "seconds": 240.0,
+                     "timed_out": True}
     tr = ai_trace.turn_record(steps=[st], tail=["library"], short=["read"],
                               notes=[ai_chat.EMPTY_NUDGE], refused={}, errors={"read": 1},
                               widened=False, plan_n=0, model="qwen3.5-9b", profile="small")
@@ -68,6 +73,11 @@ def test_summarize_counts_misses_docs_and_nudges():
     assert total["notes"] == {"empty_nudge": 1}
     assert total["tail"] == {"library": 2, "recipe": 1}
     assert total["refused"] == {"read: not found": 2}
+    timed = ai_trace.summarize([{"steps": [
+        {"called": [], "seconds": 5.0, "thought": 40},
+        {"called": [], "seconds": 240.0, "timed_out": True}]}])
+    assert timed["timed_out"] == 1 and timed["thought_tokens"] == 40
+    assert timed["seconds"] == 245.0 and timed["slowest"] == 240.0
 
 
 def test_the_report_script_reads_traces_from_a_library(tmp_path):
@@ -106,3 +116,28 @@ def test_the_smoke_set_checks_card_content():
     assert scored["content"] is False and scored["did"] is True
     assert evals.score_turn(out, None, lambda o: 1 / 0)["content"] is False
     assert evals.score_turn(out, None)["content"] is None
+
+
+def test_each_eval_run_gets_a_fresh_library(tmp_path):
+    evals = _script("ai_chat_evals")
+    (tmp_path / "library.db").write_text("clean")
+    restore = evals.fresh_copy(tmp_path)
+    (tmp_path / "library.db").write_text("edited by run 1")
+    (tmp_path / "library.db-wal").write_text("wal")
+    (tmp_path / "ai-examples.json").write_text("{}")
+    (tmp_path / "wildcard-pipeline.ai-index.db").write_text("index")
+    from wp_api import _ai_context
+
+    class Open:
+        closed = False
+
+        def close(self):
+            Open.closed = True
+
+    _ai_context._INDEXES["x"] = Open()  # type: ignore[assignment]
+    restore()
+    assert Open.closed and not _ai_context._INDEXES
+    assert (tmp_path / "library.db").read_text() == "clean"
+    assert not (tmp_path / "library.db-wal").exists()
+    assert not (tmp_path / "ai-examples.json").exists()
+    assert not (tmp_path / "wildcard-pipeline.ai-index.db").exists()

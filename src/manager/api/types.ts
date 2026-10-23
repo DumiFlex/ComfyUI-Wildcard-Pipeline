@@ -1663,7 +1663,8 @@ export interface AiChatDetail {
 export type AiChatStreamEvent =
   | { type: "step"; n?: number }
   | { type: "status"; v: string }
-  | { type: "thinking" }
+  /** Without `v`: it started thinking; with it, the reasoning so far. */
+  | { type: "thinking"; v?: string }
   | { type: "text"; v: string }
   | { type: "tool"; step: AiChatStep }
   /** An emoji on the user's message, sent as soon as it is decided. */

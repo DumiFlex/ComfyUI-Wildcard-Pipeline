@@ -1047,6 +1047,11 @@ class Library(MoreTools, ManageTools):
         return (self.modules.get(item_id) or self.bundles.get(item_id)
                 or self.templates.get(item_id))
 
+    def kind_of(self, item_id: Any) -> str:
+        """An item's kind (wildcard, bundle, template, …), or "" if unknown."""
+        row = self.get(item_id)
+        return self._kind(row) if row is not None else ""
+
     def not_found(self, raw: Any, what: str = "item") -> str:
         """Why `raw` names nothing, for the model. An item from an earlier
         proposal the user hasn't applied has no id yet: say so, or the model

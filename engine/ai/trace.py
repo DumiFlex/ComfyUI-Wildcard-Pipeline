@@ -23,7 +23,7 @@ _KNOWN: tuple[tuple[str, str], ...] = tuple(sorted(
 
 #: The tail blocks a user message can carry, in the order `_prepare` joins them.
 TAIL_KINDS = ("since", "changes", "perms", "images", "page", "library", "model", "examples",
-              "recipe", "plan")
+              "cards", "recipe", "plan")
 
 #: A re-read: a request with a prompt this size or more that came back
 #: with no more than this share cached.
@@ -46,16 +46,27 @@ def tail_kinds(parts: dict[str, Any]) -> list[str]:
 
 
 def step_record(n: int, offered: list[str] | None, calls: list[dict[str, Any]],
-                usage: dict[str, Any]) -> dict[str, Any]:
+                usage: dict[str, Any], seconds: float | None = None) -> dict[str, Any]:
     """One model step: the tools its grammar offered (None: every tool of
-    the chat), the tools it called, and its token counts."""
+    the chat), the tools it called, its token counts (`thought`: the
+    reasoning part of `output`, where the server says) and how long it took."""
     out: dict[str, Any] = {"n": n, "called": [str(c.get("tool")) for c in calls]}
     if offered is not None:
         out["offered"] = list(offered)
-    for key in ("prompt", "cached", "output"):
+    if seconds is not None:
+        out["seconds"] = round(seconds, 1)
+    for key in ("prompt", "cached", "output", "thought"):
         v = usage.get(key) if isinstance(usage, dict) else None
         if isinstance(v, int):
             out[key] = v
+    return out
+
+
+def timed_out_record(n: int, offered: list[str] | None, seconds: float) -> dict[str, Any]:
+    """A step the model never finished within the step limit: no usage
+    comes back, so without it a stalled turn's time shows up nowhere."""
+    out = step_record(n, offered, [], {}, seconds)
+    out["timed_out"] = True
     return out
 
 
@@ -99,7 +110,8 @@ def summarize(traces: list[dict[str, Any]]) -> dict[str, Any]:
     refused: Counter[str] = Counter()
     out: dict[str, Any] = {"answers": 0, "steps": 0, "shortlisted": 0, "widened": 0,
                            "more_tools": 0, "docs": 0, "rereads": 0, "prompt_tokens": 0,
-                           "cached_tokens": 0}
+                           "cached_tokens": 0, "thought_tokens": 0, "timed_out": 0,
+                           "seconds": 0.0, "slowest": 0.0}
     for tr in traces:
         if not isinstance(tr, dict):
             continue
@@ -114,6 +126,11 @@ def summarize(traces: list[dict[str, Any]]) -> dict[str, Any]:
                 called[tool] += 1
             out["prompt_tokens"] += int(st.get("prompt") or 0)
             out["cached_tokens"] += int(st.get("cached") or 0)
+            out["thought_tokens"] += int(st.get("thought") or 0)
+            out["timed_out"] += int(bool(st.get("timed_out")))
+            secs = float(st.get("seconds") or 0)
+            out["seconds"] += secs
+            out["slowest"] = max(out["slowest"], secs)
         notes.update(tr.get("notes") or [])
         tails.update(tr.get("tail") or [])
         refused.update(tr.get("refused") or {})
@@ -123,4 +140,5 @@ def summarize(traces: list[dict[str, Any]]) -> dict[str, Any]:
     out["notes"] = dict(notes.most_common())
     out["tail"] = dict(tails.most_common())
     out["refused"] = dict(refused.most_common(15))
+    out["seconds"] = round(out["seconds"], 1)
     return out

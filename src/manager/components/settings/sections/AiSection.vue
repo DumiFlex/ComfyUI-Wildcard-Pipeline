@@ -17,7 +17,7 @@ import SettingRow from "../SettingRow.vue";
 import { api } from "../../../api/client";
 import type { AiConfigPatch, AiEmbedApi, AiIndexStatus, AiModelSize, AiProviderId, AiTestResult, AiToolFormat } from "../../../api/types";
 import { useAiConfig } from "../../../composables/useAiConfig";
-import { SUGGESTIONS_SOURCE_NOTE, hfRepo, suggestionsFor, type SuggestedModel } from "../ai-models";
+import { SUGGESTIONS_SOURCE_NOTE, suggestionsFor } from "../ai-models";
 import { useUiStore } from "../../../stores/uiStore";
 import { isThinking, thinkingChoices } from "../../../utils/ai-thinking";
 import { useAiThinking } from "../../../composables/useAiThinking";
@@ -46,10 +46,6 @@ const isLocal = computed(() => config.value?.local ?? preset.value?.local ?? tru
 
 /* ── Suggested models (only the selected provider's list) ────────────── */
 const suggestions = computed(() => (config.value ? suggestionsFor(config.value.provider, isLocal.value) : null));
-/** Ollama takes the pull name; LM Studio and llama.cpp users start from the repo. */
-function suggestedName(m: SuggestedModel): string {
-  return suggestions.value?.key === "local" && config.value?.provider !== "ollama" ? hfRepo(m) : m.name;
-}
 
 const saveError = ref("");
 async function patch(p: Parameters<typeof save>[0]): Promise<boolean> {
@@ -76,14 +72,16 @@ const RECOMMENDED = {
  * fit, so Reset raises a smaller window to 32k and leaves a bigger one. */
 const CONTEXT_MIN = 16384;
 const CONTEXT_RESET = 32768;
-const RECOMMENDED_UI = { explainChip: true, chatThinking: false, chatNotes: true, chatSteps: true } as const;
+const RECOMMENDED_UI = {
+  explainChip: true, chatThinking: false, chatNotes: true, chatSteps: true, chatTyping: false,
+} as const;
 const RESET_LABELS: Record<string, string> = {
   model_size: "Model size", context_max: "Most context to use", thinking: "Thinking",
   unload_after_s: "Unload the model after", tool_format: "Tool format",
   choose_first: "Choose the tool first", allow_delete: "Let the assistant delete items",
   auto_apply: "Apply small changes automatically", web_always_allow: "Don't ask before web calls",
   explainChip: "Show Explain on selected text", chatThinking: "Show thinking",
-  chatNotes: "Show working notes", chatSteps: "Show what it did",
+  chatNotes: "Show working notes", chatSteps: "Show what it did", chatTyping: "Type out replies",
 };
 const resetChanges = computed<string[]>(() => {
   const c = config.value;
@@ -107,6 +105,7 @@ async function resetToRecommended(): Promise<void> {
   ui.setChatShow("thinking", RECOMMENDED_UI.chatThinking);
   ui.setChatShow("notes", RECOMMENDED_UI.chatNotes);
   ui.setChatShow("steps", RECOMMENDED_UI.chatSteps);
+  ui.setChatShow("typing", RECOMMENDED_UI.chatTyping);
   contextCustom.value = false;
   unloadCustom.value = false;
   resetAsk.value = false;
@@ -1064,6 +1063,19 @@ const off = computed(() => !config.value?.enabled);
               @update:model-value="(v: boolean) => ui.setChatShow('steps', v)"
             />
           </SettingRow>
+          <SettingRow
+            label="Type out replies"
+            recommended="Off"
+            hint="The reply appears word by word as the model writes it, instead of all at once when it is done, and with Show thinking on, the Thinking box fills as the model thinks. Works with every provider that streams, local ones included. Saved in this browser."
+            setting-key="ai-chat-type-out"
+          >
+            <Toggle
+              :model-value="ui.chatTyping"
+              aria-label="Type out replies"
+              data-test="ai-chat-type-out"
+              @update:model-value="(v: boolean) => ui.setChatShow('typing', v)"
+            />
+          </SettingRow>
         </SettingGroup>
 
         <SettingGroup title="Permissions" note="The assistant can't change these itself.">
@@ -1327,16 +1339,12 @@ const off = computed(() => !config.value?.enabled);
             <ul class="wp-ai-set__models">
               <li v-for="m in g.models" :key="m.name" class="wp-ai-set__model" data-test="ai-model-row">
                 <div class="wp-ai-set__model-head">
-                  <code>{{ suggestedName(m) }}</code>
+                  <code>{{ m.name }}</code>
                   <span v-if="m.tested" class="wp-ai-set__tested" data-test="ai-model-tested">Tested</span>
                   <span v-if="m.vram || m.price" class="wp-ai-set__vram" :title="m.vram ? 'GPU memory' : 'USD per million tokens, input / output'">{{ m.vram ?? m.price }}</span>
                 </div>
                 <div class="wp-ai-set__muted">
                   {{ m.goodFor }}.
-                  <span v-if="m.hfUrl" class="wp-ai-set__links">
-                    <a v-if="m.ollamaUrl && config.provider === 'ollama'" :href="m.ollamaUrl" target="_blank" rel="noopener noreferrer" data-test="ai-model-ollama">Ollama</a>
-                    <a :href="m.hfUrl" target="_blank" rel="noopener noreferrer" data-test="ai-model-hf">Hugging Face</a>
-                  </span>
                   <a v-if="m.pageUrl" :href="m.pageUrl" target="_blank" rel="noopener noreferrer" data-test="ai-model-page">Price and details</a>
                 </div>
               </li>
@@ -1468,8 +1476,4 @@ p.wp-ai-set__muted:has(.wp-ai-set__link) { padding: var(--wp-space-2) var(--wp-s
   flex: none; padding: 0 6px; font-size: 10px; font-weight: 600; line-height: 16px; border-radius: 999px;
   color: var(--wp-success); background: color-mix(in oklab, var(--wp-success) 14%, transparent);
 }
-.wp-ai-set__links { white-space: nowrap; }
-.wp-ai-set__links a { color: var(--wp-accent); text-decoration: none; }
-.wp-ai-set__links a:hover { text-decoration: underline; }
-.wp-ai-set__links a + a { margin-left: var(--wp-space-4); }
 </style>

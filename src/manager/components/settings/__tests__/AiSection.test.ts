@@ -57,20 +57,18 @@ describe("Settings › AI assistant", () => {
     expect(w.get('[data-test="ai-privacy"]').text()).toContain("Stays on your machine");
     const card = w.get('[data-test="ai-suggested-models"]');
     expect(card.text()).toContain("Only the ones marked Tested were tried");
-    expect(card.text()).toContain("ollama pull");
-    const ollama = w.findAll('[data-test="ai-model-ollama"]');
-    const hf = w.findAll('[data-test="ai-model-hf"]');
-    expect(ollama.length).toBe(SUGGESTED_LOCAL_MODELS.filter((m) => m.ollamaUrl).length);
-    expect(w.find('[data-test="ai-models-writing"]').text()).toContain("HammerAI/cydonia-v4.3:24b-q4_K_M");
-    expect(w.find('[data-test="ai-models-building"]').text()).toContain("hf.co/filvyb/Qwen3.5-9B-heretic-v2-GGUF:Q4_K_M");
-    expect(card.text()).not.toContain("Rocinante");
-    expect(hf.length).toBe(SUGGESTED_LOCAL_MODELS.length);
-    expect(w.findAll('[data-test="ai-model-tested"]').length).toBe(SUGGESTED_LOCAL_MODELS.filter((m) => m.tested).length);
-    for (const a of [...ollama, ...hf]) {
-      expect(a.attributes("href")).toMatch(/^https:\/\/(ollama\.com|huggingface\.co)\//);
-      expect(a.attributes("target")).toBe("_blank");
-      expect(a.attributes("rel")).toContain("noopener");
-    }
+    // Base model names only: the build (uploader, quant, uncensored) is the user's pick.
+    const rows = w.findAll('[data-test="ai-model-row"]');
+    expect(rows.map((r) => r.get("code").text())).toEqual(SUGGESTED_LOCAL_MODELS.map((m) => m.name));
+    expect(w.get('[data-test="ai-models-building"]').findAll("code").map((c) => c.text()))
+      .toEqual(["Qwen3.6 35B A3B", "Qwen3.8 27B", "Qwen3.5 9B"]);
+    expect(w.get('[data-test="ai-models-writing"]').findAll("code").map((c) => c.text()))
+      .toEqual(["Cydonia 24B", "Gemma 4 31B"]);
+    expect(card.findAll("a").length).toBe(0);
+    expect(card.text()).not.toMatch(/hf\.co|Hugging Face|GGUF/);
+    expect(w.get('[data-test="ai-models-writing"]').text()).toContain("Not tested here");
+    expect(w.get('[data-test="ai-models-writing"]').findAll('[data-test="ai-model-tested"]').length).toBe(0);
+    expect(w.findAll('[data-test="ai-model-tested"]').length).toBe(3);
     expect(api.ai.models).not.toHaveBeenCalled();
   });
 
@@ -521,14 +519,13 @@ describe("Settings › AI assistant suggested models per provider", () => {
     return w;
   }
 
-  it("LM Studio shows the local list by Hugging Face repo, without Ollama links", async () => {
+  it("LM Studio shows the same local names, with no links", async () => {
     const w = await card("lmstudio");
     const c = w.get('[data-test="ai-suggested-models"]');
     expect(c.attributes("data-group")).toBe("local");
-    expect(c.text()).toContain("filvyb/Qwen3.5-9B-heretic-v2-GGUF");
+    expect(c.text()).toContain("Qwen3.5 9B");
     expect(c.text()).not.toContain("hf.co/");
-    expect(w.findAll('[data-test="ai-model-ollama"]').length).toBe(0);
-    expect(w.findAll('[data-test="ai-model-hf"]').length).toBe(SUGGESTED_LOCAL_MODELS.length);
+    expect(c.findAll("a").length).toBe(0);
   });
 
   it("Claude shows its own models, prices and the policy note, no local ones", async () => {
@@ -539,7 +536,6 @@ describe("Settings › AI assistant suggested models per provider", () => {
     expect(c.text()).toContain("$2 / $10");
     expect(c.text()).toContain("doesn't allow sexually explicit writing");
     expect(c.text()).not.toContain("heretic");
-    expect(w.findAll('[data-test="ai-model-hf"]').length).toBe(0);
     expect(w.findAll('[data-test="ai-model-tested"]').length).toBe(0);
   });
 
@@ -569,7 +565,7 @@ describe("Settings › AI assistant suggested models per provider", () => {
     const or = suggestionsFor("openrouter", false)?.groups[0].models ?? [];
     expect(or.every((m) => !m.price && m.pageUrl === `https://openrouter.ai/${m.name}`)).toBe(true);
     const all = Object.values(SUGGESTED_MODELS).flatMap((gs) => gs.flatMap((g) => g.models));
-    expect(all.filter((m) => m.tested).map((m) => m.name)).toEqual([SUGGESTED_LOCAL_MODELS[0].name]);
+    expect(all.filter((m) => m.tested).map((m) => m.name)).toEqual(["Qwen3.6 35B A3B", "Qwen3.8 27B", "Qwen3.5 9B"]);
     for (const m of all) expect(`${m.goodFor}`).not.toMatch(/\u2014/);
   });
 });

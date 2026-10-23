@@ -795,7 +795,9 @@ describe("AiChatDrawer", () => {
     w.unmount();
   });
 
-  it("shows the answer while it is written", async () => {
+  it("types the answer out while it is written, with Type out replies on", async () => {
+    const { useUiStore } = await import("../../../stores/uiStore");
+    useUiStore().setChatShow("typing", true);
     let finish: (r: AiChatResult) => void = () => undefined;
     vi.mocked(api.ai.chatStream).mockImplementationOnce(async (_body, onEvent) => {
       onEvent({ type: "step", n: 1 });
@@ -818,6 +820,80 @@ describe("AiChatDrawer", () => {
     expect(w.find('[data-test="ai-chat-live"]').exists()).toBe(false);
     expect(w.get('[data-test="ai-chat-reply"]').text()).toContain("Weather has two options.");
     w.unmount();
+  });
+
+  it("keeps the answer back until it is done, with Type out replies off", async () => {
+    const { useUiStore } = await import("../../../stores/uiStore");
+    useUiStore().setChatShow("typing", false);
+    let finish: (r: AiChatResult) => void = () => undefined;
+    vi.mocked(api.ai.chatStream).mockImplementationOnce(async (_body, onEvent) => {
+      onEvent({ type: "step", n: 1 });
+      onEvent({ type: "tool", step: { tool: "read", note: "Read Weather", ok: true } });
+      onEvent({ type: "text", v: "Weather has **two** options" });
+      return new Promise<AiChatResult>((resolve) => { finish = resolve; });
+    });
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("what is in Weather?");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    const live = w.get('[data-test="ai-chat-live"]');
+    expect(live.text()).toContain("Read Weather");
+    expect(live.text()).not.toContain("two");
+    finish({ ...RESULT, proposals: [], message: "Weather has two options." });
+    await flushPromises();
+    expect(w.get('[data-test="ai-chat-reply"]').text()).toContain("Weather has two options.");
+    w.unmount();
+  });
+
+  it("fills the Thinking box as the model thinks, with Type out replies on", async () => {
+    const { useUiStore } = await import("../../../stores/uiStore");
+    const ui = useUiStore();
+    ui.setChatShow("typing", true);
+    ui.setChatShow("thinking", true);
+    let finish: (r: AiChatResult) => void = () => undefined;
+    vi.mocked(api.ai.chatStream).mockImplementationOnce(async (_body, onEvent) => {
+      onEvent({ type: "step", n: 1 });
+      onEvent({ type: "thinking" });
+      onEvent({ type: "thinking", v: "The user wants weather" });
+      return new Promise<AiChatResult>((resolve) => { finish = resolve; });
+    });
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("what is in Weather?");
+    await w.get('[data-test="ai-chat-send"]').trigger("click");
+    await flushPromises();
+    expect(w.get('[data-test="ai-chat-live-thought"]').text()).toContain("The user wants weather");
+    ui.setChatShow("typing", false);
+    await flushPromises();
+    expect(w.find('[data-test="ai-chat-live-thought"]').exists()).toBe(false);
+    ui.setChatShow("thinking", false);
+    finish({ ...RESULT, proposals: [], message: "Two options." });
+    await flushPromises();
+    w.unmount();
+  });
+
+  it("says when nothing has come back from the model for a while", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    try {
+      let finish: (r: AiChatResult) => void = () => undefined;
+      vi.mocked(api.ai.chatStream).mockImplementationOnce(async (_body, onEvent) => {
+        onEvent({ type: "step", n: 1 });
+        return new Promise<AiChatResult>((resolve) => { finish = resolve; });
+      });
+      const { w } = await mountIt();
+      await w.get('[data-test="ai-chat-input"]').setValue("hello");
+      await w.get('[data-test="ai-chat-send"]').trigger("click");
+      await flushPromises();
+      const line = () => w.get('[data-test="ai-chat-live"]').text();
+      expect(line()).not.toContain("busy with another request");
+      vi.advanceTimersByTime(11_000);
+      await flushPromises();
+      expect(line()).toContain("busy with another request");
+      finish({ ...RESULT, proposals: [], message: "Hi." });
+      await flushPromises();
+      w.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("runs the last message again, unless a change from it was applied", async () => {

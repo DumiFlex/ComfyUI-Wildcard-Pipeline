@@ -137,29 +137,24 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           plenty; GPT-6.1 Sol costs more and isn't needed). They don't allow explicit writing.</li>
         <li><b>OpenRouter</b> reaches many more models, most paid with credits, including
           unmoderated ones.</li>
-        <li><b>Your own server</b>: the local suggestions below come in two groups. A model for
-          NSFW packs must both not refuse and know the words. "Heretic" and "abliterated" builds are
-          the original model with refusals removed; heretic ones keep more of the original. None
-          is proven to know Danbooru tags, so check a draft before relying on it.</li>
+        <li><b>Your own server</b>: the list names the model only, in two groups. Which build you download
+          is up to you: who uploaded it, the quant, and whether it is uncensored ("heretic" and
+          "abliterated" builds have refusals removed). None is proven to know Danbooru tags, so
+          check a draft before relying on it.</li>
       </ul>
       <template v-for="g in SUGGESTED_MODEL_GROUPS" :key="g.use">
         <p><b>{{ g.title }}.</b> {{ g.note }}</p>
         <ul class="wp-doc-ai-models">
           <li v-for="m in SUGGESTED_LOCAL_MODELS.filter((x) => x.use === g.use)" :key="m.name">
-            <code>{{ m.name }}</code> ({{ m.vram }} GPU): {{ m.goodFor }}.
-            <template v-if="m.ollamaUrl">
-              <a :href="m.ollamaUrl" target="_blank" rel="noopener noreferrer">Ollama</a> ·
-            </template>
-            <a :href="m.hfUrl" target="_blank" rel="noopener noreferrer">Hugging Face</a>
+            <b>{{ m.name }}</b> ({{ m.vram }} GPU): {{ m.goodFor }}.
           </li>
         </ul>
       </template>
       <p>
-        Install one in Ollama with <code>ollama pull</code> and the name above, or download it from
-        Hugging Face for LM Studio or llama.cpp.
+        Search the name in Ollama, LM Studio or Hugging Face and pick a build that fits your GPU.
       </p>
       <DocCallout variant="tip">
-        With two models, keep a writer selected for drafting and switch to a builder when you
+        With two models, keep a writer selected for drafting and switch to a chat model when you
         organize, chat or build a whole pack.
       </DocCallout>
       <DocCallout variant="warn">
@@ -189,6 +184,4 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
 <style scoped>
 .wp-doc-ai-models { list-style: disc; padding-left: 20px; }
 .wp-doc-ai-models li { margin: 4px 0; }
-.wp-doc-ai-models a { color: var(--wp-accent); text-decoration: none; white-space: nowrap; }
-.wp-doc-ai-models a:hover { text-decoration: underline; }
 </style>
