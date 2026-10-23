@@ -96,3 +96,8 @@ def test_option_tags_in_a_wildcard_ask_bring_no_list_tools():
     assert len(short) <= 13
     assert "lists" in ai_tools.groups_for("Add tags to my Hair wildcard")
     assert "lists" in ai_tools.groups_for("Retag my outfits")
+
+
+def test_renaming_a_variable_brings_no_list_tools():
+    assert "lists" not in ai_tools.groups_for("Rename its variable to $hair_style.")
+    assert "lists" in ai_tools.groups_for("Rename the Hair wildcard to Hairstyle.")
