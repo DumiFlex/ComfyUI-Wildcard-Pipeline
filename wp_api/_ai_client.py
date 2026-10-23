@@ -859,8 +859,9 @@ async def _complete_json(
         cut = choices[0].get("finish_reason") == "length" or _early(data)
         if cut and quick and thinks_off and _all_thought(message):
             # The off switch was sent and the model thought anyway (LM Studio
-            # ignored it for Qwen3.5 9B in 0.4.15, bug tracker #1990): the
-            # answer's own limit went on thinking. Ask once more with room
+            # 0.4.15 ignored `enableThinking` / `chat_template_kwargs` for
+            # Qwen3.5 9B, bug tracker #1990): the answer's own limit went on
+            # thinking. Ask once more with room
             # to think, and send its quick answers that way from now on.
             _QUICK_OFF_REFUSED.add(key)
             _JSON_THINK_OFF.discard(key)
