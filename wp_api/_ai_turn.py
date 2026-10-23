@@ -1140,6 +1140,10 @@ async def _run_call(t: _Turn, run: _Calls, at: int, call: dict[str, Any]) -> Non
     extra = ("\n(" + "; ".join(arg_notes) + ")") if arg_notes else ""
     if isinstance(out, str):
         run.needs_reply = True
+        if tool in ai_chat.CHANGE_TOOLS and "this is exactly card" in out:
+            # Re-sent with only its category changed (s7): the same card.
+            lacks = _still_lacks(t)
+            extra += ("\n" + lacks) if lacks else ""
         run.result(call, f"{tool} {_json.dumps(args, ensure_ascii=False, sort_keys=True)[:200]}:\n"
                    + ai_budget.clip(out, t.prof["result_chars"]) + extra)
         if tool == "react":
@@ -1278,7 +1282,13 @@ def _repeated(t: _Turn, run: _Calls, call: dict[str, Any], key: str) -> bool:
         # three times over a warning, then out of steps with two
         # of five wildcards never made.
         run.needs_reply = True
-        run.result(call, ai_chat.PROPOSED_AGAIN.format(tool=tool, pid=t.proposed[key]))
+        again = ai_chat.PROPOSED_AGAIN.format(tool=tool, pid=t.proposed[key])
+        # 9B smoke s-tag-filter: the note's fix was the same card, byte
+        # for byte, three runs out of three.
+        lacks = _still_lacks(t)
+        if lacks:
+            again = f"{tool}: card {t.proposed[key]} is this exact call. {lacks}"
+        run.result(call, again)
         return True
     if key in t.failed:
         run.repeats += 1
@@ -1299,6 +1309,7 @@ def _add_card(t: _Turn, run: _Calls, call: dict[str, Any], args: dict[str, Any],
     out = ai_safety.clean(out)
     proposals = t.proposals
     twin = any(p_["pid"] == out.get("replaces") for p_ in proposals)
+    had = ai_request_check.gaps(t.text or "", proposals) if twin and not t.plan_n else []
     if twin:
         # A repeat of a card from this answer: the user gets one.
         old_pid, new_pid = out["replaces"], out["pid"]
@@ -1339,6 +1350,18 @@ def _add_card(t: _Turn, run: _Calls, call: dict[str, Any], args: dict[str, Any],
         gone = t.meta["proposals"].get(out["replaces"])
         if gone is not None:
             t.meta["proposals"][out["replaces"]] = {**gone, "status": "replaced"}
+    if twin and not t.plan_n:
+        # 9B smoke s-tag-filter: a fixed card rewritten back to plain
+        # colours to get rid of a duplicate warning.
+        now = [] if t.out_of_time else ai_request_check.gaps(t.text or "", proposals)
+        lost = [n for n in now if n not in had]
+        if lost:
+            what = " and ".join(ai_request_check.short_name(n) for n in lost)
+            extra += (f"\nThis card drops {what}, which the request asks for and the card "
+                      "it replaces had: send it again with that kept.")
+        elif now:
+            # Re-sent with only its tags or order changed (s7).
+            extra += "\n" + _still_lacks(t)
     run.result(call, ai_chat.proposal_note(tool, out) + extra + _tool_card(t, tool)
                + (_loop_check(t, tool) if twin else ""))
     if twin:
@@ -1490,12 +1513,13 @@ def _next_tail(t: _Turn, calls: list[dict[str, Any]], run: _Calls, dropped: int)
                 or max(t.refused.values(), default=0) >= MAX_REFUSED)
     more = (f"\n\nOnly your first {len(calls)} calls ran; {dropped} more were left out."
             + ("" if t.forced else " Make them in your next step.")) if dropped else ""
-    if t.split and t.step > 1:
+    note = _early_gap(t, calls)
+    if t.split and t.step > 1 and not note:
         # What this answer did so far, written by code: a small model
         # re-reads and re-proposes what scrolled up (research note
-        # "Small model tool use", T7).
+        # "Small model tool use", T7). Not beside the request check's
+        # note, whose fix is often that same card changed.
         more += _progress_note(t.steps, t.proposals)
-    note = _early_gap(t, calls)
     if note:
         t.new.append(ai_chatlog.results_entry(items, more + "\n\n" + note))
         return _NEXT
@@ -1514,6 +1538,20 @@ def _early_gap(t: _Turn, calls: list[dict[str, Any]]) -> str:
         return ""
     missing = ai_request_check.gaps(t.text or "", t.proposals)
     return _gap_note(t, missing) if missing else ""
+
+
+def _still_lacks(t: _Turn) -> str:
+    """What the cards still lack of the request, for a card sent again;
+    it counts as the request check's note when none came yet."""
+    missing = ([] if t.plan_n or t.out_of_time
+               else ai_request_check.gaps(t.text or "", t.proposals))
+    if not missing:
+        return ""
+    if not t.gap_checked:
+        _gap_note(t, missing)
+    what = " and ".join(ai_request_check.short_name(n) for n in missing)
+    return (f"It still lacks {what}, which the request asks for: add it, in this card or "
+            "the card that should have it.")
 
 
 def _gap_note(t: _Turn, missing: list[str]) -> str:

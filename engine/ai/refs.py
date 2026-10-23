@@ -271,6 +271,14 @@ def _read_instead(text: str, refs: RefIndex | None) -> str:
     return ("; " + ", ".join(lines[:4]) + ", and call the tool again") if lines else ""
 
 
+def ref_dupe_hint(text: str) -> str:
+    """Why a duplicate option holding a ref needs no copies: the 9B rewrote
+    four "@{Palette:warm} sky" options back to plain colours to get rid of
+    the duplicate warning (smoke s-tag-filter, 2026-10-23)."""
+    return (" (a ref picks anew on every draw, so one option with it is enough; "
+            "or vary the words around it)") if "@{" in (text or "") else ""
+
+
 #: "{@{Palette:warm}}": a ref inside braces that make no pick.
 _WRAPPED_REF = re.compile(r"\{\s*(@\{[^{}|]*\})\s*\}")
 
@@ -284,11 +292,11 @@ def compile_text(
     # Dynamic Prompts' "{2$$a|b|c}" (no separator) prints junk here: the
     # separator goes in ("{2$$, $$a|b|c}").
     text = _DP_COUNT.sub(r"{\1$$, $$\2}", text)
-    if "@{" in text and allow_ref and _WRAPPED_REF.search(text):
+    if "@{" in text and allow_ref:
         # The 9B wrote "{@{Palette:warm}} sky", then gave up on refs when
-        # told only to drop "the braces" (smoke s-tag-filter, 2026-10-23).
-        fixed = _WRAPPED_REF.sub(r"\1", text)
-        raise ValueError(f"a ref needs no extra braces around it: write {fixed!r}")
+        # told to drop "the braces" (smoke s-tag-filter, 2026-10-23).
+        # Braces with one choice pick nothing, so they just go.
+        text = _WRAPPED_REF.sub(r"\1", text)
     if "@{" in text:
         if not allow_ref:
             raise ValueError(_WHY_NO_REF.get(surface, "no @{…} here")

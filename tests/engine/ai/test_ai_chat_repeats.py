@@ -386,6 +386,16 @@ def test_option_zero_is_refused_with_the_numbering():
         lib.run("edit_options", {"id": "aaaa0001", "weights": [{"n": 0, "weight": 1}]})
 
 
+def test_every_option_counted_from_zero_is_read_as_one_to_k():
+    # 9B smoke s-tag-filter: a rewrite of all options as n 0..k-1.
+    lib = _lib()
+    count = len(lib.modules["aaaa0001"]["payload"]["options"])
+    out = lib.run("edit_options", {"id": "aaaa0001", "rewrite": [
+        {"n": n, "text": f"new {n}"} for n in range(count)]})
+    opts = out["op"]["body"]["payload"]["options"]
+    assert [o["value"] for o in opts] == [f"new {n}" for n in range(count)]
+
+
 def test_names_in_card_style_and_ambiguous_bundle_children():
     lib = _lib()
     assert lib._bare_id("Outfit aaaa0001") == "aaaa0001"

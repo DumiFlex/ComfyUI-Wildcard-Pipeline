@@ -234,7 +234,10 @@ def test_template_draft_warns_about_unasked_vars_and_drops_stray_braces():
     assert any("Dropped an empty @{ } / ${ }" in w for w in out["warnings"])
 
 
-def test_a_ref_in_braces_is_refused_with_the_text_to_write():
-    from engine.ai.refs import compile_text
-    with pytest.raises(ValueError, match=r"write '@\{Palette:warm\} sky'"):
-        compile_text("{@{Palette:warm}} sky", surface="option")
+def test_braces_around_a_lone_ref_are_dropped():
+    from engine.ai.refs import RefIndex, compile_text
+    palette = {"id": "aaaa0001", "name": "Palette", "payload": {
+        "sub_categories": ["warm"],
+        "options": [{"value": "crimson", "sub_categories": ["warm"]}]}}
+    out = compile_text("{@{Palette:warm}} sky", surface="option", refs=RefIndex([palette]))
+    assert out == "@{aaaa0001#Palette:warm} sky"
