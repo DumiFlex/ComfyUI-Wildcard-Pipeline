@@ -34,7 +34,7 @@ USAGE
     python scripts/ai_chat_evals.py --db PATH [--runs 3] [--only NAME,...]
         [--set default|smoke] [--model NAME] [--out chat-evals.md]
         [--sampling top_k=20,top_p=0.8,min_p=0,repeat_penalty=1.0]
-        [--write-temp 0.7] [--act-temp 0.15] [--seed 1]
+        [--write-temp 0.7] [--act-temp 0.15] [--seed 1] [--empty]
 
 --sampling sets the copy's Settings › AI › Sampling (sent with each
 request, so LM Studio's own settings stay untouched); --write-temp and
@@ -45,7 +45,10 @@ builds are compared on the same draws (seed + 1000 * run + scenario index).
 
 ``--db`` is the library to copy (default: the one ComfyUI would open).
 Every scenario run starts from a fresh copy of it (and of the examples
-file), so what one run's cards made can't steer the next.
+file), so what one run's cards made can't steer the next. ``--empty``
+starts every run from an empty library instead: a new user's first chat,
+with nothing to copy from (the 9B lost about 4 of 20 smoke checks there,
+2026-10-23).
 Writes the report and a ``.json`` beside it with every turn's answer,
 steps and cards. Record the model AND its chat template with each round.
 """
@@ -475,6 +478,8 @@ def parse_sampling(text: str) -> dict[str, float]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--db", default="", help="library database to copy")
+    ap.add_argument("--empty", action="store_true",
+                    help="start every run from an empty library (a new user)")
     ap.add_argument("--runs", type=int, default=3)
     ap.add_argument("--only", default="", help="scenario names, comma-separated")
     ap.add_argument("--set", default="default", choices=sorted(SETS),
@@ -497,7 +502,17 @@ def main() -> int:
     src_db = Path(args.db) if args.db else resolve_db_path()
     src_cfg = ai_config.config_path()
     work = Path(tempfile.mkdtemp(prefix="wp-chat-eval-"))
-    if src_db.exists():
+    if args.empty:
+        # The chat route reads the tables, so an empty library still
+        # needs them ("no such table: modules" otherwise).
+        from engine.db.connection import get_connection
+        from engine.db.migrations import migrate
+
+        conn = get_connection(work / "library.db")
+        migrate(conn)
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")  # the copies take the .db only
+        conn.close()
+    elif src_db.exists():
         shutil.copy2(src_db, work / "library.db")
     if src_cfg.exists():
         shutil.copy2(src_cfg, work / "ai.json")
@@ -528,7 +543,8 @@ def main() -> int:
     print(f"Library copy and settings in {work}; model {cfg['model']}; sampling "
           f"{cfg.get('sampling') or 'server'}; temps act "
           f"{ai_budget.PROFILES['small']['act_temp']} write "
-          f"{ai_budget.PROFILES['small']['write_temp']}; seed {args.seed}", flush=True)
+          f"{ai_budget.PROFILES['small']['write_temp']}; seed {args.seed}"
+          + ("; empty library" if args.empty else ""), flush=True)
     def write(rows: list[dict[str, Any]]) -> None:
         Path(args.out).write_text(report(rows, cfg["model"], args.note), encoding="utf-8")
         Path(args.out).with_suffix(".json").write_text(

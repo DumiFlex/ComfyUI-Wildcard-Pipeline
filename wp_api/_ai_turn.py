@@ -252,6 +252,9 @@ class _Turn:
     #: grammar for the rest of the answer for looping (`_loop_check`).
     loops: dict[str, int] = field(default_factory=dict)
     closed: set[str] = field(default_factory=set)
+    #: The next step's tools after the request check's nudge, once
+    #: (`request_check.fix_tools`).
+    gap_offer: list[str] | None = None
     #: Ask the next step with the model's thinking off: set by the empty
     #: nudge, since a thinking model that came back empty once tends to
     #: think itself out of an answer again.
@@ -782,6 +785,11 @@ def _offer(t: _Turn) -> tuple[list[Any] | None, bool]:
         return [ai_plan.plan_tool(t.meta["tools"], t.plan_n)], True
     if t.queue is not None and t.queue.active and not t.forced:
         return ai_tools.tools([n for n in t.queue.allowed() if n in t.meta["tools"]]), True
+    if t.gap_offer:
+        fix = [n for n in t.gap_offer if n in t.meta["tools"] and n not in t.closed]
+        t.gap_offer = None
+        if fix:
+            return ai_tools.tools(fix), False
     if t.short and not t.widened:
         # Plus what usually follows this answer's calls (`ai_narrow.NEXT`),
         # a test once it made a card, the docs once a call failed (H5).
@@ -1413,12 +1421,17 @@ def _settle(t: _Turn, said: str, calls: list[dict[str, Any]], cut: bool,
     # The request asks for a feature no card has (a constraint, an
     # "only" rule, a fallback, negatives): ask once, before the test, so
     # the test covers it. Not in a plan run, whose items are the ask.
+    # A repeated refusal forces the answer, but the missing feature
+    # still gets its one step (9B smoke, s-tag-filter: two refused
+    # opens, then plain colours with no tag ref). Out of time does not.
     missing = (ai_request_check.gaps(t.text or "", proposals)
                if not calls and not t.gap_checked and t.step < t.cap and not t.plan_n
-               and not t.forced else [])
+               and not t.out_of_time else [])
     if missing:
         t.gap_checked = True
+        t.forced = False
         t.gaps = missing
+        t.gap_offer = ai_request_check.fix_tools(missing, proposals)
         note = ai_request_check.nudge(missing, t.text or "")
         t.new.append(ai_chatlog.results_entry(items, "\n\n" + note) if items
                      else ai_chatlog.note_entry(note))
@@ -1520,6 +1533,11 @@ def _claim_notes(t: _Turn) -> None:
         what = " or ".join(k.replace("_", " ") for k in missing)
         message = (message.rstrip() + f"\n\n*(No {what} card came with this answer, so no "
                    f"{what} was made. Ask me to propose it.)*")
+    if not t.pause and proposals and (said := ai_request_check.claimed(
+            ai_request_check.gaps(text or "", proposals), message)):
+        what = " or ".join(ai_request_check.short_name(n) for n in said)
+        message = (message.rstrip() + f"\n\n*(No card in this answer has {what}, so it "
+                   "isn't made yet. Ask me to add it.)*")
     if not t.pause and t.cfg.get("local") and not t.meta.get("cloud_offered") and _struggled(
             message, t.errors, t.queue, bool(proposals)):
         # A local model struggled: say once per chat that a cloud model the
