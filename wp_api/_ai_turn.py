@@ -1270,7 +1270,8 @@ def _repeated(t: _Turn, run: _Calls, call: dict[str, Any], key: str) -> bool:
         run.repeats += 1
         run.needs_reply = True
         run.result(call, f"{tool}: you already made this exact call; its results are above. "
-                   "Don't repeat it.")
+                   "Don't repeat it: use them for the next call (the change, if the "
+                   "request asks for one).")
         return True
     if tool in ai_chat.CHANGE_TOOLS and key in t.proposed:
         # Sonnet probe 2026-10-21: the same three creates sent
@@ -1403,6 +1404,13 @@ def _settle(t: _Turn, said: str, calls: list[dict[str, Any]], cut: bool,
     organize = bool(_ORGANIZE_ASK.search(t.text or ""))
     if can_nudge and not proposals and (ai_chat.claims_change(said) or _card_as_text(said)
                                         or organize):
+        if not organize or ai_chat.claims_change(said):
+            # The 9B met the claim nudge with the same claim again (smoke
+            # s-negatives, empty library): the next step offers only the
+            # change tools it had, and the test tools.
+            t.gap_offer = [n for n in t.meta["tools"] if (
+                n in ai_chat.CHANGE_TOOLS and (not t.short or n in t.short)
+            ) or n in ("run_test", "show_test")]
         return _nudge(t, said, ai_chat.ORGANIZE_NUDGE if organize
                       and not ai_chat.claims_change(said) else ai_chat.CLAIM_NUDGE)
     # Proposed part of the ask and put the rest off to a later turn
