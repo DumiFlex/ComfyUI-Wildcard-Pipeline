@@ -66,3 +66,21 @@ def test_a_fallback_described_by_rules_asks_no_constraint():
            "rules rule out everything else.")
     assert rc.gaps(ask, [_wildcard(fallback=True)]) == []
     assert rc.gaps(ask, [_wildcard()]) == ["a fallback option"]
+
+
+def test_fix_tools_are_the_cards_own_and_what_adds_the_gap():
+    from engine.ai.request_check import fix_tools
+    cards = [{"tool": "create_wildcard", "op": {}}]
+    assert fix_tools(["a fallback option"], cards) == ["create_wildcard", "edit_options"]
+    assert fix_tools(["a constraint"], cards) == [
+        "create_wildcard", "create_constraint", "edit_constraint"]
+
+
+def test_claimed_finds_what_the_answer_says_it_made():
+    from engine.ai.request_check import FEATURES, claimed
+    tag = FEATURES[-1][0]
+    assert claimed(["a fallback option", tag], "Options: a @{Palette:warm} sky.") == [tag]
+    assert claimed(["a fallback option"], "Proposed Weapon.") == []
+    assert claimed(["a fallback option"], "No fallback is needed here.") == []
+    assert claimed(["a fallback option"], "It works without a fallback. Clear sky (fallback).") == [
+        "a fallback option"]

@@ -114,3 +114,54 @@ def nudge(missing: list[str], request: str) -> str:
             f"{'it' if len(missing) == 1 else 'them'}. Propose "
             f"{'it' if len(missing) == 1 else 'them'} now (or change the card that should "
             f"have it), or say why it isn't needed.\nThe request: \"{asked}\"")
+
+
+#: The tools that add each feature, besides re-sending the card's own tool.
+_FIX_TOOLS = (
+    ("a constraint", ("create_constraint", "edit_constraint")),
+    ('an "only" rule', ("create_constraint", "edit_constraint")),
+    ("a fallback option", ("edit_options",)),
+    ("negatives", ("edit_options",)),
+    ("a tag-filtered ref", ("edit_options", "add_options")),
+)
+
+
+def fix_tools(missing: list[str], cards: list[dict[str, Any]]) -> list[str]:
+    """What the step after the nudge offers: the cards' own tools (sent
+    again with the fix) and the tools that add what is missing. On an empty
+    library the 9B answered the nudge with more_tools, then opened its own
+    card twice and claimed the fix (smoke --empty, 2026-10-23)."""
+    out = [str(c.get("tool")) for c in cards if c.get("tool")]
+    for name in missing:
+        out += [t for prefix, tools in _FIX_TOOLS if name.startswith(prefix) for t in tools]
+    return list(dict.fromkeys(out))
+
+
+#: How an answer talks about each feature as if it were made.
+_SAYS = (
+    ("a constraint", re.compile(r"\bconstraints?\b", re.I)),
+    ('an "only" rule', re.compile(r"\bonly\b.{0,30}\brule\b|\beffect\b.{0,10}\bonly\b", re.I)),
+    ("a fallback option", re.compile(r"\bfallback\b", re.I)),
+    ("negatives", re.compile(r"\bnegatives?\b", re.I)),
+    ("a tag-filtered ref", re.compile(r"@\{[^}]*:")),
+)
+
+
+_NOT_BEFORE = re.compile(r"\b(?:no|not|without|isn't|aren't|doesn't|don't|didn't|"
+                         r"skip(?:ped)?|instead of)\b[^.\n]{0,30}$", re.I)
+
+
+def claimed(missing: list[str], message: str) -> list[str]:
+    """The missing features the answer talks about anyway: on an empty
+    library the 9B said "clear sky (fallback)" and "a @{Palette:warm} sky"
+    beside cards with neither (smoke --empty, 2026-10-23). "No fallback is
+    needed" says why it's left out, which is the answer the note asked for."""
+    text = message or ""
+    return [name for name in missing for prefix, says in _SAYS
+            if name.startswith(prefix) and any(
+                not _NOT_BEFORE.search(text[:m.start()]) for m in says.finditer(text))]
+
+
+def short_name(name: str) -> str:
+    """A feature's name without its explanation in brackets."""
+    return name.split(" (", 1)[0]

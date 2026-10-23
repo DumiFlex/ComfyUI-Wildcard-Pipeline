@@ -71,7 +71,9 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
             see it.</li>
           <li><b>Checked against your request.</b> Before an answer with cards ends, the code checks
             that the cards have what you asked for (a constraint, an "only" rule, a fallback,
-            negatives, a tag filter like <code>@{Palette:warm}</code>). If one is missing, the model is asked once to add it or say why not. A tool
+            negatives, a tag filter like <code>@{Palette:warm}</code>). If one is missing, the model is asked once to add it or say why not, and its next step
+            offers only the tools that can add it. If the answer still talks about it, the reply
+            says no card has it yet. A tool
             the model repeats twice in one answer is taken away for the rest of that answer, so it
             moves on instead of making the same card again.</li>
           <li><b>A progress note.</b> Each later step gets one line saying what the answer has done so
