@@ -224,6 +224,21 @@ def checks_schema(cfg: dict[str, Any]) -> bool:
     return cfg.get("provider") in SCHEMA_SERVERS
 
 
+#: (server, model) pairs whose grammar refused a narrowed step schema
+#: (`engine/ai/narrow.py`): their steps get the plain one.
+NO_ENUMS: set[tuple[str, str]] = set()
+
+
+def refused_enums(cfg: dict[str, Any], e: AIError) -> bool:
+    """`refused_schema` for a narrowed schema: remembered so later steps send
+    the plain typed one, which this server may still take."""
+    if not (400 <= (e.upstream or 0) < 600
+            and re.search(r"schema|grammar|format|enum", e.message, re.I)):
+        return False
+    NO_ENUMS.add((str(cfg.get("base_url") or ""), str(cfg.get("model") or "")))
+    return True
+
+
 def refused_schema(cfg: dict[str, Any], e: AIError) -> bool:
     """A server that couldn't take the typed schema (too big or a keyword
     its grammar builder lacks); remembered so later steps send the string

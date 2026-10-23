@@ -64,6 +64,19 @@ def _chat_step(schema: dict, chat_steps: list) -> object:
     return nxt
 
 
+def _id_enum(node) -> bool:
+    """Whether a JSON schema limits some "id" field to an enum."""
+    if isinstance(node, dict):
+        props = node.get("properties")
+        if isinstance(props, dict) and isinstance(props.get("id"), dict) \
+                and "enum" in props["id"]:
+            return True
+        return any(_id_enum(v) for v in node.values())
+    if isinstance(node, list):
+        return any(_id_enum(v) for v in node)
+    return False
+
+
 @pytest.fixture(autouse=True)
 def _isolated_ai(tmp_path, monkeypatch):
     monkeypatch.setenv("WP_AI_CONFIG_PATH", str(tmp_path / "ai.json"))
@@ -96,6 +109,10 @@ async def fake_llm(aiohttp_server):
                 "n_prompt_tokens": 17339, "n_ctx": 16384}})
             return web.json_response(
                 {"error": "Engine protocol predict request returned 400: " + detail}, status=500)
+        if overrides.get("_no_enums") and _id_enum(body.get("response_format")):
+            # A grammar builder that can't take a long enum on an id.
+            return web.json_response({"error": {
+                "message": "failed to parse grammar from json schema"}}, status=400)
         if "tools" in body and overrides.get("_peg"):
             # LM Studio with a chat template its tool-call parser can't
             # read (the stock Qwen3.5 template): it takes the tools, then

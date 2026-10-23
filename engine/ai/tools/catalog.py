@@ -912,10 +912,67 @@ def sync_delete(names: list[str], allowed: bool, group: tuple[str, ...] = DELETE
     return [*names, *(t.name for t in TOOLS if t.name in group and t.name not in have)]
 
 
-#: Always on a shortlist: finding and reading, the docs, a reaction, a
-#: test, a question, and the way to every other tool.
-SHORTLIST_CORE = ("search", "read", "variables", "explain", "docs_search", "docs_read", "react",
-                  "run_test", "ask", "more_tools")
+#: Always on a shortlist: finding and reading, a question, and the way to
+#: every other tool. The rest of what used to be core depends on the
+#: request (`request_core`, harness note H5): 7-9B models pick better from
+#: about ten tools than from fifteen.
+SHORTLIST_CORE = ("search", "read", "ask", "more_tools")
+#: Offered for a question, or once a call in the answer failed.
+DOCS_TOOLS = ("explain", "docs_search", "docs_read")
+#: Tools that come after a change: offered once the answer made a card.
+AFTER_CHANGE = ("run_test",)
+#: The page tools a question may still use (look, never change).
+LOOK_TOOLS = ("open", "read_page", "highlight", "select_rows")
+#: Words that ask for a change (harness note H3, after Mingbird's `_is_qa`).
+_CHANGE_WORDS = re.compile(
+    r"\b(?:make|add|create|build|write|generate|set\s+up|change|edit|fix|rename|remove|"
+    r"delete|replace|update|swap|move|put|give|link|connect|tag|split|merge|draft|fill|"
+    r"apply|turn\s+(?:on|off|into)|bind|unbind|exclude|include|weight|reweight|increase|"
+    r"decrease|lower|raise|drop|insert|append|prepend|extend|improve|redo|undo)\b", re.I)
+#: How a question starts: these lead even when a change word follows
+#: ("how do I add a fallback?").
+_QUESTION_START = re.compile(
+    r"^\s*(?:how|where|what|why|which|when|explain|is\s+(?:there|it)|are\s+there|does|"
+    r"do\s+(?:i|you|we)|can\s+i|could\s+i|should\s+i|tell\s+me\s+(?:how|what|why|where))\b",
+    re.I)
+#: A short message with no change words is chat-like ("thanks!", "cool").
+_SHORT_WORDS = 6
+_TEST_WORDS = re.compile(r"\b(?:test|try|run|roll|rolls|rolled|pick|picks|picked|sample|"
+                         r"preview|output|outputs|result|results)\b", re.I)
+
+
+def message_kind(text: str, working: bool = False) -> str:
+    """"question", "chat" or "task" for one user message (harness note H3).
+    A question opener wins; else change words make a task; else a "?" makes
+    a question, and a short message with neither is chat. In a chat that
+    already proposed cards (`working`) only an opener makes a question: a
+    follow-up like "same for the eyes?" carries on the work."""
+    text = text or ""
+    if _QUESTION_START.search(text):
+        return "question"
+    if _CHANGE_WORDS.search(text) or working:
+        return "task"
+    if "?" in text:
+        return "question"
+    return "chat" if len(text.split()) <= _SHORT_WORDS else "task"
+
+
+def request_core(text: str, kind: str) -> set[str]:
+    """The request-dependent part of a shortlist's core (H5): the docs for
+    questions, `react` for chat, `variables` when the message names one,
+    `run_test` when it talks about a run's output."""
+    want: set[str] = set(SHORTLIST_CORE)
+    if kind != "task":
+        want |= set(DOCS_TOOLS)
+    if kind == "chat":
+        want.add("react")
+    if "$" in text or re.search(r"\bvariables?\b", text, re.I):
+        want.add("variables")
+    if _TEST_WORDS.search(text):
+        want.add("run_test")
+    return want
+
+
 #: Words that put the page tools on a shortlist.
 _PAGE_WORDS = re.compile(r"\b(?:page|screen|where|open|go to|take me|show me|point|highlight"
                          r"|button|field|section|this|here|link)\b", re.I)
@@ -928,22 +985,25 @@ def _stems(text: str) -> set[str]:
 
 
 def shortlist(names: list[str], text: str, route: str | None = None,
-              extra: int = 3) -> list[str] | None:
+              extra: int = 3, working: bool = False) -> list[str] | None:
     """The tools one message's steps offer a small model (research note
-    "Small model tool use", T2): the core reads, the groups the message
-    names (else the page's main group), the page tools when it talks about
-    the page, and the `extra` tools whose names and use-when lines share
-    the most words with it. The prompt still lists all of the chat's
-    tools, and `more_tools` (always offered) opens the rest for the turn,
-    so a miss costs one step. None when it would offer everything anyway."""
+    "Small model tool use", T2): the core reads (`request_core`), the
+    groups the message names (else the page's main group), the page tools
+    when it talks about the page, and the `extra` tools whose names and
+    use-when lines share the most words with it. A question or chat gets
+    no change tools (`message_kind`; `working`: the chat already proposed
+    cards). The prompt still lists all of the chat's tools, and
+    `more_tools` (always offered) opens the rest for the turn, so a miss
+    costs one step. None when it would offer everything anyway."""
     if not text:
         return None
     key = str(route or "")
     for suffix in ("-new", "-edit"):
         if key.endswith(suffix):
             key = key[: -len(suffix)]
+    kind = message_kind(text, working)
     groups = set(groups_for(text) or PAGE_GROUPS.get(key, DEFAULT_GROUPS)[:1])
-    want: set[str] = set(SHORTLIST_CORE)
+    want = request_core(text, kind)
     if _PAGE_WORDS.search(text):
         want |= {"open", "read_page", "highlight"}
     if _INFO_WORDS.search(text) or "lists" in groups:
@@ -951,15 +1011,29 @@ def shortlist(names: list[str], text: str, route: str | None = None,
     if re.search(r"\bpacks?\b", text, re.I):
         want.add("plan_pack")  # the turn steers a pack ask to it (`PACK_FIRST`)
     have = tools(names)
-    want |= {t.name for t in have if groups.intersection(t.groups)}
+    want |= {t.name for t in have if groups.intersection(t.groups) and t.name != "react"
+             and t.name not in DOCS_TOOLS}
     words = _stems(text)
     scored = sorted(
         ((3 * len(words & _stems(t.name.replace("_", " ")))
           + len(words & _stems(t.when or t.summary)), i, t.name)
          for i, t in enumerate(have) if t.name not in want), reverse=True)
     want |= {n for score, _, n in scored[:extra] if score >= 2}
+    if kind != "task":
+        want = {n for n in want if looks(n)}
     out = [n for n in names if n in want]
     return None if len(out) >= len(names) else out
+
+
+def looks(name: str) -> bool:
+    """A tool a question may use: it reads, asks or points, never changes
+    or drafts (H3)."""
+    tool = BY_NAME.get(name)
+    if tool is None:
+        return name == "more_tools"
+    if tool.kind == "client":
+        return name in LOOK_TOOLS
+    return tool.kind in ("read", "ask")
 
 
 def tools(names: list[str]) -> list[Tool]:

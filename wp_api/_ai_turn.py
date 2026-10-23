@@ -21,6 +21,7 @@ from engine.ai import config as ai_config
 from engine.ai import examples as ai_examples
 from engine.ai import guide as ai_guide
 from engine.ai import lint as ai_lint
+from engine.ai import narrow as ai_narrow
 from engine.ai import plan_items as ai_plan
 from engine.ai import react as ai_react
 from engine.ai import recipes as ai_recipes
@@ -195,6 +196,9 @@ class _Turn:
     plan_n: int
     #: The step's tool shortlist for small models (None: every tool).
     short: Any
+    #: The message as `ai_tools.message_kind` reads it: "question" and
+    #: "chat" steps are offered no change tools.
+    asks_kind: str
     #: What earlier paused calls did, for the empty-answer line.
     first_done: list[str]
     step: int
@@ -600,7 +604,11 @@ async def _prepare(
     # (`engine/ai/plan_items.py`). The prompt keeps every tool either way.
     guided = (not ask.resume and bool(text) and fmt == "json" and bool(meta.get("typed"))
               and _ai_chat.checks_schema(cfg) and _splits(cfg, meta, fmt))
-    short = ai_tools.shortlist(meta["tools"], text, route) if guided else None
+    # A question or chat gets no change tools (harness note H3); a chat that
+    # already proposed cards counts a follow-up as more work.
+    working = bool(meta.get("proposals"))
+    asks_kind = ai_tools.message_kind(text, working) if guided else "task"
+    short = ai_tools.shortlist(meta["tools"], text, route, working=working) if guided else None
     plan_n = ai_plan.multi_ask(text) if guided and not _PACK_ASK.search(text) else 0
     tail_kinds: list[str] = []
     if plan_n and not any(n in ai_plan.PLANNABLE for n in meta["tools"]):
@@ -626,7 +634,10 @@ async def _prepare(
         ai_cards.mark(meta, cards, len(log) + len(new))
         card_note = ai_cards.note(cards)
         if cards:
-            short, unlocked = _card_tools(meta, short, ai_cards.offers(cards))
+            offers = ai_cards.offers(cards)
+            if asks_kind != "task":
+                offers = [n for n in offers if ai_tools.looks(n)]
+            short, unlocked = _card_tools(meta, short, offers)
             card_note += unlocked
             if plan_n:
                 # "…then make each setting get only outfits that suit it"
@@ -651,7 +662,8 @@ async def _prepare(
         request=request, body=body, emit=emit, cfg=cfg, ask=ask, lib=lib, chat=chat,
         log=log, meta=meta, snapshot=snapshot, fmt=fmt, base_prof=base_prof, prof=prof,
         fixed=fixed, window=window, num_ctx=num_ctx, retried_from=retried_from, new=new,
-        fp_now=fp_now, plan_n=plan_n, short=short, first_done=first_done, step=step,
+        fp_now=fp_now, plan_n=plan_n, short=short, asks_kind=asks_kind,
+        first_done=first_done, step=step,
         deadline=loop.time() + (TURN_SECONDS_LOCAL if cfg.get("local") else TURN_SECONDS),
         steps=first_steps, cap=ai_chat.MAX_STEPS, limit=ai_chat.MAX_STEPS, tail_kinds=tail_kinds,
         sent_steps=len(first_steps), read_budget=ai_chat.read_budget(prof["size"]),
@@ -762,9 +774,29 @@ def _offer(t: _Turn) -> tuple[list[Any] | None, bool]:
     if t.queue is not None and t.queue.active and not t.forced:
         return ai_tools.tools([n for n in t.queue.allowed() if n in t.meta["tools"]]), True
     if t.short and not t.widened:
+        # Plus what usually follows this answer's calls (`ai_narrow.NEXT`),
+        # a test once it made a card, the docs once a call failed (H5).
+        follow = ai_narrow.next_tools(t.called, {t.lib.kind_of(i) for i in t.lib.touched})
+        if t.proposals:
+            follow |= set(ai_tools.AFTER_CHANGE)
+        if t.errors:
+            follow |= set(ai_tools.DOCS_TOOLS)
+        if t.asks_kind != "task":
+            follow = {n for n in follow if ai_tools.looks(n)}
         return ai_tools.tools([n for n in t.meta["tools"]
-                               if n in t.short or n in t.called]), False
+                               if n in t.short or n in t.called or n in follow]), False
     return None, False
+
+
+def _narrowed(t: _Turn, offer: list[Any] | None) -> list[Any] | None:
+    """A typed JSON step's offer with its fields limited to what exists and
+    may be changed (`engine/ai/narrow.py`); grammar only, so free."""
+    key = (str(t.cfg.get("base_url") or ""), str(t.cfg.get("model") or ""))
+    if not (t.fmt == "json" and t.split and t.meta.get("typed")
+            and _ai_chat.checks_schema(t.cfg)) or key in _ai_chat.NO_ENUMS:
+        return offer
+    return ai_narrow.narrow(offer if offer is not None else ai_tools.tools(t.meta["tools"]),
+                            t.lib)
 
 
 async def _model_step(t: _Turn) -> dict[str, Any] | str | web.Response:
@@ -777,6 +809,8 @@ async def _model_step(t: _Turn) -> dict[str, Any] | str | web.Response:
         await t.emit({"type": "step", "n": t.step + 1})
     offer, must_call = _offer(t)
     t.offered = [x.name for x in offer] if offer is not None else None
+    plain = offer
+    offer = _narrowed(t, offer)
     cfg = t.cfg
     started = asyncio.get_running_loop().time()
     try:
@@ -787,7 +821,7 @@ async def _model_step(t: _Turn) -> dict[str, Any] | str | web.Response:
                        cache_key=t.chat["id"] if t.chat else "", emit=t.emit,
                        typed=bool(meta.get("typed")), decls=_decls(cfg, meta, t.fmt),
                        split=t.split, answer_only=t.forced, offer=offer,
-                       must_call=must_call),
+                       must_call=must_call, plain=plain if plain is not offer else None),
             timeout=STEP_SECONDS)
     except asyncio.TimeoutError:
         t.trace.append(ai_trace.timed_out_record(
@@ -1455,7 +1489,7 @@ def _trace(t: _Turn) -> dict[str, Any]:
     return ai_trace.turn_record(
         steps=t.trace, tail=t.tail_kinds, short=t.short, notes=notes, refused=t.refused,
         errors=t.errors, widened=t.widened, plan_n=t.plan_n, model=t.cfg.get("model"),
-        profile=t.prof.get("size"))
+        profile=t.prof.get("size"), asks=t.asks_kind)
 
 
 async def _close(t: _Turn) -> web.Response:

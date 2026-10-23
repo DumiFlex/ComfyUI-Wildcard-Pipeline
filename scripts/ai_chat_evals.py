@@ -102,6 +102,12 @@ def _texts(out: dict[str, Any]) -> str:
     return json.dumps([p.get("op") for p in out.get("proposals") or []], ensure_ascii=False)
 
 
+#: A ref to the wildcard named {}: the model writes ``@{Name}``, the card
+#: stores ``@{8hex#Name}`` once that wildcard exists (the smoke checks
+#: missed every compiled ref until 2026-10-23).
+_REF = r"@\{{(?:[0-9a-f]{{8}}#)?{}"
+
+
 def _cards(tool: str, n: int) -> Callable[[dict[str, Any]], bool]:
     return lambda out: sum(1 for p in out.get("proposals") or [] if p.get("tool") == tool) >= n
 
@@ -114,13 +120,14 @@ SMOKE: list[dict[str, Any]] = [
                "can draw from it.",
                "Make an Outfit wildcard whose options draw their colour from Colors."],
      "expect": [["create_wildcard"], ["create_wildcard"]],
-     "check": [None, lambda out: "@{Colors" in _texts(out)]},
+     "check": [None, lambda out: bool(re.search(_REF.format("Colors"), _texts(out)))]},
     {"name": "s-tag-filter", "page": {"route": "/library"},
      "turns": ["Make a Palette wildcard with no variable: 4 warm colours tagged warm and 4 "
                "cool colours tagged cool.",
                "Make a Sky wildcard whose options use only warm colours from Palette."],
      "expect": [["create_wildcard"], ["create_wildcard"]],
-     "check": [None, lambda out: bool(re.search(r"@\{Palette:\s*warm", _texts(out)))]},
+     "check": [None, lambda out: bool(re.search(_REF.format("Palette") + r":\s*warm",
+                                                _texts(out)))]},
     {"name": "s-only", "page": {"route": "/library"},
      "turns": ["Make a Setting wildcard (beach, office, forest) and an Outfit wildcard with "
                "outfits tagged by the setting they suit, then make each setting get only "
@@ -260,7 +267,9 @@ def score_turn(out: dict[str, Any], expect: Any, check: Any = None) -> dict[str,
             "errors": len(errors),
             "tests": len(tests), "tests_ran": len(ran), "did": did,
             "claims": sorted(set(claims)), "steps": len(steps),
-            "card_warnings": sum(len(p.get("warnings") or []) for p in proposals)}
+            "card_warnings": sum(len(p.get("warnings") or []) for p in proposals),
+            # what the cards would write, so a fixed check can re-score a run
+            "ops": [p.get("op") for p in proposals]}
 
 
 async def run_scenario(client: Any, sc: dict[str, Any]) -> list[dict[str, Any]]:
@@ -353,9 +362,14 @@ def fresh_copy(work: Path) -> Callable[[], None]:
     """What puts `work`'s library and examples back as they are now: the
     smoke set's second run found the first run's Hair and Outfit and edited
     those (2026-10-23). The search index beside the library is dropped, so
-    it is rebuilt from the copy."""
+    it is rebuilt from the copy. The library each run leaves is kept as
+    ``runs/run-NNN.db`` first, so its chats' traces survive for
+    `ai_trace_report.py --db <work>/runs`."""
     keep = work / "pristine"
     keep.mkdir(exist_ok=True)
+    runs = work / "runs"
+    runs.mkdir(exist_ok=True)
+    used = [0]
     names = ("library.db", "ai-examples.json")
     for n in names:
         if (work / n).exists():
@@ -371,6 +385,9 @@ def fresh_copy(work: Path) -> Callable[[], None]:
                 idx.close()
         _ai_context._INDEXES.clear()
         gc.collect()  # and any library connection nobody closed
+        if used[0] and (work / "library.db").exists():
+            shutil.copy2(work / "library.db", runs / f"run-{used[0]:03d}.db")
+        used[0] += 1
         for p in work.iterdir():
             if p.is_file() and (p.name.startswith(("library.db", "ai-examples.json"))
                                 or ".ai-index.db" in p.name):
@@ -409,6 +426,8 @@ async def evaluate(scenarios: list[dict[str, Any]], runs: int,
                              "turns": await run_scenario(client, sc)})
                 if partial is not None:
                     partial(rows)
+        if fresh is not None:
+            fresh()  # keeps the last run's library too
     return rows
 
 
@@ -454,7 +473,7 @@ def main() -> int:
             json.dumps(rows, indent=2, ensure_ascii=False), encoding="utf-8")
 
     write(asyncio.run(evaluate(scenarios, args.runs, partial=write, fresh=fresh_copy(work))))
-    print(f"Wrote {args.out}")
+    print(f"Wrote {args.out}; traces: python scripts/ai_trace_report.py --db {work / 'runs'}")
     return 0
 
 

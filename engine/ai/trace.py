@@ -72,7 +72,8 @@ def timed_out_record(n: int, offered: list[str] | None, seconds: float) -> dict[
 
 def turn_record(*, steps: list[dict[str, Any]], tail: list[str], short: Any,
                 notes: list[str], refused: dict[str, int], errors: dict[str, int],
-                widened: bool, plan_n: int, model: Any, profile: Any) -> dict[str, Any]:
+                widened: bool, plan_n: int, model: Any, profile: Any,
+                asks: str = "task") -> dict[str, Any]:
     """The trace stored with one answer."""
     out: dict[str, Any] = {"steps": steps, "tail": list(tail), "model": str(model or ""),
                            "profile": str(profile or "")}
@@ -88,6 +89,8 @@ def turn_record(*, steps: list[dict[str, Any]], tail: list[str], short: Any,
         out["widened"] = True
     if plan_n:
         out["plan_n"] = plan_n
+    if asks != "task":
+        out["asks"] = asks
     return out
 
 
@@ -111,7 +114,8 @@ def summarize(traces: list[dict[str, Any]]) -> dict[str, Any]:
     out: dict[str, Any] = {"answers": 0, "steps": 0, "shortlisted": 0, "widened": 0,
                            "more_tools": 0, "docs": 0, "rereads": 0, "prompt_tokens": 0,
                            "cached_tokens": 0, "thought_tokens": 0, "timed_out": 0,
-                           "seconds": 0.0, "slowest": 0.0}
+                           "seconds": 0.0, "slowest": 0.0, "questions": 0,
+                           "question_changes": 0, "first_offered": 0}
     for tr in traces:
         if not isinstance(tr, dict):
             continue
@@ -121,6 +125,13 @@ def summarize(traces: list[dict[str, Any]]) -> dict[str, Any]:
         out["shortlisted"] += int("short" in tr)
         out["widened"] += int(bool(tr.get("widened")))
         out["rereads"] += rereads(tr)
+        if tr.get("asks") in ("question", "chat"):
+            out["questions"] += 1
+            out["question_changes"] += int(any(
+                t.startswith(("create_", "add_", "edit_", "update_"))
+                for st in steps for t in st.get("called") or []))
+        if steps and isinstance(steps[0].get("offered"), list):
+            out["first_offered"] = max(out["first_offered"], len(steps[0]["offered"]))
         for st in steps:
             for tool in st.get("called") or []:
                 called[tool] += 1

@@ -77,6 +77,7 @@ async def _chat_step(
     emit: Any = None, typed: bool = False, decls: list[dict[str, Any]] | None = None,
     split: bool = False, answer_only: bool = False,
     offer: list[Any] | None = None, must_call: bool = False,
+    plain: list[Any] | None = None,
 ) -> dict[str, Any]:
     """One model step, asked again once with the problem named when a
     JSON-mode answer isn't usable: small models usually fix a named error.
@@ -87,7 +88,9 @@ async def _chat_step(
     `offer` (typed JSON only): the tools this step's grammar allows instead
     of all of the chat's (a shortlist, a plan, a plan item); the prompt and
     native declarations stay the same, so the cached prefix does too.
-    `must_call`: a split act ask that must call (with `offer`)."""
+    `must_call`: a split act ask that must call (with `offer`). `plain`:
+    the offer before `engine/ai/narrow.py` limited its fields, asked
+    instead if the server's grammar refuses the narrowed one."""
     chosen = ai_tools.tools(names)
     native = decls if decls is not None else ai_tools.native(chosen, cfg["api"])
     typed = typed and fmt == "json" and _ai_chat.checks_schema(cfg)
@@ -121,6 +124,10 @@ async def _chat_step(
         except _ai_chat.ToolsUnsupported:
             raise
         except _ai_client.AIError as e:
+            if typed and plain is not None and _ai_chat.refused_enums(cfg, e):
+                chosen, plain = list(plain), None
+                schema = ai_tools.step_schema([t.name for t in chosen], chosen)
+                continue  # the same ask, without the enums
             if typed and _ai_chat.refused_schema(cfg, e):
                 chosen, must_call = ai_tools.tools(names), False
                 typed, schema = False, ai_tools.step_schema(names)

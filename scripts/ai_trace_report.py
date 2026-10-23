@@ -75,6 +75,9 @@ def render(total: dict[str, Any]) -> str:
         f"({total['steps'] / n:.1f} per answer)",
         f"- Answers with a tool shortlist: {total['shortlisted']}; widened by more_tools: "
         f"{total['widened']} (more_tools calls: {total['more_tools']})",
+        f"- Most tools a first step offered: {total['first_offered']}",
+        f"- Questions or chat: {total['questions']}; of them with a change call: "
+        f"{total['question_changes']}",
         f"- Docs lookups (explain, docs_search): {total['docs']}",
         f"- Re-reads (a later step's prompt mostly uncached): {total['rereads']}",
         f"- Prompt tokens: {total['prompt_tokens']}, cached: {total['cached_tokens']} "
@@ -94,7 +97,9 @@ def render(total: dict[str, Any]) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--db", default="", help="library database (default: ComfyUI's)")
+    ap.add_argument("--db", action="append", default=[],
+                    help="library database, or a folder of them such as an eval run's "
+                         "runs/ (repeatable; default: ComfyUI's)")
     ap.add_argument("--since", default="", help="only chats updated on or after this date")
     ap.add_argument("--model", default="", help="only answers from this model")
     ap.add_argument("--json", action="store_true", help="print the totals as JSON")
@@ -103,11 +108,16 @@ def main() -> int:
     from engine.ai import trace as ai_trace
     from engine.db.connection import resolve_db_path
 
-    db = Path(args.db) if args.db else resolve_db_path()
-    if not db.exists():
-        print(f"No library database at {db}")
+    dbs: list[Path] = []
+    for given in args.db or [str(resolve_db_path())]:
+        path = Path(given)
+        dbs += sorted(path.glob("*.db")) if path.is_dir() else [path]
+    missing = [d for d in dbs if not d.exists()]
+    if missing or not dbs:
+        print(f"No library database at {missing[0] if missing else args.db}")
         return 1
-    total = ai_trace.summarize(load_traces(db, args.since, args.model))
+    traces = [t for d in dbs for t in load_traces(d, args.since, args.model)]
+    total = ai_trace.summarize(traces)
     print(json.dumps(total, indent=2) if args.json else render(total))
     return 0
 

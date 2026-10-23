@@ -1,12 +1,14 @@
 """The chat's tool registry: `catalog` declares the tools, `registry`
 renders and checks them."""
 from engine.ai.tools.catalog import (
+    AFTER_CHANGE,
     ASK,
     BY_NAME,
     CHANGE,
     CLIENT,
     DANBOORU,
     DELETE,
+    DOCS_TOOLS,
     LAZY_GROUPS,
     MORE_GROUPS,
     READ,
@@ -16,7 +18,10 @@ from engine.ai.tools.catalog import (
     WEB,
     WEB_SEARCH,
     groups_for,
+    looks,
+    message_kind,
     more,
+    request_core,
     shortlist,
     sync_delete,
     tools,
@@ -37,12 +42,13 @@ from engine.ai.tools.registry import (
     step_schema,
 )
 
-__all__ = ["ANSWER_SCHEMA", "ANSWER_TOOL", "ASK", "BY_NAME", "CHANGE", "CLIENT", "DANBOORU",
-           "DELETE", "LAZY_GROUPS", "MORE_GROUPS", "READ", "READER", "TOOLS", "VOCAB", "WEB",
-           "WEB_SEARCH",
+__all__ = ["AFTER_CHANGE", "ANSWER_SCHEMA", "ANSWER_TOOL", "ASK", "BY_NAME", "CHANGE", "CLIENT",
+           "DANBOORU", "DELETE", "DOCS_TOOLS", "LAZY_GROUPS", "MORE_GROUPS", "READ", "READER",
+           "TOOLS", "VOCAB", "WEB", "WEB_SEARCH",
            "ArgsError",
            "Tool",
-           "act_schema", "answer_decl", "check_args", "description", "groups_for", "more",
+           "act_schema", "answer_decl", "check_args", "description", "groups_for", "looks",
+           "message_kind", "more", "request_core",
            "native",
            "prompt_lines",
            "shortlist", "step_schema", "sync_delete", "toolset", "tools", "web_allowed"]
