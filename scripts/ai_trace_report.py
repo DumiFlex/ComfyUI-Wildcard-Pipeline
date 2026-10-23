@@ -92,6 +92,8 @@ def render(total: dict[str, Any]) -> str:
     lines += table("Note or nudge sent", total["notes"])
     lines += table("Message tail block", total["tail"])
     lines += table("Refusal", total["refused"])
+    lines += table("Missing from the cards (request check)", total["gaps"])
+    lines += table("Closed for looping", total["closed"])
     return "\n".join(lines) + "\n"
 
 

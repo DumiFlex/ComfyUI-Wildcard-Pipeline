@@ -815,9 +815,19 @@ ASK_GROUPS: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 
 
+#: A message that makes a wildcard: its "tagged warm" / "with tags" are
+#: option tags (wildcards), not the library's item tags (lists).
+_MAKES_WILDCARD = re.compile(r"\b(?:make|create|build|write)\b.*\b(?:wildcards?|options?)\b")
+_TAG_WORDS = re.compile(r"\b(?:re)?tag(?:s|ged|ging)?\b")
+
+
 def groups_for(text: str) -> list[str]:
     """The tool groups a user's message asks for by its words."""
     low = (text or "").lower()
+    if _MAKES_WILDCARD.search(low):
+        # Smoke s-tag-filter offered the 9B all six list tools for "4 warm
+        # colours tagged warm" (19 tools on the first step).
+        low = _TAG_WORDS.sub(" ", low)
     return [g for g, pat in ASK_GROUPS if pat.search(low)]
 
 
@@ -974,8 +984,11 @@ def request_core(text: str, kind: str) -> set[str]:
 
 
 #: Words that put the page tools on a shortlist.
-_PAGE_WORDS = re.compile(r"\b(?:page|screen|where|open|go to|take me|show me|point|highlight"
-                         r"|button|field|section|this|here|link)\b", re.I)
+_PAGE_WORDS = re.compile(r"\b(?:page|screen|open|go to|take me|show me|highlight"
+                         r"|button|field|section|link)\b", re.I)
+#: ... and these too, but only in a question: in a task they are ordinary
+#: words ("5 options where clear sky is the fallback", smoke 2026-10-23).
+_ASK_PAGE_WORDS = re.compile(r"\b(?:where|point|this|here)\b", re.I)
 _INFO_WORDS = re.compile(r"\b(?:rename|describ\w*|description|name it|call it)\b", re.I)
 _WORD = re.compile(r"[a-z]{4,}")
 
@@ -1004,7 +1017,7 @@ def shortlist(names: list[str], text: str, route: str | None = None,
     kind = message_kind(text, working)
     groups = set(groups_for(text) or PAGE_GROUPS.get(key, DEFAULT_GROUPS)[:1])
     want = request_core(text, kind)
-    if _PAGE_WORDS.search(text):
+    if _PAGE_WORDS.search(text) or (kind != "task" and _ASK_PAGE_WORDS.search(text)):
         want |= {"open", "read_page", "highlight"}
     if _INFO_WORDS.search(text) or "lists" in groups:
         want.add("update_info")

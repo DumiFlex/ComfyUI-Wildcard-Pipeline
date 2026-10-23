@@ -69,6 +69,11 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
             works come with it, at most three at a time. The first time a change tool is used or
             fails, its note comes with the result. Each note is sent once while the model can still
             see it.</li>
+          <li><b>Checked against your request.</b> Before an answer with cards ends, the code checks
+            that the cards have what you asked for (a constraint, an "only" rule, a fallback,
+            negatives, a tag filter like <code>@{Palette:warm}</code>). If one is missing, the model is asked once to add it or say why not. A tool
+            the model repeats twice in one answer is taken away for the rest of that answer, so it
+            moves on instead of making the same card again.</li>
           <li><b>A progress note.</b> Each later step gets one line saying what the answer has done so
             far.</li>
           <li><b>Shorter memory.</b> The chat is summarised sooner (at half the window for a small
