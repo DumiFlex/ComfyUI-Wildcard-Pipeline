@@ -133,3 +133,91 @@ async def test_an_answer_on_the_last_step_still_gets_the_note(wp_client, fake_ll
     [card] = out["proposals"]
     assert any(o.get("fallback") for o in card["op"]["body"]["payload"]["options"])
     assert "ran out of steps" not in out["message"]
+
+
+async def test_the_same_card_after_the_note_is_told_what_it_lacks(wp_client, fake_llm):
+    # 9B smoke s-tag-filter: three runs answered the note with the same card.
+    _on(fake_llm, model_size="small", tool_format="json")
+    same = {"tool": "create_wildcard", "args": json.dumps(WEAPON)}
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [same]},
+        {"message": "", "calls": [{"tool": "more_tools", "args": json.dumps({"group": "web"})}]},
+        {"message": "", "calls": [same]},
+        {"message": "Proposed Weapon.", "calls": []},
+    ])
+    await _chat(wp_client, ASK)
+    log = " ".join(str(m["content"]) for m in fake_llm.seen[-1]["body"]["messages"])
+    assert "It still lacks a fallback option" in log
+    [tail] = [str(m["content"]) for m in fake_llm.seen[-1]["body"]["messages"]
+              if "check the cards against" in str(m["content"])]
+    assert "don't propose these again" not in tail
+
+
+async def test_a_repeat_before_any_note_gets_the_check(wp_client, fake_llm):
+    # 9B smoke 234bce5 full s42: the same card twice, then constraints;
+    # the note came only at the answer, with create_wildcard closed.
+    _on(fake_llm, model_size="small", tool_format="json")
+    same = {"tool": "create_wildcard", "args": json.dumps(WEAPON)}
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [same]},
+        {"message": "", "calls": [same]},
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(
+            {**WEAPON, "options": [*WEAPON["options"], {"text": "fists", "fallback": True}]})}]},
+        {"message": "Proposed Weapon with a fallback.", "calls": []},
+    ])
+    out = await _chat(wp_client, ASK)
+    log = " ".join(str(m["content"]) for m in fake_llm.seen[-1]["body"]["messages"])
+    assert "It still lacks a fallback option" in log
+    assert "check the cards against the request" not in log
+    assert any(o.get("fallback") for p in out["proposals"]
+               for o in p["op"]["body"]["payload"]["options"])
+
+
+async def test_a_repeat_of_a_card_that_has_it_gets_the_plain_refusal(wp_client, fake_llm):
+    # 234bce5 empty s42: the fixed card sent again was told it lacked the ref.
+    _on(fake_llm, model_size="small", tool_format="json")
+    fixed = {"tool": "create_wildcard", "args": json.dumps(
+        {**WEAPON, "options": [*WEAPON["options"], {"text": "fists", "fallback": True}]})}
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [fixed]},
+        {"message": "", "calls": [fixed]},
+        {"message": "Proposed Weapon with a fallback.", "calls": []},
+    ])
+    await _chat(wp_client, ASK)
+    log = " ".join(str(m["content"]) for m in fake_llm.seen[-1]["body"]["messages"])
+    assert "still lacks" not in log and "you already proposed exactly this" in log
+
+
+async def test_a_card_that_drops_the_asked_feature_is_told(wp_client, fake_llm):
+    # 9B smoke e760fd2 empty s42: the fixed Sky card rewritten back to
+    # plain colours to get rid of a duplicate warning.
+    _on(fake_llm, model_size="small", tool_format="json")
+    good = {**WEAPON, "options": [*WEAPON["options"], {"text": "fists", "fallback": True}]}
+    bad = {**WEAPON, "options": [*WEAPON["options"], {"text": "fists"}]}
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(good)}]},
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(bad)}]},
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(good)}]},
+        {"message": "Proposed Weapon with a fallback.", "calls": []},
+    ])
+    await _chat(wp_client, ASK)
+    log = " ".join(str(m["content"]) for m in fake_llm.seen[-1]["body"]["messages"])
+    assert log.count("This card drops a fallback option") == 1
+
+
+async def test_a_card_resent_with_only_its_tags_changed_still_lacks_it(wp_client, fake_llm):
+    # 9B smoke e760fd2 full s7: Sky re-sent with a category, then with its
+    # option tags flipped, each accepted, never with the ref.
+    _on(fake_llm, model_size="small", tool_format="json")
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(WEAPON)}]},
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(
+            {**WEAPON, "category": "Props"})}]},
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(
+            {**WEAPON, "options": [*WEAPON["options"], {"text": "fists", "fallback": True}]})}]},
+        {"message": "Proposed Weapon with a fallback.", "calls": []},
+    ])
+    await _chat(wp_client, ASK)
+    log = " ".join(str(m["content"]) for m in fake_llm.seen[-1]["body"]["messages"])
+    assert "It still lacks a fallback option" in log
+    assert "check the cards against the request" not in log

@@ -285,7 +285,8 @@ def compile_edit(
                 continue
             nk = _norm_key(text)
             if final_texts.get(nk, oid) != oid:
-                skipped.append({"text": text, "reason": "same as another option"})
+                skipped.append({"text": text, "reason": "same as another option"
+                                + ai_refs.ref_dupe_hint(text)})
                 continue
             final_texts.pop(_norm_key(opt["value"]), None)
             final_texts[nk] = oid

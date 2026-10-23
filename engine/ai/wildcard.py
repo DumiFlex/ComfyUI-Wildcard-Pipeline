@@ -247,7 +247,7 @@ def compile_options(
             continue
         key = _norm_key(text)
         if key in seen:
-            skipped.append({"text": text, "reason": "duplicate"})
+            skipped.append({"text": text, "reason": "duplicate" + ai_refs.ref_dupe_hint(text)})
             continue
         seen.add(key)
 

@@ -1856,6 +1856,15 @@ class Library(MoreTools, ManageTools):
             "retag": {"options": _numbered("retag", "tags")},
             "reweight": {"options": _numbered("weights", "weight")},
         }
+        for raw in asks.values():
+            rows = next(iter(raw.values()))
+            ids = sorted(int(x["id"]) for x in rows if str(x["id"]).isdigit())
+            if not nulls and ids and ids == list(range(len(opts))):
+                # 9B smoke s-tag-filter: a rewrite of all four options as
+                # n 0-3, refused at the last step. Every option, counted
+                # from 0, can only mean 1-4.
+                for x in rows:
+                    x["id"] = str(int(x["id"]) + 1)
         if any(x["id"] == "0" for raw in asks.values() for x in next(iter(raw.values()))):
             # Browser test: "make the blank option rarer" sent n 0, and the
             # card changed another option while leaving the blank alone.
