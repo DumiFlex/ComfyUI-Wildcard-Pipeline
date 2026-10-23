@@ -187,7 +187,7 @@ async def post_thinking(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    return json_ok(await _ai_thinking.describe(cfg))
+    return json_ok(await _ai_thinking.describe(cfg, fresh=True))
 
 
 async def post_test(request: web.Request) -> web.Response:
