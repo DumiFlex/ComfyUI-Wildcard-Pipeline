@@ -95,3 +95,41 @@ async def test_a_forced_answer_still_gets_the_note(wp_client, fake_llm):
     await _chat(wp_client, "Make a Sky wildcard whose options use only warm colours from Palette.")
     told = _told(fake_llm, len(fake_llm.seen) - 1)
     assert told.count("check the cards against the request") == 1
+
+
+async def test_a_step_after_the_card_that_changes_nothing_gets_the_note(wp_client, fake_llm):
+    # 9B smoke d25d274: card, more_tools, open, then the answer, and only
+    # then the note. The note now comes with the first step that changes nothing.
+    _on(fake_llm, model_size="small", tool_format="json")
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(WEAPON)}]},
+        {"message": "", "calls": [{"tool": "more_tools", "args": json.dumps({"group": "web"})}]},
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(
+            {**WEAPON, "options": [*WEAPON["options"], {"text": "fists", "fallback": True}]})}]},
+        {"message": "Proposed Weapon with a fallback.", "calls": []},
+    ])
+    out = await _chat(wp_client, ASK)
+    log = " ".join(str(m["content"]) for m in fake_llm.seen[-1]["body"]["messages"])
+    assert log.count("check the cards against the request") == 1
+    assert log.index("check the cards against the request") < log.index("fists")
+    [card] = out["proposals"]
+    assert any(o.get("fallback") for o in card["op"]["body"]["payload"]["options"])
+
+
+async def test_an_answer_on_the_last_step_still_gets_the_note(wp_client, fake_llm, monkeypatch):
+    # 9B smoke d25d274 full library: the answer came on the last step, so
+    # the note had no step left for the fix and never ran.
+    from engine.ai import chat as ai_chat
+    monkeypatch.setattr(ai_chat, "MAX_STEPS", 2)
+    _on(fake_llm, model_size="small", tool_format="json")
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(WEAPON)}]},
+        {"message": "Proposed Weapon.", "calls": []},
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(
+            {**WEAPON, "options": [*WEAPON["options"], {"text": "fists", "fallback": True}]})}]},
+        {"message": "Proposed Weapon with a fallback.", "calls": []},
+    ])
+    out = await _chat(wp_client, ASK)
+    [card] = out["proposals"]
+    assert any(o.get("fallback") for o in card["op"]["body"]["payload"]["options"])
+    assert "ran out of steps" not in out["message"]
