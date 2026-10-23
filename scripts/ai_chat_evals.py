@@ -33,6 +33,15 @@ USAGE
 -----
     python scripts/ai_chat_evals.py --db PATH [--runs 3] [--only NAME,...]
         [--set default|smoke] [--model NAME] [--out chat-evals.md]
+        [--sampling top_k=20,top_p=0.8,min_p=0,repeat_penalty=1.0]
+        [--write-temp 0.7] [--act-temp 0.15] [--seed 1]
+
+--sampling sets the copy's Settings › AI › Sampling (sent with each
+request, so LM Studio's own settings stay untouched); --write-temp and
+--act-temp override the small and medium profiles' temperatures for the
+run (the reply step and the tool step). --seed sends a fixed sampling seed
+with each request, the same for a scenario's run N in every report, so two
+builds are compared on the same draws (seed + 1000 * run + scenario index).
 
 ``--db`` is the library to copy (default: the one ComfyUI would open).
 Every scenario run starts from a fresh copy of it (and of the examples
@@ -399,6 +408,24 @@ def fresh_copy(work: Path) -> Callable[[], None]:
     return restore
 
 
+#: The seed the next requests carry (``--seed``); None sends none.
+_SEED: list[int | None] = [None]
+
+
+def seed_requests(base: int) -> None:
+    """Add ``_SEED`` to every chat request's sampling fields."""
+    from wp_api import _ai_client
+
+    plain = _ai_client.sampling_fields
+
+    def seeded(cfg: dict[str, Any]) -> dict[str, Any]:
+        out = plain(cfg)
+        return out if _SEED[0] is None else {**out, "seed": _SEED[0]}
+
+    _ai_client.sampling_fields = seeded  # type: ignore[assignment]
+    _SEED[0] = base
+
+
 async def evaluate(scenarios: list[dict[str, Any]], runs: int,
                    partial: Callable[[list[dict[str, Any]]], None] | None = None,
                    fresh: Callable[[], None] | None = None,
@@ -417,10 +444,13 @@ async def evaluate(scenarios: list[dict[str, Any]], runs: int,
     wp_api.register_routes(app)
     rows: list[dict[str, Any]] = []
     async with TestClient(TestServer(app), timeout=ClientTimeout(None)) as client:
+        base = _SEED[0]
         for run in range(1, runs + 1):
-            for sc in scenarios:
+            for i, sc in enumerate(scenarios):
                 if fresh is not None:
                     fresh()
+                if base is not None:
+                    _SEED[0] = base + 1000 * run + i
                 print(f"run {run} · {sc['name']}", flush=True)
                 rows.append({"name": sc["name"], "run": run,
                              "turns": await run_scenario(client, sc)})
@@ -429,6 +459,17 @@ async def evaluate(scenarios: list[dict[str, Any]], runs: int,
         if fresh is not None:
             fresh()  # keeps the last run's library too
     return rows
+
+
+def parse_sampling(text: str) -> dict[str, float]:
+    """"top_k=20,top_p=0.8" as a Sampling patch; ValueError on a bad pair."""
+    out: dict[str, float] = {}
+    for pair in filter(None, (p.strip() for p in text.split(","))):
+        name, sep, value = pair.partition("=")
+        if not sep:
+            raise ValueError(f"--sampling: {pair!r} is not name=value")
+        out[name.strip()] = float(value)
+    return out
 
 
 def main() -> int:
@@ -441,6 +482,13 @@ def main() -> int:
     ap.add_argument("--model", default="")
     ap.add_argument("--note", default="", help="model, chat template, commit")
     ap.add_argument("--out", default="chat-evals.md")
+    ap.add_argument("--sampling", default="", help="name=value,… (Settings › AI › Sampling)")
+    ap.add_argument("--write-temp", type=float, default=None,
+                    help="reply-step temperature for small and medium models")
+    ap.add_argument("--act-temp", type=float, default=None,
+                    help="tool-step temperature for small and medium models")
+    ap.add_argument("--seed", type=int, default=None,
+                    help="fixed sampling seed, so two builds see the same draws")
     args = ap.parse_args()
 
     from engine.ai import config as ai_config
@@ -460,13 +508,27 @@ def main() -> int:
     if args.model:
         ai_config.update({"model": args.model})
         cfg = ai_config.load_effective()
+    if args.sampling:
+        ai_config.update({"sampling": parse_sampling(args.sampling)})
+        cfg = ai_config.load_effective()
+    from engine.ai import budget as ai_budget
+    for size in ("small", "medium"):
+        if args.write_temp is not None:
+            ai_budget.PROFILES[size]["write_temp"] = args.write_temp
+        if args.act_temp is not None:
+            ai_budget.PROFILES[size]["act_temp"] = args.act_temp
+    if args.seed is not None:
+        seed_requests(args.seed)
     if not cfg.get("enabled") or not cfg.get("model"):
         print("The AI assistant is off or has no model. Set it up under Settings › AI "
               "assistant, or pass --model.")
         return 0
     only = {s.strip() for s in args.only.split(",") if s.strip()}
     scenarios = [s for s in SETS[args.set] if not only or s["name"] in only]
-    print(f"Library copy and settings in {work}; model {cfg['model']}", flush=True)
+    print(f"Library copy and settings in {work}; model {cfg['model']}; sampling "
+          f"{cfg.get('sampling') or 'server'}; temps act "
+          f"{ai_budget.PROFILES['small']['act_temp']} write "
+          f"{ai_budget.PROFILES['small']['write_temp']}; seed {args.seed}", flush=True)
     def write(rows: list[dict[str, Any]]) -> None:
         Path(args.out).write_text(report(rows, cfg["model"], args.note), encoding="utf-8")
         Path(args.out).with_suffix(".json").write_text(

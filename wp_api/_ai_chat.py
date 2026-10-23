@@ -1501,7 +1501,8 @@ async def _step_ollama(cfg: dict[str, Any], system: str, log: list[dict[str, Any
         # num_ctx changes, and a reload throws its cache away.
         # num_predict: Ollama has no output cap by default (the others get
         # max_tokens), so a looping model would run until the timeout.
-        "options": {"temperature": temperature, "num_ctx": num_ctx, "num_predict": 8192},
+        "options": {**client.sampling_fields(cfg), "temperature": temperature,
+                    "num_ctx": num_ctx, "num_predict": 8192},
         "messages": openai_messages(system, log, fmt, api="ollama"),
     }
     if cfg.get("thinking") == "off":
@@ -1666,6 +1667,7 @@ async def _step_openai(cfg: dict[str, Any], system: str, log: list[dict[str, Any
         # mid-sentence.
         body["temperature"] = temperature
         body["max_tokens"] = max_tokens
+        body.update(client.sampling_fields(cfg))
     body.update(_thinking_fields(cfg))
     if cfg.get("local"):
         ttl = int(cfg.get("unload_after_s", 60))

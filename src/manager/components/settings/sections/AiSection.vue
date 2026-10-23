@@ -15,7 +15,7 @@ import type { SelectOption } from "../../ui/select-types";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { api } from "../../../api/client";
-import type { AiConfigPatch, AiEmbedApi, AiIndexStatus, AiModelSize, AiProviderId, AiTestResult, AiToolFormat } from "../../../api/types";
+import type { AiConfigPatch, AiEmbedApi, AiIndexStatus, AiModelSize, AiProviderId, AiSamplerId, AiTestResult, AiToolFormat } from "../../../api/types";
 import { useAiConfig } from "../../../composables/useAiConfig";
 import { SUGGESTIONS_SOURCE_NOTE, suggestionsFor } from "../ai-models";
 import { useUiStore } from "../../../stores/uiStore";
@@ -81,7 +81,7 @@ const RESET_LABELS: Record<string, string> = {
   choose_first: "Choose the tool first", allow_delete: "Let the assistant delete items",
   auto_apply: "Apply small changes automatically", web_always_allow: "Don't ask before web calls",
   explainChip: "Show Explain on selected text", chatThinking: "Show thinking",
-  chatNotes: "Show working notes", chatSteps: "Show what it did", chatTyping: "Type out replies",
+  chatNotes: "Show working notes", chatSteps: "Show what it did", chatTyping: "Type out replies", sampling: "Sampling",
 };
 const resetChanges = computed<string[]>(() => {
   const c = config.value;
@@ -89,6 +89,7 @@ const resetChanges = computed<string[]>(() => {
   const server = (Object.keys(RECOMMENDED) as Array<keyof typeof RECOMMENDED>)
     .filter((k) => (c[k] ?? RECOMMENDED[k]) !== RECOMMENDED[k]);
   if ((c.context_max ?? CONTEXT_MIN) < CONTEXT_MIN) server.push("context_max" as never);
+  if (Object.keys(c.sampling ?? {}).length) server.push("sampling" as never);
   const local = (Object.keys(RECOMMENDED_UI) as Array<keyof typeof RECOMMENDED_UI>)
     .filter((k) => ui[k] !== RECOMMENDED_UI[k]);
   return [...server, ...local].map((k) => RESET_LABELS[k] ?? k);
@@ -100,6 +101,8 @@ async function resetToRecommended(): Promise<void> {
   const p: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(RECOMMENDED)) if ((c[k as keyof typeof RECOMMENDED] ?? v) !== v) p[k] = v;
   if ((c.context_max ?? CONTEXT_MIN) < CONTEXT_MIN) p.context_max = CONTEXT_RESET;
+  const samplers = Object.keys(c.sampling ?? {});
+  if (samplers.length) p.sampling = Object.fromEntries(samplers.map((k) => [k, null]));
   if (Object.keys(p).length && !(await patch(p as Parameters<typeof save>[0]))) return;
   ui.setExplainChip(RECOMMENDED_UI.explainChip);
   ui.setChatShow("thinking", RECOMMENDED_UI.chatThinking);
@@ -238,6 +241,48 @@ async function commitContext(): Promise<void> {
   if (!Number.isFinite(n)) { contextDraft.value = config.value?.context_max ?? 16384; return; }
   contextDraft.value = n;
   if (n !== config.value?.context_max) await patch({ context_max: n });
+}
+
+/* ── Sampling ─────────────────────────────────────────────────────────
+ * Optional samplers sent with each request to a local or OpenAI-compatible
+ * server. Empty means the server's own setting for the model. Claude and
+ * OpenAI's own API get none (their newest models refuse them). */
+const SAMPLERS: ReadonlyArray<{ id: AiSamplerId; label: string; min: number; max: number; step: number }> = [
+  { id: "top_k", label: "Top K", min: 0, max: 1000, step: 1 },
+  { id: "top_p", label: "Top P", min: 0, max: 1, step: 0.05 },
+  { id: "min_p", label: "Min P", min: 0, max: 1, step: 0.01 },
+  { id: "repeat_penalty", label: "Repeat penalty", min: 0.5, max: 2, step: 0.05 },
+  { id: "presence_penalty", label: "Presence penalty", min: -2, max: 2, step: 0.1 },
+];
+const samplingDraft = ref<Record<AiSamplerId, number | string>>({
+  top_k: "", top_p: "", min_p: "", repeat_penalty: "", presence_penalty: "",
+});
+watch(() => config.value?.sampling, (v) => {
+  for (const { id } of SAMPLERS) samplingDraft.value[id] = v?.[id] ?? "";
+}, { immediate: true });
+const samplingSends = computed(() => {
+  const c = config.value;
+  return !!c && c.provider !== "anthropic" && c.provider !== "openai";
+});
+async function commitSampler(id: AiSamplerId): Promise<void> {
+  const spec = SAMPLERS.find((x) => x.id === id);
+  const raw = samplingDraft.value[id];
+  const saved = config.value?.sampling?.[id];
+  if (!spec) return;
+  if (raw === "" || raw === null) {
+    if (saved !== undefined) await patch({ sampling: { [id]: null } });
+    return;
+  }
+  let n = Number(raw);
+  if (!Number.isFinite(n)) { samplingDraft.value[id] = saved ?? ""; return; }
+  n = Math.min(spec.max, Math.max(spec.min, spec.step === 1 ? Math.round(n) : n));
+  samplingDraft.value[id] = n;
+  if (n !== saved) await patch({ sampling: { [id]: n } });
+}
+async function clearSampling(): Promise<void> {
+  const saved = config.value?.sampling ?? {};
+  const p = Object.fromEntries(Object.keys(saved).map((k) => [k, null]));
+  if (Object.keys(p).length) await patch({ sampling: p });
 }
 
 const toolFormatOptions: SelectOption[] = [
@@ -1292,6 +1337,44 @@ const off = computed(() => !config.value?.enabled);
             />
           </SettingRow>
           <SettingRow
+            form
+            label="Sampling"
+            recommended="Empty, unless the model's card lists its own"
+            hint="Optional samplers sent with every request for this model. Empty uses the server's own setting (LM Studio's, Ollama's). The assistant still picks the temperature itself, low for tool steps. For Qwen 3.5 and later, top K 20, top P 0.8, min P 0 and repeat penalty 1.0 follow the model card; a presence penalty can make a model copy ids and names less exactly."
+            setting-key="ai-sampling"
+          >
+            <div class="wp-ai-set__sampling">
+            <div class="wp-ai-set__samplers" data-test="ai-sampling">
+              <label v-for="sp in SAMPLERS" :key="sp.id" class="wp-ai-set__sampler">
+                <span>{{ sp.label }}</span>
+                <Input
+                  v-model.number="samplingDraft[sp.id]"
+                  type="number"
+                  :min="sp.min"
+                  :max="sp.max"
+                  :step="sp.step"
+                  placeholder="Server"
+                  class="wp-set-num"
+                  :aria-label="sp.label"
+                  :data-test="`ai-sampler-${sp.id}`"
+                  @blur="commitSampler(sp.id)"
+                  @keydown.enter="commitSampler(sp.id)"
+                />
+              </label>
+            </div>
+            <p v-if="!samplingSends" class="wp-ai-set__muted" data-test="ai-sampling-cloud">
+              Not sent to {{ preset?.label }}: its newest models refuse samplers.
+            </p>
+            <Button
+              v-if="Object.keys(config.sampling ?? {}).length"
+              size="sm"
+              variant="ghost"
+              data-test="ai-sampling-clear"
+              @click="clearSampling"
+            >Use the server's settings</Button>
+            </div>
+          </SettingRow>
+          <SettingRow
             label="Choose the tool first"
             recommended="Off, unless a small model keeps picking the wrong tool"
             hint="Small and medium models on a local server, in JSON steps: each step first names the tool to call, then writes only that tool's arguments. Can help a model that picks the wrong tool; it costs a little time per step. Off by default."
@@ -1459,6 +1542,9 @@ p.wp-ai-set__muted:has(.wp-ai-set__link) { padding: var(--wp-space-2) var(--wp-s
   margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--wp-text-dim);
 }
 .wp-ai-set__muted { color: var(--wp-text-dim); font-size: 12px; }
+.wp-ai-set__sampling { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 100%; }
+.wp-ai-set__samplers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; width: 100%; }
+.wp-ai-set__sampler { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 12px; color: var(--wp-text-dim); }
 .wp-ai-set__reset-list { margin: 3px 0 0; font-size: 12px; color: var(--wp-text-dim); }
 .wp-ai-set__lan { margin: 0; font-size: 12px; line-height: 1.45; color: var(--wp-warn); }
 .wp-ai-set__card code { font-family: var(--wp-font-mono); font-size: 12px; color: var(--wp-text); }

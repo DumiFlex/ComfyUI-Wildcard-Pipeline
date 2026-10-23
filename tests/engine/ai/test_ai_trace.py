@@ -183,3 +183,27 @@ def test_each_run_keeps_its_library_for_the_trace_report(tmp_path):
     runs = sorted((tmp_path / "runs").iterdir())
     assert [p.read_text() for p in runs] == ["run 1", "run 2"]
     assert (tmp_path / "library.db").read_text() == "clean"
+
+
+def test_the_eval_takes_samplers_and_temperatures():
+    evals = _script("ai_chat_evals")
+    assert evals.parse_sampling("top_k=20, top_p=0.8,min_p=0") == {
+        "top_k": 20.0, "top_p": 0.8, "min_p": 0.0}
+    try:
+        evals.parse_sampling("top_k")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("a bare name must be refused")
+
+
+def test_the_eval_seed_rides_every_request(monkeypatch):
+    evals = _script("ai_chat_evals")
+    from wp_api import _ai_client
+
+    monkeypatch.setattr(_ai_client, "sampling_fields", lambda cfg: {"top_k": 20})
+    monkeypatch.setattr(evals, "_SEED", [None])
+    evals.seed_requests(7)
+    assert _ai_client.sampling_fields({}) == {"top_k": 20, "seed": 7}
+    evals._SEED[0] = None
+    assert _ai_client.sampling_fields({}) == {"top_k": 20}

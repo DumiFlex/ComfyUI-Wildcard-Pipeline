@@ -7,7 +7,7 @@ import Select from "../../ui/Select.vue";
 import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODELS, suggestionsFor } from "../ai-models";
 import { api } from "../../../api/client";
 import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
-import type { AiConfig, AiIndexStatus } from "../../../api/types";
+import type { AiConfig, AiConfigPatch, AiIndexStatus, AiSampling } from "../../../api/types";
 
 vi.mock("../../../api/client", () => ({
   api: { ai: { config: vi.fn(), saveConfig: vi.fn(), models: vi.fn(), test: vi.fn(), index: vi.fn(), rebuildIndex: vi.fn() } },
@@ -24,12 +24,19 @@ const PRESETS: AiConfig["presets"] = {
   custom: { label: "Other", api: "openai", local: true, needs_key: false, base_url: "", embeds: true, embed_model: "", embed_note: "" },
 };
 
-function cfg(over: Partial<AiConfig> = {}): AiConfig {
+/** A saved patch's samplers as the config shows them (null = removed). */
+function samplers(p: AiConfigPatch["sampling"]): AiSampling {
+  return Object.fromEntries(Object.entries(p ?? {}).filter(([, v]) => typeof v === "number"));
+}
+
+function cfg(over: Omit<Partial<AiConfig>, "sampling"> & { sampling?: AiConfigPatch["sampling"] } = {}): AiConfig {
+  const { sampling, ...rest } = over;
   return {
     enabled: false, provider: "ollama", base_url: "", model: "", unload_after_s: 60,
     context_max: 16384, model_size: "auto", model_size_auto: "medium", tool_format: "auto", thinking: "auto", allow_delete: false, auto_apply: false, embed_model: "", embed_base_url: "", embed_api: "auto", search_engine: "off", search_url: "", search_keys_saved: [], search_engines: { searxng: { label: "SearXNG", needs_key: false }, brave: { label: "Brave Search", needs_key: true }, tavily: { label: "Tavily", needs_key: true }, kagi: { label: "Kagi", needs_key: true } }, reader_engine: "builtin", reader_url: "", reader_keys_saved: [], reader_engines: { builtin: { label: "Built in (page text)", needs_key: false, needs_url: false, base_url: "" }, crawl4ai: { label: "Crawl4AI (your server)", needs_key: false, needs_url: true, base_url: "" }, firecrawl: { label: "Firecrawl", needs_key: true, needs_url: false, base_url: "https://api.firecrawl.dev" } }, danbooru_lookup: false, web_always_allow: false, key_for_host: null,
     key_set: false, key_from_env: false, keys_saved: [], presets: PRESETS, embed_key_set: false, embed_key_own: false,
-    local: PRESETS[over.provider ?? "ollama"].local, ...over,
+    local: PRESETS[over.provider ?? "ollama"].local, ...rest,
+    ...(sampling ? { sampling: samplers(sampling) } : {}),
   };
 }
 
@@ -275,6 +282,31 @@ describe("Settings › AI assistant", () => {
     await flushPromises();
     expect(w.text()).toContain("only 4k context");
     expect(w.get('[data-test="ai-context-low"]').text()).toContain("loaded with 4k of context");
+  });
+
+  it("saves and clears the optional samplers", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, provider: "lmstudio", model: "m" }));
+    vi.mocked(api.ai.saveConfig).mockImplementation(async (p) =>
+      cfg({ enabled: true, provider: "lmstudio", model: "m", ...p }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    const topK = w.find('[data-test="ai-sampler-top_k"] input');
+    await topK.setValue("20.4");
+    await topK.trigger("blur");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenLastCalledWith({ sampling: { top_k: 20 } });
+    expect(w.find('[data-test="ai-sampling-cloud"]').exists()).toBe(false);
+    await topK.setValue("");
+    await topK.trigger("blur");
+    await flushPromises();
+    expect(api.ai.saveConfig).toHaveBeenLastCalledWith({ sampling: { top_k: null } });
+  });
+
+  it("says Claude gets no samplers", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, provider: "anthropic", model: "m" }));
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    expect(w.find('[data-test="ai-sampling-cloud"]').exists()).toBe(true);
   });
 
   it("saves the tool format", async () => {
