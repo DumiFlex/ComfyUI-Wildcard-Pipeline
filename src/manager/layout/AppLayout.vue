@@ -28,6 +28,7 @@ import { useCascadeStore } from "../cascade/cascade-store";
 import { useGuidedPublishStore } from "../import-export/guided-publish-store";
 import { repairLibraryOnce } from "../import-export/uuid-repair-boot";
 import { api } from "../api/client";
+import { libraryVersion } from "../composables/useLibraryChanged";
 import {
   hashes as libraryHashes,
   bundleHashes as libraryBundleHashes,
@@ -168,6 +169,41 @@ function onVisibilityChange(): void {
 const pageEl = ref<HTMLElement | null>(null);
 usePageWidth(pageEl);
 
+// Which catalogs have loaded at least once. Recently opened is pruned
+// against them only then, so a failed fetch never empties it.
+const catalogsLoaded = { modules: false, bundles: false };
+function fetchModuleCatalog(): Promise<void> {
+  return moduleStore.fetchCatalog().then(() => { catalogsLoaded.modules = true; });
+}
+function fetchBundleCatalog(): Promise<void> {
+  return bundleStore.fetchCatalog().then(() => { catalogsLoaded.bundles = true; });
+}
+function pruneRecent(): void {
+  if (!catalogsLoaded.modules || !catalogsLoaded.bundles) return;
+  recent.prune(new Set([...moduleStore.catalog, ...bundleStore.catalog].map((r) => r.id)));
+}
+
+/** Fetch every library list some page has loaded, after a change the
+ *  drift poll can't be relied on to catch in time (a cascade delete or
+ *  undo, a chat card applied or undone). The stores are the one copy the
+ *  list pages, editors and sidebar read, so refreshing them here keeps
+ *  every page live without each one watching for changes itself. */
+async function refreshLibrary(): Promise<void> {
+  const jobs: Promise<unknown>[] = [
+    fetchModuleCatalog(),
+    fetchBundleCatalog(),
+    templateStore.fetchCatalog(),
+    categoryStore.fetchAll(),
+  ];
+  if (moduleStore.listed) jobs.push(moduleStore.fetchAll());
+  if (bundleStore.listed) jobs.push(bundleStore.fetchAll());
+  if (templateStore.listed) jobs.push(templateStore.fetchAll());
+  await Promise.allSettled(jobs);
+  cascadeStore.rebuildFromCatalogs(moduleStore.catalog, bundleStore.catalog, categoryStore.items);
+  pruneRecent();
+}
+watch(libraryVersion, () => { void refreshLibrary(); });
+
 onMounted(() => {
   window.addEventListener("keydown", onKeydown);
   window.addEventListener("wp:server-restarted", onServerRestarted);
@@ -189,14 +225,15 @@ onMounted(() => {
   // Errors on individual fetches are swallowed — the lazy list-view
   // fetches still run on actual usage if a fetch fails here.
   Promise.all([
-    moduleStore.fetchCatalog().catch(() => undefined),
-    bundleStore.fetchCatalog().catch(() => undefined),
+    fetchModuleCatalog().catch(() => undefined),
+    fetchBundleCatalog().catch(() => undefined),
     templateStore.fetchCatalog().catch(() => undefined),
     categoryStore.fetchAll().catch(() => undefined),
   ]).then(() => {
     cascadeStore.rebuildFromCatalogs(
       moduleStore.catalog, bundleStore.catalog, categoryStore.items,
     );
+    pruneRecent();
     // One-time repair of any pre-existing non-8-hex module/bundle ids (a
     // `coloruni`-style id can't be nested-referenced). Gated + fire-and-forget;
     // refresh the catalogs + cascade index only if it actually rekeyed rows.
@@ -245,11 +282,12 @@ onMounted(() => {
     () => hashesFingerprint(libraryHashes.value),
     (next, prev) => {
       if (prev === undefined || prev === "" || next === prev) return;
-      moduleStore.fetchCatalog()
+      fetchModuleCatalog()
         .then(() => {
           cascadeStore.rebuildFromCatalogs(
             moduleStore.catalog, bundleStore.catalog, categoryStore.items,
           );
+          pruneRecent();
           // Library changed (insert / delete / edit, from ANY surface) —
           // re-run the community update check so per-row pills track
           // reality without a manual refresh: a pill clears after an
@@ -267,11 +305,12 @@ onMounted(() => {
     () => hashesFingerprint(libraryBundleHashes.value),
     (next, prev) => {
       if (prev === undefined || prev === "" || next === prev) return;
-      bundleStore.fetchCatalog()
+      fetchBundleCatalog()
         .then(() => {
           cascadeStore.rebuildFromCatalogs(
             moduleStore.catalog, bundleStore.catalog, categoryStore.items,
           );
+          pruneRecent();
           // See the module-hash watch above — same recheck, for bundle
           // inserts / deletes / edits (#4 / #6).
           void communityUpdateStore.check({

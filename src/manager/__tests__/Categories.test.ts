@@ -12,6 +12,7 @@ vi.mock("../api/client", () => ({
     modules: {
       list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     },
+    cascade_apply: vi.fn(),
   },
   // Re-export ApiError so the SFC's `import { ApiError } from "../api/client"`
   // resolves under the mock.
@@ -20,6 +21,7 @@ vi.mock("../api/client", () => ({
 
 import { api } from "../api/client";
 import Categories from "../views/Categories.vue";
+import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
 
 const apiCat = api.categories as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const apiMod = api.modules as unknown as Record<string, ReturnType<typeof vi.fn>>;
@@ -148,5 +150,23 @@ describe("Categories.vue", () => {
     expect(apiCat.create).toHaveBeenCalledWith(
       expect.objectContaining({ name: "Mood", icon: "moon" }),
     );
+  });
+
+  it("drops a deleted row at once, without a second DELETE", async () => {
+    // The cascade apply already deletes the row on the server. A second
+    // DELETE used to 404 and throw before the row left the list.
+    apiCat.list.mockResolvedValue({
+      items: [{ id: "c1", name: "Style", color: "#ff0000", icon: null, created_at: "", updated_at: "" }],
+    });
+    const cascadeApply = api.cascade_apply as unknown as ReturnType<typeof vi.fn>;
+    cascadeApply.mockResolvedValue({ ok: true, undo_entry_id: "u1", affected_count: 0, diff: [] });
+    const wrap = mount(Categories, { global: { plugins: [] } });
+    await flushPromises();
+    await wrap.find('[data-test="cat-delete-c1"]').trigger("click");
+    wrap.findComponent(ConfirmDialog).vm.$emit("confirm");
+    await flushPromises();
+    expect(cascadeApply).toHaveBeenCalledWith(expect.objectContaining({ kind: "category", id: "c1", action: "delete" }));
+    expect(apiCat.delete).not.toHaveBeenCalled();
+    expect(wrap.find('[data-test="cat-row-c1"]').exists()).toBe(false);
   });
 });

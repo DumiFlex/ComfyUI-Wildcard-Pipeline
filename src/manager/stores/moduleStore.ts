@@ -20,6 +20,9 @@ export const useModuleStore = defineStore("modules", () => {
   const catalog = ref<ModuleRow[]>([]);
   const loading = ref(false);
   const filter = reactive<Filter>({});
+  /** Set once a list view has fetched `items`, so a library refresh only
+   *  re-fetches what some page has already loaded. */
+  const listed = ref(false);
 
   async function fetchAll() {
     loading.value = true;
@@ -31,6 +34,7 @@ export const useModuleStore = defineStore("modules", () => {
       if (filter.favorites) params.favorites = true;
       const res = await api.modules.list(params);
       items.value = res.items;
+      listed.value = true;
     } finally {
       loading.value = false;
     }
@@ -93,6 +97,7 @@ export const useModuleStore = defineStore("modules", () => {
    * list in sync). Calling `remove(id)` here would round-trip a second
    * DELETE and 404. */
   function removeLocal(id: string) {
+    markDeleted([id]);
     items.value = items.value.filter((i) => i.id !== id);
     catalog.value = catalog.value.filter((i) => i.id !== id);
   }
@@ -117,7 +122,7 @@ export const useModuleStore = defineStore("modules", () => {
   const fixedValues = computed(() => items.value.filter((i) => i.type === "fixed_values"));
 
   return {
-    items, catalog, loading, filter,
+    items, catalog, loading, filter, listed,
     fetchAll, fetchCatalog, get, create, update, remove, removeLocal, duplicate, toggleFavorite,
     wildcards, fixedValues,
   };
