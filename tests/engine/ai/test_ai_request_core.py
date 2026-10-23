@@ -75,3 +75,24 @@ def test_the_core_follows_the_request():
 ])
 def test_a_first_step_offers_about_ten(text):
     assert len(ai_tools.shortlist(NAMES, text, "library")) <= 10
+
+
+def test_where_in_a_task_is_not_about_the_page():
+    task = ai_tools.shortlist(NAMES, "Make a Weather wildcard with 5 options where clear sky "
+                              "is the fallback when rules rule out everything else.", "library")
+    assert "open" not in task and "highlight" not in task
+    ask = ai_tools.shortlist(NAMES, "where is the reach setting?", "library")
+    assert {"open", "read_page", "highlight"} <= set(ask)
+
+
+def test_option_tags_in_a_wildcard_ask_bring_no_list_tools():
+    # Smoke s-tag-filter: "tagged warm" offered all six list tools.
+    names = ai_tools.toolset("/library", scoped=True, wide=False)
+    names += [t.name for t in ai_tools.tools(list(ai_tools.BY_NAME))
+              if "lists" in t.groups and t.name not in names]
+    short = ai_tools.shortlist(names, "Make a Palette wildcard with no variable: 4 warm colours "
+                             "tagged warm and 4 cool colours tagged cool.", "/library")
+    assert short is not None and "edit_tags" not in short and "organize" not in short
+    assert len(short) <= 13
+    assert "lists" in ai_tools.groups_for("Add tags to my Hair wildcard")
+    assert "lists" in ai_tools.groups_for("Retag my outfits")

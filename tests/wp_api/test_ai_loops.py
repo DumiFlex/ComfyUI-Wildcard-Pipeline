@@ -1,0 +1,52 @@
+"""A tool the model keeps repeating leaves the grammar for the rest of the
+answer (harness research H2; the 9B re-proposed one Setting card four
+times in smoke s-only, 2026-10-23)."""
+from __future__ import annotations
+
+import json
+
+from tests.wp_api.test_ai_api import _chat
+from tests.wp_api.test_ai_chats import _on
+from tests.wp_api.test_ai_plan_items import _offered
+from tests.wp_api.test_ai_small_models import _kind
+
+SETTING = {"name": "Setting", "var": "setting",
+           "options": [{"text": "beach"}, {"text": "office"}]}
+
+
+def _version(*extra):
+    return {"tool": "create_wildcard", "args": json.dumps(
+        {**SETTING, "options": [*SETTING["options"], *({"text": e} for e in extra)]})}
+
+
+async def test_a_card_rewritten_twice_closes_its_tool(wp_client, fake_llm):
+    _on(fake_llm, model_size="small", tool_format="json")
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [_version()]},
+        {"message": "", "calls": [_version("forest")]},
+        {"message": "", "calls": [_version("forest", "city")]},
+        {"message": "Proposed Setting.", "calls": []},
+    ])
+    n = len(fake_llm.seen)
+    out = await _chat(wp_client, "make a setting wildcard")
+    assert [p["tool"] for p in out["proposals"]] == ["create_wildcard"]
+    acts = [x for x in fake_llm.seen[n:] if "response_format" in x["body"]
+            and _kind(x) == "act"]
+    assert "create_wildcard" in _offered(acts[0])
+    assert "create_wildcard" not in _offered(acts[-1])
+    told = " ".join(str(m["content"]) for m in acts[-1]["body"]["messages"])
+    assert "create_wildcard is closed for the rest of this answer" in told
+
+
+async def test_one_rewrite_keeps_the_tool(wp_client, fake_llm):
+    _on(fake_llm, model_size="small", tool_format="json")
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [_version()]},
+        {"message": "", "calls": [_version("forest")]},
+        {"message": "Proposed Setting.", "calls": []},
+    ])
+    n = len(fake_llm.seen)
+    await _chat(wp_client, "make a setting wildcard")
+    acts = [x for x in fake_llm.seen[n:] if "response_format" in x["body"]
+            and _kind(x) == "act"]
+    assert "create_wildcard" in _offered(acts[-1])

@@ -73,10 +73,16 @@ def timed_out_record(n: int, offered: list[str] | None, seconds: float) -> dict[
 def turn_record(*, steps: list[dict[str, Any]], tail: list[str], short: Any,
                 notes: list[str], refused: dict[str, int], errors: dict[str, int],
                 widened: bool, plan_n: int, model: Any, profile: Any,
-                asks: str = "task") -> dict[str, Any]:
-    """The trace stored with one answer."""
+                asks: str = "task", gaps: list[str] | None = None,
+                closed: Any = None) -> dict[str, Any]:
+    """The trace stored with one answer (`gaps`: what the request check
+    found missing; `closed`: tools taken out of the grammar for looping)."""
     out: dict[str, Any] = {"steps": steps, "tail": list(tail), "model": str(model or ""),
                            "profile": str(profile or "")}
+    if gaps:
+        out["gaps"] = list(gaps)
+    if closed:
+        out["closed"] = sorted(closed)
     if short is not None:
         out["short"] = list(short)
     if notes:
@@ -111,6 +117,8 @@ def summarize(traces: list[dict[str, Any]]) -> dict[str, Any]:
     notes: Counter[str] = Counter()
     tails: Counter[str] = Counter()
     refused: Counter[str] = Counter()
+    gaps: Counter[str] = Counter()
+    closed: Counter[str] = Counter()
     out: dict[str, Any] = {"answers": 0, "steps": 0, "shortlisted": 0, "widened": 0,
                            "more_tools": 0, "docs": 0, "rereads": 0, "prompt_tokens": 0,
                            "cached_tokens": 0, "thought_tokens": 0, "timed_out": 0,
@@ -145,11 +153,15 @@ def summarize(traces: list[dict[str, Any]]) -> dict[str, Any]:
         notes.update(tr.get("notes") or [])
         tails.update(tr.get("tail") or [])
         refused.update(tr.get("refused") or {})
+        gaps.update(tr.get("gaps") or [])
+        closed.update(tr.get("closed") or [])
     out["more_tools"] = called.get("more_tools", 0)
     out["docs"] = called.get("explain", 0) + called.get("docs_search", 0)
     out["called"] = dict(called.most_common())
     out["notes"] = dict(notes.most_common())
     out["tail"] = dict(tails.most_common())
     out["refused"] = dict(refused.most_common(15))
+    out["gaps"] = dict(gaps.most_common())
+    out["closed"] = dict(closed.most_common())
     out["seconds"] = round(out["seconds"], 1)
     return out

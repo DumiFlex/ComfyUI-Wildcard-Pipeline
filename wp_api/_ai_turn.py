@@ -25,6 +25,7 @@ from engine.ai import narrow as ai_narrow
 from engine.ai import plan_items as ai_plan
 from engine.ai import react as ai_react
 from engine.ai import recipes as ai_recipes
+from engine.ai import request_check as ai_request_check
 from engine.ai import safety as ai_safety
 from engine.ai import tools as ai_tools
 from engine.ai import trace as ai_trace
@@ -221,6 +222,9 @@ class _Turn:
     refused: dict[str, int] = field(default_factory=dict)
     forced: bool = False
     checked: bool = False
+    #: The cards were checked against the request (`request_check`), once.
+    gap_checked: bool = False
+    gaps: list[str] = field(default_factory=list)
     nudged: bool = False
     #: The step whose create calls were turned to plan_pack (`PACK_FIRST`).
     steered_at: int | None = None
@@ -243,6 +247,11 @@ class _Turn:
     queue_told: bool = False
     #: Change calls proposed in this request, by their exact args: the card's pid.
     proposed: dict[str, str] = field(default_factory=dict)
+    #: Repeats per tool (exact calls answered by `_repeated`, cards that
+    #: replaced their own earlier version) and the tools taken out of the
+    #: grammar for the rest of the answer for looping (`_loop_check`).
+    loops: dict[str, int] = field(default_factory=dict)
+    closed: set[str] = field(default_factory=set)
     #: Ask the next step with the model's thinking off: set by the empty
     #: nudge, since a thinking model that came back empty once tends to
     #: think itself out of an answer again.
@@ -783,9 +792,30 @@ def _offer(t: _Turn) -> tuple[list[Any] | None, bool]:
             follow |= set(ai_tools.DOCS_TOOLS)
         if t.asks_kind != "task":
             follow = {n for n in follow if ai_tools.looks(n)}
-        return ai_tools.tools([n for n in t.meta["tools"]
-                               if n in t.short or n in t.called or n in follow]), False
+        return ai_tools.tools([n for n in t.meta["tools"] if n not in t.closed
+                               and (n in t.short or n in t.called or n in follow)]), False
+    if t.closed:
+        return ai_tools.tools([n for n in t.meta["tools"] if n not in t.closed]), False
     return None, False
+
+
+#: Repeats of one tool in an answer before it leaves the grammar.
+MAX_LOOPS = 2
+
+
+def _loop_check(t: _Turn, tool: str) -> str:
+    """Count a repeat of `tool`; at MAX_LOOPS it leaves the grammar for the
+    rest of the answer (harness research H2: Mingbird's anti-loop; the 9B
+    re-proposed the same Setting card four times in smoke s-only). Not in a
+    plan run, where the same tool on the next item is the point. Returns
+    the line that tells the model."""
+    t.loops[tool] = t.loops.get(tool, 0) + 1
+    if t.loops[tool] < MAX_LOOPS or tool in t.closed or tool == "more_tools" \
+            or (t.queue is not None and t.queue.active):
+        return ""
+    t.closed.add(tool)
+    return (f"\n({tool} is closed for the rest of this answer: you repeated it. Answer "
+            "with what you have, or do the next part of the request with another tool.)")
 
 
 def _narrowed(t: _Turn, offer: list[Any] | None) -> list[Any] | None:
@@ -1012,6 +1042,11 @@ class _Calls:
         self.items.append({"id": call["id"], "tool": call["tool"],
                            "text": ai_safety.strip_invisible(out)})
 
+    def add_to_last(self, text: str) -> None:
+        """Append `text` to the result just given (a note on the call)."""
+        if text and self.items:
+            self.items[-1]["text"] += ai_safety.strip_invisible(text)
+
 
 async def _run_call(t: _Turn, run: _Calls, at: int, call: dict[str, Any]) -> None:
     """Run one call of the step: a plan, a refusal, a pause for the
@@ -1063,6 +1098,7 @@ async def _run_call(t: _Turn, run: _Calls, at: int, call: dict[str, Any]) -> Non
             raise ValueError(PACK_FIRST)
         key = tool + _json.dumps(args, sort_keys=True, ensure_ascii=False)
         if _repeated(t, run, call, key):
+            run.add_to_last(_loop_check(t, call["tool"]))
             return
         t.seen.add(key)
         if t.errors.get(tool, 0) >= 3 and not (t.queue is not None and t.queue.active):
@@ -1290,7 +1326,8 @@ def _add_card(t: _Turn, run: _Calls, call: dict[str, Any], args: dict[str, Any],
         gone = t.meta["proposals"].get(out["replaces"])
         if gone is not None:
             t.meta["proposals"][out["replaces"]] = {**gone, "status": "replaced"}
-    run.result(call, ai_chat.proposal_note(tool, out) + extra + _tool_card(t, tool))
+    run.result(call, ai_chat.proposal_note(tool, out) + extra + _tool_card(t, tool)
+               + (_loop_check(t, tool) if twin else ""))
     if twin:
         out.pop("replaces")  # the user never saw the card it replaces
     out.pop("absorbs", None)
@@ -1373,6 +1410,19 @@ def _settle(t: _Turn, said: str, calls: list[dict[str, Any]], cut: bool,
     # The stalled question isn't the answer, unless nothing better comes.
     if can_nudge and not proposals and ai_chat.stalls(said, t.text, t.last_answer):
         return _nudge(t, said, ai_chat.GO_NUDGE)
+    # The request asks for a feature no card has (a constraint, an
+    # "only" rule, a fallback, negatives): ask once, before the test, so
+    # the test covers it. Not in a plan run, whose items are the ask.
+    missing = (ai_request_check.gaps(t.text or "", proposals)
+               if not calls and not t.gap_checked and t.step < t.cap and not t.plan_n
+               and not t.forced else [])
+    if missing:
+        t.gap_checked = True
+        t.gaps = missing
+        note = ai_request_check.nudge(missing, t.text or "")
+        t.new.append(ai_chatlog.results_entry(items, "\n\n" + note) if items
+                     else ai_chatlog.note_entry(note))
+        return _NEXT
     # Changes were proposed but never tried: ask for one check
     # before the answer stands, so "done" means it ran.
     if (not t.checked and t.step < t.cap
@@ -1489,7 +1539,7 @@ def _trace(t: _Turn) -> dict[str, Any]:
     return ai_trace.turn_record(
         steps=t.trace, tail=t.tail_kinds, short=t.short, notes=notes, refused=t.refused,
         errors=t.errors, widened=t.widened, plan_n=t.plan_n, model=t.cfg.get("model"),
-        profile=t.prof.get("size"), asks=t.asks_kind)
+        profile=t.prof.get("size"), asks=t.asks_kind, gaps=t.gaps, closed=t.closed)
 
 
 async def _close(t: _Turn) -> web.Response:
