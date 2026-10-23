@@ -25,6 +25,7 @@ from engine.ai import react as ai_react
 from engine.ai import recipes as ai_recipes
 from engine.ai import safety as ai_safety
 from engine.ai import tools as ai_tools
+from engine.ai import trace as ai_trace
 from engine.ai.step_fields import strip_step_fields
 from engine.db.repositories import (
     BundleRepository,
@@ -254,6 +255,12 @@ class _Turn:
     read_budget: int = 0
     last_answer: str = ""
     usage: dict[str, Any] = field(default_factory=dict)
+    #: The tail blocks the user's message carried (`ai_trace.TAIL_KINDS`).
+    tail_kinds: list[str] = field(default_factory=list)
+    #: The tools the current step's grammar offers (None: all of the chat's).
+    offered: list[str] | None = None
+    #: One record per model step (`ai_trace.step_record`).
+    trace: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def text(self) -> Any:
@@ -594,6 +601,7 @@ async def _prepare(
               and _ai_chat.checks_schema(cfg) and _splits(cfg, meta, fmt))
     short = ai_tools.shortlist(meta["tools"], text, route) if guided else None
     plan_n = ai_plan.multi_ask(text) if guided and not _PACK_ASK.search(text) else 0
+    tail_kinds: list[str] = []
     if plan_n and not any(n in ai_plan.PLANNABLE for n in meta["tools"]):
         plan_n = 0
     if not ask.resume:
@@ -610,6 +618,10 @@ async def _prepare(
             if text and _splits(cfg, meta, fmt) else ""
         steps_hint = ai_recipes.recipe(text) if text and not plan_n \
             and _splits(cfg, meta, fmt) else ""
+        tail_kinds = ai_trace.tail_kinds({
+            "since": since, "changes": changes, "perms": perms, "images": pics, "page": note,
+            "library": hints, "model": model, "examples": shown_examples,
+            "recipe": steps_hint, "plan": plan_hint})
         sent = ai_safety.strip_invisible(
             "\n\n".join(x for x in (since, changes, perms, text, pics, note, hints, model,
                                     shown_examples, steps_hint, plan_hint) if x))
@@ -626,7 +638,7 @@ async def _prepare(
         fixed=fixed, window=window, num_ctx=num_ctx, retried_from=retried_from, new=new,
         fp_now=fp_now, plan_n=plan_n, short=short, first_done=first_done, step=step,
         deadline=loop.time() + (TURN_SECONDS_LOCAL if cfg.get("local") else TURN_SECONDS),
-        steps=first_steps, cap=ai_chat.MAX_STEPS, limit=ai_chat.MAX_STEPS,
+        steps=first_steps, cap=ai_chat.MAX_STEPS, limit=ai_chat.MAX_STEPS, tail_kinds=tail_kinds,
         sent_steps=len(first_steps), read_budget=ai_chat.read_budget(prof["size"]),
         last_answer=ai_chatlog.last_reply(log),
     )
@@ -694,6 +706,7 @@ async def _model_step(t: _Turn) -> dict[str, Any] | str | web.Response:
     if t.emit:
         await t.emit({"type": "step", "n": t.step + 1})
     offer, must_call = _offer(t)
+    t.offered = [x.name for x in offer] if offer is not None else None
     cfg = t.cfg
     try:
         return await asyncio.wait_for(
@@ -790,6 +803,7 @@ async def _step(t: _Turn) -> str | web.Response:
     t.ran += 1
     t.usage = usage = st["usage"]
     calls = st["calls"][:ai_chat.MAX_CALLS_PER_STEP]
+    t.trace.append(ai_trace.step_record(t.step, t.offered, calls, usage))
     said = _said(t, st, calls)
     dropped = len(st["calls"]) - len(calls)
     # How the model called its tools this answer, for the drawer's badge.
@@ -846,6 +860,8 @@ async def _step(t: _Turn) -> str | web.Response:
     made_before = len(t.proposals)
     for at, call in enumerate(calls):
         await _run_call(t, run, at, call)
+    if run.repeats:
+        t.trace[-1]["repeats"] = run.repeats
     if t.queue is not None and t.queue.active and not run.planned_now:
         t.queue.after_step(len(t.proposals) > made_before)
     if t.emit:
@@ -1354,6 +1370,15 @@ def _claim_notes(t: _Turn) -> None:
     t.message = t.lib.link_items(message)
 
 
+def _trace(t: _Turn) -> dict[str, Any]:
+    """What this request offered the model and what it did (`engine/ai/trace.py`)."""
+    notes = [str(e.get("text") or "") for e in t.new if e.get("kind") == "note"]
+    return ai_trace.turn_record(
+        steps=t.trace, tail=t.tail_kinds, short=t.short, notes=notes, refused=t.refused,
+        errors=t.errors, widened=t.widened, plan_n=t.plan_n, model=t.cfg.get("model"),
+        profile=t.prof.get("size"))
+
+
 async def _close(t: _Turn) -> web.Response:
     """The answer's closing lines, then the chat stored with this turn and
     the reply the drawer shows."""
@@ -1386,7 +1411,7 @@ async def _close(t: _Turn) -> web.Response:
     # reads it).
     t.new.append(ai_chatlog.shown_entry({k: out[k] for k in (
         "message", "proposals", "steps", "refs", "model", "pending", "format", "tool_use",
-        "elapsed_ms", "reaction") if k in out}))
+        "elapsed_ms", "reaction") if k in out}, trace=_trace(t)))
     out["context"] = _context(t.cfg, meta, t.log + t.new, t.fixed, t.usage, t.window)
     chat = t.chat
     with db_session(t.request) as conn:

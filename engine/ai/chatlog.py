@@ -120,8 +120,13 @@ def step_entry(text: str, calls: list[dict[str, Any]], *, answer: Any = None,
     return out
 
 
-def shown_entry(view: dict[str, Any]) -> dict[str, Any]:
-    return {"kind": "shown", "view": view}
+def shown_entry(view: dict[str, Any], trace: dict[str, Any] | None = None) -> dict[str, Any]:
+    """What the user saw; `trace` is what the answer offered the model
+    (`engine/ai/trace.py`), kept for `scripts/ai_trace_report.py`."""
+    out: dict[str, Any] = {"kind": "shown", "view": view}
+    if trace:
+        out["trace"] = trace
+    return out
 
 
 def last_shown(entries: list[dict[str, Any]]) -> str:
