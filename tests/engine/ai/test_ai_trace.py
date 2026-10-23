@@ -141,3 +141,45 @@ def test_each_eval_run_gets_a_fresh_library(tmp_path):
     assert not (tmp_path / "library.db-wal").exists()
     assert not (tmp_path / "ai-examples.json").exists()
     assert not (tmp_path / "wildcard-pipeline.ai-index.db").exists()
+
+
+def test_summarize_counts_questions_and_the_first_offer():
+    rec = ai_trace.turn_record(steps=[ai_trace.step_record(1, ["search", "read"], [], {})], tail=[],
+                            short=None, notes=[], refused={}, errors={}, widened=False,
+                            plan_n=0, model="m", profile="small", asks="question")
+    assert rec["asks"] == "question"
+    task = ai_trace.turn_record(steps=[ai_trace.step_record(
+        1, ["search", "read", "create_wildcard"], [{"tool": "create_wildcard"}], {})], tail=[],
+        short=None, notes=[], refused={}, errors={}, widened=False, plan_n=0, model="m",
+        profile="small")
+    assert "asks" not in task
+    total = ai_trace.summarize([rec, task])
+    assert total["questions"] == 1 and total["question_changes"] == 0
+    assert total["first_offered"] == 3
+
+
+def test_the_smoke_checks_read_compiled_refs():
+    evals = _script("ai_chat_evals")
+    checks = {s["name"]: s["check"][1] for s in evals.SMOKE
+              if s["name"] in ("s-refs", "s-tag-filter")}
+
+    def card(text):
+        return {"proposals": [{"op": {"body": {"payload": {"options": [{"value": text}]}}}}]}
+
+    assert checks["s-refs"](card("a @{0a1b2c3d#Colors} jacket"))
+    assert checks["s-tag-filter"](card("a @{0a1b2c3d#Palette:warm} sky"))
+    assert not checks["s-tag-filter"](card("a @{0a1b2c3d#Palette} sky"))
+
+
+def test_each_run_keeps_its_library_for_the_trace_report(tmp_path):
+    evals = _script("ai_chat_evals")
+    (tmp_path / "library.db").write_text("clean")
+    restore = evals.fresh_copy(tmp_path)
+    restore()  # before the first run: nothing to keep
+    (tmp_path / "library.db").write_text("run 1")
+    restore()
+    (tmp_path / "library.db").write_text("run 2")
+    restore()
+    runs = sorted((tmp_path / "runs").iterdir())
+    assert [p.read_text() for p in runs] == ["run 1", "run 2"]
+    assert (tmp_path / "library.db").read_text() == "clean"

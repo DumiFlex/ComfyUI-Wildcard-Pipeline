@@ -44,8 +44,15 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
           <li><b>Fewer tools at a time.</b> The model starts with the tools for the page you're on
             (medium models also get the wildcard, rule, constraint and test tools everywhere) and
             loads more one group at a time. On a local server each step also offers a shortlist of
-            tools that fit your message. Every tool says when to use it, which look-alike to use
-            instead, and shows a sample call.</li>
+            tools that fit your message, plus the tools that usually come next (after a search,
+            read; after reading a wildcard, its edit tools; after a card, the test). A question
+            gets the docs and the reading tools but no tools that change things, so it gets an
+            answer, not a card. Every tool says when to use it, which look-alike to use instead,
+            and shows a sample call.</li>
+          <li><b>Only real items.</b> With JSON steps, a tool call can only name items that exist,
+            and an edit can only name items you pointed at in the chat (or ones it read when you
+            asked for a change), so the model can't invent an id or change the wrong item. A
+            server that can't take these lists gets the plain format.</li>
           <li><b>Decide, then write.</b> Each step first decides what to call next, then writes the
             reply with the tools out of reach, so it can't stop halfway to ask. Tool steps run with
             thinking off.</li>
