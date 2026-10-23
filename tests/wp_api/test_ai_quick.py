@@ -9,7 +9,7 @@ from engine.ai import refs as ai_refs
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_edit
 from tests.wp_api.test_ai_chats import _cfg, _sse, streamer  # noqa: F401
-from wp_api import _ai_chat, _ai_client, _ai_progress
+from wp_api import _ai_chat, _ai_client, _ai_progress, _ai_thinking
 
 _SCHEMA = {"type": "object", "properties": {"ok": {"type": "boolean"}}}
 _OK = {"choices": [{"message": {"content": '{"ok": true}'}, "finish_reason": "stop"}]}
@@ -86,9 +86,13 @@ async def test_a_model_that_refuses_the_off_switch_is_asked_as_is_from_then_on(s
 
 async def test_watchdog_stops_long_thinking_and_asks_without(streamer, monkeypatch):  # noqa: F811
     monkeypatch.setattr(_ai_client, "QUICK_THINK_CHARS", 300)
-    cfg = _local(streamer)
-    # This model once refused the switch, so the first ask lets it think.
-    _ai_client._QUICK_OFF_REFUSED.add((cfg["base_url"], cfg["model"]))
+
+    async def as_is(cfg_):
+        return cfg_
+
+    monkeypatch.setattr(_ai_thinking, "fitted", as_is)
+    # Thinking on: the first ask lets it think.
+    cfg = _local(streamer, thinking="on")
     streamer.state["body"] = _sse(
         *[{"choices": [{"delta": {"reasoning_content": "Wait, let me check. "}}]}] * 40,
         {"choices": [{"delta": {"content": '{"ok": false}'}, "finish_reason": "stop"}]},
@@ -114,11 +118,38 @@ async def test_watchdog_stops_long_thinking_and_asks_without(streamer, monkeypat
         _ai_progress.current.reset(token)
         _ai_progress.finish("quick-watch-1")
     assert answer == {"ok": True}
-    assert "reasoning_effort" not in seen[0]
+    assert seen[0]["reasoning_effort"] == "medium"
     assert seen[0]["max_tokens"] == _ai_client.THINKING_MAX_TOKENS
     assert seen[1]["reasoning_effort"] == "none" and seen[1]["max_tokens"] == 700
     assert (cfg["base_url"], cfg["model"]) in _ai_client._JSON_THINK_OFF
     assert _ai_progress.view("quick-watch-1")["calls"] == 2
+
+
+async def test_an_ignored_off_switch_gets_room_to_think_from_then_on(streamer):  # noqa: F811
+    thought = {"choices": [{"message": {"content": "", "reasoning_content": "hmm " * 50},
+                            "finish_reason": "length"}]}
+    seen = streamer.state["seen"]
+    real = _ai_client._answer
+
+    async def fake(cfg_, path, body, kind, **kw):
+        streamer.state["plain"] = thought if len(seen) == 0 else _OK
+        return await real(cfg_, path, body, kind, **kw)
+
+    _ai_client._answer = fake
+    try:
+        cfg = _local(streamer)
+        answer = await _ai_client.complete_json(cfg, system="s", user="u", schema=_SCHEMA,
+                                                schema_name="t", max_tokens=700, quick=True)
+        assert answer == {"ok": True}
+        assert seen[0]["reasoning_effort"] == "none" and seen[0]["max_tokens"] == 700
+        assert "reasoning_effort" not in seen[1]
+        assert seen[1]["max_tokens"] == _ai_client.THINKING_MAX_TOKENS
+        await _ai_client.complete_json(cfg, system="s", user="u", schema=_SCHEMA,
+                                       schema_name="t", max_tokens=700, quick=True)
+        assert "reasoning_effort" not in seen[2]
+        assert seen[2]["max_tokens"] == _ai_client.THINKING_MAX_TOKENS
+    finally:
+        _ai_client._answer = real
 
 
 async def test_progress_counts_thinking(streamer, monkeypatch):  # noqa: F811

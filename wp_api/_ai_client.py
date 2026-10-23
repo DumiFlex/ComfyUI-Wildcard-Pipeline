@@ -814,7 +814,10 @@ async def _complete_json(
             body["max_tokens"] = max(max_tokens, THINKING_MAX_TOKENS)
         try:
             try:
-                watch = {"meter": _meter(QUICK_THINK_CHARS)} if quick and not thinks_off else {}
+                # Not for a model whose switch doesn't work: stopping it
+                # would only ask again the same way.
+                watch = ({"meter": _meter(QUICK_THINK_CHARS)}
+                         if quick and not thinks_off and key not in _QUICK_OFF_REFUSED else {})
                 data = await _answer(cfg, "/chat/completions", body, "openai", **watch)
             except _Overthought:
                 # Still thinking, no answer begun: ask again with the off
@@ -854,7 +857,23 @@ async def _complete_json(
         if message.get("refusal"):
             raise AIError("the model declined this request", status=422)
         cut = choices[0].get("finish_reason") == "length" or _early(data)
-        if cut and not think_keys and _all_thought(message):
+        if cut and quick and thinks_off and _all_thought(message):
+            # The off switch was sent and the model thought anyway (LM Studio
+            # ignored it for Qwen3.5 9B in 0.4.15, bug tracker #1990): the
+            # answer's own limit went on thinking. Ask once more with room
+            # to think, and send its quick answers that way from now on.
+            _QUICK_OFF_REFUSED.add(key)
+            _JSON_THINK_OFF.discard(key)
+            for k in think_keys:
+                body.pop(k, None)
+            body["max_tokens"] = max(max_tokens, THINKING_MAX_TOKENS)
+            data = await _answer(cfg, "/chat/completions", body, "openai")
+            choices = data.get("choices") if isinstance(data, dict) else None
+            if not choices or not isinstance(choices[0], dict):
+                raise AIError("the model didn't return an answer")
+            message = choices[0].get("message") or {}
+            cut = choices[0].get("finish_reason") == "length" or _early(data)
+        elif cut and not think_keys and _all_thought(message):
             # The model spent its whole output limit thinking (a 9B under
             # LM Studio with thinking on lost 32 of 39 pack plans this
             # way): ask once more with the server's off switch, and keep
@@ -883,8 +902,9 @@ async def _complete_json(
 #: (base_url, model) pairs whose JSON answer was once all reasoning: their
 #: JSON calls (plans, items, panels) go with the thinking switch off.
 _JSON_THINK_OFF: set[tuple[str, str]] = set()
-#: (base_url, model) pairs that refused the off switch a quick answer sent
-#: on Auto (a model that must reason): their quick answers go as they are.
+#: (base_url, model) pairs whose off switch a quick answer can't use: the
+#: server refused it (a model that must reason) or ignored it. Their quick
+#: answers go as they are, with room to think and no watchdog.
 _QUICK_OFF_REFUSED: set[tuple[str, str]] = set()
 
 
