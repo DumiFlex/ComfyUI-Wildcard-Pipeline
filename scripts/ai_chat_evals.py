@@ -493,6 +493,8 @@ def main() -> int:
                     help="reply-step temperature for small and medium models")
     ap.add_argument("--act-temp", type=float, default=None,
                     help="tool-step temperature for small and medium models")
+    ap.add_argument("--lean", action="store_true",
+                    help="lean prompt: one line per tool (Settings › AI › Advanced)")
     ap.add_argument("--seed", type=int, default=None,
                     help="fixed sampling seed, so two builds see the same draws")
     args = ap.parse_args()
@@ -527,6 +529,9 @@ def main() -> int:
     if args.sampling:
         ai_config.update({"sampling": parse_sampling(args.sampling)})
         cfg = ai_config.load_effective()
+    if args.lean:
+        ai_config.update({"lean_prompt": True})
+        cfg = ai_config.load_effective()
     from engine.ai import budget as ai_budget
     for size in ("small", "medium"):
         if args.write_temp is not None:
@@ -545,7 +550,8 @@ def main() -> int:
           f"{cfg.get('sampling') or 'server'}; temps act "
           f"{ai_budget.PROFILES['small']['act_temp']} write "
           f"{ai_budget.PROFILES['small']['write_temp']}; seed {args.seed}"
-          + ("; empty library" if args.empty else ""), flush=True)
+          + ("; empty library" if args.empty else "")
+          + ("; lean prompt" if args.lean else ""), flush=True)
     def write(rows: list[dict[str, Any]]) -> None:
         Path(args.out).write_text(report(rows, cfg["model"], args.note), encoding="utf-8")
         Path(args.out).with_suffix(".json").write_text(

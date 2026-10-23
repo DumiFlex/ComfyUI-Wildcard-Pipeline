@@ -547,16 +547,29 @@ def tools_section(names: list[str] | None = None) -> str:
     return kinds_section(chosen) + "\n"
 
 
-def kinds_section(chosen: list[Any]) -> str:
+#: Under the lean prompt's one-line tool list.
+INDEX_NOTE = ("Each tool's arguments and an example come with the step that first offers "
+              "it, under \"Tools for this step\".")
+
+
+def index_section(names: list[str] | None = None) -> str:
+    """The lean prompt's tool list: one line per tool (`lean_prompt`)."""
+    chosen = ai_tools.tools(names if names is not None
+                            else ai_tools.toolset(None, scoped=False))
+    return kinds_section(chosen, index=True) + INDEX_NOTE + "\n"
+
+
+def kinds_section(chosen: list[Any], *, index: bool = False) -> str:
     """Tools grouped by what they do, for the JSON-mode prompt and
-    `more_tools`."""
+    `more_tools`; `index`: one line each, no arguments or example."""
+    lines_of = ai_tools.index_lines if index else ai_tools.prompt_lines
     out = ""
     for kind, head in (("read", "Read tools"),
                        ("change", "Change tools (each becomes a proposal)"),
                        ("client", "Page tools (run in the user's browser; you get the result)"),
                        ("web", "Web tools (the user allows each query first)"),
                        ("ask", "Questions (shown in the chat; you get the user's answers)")):
-        lines = ai_tools.prompt_lines(chosen, kind)
+        lines = lines_of(chosen, kind)
         if lines:
             out += ("\n" if out else "") + head + ":\n" + lines + "\n"
     return out
@@ -628,7 +641,7 @@ assert _NATIVE_DONE in FORMAT_NATIVE
 
 def system_prompt(*, slim: bool = False, examples: bool = True, native: bool = False,
                   tools: list[str] | None = None, typed: bool = False,
-                  prose: bool = True, split: bool = False) -> str:
+                  prose: bool = True, split: bool = False, index: bool = False) -> str:
     """The chat's instructions. `slim` (small models) keeps the tools and
     the core guide but leaves out the coherence notes and the docs and page
     tables (docs_search still finds pages), about a third shorter.
@@ -638,7 +651,9 @@ def system_prompt(*, slim: bool = False, examples: bool = True, native: bool = F
     checks against each tool's schema (`ai_tools.step_schema`). `prose`
     False (the leanest level): the short closing rules (SYSTEM_TAIL_SHORT).
     `split` (native): steps are asked in two parts, so the model finishes
-    by calling `answer` (`_ai_chat.split_step`)."""
+    by calling `answer` (`_ai_chat.split_step`). `index` (JSON mode, the
+    `lean_prompt` setting): one line per tool; each tool's docs go in the
+    tail of the step that first offers it (`_ai_turn._tool_docs`)."""
     pages = "\n".join(f"- {k}: {v}" for k, v in APP_PAGES.items())
     if native:
         fmt = FORMAT_NATIVE.replace(_NATIVE_DONE, _NATIVE_DONE_SPLIT) if split \
@@ -646,7 +661,8 @@ def system_prompt(*, slim: bool = False, examples: bool = True, native: bool = F
         head = SYSTEM_INTRO + fmt + "\n"
         shown = ai_guide.EXAMPLES_CHAT_NATIVE if examples else ""
     else:
-        head = SYSTEM_INTRO + _format_json(typed) + "\n" + tools_section(tools)
+        head = SYSTEM_INTRO + _format_json(typed) + "\n" + (
+            index_section(tools) if index else tools_section(tools))
         shown = (ai_guide.EXAMPLES_CHAT_TYPED if typed else ai_guide.EXAMPLES_CHAT) \
             if examples else ""
     tail = SYSTEM_TAIL if prose else SYSTEM_TAIL_SHORT

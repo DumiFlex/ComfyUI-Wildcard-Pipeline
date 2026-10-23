@@ -346,6 +346,7 @@ def _system_text(prof: dict[str, Any], meta: dict[str, Any], fmt: str, snapshot:
         examples=_lean(meta).get("examples", True), prose=_lean(meta).get("prose", True),
         typed=fmt == "json" and bool(meta.get("typed")),
         split=fmt == "native" and bool(meta.get("split")),
+        index=fmt == "json" and bool(meta.get("tool_index")),
     ) + _LIBRARY_HEAD + snapshot
 
 

@@ -151,6 +151,10 @@ DEFAULTS: dict[str, Any] = {
     # first, then write only its arguments (Settings › AI assistant ›
     # Advanced; an experiment, off by default).
     "choose_first": False,
+    # Small models in JSON steps: the instructions list each tool in one
+    # line, and a tool's arguments and example come with the step that
+    # first offers it (Settings › AI assistant › Advanced; off by default).
+    "lean_prompt": False,
 }
 #: Optional samplers sent with every request to a local or
 #: OpenAI-compatible server (Settings › AI assistant › Advanced): name →
@@ -365,6 +369,7 @@ def _normalize(raw: Any) -> dict[str, Any]:
         "danbooru_lookup": src.get("danbooru_lookup") is True,
         "web_always_allow": src.get("web_always_allow") is True,
         "choose_first": src.get("choose_first") is True,
+        "lean_prompt": src.get("lean_prompt") is True,
     }
 
 
@@ -434,6 +439,7 @@ def _active(cfg: dict[str, Any]) -> dict[str, Any]:
         "danbooru_lookup": cfg["danbooru_lookup"],
         "web_always_allow": cfg["web_always_allow"],
         "choose_first": cfg["choose_first"],
+        "lean_prompt": cfg["lean_prompt"],
         "embed_model": slot["embed_model"],
         "embed_base_url": slot["embed_base_url"],
         "embed_api": slot["embed_api"],
@@ -678,7 +684,7 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
     with _lock:
         cfg = _read()
         for flag in ("enabled", "allow_delete", "auto_apply", "danbooru_lookup",
-                     "web_always_allow", "choose_first"):
+                     "web_always_allow", "choose_first", "lean_prompt"):
             if flag in patch:
                 if not isinstance(patch[flag], bool):
                     raise ConfigError(f"{flag} must be true or false")

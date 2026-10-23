@@ -226,6 +226,12 @@ def prompt_lines(tools: list[Tool], kind: str) -> str:
     return "\n".join(out)
 
 
+def index_lines(tools: list[Tool], kind: str) -> str:
+    """The lean prompt's list of one kind of tool: "- name: summary" each;
+    the arguments and example come with the step that offers it."""
+    return "\n".join(f"- {t.name}: {t.summary}" for t in tools if t.kind == kind)
+
+
 def description(t: Tool) -> str:
     """A native declaration's description: the summary and its use-when line."""
     return f"{t.summary} Use when: {t.when}" if t.when else t.summary
