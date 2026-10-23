@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
-import { libraryVersion } from "../composables/useLibraryChanged";
+import { computed, nextTick, onMounted, ref } from "vue";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
@@ -55,8 +54,6 @@ async function refresh() {
 }
 
 onMounted(refresh);
-// A chat card applied or undone: counts and names may have moved.
-watch(libraryVersion, () => { void refresh(); });
 
 function moduleCount(row: CategoryRow): number {
   return countsByCategory.value.get(row.id) ?? 0;
@@ -116,7 +113,7 @@ async function performDelete(row: CategoryRow) {
     kind: "category", id: row.id, action: "delete",
   });
   if (result.ok) {
-    store.remove(row.id);
+    store.removeLocal(row.id);
     const undoId = result.undo_entry_id;
     toast.push({
       severity: "success",
@@ -143,7 +140,7 @@ function onCatCascadeDialogConfirmed(result: { undo_entry_id: string; affected_c
   const row = cascadeDialogRow.value;
   cascadeDialogRow.value = null;
   if (!row) return;
-  store.remove(row.id);
+  store.removeLocal(row.id);
   const undoId = result.undo_entry_id;
   const count = result.affected_count;
   toast.push({

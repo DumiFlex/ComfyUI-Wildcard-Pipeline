@@ -15,6 +15,7 @@
  */
 
 import { api } from "../api/client";
+import { markDeleted, markLibraryChanged } from "../composables/useLibraryChanged";
 import { useCascadeStore } from "./cascade-store";
 import type { DiffEntry } from "./reverse-dep-index";
 
@@ -94,6 +95,12 @@ function isDiffEntryArray(value: unknown): value is DiffEntry[] {
   );
 }
 
+/** Kinds whose delete removes the target row itself (not a part of it,
+ *  like an option or a subcategory). */
+const WHOLE_ENTITY_KINDS = new Set([
+  "wildcard", "fixed_values", "combine", "derivation", "constraint", "bundle", "category",
+]);
+
 export function useCascadeApply() {
   const store = useCascadeStore();
 
@@ -111,6 +118,11 @@ export function useCascadeApply() {
       if (isDiffEntryArray(raw.diff)) {
         store.applyDiff(raw.diff);
       }
+      // A whole-entity delete drops the row from Recently opened and the
+      // chat's view; any apply may have rewritten other rows, so every
+      // loaded library list fetches again.
+      if (req.action === "delete" && WHOLE_ENTITY_KINDS.has(req.kind)) markDeleted([req.id]);
+      markLibraryChanged();
       return raw as unknown as CascadeApplyOk;
     }
     return { ok: false, error: (raw.error as string | undefined) ?? "unknown error" };
@@ -122,6 +134,7 @@ export function useCascadeApply() {
       // Server-side state changed in ways we can't precisely diff —
       // mark for lazy rebuild on next read.
       store.invalidate();
+      markLibraryChanged();
     }
     return result;
   }

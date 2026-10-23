@@ -17,6 +17,9 @@ export const useTemplateStore = defineStore("templates", () => {
   const catalog = ref<TemplateRow[]>([]);
   const loading = ref(false);
   const filter = reactive<Filter>({});
+  /** Set once a list view has fetched `items`, so a library refresh only
+   *  re-fetches what some page has already loaded. */
+  const listed = ref(false);
 
   async function fetchAll() {
     loading.value = true;
@@ -27,6 +30,7 @@ export const useTemplateStore = defineStore("templates", () => {
       if (filter.favorites) params.favorites = true;
       const res = await api.templates.list(params);
       items.value = res.items;
+      listed.value = true;
     } finally {
       loading.value = false;
     }
@@ -79,7 +83,7 @@ export const useTemplateStore = defineStore("templates", () => {
   }
 
   return {
-    items, catalog, loading, filter,
+    items, catalog, loading, filter, listed,
     fetchAll, fetchCatalog, get, create, update, remove, toggleFavorite,
   };
 });

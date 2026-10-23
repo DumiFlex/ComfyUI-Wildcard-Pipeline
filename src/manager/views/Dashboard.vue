@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
+import { libraryVersion } from "../composables/useLibraryChanged";
 import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
@@ -259,8 +260,9 @@ function categoryFor(row: DashboardRow): CategoryRow | undefined {
  *  what the user actually clicked into) — distinct from "Recent edits"
  *  which is sorted by server-side `updated_at`. Joins against live
  *  module/bundle catalog to pick up category_id; falls back to the
- *  recentStore snapshot if the row is no longer in the catalog (e.g.
- *  deleted, or catalog still loading). `updated_at` is wired to the
+ *  recentStore snapshot while the catalog is still loading. Deleted rows
+ *  leave recentStore itself (on delete, and when AppLayout prunes it
+ *  against a fresh catalog). `updated_at` is wired to the
  *  recentStore's `openedAt` so RelativeDate renders "X ago" since the
  *  user last opened the row — not since it was last edited. */
 const openedItems = computed<DashboardRow[]>(() => {
@@ -420,6 +422,8 @@ async function refresh() {
     refreshing.value = false;
   }
 }
+// A delete, undo or chat card changed the library: counts and lists move.
+watch(libraryVersion, () => { void refresh(); });
 // Tell the AI chat what the dashboard shows: the counts, the warnings and
 // the list under the open tab.
 const TAB_LABEL = { opened: "Recently opened", recent: "Recent edits", favorites: "Favorites" } as const;

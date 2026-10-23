@@ -44,6 +44,7 @@ The assistant is new and **off by default**. Turn it on in **Settings › AI ass
 
 ### Fixes
 
+- **Library pages update when something is deleted.** A deleted category stayed on the Categories page until you refreshed. Undo now brings rows back on screen, chat changes refresh every library list, and Recently opened drops deleted items.
 - **Every random pick rolls on its own.** Picks used to share random sequences, so changing one could move another. This is the change behind the seed warning above.
 - **Constraints hold on multi-picks.** `{2$$…}` picks and `2-3` picks no longer bring back options a constraint or a weight of 0 shut out.
 - **Clear template clears the negative too** on the Assembler.

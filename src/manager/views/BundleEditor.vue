@@ -196,7 +196,7 @@ async function onEntityDeleteClick(): Promise<void> {
 
 function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_count: number }): void {
   cascadeDialogOpen.value = false;
-  store.remove(props.id!);
+  store.removeLocal(props.id!);
   const undoId = result.undo_entry_id;
   const count = result.affected_count;
   toast.push({

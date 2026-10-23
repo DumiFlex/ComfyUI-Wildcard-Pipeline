@@ -779,7 +779,7 @@ function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_coun
 
   if (dialogProps.kind === "wildcard") {
     // Whole-entity delete confirmed from the cascade dialog.
-    moduleStore.remove(dialogProps.id);
+    moduleStore.removeLocal(dialogProps.id);
     toast.push({
       severity: "success",
       summary: `"${name.value}" deleted`,

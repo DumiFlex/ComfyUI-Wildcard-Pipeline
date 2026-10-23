@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
+import { deletedIds } from "../composables/useLibraryChanged";
 
 export type RecentKind = "wildcard" | "fixed_values" | "combine" | "derivation" | "constraint" | "bundle";
 
@@ -66,11 +67,31 @@ export const useRecentStore = defineStore("recent", () => {
     persist();
   }
 
+  /** Drop entries whose rows are gone. */
+  function forget(ids: Iterable<string>): void {
+    const gone = new Set(ids);
+    const next = items.value.filter((i) => !gone.has(i.id));
+    if (next.length === items.value.length) return;
+    items.value = next;
+    persist();
+  }
+
+  /** Keep only entries whose rows are in a freshly fetched library, so
+   *  an item deleted anywhere (another tab, the graph, the chat) leaves
+   *  "Recently opened" too. Call it only after a fetch succeeded: an
+   *  empty list from a failed fetch would wipe everything. */
+  function prune(liveIds: ReadonlySet<string>): void {
+    forget(items.value.filter((i) => !liveIds.has(i.id)).map((i) => i.id));
+  }
+
+  // A delete in this session drops its entry at once.
+  watch(deletedIds, (ids) => forget(ids));
+
   /** Command-index-prefixed ids for the palette ranker's recent-boost.
    *  Bundles use `bundle:<id>`; all module kinds use `module:<id>`. */
   const recentIds = computed<string[]>(() =>
     items.value.map((i) => (i.kind === "bundle" ? `bundle:${i.id}` : `module:${i.id}`)),
   );
 
-  return { items, recentIds, push };
+  return { items, recentIds, push, forget, prune };
 });

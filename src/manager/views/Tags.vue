@@ -8,8 +8,7 @@
  * with how many rows carry it, opens a tag as a filtered list, and renames,
  * merges or deletes a tag across the whole library in one step.
  */
-import { computed, nextTick, onMounted, ref, watch } from "vue";
-import { libraryVersion } from "../composables/useLibraryChanged";
+import { computed, nextTick, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Chip from "../components/ui/Chip.vue";
@@ -58,8 +57,6 @@ async function refresh() {
 }
 
 onMounted(refresh);
-// A chat card applied or undone: counts and names may have moved.
-watch(libraryVersion, () => { void refresh(); });
 
 function reportError(e: unknown, summary: string) {
   const msg = e instanceof ApiError ? e.message : String(e);
