@@ -271,6 +271,10 @@ def _read_instead(text: str, refs: RefIndex | None) -> str:
     return ("; " + ", ".join(lines[:4]) + ", and call the tool again") if lines else ""
 
 
+#: "{@{Palette:warm}}": a ref inside braces that make no pick.
+_WRAPPED_REF = re.compile(r"\{\s*(@\{[^{}|]*\})\s*\}")
+
+
 def compile_text(
     text: str, *, surface: str, refs: RefIndex | None = None, self_id: str | None = None,
 ) -> str:
@@ -280,6 +284,11 @@ def compile_text(
     # Dynamic Prompts' "{2$$a|b|c}" (no separator) prints junk here: the
     # separator goes in ("{2$$, $$a|b|c}").
     text = _DP_COUNT.sub(r"{\1$$, $$\2}", text)
+    if "@{" in text and allow_ref and _WRAPPED_REF.search(text):
+        # The 9B wrote "{@{Palette:warm}} sky", then gave up on refs when
+        # told only to drop "the braces" (smoke s-tag-filter, 2026-10-23).
+        fixed = _WRAPPED_REF.sub(r"\1", text)
+        raise ValueError(f"a ref needs no extra braces around it: write {fixed!r}")
     if "@{" in text:
         if not allow_ref:
             raise ValueError(_WHY_NO_REF.get(surface, "no @{…} here")

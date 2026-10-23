@@ -818,6 +818,7 @@ ASK_GROUPS: tuple[tuple[str, re.Pattern[str]], ...] = (
 #: A message that makes a wildcard: its "tagged warm" / "with tags" are
 #: option tags (wildcards), not the library's item tags (lists).
 _MAKES_WILDCARD = re.compile(r"\b(?:make|create|build|write)\b.*\b(?:wildcards?|options?)\b")
+_RENAME_VAR = re.compile(r"\brename\b(?=[^.]{0,20}\bvariables?\b)")
 _TAG_WORDS = re.compile(r"\b(?:re)?tag(?:s|ged|ging)?\b")
 
 
@@ -828,6 +829,9 @@ def groups_for(text: str) -> list[str]:
         # Smoke s-tag-filter offered the 9B all six list tools for "4 warm
         # colours tagged warm" (19 tools on the first step).
         low = _TAG_WORDS.sub(" ", low)
+    # "Rename its variable" edits one item (smoke s-rename-var got the six
+    # list tools, 17 on its first step), not a tidy of many.
+    low = _RENAME_VAR.sub(" ", low)
     return [g for g, pat in ASK_GROUPS if pat.search(low)]
 
 
@@ -1015,11 +1019,13 @@ def shortlist(names: list[str], text: str, route: str | None = None,
         if key.endswith(suffix):
             key = key[: -len(suffix)]
     kind = message_kind(text, working)
-    groups = set(groups_for(text) or PAGE_GROUPS.get(key, DEFAULT_GROUPS)[:1])
+    renames_var = bool(_RENAME_VAR.search(text.lower()))
+    groups = set(groups_for(text) or ([] if renames_var
+                                      else PAGE_GROUPS.get(key, DEFAULT_GROUPS)[:1]))
     want = request_core(text, kind)
     if _PAGE_WORDS.search(text) or (kind != "task" and _ASK_PAGE_WORDS.search(text)):
         want |= {"open", "read_page", "highlight"}
-    if _INFO_WORDS.search(text) or "lists" in groups:
+    if _INFO_WORDS.search(text) or "lists" in groups or renames_var:
         want.add("update_info")
     if re.search(r"\bpacks?\b", text, re.I):
         want.add("plan_pack")  # the turn steers a pack ask to it (`PACK_FIRST`)
