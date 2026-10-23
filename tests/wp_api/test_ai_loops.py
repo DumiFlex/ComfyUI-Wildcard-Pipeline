@@ -50,3 +50,21 @@ async def test_one_rewrite_keeps_the_tool(wp_client, fake_llm):
     acts = [x for x in fake_llm.seen[n:] if "response_format" in x["body"]
             and _kind(x) == "act"]
     assert "create_wildcard" in _offered(acts[-1])
+
+
+async def test_opening_its_own_card_closes_open(wp_client, fake_llm):
+    # 9B smoke 1a63959: open, open on its own card before each fix.
+    _on(fake_llm, model_size="small", tool_format="json")
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [_version()]},
+        {"message": "", "calls": [{"tool": "open", "args": json.dumps({"proposal": "p1"})}]},
+        {"message": "Proposed Setting.", "calls": []},
+    ])
+    n = len(fake_llm.seen)
+    await _chat(wp_client, "make a setting wildcard and open it")
+    acts = [x for x in fake_llm.seen[n:] if "response_format" in x["body"]
+            and _kind(x) == "act"]
+    assert "open" in _offered(acts[1])
+    assert "open" not in _offered(acts[-1])
+    told = " ".join(str(m["content"]) for m in acts[-1]["body"]["messages"])
+    assert "open is closed for the rest of this answer" in told

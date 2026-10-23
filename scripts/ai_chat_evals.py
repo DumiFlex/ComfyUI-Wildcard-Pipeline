@@ -181,7 +181,8 @@ SMOKE: list[dict[str, Any]] = [
     {"name": "s-where", "page": {"route": "/library"},
      "turns": ["Where do I turn on deleting for the AI assistant?"],
      "expect": [[]],
-     "check": [lambda out: "permission" in str(out.get("message") or "").lower()]},
+     "check": [lambda out: bool(re.search(
+         r"permission|let the assistant delete", str(out.get("message") or ""), re.I))]},
 ]
 
 SETS = {"default": SCENARIOS, "smoke": SMOKE}

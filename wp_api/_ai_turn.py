@@ -1222,7 +1222,11 @@ async def _pause_call(t: _Turn, run: _Calls, at: int, call: dict[str, Any],
             # and again instead of answering.
             run.repeats += 1
         t.seen.add(again)
-        run.result(call, str(shown))
+        # Its own card can't be opened until the answer ends, so the
+        # tool leaves the grammar now (9B smoke 1a63959: open, open on
+        # its own card before every request-check fix).
+        t.closed.add(tool)
+        run.result(call, str(shown) + f" ({tool} is closed for the rest of this answer.)")
         return
     if tool == "highlight":
         anchors = sorted(p["anchor"] for p in cargs["points"])
@@ -1421,18 +1425,15 @@ def _settle(t: _Turn, said: str, calls: list[dict[str, Any]], cut: bool,
     # The request asks for a feature no card has (a constraint, an
     # "only" rule, a fallback, negatives): ask once, before the test, so
     # the test covers it. Not in a plan run, whose items are the ask.
-    # A repeated refusal forces the answer, but the missing feature
-    # still gets its one step (9B smoke, s-tag-filter: two refused
-    # opens, then plain colours with no tag ref). Out of time does not.
+    # A repeated refusal forces the answer, and the last step leaves none
+    # for the fix, but the missing feature still gets its one note (9B
+    # smoke, s-tag-filter: plain colours with no tag ref, answered on the
+    # last step). Out of time does not.
     missing = (ai_request_check.gaps(t.text or "", proposals)
-               if not calls and not t.gap_checked and t.step < t.cap and not t.plan_n
+               if not calls and not t.gap_checked and not t.plan_n
                and not t.out_of_time else [])
     if missing:
-        t.gap_checked = True
-        t.forced = False
-        t.gaps = missing
-        t.gap_offer = ai_request_check.fix_tools(missing, proposals)
-        note = ai_request_check.nudge(missing, t.text or "")
+        note = _gap_note(t, missing)
         t.new.append(ai_chatlog.results_entry(items, "\n\n" + note) if items
                      else ai_chatlog.note_entry(note))
         return _NEXT
@@ -1486,10 +1487,37 @@ def _next_tail(t: _Turn, calls: list[dict[str, Any]], run: _Calls, dropped: int)
         # re-reads and re-proposes what scrolled up (research note
         # "Small model tool use", T7).
         more += _progress_note(t.steps, t.proposals)
+    note = _early_gap(t, calls)
+    if note:
+        t.new.append(ai_chatlog.results_entry(items, more + "\n\n" + note))
+        return _NEXT
     t.new.append(ai_chatlog.results_entry(
         items, more + _results_tail(t.text, last=t.forced, native=t.fmt == "native",
                                     split=t.split)))
     return _NEXT
+
+
+def _early_gap(t: _Turn, calls: list[dict[str, Any]]) -> str:
+    """The request check's note as soon as a step after the cards changes
+    nothing: the 9B spent 2-4 steps on more_tools and opening its own card
+    before answering, and only then got the note (smoke d25d274)."""
+    if (t.gap_checked or not t.proposals or t.plan_n or t.out_of_time
+            or any(c["tool"] in ai_chat.CHANGE_TOOLS for c in calls)):
+        return ""
+    missing = ai_request_check.gaps(t.text or "", t.proposals)
+    return _gap_note(t, missing) if missing else ""
+
+
+def _gap_note(t: _Turn, missing: list[str]) -> str:
+    """Mark the request check as done and give it room: the fix step and
+    the answer after it, even past the step cap (once per answer)."""
+    t.gap_checked = True
+    t.gaps = missing
+    t.gap_offer = ai_request_check.fix_tools(missing, t.proposals)
+    t.forced = False
+    t.cap = max(t.cap, t.step + 2)
+    t.limit = max(t.limit, t.cap)
+    return ai_request_check.nudge(missing, t.text or "")
 
 
 def _end_answer(t: _Turn) -> None:
