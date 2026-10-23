@@ -35,6 +35,8 @@ USAGE
         [--set default|smoke] [--model NAME] [--out chat-evals.md]
 
 ``--db`` is the library to copy (default: the one ComfyUI would open).
+Every scenario run starts from a fresh copy of it (and of the examples
+file), so what one run's cards made can't steer the next.
 Writes the report and a ``.json`` beside it with every turn's answer,
 steps and cards. Record the model AND its chat template with each round.
 """
@@ -42,6 +44,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import gc
 import json
 import os
 import re
@@ -346,12 +349,47 @@ def report(rows: list[dict[str, Any]], model: str, note: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def fresh_copy(work: Path) -> Callable[[], None]:
+    """What puts `work`'s library and examples back as they are now: the
+    smoke set's second run found the first run's Hair and Outfit and edited
+    those (2026-10-23). The search index beside the library is dropped, so
+    it is rebuilt from the copy."""
+    keep = work / "pristine"
+    keep.mkdir(exist_ok=True)
+    names = ("library.db", "ai-examples.json")
+    for n in names:
+        if (work / n).exists():
+            shutil.copy2(work / n, keep / n)
+
+    def restore() -> None:
+        # The chat keeps its search index open; Windows can't delete an
+        # open file (WinError 32 on Dumi's PC, 2026-10-23).
+        from wp_api import _ai_context
+
+        for idx in _ai_context._INDEXES.values():
+            if idx is not None:
+                idx.close()
+        _ai_context._INDEXES.clear()
+        gc.collect()  # and any library connection nobody closed
+        for p in work.iterdir():
+            if p.is_file() and (p.name.startswith(("library.db", "ai-examples.json"))
+                                or ".ai-index.db" in p.name):
+                p.unlink()
+        for n in names:
+            if (keep / n).exists():
+                shutil.copy2(keep / n, work / n)
+
+    return restore
+
+
 async def evaluate(scenarios: list[dict[str, Any]], runs: int,
                    partial: Callable[[list[dict[str, Any]]], None] | None = None,
+                   fresh: Callable[[], None] | None = None,
                    ) -> list[dict[str, Any]]:
-    """Every scenario ``runs`` times. No client timeout: a slow turn on a
-    shared or wordy model must not lose the run. ``partial`` gets the rows
-    so far after each scenario, so a killed run still leaves a report."""
+    """Every scenario ``runs`` times, each from `fresh` (a clean library).
+    No client timeout: a slow turn on a shared or wordy model must not lose
+    the run. ``partial`` gets the rows so far after each scenario, so a
+    killed run still leaves a report."""
     from aiohttp import ClientTimeout, web
     from aiohttp.test_utils import TestClient, TestServer
 
@@ -364,6 +402,8 @@ async def evaluate(scenarios: list[dict[str, Any]], runs: int,
     async with TestClient(TestServer(app), timeout=ClientTimeout(None)) as client:
         for run in range(1, runs + 1):
             for sc in scenarios:
+                if fresh is not None:
+                    fresh()
                 print(f"run {run} · {sc['name']}", flush=True)
                 rows.append({"name": sc["name"], "run": run,
                              "turns": await run_scenario(client, sc)})
@@ -413,7 +453,7 @@ def main() -> int:
         Path(args.out).with_suffix(".json").write_text(
             json.dumps(rows, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    write(asyncio.run(evaluate(scenarios, args.runs, partial=write)))
+    write(asyncio.run(evaluate(scenarios, args.runs, partial=write, fresh=fresh_copy(work))))
     print(f"Wrote {args.out}")
     return 0
 

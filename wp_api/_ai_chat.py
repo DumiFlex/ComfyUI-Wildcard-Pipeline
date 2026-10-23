@@ -710,8 +710,10 @@ def _usage_openai(data: dict[str, Any]) -> dict[str, Any]:
     u = _got if isinstance(_got := data.get("usage"), dict) else {}
     details = u.get("prompt_tokens_details") if isinstance(u.get("prompt_tokens_details"),
                                                            dict) else {}
+    done = u.get("completion_tokens_details") if isinstance(
+        u.get("completion_tokens_details"), dict) else {}
     out = {"prompt": u.get("prompt_tokens"), "output": u.get("completion_tokens"),
-           "cached": details.get("cached_tokens")}
+           "cached": details.get("cached_tokens"), "thought": done.get("reasoning_tokens")}
     timings = _got if isinstance(_got := data.get("timings"), dict) else {}
     if out["cached"] is None and isinstance(timings.get("cache_n"), int):
         out["cached"] = timings["cache_n"]
@@ -722,8 +724,10 @@ def _usage_responses(data: dict[str, Any]) -> dict[str, Any]:
     u = _got if isinstance(_got := data.get("usage"), dict) else {}
     details = u.get("input_tokens_details") if isinstance(u.get("input_tokens_details"),
                                                           dict) else {}
+    done = u.get("output_tokens_details") if isinstance(u.get("output_tokens_details"),
+                                                        dict) else {}
     out = {"prompt": u.get("input_tokens"), "output": u.get("output_tokens"),
-           "cached": details.get("cached_tokens")}
+           "cached": details.get("cached_tokens"), "thought": done.get("reasoning_tokens")}
     return {k: v for k, v in out.items() if isinstance(v, int)}
 
 
@@ -811,12 +815,82 @@ _NO_STREAM: set[tuple[str, str]] = set()
 TEXT_EVERY = 0.15
 
 
+_ESCAPES = {'"': '"', "\\": "\\", "/": "/", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t"}
+
+
+def _read_str(text: str, i: int) -> tuple[str, int]:
+    """The JSON string starting after its opening quote at `i`, decoded as
+    far as it is written, and the index after its closing quote (len(text)
+    while it is still open). An escape cut off at the end is left out."""
+    out: list[str] = []
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            return "".join(out), i + 1
+        if c != "\\":
+            out.append(c)
+            i += 1
+            continue
+        if i + 1 >= n:
+            break
+        e = text[i + 1]
+        if e == "u":
+            if i + 6 > n:
+                break
+            try:
+                out.append(chr(int(text[i + 2:i + 6], 16)))
+            except ValueError:
+                pass
+            i += 6
+            continue
+        out.append(_ESCAPES.get(e, e))
+        i += 2
+    return "".join(out), n
+
+
+def partial_field(text: str, name: str = "message") -> str:
+    """The text so far of a top-level string field in a JSON answer still
+    being written ("" until that field starts). Keys of nested objects
+    (a call's args) are skipped, so only the answer's own field shows."""
+    depth, i, n = 0, 0, len(text)
+    key: str | None = None  # a top-level string that may be a key
+    value_of: str | None = None  # the key whose value comes next
+    while i < n:
+        c = text[i]
+        if c.isspace():
+            i += 1
+            continue
+        if c == '"':
+            got, i = _read_str(text, i + 1)
+            if depth == 1 and value_of == name:
+                return got
+            key, value_of = (got if depth == 1 else None), None
+            continue
+        if c == ":" and depth == 1 and key is not None:
+            value_of, key = key, None
+        else:
+            key = value_of = None
+            if c in "{[":
+                depth += 1
+            elif c in "}]":
+                depth -= 1
+        i += 1
+    return ""
+
+
 class _Live:
     """Sends the visible part of the text written so far (reasoning left
-    out), at most every TEXT_EVERY seconds, plus one "thinking" signal."""
+    out), at most every TEXT_EVERY seconds, plus one "thinking" signal.
+    `field`: the text is a JSON step, and only that field's text (the
+    reply, `message`) is sent as it is written."""
 
-    def __init__(self, emit: Any) -> None:
+    def __init__(self, emit: Any, field: str | None = None) -> None:
         self.emit = emit
+        self.field = field
+        self.reasoning = ""
+        self.think_sent = ""
+        self.think_last = 0.0
         self.text = ""
         self.sent = ""
         self.last = 0.0
@@ -833,16 +907,49 @@ class _Live:
     async def flush(self, now: float | None = None) -> None:
         if self.emit is None:
             return
+        low = self.text.lower()
+        if "<think>" in low:
+            # A template that writes its reasoning in the text: that part
+            # goes to the Thinking box, not the reply.
+            start = low.index("<think>") + len("<think>")
+            end = low.find("</think>", start)
+            inner = self.text[start:end if end >= 0 else len(self.text)]
+            if inner.strip():
+                self.reasoning = inner
+                await self._send_thinking()
         visible = strip_thinking(self.text)
+        if self.field:
+            visible = partial_field(visible, self.field).strip()
         if visible != self.sent:
             self.sent = visible
             self.last = now if now is not None else time.monotonic()
             await self.emit({"type": "text", "v": visible})
 
-    async def thinking(self) -> None:
-        if self.emit is not None and not self.thought:
+    async def thinking(self, delta: Any = "") -> None:
+        """The "thinking" signal, then the reasoning so far (`v`, its last
+        MAX_THINKING characters) as it grows, as often as the text."""
+        if self.emit is None:
+            return
+        if not self.thought:
             self.thought = True
             await self.emit({"type": "thinking"})
+        if not isinstance(delta, str) or not delta:
+            return
+        self.reasoning += delta
+        now = time.monotonic()
+        if now - self.think_last >= TEXT_EVERY:
+            self.think_last = now
+            await self._send_thinking()
+
+    async def _send_thinking(self) -> None:
+        v = self.reasoning[-MAX_THINKING:].strip()
+        if self.emit is not None and v and v != self.think_sent:
+            self.think_sent = v
+            await self.emit({"type": "thinking", "v": v})
+
+    async def flush_thinking(self) -> None:
+        """The rest of the reasoning the throttle held back, if any."""
+        await self._send_thinking()
 
 
 def _openai_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
@@ -870,7 +977,7 @@ def _openai_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
                 msg["refusal"] = d["refusal"]
             think = d.get("reasoning_content") or d.get("reasoning")
             if think:
-                await live.thinking()
+                await live.thinking(think)
                 if isinstance(think, str):
                     # Kept for one thing only: a call written in the
                     # reasoning when the answer came back empty.
@@ -926,7 +1033,7 @@ def _responses_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
             if show and isinstance(obj.get("delta"), str):
                 await live.add(obj["delta"])
         elif kind in ("response.reasoning_summary_text.delta", "response.reasoning_text.delta"):
-            await live.thinking()
+            await live.thinking(obj.get("delta"))
         elif kind == "response.output_item.done":
             if isinstance(obj.get("item"), dict) and isinstance(obj.get("output_index"), int):
                 done[obj["output_index"]] = obj["item"]
@@ -947,7 +1054,7 @@ def _ollama_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
             raise client._upstream_error(500, obj)
         m = _got if isinstance(_got := obj.get("message"), dict) else {}
         if m.get("thinking"):
-            await live.thinking()
+            await live.thinking(m["thinking"])
             if isinstance(m["thinking"], str):
                 got = data["message"].get("thinking") or ""
                 data["message"]["thinking"] = got + m["thinking"]
@@ -995,8 +1102,10 @@ def _anthropic_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
                     await live.add(d["text"])
             elif d.get("type") == "input_json_delta" and isinstance(d.get("partial_json"), str):
                 partial[i] = partial.get(i, "") + d["partial_json"]
+                if live.field and block.get("name") == client._TOOL_NAME:
+                    await live.add(d["partial_json"])  # JSON mode: the step is a tool's input
             elif d.get("type") == "thinking_delta":
-                await live.thinking()
+                await live.thinking(d.get("thinking"))
                 if isinstance(d.get("thinking"), str):
                     block["thinking"] = str(block.get("thinking") or "") + d["thinking"]
         elif kind == "content_block_stop":
@@ -1023,10 +1132,12 @@ async def _post(cfg: dict[str, Any], path: str, body: dict[str, Any], *, kind: s
     if key in _NO_STREAM:
         return await client._request(cfg, "POST", path, body=body,
                                      timeout=client._COMPLETE_TIMEOUT)
-    live = _Live(emit)
+    # Native calls write the reply as plain text; a JSON step writes it in
+    # its `message` field, so only that field's text goes live.
+    live = _Live(emit, None if show else "message")
     collect = {"openai": _openai_collect, "ollama": _ollama_collect,
                "anthropic": _anthropic_collect, "responses": _responses_collect}[kind]
-    data, on = collect(live, show)
+    data, on = collect(live, show or kind != "anthropic")
     streamed = {**body, "stream": True}
     if kind == "openai":
         streamed["stream_options"] = {"include_usage": True}
@@ -1046,6 +1157,7 @@ async def _post(cfg: dict[str, Any], path: str, body: dict[str, Any], *, kind: s
     if plain is not None:
         return plain  # the server ignored `stream`
     await live.flush()
+    await live.flush_thinking()
     if kind == "openai":
         for c in data["choices"][0]["message"]["tool_calls"]:
             c.pop("_i", None)

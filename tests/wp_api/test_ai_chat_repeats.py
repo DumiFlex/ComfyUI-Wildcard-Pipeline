@@ -207,3 +207,29 @@ def test_a_sent_back_answer_is_rewritten_whole():
     from engine.ai import chat as ai_chat
     assert ai_chat.REWRITE_KEEP in ai_chat.CLAIM_NUDGE
     assert ai_chat.REWRITE_KEEP in ai_chat.facts_nudge(["Ctrl+K"])
+
+
+async def test_an_item_made_from_this_chats_card_may_be_changed(wp_client, fake_llm):
+    """Smoke s-rename-var (9B, 2026-10-23): it made Hair from its own card,
+    then every edit of it was refused as an item the user never named."""
+    _on(fake_llm)
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(STYLE)}]},
+        {"message": "Proposed it.", "calls": []},
+    ])
+    out = await _chat(wp_client, "make a style wildcard")
+    [card] = out["proposals"]
+    body = card["op"]["body"]
+    resp = await wp_client.post("/wp/api/modules", json={
+        **body, "description": "", "category_id": None, "tags": []})
+    assert resp.status == 201, await resp.text()
+    assert (await resp.json())["id"] == body["id"]
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "edit_options", "args": json.dumps(
+            {"id": body["id"], "var": "art_style"})}]},
+        {"message": "Renamed it.", "calls": []},
+    ])
+    again = await _chat(wp_client, "rename the variable to art_style", chat_id=out["chat_id"])
+    [edit] = again["proposals"]
+    assert edit["op"]["id"] == body["id"]
+    assert edit["op"]["body"]["payload"]["var_binding"] == "art_style"

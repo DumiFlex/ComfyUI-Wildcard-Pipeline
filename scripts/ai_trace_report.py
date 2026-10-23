@@ -79,6 +79,11 @@ def render(total: dict[str, Any]) -> str:
         f"- Re-reads (a later step's prompt mostly uncached): {total['rereads']}",
         f"- Prompt tokens: {total['prompt_tokens']}, cached: {total['cached_tokens']} "
         f"({100 * total['cached_tokens'] / prompt:.0f}%)",
+        f"- Thinking tokens (where the server reports them): {total['thought_tokens']}",
+        f"- Model time: {total['seconds']:.0f} s "
+        f"({total['seconds'] / max(total['steps'], 1):.0f} s per step, slowest "
+        f"{total['slowest']:.0f} s); steps that hit the time limit: "
+        f"{total['timed_out']}",
     ]
     lines += table("Tool called", total["called"])
     lines += table("Note or nudge sent", total["notes"])

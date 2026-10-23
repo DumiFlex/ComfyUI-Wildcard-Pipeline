@@ -4,26 +4,22 @@
  * OpenAI-compatible server), Claude, OpenAI and OpenRouter. Settings shows only
  * the list for the provider that is selected.
  *
- * Most picks come from benchmarks (Artificial Analysis tau2, UGI) and community
- * reports (r/LocalLLaMA, r/SillyTavernAI), gathered 2026-10-14 in
- * `/pr-drafts/ai-model-research-2026-10.md`. Only entries with `tested: true`
- * were tried with Wildcard Pipeline; the card says so in its header.
+ * Local models are named by model only. Which build to download (uploader,
+ * quant, uncensored or not) is the user's choice, so there are no repos or
+ * links. The GPU column is a rough guide for a 3 to 4-bit file with a 16k
+ * context. They fall in two groups:
+ * - `building`: the models we tested with Wildcard Pipeline (`tested: true`).
+ * - `writing`: untested fine-tunes for drafting options; `goodFor` says why
+ *   each was suggested. No tool calls, so drafting only.
  *
- * Local models fall in two groups:
- * - `building`: instruct models with refusals removed ("heretic" builds keep
- *   the most of the original). They follow instructions, JSON and tool calls,
- *   which the organize, chat and pack-builder steps lean on.
- * - `writing`: fine-tunes trained on creative writing, NSFW included. No tool
- *   calls, so they are for drafting options only.
- *
- * Models without an official Ollama page are pulled straight from Hugging Face
- * (`ollama pull hf.co/<repo>:<quant>`). The GPU column is a rough guide for a
- * 4-bit download with a 16k context.
+ * The writing and cloud picks come from benchmarks (Artificial Analysis tau2,
+ * UGI) and community reports, gathered 2026-10-14 in
+ * `/pr-drafts/ai-model-research-2026-10.md`.
  */
 export type SuggestUse = "writing" | "building";
 
 export interface SuggestedModel {
-  /** What goes in the Model field (for Ollama, what `ollama pull` takes). */
+  /** Cloud models: what goes in the Model field. Local models: the base model's name. */
   name: string;
   goodFor: string;
   use: SuggestUse;
@@ -31,20 +27,15 @@ export interface SuggestedModel {
   vram?: string;
   /** Cloud models: USD per million tokens, input / output. */
   price?: string;
-  /** The model's Ollama page, when there is one. */
-  ollamaUrl?: string;
   /** The model's page on the provider (OpenRouter), where its current price is. */
   pageUrl?: string;
-  /** The model's Hugging Face repo (the weights LM Studio and llama.cpp users start from). */
-  hfUrl?: string;
   /** Tried with Wildcard Pipeline, not only read about. */
   tested?: true;
 }
 
-/** A local model: always has a GPU size and a Hugging Face repo. */
+/** A local model: always has a GPU size. */
 export interface SuggestedLocalModel extends SuggestedModel {
   vram: string;
-  hfUrl: string;
 }
 
 export type SuggestGroupKey = "local" | "anthropic" | "openai" | "openrouter";
@@ -62,34 +53,25 @@ export interface Suggestions {
   groups: SuggestionGroup[];
 }
 
-const HF = "https://huggingface.co/";
-
 export const SUGGESTED_LOCAL_MODELS: SuggestedLocalModel[] = [
-  { name: "hf.co/SC117/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-GGUF:APEX-I-Mini",
-    vram: "16 GB", use: "building", tested: true,
-    goodFor: "One model for chat, packs and writing. Fast mixture of experts: about 50 tok/s on a 16 GB RTX 5060 Ti with 32 GB RAM. Files: APEX-I-Mini (14.27 GB) or APEX-I-Compact (17.02 GB); in Ollama the tag after the colon must match the file",
-    hfUrl: `${HF}SC117/Qwen3.6-35B-A3B-uncensored-heretic-Native-MTP-Preserved-APEX-GGUF` },
-  { name: "hf.co/filvyb/Qwen3.5-9B-heretic-v2-GGUF:Q4_K_M", vram: "8 GB", use: "building",
-    goodFor: "One uncensored model on 8 to 12 GB, or beside ComfyUI",
-    hfUrl: `${HF}filvyb/Qwen3.5-9B-heretic-v2-GGUF` },
-  { name: "hf.co/0bserverx/Qwen3.8-27B-Heretic-Abliterated-Uncensored-GGUF", vram: "16-24 GB", use: "building",
-    goodFor: "The smartest instruction follower. IQ3_M (12.58 GB) fits 16 GB, Q4_K_M (16.55 GB) is for 24 GB. On a 16 GB card it sits on the edge; the 35B-A3B is steadier",
-    hfUrl: `${HF}0bserverx/Qwen3.8-27B-Heretic-Abliterated-Uncensored-GGUF` },
-  { name: "HammerAI/cydonia-v4.3:24b-q4_K_M", vram: "16 GB", use: "writing",
-    goodFor: "Explicit writing that follows instructions (Mistral Small 24B). No tools, so drafting only",
-    ollamaUrl: "https://ollama.com/HammerAI/cydonia-v4.3", hfUrl: `${HF}TheDrummer/Cydonia-24B-v4.3` },
-  { name: "HammerAI/gemma-4-31b-heretic", vram: "24 GB", use: "writing",
-    goodFor: "The most knowledgeable uncensored writer (Gemma 4 31B)",
-    ollamaUrl: "https://ollama.com/HammerAI/gemma-4-31b-heretic",
-    hfUrl: `${HF}llmfan46/gemma-4-31B-it-uncensored-heretic-GGUF` },
+  { name: "Qwen3.6 35B A3B", vram: "16 GB", use: "building", tested: true,
+    goodFor: "The one we use most, for chat, packs and writing. Mixture of experts, so it stays fast with part of it in system RAM: about 50 tok/s on a 16 GB card with 32 GB RAM" },
+  { name: "Qwen3.8 27B", vram: "16-24 GB", use: "building", tested: true,
+    goodFor: "The best at following instructions. A 3-bit file fits a 16 GB card, 24 GB is comfortable. Slower than the 35B A3B" },
+  { name: "Qwen3.5 9B", vram: "8 GB", use: "building", tested: true,
+    goodFor: "Fits 8 to 12 GB, or beside ComfyUI. Fine for single items, tags and negatives; it misses parts of bigger asks with several items" },
+  { name: "Cydonia 24B", vram: "16 GB", use: "writing",
+    goodFor: "Suggested because community reports rate it highly for explicit creative writing that still follows instructions (a Mistral Small 24B fine-tune)" },
+  { name: "Gemma 4 31B", vram: "24 GB", use: "writing",
+    goodFor: "Suggested because the UGI benchmark puts its uncensored builds first for world knowledge among writers" },
 ];
 
 /** The local groups, in the order Settings and the docs show them. */
 export const SUGGESTED_MODEL_GROUPS: { use: SuggestUse; title: string; note: string }[] = [
   { use: "building", title: "For the chat and packs",
-    note: "Uncensored and good at following instructions and tool calls. Any of these can be your only model." },
+    note: "Tested with Wildcard Pipeline. Any of these can be your only model." },
   { use: "writing", title: "For writing options",
-    note: "Fine-tuned on explicit creative writing. They can't call tools, so keep them for drafting." },
+    note: "Not tested here. They can't call tools, so keep them for drafting." },
 ];
 
 const noExplicit = (who: string): string =>
@@ -127,21 +109,15 @@ export const SUGGESTED_MODELS: Record<SuggestGroupKey, SuggestionGroup[]> = {
 };
 
 const INTROS: Record<SuggestGroupKey, string> = {
-  local: "Uncensored models you run yourself. Download one from Hugging Face.",
+  local: "Models you run yourself. Any build of them works: you pick the uploader, the quant and whether it is uncensored (heretic, abliterated).",
   anthropic: "Prices are USD per million tokens, input / output.",
   openai: "Prices are USD per million tokens, input / output.",
   openrouter: "OpenRouter reaches many more models. Most need credits; free :free models are rate-limited. anthropic/* and openai/* models are moderated there. Prices change often, so check them on each model's page.",
 };
 
-const LOCAL_INTROS: Partial<Record<string, string>> = {
-  ollama: "Uncensored models you run yourself. Pull one with ollama pull and the name shown.",
-  lmstudio: "Uncensored models you run yourself. Search the Hugging Face repo in LM Studio, or download a GGUF file from the link.",
-  llamacpp: "Uncensored models you run yourself. Download a GGUF file from the Hugging Face link and start llama-server with it.",
-};
-
 /** The card header note, the same for every provider. */
 export const SUGGESTIONS_SOURCE_NOTE =
-  "Picked from benchmarks and community reports (October 2026). Only the ones marked Tested were tried with Wildcard Pipeline.";
+  "Only the ones marked Tested were tried with Wildcard Pipeline. The rest come from benchmarks and community reports (October 2026).";
 
 /**
  * What Settings suggests for a provider. Local servers share one list; a
@@ -152,10 +128,5 @@ export function suggestionsFor(provider: string, local: boolean): Suggestions | 
     return { key: provider, intro: INTROS[provider], groups: SUGGESTED_MODELS[provider] };
   }
   if (!local) return null;
-  return { key: "local", intro: LOCAL_INTROS[provider] ?? INTROS.local, groups: SUGGESTED_MODELS.local };
-}
-
-/** The Hugging Face repo id (`owner/name`) of a model, for LM Studio and llama.cpp users. */
-export function hfRepo(m: SuggestedModel): string {
-  return m.hfUrl ? m.hfUrl.replace(HF, "") : m.name;
+  return { key: "local", intro: INTROS.local, groups: SUGGESTED_MODELS.local };
 }

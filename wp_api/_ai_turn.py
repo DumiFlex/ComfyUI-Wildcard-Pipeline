@@ -13,6 +13,7 @@ from aiohttp import web
 
 from engine.ai import ask as ai_ask
 from engine.ai import budget as ai_budget
+from engine.ai import cards as ai_cards
 from engine.ai import chat as ai_chat
 from engine.ai import chatlog as ai_chatlog
 from engine.ai import client_tools as ai_client_tools
@@ -618,13 +619,27 @@ async def _prepare(
             if text and _splits(cfg, meta, fmt) else ""
         steps_hint = ai_recipes.recipe(text) if text and not plan_n \
             and _splits(cfg, meta, fmt) else ""
+        # Small and medium models: a few lines on each feature this ask
+        # touches (`engine/ai/cards.py`), once while the model can see them.
+        cards = _feature_cards(lib, text, route, meta, len(log)) \
+            if text and _splits(cfg, meta, fmt) else []
+        ai_cards.mark(meta, cards, len(log) + len(new))
+        card_note = ai_cards.note(cards)
+        if cards:
+            short, unlocked = _card_tools(meta, short, ai_cards.offers(cards))
+            card_note += unlocked
+            if plan_n:
+                # "…then make each setting get only outfits that suit it"
+                # asks for a constraint without the word: room in the plan
+                # for each item kind a card brings that the count missed.
+                plan_n = min(ai_plan.MAX_ITEMS, plan_n + _unnamed_kinds(text, cards))
         tail_kinds = ai_trace.tail_kinds({
             "since": since, "changes": changes, "perms": perms, "images": pics, "page": note,
             "library": hints, "model": model, "examples": shown_examples,
-            "recipe": steps_hint, "plan": plan_hint})
+            "cards": card_note, "recipe": steps_hint, "plan": plan_hint})
         sent = ai_safety.strip_invisible(
             "\n\n".join(x for x in (since, changes, perms, text, pics, note, hints, model,
-                                    shown_examples, steps_hint, plan_hint) if x))
+                                    shown_examples, card_note, steps_hint, plan_hint) if x))
         new.append(ai_chatlog.user_entry(text, sent, ask.images))
         meta = ai_chatlog.move_images(log + new, meta)
     _scope_edits(lib, meta, ask, log, paused)
@@ -647,10 +662,60 @@ async def _prepare(
     return t
 
 
+def _feature_cards(lib: Any, text: str, route: str, meta: dict[str, Any],
+                   log_len: int) -> list[ai_cards.Card]:
+    """The feature cards one message needs, from its words, the kinds of
+    the items it @-picks and the page it was sent from."""
+    kinds = {lib.kind_of(i) for i in ai_cards.picked_ids(text)} - {""}
+    return ai_cards.pick(text, kinds=kinds, route=route, shown=ai_cards.sent(meta, log_len))
+
+
+_KIND_WORDS = {"create_constraint": r"constraints?", "create_derivation": r"derivations?|rules?",
+               "create_bundle": r"bundles?|stacks?", "create_template": r"templates?",
+               "create_combine": r"combines?", "create_fixed_values": r"fixed[ -]?values?"}
+
+
+def _unnamed_kinds(text: str, cards: list[ai_cards.Card]) -> int:
+    """Item kinds the cards' create tools make that the message never names."""
+    return sum(1 for tool in ai_cards.offers(cards) if tool in _KIND_WORDS
+               and not re.search(rf"\b(?:{_KIND_WORDS[tool]})\b", text, re.I))
+
+
+def _card_tools(meta: dict[str, Any], short: list[str] | None,
+                offers: list[str]) -> tuple[list[str] | None, str]:
+    """The step shortlist plus the tools the message's cards name; a named
+    tool the chat doesn't have yet comes with its group, as `more_tools`
+    would bring it (its docs go in the message tail)."""
+    unlocked = ""
+    for group in dict.fromkeys(
+            g for n in offers if n not in (meta.get("tools") or []) and n in ai_tools.BY_NAME
+            for g in ai_tools.BY_NAME[n].groups[:1] if g in ai_tools.MORE_GROUPS):
+        got = _more_tools(meta, group)
+        if got.startswith("These tools"):
+            unlocked += "\n\n" + got
+    if short is not None:
+        short = [*short, *(n for n in offers if n in meta["tools"] and n not in short)]
+    return short, unlocked
+
+
+def _tool_card(t: _Turn, tool: str) -> str:
+    """A change tool's feature card, the first time it is used or fails
+    while the model can't see it yet, for the end of that call's result."""
+    if not t.split or tool not in ai_chat.CHANGE_TOOLS:
+        return ""
+    at = len(t.log) + len(t.new)
+    card = ai_cards.for_tool(tool, ai_cards.sent(t.meta, at))
+    if card is None:
+        return ""
+    ai_cards.mark(t.meta, [card], at, in_result=True)
+    return f"\n(Note: {card.title}: {card.text})"
+
+
 def _scope_edits(lib: Any, meta: dict[str, Any], ask: _Ask, log: list[dict[str, Any]],
                  paused: Any) -> None:
     """The library items the edit tools may change: ones the user named in
-    this chat, the page's item, and ones an earlier card already changes;
+    this chat, the page's item, and ones an earlier card already changes
+    or created;
     plus the card numbering and what `ask` may not ask again."""
     text = ask.text
     pids = [int(p[1:]) for p in meta.get("proposals") or {} if p[1:].isdigit()]
@@ -671,6 +736,11 @@ def _scope_edits(lib: Any, meta: dict[str, Any], ask: _Ask, log: list[dict[str, 
         op = p_.get("op") if isinstance(p_, dict) else None
         if isinstance(op, dict) and op.get("op") == "update" and isinstance(op.get("id"), str):
             named.add(op["id"])
+        # The item a card of this chat changes or made (applied at the
+        # card's id): the 9B was refused renaming the Hair it had just
+        # created (smoke s-rename-var, 2026-10-23).
+        if isinstance(p_, dict) and isinstance(p_.get("item"), str):
+            named.add(p_["item"])
     meta["named"] = sorted(named)
     lib.named = named
     if not ask.resume and text:
@@ -708,6 +778,7 @@ async def _model_step(t: _Turn) -> dict[str, Any] | str | web.Response:
     offer, must_call = _offer(t)
     t.offered = [x.name for x in offer] if offer is not None else None
     cfg = t.cfg
+    started = asyncio.get_running_loop().time()
     try:
         return await asyncio.wait_for(
             _chat_step({**cfg, "thinking": "off"} if t.think_off else cfg,
@@ -719,6 +790,8 @@ async def _model_step(t: _Turn) -> dict[str, Any] | str | web.Response:
                        must_call=must_call),
             timeout=STEP_SECONDS)
     except asyncio.TimeoutError:
+        t.trace.append(ai_trace.timed_out_record(
+            t.step + 1, t.offered, asyncio.get_running_loop().time() - started))
         if t.no_step_yet():
             return json_error("the model took too long to answer", status=504)
         t.message = "(Stopped early: this answer took too long. Ask me to continue.)"
@@ -795,6 +868,7 @@ async def _step(t: _Turn) -> str | web.Response:
         t.out_of_time = t.forced = True
         t.new[-1] = {**t.new[-1], "tail": str(t.new[-1].get("tail") or "") + (
             "\n\nTime is up: no more tool calls. Answer the user now from what you have.")}
+    started = asyncio.get_running_loop().time()
     st = await _model_step(t)
     if not isinstance(st, dict):
         return st
@@ -803,7 +877,8 @@ async def _step(t: _Turn) -> str | web.Response:
     t.ran += 1
     t.usage = usage = st["usage"]
     calls = st["calls"][:ai_chat.MAX_CALLS_PER_STEP]
-    t.trace.append(ai_trace.step_record(t.step, t.offered, calls, usage))
+    t.trace.append(ai_trace.step_record(t.step, t.offered, calls, usage,
+                                        asyncio.get_running_loop().time() - started))
     said = _said(t, st, calls)
     dropped = len(st["calls"]) - len(calls)
     # How the model called its tools this answer, for the drawer's badge.
@@ -974,7 +1049,7 @@ async def _run_call(t: _Turn, run: _Calls, at: int, call: dict[str, Any]) -> Non
         why = tool + re.sub(r"\b[0-9a-f]{8}\b|\d+", "#", str(e))
         t.refused[why] = t.refused.get(why, 0) + 1
         run.needs_reply = True
-        run.result(call, f"{tool}: error: {e}")
+        run.result(call, f"{tool}: error: {e}" + _tool_card(t, tool))
         t.steps.append({"tool": tool, "note": f"{tool}: {e}", "ok": False})
         return
     except Exception as e:  # noqa: BLE001 - one broken call mustn't end the turn
@@ -1171,13 +1246,17 @@ def _add_card(t: _Turn, run: _Calls, call: dict[str, Any], args: dict[str, Any],
         kept[out["pid"]] = {"ask": ai_budget.clip(t.text, 300), "tool": tool,
                             "args": ai_examples.compact(args)}
         t.meta["examples"] = dict(list(kept.items())[-30:])
-    t.meta.setdefault("proposals", {})[out["pid"]] = {
-        "title": out["title"], "status": None}
+    entry: dict[str, Any] = {"title": out["title"], "status": None}
+    op = out.get("op") if isinstance(out.get("op"), dict) else {}
+    item = op.get("id") if op.get("op") == "update" else (op.get("body") or {}).get("id")
+    if isinstance(item, str):
+        entry["item"] = item  # the item it changes or makes (`_scope_edits`)
+    t.meta.setdefault("proposals", {})[out["pid"]] = entry
     if out.get("replaces"):
         gone = t.meta["proposals"].get(out["replaces"])
         if gone is not None:
             t.meta["proposals"][out["replaces"]] = {**gone, "status": "replaced"}
-    run.result(call, ai_chat.proposal_note(tool, out) + extra)
+    run.result(call, ai_chat.proposal_note(tool, out) + extra + _tool_card(t, tool))
     if twin:
         out.pop("replaces")  # the user never saw the card it replaces
     out.pop("absorbs", None)

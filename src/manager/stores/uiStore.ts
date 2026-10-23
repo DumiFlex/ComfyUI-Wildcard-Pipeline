@@ -47,6 +47,8 @@ const STORAGE_KEY_EXPLAIN_CHIP = "wp-explain-chip";
 const STORAGE_KEY_CHAT_THINKING = "wp-ai-chat-show-thinking";
 const STORAGE_KEY_CHAT_NOTES = "wp-ai-chat-show-notes";
 const STORAGE_KEY_CHAT_STEPS = "wp-ai-chat-show-steps";
+/** Replies type out as the model writes them, instead of arriving whole. */
+const STORAGE_KEY_CHAT_TYPING = "wp-ai-chat-type-out";
 /** Anonymous usage pings from the Community tab (passed to the embed). */
 const STORAGE_KEY_USAGE_STATS = "wp-usage-stats";
 export const STORAGE_KEY_LAST_SEEN_VERSION = "wp-last-seen-version";
@@ -256,6 +258,7 @@ export const useUiStore = defineStore("ui", () => {
   const chatThinking = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_THINKING, ["1", "0"] as const, "1") === "1");
   const chatNotes = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_NOTES, ["1", "0"] as const, "1") === "1");
   const chatSteps = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_STEPS, ["1", "0"] as const, "1") === "1");
+  const chatTyping = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_TYPING, ["1", "0"] as const, "0") === "1");
   const usageStats = ref<boolean>(readStoredEnum(STORAGE_KEY_USAGE_STATS, ["1", "0"] as const, "1") === "1");
   const testRunnerDefaults = ref<TestRunnerDefaults>(readTestRunnerDefaults());
   const maxRefDepth = ref<number>(readStoredMaxRefDepth());
@@ -372,9 +375,10 @@ export const useUiStore = defineStore("ui", () => {
     try { localStorage.setItem(STORAGE_KEY_EXPLAIN_CHIP, v ? "1" : "0"); } catch { /* ignore */ }
   }
 
-  function setChatShow(what: "thinking" | "notes" | "steps", v: boolean): void {
+  function setChatShow(what: "thinking" | "notes" | "steps" | "typing", v: boolean): void {
     const [r, key] = what === "thinking" ? [chatThinking, STORAGE_KEY_CHAT_THINKING]
-      : what === "notes" ? [chatNotes, STORAGE_KEY_CHAT_NOTES] : [chatSteps, STORAGE_KEY_CHAT_STEPS];
+      : what === "notes" ? [chatNotes, STORAGE_KEY_CHAT_NOTES]
+        : what === "typing" ? [chatTyping, STORAGE_KEY_CHAT_TYPING] : [chatSteps, STORAGE_KEY_CHAT_STEPS];
     r.value = v;
     try { localStorage.setItem(key, v ? "1" : "0"); } catch { /* ignore */ }
   }
@@ -463,6 +467,7 @@ export const useUiStore = defineStore("ui", () => {
     chatThinking,
     chatNotes,
     chatSteps,
+    chatTyping,
     setChatShow,
     usageStats,
     setUsageStats,

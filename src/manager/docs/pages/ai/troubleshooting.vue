@@ -57,6 +57,11 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
           <li><b>Recipes.</b> Common asks (an option never comes up, fixing warnings, negatives,
             weights, how-to questions) come with a short list of steps, and a docs question can be
             answered with one <b>explain</b> call.</li>
+          <li><b>Feature notes.</b> When your message touches a feature (refs, tag filters,
+            constraints, rules, negatives, weights, loops and more), a few lines on how that feature
+            works come with it, at most three at a time. The first time a change tool is used or
+            fails, its note comes with the result. Each note is sent once while the model can still
+            see it.</li>
           <li><b>A progress note.</b> Each later step gets one line saying what the answer has done so
             far.</li>
           <li><b>Shorter memory.</b> The chat is summarised sooner (at half the window for a small

@@ -35,6 +35,7 @@ import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
+import { useUiStore } from "../stores/uiStore";
 import { openEditor, stageDraft } from "./useOpenEditor";
 import { useAiConfig } from "./useAiConfig";
 import { applyManage, isManageOp, undoManage, type ManageOp } from "./aiManageOps";
@@ -118,6 +119,11 @@ export interface LiveAnswer {
   status: string;
   thinking: boolean;
   steps: AiChatStep[];
+  /** The step's reasoning so far, while it streams. */
+  thought?: string;
+  /** When the step was asked, while the model has sent nothing back
+   *  (busy with another request, loading, or reading the prompt). */
+  waitingSince?: number;
 }
 const EMPTY_LIVE: LiveAnswer = { text: "", status: "", thinking: false, steps: [] };
 const live = shallowRef<LiveAnswer>(EMPTY_LIVE);
@@ -146,16 +152,27 @@ function onEvent(ev: AiChatStreamEvent): void {
     // Text the last step streamed stays above the steps, not wiped by the next.
     const kept = cur.text.trim() && !cur.steps.some((s) => s.say && s.note === cur.text)
       ? [...cur.steps, { tool: "say", note: cur.text, ok: true, say: true }] : cur.steps;
-    live.value = { ...cur, steps: kept, text: "", thinking: false, status: "" };
+    live.value = { ...cur, steps: kept, text: "", thinking: false, status: "", thought: "",
+                   waitingSince: Date.now() };
   }
-  else if (ev.type === "text") live.value = { ...cur, text: ev.v, thinking: false };
-  else if (ev.type === "thinking") live.value = { ...cur, thinking: true };
-  else if (ev.type === "status") live.value = { ...cur, status: ev.v };
+  // Typing out is a choice (Settings › AI assistant › Chat); off, the reply
+  // arrives whole with the answer.
+  else if (ev.type === "text") {
+    live.value = useUiStore().chatTyping
+      ? { ...cur, text: ev.v, thinking: false, waitingSince: undefined }
+      : { ...cur, waitingSince: undefined };
+  }
+  else if (ev.type === "thinking") {
+    live.value = { ...cur, thinking: true, waitingSince: undefined,
+                   ...(ev.v !== undefined ? { thought: ev.v } : {}) };
+  }
+  else if (ev.type === "status") live.value = { ...cur, status: ev.v, waitingSince: undefined };
   // As soon as it is decided, not when the answer is done.
   else if (ev.type === "reaction") react(ev.emoji);
   else if (ev.type === "tool") {
     // A "say" step is the text that just streamed: it moves into the list.
-    live.value = { ...cur, steps: [...cur.steps, ev.step], ...(ev.step.say ? { text: "" } : {}) };
+    live.value = { ...cur, steps: [...cur.steps, ev.step], ...(ev.step.say ? { text: "" } : {}),
+                   ...(ev.step.think ? { thought: "" } : {}), waitingSince: undefined };
   }
 }
 
@@ -163,7 +180,7 @@ function onEvent(ev: AiChatStreamEvent): void {
 async function turn(
   body: AiChatRequest | AiChatResume | AiChatRetry, signal: AbortSignal,
 ): Promise<AiChatResult> {
-  live.value = EMPTY_LIVE;
+  live.value = { ...EMPTY_LIVE, waitingSince: Date.now() };
   try {
     const result = await api.ai.chatStream(body, onEvent, signal);
     if (result.context) context.value = result.context;

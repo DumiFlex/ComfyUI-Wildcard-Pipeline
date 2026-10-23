@@ -298,7 +298,41 @@ async def test_openai_stream_is_assembled_with_text_events(streamer):
     assert streamer.state["seen"][0]["stream"] is True
     assert streamer.state["seen"][0]["stream_options"] == {"include_usage": True}
     assert events[0] == {"type": "thinking"}
-    assert events[-1] == {"type": "text", "v": "Hello"}
+    assert [e for e in events if e["type"] == "text"][-1] == {"type": "text", "v": "Hello"}
+    # The reasoning goes live too, and a <think> block in the text with it.
+    thoughts = [e["v"] for e in events if e["type"] == "thinking" and "v" in e]
+    assert "hmm" in thoughts and "x" in thoughts
+
+
+async def test_a_json_step_streams_only_its_message(streamer):
+    _ai_chat._NO_STREAM.clear()
+    step = json.dumps({"plan": "say \"message\": no", "message": "Added it.\nCheck the café.",
+                       "calls": [{"tool": "x", "args": {"message": "never"}}]})
+    streamer.state["body"] = _sse(*(
+        {"choices": [{"delta": {"content": step[i:i + 5]}}]} for i in range(0, len(step), 5)))
+    events: list = []
+
+    async def emit(e):
+        events.append(e)
+
+    data = await _ai_chat._post(_cfg(streamer), "/chat/completions", {"model": "m"},
+                                kind="openai", emit=emit, show=False)
+    assert data["choices"][0]["message"]["content"] == step
+    texts = [e["v"] for e in events if e["type"] == "text"]
+    assert texts and texts[-1] == "Added it.\nCheck the café."
+    assert all("never" not in t and "{" not in t for t in texts)
+    assert all("Added it.\nCheck the café.".startswith(t) for t in texts)
+
+
+def test_partial_field_reads_the_reply_as_it_is_written():
+    pf = _ai_chat.partial_field
+    assert pf('{"plan": "a", "mess') == ""
+    assert pf('{"plan": "a", "message": "Hi\\nthe') == "Hi\nthe"
+    assert pf('{"message": "caf\\u00e9 \\u00') == "café "
+    assert pf('{"message": "a\\') == "a"
+    assert pf('{"calls": [{"args": {"message": "no"}}], "message": "yes"}') == "yes"
+    assert pf('```json\n{"message": "done"}\n```') == "done"
+    assert pf("not json") == ""
 
 
 async def test_ollama_stream_is_assembled(streamer):
@@ -375,7 +409,9 @@ async def test_responses_stream_is_assembled(streamer):
                                 kind="responses", emit=emit, show=True)
     assert data["output"] == final["output"] and data["status"] == "completed"
     assert "_early" not in data
-    assert events[0] == {"type": "thinking"} and events[-1] == {"type": "text", "v": "Hello"}
+    assert events[0] == {"type": "thinking"}
+    assert [e for e in events if e["type"] == "text"][-1] == {"type": "text", "v": "Hello"}
+    assert {"type": "thinking", "v": "hm"} in events
 
 
 async def test_a_cut_responses_stream_keeps_finished_items(streamer):
@@ -545,3 +581,12 @@ async def test_a_window_too_small_even_when_lean_says_what_to_load(wp_client, fa
     err = (await _json(resp, 400))["error"]
     assert "loaded with 16,384 tokens of context" in err
     assert "about 17,339" in err and "at least 32,768" in err
+
+
+def test_usage_keeps_the_thinking_tokens_the_server_reports():
+    # LM Studio 0.4.26, Qwen3.5 9B (probe 2026-10-23).
+    got = _ai_chat._usage_openai({"usage": {
+        "prompt_tokens": 25, "completion_tokens": 267,
+        "completion_tokens_details": {"reasoning_tokens": 261}}})
+    assert got == {"prompt": 25, "output": 267, "thought": 261}
+    assert "thought" not in _ai_chat._usage_openai({"usage": {"completion_tokens": 3}})
