@@ -20,10 +20,19 @@ Use it after a chat change, the way `ai_pack_evals.py` is used for the pack
 builder; score each scenario by its average over several runs (``--runs``).
 It is not part of CI: it needs a running model.
 
+The ``smoke`` set (``--set smoke``) is ten short asks, one per feature a
+small model gets wrong most (refs, tag filters, "only" constraints,
+fallback, negatives, AND rules, a renamed variable, four items at once, a
+how-to and a "where is"). Its cards are applied between turns (creates
+only), so a later turn can build on them, and each turn can carry a
+``check`` on the cards' content. Run it before and after each small-model
+change (/pr-drafts/request-aware-prompts-plan.md); about fifteen minutes on
+a 9B.
+
 USAGE
 -----
     python scripts/ai_chat_evals.py --db PATH [--runs 3] [--only NAME,...]
-        [--model NAME] [--out chat-evals.md]
+        [--set default|smoke] [--model NAME] [--out chat-evals.md]
 
 ``--db`` is the library to copy (default: the one ComfyUI would open).
 Writes the report and a ``.json`` beside it with every turn's answer,
@@ -83,6 +92,100 @@ SCENARIOS: list[dict[str, Any]] = [
      "expect": [["run_test"]]},
 ]
 
+
+
+def _texts(out: dict[str, Any]) -> str:
+    """Everything the answer's cards would write, as one JSON string."""
+    return json.dumps([p.get("op") for p in out.get("proposals") or []], ensure_ascii=False)
+
+
+def _cards(tool: str, n: int) -> Callable[[dict[str, Any]], bool]:
+    return lambda out: sum(1 for p in out.get("proposals") or [] if p.get("tool") == tool) >= n
+
+
+#: Small-model smoke set: one ask per feature. ``check`` per turn: a test of
+#: the answer (its cards' ops are in ``_texts``), scored as "content".
+SMOKE: list[dict[str, Any]] = [
+    {"name": "s-refs", "page": {"route": "/library"},
+     "turns": ["Make a Colors wildcard with 6 colours and no variable, so other wildcards "
+               "can draw from it.",
+               "Make an Outfit wildcard whose options draw their colour from Colors."],
+     "expect": [["create_wildcard"], ["create_wildcard"]],
+     "check": [None, lambda out: "@{Colors" in _texts(out)]},
+    {"name": "s-tag-filter", "page": {"route": "/library"},
+     "turns": ["Make a Palette wildcard with no variable: 4 warm colours tagged warm and 4 "
+               "cool colours tagged cool.",
+               "Make a Sky wildcard whose options use only warm colours from Palette."],
+     "expect": [["create_wildcard"], ["create_wildcard"]],
+     "check": [None, lambda out: bool(re.search(r"@\{Palette:\s*warm", _texts(out)))]},
+    {"name": "s-only", "page": {"route": "/library"},
+     "turns": ["Make a Setting wildcard (beach, office, forest) and an Outfit wildcard with "
+               "outfits tagged by the setting they suit, then make each setting get only "
+               "outfits that suit it."],
+     "expect": [["create_wildcard", "create_constraint"]],
+     "check": [lambda out: '"only"' in _texts(out)]},
+    {"name": "s-fallback", "page": {"route": "/library"},
+     "turns": ["Make a Weather wildcard with 5 options where clear sky is the fallback when "
+               "rules rule out everything else."],
+     "expect": [["create_wildcard"]],
+     "check": [lambda out: '"fallback": true' in _texts(out)]},
+    {"name": "s-negatives", "page": {"route": "/library"},
+     "turns": ["Make a Lighting wildcard with 4 options: two dark, two bright.",
+               "Add negatives to the dark options so the image isn't overexposed."],
+     "expect": [["create_wildcard"], [("edit_options", "create_wildcard")]],
+     "check": [None, lambda out: '"negative": "' in _texts(out)]},
+    {"name": "s-and-rule", "page": {"route": "/library"},
+     "turns": ["Make a Class wildcard (mage, warrior) and a Season wildcard (winter, summer), "
+               "then a derivation that sets $cloak to 'fur cloak' when the class is warrior "
+               "AND the season is winter, else nothing."],
+     "expect": [["create_wildcard", "create_derivation"]],
+     "check": [lambda out: '"match": "all"' in _texts(out)
+               and all(w in _texts(out) for w in ("warrior", "winter"))]},
+    {"name": "s-rename-var", "page": {"route": "/library"},
+     "turns": ["Make a Hair wildcard bound to $hair with 4 options.",
+               "Rename its variable to hair_color."],
+     "expect": [["create_wildcard"], [("update_info", "edit_options", "variables")]],
+     "check": [None, lambda out: "hair_color" in _texts(out)]},
+    {"name": "s-four-items", "page": {"route": "/library"},
+     "turns": ["Make four wildcards: Eyes, Pose, Expression and Background, each with 5 "
+               "options."],
+     "expect": [["create_wildcard"]],
+     "check": [_cards("create_wildcard", 4)]},
+    {"name": "s-how-to", "page": {"route": "/library"},
+     "turns": ["How does a constraint's only mode work? Keep it short."],
+     "expect": [[]],
+     "check": [lambda out: any(s.get("tool") in ("explain", "docs_search", "docs_read")
+                               for s in out.get("steps") or [])]},
+    {"name": "s-where", "page": {"route": "/library"},
+     "turns": ["Where do I turn on deleting for the AI assistant?"],
+     "expect": [[]],
+     "check": [lambda out: "permission" in str(out.get("message") or "").lower()]},
+]
+
+SETS = {"default": SCENARIOS, "smoke": SMOKE}
+
+#: Where each kind of create card is applied (the drawer's Apply, creates only).
+_APPLY = {"module": "/wp/api/modules", "bundle": "/wp/api/bundles",
+          "template": "/wp/api/templates"}
+
+
+async def apply_cards(client: Any, out: dict[str, Any]) -> list[dict[str, Any]]:
+    """Apply the answer's create cards like the drawer does, so the next turn
+    can build on them; the events the next message reports."""
+    events = []
+    for p in out.get("proposals") or []:
+        op = p.get("op") or {}
+        path = _APPLY.get(str(op.get("kind")))
+        if op.get("op") != "create" or not path or not isinstance(op.get("body"), dict):
+            continue
+        body = {"category_id": None, "description": "", "tags": [], **op["body"]}
+        resp = await client.post(path, json=body)
+        if resp.status in (200, 201):
+            row = await resp.json()
+            events.append({"pid": p.get("pid"), "status": "applied", "id": row.get("id")})
+    return events
+
+
 #: What a page tool answers in the eval (no browser).
 PAGE_ANSWERS = {
     "read_page": "The page shows the library list: wildcards, derivations, constraints, "
@@ -115,7 +218,7 @@ def _answers(pending: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def score_turn(out: dict[str, Any], expect: Any) -> dict[str, Any]:
+def score_turn(out: dict[str, Any], expect: Any, check: Any = None) -> dict[str, Any]:
     """One answer's numbers (see the module docstring)."""
     proposals = out.get("proposals") or []
     steps = out.get("steps") or []
@@ -144,7 +247,14 @@ def score_turn(out: dict[str, Any], expect: Any) -> dict[str, Any]:
         claims.append("claimed a change with no card")
     if "no test ran in this answer" in message.lower():
         claims.append("talked about a test that never ran")
-    return {"cards": len(proposals), "repeats": repeats, "errors": len(errors),
+    content = None
+    if callable(check):
+        try:
+            content = bool(check(out))
+        except Exception:  # a check that can't read the answer failed it
+            content = False
+    return {"content": content, "cards": len(proposals), "repeats": repeats,
+            "errors": len(errors),
             "tests": len(tests), "tests_ran": len(ran), "did": did,
             "claims": sorted(set(claims)), "steps": len(steps),
             "card_warnings": sum(len(p.get("warnings") or []) for p in proposals)}
@@ -153,11 +263,14 @@ def score_turn(out: dict[str, Any], expect: Any) -> dict[str, Any]:
 async def run_scenario(client: Any, sc: dict[str, Any]) -> list[dict[str, Any]]:
     chat_id = None
     turns = []
+    events: list[dict[str, Any]] = []
     for n, text in enumerate(sc["turns"]):
         started = time.perf_counter()
         body: dict[str, Any] = {"message": text, "page": sc.get("page") or {}}
         if chat_id:
             body["chat_id"] = chat_id
+        if events:
+            body["events"] = events
         resp = await client.post("/wp/api/ai/chat", json=body)
         out = await resp.json()
         rounds = 0
@@ -180,8 +293,10 @@ async def run_scenario(client: Any, sc: dict[str, Any]) -> list[dict[str, Any]]:
             break
         chat_id = out.get("chat_id")
         expect = (sc.get("expect") or [None] * len(sc["turns"]))[n]
+        check = (sc.get("check") or [None] * len(sc["turns"]))[n]
+        events = await apply_cards(client, out) if sc.get("check") else []
         turns.append({
-            "text": text, "seconds": seconds, **score_turn(out, expect),
+            "text": text, "seconds": seconds, **score_turn(out, expect, check),
             "message": out.get("message"),
             "step_notes": [(s.get("tool"), s.get("ok"), s.get("note")) for s in
                            out.get("steps") or []],
@@ -200,28 +315,32 @@ def report(rows: list[dict[str, Any]], model: str, note: str) -> str:
         return sum(t[key] for t in turns) / len(turns) if turns else 0
 
     judged = [t for t in turns if t["did"] is not None]
+    checked = [t for t in turns if t.get("content") is not None]
     tests = sum(t["tests"] for t in turns)
     lines = [
         f"# Chat evals: {model}", "", note, "",
         f"- Turns: {len(turns)} ({len(failed)} failed outright)",
         f"- Did what was asked: {sum(1 for t in judged if t['did'])} / {len(judged)}",
+        f"- Content checks passed: {sum(1 for t in checked if t['content'])} / {len(checked)}",
         f"- Cards per answer: {mean('cards'):.1f}; repeated cards: "
         f"{sum(t['repeats'] for t in turns)}",
         f"- Tool errors per turn: {mean('errors'):.2f}",
         f"- run_test: {sum(t['tests_ran'] for t in turns)} ran of {tests} calls",
         f"- Answers with a false claim: {sum(1 for t in turns if t['claims'])}",
         f"- Seconds per turn: {mean('seconds'):.0f}", "",
-        "| Scenario | Run | Turn | Did | Cards | Repeats | Errors | Tests ran | Claims | s |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Scenario | Run | Turn | Did | Content | Cards | Repeats | Errors | Tests ran | Claims "
+        "| s |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for r in rows:
         for n, t in enumerate(r["turns"], 1):
             if "error" in t:
                 lines.append(f"| {r['name']} | {r['run']} | {n} | error: "
-                             f"{str(t['error'])[:60]} | | | | | | {t['seconds']} |")
+                             f"{str(t['error'])[:60]} | | | | | | | {t['seconds']} |")
                 continue
             did = "" if t["did"] is None else ("yes" if t["did"] else "NO")
-            lines.append(f"| {r['name']} | {r['run']} | {n} | {did} | {t['cards']} | "
+            ok = "" if t.get("content") is None else ("yes" if t["content"] else "NO")
+            lines.append(f"| {r['name']} | {r['run']} | {n} | {did} | {ok} | {t['cards']} | "
                          f"{t['repeats']} | {t['errors']} | {t['tests_ran']}/{t['tests']} | "
                          f"{'; '.join(t['claims'])[:60]} | {t['seconds']} |")
     return "\n".join(lines) + "\n"
@@ -258,6 +377,8 @@ def main() -> int:
     ap.add_argument("--db", default="", help="library database to copy")
     ap.add_argument("--runs", type=int, default=3)
     ap.add_argument("--only", default="", help="scenario names, comma-separated")
+    ap.add_argument("--set", default="default", choices=sorted(SETS),
+                    help="which scenarios: the default chats or the small-model smoke set")
     ap.add_argument("--model", default="")
     ap.add_argument("--note", default="", help="model, chat template, commit")
     ap.add_argument("--out", default="chat-evals.md")
@@ -285,7 +406,7 @@ def main() -> int:
               "assistant, or pass --model.")
         return 0
     only = {s.strip() for s in args.only.split(",") if s.strip()}
-    scenarios = [s for s in SCENARIOS if not only or s["name"] in only]
+    scenarios = [s for s in SETS[args.set] if not only or s["name"] in only]
     print(f"Library copy and settings in {work}; model {cfg['model']}", flush=True)
     def write(rows: list[dict[str, Any]]) -> None:
         Path(args.out).write_text(report(rows, cfg["model"], args.note), encoding="utf-8")
