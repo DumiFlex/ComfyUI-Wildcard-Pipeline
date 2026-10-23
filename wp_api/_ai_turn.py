@@ -525,6 +525,11 @@ async def _start_chat(
         # when asked (`more_tools`), appended to the end of the list.
         "split": bool(prof.get("split")),
         "lazy": bool(prof["slim"] or prof.get("scoped")),
+        # Lean prompt (Settings › AI assistant › Advanced): small models in
+        # typed JSON steps get one line per tool, and each tool's docs with
+        # the step that first offers it (`_tool_docs`).
+        "tool_index": bool(cfg.get("lean_prompt")) and prof.get("size") == "small"
+        and fmt == "json" and _ai_chat.checks_schema(cfg) and bool(prof.get("split")),
     }
     if meta["lazy"]:
         # Their tools aren't declared up front: the first message's
@@ -826,6 +831,35 @@ def _loop_check(t: _Turn, tool: str) -> str:
             "with what you have, or do the next part of the request with another tool.)")
 
 
+#: Where each kind of log entry keeps the text the model reads last.
+_TAIL_FIELD = {"user": "sent", "results": "tail", "note": "text"}
+
+
+def _tool_docs(t: _Turn, offer: list[Any] | None) -> None:
+    """Lean prompt (`meta["tool_index"]`): the full docs of each offered
+    tool the model can't read yet, at the end of the newest entry (which no
+    request carried yet, so the log stays append-only). Remembered as
+    `tool:<name>` keys beside the feature cards, so a masked or cut entry
+    sends them again."""
+    if not t.meta.get("tool_index") or offer is None or t.forced:
+        return
+    at = len(t.log) + len(t.new) - 1
+    seen = ai_cards.sent(t.meta, at + 1)
+    fresh = [x for x in offer if x.name in ai_tools.BY_NAME and f"tool:{x.name}" not in seen]
+    if not fresh:
+        return
+    docs = "Tools for this step:\n" + ai_chat.kinds_section(fresh).strip()
+    last = t.new[-1] if t.new else {}
+    field = _TAIL_FIELD.get(str(last.get("kind")))
+    if field is None:
+        t.new.append(ai_chatlog.note_entry(docs))
+        at += 1
+    else:
+        last[field] = (last.get(field) or "") + "\n\n" + docs
+    t.meta["cards"] = {**(t.meta.get("cards") or {}),
+                       **{f"tool:{x.name}": [at, False] for x in fresh}}
+
+
 def _narrowed(t: _Turn, offer: list[Any] | None) -> list[Any] | None:
     """A typed JSON step's offer with its fields limited to what exists and
     may be changed (`engine/ai/narrow.py`); grammar only, so free."""
@@ -841,11 +875,12 @@ async def _model_step(t: _Turn) -> dict[str, Any] | str | web.Response:
     """Ask the model for one step. Returns the step, `_NEXT` to ask again
     (another tool format, a leaner start), `_STOP` with `t.message` set, or
     an error response when nothing was worked out yet."""
+    offer, must_call = _offer(t)
+    _tool_docs(t, offer)
     meta = t.meta = ai_chatlog.fit(t.log + t.new, t.meta, t.prof["history_chars"])
     rendered = ai_chatlog.render(t.log + t.new, meta)
     if t.emit:
         await t.emit({"type": "step", "n": t.step + 1})
-    offer, must_call = _offer(t)
     t.offered = [x.name for x in offer] if offer is not None else None
     plain = offer
     offer = _narrowed(t, offer)

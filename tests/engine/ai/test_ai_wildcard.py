@@ -241,3 +241,5 @@ def test_braces_around_a_lone_ref_are_dropped():
         "options": [{"value": "crimson", "sub_categories": ["warm"]}]}}
     out = compile_text("{@{Palette:warm}} sky", surface="option", refs=RefIndex([palette]))
     assert out == "@{aaaa0001#Palette:warm} sky"
+    out = compile_text("{1$$@{Palette:warm}} sky", surface="option", refs=RefIndex([palette]))
+    assert out == "@{aaaa0001#Palette:warm} sky"

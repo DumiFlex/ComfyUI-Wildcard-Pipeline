@@ -892,6 +892,8 @@ export interface AiConfig {
   web_always_allow: boolean;
   /** Advanced: small models name the tool, then fill its args (off when absent). */
   choose_first?: boolean;
+  /** Advanced: small models get one line per tool, its docs when first offered. */
+  lean_prompt?: boolean;
   /** Advanced: samplers sent to a local or OpenAI-compatible server for the
    *  model set here. Absent ones use the server's setting. */
   sampling?: AiSampling;
@@ -962,6 +964,7 @@ export interface AiConfigPatch {
   danbooru_lookup?: boolean;
   web_always_allow?: boolean;
   choose_first?: boolean;
+  lean_prompt?: boolean;
   /** A partial update: `null` puts one sampler back to the server's setting. */
   sampling?: Partial<Record<AiSamplerId, number | null>>;
   allow_delete?: boolean;

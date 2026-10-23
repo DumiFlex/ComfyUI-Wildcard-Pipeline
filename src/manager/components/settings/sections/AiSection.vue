@@ -65,7 +65,8 @@ async function patch(p: Parameters<typeof save>[0]): Promise<boolean> {
  * and the Danbooru lookup (its recommendation depends on the image model). */
 const RECOMMENDED = {
   model_size: "auto", thinking: "auto", unload_after_s: 60,
-  tool_format: "auto", choose_first: false, allow_delete: false, auto_apply: false,
+  tool_format: "auto", choose_first: false, lean_prompt: false, allow_delete: false,
+  auto_apply: false,
   web_always_allow: false,
 } as const;
 /* Context is a floor, not a pick: under 16k the chat's instructions don't
@@ -78,7 +79,7 @@ const RECOMMENDED_UI = {
 const RESET_LABELS: Record<string, string> = {
   model_size: "Model size", context_max: "Most context to use", thinking: "Thinking",
   unload_after_s: "Unload the model after", tool_format: "Tool format",
-  choose_first: "Choose the tool first", allow_delete: "Let the assistant delete items",
+  choose_first: "Choose the tool first", lean_prompt: "Short tool list", allow_delete: "Let the assistant delete items",
   auto_apply: "Apply small changes automatically", web_always_allow: "Don't ask before web calls",
   explainChip: "Show Explain on selected text", chatThinking: "Show thinking",
   chatNotes: "Show working notes", chatSteps: "Show what it did", chatTyping: "Type out replies", sampling: "Sampling",
@@ -1385,6 +1386,19 @@ const off = computed(() => !config.value?.enabled);
               aria-label="Choose the tool first"
               data-test="ai-choose-first"
               @update:model-value="(v: boolean) => patch({ choose_first: v })"
+            />
+          </SettingRow>
+          <SettingRow
+            label="Short tool list"
+            recommended="Off, unless a small model's context is tight"
+            hint="Small models on a local server, in JSON steps: the instructions name each tool in one line, and a tool's full description comes the first time a step offers it. About 2,000 fewer tokens per step. New chats only. Off by default."
+            setting-key="ai-lean-prompt"
+          >
+            <Toggle
+              :model-value="!!config.lean_prompt"
+              aria-label="Short tool list"
+              data-test="ai-lean-prompt"
+              @update:model-value="(v: boolean) => patch({ lean_prompt: v })"
             />
           </SettingRow>
         </SettingGroup>

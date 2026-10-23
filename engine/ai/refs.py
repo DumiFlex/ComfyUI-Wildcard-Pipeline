@@ -279,8 +279,9 @@ def ref_dupe_hint(text: str) -> str:
             "or vary the words around it)") if "@{" in (text or "") else ""
 
 
-#: "{@{Palette:warm}}": a ref inside braces that make no pick.
-_WRAPPED_REF = re.compile(r"\{\s*(@\{[^{}|]*\})\s*\}")
+#: "{@{Palette:warm}}" or "{1$$@{Palette:warm}}": a ref inside braces that
+#: make no pick (one choice, so a 1-pick of it is the ref itself).
+_WRAPPED_REF = re.compile(r"\{\s*(?:1\$\$\s*)?(@\{[^{}|]*\})\s*\}")
 
 
 def compile_text(
@@ -295,7 +296,8 @@ def compile_text(
     if "@{" in text and allow_ref:
         # The 9B wrote "{@{Palette:warm}} sky", then gave up on refs when
         # told to drop "the braces" (smoke s-tag-filter, 2026-10-23).
-        # Braces with one choice pick nothing, so they just go.
+        # Braces with one choice pick nothing, so they just go; so does the
+        # "1$$" it then tried ("{1$$@{Palette:warm}} sky", same set).
         text = _WRAPPED_REF.sub(r"\1", text)
     if "@{" in text:
         if not allow_ref:
