@@ -153,9 +153,8 @@ class RefIndex:
     def describe(self, *, limit: int = 60, exclude: str | None = None) -> str:
         """One line per wildcard for a prompt: name, $var and tags."""
         lines = []
-        for r in list(self.rows.values()):
-            if r["id"] == exclude:
-                continue
+        rows = [r for r in self.rows.values() if r["id"] != exclude]
+        for r in rows:
             p = r["payload"]
             bits = [f"@{{{r.get('name') or r['id']}}}"]
             if p.get("var_binding"):
@@ -164,8 +163,8 @@ class RefIndex:
             if tags:
                 bits.append("tags: " + ", ".join(tags[:20]))
             lines.append(" ".join(bits))
-            if len(lines) >= limit:
-                lines.append(f"(+{len(self.rows) - limit} more)")
+            if len(lines) >= limit and len(rows) > limit:
+                lines.append(f"(+{len(rows) - limit} more)")
                 break
         return "\n".join(lines)
 

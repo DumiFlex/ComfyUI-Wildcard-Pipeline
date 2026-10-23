@@ -548,16 +548,18 @@ def _official_openai(cfg: dict[str, Any]) -> bool:
     return cfg.get("provider") == "openai" or host == "api.openai.com"
 
 
-async def _answer(cfg: dict[str, Any], path: str, body: dict[str, Any], kind: str) -> Any:
+async def _answer(cfg: dict[str, Any], path: str, body: dict[str, Any], kind: str,
+                  meter: Any = None) -> Any:
     """`complete_json`'s request. Streamed when the browser is watching its
     progress (`_ai_progress`), so it can say whether the model is reading
-    the prompt, thinking or writing; a plain request otherwise."""
+    the prompt, thinking or writing; a plain request otherwise. `meter`
+    (`_meter`) sees the stream as it comes."""
     if not _ai_progress.active():
         return await _request(cfg, "POST", path, timeout=_COMPLETE_TIMEOUT, body=body)
     from wp_api import _ai_chat  # imports this module
     _ai_progress.call_started()
     return await _ai_chat._post(cfg, path, body, kind=kind, emit=_ai_progress.on_event,
-                                show=True)
+                                show=True, meter=meter or _meter(0))
 
 
 def _early(data: Any) -> bool:
@@ -624,11 +626,40 @@ def _keep_thinking(text: Any, reasoning: Any = "") -> None:
     _THOUGHT.set(_ai_chat.thinking_text(text, reasoning))
 
 
+#: The output limit for an answer that may think first: a `quick` answer's
+#: own limit is only used once its reasoning is off.
+THINKING_MAX_TOKENS = 8192
+#: Reasoning a `quick` answer may write before its answer starts (about 4k
+#: tokens): past it the stream is stopped and asked again without. A 9B on
+#: LM Studio thought 7,368 tokens over 3 minutes for 3 wildcard options
+#: with Thinking on Auto (2026-10-23).
+QUICK_THINK_CHARS = 16000
+
+
+class _Overthought(Exception):
+    """Raised from the stream meter: a `quick` answer is still thinking."""
+
+
+def _meter(limit: int) -> Any:
+    """The `_ai_chat._post` meter: counts the reasoning for the working line
+    and stops a stream that thought past `limit` characters without
+    starting its answer (0: count only)."""
+    def meter(reasoning: int, text: str) -> None:
+        low = text.lower()
+        if "<think>" in low and "</think>" not in low:
+            reasoning = max(reasoning, len(text))
+        _ai_progress.thought(reasoning)
+        if limit and reasoning > limit and not strip_think(text).strip():
+            raise _Overthought
+    return meter
+
+
 async def complete_json(
     cfg: dict[str, Any], *, system: str, user: str, schema: dict[str, Any],
     schema_name: str, temperature: float = 0.8, max_tokens: int = 8192,
     history: list[tuple[str, Any]] | None = None, num_ctx: int | None = None,
     images: list[dict[str, Any]] | None = None, partial: bool = False,
+    quick: bool = False,
 ) -> Any:
     """One request, one JSON object back, shaped by `schema` where supported.
 
@@ -640,6 +671,13 @@ async def complete_json(
 
     An answer the server cut off at its limit is an error, unless `partial`
     says the caller can use what came before the cut (marked `CUT_OFF`).
+
+    `quick` marks a short answer that gains little from reasoning (the
+    editor panels): on a local server with Thinking on Auto the server is
+    asked to skip it, as Ollama always is, and a model that thinks anyway
+    is stopped past `QUICK_THINK_CHARS` and asked again without.
+    `max_tokens` is then the answer's own size; while reasoning may run the
+    limit is at least `THINKING_MAX_TOKENS`.
     """
     _THOUGHT.set("")
     from wp_api import _ai_thinking  # imports this module
@@ -647,7 +685,7 @@ async def complete_json(
     answer = await _complete_json(
         cfg, system=system, user=user, schema=schema, schema_name=schema_name,
         temperature=temperature, max_tokens=max_tokens, history=history,
-        num_ctx=num_ctx, images=images)
+        num_ctx=num_ctx, images=images, quick=quick)
     if not partial and isinstance(answer, dict) and answer.get(CUT_OFF):
         raise AIError(CUT_OFF_MESSAGE)
     return answer
@@ -657,7 +695,7 @@ async def _complete_json(
     cfg: dict[str, Any], *, system: str, user: str, schema: dict[str, Any],
     schema_name: str, temperature: float, max_tokens: int,
     history: list[tuple[str, Any]] | None, num_ctx: int | None,
-    images: list[dict[str, Any]] | None,
+    images: list[dict[str, Any]] | None, quick: bool = False,
 ) -> Any:
     _require_model(cfg)
     history = history or []
@@ -709,7 +747,8 @@ async def _complete_json(
                 "think": False,
                 "options": {
                     "temperature": temperature,
-                    "num_predict": 8192,
+                    # `think` is off, so the limit is the answer's own.
+                    "num_predict": max_tokens,
                     # Ollama's default window is 2-4k tokens and it cuts a
                     # longer prompt without saying so, so size it per request.
                     # A chat's own window when given: a new size reloads the
@@ -758,14 +797,41 @@ async def _complete_json(
                 body["ttl"] = ttl
         think_keys: tuple[str, ...] = ()
         key = (str(cfg.get("base_url") or ""), str(cfg.get("model") or ""))
-        if cfg.get("thinking", "auto") != "auto" or key in _JSON_THINK_OFF:
+        setting = cfg.get("thinking", "auto")
+        # A quick answer on a local server skips the reasoning on Auto,
+        # unless this model refused the off switch before.
+        quick_off = (quick and setting == "auto" and bool(cfg.get("local"))
+                     and key not in _QUICK_OFF_REFUSED)
+        if setting != "auto" or key in _JSON_THINK_OFF or quick_off:
             from wp_api import _ai_chat  # imports this module
-            off = (_ai_chat._no_thinking(cfg) if key in _JSON_THINK_OFF
+            off = (_ai_chat._no_thinking(cfg) if key in _JSON_THINK_OFF or quick_off
                    else _ai_chat._thinking_fields(cfg))
             body.update(off)
             think_keys = tuple(off)
+        thinks_off = bool(think_keys) and (
+            key in _JSON_THINK_OFF or quick_off or setting == "off")
+        if quick and not thinks_off:
+            body["max_tokens"] = max(max_tokens, THINKING_MAX_TOKENS)
         try:
-            data = await _answer(cfg, "/chat/completions", body, "openai")
+            try:
+                watch = {"meter": _meter(QUICK_THINK_CHARS)} if quick and not thinks_off else {}
+                data = await _answer(cfg, "/chat/completions", body, "openai", **watch)
+            except _Overthought:
+                # Still thinking, no answer begun: ask again with the off
+                # switch, sized to the answer, and keep it off for this
+                # model's JSON calls.
+                from wp_api import _ai_chat  # imports this module
+                off = _ai_chat._no_thinking(cfg)
+                if not off:
+                    raise AIError(CUT_OFF_MESSAGE) from None
+                for k in think_keys:
+                    body.pop(k, None)
+                body.update(off)
+                body["max_tokens"] = max_tokens
+                think_keys = tuple(off)
+                quick_off = True
+                data = await _answer(cfg, "/chat/completions", body, "openai")
+                _JSON_THINK_OFF.add(key)
         except AIError as e:
             # A server or model that won't take the thinking switch: ask
             # again as is, as the chat does.
@@ -773,8 +839,12 @@ async def _complete_json(
                 raise
             for k in think_keys:
                 body.pop(k, None)
+            if quick:
+                body["max_tokens"] = max(max_tokens, THINKING_MAX_TOKENS)
             data = await _answer(cfg, "/chat/completions", body, "openai")
-            if key not in _JSON_THINK_OFF:
+            if quick_off:
+                _QUICK_OFF_REFUSED.add(key)
+            elif key not in _JSON_THINK_OFF:
                 from wp_api import _ai_thinking  # imports this module
                 _ai_thinking.refused(cfg, str(cfg.get("thinking")))
         choices = data.get("choices") if isinstance(data, dict) else None
@@ -813,6 +883,9 @@ async def _complete_json(
 #: (base_url, model) pairs whose JSON answer was once all reasoning: their
 #: JSON calls (plans, items, panels) go with the thinking switch off.
 _JSON_THINK_OFF: set[tuple[str, str]] = set()
+#: (base_url, model) pairs that refused the off switch a quick answer sent
+#: on Auto (a model that must reason): their quick answers go as they are.
+_QUICK_OFF_REFUSED: set[tuple[str, str]] = set()
 
 
 def _all_thought(message: dict[str, Any]) -> bool:

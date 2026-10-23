@@ -41,6 +41,20 @@ from engine.modules.wildcard_handler import WildcardHandler
 from engine.syntax.subcat_filter import validate_subcat_name
 
 MAX_COUNT = 100
+
+
+def over_ask(count: int) -> int:
+    """How many options to ask for when `count` are wanted: a third more (at
+    least one), since repeats of the list are dropped after."""
+    return min(MAX_COUNT, count + max(1, -(-count // 3)))
+
+
+def answer_tokens(count: int) -> int:
+    """The output limit for `count` new options with reasoning off: an
+    option with its tags and negative is well under 100 tokens, so this
+    leaves room for long ones and the axes, and stops a looping model
+    early instead of after 8k tokens."""
+    return min(8192, 600 + 150 * count)
 MAX_TEXT_LEN = 400
 MAX_INSTRUCTION_LEN = 2000
 #: How many existing options the model sees as style examples. Enough to show
@@ -76,7 +90,7 @@ You write wildcard lists for Wildcard Pipeline, a ComfyUI extension that builds 
 image-generation prompts. A wildcard is a list of interchangeable options; each \
 run picks one option and puts its text into the prompt.
 
-Write each option like this:
+Each option has these fields:
 - text: one prompt fragment, exactly as it should appear in the prompt. Match the \
 style of the existing options: tag style ("red hair, long hair") or plain \
 sentences, casing, and length. No numbering, quotes, bullet marks or trailing \

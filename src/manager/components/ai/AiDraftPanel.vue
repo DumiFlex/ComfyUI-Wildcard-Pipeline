@@ -24,6 +24,8 @@ import type { ParsedBulkOption } from "../../utils/bulkParse";
 import { keptNote, useAiConversation } from "../../composables/useAiConversation";
 
 interface Props {
+  /** The saved wildcard's id; unset for a new one. */
+  moduleId?: string;
   name: string;
   varBinding: string;
   /** Current option values, blank rows included (the server ignores them). */
@@ -76,6 +78,7 @@ const convo = useAiConversation<AiWildcardDraftResult, Ctx>({
       skipped,
       count: n,
       wildcard: {
+        ...(props.moduleId ? { id: props.moduleId } : {}),
         name: props.name,
         var_binding: props.varBinding,
         description: props.description ?? "",

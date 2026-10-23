@@ -17,6 +17,8 @@ import { useAiConfig } from "../../composables/useAiConfig";
 type Mode = "add" | AiWildcardEditAction;
 
 interface Props {
+  /** The saved wildcard's id; unset for a new one. */
+  moduleId?: string;
   name: string;
   varBinding: string;
   options: WildcardOption[];
@@ -107,6 +109,7 @@ defineExpose({ draft, edit });
     <AiDraftPanel
       v-show="mode === 'add'"
       ref="drafter"
+      :module-id="moduleId"
       :name="name"
       :var-binding="varBinding"
       :existing-values="options.map((o) => o.value)"
@@ -123,6 +126,7 @@ defineExpose({ draft, edit });
     <AiEditPanel
       v-show="mode !== 'add'"
       ref="editor"
+      :module-id="moduleId"
       :action="editAction"
       :name="name"
       :var-binding="varBinding"

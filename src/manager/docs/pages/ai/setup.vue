@@ -103,6 +103,14 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
           for that model until you change Thinking.
         </p>
         <p>
+          <b>Draft with AI panels.</b> The panels in the editors (Add, Remove, Rewrite, Retag and
+          Weights on a wildcard, and the rule, text, description and organize panels) write short,
+          checked answers, so with Thinking on Auto a local model answers them without thinking.
+          Pick On or a level to have it think there too. A model that keeps thinking for about
+          4,000 tokens without starting its answer is stopped and asked again without thinking,
+          and the working line counts its thinking as it goes.
+        </p>
+        <p>
           LM Studio turns a model's thinking only on or off: it never hands a level to the model's
           chat template. A template with its own levels (Qwen 3.8: low, medium, xhigh) then always
           runs at its default, so On there means the template's default effort. llama.cpp does

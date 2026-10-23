@@ -72,6 +72,11 @@ async def test_openai_compatible_draft(wp_client, fake_llm):
     assert sent["response_format"]["json_schema"]["strict"] is True
     assert sent["ttl"] == 60  # local server: unload after idle
     assert "red hair" in sent["messages"][1]["content"]
+    # A panel answer: no reasoning on Auto, a limit sized to the options,
+    # and a couple more asked for than wanted (repeats are dropped).
+    assert sent["reasoning_effort"] == "none"
+    assert "Write 7 new options." in sent["messages"][1]["content"]
+    assert sent["max_tokens"] == 600 + 150 * 7
 
 
 async def test_cloud_openai_omits_temperature_and_sends_bearer(wp_client, fake_llm):

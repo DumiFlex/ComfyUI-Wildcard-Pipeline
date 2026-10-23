@@ -1062,6 +1062,9 @@ export interface AiWildcardDraftRequest extends AiConversational {
   instruction: string;
   count: number;
   wildcard: {
+    /** The saved wildcard's id, so it isn't offered as its own @{ref}
+     *  and refs read the editor's unsaved options. */
+    id?: string;
     name: string;
     var_binding: string;
     /** What the wildcard is for: its description and library tags. */
@@ -1107,6 +1110,9 @@ export interface AiWildcardEditRequest extends AiConversational {
   action: AiWildcardEditAction;
   instruction: string;
   wildcard: {
+    /** The saved wildcard's id, so it isn't offered as its own @{ref}
+     *  and refs read the editor's unsaved options. */
+    id?: string;
     name: string;
     var_binding: string;
     /** What the wildcard is for: its description and library tags. */

@@ -66,6 +66,8 @@ describe("AiDraftPanel", () => {
     // Blank scaffold rows are not sent.
     expect(body.wildcard.payload.options).toEqual([{ value: "red hair" }]);
     expect(body.wildcard.payload.tag_groups).toEqual({ TONE: ["warm"] });
+    // A new wildcard has no id to send.
+    expect(body.wildcard).not.toHaveProperty("id");
 
     const rows = w.findAll(".wp-ai-draft__row");
     expect(rows).toHaveLength(2);
@@ -153,5 +155,16 @@ describe("AiDraftPanel", () => {
     await w.get('[data-test="ai-run"]').trigger("click");
     await flushPromises();
     expect(draft.mock.calls[0][0].count).toBe(100);
+  });
+
+  it("sends a saved wildcard's id, so it isn't offered as its own reference", async () => {
+    draft.mockResolvedValue({ options: [], new_tags: [], skipped: [], model: "m", answer: {} });
+    const w = mount(AiDraftPanel, {
+      props: { moduleId: "abcd1234", name: "hair", varBinding: "hair", existingValues: [], existingTags: [] },
+    });
+    await w.get('[data-test="ai-instruction"]').setValue("more");
+    await w.get('[data-test="ai-run"]').trigger("click");
+    await flushPromises();
+    expect(draft.mock.calls[0][0].wildcard.id).toBe("abcd1234");
   });
 });
