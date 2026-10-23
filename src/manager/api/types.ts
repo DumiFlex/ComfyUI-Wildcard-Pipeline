@@ -892,6 +892,9 @@ export interface AiConfig {
   web_always_allow: boolean;
   /** Advanced: small models name the tool, then fill its args (off when absent). */
   choose_first?: boolean;
+  /** Advanced: samplers sent to a local or OpenAI-compatible server for the
+   *  model set here. Absent ones use the server's setting. */
+  sampling?: AiSampling;
   /** The chat may propose deleting items, categories and tags (each card
    *  still needs its own confirm). Off by default. */
   allow_delete: boolean;
@@ -959,9 +962,14 @@ export interface AiConfigPatch {
   danbooru_lookup?: boolean;
   web_always_allow?: boolean;
   choose_first?: boolean;
+  /** A partial update: `null` puts one sampler back to the server's setting. */
+  sampling?: Partial<Record<AiSamplerId, number | null>>;
   allow_delete?: boolean;
   auto_apply?: boolean;
 }
+
+export type AiSamplerId = "top_p" | "top_k" | "min_p" | "repeat_penalty" | "presence_penalty";
+export type AiSampling = Partial<Record<AiSamplerId, number>>;
 
 export interface AiTestResult {
   ok: boolean;

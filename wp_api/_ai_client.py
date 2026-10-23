@@ -540,6 +540,22 @@ def _chat_messages(
     return messages
 
 
+def sampling_fields(cfg: dict[str, Any]) -> dict[str, Any]:
+    """The user's optional samplers (`config.SAMPLING`) as this server's
+    request takes them: OpenAI-compatible body fields (OpenRouter spells
+    the repeat penalty `repetition_penalty`) or, for Ollama, `options`
+    entries. Claude and OpenAI's own API get none: their newest models
+    refuse samplers."""
+    got = cfg.get("sampling")
+    if not isinstance(got, dict) or not got or cfg.get("api") == "anthropic" \
+            or _official_openai(cfg):
+        return {}
+    out = dict(got)
+    if cfg.get("provider") == "openrouter" and "repeat_penalty" in out:
+        out["repetition_penalty"] = out.pop("repeat_penalty")
+    return out
+
+
 def _official_openai(cfg: dict[str, Any]) -> bool:
     """OpenAI's own API, which gets the Responses API (as `_ai_chat.uses_responses`)."""
     if cfg.get("api") != "openai" or cfg.get("local"):
@@ -708,6 +724,7 @@ async def _complete_json(
                 # JSON answer waited on a long hidden essay first.
                 "think": False,
                 "options": {
+                    **sampling_fields(cfg),
                     "temperature": temperature,
                     "num_predict": 8192,
                     # Ollama's default window is 2-4k tokens and it cuts a
@@ -747,6 +764,7 @@ async def _complete_json(
                 "json_schema": {"name": schema_name, "schema": schema, "strict": True},
             },
         }
+        body.update(sampling_fields(cfg))
         if cfg.get("local"):
             # OpenAI's reasoning models refuse any temperature but the
             # default, so it is only sent to local servers, which all take it.

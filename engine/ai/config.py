@@ -152,6 +152,18 @@ DEFAULTS: dict[str, Any] = {
     # Advanced; an experiment, off by default).
     "choose_first": False,
 }
+#: Optional samplers sent with every request to a local or
+#: OpenAI-compatible server (Settings › AI assistant › Advanced): name →
+#: (lowest, highest, whole number). Left out, the server's own setting for
+#: the model applies. Temperature is not here: the assistant picks it per
+#: task (`budget.PROFILES`), low for tool steps.
+SAMPLING: dict[str, tuple[float, float, bool]] = {
+    "top_p": (0.0, 1.0, False),
+    "top_k": (0.0, 1000.0, True),
+    "min_p": (0.0, 1.0, False),
+    "repeat_penalty": (0.5, 2.0, False),
+    "presence_penalty": (-2.0, 2.0, False),
+}
 TOOL_FORMATS = ("auto", "native", "json")
 #: "auto" leaves thinking to the server or model; "off" asks it to skip;
 #: "on" turns it on; a level asks a thinking model for that much reasoning.
@@ -277,6 +289,15 @@ def _normalize_slot(raw: Any) -> dict[str, Any]:
     key_origin = _got if isinstance(_got := src.get("key_origin"), str) else None
     embed_key = _got if isinstance(_got := src.get("embed_api_key"), str) else ""
     embed_origin = _got if isinstance(_got := src.get("embed_key_origin"), str) else ""
+    raw_sampling = _got if isinstance(_got := src.get("sampling"), dict) else {}
+    sampling = {}
+    for name, value in raw_sampling.items():
+        try:
+            got = _sampler(name, value)
+        except ConfigError:
+            continue
+        if got is not None:
+            sampling[name] = got
     return {"base_url": base_url, "model": model.strip()[:200], "api_key": key.strip(),
             # None: a key saved before keys were bound; bound on read.
             "key_origin": key_origin if key.strip() else "",
@@ -284,7 +305,26 @@ def _normalize_slot(raw: Any) -> dict[str, Any]:
             "embed_base_url": embed_url, "embed_api": embed_api_,
             # The embedding server's own key, bound to its address the same way.
             "embed_api_key": embed_key.strip(),
-            "embed_key_origin": embed_origin if embed_key.strip() else ""}
+            "embed_key_origin": embed_origin if embed_key.strip() else "",
+            "sampling": sampling}
+
+
+def _sampler(name: Any, value: Any) -> float | int | None:
+    """A sampler's stored value, None to leave it to the server; ConfigError
+    when it isn't one or is out of range."""
+    if name not in SAMPLING:
+        raise ConfigError(f"unknown sampler {str(name)[:40]!r}")
+    if value is None or value == "":
+        return None
+    low, high, whole = SAMPLING[name]
+    if isinstance(value, bool) or not isinstance(value, (int, float)) \
+            or not (low <= value <= high) or value != value:
+        raise ConfigError(f"{name} must be a number from {low:g} to {high:g}")
+    if whole:
+        if not float(value).is_integer():
+            raise ConfigError(f"{name} must be a whole number")
+        return int(value)
+    return float(value)
 
 
 def _normalize(raw: Any) -> dict[str, Any]:
@@ -401,6 +441,7 @@ def _active(cfg: dict[str, Any]) -> dict[str, Any]:
         "key_origin": slot["key_origin"],
         "embed_api_key": slot["embed_api_key"],
         "embed_key_origin": slot["embed_key_origin"],
+        "sampling": dict(slot["sampling"]),
     }
 
 
@@ -689,6 +730,19 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
                 patch["unload_after_s"], UNLOAD_AFTER_MIN, UNLOAD_AFTER_MAX,
                 cfg["unload_after_s"],
             )
+        if "sampling" in patch:
+            # A partial update: a sampler set to null or "" goes back to
+            # the server's setting; ones left out stay as they are.
+            if not isinstance(patch["sampling"], dict):
+                raise ConfigError("sampling must be an object")
+            merged = dict(slot["sampling"])
+            for name, value in patch["sampling"].items():
+                got = _sampler(name, value)
+                if got is None:
+                    merged.pop(name, None)
+                else:
+                    merged[name] = got
+            slot["sampling"] = merged
         if "model_size" in patch:
             if patch["model_size"] not in MODEL_SIZES:
                 raise ConfigError("model_size must be auto, small, medium or large")

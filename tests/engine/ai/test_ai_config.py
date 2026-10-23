@@ -138,3 +138,27 @@ def test_thinking_levels(tmp_path, monkeypatch):
     assert ai_config.load_effective()["thinking"] == "high"
     with pytest.raises(ai_config.ConfigError):
         ai_config.update({"thinking": "ultra"})
+
+
+def test_samplers_are_optional_per_provider_and_checked():
+    view = ai_config.update({"provider": "lmstudio", "sampling": {
+        "top_k": 20, "top_p": 0.8, "min_p": 0, "repeat_penalty": 1.0}})
+    assert view["sampling"] == {"top_k": 20, "top_p": 0.8, "min_p": 0.0, "repeat_penalty": 1.0}
+    view = ai_config.update({"sampling": {"min_p": None, "presence_penalty": 0.5}})
+    assert view["sampling"] == {"top_k": 20, "top_p": 0.8, "repeat_penalty": 1.0,
+                                "presence_penalty": 0.5}
+    # Another provider has its own (none); switching back keeps them.
+    assert ai_config.update({"provider": "ollama"})["sampling"] == {}
+    assert ai_config.update({"provider": "lmstudio"})["sampling"]["top_k"] == 20
+    for bad in ({"top_k": 2.5}, {"top_p": 1.5}, {"temperature": 0.7}, {"min_p": True},
+                {"repeat_penalty": "1.1"}):
+        with pytest.raises(ai_config.ConfigError):
+            ai_config.update({"sampling": bad})
+    with pytest.raises(ai_config.ConfigError):
+        ai_config.update({"sampling": [1]})
+
+
+def test_a_hand_edited_sampler_out_of_range_is_dropped(_isolated):
+    _isolated.write_text(json.dumps({"provider": "lmstudio", "providers": {"lmstudio": {
+        "model": "m", "sampling": {"top_k": 20, "top_p": 7, "nope": 1}}}}), encoding="utf-8")
+    assert ai_config.load_effective()["sampling"] == {"top_k": 20}
