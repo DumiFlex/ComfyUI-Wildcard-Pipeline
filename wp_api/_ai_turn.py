@@ -831,6 +831,24 @@ def _loop_check(t: _Turn, tool: str) -> str:
             "with what you have, or do the next part of the request with another tool.)")
 
 
+def _check_call(proposals: list[dict[str, Any]]) -> str:
+    """The run_test call for CHECK_NUDGE, spelled out: told only to test,
+    the 9B answered "I cannot run a test automatically, no such stack
+    exists" (smoke s-negatives, empty library, 2026-10-23)."""
+    stack: list[str] = []
+    for p_ in proposals:
+        op = p_.get("op") if isinstance(p_.get("op"), dict) else {}
+        body = op.get("body") if isinstance(op.get("body"), dict) else {}
+        ref = op.get("id") if op.get("op") == "update" else body.get("name")
+        if p_.get("tool") in ai_chat.CHECKABLE_TOOLS and isinstance(ref, str) \
+                and ref and ref not in stack:
+            stack.append(ref)
+    if not stack:
+        return ""
+    call = ai_chatlog.dumps({"proposed": True, "stack": stack[:4]})
+    return f" A card is enough for a stack of its own: run_test {call}"
+
+
 #: Where each kind of log entry keeps the text the model reads last.
 _TAIL_FIELD = {"user": "sent", "results": "tail", "note": "text"}
 
@@ -1508,10 +1526,11 @@ def _settle(t: _Turn, said: str, calls: list[dict[str, Any]], cut: bool,
     if (not t.checked and t.step < t.cap
             and any(p["tool"] in ai_chat.CHECKABLE_TOOLS for p in proposals)):
         t.checked = True
+        nudge = ai_chat.CHECK_NUDGE + _check_call(proposals)
         if items:
-            t.new.append(ai_chatlog.results_entry(items, "\n\n" + ai_chat.CHECK_NUDGE))
+            t.new.append(ai_chatlog.results_entry(items, "\n\n" + nudge))
         else:
-            t.new.append(ai_chatlog.note_entry(ai_chat.CHECK_NUDGE))
+            t.new.append(ai_chatlog.note_entry(nudge))
         return _NEXT
     if items:
         t.new.append(ai_chatlog.results_entry(items, ""))
