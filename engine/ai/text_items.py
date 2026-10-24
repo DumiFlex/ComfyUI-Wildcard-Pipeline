@@ -41,11 +41,26 @@ def _obj(props: dict[str, Any]) -> dict[str, Any]:
             "required": list(props), "properties": props}
 
 
-FIXED_SCHEMA = _obj({"values": {"type": "array", "items": _obj({
-    "name": _STR, "value": _STR, "negative": _STR,
+def _cap(n: int) -> dict[str, Any]:
+    return {"type": "string", "maxLength": n}
+
+
+#: Longest strings the answer schemas let a model write. Unbounded, a 9B
+#: wrote one on until the output limit cut the answer off (the Template
+#: panel on an empty library, 2026-10-24; the pack builder's slot
+#: negatives the same day); a real template or value is far shorter.
+SCHEMA_TEMPLATE_CHARS = 1200
+SCHEMA_VALUE_CHARS = 400
+SCHEMA_NEGATIVE_CHARS = 400
+
+FIXED_SCHEMA = _obj({"values": {"type": "array", "maxItems": MAX_VALUES, "items": _obj({
+    "name": _cap(64), "value": _cap(SCHEMA_VALUE_CHARS),
+    "negative": _cap(SCHEMA_NEGATIVE_CHARS),
 })}})
-COMBINE_SCHEMA = _obj({"template": _STR, "negative": _STR})
-TEMPLATE_SCHEMA = _obj({"template": _STR, "negative": _STR})
+COMBINE_SCHEMA = _obj({"template": _cap(SCHEMA_TEMPLATE_CHARS),
+                       "negative": _cap(SCHEMA_NEGATIVE_CHARS)})
+TEMPLATE_SCHEMA = _obj({"template": _cap(SCHEMA_TEMPLATE_CHARS),
+                        "negative": _cap(SCHEMA_NEGATIVE_CHARS)})
 
 _INTRO = """\
 You write for Wildcard Pipeline, a ComfyUI extension that builds \
