@@ -1185,3 +1185,94 @@ def test_a_drawer_that_names_the_list_values_itself_gets_no_pick_in_front():
                          for t in ("flannel shirt", "polo shirt")]}
     out = pg.compile_slot(g, shirt, plain, refs={"Colors": "abcd1234"})
     assert all(o["value"].startswith("@{abcd1234}") for o in out["payload"]["options"])
+
+
+def test_rules_on_an_axis_are_checked_from_the_engines_axis_table():
+    """9B pack 7: 25 rules keyed on Hat.type showed as never fired; a run
+    keeps the rolled axis in ``__wp_axes__``, never as ``ctx["hat.type"]``."""
+    plan = _plan()
+    built = _build(plan)
+    # "wizard" is no option's text, so only the axis table says caster.
+    good = {"race": "elf", "class": "wizard", "weapon": "oak staff", "season": "winter",
+            "outfit": "wool coat, scarf", "title": "Archmage",
+            "__wp_axes__": {"class": {"role": "caster"}, "season": {"season": "winter"}}}
+    by_kind = {r["kind"]: r for r in pg.verify_relations(plan, built, [good])}
+    assert by_kind["only"]["seen"] == 1 and by_kind["derive"]["seen"] == 1
+    assert by_kind["append"]["seen"] == 1
+
+
+def test_a_rule_adding_to_the_pick_it_reads_is_left_out():
+    """9B pack 7: "Hat.type cap → add 'cap' to $hat" printed "capcap"."""
+    rel = {"kind": "append", "from_slot": "Weapon", "from_axis": "type", "from_value": "gun",
+           "to_slot": "", "to_axis": "", "to_value": "", "factor": 0,
+           "var": "weapon", "text": "gun", "otherwise": ""}
+    g = pack.compile_graph(_graph(relations=[*_graph()["relations"], rel]))
+    assert not any(r.get("var") == "weapon" for r in g["relations"])
+    assert any("can't add to the pick it reads" in w for w in g["warnings"])
+
+
+def test_two_slots_split_by_their_own_axis_become_one():
+    """9B pack 15: Casual Outfit [casual] and Formal Outfit [formal] both
+    printed, and their only-rows on Footwear left no shoe in any run."""
+    def slot(name, var, axis, values):
+        return {"name": name, "var": var, "what": name.lower(), "section": "", "count": 5,
+                "show": "prompt", "pick": "", "hold": False, "sometimes_none": 0,
+                "axes": [{"name": axis, "values": values}]}
+
+    def accepts(src):
+        return {"kind": "accepts", "from_slot": src, "from_axis": "formality",
+                "from_value": "", "to_slot": "Footwear", "to_axis": "formality",
+                "to_value": "", "factor": 0, "var": "", "text": "", "otherwise": ""}
+    g = pack.compile_graph(_graph(
+        slots=[slot("Casual Outfit", "casual", "formality", ["casual"]),
+               slot("Formal Outfit", "formal", "formality", ["formal"]),
+               slot("Footwear", "shoes", "formality", ["casual", "formal"])],
+        fixed=[], relations=[accepts("Casual Outfit"), accepts("Formal Outfit")],
+        template={"lead": "", "order": ["Footwear", "Casual Outfit", "$formal"],
+                  "tail": "", "negative": ""}, anchor=""))
+    outfit = pg.slot_by_var(g, "outfit")
+    assert outfit is not None and outfit["axes"] == [{"name": "formality",
+                                                      "values": ["casual", "formal"]}]
+    assert outfit["count"] == 10 and len(g["slots"]) == 2
+    assert g["template"]["order"] == ["shoes", "outfit"]
+    assert [(r["from"]["slot"], r["values"]) for r in g["relations"]] == [
+        ("Outfit", ["casual", "formal"])]
+    assert any("are one Outfit slot" in w for w in g["warnings"])
+    # Two parts that differ in more than the value stay apart.
+    g = pack.compile_graph(_graph(
+        slots=[slot("Casual Top", "top", "formality", ["casual"]),
+               slot("Formal Trousers", "trousers", "formality", ["formal"])],
+        fixed=[], relations=[], template={"lead": "", "order": [], "tail": "",
+                                          "negative": ""}, anchor=""))
+    assert [s["var"] for s in g["slots"]] == ["top", "trousers"]
+
+
+def test_a_rule_text_reading_a_variable_is_checked_with_its_value():
+    """9B smoke on #120: "wearing a $top" was looked for as written."""
+    plan = _plan()
+    built = _build(plan)
+    for r in plan["graph"]["relations"]:
+        if r["kind"] == "derive":
+            r["text"] = "Archmage of $race"
+    good = {"race": "elf", "class": "mage", "class.role": "caster", "weapon": "oak staff",
+            "season": "winter", "season.season": "winter", "outfit": "wool coat, scarf",
+            "title": "Archmage of elf"}
+    by_kind = {r["kind"]: r for r in pg.verify_relations(plan, built, [good])}
+    assert by_kind["derive"]["seen"] == 1 and by_kind["derive"]["holds"]
+
+
+def test_two_rows_on_one_value_go_in_one_branch():
+    """9B smoke on #120: two appends on night were an if/elif with the same
+    test twice, so ", volumetric darkness" never ran."""
+    extra = {"kind": "append", "from_slot": "Season", "from_axis": "season",
+             "from_value": "winter", "to_slot": "", "to_axis": "", "to_value": "",
+             "factor": 0, "var": "outfit", "text": ", mittens", "otherwise": ""}
+    g = pg.compile_graph(_graph(relations=[*_graph()["relations"], extra]))
+    plan = pack.compile_plan(pg.graph_plan(g))
+    plan["graph"] = g
+    built = _build(plan)
+    rule = next(built[i["key"]]["payload"] for i in plan["items"] if i["name"] == "Outfit rule")
+    branches = rule["rules"][0]["branches"]
+    assert [b["action"]["value"] for b in branches] == ["scarf, mittens"]
+    report = pack.check_pack(plan, built, seeds=40)
+    assert not [n for n in report["notes"] if "mittens" in n or "scarf" in n], report["notes"]

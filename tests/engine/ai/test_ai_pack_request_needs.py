@@ -299,3 +299,20 @@ def test_an_unasked_multi_pick_a_derive_keys_on_picks_one():
     plan = pack.compile_graph_plan(raw, library=[], request="Outfits and shoes, long more common")
     assert plan["graph"]["slots"][0]["pick"] == ""
     assert any(r.get("var") == "vibe" for r in plan["graph"]["relations"])
+
+
+def test_a_share_lands_on_the_thing_it_is_about_and_flips_an_inverted_one():
+    """9B pack 7: "the person wears a hat about 30% of the time" left the
+    Person out 70% too, and a Hat at sometimes_none 30 was never fixed."""
+    req = "Portraits where the person wears a hat about 30% of the time."
+    raw = copy.deepcopy(GRAPH)
+    raw["slots"] += [_slot("Person", "person"), _slot("Hat", "hat")]
+    plan = pack.compile_graph_plan(raw, library=[], request=req)
+    by = {s["name"]: s for s in plan["graph"]["slots"]}
+    assert by["Hat"]["sometimes_none"] == 70 and by["Person"]["sometimes_none"] == 0
+    raw["slots"][-1].update(sometimes_none=30, pick="2")
+    plan = pack.compile_graph_plan(raw, library=[], request=req)
+    hat = next(s for s in plan["graph"]["slots"] if s["name"] == "Hat")
+    assert hat["sometimes_none"] == 70 and hat["pick"] == ""
+    plan = pack.compile_graph_plan(raw, library=[], request="Portraits, no hat 30% of the time.")
+    assert next(s for s in plan["graph"]["slots"] if s["name"] == "Hat")["sometimes_none"] == 30
