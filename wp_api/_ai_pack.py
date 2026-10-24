@@ -237,7 +237,12 @@ async def post_pack_plan(request: web.Request) -> web.Response:
             return json_error(e.message, status=e.status)
         except ai_pack.PlanError as e:
             if isinstance(answer, dict) and answer.get(_ai_client.CUT_OFF):
-                return json_error(_ai_client.CUT_OFF_MESSAGE, status=502)
+                if attempt:
+                    return json_error(_ai_client.CUT_OFF_MESSAGE, status=502)
+                # A plan that ran into the output limit is most often a
+                # model repeating itself: one more sample, asked for less.
+                retry = ai_pack.CUT_OFF_NOTE
+                continue
             if attempt:
                 return json_error(
                     f"the model's plan couldn't be used ({e}). Try again, or a larger model.",

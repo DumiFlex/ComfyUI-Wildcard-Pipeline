@@ -327,6 +327,9 @@ def pack_sheet(request: str, result: dict[str, Any]) -> str:
                      + (f", distinct prompts {check['distinct']}" if check.get("distinct") is not
                         None else ""))
         lines += [f"- note: {n}" for n in check.get("notes") or []]
+        listed = {i["key"] for i in plan["items"] if i["key"] in built}
+        lines += [f"- ⚠ {k or 'pack'}: {p}" for k, ps in problems.items() if k not in listed
+                  for p in ps]
         for r in check.get("relations") or []:
             mark = "✓" if r["holds"] else ("✗" if r["checked"] else "·")
             lines.append(f"- {mark} {r['text']}" + (f" ({r['broken']} of {r['seen']} runs broke it)"

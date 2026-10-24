@@ -164,6 +164,12 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
           <li>Things your request names that the plan says nowhere ("sandals", "parka") become a
             finding, sent back to the planner once; if there's still no place, a note to add by
             hand.</li>
+          <li>What your request asks for is held to the plan. "A hat 30% of the time" leaves the hat
+            out of 70% of runs, "the same hero in every image" holds the hero in a story, and the
+            thing the pack is about ("Outfits and shoes: …") is shown in the prompt; the code sets
+            these itself. A rule between two picks it names ("winter never gets pastel colours")
+            with no relation between them is a finding for the planner, and a rule keyed on a
+            shared list instead of what was drawn from it is a tip.</li>
           <li>An option tagged with two axis values (a mountain that is cold and temperate) rolls
             one of them each run, so two rules never empty the pool together. The test run names
             rules that left a slot empty in three runs out of ten or more.</li>

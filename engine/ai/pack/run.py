@@ -37,6 +37,11 @@ Complete = Any
 DECIDE_ANSWER = "Your call (decide for me)"
 
 
+#: Sent with a plan asked again after the first ran into the output limit.
+CUT_OFF_NOTE = ("Your last plan ran past the output limit. Write it again shorter: only the "
+                "slots the request needs, a short `what` per slot, few assumptions.")
+
+
 def plan_retry_note(error: str) -> str:
     """Sent with a plan request asked again after the answer couldn't be used."""
     return (f"Your last plan couldn't be used: {error}. Write the whole plan again with "
@@ -83,8 +88,15 @@ async def run_pack(
     lib_note = ai_patterns.note(ai_patterns.summarize(library or []))
     first = plan_prompt(instruction, library_note=lib_note, settings=cfg, library=library,
                         graph=graph)
-    answer = await complete(system=system, user=first,
-                            schema=schema, schema_name=schema_name, temperature=0.4)
+    try:
+        answer = await complete(system=system, user=first,
+                                schema=schema, schema_name=schema_name, temperature=0.4)
+    except Exception as e:  # noqa: BLE001 - only a cut-off is asked again
+        if "cut off" not in str(getattr(e, "message", e)):
+            raise
+        log.append("plan: cut off at the output limit; asked again for less")
+        answer = await complete(system=system, user=first + "\n\n" + CUT_OFF_NOTE,
+                                schema=schema, schema_name=schema_name, temperature=0.2)
     try:
         plan = await compiled(answer)
     except PlanError as e:  # once more with what was wrong, as the route does

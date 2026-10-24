@@ -1922,3 +1922,35 @@ def test_listen_exposed_names_a_non_loopback_address(monkeypatch):
                          ("127.0.0.1,192.168.1.5", "127.0.0.1,192.168.1.5")):
         fake.args = types.SimpleNamespace(listen=listen)  # type: ignore[attr-defined]
         assert ai_routes.listen_exposed() == want
+
+
+async def test_a_plan_cut_off_at_the_limit_is_asked_once_more_for_less(
+        wp_client, fake_llm, monkeypatch):
+    from engine.ai import pack as ai_pack
+    from tests.engine.ai.test_ai_pack_graph import GRAPH
+    from wp_api import _ai_pack
+
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    asks = []
+
+    async def fake(cfg, **kw):
+        asks.append(kw)
+        if len(asks) == 1:
+            return {_ai_client.CUT_OFF: True}
+        return dict(GRAPH) if kw["schema_name"] == "pack_graph" else dict(PACK_PLAN)
+
+    monkeypatch.setattr(_ai_pack, "_ask", fake)
+    resp = await wp_client.post("/wp/api/ai/pack/plan", json={"instruction": "season outfits"})
+    assert resp.status == 200, await resp.text()
+    assert len(asks) == 2 and asks[1]["extra"] == ai_pack.CUT_OFF_NOTE
+    # Cut off twice: the error stands.
+    asks.clear()
+
+    async def always(cfg, **kw):
+        asks.append(kw)
+        return {_ai_client.CUT_OFF: True}
+
+    monkeypatch.setattr(_ai_pack, "_ask", always)
+    resp = await wp_client.post("/wp/api/ai/pack/plan", json={"instruction": "season outfits"})
+    assert resp.status == 502 and len(asks) == 2

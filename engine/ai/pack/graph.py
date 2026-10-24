@@ -477,6 +477,10 @@ def plain_ref(ref: str) -> str:
     return f"Left out a rule: {ref}"
 
 
+#: Derive text that is an instruction, not prompt words.
+_RULE_TEXT = re.compile(r"^\s*(?:exclude|include|avoid|allow|forbid|never|only)s?\b", re.I)
+
+
 def _relations(
     raw: Any, slots: list[dict[str, Any]], fixed_vars: set[str], input_vars: set[str],
     warnings: list[str], bad_refs: list[str],
@@ -518,6 +522,14 @@ def _relations(
                 continue
             if not var or not text:
                 bad_refs.append(f"{kind} from {src['slot']['name']}: no variable or text")
+                continue
+            if _RULE_TEXT.match(text):
+                # "exclude pastels" written into $color_rule is a rule said as
+                # words: the prompt would print it and nothing excludes
+                # anything (9B smoke, 2026-10-24). The request check asks
+                # for the real rule.
+                warnings.append(f"Left out ${var} \"{text[:40]}\": a rule written as prompt "
+                                "text; a relation between the slots does that")
                 continue
             if kind == "derive" and (var in slot_vars or var in fixed_vars or var in input_vars):
                 # A pick can't be overwritten, but the rule's words can still
@@ -801,7 +813,7 @@ def _text_reads(lead: str, tail: str, order: list[str], by_name: dict[str, str],
     return lead, tail, order, set(read)
 
 
-_IDENT_PART = re.compile(r"^\$?[A-Za-z_][\w ]*$")
+_IDENT_PART = re.compile(r"^\$*[A-Za-z_][\w ]*$")
 
 #: Standing-negative tags that have no place in a positive prompt. Only
 #: whole comma-parts count ("bad anatomy", "(ugly:1.2)"), never a word
@@ -1493,7 +1505,10 @@ def _wired(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict[str, A
         matrix: dict[str, dict[str, dict[str, Any]]] = {}
         preview = []
         for r in graph["relations"]:
-            if not r.get("to") or r["from"]["slot"] != src["name"] \
+            # Only narrowing relations are cells: a "draw" between the same
+            # two slots wrote a draw cell with no target tag, which failed
+            # every run (9B smoke, shirts by season, 2026-10-24).
+            if r["kind"] not in NARROWING or r["from"]["slot"] != src["name"] \
                     or r["to"]["slot"] != dst["name"]:
                 continue
             if r["kind"] in ("agree", "accepts"):
@@ -2472,11 +2487,30 @@ def drop_multi_pick_rules(graph: dict[str, Any]) -> list[str]:
     return lines
 
 
-def apply_picks(graph: dict[str, Any], request: str) -> list[str]:
+def apply_picks(graph: dict[str, Any], request: str,
+                locked: list[str] | tuple[str, ...] = ()) -> list[str]:
     """A slot the request counts ("2 to 3 accessories") picks that many
-    when the model left its ``pick`` empty. Returns the lines saying so."""
+    when the model left its ``pick`` empty, and a slot a rule runs between
+    picks one when the model gave it several the request doesn't count
+    (unless the user set it by hand, ``locked``). Returns the lines saying
+    so."""
     lines: list[str] = []
-    for lo, hi, noun in request_picks(request):
+    counted = request_picks(request)
+    # A slot the model gave several picks that a rule runs between, with no
+    # count for it in the request: both rows fire, and only an option fit
+    # for every pick is left ("pick 2" outfits, 9B smoke 2026-10-24: one
+    # casual and one formal outfit, boots in every run).
+    ruled = {x for r in graph["relations"] if r["kind"] in NARROWING
+             for x in (r["from"]["slot"], r["to"]["slot"])}
+    for s in graph["slots"]:
+        if request.strip() and s["pick"] and s["pick"] != "1" and s["name"] in ruled \
+                and s["var"] not in locked and not any(
+                _stems(noun) & _stems(w) for _, _, noun in counted
+                for w in re.findall(r"[a-z]+", f"{s['name']} {s['var']} {s['what']}".lower())):
+            lines.append(f"{s['name']} picks one: the request doesn't ask for {s['pick']}, and "
+                         "its rules need one pick")
+            s["pick"] = ""
+    for lo, hi, noun in counted:
         stems = _stems(noun)
         for s in graph["slots"]:
             if s["pick"] or s.get("self_axis"):
@@ -2624,7 +2658,10 @@ structure structured section sections held vary varies varying varied each
 
 def _stems(word: str) -> set[str]:
     """The word and the singulars it may be the plural of ("heroes" →
-    hero, heroe; "ponies" → pony), so either spelling matches."""
+    hero, heroe; "ponies" → pony), so either spelling matches. A British
+    "-our" also matches its American "-or" ("colours" → color: the shirts
+    pack's "colour" was a request gap next to a Color List, 9B smoke
+    2026-10-24)."""
     out = {word, word.replace("-", "")}
     if len(word) > 4 and word.endswith("ies"):
         out.add(word[:-3] + "y")
@@ -2632,6 +2669,8 @@ def _stems(word: str) -> set[str]:
         out.add(word[:-2])
     if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
         out.add(word[:-1])
+    if len(word) > 5 and "our" in word[2:]:
+        out |= {w.replace("our", "or") for w in out}
     return out
 
 
@@ -2899,9 +2938,11 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
         graph["run"] = parse_run(kw["previous"]["run"], graph["run"])
     applied += apply_settings(graph, kw.get("settings"))
     applied += code_beat(graph)
-    applied += apply_picks(graph, kw.get("request") or "")
+    applied += apply_picks(graph, kw.get("request") or "", locks["slots"])
     applied += drop_multi_pick_rules(graph)
     applied += apply_request_slots(graph, kw.get("request") or "")
+    from engine.ai.pack.request_needs import apply_request_needs
+    applied += apply_request_needs(graph, kw.get("request") or "")
     applied += trim_model(graph, kw.get("request") or "")
     if model_quality(graph, kw.get("settings")):
         own = [f["name"] for f in graph["fixed"] if f["var"] == QUALITY_VAR]
