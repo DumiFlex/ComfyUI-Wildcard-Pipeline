@@ -474,16 +474,18 @@ async def post_text_draft(request: web.Request) -> web.Response:
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
     answer, research = webs.take(answer)
-    unset = text_items.unset_asked(answer, instruction) if kind == "fixed_values" else []
+    unset = text_items.left_out(kind, answer, instruction)
     if unset:
         # One re-ask naming what the request asked for; the first answer
-        # stands when the second sets no more of it.
-        note = ("Set " + ", ".join(f"${v}" for v in unset)
-                + " too: the request asks for it. Answer with the whole list again.")
+        # stands when the second leaves out no less of it.
+        names = ", ".join(f"${v}" for v in unset)
+        note = (f"Set {names} too: the request asks for it. Answer with the whole list again."
+                if kind == "fixed_values" else
+                f"Read {names} too: the request asks for it. Answer with the whole text again.")
         try:
             again, _ = webs.take(await _ask(
                 extra="\n\n".join(x for x in (webs.note, note) if x), **ask))
-            if len(text_items.unset_asked(again, instruction)) < len(unset):
+            if len(text_items.left_out(kind, again, instruction)) < len(unset):
                 answer = again
         except _ai_client.AIError:
             pass

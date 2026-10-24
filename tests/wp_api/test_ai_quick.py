@@ -293,3 +293,16 @@ async def test_fixed_values_ask_once_more_for_a_variable_the_request_names(wp_cl
     before = len(fake_llm.seen)
     await wp_client.post("/wp/api/ai/text/draft", json=body)
     assert len(fake_llm.seen) == before + 1
+
+
+async def test_a_template_asks_once_more_for_a_variable_the_request_names(wp_client, fake_llm):
+    from engine.ai import config as ai_config
+
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    fake_llm.overrides["prompt_template"] = [{"template": "$hair", "negative": ""},
+                                             {"template": "$hair, $sky", "negative": ""}]
+    body = _text_body("template", "a portrait with $hair and $sky")
+    await wp_client.post("/wp/api/ai/text/draft", json=body)
+    asks = [s for s in fake_llm.seen if "response_format" in s["body"]]
+    assert len(asks) == 2 and "Read $sky too" in json.dumps(asks[1]["body"]["messages"])

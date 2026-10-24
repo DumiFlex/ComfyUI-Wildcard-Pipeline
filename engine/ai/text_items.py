@@ -305,6 +305,16 @@ def unset_asked(raw: Any, asked: str) -> list[str]:
     return [v for v in dict.fromkeys(_ASKED_VAR.findall(asked or "")) if v not in have]
 
 
+def left_out(kind: str, raw: Any, asked: str) -> list[str]:
+    """The ``$vars`` the request names that the answer leaves out: not set
+    (fixed values) or not read (a combine or template's text)."""
+    if kind == "fixed_values":
+        return unset_asked(raw, asked)
+    text = raw.get("template") if isinstance(raw, dict) else None
+    have = set(reads(text if isinstance(text, str) else ""))
+    return [v for v in dict.fromkeys(_ASKED_VAR.findall(asked or "")) if v not in have]
+
+
 def missing_asked(text: str, asked: str) -> str:
     """A warning naming the ``$vars`` the request spelled out that the draft
     doesn't read, or "". Browser test (9B): a portrait template asked to read
