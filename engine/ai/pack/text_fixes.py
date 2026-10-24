@@ -282,6 +282,37 @@ def _list_options(options: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+_ARTICLED = re.compile(r"^(?:a|an|the)\s+\S+\s+\S+", re.I)
+
+
+def _split_glued(options: list[dict[str, Any]]) -> list[str]:
+    """A wildcard of one or two options, one of which glues four or more
+    whole phrases together ("a heroic male warrior, a dynamic female
+    superhero, … a nimble female scout": every prompt printed all twelve,
+    9B smoke 2026-10-24), gets one option per phrase, each with the glued
+    option's tags, weight and negative. Only "a/an/the …" phrases count, so
+    a tag list ("1girl, solo, smile") is never split. Edits in place."""
+    if len(options) > 2:
+        return []
+    from engine.ai.wildcard import new_option_id
+    said: list[str] = []
+    taken = {o.get("id") for o in options}
+    out: list[dict[str, Any]] = []
+    for o in options:
+        v = o.get("value")
+        parts = [p.strip() for p in v.split(",")] if isinstance(v, str) and "@{" not in v \
+            and "$" not in v else []
+        if len(parts) >= 4 and all(_ARTICLED.match(p) for p in parts):
+            for p in dict.fromkeys(parts):
+                out.append({**o, "id": new_option_id(taken), "value": p})
+            said.append(f"Split \"{v[:40]}…\" into {len(parts)} options: one option held "
+                        "them all, so every prompt printed every one")
+        else:
+            out.append(o)
+    options[:] = out
+    return said
+
+
 _SNAKE = re.compile(r"(\$[A-Za-z_]\w*|@\{[^}]*\}|<[^>]*>)|(?<=[A-Za-z])_(?=[A-Za-z])")
 
 

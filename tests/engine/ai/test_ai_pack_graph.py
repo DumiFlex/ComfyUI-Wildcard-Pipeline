@@ -1069,3 +1069,40 @@ async def test_a_rule_on_a_drawn_list_runs_before_the_drawer_and_is_checked_ther
     ctx = {"color": "blue", "shirt": "red flannel shirt", "season": "winter",
            "season.warmth": "cool"}
     assert pg._drawn_tags(plan["graph"], payloads, "Colors", ctx) == [{"warm"}]
+
+
+def test_an_exclude_word_naming_its_source_or_in_the_source_text_is_no_break():
+    plan = _plan()
+    built = _build(plan)
+    ex = next(r for r in plan["graph"]["relations"] if r["kind"] == "exclude")
+    ex["words"] = ["elf", "gun"]
+    run = {"race": "elf with a gun-shy look", "class": "mage", "class.role": "caster",
+           "weapon": "dagger", "season": "winter", "season.season": "winter",
+           "outfit": "wool coat, scarf", "title": "Archmage"}
+    rels = pg.verify_relations(plan, built, [run], ["an elf with a gun-shy look, dagger"])
+    assert next(r for r in rels if r["kind"] == "exclude")["broken"] == 0
+    rels = pg.verify_relations(plan, built, [run], ["an elf, dagger, a gun"])
+    assert next(r for r in rels if r["kind"] == "exclude")["broken"] == 0  # the race says gun
+    run["race"] = "elf"
+    rels = pg.verify_relations(plan, built, [run], ["an elf, dagger, a gun"])
+    assert next(r for r in rels if r["kind"] == "exclude")["broken"] == 1
+
+
+def test_a_request_for_a_loop_runs_as_a_story():
+    """Smoke run on #117: "the same hero in every image of a loop" was
+    planned as single images, so the code cleared the hold it had set."""
+    held = [{**s, "hold": s["name"] == "Race"} for s in GRAPH["slots"]]
+    ask = "Adventurers: the same race in every image of a loop, a new outfit each time."
+    plan = pack.compile_graph_plan(_graph(run={"mode": "single", "frames": 0}, slots=held),
+                                   request=ask)
+    assert plan["run"]["mode"] == "story"
+    assert pg.slot_by_var(plan["graph"], "race")["hold"]
+    assert any("the request asks for a Loop" in a for a in plan["applied"])
+    # The user's "Single images" answer stands, and so does a plain request.
+    no = pack.compile_graph_plan(
+        _graph(run={"mode": "single", "frames": 0}, slots=held), request=ask,
+        decisions=[{"question": pg.STORY_QUESTION, "answer": "Single images"}])
+    assert no["run"]["mode"] == "single"
+    plain = pack.compile_graph_plan(_graph(run={"mode": "single", "frames": 0}),
+                                    request="Adventurers with outfits.")
+    assert plain["run"]["mode"] == "single"

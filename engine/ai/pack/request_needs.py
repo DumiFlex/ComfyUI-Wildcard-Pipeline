@@ -173,7 +173,8 @@ def request_needs(graph: dict[str, Any], request: str) -> list[dict[str, Any]]:
                 need("sometimes_none", [n],
                      f"The request says \"{clause}\", but {n} is picked every run; set its "
                      f"sometimes_none{hint}")
-        if _SAME.search(clause):
+        if _SAME.search(clause) and (graph.get("run") or {}).get("mode") != "single":
+            # Single images clear every hold; the story question asks first.
             for n in _named(clause, words, own_only=True, graph=graph):
                 s = by_name[n]
                 if not s["hold"] and s["show"] == "prompt":
@@ -213,12 +214,119 @@ def list_reads(graph: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+#: "sneakers only with casual", "heels go only with formal", "sneakers with
+#: casual", "boots go with both casual and formal", "boots with either".
+_WITH = re.compile(
+    r"\b([a-z]+)\s+(?:go(?:es)?\s+|are\s+|is\s+)?(only\s+)?(?:go(?:es)?\s+)?"
+    r"(?:with|for)\s+(?:a\s+|an\s+|the\s+)?([a-z]+)", re.I)
+_ANY = {"either", "both", "any", "all", "every", "each"}
+
+
+def _value_slot(graph: dict[str, Any], word: str,
+                near: str = "") -> tuple[dict[str, Any], str, str] | None:
+    """The one slot axis value a word names: (slot, axis, value). With
+    ``near``, a value two slots carry ("casual" on Formality and Outfit)
+    goes to the one a rule runs between it and ``near``."""
+    stems = _stems(word.lower())
+    hits = [(s, a["name"], v) for s in graph["slots"] for a in s["axes"] for v in a["values"]
+            if stems & _stems(v.lower())]
+    if near and len({h[0]["name"] for h in hits}) > 1:
+        linked = {x for r in graph["relations"] if r["kind"] in NARROWING
+                  and near in (r["from"]["slot"], r["to"]["slot"])
+                  for x in (r["from"]["slot"], r["to"]["slot"])} - {near}
+        hits = [h for h in hits if h[0]["name"] in linked] or hits
+    return hits[0] if len({(h[0]["name"], h[2]) for h in hits}) == 1 else None
+
+
+def _only_with(graph: dict[str, Any], request: str) -> list[str]:
+    """Pairings the request spells out ("sneakers with casual, heels with
+    formal, boots with either") as "only" rows from the partner's value to
+    the things it takes. A pairing said with "only" also drops a rule that
+    pairs the thing with another partner value (formal → sneakers, casual →
+    heels: rules written the wrong way round, 9B smoke 2026-10-24, the check
+    passed them all). Pairings without "only" are added only when no rule
+    runs between the two slots yet (the planner left the request's rule out:
+    accepts missing on the shoes pack)."""
+    pairs: list[tuple[tuple[dict[str, Any], str, str], tuple[dict[str, Any], str, str], bool]] = []
+    anys: list[tuple[dict[str, Any], str, str]] = []
+    for m in _WITH.finditer(request):
+        thing = _value_slot(graph, m.group(1))
+        if thing is None:
+            continue
+        if m.group(3).lower() in _ANY:
+            anys.append(thing)
+            continue
+        partner = _value_slot(graph, m.group(3), near=thing[0]["name"])
+        if partner is not None and thing[0] is not partner[0]:
+            pairs.append((thing, partner, bool(m.group(2))))
+    lines: list[str] = []
+    groups: dict[tuple[str, str, str], list[tuple[Any, Any, bool]]] = {}
+    for t, p, only in pairs:
+        groups.setdefault((t[0]["name"], p[0]["name"], p[1]), []).append((t, p, only))
+    for (tname, pname, pa), rows in groups.items():
+        pair = {tname, pname}
+
+        def sides(r: dict[str, Any], pair: set[str] = pair) -> dict[str, dict[str, Any]] | None:
+            to = r.get("to") or {}
+            if r["kind"] not in NARROWING or {r["from"]["slot"], to.get("slot")} != pair:
+                return None
+            return {r["from"]["slot"]: r["from"], to["slot"]: to}
+
+        pvals = next(a["values"] for a in rows[0][1][0]["axes"] if a["name"] == pa)
+        said = [((t[0]["name"], t[2]), p[2]) for t, p, _ in rows] + [
+            ((t[0]["name"], t[2]), v) for t in anys if t[0]["name"] == tname for v in pvals]
+        # An exclude the request contradicts ("boots go with both" against
+        # casual → never boots, 9B smoke 2026-10-24) goes either way.
+        keep = []
+        for r in graph["relations"]:
+            sd = sides(r)
+            if sd and r["kind"] in ("exclude", "reduce") and sd[pname].get("axis") == pa \
+                    and ((tname, sd[tname].get("value")), sd[pname].get("value")) in said:
+                lines.append(f"Dropped {sd[pname]['value']} never {sd[tname]['value']}: the "
+                             f"request pairs {sd[tname]['value']} with "
+                             f"{sd[pname]['value']}")
+                continue
+            keep.append(r)
+        graph["relations"] = keep
+        ruled = any(sides(r) for r in graph["relations"])
+        if ruled and not any(only for *_, only in rows):
+            continue
+        # The wrong way round: "X only with Y" against a rule X ← Z.
+        for (_ts, _ta, tv), (_ps, _pa, pv), only in rows:
+            if not only:
+                continue
+            keep = []
+            for r in graph["relations"]:
+                sd = sides(r)
+                if sd and r["kind"] in ("only", "boost") and sd[tname].get("value") == tv \
+                        and sd[pname].get("axis") == pa \
+                        and sd[pname].get("value") not in ("", pv):
+                    lines.append(f"Dropped {sd[pname]['value']} → {tv}: the request says "
+                                 f"{tv} only with {pv}")
+                    continue
+                keep.append(r)
+            graph["relations"] = keep
+        wanted = [(t, p) for t, p, _ in rows]
+        wanted += [(t, (rows[0][1][0], pa, v)) for t in anys if t[0]["name"] == tname
+                   for v in pvals]
+        for (ts, ta, tv), (ps, _pa, pv) in dict.fromkeys(
+                ((t[0]["name"], t[1], t[2]), (p[0]["name"], p[1], p[2])) for t, p in wanted):
+            if any((sd := sides(r)) and sd[ts].get("value") == tv and sd[ps].get("value") == pv
+                   for r in graph["relations"]):
+                continue
+            graph["relations"].append({
+                "kind": "only", "from": {"slot": ps, "axis": pa, "value": pv},
+                "to": {"slot": ts, "axis": ta, "value": tv}, "words": []})
+            lines.append(f"Added {ps} {pv} → only {ts} {tv}, as the request says")
+    return lines
+
+
 def apply_request_needs(graph: dict[str, Any], request: str) -> list[str]:
     """Settle what ``request_needs`` finds that has one answer: "a hat 30%
     of the time" sets Hat's sometimes_none to 70, "the same hero" holds
     Hero, and the subject of "Outfits and shoes: …" goes in the prompt.
     Edits ``graph`` in place; returns the lines saying so."""
-    lines: list[str] = []
+    lines = _only_with(graph, request)
     by_name = {s["name"]: s for s in graph["slots"]}
     for n in request_needs(graph, request):
         s = by_name.get(n["refs"][0]) if len(n["refs"]) == 1 else None

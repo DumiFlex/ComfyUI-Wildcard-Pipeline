@@ -188,3 +188,114 @@ def test_a_variable_name_printed_as_written_is_a_problem():
     # Printed by the template itself: filed there; an unset read is reported already.
     assert list(_literal_names(owned, [{"hero": "x"}], prompts, "t", set())) == ["t"]
     assert _literal_names(owned, [{"hero": "x"}], prompts, "t", {"style"}) == {}
+
+
+def _shoes():
+    raw = copy.deepcopy(DRAWN)
+    raw["slots"] = [_slot("Outfit Style", "outfit_style",
+                          axes=[("formality", ["casual", "formal"])]),
+                    _slot("Shoe Type", "shoe_type",
+                          axes=[("type", ["boots", "sneakers", "heels"])])]
+    raw["relations"] = [
+        _rel("only", "Outfit Style", "formality", "casual", "Shoe Type", "type", "sneakers"),
+        _rel("only", "Outfit Style", "formality", "formal", "Shoe Type", "type", "boots"),
+        _rel("only", "Outfit Style", "formality", "casual", "Shoe Type", "type", "heels"),
+        _rel("only", "Outfit Style", "formality", "formal", "Shoe Type", "type", "sneakers")]
+    raw["template"]["order"] = ["outfit_style", "shoe_type"]
+    return raw
+
+
+def test_only_rules_the_wrong_way_round_follow_the_request():
+    req = ("Outfits and shoes: boots go with both casual and formal outfits, sneakers only "
+           "with casual, heels only with formal.")
+    plan = pack.compile_graph_plan(_shoes(), library=[], request=req)
+    pairs = {(r["from"]["value"], r["to"]["value"]) for r in plan["graph"]["relations"]}
+    # Boots "go with both": a row under each.
+    assert pairs == {("casual", "sneakers"), ("formal", "boots"), ("formal", "heels"),
+                     ("casual", "boots")}
+    assert any("Dropped formal → sneakers" in a for a in plan["applied"])
+
+
+def test_a_rule_on_the_drawers_tag_goes_onto_the_list():
+    raw = copy.deepcopy(DRAWN)
+    raw["slots"] = [
+        _slot("Season", "season", show="internal", axes=[("season", ["winter", "summer"])]),
+        _slot("Color List", "color_list", show="internal",
+              axes=[("palette", ["deep", "pastel"])]),
+        _slot("Shirt", "shirt", axes=[("color", ["deep", "pastel"])])]
+    raw["relations"] = [_rel("draw", "Color List", "palette", "", "Shirt"),
+                        _rel("exclude", "Season", "season", "winter", "Shirt", "color", "pastel")]
+    raw["template"]["order"] = ["shirt"]
+    g = pack.compile_graph_plan(raw, library=[], request="")["graph"]
+    ex = next(r for r in g["relations"] if r["kind"] == "exclude")
+    assert ex["to"] == {"slot": "Color List", "axis": "palette", "value": "pastel"}
+    raw["slots"][2]["axes"] = [{"name": "color", "values": ["deep_red", "soft_pastel"]}]
+    raw["relations"][1] = _rel("exclude", "Season", "season", "winter", "Shirt", "color",
+                               "soft_pastel")
+    raw["slots"][1]["axes"] = [{"name": "palette", "values": ["deep", "soft"]}]
+    g = pack.compile_graph_plan(raw, library=[], request="")["graph"]
+    ex = next(r for r in g["relations"] if r["kind"] == "exclude")
+    assert ex["to"] == {"slot": "Color List", "axis": "palette", "value": "soft"}
+
+
+def test_one_option_glued_from_many_phrases_is_split():
+    from engine.ai.pack.text_fixes import _split_glued
+    opts = [{"id": "o1", "value": "a heroic male warrior, a dynamic female superhero, "
+             "a stoic old knight, a nimble female scout", "weight": 1, "sub_categories": []}]
+    assert _split_glued(opts) and [o["value"] for o in opts][-1] == "a nimble female scout"
+    assert len({o["id"] for o in opts}) == 4
+    tags = [{"id": "o1", "value": "1girl, solo, smile, long hair", "weight": 1}]
+    assert _split_glued(tags) == [] and len(tags) == 1
+
+
+def test_pairings_the_request_spells_out_become_only_rows_when_no_rule_runs():
+    raw = _shoes()
+    raw["relations"] = []
+    req = ("Outfits and shoes: the shoes must match the outfit (sneakers with casual, heels "
+           "with formal, boots with either).")
+    plan = pack.compile_graph_plan(raw, library=[], request=req)
+    pairs = {(r["from"]["value"], r["to"]["value"]) for r in plan["graph"]["relations"]
+             if r["kind"] == "only"}
+    assert pairs == {("casual", "sneakers"), ("formal", "heels"), ("casual", "boots"),
+                     ("formal", "boots")}
+    assert request_needs(plan["graph"], req) == []
+    # A rule already there: left as the planner wrote it.
+    raw = _shoes()
+    raw["relations"] = raw["relations"][:2]
+    plan = pack.compile_graph_plan(raw, library=[], request=req)
+    assert len(plan["graph"]["relations"]) == 2
+
+
+def test_an_exclude_the_request_pairs_goes_and_a_shared_value_finds_the_ruled_slot():
+    raw = _shoes()
+    raw["slots"].append(_slot("Outfit", "outfit", axes=[("formality", ["casual", "formal"])]))
+    raw["relations"] = [
+        _rel("exclude", "Outfit Style", "formality", "casual", "Shoe Type", "type", "heels"),
+        _rel("exclude", "Outfit Style", "formality", "casual", "Shoe Type", "type", "boots"),
+        _rel("exclude", "Outfit Style", "formality", "formal", "Shoe Type", "type", "sneakers")]
+    req = ("Outfits and shoes: boots go with both casual and formal outfits, sneakers only "
+           "with casual, heels only with formal.")
+    plan = pack.compile_graph_plan(raw, library=[], request=req)
+    ex = {(r["from"]["value"], r["to"]["value"]) for r in plan["graph"]["relations"]
+          if r["kind"] == "exclude"}
+    assert ("casual", "boots") not in ex and ("casual", "heels") in ex
+
+
+def test_a_not_list_is_a_rule_written_as_text():
+    raw = _shoes()
+    d = _rel("derive", "Outfit Style", "formality", "casual", "")
+    d.update(var="shoe_note", text="not heels, not pumps")
+    raw["relations"] = [d]
+    plan = pack.compile_graph_plan(raw, library=[], request="")
+    assert not [r for r in plan["graph"]["relations"] if r.get("var") == "shoe_note"]
+
+
+def test_an_unasked_multi_pick_a_derive_keys_on_picks_one():
+    raw = _shoes()
+    raw["slots"][0]["pick"] = "2-3"
+    d = _rel("derive", "Outfit Style", "formality", "casual", "")
+    d.update(var="vibe", text="relaxed")
+    raw["relations"] = [d]
+    plan = pack.compile_graph_plan(raw, library=[], request="Outfits and shoes, long more common")
+    assert plan["graph"]["slots"][0]["pick"] == ""
+    assert any(r.get("var") == "vibe" for r in plan["graph"]["relations"])
