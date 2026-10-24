@@ -1767,7 +1767,7 @@ export interface AiPackSettings {
   planner: "graph" | "items";
   /** three: the first plan is drafted three times and the code keeps the
    *  best fit; one: one draft. */
-  drafts: "one" | "three";
+  drafts: "auto" | "one" | "three";
 }
 
 /** One way a slot's options are sorted, for a relation to key on. */

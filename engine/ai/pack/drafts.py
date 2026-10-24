@@ -15,7 +15,12 @@ next drops the rule or a slot. Choosing is what code does well, so
 - a plan with fewer than two prompt slots.
 
 ``pick_draft`` returns the highest score; a tie keeps the earliest draft
-(the one asked at the lowest temperature).
+(the one asked at the lowest temperature). ``extra_temperatures`` says
+which drafts come after the first: "three" always asks two more, "auto"
+one more only when the first has a problem worse than a missing word
+(``serious``: a relation that named nothing, a review fix, a stated rule
+with no relation, too few prompt slots), which keeps most of best-of-3's
+gain, since a clean first draft stops at one.
 """
 from __future__ import annotations
 
@@ -26,6 +31,16 @@ from engine.ai.pack.graph import request_gaps
 
 #: Drafts the "three" setting asks for, and the temperature of each.
 DRAFT_TEMPERATURES = (0.4, 0.7, 0.9)
+
+
+def extra_temperatures(setting: str, plan: dict[str, Any], request: str,
+                       library: list[dict[str, Any]] | None = None) -> tuple[float, ...]:
+    """The temperatures of the drafts asked after ``plan``, the first."""
+    if setting == "three":
+        return DRAFT_TEMPERATURES[1:]
+    if setting == "auto" and score_plan(plan, request, library)["serious"] < 0:
+        return DRAFT_TEMPERATURES[1:2]
+    return ()
 
 
 def images_seen(plan: dict[str, Any]) -> str:
@@ -61,13 +76,14 @@ def _left_out(plan: dict[str, Any]) -> int:
 
 def score_plan(plan: dict[str, Any], request: str,
                library: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    """``{score, reasons}`` for a compiled graph plan: 0 is a plan with no
-    problem the code can see, each problem takes points off."""
+    """``{score, serious, reasons}`` for a compiled graph plan: 0 is a plan
+    with no problem the code can see, each problem takes points off;
+    ``serious`` leaves out the soft ones (request words, parts left out)."""
     from engine.ai.pack.review import review_plan
 
     graph = _got if isinstance(_got := plan.get("graph"), dict) else None
     reasons: list[str] = []
-    score = 0
+    score = soft = 0
     bad = len(plan.get("bad_refs") or [])
     if bad:
         score -= BAD_REF * bad
@@ -75,11 +91,14 @@ def score_plan(plan: dict[str, Any], request: str,
     fixes = [f for f in review_plan(plan, library, request=request) if f["level"] == "fix"]
     if fixes:
         score -= REVIEW_FIX * len(fixes)
+        # The review files request words too: soft, as below.
+        soft += REVIEW_FIX * sum(1 for f in fixes if f["type"] == "request_gap")
         reasons.append(f"{len(fixes)} review fix(es)")
     if graph is not None:
         gaps = request_gaps(graph, request)
         if gaps:
             score -= GAP * len(gaps)
+            soft += GAP * len(gaps)
             reasons.append("request words left out: " + ", ".join(gaps))
         if _RULE_CUE.search(request or "") and not graph["relations"]:
             score -= NO_RULE
@@ -91,8 +110,9 @@ def score_plan(plan: dict[str, Any], request: str,
     left = _left_out(plan)
     if left:
         score -= LEFT_OUT * left
+        soft += LEFT_OUT * left
         reasons.append(f"{left} part(s) left out")
-    return {"score": score, "reasons": reasons}
+    return {"score": score, "serious": score + soft, "reasons": reasons}
 
 
 def pick_draft(drafts: list[dict[str, Any]], request: str,

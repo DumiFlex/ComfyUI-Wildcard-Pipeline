@@ -43,7 +43,7 @@ const PLAN: AiPackPlanResult = {
     style: "tags", model: "", anchor: "season",
     questions: [{ header: "Size", question: "How many?", multi: false, choices: ["Few", "Many"] }],
     assumptions: ["Daytime only"], research: [], decisions: [], sections: [],
-    settings: { library: "inspire", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, model: "any", youth_negative: "on", planner: "graph", drafts: "one" },
+    settings: { library: "inspire", negatives: "auto", structure: "sections", style: "auto", rating: "auto", count: 0, model: "any", youth_negative: "on", planner: "graph", drafts: "auto" },
     inputs: [],
     items: [
       item("i1", "template", "Scene"),

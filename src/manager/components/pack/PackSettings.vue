@@ -30,6 +30,7 @@ const FIELDS: Array<{ key: Field; label: string; about: string; options: Array<S
     { value: "items", label: "Every item by the AI", hint: "The AI writes the item list and every rule, constraint and template itself. For large models." },
   ] },
   { key: "drafts", label: "Plan drafts", about: "How many plans the AI drafts first.", options: [
+    { value: "auto", label: "When needed", hint: "One plan draft, and a second only when the code sees a problem in the first (a rule you gave with no rule in the plan, a part that names nothing, something the review would fix); the code keeps the better one. A clean first plan costs nothing extra." },
     { value: "one", label: "One", hint: "One plan draft. Fastest." },
     { value: "three", label: "Best of three", hint: "The AI drafts the plan three times and the code keeps the one that fits your request best (every part you named, the rules you gave). About three times as long to plan; helps small local models most." },
   ] },
