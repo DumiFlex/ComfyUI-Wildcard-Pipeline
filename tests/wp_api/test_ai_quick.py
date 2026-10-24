@@ -3,6 +3,8 @@ model's reasoning on Auto, get an output limit sized to the answer, and a
 model that thinks anyway is stopped and asked again without."""
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from engine.ai import refs as ai_refs
@@ -201,3 +203,33 @@ def test_refs_describe_counts_the_rest_without_the_excluded_row():
     text = idx.describe(limit=3, exclude="00000000")
     assert "@{W0}" not in text and text.endswith("(+1 more)")
     assert "more" not in idx.describe(limit=4, exclude="00000000")
+
+
+async def test_add_asks_once_more_when_options_set_another_concept(wp_client, fake_llm):
+    from engine.ai import config as ai_config
+
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+
+    def opts(*texts):
+        return {"axes": [], "options": [{"text": t, "weight": 1, "tags": [], "negative": ""}
+                                        for t in texts]}
+
+    fake_llm.overrides["wildcard_options"] = [
+        opts("ponytail with a red dress", "braid and blue jeans", "bob cut"),
+        opts("ponytail", "braid", "bob cut")]
+    body = {"instruction": "3 hair styles", "count": 3, "wildcard": {
+        "name": "Hair style", "var_binding": "hair_style",
+        "payload": {"options": [], "sub_categories": []}}}
+    resp = await wp_client.post("/wp/api/ai/wildcard/draft", json=body)
+    out = await resp.json()
+    assert [o["value"] for o in out["options"]] == ["ponytail", "braid", "bob cut"]
+    asks = [s for s in fake_llm.seen if "response_format" in s["body"]]
+    assert len(asks) == 2 and "also set clothing" in json.dumps(asks[1]["body"]["messages"])
+    # Asked for: no second ask.
+    fake_llm.overrides["wildcard_options"] = [opts("ponytail with a red dress", "braid and "
+                                                   "blue jeans", "bob cut")]
+    body["instruction"] = "3 hair styles, each with a dress"
+    before = len(fake_llm.seen)
+    out = await (await wp_client.post("/wp/api/ai/wildcard/draft", json=body)).json()
+    assert len(out["options"]) == 3 and len(fake_llm.seen) == before + 1

@@ -744,3 +744,25 @@ def option_line(o: dict[str, Any], refs: ai_refs.RefIndex | None = None) -> str:
     if o.get("negative"):
         out += f"  (negative: {ai_refs.display_text(o['negative'], refs)})"
     return out
+
+
+def bleed_note(name: str, var: str, options: list[dict[str, Any]], instruction: str) -> str:
+    """One re-ask's note when new options of a one-concept wildcard also set
+    another concept the request never named (hair options that pick an
+    outfit too), from `lint.scope_bleed`: code checks the answer instead
+    of asking the model to review its own (TICK, LLM-Modulo). "" when
+    there is nothing to say."""
+    from engine.ai import lint
+
+    hits = lint.bleeding(name, var, options)
+    asked = lint._words(instruction)
+    named = {other for other in hits if any(lint._has(asked, w)
+                                            for w in lint.CONCEPTS[other])}
+    found = {k: v for k, v in hits.items() if k not in named}
+    if not found:
+        return ""
+    other, texts = next(iter(found.items()))
+    return (f"Your last answer: {len(texts)} options also set {other} ("
+            + ", ".join(f'"{t[:40]}"' for t in texts[:3])
+            + f"). {name or 'This wildcard'} holds one thing; write the options again "
+            f"without any {other}.")

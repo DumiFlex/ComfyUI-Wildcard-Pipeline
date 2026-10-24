@@ -116,6 +116,29 @@ class RefIndex:
         return next((r for r in self.rows.values()
                      if str(r.get("name") or "").lower() == low), None)
 
+    def same_name(self, head: str) -> list[dict[str, Any]]:
+        """Every row ``head`` names by name (case-insensitive) when it names
+        more than one: Dumi's library has 15 names used twice (Outfit, Body,
+        Hair color…) and `find` took the first silently. [] otherwise."""
+        head = head.strip()
+        if head.startswith("$") or (_HEX8.match(head) and head in self.rows):
+            return []
+        low = head.lower()
+        hits = [r for r in self.rows.values() if str(r.get("name") or "").lower() == low]
+        return hits if len(hits) > 1 else []
+
+    def handle(self, row: dict[str, Any]) -> str:
+        """How a prompt names ``row`` in a ref: its name, or its ``$var``
+        (else its id) when another wildcard has the same name."""
+        name = str(row.get("name") or "")
+        if name and not self.same_name(name):
+            return name
+        var = row["payload"].get("var_binding")
+        if var and sum(1 for r in self.rows.values()
+                       if r["payload"].get("var_binding") == var) == 1:
+            return f"${var}"
+        return row["id"]
+
     def close_names(self, head: str) -> list[str]:
         names = [str(r.get("name") or "") for r in self.rows.values() if r.get("name")]
         return difflib.get_close_matches(head, names, n=3, cutoff=0.6)
@@ -156,8 +179,11 @@ class RefIndex:
         rows = [r for r in self.rows.values() if r["id"] != exclude]
         for r in rows:
             p = r["payload"]
-            bits = [f"@{{{r.get('name') or r['id']}}}"]
-            if p.get("var_binding"):
+            handle = self.handle(r)
+            bits = [f"@{{{handle}}}"]
+            if handle != (r.get("name") or "") and r.get("name"):
+                bits.append(f"\"{r['name']}\"")
+            if p.get("var_binding") and not handle.startswith("$"):
                 bits.append(f"(${p['var_binding']})")
             tags = _tags_of(p)
             if tags:
@@ -243,6 +269,11 @@ def compile_refs(text: str, index: RefIndex | None, *, self_id: str | None = Non
             raise ValueError(f"@{{{head}…!{flag}}}: only !null goes after the filter")
         if index is None or not index:
             raise ValueError("there are no wildcards to point at here")
+        twins = index.same_name(head)
+        if twins:
+            raise ValueError(f"{len(twins)} wildcards are named {head!r}; write "
+                             + " or ".join(f"@{{{index.handle(r)}}}" for r in twins[:3])
+                             + " for the one you mean")
         row = index.find(head)
         if row is None:
             near = index.close_names(head.lstrip("$"))

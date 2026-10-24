@@ -102,33 +102,51 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
         existing_options=existing_texts, tags=tags, axes=axes,
         description=description, labels=labels, refs_text=refs.describe(exclude=self_id),
     )
-    try:
-        answer = await _ask(
-            cfg, first=first, turns=turns, instruction=instruction,
-            system=webs.system(ai_wildcard.draft_prompt()),
-            schema=webs.schema(ai_wildcard.DRAFT_SCHEMA),
-            schema_name="wildcard_options",
-            images=images or None, extra=webs.note,
-            quick=True, max_tokens=ai_wildcard.answer_tokens(asked),
-        )
-    except _ai_client.AIError as e:
-        return json_error(e.message, status=e.status)
-    answer, research = webs.take(answer)
+    ask: dict[str, Any] = dict(
+        cfg=cfg, first=first, turns=turns, instruction=instruction,
+        system=webs.system(ai_wildcard.draft_prompt()),
+        schema=webs.schema(ai_wildcard.DRAFT_SCHEMA),
+        schema_name="wildcard_options",
+        images=images or None,
+        quick=True, max_tokens=ai_wildcard.answer_tokens(asked),
+    )
 
-    try:
-        result = ai_wildcard.compile_options(
-            answer,
+    def compiled(raw: Any) -> dict[str, Any]:
+        return ai_wildcard.compile_options(
+            raw,
             existing_payload={
                 "options": [o for o in options if isinstance(o, dict)][:5000],
                 "sub_categories": tags,
             },
             limit=count, refs=refs, self_id=self_id,
         )
+
+    try:
+        answer = await _ask(extra=webs.note, **ask)
+    except _ai_client.AIError as e:
+        return json_error(e.message, status=e.status)
+    answer, research = webs.take(answer)
+
+    try:
+        result = compiled(answer)
     except ValueError as e:
         return json_error(
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
             status=502,
         )
+    note = ai_wildcard.bleed_note(name, var, result["options"], instruction)
+    if note:
+        # One re-ask with what the code found; the first answer stands when
+        # the second is no better.
+        try:
+            again, _ = webs.take(await _ask(extra="\n\n".join(
+                x for x in (webs.note, note) if x), **ask))
+            better = compiled(again)
+            if len(better["options"]) >= len(result["options"]) and not \
+                    ai_wildcard.bleed_note(name, var, better["options"], instruction):
+                answer, result = again, better
+        except (_ai_client.AIError, ValueError):
+            pass
     groups, group_notes = ai_wildcard.new_groups(
         answer.get("axes") if isinstance(answer, dict) else None,
         existing_payload={"sub_categories": tags, "tag_groups": axes, "tag_group_kinds": kinds},
@@ -300,7 +318,10 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
     first = ai_derivation.build_prompt(
         instruction=ai_followup.first_instruction(turns, instruction), name=name[:200],
         description=description, labels=labels,
-        catalog_text=library_vars.describe(catalog, focus=focus),
+        catalog_text=library_vars.describe_for(
+            # The first request only: follow-ups replay this prompt as it was.
+            catalog, " ".join([ai_followup.first_instruction(turns, instruction), name,
+                               description]), focus=focus),
         existing_rules=[ai_derivation.describe_rule(r) for r in rules],
         refs_text=refs.describe(),
     )
@@ -429,7 +450,10 @@ async def post_text_draft(request: web.Request) -> web.Response:
     description, labels = ai_about.clean(item.get("description"), item.get("tags"))
     first = text_items.build_prompt(
         kind=kind, instruction=ai_followup.first_instruction(turns, instruction),
-        name=name[:200], catalog_text=library_vars.describe(catalog), description=description,
+        name=name[:200], description=description,
+        catalog_text=library_vars.describe_for(
+            catalog, " ".join([ai_followup.first_instruction(turns, instruction), name,
+                               description, current[:2000], out_var])),
         labels=labels, current=current[:4000], out_var=out_var,
     )
     system, schema, schema_name = _TEXT_KINDS[kind]
