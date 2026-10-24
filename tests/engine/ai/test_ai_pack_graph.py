@@ -146,12 +146,42 @@ def test_slot_schema_and_compile_slot():
     plan = _plan()
     g = plan["graph"]
     weapon = pg.slot_by_var(g, "weapon")
+    # A slot's options come grouped by the axis its rules are on: every
+    # value gets options from the first call (P3).
+    assert pg.group_axis(g, weapon) == "type"
     schema = pg.slot_schema(g, weapon)
-    tags = schema["properties"]["options"]["items"]["properties"]["tags"]["properties"]
-    assert tags["type"]["items"]["enum"] == ["gun", "blade", "staff"]
+    groups = schema["properties"]["groups"]
+    assert list(groups["properties"]) == ["gun", "blade", "staff"]
+    assert groups["properties"]["gun"]["minItems"] == (2 if weapon["count"] >= 6 else 1)
+    assert "tags" not in groups["properties"]["gun"]["items"]["properties"]
+    item = groups["properties"]["gun"]["items"]
+    assert list(item["properties"]) == ["text", "negative", "weight"]  # a number ends it
+    assert item["properties"]["negative"]["maxLength"] == pg.MAX_NEGATIVE
+    # Each group holds its share of the count and one more, so a small
+    # model can't write on to the output limit.
+    assert groups["properties"]["gun"]["maxItems"] == -(-weapon["count"] // 3) + 1
+    assert "List the options by type under groups" in pg.slot_prompt(g, weapon)
+    # A fill call stays a flat list on the gap values.
+    fill = pg.slot_schema(g, weapon, fill={"type": ["gun"]})
+    tags = fill["properties"]["add"]["items"]["properties"]["tags"]["properties"]
+    assert tags["type"]["items"]["enum"] == ["gun"]
     cls = pg.slot_by_var(g, "class")
-    role = pg.slot_schema(g, cls)["properties"]["options"]["items"]["properties"]["tags"]
-    assert role["properties"]["role"]["enum"] == ["caster", "martial"]  # read by a rule
+    assert pg.group_axis(g, cls) == "role"  # offered to the title rule
+    assert list(pg.slot_schema(g, cls)["properties"]["groups"]["properties"]) == [
+        "caster", "martial"]
+    opt = {"weight": 1, "negative": ""}
+    grouped = pg.compile_slot(g, weapon, {"groups": {
+        "gun": [{**opt, "text": "musket"}],
+        "blade": [{**opt, "text": "longsword"}, {**opt, "text": "spear staff"}],
+        "staff": [{**opt, "text": "Spear staff"}, {**opt, "text": "oak staff"}],
+        "bow": [{**opt, "text": "longbow"}]}})["payload"]
+    assert {o["value"]: o["sub_categories"] for o in grouped["options"]} == {
+        "musket": ["gun"], "longsword": ["blade"], "Spear staff": ["staff", "blade"],
+        "oak staff": ["staff"]}
+    # Taken in turn, so a cut to the count keeps every value's first.
+    many = {v: [{**opt, "text": f"{v} {k}"} for k in range(4)] for v in ("gun", "blade", "staff")}
+    flat = pg.ungroup(weapon, "type", many)
+    assert [o["text"] for o in flat[:3]] == ["gun 0", "blade 0", "staff 0"]
     out = pg.compile_slot(g, weapon, _answer("Weapon"))
     p = out["payload"]
     assert p["var_binding"] == "weapon"
@@ -1106,3 +1136,21 @@ def test_a_request_for_a_loop_runs_as_a_story():
     plain = pack.compile_graph_plan(_graph(run={"mode": "single", "frames": 0}),
                                     request="Adventurers with outfits.")
     assert plain["run"]["mode"] == "single"
+
+
+def test_two_reads_in_one_lead_part_print_once():
+    """9B smoke on #118: lead "$quality $race" and an order naming both
+    printed each twice, and the negative began with an unset $negative."""
+    tpl = {**GRAPH["template"], "lead": "$quality $race", "negative": "$negative, blurry"}
+    g = pack.compile_graph(_graph(template=tpl))
+    assert g["template"]["lead"] == "$quality, $race"
+    assert "quality" not in g["template"]["order"] and "race" not in g["template"]["order"]
+    assert g["template"]["negative"] == "blurry"
+    assert any("Took $negative out of the negative" in w for w in g["warnings"])
+    # The run's own $quality and $beat aren't added again once the lead reads them.
+    story = {**GRAPH["template"], "lead": "$quality, 1girl", "tail": "$beat"}
+    plan = pack.compile_graph_plan(_graph(template=story, run={"mode": "story", "frames": 3},
+                                          fixed=[]),
+                                   settings={"model": "family"})
+    order = pg.template_order(plan["graph"], plan["settings"])
+    assert "quality" not in order and "beat" not in order

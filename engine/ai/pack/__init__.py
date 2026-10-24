@@ -173,6 +173,7 @@ from engine.ai.pack.compile_item import (
 from engine.ai.pack.drafts import (
     DRAFT_TEMPERATURES,
     draft_line,
+    extra_temperatures,
     images_seen,
     pick_draft,
     score_plan,
@@ -459,6 +460,7 @@ from engine.ai.pack.text_fixes import (
 
 __all__ = [
     "DRAFT_TEMPERATURES",
+    "extra_temperatures",
     "GRAPH_SCHEMA",
     "draft_line",
     "images_seen",

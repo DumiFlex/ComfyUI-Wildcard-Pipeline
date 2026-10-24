@@ -251,15 +251,18 @@ async def post_pack_plan(request: web.Request) -> web.Response:
             # A small model now and then answers a plan with no wildcards
             # or no template: asked once more with what was wrong.
             retry = ai_pack.plan_retry_note(str(e))
-    if graph and not turns and settings["drafts"] == "three":
-        # Best of three on the first plan: the code keeps the draft that
-        # fits the request best (`drafts.pick_draft`); a failed draft is
-        # skipped.
+    temps = ai_pack.extra_temperatures(settings["drafts"], plan, asked, library) \
+        if graph and not turns else ()
+    if temps:
+        # More drafts of the first plan (always two with "three", one when
+        # the first scores below 0 with "auto"): the code keeps the draft
+        # that fits the request best (`drafts.pick_draft`); a failed draft
+        # is skipped.
         drafts = [(answer, plan)]
         # The images went once: the other drafts read what the first took
         # from them instead of reading the images again.
         seen = ai_pack.images_seen(plan) if images else ""
-        for t in ai_pack.DRAFT_TEMPERATURES[1:]:
+        for t in temps:
             try:
                 a = await _ask(cfg, first=first, turns=turns, instruction=follow, extra=seen,
                                system=ai_pack.GRAPH_SYSTEM, schema=ai_pack.GRAPH_SCHEMA,
