@@ -900,9 +900,12 @@ class _Live:
     `field`: the text is a JSON step, and only that field's text (the
     reply, `message`) is sent as it is written."""
 
-    def __init__(self, emit: Any, field: str | None = None) -> None:
+    def __init__(self, emit: Any, field: str | None = None, meter: Any = None) -> None:
         self.emit = emit
         self.field = field
+        #: Told the reasoning's length and the text so far whenever either
+        #: grows (`_ai_client`'s thinking watchdog); it may raise to stop.
+        self.meter = meter
         self.reasoning = ""
         self.think_sent = ""
         self.think_last = 0.0
@@ -915,6 +918,8 @@ class _Live:
         if not delta or self.emit is None:
             return
         self.text += delta
+        if self.meter is not None:
+            self.meter(len(self.reasoning), self.text)
         now = time.monotonic()
         if now - self.last >= TEXT_EVERY:
             await self.flush(now)
@@ -951,6 +956,8 @@ class _Live:
         if not isinstance(delta, str) or not delta:
             return
         self.reasoning += delta
+        if self.meter is not None:
+            self.meter(len(self.reasoning), self.text)
         now = time.monotonic()
         if now - self.think_last >= TEXT_EVERY:
             self.think_last = now
@@ -1140,16 +1147,16 @@ def _anthropic_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
 
 
 async def _post(cfg: dict[str, Any], path: str, body: dict[str, Any], *, kind: str,
-                emit: Any, show: bool) -> Any:
+                emit: Any, show: bool, meter: Any = None) -> Any:
     """The model's answer as the non-streaming JSON, streamed when the
-    server allows it (see above)."""
+    server allows it (see above). `meter` goes to `_Live`."""
     key = (str(cfg.get("base_url")), str(cfg.get("model")))
     if key in _NO_STREAM:
         return await client._request(cfg, "POST", path, body=body,
                                      timeout=client._COMPLETE_TIMEOUT)
     # Native calls write the reply as plain text; a JSON step writes it in
     # its `message` field, so only that field's text goes live.
-    live = _Live(emit, None if show else "message")
+    live = _Live(emit, None if show else "message", meter)
     collect = {"openai": _openai_collect, "ollama": _ollama_collect,
                "anthropic": _anthropic_collect, "responses": _responses_collect}[kind]
     data, on = collect(live, show or kind != "anthropic")

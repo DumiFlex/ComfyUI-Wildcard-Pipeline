@@ -71,6 +71,19 @@ describe("AiWorking", () => {
     w.unmount();
   });
 
+  it("counts the model's thinking while it thinks", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(
+      { phase: "thinking", tokens: 900, calls: 1, seconds: 0, done: false }))));
+    const id = startAiRequest("/wp/api/ai/wildcard/draft");
+    const w = mount(AiWorking, { props: { label: "Drafting" } });
+    await flushPromises();
+    expect(w.get('[data-test="ai-working-detail"]').text()).toBe("Drafting: thinking, about 900 tokens");
+    expect(w.get('[data-test="ai-working-word"]').text()).toBe("Thinking · 900 tokens…");
+    endAiRequest(id);
+    w.unmount();
+  });
+
   it("writes the time like Claude Code", () => {
     expect([5, 65, 797, 3725].map(formatElapsed)).toEqual(["5s", "1m 05s", "13m 17s", "1h 02m"]);
   });

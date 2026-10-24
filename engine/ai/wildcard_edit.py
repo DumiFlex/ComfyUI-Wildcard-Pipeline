@@ -35,6 +35,16 @@ ACTIONS = ("remove", "rewrite", "retag", "reweight")
 #: edited through a selection, which the editor sends instead.
 MAX_EDIT_OPTIONS = 300
 MAX_REASON_LEN = 160
+
+#: Output tokens per listed option for each action, with reasoning off: a
+#: number plus a reason / text / tag list / weight.
+_TOKENS_PER_ROW = {"remove": 40, "rewrite": 120, "retag": 60, "reweight": 25}
+
+
+def answer_tokens(action: str, rows: int) -> int:
+    """The output limit for an edit of `rows` options: room for every row
+    changing, plus the note."""
+    return min(8192, 400 + _TOKENS_PER_ROW[action] * rows)
 MAX_NOTE_LEN = 240
 
 

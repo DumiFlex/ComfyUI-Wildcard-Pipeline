@@ -216,3 +216,52 @@ _VAR = re.compile(r"\$([a-zA-Z_][a-zA-Z0-9_]*)")
 def var_names_in(text: str) -> list[str]:
     """The ``$name`` reads in a line of text, in order."""
     return _VAR.findall(text or "")
+
+
+#: Variables listed in full by `describe_for`; the rest go on one line by name.
+MAX_VARS_FOCUSED = 20
+_WORD = re.compile(r"[a-z0-9]+")
+#: Request words that say nothing about which variable is meant.
+_PLAIN = frozenset("""a an the and or of to in on at for with when if then else set sets
+is are be it its this that these those my your from by as not no any all each every
+make add write rule rules value values variable variables use only also than into""".split())
+
+
+def _words(text: str) -> set[str]:
+    return {w for w in _WORD.findall(text.lower().replace("_", " ")) if len(w) > 2
+            and w not in _PLAIN}
+
+
+def describe_for(catalog: dict[str, dict[str, Any]], request: str, *,
+                 focus: list[str] | None = None, keep: int = MAX_VARS_FOCUSED) -> str:
+    """`describe`, narrowed to what `request` is about: the variables it
+    names (``$name``), the ``focus`` ones, then those whose name, values,
+    tags or module share its words, up to ``keep`` in full; every other
+    variable is still named on one line, so the model knows it exists. A
+    catalog of ``keep`` or fewer is described whole (the derivation and text
+    panels sent ~4,900 tokens of catalog for 82 variables, 2026-10-23)."""
+    if len(catalog) <= keep:
+        return describe(catalog, focus=focus)
+    named = [n for n in var_names_in(request) if n in catalog]
+    first = list(dict.fromkeys([*named, *(n for n in focus or [] if n in catalog)]))
+    words = _words(request) | {w.rstrip("s") for w in _words(request)}
+
+    def score(name: str) -> int:
+        e = catalog[name]
+        own = _words(name)
+        text = _words(" ".join([*map(str, e["values"][:MAX_VALUES_SHOWN]), *map(str, e["tags"]),
+                                str(e.get("about") or ""),
+                                *(str(s.get("module") or "") for s in e["sources"])]))
+        return 3 * len(words & own) + len(words & text)
+
+    scored = sorted((n for n in catalog if n not in first), key=lambda n: -score(n))
+    picked = first + [n for n in scored if score(n) > 0][:max(0, keep - len(first))]
+    rest = [n for n in catalog if n not in picked]
+    out = describe({n: catalog[n] for n in picked}) if picked else ""
+    if rest:
+        out += ("\n" if out else "") + (
+            "Also set in the library (name only; use one only when the request is about it): "
+            + ", ".join(f"${n}" for n in rest[:MAX_VARS_SHOWN]))
+        if len(rest) > MAX_VARS_SHOWN:
+            out += f" (+{len(rest) - MAX_VARS_SHOWN} more)"
+    return out

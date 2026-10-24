@@ -146,7 +146,9 @@ const detail = computed(() => {
   if (p && p.calls > 1) parts.push(`request ${p.calls}`);
   switch (shownPhase.value) {
     case "reading": parts.push("reading the prompt"); break;
-    case "thinking": parts.push("thinking"); break;
+    case "thinking":
+      parts.push(p && p.tokens > 0 ? `thinking, about ${p.tokens.toLocaleString()} tokens` : "thinking");
+      break;
     case "writing":
       parts.push(p && p.tokens > 0 ? `writing, about ${p.tokens.toLocaleString()} tokens` : "writing");
       break;
@@ -162,7 +164,7 @@ const real = computed(() => {
   const p = progress.value;
   switch (shownPhase.value) {
     case "reading": return "Reading the prompt";
-    case "thinking": return "Thinking";
+    case "thinking": return p && p.tokens > 0 ? `Thinking · ${p.tokens.toLocaleString()} tokens` : "Thinking";
     case "writing": return p && p.tokens > 0 ? `Writing · ${p.tokens.toLocaleString()} tokens` : "Writing";
     default: return props.label || "Waiting for the model";
   }

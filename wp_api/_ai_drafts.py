@@ -67,6 +67,9 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     if isinstance(count, bool) or not isinstance(count, int):
         return json_error("count must be a whole number", status=400)
     count = max(1, min(ai_wildcard.MAX_COUNT, count))
+    # A few more than wanted: some come back as repeats of the list (or of
+    # each other) and are dropped, and "3 options" should still land 3.
+    asked = ai_wildcard.over_ask(count)
     turns = _turns(body)
     if isinstance(turns, web.Response):
         return turns
@@ -94,37 +97,56 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     refs = _ref_index(_wildcards(request), self_id, payload, name)
     existing_texts = [ai_refs.display_text(t, refs) for t in existing_texts]
     first = ai_wildcard.build_user_prompt(kinds=kinds,
-        instruction=ai_followup.first_instruction(turns, instruction), count=count,
+        instruction=ai_followup.first_instruction(turns, instruction), count=asked,
         name=name[:200], var_binding=var[:100],
         existing_options=existing_texts, tags=tags, axes=axes,
         description=description, labels=labels, refs_text=refs.describe(exclude=self_id),
     )
-    try:
-        answer = await _ask(
-            cfg, first=first, turns=turns, instruction=instruction,
-            system=webs.system(ai_wildcard.draft_prompt()),
-            schema=webs.schema(ai_wildcard.DRAFT_SCHEMA),
-            schema_name="wildcard_options",
-            images=images or None, extra=webs.note,
-        )
-    except _ai_client.AIError as e:
-        return json_error(e.message, status=e.status)
-    answer, research = webs.take(answer)
+    ask: dict[str, Any] = dict(
+        cfg=cfg, first=first, turns=turns, instruction=instruction,
+        system=webs.system(ai_wildcard.draft_prompt()),
+        schema=webs.schema(ai_wildcard.DRAFT_SCHEMA),
+        schema_name="wildcard_options",
+        images=images or None,
+        quick=True, max_tokens=ai_wildcard.answer_tokens(asked),
+    )
 
-    try:
-        result = ai_wildcard.compile_options(
-            answer,
+    def compiled(raw: Any) -> dict[str, Any]:
+        return ai_wildcard.compile_options(
+            raw,
             existing_payload={
                 "options": [o for o in options if isinstance(o, dict)][:5000],
                 "sub_categories": tags,
             },
             limit=count, refs=refs, self_id=self_id,
         )
+
+    try:
+        answer = await _ask(extra=webs.note, **ask)
+    except _ai_client.AIError as e:
+        return json_error(e.message, status=e.status)
+    answer, research = webs.take(answer)
+
+    try:
+        result = compiled(answer)
     except ValueError as e:
         return json_error(
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
             status=502,
         )
+    note = ai_wildcard.bleed_note(name, var, result["options"], instruction)
+    if note:
+        # One re-ask with what the code found; the first answer stands when
+        # the second is no better.
+        try:
+            again, _ = webs.take(await _ask(extra="\n\n".join(
+                x for x in (webs.note, note) if x), **ask))
+            better = compiled(again)
+            if len(better["options"]) >= len(result["options"]) and not \
+                    ai_wildcard.bleed_note(name, var, better["options"], instruction):
+                answer, result = again, better
+        except (_ai_client.AIError, ValueError):
+            pass
     groups, group_notes = ai_wildcard.new_groups(
         answer.get("axes") if isinstance(answer, dict) else None,
         existing_payload={"sub_categories": tags, "tag_groups": axes, "tag_group_kinds": kinds},
@@ -221,6 +243,7 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
         # Edits should be faithful to the request, not creative.
         temperature=0.3,
         images=images or None,
+        quick=True, max_tokens=ai_edit.answer_tokens(action, len(rows)),
     )
     try:
         answer = await _ask(extra=webs.note, **ask)
@@ -295,7 +318,10 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
     first = ai_derivation.build_prompt(
         instruction=ai_followup.first_instruction(turns, instruction), name=name[:200],
         description=description, labels=labels,
-        catalog_text=library_vars.describe(catalog, focus=focus),
+        catalog_text=library_vars.describe_for(
+            # The first request only: follow-ups replay this prompt as it was.
+            catalog, " ".join([ai_followup.first_instruction(turns, instruction), name,
+                               description]), focus=focus),
         existing_rules=[ai_derivation.describe_rule(r) for r in rules],
         refs_text=refs.describe(),
     )
@@ -304,7 +330,7 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
             cfg, first=first, turns=turns, instruction=instruction,
             system=ai_derivation.SYSTEM_PROMPT,
             schema=ai_derivation.SCHEMA, schema_name="derivation_rules", temperature=0.3,
-            images=images or None,
+            images=images or None, quick=True,
         )
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
@@ -353,7 +379,7 @@ async def _repair_else(cfg: dict[str, Any], instruction: str, result: dict[str, 
             cfg, system=ai_derivation.ELSE_SYSTEM,
             user=ai_derivation.else_prompt(instruction, rules),
             schema=ai_derivation.else_schema(targets), schema_name="derivation_else",
-            temperature=0.2, max_tokens=512)
+            temperature=0.2, max_tokens=512, quick=True)
     except _ai_client.AIError:
         return ""
     return ai_derivation.attach_else(answer, rules, catalog, refs)
@@ -424,18 +450,45 @@ async def post_text_draft(request: web.Request) -> web.Response:
     description, labels = ai_about.clean(item.get("description"), item.get("tags"))
     first = text_items.build_prompt(
         kind=kind, instruction=ai_followup.first_instruction(turns, instruction),
-        name=name[:200], catalog_text=library_vars.describe(catalog), description=description,
+        name=name[:200], description=description,
+        catalog_text=library_vars.describe_for(
+            catalog, " ".join([ai_followup.first_instruction(turns, instruction), name,
+                               description, current[:2000], out_var])),
         labels=labels, current=current[:4000], out_var=out_var,
     )
     system, schema, schema_name = _TEXT_KINDS[kind]
+    ask: dict[str, Any] = dict(
+        cfg=cfg, first=first, turns=turns, instruction=instruction,
+        system=webs.system(system), schema=webs.schema(schema), schema_name=schema_name,
+        temperature=0.5, images=images or None, quick=True,
+        max_tokens=text_items.answer_tokens(kind))
     try:
-        answer = await _ask(cfg, first=first, turns=turns, instruction=instruction,
-                            system=webs.system(system), schema=webs.schema(schema),
-                            schema_name=schema_name, temperature=0.5,
-                            images=images or None, extra=webs.note)
+        try:
+            answer = await _ask(extra=webs.note, **ask)
+        except _ai_client.AIError as e:
+            # A model that loops on the same words hits the limit; one more
+            # sample usually doesn't.
+            if e.message != _ai_client.CUT_OFF_MESSAGE:
+                raise
+            answer = await _ask(extra=webs.note, **ask)
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
     answer, research = webs.take(answer)
+    unset = text_items.left_out(kind, answer, instruction)
+    if unset:
+        # One re-ask naming what the request asked for; the first answer
+        # stands when the second leaves out no less of it.
+        names = ", ".join(f"${v}" for v in unset)
+        note = (f"Set {names} too: the request asks for it. Answer with the whole list again."
+                if kind == "fixed_values" else
+                f"Read {names} too: the request asks for it. Answer with the whole text again.")
+        try:
+            again, _ = webs.take(await _ask(
+                extra="\n\n".join(x for x in (webs.note, note) if x), **ask))
+            if len(text_items.left_out(kind, again, instruction)) < len(unset):
+                answer = again
+        except _ai_client.AIError:
+            pass
     try:
         if kind == "fixed_values":
             result = text_items.compile_fixed(answer, existing=payload)
@@ -519,7 +572,7 @@ async def post_constraint_draft(request: web.Request) -> web.Response:
             cfg, first=first, turns=turns, instruction=instruction,
             system=ai_constraint.SYSTEM_PROMPT,
             schema=ai_constraint.SCHEMA, schema_name="constraint_rules", temperature=0.3,
-            images=images or None,
+            images=images or None, quick=True,
         )
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
@@ -577,6 +630,7 @@ async def post_describe(request: web.Request) -> web.Response:
             cfg, first=first, turns=turns, instruction=hint,
             system=ai_describe.SYSTEM_PROMPT,
             schema=ai_describe.SCHEMA, schema_name="describe", temperature=0.4,
+            quick=True,
         )
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
@@ -657,7 +711,7 @@ async def post_organize(request: web.Request) -> web.Response:
             cfg, first=first, turns=turns, instruction=hint,
             system=ai_organize.SYSTEM_PROMPT,
             schema=ai_organize.schema_for([it["id"] for it in items]),
-            schema_name="organize", temperature=0.3,
+            schema_name="organize", temperature=0.3, quick=True,
         )
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)

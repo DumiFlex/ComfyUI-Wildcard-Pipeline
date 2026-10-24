@@ -499,3 +499,47 @@ def test_else_repair_attaches_to_the_rule_without_one():
         "properties"]["target_var"]["enum"] == ["title"]
     assert "anyone else" in ai_derivation.else_prompt(
         "mage Archmage, anyone else Adventurer", rules)
+
+
+def _many_vars(n: int) -> dict:
+    rows = [{"type": "wildcard", "name": f"Thing {i}", "payload": {
+        "var_binding": f"thing_{i}", "options": [{"id": "o", "value": f"value {i}"}]}}
+        for i in range(n)]
+    rows.append({"type": "wildcard", "name": "Weather", "payload": {
+        "var_binding": "weather", "options": [{"id": "r", "value": "heavy rain"}]}})
+    rows.append({"type": "wildcard", "name": "Mood", "payload": {
+        "var_binding": "mood", "options": [{"id": "g", "value": "gloomy"}]}})
+    return library_vars.build_catalog(rows)
+
+
+def test_the_panels_catalog_lists_what_the_request_is_about_in_full():
+    cat = _many_vars(40)
+    text = library_vars.describe_for(cat, "if it rains set $mood to gloomy")
+    full = library_vars.describe(cat)
+    assert len(text) < len(full) / 2
+    lines = text.splitlines()
+    # Named first, then the variable whose values share a word ("rain").
+    assert lines[0].startswith("$mood") and any(x.startswith("$weather") for x in lines)
+    # Every other variable is still named, so it can be used.
+    assert "$thing_39" in lines[-1] and lines[-1].startswith("Also set in the library")
+    assert not any(x.startswith("$thing_3 ") for x in lines[:-1])
+    # A small catalog is described whole.
+    small = _many_vars(3)
+    assert library_vars.describe_for(small, "rain") == library_vars.describe(small)
+
+
+def test_a_name_two_wildcards_share_is_refused_and_listed_by_variable():
+    rows = [{"id": "aaaa0001", "type": "wildcard", "name": "Outfit",
+             "payload": {"var_binding": "outfit", "options": []}},
+            {"id": "aaaa0002", "type": "wildcard", "name": "Outfit",
+             "payload": {"var_binding": "outfit_nsfw", "options": []}},
+            {"id": "aaaa0003", "type": "wildcard", "name": "Colors",
+             "payload": {"var_binding": "color", "options": []}}]
+    index = refs.RefIndex(rows)
+    listed = index.describe()
+    assert '@{$outfit} "Outfit"' in listed and '@{$outfit_nsfw} "Outfit"' in listed
+    assert "@{Colors} ($color)" in listed
+    with pytest.raises(ValueError, match=r"2 wildcards are named 'Outfit'.*@\{\$outfit\}"):
+        refs.compile_refs("@{Outfit} jacket", index)
+    assert refs.compile_refs("@{$outfit_nsfw} jacket", index).startswith("@{aaaa0002#Outfit}")
+    assert refs.compile_refs("@{Colors} jacket", index).startswith("@{aaaa0003#Colors}")

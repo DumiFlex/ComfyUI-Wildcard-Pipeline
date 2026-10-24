@@ -20,6 +20,8 @@ import type {
 import { keptNote, useAiConversation } from "../../composables/useAiConversation";
 
 interface Props {
+  /** The saved wildcard's id; unset for a new one. */
+  moduleId?: string;
   action: AiWildcardEditAction;
   name: string;
   varBinding: string;
@@ -76,6 +78,7 @@ const convo = useAiConversation<AiWildcardEditResult, Ctx>({
     searched,
     skipped,
     wildcard: {
+      ...(props.moduleId ? { id: props.moduleId } : {}),
       name: props.name,
       var_binding: props.varBinding,
       description: props.description ?? "",

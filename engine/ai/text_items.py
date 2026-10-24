@@ -288,6 +288,33 @@ def unasked(text: str, asked: str, reads_: list[str]) -> str:
             + ", which you didn't ask for; take out what you don't want")
 
 
+def answer_tokens(kind: str) -> int:
+    """The output limit for a text panel's answer, reasoning off. A template
+    or combine of `MAX_TEMPLATE` characters is about 1k tokens, a full value
+    list about 2k; a model looping on the same words (the 9B on a portrait
+    template, 2026-10-24) is stopped after these instead of after 8k."""
+    return 2048 if kind == "fixed_values" else 1536
+
+
+def unset_asked(raw: Any, asked: str) -> list[str]:
+    """The ``$vars`` a fixed values request spelled out that the answer
+    doesn't set. A fixed value can't read variables, so every one the
+    request names is one to set."""
+    values = raw.get("values") if isinstance(raw, dict) else None
+    have = {str(v.get("name") or "").lstrip("$") for v in values or [] if isinstance(v, dict)}
+    return [v for v in dict.fromkeys(_ASKED_VAR.findall(asked or "")) if v not in have]
+
+
+def left_out(kind: str, raw: Any, asked: str) -> list[str]:
+    """The ``$vars`` the request names that the answer leaves out: not set
+    (fixed values) or not read (a combine or template's text)."""
+    if kind == "fixed_values":
+        return unset_asked(raw, asked)
+    text = raw.get("template") if isinstance(raw, dict) else None
+    have = set(reads(text if isinstance(text, str) else ""))
+    return [v for v in dict.fromkeys(_ASKED_VAR.findall(asked or "")) if v not in have]
+
+
 def missing_asked(text: str, asked: str) -> str:
     """A warning naming the ``$vars`` the request spelled out that the draft
     doesn't read, or "". Browser test (9B): a portrait template asked to read
