@@ -47,6 +47,7 @@ from engine.ai.pack.text_fixes import (
     _plan_prose,
     _second_rolls,
     _snake_text,
+    _split_glued,
     _strict_rules,
     _wrap_pipes,
 )
@@ -125,6 +126,7 @@ def compile_item(
                                               .values() for x in v}]
         warnings += _wrap_pipes(payload.get("options") or [])
         warnings += _strip_sibling_picks(plan, built, item, payload)
+        warnings += _split_glued(payload["options"])
         lists = _list_options(payload["options"])
         if lists and len(lists) < len(payload["options"]):
             payload["options"] = [o for o in payload["options"] if o not in lists]

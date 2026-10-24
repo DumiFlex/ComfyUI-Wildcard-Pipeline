@@ -478,7 +478,8 @@ def plain_ref(ref: str) -> str:
 
 
 #: Derive text that is an instruction, not prompt words.
-_RULE_TEXT = re.compile(r"^\s*(?:exclude|include|avoid|allow|forbid|never|only)s?\b", re.I)
+_RULE_TEXT = re.compile(r"^\s*(?:(?:exclude|include|avoid|allow|forbid|never|only)s?|not)\b",
+                        re.I)
 
 
 def _relations(
@@ -971,6 +972,7 @@ def compile_graph(raw: Any) -> dict[str, Any]:
     _infer_axes(raw.get("relations"), slots, warnings)
     relations = _relations(raw.get("relations"), slots, {f["var"] for f in fixed},
                            {i["var"] for i in inputs}, warnings, bad_refs)
+    _onto_lists(slots, relations, warnings)
     _list_slots(slots, relations, raw.get("template"), warnings)
     template = _template(raw.get("template"), slots, fixed, relations, inputs, warnings)
     _story_holds(slots, parse_run(raw.get("run")), warnings)
@@ -1033,6 +1035,39 @@ def compile_graph(raw: Any) -> dict[str, Any]:
 
 
 # --- the graph as plan items ------------------------------------------------
+
+def _onto_lists(slots: list[dict[str, Any]], relations: list[dict[str, Any]],
+                warnings: list[str]) -> None:
+    """A rule on a drawer's tag that the list it draws from also carries
+    goes onto the list: the drawn pick is what the prompt shows, and a rule
+    on the drawer's own tag never sees it ("winter never pastel" on Shirt
+    while the colour came in through the Color List ref: 4 of 10 winter
+    runs pastel, 9B smoke 2026-10-24). A rule on the list reaches every
+    drawer's draw."""
+    by_name = {s["name"]: s for s in slots}
+    lists: dict[str, list[str]] = {}
+    for r in relations:
+        if r["kind"] == "draw":
+            lists.setdefault(r["to"]["slot"], []).append(r["from"]["slot"])
+    for r in relations:
+        to = r.get("to") or {}
+        if r["kind"] not in ("exclude", "only", "boost", "reduce") or not to.get("value") \
+                or to["slot"] not in lists:
+            continue
+        # "soft_pastel" on the drawer is the list's "soft" (9B smoke,
+        # 2026-10-24): a part of the value names the list's value.
+        parts = [to["value"], *re.split(r"[_\- ]+", to["value"])]
+        for name in lists[to["slot"]]:
+            hit = next(((a, p) for p in parts for a in by_name[name]["axes"]
+                        if p in a["values"]), None)
+            if hit is None or name == r["from"]["slot"]:
+                continue
+            ax, value = hit
+            warnings.append(f"{r['from']['slot']} → {to['slot']} {to['value']}: the rule goes on "
+                            f"{name} {value}, the list {to['slot']} draws its {ax['name']} from")
+            r["to"] = {"slot": name, "axis": ax["name"], "value": value}
+            break
+
 
 def _list_slots(slots: list[dict[str, Any]], relations: list[dict[str, Any]],
                 raw_template: Any, warnings: list[str]) -> None:
@@ -1270,10 +1305,17 @@ def run_items(graph: dict[str, Any], settings: Any = None) -> list[dict[str, Any
             "count": 0, "tags": [], "source": "", "target": "", "use": ""})
     if story_beat(graph):
         n = parse_run(graph["run"])["frames"]
+        # A beat that describes the hero gives every frame a different one
+        # (9B smoke, 2026-10-24: a young man, then a young woman, while
+        # Hero was held): the held slots print themselves.
+        held = [s["var"] for s in graph["slots"] if s["hold"] and s["show"] == "prompt"]
+        keep = (" Never describe what " + ", ".join(f"${v}" for v in held) + " already say "
+                "(they are the same in every frame and print themselves): only what happens."
+                if held else "")
         items.append({
             "kind": "derivation", "name": "Story beat", "var": BEAT_VAR, "section": "",
             "about": f"Sets $beat from $iteration, one branch per frame 1 to {n} (equals "
-                     "\"1\", \"2\", …), each one short step of the story in order.",
+                     "\"1\", \"2\", …), each one short step of the story in order." + keep,
             "count": 0, "tags": [], "source": "", "target": "", "use": ""})
     return items
 
@@ -2100,6 +2142,12 @@ def verify_relations(plan: dict[str, Any], built: dict[str, Any],
         if not row["checked"]:
             continue
         words = r.get("words") or [] if kind == "exclude" else []
+        # "casual" in the words of "casual never gets heels" is the source,
+        # not a forbidden thing: it showed in every casual prompt, so the rule
+        # counted broken in 27 of 27 runs (9B smoke, 2026-10-24).
+        src_slot = next((s for s in graph["slots"] if s["name"] == src["slot"]), None)
+        src_vals = {v.lower() for a in (src_slot or {}).get("axes") or [] for v in a["values"]}
+        words = [w for w in words if w.lower() not in src_vals]
         for n, ctx in enumerate(runs):
             got_src = _picked_tags(graph, payloads, src["slot"], ctx)
             if got_src is None:
@@ -2115,7 +2163,9 @@ def verify_relations(plan: dict[str, Any], built: dict[str, Any],
                     break
                 dt, fell = got_dst
                 prompt = rendered[n] if rendered and n < len(rendered) else ""
-                said = [w for w in words if _has_word(prompt, w)] if prompt else []
+                own = str(ctx.get(src_slot["var"]) or "").lower() if src_slot else ""
+                said = [w for w in words if _has_word(prompt, w)
+                        and not _has_word(own, w)] if prompt else []
                 nested = _drawn_tags(graph, payloads, dst["slot"], ctx)
                 if not dt and not said and not nested:
                     continue
@@ -2500,8 +2550,12 @@ def apply_picks(graph: dict[str, Any], request: str,
     # count for it in the request: both rows fire, and only an option fit
     # for every pick is left ("pick 2" outfits, 9B smoke 2026-10-24: one
     # casual and one formal outfit, boots in every run).
+    # A derive / append keyed on a multi-pick goes (drop_multi_pick_rules),
+    # so its source counts too (hair lengths "pick 2-3": nine length rules
+    # dropped and the length never shown, 9B smoke 2026-10-24).
     ruled = {x for r in graph["relations"] if r["kind"] in NARROWING
-             for x in (r["from"]["slot"], r["to"]["slot"])}
+             for x in (r["from"]["slot"], r["to"]["slot"])} | {
+        r["from"]["slot"] for r in graph["relations"] if r["kind"] in ("derive", "append")}
     for s in graph["slots"]:
         if request.strip() and s["pick"] and s["pick"] != "1" and s["name"] in ruled \
                 and s["var"] not in locked and not any(
@@ -2903,6 +2957,26 @@ def code_questions(graph: dict[str, Any], request: str,
     return out
 
 
+_LOOP_ASK = re.compile(
+    r"\b(?:every|each|all)\s+(?:image|frame|panel|picture|shot)s?\s+(?:of|in|over)\s+"
+    r"(?:a|the)\s+loop\b|\b(?:over|across|in)\s+(?:a|the)\s+loop\b", re.I)
+
+
+def loop_run(graph: dict[str, Any], request: str, decisions: Any = None) -> list[str]:
+    """A first answer that runs single images when the request asks for a
+    Loop ("the same hero in every image of a loop") runs as a story
+    instead, so what the request holds stays held (single images clear
+    every hold). Not when the user already answered the story question."""
+    from engine.ai.pack.settings import DEFAULT_FRAMES, MAX_FRAMES, MIN_FRAMES, parse_decisions
+    if parse_run(graph["run"])["mode"] != "single" or not _LOOP_ASK.search(request) \
+            or any(d["question"] == STORY_QUESTION for d in parse_decisions(decisions)):
+        return []
+    m = _FRAMES.search(request)
+    frames = max(MIN_FRAMES, min(MAX_FRAMES, int(m.group(1)))) if m else DEFAULT_FRAMES
+    graph["run"] = {"mode": "story", "frames": frames}
+    return [f"Runs as a story of {frames} frames: the request asks for a Loop"]
+
+
 def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
     """A graph answer as a plan (``compile_plan`` on its items), carrying
     the graph as ``plan["graph"]``, the settings applied to it
@@ -2936,6 +3010,8 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
         # A refine: how the pack runs is the user's setting by now, never
         # re-decided by the model's next answer.
         graph["run"] = parse_run(kw["previous"]["run"], graph["run"])
+    else:
+        applied += loop_run(graph, kw.get("request") or "", kw.get("decisions"))
     applied += apply_settings(graph, kw.get("settings"))
     applied += code_beat(graph)
     applied += apply_picks(graph, kw.get("request") or "", locks["slots"])
