@@ -1880,6 +1880,7 @@ defineExpose({
       >
         <AiWildcardPanel
           ref="aiPanel"
+          :module-id="props.id"
           :name="name"
           :var-binding="varBinding"
           :options="options"

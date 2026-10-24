@@ -67,9 +67,19 @@ def call_started() -> None:
 async def on_event(ev: dict[str, Any]) -> None:
     """The emit given to `_ai_chat._post`: its `thinking` / `text` events."""
     if ev.get("type") == "thinking":
-        _set(phase="thinking")
+        e = _entries.get(current.get() or "")
+        if e is not None and e["phase"] != "thinking":
+            _set(phase="thinking", chars=0)
     elif ev.get("type") == "text":
         _set(phase="writing", chars=len(str(ev.get("v") or "")))
+
+
+def thought(chars: int) -> None:
+    """The reasoning so far is `chars` long (`_ai_client`'s meter), so the
+    working line can count it while the model thinks."""
+    e = _entries.get(current.get() or "")
+    if e is not None and e["phase"] in ("reading", "thinking") and chars > e["chars"] + 200:
+        _set(phase="thinking", chars=chars)
 
 
 def active() -> bool:
