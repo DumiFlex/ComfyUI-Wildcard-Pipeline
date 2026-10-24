@@ -755,6 +755,38 @@ def _by_reads(items: list[dict[str, Any]], built: dict[str, Any]) -> list[str]:
     return done
 
 
+_DRAWN = re.compile(r"@\{([0-9a-f]{8})")
+
+
+def draws(plan: dict[str, Any], built: dict[str, Any] | None = None) -> dict[str, set[str]]:
+    """Drawer variable → the list variables its options pick from (an
+    ``@{id}`` in its built options, or a graph ``draw`` relation). A rule
+    on a list must run before every drawer too: the nested pick resolves
+    where the drawer runs, and constraint reach counts downstream only."""
+    built = built or {}
+    wild = [i for i in plan["items"] if is_wild(i)]
+    var_of = {i["id"]: i["var"] for i in wild if i.get("id")}
+    var_of.update({b["id"]: i["var"] for i in wild
+                   if isinstance(b := built.get(i["key"]), dict) and b.get("id")})
+    out: dict[str, set[str]] = {}
+    for i in wild:
+        payload = (built.get(i["key"]) or {}).get("payload") or {}
+        for o in payload.get("options") or []:
+            for mid in _DRAWN.findall(str(o.get("value") or "") if isinstance(o, dict) else ""):
+                if var_of.get(mid) and var_of[mid] != i["var"]:
+                    out.setdefault(i["var"], set()).add(var_of[mid])
+    graph = plan.get("graph")
+    if isinstance(graph, dict):
+        slot_var = {s["name"]: s["var"] for s in graph.get("slots") or []}
+        for r in graph.get("relations") or []:
+            if r.get("kind") == "draw":
+                d, li = slot_var.get((r.get("to") or {}).get("slot")), \
+                    slot_var.get(r["from"]["slot"])
+                if d and li and d != li:
+                    out.setdefault(d, set()).add(li)
+    return out
+
+
 def chain_order(plan: dict[str, Any], built: dict[str, Any] | None = None) -> list[str]:
     """Keys of the modules in the order they run. Fixed values first. A
     constraint needs its source picked before it and its target after it,
@@ -771,6 +803,11 @@ def chain_order(plan: dict[str, Any], built: dict[str, Any] | None = None) -> li
     after: dict[str, set[str]] = {i["var"]: set() for i in wild}
     for c in cons:
         after[c["target"]].add(c["source"])
+    drawn = {d: {li for li in lists if li in after} for d, lists in
+             draws(plan, built).items() if d in after}
+    for d, lists in drawn.items():
+        for li in lists:
+            after[d] |= after[li] - {d}
     ordered: list[str] = []
     placed: set[str] = set()
     pending = [i["var"] for i in wild]
@@ -785,7 +822,8 @@ def chain_order(plan: dict[str, Any], built: dict[str, Any] | None = None) -> li
     chain: list[str] = [i["key"] for i in items if module_type(i) == "fixed_values"]
     for v in ordered:
         for c in cons:
-            if c["target"] == v and position[c["source"]] < position[v]:
+            if c["key"] not in chain and (c["target"] == v or c["target"] in drawn.get(v, ())) \
+                    and c["source"] in position and position[c["source"]] < position[v]:
                 chain.append(c["key"])
         chain.append(by_var[v]["key"])
     chain += [c["key"] for c in cons if c["key"] not in chain]
@@ -810,6 +848,8 @@ def _deps(plan: dict[str, Any], built: dict[str, Any]) -> list[tuple[str, str]]:
                 out.append((by_var[i["source"]], i["key"]))
             if i["target"] in by_var:
                 out.append((i["key"], by_var[i["target"]]))
+                out += [(i["key"], by_var[d]) for d, lists in draws(plan, built).items()
+                        if i["target"] in lists and d in by_var]
             continue
         for o in items:
             if o is not i and o["kind"] != "constraint" and io[o["key"]][1] & io[i["key"]][0]:

@@ -980,3 +980,92 @@ def test_a_left_out_rule_names_what_it_would_have_set():
     line = pg.plain_ref(g["bad_refs"][0])
     assert line.startswith('Left out a rule: A rule that sets $fit = "loose cut" on '
                            "Class's role: it names no role value")
+
+
+def test_the_negatives_setting_reaches_the_graph_build():
+    plan = _plan()
+    race = next(i["key"] for i in plan["items"] if i["name"] == "Race")
+    tpl = next(i["key"] for i in plan["items"] if i["kind"] == "template")
+    answer = _answer("Race")
+    answer["options"][0]["negative"] = "pointy ears missing"
+    auto = pack.compile_item(plan, race, {}, answer)
+    assert auto["payload"]["options"][0].get("negative") == "pointy ears missing"
+    assert "Leave every negative" not in pg.slot_request(plan, race)["user"]
+    assert pg.wired_payload(plan, tpl, {})["payload"]["negative_template"] == "bad anatomy"
+    plan["settings"] = {**(plan.get("settings") or {}), "negatives": "template"}
+    off = pack.compile_item(plan, race, {}, answer)
+    assert not any("negative" in o for o in off["payload"]["options"])
+    assert "Leave every negative" in pg.slot_request(plan, race)["user"]
+    assert pg.wired_payload(plan, tpl, {})["payload"]["negative_template"] == "bad anatomy"
+    plan["settings"]["negatives"] = "none"
+    assert pg.wired_payload(plan, tpl, {})["payload"]["negative_template"] == ""
+
+
+def _slot(name, var, show="prompt", axes=()):
+    return {"name": name, "var": var, "what": name.lower(), "section": "", "count": 4,
+            "show": show, "pick": "", "hold": False, "sweep": False, "sometimes_none": 0,
+            "axes": [{"name": a, "values": ["warm", "cool"]} for a in axes]}
+
+
+def _rel(kind, src, dst, axis=""):
+    return {"kind": kind, "from_slot": src, "from_axis": axis, "from_value": "", "to_slot": dst,
+            "to_axis": axis, "to_value": "", "factor": 0, "var": "", "text": "",
+            "otherwise": "", "words": []}
+
+
+DRAWN = {
+    "title": "Casual shirts", "summary": "shirts in a colour", "design": "", "rating": "safe",
+    "style": "tags", "model": "", "anchor": "", "questions": [], "assumptions": [],
+    "from_images": [], "research": [], "run": {"mode": "single", "frames": 0}, "inputs": [],
+    "sections": [], "fixed": [],
+    "slots": [_slot("Colors", "color", axes=["warmth"]), _slot("Shirt", "shirt"),
+              _slot("Season", "season", show="internal", axes=["warmth"])],
+    "relations": [_rel("draw", "Colors", "Shirt"), _rel("agree", "Season", "Colors", "warmth")],
+    "template": {"lead": "1girl", "order": ["Shirt"], "tail": "", "negative": "lowres"},
+}
+DRAWN_OPTIONS = {
+    "Colors": [("red", {"warmth": ["warm"]}), ("orange", {"warmth": ["warm"]}),
+               ("blue", {"warmth": ["cool"]}), ("teal", {"warmth": ["cool"]})],
+    "Shirt": [(t, {}) for t in ("flannel shirt", "polo shirt", "henley shirt", "oxford shirt")],
+    "Season": [("summer", {"warmth": ["warm"]}), ("winter", {"warmth": ["cool"]})],
+}
+
+
+async def test_a_rule_on_a_drawn_list_runs_before_the_drawer_and_is_checked_there():
+    asks: dict[str, str] = {}
+
+    async def complete(**kw):
+        if kw["schema_name"] == "pack_slot":
+            asks[kw["user"].split('"')[1]] = kw["user"]
+        if kw["schema_name"] == "pack_graph":
+            return DRAWN
+        if kw["schema_name"] == "pack_refs":
+            return {"relations": []}
+        name = kw["user"].split('"')[1]
+        return {"options": [{"text": t, "weight": 1, "negative": "", "tags": tags}
+                            for t, tags in DRAWN_OPTIONS[name]]}
+
+    result = await pack.run_pack(complete, "shirts, each in a colour from one colour list, "
+                                 "colours fit the season", seeds=30,
+                                 settings={"planner": "graph"})
+    plan, built = result["plan"], result["built"]
+    names = {i["key"]: i["name"] for i in plan["items"]}
+    order = [names[k] for k in pack.run_order(plan, built)]
+    # The rule narrows the list for the shirt's own pick of it.
+    assert order.index("Season → Colors") < order.index("Shirt")
+    assert order.index("Season") < order.index("Shirt")
+    # A list with a rule on it stays a list: the template doesn't print it.
+    assert pg.slot_by_var(plan["graph"], "color")["show"] == "internal"
+    tpl = next(b for k, b in built.items() if names[k] == "Casual shirts")
+    assert "$color" not in tpl["payload"]["template_string"]
+    assert result["check"]["problems"] == {}
+    # The drawer's call sees what goes in front of its options.
+    assert 'What goes in front: Colors options like "red", "orange"' in asks["Shirt"]
+    agree = next(r for r in result["check"]["relations"] if r["kind"] == "agree")
+    assert agree["holds"] and agree["seen"] > 0
+
+    # The check reads the colour in front of the shirt, not only $color.
+    payloads = {"Colors": built[next(k for k in built if names[k] == "Colors")]["payload"]}
+    ctx = {"color": "blue", "shirt": "red flannel shirt", "season": "winter",
+           "season.warmth": "cool"}
+    assert pg._drawn_tags(plan["graph"], payloads, "Colors", ctx) == [{"warm"}]

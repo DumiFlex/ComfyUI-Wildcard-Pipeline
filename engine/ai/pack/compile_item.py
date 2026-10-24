@@ -29,6 +29,7 @@ from engine.ai.pack.build_notes import (
     repair_note,
     tag_commas,
 )
+from engine.ai.pack.settings import parse_settings
 from engine.ai.pack.text_fixes import (
     _ARTICLE_PICK,
     _PLACEHOLDER,
@@ -103,6 +104,11 @@ def compile_item(
                 plan["graph"], slot, answer, existing=(built.get(key) or {}).get("payload"),
                 others=pack_graph.other_texts(plan, built, key),
                 refs=pack_graph.draw_refs(plan, built))
+            if parse_settings(plan.get("settings"))["negatives"] != "auto":
+                # Option negatives are off in the settings (the slot call
+                # was told so; a small model writes them anyway).
+                for o in compiled["payload"].get("options") or []:
+                    o.pop("negative", None)
         else:
             compiled = ai_wildcard.compile_spec(
                 answer, var=item["var"] or None, refs=idx, self_id=mid, limit=item["count"],

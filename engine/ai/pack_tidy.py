@@ -28,7 +28,12 @@ from engine.ai import pack as P
 from engine.modules._constraint_math import EXCLUDE, combine_constraint_factor
 from engine.modules.derivation_handler import NEGATIVE_MODES, DerivationHandler
 from engine.modules.fixed_values_handler import FixedValuesHandler
-from engine.modules.wildcard_handler import WildcardHandler
+from engine.modules.wildcard_handler import (
+    WildcardHandler,
+    _accepts_axes,
+    _axis_menus,
+    _pick_record_for_constraint,
+)
 
 #: Runs each repeat fix is tested on.
 TIDY_SEEDS = 32
@@ -630,6 +635,22 @@ def _weight(o: dict[str, Any]) -> float:
         return 1.0
 
 
+#: Accepts rolls tried per source option; past it the rest are not checked.
+_MAX_ROLLS = 64
+
+
+def _rolls(option: dict[str, Any], payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """What a constraint can see of `option` when it fires: one record per
+    roll of its accepts axes (a sundress that accepts sandals and heels is
+    seen as sandals OR heels, never both), as the engine builds it
+    (`_pick_record_for_constraint`). One record when it has no accepts axis."""
+    menus = _axis_menus(payload, list(option.get("sub_categories") or []))
+    rolls: list[dict[str, str]] = [{}]
+    for axis, members in menus.items():
+        rolls = [{**r, axis: m} for r in rolls for m in members][:_MAX_ROLLS]
+    return [_pick_record_for_constraint(option, payload, r) for r in rolls]
+
+
 def _stuck(plan: dict[str, Any], built: dict[str, Any]):
     """``(constraint, source item, target item, stuck source values)`` for
     each constraint that leaves its target no option for some source pick."""
@@ -647,13 +668,16 @@ def _stuck(plan: dict[str, Any], built: dict[str, Any]):
         if len(options) < 2:
             continue
         stuck: list[str] = []
-        for o in built[s["key"]]["payload"].get("options") or []:
+        source = built[s["key"]]["payload"]
+        axes = _accepts_axes(built[t["key"]]["payload"])
+        for o in source.get("options") or []:
             if not isinstance(o, dict) or o.get("is_null") or not isinstance(o.get("value"), str):
                 continue
-            pick = {"value": o["value"], "tags": list(o.get("sub_categories") or [])}
-            if all(combine_constraint_factor(
+            if any(all(combine_constraint_factor(
                     [pick], {"value": x.get("value") or "", "tags": x.get("sub_categories") or []},
-                    rule.get("matrix"), rule.get("exceptions")) is EXCLUDE for x in options):
+                    rule.get("matrix"), rule.get("exceptions"),
+                    target_axes=axes) is EXCLUDE for x in options)
+                    for pick in _rolls(o, source)):
                 stuck.append(o["value"])
         if stuck:
             seen.add(t["key"])

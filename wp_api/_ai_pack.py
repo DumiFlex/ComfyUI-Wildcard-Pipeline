@@ -179,14 +179,15 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     first_text = ai_followup.first_instruction(turns, instruction)
     loras = ai_vocab.loras_note(_ai_vocab.lookup, kinds,
                                 re.findall(r"[a-z]{3,}", f"{first_text} {sample}".lower()))
+    graph = settings["planner"] == "graph"
     first = ai_pack.plan_prompt(
         first_text, library_note=lib_note,
         sample=sample, settings=settings, decisions=[] if turns else decisions,
-        library=library, images=first_images, web=web_on, loras=loras)
+        library=library, images=first_images, web=web_on, loras=loras, graph=graph)
     if base is not None:
         first = ai_pack.base_note(base) + "\n\n" + first
     follow = ai_pack.refine_text(instruction, decisions, settings, body.get("web"),
-                                 searched) if turns else instruction
+                                 searched, graph=graph) if turns else instruction
     canvas_line = ai_pack.canvas_note(ai_pack.canvas_vars(canvas))
     if canvas_line:
         if turns:
@@ -201,7 +202,6 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     answer: Any = None
     plan: Any = None  # set by the loop, which returns when it can't
     retry = ""
-    graph = settings["planner"] == "graph"
     # The user's own words. A decision's answer is not one of them: picked
     # from the planner's own choices, it reads "a woman", "Generic big city"
     # or "your call", and those came back as request gaps at fix level in
@@ -291,16 +291,19 @@ async def post_pack_plan(request: web.Request) -> web.Response:
                     "review": ai_pack.review_plan(plan, library, request=asked),
                     "web": web_on,
                     "context": await _plan_context(cfg, first, turns, follow, answer,
-                                                   len(images))})
+                                                   len(images), graph=graph)})
 
 
 async def _plan_context(cfg: dict[str, Any], first: str, turns: list[dict[str, Any]],
-                        follow: str, answer: Any, images: int) -> dict[str, Any]:
+                        follow: str, answer: Any, images: int, *,
+                        graph: bool = False) -> dict[str, Any]:
     """The pack plan's meter, like the chat's: about how much of the model's
     window the last request and its answer took (every refine sends the
     whole conversation again, so it grows)."""
     history, user = ai_followup.conversation(first, turns, follow)
-    chars = ai_budget.prompt_chars(ai_pack.PLAN_SYSTEM, history, user, ai_pack.PLAN_SCHEMA)
+    chars = ai_budget.prompt_chars(ai_pack.GRAPH_SYSTEM if graph else ai_pack.PLAN_SYSTEM,
+                                   history, user,
+                                   ai_pack.GRAPH_SCHEMA if graph else ai_pack.PLAN_SCHEMA)
     chars += len(_json.dumps(answer, ensure_ascii=False)) if answer is not None else 0
     return {"used": ai_budget.tokens(chars) + 1000 * images,
             "window": await _window(cfg, {}), "estimated": True,

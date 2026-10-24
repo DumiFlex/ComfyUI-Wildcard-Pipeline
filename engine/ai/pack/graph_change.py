@@ -93,7 +93,7 @@ def graph_lines(plan: dict[str, Any]) -> list[str]:
                  + (f" · negative: {t['negative']}" if t["negative"] else ""))
     if plan.get("decisions"):
         lines += ["", decisions_note(plan["decisions"])]
-    lines += ["", settings_note(plan.get("settings") or {})]
+    lines += ["", settings_note(plan.get("settings") or {}, graph=True)]
     return lines
 
 
