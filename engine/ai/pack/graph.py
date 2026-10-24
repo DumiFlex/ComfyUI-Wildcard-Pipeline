@@ -723,6 +723,15 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
                         "as an assignment")
         negative = negative[assigned.end():]
     negative = _placeholders(negative, by_name, warnings)
+    # "$negative, blurry" (9B smoke, 2026-10-24): a $name nothing sets
+    # would print as written, so it goes.
+    unset = [m.group(0) for m in _VAR.finditer(negative) if m.group(1).lower() not in by_name]
+    if unset:
+        negative = _VAR.sub(lambda m: m.group(0) if m.group(1).lower() in by_name else "",
+                            negative)
+        negative = re.sub(r"\s*,\s*(?=,|$)|^\s*,\s*", "", negative)
+        negative = re.sub(r",\s*,", ",", negative).strip(" ,")
+        warnings.append(f"Took {', '.join(unset)} out of the negative: nothing sets it")
     rule_words = {w for r in relations for w in r.get("words") or []}
     if negative and rule_words:
         # "sandals, shorts in winter" is a relation, not a defect.
@@ -802,6 +811,13 @@ def _text_reads(lead: str, tail: str, order: list[str], by_name: dict[str, str],
                     bare.append(c)
                 c = f"${var}"
                 read.append(var)
+            elif _VARS_ONLY.match(c) and all(by_name.get(n.lower()) for n in _VAR.findall(c)):
+                # "$quality $style" (9B smoke, 2026-10-24): two reads, one part each.
+                parts += [f"${by_name[n.lower()]}" for n in _VAR.findall(c)]
+                read.extend(by_name[n.lower()] for n in _VAR.findall(c))
+                continue
+            else:
+                read.extend(by_name[n.lower()] for n in _VAR.findall(c) if by_name.get(n.lower()))
             if c:
                 parts.append(c)
         return ", ".join(parts)
@@ -815,6 +831,8 @@ def _text_reads(lead: str, tail: str, order: list[str], by_name: dict[str, str],
 
 
 _IDENT_PART = re.compile(r"^\$*[A-Za-z_][\w ]*$")
+_VAR = re.compile(r"\$+([A-Za-z_]\w*)")
+_VARS_ONLY = re.compile(r"^(?:\$+[A-Za-z_]\w*\s+)+\$+[A-Za-z_]\w*$")
 
 #: Standing-negative tags that have no place in a positive prompt. Only
 #: whole comma-parts count ("bad anatomy", "(ugly:1.2)"), never a word
@@ -1281,9 +1299,11 @@ def template_order(graph: dict[str, Any], settings: Any = None) -> list[str]:
     """The template's variables in order, with what the run style and the
     model setting add: $quality first, $beat last."""
     order = list(graph["template"]["order"])
-    if model_quality(graph, settings) and QUALITY_VAR not in order:
+    t = graph["template"]
+    said = {n.lower() for n in _VAR.findall(f"{t['lead']} {t['tail']}")}
+    if model_quality(graph, settings) and QUALITY_VAR not in order and QUALITY_VAR not in said:
         order.insert(0, QUALITY_VAR)
-    if story_beat(graph) and BEAT_VAR not in order:
+    if story_beat(graph) and BEAT_VAR not in order and BEAT_VAR not in said:
         order.append(BEAT_VAR)
     return order[:MAX_TEMPLATE_PARTS]
 
@@ -1710,17 +1730,81 @@ def rule_words(graph: dict[str, Any], slot: dict[str, Any]) -> list[tuple[str, s
 
 # --- the per-slot content call ----------------------------------------------
 
+#: Most values a content call groups a slot's options by: past it the
+#: groups get too short to be worth the structure.
+MAX_GROUP_VALUES = 6
+
+
+def group_axis(graph: dict[str, Any], slot: dict[str, Any]) -> str | None:
+    """The axis a slot's content call groups its options by (``groups``:
+    a list per value, so every value has options from the first call and
+    none is mis-tagged): the one a rule narrows on or names words for,
+    else one the slot offers a partner, else the first. None when no axis
+    has 2 to ``MAX_GROUP_VALUES`` values or the slot asks for fewer
+    options than the axis has values."""
+    axes = [a for a in slot["axes"] if 2 <= len(a["values"]) <= MAX_GROUP_VALUES
+            and len(a["values"]) <= slot["count"]]
+    if not axes:
+        return None
+    ruled = {r["to"]["axis"] for r in inbound(graph, slot)} \
+        | {axis for _, axis, _ in rule_words(graph, slot)}
+    kinds = axis_kinds(graph, slot)
+    for a in axes:
+        if a["name"] in ruled:
+            return a["name"]
+    return next((a["name"] for a in axes if kinds[a["name"]] == "accepts"), axes[0]["name"])
+
+
+def _group_size(slot: dict[str, Any], axis: str) -> int:
+    n = len(next(a["values"] for a in slot["axes"] if a["name"] == axis))
+    return 2 if slot["count"] >= 2 * n else 1
+
+
+def _group_most(slot: dict[str, Any], axis: str) -> int:
+    """Most options one group may hold: its share of the count and one
+    more. Unbounded, a 9B wrote groups until the output limit cut it off
+    (smoke on #118: a pack's slot calls went from 279 s to 19 min)."""
+    n = len(next(a["values"] for a in slot["axes"] if a["name"] == axis))
+    return max(_group_size(slot, axis), -(-slot["count"] // n) + 1)
+
+
+def ungroup(slot: dict[str, Any], axis: str, groups: Any) -> list[dict[str, Any]]:
+    """A grouped answer's options as one list, each tagged with the value
+    it was listed under; one listed under two values carries both."""
+    allowed = next((a["values"] for a in slot["axes"] if a["name"] == axis), [])
+    out: dict[str, dict[str, Any]] = {}
+    for value, opts in (groups.items() if isinstance(groups, dict) else []):
+        if _tag(value) not in allowed or not isinstance(opts, list):
+            continue
+        for o in opts:
+            if not isinstance(o, dict) or not isinstance(o.get("text"), str):
+                continue
+            seen = out.get(_norm(o["text"]))
+            if seen is not None:
+                if _tag(value) not in seen["tags"][axis]:
+                    seen["tags"][axis].append(_tag(value))
+                continue
+            tags = _got if isinstance(_got := o.get("tags"), dict) else {}
+            out[_norm(o["text"])] = {**o, "tags": {**tags, axis: [_tag(value)]}}
+    return list(out.values())
+
+
 def slot_schema(graph: dict[str, Any], slot: dict[str, Any],
                 fill: dict[str, list[str]] | None = None) -> dict[str, Any]:
     """The JSON schema of one slot's options: ``text``, ``weight``,
     ``negative`` and a ``tags`` object with one key per axis, each an enum
     of that axis's values (a list of them on a classify axis, one on an
-    accepts axis). With ``fill`` (``{axis: [values]}``) it is a fill call's
-    schema: an ``add`` list whose options can only carry those values on
-    that axis, so every new option plugs a gap."""
+    accepts axis). With a ``group_axis`` the options come as ``groups``,
+    a list per value of that axis (at least ``_group_size`` each), the
+    other axes still tagged. With ``fill`` (``{axis: [values]}``) it is a
+    fill call's schema: an ``add`` list whose options can only carry
+    those values on that axis, so every new option plugs a gap."""
     kinds = axis_kinds(graph, slot)
+    grouped = None if fill else group_axis(graph, slot)
     tag_props: dict[str, Any] = {}
     for a in slot["axes"]:
+        if a["name"] == grouped:
+            continue
         allowed = (fill or {}).get(a["name"]) or list(a["values"])
         enum = {"type": "string", "enum": list(allowed)}
         if kinds[a["name"]] == "accepts" and not any(
@@ -1729,8 +1813,16 @@ def slot_schema(graph: dict[str, Any], slot: dict[str, Any],
             tag_props[a["name"]] = enum
         else:
             tag_props[a["name"]] = {"type": "array", "items": enum, "minItems": 1}
-    option = _obj({"text": _STR, "weight": {"type": "number"}, "negative": _STR,
-                   "tags": _obj(tag_props)})
+    fields: dict[str, Any] = {"text": _STR, "weight": {"type": "number"}, "negative": _STR}
+    if tag_props:
+        fields["tags"] = _obj(tag_props)
+    option = _obj(fields)
+    if grouped:
+        size = _group_size(slot, grouped)
+        values = next(a["values"] for a in slot["axes"] if a["name"] == grouped)
+        most = _group_most(slot, grouped)
+        return _obj({"groups": _obj({v: {"type": "array", "items": option, "minItems": size,
+                                         "maxItems": most} for v in values})})
     return _obj({("add" if fill else "options"): {"type": "array", "items": option}})
 
 
@@ -1899,6 +1991,10 @@ def compile_slot(
 
     if not isinstance(answer, dict):
         raise ValueError("the model's answer wasn't a list of options")
+    axis = group_axis(graph, slot)
+    if axis and isinstance(answer.get("groups"), dict) and not isinstance(
+            answer.get("options"), list):
+        answer = {**answer, "options": ungroup(slot, axis, answer["groups"])}
     adding = isinstance(answer.get("add"), list) and not isinstance(answer.get("options"), list)
     if adding and not (isinstance(existing, dict) and existing.get("options")):
         answer, adding = {**answer, "options": answer["add"]}, False
@@ -2000,7 +2096,13 @@ def slot_prompt(graph: dict[str, Any], slot: dict[str, Any], *, note: str = "") 
              f"What it holds: {slot['what'] or slot['name']}.",
              f"Style: {'short comma tags' if graph['style'] == 'tags' else 'short sentences'}; "
              f"rating: {graph['rating']}."]
+    grouped = group_axis(graph, slot)
     for a in slot["axes"]:
+        if a["name"] == grouped:
+            n, most = _group_size(slot, a["name"]), _group_most(slot, a["name"])
+            lines.append(f"List the options by {a['name']} under groups: {n} to {most} under "
+                         f"each of {', '.join(a['values'])}; one that fits two goes under each.")
+            continue
         lines.append(f"Tag every option on {a['name']} with "
                      + ("the one value" if axis_kinds(graph, slot)[a["name"]] == "accepts"
                         else "every value") + f" that fits: {', '.join(a['values'])}.")
@@ -2712,7 +2814,7 @@ structure structured section sections held vary varies varying varied each
 
 def _stems(word: str) -> set[str]:
     """The word and the singulars it may be the plural of ("heroes" →
-    hero, heroe; "ponies" → pony), so either spelling matches. A British
+    hero, heroe; "ponies" → pony; "elves" → elf), so either spelling matches. A British
     "-our" also matches its American "-or" ("colours" → color: the shirts
     pack's "colour" was a request gap next to a Color List, 9B smoke
     2026-10-24)."""
@@ -2723,6 +2825,8 @@ def _stems(word: str) -> set[str]:
         out.add(word[:-2])
     if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
         out.add(word[:-1])
+    if len(word) > 4 and word.endswith("ves"):
+        out |= {word[:-3] + "f", word[:-3] + "fe"}  # elves → elf, knives → knife
     if len(word) > 5 and "our" in word[2:]:
         out |= {w.replace("our", "or") for w in out}
     return out

@@ -20,7 +20,7 @@ needs a running model and takes minutes per request.
 USAGE
 -----
     python scripts/ai_pack_evals.py [--set full|smoke] [--limit N] [--model NAME] [--out report.md]
-                                    [--planner graph|items] [--drafts one|three]
+                                    [--planner graph|items] [--drafts auto|one|three]
                                     [--save DIR]
 
 ``--set smoke`` runs a shorter set (plain packs, the feature requests and
@@ -444,7 +444,7 @@ def main() -> int:
     ap.add_argument("--planner", choices=("graph", "items"), default="graph",
                     help="graph: the model writes slots, axes and relations and the code "
                          "wires the pack; items: the model writes every item and payload")
-    ap.add_argument("--drafts", choices=("one", "three"), default="one",
+    ap.add_argument("--drafts", choices=("auto", "one", "three"), default="auto",
                     help="plan drafts on the first plan (the Plan drafts setting)")
     args = ap.parse_args()
     from wp_api import _ai_client

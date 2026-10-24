@@ -70,7 +70,40 @@ def test_run_pack_with_three_drafts_keeps_the_best_one():
     assert out["plan"]["graph"]["relations"]
 
 
-def test_drafts_setting_defaults_to_one():
-    assert pack.parse_settings({})["drafts"] == "one"
+def test_drafts_setting_defaults_to_auto():
+    assert pack.parse_settings({})["drafts"] == "auto"
     assert pack.parse_settings({"drafts": "three"})["drafts"] == "three"
-    assert pack.parse_settings({"drafts": "nine"})["drafts"] == "one"
+    assert pack.parse_settings({"drafts": "one"})["drafts"] == "one"
+    assert pack.parse_settings({"drafts": "nine"})["drafts"] == "auto"
+
+
+def test_auto_asks_a_second_draft_only_for_a_first_with_problems():
+    ask = "fantasy races with weapons; elves never use guns"
+    good = {**pack.compile_graph_plan(copy.deepcopy(GRAPH), request=ask), "bad_refs": []}
+    assert drafts.score_plan(good, ask)["serious"] == 0  # only the orc rule left out
+    assert drafts.extra_temperatures("auto", good, ask) == ()
+    bare = _plan(relations=[])
+    assert drafts.extra_temperatures("auto", bare, REQUEST) == drafts.DRAFT_TEMPERATURES[1:2]
+    # Words the plan leaves out are soft: no second draft for them alone.
+    words = drafts.score_plan(good, ask + ", dragons")
+    assert words["score"] < 0 and words["serious"] == 0
+    assert drafts.extra_temperatures("three", good, REQUEST) == drafts.DRAFT_TEMPERATURES[1:]
+    assert drafts.extra_temperatures("one", bare, REQUEST) == ()
+
+
+def test_run_pack_on_auto_keeps_the_better_of_two():
+    answers = [{**copy.deepcopy(GRAPH), "relations": []}, copy.deepcopy(GRAPH)]
+    temps: list[float] = []
+
+    async def complete(**kw):
+        if kw.get("schema_name") == "pack_graph":
+            temps.append(kw["temperature"])
+            return answers.pop(0) if answers else copy.deepcopy(GRAPH)
+        if kw.get("schema_name") == "pack_refs":
+            return {"relations": []}
+        raise ValueError("no item builds in this test")
+
+    out = asyncio.run(pack.run_pack(complete, REQUEST, seeds=5, repairs=0))
+    assert temps[:2] == list(drafts.DRAFT_TEMPERATURES[:2])
+    assert any("Kept draft 2 of 2" in line for line in out["log"])
+    assert out["plan"]["graph"]["relations"]
