@@ -23,6 +23,7 @@ from engine.ai.pack.change import _plan_lines
 from engine.ai.pack.plan import _row_var, _vocab
 from engine.ai.pack.plan_rules import _case_namers, _split_groups, _twin_picks
 from engine.ai.pack.prompts import decisions_note, settings_note
+from engine.ai.pack.request_needs import list_reads, request_needs
 from engine.ai.pack.settings import MAX_SWEEP_OPTIONS, canvas_note, parse_run, parse_settings
 
 _NARROWS = re.compile(r"\b(exclude|only|never|reduce|rarely|no |not |without)", re.I)
@@ -378,6 +379,10 @@ def review_plan(plan: dict[str, Any],
                 + ("each" if len(gaps) > 1 else "it") + " a slot of its own, a value on an "
                 "axis, or put it in the words of the rule it is part of",
                 type="request_gap", refs=tuple(gaps))
+        for n in request_needs(graph, request):
+            add(None, "fix", n["text"], type=n["type"], refs=tuple(n["refs"]))
+        for n in list_reads(graph):
+            add(None, "tip", n["text"], type=n["type"], refs=tuple(n["refs"]))
         left = sorted(tried)
         if left:
             add(None, "tip", "The request also says " + ", ".join(left) + ", which the planner "

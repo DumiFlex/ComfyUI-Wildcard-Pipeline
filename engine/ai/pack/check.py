@@ -219,6 +219,8 @@ def check_pack(
             problems.setdefault(k, []).append(said)
         for k, said in pack_tidy.missing_attributes(plan, built, tested).items():
             problems.setdefault(k, []).append(said)
+        for k, said in _literal_names(owned, runs, prompts, item["key"], set(unset)).items():
+            problems.setdefault(k, []).append(said)
         if braces:
             problems.setdefault(item["key"], []).append(
                 "the prompt shows { } or @{ } as written: a variable it reads holds a pick "
@@ -231,6 +233,33 @@ def check_pack(
             "notes": notes, "variables": variables, "prompts": prompts, "quality": quality,
             "order": order, "relations": relations, "distinct": distinct,
             "fallbacks": fallbacks}
+
+
+_NAME = re.compile(r"\$[A-Za-z_]\w*")
+
+
+def _literal_names(owned: list[dict[str, Any]], runs: list[dict[str, Any]],
+                   prompts: list[dict[str, Any]], tpl_key: str,
+                   unset: set[str]) -> dict[str, str]:
+    """A ``$name`` printed as written in the prompt: a value holds a
+    variable name the Assembler doesn't fill in again (9B smoke, comic
+    hero, 2026-10-24: "$style, 1hero, solo, $hero, …"). Filed on the item
+    whose value holds it, else on the template."""
+    seen = {m for p in prompts for m in _NAME.findall(p["text"])} - {f"${v}" for v in unset}
+    if not seen:
+        return {}
+    out: dict[str, str] = {}
+    for i in owned:
+        names = sorted({m for ctx in runs for m in _NAME.findall(str(ctx.get(i["var"]) or ""))})
+        if names:
+            out[i["key"]] = (f"${i['var']} holds {', '.join(names[:3])} as written, and the "
+                             "prompt prints it: write the words, or read the variable from the "
+                             "template instead")
+    if not out:
+        names = sorted(seen)
+        out[tpl_key] = (f"the prompt prints {', '.join(names[:3])} as written: nothing fills "
+                        "it in")
+    return out
 
 
 #: The share of runs a slot may fall back in before its rules count as too
