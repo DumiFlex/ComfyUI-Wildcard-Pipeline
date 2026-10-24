@@ -221,6 +221,8 @@ class _Turn:
     #: Refusals by tool and reason (ids and numbers left out).
     refused: dict[str, int] = field(default_factory=dict)
     forced: bool = False
+    #: A step of only repeated calls was let through once (`_repeat_pass`).
+    repeat_passed: bool = False
     checked: bool = False
     #: The cards were checked against the request (`request_check`), once.
     gap_checked: bool = False
@@ -774,12 +776,22 @@ def _scope_edits(lib: Any, meta: dict[str, Any], ask: _Ask, log: list[dict[str, 
     lib.named = named
     if not ask.resume and text:
         meta["ref_asks"] = sorted(ai_chat.ref_asks(text))
+        meta["asked_words"] = sorted({w.lower() for m in _VAR_WORD.findall(text)
+                                      for w in m if w})
     lib.ref_asks = set(meta.get("ref_asks") or [])
+    lib.asked_words = set(meta.get("asked_words") or [])
     # An item the answer reads in full may be changed when the user asked
     # for a change ("add negatives to the stormy options"), not a new item.
     lib.edit_read = (bool(text) and not ask.resume and not ai_chat.creation_ask(text)) \
         or bool(answered_named)
     lib.decisions = list(meta.get("decisions") or [])  # what `ask` may not ask again
+
+
+#: A variable the user's message names: "$hair", "hair_color", or a word
+#: after "to" / "named" / "called" ("rename it to hue"), not any word ("a
+#: color wildcard" doesn't ask for $color).
+_VAR_WORD = re.compile(r"\$([A-Za-z_]\w{0,40})|(?<![\w$])([A-Za-z]\w*_\w+)"
+                       r"|\b(?:to|named|called)\s+([A-Za-z_]\w{0,40})", re.I)
 
 
 def _offer(t: _Turn) -> tuple[list[Any] | None, bool]:
@@ -829,6 +841,43 @@ def _loop_check(t: _Turn, tool: str) -> str:
     t.closed.add(tool)
     return (f"\n({tool} is closed for the rest of this answer: you repeated it. Answer "
             "with what you have, or do the next part of the request with another tool.)")
+
+
+def _check_call(proposals: list[dict[str, Any]]) -> str:
+    """The run_test call for CHECK_NUDGE, spelled out: told only to test,
+    the 9B answered "I cannot run a test automatically, no such stack
+    exists" (smoke s-negatives, empty library, 2026-10-23)."""
+    stack: list[str] = []
+    for p_ in proposals:
+        op = p_.get("op") if isinstance(p_.get("op"), dict) else {}
+        body = op.get("body") if isinstance(op.get("body"), dict) else {}
+        ref = op.get("id") if op.get("op") == "update" else body.get("name")
+        if p_.get("tool") in ai_chat.CHECKABLE_TOOLS and isinstance(ref, str) \
+                and ref and ref not in stack:
+            stack.append(ref)
+    if not stack:
+        return ""
+    call = ai_chatlog.dumps({"proposed": True, "stack": stack[:4]})
+    return f" A card is enough for a stack of its own: run_test {call}"
+
+
+def _repeat_pass(t: _Turn, calls: list[dict[str, Any]], items: list[dict[str, Any]]) -> bool:
+    """A small model's change ask (a shortlisted, guided chat) with no card
+    yet whose step only repeated a look-up
+    gets one more step, with the repeated tools closed, instead of being
+    made to answer: the 9B looked up $hair_color twice, then claimed a
+    rename it never proposed (smoke s-rename-var, 2026-10-24)."""
+    if t.repeat_passed or t.proposals or t.short is None or t.asks_kind != "task" or t.plan_n \
+            or t.step >= t.cap - 1 or any(c["tool"] in ai_chat.CHANGE_TOOLS for c in calls):
+        return False
+    t.repeat_passed = True
+    closed = sorted({c["tool"] for c in calls} - {"more_tools"})
+    t.closed.update(closed)
+    if items and closed:
+        items[-1]["text"] = (items[-1].get("text") or "") + (
+            f"\n({', '.join(closed)} {'is' if len(closed) == 1 else 'are'} closed for the rest "
+            "of this answer. Make the change the user asked for now.)")
+    return True
 
 
 #: Where each kind of log entry keeps the text the model reads last.
@@ -1508,10 +1557,11 @@ def _settle(t: _Turn, said: str, calls: list[dict[str, Any]], cut: bool,
     if (not t.checked and t.step < t.cap
             and any(p["tool"] in ai_chat.CHECKABLE_TOOLS for p in proposals)):
         t.checked = True
+        nudge = ai_chat.CHECK_NUDGE + _check_call(proposals)
         if items:
-            t.new.append(ai_chatlog.results_entry(items, "\n\n" + ai_chat.CHECK_NUDGE))
+            t.new.append(ai_chatlog.results_entry(items, "\n\n" + nudge))
         else:
-            t.new.append(ai_chatlog.note_entry(ai_chat.CHECK_NUDGE))
+            t.new.append(ai_chatlog.note_entry(nudge))
         return _NEXT
     if items:
         t.new.append(ai_chatlog.results_entry(items, ""))
@@ -1543,7 +1593,8 @@ def _next_tail(t: _Turn, calls: list[dict[str, Any]], run: _Calls, dropped: int)
     t.reads += sum(1 for c in calls if c["tool"] in ai_tools.READ)
     # The same refusal twice: small models loop on it instead of
     # answering, so the next step must answer (with what went wrong).
-    t.forced = (bool(calls and run.repeats == len(calls)) or t.step == t.cap - 1
+    t.forced = ((bool(calls and run.repeats == len(calls)) and not _repeat_pass(t, calls, items))
+                or t.step == t.cap - 1
                 or t.reads >= t.read_budget or t.out_of_time
                 or max(t.refused.values(), default=0) >= MAX_REFUSED)
     more = (f"\n\nOnly your first {len(calls)} calls ran; {dropped} more were left out."

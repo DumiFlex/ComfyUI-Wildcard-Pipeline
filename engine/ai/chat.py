@@ -340,6 +340,10 @@ def unknown_names(said: str, known: str, variables: Any = ()) -> list[str]:
         low = name.lower()
         if low in have or f"${low}" in docs or f"${low}" in known or f"${name}" in out:
             continue
+        if re.search(r"(?<![\w$])" + re.escape(low) + r"(?!\w)", known):
+            # The user's bare word: "Rename its variable to hair_color."
+            # (9B smoke s-rename-var, empty library, 2026-10-24).
+            continue
         out.append(f"${name}")
     return out[:6]
 
@@ -776,6 +780,9 @@ class Library(MoreTools, ManageTools):
         #: them ("a nested reference of [[id#color]]"): a new wildcard that
         #: never does is told so (`_unused_ref_ask`).
         self.ref_asks: set[str] = set()
+        #: Words of the user's message that could be variable names: a
+        #: clash with one of them is what the user asked for.
+        self.asked_words: set[str] = set()
         self.cat_by_lower = {c["name"].lower(): c["id"] for c in categories}
         self.names = {i: m.get("name") or "" for i, m in self.modules.items()}
         self.tags = ai_describe.library_tags([*modules, *bundles, *(templates or [])])
@@ -1778,6 +1785,12 @@ class Library(MoreTools, ManageTools):
         chips = ", ".join(self._chip(r) + (" (proposed)" if r.get("_proposed") else "")
                           for r in writers[:3])
         more = f" and {len(writers) - 3} more" if len(writers) > 3 else ""
+        if var.lower() in self.asked_words:
+            # "Rename its variable to hair_color" with $hair_color taken:
+            # "pick another name" made the 9B propose $hair_style instead
+            # (smoke s-rename-var, 2026-10-24).
+            return (f"${var} is also set by {chips}{more}. The user asked for ${var}, so "
+                    "keep it, and tell them both set it (when both run, the later one wins)")
         return (f"${var} is already set by {chips}{more}: reuse that, or pick another "
                 "variable name (when both run, the later one wins)")
 

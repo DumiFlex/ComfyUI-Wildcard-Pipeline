@@ -199,6 +199,10 @@ async def test_keys_and_variables_nothing_mentions_are_checked_once(wp_client, f
     # The docs' keys, the library's variables and the user's own words pass.
     assert ai_chat.unknown_names("Ctrl + S saves; Ctrl+Shift+X explains.", "") == []
     assert ai_chat.unknown_names("Set $hair and $mood.", "my $mood wildcard", ["hair"]) == []
+    # The user's bare word counts; a name nobody said still doesn't.
+    asked = "rename its variable to hair_color."
+    assert ai_chat.unknown_names("Renamed to $hair_color.", asked) == []
+    assert ai_chat.unknown_names("Or try $hair_texture.", asked) == ["$hair_texture"]
 
 
 def test_a_sent_back_answer_is_rewritten_whole():

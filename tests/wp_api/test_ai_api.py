@@ -560,6 +560,9 @@ async def test_chat_reads_then_proposes(wp_client, fake_llm):
     first, second, nudged, checked = fake_llm.seen[-4:]
     # Changes that were never tried get one nudge to run them.
     assert ai_chat.CHECK_NUDGE in nudged["body"]["messages"][-1]["content"]
+    # The call spelled out: told only to test, the 9B said it couldn't.
+    assert f'run_test {{"proposed": true, "stack": ["{tgt}"' in nudged["body"]["messages"][-1][
+        "content"]
     assert "with the proposed changes" in checked["body"]["messages"][-1]["content"]
     msgs = first["body"]["messages"]
     assert msgs[0]["role"] == "system" and "Items (id" in msgs[0]["content"]
