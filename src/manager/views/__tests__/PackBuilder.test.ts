@@ -99,6 +99,24 @@ describe("PackBuilder", () => {
     return { w, router };
   }
 
+  it("doesn't send a problem again when a rebuild brought it back unchanged", async () => {
+    vi.mocked(api.ai.packCheck).mockReset().mockResolvedValue({
+      runs: 200, failed: 0, problems: { i2: ["never applied"] }, notes: [], variables: [],
+      prompts: [], quality: [],
+    });
+    const { w } = await mountIt();
+    await w.get('[data-test="pack-request"]').setValue("season outfits");
+    await w.get('[data-test="pack-next"]').trigger("click");
+    await w.get('[data-test="pack-plan"]').trigger("click");
+    await flushPromises();
+    await w.get('[data-test="pack-build"]').trigger("click");
+    await flushPromises();
+    const repairs = vi.mocked(api.ai.packItem).mock.calls.filter((c) => c[0].note === "never applied");
+    expect(repairs).toHaveLength(1);
+    // The first check and the one after the single repair.
+    expect(api.ai.packCheck).toHaveBeenCalledTimes(2);
+  });
+
   it("plans, refines with answers, builds in order, repairs, installs", async () => {
     const { w, router } = await mountIt();
     await w.get('[data-test="pack-request"]').setValue("season outfits");

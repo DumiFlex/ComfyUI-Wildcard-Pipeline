@@ -19,9 +19,12 @@ needs a running model and takes minutes per request.
 
 USAGE
 -----
-    python scripts/ai_pack_evals.py [--limit N] [--model NAME] [--out report.md]
+    python scripts/ai_pack_evals.py [--set full|smoke] [--limit N] [--model NAME] [--out report.md]
                                     [--planner graph|items] [--drafts one|three]
                                     [--save DIR]
+
+``--set smoke`` runs a shorter set (plain packs, the feature requests and
+two packs with a rule on a drawn list / a multi-value accepts target).
 
 ``--save DIR`` keeps every pack the run built: ``DIR/<n>-<slug>.md`` is a
 readable sheet (items with their options and tags, constraint cells,
@@ -101,6 +104,19 @@ REQUESTS = [
      "time.", "hold"),
 ]
 
+#: Not in the full run: a rule on a list that another wildcard draws from,
+#: and a target that takes more than one source value.
+EXTRA = [
+    ("Shirts by season, the colour drawn from one shared colour list; winter never gets "
+     "pastel colours.", "ref_filter"),
+    ("Outfits and shoes: boots go with both casual and formal outfits, sneakers only with "
+     "casual, heels only with formal.", "accepts"),
+]
+
+#: A shorter run (about a third of the time): a few plain packs, every
+#: feature request, and `EXTRA`.
+SMOKE = [REQUESTS[i] for i in (1, 2, 6, 29)] + REQUESTS[30:] + EXTRA
+
 
 def _wildcards(result: dict[str, Any]) -> list[dict[str, Any]]:
     kinds = {i["key"]: i["kind"] for i in result["plan"]["items"]}
@@ -134,6 +150,36 @@ FEATURES: dict[str, Any] = {
         for i in r["plan"]["items"]),
     "hold": lambda r: "hold" in _uses(r),
 }
+
+
+def _relations(r: dict[str, Any]) -> list[dict[str, Any]]:
+    graph = r["plan"].get("graph")
+    return list(graph.get("relations") or []) if isinstance(graph, dict) else []
+
+
+#: The features the code adds by itself once the plan calls for them, read
+#: from the model's own graph instead: every agree / only source becomes
+#: accepts, every narrowed slot gets a fallback, the tidy adds empty options.
+#: Counted from the BUILT pack, those passed with the model doing nothing.
+PLANNED: dict[str, Any] = {
+    "accepts": lambda r: any(x.get("kind") == "accepts" for x in _relations(r)),
+    "null": lambda r: any((s.get("sometimes_none") or 0) > 0
+                          for s in (r["plan"].get("graph") or {}).get("slots") or []),
+    # The model can't write a fallback; it can write the rule that needs one.
+    "fallback": lambda r: any(x.get("kind") in ("agree", "accepts", "only", "exclude")
+                              for x in _relations(r)),
+}
+
+
+def feature_scores(feature: str, result: dict[str, Any]) -> dict[str, Any]:
+    """``feature_used``: the model asked for the feature (its graph, for the
+    ones in `PLANNED`), else the built pack has it; ``feature_built``: the
+    built pack has it, whoever added it."""
+    built = bool(FEATURES[feature](result))
+    planned = PLANNED.get(feature)
+    if planned is None or not isinstance(result["plan"].get("graph"), dict):
+        return {"feature": feature, "feature_used": built, "feature_built": built}
+    return {"feature": feature, "feature_used": bool(planned(result)), "feature_built": built}
 
 
 def _score(result: dict[str, Any]) -> dict[str, Any]:
@@ -328,8 +374,7 @@ async def evaluate(complete: Any, requests: list[Any], *, seeds: int = 100,
             except Exception as e:  # noqa: BLE001 - a sheet that fails is said, not fatal
                 print(f"could not save pack {n}: {type(e).__name__}: {e}")
         rows.append({"request": req, "plan": True, **_score(result),
-                     **({"feature": feature, "feature_used": bool(FEATURES[feature](result))}
-                        if feature else {}),
+                     **(feature_scores(feature, result) if feature else {}),
                      "log": result["log"][-12:],
                      "seconds": round(time.perf_counter() - started, 1)})
     return rows
@@ -352,7 +397,9 @@ def report(rows: list[dict], model: str) -> str:
         f"- Packs with a clean test run: {len(clean)} / {len(rows)}",
         f"- Feature requests that used the feature: "
         f"{sum(1 for r in planned if r.get('feature_used'))} / "
-        f"{sum(1 for r in rows if r.get('feature'))}",
+        f"{sum(1 for r in rows if r.get('feature'))} (built pack has it: "
+        f"{sum(1 for r in planned if r.get('feature_built'))}; accepts, null and fallback "
+        "count only when the model's graph asks for them)",
         f"- Relations that held on the test runs (wired): {held} / {relations}",
         f"- Distinct prompts per run (mean): {distinct:.2f}",
         f"- Packs where a slot fell back in 30% or more of the runs: {len(tight)} / "
@@ -365,8 +412,9 @@ def report(rows: list[dict], model: str) -> str:
         if not r["plan"]:
             lines.append(f"| {n} | {req} | no: {r['error'][:60]} | | | | | | {r['seconds']} |")
             continue
-        feat = f" ({r['feature']}: {'used' if r['feature_used'] else 'missing'})" \
-            if r.get("feature") else ""
+        feat = f" ({r['feature']}: {'used' if r['feature_used'] else 'missing'}" \
+            + (", code added it" if r.get("feature_built") and not r["feature_used"] else "") \
+            + ")" if r.get("feature") else ""
         wired = f"{r['held']}/{r['relations']}" if r.get("relations") else "-"
         distinct_s = f"{r['distinct']:.2f}" if r.get("distinct") is not None else "-"
         fell = f"{r['fell']:.0%}" if r.get("fell") is not None else "-"
@@ -381,7 +429,10 @@ def report(rows: list[dict], model: str) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--limit", type=int, default=len(REQUESTS))
+    ap.add_argument("--set", choices=("full", "smoke"), default="full",
+                    help="smoke: a shorter run of plain packs, every feature request and "
+                         "two rule-on-a-drawn-list / accepts packs")
+    ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--model", default="")
     ap.add_argument("--seeds", type=int, default=100)
     ap.add_argument("--out", default="pack-evals.md")
@@ -405,7 +456,8 @@ def main() -> int:
     async def complete(**kwargs: Any) -> Any:
         return await _ai_client.complete_json(cfg, **kwargs)
 
-    rows = asyncio.run(evaluate(complete, REQUESTS[: args.limit], seeds=args.seeds,
+    requests = SMOKE if args.set == "smoke" else REQUESTS
+    rows = asyncio.run(evaluate(complete, requests[: args.limit or len(requests)], seeds=args.seeds,
                                 settings={"planner": args.planner, "drafts": args.drafts},
                                 save=Path(args.save) if args.save else None))
     title = f"{cfg['model']} ({args.planner} planner, drafts: {args.drafts})"

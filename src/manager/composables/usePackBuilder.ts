@@ -1344,9 +1344,16 @@ async function build(): Promise<void> {
       await buildItem(p, item, mine.signal);
     }
     let report = await runCheck(p, mine.signal);
+    // What each item was last asked to fix: the same problems back after a
+    // rebuild means the model can't fix them that way, so they aren't
+    // sent a second time (a repair that changed nothing doubled the wait).
+    const sent = new Map<string, string>();
     for (let round = 0; report && round < MAX_REPAIRS; round += 1) {
-      const broken = Object.entries(report.problems).filter(([k]) => states.value[k]?.result);
+      const broken = Object.entries(report.problems).filter(
+        ([k, ps]) => states.value[k]?.result && sent.get(k) !== ps.join("; "),
+      );
       if (!broken.length) break;
+      for (const [k, ps] of broken) sent.set(k, ps.join("; "));
       const notes = new Map<string, string[]>(broken);
       for (const [key] of broken) {
         for (const dep of dependents(p, key)) if (!notes.has(dep)) notes.set(dep, []);

@@ -503,7 +503,7 @@ def review_prompt(plan: dict[str, Any], found: list[dict[str, Any]],
         if axes:
             lines.append("Axes: " + " · ".join(axes))
         lines.append("Prompt order: " + ", ".join(graph["template"]["order"]))
-    lines += ["", settings_note(plan.get("settings") or {})]
+    lines += ["", settings_note(plan.get("settings") or {}, graph=graph is not None)]
     if plan.get("decisions"):
         lines.append(decisions_note(plan["decisions"]))
     if plan.get("canvas"):

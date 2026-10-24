@@ -340,3 +340,29 @@ def test_eval_features_score_a_built_pack():
     }
     used = {f for f, check in evals.FEATURES.items() if check(result)}
     assert used == set(evals.FEATURES) - {"model"}
+    # From a graph plan, accepts / null / fallback count only when the
+    # model's graph asks for them: the code adds all three on its own.
+    result["plan"]["graph"] = {"slots": [{"name": "Hat", "sometimes_none": 0}],
+                               "relations": [{"kind": "agree"}]}
+    assert evals.feature_scores("accepts", result) == {
+        "feature": "accepts", "feature_used": False, "feature_built": True}
+    assert not evals.feature_scores("null", result)["feature_used"]
+    assert evals.feature_scores("fallback", result)["feature_used"]
+    result["plan"]["graph"]["slots"][0]["sometimes_none"] = 30
+    result["plan"]["graph"]["relations"] = [{"kind": "accepts"}]
+    assert evals.feature_scores("accepts", result)["feature_used"]
+    assert evals.feature_scores("null", result)["feature_used"]
+    assert evals.feature_scores("hold", result)["feature_used"]  # read from the built pack
+
+
+def test_the_graph_planner_gets_settings_it_can_act_on():
+    graph = pack.plan_prompt("elves", settings={"library": "reuse", "negatives": "auto",
+                                                "model": "family"}, graph=True)
+    items = pack.plan_prompt("elves", settings={"library": "reuse", "negatives": "auto",
+                                                "model": "family"})
+    assert 'kind "library"' in items and 'kind "library"' not in graph
+    assert "about" in items and "wildcard's about" not in graph
+    assert 'Add a derivation "Model quality"' in items
+    assert "Model quality" not in graph and "plan no quality slot" in graph
+    again = pack.refine_text("more", [], {"negatives": "none"}, graph=True)
+    assert "leave the template's negative" in again

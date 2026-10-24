@@ -1025,15 +1025,16 @@ def compile_graph(raw: Any) -> dict[str, Any]:
 def _list_slots(slots: list[dict[str, Any]], relations: list[dict[str, Any]],
                 raw_template: Any, warnings: list[str]) -> None:
     """A slot other slots only draw from is a list, not a pick of its own:
-    it goes internal unless the template names it."""
+    it goes internal unless the template names it. A rule that narrows the
+    list (it is the rule's target: "colours fit the season") keeps it a
+    list; a rule it drives (its pick is a source) makes it a pick."""
     named: set[str] = set()
     order = raw_template.get("order") if isinstance(raw_template, dict) else None
     for part in order if isinstance(order, list) else []:
         named.add(_clean(part, MAX_NAME).lstrip("$").strip().lower())
     for s in slots:
         drawn = [r for r in relations if r["kind"] == "draw" and r["from"]["slot"] == s["name"]]
-        other = [r for r in relations if r["kind"] != "draw" and (
-            r["from"]["slot"] == s["name"] or (r.get("to") or {}).get("slot") == s["name"])]
+        other = [r for r in relations if r["kind"] != "draw" and r["from"]["slot"] == s["name"]]
         if drawn and not other and s["show"] == "prompt" \
                 and not {s["name"].lower(), s["var"].lower()} & named:
             s["show"] = "internal"
@@ -1552,8 +1553,12 @@ def _wired(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict[str, A
         t = graph["template"]
         order = template_order(graph, plan.get("settings"))
         body = ", ".join(x for x in [t["lead"], *(f"${v}" for v in order), t["tail"]] if x)
+        # Negatives "none": the planner was told to leave it empty; a 9B
+        # writes one anyway.
+        negative = "" if parse_settings(plan.get("settings"))["negatives"] == "none" \
+            else t["negative"] or ""
         return {"kind": kind, "payload": {"template_string": body,
-                                         "negative_template": t["negative"] or ""},
+                                         "negative_template": negative},
                 "preview": [body], "warnings": []}
     raise PlanError(f"{item['name']} isn't wired by the graph")
 
@@ -2010,6 +2015,33 @@ def _picked_tags(graph: dict[str, Any], payloads: dict[str, dict[str, Any]], slo
     return tags, fallback
 
 
+def _drawn_tags(graph: dict[str, Any], payloads: dict[str, dict[str, Any]], list_name: str,
+                ctx: dict[str, Any]) -> list[set[str]]:
+    """The tags of each pick a ``draw`` put in front of a drawer's text
+    this run (the list's option the drawer's value starts with), one set
+    per drawer that drew. A rule on the list must hold for these too: they
+    are what the prompt shows."""
+    payload = payloads.get(list_name)
+    if payload is None:
+        return []
+    options = sorted(((_norm(str(o.get("value") or "")), set(o.get("sub_categories") or []))
+                      for o in payload.get("options") or []
+                      if isinstance(o, dict) and not o.get("is_null") and o.get("value")),
+                     key=lambda x: -len(x[0]))
+    out: list[set[str]] = []
+    for r in graph["relations"]:
+        if r["kind"] != "draw" or r["from"]["slot"] != list_name:
+            continue
+        drawer = next((s for s in graph["slots"] if s["name"] == (r.get("to") or {}).get("slot")),
+                      None)
+        value = _norm(ctx.get(drawer["var"])) if drawer else ""
+        hit = next((tags for text, tags in options if text and (
+            value == text or value.startswith(text + " "))), None)
+        if hit is not None:
+            out.append(hit)
+    return out
+
+
 def verify_relations(plan: dict[str, Any], built: dict[str, Any],
                      runs: list[dict[str, Any]],
                      rendered: list[str] | None = None) -> list[dict[str, Any]]:
@@ -2069,13 +2101,18 @@ def verify_relations(plan: dict[str, Any], built: dict[str, Any],
                 dt, fell = got_dst
                 prompt = rendered[n] if rendered and n < len(rendered) else ""
                 said = [w for w in words if _has_word(prompt, w)] if prompt else []
-                if not dt and not said:
+                nested = _drawn_tags(graph, payloads, dst["slot"], ctx)
+                if not dt and not said and not nested:
                     continue
                 row["seen"] += 1
+                allowed = only_rows.get((src["slot"], src["value"], dst["slot"]), set())
                 if kind == "exclude" and not fell and (dst["value"] in dt or said):
                     row["broken"] += 1
-                elif kind == "only" and not fell and not (
-                        dt & only_rows[(src["slot"], src["value"], dst["slot"])]):
+                elif kind == "only" and not fell and dt and not (dt & allowed):
+                    row["broken"] += 1
+                elif kind == "exclude" and any(dst["value"] in t for t in nested):
+                    row["broken"] += 1
+                elif kind == "only" and any(t and not (t & allowed) for t in nested):
                     row["broken"] += 1
             elif kind in ("agree", "accepts"):
                 got_dst = _picked_tags(graph, payloads, dst["slot"], ctx)
@@ -2084,10 +2121,12 @@ def verify_relations(plan: dict[str, Any], built: dict[str, Any],
                     break
                 dt, fell = got_dst
                 shared = set(r["values"])
-                if not (st & shared) or not dt:
+                nested = [t & shared for t in _drawn_tags(graph, payloads, dst["slot"], ctx)]
+                if not (st & shared) or not (dt or any(nested)):
                     continue
                 row["seen"] += 1
-                if not (st & dt & shared) and not fell:
+                if (dt and not (st & dt & shared) and not fell) \
+                        or any(t and not (st & t) for t in nested):
                     row["broken"] += 1
             else:
                 got = _norm(ctx.get(r["var"]))
@@ -2304,6 +2343,22 @@ def slot_request(plan: dict[str, Any], key: str, note: str = "",
                                 f"these out of these options; they are {other}'s.")
         schema = slot_schema(graph, slot)
         name = "pack_slot"
+    for r in draw_sources(graph, slot):
+        # What the code will put in front, so the options read well with it
+        # ("red" + "flannel shirt") and say nothing of it.
+        src = next((x for x in graph["slots"] if x["name"] == r["from"]["slot"]), None)
+        key_of = next((i["key"] for i in plan["items"] if src and i.get("var") == src["var"]
+                       and i["kind"] in ("wildcard", "library")), None)
+        payload = ((built or {}).get(key_of) or {}).get("payload") if key_of else None
+        drawn = [str(o.get("value")) for o in (payload or {}).get("options") or []
+                 if isinstance(o, dict) and o.get("value") and not o.get("is_null")
+                 and (not r["from"]["value"] or r["from"]["value"] in (
+                     o.get("sub_categories") or []))][:12]
+        if drawn:
+            user += (f"\nWhat goes in front: {r['from']['slot']} options like "
+                     + ", ".join(f'"{d[:30]}"' for d in drawn) + ".")
+    if parse_settings(plan.get("settings"))["negatives"] != "auto":
+        user += "\nLeave every negative \"\": the pack keeps one standing negative."
     fmt = ai_guide.format_line(plan.get("model") or "")
     if fmt:
         user += f"\nThe image model: {fmt}"

@@ -81,7 +81,8 @@ async def run_pack(
         return plan
 
     lib_note = ai_patterns.note(ai_patterns.summarize(library or []))
-    first = plan_prompt(instruction, library_note=lib_note, settings=cfg, library=library)
+    first = plan_prompt(instruction, library_note=lib_note, settings=cfg, library=library,
+                        graph=graph)
     answer = await complete(system=system, user=first,
                             schema=schema, schema_name=schema_name, temperature=0.4)
     try:
@@ -112,7 +113,7 @@ async def run_pack(
         decisions = [{"question": q["question"], "answer": DECIDE_ANSWER}
                      for q in plan["questions"]]
         log.append(f"plan: left {len(decisions)} question(s) to the model")
-        follow = refine_text("I answered your questions.", decisions, cfg)
+        follow = refine_text("I answered your questions.", decisions, cfg, graph=graph)
         answer = await complete(system=system, user=follow, history=history,
                                 schema=schema, schema_name=schema_name,
                                 temperature=0.4)
@@ -213,10 +214,16 @@ async def run_pack(
         return check_pack(plan, built, seeds=seeds, library=library)
 
     report = checked()
+    # As the manager does: problems that come back unchanged after a
+    # rebuild aren't sent again.
+    sent: dict[str, str] = {}
     for _ in range(repairs):
-        if not report or not report["problems"]:
+        todo = {k: ps for k, ps in (report or {}).get("problems", {}).items()
+                if sent.get(k) != "; ".join(ps)}
+        if not todo:
             break
-        for key, problems in report["problems"].items():
+        for key, problems in todo.items():
+            sent[key] = "; ".join(problems)
             if key in built:
                 log.append(f"{key} repair: {'; '.join(problems)}")
                 await build(key, "; ".join(problems))

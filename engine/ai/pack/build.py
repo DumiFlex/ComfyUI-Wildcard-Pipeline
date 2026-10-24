@@ -196,10 +196,20 @@ def item_request(
     plan: dict[str, Any], key: str, built: dict[str, Any], note: str = "",
     library: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """``{system, user, schema, schema_name, temperature}`` for one item."""
+    """``{system, user, schema, schema_name, temperature, quick}`` for one
+    item, plus ``max_tokens`` for a wildcard. Every item is a short typed
+    answer like a Draft with AI panel's (`complete_json` ``quick``): no
+    reasoning on Auto for a local model, and a wildcard's output limit
+    sized to its options."""
     req = _item_request(plan, key, built, note, library)
+    req.setdefault("quick", True)
+    if _item(plan, key)["kind"] == "wildcard":
+        # A fill call may add up to 20 to a short slot.
+        count = max(20, int(_item(plan, key).get("count") or 0))
+        req.setdefault("max_tokens", ai_wildcard.answer_tokens(count))
     if _CUT.search(note or ""):
         req["user"] += "\n\n" + CUT_RETRY
+        req["max_tokens"] = ai_wildcard.answer_tokens(ai_wildcard.MAX_COUNT)
         req["temperature"] = min(float(req.get("temperature", 0.8)), 0.2)
     return req
 
@@ -213,7 +223,10 @@ def _item_request(
     if kind == "library":
         raise PlanError(f"{item['name']} comes from the library; nothing to write")
     if pack_graph.slot_for(plan, key) is not None:
-        return pack_graph.slot_request(plan, key, note, built)
+        req = pack_graph.slot_request(plan, key, note, built)
+        # The item planner's wildcards got these; the slot calls didn't.
+        req["user"] += style_examples(plan, item, library)
+        return req
     fix = f"\n\nThe last version had these problems; fix them: {note.strip()}" \
         if note.strip() else ""
     if kind == "wildcard":

@@ -29,6 +29,24 @@ NEGATIVE_LINES = {
     "none": "Negatives: none. The template's negative is just $negatives.",
 }
 
+#: The same settings as the graph planner can act on them: it writes slots,
+#: never library items or an item's "about", and the code reuses a library
+#: wildcard for a slot with the same name (`graph.library_slots`).
+GRAPH_LIBRARY_LINES = {
+    "reuse": "Library: a slot named like one of the user's wildcards below, with no axes "
+             "and no relation on it, uses that wildcard as it is; name such slots exactly "
+             "like them. Plan the rest new. Never add a slot the request doesn't call for.",
+    "inspire": "Library: every slot is new, written like the user's library below: its "
+               "variable names, option length and style.",
+    "new": "Library: every slot is new.",
+}
+GRAPH_NEGATIVE_LINES = {
+    "auto": "Negatives: write the template's standing negative in the pack's style; the "
+            "option calls give an option its own negative where it invites a mistake.",
+    "template": "Negatives: only the template's standing negative; options carry none.",
+    "none": "Negatives: none; leave the template's negative \"\".",
+}
+
 
 def _score(row: dict[str, Any], words: set[str]) -> int:
     p = _got if isinstance(_got := row.get("payload"), dict) else {}
@@ -75,11 +93,17 @@ WEB_LINES = {
 }
 
 
-def settings_note(settings: dict[str, Any]) -> str:
+def settings_note(settings: dict[str, Any], *, graph: bool = False) -> str:
+    """The settings as plan lines; ``graph`` for the graph planner, which
+    plans slots (no "library" items, no abouts, no derivations)."""
     cfg = parse_settings(settings)
-    lines = ["Settings the user chose:", "- " + LIBRARY_LINES[cfg["library"]],
-             "- " + NEGATIVE_LINES[cfg["negatives"]]]
-    lines.append("- Structure: group the items into sections (each becomes a sub-bundle)."
+    lib, neg = (GRAPH_LIBRARY_LINES, GRAPH_NEGATIVE_LINES) if graph \
+        else (LIBRARY_LINES, NEGATIVE_LINES)
+    lines = ["Settings the user chose:", "- " + lib[cfg["library"]],
+             "- " + neg[cfg["negatives"]]]
+    lines.append("- Structure: group the slots into sections (each becomes a sub-bundle)."
+                 if graph and cfg["structure"] == "sections"
+                 else "- Structure: group the items into sections (each becomes a sub-bundle)."
                  if cfg["structure"] == "sections"
                  else "- Structure: one bundle; sections: [].")
     if cfg["style"] != "auto":
@@ -89,14 +113,21 @@ def settings_note(settings: dict[str, Any]) -> str:
     if cfg["count"]:
         lines.append(f"- Wildcards have about {cfg['count']} options each unless a slot "
                      "needs fewer.")
-    lines += run_lines(cfg)
+    lines += run_lines(cfg, graph=graph)
     return "\n".join(lines)
 
 
-def run_lines(cfg: dict[str, Any]) -> list[str]:
+def run_lines(cfg: dict[str, Any], *, graph: bool = False) -> list[str]:
     """What the model setting asks of the plan."""
     out: list[str] = []
-    if cfg["model"] == "family":
+    if cfg["model"] == "family" and graph:
+        # `graph.run_items` adds the rule and `template_order` reads it first.
+        out.append(
+            "- Model: per model family. The code adds $quality from $model_variant (score "
+            "tags for Pony, masterpiece tags for Illustrious and NoobAI) and puts it first in "
+            "the template: plan no quality slot or quality fixed value, and leave $quality "
+            "out of the order.")
+    elif cfg["model"] == "family":
         out.append(
             "- Model: per model family. Add a derivation \"Model quality\" (var quality) "
             "keyed on $model_variant: pony gets score_9, score_8_up, score_7_up; "
@@ -148,7 +179,7 @@ def plan_prompt(instruction: str, *, library_note: str = "", sample: str = "",
                 settings: dict[str, Any] | None = None,
                 decisions: list[dict[str, str]] | None = None,
                 library: list[dict[str, Any]] | None = None, images: int = 0,
-                web: bool = False, loras: str = "") -> str:
+                web: bool = False, loras: str = "", graph: bool = False) -> str:
     """The plan request: what the user asked, their settings and answers,
     their library's conventions and reusable items, optionally a prompt
     they like to rebuild as a pack, and reference images."""
@@ -160,10 +191,14 @@ def plan_prompt(instruction: str, *, library_note: str = "", sample: str = "",
             "\n\nA prompt the user likes, to turn into a pack that makes more like it:\n"
             f"<<<\n{sample}\n>>>\nSplit it into slots (subject, hair, outfit, pose, "
             "setting, lighting, style, quality…). For each slot "
-            + ("reuse a library item that fits (kind \"library\"), else plan "
+            + ("reuse a library wildcard that fits (a slot named like it), else plan "
+               if cfg["library"] == "reuse" and graph
+               else "reuse a library item that fits (kind \"library\"), else plan "
                if cfg["library"] == "reuse" else "plan ")
-            + "a wildcard whose options include the sample's own words. Keep fixed parts "
-            "(quality tags, style) as fixed values. The template should read the slots in "
+            + ("a slot whose options include the sample's own words. Keep fixed parts "
+               if graph else "a wildcard whose options include the sample's own words. "
+               "Keep fixed parts ")
+            + "(quality tags, style) as fixed values. The template should read the slots in "
             "the sample's order, and its negative should keep the sample's negative if it "
             "has one. Write in the sample's style.")
     if images:
@@ -171,7 +206,7 @@ def plan_prompt(instruction: str, *, library_note: str = "", sample: str = "",
         if images > 1:
             out += (" They come in the order the user numbered them (image 1 first), so "
                     "\"image 2\" means the second.")
-    out += "\n\n" + settings_note(cfg)
+    out += "\n\n" + settings_note(cfg, graph=graph)
     out += "\n" + WEB_LINES[web]
     if loras:
         out += "\n\n" + loras
@@ -202,7 +237,7 @@ def web_note(results: Any) -> str:
 
 def refine_text(instruction: str, decisions: list[dict[str, str]],
                 settings: dict[str, Any] | None = None, web: Any = None,
-                searched: list[str] | None = None) -> str:
+                searched: list[str] | None = None, *, graph: bool = False) -> str:
     """A plan follow-up: the user's words, plus what is now decided, so the
     model asks new questions instead of the same ones, and any web results
     they allowed."""
@@ -216,7 +251,7 @@ def refine_text(instruction: str, decisions: list[dict[str, str]],
     if decisions:
         parts.append(decisions_note(decisions))
     if settings is not None:
-        parts.append(settings_note(settings))
+        parts.append(settings_note(settings, graph=graph))
     parts.append("Questions: ask only what is still open and changes the plan (new ones "
                  "these answers raise); [] when nothing is.")
     return "\n\n".join(parts)

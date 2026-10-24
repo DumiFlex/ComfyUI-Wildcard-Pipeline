@@ -282,3 +282,45 @@ def test_a_variable_the_template_reads_twice_loses_its_second_read():
     for t in tested:
         chunks = [c.strip() for c in t["prompt"].split(",")]
         assert len(chunks) == len(set(chunks))
+
+
+def _shoes_pack(sundress_tags):
+    """Outfit (accepts SHOES) → Shoes (classify SHOES), one agree matrix."""
+    plan = {"items": [
+        {"key": "o", "kind": "wildcard", "var": "outfit", "name": "Outfit"},
+        {"key": "s", "kind": "wildcard", "var": "shoes", "name": "Shoes"},
+        {"key": "c", "kind": "constraint", "var": "", "name": "Outfit → Shoes",
+         "source": "outfit", "target": "shoes"}]}
+    shoes = ["sandals", "heels", "boots"]
+    built = {
+        "o": {"payload": {"var_binding": "outfit", "sub_categories": shoes,
+                          "tag_groups": {"SHOES": shoes}, "tag_group_kinds": {"SHOES": "accepts"},
+                          "options": [{"id": "o1", "value": "sundress",
+                                       "sub_categories": sundress_tags},
+                                      {"id": "o2", "value": "parka",
+                                       "sub_categories": ["boots"]}]}},
+        "s": {"payload": {"var_binding": "shoes", "sub_categories": shoes,
+                          "tag_groups": {"SHOES": shoes},
+                          "options": [{"id": f"s{n}", "value": t, "sub_categories": [t]}
+                                      for n, t in enumerate(shoes)]}},
+        "c": {"payload": {"matrix": {a: {b: {"mode": "allow" if a == b else "exclude"}
+                                         for b in shoes} for a in shoes},
+                          "exceptions": []}},
+    }
+    return plan, built
+
+
+def test_an_outfit_that_accepts_two_shoes_is_no_dead_end():
+    # The engine rolls ONE accepted shoe per pick, so a sundress that accepts
+    # sandals and heels always has a shoe; scoring both tags at once used to
+    # add an empty Shoes option that left prompts with no shoes.
+    plan, built = _shoes_pack(["sandals", "heels"])
+    assert pack_tidy.dead_ends(plan, built) == {}
+    new, said = pack_tidy.fill_dead_ends(plan, built)
+    assert said == {} and new is built
+    # A shoe the rule allows for no rolled tag is still a dead end.
+    plan, built = _shoes_pack(["sandals", "heels"])
+    built["s"]["payload"]["options"] = [o for o in built["s"]["payload"]["options"]
+                                        if o["value"] != "heels"]
+    assert set(pack_tidy.dead_ends(plan, built)) == {"s"}
+    assert '"sundress"' in pack_tidy.dead_ends(plan, built)["s"]
