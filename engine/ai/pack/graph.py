@@ -75,6 +75,7 @@ from engine.ai.pack._common import (
 )
 from engine.ai.pack.plan import _NEGATIVEISH, MAX_TAGS, _row_var, _slug_var
 from engine.ai.pack.settings import MAX_SWEEP_OPTIONS, parse_run, parse_settings
+from engine.modules.derivation_handler import _ctx_get
 
 MAX_SLOTS = 24
 MAX_AXES = 4
@@ -301,14 +302,76 @@ def _self_axis(name: str, var: str, axes: list[dict[str, Any]]) -> str:
     return ""
 
 
-def _slot_index(slots: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Slots by lowercase name, variable and $variable."""
+def _slot_index(slots: list[dict[str, Any]],
+                aliases: dict[str, str] | None = None) -> dict[str, dict[str, Any]]:
+    """Slots by lowercase name, variable and $variable, plus the old names
+    of slots ``_merge_split_slots`` folded together (``aliases``: old name
+    or variable → the merged slot's name)."""
     by_name: dict[str, dict[str, Any]] = {}
     for s in slots:
         by_name[s["name"].lower()] = s
         by_name[s["var"].lower()] = s
         by_name[f"${s['var']}".lower()] = s
+    for old, new in (aliases or {}).items():
+        if new.lower() in by_name:
+            by_name.setdefault(old.lower(), by_name[new.lower()])
+            by_name.setdefault(f"${old}".lower(), by_name[new.lower()])
     return by_name
+
+
+def _merge_split_slots(slots: list[dict[str, Any]], warnings: list[str]) -> dict[str, str]:
+    """"Casual Outfit" [formality: casual] and "Formal Outfit" [formality:
+    formal] are one Outfit slot split by its own axis: both print in every
+    prompt, and two rules on Footwear ("casual outfits only with casual
+    shoes", "formal only with formal") both fire every run, so no shoe is
+    left and the fallback is always taken (9B pack 15, 2026-10-24). Shown
+    slots whose one axis is the same, each with one value its name says,
+    and whose names are the same once that value is taken out, become one
+    slot with all the values. Returns old name / variable → merged name."""
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for s in slots:
+        if s["show"] != "prompt" or len(s["axes"]) != 1 or len(s["axes"][0]["values"]) != 1:
+            continue
+        value = s["axes"][0]["values"][0]
+        words = re.findall(r"[a-z0-9]+", s["name"].lower())
+        rest = [w for w in words if w not in value.split("_")]
+        if not rest or len(rest) == len(words):
+            continue
+        groups.setdefault((s["axes"][0]["name"], " ".join(rest)), []).append(s)
+    aliases: dict[str, str] = {}
+    taken = {s["var"] for s in slots}
+    for (axis, rest), group in groups.items():
+        values = [g["axes"][0]["values"][0] for g in group]
+        if len(group) < 2 or len(set(values)) != len(values):
+            continue
+        keep = group[0]
+        old = [g["name"] for g in group]
+        name = rest.title()
+        ids = {id(g) for g in group}
+        if any(s["name"].lower() == rest for s in slots if id(s) not in ids):
+            name = keep["name"]
+        var = _slug_var(name)
+        if var in taken and var not in {g["var"] for g in group}:
+            var = keep["var"]
+        for g in group:
+            aliases[g["name"]] = name
+            aliases[g["var"]] = name
+        taken -= {g["var"] for g in group}
+        taken.add(var)
+        keep.update({
+            "name": name, "var": var,
+            "what": "; ".join(dict.fromkeys(g["what"] for g in group if g["what"]))[:MAX_ABOUT],
+            "count": min(MAX_COUNT, sum(g["count"] for g in group)),
+            "sometimes_none": min(g["sometimes_none"] for g in group),
+            "hold": any(g["hold"] for g in group),
+            "axes": [{"name": axis, "values": values}],
+        })
+        keep["self_axis"] = _self_axis(name, var, keep["axes"])
+        keep.pop("weights", None)
+        slots[:] = [s for s in slots if s is keep or id(s) not in ids]
+        warnings.append(f"{' and '.join(old)} are one {name} slot with a {axis} axis: "
+                        "both printed in every prompt and their rules shut each other out")
+    return aliases
 
 
 def _find_slot(sname: str, slots: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
@@ -316,14 +379,15 @@ def _find_slot(sname: str, slots: dict[str, dict[str, Any]]) -> dict[str, Any] |
         or slots.get(f"${_var(sname)}".lower())
 
 
-def _infer_axes(raw: Any, slots: list[dict[str, Any]], warnings: list[str]) -> None:
+def _infer_axes(raw: Any, slots: list[dict[str, Any]], warnings: list[str],
+                aliases: dict[str, str] | None = None) -> None:
     """An axis a relation names on one slot that only the other slot
     declares is copied over (same name, same values), so the model
     declares each axis once: "exclude Season.season=winter →
     Footwear.season=summer" gives Footwear a season axis when it has none,
     and "agree on season Season → Outfit" likewise. Nothing is added when
     the slot already uses a value of it on another axis, or has 4 axes."""
-    by_name = _slot_index(slots)
+    by_name = _slot_index(slots, aliases)
     for r in raw if isinstance(raw, list) else []:
         if not isinstance(r, dict) or r.get("kind") not in RELATIONS:
             continue
@@ -492,9 +556,9 @@ _RULE_TEXT = re.compile(r"^\s*(?:(?:exclude|include|avoid|allow|forbid|never|onl
 
 def _relations(
     raw: Any, slots: list[dict[str, Any]], fixed_vars: set[str], input_vars: set[str],
-    warnings: list[str], bad_refs: list[str],
+    warnings: list[str], bad_refs: list[str], aliases: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
-    by_name = _slot_index(slots)
+    by_name = _slot_index(slots, aliases)
     slot_vars = {s["var"] for s in slots}
     derived: set[str] = set()
     out: list[dict[str, Any]] = []
@@ -517,6 +581,8 @@ def _relations(
                                "words": _words(r.get("words"))}
         if kind in ("derive", "append"):
             var = _var(r.get("var"))
+            if var in (aliases or {}) and var.lower() in by_name:
+                var = by_name[var.lower()]["var"]  # a slot folded into another
             text = _clean(r.get("text"), MAX_TEXT)
             m = _WEIGHT_TEXT.match(text) if kind == "derive" and src["value"] else None
             if m and 0 < float(m.group(1)) <= MAX_WEIGHT_FACTOR:
@@ -539,6 +605,13 @@ def _relations(
                 # for the real rule.
                 warnings.append(f"Left out ${var} \"{text[:40]}\": a rule written as prompt "
                                 "text; a relation between the slots does that")
+                continue
+            if var == src["slot"]["var"]:
+                # "Hat.type fedora → add 'fedora' to $hat" printed "a man in a
+                # fedorafedora" and broke every check that reads the pick
+                # (9B pack 7, 2026-10-24): a pick's own tags are already on it.
+                warnings.append(f"Left out {src['slot']['name']} → ${var} \"{text[:40]}\": a "
+                                "rule can't add to the pick it reads")
                 continue
             if kind == "derive" and (var in slot_vars or var in fixed_vars or var in input_vars):
                 # A pick can't be overwritten, but the rule's words can still
@@ -667,7 +740,7 @@ _LORA_INPUT = re.compile(r"lora|lycoris|locon", re.I)
 
 def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]],
               relations: list[dict[str, Any]], inputs: list[dict[str, str]],
-              warnings: list[str]) -> dict[str, Any]:
+              warnings: list[str], aliases: dict[str, str] | None = None) -> dict[str, Any]:
     """The template's parts in order, each resolved to a variable."""
     raw = raw if isinstance(raw, dict) else {}
     by_name: dict[str, str] = {}
@@ -683,6 +756,9 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
             by_name[r["var"].lower()] = r["var"]
     for i in inputs:
         by_name[i["var"].lower()] = i["var"]
+    for old, new in (aliases or {}).items():
+        if new.lower() in by_name:
+            by_name.setdefault(old.lower(), by_name[new.lower()])
     internal = {s["var"] for s in slots if s["show"] == "internal"} | {
         s["name"].lower() for s in slots if s["show"] == "internal"}
     order: list[str] = []
@@ -994,13 +1070,16 @@ def compile_graph(raw: Any) -> dict[str, Any]:
     if not slots:
         raise PlanError("the graph has no slot: add one wildcard slot per choice the image "
                         "makes")
+    aliases = _merge_split_slots(slots, warnings)
+    taken |= {s["var"] for s in slots}
     fixed = _fixed(raw.get("fixed"), warnings, taken)
-    _infer_axes(raw.get("relations"), slots, warnings)
+    _infer_axes(raw.get("relations"), slots, warnings, aliases)
     relations = _relations(raw.get("relations"), slots, {f["var"] for f in fixed},
-                           {i["var"] for i in inputs}, warnings, bad_refs)
+                           {i["var"] for i in inputs}, warnings, bad_refs, aliases)
     _onto_lists(slots, relations, warnings)
     _list_slots(slots, relations, raw.get("template"), warnings)
-    template = _template(raw.get("template"), slots, fixed, relations, inputs, warnings)
+    template = _template(raw.get("template"), slots, fixed, relations, inputs, warnings,
+                         aliases)
     _story_holds(slots, parse_run(raw.get("run")), warnings)
     read_by_relation = {r["from"]["slot"] for r in relations} | {
         r["to"]["slot"] for r in relations if r.get("to")}
@@ -1605,6 +1684,19 @@ def _wired(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict[str, A
         rules: list[dict[str, Any]] = []
         warnings: list[str] = []
         for n, ((_sname, axis), rows) in enumerate(groups.items()):
+            # Two rows on the same value would be two branches of one
+            # if/elif, and only the first ever runs (9B smoke on #120:
+            # ", volumetric darkness" on night broke every run): their
+            # words go in one branch.
+            merged: dict[str, dict[str, Any]] = {}
+            for r in rows:
+                v = r["from"]["value"]
+                if v in merged:
+                    merged[v] = {**merged[v], "text": ", ".join(
+                        t.strip(" ,") for t in (merged[v]["text"], r["text"]) if t.strip(" ,"))}
+                else:
+                    merged[v] = r
+            rows = list(merged.values())
             branches = []
             for r in rows:
                 src = next((s for s in graph["slots"] if s["name"] == r["from"]["slot"]), None)
@@ -2182,6 +2274,13 @@ def _otherwise(rels: list[dict[str, Any]]) -> str:
     return next((r["otherwise"] for r in rels if r.get("otherwise")), "")
 
 
+def _expected(text: str, ctx: dict[str, Any]) -> str:
+    """A rule's text as the run wrote it: "wearing a $top" holds the top
+    the run picked, so it is looked for with ``$top`` filled in (9B smoke
+    on #120: 13 such rules were scored broken in every run)."""
+    return _norm(_VAR.sub(lambda m: _ctx_get(ctx, m.group(1)), text)).strip(" ,")
+
+
 def _picked_tags(graph: dict[str, Any], payloads: dict[str, dict[str, Any]], slot_name: str,
                  ctx: dict[str, Any]) -> tuple[set[str], bool] | None:
     """The tags the run's pick for a slot carries, and whether that pick
@@ -2207,12 +2306,16 @@ def _picked_tags(graph: dict[str, Any], payloads: dict[str, dict[str, Any]], slo
             fallback = fallback or o.get("fallback") is True
     kinds = axis_kinds(graph, slot)
     for a in slot["axes"]:
-        got = ctx.get(f"{slot['var']}.{a['name']}")
+        # What the run rolled on the axis, read the way a rule's
+        # ``$hat.type`` reads it (``__wp_axes__``): a plain
+        # ``ctx["hat.type"]`` is never there, so every rule keyed on an
+        # accepts axis looked like it never fired (9B pack 7, 2026-10-24).
+        got = ctx.get(f"{slot['var']}.{a['name']}") or _ctx_get(ctx, f"{slot['var']}.{a['name']}")
         if isinstance(got, str) and got:
             if kinds.get(a["name"]) == "accepts":
                 # The option offered alternatives; this run rolled one.
                 tags -= set(a["values"])
-            tags.add(got)
+            tags |= {g.strip() for g in got.split(",") if g.strip()}
     return tags, fallback
 
 
@@ -2341,7 +2444,7 @@ def verify_relations(plan: dict[str, Any], built: dict[str, Any],
                 got = _norm(ctx.get(r["var"]))
                 if src["value"] in st:
                     row["seen"] += 1
-                    if _norm(r["text"]) not in got:
+                    if _expected(r["text"], ctx) not in got:
                         row["broken"] += 1
                 elif kind == "derive" and _otherwise(by_var[r["var"]]):
                     fired = False
@@ -2350,7 +2453,7 @@ def verify_relations(plan: dict[str, Any], built: dict[str, Any],
                         fired = fired or bool(t and d["from"]["value"] in t[0])
                     if not fired:
                         row["seen"] += 1
-                        if _norm(_otherwise(by_var[r["var"]])) not in got:
+                        if _expected(_otherwise(by_var[r["var"]]), ctx) not in got:
                             row["broken"] += 1
         if row["checked"] and row["seen"] == 0:
             row["why"] = f"never fired in {len(runs)} runs"

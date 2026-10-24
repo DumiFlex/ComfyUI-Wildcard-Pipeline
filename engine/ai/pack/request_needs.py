@@ -33,6 +33,8 @@ _RULE_CUE = re.compile(
 _SOMETIMES = re.compile(
     r"\b(\d{1,2})\s*(?:%|percent)|\b(sometimes|occasionally|now and then|once in a while)\b",
     re.I)
+#: "no hat 30% of the time", "bare-headed 30%": the share is the empty one.
+_NOT_SHOWN = re.compile(r"\b(?:no|without|bare\w*|empty|none|nothing)\b", re.I)
 #: "the same hero in every image", "keep the outfit", "stays the same".
 _SAME = re.compile(r"\b(?:the same|keeps?|stays? the same|unchanged|consistent)\b", re.I)
 _CLAUSE = re.compile(r"[.;:\n]|,\s*(?=(?:but|and|never|only|while|with|each)\b)", re.I)
@@ -163,11 +165,28 @@ def request_needs(graph: dict[str, Any], request: str) -> list[dict[str, Any]]:
                      "the relations that do")
         m = _SOMETIMES.search(clause)
         if m:
-            for n in named:
+            # The share is about the last thing named before it: in "the
+            # person wears a hat about 30% of the time" that is the hat, not
+            # the person (9B smoke: Subject and Action were left out 70% too).
+            near = (_named(clause[:m.start()], words, own_only=True, graph=graph)
+                    or _named(clause[:m.start()], words))[-1:] \
+                or (_named(clause[m.end():], words, own_only=True, graph=graph)
+                    or _named(clause[m.end():], words))[:1]
+            for n in near:
                 s = by_name[n]
-                if s["sometimes_none"] or s.get("weights") or s.get("self_axis"):
+                if s.get("weights") or s.get("self_axis"):
                     continue
                 pct = int(m.group(1)) if m.group(1) else 0
+                if s["sometimes_none"]:
+                    # sometimes_none 30 for "a hat 30% of the time" is the
+                    # share it shows, written as the share it doesn't.
+                    if pct and s["sometimes_none"] == pct and pct != 50 \
+                            and not _NOT_SHOWN.search(clause):
+                        need("sometimes_none", [n],
+                             f"The request says \"{clause}\", but {n} comes out empty "
+                             f"{pct}% of the time instead of showing then; set its "
+                             f"sometimes_none {100 - pct}")
+                    continue
                 hint = (f" (it shows {pct}% of the time, so sometimes_none {100 - pct})"
                         if pct else "")
                 need("sometimes_none", [n],
@@ -338,6 +357,11 @@ def apply_request_needs(graph: dict[str, Any], request: str) -> list[str]:
                 s["sometimes_none"] = int(m.group(1))
                 lines.append(f"{s['name']} comes out empty in {m.group(1)}% of runs, as the "
                              "request asks")
+                if s["pick"] and not re.search(r"\d+\s*(?:to|-|or)\s*\d+", request):
+                    # Two picks each empty 70% of runs still show one 91% of
+                    # the time (9B pack 7: a hat in nearly every prompt).
+                    s["pick"] = ""
+                    lines.append(f"{s['name']} picks one, so the share holds")
         elif n["type"] == "hold":
             s["hold"] = True
             lines.append(f"{s['name']} is held, as the request asks")
