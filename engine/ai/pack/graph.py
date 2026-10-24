@@ -104,57 +104,63 @@ SHOW = ("prompt", "internal")
 _AXIS_NAME = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 _PICK = re.compile(r"^(\d{1,2})(?:\s*-\s*(\d{1,2}))?$")
 
-AXIS_SCHEMA: dict[str, Any] = _obj({"name": _STR, "values": _STRS})
+#: Capped strings for the planner's schema: a 9B can write one field on
+#: until the output limit cuts the plan off (smoke on #118, a plan at
+#: 10k tokens); the compile cuts every field far shorter anyway.
+_S: dict[str, Any] = {"type": "string", "maxLength": 300}
+_SS: dict[str, Any] = {"type": "array", "items": _S}
+
+AXIS_SCHEMA: dict[str, Any] = _obj({"name": _S, "values": _SS})
 SLOT_SCHEMA: dict[str, Any] = _obj({
-    "name": _STR,
-    "var": _STR,
-    "what": _STR,
-    "section": _STR,
+    "name": _S,
+    "var": _S,
+    "what": _S,
+    "section": _S,
     "count": {"type": "integer"},
     "show": {"type": "string", "enum": list(SHOW)},
-    "pick": _STR,
+    "pick": _S,
     "hold": {"type": "boolean"},
     "sweep": {"type": "boolean"},
     "sometimes_none": {"type": "integer"},
     "axes": {"type": "array", "items": AXIS_SCHEMA},
 })
 FIXED_SCHEMA: dict[str, Any] = _obj({
-    "name": _STR, "var": _STR, "text": _STR, "negative": _STR,
+    "name": _S, "var": _S, "text": _S, "negative": _S,
 })
 RELATION_SCHEMA: dict[str, Any] = _obj({
     "kind": {"type": "string", "enum": list(RELATIONS)},
-    "from_slot": _STR,
-    "from_axis": _STR,
-    "from_value": _STR,
-    "to_slot": _STR,
-    "to_axis": _STR,
-    "to_value": _STR,
+    "from_slot": _S,
+    "from_axis": _S,
+    "from_value": _S,
+    "to_slot": _S,
+    "to_axis": _S,
+    "to_value": _S,
     "factor": {"type": "number"},
-    "var": _STR,
-    "text": _STR,
-    "otherwise": _STR,
-    "words": _STRS,
+    "var": _S,
+    "text": _S,
+    "otherwise": _S,
+    "words": _SS,
 })
 TEMPLATE_SCHEMA: dict[str, Any] = _obj({
-    "lead": _STR, "order": _STRS, "tail": _STR, "negative": _STR,
+    "lead": _S, "order": _SS, "tail": _S, "negative": _S,
 })
 GRAPH_SCHEMA: dict[str, Any] = _obj({
-    "title": _STR,
-    "summary": _STR,
-    "design": _STR,
+    "title": _S,
+    "summary": _S,
+    "design": {"type": "string", "maxLength": 1500},
     "rating": {"type": "string", "enum": ["safe", "nsfw"]},
     "style": {"type": "string", "enum": list(STYLES)},
-    "model": _STR,
-    "anchor": _STR,
+    "model": _S,
+    "anchor": _S,
     "questions": {"type": "array", "items": _obj({
-        "header": _STR, "question": _STR, "multi": {"type": "boolean"}, "choices": _STRS})},
-    "assumptions": _STRS,
-    "from_images": _STRS,
-    "research": _STRS,
+        "header": _S, "question": _S, "multi": {"type": "boolean"}, "choices": _SS})},
+    "assumptions": _SS,
+    "from_images": _SS,
+    "research": _SS,
     "run": _obj({"mode": {"type": "string", "enum": list(RUN_MODES)},
                  "frames": {"type": "integer"}}),
-    "inputs": {"type": "array", "items": _obj({"var": _STR, "about": _STR, "example": _STR})},
-    "sections": {"type": "array", "items": _obj({"name": _STR, "about": _STR})},
+    "inputs": {"type": "array", "items": _obj({"var": _S, "about": _S, "example": _S})},
+    "sections": {"type": "array", "items": _obj({"name": _S, "about": _S})},
     "slots": {"type": "array", "items": SLOT_SCHEMA},
     "fixed": {"type": "array", "items": FIXED_SCHEMA},
     "relations": {"type": "array", "items": RELATION_SCHEMA},
@@ -1732,9 +1738,11 @@ def rule_words(graph: dict[str, Any], slot: dict[str, Any]) -> list[tuple[str, s
 
 # --- the per-slot content call ----------------------------------------------
 
-#: Most values a content call groups a slot's options by: past it the
-#: groups get too short to be worth the structure.
-MAX_GROUP_VALUES = 6
+#: Most values a content call groups a slot's options by (it still needs
+#: an option per value, so a slot asks at least that many). 6 left a
+#: 10-hue collar colour ungrouped, and half its hues got no option
+#: (smoke on #118, the pet pack's fallback in 73% of runs).
+MAX_GROUP_VALUES = 10
 
 
 def group_axis(graph: dict[str, Any], slot: dict[str, Any]) -> str | None:
@@ -1742,10 +1750,9 @@ def group_axis(graph: dict[str, Any], slot: dict[str, Any]) -> str | None:
     a list per value, so every value has options from the first call and
     none is mis-tagged): the one a rule narrows on or names words for,
     else one the slot offers a partner, else the first. None when no axis
-    has 2 to ``MAX_GROUP_VALUES`` values or the slot asks for fewer
-    options than the axis has values."""
-    axes = [a for a in slot["axes"] if 2 <= len(a["values"]) <= MAX_GROUP_VALUES
-            and len(a["values"]) <= slot["count"]]
+    has 2 to ``MAX_GROUP_VALUES`` values. A slot asking for fewer options
+    than the axis has values gets one per value (``_group_count``)."""
+    axes = [a for a in slot["axes"] if 2 <= len(a["values"]) <= MAX_GROUP_VALUES]
     if not axes:
         return None
     ruled = {r["to"]["axis"] for r in inbound(graph, slot)} \
@@ -1755,6 +1762,14 @@ def group_axis(graph: dict[str, Any], slot: dict[str, Any]) -> str | None:
         if a["name"] in ruled:
             return a["name"]
     return next((a["name"] for a in axes if kinds[a["name"]] == "accepts"), axes[0]["name"])
+
+
+def _group_count(slot: dict[str, Any], axis: str) -> int:
+    """The options a grouped slot keeps: its count, and never fewer than
+    one per value of the axis (a rule on a value with no option never
+    fires, and the fallback stands in)."""
+    return max(slot["count"], len(next(a["values"] for a in slot["axes"]
+                                       if a["name"] == axis)))
 
 
 def _group_size(slot: dict[str, Any], axis: str) -> int:
@@ -1767,7 +1782,7 @@ def _group_most(slot: dict[str, Any], axis: str) -> int:
     more. Unbounded, a 9B wrote groups until the output limit cut it off
     (smoke on #118: a pack's slot calls went from 279 s to 19 min)."""
     n = len(next(a["values"] for a in slot["axes"] if a["name"] == axis))
-    return max(_group_size(slot, axis), -(-slot["count"] // n) + 1)
+    return max(_group_size(slot, axis), -(-_group_count(slot, axis) // n) + 1)
 
 
 def ungroup(slot: dict[str, Any], axis: str, groups: Any) -> list[dict[str, Any]]:
@@ -2009,6 +2024,7 @@ def compile_slot(
     if axis and isinstance(answer.get("groups"), dict) and not isinstance(
             answer.get("options"), list):
         answer = {**answer, "options": ungroup(slot, axis, answer["groups"])}
+        limit = max(limit or slot["count"], _group_count(slot, axis))
     adding = isinstance(answer.get("add"), list) and not isinstance(answer.get("options"), list)
     if adding and not (isinstance(existing, dict) and existing.get("options")):
         answer, adding = {**answer, "options": answer["add"]}, False
@@ -2093,6 +2109,18 @@ def _draw_prefix(graph: dict[str, Any], slot: dict[str, Any], rows: list[dict[st
                             f"front of {slot['name']}'s options")
             continue
         ref = "@{" + sid + (":" + r["from"]["value"] if r["from"]["value"] else "") + "}"
+        src = next((x for x in graph["slots"] if x["name"] == r["from"]["slot"]), None)
+        said = [v.replace("_", " ") for a in (src or {}).get("axes") or [] for v in a["values"]]
+        own = [row for row in rows if not row.get("is_null") and isinstance(row.get("value"), str)
+               and not row["value"].startswith("@{")]
+        if said and own and 2 * sum(1 for row in own if any(
+                _has_word(_norm(row["value"]), v) for v in said)) >= len(own):
+            # "purple a person in a forest green shirt" (smoke on #118): the
+            # options name the list's values themselves, so a fresh pick in
+            # front only says a second, different one.
+            warnings.append(f"{slot['name']}'s options already say a {r['from']['slot']} value, "
+                            "so no fresh pick goes in front of them")
+            continue
         for row in rows:
             if row.get("is_null") or not isinstance(row.get("value"), str):
                 continue

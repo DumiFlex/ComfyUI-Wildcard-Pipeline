@@ -477,8 +477,15 @@ def missing_attributes(plan: dict[str, Any], built: dict[str, Any],
     out: dict[str, str] = {}
     if not done or not any(r["prompt"] for r in done):
         return out
+    # A list another wildcard draws from shows through the drawer's pick,
+    # never its own variable (118d: "28 of 32 prompts show no color list").
+    from engine.ai.pack.plan import draws
+    drawn = {v for vs in draws(plan, built).values() for v in vs}
+    graph = plan.get("graph") if isinstance(plan.get("graph"), dict) else {}
+    drawn |= {s["var"] for s in graph.get("slots") or [] if s.get("show") == "internal"}
     for i in plan["items"]:
-        if i["kind"] != "wildcard" or i["key"] not in built or not i.get("var"):
+        if i["kind"] != "wildcard" or i["key"] not in built or not i.get("var") \
+                or i["var"] in drawn:
             continue
         subject, _values = _attribute(i, built[i["key"]]["payload"])
         if not subject:

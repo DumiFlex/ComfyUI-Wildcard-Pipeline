@@ -1154,3 +1154,34 @@ def test_two_reads_in_one_lead_part_print_once():
                                    settings={"model": "family"})
     order = pg.template_order(plan["graph"], plan["settings"])
     assert "quality" not in order and "beat" not in order
+
+
+def test_a_ten_value_axis_is_grouped_when_the_count_covers_it():
+    hues = ["red", "orange", "yellow", "green", "blue", "navy", "pink", "white", "black", "brown"]
+    slot = {"name": "Collar", "var": "collar", "count": 12, "sometimes_none": 0, "show": "prompt",
+            "hold": False, "pick": "", "what": "", "section": "", "axes": [{"name": "hue",
+                                                                       "values": hues}]}
+    g = {"slots": [slot], "relations": [], "fixed": [], "title": "", "summary": ""}
+    assert pg.group_axis(g, slot) == "hue"
+    # A count under the hues still gets one option per hue, kept by the compile.
+    small = {**slot, "count": 8}
+    assert pg.group_axis(g, small) == "hue"
+    groups = {h: [{"text": f"{h} collar", "weight": 1, "negative": ""}] for h in hues}
+    out = pg.compile_slot(g, small, {"groups": groups})["payload"]
+    assert {t for o in out["options"] for t in o["sub_categories"]} == set(hues)
+
+
+def test_a_drawer_that_names_the_list_values_itself_gets_no_pick_in_front():
+    """Smoke on #118: "purple a person in a forest green shirt": Shirt Color's
+    options named colours, and the draw put a second, different one first."""
+    g = pack.compile_graph(DRAWN)
+    shirt = pg.slot_by_var(g, "shirt")
+    said = {"options": [{"text": f"{w} shirt", "weight": 1, "negative": "", "tags": {}}
+                        for w in ("warm red", "cool blue", "warm orange", "plain")]}
+    out = pg.compile_slot(g, shirt, said, refs={"Colors": "abcd1234"})
+    assert not any(o["value"].startswith("@{") for o in out["payload"]["options"])
+    assert any("already say a Colors value" in w for w in out["warnings"])
+    plain = {"options": [{"text": t, "weight": 1, "negative": "", "tags": {}}
+                         for t in ("flannel shirt", "polo shirt")]}
+    out = pg.compile_slot(g, shirt, plain, refs={"Colors": "abcd1234"})
+    assert all(o["value"].startswith("@{abcd1234}") for o in out["payload"]["options"])

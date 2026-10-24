@@ -189,13 +189,17 @@ def _score(result: dict[str, Any]) -> dict[str, Any]:
     check = result["check"] or {}
     problems = sum(len(v) for v in (check.get("problems") or {}).values()) \
         + len(check.get("notes") or [])
-    checked = [r for r in check.get("relations") or [] if r.get("checked")]
+    # A rule that never fired in the runs can't be judged: counted apart,
+    # never as a break (118d showed "0 of 0 runs broke it" as ✗).
+    rels = [r for r in check.get("relations") or [] if r.get("checked")]
+    checked = [r for r in rels if r.get("seen") or r.get("holds")]
     return {
         "items": total, "built": built, "built_share": round(built / total, 2) if total else 0,
         "problems": problems if check else None, "clean": bool(check) and problems == 0,
         "prompts": [p["text"] for p in check.get("prompts") or []],
         # wired: relations that held on the engine runs (graph plans only).
         "relations": len(checked), "held": sum(1 for r in checked if r.get("holds")),
+        "unfired": len(rels) - len(checked),
         "distinct": check.get("distinct") if check else None,
         # fell: the worst slot's share of runs where its rules left nothing
         # and the fallback stood in (graph plans only).
@@ -331,9 +335,12 @@ def pack_sheet(request: str, result: dict[str, Any]) -> str:
         lines += [f"- ⚠ {k or 'pack'}: {p}" for k, ps in problems.items() if k not in listed
                   for p in ps]
         for r in check.get("relations") or []:
-            mark = "✓" if r["holds"] else ("✗" if r["checked"] else "·")
-            lines.append(f"- {mark} {r['text']}" + (f" ({r['broken']} of {r['seen']} runs broke it)"
-                                                   if r["checked"] and not r["holds"] else ""))
+            unfired = r["checked"] and not r["holds"] and not r.get("seen")
+            mark = "✓" if r["holds"] else "○" if unfired else ("✗" if r["checked"] else "·")
+            lines.append(f"- {mark} {r['text']}" + (
+                " (never fired)" if unfired else
+                f" ({r['broken']} of {r['seen']} runs broke it)"
+                if r["checked"] and not r["holds"] else ""))
     else:
         lines.append("(no check)")
     lines += ["", "## Sample prompts", ""]
@@ -403,7 +410,8 @@ def report(rows: list[dict], model: str) -> str:
         f"{sum(1 for r in rows if r.get('feature'))} (built pack has it: "
         f"{sum(1 for r in planned if r.get('feature_built'))}; accepts, null and fallback "
         "count only when the model's graph asks for them)",
-        f"- Relations that held on the test runs (wired): {held} / {relations}",
+        f"- Relations that held on the test runs (wired): {held} / {relations}"
+        f" (never fired, not counted: {sum(r.get('unfired') or 0 for r in planned)})",
         f"- Distinct prompts per run (mean): {distinct:.2f}",
         f"- Packs where a slot fell back in 30% or more of the runs: {len(tight)} / "
         f"{len(planned)}", "",

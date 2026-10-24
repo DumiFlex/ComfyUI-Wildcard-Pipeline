@@ -240,6 +240,13 @@ def test_a_colour_missing_from_many_prompts_is_named():
     assert "drop the empty option" in said[keys["Hair Colour"]]
     plan, built, keys = _with_hair_colour()
     assert pack_tidy.missing_attributes(plan, built, pack_tidy.runs(plan, built)) == {}
+    # A list only seen through what draws from it is never named (118d:
+    # "28 of 32 prompts show no color list" on an internal Color List).
+    plan, built, keys = _with_hair_colour(always=False)
+    hair = next(i for i in plan["items"] if i["name"] == "Hair Colour")
+    plan = {**plan, "graph": {"slots": [{"name": "Hair Colour", "var": hair["var"],
+                                         "show": "internal"}], "relations": []}}
+    assert keys["Hair Colour"] not in pack_tidy.missing_attributes(plan, built, done)
 
 
 def test_hair_colours_the_request_asks_for_get_a_wildcard_when_the_plan_forgot():
