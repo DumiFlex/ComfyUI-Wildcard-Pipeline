@@ -40,13 +40,14 @@ SETTINGS: dict[str, tuple[str, ...]] = {
     # the pack; items: the model writes the item list and every payload.
     "planner": ("graph", "items"),
     # three: the first plan is drafted three times and the code keeps the
-    # one that fits the request best (`drafts.pick_draft`); one: one draft.
-    "drafts": ("one", "three"),
+    # one that fits the request best (`drafts.pick_draft`); auto: a second
+    # draft only when the first scores below 0; one: one draft.
+    "drafts": ("auto", "one", "three"),
 }
 DEFAULT_SETTINGS: dict[str, Any] = {
     "library": "inspire", "negatives": "auto", "structure": "sections", "style": "auto",
     "rating": "auto", "count": 0, "model": "any", "youth_negative": "on",
-    "planner": "graph", "drafts": "one",
+    "planner": "graph", "drafts": "auto",
 }
 #: Most options a sweep axis should have (the Loop sweeps every ticked one).
 MAX_SWEEP_OPTIONS = 6

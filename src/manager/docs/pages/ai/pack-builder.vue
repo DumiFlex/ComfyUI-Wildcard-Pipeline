@@ -49,7 +49,7 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       <DocKeyList
         :items="[
           { term: 'Planner', desc: 'Pack graph (the default): the model plans the picks and how they relate, and the code writes every rule and the template from that. Items one by one: the older planner, where the model writes each rule itself.' },
-          { term: 'Plan drafts', desc: 'Best of three drafts the first plan three times and keeps the one that fits your request best. Takes about three times as long; helps small local models most. One: a single draft.' },
+          { term: 'Plan drafts', desc: 'When needed (the default) drafts the plan once, and once more only when the code sees a problem in the first, keeping the better one. Best of three drafts the first plan three times and keeps the one that fits your request best; about three times as long, helps small local models most. One: a single draft.' },
           { term: 'Your library', desc: 'New, in its style (the default), Reuse what fits (your existing wildcards and fixed values, marked yours), or Everything new.' },
           { term: 'Negatives', desc: 'Standing + per option, Template only, or None.' },
           { term: 'Structure', desc: 'Sub-bundle per section, or One bundle.' },

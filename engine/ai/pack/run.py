@@ -10,7 +10,7 @@ from engine.ai.pack._common import PLAN_SCHEMA, PlanError, _item
 from engine.ai.pack.build import item_request, library_item
 from engine.ai.pack.check import check_pack
 from engine.ai.pack.compile_item import compile_item
-from engine.ai.pack.drafts import DRAFT_TEMPERATURES, draft_line, pick_draft
+from engine.ai.pack.drafts import draft_line, extra_temperatures, pick_draft
 from engine.ai.pack.graph import (
     GRAPH_SCHEMA,
     GRAPH_SYSTEM,
@@ -104,9 +104,10 @@ async def run_pack(
         answer = await complete(system=system, user=first + "\n\n" + plan_retry_note(str(e)),
                                 schema=schema, schema_name=schema_name, temperature=0.2)
         plan = await compiled(answer)
-    if graph and cfg["drafts"] == "three":
+    temps = extra_temperatures(cfg["drafts"], plan, instruction, library) if graph else ()
+    if temps:
         drafts = [(answer, plan)]
-        for t in DRAFT_TEMPERATURES[1:]:
+        for t in temps:
             try:
                 a = await complete(system=system, user=first, schema=schema,
                                    schema_name=schema_name, temperature=t)
