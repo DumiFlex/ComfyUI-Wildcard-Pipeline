@@ -457,14 +457,36 @@ async def post_text_draft(request: web.Request) -> web.Response:
         labels=labels, current=current[:4000], out_var=out_var,
     )
     system, schema, schema_name = _TEXT_KINDS[kind]
+    ask: dict[str, Any] = dict(
+        cfg=cfg, first=first, turns=turns, instruction=instruction,
+        system=webs.system(system), schema=webs.schema(schema), schema_name=schema_name,
+        temperature=0.5, images=images or None, quick=True,
+        max_tokens=text_items.answer_tokens(kind))
     try:
-        answer = await _ask(cfg, first=first, turns=turns, instruction=instruction,
-                            system=webs.system(system), schema=webs.schema(schema),
-                            schema_name=schema_name, temperature=0.5,
-                            images=images or None, extra=webs.note, quick=True)
+        try:
+            answer = await _ask(extra=webs.note, **ask)
+        except _ai_client.AIError as e:
+            # A model that loops on the same words hits the limit; one more
+            # sample usually doesn't.
+            if e.message != _ai_client.CUT_OFF_MESSAGE:
+                raise
+            answer = await _ask(extra=webs.note, **ask)
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
     answer, research = webs.take(answer)
+    unset = text_items.unset_asked(answer, instruction) if kind == "fixed_values" else []
+    if unset:
+        # One re-ask naming what the request asked for; the first answer
+        # stands when the second sets no more of it.
+        note = ("Set " + ", ".join(f"${v}" for v in unset)
+                + " too: the request asks for it. Answer with the whole list again.")
+        try:
+            again, _ = webs.take(await _ask(
+                extra="\n\n".join(x for x in (webs.note, note) if x), **ask))
+            if len(text_items.unset_asked(again, instruction)) < len(unset):
+                answer = again
+        except _ai_client.AIError:
+            pass
     try:
         if kind == "fixed_values":
             result = text_items.compile_fixed(answer, existing=payload)

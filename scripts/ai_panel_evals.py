@@ -174,7 +174,10 @@ REQUESTS: list[dict[str, Any]] = [
     {"name": "edit-rewrite", "panel": "Rewrite", "route": "wildcard/edit",
      "body": {"action": "rewrite", "instruction": "rewrite each as short danbooru-style tags",
               "wildcard": _wc("outfit")},
-     "check": lambda o: "" if len(o["changes"]) == 4 else f"{len(o['changes'])} of 4"},
+     # "yellow raincoat" and "sundress" are tags already, so only the two
+     # phrases with "and" must change.
+     "check": lambda o: ("" if {"o0000002", "o0000004"} <= _changed_ids(o)
+                         else f"rewrote {sorted(_changed_ids(o))}")},
     {"name": "derive-else", "panel": "Derivation", "route": "derivation/draft",
      "body": {"instruction": "if $eval_weather is heavy rain set $mood to gloomy, "
                              "otherwise set $mood to cheerful",

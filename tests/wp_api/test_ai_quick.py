@@ -233,3 +233,63 @@ async def test_add_asks_once_more_when_options_set_another_concept(wp_client, fa
     before = len(fake_llm.seen)
     out = await (await wp_client.post("/wp/api/ai/wildcard/draft", json=body)).json()
     assert len(out["options"]) == 3 and len(fake_llm.seen) == before + 1
+
+
+def _text_body(kind, instruction):
+    item = ({"name": "Cozy room", "payload": {"values": []}} if kind == "fixed_values"
+            else {"name": "Portrait", "template_string": ""})
+    return {"kind": kind, "instruction": instruction, "item": item}
+
+
+async def test_a_text_answer_cut_off_is_asked_once_more_with_a_sized_limit(
+        wp_client, fake_llm, monkeypatch):
+    from engine.ai import config as ai_config
+    from engine.ai import text_items
+
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    seen = []
+    answers = [_ai_client.AIError(_ai_client.CUT_OFF_MESSAGE),
+               {"template": "$who, rain", "negative": ""}]
+
+    async def fake(cfg, **kwargs):
+        seen.append(kwargs)
+        got = answers.pop(0)
+        if isinstance(got, Exception):
+            raise got
+        return got
+
+    monkeypatch.setattr(_ai_client, "complete_json", fake)
+    resp = await wp_client.post("/wp/api/ai/text/draft",
+                                json=_text_body("template", "a portrait in the rain"))
+    assert resp.status == 200, await resp.text()
+    assert len(seen) == 2
+    assert all(k["max_tokens"] == text_items.answer_tokens("template") < 8192 for k in seen)
+    # Twice cut off: the error stands.
+    answers[:] = [_ai_client.AIError(_ai_client.CUT_OFF_MESSAGE)] * 2
+    resp = await wp_client.post("/wp/api/ai/text/draft",
+                                json=_text_body("template", "a portrait in the rain"))
+    assert resp.status == 502 and len(seen) == 4
+
+
+async def test_fixed_values_ask_once_more_for_a_variable_the_request_names(wp_client, fake_llm):
+    from engine.ai import config as ai_config
+
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+
+    def vals(**kv):
+        return {"values": [{"name": k, "value": v, "negative": ""} for k, v in kv.items()]}
+
+    fake_llm.overrides["fixed_values"] = [vals(room="bedroom"),
+                                          vals(room="bedroom", light="warm lamp light")]
+    body = _text_body("fixed_values", "$room is bedroom and $light is warm lamp light")
+    out = await (await wp_client.post("/wp/api/ai/text/draft", json=body)).json()
+    assert {v["name"] for v in out["payload"]["values"]} == {"room", "light"}
+    asks = [s for s in fake_llm.seen if "response_format" in s["body"]]
+    assert len(asks) == 2 and "Set $light too" in json.dumps(asks[1]["body"]["messages"])
+    # All set the first time: one ask.
+    fake_llm.overrides["fixed_values"] = [vals(room="bedroom", light="lamp")]
+    before = len(fake_llm.seen)
+    await wp_client.post("/wp/api/ai/text/draft", json=body)
+    assert len(fake_llm.seen) == before + 1
