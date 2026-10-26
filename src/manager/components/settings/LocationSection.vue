@@ -222,7 +222,7 @@ function fmtBytes(n: number | null): string {
           name="db-location"
           :value="opt.key"
           v-model="selected"
-          class="wp-loc__radio"
+          class="wp-radio wp-loc__radio"
         />
         <div class="wp-loc__option-body">
           <div class="wp-loc__option-head">
@@ -271,15 +271,15 @@ function fmtBytes(n: number | null): string {
         </p>
         <div class="wp-loc__modal-choice">
           <label>
-            <input type="radio" v-model="transferMode" value="copy" />
+            <input type="radio" class="wp-radio" v-model="transferMode" value="copy" />
             <strong>Copy</strong> &mdash; duplicate to new location, keep current as backup
           </label>
           <label>
-            <input type="radio" v-model="transferMode" value="move" />
+            <input type="radio" class="wp-radio" v-model="transferMode" value="move" />
             <strong>Move</strong> &mdash; relocate file, source removed
           </label>
           <label>
-            <input type="radio" v-model="transferMode" value="none" />
+            <input type="radio" class="wp-radio" v-model="transferMode" value="none" />
             <strong>Don't transfer</strong> &mdash; point at new location, start fresh
           </label>
         </div>
@@ -399,4 +399,5 @@ function fmtBytes(n: number | null): string {
 .wp-loc__modal-body p { margin: 0 0 var(--wp-space-3); }
 .wp-loc__modal-choice { display: flex; flex-direction: column; gap: var(--wp-space-3); margin-top: var(--wp-space-3); }
 .wp-loc__modal-choice label { display: flex; gap: var(--wp-space-3); align-items: flex-start; cursor: pointer; }
+.wp-loc__modal-choice .wp-radio { margin-top: 3px; }
 </style>

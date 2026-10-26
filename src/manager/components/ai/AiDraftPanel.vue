@@ -14,6 +14,7 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
+import Checkbox from "../ui/Checkbox.vue";
 import Input from "../ui/Input.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
 import AiSyntax from "./AiSyntax.vue";
@@ -221,14 +222,8 @@ const skippedSummary = computed(() => {
     <template v-if="result && result.options.length">
       <ul class="wp-ai-draft__list" data-test="ai-draft-results">
         <li v-for="(o, i) in result.options" :key="i" class="wp-ai-draft__row" :data-off="unticked.has(i) ? 'true' : 'false'">
-          <label class="wp-ai-draft__row-label" :for="`wp-ai-draft-opt-${i}`">
-            <input
-              :id="`wp-ai-draft-opt-${i}`"
-              type="checkbox"
-              class="wp-ai-draft__check"
-              :checked="!unticked.has(i)"
-              @change="toggle(i)"
-            />
+          <label class="wp-ai-draft__row-label">
+            <Checkbox class="wp-checkbox--inline wp-ai-draft__check" :model-value="!unticked.has(i)" @update:model-value="toggle(i)" />
             <span class="wp-ai-draft__value"><AiSyntax :text="o.value" /></span>
           </label>
           <span v-if="o.weight !== 1" class="wp-ai-draft__weight" title="Weight">×{{ o.weight }}</span>
@@ -293,7 +288,6 @@ const skippedSummary = computed(() => {
 .wp-ai-draft__row:first-child { border-top: 0; }
 .wp-ai-draft__row[data-off="true"] { box-shadow: none; opacity: 0.5; }
 .wp-ai-draft__row-label { display: inline-flex; align-items: center; gap: 8px; flex: 1 1 240px; min-width: 0; cursor: pointer; }
-.wp-ai-draft__check { accent-color: var(--wp-accent-500); }
 .wp-ai-draft__value { font-family: var(--wp-font-mono, monospace); font-size: 12px; color: var(--wp-text); overflow-wrap: anywhere; }
 .wp-ai-draft__weight { font-size: 11px; color: var(--wp-text-muted); font-variant-numeric: tabular-nums; }
 .wp-ai-draft__tag {

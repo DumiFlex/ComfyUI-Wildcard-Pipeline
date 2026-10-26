@@ -90,7 +90,7 @@ describe("AiDraftPanel", () => {
     await w.get('[data-test="ai-instruction"]').setValue("go");
     await w.get('[data-test="ai-run"]').trigger("click");
     await flushPromises();
-    await w.findAll(".wp-ai-draft__check")[0].trigger("change");
+    await w.findAll(".wp-ai-draft__check [role='checkbox']")[0].trigger("click");
     expect(w.get('[data-test="ai-draft-add"]').text()).toBe("Add 1 option");
     await w.get('[data-test="ai-draft-add"]').trigger("click");
     expect(w.emitted("commit-options")?.[0]).toEqual([[
@@ -119,7 +119,7 @@ describe("AiDraftPanel", () => {
     await flushPromises();
     expect(w.get('[data-test="ai-draft-groups"]').text()).toContain("SHOES");
     // Untick hiking gear: its "boots" no longer goes into the group.
-    await w.findAll(".wp-ai-draft__check")[1].trigger("change");
+    await w.findAll(".wp-ai-draft__check [role='checkbox']")[1].trigger("click");
     await w.get('[data-test="ai-draft-add"]').trigger("click");
     expect(w.emitted("commit-groups")?.[0]).toEqual([[
       { name: "SHOES", kind: "accepts", tags: ["loafers"] },

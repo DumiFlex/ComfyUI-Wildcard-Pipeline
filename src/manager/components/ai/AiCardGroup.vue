@@ -14,6 +14,7 @@
  */
 import { computed, ref } from "vue";
 import Button from "../ui/Button.vue";
+import Checkbox from "../ui/Checkbox.vue";
 import type { AiChatProposal } from "../../api/types";
 import { useAiChat, type ChatAssistantEntry } from "../../composables/useAiChat";
 import { groupTitle, type CardGroup } from "../../utils/card-groups";
@@ -129,14 +130,7 @@ const STATE: Record<string, string> = {
     <ul class="wp-ai-group__rows">
       <li v-for="p in cards" :key="p.pid" class="wp-ai-group__row" :data-state="stateOf(p)" :data-open="open.has(p.pid) || undefined" data-test="ai-group-row">
         <div class="wp-ai-group__line">
-          <input
-            v-if="stateOf(p) === 'pending'"
-            type="checkbox"
-            :checked="!unticked.has(p.pid)"
-            :aria-label="`Include ${p.title}`"
-            data-test="ai-group-tick"
-            @change="tick(p.pid)"
-          />
+          <Checkbox v-if="stateOf(p) === 'pending'" class="wp-checkbox--inline" :model-value="!unticked.has(p.pid)" :aria-label="`Include ${p.title}`" data-test="ai-group-tick" @update:model-value="tick(p.pid)" />
           <i v-else :class="['pi', ICON[stateOf(p)] ?? 'pi-circle', 'wp-ai-group__state']" :title="STATE[stateOf(p)]" aria-hidden="true" />
           <button
             type="button"
@@ -188,7 +182,6 @@ const STATE: Record<string, string> = {
 .wp-ai-group__body:empty { display: none; }
 .wp-ai-group__row:first-child { border-top: 0; }
 .wp-ai-group__row[data-state="dismissed"], .wp-ai-group__row[data-state="replaced"] { opacity: 0.55; }
-.wp-ai-group__line input { flex: none; margin: 0; accent-color: var(--wp-accent-500); }
 .wp-ai-group__state { flex: none; font-size: 13px; color: var(--wp-text-muted); }
 .wp-ai-group__row[data-state="applied"] .wp-ai-group__state, .wp-ai-group__row[data-state="editor"] .wp-ai-group__state { color: var(--wp-success); }
 .wp-ai-group__row[data-state="failed"] .wp-ai-group__state { color: var(--wp-danger, var(--wp-warn)); }

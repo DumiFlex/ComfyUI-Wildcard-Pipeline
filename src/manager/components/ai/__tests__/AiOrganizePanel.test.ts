@@ -91,7 +91,7 @@ describe("AiOrganizePanel", () => {
     await flushPromises();
     await w.get('[data-test="ai-run"]').trigger("click");
     await flushPromises();
-    await w.get("#wp-ai-org-1").setValue(false);
+    await w.findAll(".wp-ai-org__check [role='checkbox']")[1].trigger("click");
     expect(w.get('[data-test="ai-apply"]').text()).toBe("Apply to 1 item");
     await w.get('[data-test="ai-instruction"]').setValue("fewer tags");
     await w.get('[data-test="ai-refine"]').trigger("click");

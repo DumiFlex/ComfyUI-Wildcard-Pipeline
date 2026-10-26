@@ -10,6 +10,7 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
+import Checkbox from "../ui/Checkbox.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
 import { useAiImages } from "../../composables/useAiImages";
 import ConstraintPreview from "../ConstraintPreview.vue";
@@ -187,8 +188,8 @@ function shown(v: string): string {
           :data-off="unticked.has(`c:${i}`) ? 'true' : 'false'"
           data-test="ai-cn-cell"
         >
-          <label class="wp-ai-cn__body" :for="`wp-ai-cn-c${i}`">
-            <input :id="`wp-ai-cn-c${i}`" type="checkbox" class="wp-ai-cn__check" :checked="!unticked.has(`c:${i}`)" @change="toggle(`c:${i}`)" />
+          <label class="wp-ai-cn__body">
+            <Checkbox class="wp-checkbox--inline wp-ai-cn__check" :model-value="!unticked.has(`c:${i}`)" @update:model-value="toggle(`c:${i}`)" />
             <span class="wp-ai-cn__tag">#{{ c.source_tag }}</span>
             <i class="pi pi-arrow-right wp-ai-cn__arrow" aria-hidden="true" />
             <span class="wp-ai-cn__tag">#{{ c.target_tag }}</span>
@@ -206,8 +207,8 @@ function shown(v: string): string {
           :data-off="unticked.has(`e:${i}`) ? 'true' : 'false'"
           data-test="ai-cn-exception"
         >
-          <label class="wp-ai-cn__body" :for="`wp-ai-cn-e${i}`">
-            <input :id="`wp-ai-cn-e${i}`" type="checkbox" class="wp-ai-cn__check" :checked="!unticked.has(`e:${i}`)" @change="toggle(`e:${i}`)" />
+          <label class="wp-ai-cn__body">
+            <Checkbox class="wp-checkbox--inline wp-ai-cn__check" :model-value="!unticked.has(`e:${i}`)" @update:model-value="toggle(`e:${i}`)" />
             <span class="wp-ai-cn__opt">{{ shown(e.exception.source) }}</span>
             <i class="pi pi-arrow-right wp-ai-cn__arrow" aria-hidden="true" />
             <span class="wp-ai-cn__opt">{{ shown(e.exception.target) }}</span>
@@ -264,7 +265,6 @@ function shown(v: string): string {
 .wp-ai-cn__row[data-mode="reduce"] { box-shadow: inset 3px 0 0 var(--wp-warn); }
 .wp-ai-cn__row[data-off="true"] { box-shadow: none; opacity: 0.5; }
 .wp-ai-cn__body { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; cursor: pointer; }
-.wp-ai-cn__check { accent-color: var(--wp-accent-500); }
 .wp-ai-cn__tag {
   font-size: 11px;
   padding: 0 7px;

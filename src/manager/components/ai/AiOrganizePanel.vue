@@ -9,6 +9,7 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
+import Checkbox from "../ui/Checkbox.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
 import { api } from "../../api/client";
 import type { AiOrganizeChange, AiOrganizeResult, ModuleUpdateInput } from "../../api/types";
@@ -264,14 +265,8 @@ function close(): void {
           :data-off="itemOn(c, i) ? 'false' : 'true'"
           data-test="ai-organize-item"
         >
-          <label class="wp-ai-org__head" :for="`wp-ai-org-${i}`">
-            <input
-              :id="`wp-ai-org-${i}`"
-              type="checkbox"
-              class="wp-ai-org__check"
-              :checked="itemOn(c, i)"
-              @change="toggleItem(c, i)"
-            />
+          <label class="wp-ai-org__head">
+            <Checkbox class="wp-checkbox--inline wp-ai-org__check" :model-value="itemOn(c, i)" @update:model-value="toggleItem(c, i)" />
             <span class="wp-ai-org__name">{{ c.name }}</span>
             <span class="wp-ai-org__type">{{ c.type.replace("_", " ") }}</span>
             <span v-if="c.reason" class="wp-ai-org__reason">{{ c.reason }}</span>
@@ -378,7 +373,7 @@ function close(): void {
 .wp-ai-org__row:first-child { border-top: 0; }
 .wp-ai-org__row[data-off="true"] { box-shadow: none; opacity: 0.5; }
 .wp-ai-org__head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; cursor: pointer; }
-.wp-ai-org__check { accent-color: var(--wp-accent-500); align-self: center; }
+.wp-ai-org__check { align-self: center; }
 .wp-ai-org__name { font-weight: 600; font-size: 13px; color: var(--wp-text); }
 .wp-ai-org__type { font-size: 11px; color: var(--wp-text-dim); }
 .wp-ai-org__reason { font-size: 12px; color: var(--wp-text-muted); }

@@ -251,7 +251,7 @@ describe("PackBuilder", () => {
     await flushPromises();
     expect(vi.mocked(api.ai.packPlan).mock.calls).toHaveLength(3);
     // Ticked on purpose, one goes once more.
-    await w.findAll('input[type="checkbox"]')[0].setValue(true);
+    await w.findAll('[data-test="pack-finding"] [role="checkbox"]')[0].trigger("click");
     await w.get('[data-test="pack-fix"]').trigger("click");
     await flushPromises();
     expect(vi.mocked(api.ai.packPlan).mock.calls).toHaveLength(4);

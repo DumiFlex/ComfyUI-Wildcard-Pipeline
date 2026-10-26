@@ -1758,6 +1758,34 @@ input, textarea, select { font: inherit; }
   font-size: 12.5px;
   color: var(--wp-text);
 }
+/* Box-only checkbox inside a row or a <label> that already gives the hit
+   target (AI result lists, file lists): no 32px min-height, so it sits on
+   the row's text line. */
+.wp-checkbox--inline { min-height: 0; flex: none; }
+
+/* ---------- Radio ----------
+   Native <input type="radio" class="wp-radio"> drawn to match .wp-check:
+   same 14px box, soft border and accent-600 fill, round. Stays a real
+   radio so name-grouping, arrow keys and v-model keep working. */
+.wp-radio {
+  appearance: none; -webkit-appearance: none;
+  width: 14px; height: 14px; margin: 0; flex-shrink: 0;
+  border: 1.5px solid var(--wp-border-soft, var(--wp-border));
+  border-radius: 50%;
+  background: var(--wp-bg);
+  display: inline-grid; place-items: center;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.wp-radio::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: #fff; /* audit-exempt: white dot on accent-600 fill ≥4.5:1 both themes */
+  transform: scale(0); transition: transform .12s;
+}
+.wp-radio:checked { background: var(--wp-accent-600); border-color: var(--wp-accent-500); }
+.wp-radio:checked::before { transform: scale(1); }
+.wp-radio:disabled { opacity: 0.45; cursor: not-allowed; }
+.wp-radio:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
 .wp-checkbox__label { color: var(--wp-text); }
 
 /* ---------- Star (favorite) ---------- */

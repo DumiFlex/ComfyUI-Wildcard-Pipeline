@@ -135,8 +135,7 @@ describe("PackBuilder on a graph plan", () => {
     await flushPromises();
     // In a sweep run the slot editor offers the sweep-axis box.
     await w.findAll("[data-test='pack-item-open']")[1].trigger("click");
-    const box = w.get("[data-test='pack-slot-sweep']");
-    await box.setValue(true);
+    await w.get("[data-test='pack-slot-sweep'] [role='checkbox']").trigger("click");
     expect(pb.draft.value?.graph?.slots[1].sweep).toBe(true);
     expect(pb.draft.value?.graph?.slots[1].hold).toBe(false);
   });

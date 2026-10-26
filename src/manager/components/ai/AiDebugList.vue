@@ -6,6 +6,7 @@
  * JSON. Loaded only while the log is on.
  */
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import Button from "../ui/Button.vue";
 import {
   aiDebugSent, aiDebugUnseen, clearAiDebug, fetchAiDebug, listAiDebug, type AiDebugRow,
 } from "../../api/ai-debug";
@@ -128,20 +129,18 @@ watch(() => aiDebugSent.value.length, () => {
           </span>
         </div>
         <div class="wp-ai-debug__actions">
-          <button
-            type="button"
-            class="wp-ai-debug__btn"
+          <Button
+            variant="outline" size="sm"
             :disabled="busy === r.id + 'md'"
             data-test="ai-debug-copy"
             @click="copy(r, 'md')"
-          >{{ copied?.id === r.id && copied.what === "md" ? "Copied" : "Copy debug" }}</button>
-          <button
-            type="button"
-            class="wp-ai-debug__btn wp-ai-debug__btn--quiet"
+          >{{ copied?.id === r.id && copied.what === "md" ? "Copied" : "Copy debug" }}</Button>
+          <Button
+            size="sm"
             :disabled="busy === r.id + 'json'"
             data-test="ai-debug-copy-json"
             @click="copy(r, 'json')"
-          >{{ copied?.id === r.id && copied.what === "json" ? "Copied" : "JSON" }}</button>
+          >{{ copied?.id === r.id && copied.what === "json" ? "Copied" : "JSON" }}</Button>
         </div>
       </li>
     </ul>
@@ -190,13 +189,7 @@ watch(() => aiDebugSent.value.length, () => {
 .wp-ai-debug__meta { font-size: 11px; color: var(--wp-text-muted); font-variant-numeric: tabular-nums; }
 .wp-ai-debug__err { font-size: 11px; color: var(--wp-danger-text); overflow-wrap: anywhere; }
 .wp-ai-debug__actions { display: flex; gap: 4px; flex-shrink: 0; }
-.wp-ai-debug__btn {
-  font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 6px; cursor: pointer;
-  border: 1px solid var(--wp-accent); background: transparent; color: var(--wp-accent-text);
-}
-.wp-ai-debug__btn--quiet { border-color: var(--wp-border-strong); color: var(--wp-text-muted); }
-.wp-ai-debug__btn:disabled { opacity: 0.5; cursor: progress; }
-.wp-ai-debug__btn:focus-visible, .wp-ai-debug__link:focus-visible, .wp-ai-debug__close:focus-visible {
+.wp-ai-debug__link:focus-visible, .wp-ai-debug__close:focus-visible {
   outline: 2px solid var(--wp-accent); outline-offset: 1px;
 }
 </style>

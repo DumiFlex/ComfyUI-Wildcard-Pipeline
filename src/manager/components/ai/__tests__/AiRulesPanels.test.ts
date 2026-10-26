@@ -88,7 +88,7 @@ describe("AiDerivationPanel", () => {
     expect(w.get('[data-test="ai-rule-warning"]').text()).toContain("$weapon");
     expect(w.text()).toContain('set $title to "Archmage"');
     expect(lastPending(w)).toBe(true);
-    await w.findAll('[data-test="ai-rule"] input')[1].trigger("change");
+    await w.findAll('[data-test="ai-rule"] [role="checkbox"]')[1].trigger("click");
     expect(w.get('[data-test="ai-apply"]').text()).toBe("Add 1 rule");
     await w.get('[data-test="ai-apply"]').trigger("click");
     expect(w.emitted("add")?.[0]).toEqual([[RULE]]);
@@ -140,7 +140,7 @@ describe("AiConstraintPanel", () => {
     expect(w.get('[data-test="ai-cn-cell"]').text()).toContain("Exclude");
     expect(w.get('[data-test="ai-cn-cell"]').text()).toContain("replaces");
     expect(w.findAll('[data-test="ai-cn-exception"]')[0].text()).toContain("Boost ×3");
-    await w.findAll('[data-test="ai-cn-exception"] input')[1].trigger("change");
+    await w.findAll('[data-test="ai-cn-exception"] [role="checkbox"]')[1].trigger("click");
     await w.get('[data-test="ai-apply"]').trigger("click");
     expect(w.emitted("apply")?.[0]).toEqual([[cell], [exc]]);
   });
@@ -174,7 +174,7 @@ describe("follow-ups", () => {
     expect((w.get('[data-test="ai-instruction"]').element as HTMLTextAreaElement).value).toBe("");
     expect(w.findAll('[data-test="ai-asked"]').map((x) => x.text())).toEqual(["mages get a title"]);
     expect(w.get('[data-test="ai-refine"]').attributes("disabled")).toBeDefined();
-    await w.findAll('[data-test="ai-rule"] input[type="checkbox"]')[1].setValue(false);
+    await w.findAll('[data-test="ai-rule"] [role="checkbox"]')[1].trigger("click");
     await w.get('[data-test="ai-instruction"]').setValue("shorter titles");
     await w.get('[data-test="ai-refine"]').trigger("click");
     await flushPromises();

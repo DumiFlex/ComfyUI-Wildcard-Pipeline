@@ -8,6 +8,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import type { BundleRow, ModuleRow, ScenarioStackItem } from "../../api/types";
 import { moduleBinding, searchText, type StackKind } from "../../utils/scenario";
 import { KIND_META } from "./kinds";
+import Select from "../ui/Select.vue";
 
 const props = defineProps<{
   modules: ModuleRow[];
@@ -31,6 +32,10 @@ const KINDS: StackKind[] = ["wildcard", "combine", "derivation", "constraint", "
 const query = ref("");
 const kind = ref<StackKind | "all">("all");
 const sort = ref<Sort>("updated");
+function setSort(v: string | number | null): void {
+  const hit = SORTS.find((o) => o.value === v);
+  if (hit) sort.value = hit.value;
+}
 const active = ref(0);
 const root = ref<HTMLElement | null>(null);
 const input = ref<HTMLInputElement | null>(null);
@@ -77,7 +82,14 @@ function pick(e: Entry): void {
   emit("pick", e.kind === "bundle" ? { bundle: e.id } : { module: e.id });
 }
 
+/** The sort dropdown (its trigger here, its menu teleported to the body)
+ *  owns its own keys and clicks; they must not move or close the picker. */
+function inSortSelect(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(".wp-select-wrap, .wp-select__menu") !== null;
+}
+
 function onKey(ev: KeyboardEvent): void {
+  if (inSortSelect(ev.target)) return;
   if (ev.key === "Escape") { ev.preventDefault(); emit("close"); return; }
   if (ev.key === "ArrowDown") { ev.preventDefault(); active.value = Math.min(results.value.length - 1, active.value + 1); }
   if (ev.key === "ArrowUp") { ev.preventDefault(); active.value = Math.max(0, active.value - 1); }
@@ -89,6 +101,7 @@ function onKey(ev: KeyboardEvent): void {
 }
 
 function onDocDown(ev: MouseEvent): void {
+  if (inSortSelect(ev.target)) return;
   if (root.value && !root.value.contains(ev.target as Node)) emit("close");
 }
 
@@ -126,11 +139,12 @@ onBeforeUnmount(() => document.removeEventListener("mousedown", onDocDown));
     </div>
     <div class="wp-trp__bar">
       <span>{{ results.length }} {{ results.length === 1 ? "match" : "matches" }}</span>
-      <label class="wp-trp__sort">Sort
-        <select v-model="sort" aria-label="Sort" data-test="picker-sort">
-          <option v-for="s in SORTS" :key="s.value" :value="s.value">{{ s.label }}</option>
-        </select>
-      </label>
+      <span class="wp-trp__sort">Sort
+        <Select
+          :model-value="sort" :options="SORTS" :filterable="false" size="sm"
+          aria-label="Sort" data-test="picker-sort" @update:model-value="setSort"
+        />
+      </span>
     </div>
     <ul class="wp-trp__list" role="listbox" aria-label="Results">
       <li
