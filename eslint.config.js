@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 // A label may wrap its control (`<label><input/></label>`) or point at it
 // with `for=`. The shared ui/Checkbox renders a <button role="checkbox">,
 // which a wrapping <label> activates like an input, so it counts as one.
-const LABEL_HAS_FOR = { required: { some: ["nesting", "id"] }, controlComponents: ["Checkbox"] };
+const LABEL_HAS_FOR = { required: { some: ["nesting", "id"] }, controlComponents: ["Checkbox", "WpSelect", "WpNumber"] };
 
 // The ratchet: these rules are errors everywhere except the files listed in
 // eslint-baseline.json, which still break them (scripts/lint-baseline.mjs

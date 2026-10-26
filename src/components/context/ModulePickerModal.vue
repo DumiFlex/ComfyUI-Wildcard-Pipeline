@@ -111,16 +111,14 @@
             <div v-if="filtersOpen" class="wp-picker__pop" data-testid="picker-filter-pop">
               <div v-if="usedCategories.length" class="wp-picker__pop-section">
                 <div class="wp-picker__pop-label">CATEGORY</div>
-                <select
+                <WpSelect
                   class="wp-picker__filter-cat-select"
-                  :value="selectedCategoryId ?? ''"
+                  :model-value="selectedCategoryId ?? ''"
+                  :options="[{ value: '', label: 'All categories' }, ...usedCategories.map((c) => ({ value: c.id, label: c.name }))]"
                   aria-label="Filter by category"
                   data-testid="picker-filter-category"
-                  @change="selectedCategoryId = ($event.target as HTMLSelectElement).value || null"
-                >
-                  <option value="">All categories</option>
-                  <option v-for="c in usedCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
-                </select>
+                  @update:model-value="(v) => selectedCategoryId = String(v) || null"
+                />
               </div>
 
               <div v-if="availableTags.length" class="wp-picker__pop-section">
@@ -377,6 +375,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
+import WpSelect from "../shared/WpSelect.vue";
 import { kindIcon } from "../shared/kind-icons";
 
 interface PickerModule {
@@ -1734,29 +1733,5 @@ onBeforeUnmount(detachCaptureListeners);
 
 /* Category dropdown — same chrome as before but full-width inside
  * the popover panel. Hide native browser arrow + draw our own. */
-.wp-picker__filter-cat-select {
-  width: 100%;
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text);
-  font-family: var(--wp-font-sans, sans-serif);
-  font-size: 11px;
-  padding: 5px 22px 5px 8px;
-  cursor: pointer;
-  outline: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
-                    linear-gradient(135deg, currentColor 50%, transparent 50%);
-  background-position: calc(100% - 12px) 50%, calc(100% - 7px) 50%;
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-}
-.wp-picker__filter-cat-select:focus { border-color: var(--wp-accent); }
-.wp-picker__filter-cat-select option {
-  background: var(--wp-bg2);
-  color: var(--wp-text);
-}
+.wp-picker__filter-cat-select { width: 100%; height: 26px; }
 </style>

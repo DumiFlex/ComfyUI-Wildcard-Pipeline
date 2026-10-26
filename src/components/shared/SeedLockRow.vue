@@ -2,6 +2,8 @@
 /** One per-iteration row in SeedListModal — a per-row mirror of the
  *  module SeedLockControls. Unlocked shows the derived seed; locking
  *  captures it; locked exposes a seed input + ±spinners + roll. */
+import WpNumber from "./WpNumber.vue";
+
 const props = defineProps<{
   index: number;       // 0-based
   derived: number;     // computed seed for this index (preview when unlocked)
@@ -38,13 +40,8 @@ function onLock() { set(props.locked ? null : props.derived); }
 /** Fill + lock the seed this frame used on the previous run. No-op (button is
  *  disabled) when there's no captured previous for this frame. */
 function lockPrevious() { if (props.previous != null) set(props.previous); }
-function onInput(ev: Event) {
-  const n = Number((ev.target as HTMLInputElement).value.trim());
-  if (Number.isFinite(n) && Number.isInteger(n)) set(n);
-}
-function bump(d: 1 | -1) {
-  if (!props.locked || props.seed == null) return;
-  set(Math.max(0, Math.min(SEED_MAX, props.seed + d)));
+function onSeed(n: number) {
+  if (Number.isInteger(n)) set(n);
 }
 </script>
 
@@ -83,16 +80,10 @@ function bump(d: 1 | -1) {
       <span class="derived__tag">derived</span>
     </span>
     <span v-else class="seed-controls">
-      <span class="seed-input-wrap">
-        <input class="seed-input" data-test="seedrow-input" type="number" step="1"
-          :value="seed ?? ''" aria-label="Locked seed" @input="onInput" />
-        <span class="seed-spin">
-          <button type="button" class="seed-spin-btn" tabindex="-1" aria-label="Increase" @click="bump(1)">
-            <svg width="6" height="4" viewBox="0 0 8 5"><path d="M0 5 L4 0 L8 5 Z" fill="currentColor" /></svg></button>
-          <button type="button" class="seed-spin-btn" tabindex="-1" aria-label="Decrease" @click="bump(-1)">
-            <svg width="6" height="4" viewBox="0 0 8 5"><path d="M0 0 L4 5 L8 0 Z" fill="currentColor" /></svg></button>
-        </span>
-      </span>
+      <WpNumber
+        class="seed-input-wrap" :model-value="seed" :min="0" :max="SEED_MAX" commit="input"
+        aria-label="Locked seed" data-test="seedrow-input" @update:model-value="onSeed"
+      />
       <button type="button" class="seed-roll" data-test="seedrow-roll" title="Random seed"
         aria-label="Random seed" @click="set(randomSeed())">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5" /></svg>
@@ -150,15 +141,7 @@ function bump(d: 1 | -1) {
  * below its content, and the input wrap now treats 178px as a max rather than
  * a fixed size. */
 .seed-controls { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; }
-.seed-input-wrap { display: inline-flex; align-items: stretch; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: 3px; height: 24px; flex: 1 1 auto; min-width: 88px; max-width: 178px; overflow: hidden; }
-.seed-input-wrap:focus-within { border-color: var(--wp-accent); }
-.seed-input { flex: 1; background: transparent; border: 0; padding: 0 7px; font: 11px var(--wp-font-mono, monospace); color: var(--wp-text); text-align: right; min-width: 0; -moz-appearance: textfield; }
-.seed-input::-webkit-outer-spin-button, .seed-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.seed-input:focus { outline: none; }
-.seed-spin { display: flex; flex-direction: column; width: 14px; flex-shrink: 0; border-left: 1px solid var(--wp-border); background: rgba(99,102,241,.04); }
-.seed-spin-btn { flex: 1; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; padding: 0; color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; line-height: 0; }
-.seed-spin-btn + .seed-spin-btn { border-top: 1px solid var(--wp-border); }
-.seed-spin-btn:hover { color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.12); }
+.seed-input-wrap { flex: 1 1 auto; min-width: 88px; max-width: 178px; }
 .seed-roll { background: transparent; border: 0; color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; padding: 2px 4px; display: flex; flex-shrink: 0; }
 .seed-roll:hover { color: var(--wp-accent-text, var(--wp-text)); }
 </style>
