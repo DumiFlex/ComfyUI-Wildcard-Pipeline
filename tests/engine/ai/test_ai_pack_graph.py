@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import json
 
 import pytest
 
@@ -1447,6 +1448,48 @@ def test_an_empty_otherwise_on_the_quality_rule_gets_the_pack_words():
     rule = out["payload"]["rules"][0]
     assert rule["else"]["action"]["value"]
     assert any("Added an otherwise" in w for w in out["warnings"])
+
+
+def test_two_quality_rules_join_into_one_so_pony_keeps_its_tags():
+    """9B pack 11 (2026-10-26): "if pony … else …" then "if illustrious …
+    else high quality": the second otherwise always wrote over Pony's row."""
+    from engine.modules.derivation_handler import DerivationHandler
+
+    plan = pack.compile_graph_plan(_graph(model="Pony, Flux"))
+    q = next(i for i in plan["items"] if i["var"] == "quality")
+
+    def cond(v):
+        return {"var": "model_variant", "op": "equals", "value": v}
+
+    def act(v):
+        return [{"target_var": "quality", "mode": "replace", "value": v}]
+    answer = {"rules": [
+        {"branches": [{"conditions": [cond("pony")], "actions": act("score_9, score_8_up")}],
+         "else_actions": act("masterpiece, best quality")},
+        {"branches": [{"conditions": [cond("illustrious")], "actions": act("very aesthetic")}],
+         "else_actions": act("high quality")}]}
+    out = pack.compile_item(plan, q["key"], {}, answer)
+    rules = out["payload"]["rules"]
+    assert len(rules) == 1 and len(rules[0]["branches"]) == 2
+    assert rules[0]["else"]["action"]["value"] == "masterpiece, best quality"
+    assert "pony" in json.dumps(rules[0]["branches"][0])
+    DerivationHandler.validate_payload(out["payload"])
+
+
+def test_pony_tags_come_out_of_slot_options_on_a_two_family_pack():
+    g = pack.compile_graph_plan(_graph(model="Pony, Flux"))["graph"]
+    slot = g["slots"][0]
+    axes = {a["name"]: a["values"][:1] for a in slot["axes"]}
+    out = pg.compile_slot(g, slot, {"options": [
+        {"text": "score_9, score_8_up, source_cartoon, rating_safe, knight", "weight": 1,
+         "negative": "score_6, worst quality", "tags": axes},
+        {"text": "score_9", "weight": 1, "negative": "", "tags": axes},
+        {"text": "mage", "weight": 1, "negative": "", "tags": axes}]})
+    values = [(o["value"], o.get("negative")) for o in out["payload"]["options"]
+              if not o.get("is_null")]
+    assert ("knight", "worst quality") in values
+    assert not any("score_" in v for v, _ in values)
+    assert any("Took Pony's score tags out of 2 option" in w for w in out["warnings"])
 
 
 def test_score_tags_stay_on_the_pony_row_of_the_quality_rule():

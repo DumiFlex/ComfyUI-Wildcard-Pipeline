@@ -1355,6 +1355,14 @@ _MODEL_SLOT_VARS = frozenset({"model_family", "model_variant", "model_name", "mo
 #: Tags only Pony reads (score, source and rating tags).
 PONY_ONLY = re.compile(r"(?<![\w-])(?:score_\d(?:_up)?|source_(?:anime|cartoon|furry|pony|"
                        r"realistic)|rating_(?:safe|questionable|explicit))(?![\w-])", re.I)
+def _unpony(text: str) -> tuple[str, int]:
+    """``text`` without Pony-only tags, and how many went."""
+    if not text or not PONY_ONLY.search(text):
+        return text, 0
+    n = len(PONY_ONLY.findall(text))
+    return ", ".join(t.strip() for t in PONY_ONLY.sub("", text).split(",") if t.strip()), n
+
+
 #: Families whose row of the quality rule the code names (pony,
 #: illustrious or noobai); any other family gets the rule's otherwise.
 _TAG_QUALITY_FAMILIES = frozenset({"pony", "illustrious", "noobai"})
@@ -2314,12 +2322,28 @@ def compile_slot(
             f"; {s['text'][:40]}: {s['reason']}" for s in compiled["skipped"][:3]))
     taken: set[str] = {o["id"] for o in kept}
     rows: list[dict[str, Any]] = []
+    fams = model_families(graph)
+    off_pony = bool(fams) and fams != ["pony"]
+    unponied = 0
     for o in options:
-        row: dict[str, Any] = {"id": ai_wildcard.new_option_id(taken), "value": o["value"],
+        value, negative = o["value"], o["negative"]
+        if off_pony:
+            # Score, source and rating tags in a slot's options print on
+            # every model; the quality rule gives them to Pony (9B pack 11,
+            # 2026-10-26: every Type option began "score_9, …, rating_safe").
+            value, n = _unpony(value)
+            negative, m = _unpony(negative)
+            unponied += bool(n or m)
+            if not value:
+                continue
+        row: dict[str, Any] = {"id": ai_wildcard.new_option_id(taken), "value": value,
                                "weight": o["weight"], "sub_categories": o["tags"]}
-        if o["negative"]:
-            row["negative"] = o["negative"]
+        if negative:
+            row["negative"] = negative
         rows.append(row)
+    if unponied:
+        warnings.append(f"Took Pony's score tags out of {unponied} option(s): the quality rule "
+                        "gives them to Pony only")
     rows, scoped = scope_notes(rows, others or {})
     warnings += scoped
     if not rows and not kept:

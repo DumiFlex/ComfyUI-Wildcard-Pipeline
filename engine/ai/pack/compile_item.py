@@ -57,6 +57,40 @@ from engine.modules.derivation_handler import DerivationHandler, clause_actions
 from engine.modules.wildcard_handler import WildcardHandler
 
 
+def _quality_one_rule(plan: dict[str, Any], item: dict[str, Any], payload: dict[str, Any]
+                      ) -> tuple[dict[str, Any], list[str]]:
+    """The per-family quality rule as ONE if/elif/else. Written as two rules
+    ("if pony … else …", then "if illustrious … else …"), the second always
+    runs, so its otherwise wrote over Pony's score tags (9B pack 11,
+    2026-10-26). The branches join in order and the first otherwise that
+    writes something stays."""
+    graph = plan.get("graph")
+    rules = [r for r in payload.get("rules") or [] if isinstance(r, dict)]
+    if not isinstance(graph, dict) or item.get("var") != pack_graph.QUALITY_VAR \
+            or len(rules) < 2:
+        return payload, []
+    clauses = [c for r in rules for c in [*(r.get("branches") or []), r.get("else")]
+               if isinstance(c, dict)]
+    if any(a.get("target_var") != item["var"] for c in clauses for a in clause_actions(c)):
+        return payload, []
+    branches: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for r in rules:
+        for b in r.get("branches") or []:
+            key = json.dumps(b, sort_keys=True)
+            if isinstance(b, dict) and key not in seen:
+                seen.add(key)
+                branches.append(b)
+    otherwise = next((r["else"] for r in rules if isinstance(r.get("else"), dict) and any(
+        str(a.get("value") or "").strip() for a in clause_actions(r["else"]))), None)
+    one = {**{k: v for k, v in rules[0].items() if k != "else"}, "branches": branches}
+    if otherwise is not None:
+        one["else"] = otherwise
+    return ({**payload, "rules": [one]},
+            ["Joined the quality rules into one: a second rule's otherwise wrote over the "
+             "first rule's Pony row"])
+
+
 def _quality_otherwise(plan: dict[str, Any], item: dict[str, Any], payload: dict[str, Any]
                        ) -> tuple[dict[str, Any], list[str]]:
     """The per-family quality rule the code wires gets an "otherwise": the
@@ -215,6 +249,8 @@ def compile_item(
                 seen_rules.add(same)
                 rules.append(r["rule"])
         payload = {"rules": rules}
+        payload, said = _quality_one_rule(plan, item, payload)
+        warnings += said
         payload, said = _quality_otherwise(plan, item, payload)
         warnings += said
         payload, said = _quality_off_pony(plan, item, payload)
