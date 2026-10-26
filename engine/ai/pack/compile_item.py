@@ -1,6 +1,7 @@
 """Pack builder: `compile_item` turns one model answer into a checked payload."""
 from __future__ import annotations
 
+import copy
 import json
 import re
 from typing import Any
@@ -52,8 +53,42 @@ from engine.ai.pack.text_fixes import (
     _wrap_pipes,
 )
 from engine.modules.constraint_handler import ConstraintHandler
-from engine.modules.derivation_handler import DerivationHandler
+from engine.modules.derivation_handler import DerivationHandler, clause_actions
 from engine.modules.wildcard_handler import WildcardHandler
+
+
+def _quality_one_rule(plan: dict[str, Any], item: dict[str, Any], payload: dict[str, Any]
+                      ) -> tuple[dict[str, Any], list[str]]:
+    """The per-family quality rule as ONE if/elif/else. Written as two rules
+    ("if pony … else …", then "if illustrious … else …"), the second always
+    runs, so its otherwise wrote over Pony's score tags (9B pack 11,
+    2026-10-26). The branches join in order and the first otherwise that
+    writes something stays."""
+    graph = plan.get("graph")
+    rules = [r for r in payload.get("rules") or [] if isinstance(r, dict)]
+    if not isinstance(graph, dict) or item.get("var") != pack_graph.QUALITY_VAR \
+            or len(rules) < 2:
+        return payload, []
+    clauses = [c for r in rules for c in [*(r.get("branches") or []), r.get("else")]
+               if isinstance(c, dict)]
+    if any(a.get("target_var") != item["var"] for c in clauses for a in clause_actions(c)):
+        return payload, []
+    branches: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for r in rules:
+        for b in r.get("branches") or []:
+            key = json.dumps(b, sort_keys=True)
+            if isinstance(b, dict) and key not in seen:
+                seen.add(key)
+                branches.append(b)
+    otherwise = next((r["else"] for r in rules if isinstance(r.get("else"), dict) and any(
+        str(a.get("value") or "").strip() for a in clause_actions(r["else"]))), None)
+    one = {**{k: v for k, v in rules[0].items() if k != "else"}, "branches": branches}
+    if otherwise is not None:
+        one["else"] = otherwise
+    return ({**payload, "rules": [one]},
+            ["Joined the quality rules into one: a second rule's otherwise wrote over the "
+             "first rule's Pony row"])
 
 
 def _quality_otherwise(plan: dict[str, Any], item: dict[str, Any], payload: dict[str, Any]
@@ -67,8 +102,14 @@ def _quality_otherwise(plan: dict[str, Any], item: dict[str, Any], payload: dict
     if not isinstance(graph, dict) or item.get("var") != pack_graph.QUALITY_VAR:
         return payload, []
     rules = payload.get("rules") or []
-    if not rules or any(isinstance(r, dict) and r.get("else") for r in rules):
+    if not rules or any(isinstance(r, dict) and isinstance(r.get("else"), dict) and any(
+            str(a.get("value") or "").strip() for a in clause_actions(r["else"]))
+            for r in rules):
         return payload, []
+    # An otherwise that writes nothing (9B pack 11, 2026-10-26: ELSE → "")
+    # is no otherwise: the other models got no quality words.
+    rules = [{k: v for k, v in r.items() if k != "else"} if isinstance(r, dict) else r
+             for r in rules]
     words = graph.get("quality_words") or (
         "masterpiece, best quality" if graph.get("style") == "tags"
         else "high quality, detailed")
@@ -77,6 +118,48 @@ def _quality_otherwise(plan: dict[str, Any], item: dict[str, Any], payload: dict
     return ({**payload, "rules": [first, *rules[1:]]},
             [f"Added an otherwise, \"{words}\": with no model variable set, $quality still "
              "has the pack's quality words"])
+
+
+_PONY_ONLY = pack_graph.PONY_ONLY
+
+
+def _quality_off_pony(plan: dict[str, Any], item: dict[str, Any], payload: dict[str, Any]
+                      ) -> tuple[dict[str, Any], list[str]]:
+    """Score tags only where the per-family quality rule tests for Pony.
+    The 9B wrote "score_9, score_8_up, score_7_up" as the otherwise of a
+    Pony and Flux pack (2026-10-26), so every Flux run printed Pony's
+    score tags."""
+    graph = plan.get("graph")
+    if not isinstance(graph, dict) or item.get("var") != pack_graph.QUALITY_VAR:
+        return payload, []
+    if set(pack_graph.model_families(graph)) == {"pony"}:
+        return payload, []
+    default = ("masterpiece, best quality" if graph.get("style") == "tags"
+               else "high quality, detailed")
+    fixed = 0
+    rules = copy.deepcopy(payload.get("rules") or [])
+    for rule in rules:
+        if not isinstance(rule, dict):
+            continue
+        clauses = [b for b in rule.get("branches") or [] if isinstance(b, dict)
+                   and "pony" not in json.dumps(
+                       {k: v for k, v in b.items() if k not in ("action", "extra_actions")}
+                   ).lower()]
+        clauses += [rule["else"]] if isinstance(rule.get("else"), dict) else []
+        for clause in clauses:
+            for action in clause_actions(clause):
+                value = action.get("value")
+                if not isinstance(value, str) or not _PONY_ONLY.search(value):
+                    continue
+                kept = ", ".join(t.strip() for t in _PONY_ONLY.sub("", value).split(",")
+                                 if t.strip())
+                action["value"] = kept or default
+                fixed += 1
+    if not fixed:
+        return payload, []
+    return ({**payload, "rules": rules},
+            ["Took Pony's score tags out of the rows that aren't for Pony: other models "
+             "would print them"])
 
 
 def compile_item(
@@ -166,7 +249,11 @@ def compile_item(
                 seen_rules.add(same)
                 rules.append(r["rule"])
         payload = {"rules": rules}
+        payload, said = _quality_one_rule(plan, item, payload)
+        warnings += said
         payload, said = _quality_otherwise(plan, item, payload)
+        warnings += said
+        payload, said = _quality_off_pony(plan, item, payload)
         warnings += said
         from engine.ai import pack_tidy
         payload, joined = pack_tidy.merge_lookup(payload)

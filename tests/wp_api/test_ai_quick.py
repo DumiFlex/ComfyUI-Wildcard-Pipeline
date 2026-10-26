@@ -306,3 +306,30 @@ async def test_a_template_asks_once_more_for_a_variable_the_request_names(wp_cli
     await wp_client.post("/wp/api/ai/text/draft", json=body)
     asks = [s for s in fake_llm.seen if "response_format" in s["body"]]
     assert len(asks) == 2 and "Read $sky too" in json.dumps(asks[1]["body"]["messages"])
+
+
+async def test_fixed_values_send_a_short_catalog(wp_client, fake_llm, monkeypatch):
+    from engine.ai import config as ai_config
+    from engine.ai import library_vars, text_items
+
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    seen = []
+    real = library_vars.describe_for
+
+    def spy(catalog, request, **kw):
+        seen.append(kw)
+        return real(catalog, request, **kw)
+
+    monkeypatch.setattr(library_vars, "describe_for", spy)
+    fake_llm.overrides["fixed_values"] = {"values": [
+        {"name": "room", "value": "bedroom", "negative": ""}]}
+    await wp_client.post("/wp/api/ai/text/draft",
+                         json=_text_body("fixed_values", "$room is bedroom"))
+    fake_llm.overrides["prompt_template"] = {"template": "$room", "negative": ""}
+    await wp_client.post("/wp/api/ai/text/draft", json=_text_body("template", "a room"))
+    # Fixed values read no variable: a few for the style, the rest by name.
+    assert seen == [{"keep": text_items.FIXED_CATALOG_VARS,
+                     "values": text_items.FIXED_CATALOG_VALUES},
+                    {"keep": library_vars.MAX_VARS_FOCUSED,
+                     "values": library_vars.MAX_VALUES_SHOWN}]

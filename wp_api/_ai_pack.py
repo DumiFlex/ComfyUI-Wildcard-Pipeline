@@ -18,6 +18,8 @@ from engine.ai import pack_tidy
 from engine.ai import patterns as ai_patterns
 from engine.ai import safety as ai_safety
 from engine.ai import vocab as ai_vocab
+from engine.ai import wildcard as ai_wildcard
+from engine.ai.pack import recommend as pack_recommend
 from engine.db.repositories import (
     BundleRepository,
     ModuleRepository,
@@ -351,6 +353,21 @@ async def post_pack_search(request: web.Request) -> web.Response:
             results.append({"query": q, "text": f"web_search: error: {e.message}", "rows": [],
                             "error": e.message})
     return json_ok({"results": results})
+
+
+async def post_pack_recommend(request: web.Request) -> web.Response:
+    """Body: {request, suggested?}. The pack settings the request, the
+    assistant's model and the chat's suggestion (``suggested``, from a plan
+    card) point to: ``{settings, reasons}``. No model call."""
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+    text = body.get("request")
+    text = text[:ai_wildcard.MAX_INSTRUCTION_LEN] if isinstance(text, str) else ""
+    return json_ok(pack_recommend.recommend(text, cfg, body.get("suggested")))
 
 
 async def post_pack_change(request: web.Request) -> web.Response:

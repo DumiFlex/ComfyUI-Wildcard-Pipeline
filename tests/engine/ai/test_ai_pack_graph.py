@@ -1,6 +1,9 @@
 """engine/ai/pack/graph.py — the pack graph, its compiler and the wiring."""
 from __future__ import annotations
 
+import copy
+import json
+
 import pytest
 
 from engine.ai import pack
@@ -313,6 +316,41 @@ async def test_run_pack_on_the_graph_planner():
 
 
 # --- phase 3: fill calls, the scope check and relations verified on runs ----
+
+def test_a_rule_word_no_fill_wrote_becomes_an_option():
+    """9B pack 15 (2026-10-26): casual outfits only got sneakers, but the
+    Shoe options were heels, oxfords and loafers, fill or not."""
+    def slot(name, var):
+        return {"name": name, "var": var, "what": "x", "section": "", "count": 3,
+                "show": "prompt", "pick": "", "hold": False, "sometimes_none": 0,
+                "axes": [{"name": "formality", "values": ["casual", "formal"]}]}
+
+    rel = {"kind": "only", "from_slot": "Outfit", "from_axis": "formality",
+           "from_value": "casual", "to_slot": "Shoe", "to_axis": "formality",
+           "to_value": "casual", "words": ["sneakers"]}
+    g = pack.compile_graph_plan(_graph(
+        slots=[slot("Outfit", "outfit"), slot("Shoe", "shoe")], fixed=[], relations=[rel],
+        model="", anchor="", template={"lead": "", "order": ["Outfit", "Shoe"], "tail": "",
+                                       "negative": ""}))["graph"]
+    shoe = pg.slot_by_var(g, "shoe")
+
+    def opts(*rows):
+        return [{"text": t, "weight": 1, "negative": "", "tags": {"formality": [v]}}
+                for t, v in rows]
+
+    first = pg.compile_slot(g, shoe, {"options": opts(("heels", "formal"),
+                                                      ("loafers", "casual"))})
+    assert "No option mentions sneakers tagged casual on formality" in first["warnings"]
+    out = pg.compile_slot(g, shoe, {"add": opts(("brogues", "formal"))},
+                          existing=first["payload"])
+    rows = {o["value"]: o["sub_categories"] for o in out["payload"]["options"]
+            if not o.get("is_null")}
+    assert rows["sneakers"] == ["casual"]
+    assert "Added sneakers [casual] as options" in " ".join(out["warnings"])
+    assert not any(w.startswith("No option mentions") for w in out["warnings"])
+    # A first answer is not a fill: the fill call asks first.
+    assert "sneakers" not in {o["value"] for o in first["payload"]["options"]}
+
 
 def test_fill_call_adds_options_for_the_missing_axis_values():
     plan = _plan()
@@ -1245,6 +1283,232 @@ def test_two_slots_split_by_their_own_axis_become_one():
         fixed=[], relations=[], template={"lead": "", "order": [], "tail": "",
                                           "negative": ""}, anchor=""))
     assert [s["var"] for s in g["slots"]] == ["top", "trousers"]
+
+
+def test_a_folded_slot_named_like_its_axis_keeps_real_options():
+    """9B pack 15: Casual Outfit [outfit: casual] and Formal Outfit [outfit:
+    formal] folded into Outfit with an outfit axis, which made it a self
+    axis: the code wrote "casual" and "formal" as the outfits."""
+    def slot(name, var, values):
+        return {"name": name, "var": var, "what": name.lower(), "section": "", "count": 4,
+                "show": "prompt", "pick": "", "hold": False, "sometimes_none": 0,
+                "axes": [{"name": "outfit", "values": values}]}
+
+    g = pack.compile_graph(_graph(
+        slots=[slot("Casual Outfit", "casual_outfit", ["casual"]),
+               slot("Formal Outfit", "formal_outfit", ["formal"])],
+        fixed=[], relations=[], template={"lead": "", "order": ["Casual Outfit"], "tail": "",
+                                          "negative": ""}, anchor=""))
+    outfit = pg.slot_by_var(g, "outfit")
+    assert outfit is not None and outfit["self_axis"] == "" and outfit["folded"]
+    # The browser sends the graph back: it stays folded, not a self axis.
+    again = pack.compile_graph(copy.deepcopy(g))
+    assert pg.slot_by_var(again, "outfit")["self_axis"] == ""
+    # An Outfit slot the model wrote that way itself is still its own axis.
+    g = pack.compile_graph(_graph(
+        slots=[slot("Outfit", "outfit", ["casual", "formal"])], fixed=[], relations=[],
+        template={"lead": "", "order": ["Outfit"], "tail": "", "negative": ""}, anchor=""))
+    assert pg.slot_by_var(g, "outfit")["self_axis"] == "outfit"
+
+
+def test_a_slot_rolling_the_image_model_goes_and_per_family_slots_with_it():
+    """9B pack 11 (2026-10-26): an internal pick-2 Model Family slot no rule
+    read, plus Pony Quality Tags and Flux Quality Phrases printed in every
+    prompt whatever the checkpoint."""
+    def slot(name, var, what, show="prompt", axes=()):
+        return {"name": name, "var": var, "what": what, "section": "", "count": 4,
+                "show": show, "pick": "", "hold": False, "sometimes_none": 0,
+                "axes": list(axes)}
+
+    slots = [slot("Model Family", "model_family", "Pony, Flux", show="internal"),
+             slot("Subject", "subject", "who"),
+             slot("Pony Quality Tags", "pony_quality", "score tags"),
+             slot("Flux Quality Phrases", "flux_quality", "photo words")]
+    plan = pack.compile_graph_plan(_graph(
+        slots=slots, fixed=[], relations=[], model="", anchor="model_family",
+        template={"lead": "", "order": ["Subject", "Pony Quality Tags", "Flux Quality Phrases"],
+                  "tail": "", "negative": ""}))
+    g = plan["graph"]
+    assert [s["var"] for s in g["slots"]] == ["subject"]
+    assert pg.model_families(g) == ["pony", "flux"] and g["anchor"] == "subject"
+    assert any("the checkpoint decides the model" in w for w in plan["applied"])
+    # The per-family quality rule takes over $quality, first in the template.
+    assert any(i["var"] == "quality" for i in plan["items"])
+    assert pg.template_order(g, plan["settings"])[:2] == ["quality", "subject"]
+    # One family named: a slot named after it stays.
+    plan = pack.compile_graph_plan(_graph(
+        slots=[slot("Subject", "subject", "who"), slot("Pony Quality Tags", "pony_quality", "x")],
+        fixed=[], relations=[], model="pony", anchor="",
+        template={"lead": "", "order": ["Subject", "Pony Quality Tags"], "tail": "",
+                  "negative": ""}))
+    assert [s["var"] for s in plan["graph"]["slots"]] == ["subject", "pony_quality"]
+
+
+def test_fixed_values_named_after_one_family_go_on_a_two_family_pack():
+    """9B pack 11 (2026-10-26): "Pony Quality" printed "1girl, solo, …" on
+    every prompt, and "Flux Quality" sat unread beside the quality rule."""
+    def slot(name, var):
+        return {"name": name, "var": var, "what": "who", "section": "", "count": 4,
+                "show": "prompt", "pick": "", "hold": False, "sometimes_none": 0, "axes": []}
+
+    fixed = [{"name": "Pony Quality", "var": "pony_q", "text": "1girl, solo, score_9",
+              "negative": ""},
+             {"name": "Flux Quality", "var": "flux_q", "text": "sharp focus, rich detail",
+              "negative": ""},
+             {"name": "Style", "var": "look", "text": "cel shading", "negative": ""}]
+    plan = pack.compile_graph_plan(_graph(
+        slots=[slot("Subject", "subject")], fixed=fixed, relations=[], model="Pony, Flux",
+        anchor="", template={"lead": "", "order": ["Subject", "Pony Quality", "Style"],
+                             "tail": "", "negative": ""}))
+    g = plan["graph"]
+    assert [f["var"] for f in g["fixed"]] == ["look"]
+    assert pg.template_order(g, plan["settings"]) == ["quality", "subject", "look"]
+    # Flux reads the rule's otherwise, so its words are kept there.
+    assert g["quality_words"] == "sharp focus, rich detail"
+    assert sum("printed in every prompt whatever the model" in w for w in plan["applied"]) == 2
+    # One family: its fixed value is the pack's quality, kept.
+    plan = pack.compile_graph_plan(_graph(
+        slots=[slot("Subject", "subject")], fixed=fixed[:1], relations=[], model="pony",
+        anchor="", template={"lead": "", "order": ["Subject", "Pony Quality"], "tail": "",
+                             "negative": ""}))
+    assert [f["var"] for f in plan["graph"]["fixed"]] == ["pony_q"]
+
+
+def test_a_fixed_model_variable_and_pony_tags_in_presets_go_on_a_two_family_pack():
+    """9B pack 11 (2026-10-26): a "Model Family" fixed value printed "pony,
+    source_cartoon, 1girl, …" and a Style preset Pony's score tags on every
+    run."""
+    def slot(name, var):
+        return {"name": name, "var": var, "what": "who", "section": "", "count": 4,
+                "show": "prompt", "pick": "", "hold": False, "sometimes_none": 0, "axes": []}
+
+    fixed = [{"name": "Model Family", "var": "model_family", "text": "pony, 1girl",
+              "negative": ""},
+             {"name": "Style", "var": "style", "text": "score_9, source_cartoon, anime style",
+              "negative": ""},
+             {"name": "Scores", "var": "scores", "text": "score_9, score_8_up", "negative": ""}]
+    plan = pack.compile_graph_plan(_graph(
+        slots=[slot("Subject", "subject")], fixed=fixed, relations=[], model="Pony, Flux",
+        anchor="", template={"lead": "", "order": ["Model Family", "Style", "Scores",
+                                                   "Subject"], "tail": "", "negative": ""}))
+    g = plan["graph"]
+    assert [(f["var"], f["text"]) for f in g["fixed"]] == [("style", "anime style")]
+    assert pg.template_order(g, plan["settings"]) == ["quality", "style", "subject"]
+    # A Pony-only pack keeps its score tags.
+    plan = pack.compile_graph_plan(_graph(
+        slots=[slot("Subject", "subject")], fixed=fixed[1:2], relations=[], model="pony",
+        anchor="", template={"lead": "", "order": ["Style", "Subject"], "tail": "",
+                             "negative": ""}))
+    assert plan["graph"]["fixed"][0]["text"] == "score_9, source_cartoon, anime style"
+
+
+def test_an_internal_writing_style_slot_nothing_reads_goes():
+    """9B pack 11 (2026-10-26): an internal "Style Syntax" slot [Danbooru
+    tags, Natural sentences] whose rules were left out rolled a pick nobody
+    saw."""
+    def slot(name, var, show="prompt", axes=()):
+        return {"name": name, "var": var, "what": "x", "section": "", "count": 4,
+                "show": show, "pick": "", "hold": False, "sometimes_none": 0,
+                "axes": list(axes)}
+
+    slots = [slot("Style Syntax", "syntax", show="internal"), slot("Race", "race"),
+             slot("Model Style", "style", show="internal") | {"what": "danbooru_tags"},
+             slot("Season", "season", show="internal"),
+             slot("Mood", "mood", show="internal",
+                  axes=[{"name": "tone", "values": ["dark", "light"]}]),
+             slot("Outfit", "outfit", axes=[{"name": "tone", "values": ["dark", "light"]}])]
+    rel = {"kind": "only", "from_slot": "Mood", "from_axis": "tone", "from_value": "dark",
+           "to_slot": "Outfit", "to_axis": "tone", "to_value": "dark"}
+    plan = pack.compile_graph_plan(_graph(
+        slots=slots, fixed=[], relations=[rel], model="", anchor="syntax",
+        template={"lead": "", "order": ["Race", "Outfit"], "tail": "", "negative": ""}))
+    g = plan["graph"]
+    # Season picks something real; a review asks for its rule instead.
+    assert [s["var"] for s in g["slots"]] == ["race", "season", "mood", "outfit"]
+    assert g["anchor"] == "race"
+    assert sum(w.endswith("no rule read this pick, so the slot went")
+               for w in plan["applied"]) == 2
+    assert not any("Style Syntax is internal" in w for w in plan["warnings"])
+    # A slot the user locked by hand stays.
+    plan = pack.compile_graph_plan(_graph(
+        slots=slots, fixed=[], relations=[rel], model="", anchor="",
+        template={"lead": "", "order": ["Race", "Outfit"], "tail": "", "negative": ""}),
+        previous={"locks": {"slots": ["syntax"]}})
+    assert "syntax" in [s["var"] for s in plan["graph"]["slots"]]
+
+
+def test_an_empty_otherwise_on_the_quality_rule_gets_the_pack_words():
+    plan = pack.compile_graph_plan(_graph(model="Pony, Flux"))
+    q = next(i for i in plan["items"] if i["var"] == "quality")
+    pony = {"var": "model_variant", "op": "equals", "value": "pony"}
+    answer = {"rules": [{"branches": [{"conditions": [pony], "actions": [
+        {"target_var": "quality", "mode": "replace", "value": "score_9, score_8_up"}]}],
+        "else_actions": [{"target_var": "quality", "mode": "replace", "value": ""}]}]}
+    out = pack.compile_item(plan, q["key"], {}, answer)
+    rule = out["payload"]["rules"][0]
+    assert rule["else"]["action"]["value"]
+    assert any("Added an otherwise" in w for w in out["warnings"])
+
+
+def test_two_quality_rules_join_into_one_so_pony_keeps_its_tags():
+    """9B pack 11 (2026-10-26): "if pony … else …" then "if illustrious …
+    else high quality": the second otherwise always wrote over Pony's row."""
+    from engine.modules.derivation_handler import DerivationHandler
+
+    plan = pack.compile_graph_plan(_graph(model="Pony, Flux"))
+    q = next(i for i in plan["items"] if i["var"] == "quality")
+
+    def cond(v):
+        return {"var": "model_variant", "op": "equals", "value": v}
+
+    def act(v):
+        return [{"target_var": "quality", "mode": "replace", "value": v}]
+    answer = {"rules": [
+        {"branches": [{"conditions": [cond("pony")], "actions": act("score_9, score_8_up")}],
+         "else_actions": act("masterpiece, best quality")},
+        {"branches": [{"conditions": [cond("illustrious")], "actions": act("very aesthetic")}],
+         "else_actions": act("high quality")}]}
+    out = pack.compile_item(plan, q["key"], {}, answer)
+    rules = out["payload"]["rules"]
+    assert len(rules) == 1 and len(rules[0]["branches"]) == 2
+    assert rules[0]["else"]["action"]["value"] == "masterpiece, best quality"
+    assert "pony" in json.dumps(rules[0]["branches"][0])
+    DerivationHandler.validate_payload(out["payload"])
+
+
+def test_pony_tags_come_out_of_slot_options_on_a_two_family_pack():
+    g = pack.compile_graph_plan(_graph(model="Pony, Flux"))["graph"]
+    slot = g["slots"][0]
+    axes = {a["name"]: a["values"][:1] for a in slot["axes"]}
+    out = pg.compile_slot(g, slot, {"options": [
+        {"text": "score_9, score_8_up, source_cartoon, rating_safe, knight", "weight": 1,
+         "negative": "score_6, worst quality", "tags": axes},
+        {"text": "score_9", "weight": 1, "negative": "", "tags": axes},
+        {"text": "mage", "weight": 1, "negative": "", "tags": axes}]})
+    values = [(o["value"], o.get("negative")) for o in out["payload"]["options"]
+              if not o.get("is_null")]
+    assert ("knight", "worst quality") in values
+    assert not any("score_" in v for v, _ in values)
+    assert any("Took Pony's score tags out of 2 option" in w for w in out["warnings"])
+
+
+def test_score_tags_stay_on_the_pony_row_of_the_quality_rule():
+    plan = pack.compile_graph_plan(_graph(model="Pony, Flux"))
+    q = next(i for i in plan["items"] if i["var"] == "quality")
+    pony = {"var": "model_variant", "op": "equals", "value": "pony"}
+    flux = {"var": "model_variant", "op": "equals", "value": "flux"}
+    def act(v):
+        return [{"target_var": "quality", "mode": "replace", "value": v}]
+    answer = {"rules": [{"branches": [
+        {"conditions": [pony], "actions": act("score_9, score_8_up, score_7_up")},
+        {"conditions": [flux], "actions": act("score_9, photo, sharp focus")}],
+        "else_actions": act("score_9, score_8_up, score_7_up")}]}
+    out = pack.compile_item(plan, q["key"], {}, answer)
+    rule = out["payload"]["rules"][0]
+    assert rule["branches"][0]["action"]["value"] == "score_9, score_8_up, score_7_up"
+    assert rule["branches"][1]["action"]["value"] == "photo, sharp focus"
+    assert rule["else"]["action"]["value"] == "masterpiece, best quality"
+    assert any("score tags" in w for w in out["warnings"])
 
 
 def test_a_rule_text_reading_a_variable_is_checked_with_its_value():

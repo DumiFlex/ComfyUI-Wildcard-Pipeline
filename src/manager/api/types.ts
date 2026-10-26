@@ -1506,7 +1506,11 @@ export type AiChatOp =
   | { op: "open"; kind: "doc"; type: "doc"; id: string }
   | { op: "open"; kind: "page"; type: "page"; id: string; section?: string }
   /** Hands a description to the Pack builder, which plans the pack. */
-  | { op: "open"; kind: "pack"; type: "pack"; id: string; description: string }
+  | {
+      op: "open"; kind: "pack"; type: "pack"; id: string; description: string;
+      /** Settings the chat recommends for this pack (only those it named). */
+      settings?: Partial<AiPackSettings>;
+    }
   | {
       op: "categories"; kind: "categories"; create: string[];
       rename: Array<{ id: string; from: string; to: string }>;
@@ -1768,6 +1772,13 @@ export interface AiPackSettings {
   /** three: the first plan is drafted three times and the code keeps the
    *  best fit; one: one draft. */
   drafts: "auto" | "one" | "three";
+}
+
+/** Pack settings the code (and the chat, through a plan card) recommend
+ *  for one request, each with why. Only the settings it can tell. */
+export interface AiPackRecommended {
+  settings: Partial<AiPackSettings>;
+  reasons: Partial<Record<keyof AiPackSettings, string>>;
 }
 
 /** One way a slot's options are sorted, for a relation to key on. */

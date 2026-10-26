@@ -111,6 +111,7 @@ from wp_api._ai_pack import (
     post_pack_install,
     post_pack_item,
     post_pack_plan,
+    post_pack_recommend,
     post_pack_review,
     post_pack_search,
 )
@@ -330,5 +331,6 @@ def register(router: web.UrlDispatcher) -> None:
     add("POST", "/wp/api/ai/pack/search", post_pack_search)
     add("POST", "/wp/api/ai/pack/item", post_pack_item)
     add("POST", "/wp/api/ai/pack/check", post_pack_check)
+    add("POST", "/wp/api/ai/pack/recommend", post_pack_recommend)
     # Writes, so never cut short.
     add("POST", "/wp/api/ai/pack/install", post_pack_install, cut_short=False)

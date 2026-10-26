@@ -367,14 +367,14 @@ FORMATS: dict[str, str] = {
 }
 
 _FAMILY = [
-    (re.compile(r"pony|pdxl", re.I), "pony"),
+    (re.compile(r"pony(?!tail)|pdxl", re.I), "pony"),
     (re.compile(r"noob", re.I), "noobai"),
     (re.compile(r"illustrious|\bill?xl\b|\bwai\b", re.I), "illustrious"),
     (re.compile(r"animagine", re.I), "animagine"),
     (re.compile(r"\banima\b|cosmos", re.I), "anima"),
     (re.compile(r"flux|krea", re.I), "flux"),
     (re.compile(r"\bsd ?3(?:\.5)?\b|stable diffusion 3", re.I), "sd3"),
-    (re.compile(r"chroma", re.I), "chroma"),
+    (re.compile(r"chroma(?!tic)", re.I), "chroma"),
     (re.compile(r"qwen", re.I), "qwen_image"),
     (re.compile(r"hidream", re.I), "hidream"),
     (re.compile(r"lumina|z[-_ ]?image", re.I), "lumina2"),
@@ -382,6 +382,19 @@ _FAMILY = [
     (re.compile(r"\bsd ?1\.?5\b|\bsd15\b", re.I), "sd15"),
     (re.compile(r"sdxl|\bxl\b|juggernaut|realvis", re.I), "sdxl"),
 ]
+
+
+#: Families built on SDXL: next to one of these, "XL" names it, not SDXL.
+_ON_SDXL = frozenset({"pony", "illustrious", "noobai", "animagine"})
+
+
+def families_in(text: str) -> list[str]:
+    """Every family ``text`` names, in `_FAMILY` order ("Pony and Flux" →
+    pony, flux); "Illustrious XL" is Illustrious alone, not also SDXL."""
+    out = [key for rx, key in _FAMILY if rx.search(text or "")]
+    if "sdxl" in out and _ON_SDXL & set(out):
+        out.remove("sdxl")
+    return out
 
 
 def family(model: str) -> str:

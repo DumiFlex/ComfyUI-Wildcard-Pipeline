@@ -385,6 +385,15 @@ async def _repair_else(cfg: dict[str, Any], instruction: str, result: dict[str, 
     return ai_derivation.attach_else(answer, rules, catalog, refs)
 
 
+def _catalog_size(kind: str) -> tuple[int, int]:
+    """How much of the library a text panel sees, (variables in full,
+    values each): fixed values read no variable, so a few for the style and
+    the rest by name."""
+    if kind == "fixed_values":
+        return text_items.FIXED_CATALOG_VARS, text_items.FIXED_CATALOG_VALUES
+    return library_vars.MAX_VARS_FOCUSED, library_vars.MAX_VALUES_SHOWN
+
+
 _TEXT_KINDS = {
     "fixed_values": (text_items.FIXED_SYSTEM, text_items.FIXED_SCHEMA, "fixed_values"),
     "combine": (text_items.COMBINE_SYSTEM, text_items.COMBINE_SCHEMA, "combine"),
@@ -453,7 +462,8 @@ async def post_text_draft(request: web.Request) -> web.Response:
         name=name[:200], description=description,
         catalog_text=library_vars.describe_for(
             catalog, " ".join([ai_followup.first_instruction(turns, instruction), name,
-                               description, current[:2000], out_var])),
+                               description, current[:2000], out_var]),
+            keep=_catalog_size(kind)[0], values=_catalog_size(kind)[1]),
         labels=labels, current=current[:4000], out_var=out_var,
     )
     system, schema, schema_name = _TEXT_KINDS[kind]

@@ -62,6 +62,13 @@ COMBINE_SCHEMA = _obj({"template": _cap(SCHEMA_TEMPLATE_CHARS),
 TEMPLATE_SCHEMA = _obj({"template": _cap(SCHEMA_TEMPLATE_CHARS),
                         "negative": _cap(SCHEMA_NEGATIVE_CHARS)})
 
+#: Fixed values can't read a variable, so their panel needs the library
+#: only for its style and the names already taken: a few variables with a
+#: few values each, the rest by name. With the full narrowed catalog the
+#: panel's prompt was 5.6k tokens on Dumi's library (9B, 2026-10-24).
+FIXED_CATALOG_VARS = 6
+FIXED_CATALOG_VALUES = 6
+
 _INTRO = """\
 You write for Wildcard Pipeline, a ComfyUI extension that builds \
 image-generation prompts from variables ($name) that modules set in order. \

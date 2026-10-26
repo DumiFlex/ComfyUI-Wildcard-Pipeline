@@ -255,8 +255,12 @@ def _slots(raw: Any, warnings: list[str], taken_vars: set[str]) -> list[dict[str
             "sweep": s.get("sweep") is True,
             "sometimes_none": max(0, min(90, none)),
             "axes": axes,
-            "self_axis": _self_axis(name, var, axes),
+            # A slot folded from kinds of one thing keeps its options when
+            # the graph comes back from the browser (`_merge_split_slots`).
+            "self_axis": "" if s.get("folded") is True else _self_axis(name, var, axes),
         })
+        if s.get("folded") is True:
+            out[-1]["folded"] = True
         weights = _weights(s.get("weights"), axes)
         if weights:
             out[-1]["weights"] = weights
@@ -366,7 +370,12 @@ def _merge_split_slots(slots: list[dict[str, Any]], warnings: list[str]) -> dict
             "hold": any(g["hold"] for g in group),
             "axes": [{"name": axis, "values": values}],
         })
-        keep["self_axis"] = _self_axis(name, var, keep["axes"])
+        # The values were kinds of the thing ("Casual Outfit" / "Formal
+        # Outfit"), never its options: with an axis named like the slot
+        # ("outfit": casual, formal) a self axis would print the bare kind
+        # ("casual") as the outfit (9B pack 15, 2026-10-24).
+        keep["self_axis"] = ""
+        keep["folded"] = True
         keep.pop("weights", None)
         slots[:] = [s for s in slots if s is keep or id(s) not in ids]
         warnings.append(f"{' and '.join(old)} are one {name} slot with a {axis} axis: "
@@ -413,7 +422,8 @@ def _infer_axes(raw: Any, slots: list[dict[str, Any]], warnings: list[str],
             if used & set(have["values"]) or len(slot["axes"]) >= MAX_AXES:
                 continue
             slot["axes"].append({"name": axis, "values": list(have["values"])})
-            slot["self_axis"] = _self_axis(slot["name"], slot["var"], slot["axes"])
+            if not slot.get("folded"):
+                slot["self_axis"] = _self_axis(slot["name"], slot["var"], slot["axes"])
             warnings.append(f"{slot['name']}: added the {axis} axis "
                             f"({', '.join(have['values'])}) that its {kind} rule with "
                             f"{other['name']} needs")
@@ -1334,7 +1344,151 @@ def model_families(graph: dict[str, Any]) -> list[str]:
 def request_families(request: str) -> list[str]:
     """The image model families a request names, in the guide's keys."""
     from engine.ai import guide as ai_guide
-    return [key for rx, key in ai_guide._FAMILY if rx.search(request or "")]
+    return ai_guide.families_in(request)
+
+
+#: Slot variables that name the checkpoint itself. WP Model Info sets
+#: $model_family / $model_variant / $model_name from the loaded model, so a
+#: slot rolling one picks nothing real.
+_MODEL_SLOT_VARS = frozenset({"model_family", "model_variant", "model_name", "model",
+                              "checkpoint", "base_model", "model_type", "family"})
+#: Tags only Pony reads (score, source and rating tags).
+PONY_ONLY = re.compile(r"(?<![\w-])(?:score_\d(?:_up)?|source_(?:anime|cartoon|furry|pony|"
+                       r"realistic)|rating_(?:safe|questionable|explicit))(?![\w-])", re.I)
+def _unpony(text: str) -> tuple[str, int]:
+    """``text`` without Pony-only tags, and how many went."""
+    if not text or not PONY_ONLY.search(text):
+        return text, 0
+    n = len(PONY_ONLY.findall(text))
+    return ", ".join(t.strip() for t in PONY_ONLY.sub("", text).split(",") if t.strip()), n
+
+
+#: Families whose row of the quality rule the code names (pony,
+#: illustrious or noobai); any other family gets the rule's otherwise.
+_TAG_QUALITY_FAMILIES = frozenset({"pony", "illustrious", "noobai"})
+
+
+def drop_model_slots(graph: dict[str, Any]) -> list[str]:
+    """A slot that rolls the image model ("Model Family" [Pony, Flux]) goes:
+    the checkpoint decides the model, not a pick, and nothing printed it
+    (9B pack 11, 2026-10-26: an internal pick-2 Model Family slot that no
+    rule read, its options quality tags). Its families become the graph's
+    ``model``, so the per-family quality rule takes over, and once the pack
+    runs on two families, slots named after one family ("Pony Quality Tags",
+    "Flux Quality Phrases") go too: both printed in every prompt whatever
+    the model. Returns the lines saying so."""
+    from engine.ai import guide as ai_guide
+    out: list[str] = []
+    gone: list[dict[str, Any]] = []
+    for s in graph["slots"]:
+        named = ai_guide.families_in(" ".join([s["name"], s["what"],
+                                               *(v for a in s["axes"] for v in a["values"])]))
+        if s["var"] in _MODEL_SLOT_VARS or _slug_var(s["name"]) in _MODEL_SLOT_VARS \
+                or (len(named) >= 2 and all(ai_guide.family(v) for a in s["axes"]
+                                            for v in a["values"]) and s["axes"]):
+            gone.append(s)
+            fams = [ai_guide.FAMILY_LABEL[f] for f in named]
+            if fams and not model_families(graph):
+                graph["model"] = ", ".join(fams)
+            out.append(f"{s['name']}: the checkpoint decides the model, not a pick (a WP Model "
+                       "Info node sets $model_family and $model_variant), so the slot went")
+    # A fixed value writing a model variable ("Model Family" $model_family,
+    # 9B pack 11, 2026-10-26: "pony, source_cartoon, 1girl, …" printed on
+    # every run) writes over what WP Model Info set.
+    fixed_gone = [f for f in graph["fixed"] if f["var"] in _MODEL_SLOT_VARS]
+    out += [f"{f['name']}: a WP Model Info node sets ${f['var']} from the checkpoint, so the "
+            "fixed value went" for f in fixed_gone]
+    fams_now = model_families(graph)
+    if fams_now and fams_now != ["pony"]:
+        # Score, source and rating tags only mean something to Pony; the
+        # quality rule's Pony row carries them (9B pack 11: a "Style"
+        # preset of "score_9, …, source_cartoon" on every Flux image).
+        for f in graph["fixed"]:
+            if f in fixed_gone or not PONY_ONLY.search(f["text"]):
+                continue
+            kept = ", ".join(t.strip() for t in PONY_ONLY.sub("", f["text"]).split(",")
+                             if t.strip())
+            if kept:
+                f["text"] = kept
+                out.append(f"{f['name']}: took Pony's score tags out; the quality rule gives "
+                           "them to Pony only")
+            else:
+                fixed_gone.append(f)
+                out.append(f"{f['name']}: only Pony's score tags, which the quality rule gives "
+                           "Pony, so the fixed value went")
+    if len(model_families(graph)) >= 2:
+        for s in graph["slots"]:
+            if s in gone or s["show"] != "prompt":
+                continue
+            if ai_guide.family(s["name"].split()[0] if s["name"].split() else ""):
+                gone.append(s)
+                out.append(f"{s['name']}: printed in every prompt whatever the model; the "
+                           "per-model quality rule ($quality) gives each model its own words")
+        # Fixed values named after one family ("Pony Quality" $pony_q, "Flux
+        # Quality" $flux_q; 9B pack 11, 2026-10-26: Pony's "1girl, solo" on
+        # every prompt) print whatever the model too. A non-tag family's
+        # words become the rule's otherwise, which is what that model gets.
+        for f in graph["fixed"]:
+            fam = ai_guide.family(f["name"].split()[0] if f["name"].split() else "")
+            if not fam or f in fixed_gone:
+                continue
+            fixed_gone.append(f)
+            if fam not in _TAG_QUALITY_FAMILIES and not graph.get("quality_words"):
+                graph["quality_words"] = _clean(f["text"], MAX_TEXT)
+            out.append(f"{f['name']}: printed in every prompt whatever the model; the "
+                       "per-model quality rule ($quality) gives each model its own words")
+    if not gone and not fixed_gone:
+        return []
+    names = {s["name"] for s in gone}
+    vars_ = {s["var"] for s in gone} | {f["var"] for f in fixed_gone}
+    graph["slots"] = [s for s in graph["slots"] if s["name"] not in names]
+    graph["fixed"] = [f for f in graph["fixed"] if f["var"] not in vars_]
+    graph["relations"] = [
+        r for r in graph["relations"]
+        if r["from"]["slot"] not in names and (r.get("to") or {}).get("slot") not in names]
+    graph["template"]["order"] = [v for v in graph["template"]["order"] if v not in vars_]
+    if graph.get("anchor") in vars_:
+        graph["anchor"] = graph["slots"][0]["var"] if graph["slots"] else ""
+    return out
+
+
+#: Words of a slot that picks how the prompt is written ("Style Syntax":
+#: Danbooru tags, Natural sentences).
+_WRITING = re.compile(r"\b(?:danbooru|booru|tags?|sentences?|natural language|prose|phrases?|"
+                      r"syntax|prompt (?:format|style))\b", re.I)
+
+
+def drop_writing_slots(graph: dict[str, Any], locked: list[str]) -> list[str]:
+    """An internal slot that picks how the prompt is written, that no
+    relation reads and nothing prints, goes: the checkpoint and the
+    "Written as" setting decide that, and the pick did nothing (9B pack 11,
+    2026-10-26: "Style Syntax" [Danbooru tags, Natural sentences] and "Model
+    Style" [danbooru_tags], whose rules named an axis the slot never had
+    and were left out). Hand-locked slots stay. Returns the lines saying
+    so."""
+    t = graph["template"]
+    read = {r["from"]["slot"] for r in graph["relations"]} | {
+        (r.get("to") or {}).get("slot") for r in graph["relations"]}
+    said = {v.lower() for v in _VAR.findall(" ".join([
+        t["lead"], t["tail"], t.get("negative") or "", *(f["text"] for f in graph["fixed"]),
+        *(r.get("text") or "" for r in graph["relations"]),
+        *(s["what"] for s in graph["slots"])]))}
+    gone = [s for s in graph["slots"]
+            if s["show"] == "internal" and s["name"] not in read and s["var"] not in said
+            and s["var"] not in locked and s["var"] not in t["order"]
+            and _WRITING.search(f"{s['name']} {s['what']}".replace("_", " "))]
+    if not gone or len(gone) == len(graph["slots"]):
+        return []
+    names = {s["name"] for s in gone}
+    graph["slots"] = [s for s in graph["slots"] if s["name"] not in names]
+    graph["warnings"] = [w for w in graph["warnings"]
+                         if not any(w.startswith(f"{n} is internal but no relation reads it")
+                                    for n in names)]
+    if graph.get("anchor") in {s["var"] for s in gone}:
+        graph["anchor"] = next((s["var"] for s in graph["slots"] if s["show"] == "prompt"),
+                               graph["slots"][0]["var"])
+    return [f"{s['name']}: how the prompt is written comes from the checkpoint and the "
+            "Written as setting, and no rule read this pick, so the slot went" for s in gone]
 
 
 def trim_model(graph: dict[str, Any], request: str) -> list[str]:
@@ -2168,24 +2322,68 @@ def compile_slot(
             f"; {s['text'][:40]}: {s['reason']}" for s in compiled["skipped"][:3]))
     taken: set[str] = {o["id"] for o in kept}
     rows: list[dict[str, Any]] = []
+    fams = model_families(graph)
+    off_pony = bool(fams) and fams != ["pony"]
+    unponied = 0
     for o in options:
-        row: dict[str, Any] = {"id": ai_wildcard.new_option_id(taken), "value": o["value"],
+        value, negative = o["value"], o["negative"]
+        if off_pony:
+            # Score, source and rating tags in a slot's options print on
+            # every model; the quality rule gives them to Pony (9B pack 11,
+            # 2026-10-26: every Type option began "score_9, …, rating_safe").
+            value, n = _unpony(value)
+            negative, m = _unpony(negative)
+            unponied += bool(n or m)
+            if not value:
+                continue
+        row: dict[str, Any] = {"id": ai_wildcard.new_option_id(taken), "value": value,
                                "weight": o["weight"], "sub_categories": o["tags"]}
-        if o["negative"]:
-            row["negative"] = o["negative"]
+        if negative:
+            row["negative"] = negative
         rows.append(row)
+    if unponied:
+        warnings.append(f"Took Pony's score tags out of {unponied} option(s): the quality rule "
+                        "gives them to Pony only")
     rows, scoped = scope_notes(rows, others or {})
     warnings += scoped
     if not rows and not kept:
         raise ValueError("every option names what another slot picks: " + "; ".join(scoped[:3]))
     warnings += _draw_prefix(graph, slot, rows, refs or {})
     rows = [*kept, *rows]
+    if adding:
+        warnings += _word_rows(graph, slot, rows, taken)
     payload, more = _finish_rows(graph, slot, rows, taken)
     warnings += more
     warnings += [f"Left out {s['text'][:60]}: {s['reason']}" for s in compiled["skipped"][:8]]
     return {"payload": payload,
             "preview": [ai_wildcard.option_line(r) for r in payload["options"]],
             "warnings": warnings}
+
+
+def _word_rows(graph: dict[str, Any], slot: dict[str, Any], rows: list[dict[str, Any]],
+               taken: set[str]) -> list[str]:
+    """After a fill, a rule word still no option says becomes an option of
+    its own, tagged with the rule's value: the rule is about it, and with
+    no option saying it the rule never fires (9B pack 15, 2026-10-26: the
+    rule kept casual outfits to sneakers, the Shoe options were heels,
+    oxfords and loafers even after the fill). Returns the lines saying so."""
+    from engine.ai import wildcard as ai_wildcard
+
+    added: list[str] = []
+    for value, _axis, word in rule_words(graph, slot):
+        if any(not r.get("is_null") and value in (r.get("sub_categories") or [])
+               and _has_word(_norm(r.get("value")), word) for r in rows):
+            continue
+        same = next((r for r in rows if not r.get("is_null")
+                     and _norm(r.get("value")) == _norm(word)), None)
+        if same is not None:
+            same["sub_categories"] = [*(same.get("sub_categories") or []), value]
+        else:
+            rows.append({"id": ai_wildcard.new_option_id(taken), "value": word, "weight": 1,
+                         "sub_categories": [value]})
+        added.append(f"{word} [{value}]")
+    return [f"Added {', '.join(added)} as options: a rule is about them and no option said "
+            "them"] if added else []
 
 
 def _draw_prefix(graph: dict[str, Any], slot: dict[str, Any], rows: list[dict[str, Any]],
@@ -3268,6 +3466,8 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
     applied += apply_request_slots(graph, kw.get("request") or "")
     from engine.ai.pack.request_needs import apply_request_needs
     applied += apply_request_needs(graph, kw.get("request") or "")
+    applied += drop_model_slots(graph)
+    applied += drop_writing_slots(graph, locks["slots"])
     applied += trim_model(graph, kw.get("request") or "")
     if model_quality(graph, kw.get("settings")):
         own = [f["name"] for f in graph["fixed"] if f["var"] == QUALITY_VAR]

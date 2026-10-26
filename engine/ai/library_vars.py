@@ -178,8 +178,10 @@ def build_catalog(
     return out
 
 
-def describe(catalog: dict[str, dict[str, Any]], *, focus: list[str] | None = None) -> str:
-    """The catalog as prompt lines, the ``focus`` variables first."""
+def describe(catalog: dict[str, dict[str, Any]], *, focus: list[str] | None = None,
+             values: int = MAX_VALUES_SHOWN) -> str:
+    """The catalog as prompt lines, the ``focus`` variables first, with up
+    to ``values`` values each."""
     names = list(catalog)
     if focus:
         first = [n for n in focus if n in catalog]
@@ -196,8 +198,8 @@ def describe(catalog: dict[str, dict[str, Any]], *, focus: list[str] | None = No
             line += f" — {e['about']}"
         vals = e["values"]
         if vals:
-            shown = ", ".join(vals[:MAX_VALUES_SHOWN])
-            extra = len(vals) - MAX_VALUES_SHOWN
+            shown = ", ".join(vals[:values])
+            extra = len(vals) - values
             more = f" (+{extra} more)" if extra > 0 else ""
             line += f": {shown}{more}"
         if e["tags"]:
@@ -233,7 +235,8 @@ def _words(text: str) -> set[str]:
 
 
 def describe_for(catalog: dict[str, dict[str, Any]], request: str, *,
-                 focus: list[str] | None = None, keep: int = MAX_VARS_FOCUSED) -> str:
+                 focus: list[str] | None = None, keep: int = MAX_VARS_FOCUSED,
+                 values: int = MAX_VALUES_SHOWN) -> str:
     """`describe`, narrowed to what `request` is about: the variables it
     names (``$name``), the ``focus`` ones, then those whose name, values,
     tags or module share its words, up to ``keep`` in full; every other
@@ -241,7 +244,7 @@ def describe_for(catalog: dict[str, dict[str, Any]], request: str, *,
     catalog of ``keep`` or fewer is described whole (the derivation and text
     panels sent ~4,900 tokens of catalog for 82 variables, 2026-10-23)."""
     if len(catalog) <= keep:
-        return describe(catalog, focus=focus)
+        return describe(catalog, focus=focus, values=values)
     named = [n for n in var_names_in(request) if n in catalog]
     first = list(dict.fromkeys([*named, *(n for n in focus or [] if n in catalog)]))
     words = _words(request) | {w.rstrip("s") for w in _words(request)}
@@ -257,7 +260,7 @@ def describe_for(catalog: dict[str, dict[str, Any]], request: str, *,
     scored = sorted((n for n in catalog if n not in first), key=lambda n: -score(n))
     picked = first + [n for n in scored if score(n) > 0][:max(0, keep - len(first))]
     rest = [n for n in catalog if n not in picked]
-    out = describe({n: catalog[n] for n in picked}) if picked else ""
+    out = describe({n: catalog[n] for n in picked}, values=values) if picked else ""
     if rest:
         out += ("\n" if out else "") + (
             "Also set in the library (name only; use one only when the request is about it): "

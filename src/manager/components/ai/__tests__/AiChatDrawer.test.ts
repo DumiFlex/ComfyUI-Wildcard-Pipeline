@@ -481,7 +481,7 @@ describe("AiChatDrawer", () => {
     w.unmount();
   });
 
-  it("hands a pack to the Pack builder and starts the plan", async () => {
+  it("hands a pack to the Pack builder without planning it, with the chat's settings", async () => {
     _resetPackBuilderForTests();
     vi.mocked(api.ai.packPlan).mockReset().mockReturnValue(new Promise(() => {}));
     vi.mocked(api.ai.chat).mockResolvedValueOnce({
@@ -489,8 +489,11 @@ describe("AiChatDrawer", () => {
       message: "Here it is.", model: "m", steps: [],
       proposals: [{
         pid: "p1", tool: "plan_pack", title: "Plan this pack in the Pack builder", summary: "pack",
-        preview: ["Medieval character"], warnings: [], after: null,
-        op: { op: "open", kind: "pack", type: "pack", id: "pack-builder", description: "Medieval character" },
+        preview: ["Medieval character", "Suggested settings: Tags"], warnings: [], after: null,
+        op: {
+          op: "open", kind: "pack", type: "pack", id: "pack-builder", description: "Medieval character",
+          settings: { style: "tags" },
+        },
       }],
     });
     const { w, router } = await mountIt();
@@ -498,12 +501,15 @@ describe("AiChatDrawer", () => {
     await w.get('[data-test="ai-chat-send"]').trigger("click");
     await flushPromises();
     const open = w.get('[data-test="ai-chat-open"]');
-    expect(open.text()).toBe("Plan it");
+    expect(open.text()).toBe("Open in Pack builder");
     await open.trigger("click");
     await flushPromises();
     expect(router.currentRoute.value.name).toBe("pack-builder");
-    expect(usePackBuilder().convo.instruction.value).toBe("Medieval character");
-    expect(vi.mocked(api.ai.packPlan).mock.calls[0][0]).toMatchObject({ instruction: "Medieval character" });
+    const pb = usePackBuilder();
+    expect(pb.convo.instruction.value).toBe("Medieval character");
+    expect(pb.suggested.value).toEqual({ style: "tags" });
+    // Images and settings come first: nothing is planned yet.
+    expect(api.ai.packPlan).not.toHaveBeenCalled();
     w.unmount();
   });
 

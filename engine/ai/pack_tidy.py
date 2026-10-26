@@ -164,6 +164,21 @@ def _reads_saying(text: str, piece: str, ctx: dict[str, Any]) -> list[str]:
     return out
 
 
+_VAR_READ = re.compile(r"\$([A-Za-z_]\w*)")
+_MODEL_VARS = re.compile(r"\bmodel_(?:variant|family|name)\b")
+
+
+def _model_written(plan: dict[str, Any], built: dict[str, Any]) -> set[str]:
+    """Variables a rule writes from the loaded model ($quality from
+    $model_variant): the test runs set no model, so they only ever see its
+    otherwise, and a repeat there is no repeat on a real checkpoint (9B pack
+    11, 2026-10-26: $quality was taken out of the template because the
+    otherwise said what a Flux preset said, so Pony lost its score tags)."""
+    return {i["var"] for i in plan["items"]
+            if i["kind"] == "derivation" and i.get("var") and i["key"] in built
+            and _MODEL_VARS.search(json.dumps(built[i["key"]].get("payload") or {}))}
+
+
 def _validate(kind: str, payload: dict[str, Any]) -> None:
     {"wildcard": WildcardHandler, "fixed_values": FixedValuesHandler,
      "derivation": DerivationHandler}.get(kind, _NoCheck).validate_payload(payload)
@@ -206,6 +221,7 @@ def strip_repeats(plan: dict[str, Any], built: dict[str, Any], *,
         return built, {}
     items = {i["key"]: i for i in plan["items"]}
     order = _prompt_order(plan, built)
+    keep = _model_written(plan, built)
     said: dict[str, list[str]] = {}
     tries = 0
     done: set[tuple[str, int, str]] = set()
@@ -225,9 +241,12 @@ def strip_repeats(plan: dict[str, Any], built: dict[str, Any], *,
         found = False
         # The words said twice most often first; the later writer first.
         for piece in sorted(twice, key=lambda c: (-twice[c], c)):
+            if any(piece in _chunks(str(seen_in[piece].get(v) or "")) for v in keep):
+                continue
             for key in reversed(order):
                 i = items.get(key)
-                if i is None or i.get("existing") or i["kind"] in ("constraint", "library"):
+                if i is None or i.get("existing") or i["kind"] in ("constraint", "library") \
+                        or i.get("var") in keep:
                     continue
                 payload = built[key]["payload"]
                 cuts: list[tuple[int, str, str]] = []
@@ -238,7 +257,8 @@ def strip_repeats(plan: dict[str, Any], built: dict[str, Any], *,
                         # The same variable read twice (or a combine that
                         # already holds it): drop the later read.
                         cuts += [(n, raw, piece) for raw in _reads_saying(
-                            text, piece, seen_in[piece])]
+                            text, piece, seen_in[piece])
+                            if not keep & {v.lower() for v in _VAR_READ.findall(raw)}]
                 for n, cut, said_piece in cuts:
                     if (key, n, cut) in done:
                         continue

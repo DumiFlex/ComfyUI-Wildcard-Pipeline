@@ -37,7 +37,9 @@ import type {
   AiPackPlan,
   AiPackPlanRequest,
   AiPackPlanResult,
+  AiPackRecommended,
   AiPackReview,
+  AiPackSettings,
   AiDescribeRequest,
   AiDescribeResult,
   TagStatus, TagSuggestResponse, TagDownloadResult, LibraryTagUpdateCounts,
@@ -615,6 +617,13 @@ export const api = {
     async packReview(body: { plan: AiPackPlan; ai?: boolean; request?: string; recheck?: string[] }, signal?: AbortSignal) {
       return request<AiPackReview>("/wp/api/ai/pack/review", {
         method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
+      });
+    },
+    /** The settings the request, the assistant's model and the chat's
+     *  suggestion point to (no model call). */
+    packRecommend(body: { request: string; suggested?: Partial<AiPackSettings> }, signal?: AbortSignal) {
+      return request<AiPackRecommended>("/wp/api/ai/pack/recommend", {
+        method: "POST", body: JSON.stringify(body), signal,
       });
     },
     async packCheck(body: { plan: AiPackPlan; built: AiPackBuilt }, signal?: AbortSignal) {
