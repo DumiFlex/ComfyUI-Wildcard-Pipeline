@@ -46,6 +46,7 @@ The assistant is new and **off by default**. Turn it on in **Settings › AI ass
 ### Fixes
 
 - **AI settings follow the provider and model.** Thinking, Model size, context, Tool format, Sampling and the small-model options are kept for each model, so Medium thinking set for Claude no longer sticks on a local Qwen that only takes on or off.
+- **The AI working line no longer cuts its words short.** "Writing · 38 tokens…" or "Writing prompts…" could lose its last letters ("Writing · 38 token") while the line changed width, or for good, and a longer word showed as "Rolling the d…" until the line had widened. The line now widens at once for a longer word and narrows only after the old word has faded, and a token count ticking up no longer fades in and out.
 - **Library pages update when something is deleted.** A deleted category stayed on the Categories page until you refreshed. Undo now brings rows back on screen, chat changes refresh every library list, and Recently opened drops deleted items.
 - **Every random pick rolls on its own.** Picks used to share random sequences, so changing one could move another. This is the change behind the seed warning above.
 - **Constraints hold on multi-picks.** `{2$$…}` picks and `2-3` picks no longer bring back options a constraint or a weight of 0 shut out.

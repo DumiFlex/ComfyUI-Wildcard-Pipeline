@@ -175,28 +175,48 @@ const step = shared.step;
 const showReal = computed(() => step.value % REAL_EVERY === 0);
 const shown = computed(() => (showReal.value ? real.value : word.value));
 /** What the word transition keys on: a new status animates in, a token
- *  count ticking up while writing doesn't. */
+ *  count ticking up while writing doesn't (nor does a number in the chat's
+ *  own status). */
 const wordKey = computed(() => {
   if (!showReal.value) return `w:${word.value}`;
-  return props.text !== undefined ? `r:${real.value}` : `r:${shownPhase.value}`;
+  return props.text !== undefined ? `r:${real.value.replace(/\d[\d,.]*/g, "#")}` : `r:${shownPhase.value}`;
 });
 
-/** The words box follows the new word's width smoothly while the old word
- *  fades out over it (a crossfade in place, nothing goes blank). */
+/** The words box is never narrower than its word, or the word's end is
+ *  cut off ("Writing · 38 token"): it widens at once for a longer word and
+ *  narrows smoothly, a moment later, for a shorter one, once the old word
+ *  has mostly faded out over the new (a crossfade in place, nothing goes
+ *  blank). The word may still end in "…" where the line really is too long
+ *  for its place. */
 const measure = ref<HTMLElement | null>(null);
 const boxWidth = ref<number | null>(null);
+const growing = ref(false);
 async function fit(): Promise<void> {
   await nextTick();
-  const w = measure.value?.offsetWidth;
-  if (w) boxWidth.value = w;
+  // Rounded up, plus a pixel to spare: offsetWidth rounds a 186.6px word
+  // down to 186px, and one pixel short is enough for the browser to drop
+  // "s…" for its own "…", which Firefox draws invisibly on this gradient
+  // text, so the line read "Writing · 3 token" for good.
+  const raw = measure.value?.getBoundingClientRect().width ?? 0;
+  const w = raw ? Math.ceil(raw) + 1 : 0;
+  if (!w || w === boxWidth.value) return;
+  growing.value = boxWidth.value === null || w > boxWidth.value;
+  boxWidth.value = w;
 }
 watch(shown, () => { void fit(); });
 
 // A new phase (or chat status) is said straight away, on every line.
 watch(() => [shownPhase.value, props.text], () => { step.value = 0; });
 
+// The word's width can also change on its own, when the font loads late.
+let resized: ResizeObserver | null = null;
+
 onMounted(() => {
   void fit();
+  if (typeof ResizeObserver !== "undefined" && measure.value) {
+    resized = new ResizeObserver(() => { void fit(); });
+    resized.observe(measure.value);
+  }
   const count = (): void => { elapsed.value = Math.floor((Date.now() - shared.startedAt) / 1000); };
   count();
   tick = setInterval(count, 1000);
@@ -208,6 +228,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (poll) clearInterval(poll);
   if (tick) clearInterval(tick);
+  resized?.disconnect();
   leave();
 });
 
@@ -269,7 +290,11 @@ const TYPING = [[250, "#6366f1"], [512, "#a970ff"], [774, "#33d6c6"]] as const;
         <path class="wp-aiw__star wp-aiw__burst" style="--wp-aiw-dx: -152px; --wp-aiw-dy: 152px" fill="#33d6c6" :d="STAR_B" />
       </g>
     </svg>
-    <span class="wp-aiw__words" :style="boxWidth ? { width: `${boxWidth}px` } : undefined">
+    <span
+      class="wp-aiw__words"
+      :data-grow="growing ? 'true' : undefined"
+      :style="boxWidth ? { width: `${boxWidth}px` } : undefined"
+    >
       <Transition name="wp-aiw-word" type="transition">
         <span :key="wordKey" class="wp-aiw__word" data-test="ai-working-word">{{ shown }}…</span>
       </Transition>
@@ -301,8 +326,10 @@ const TYPING = [[250, "#6366f1"], [512, "#a970ff"], [774, "#33d6c6"]] as const;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
-  transition: width 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+  /* Narrows once the old word has mostly faded; widens at once. */
+  transition: width 0.35s cubic-bezier(0.25, 0.8, 0.25, 1) 0.3s;
 }
+.wp-aiw__words[data-grow="true"] { transition: none; }
 .wp-aiw__word {
   display: inline-block;
   min-width: 0;
