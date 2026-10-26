@@ -37,6 +37,7 @@ The assistant is new and **off by default**. Turn it on in **Settings › AI ass
 - **Sample rolls.** The review shows a few prompts each stack and entry point makes, rolled on the real engine.
 - **Installed folders.** The wildcard folders of Impact Pack, Dynamic Prompts, Easy-Use, PPP and LoRA Manager are listed for a one-click convert.
 - **Bundles are stacks only by default.** The old bundle per folder is still under **Bundles** in the settings.
+- **Same look as the rest of the manager.** The Wildcard packs tab and the Import tab now use the manager's own checkboxes, dropdowns, fields, search box and buttons instead of the browser's, in light and dark. The role cards and "How it carries over" no longer wrap onto a second row when a pack has stacks.
 
 ### Community
 
