@@ -1373,6 +1373,34 @@ def test_fixed_values_named_after_one_family_go_on_a_two_family_pack():
     assert [f["var"] for f in plan["graph"]["fixed"]] == ["pony_q"]
 
 
+def test_a_fixed_model_variable_and_pony_tags_in_presets_go_on_a_two_family_pack():
+    """9B pack 11 (2026-10-26): a "Model Family" fixed value printed "pony,
+    source_cartoon, 1girl, …" and a Style preset Pony's score tags on every
+    run."""
+    def slot(name, var):
+        return {"name": name, "var": var, "what": "who", "section": "", "count": 4,
+                "show": "prompt", "pick": "", "hold": False, "sometimes_none": 0, "axes": []}
+
+    fixed = [{"name": "Model Family", "var": "model_family", "text": "pony, 1girl",
+              "negative": ""},
+             {"name": "Style", "var": "style", "text": "score_9, source_cartoon, anime style",
+              "negative": ""},
+             {"name": "Scores", "var": "scores", "text": "score_9, score_8_up", "negative": ""}]
+    plan = pack.compile_graph_plan(_graph(
+        slots=[slot("Subject", "subject")], fixed=fixed, relations=[], model="Pony, Flux",
+        anchor="", template={"lead": "", "order": ["Model Family", "Style", "Scores",
+                                                   "Subject"], "tail": "", "negative": ""}))
+    g = plan["graph"]
+    assert [(f["var"], f["text"]) for f in g["fixed"]] == [("style", "anime style")]
+    assert pg.template_order(g, plan["settings"]) == ["quality", "style", "subject"]
+    # A Pony-only pack keeps its score tags.
+    plan = pack.compile_graph_plan(_graph(
+        slots=[slot("Subject", "subject")], fixed=fixed[1:2], relations=[], model="pony",
+        anchor="", template={"lead": "", "order": ["Style", "Subject"], "tail": "",
+                             "negative": ""}))
+    assert plan["graph"]["fixed"][0]["text"] == "score_9, source_cartoon, anime style"
+
+
 def test_an_internal_writing_style_slot_nothing_reads_goes():
     """9B pack 11 (2026-10-26): an internal "Style Syntax" slot [Danbooru
     tags, Natural sentences] whose rules were left out rolled a pick nobody
@@ -1406,6 +1434,19 @@ def test_an_internal_writing_style_slot_nothing_reads_goes():
         template={"lead": "", "order": ["Race", "Outfit"], "tail": "", "negative": ""}),
         previous={"locks": {"slots": ["syntax"]}})
     assert "syntax" in [s["var"] for s in plan["graph"]["slots"]]
+
+
+def test_an_empty_otherwise_on_the_quality_rule_gets_the_pack_words():
+    plan = pack.compile_graph_plan(_graph(model="Pony, Flux"))
+    q = next(i for i in plan["items"] if i["var"] == "quality")
+    pony = {"var": "model_variant", "op": "equals", "value": "pony"}
+    answer = {"rules": [{"branches": [{"conditions": [pony], "actions": [
+        {"target_var": "quality", "mode": "replace", "value": "score_9, score_8_up"}]}],
+        "else_actions": [{"target_var": "quality", "mode": "replace", "value": ""}]}]}
+    out = pack.compile_item(plan, q["key"], {}, answer)
+    rule = out["payload"]["rules"][0]
+    assert rule["else"]["action"]["value"]
+    assert any("Added an otherwise" in w for w in out["warnings"])
 
 
 def test_score_tags_stay_on_the_pony_row_of_the_quality_rule():

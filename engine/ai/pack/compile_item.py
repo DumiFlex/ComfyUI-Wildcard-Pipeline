@@ -68,8 +68,14 @@ def _quality_otherwise(plan: dict[str, Any], item: dict[str, Any], payload: dict
     if not isinstance(graph, dict) or item.get("var") != pack_graph.QUALITY_VAR:
         return payload, []
     rules = payload.get("rules") or []
-    if not rules or any(isinstance(r, dict) and r.get("else") for r in rules):
+    if not rules or any(isinstance(r, dict) and isinstance(r.get("else"), dict) and any(
+            str(a.get("value") or "").strip() for a in clause_actions(r["else"]))
+            for r in rules):
         return payload, []
+    # An otherwise that writes nothing (9B pack 11, 2026-10-26: ELSE → "")
+    # is no otherwise: the other models got no quality words.
+    rules = [{k: v for k, v in r.items() if k != "else"} if isinstance(r, dict) else r
+             for r in rules]
     words = graph.get("quality_words") or (
         "masterpiece, best quality" if graph.get("style") == "tags"
         else "high quality, detailed")
@@ -80,9 +86,7 @@ def _quality_otherwise(plan: dict[str, Any], item: dict[str, Any], payload: dict
              "has the pack's quality words"])
 
 
-#: Tags only Pony reads (score, source and rating tags).
-_PONY_ONLY = re.compile(r"(?<![\w-])(?:score_\d(?:_up)?|source_(?:anime|cartoon|furry|pony|"
-                        r"realistic)|rating_(?:safe|questionable|explicit))(?![\w-])", re.I)
+_PONY_ONLY = pack_graph.PONY_ONLY
 
 
 def _quality_off_pony(plan: dict[str, Any], item: dict[str, Any], payload: dict[str, Any]

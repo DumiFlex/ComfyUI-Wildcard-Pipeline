@@ -1352,6 +1352,9 @@ def request_families(request: str) -> list[str]:
 #: slot rolling one picks nothing real.
 _MODEL_SLOT_VARS = frozenset({"model_family", "model_variant", "model_name", "model",
                               "checkpoint", "base_model", "model_type", "family"})
+#: Tags only Pony reads (score, source and rating tags).
+PONY_ONLY = re.compile(r"(?<![\w-])(?:score_\d(?:_up)?|source_(?:anime|cartoon|furry|pony|"
+                       r"realistic)|rating_(?:safe|questionable|explicit))(?![\w-])", re.I)
 #: Families whose row of the quality rule the code names (pony,
 #: illustrious or noobai); any other family gets the rule's otherwise.
 _TAG_QUALITY_FAMILIES = frozenset({"pony", "illustrious", "noobai"})
@@ -1381,7 +1384,30 @@ def drop_model_slots(graph: dict[str, Any]) -> list[str]:
                 graph["model"] = ", ".join(fams)
             out.append(f"{s['name']}: the checkpoint decides the model, not a pick (a WP Model "
                        "Info node sets $model_family and $model_variant), so the slot went")
-    fixed_gone: list[dict[str, Any]] = []
+    # A fixed value writing a model variable ("Model Family" $model_family,
+    # 9B pack 11, 2026-10-26: "pony, source_cartoon, 1girl, …" printed on
+    # every run) writes over what WP Model Info set.
+    fixed_gone = [f for f in graph["fixed"] if f["var"] in _MODEL_SLOT_VARS]
+    out += [f"{f['name']}: a WP Model Info node sets ${f['var']} from the checkpoint, so the "
+            "fixed value went" for f in fixed_gone]
+    fams_now = model_families(graph)
+    if fams_now and fams_now != ["pony"]:
+        # Score, source and rating tags only mean something to Pony; the
+        # quality rule's Pony row carries them (9B pack 11: a "Style"
+        # preset of "score_9, …, source_cartoon" on every Flux image).
+        for f in graph["fixed"]:
+            if f in fixed_gone or not PONY_ONLY.search(f["text"]):
+                continue
+            kept = ", ".join(t.strip() for t in PONY_ONLY.sub("", f["text"]).split(",")
+                             if t.strip())
+            if kept:
+                f["text"] = kept
+                out.append(f"{f['name']}: took Pony's score tags out; the quality rule gives "
+                           "them to Pony only")
+            else:
+                fixed_gone.append(f)
+                out.append(f"{f['name']}: only Pony's score tags, which the quality rule gives "
+                           "Pony, so the fixed value went")
     if len(model_families(graph)) >= 2:
         for s in graph["slots"]:
             if s in gone or s["show"] != "prompt":
@@ -1396,7 +1422,7 @@ def drop_model_slots(graph: dict[str, Any]) -> list[str]:
         # words become the rule's otherwise, which is what that model gets.
         for f in graph["fixed"]:
             fam = ai_guide.family(f["name"].split()[0] if f["name"].split() else "")
-            if not fam:
+            if not fam or f in fixed_gone:
                 continue
             fixed_gone.append(f)
             if fam not in _TAG_QUALITY_FAMILIES and not graph.get("quality_words"):
