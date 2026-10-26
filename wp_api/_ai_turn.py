@@ -1301,7 +1301,8 @@ async def _pause_call(t: _Turn, run: _Calls, at: int, call: dict[str, Any],
         # only say "no part" after a pause.
         raise ValueError(ai_client_tools.READ_PAGE_FIRST)
     try:
-        cargs, label = ai_client_tools.prepare(t.lib, tool, args)
+        cargs, label = ai_client_tools.prepare(
+            t.lib, tool, args, t.ask.text if isinstance(t.ask.text, str) else "")
     except ai_client_tools.Shown as shown:
         run.needs_reply = True
         again = tool + _json.dumps(args, sort_keys=True, ensure_ascii=False)

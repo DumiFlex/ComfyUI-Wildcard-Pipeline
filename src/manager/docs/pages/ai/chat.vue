@@ -112,6 +112,11 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         It only changes items you named, have open, or that its last answer showed you. Asked for
         something new, it makes a new item instead of rewriting yours.
       </p>
+      <p>
+        Adding a tag to options keeps the tags they have. A card that takes a tag off every option
+        while a constraint still has rules for it says so, since those rules would stop working.
+        Asked to draft options in a wildcard's panel, it passes on how many you asked for.
+      </p>
     </DocSection>
 
     <DocSection title="It can show you around and test its work">

@@ -1082,7 +1082,8 @@ export interface AiWildcardDraftRequest extends AiConversational {
     description?: string;
     tags?: string[];
     payload: {
-      options: Array<{ value: string }>;
+      /** Existing rows; their tags show the model how the list is tagged. */
+      options: Array<{ value: string; sub_categories?: string[]; negative?: string }>;
       sub_categories: string[];
       tag_groups?: Record<string, string[]>;
       tag_group_kinds?: Record<string, "accepts">;

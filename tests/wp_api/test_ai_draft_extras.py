@@ -101,3 +101,17 @@ async def test_draft_asks_to_search_only_when_web_search_is_set_up(wp_client, fa
         "web": [{"query": "b", "text": "web_search: Fur coats"}]})
     last = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
     assert "chose not to search" not in last and "Fur coats" in last
+
+
+async def test_draft_shows_existing_tags_and_drops_unasked_negatives(wp_client, fake_llm):
+    # Bench W3: the model only saw option texts and invented its own tags;
+    # W1: negatives nobody asked for.
+    _on(fake_llm, "m1")
+    fake_llm.overrides["wildcard_options"] = {"options": [
+        {"text": "silver hair", "weight": 1, "tags": ["cool"], "negative": "gold hair"}]}
+    body = _draft_body()
+    body["wildcard"]["payload"]["options"][0]["sub_categories"] = ["cool"]
+    out = await (await wp_client.post("/wp/api/ai/wildcard/draft", json=body)).json()
+    assert "- red hair  [tags cool]" in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+    assert out["options"][0]["negative"] == ""
+    assert any(s["reason"] == "not asked for" for s in out["skipped"])

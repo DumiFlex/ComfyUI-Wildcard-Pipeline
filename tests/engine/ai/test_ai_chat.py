@@ -206,6 +206,32 @@ def test_edit_options_remove_rewrite_retag_weights():
         _lib().run("edit_options", {"id": "aaaa0001", "rewrite": [{"n": 1, "text": "a $b"}]})
 
 
+def test_edit_options_add_tags_keeps_the_options_tags():
+    # Bench W17: "add an intensity tag" through retag dropped the old tags.
+    p = _lib().run("edit_options", {"id": "aaaa0001", "add_tags": [
+        {"n": 1, "tags": ["mild"]}, {"n": 2, "tags": ["strong"]}]})
+    opts = p["op"]["body"]["payload"]["options"]
+    assert [o["sub_categories"] for o in opts] == [["warm", "mild"], ["strong"]]
+    assert "wool coat: #warm → #warm #mild" in p["preview"]
+    both = _lib().run("edit_options", {"id": "aaaa0001", "retag": [{"n": 1, "tags": ["cosy"]}],
+                                       "add_tags": [{"n": 1, "tags": ["mild"]}]})
+    assert both["op"]["body"]["payload"]["options"][0]["sub_categories"] == ["cosy", "mild"]
+
+
+def test_a_retag_that_takes_a_constraints_tag_off_every_option_warns():
+    def lib():
+        out = _lib()
+        out.modules["cccc0001"] = {
+            "id": "cccc0001", "type": "constraint", "name": "Outfit to season",
+            "payload": {"source_wildcard_id": "aaaa0001", "target_wildcard_id": "aaaa0002",
+                        "matrix": {"warm": {"cold": "exclude"}}, "exceptions": []}}
+        return out
+    p = lib().run("edit_options", {"id": "aaaa0001", "retag": [{"n": 1, "tags": ["mild"]}]})
+    assert any("#warm" in w and "will do nothing" in w for w in p["warnings"])
+    kept = lib().run("edit_options", {"id": "aaaa0001", "add_tags": [{"n": 1, "tags": ["mild"]}]})
+    assert not any("will do nothing" in w for w in kept["warnings"])
+
+
 def test_editor_version_and_page_note():
     lib = _lib()
     lib.use_editor({"id": "aaaa0001", "name": "Outfits", "dirty": True, "payload": {

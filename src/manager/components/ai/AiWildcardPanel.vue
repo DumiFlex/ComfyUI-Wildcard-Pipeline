@@ -113,6 +113,7 @@ defineExpose({ draft, edit });
       :name="name"
       :var-binding="varBinding"
       :existing-values="options.map((o) => o.value)"
+      :existing-options="options"
       :existing-tags="existingTags"
       :tag-groups="tagGroups"
       :tag-group-kinds="tagGroupKinds"

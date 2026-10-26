@@ -157,6 +157,38 @@ describe("AiDraftPanel", () => {
     expect(draft.mock.calls[0][0].count).toBe(100);
   });
 
+  it("takes How many from the typed request and sends option tags", async () => {
+    // Bench W18: "draft 6 desert weather options" drafted 10.
+    draft.mockResolvedValue({ options: [], new_tags: [], skipped: [], model: "m", answer: {} });
+    const w = mount(AiDraftPanel, {
+      props: {
+        name: "weather", varBinding: "weather", existingValues: ["rain"], existingTags: ["wet"],
+        existingOptions: [{ value: "rain", sub_categories: ["wet"] }, { value: "" }],
+      },
+    });
+    await w.get('[data-test="ai-instruction"]').setValue("draft 6 desert weather options");
+    await w.get('[data-test="ai-run"]').trigger("click");
+    await flushPromises();
+    expect(draft.mock.calls[0][0].count).toBe(6);
+    expect((w.get('[data-test="ai-draft-count"] input').element as HTMLInputElement).value).toBe("6");
+    expect(draft.mock.calls[0][0].wildcard.payload.options).toEqual([{ value: "rain", sub_categories: ["wet"] }]);
+  });
+
+  it("lists left-off tags and negatives apart from skipped options", async () => {
+    draft.mockResolvedValue({
+      options: [{ value: "dust storm", weight: 1, tags: ["dry"], negative: "" }], new_tags: [],
+      skipped: [{ text: "#desert", reason: "on every new option, so it filters nothing" },
+        { text: "2 negatives", reason: "not asked for" }, { text: "sand", reason: "duplicate" }],
+      model: "m", answer: {},
+    });
+    const w = mountPanel();
+    await w.get('[data-test="ai-instruction"]').setValue("desert weather");
+    await w.get('[data-test="ai-run"]').trigger("click");
+    await flushPromises();
+    expect(w.text()).toContain("skipped 1 duplicate");
+    expect(w.text()).toContain("left off #desert (on every new option, so it filters nothing), 2 negatives (not asked for)");
+  });
+
   it("sends a saved wildcard's id, so it isn't offered as its own reference", async () => {
     draft.mockResolvedValue({ options: [], new_tags: [], skipped: [], model: "m", answer: {} });
     const w = mount(AiDraftPanel, {

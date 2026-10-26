@@ -150,3 +150,56 @@ def test_an_empty_answer_carries_the_models_reason():
     assert ed.answered_nothing("retag", {"options": []}, ask)
     assert not ed.answered_nothing("retag", {"options": [], "note": "all tagged already"}, ask)
     assert ed.answered_nothing("retag", {"options": [], "note": "  "}, ask)
+
+
+# ── bench 2026-10-26 (9B manual runs) ───────────────────────────────────────
+
+
+def test_a_retag_that_adds_keeps_the_options_tags():
+    # W17: "add an intensity tag" came back as the new tag alone.
+    out = ed.compile_edit("retag", {"options": [
+        {"id": "1", "tags": ["mild"]}, {"id": "3", "tags": ["strong", "summer"]},
+    ]}, options=OPTS, registry=REG,
+        instruction="add an intensity tag to every option: mild or strong")
+    assert [c["after"]["tags"] for c in out["changes"]] == [
+        ["winter", "mild"], ["summer", "strong"]]
+
+
+def test_a_retag_that_sets_still_replaces():
+    out = ed.compile_edit("retag", {"options": [{"id": "1", "tags": ["summer"]}]},
+                          options=OPTS, registry=REG,
+                          instruction="change the winter ones to summer")
+    assert out["changes"][0]["after"]["tags"] == ["summer"]
+    assert not ed.adds_tags("replace the tags, add season ones only")
+
+
+def test_half_as_likely_halves_the_current_weight():
+    # W12: a 0.1 option was set to 0.5, five times more likely.
+    opts = [{"id": "1", "value": "wool coat", "weight": 0.1, "sub_categories": []},
+            {"id": "2", "value": "business suit", "weight": 1, "sub_categories": []},
+            {"id": "3", "value": "gown", "weight": 4, "sub_categories": []}]
+    out = ed.compile_edit("reweight", {"options": [
+        {"id": "1", "weight": 0.5}, {"id": "2", "weight": 0.5}, {"id": "3", "weight": 2},
+    ]}, options=opts, registry=[], instruction="make formal and evening wear half as likely")
+    assert [(c["id"], c["after"]["weight"]) for c in out["changes"]] == [
+        ("1", 0.05), ("2", 0.5), ("3", 2)]
+
+
+def test_a_weight_that_moves_the_wrong_way_is_refused():
+    opts = [{"id": "1", "value": "wool coat", "weight": 0.1, "sub_categories": []}]
+    out = ed.compile_edit("reweight", {"options": [{"id": "1", "weight": 0.3}]},
+                          options=opts, registry=[], instruction="make the coats rarer")
+    assert out["changes"] == []
+    assert "rarer" in out["skipped"][0]["reason"]
+
+
+def test_a_weight_note_copied_as_a_tag_is_dropped():
+    # W11: the prompt's "[weight 0.1; …]" came back as tag "weight_0.1".
+    out = ed.compile_edit("retag", {"options": [{"id": "2", "tags": ["weight_0.1", "spring"]}]},
+                          options=OPTS, registry=REG)
+    assert out["changes"][0]["after"]["tags"] == ["spring"]
+
+
+def test_the_reweight_guide_says_relative_asks_change_the_current_weight():
+    assert "CURRENT" in ed.system_prompt("reweight")
+    assert "0.5 is half as likely" not in ed.system_prompt("reweight")

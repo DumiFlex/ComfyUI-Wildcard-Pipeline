@@ -14,6 +14,7 @@ import re
 from typing import Any
 
 from engine.ai import ask as ai_ask
+from engine.ai import asked as ai_asked
 from engine.ai import docs as ai_docs
 from engine.ai import safety
 
@@ -76,12 +77,16 @@ class Shown(Exception):
     1: the 9B opened its own card after nearly every proposal."""
 
 
-def prepare(lib: Any, tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
+def prepare(lib: Any, tool: str, args: dict[str, Any],
+            said: str = "") -> tuple[dict[str, Any], str]:
     """(the args the browser gets, a short label for the steps list).
+    ``said`` is the user's message, for what the model's call left out.
     Raises ValueError with a message for the model."""
     fn = _PREPARE.get(tool)
     if fn is None:
         raise ValueError(f"unknown tool {tool}")
+    if tool == "draft_options":
+        return _draft_options(lib, args, said)
     return fn(lib, args)
 
 
@@ -241,14 +246,19 @@ def _organize(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
             f"Organize {len(rows)} item" + ("" if len(rows) == 1 else "s"))
 
 
-def _draft_options(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
+def _draft_options(lib: Any, args: dict[str, Any],
+                   said: str = "") -> tuple[dict[str, Any], str]:
     row = _row(lib, args.get("id"), "wildcard")
     if row.get("type") != "wildcard":
         raise ValueError(f"{row.get('name')} is a {lib._kind(row)}, not a wildcard")
     instruction = _text(args.get("instruction"), 1000)
     if len(instruction) < 3:
         raise ValueError("say what options to write")
-    count = _got if isinstance(_got := args.get("count"), int) else 10
+    count = args.get("count")
+    if isinstance(count, bool) or not isinstance(count, int):
+        # Bench W18: "draft 6 desert weather options" came without a count
+        # and the panel drafted 10. The request's own number, else 10.
+        count = ai_asked.option_count(instruction) or ai_asked.option_count(said) or 10
     count = max(1, min(50, count))
     return ({"id": row["id"], "instruction": instruction, "count": count},
             f"Drafting {count} options for {row.get('name')}")

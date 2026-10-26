@@ -1878,12 +1878,26 @@ class Library(MoreTools, ManageTools):
             return [{"id": str(x.get("n")), field: x.get(field)}
                     for x in rows if isinstance(x, dict)]
 
+        retag = _numbered("retag", "tags")
+        for x in _numbered("add_tags", "tags"):
+            # Bench W17: "add an intensity tag" went through retag with the
+            # new tag alone, which dropped the tags a constraint keys on.
+            # add_tags keeps the option's tags (and a retag of it).
+            extra = [t for t in x["tags"] if isinstance(t, str)] \
+                if isinstance(x["tags"], list) else []
+            same = next((r for r in retag if r["id"] == x["id"]), None)
+            if same is not None:
+                same["tags"] = list(same["tags"] or []) + extra
+                continue
+            k = int(x["id"]) - 1 if str(x["id"]).isdigit() else -1
+            has = shown[k]["sub_categories"] if 0 <= k < len(shown) else []
+            retag.append({"id": x["id"], "tags": has + extra})
         asks = {
             "remove": {"remove": [{"id": str(n), "reason": ""}
                                   for n in (args.get("remove") or [])
                                   if isinstance(n, (int, str)) and not isinstance(n, bool)]},
             "rewrite": {"options": _numbered("rewrite", "text")},
-            "retag": {"options": _numbered("retag", "tags")},
+            "retag": {"options": retag},
             "reweight": {"options": _numbered("weights", "weight")},
         }
         for raw in asks.values():
@@ -2022,6 +2036,8 @@ class Library(MoreTools, ManageTools):
             payload["sub_categories"] = list(dict.fromkeys([*registry, *new_tags]))
         WildcardHandler.validate_payload(payload)
         warnings = [f"Kept {_short(v, 60)}: a constraint points at it" for v in kept[:8]]
+        if not (args.get("rename_tags") or args.get("drop_tags")):
+            tag_warnings += self._lost_tag_rules(str(r["id"]), opts, payload["options"])
         warnings += tag_warnings[:4] + var_warnings
         n = len(preview)
         return {
@@ -2033,6 +2049,37 @@ class Library(MoreTools, ManageTools):
                    "name": r.get("name"), "body": {"payload": payload},
                    "before": {"payload": old}},
         }
+
+    def _lost_tag_rules(self, wid: str, before: list[dict[str, Any]],
+                        after: list[Any]) -> list[str]:
+        """Saved constraints on wildcard `wid` with rules for a tag that no
+        option carries after this change (bench W17: a retag took #dark and
+        #bright off Mood, and Mood → weather quietly stopped working)."""
+        def carried(rows: list[Any]) -> set[str]:
+            return {t for o in rows if isinstance(o, dict)
+                    for t in o.get("sub_categories") or [] if isinstance(t, str)}
+        lost = carried(before) - carried(after)
+        if not lost:
+            return []
+        out: list[str] = []
+        for m in self.modules.values():
+            cp = _got if isinstance(_got := m.get("payload"), dict) else {}
+            if m.get("type") != "constraint" or m.get("_proposed"):
+                continue
+            side = ("source" if cp.get("source_wildcard_id") == wid else
+                    "target" if cp.get("target_wildcard_id") == wid else "")
+            if not side:
+                continue
+            matrix = _got if isinstance(_got := cp.get("matrix"), dict) else {}
+            used = (set(matrix) if side == "source" else
+                    {t for cells in matrix.values() if isinstance(cells, dict) for t in cells})
+            gone = sorted(used & lost)
+            if gone:
+                out.append(f"{self._chip(m)} has rules for "
+                           + ", ".join(f"#{t}" for t in gone[:5])
+                           + ", which no option carries after this, so those rules "
+                           "will do nothing")
+        return out
 
     def _option_extras(self, args: dict[str, Any], rows: list[dict[str, Any]],
                        nulls: set[str], gone: set[int], skipped: list[dict[str, str]],

@@ -22,6 +22,7 @@ import re
 from typing import Any
 
 from engine.ai import about, adult
+from engine.ai import asked as ai_asked
 from engine.ai import refs as ai_refs
 from engine.ai.wildcard import (
     MAX_TEXT_LEN,
@@ -116,12 +117,15 @@ any {a|b} pick and @{Name} reference unless the request is about them; a \
 reference must name a wildcard listed under "Wildcards you can point at".""",
     "retag": """
 Task: set TAGS on options as the request says. Return the option's complete new \
-tag list (it replaces the old one). Prefer the wildcard's existing tags. A new \
+tag list (it replaces the old one), so when the request adds a tag, keep the \
+option's other tags in the list. Prefer the wildcard's existing tags. A new \
 tag is one lowercase word (letters, digits, _ or -).""",
     "reweight": """
-Task: set WEIGHTS as the request says. 1 is normal, below 1 is rarer (0.5 is \
-half as likely), above 1 is more common (2 is twice as likely), 0 never picks \
-the option. Use values from 0 to 100.""",
+Task: set WEIGHTS as the request says. An option with no weight shown has \
+weight 1. 1 is normal, below 1 is rarer, above 1 is more common, 0 never picks \
+the option. "Half as likely" or "twice as common" changes the option's CURRENT \
+weight: half of 0.1 is 0.05, half of 1 is 0.5, twice 3 is 6. Use values from \
+0 to 100.""",
 }
 
 
@@ -155,6 +159,30 @@ def answered_nothing(action: str, answer: Any, instruction: str) -> bool:
         return False
     note = answer.get("note")
     return not (isinstance(note, str) and note.strip())
+
+
+def left_out(action: str, answer: Any, instruction: str, ids: list[str]) -> list[str]:
+    """The options a rewrite or retag that covers every option ("tag each
+    by season", "rewrite every option as tags") left out of a non-empty
+    answer (bench W9, W11, W17: 5 or 6 of 12). They are asked for once more
+    with `left_out_nudge`; an empty answer is `answered_nothing`'s."""
+    if action not in ("rewrite", "retag") or not _EVERY.search(instruction or ""):
+        return []
+    rows = answer.get("options") if isinstance(answer, dict) else None
+    if not isinstance(rows, list) or not rows:
+        return []
+    named = {str(int(x["id"])) if isinstance(x.get("id"), (int, float))
+             and not isinstance(x.get("id"), bool) else str(x.get("id")).strip()
+             for x in rows if isinstance(x, dict)}
+    return [i for i in ids if i not in named]
+
+
+def left_out_nudge(missing: list[str]) -> str:
+    shown = ", ".join(missing[:30]) + (" and more" if len(missing) > 30 else "")
+    return (f"Your last answer left out options {shown}, but the request covers every "
+            "option. Answer again with every option the request changes, the ones you "
+            "already answered included. Leave an option out only when the request really "
+            "doesn't apply to it.")
 
 
 def build_edit_prompt(
@@ -203,6 +231,17 @@ def build_edit_prompt(
 _NOTE = re.compile(r"\s*\[(?:weight [^\]]*|tags [^\]]*)\]\s*$")
 
 
+#: A retag request that adds tags rather than setting the whole list.
+_ADDS = re.compile(r"\badd(?:s|ed|ing)?\b|\balso\s+tag", re.I)
+_SETS = re.compile(r"\b(?:replace|instead|only|swap|change|remove|drop|clear|retag\s+all)\b", re.I)
+
+
+def adds_tags(instruction: str) -> bool:
+    """Whether a retag request adds tags and keeps the old ones ("add an
+    intensity tag to every option") rather than setting them."""
+    return bool(_ADDS.search(instruction or "")) and not _SETS.search(instruction or "")
+
+
 def _clean_weight(raw: Any) -> float | int | None:
     if isinstance(raw, bool) or not isinstance(raw, (int, float)):
         return None
@@ -215,11 +254,13 @@ def _clean_weight(raw: Any) -> float | int | None:
 def compile_edit(
     action: str, raw: Any, *, options: list[dict[str, Any]], registry: list[str],
     refs: ai_refs.RefIndex | None = None, self_id: str | None = None,
-    labels: list[str] | None = None,
+    labels: list[str] | None = None, instruction: str = "",
 ) -> dict[str, Any]:
     """Check the model's answer against the options it was shown. ``labels``
     are the wildcard's own (library) tags: a retag never copies one onto an
-    option unless it is an option tag too.
+    option unless it is an option tag too. ``instruction`` is the user's
+    request: a retag that "adds" keeps the option's tags, and a re-weight
+    by a factor ("half as likely") is checked against each current weight.
 
     Returns ``{"changes": [...], "new_tags": [...], "skipped": [...], "note":
     why nothing changed, or ""}``. Each
@@ -246,6 +287,9 @@ def compile_edit(
     # Texts the list will hold after the rewrite, to refuse a rewrite that
     # turns two options into the same one.
     final_texts = {_norm_key(o["value"]): o["id"] for o in options}
+    adds = action == "retag" and adds_tags(instruction)
+    factor = ai_asked.weight_factor(instruction) if action == "reweight" else None
+    way = ai_asked.weight_direction(instruction) if action == "reweight" else 0
 
     for item in raw[key]:
         if not isinstance(item, dict):
@@ -321,6 +365,10 @@ def compile_edit(
                 if tag not in tags:
                     tags.append(tag)
             before = list(opt.get("sub_categories") or [])
+            if adds:
+                # Bench W17: "add an intensity tag" came back as the new tag
+                # alone, which dropped the tags a constraint keys on.
+                tags = before + [t for t in tags if t not in before]
             if set(tags) == set(before):
                 continue
             changes.append({
@@ -332,7 +380,19 @@ def compile_edit(
             if w is None:
                 skipped.append({"text": opt["value"][:80], "reason": "weight out of range"})
                 continue
-            if w == opt.get("weight", 1):
+            was = opt.get("weight", 1)
+            if factor is not None and was != 1 and math.isclose(w, factor):
+                # Bench W12: "half as likely" set a 0.1 option to 0.5, five
+                # times MORE likely. The factor was meant for its weight.
+                w = _clean_weight(min(100.0, was * factor))
+                if w is None:
+                    continue
+            if way and (w - was) * way < 0:
+                skipped.append({"text": opt["value"][:80], "reason": (
+                    "the request makes options rarer, this made it more common" if way < 0
+                    else "the request makes options more common, this made it rarer")})
+                continue
+            if w == was:
                 continue
             changes.append({
                 "id": oid, "before": {"weight": opt.get("weight", 1)}, "after": {"weight": w},

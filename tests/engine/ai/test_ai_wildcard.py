@@ -243,3 +243,78 @@ def test_braces_around_a_lone_ref_are_dropped():
     assert out == "@{aaaa0001#Palette:warm} sky"
     out = compile_text("{1$$@{Palette:warm}} sky", surface="option", refs=RefIndex([palette]))
     assert out == "@{aaaa0001#Palette:warm} sky"
+
+
+# ── bench 2026-10-26: held to the typed request ─────────────────────────────
+
+_EMPTY = {"options": [], "sub_categories": ["casual", "formal"]}
+
+
+def _held(options, request, existing=_EMPTY, labels=(), own_name="Outfit outfit"):
+    return w.compile_options({"options": options}, existing_payload=existing,
+                             request=request, labels=list(labels), own_name=own_name)
+
+
+def test_a_new_tag_on_every_new_option_is_dropped():
+    # W18: #desert on every desert weather option.
+    out = _held([_opt("dust storm", tags=["desert", "dry"]),
+                 _opt("heat haze", tags=["desert", "dry"]),
+                 _opt("sandy wind", tags=["desert", "wet"])],
+                "draft 6 desert weather options", own_name="Weather weather")
+    assert [o["tags"] for o in out["options"]] == [["dry"], ["dry"], ["wet"]]
+    assert "desert" not in out["new_tags"]
+    assert {"text": "#desert", "reason": "on every new option, so it filters nothing"} \
+        in out["skipped"]
+
+
+def test_a_tag_the_request_asks_for_stays_even_on_every_option():
+    out = _held([_opt("a", tags=["rainy"]), _opt("b", tags=["rainy"]), _opt("c", tags=["rainy"])],
+                "3 outfits, tag them all rainy")
+    assert all(o["tags"] == ["rainy"] for o in out["options"])
+
+
+def test_library_labels_and_the_wildcards_own_name_are_not_option_tags():
+    # W3 "bench" (a library label), W5 "$outfit".
+    out = _held([_opt("trench coat", tags=["bench", "casual"]),
+                 _opt("hoodie", tags=["$outfit", "casual"]),
+                 _opt("suit", tags=["formal"])],
+                "3 more outfits", labels=["bench"])
+    assert [o["tags"] for o in out["options"]] == [["casual"], ["casual"], ["formal"]]
+    assert out["new_tags"] == []
+
+
+def test_negatives_nobody_asked_for_are_dropped():
+    # W1: a short cut got negative "long hair".
+    out = _held([_opt("pixie cut", negative="long hair"), _opt("long braid")],
+                "10 hairstyles tagged short or long", own_name="Hair hair")
+    assert [o["negative"] for o in out["options"]] == ["", ""]
+    assert {"text": "1 negative", "reason": "not asked for"} \
+        in out["skipped"]
+
+
+def test_asked_negatives_stay_without_other_options_words():
+    # W3: a trench coat's negatives named the other outfits.
+    out = _held([_opt("trench coat", negative="hoodie, umbrella"), _opt("grey hoodie")],
+                "2 outfits with negatives")
+    assert out["options"][0]["negative"] == "umbrella"
+
+
+def test_negatives_stay_when_the_wildcard_already_uses_them():
+    existing = {"options": [{"id": "a", "value": "blonde", "weight": 1, "negative": "yellow"}],
+                "sub_categories": []}
+    out = _held([_opt("strawberry blonde", negative="strawberry, fruit")], "more", existing)
+    assert out["options"][0]["negative"] == "strawberry, fruit"
+
+
+def test_the_tags_note_from_the_prompt_is_cut_from_option_text():
+    out = _held([_opt("rain coat  [tags casual]", tags=["casual"])], "1 option")
+    assert out["options"][0]["value"] == "rain coat"
+
+
+def test_without_a_request_the_answer_is_kept_as_written():
+    # The pack builder and specs pass no request.
+    out = w.compile_options({"options": [_opt("a", tags=["x"], negative="n"),
+                                         _opt("b", tags=["x"]), _opt("c", tags=["x"])]},
+                            existing_payload=_EMPTY)
+    assert all(o["tags"] == ["x"] for o in out["options"])
+    assert out["options"][0]["negative"] == "n"

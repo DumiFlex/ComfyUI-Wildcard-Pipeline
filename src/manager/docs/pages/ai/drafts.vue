@@ -19,13 +19,22 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       <ol>
         <li>Open a wildcard and press <b>AI</b> above the options. Stay on the <b>Add</b> tab.</li>
         <li>Say what you want and how many, for example <em>8 more outfits for a rainy city at
-          night</em>. Press <b>Draft</b> (Ctrl + Enter).</li>
+          night</em>. Press <b>Draft</b> (Ctrl + Enter). A number in the request sets <b>How
+          many</b>; without one the box decides (10 to start).</li>
         <li>Untick anything you don't want and press <b>Add</b>. The rest go in like pasted
           options, with new tags marked.</li>
       </ol>
       <p>
-        The model sees the wildcard's name, options and tags, so it writes in the same style and
-        reuses your tags. <b>Draft again</b> asks for another set, and <b>Stop</b> cancels a slow one.
+        The model sees the wildcard's name, options and the tags each option has, so it writes in
+        the same style and tags new options the way the list is tagged. <b>Draft again</b> asks for
+        another set, and <b>Stop</b> cancels a slow one.
+      </p>
+      <p>
+        Tags and negatives have to earn their place. A new tag the model put on every new option
+        (<em>desert</em> on every desert weather) is left off, unless you asked for that tag, and so
+        are the wildcard's own library tags and tags that only repeat its name. Negatives stay only
+        when you ask for them or the wildcard's options already have them, and never name another
+        option. What was left off is listed under the result.
       </p>
       <p>
         Options can use the syntax you'd type: <code>{red|blue}</code> picks one each run, and
@@ -53,8 +62,8 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         :items="[
           { term: 'Remove', desc: 'Finds options matching what you describe (\'drop anything modern\') and says why. Options other modules point at stay; delete those by hand.' },
           { term: 'Rewrite', desc: 'Changes the wording: tags to sentences, another style, shorter, typos fixed.' },
-          { term: 'Retag', desc: 'Sets each option\'s tags (\'tag each by the seasons it suits\'). The new tags replace the old ones.' },
-          { term: 'Weights', desc: 'Makes options rarer or more common. 1 is normal, 0.5 half as likely, 2 twice, 0 never.' },
+          { term: 'Retag', desc: 'Sets each option\'s tags (\'tag each by the seasons it suits\'). The new tags replace the old ones, unless the request adds (\'add an intensity tag: mild or strong\'), which keeps them.' },
+          { term: 'Weights', desc: 'Makes options rarer or more common. 1 is normal, 0.5 half as likely, 2 twice, 0 never. \'Half as likely\' halves each option\'s current weight (0.1 becomes 0.05), and a change that goes the other way than you asked is left out.' },
         ]"
       />
       <p>Up to 300 options go in one request; select some first for a longer list.</p>
@@ -125,8 +134,9 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         <ul>
           <li>Changes land in the editor like your own edits, so you can still tweak or undo them.</li>
           <li>Retag on every option that comes back empty is asked once more, unless the model
-            says why nothing changes; that reason shows in the panel. A rewrite that would make two
-            options the same is left out.</li>
+            says why nothing changes; that reason shows in the panel. A rewrite or retag of
+            "every" or "each" option that leaves some out is asked once more for those. A rewrite
+            that would make two options the same is left out.</li>
           <li>Derivation option names are fixed to the exact spelling, since the test is
             case-sensitive.</li>
           <li>Constraint rules between two tags go in the matrix, between two options become
