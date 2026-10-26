@@ -84,6 +84,41 @@ describe("AiWorking", () => {
     w.unmount();
   });
 
+  it("never makes the words box narrower than its word", async () => {
+    vi.useFakeTimers();
+    // jsdom lays nothing out: each word is 9.3px a letter.
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return { width: (this.textContent ?? "").length * 9.3 } as DOMRect;
+    });
+    const w = mount(AiWorking, { props: { text: "Mixing…", variant: "typing" } });
+    await flushPromises();
+    const box = () => w.get(".wp-aiw__words");
+    // Rounded up with a pixel to spare, so the last letters are never lost.
+    expect(box().attributes("style")).toContain("width: 67px");
+    // A longer word widens the box at once ...
+    await w.setProps({ text: "Searching the library…" });
+    await flushPromises();
+    expect(box().attributes("style")).toContain("width: 206px");
+    expect(box().attributes("data-grow")).toBe("true");
+    // ... a shorter one narrows it smoothly.
+    await w.setProps({ text: "Thinking…" });
+    await flushPromises();
+    expect(box().attributes("style")).toContain("width: 85px");
+    expect(box().attributes("data-grow")).toBeUndefined();
+    w.unmount();
+    vi.restoreAllMocks();
+  });
+
+  it("does not crossfade a number ticking up in the chat's status", async () => {
+    const w = mount(AiWorking, { props: { text: "Writing · 38 tokens…", variant: "typing" } });
+    const first = w.get('[data-test="ai-working-word"]').element;
+    await w.setProps({ text: "Writing · 1,204 tokens…" });
+    const word = w.get('[data-test="ai-working-word"]');
+    expect(word.element).toBe(first);
+    expect(word.text()).toBe("Writing · 1,204 tokens…");
+    w.unmount();
+  });
+
   it("writes the time like Claude Code", () => {
     expect([5, 65, 797, 3725].map(formatElapsed)).toEqual(["5s", "1m 05s", "13m 17s", "1h 02m"]);
   });
