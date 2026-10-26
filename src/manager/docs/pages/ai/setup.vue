@@ -48,7 +48,7 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
       <DocKeyList
         :items="[
           { term: 'Enable', desc: 'Turns the assistant on. While it is off, the AI buttons are hidden and nothing is sent anywhere.' },
-          { term: 'Provider', desc: 'Each provider remembers its own address, model and key, so you can switch back and forth. A key icon means a key is saved.' },
+          { term: 'Provider', desc: 'Each provider remembers its own address, model and key, so you can switch back and forth. A key icon means a key is saved. The settings that depend on the model are kept for each model too (see below).' },
           { term: 'Server address', desc: 'Change it if your server runs on another port or machine.' },
           { term: 'API key', desc: 'Stored on the ComfyUI side and never shown again; Remove deletes it. A key is only sent to the address it was saved for.' },
           { term: 'Model', desc: 'Picked from your server\'s list (refresh after downloading a new one), or typed in.' },
@@ -61,6 +61,15 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         choice. <b>Reset to recommended</b> puts every AI setting back after showing what will
         change; your provider, keys, addresses and chosen models stay as they are. Context is the
         one exception: Reset raises a window under 16k to 32k and leaves a bigger one alone.
+      </p>
+      <p>
+        <b>Kept for each model.</b> Thinking, Model size, Most context to use, Tool format, Sampling,
+        Choose the tool first and Short tool list are saved for the provider and model you set them
+        on, and Unload after for the provider. Switch from Claude at Medium thinking to a Qwen in LM
+        Studio and you get the Qwen's own settings back, not Claude's. A model you haven't used yet
+        keeps the provider's values but starts Thinking and Model size at automatic, since another
+        model's level or size may not fit it. Permissions, web search and the chat display options
+        are the same for every provider.
       </p>
       <DocDetails title="Advanced settings">
         <DocKeyList

@@ -60,6 +60,17 @@ async function patch(p: Parameters<typeof save>[0]): Promise<boolean> {
   }
 }
 
+/* ── Settings kept per provider and model ───────────────────────────────
+ * The server keeps Model size, context, Thinking and the model-tied
+ * Advanced rows for each model (`engine/ai/config.py` MODEL_FIELDS) and
+ * the unload time for each provider; this only says so. */
+const perModelNote = computed(() => {
+  const c = config.value;
+  if (!c) return undefined;
+  const who = c.model ? `${c.model} on ${c.presets?.[c.provider]?.label ?? c.provider}` : "each model";
+  return `Kept for ${who}: switching provider or model brings back what you last used with it. A model you haven't used yet starts Model size and Thinking at automatic.`;
+});
+
 /* ── Reset to recommended ───────────────────────────────────────────────
  * Every choice goes back to what its row recommends. What the user set up
  * stays: the provider, addresses, keys, models, embedding and web search,
@@ -826,7 +837,7 @@ const off = computed(() => !config.value?.enabled);
           </p>
         </SettingGroup>
 
-        <SettingGroup title="How the model runs">
+        <SettingGroup title="How the model runs" :note="perModelNote">
           <SettingRow
             form
             label="Model size"
@@ -1322,7 +1333,7 @@ const off = computed(() => !config.value?.enabled);
           </p>
         </SettingGroup>
 
-        <SettingGroup title="Advanced">
+        <SettingGroup title="Advanced" note="Tool format, Sampling, Choose the tool first and Short tool list are kept for each model too, like the settings under How the model runs.">
           <SettingRow
             form
             label="Tool format"
