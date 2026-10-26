@@ -126,10 +126,10 @@ def track(handler: Any) -> Any:
         try:
             resp = await handler(request)
             status = getattr(resp, "status", None)
-            if isinstance(resp, web.Response) and status is not None and status >= 400 \
-                    and resp.body is not None:
+            body = resp.body if isinstance(resp, web.Response) else None
+            if status is not None and status >= 400 and isinstance(body, (bytes, bytearray)):
                 try:
-                    error = str(json.loads(resp.body).get("error") or "")[:500] or None
+                    error = str(json.loads(body).get("error") or "")[:500] or None
                 except (ValueError, TypeError, AttributeError):
                     error = None
             return resp
