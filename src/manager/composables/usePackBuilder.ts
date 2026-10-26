@@ -26,7 +26,7 @@ import type {
   AiPackGraph, AiPackLocks, AiPackRelation, AiPackSlot,
   AiPackBuilt, AiPackCheck, AiPackDecision, AiPackFinding, AiPackInstallResult, AiPackItem,
   AiPackItemResult, AiPackKind, AiPackPatch, AiPackPlan, AiPackPlanResult, AiPackQuestion,
-  AiPackSettings,
+  AiPackRecommended, AiPackSettings,
 } from "../api/types";
 import { pendingResearch, useAiConversation } from "./useAiConversation";
 import { useAiImages } from "./useAiImages";
@@ -242,6 +242,43 @@ const installed = shallowRef<AiPackInstallResult | null>(null);
 const error = ref("");
 /** A prompt the user likes, to rebuild as a pack ("" for none). */
 const sample = ref("");
+/** Settings the chat's plan card recommended for this request. */
+const suggested = ref<Partial<AiPackSettings> | null>(null);
+/** What the code (with the chat's suggestion) recommends for the request
+ *  on the Settings step; null until asked or when the call failed. */
+const recommended = shallowRef<AiPackRecommended | null>(null);
+let recommendFor = "";
+
+/** The recommended settings for the request as it reads now (no model
+ *  call). A failure leaves none: the step works without them. */
+async function loadRecommended(): Promise<void> {
+  const text = convo.instruction.value.trim();
+  const key = JSON.stringify([text, suggested.value]);
+  if (recommended.value && key === recommendFor) return;
+  recommendFor = key;
+  try {
+    const got = await api.ai.packRecommend({ request: text, ...(suggested.value ? { suggested: suggested.value } : {}) });
+    if (recommendFor === key) recommended.value = got;
+  } catch {
+    if (recommendFor === key) recommended.value = null;
+  }
+}
+
+/** The recommended settings that differ from the current ones. */
+const recommendedChanges = computed(() => {
+  const r = recommended.value;
+  if (!r) return [];
+  return (Object.entries(r.settings) as Array<[keyof AiPackSettings, AiPackSettings[keyof AiPackSettings]]>)
+    .filter(([k, v]) => v !== undefined && settings.value[k] !== v)
+    .map(([key, value]) => ({ key, value, reason: r.reasons[key] ?? "" }));
+});
+
+/** Take every recommended setting. */
+function takeRecommended(): void {
+  const next = { ...settings.value };
+  for (const c of recommendedChanges.value) (next as Record<string, unknown>)[c.key] = c.value;
+  settings.value = next;
+}
 const reviewing = ref(false);
 /** The item the model is rewriting now ("+" for a new one), or "". */
 const changing = ref("");
@@ -1486,6 +1523,9 @@ function reset(): void {
   unfixed.value = new Set();
   stuck.value = new Set();
   sample.value = "";
+  suggested.value = null;
+  recommended.value = null;
+  recommendFor = "";
   error.value = "";
   images.clear();
   target.value = null;
@@ -1526,6 +1566,7 @@ export function usePackBuilder() {
     changing, research, allowResearch, skipResearch, searching, webResults, images, target,
     web, useFound, skipFound,
     extendBundle, skipCurrent, skipItem, dismissNote, dismissedNotes, planThinking,
+    suggested, recommended, recommendedChanges, loadRecommended, takeRecommended,
   };
 }
 

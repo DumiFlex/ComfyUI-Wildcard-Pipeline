@@ -5,7 +5,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import PackBuilder from "../PackBuilder.vue";
 import { api } from "../../api/client";
 import { _resetAiConfigForTests } from "../../composables/useAiConfig";
-import { _resetPackBuilderForTests } from "../../composables/usePackBuilder";
+import { _resetPackBuilderForTests, usePackBuilder } from "../../composables/usePackBuilder";
 import type { AiConfig, AiPackItem, AiPackPlanResult } from "../../api/types";
 
 const CONFIG = {
@@ -18,7 +18,7 @@ vi.mock("../../api/client", () => ({
   api: {
     ai: {
       config: vi.fn(), packPlan: vi.fn(), packItem: vi.fn(), packCheck: vi.fn(), packInstall: vi.fn(),
-      packReview: vi.fn(), packChange: vi.fn(), packSearch: vi.fn(),
+      packReview: vi.fn(), packChange: vi.fn(), packSearch: vi.fn(), packRecommend: vi.fn(),
       vision: vi.fn().mockResolvedValue({ vision: true, model: "m" }),
     },
     importExport: { undo: vi.fn() },
@@ -115,6 +115,30 @@ describe("PackBuilder", () => {
     expect(repairs).toHaveLength(1);
     // The first check and the one after the single repair.
     expect(api.ai.packCheck).toHaveBeenCalledTimes(2);
+  });
+
+  it("recommends settings on the Settings step and takes them on Use recommended", async () => {
+    vi.mocked(api.ai.packRecommend).mockReset().mockResolvedValue({
+      settings: { style: "sentences", negatives: "none", planner: "graph" },
+      reasons: { style: "Flux reads natural phrases", negatives: "Flux ignores the negative prompt" },
+    });
+    const { w } = await mountIt();
+    usePackBuilder().suggested.value = { negatives: "none" };
+    await w.get('[data-test="pack-request"]').setValue("flux portraits");
+    await w.get('[data-test="pack-next"]').trigger("click");
+    await flushPromises();
+    expect(api.ai.packRecommend).toHaveBeenCalledWith({ request: "flux portraits", suggested: { negatives: "none" } });
+    // Only what differs from the current settings is listed (planner is graph already).
+    expect(w.findAll('[data-test^="pack-recommended-"]').map((x) => x.attributes("data-test")))
+      .toEqual(["pack-recommended-style", "pack-recommended-negatives"]);
+    expect(w.get('[data-test="pack-recommended-style"]').text()).toBe("Written as: Natural phrases · Flux reads natural phrases");
+    expect(usePackBuilder().settings.value.style).toBe("auto");
+    await w.get('[data-test="pack-use-recommended"]').trigger("click");
+    await flushPromises();
+    expect(usePackBuilder().settings.value).toMatchObject({ style: "sentences", negatives: "none" });
+    expect(w.find('[data-test="pack-use-recommended"]').exists()).toBe(false);
+    expect(w.get('[data-test="pack-recommended-same"]').text()).toContain("already fit");
+    expect(api.ai.packPlan).not.toHaveBeenCalled();
   });
 
   it("plans, refines with answers, builds in order, repairs, installs", async () => {

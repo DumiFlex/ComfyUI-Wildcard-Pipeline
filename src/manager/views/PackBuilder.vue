@@ -27,6 +27,7 @@ import ChatInputMarks from "../components/ai/ChatInputMarks.vue";
 import PackFindings from "../components/pack/PackFindings.vue";
 import PackPlanList from "../components/pack/PackPlanList.vue";
 import PackQuestions from "../components/pack/PackQuestions.vue";
+import PackRecommended from "../components/pack/PackRecommended.vue";
 import PackSettings from "../components/pack/PackSettings.vue";
 import { registerPageNote } from "../composables/useOpenEditor";
 import { useAiChat } from "../composables/useAiChat";
@@ -99,7 +100,9 @@ function startOver(): void {
 }
 
 function toSettings(): void {
-  if (convo.instruction.value.trim()) settingUp.value = true;
+  if (!convo.instruction.value.trim()) return;
+  settingUp.value = true;
+  void pb.loadRecommended();
 }
 
 function onSettingsKey(ev: KeyboardEvent): void {
@@ -428,6 +431,12 @@ function stopExtending(): void {
           click. You can still change them later under <b>Change the plan</b>; the next update
           follows them.
         </p>
+        <PackRecommended
+          v-if="pb.recommended.value"
+          :changes="pb.recommendedChanges.value"
+          :disabled="convo.loading.value"
+          @use="pb.takeRecommended"
+        />
         <PackSettings v-model="pb.settings.value" detailed :disabled="convo.loading.value" />
         <div class="wp-pack__row">
           <Button variant="ghost" size="sm" icon="pi-arrow-left" :disabled="convo.loading.value" data-test="pack-back" @click="settingUp = false">Back</Button>

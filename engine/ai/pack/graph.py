@@ -1334,7 +1334,7 @@ def model_families(graph: dict[str, Any]) -> list[str]:
 def request_families(request: str) -> list[str]:
     """The image model families a request names, in the guide's keys."""
     from engine.ai import guide as ai_guide
-    return [key for rx, key in ai_guide._FAMILY if rx.search(request or "")]
+    return ai_guide.families_in(request)
 
 
 def trim_model(graph: dict[str, Any], request: str) -> list[str]:

@@ -57,7 +57,7 @@ import { useAiThinking } from "../../composables/useAiThinking";
 import { useUiStore } from "../../stores/uiStore";
 import { deletedIds } from "../../composables/useLibraryChanged";
 import { useAiChatWidth } from "../../composables/useAiChatWidth";
-import type { AiCardFix, AiChatCardPart, AiChatPage, AiChatProposal, AiChatStep, AiTestCard as TestCard } from "../../api/types";
+import type { AiCardFix, AiChatCardPart, AiChatPage, AiChatProposal, AiChatStep, AiPackSettings, AiTestCard as TestCard } from "../../api/types";
 import { currentPageNote, editorForPage } from "../../composables/useOpenEditor";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 import { useCategoryStore } from "../../stores/categoryStore";
@@ -703,28 +703,31 @@ function target(entry: ChatAssistantEntry, p: AiChatProposal): RouteLocationRaw 
 function openItem(entry: ChatAssistantEntry, p: AiChatProposal): void {
   const op = p.op;
   if (op.op === "open" && op.kind === "pack") {
-    planPack(op.description);
+    openPack(op.description, op.settings);
     return;
   }
   const t = target(entry, p);
   if (t) void router.push(t);
 }
 
-/** Put the description in the Pack builder and plan it. A plan already
- *  there is kept: the text goes into its box for the user to send. */
-function planPack(description: string): void {
+/** Put the description (and the chat's recommended settings) in the Pack
+ *  builder's Describe step, without planning: the user adds reference
+ *  images and checks the settings first (Dumi 2026-10-26: Plan it started
+ *  the plan at once). A plan already there is kept: the text goes into its
+ *  box for the user to send. */
+function openPack(description: string, settings?: Partial<AiPackSettings>): void {
   const pb = usePackBuilder();
   const fresh = pb.phase.value === "plan" && !pb.plan.value && !pb.convo.loading.value;
   pb.convo.instruction.value = description;
+  if (fresh) pb.suggested.value = settings && Object.keys(settings).length ? { ...settings } : null;
   void router.push({ name: "pack-builder" });
-  if (fresh) void pb.askPlan();
 }
 
 function openLabel(p: AiChatProposal): string {
   const op = p.op;
   if (op.op !== "open") return "Open";
   return op.kind === "doc" ? "Open the docs" : op.kind === "page" ? "Go there"
-    : op.kind === "pack" ? "Plan it" : "Open";
+    : op.kind === "pack" ? "Open in Pack builder" : "Open";
 }
 
 function toEditor(p: AiChatProposal): boolean {

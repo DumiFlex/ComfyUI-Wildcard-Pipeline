@@ -19,7 +19,8 @@ needs a running model and takes minutes per request.
 
 USAGE
 -----
-    python scripts/ai_pack_evals.py [--set full|smoke] [--limit N] [--model NAME] [--out report.md]
+    python scripts/ai_pack_evals.py [--set full|smoke] [--limit N] [--only 11,15]
+                                    [--model NAME] [--out report.md]
                                     [--planner graph|items] [--drafts auto|one|three]
                                     [--save DIR]
 
@@ -362,13 +363,17 @@ def save_pack(folder: Path, n: int, request: str, result: dict[str, Any]) -> Pat
 
 
 async def evaluate(complete: Any, requests: list[Any], *, seeds: int = 100,
-                   settings: dict | None = None, save: Path | None = None) -> list[dict]:
+                   settings: dict | None = None, save: Path | None = None,
+                   only: set[int] | None = None) -> list[dict]:
     """``requests``: text, or ``(text, feature)`` to also score a feature.
     ``settings`` are the pack settings (``planner`` picks the graph or the
     item-list planner). With ``save``, every built pack is written there as
-    a readable sheet and JSON (``save_pack``)."""
+    a readable sheet and JSON (``save_pack``). ``only``: the request
+    numbers to run (1-based, as the report numbers them)."""
     rows = []
     for n, entry in enumerate(requests, 1):
+        if only and n not in only:
+            continue
         req, feature = entry if isinstance(entry, tuple) else (entry, "")
         started = time.perf_counter()
         try:
@@ -444,6 +449,8 @@ def main() -> int:
                     help="smoke: a shorter run of plain packs, every feature request and "
                          "two rule-on-a-drawn-list / accepts packs")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--only", default="",
+                    help="run only these request numbers, e.g. 11,15 (as the report numbers them)")
     ap.add_argument("--model", default="")
     ap.add_argument("--seeds", type=int, default=100)
     ap.add_argument("--out", default="pack-evals.md")
@@ -470,7 +477,8 @@ def main() -> int:
     requests = SMOKE if args.set == "smoke" else REQUESTS
     rows = asyncio.run(evaluate(complete, requests[: args.limit or len(requests)], seeds=args.seeds,
                                 settings={"planner": args.planner, "drafts": args.drafts},
-                                save=Path(args.save) if args.save else None))
+                                save=Path(args.save) if args.save else None,
+                                only={int(x) for x in args.only.split(",") if x.strip().isdigit()}))
     title = f"{cfg['model']} ({args.planner} planner, drafts: {args.drafts})"
     Path(args.out).write_text(report(rows, title), encoding="utf-8")
     Path(args.out).with_suffix(".json").write_text(json.dumps(rows, indent=2), encoding="utf-8")

@@ -44,6 +44,7 @@ from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_wildcard_edit
 from engine.ai.chat_manage import ManageTools, bulk_key, default_style
 from engine.ai.chat_tools import MoreTools, _num, _reach, _reach_text
+from engine.ai.pack import recommend as pack_recommend
 from engine.modules.constraint_handler import ConstraintHandler
 from engine.modules.derivation_handler import DerivationHandler
 from engine.modules.wildcard_handler import WildcardHandler
@@ -2293,11 +2294,15 @@ class Library(MoreTools, ManageTools):
         if len(text) < 10:
             raise ValueError("describe the pack: what it makes, its parts and its rules")
         text = text[:MAX_PACK_DESCRIPTION]
+        settings = pack_recommend.clean_suggested(args.get("settings"))
+        preview = [_short(text, 300)]
+        if settings:
+            preview.append("Suggested settings: " + pack_recommend.settings_line(settings))
         return {
             "title": "Plan this pack in the Pack builder", "summary": "pack",
-            "preview": [_short(text, 300)], "warnings": [],
+            "preview": preview, "warnings": [],
             "op": {"op": "open", "kind": "pack", "type": "pack", "id": "pack-builder",
-                   "description": text},
+                   "description": text, **({"settings": settings} if settings else {})},
         }
 
     def _adopt(self, proposal: dict[str, Any]) -> None:

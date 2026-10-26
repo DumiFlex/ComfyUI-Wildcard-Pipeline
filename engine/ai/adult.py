@@ -103,6 +103,11 @@ def _found(text: str, *patterns: re.Pattern[str]) -> list[str]:
     return out
 
 
+def explicit_words(text: str) -> list[str]:
+    """The sexual or nude words in ``text``, in order."""
+    return _found(text, _EXPLICIT)
+
+
 def minor_words(text: str, *, sexual: bool = False) -> list[str]:
     """The words in ``text`` that only mean a minor ("25 years old" is fine;
     "16 years old" is not), in order, each once. In a sexual context

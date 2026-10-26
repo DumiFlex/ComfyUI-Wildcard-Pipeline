@@ -517,8 +517,24 @@ TOOLS: list[Tool] = [
         "plus what they answered}: a button that hands the description to the Pack builder, "
         "which plans, builds, tests and installs a whole pack (wildcards, rules, constraints, "
         "a template) on its own. Use it when the user wants a new pack or a whole set of "
-        "modules for one subject; use the create tools for one or a few items.",
-        obj({"description": s("what the pack makes, its parts and its rules")},
+        "modules for one subject; use the create tools for one or a few items. "
+        '"settings" (optional): only the pack settings the conversation says (style '
+        "tags|sentences, rating safe|nsfw, model family when it is for two or more image "
+        "models, negatives, library reuse for their own wildcards, structure, count); the "
+        "user sees them as recommended.",
+        obj({"description": s("what the pack makes, its parts and its rules"),
+             "settings": obj({
+                 "style": s("how options are worded", enum=["tags", "sentences"]),
+                 "rating": s("safe or explicit", enum=["safe", "nsfw"]),
+                 "model": s("one set of quality tags, or per image model family",
+                            enum=["any", "family"]),
+                 "negatives": s("how the negative prompt is filled",
+                                enum=["auto", "template", "none"]),
+                 "library": s("use the user's library", enum=["reuse", "inspire", "new"]),
+                 "structure": s("sub-bundle per section or one bundle",
+                                enum=["sections", "flat"]),
+                 "count": n("options per wildcard", integer=True),
+             }, desc="pack settings the conversation points to (only those it says)")},
             ("description",)),
         ("pack",),
     ),
