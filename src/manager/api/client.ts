@@ -1,5 +1,6 @@
 import { aiRequestContext } from "../utils/ai-context";
 import type { CommitOk, CommitPayload } from "../import-export/commit";
+import { startDebug } from "./ai-debug";
 import { endAiRequest, startAiRequest, watchesProgress } from "./ai-progress";
 import type { WildcardFilesResult, WildcardFolder } from "../import-export/wildcard-files";
 import type {
@@ -106,6 +107,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   const progress = watchesProgress(path, init.method) ? startAiRequest(path) : null;
   if (progress) headers["X-WP-Progress"] = progress;
+  const debug = startDebug(path, init.method);
+  if (debug) headers["X-WP-Debug"] = debug;
   let resp: Response;
   try {
     resp = await fetch(path, { ...init, headers });
@@ -128,9 +131,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 async function streamChat(
   body: object, onEvent: (event: AiChatStreamEvent) => void, signal?: AbortSignal,
 ): Promise<AiChatResult> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  const debug = startDebug("/wp/api/ai/chat", "POST");
+  if (debug) headers["X-WP-Debug"] = debug;
   const resp = await fetch("/wp/api/ai/chat", {
-    method: "POST", body: JSON.stringify(body), signal,
-    headers: { "content-type": "application/json" },
+    method: "POST", body: JSON.stringify(body), signal, headers,
   });
   checkStartupId(resp);
   if (!resp.ok || !resp.body) {

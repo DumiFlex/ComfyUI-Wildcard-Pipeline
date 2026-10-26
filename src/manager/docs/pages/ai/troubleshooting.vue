@@ -28,6 +28,7 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
           { term: 'The image button is off', desc: 'Your server says the model can\'t see images. Pick a vision model.' },
           { term: 'A card says it\'s out of date', desc: 'The item changed after you asked. Ask again for a fresh card.' },
           { term: 'Try again is unavailable', desc: 'Undo the changes you applied from that answer first.' },
+          { term: 'Tracing a wrong answer', desc: 'Turn on Debug log in Settings › AI assistant › Advanced and ask again. The Debug button in the top bar then lists the request with every model call it made; Copy debug gives the prompt as sent, the reply, thinking and tool calls to paste into a bug report.' },
           { term: 'Explicit content is refused', desc: 'Claude and OpenAI don\'t allow explicit writing. Run an uncensored model yourself or use an unmoderated OpenRouter model.' },
         ]"
       />

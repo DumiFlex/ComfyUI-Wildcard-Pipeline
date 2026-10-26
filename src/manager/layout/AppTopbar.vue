@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, defineAsyncComponent, ref } from "vue";
 import { useRouter } from "vue-router";
 import Icon from "../components/ui/Icon.vue";
 import UpdateDialog from "../components/UpdateDialog.vue";
@@ -10,6 +10,7 @@ import { useUiStore } from "../stores/uiStore";
 import { useAiChat } from "../composables/useAiChat";
 import AiWorking from "../components/ai/AiWorking.vue";
 import { activeAiRequests } from "../api/ai-progress";
+import { aiDebugEnabled, aiDebugUnseen } from "../api/ai-debug";
 import { useAiConfig } from "../composables/useAiConfig";
 import { useTweaksStore } from "../stores/tweaksStore";
 import { useEngagementStore } from "../stores/engagementStore";
@@ -25,6 +26,9 @@ const aiChat = useAiChat();
 const aiRequests = computed(() => activeAiRequests.value.length);
 const chatBusy = computed(() => aiChat.loading.value && !aiChat.open.value);
 const { ready: aiReady } = useAiConfig();
+/** The AI debug log's list (Settings › AI assistant › Debug log). */
+const AiDebugList = defineAsyncComponent(() => import("../components/ai/AiDebugList.vue"));
+const debugOpen = ref(false);
 
 // Version is injected at build time from package.json via vite's
 // `define` config (see vite.config.mts). The release check composable
@@ -172,6 +176,21 @@ function openPalette(): void {
     </button>
 
     <button
+      v-if="aiDebugEnabled"
+      type="button"
+      class="wp-topbar__icon-btn wp-topbar__debug"
+      :aria-pressed="debugOpen"
+      :aria-label="aiDebugUnseen ? `AI debug log, ${aiDebugUnseen} new` : 'AI debug log'"
+      title="AI debug log"
+      data-test="topbar-ai-debug"
+      @click="debugOpen = !debugOpen"
+    >
+      <Icon name="pi-code" />
+      <span v-if="aiDebugUnseen" class="wp-topbar__debug-count" aria-hidden="true">{{ aiDebugUnseen > 9 ? "9+" : aiDebugUnseen }}</span>
+    </button>
+    <AiDebugList v-if="aiDebugEnabled && debugOpen" @close="debugOpen = false" />
+
+    <button
       v-if="aiReady || aiChat.open.value"
       type="button"
       class="wp-topbar__icon-btn wp-topbar__ai"
@@ -298,6 +317,26 @@ function openPalette(): void {
   border-radius: 999px;
   background: var(--wp-accent-500);
   box-shadow: 0 0 0 2px var(--wp-bg-1);
+  pointer-events: none;
+}
+
+/* The AI debug log's button: a count of requests since the list was opened. */
+.wp-topbar__debug { position: relative; }
+.wp-topbar__debug-count {
+  position: absolute;
+  top: 2px;
+  right: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--wp-accent-500);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
 

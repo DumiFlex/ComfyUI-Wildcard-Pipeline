@@ -65,6 +65,7 @@ from engine.db.repositories import (
 from wp_api import (
     _ai_chat,
     _ai_client,
+    _ai_debug,
     _ai_embed,
     _ai_progress,
     _ai_search,
@@ -299,7 +300,7 @@ def register(router: web.UrlDispatcher) -> None:
         # Every AI route: our own request checks (wp_api/_ai_guard.py), and
         # model calls stop when the browser goes away.
         h = cancel_on_disconnect(handler) if cut_short else handler
-        router.add_route(method, path, guarded(_ai_progress.track(h)))
+        router.add_route(method, path, guarded(_ai_debug.track(_ai_progress.track(h))))
 
     add("GET", "/wp/api/ai/config", get_config, cut_short=False)
     add("PUT", "/wp/api/ai/config", put_config, cut_short=False)
@@ -334,3 +335,8 @@ def register(router: web.UrlDispatcher) -> None:
     add("POST", "/wp/api/ai/pack/recommend", post_pack_recommend)
     # Writes, so never cut short.
     add("POST", "/wp/api/ai/pack/install", post_pack_install, cut_short=False)
+    # The debug log (Settings › AI assistant › Debug log): reads, so never
+    # recorded themselves.
+    router.add_route("GET", "/wp/api/ai/debug", guarded(_ai_debug.get_list))
+    router.add_route("GET", "/wp/api/ai/debug/{aid}", guarded(_ai_debug.get_one))
+    router.add_route("DELETE", "/wp/api/ai/debug", guarded(_ai_debug.delete_all))

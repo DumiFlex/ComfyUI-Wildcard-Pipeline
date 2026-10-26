@@ -58,7 +58,7 @@ from typing import Any
 import aiohttp
 
 from engine.ai import budget
-from wp_api import _ai_progress
+from wp_api import _ai_debug, _ai_progress
 
 _MAX_BODY = 4 * 1024 * 1024
 _LIST_TIMEOUT = aiohttp.ClientTimeout(total=15)
@@ -89,6 +89,8 @@ class AIError(Exception):
         self.status = status
         #: The model server's own HTTP status, when it answered one.
         self.upstream: int | None = None
+        #: What the server answered with that status (for the debug log).
+        self.body: Any = None
 
 
 def _is_loopback(url: str) -> bool:
@@ -226,6 +228,7 @@ def _upstream_error(status: int, body: Any) -> AIError:
         msg = f"the server answered {status}"
     err = AIError(f"{msg}{': ' + detail if detail else ''}")
     err.upstream = status
+    err.body = body
     return err
 
 
@@ -311,6 +314,23 @@ async def _stream_line(raw: bytes, on_obj: Any) -> None:
 async def _request(
     cfg: dict[str, Any], method: str, path: str, *,
     body: dict[str, Any] | None = None, timeout: aiohttp.ClientTimeout,
+) -> Any:
+    if method == "POST" and _ai_debug.records(path):
+        started = time.monotonic()
+        try:
+            data = await _send(cfg, method, path, body=body, timeout=timeout)
+        except AIError as e:
+            _ai_debug.record_call(cfg, path, body=body, started=started, error=e,
+                                  response=getattr(e, "body", None))
+            raise
+        _ai_debug.record_call(cfg, path, body=body, started=started, response=data)
+        return data
+    return await _send(cfg, method, path, body=body, timeout=timeout)
+
+
+async def _send(
+    cfg: dict[str, Any], method: str, path: str, *,
+    body: dict[str, Any] | None, timeout: aiohttp.ClientTimeout,
 ) -> Any:
     url = _url(cfg, path)
     try:

@@ -30,7 +30,7 @@ from engine.ai.config import THINKING_LEVELS
 from engine.ai.tools import registry
 from engine.ai.tools import tools as registry_tools
 from wp_api import _ai_client as client
-from wp_api import _ai_thinking
+from wp_api import _ai_debug, _ai_thinking
 from wp_api._ai_client import AIError
 
 FORMATS = ("auto", "native", "json")
@@ -1163,9 +1163,12 @@ async def _post(cfg: dict[str, Any], path: str, body: dict[str, Any], *, kind: s
     streamed = {**body, "stream": True}
     if kind == "openai":
         streamed["stream_options"] = {"include_usage": True}
+    started = time.monotonic()
     try:
         plain = await client.stream_request(cfg, path, body=streamed, on_obj=on)
     except AIError as e:
+        _ai_debug.record_call(cfg, path, body=streamed, started=started, error=e,
+                              response=e.body, streamed=True)
         if e.upstream is not None and 400 <= e.upstream < 500 and e.upstream not in (
                 401, 403, 404, 429) and not (kind == "anthropic" and client.claude_refused(e)) \
                 and not _THINK_REFUSAL.search(e.message):
@@ -1177,6 +1180,7 @@ async def _post(cfg: dict[str, Any], path: str, body: dict[str, Any], *, kind: s
             return plain
         raise
     if plain is not None:
+        _ai_debug.record_call(cfg, path, body=streamed, started=started, response=plain)
         return plain  # the server ignored `stream`
     await live.flush()
     await live.flush_thinking()
@@ -1192,6 +1196,8 @@ async def _post(cfg: dict[str, Any], path: str, body: dict[str, Any], *, kind: s
             or (kind == "responses" and not data.get("status"))):
         data["_early"] = True
     data.pop("_done", None)
+    _ai_debug.record_call(cfg, path, body=streamed, started=started, response=data,
+                          streamed=True)
     return data
 
 

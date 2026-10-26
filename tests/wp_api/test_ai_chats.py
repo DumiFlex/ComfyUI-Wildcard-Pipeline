@@ -590,3 +590,28 @@ def test_usage_keeps_the_thinking_tokens_the_server_reports():
         "completion_tokens_details": {"reasoning_tokens": 261}}})
     assert got == {"prompt": 25, "output": 267, "thought": 261}
     assert "thought" not in _ai_chat._usage_openai({"usage": {"completion_tokens": 3}})
+
+
+async def test_a_streamed_call_goes_in_the_debug_log_assembled(streamer):
+    from engine.ai import debug_log
+    from wp_api import _ai_debug
+    _ai_chat._NO_STREAM.clear()
+    debug_log.clear()
+    streamer.state["body"] = _sse(
+        {"choices": [{"delta": {"content": "Hel"}}]},
+        {"choices": [{"delta": {"content": "lo"}, "finish_reason": "stop"}]})
+
+    async def emit(e):
+        pass
+
+    debug_log.begin("strm0001", "/wp/api/ai/chat")
+    token = _ai_debug.current.set("strm0001")
+    try:
+        await _ai_chat._post(_cfg(streamer), "/chat/completions", {"model": "m"},
+                             kind="openai", emit=emit, show=True)
+    finally:
+        _ai_debug.current.reset(token)
+    [call] = debug_log.get("strm0001")["calls"]
+    assert call["streamed"] is True and call["request"]["stream"] is True
+    assert call["response"]["choices"][0]["message"]["content"] == "Hello"
+    debug_log.clear()

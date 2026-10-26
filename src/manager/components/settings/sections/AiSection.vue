@@ -7,6 +7,7 @@
  * remove it, never read it back.
  */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { aiDebugEnabled, setAiDebug } from "../../../api/ai-debug";
 import Toggle from "../../ui/Toggle.vue";
 import Select from "../../ui/Select.vue";
 import Input from "../../ui/Input.vue";
@@ -1399,6 +1400,19 @@ const off = computed(() => !config.value?.enabled);
               aria-label="Short tool list"
               data-test="ai-lean-prompt"
               @update:model-value="(v: boolean) => patch({ lean_prompt: v })"
+            />
+          </SettingRow>
+          <SettingRow
+            label="Debug log"
+            recommended="Off, unless you are tracing a wrong answer"
+            hint="Records every AI request with each model call it made: the prompt as sent, the reply, thinking, tool calls, tokens and errors. A button in the top bar then lists the last 30, each with Copy debug. Also saved as files in the ai-debug folder next to your library (the newest 300). Holds your library's text, so look before you share a copy. Saved in this browser."
+            setting-key="ai-debug-log"
+          >
+            <Toggle
+              :model-value="aiDebugEnabled"
+              aria-label="Debug log"
+              data-test="ai-debug-log"
+              @update:model-value="setAiDebug"
             />
           </SettingRow>
         </SettingGroup>
