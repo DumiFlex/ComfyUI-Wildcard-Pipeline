@@ -188,7 +188,11 @@ function openPalette(): void {
       <Icon name="pi-code" />
       <span v-if="aiDebugUnseen" class="wp-topbar__debug-count" aria-hidden="true">{{ aiDebugUnseen > 9 ? "9+" : aiDebugUnseen }}</span>
     </button>
-    <AiDebugList v-if="aiDebugEnabled && debugOpen" @close="debugOpen = false" />
+    <!-- On body: the top bar's own stacking context (z-index 30) would keep
+         the list under the AI chat drawer (z-index 50). -->
+    <Teleport to="body">
+      <AiDebugList v-if="aiDebugEnabled && debugOpen" @close="debugOpen = false" />
+    </Teleport>
 
     <button
       v-if="aiReady || aiChat.open.value"
