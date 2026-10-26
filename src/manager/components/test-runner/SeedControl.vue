@@ -6,6 +6,7 @@
  */
 import { computed } from "vue";
 import type { ScenarioSeedSpec } from "../../api/types";
+import Input from "../ui/Input.vue";
 
 const MAX = 10_000;
 
@@ -23,10 +24,14 @@ function clampCount(v: number): number {
 function setMode(m: "range" | "random"): void {
   emit("update:modelValue", m === "random" ? { random: true, count: count.value } : { from: from.value, count: count.value });
 }
-function setFrom(v: string): void {
+// The shared number Input emits on every keystroke and from its arrows; an
+// empty field ("") is mid-edit, so it changes nothing until a number lands.
+function setFrom(v: string | number): void {
+  if (v === "") return;
   emit("update:modelValue", { from: Math.max(0, Math.round(Number(v)) || 0), count: count.value });
 }
-function setCount(v: string): void {
+function setCount(v: string | number): void {
+  if (v === "") return;
   const n = clampCount(Number(v));
   emit("update:modelValue", mode.value === "random" ? { random: true, count: n } : { from: from.value, count: n });
 }
@@ -52,31 +57,20 @@ function setCount(v: string): void {
         @click="setMode('random')"
       >Random</button>
     </div>
-    <label v-if="mode === 'range'" class="wp-trsd__field" for="wp-tr-seed-from">
-      <span>from</span>
-      <input
-        id="wp-tr-seed-from"
-        type="number"
-        min="0"
-        :value="from"
-        aria-label="First seed"
-        data-test="seed-from"
-        @change="setFrom(($event.target as HTMLInputElement).value)"
-      >
-    </label>
-    <label class="wp-trsd__field" for="wp-tr-seed-count">
-      <input
-        id="wp-tr-seed-count"
-        type="number"
-        min="1"
-        :max="MAX"
-        :value="count"
-        aria-label="Number of seeds"
-        data-test="seed-count"
-        @change="setCount(($event.target as HTMLInputElement).value)"
-      >
-      <span>seeds</span>
-    </label>
+    <div v-if="mode === 'range'" class="wp-trsd__field">
+      <span aria-hidden="true">from</span>
+      <Input
+        type="number" size="sm" :min="0" :model-value="from"
+        aria-label="First seed" data-test="seed-from" @update:model-value="setFrom"
+      />
+    </div>
+    <div class="wp-trsd__field">
+      <Input
+        type="number" size="sm" :min="1" :max="MAX" :model-value="count"
+        aria-label="Number of seeds" data-test="seed-count" @update:model-value="setCount"
+      />
+      <span aria-hidden="true">seeds</span>
+    </div>
   </div>
 </template>
 
@@ -99,14 +93,9 @@ function setCount(v: string): void {
   padding: 0 var(--wp-space-4); color: var(--wp-text-dim);
 }
 .wp-trsd__field + .wp-trsd__field { border-left: 1px solid var(--wp-border); }
-.wp-trsd__field input {
-  width: 64px; background: none; border: 0; color: var(--wp-text);
-  font: var(--wp-text-sm) var(--wp-font-mono); text-align: right;
-  appearance: textfield; -moz-appearance: textfield;
-}
-.wp-trsd__field input::-webkit-outer-spin-button,
-.wp-trsd__field input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+/* The shared number Input sits flush inside the pill: no own border or fill. */
+.wp-trsd__field :deep(.wp-input-group) { width: 88px; border: 0; background: none; box-shadow: none; }
+.wp-trsd__field :deep(.wp-input) { font-family: var(--wp-font-mono); text-align: right; }
 .wp-trsd__field:focus-within { color: var(--wp-text-muted); }
-.wp-trsd__field input:focus-visible { outline: none; }
 .wp-trsd:focus-within { border-color: var(--wp-border-focus); }
 </style>

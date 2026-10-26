@@ -26,6 +26,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { isNavigationFailure, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import Button from "../ui/Button.vue";
+import Checkbox from "../ui/Checkbox.vue";
 import Select, { type SelectOption } from "../ui/Select.vue";
 import { api } from "../../api/client";
 import AiMessage from "./AiMessage.vue";
@@ -1080,14 +1081,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               <ul>
                 <li v-for="o in shownOptions(i, p)" :key="o.id" :data-off="isSkipped(entry, p, o.id) || undefined">
                   <label>
-                    <input
-                      type="checkbox"
-                      :checked="!isSkipped(entry, p, o.id)"
-                      :disabled="!!entry.status[p.pid]"
-                      :aria-label="`Keep ${o.empty ? 'the empty option' : o.text}`"
-                      data-test="ai-chat-card-option"
-                      @change="chat.toggleOption(entry, p, o.id)"
-                    />
+                    <Checkbox class="wp-checkbox--inline" :model-value="!isSkipped(entry, p, o.id)" :disabled="!!entry.status[p.pid]" :aria-label="`Keep ${o.empty ? 'the empty option' : o.text}`" data-test="ai-chat-card-option" @update:model-value="chat.toggleOption(entry, p, o.id)" />
                     <span class="wp-ai-chat__opt-text wp-ai-chat__clamp" :title="o.empty ? undefined : o.text"><template v-if="o.empty">∅ nothing</template><AiSyntax v-else :text="o.text" /></span>
                     <span v-if="o.weight !== 1" class="wp-ai-chat__opt-weight">×{{ o.weight }}</span>
                     <span v-if="o.fallback" class="wp-ai-chat__chip" data-tone="accent">fallback</span>
@@ -1442,7 +1436,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 }
 .wp-ai-chat__opts li:hover { background: var(--wp-bg-3); }
 .wp-ai-chat__opts li[data-off] .wp-ai-chat__opt-text { color: var(--wp-text-dim); text-decoration: line-through; }
-.wp-ai-chat__opts input { accent-color: var(--wp-accent-500); margin: 0; }
 .wp-ai-chat__opt-text { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; }
 /* Long text on a card: three lines, the rest in the tooltip and the magnifier. */
 .wp-ai-chat__clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }

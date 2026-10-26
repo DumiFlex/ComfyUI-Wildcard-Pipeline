@@ -7,6 +7,7 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
+import Checkbox from "../ui/Checkbox.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
 import { api } from "../../api/client";
 import { useAiConversation } from "../../composables/useAiConversation";
@@ -103,8 +104,8 @@ function close(): void {
     @close="close"
   >
     <template v-if="result">
-      <label v-if="result.description" class="wp-ai-desc__desc" for="wp-ai-desc-use" data-test="ai-desc-description">
-        <input id="wp-ai-desc-use" v-model="useDescription" type="checkbox" class="wp-ai-desc__check" />
+      <label v-if="result.description" class="wp-ai-desc__desc" data-test="ai-desc-description">
+        <Checkbox class="wp-checkbox--inline wp-ai-desc__check" v-model="useDescription" />
         <span class="wp-ai-desc__body">
           <span v-if="description" class="wp-ai-desc__old">{{ description }}</span>
           <span class="wp-ai-desc__new">{{ result.description }}</span>
@@ -159,7 +160,7 @@ function close(): void {
   background: var(--wp-bg-1);
   cursor: pointer;
 }
-.wp-ai-desc__check { accent-color: var(--wp-accent-500); margin-top: 3px; }
+.wp-ai-desc__check { margin-top: 3px; }
 .wp-ai-desc__body { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .wp-ai-desc__old { color: var(--wp-text-dim); text-decoration: line-through; }
 .wp-ai-desc__new { color: var(--wp-text); }

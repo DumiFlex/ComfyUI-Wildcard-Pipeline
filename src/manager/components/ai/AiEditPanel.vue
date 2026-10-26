@@ -10,6 +10,7 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
+import Checkbox from "../ui/Checkbox.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
 import AiSyntax from "./AiSyntax.vue";
 import { useAiImages } from "../../composables/useAiImages";
@@ -213,14 +214,8 @@ function fmtWeight(w: number | undefined): string {
           :data-kind="action"
           :data-off="unticked.has(i) ? 'true' : 'false'"
         >
-          <label class="wp-ai-edit__body" :for="`wp-ai-edit-${i}`">
-            <input
-              :id="`wp-ai-edit-${i}`"
-              type="checkbox"
-              class="wp-ai-edit__check"
-              :checked="!unticked.has(i)"
-              @change="toggle(i)"
-            />
+          <label class="wp-ai-edit__body">
+            <Checkbox class="wp-checkbox--inline wp-ai-edit__check" :model-value="!unticked.has(i)" @update:model-value="toggle(i)" />
             <template v-if="action === 'remove'">
               <span class="wp-ai-edit__old" data-removed="true"><AiSyntax :text="c.before.value ?? ''" /></span>
               <span v-if="c.reason" class="wp-ai-edit__reason">{{ c.reason }}</span>
@@ -301,7 +296,6 @@ function fmtWeight(w: number | undefined): string {
 .wp-ai-edit__row[data-kind="remove"] { box-shadow: inset 3px 0 0 var(--wp-danger); }
 .wp-ai-edit__row:first-child { border-top: 0; }
 .wp-ai-edit__row[data-off="true"] { box-shadow: none; opacity: 0.5; }
-.wp-ai-edit__check { accent-color: var(--wp-accent-500); }
 .wp-ai-edit__body { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1; min-width: 0; cursor: pointer; }
 .wp-ai-edit__old, .wp-ai-edit__new, .wp-ai-edit__label {
   font-family: var(--wp-font-mono, monospace);

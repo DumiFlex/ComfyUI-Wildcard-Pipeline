@@ -86,7 +86,7 @@ describe("AiEditPanel", () => {
     await w.get('[data-test="ai-run"]').trigger("click");
     await flushPromises();
     expect(w.text()).toContain("×0.5");
-    await w.findAll('[data-test="ai-edit-results"] input[type="checkbox"]')[1].setValue(false);
+    await w.findAll('[data-test="ai-edit-results"] [role="checkbox"]')[1].trigger("click");
     await w.get('[data-test="ai-edit-apply"]').trigger("click");
     const applied = w.emitted("apply")?.[0][0] as { option_id: string }[];
     expect(applied.map((c) => c.option_id)).toEqual(["aaaa0001"]);

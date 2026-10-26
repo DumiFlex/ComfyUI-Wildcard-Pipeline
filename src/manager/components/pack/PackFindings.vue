@@ -6,6 +6,7 @@
  */
 import { computed } from "vue";
 import Button from "../ui/Button.vue";
+import Checkbox from "../ui/Checkbox.vue";
 import type { AiPackFinding } from "../../api/types";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 
@@ -38,21 +39,14 @@ function patchLabel(f: AiPackFinding): string {
     </p>
     <ul v-else class="wp-pack-findings__list">
       <li v-for="f in pb.findings.value" :key="f.id" :data-level="f.level" data-test="pack-finding">
-        <input
-          type="checkbox"
-          class="wp-pack-findings__tick"
-          :checked="pb.selected.value.has(f.id)"
-          :aria-label="`Send to the AI: ${f.text}`"
-          :disabled="busy"
-          @change="pb.toggleSelected(f.id)"
-        >
+        <Checkbox class="wp-checkbox--inline wp-pack-findings__tick" :model-value="pb.selected.value.has(f.id)" :disabled="busy" :aria-label="`Send to the AI: ${f.text}`" @update:model-value="pb.toggleSelected(f.id)" />
         <i :class="['pi', f.level === 'fix' ? 'pi-exclamation-triangle' : 'pi-lightbulb']" aria-hidden="true" />
         <span class="wp-pack-findings__text">
           <b v-if="f.key && itemName(f.key)">{{ itemName(f.key) }}: </b>{{ f.text }}<span v-if="f.by === 'model'" class="wp-pack-findings__by"> · AI review</span><span v-if="pb.stuck.value.has(f.id)" class="wp-pack-findings__by" data-test="pack-finding-stuck"> · the AI couldn't change this; do it by hand, dismiss it, or tick it to send it again</span><span v-else-if="pb.unfixed.value.has(f.id)" class="wp-pack-findings__by" data-test="pack-finding-unfixed"> · the AI left this unchanged</span>
         </span>
         <span class="wp-pack-findings__acts">
-          <button v-if="f.patch" type="button" class="wp-pack-findings__btn" :disabled="busy" data-test="pack-finding-apply" @click="pb.applyFinding(f)">{{ patchLabel(f) }}</button>
-          <button type="button" class="wp-pack-findings__btn wp-pack-findings__dismiss" :aria-label="`Dismiss: ${f.text}`" title="Dismiss" :disabled="busy" data-test="pack-finding-dismiss" @click="pb.dismissFinding(f.id)"><i class="pi pi-times" aria-hidden="true" /></button>
+          <Button v-if="f.patch" variant="outline" size="sm" :disabled="busy" data-test="pack-finding-apply" @click="pb.applyFinding(f)">{{ patchLabel(f) }}</Button>
+          <Button variant="ghost" size="sm" icon="times" :aria-label="`Dismiss: ${f.text}`" :disabled="busy" data-test="pack-finding-dismiss" @click="pb.dismissFinding(f.id)" />
         </span>
       </li>
     </ul>
@@ -78,16 +72,10 @@ function patchLabel(f: AiPackFinding): string {
 .wp-pack-findings__list li { display: flex; gap: 8px; align-items: baseline; }
 .wp-pack-findings__list li[data-level="fix"] > .pi { color: var(--wp-warn); }
 .wp-pack-findings__list li[data-level="tip"] > .pi { color: var(--wp-accent-text); }
-.wp-pack-findings__tick { flex: none; margin: 0; position: relative; top: 2px; accent-color: var(--wp-accent-500); }
+.wp-pack-findings__tick { position: relative; top: 2px; }
 .wp-pack-findings__text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .wp-pack-findings__by { color: var(--wp-text-dim); }
 .wp-pack-findings__acts { flex: none; display: inline-flex; gap: 4px; }
-.wp-pack-findings__btn {
-  padding: 2px 8px; border-radius: 5px; font-size: 12px; cursor: pointer;
-  border: 1px solid var(--wp-accent-400); background: none; color: var(--wp-accent-text);
-}
-.wp-pack-findings__dismiss { border-color: transparent; color: var(--wp-text-dim); padding: 2px 5px; }
-.wp-pack-findings__dismiss:hover { color: var(--wp-text); background: var(--wp-bg-2); }
 .wp-pack-findings__notice { margin: 8px 0 0; font-size: 12.5px; color: var(--wp-warn); display: flex; gap: 6px; align-items: center; }
 .wp-pack-findings__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
 .wp-pack-findings__dim { flex: 1; font-size: 12px; color: var(--wp-text-dim); }

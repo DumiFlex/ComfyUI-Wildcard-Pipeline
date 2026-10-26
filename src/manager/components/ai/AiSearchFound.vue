@@ -7,6 +7,7 @@
  * to one line saying what was used.
  */
 import Button from "../ui/Button.vue";
+import Checkbox from "../ui/Checkbox.vue";
 import { siteOf, type SearchFound } from "../../composables/searchFound";
 
 const props = withDefaults(defineProps<{
@@ -50,14 +51,7 @@ const s = props.state;
       <ul v-else class="wp-ai-found__rows">
         <li v-for="(row, ri) in r.rows" :key="row.url + ri" :data-picked="s.picks.value.has(`${qi}:${ri}`) || undefined">
           <label>
-            <input
-              type="checkbox"
-              :checked="s.picks.value.has(`${qi}:${ri}`)"
-              :disabled="busy"
-              :aria-label="`Use ${row.title}`"
-              data-test="ai-found-row"
-              @change="s.toggle(qi, ri)"
-            />
+            <Checkbox class="wp-checkbox--inline" :model-value="s.picks.value.has(`${qi}:${ri}`)" :disabled="busy" :aria-label="`Use ${row.title}`" data-test="ai-found-row" @update:model-value="s.toggle(qi, ri)" />
             <span class="wp-ai-found__body">
               <span class="wp-ai-found__title">{{ row.title }}</span>
               <span class="wp-ai-found__site" :title="row.url">{{ siteOf(row.url) }}</span>
@@ -122,7 +116,7 @@ const s = props.state;
 .wp-ai-found__rows label { display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
 .wp-ai-found__rows li:hover label { background: var(--wp-bg-3); }
 .wp-ai-found__rows li[data-picked] label { background: color-mix(in oklab, var(--wp-accent-500) 10%, transparent); }
-.wp-ai-found__rows input { margin-top: 3px; accent-color: var(--wp-accent-500); }
+.wp-ai-found__rows .wp-checkbox { margin-top: 3px; }
 .wp-ai-found__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .wp-ai-found__title { font-size: 13px; color: var(--wp-text); overflow-wrap: anywhere; }
 .wp-ai-found__site { font-size: 11.5px; color: var(--wp-success); }

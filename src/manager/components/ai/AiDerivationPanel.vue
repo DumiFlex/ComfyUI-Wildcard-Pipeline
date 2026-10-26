@@ -9,6 +9,7 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
+import Checkbox from "../ui/Checkbox.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
 import { useAiImages } from "../../composables/useAiImages";
 import { api } from "../../api/client";
@@ -113,14 +114,8 @@ function close(): void {
           :data-off="unticked.has(i) ? 'true' : 'false'"
           data-test="ai-rule"
         >
-          <label class="wp-ai-rules__head" :for="`wp-ai-rule-${i}`">
-            <input
-              :id="`wp-ai-rule-${i}`"
-              type="checkbox"
-              class="wp-ai-rules__check"
-              :checked="!unticked.has(i)"
-              @change="toggle(i)"
-            />
+          <label class="wp-ai-rules__head">
+            <Checkbox class="wp-checkbox--inline wp-ai-rules__check" :model-value="!unticked.has(i)" @update:model-value="toggle(i)" />
             <span class="wp-ai-rules__summary">{{ r.summary }}</span>
           </label>
           <ol class="wp-ai-rules__lines">
@@ -177,7 +172,6 @@ function close(): void {
 }
 .wp-ai-rules__rule[data-off="true"] { box-shadow: none; opacity: 0.5; }
 .wp-ai-rules__head { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.wp-ai-rules__check { accent-color: var(--wp-accent-500); }
 .wp-ai-rules__summary { font-weight: 600; font-size: 13px; color: var(--wp-text); }
 .wp-ai-rules__lines { list-style: none; margin: 6px 0 0 24px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
 .wp-ai-rules__lines > li { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; font-size: 12px; }

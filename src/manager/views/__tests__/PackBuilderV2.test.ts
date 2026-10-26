@@ -177,7 +177,7 @@ describe("PackBuilder v2", () => {
     await flushPromises();
     expect(w.find('[data-test="pack-waiting-search"]').exists()).toBe(true);
     expect(w.get('[data-test="pack-answer"]').attributes("disabled")).toBeDefined();
-    await w.findAll('[data-test="ai-found-row"]')[0].setValue(true);
+    await w.findAll('[data-test="ai-found-row"] [role="checkbox"]')[0].trigger("click");
     await w.get('[data-test="ai-found-use"]').trigger("click");
     await flushPromises();
     const sent = vi.mocked(api.ai.packPlan).mock.calls[1][0];
@@ -324,7 +324,7 @@ describe("PackBuilder v2", () => {
     expect(card.text()).toContain("Wolf cut guide");
     expect(card.text()).toContain("hair.test");
     expect(w.find('[data-test="ai-found-use"]').exists()).toBe(false);
-    await w.findAll('[data-test="ai-found-row"]')[0].setValue(true);
+    await w.findAll('[data-test="ai-found-row"] [role="checkbox"]')[0].trigger("click");
     await w.get('[data-test="ai-found-use"]').trigger("click");
     await flushPromises();
     const sent = vi.mocked(api.ai.packPlan).mock.calls[1][0];

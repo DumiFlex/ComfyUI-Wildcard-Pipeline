@@ -7,6 +7,7 @@
  * used. Rename and pin don't move a chat; delete asks inline first.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import Button from "../ui/Button.vue";
 import Input from "../ui/Input.vue";
 import { api } from "../../api/client";
 import type { AiChatSummary } from "../../api/types";
@@ -155,8 +156,8 @@ function turnsLabel(n: number): string {
         >
           <template v-if="confirming === c.id">
             <span class="wp-ai-chats__ask">Delete "{{ plainMentions(c.title) }}"? This can't be undone.</span>
-            <button type="button" class="wp-ai-chats__btn" data-test="ai-chats-keep" @click="confirming = null">Keep</button>
-            <button type="button" class="wp-ai-chats__btn wp-ai-chats__btn--danger" data-test="ai-chats-confirm" @click="remove(c)">Delete</button>
+            <Button size="sm" data-test="ai-chats-keep" @click="confirming = null">Keep</Button>
+            <Button variant="danger" size="sm" data-test="ai-chats-confirm" @click="remove(c)">Delete</Button>
           </template>
           <template v-else-if="renaming === c.id">
             <input
@@ -231,10 +232,4 @@ function turnsLabel(n: number): string {
 .wp-ai-chats__icon .pi { font-size: 12px; }
 .wp-ai-chats__rename { flex: 1; margin: 4px 0 4px 8px; }
 .wp-ai-chats__ask { flex: 1; min-width: 0; padding-left: 8px; font-size: 12px; overflow-wrap: anywhere; }
-.wp-ai-chats__btn {
-  padding: 4px 9px; border-radius: 6px; font-size: 12px; cursor: pointer;
-  border: 1px solid var(--wp-border); background: var(--wp-bg-1); color: var(--wp-text);
-}
-.wp-ai-chats__btn--danger { border-color: var(--wp-danger); color: var(--wp-danger); }
-.wp-ai-chats__btn--danger:hover { background: color-mix(in oklab, var(--wp-danger) 15%, var(--wp-bg-1)); }
 </style>

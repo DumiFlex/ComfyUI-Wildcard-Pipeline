@@ -158,7 +158,7 @@ describe("Draft with AI images", () => {
     await w.get('[data-test="ai-research-allow"]').trigger("click");
     await flushPromises();
     expect(w.find('[data-test="ai-found-use"]').exists()).toBe(false);
-    await w.findAll('[data-test="ai-found-row"]')[0].setValue(true);
+    await w.findAll('[data-test="ai-found-row"] [role="checkbox"]')[0].trigger("click");
     await w.get('[data-test="ai-found-use"]').trigger("click");
     await flushPromises();
     const body = draft.mock.calls[1][0];

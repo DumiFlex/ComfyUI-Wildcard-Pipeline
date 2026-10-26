@@ -56,7 +56,7 @@ describe("AiCardGroup", () => {
     chat.blockedReason.mockImplementation(((_e: ChatAssistantEntry, p: AiChatProposal) => (p.pid === "c" ? "Apply a first" : "")) as never);
     chat.chainOf.mockImplementation(((_e: ChatAssistantEntry, p: AiChatProposal) => (p.pid === "c" ? [{}] : [])) as never);
     const w = mountIt(e);
-    await w.findAll('[data-test="ai-group-tick"]')[1].setValue(false);
+    await w.findAll('[data-test="ai-group-tick"] [role="checkbox"]')[1].trigger("click");
     expect(w.get('[data-test="ai-group-apply"]').text()).toContain("Apply 2");
     await w.get('[data-test="ai-group-apply"]').trigger("click");
     await flushPromises();
@@ -68,7 +68,7 @@ describe("AiCardGroup", () => {
     const e = entry([card("a"), card("b"), card("c")]);
     const w = mountIt(e);
     expect(w.find('[data-test="ai-group-dismiss"]').exists()).toBe(false);
-    await w.findAll('[data-test="ai-group-tick"]')[2].setValue(false);
+    await w.findAll('[data-test="ai-group-tick"] [role="checkbox"]')[2].trigger("click");
     expect(w.get('[data-test="ai-group-apply"]').text()).toBe("Apply 2");
     expect(w.get('[data-test="ai-group-dismiss"]').text()).toBe("Dismiss the other 1");
     await w.get('[data-test="ai-group-dismiss"]').trigger("click");
