@@ -291,6 +291,36 @@ def test_a_variable_the_template_reads_twice_loses_its_second_read():
         assert len(chunks) == len(set(chunks))
 
 
+def test_a_rule_on_the_model_keeps_its_words_and_its_read():
+    """9B pack 11 (2026-10-26): the test runs set no model, so $quality
+    showed its otherwise, which a Flux preset also said; the tidy took
+    $quality out of the template, and Pony lost its score tags."""
+    raw = _raw()
+    raw["items"].insert(0, _item(kind="derivation", name="Model quality", var="quality",
+                                 about="q"))
+    raw["items"].insert(1, _item(kind="fixed_values", name="Flux Quality", var="flux_q",
+                                 about="f"))
+    raw["items"][-1]["about"] = "$quality, $race, $hair, $outfit, $place, $light, $flux_q"
+    plan = pack.compile_plan(raw)
+    built = _built(plan)
+    keys = _keys(plan)
+    built[keys["Model quality"]] = {"id": plan["items"][0]["id"], "payload": {"rules": [{
+        "id": "r1", "branches": [{
+            "condition": {"var": "model_variant", "op": "equals", "value": "pony"},
+            "action": {"target_var": "quality", "mode": "replace",
+                       "value": "score_9, score_8_up"}}],
+        "else": {"action": {"target_var": "quality", "mode": "replace",
+                            "value": "masterpiece, best quality"}}}]}}
+    built[keys["Flux Quality"]] = {"id": plan["items"][1]["id"], "payload": {"values": [
+        {"id": "v1", "name": "flux_q", "value": "masterpiece, best quality"}]}}
+    built[keys["Prompt"]]["payload"]["template_string"] = raw["items"][-1]["about"]
+    new, changed = pack_tidy.tidy(plan, built)
+    assert "$quality" in new[keys["Prompt"]]["payload"]["template_string"]
+    assert new[keys["Model quality"]]["payload"] == built[keys["Model quality"]]["payload"]
+    assert new[keys["Flux Quality"]]["payload"] == built[keys["Flux Quality"]]["payload"]
+    assert keys["Prompt"] not in changed
+
+
 def _shoes_pack(sundress_tags):
     """Outfit (accepts SHOES) → Shoes (classify SHOES), one agree matrix."""
     plan = {"items": [
