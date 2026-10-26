@@ -14,6 +14,7 @@ vi.mock("../../api/client", () => ({
 
 import ImportTab from "../ImportTab.vue";
 import PackConverter from "../PackConverter.vue";
+import Select from "../../components/ui/Select.vue";
 import {
   buildWildcardForm,
   describeNote,
@@ -256,8 +257,10 @@ describe("PackConverter", () => {
     const apply = wrap.find("[data-test='pack-apply']");
     expect(apply.attributes("disabled")).toBeDefined();
     await wrap.find("[data-test='pack-files-toggle']").trigger("click");
-    const boxes = wrap.findAll("[data-test='pack-files'] input[type='checkbox']");
-    await boxes[1].setValue(false);
+    const boxes = wrap.findAll("[data-test='pack-files'] [role='checkbox']");
+    expect(boxes[1].attributes("aria-checked")).toBe("true");
+    await boxes[1].trigger("click");
+    expect(boxes[1].attributes("aria-checked")).toBe("false");
     expect(wrap.find("[data-test='pack-continue']").attributes("disabled")).toBeDefined();
     await apply.trigger("click");
     await flushPromises();
@@ -356,7 +359,10 @@ describe("PackConverter", () => {
     const samples = wrap.find("[data-test='pack-samples']").text();
     expect(samples).toContain("winter, snow");
     expect(samples).toContain("Something odd");
-    await wrap.find("[data-test='pack-bundles']").setValue("entries");
+    wrap.findAllComponents(Select)
+      .find((c) => c.attributes("data-test") === "pack-bundles")
+      ?.vm.$emit("update:modelValue", "entries");
+    await flushPromises();
     await wrap.find("[data-test='pack-apply']").trigger("click");
     await flushPromises();
     const meta = JSON.parse(String((wildcardFiles.mock.calls[1][0] as FormData).get("meta")));

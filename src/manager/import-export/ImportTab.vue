@@ -23,14 +23,12 @@
  * automatically when a subsequent parse attempt succeeds, so users
  * recover from a typo without manually dismissing anything.
  *
- * NOTE: This component uses plain `<button>` / `<input>` / `<textarea>`
- * elements rather than the project's `<Checkbox>` / `<Input>` wrappers
- * because the surface is small and the entry-point buttons need to
- * remain trivially queryable (`wrap.find("textarea")`, etc.) from the
- * test side. The styling matches the Card-less, low-chrome look used
- * by the rest of the import pane.
+ * Buttons are the shared `<Button>`; the paste box stays a native
+ * `<textarea>` with the global `.wp-textarea` look so tests can still
+ * query it (`wrap.find("textarea")`).
  */
 import { computed, ref } from "vue";
+import Button from "../components/ui/Button.vue";
 import { type IntegrityWarning } from "./parse";
 import { parseCheckedPayload } from "./shape-check";
 import type { RawPayload } from "./migrations";
@@ -276,12 +274,10 @@ function handleParse(raw: string, source: "file" | "paste"): void {
             {{ lastEntityCount === 1 ? "entity" : "entities" }}
           </span>
         </span>
-        <button
-          type="button"
-          class="wp-import-tab__btn wp-import-tab__btn--ghost"
+        <Button variant="ghost"
           data-test="import-tab-replace"
           @click="onReplaceFile"
-        >Replace file…</button>
+        >Replace file…</Button>
       </div>
       <div
         v-if="migrationNote"
@@ -315,12 +311,10 @@ function handleParse(raw: string, source: "file" | "paste"): void {
         @drop="onDrop"
       >
         <div class="wp-import-tab__entry">
-          <button
-            type="button"
-            class="wp-import-tab__btn wp-import-tab__btn--primary"
+          <Button variant="primary"
             data-test="import-file-btn"
             @click="pickFile"
-          >Pick file…</button>
+          >Pick file…</Button>
           <input
             ref="fileInput"
             type="file"
@@ -331,12 +325,10 @@ function handleParse(raw: string, source: "file" | "paste"): void {
             data-test="import-file-input"
             @change="onFilePick"
           />
-          <button
-            type="button"
-            class="wp-import-tab__btn"
+          <Button
             data-test="import-paste-btn"
             @click="openPaste"
-          >Paste JSON…</button>
+          >Paste JSON…</Button>
         </div>
         <p class="wp-import-tab__drophint" aria-hidden="true">
           <i class="pi pi-download" />
@@ -360,25 +352,21 @@ function handleParse(raw: string, source: "file" | "paste"): void {
           <textarea
             id="wp-import-tab-paste-area"
             v-model="pasteText"
-            class="wp-import-tab__textarea"
+            class="wp-textarea wp-import-tab__textarea"
             rows="10"
             placeholder="{ &quot;schema_version&quot;: 1, &quot;bundles&quot;: [], … }"
             data-test="import-paste-textarea"
           />
         </label>
         <div class="wp-import-tab__paste-actions">
-          <button
-            type="button"
-            class="wp-import-tab__btn"
+          <Button
             data-test="import-paste-cancel"
             @click="cancelPaste"
-          >Cancel</button>
-          <button
-            type="button"
-            class="wp-import-tab__btn wp-import-tab__btn--primary"
+          >Cancel</Button>
+          <Button variant="primary"
             data-test="import-paste-confirm"
             @click="onPasteConfirm"
-          >Parse</button>
+          >Parse</Button>
         </div>
       </div>
 
@@ -469,50 +457,6 @@ function handleParse(raw: string, source: "file" | "paste"): void {
   background: var(--wp-bg-3);
 }
 
-.wp-import-tab__btn {
-  height: var(--wp-btn-h);
-  padding: 0 var(--wp-space-6);
-  border-radius: var(--wp-radius-sm);
-  background: var(--wp-bg-3);
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  font-size: var(--wp-text-base);
-  font-weight: var(--wp-weight-medium);
-  font-family: inherit;
-  cursor: pointer;
-  transition: background .12s, border-color .12s, color .12s;
-}
-.wp-import-tab__btn:hover {
-  background: var(--wp-bg-4);
-  border-color: var(--wp-border-strong);
-}
-.wp-import-tab__btn:focus-visible {
-  outline: none;
-  box-shadow: var(--wp-focus-ring);
-}
-.wp-import-tab__btn--primary {
-  background: linear-gradient(180deg, var(--wp-accent-500), var(--wp-accent-600));
-  border-color: var(--wp-accent-600);
-  /* audit-exempt: white on saturated accent-500/600 gradient ≥4.5:1 both themes */
-  color: #fff;
-}
-.wp-import-tab__btn--primary:hover {
-  background: linear-gradient(180deg, var(--wp-accent-400), var(--wp-accent-500));
-  border-color: var(--wp-accent-500);
-}
-/* Ghost variant — used by the compact-mode Replace file button. Lower
- * visual weight than the primary so the loaded-state bar stays calm. */
-.wp-import-tab__btn--ghost {
-  background: transparent;
-  border-color: var(--wp-border);
-  color: var(--wp-text-muted);
-}
-.wp-import-tab__btn--ghost:hover {
-  background: var(--wp-bg-3);
-  color: var(--wp-text);
-  border-color: var(--wp-border-strong);
-}
-
 /* Compact "loaded" bar — single-row drop-in for the full pick UI once
  * the parent flips `payloadLoaded` to true. Matches the same chrome as
  * the rest of the import pane (wp-bg-2 fill, hairline border, radius)
@@ -590,24 +534,9 @@ function handleParse(raw: string, source: "file" | "paste"): void {
 }
 
 .wp-import-tab__textarea {
-  width: 100%;
   min-height: 160px;
-  padding: var(--wp-space-4);
-  background: var(--wp-bg-1);
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
   font-family: var(--wp-font-mono);
-  font-size: var(--wp-text-sm);
-  line-height: var(--wp-line-sm);
-  resize: vertical; overscroll-behavior: contain;
-  outline: none;
-  transition: border-color .12s, box-shadow .12s;
-}
-.wp-import-tab__textarea:focus-visible,
-.wp-import-tab__textarea:focus {
-  border-color: var(--wp-accent-500);
-  box-shadow: var(--wp-focus-ring);
+  overscroll-behavior: contain;
 }
 
 .wp-import-tab__paste-actions {
