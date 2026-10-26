@@ -187,11 +187,11 @@ describe("follow-ups", () => {
     });
     expect(w.findAll('[data-test="ai-asked"]').map((x) => x.text()))
       .toEqual(["mages get a title", "shorter titles"]);
-    expect(w.get('[data-test="ai-answer-nav"]').text()).toContain("Answer 2 of 2");
     expect(w.text()).toContain("second 2");
-    await w.get('[data-test="ai-prev"]').trigger("click");
+    // Clicking the first step shows its answer; the refine stays listed.
+    await w.findAll('[data-test="ai-asked"]')[0].trigger("click");
     expect(w.text()).toContain("first 2");
-    expect(w.get('[data-test="ai-answer-nav"]').text()).toContain("Answer 1 of 2");
+    expect(w.findAll('[data-test="ai-step"]').map((x) => x.attributes("data-after"))).toEqual(["false", "true"]);
     await w.get('[data-test="ai-restart"]').trigger("click");
     expect(w.find('[data-test="ai-rules-results"]').exists()).toBe(false);
     expect((w.get('[data-test="ai-instruction"]').element as HTMLTextAreaElement).value)
@@ -210,7 +210,11 @@ describe("follow-ups", () => {
     await flushPromises();
     expect(draft.mock.calls[1][0].instruction).toBe("go");
     expect(draft.mock.calls[1][0].history).toBeUndefined();
-    expect(w.get('[data-test="ai-answer-nav"]').text()).toContain("Answer 2 of 2");
+    // The try goes on the step's own switcher, not a new step.
+    expect(w.findAll('[data-test="ai-step"]')).toHaveLength(1);
+    expect(w.get('[data-test="ai-try-nav"]').text()).toContain("try 2 of 2");
+    await w.get('[data-test="ai-try-prev"]').trigger("click");
+    expect(w.get('[data-test="ai-try-nav"]').text()).toContain("try 1 of 2");
     // Adding ends the conversation.
     await w.get('[data-test="ai-apply"]').trigger("click");
     expect(w.find('[data-test="ai-thread"]').exists()).toBe(false);
