@@ -1,6 +1,7 @@
 """Pack builder: `compile_item` turns one model answer into a checked payload."""
 from __future__ import annotations
 
+import copy
 import json
 import re
 from typing import Any
@@ -52,7 +53,7 @@ from engine.ai.pack.text_fixes import (
     _wrap_pipes,
 )
 from engine.modules.constraint_handler import ConstraintHandler
-from engine.modules.derivation_handler import DerivationHandler
+from engine.modules.derivation_handler import DerivationHandler, clause_actions
 from engine.modules.wildcard_handler import WildcardHandler
 
 
@@ -77,6 +78,50 @@ def _quality_otherwise(plan: dict[str, Any], item: dict[str, Any], payload: dict
     return ({**payload, "rules": [first, *rules[1:]]},
             [f"Added an otherwise, \"{words}\": with no model variable set, $quality still "
              "has the pack's quality words"])
+
+
+#: Tags only Pony reads (score, source and rating tags).
+_PONY_ONLY = re.compile(r"(?<![\w-])(?:score_\d(?:_up)?|source_(?:anime|cartoon|furry|pony|"
+                        r"realistic)|rating_(?:safe|questionable|explicit))(?![\w-])", re.I)
+
+
+def _quality_off_pony(plan: dict[str, Any], item: dict[str, Any], payload: dict[str, Any]
+                      ) -> tuple[dict[str, Any], list[str]]:
+    """Score tags only where the per-family quality rule tests for Pony.
+    The 9B wrote "score_9, score_8_up, score_7_up" as the otherwise of a
+    Pony and Flux pack (2026-10-26), so every Flux run printed Pony's
+    score tags."""
+    graph = plan.get("graph")
+    if not isinstance(graph, dict) or item.get("var") != pack_graph.QUALITY_VAR:
+        return payload, []
+    if set(pack_graph.model_families(graph)) == {"pony"}:
+        return payload, []
+    default = ("masterpiece, best quality" if graph.get("style") == "tags"
+               else "high quality, detailed")
+    fixed = 0
+    rules = copy.deepcopy(payload.get("rules") or [])
+    for rule in rules:
+        if not isinstance(rule, dict):
+            continue
+        clauses = [b for b in rule.get("branches") or [] if isinstance(b, dict)
+                   and "pony" not in json.dumps(
+                       {k: v for k, v in b.items() if k not in ("action", "extra_actions")}
+                   ).lower()]
+        clauses += [rule["else"]] if isinstance(rule.get("else"), dict) else []
+        for clause in clauses:
+            for action in clause_actions(clause):
+                value = action.get("value")
+                if not isinstance(value, str) or not _PONY_ONLY.search(value):
+                    continue
+                kept = ", ".join(t.strip() for t in _PONY_ONLY.sub("", value).split(",")
+                                 if t.strip())
+                action["value"] = kept or default
+                fixed += 1
+    if not fixed:
+        return payload, []
+    return ({**payload, "rules": rules},
+            ["Took Pony's score tags out of the rows that aren't for Pony: other models "
+             "would print them"])
 
 
 def compile_item(
@@ -167,6 +212,8 @@ def compile_item(
                 rules.append(r["rule"])
         payload = {"rules": rules}
         payload, said = _quality_otherwise(plan, item, payload)
+        warnings += said
+        payload, said = _quality_off_pony(plan, item, payload)
         warnings += said
         from engine.ai import pack_tidy
         payload, joined = pack_tidy.merge_lookup(payload)

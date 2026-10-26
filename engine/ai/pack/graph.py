@@ -255,8 +255,12 @@ def _slots(raw: Any, warnings: list[str], taken_vars: set[str]) -> list[dict[str
             "sweep": s.get("sweep") is True,
             "sometimes_none": max(0, min(90, none)),
             "axes": axes,
-            "self_axis": _self_axis(name, var, axes),
+            # A slot folded from kinds of one thing keeps its options when
+            # the graph comes back from the browser (`_merge_split_slots`).
+            "self_axis": "" if s.get("folded") is True else _self_axis(name, var, axes),
         })
+        if s.get("folded") is True:
+            out[-1]["folded"] = True
         weights = _weights(s.get("weights"), axes)
         if weights:
             out[-1]["weights"] = weights
@@ -366,7 +370,12 @@ def _merge_split_slots(slots: list[dict[str, Any]], warnings: list[str]) -> dict
             "hold": any(g["hold"] for g in group),
             "axes": [{"name": axis, "values": values}],
         })
-        keep["self_axis"] = _self_axis(name, var, keep["axes"])
+        # The values were kinds of the thing ("Casual Outfit" / "Formal
+        # Outfit"), never its options: with an axis named like the slot
+        # ("outfit": casual, formal) a self axis would print the bare kind
+        # ("casual") as the outfit (9B pack 15, 2026-10-24).
+        keep["self_axis"] = ""
+        keep["folded"] = True
         keep.pop("weights", None)
         slots[:] = [s for s in slots if s is keep or id(s) not in ids]
         warnings.append(f"{' and '.join(old)} are one {name} slot with a {axis} axis: "
@@ -413,7 +422,8 @@ def _infer_axes(raw: Any, slots: list[dict[str, Any]], warnings: list[str],
             if used & set(have["values"]) or len(slot["axes"]) >= MAX_AXES:
                 continue
             slot["axes"].append({"name": axis, "values": list(have["values"])})
-            slot["self_axis"] = _self_axis(slot["name"], slot["var"], slot["axes"])
+            if not slot.get("folded"):
+                slot["self_axis"] = _self_axis(slot["name"], slot["var"], slot["axes"])
             warnings.append(f"{slot['name']}: added the {axis} axis "
                             f"({', '.join(have['values'])}) that its {kind} rule with "
                             f"{other['name']} needs")
@@ -1335,6 +1345,59 @@ def request_families(request: str) -> list[str]:
     """The image model families a request names, in the guide's keys."""
     from engine.ai import guide as ai_guide
     return ai_guide.families_in(request)
+
+
+#: Slot variables that name the checkpoint itself. WP Model Info sets
+#: $model_family / $model_variant / $model_name from the loaded model, so a
+#: slot rolling one picks nothing real.
+_MODEL_SLOT_VARS = frozenset({"model_family", "model_variant", "model_name", "model",
+                              "checkpoint", "base_model", "model_type", "family"})
+
+
+def drop_model_slots(graph: dict[str, Any]) -> list[str]:
+    """A slot that rolls the image model ("Model Family" [Pony, Flux]) goes:
+    the checkpoint decides the model, not a pick, and nothing printed it
+    (9B pack 11, 2026-10-26: an internal pick-2 Model Family slot that no
+    rule read, its options quality tags). Its families become the graph's
+    ``model``, so the per-family quality rule takes over, and once the pack
+    runs on two families, slots named after one family ("Pony Quality Tags",
+    "Flux Quality Phrases") go too: both printed in every prompt whatever
+    the model. Returns the lines saying so."""
+    from engine.ai import guide as ai_guide
+    out: list[str] = []
+    gone: list[dict[str, Any]] = []
+    for s in graph["slots"]:
+        named = ai_guide.families_in(" ".join([s["name"], s["what"],
+                                               *(v for a in s["axes"] for v in a["values"])]))
+        if s["var"] in _MODEL_SLOT_VARS or _slug_var(s["name"]) in _MODEL_SLOT_VARS \
+                or (len(named) >= 2 and all(ai_guide.family(v) for a in s["axes"]
+                                            for v in a["values"]) and s["axes"]):
+            gone.append(s)
+            fams = [ai_guide.FAMILY_LABEL[f] for f in named]
+            if fams and not model_families(graph):
+                graph["model"] = ", ".join(fams)
+            out.append(f"{s['name']}: the checkpoint decides the model, not a pick (a WP Model "
+                       "Info node sets $model_family and $model_variant), so the slot went")
+    if len(model_families(graph)) >= 2:
+        for s in graph["slots"]:
+            if s in gone or s["show"] != "prompt":
+                continue
+            if ai_guide.family(s["name"].split()[0] if s["name"].split() else ""):
+                gone.append(s)
+                out.append(f"{s['name']}: printed in every prompt whatever the model; the "
+                           "per-model quality rule ($quality) gives each model its own words")
+    if not gone:
+        return []
+    names = {s["name"] for s in gone}
+    vars_ = {s["var"] for s in gone}
+    graph["slots"] = [s for s in graph["slots"] if s["name"] not in names]
+    graph["relations"] = [
+        r for r in graph["relations"]
+        if r["from"]["slot"] not in names and (r.get("to") or {}).get("slot") not in names]
+    graph["template"]["order"] = [v for v in graph["template"]["order"] if v not in vars_]
+    if graph.get("anchor") in vars_:
+        graph["anchor"] = graph["slots"][0]["var"] if graph["slots"] else ""
+    return out
 
 
 def trim_model(graph: dict[str, Any], request: str) -> list[str]:
@@ -3268,6 +3331,7 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
     applied += apply_request_slots(graph, kw.get("request") or "")
     from engine.ai.pack.request_needs import apply_request_needs
     applied += apply_request_needs(graph, kw.get("request") or "")
+    applied += drop_model_slots(graph)
     applied += trim_model(graph, kw.get("request") or "")
     if model_quality(graph, kw.get("settings")):
         own = [f["name"] for f in graph["fixed"] if f["var"] == QUALITY_VAR]

@@ -324,9 +324,12 @@ async def test_fixed_values_send_a_short_catalog(wp_client, fake_llm, monkeypatc
     monkeypatch.setattr(library_vars, "describe_for", spy)
     fake_llm.overrides["fixed_values"] = {"values": [
         {"name": "room", "value": "bedroom", "negative": ""}]}
-    await wp_client.post("/wp/api/ai/text/draft", json=_text_body("fixed_values", "$room is bedroom"))
+    await wp_client.post("/wp/api/ai/text/draft",
+                         json=_text_body("fixed_values", "$room is bedroom"))
     fake_llm.overrides["prompt_template"] = {"template": "$room", "negative": ""}
     await wp_client.post("/wp/api/ai/text/draft", json=_text_body("template", "a room"))
     # Fixed values read no variable: a few for the style, the rest by name.
     assert seen == [{"keep": text_items.FIXED_CATALOG_VARS,
-                     "values": text_items.FIXED_CATALOG_VALUES}, {}]
+                     "values": text_items.FIXED_CATALOG_VALUES},
+                    {"keep": library_vars.MAX_VARS_FOCUSED,
+                     "values": library_vars.MAX_VALUES_SHOWN}]
