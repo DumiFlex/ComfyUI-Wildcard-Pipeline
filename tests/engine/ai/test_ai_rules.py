@@ -528,6 +528,19 @@ def test_the_panels_catalog_lists_what_the_request_is_about_in_full():
     assert library_vars.describe_for(small, "rain") == library_vars.describe(small)
 
 
+def test_the_catalog_can_be_cut_to_a_few_variables_with_a_few_values():
+    rows = [{"type": "wildcard", "name": f"Thing {i}", "payload": {
+        "var_binding": f"thing_{i}",
+        "options": [{"id": f"o{j}", "value": f"rain value {j}"} for j in range(20)]}}
+        for i in range(30)]
+    cat = library_vars.build_catalog(rows)
+    text = library_vars.describe_for(cat, "rain", keep=6, values=6)
+    lines = text.splitlines()
+    assert len(lines) == 7 and lines[-1].startswith("Also set in the library")
+    assert lines[0].endswith("rain value 5 (+14 more)")
+    assert len(text) < len(library_vars.describe_for(cat, "rain")) / 4
+
+
 def test_a_name_two_wildcards_share_is_refused_and_listed_by_variable():
     rows = [{"id": "aaaa0001", "type": "wildcard", "name": "Outfit",
              "payload": {"var_binding": "outfit", "options": []}},

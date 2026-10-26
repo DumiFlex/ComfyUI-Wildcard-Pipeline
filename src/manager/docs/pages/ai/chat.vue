@@ -104,7 +104,9 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         <li>Change descriptions, tags, categories and ratings, find duplicates, and tell you what
           reads a variable before you rename it.</li>
         <li>Make or rename categories and rename library tags everywhere. Each is a card with Undo.</li>
-        <li>Hand a whole new pack to the <DocRef id="ai-pack-builder" /> with <b>Plan it</b>.</li>
+        <li>Hand a whole new pack to the <DocRef id="ai-pack-builder" /> with <b>Open in Pack
+          builder</b>. It fills in the description and the settings the chat recommends, then waits
+          for you to add images and press <b>Plan it</b>.</li>
       </ul>
       <p>
         It only changes items you named, have open, or that its last answer showed you. Asked for

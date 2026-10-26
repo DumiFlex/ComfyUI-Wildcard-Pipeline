@@ -453,7 +453,9 @@ async def post_text_draft(request: web.Request) -> web.Response:
         name=name[:200], description=description,
         catalog_text=library_vars.describe_for(
             catalog, " ".join([ai_followup.first_instruction(turns, instruction), name,
-                               description, current[:2000], out_var])),
+                               description, current[:2000], out_var]),
+            **({"keep": text_items.FIXED_CATALOG_VARS, "values": text_items.FIXED_CATALOG_VALUES}
+               if kind == "fixed_values" else {})),
         labels=labels, current=current[:4000], out_var=out_var,
     )
     system, schema, schema_name = _TEXT_KINDS[kind]

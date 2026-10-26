@@ -30,7 +30,10 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
           guns, mages get robes"). Add up to 4 reference images if your model sees them, and refer
           to them by number ("the skirt in image 2").</li>
         <li><b>Settings.</b> <b>Next: pack settings</b> shows the options below. They're kept in
-          this browser, so next time <b>Plan it</b> is the only click.</li>
+          this browser, so next time <b>Plan it</b> is the only click. Above them, <b>Recommended
+          for this pack</b> lists the settings that fit your request, each with why (Flux reads
+          natural phrases and ignores negatives; two image models want Per model family).
+          <b>Use recommended</b> takes them; nothing changes until you press it.</li>
         <li><b>Plan.</b> The assistant lists every item it will build, grouped by section, and asks
           what it can't guess. Answer, edit items, or ask for changes until the plan looks right.</li>
         <li><b>Build &amp; check.</b> Each item is built, then the pack runs 200 seeds on the real
@@ -119,7 +122,9 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         <li><b>Make sub-bundles</b> in a bundle's editor groups its children by a name you type, pick
           or let <b>Suggest with AI</b> choose. The AI only groups children that sit next to each
           other, so the run order stays the same.</li>
-        <li><b>Plan it</b> on a chat card hands a pack the chat suggested to the Pack builder.</li>
+        <li><b>Open in Pack builder</b> on a chat card hands a pack the chat suggested to the Pack
+          builder, with the settings the chat recommends. It doesn't plan yet, so you can add
+          reference images and check the settings first.</li>
       </ul>
       <p>
         The planner first reads your library's style (tags or sentences, your tags, variables and
