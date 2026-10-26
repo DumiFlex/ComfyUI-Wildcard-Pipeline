@@ -28,6 +28,16 @@ switching from Claude to Ollama and back doesn't lose the Claude key. Files
 written before that (flat ``base_url`` / ``model`` / ``api_key``) are read
 as the settings of the provider they were saved with.
 
+The settings that depend on the model (``MODEL_FIELDS``: Thinking, model
+size, context, tool format, samplers and the small-model step options) live
+in the provider's slot too, and each model the provider ran keeps its own
+copy under ``models``: switching from Claude at Medium thinking to a Qwen
+that only takes on/off brings back what was last used with that Qwen. A
+model with nothing saved keeps the provider's values but starts Thinking and
+model size at automatic, since another model's level or size may not fit
+it. The unload time is the provider's (it is about the server). Everything
+else (permissions, web search, the assistant switch) is shared by all.
+
 The feature is OFF by default. Nothing in this package makes a request; this
 is only the shape of what the user configured.
 """
@@ -169,6 +179,13 @@ SAMPLING: dict[str, tuple[float, float, bool]] = {
     "presence_penalty": (-2.0, 2.0, False),
 }
 TOOL_FORMATS = ("auto", "native", "json")
+#: Settings that follow the provider and model (see the module docstring).
+#: `RESET_ON_NEW_MODEL` start at "auto" for a model with nothing saved.
+MODEL_FIELDS = ("thinking", "model_size", "context_max", "tool_format", "sampling",
+                "choose_first", "lean_prompt")
+RESET_ON_NEW_MODEL = ("thinking", "model_size")
+#: How many models per provider keep their own settings (the oldest go).
+MODELS_KEPT = 40
 #: "auto" leaves thinking to the server or model; "off" asks it to skip;
 #: "on" turns it on; a level asks a thinking model for that much reasoning.
 #: Each model takes only some of these (Extra high and Max are Claude's,
@@ -273,7 +290,46 @@ def _clamp_int(value: Any, lo: int, hi: int, default: int) -> int:
     return max(lo, min(hi, int(value)))
 
 
-def _normalize_slot(raw: Any) -> dict[str, Any]:
+def _normalize_model_fields(src: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
+    """The `MODEL_FIELDS` of a slot or a saved model, each from `src`, else
+    `fallback`, else the default."""
+    def pick(key: str, allowed: tuple[str, ...]) -> str:
+        for got in (src.get(key), fallback.get(key)):
+            if got in allowed:
+                return got
+        return DEFAULTS.get(key, "auto")
+
+    def flag(key: str) -> bool:
+        got = src.get(key, fallback.get(key))
+        return got is True
+
+    raw_context = src.get("context_max", fallback.get("context_max"))
+    raw_sampling = src.get("sampling")
+    if not isinstance(raw_sampling, dict):
+        got = fallback.get("sampling")
+        raw_sampling = got if isinstance(got, dict) else {}
+    sampling = {}
+    for name, value in raw_sampling.items():
+        try:
+            got = _sampler(name, value)
+        except ConfigError:
+            continue
+        if got is not None:
+            sampling[name] = got
+    return {
+        "thinking": pick("thinking", THINKING),
+        "model_size": pick("model_size", MODEL_SIZES),
+        "context_max": _clamp_int(raw_context, CONTEXT_MIN, CONTEXT_MAX, DEFAULTS["context_max"]),
+        "tool_format": pick("tool_format", TOOL_FORMATS),
+        "sampling": sampling,
+        "choose_first": flag("choose_first"),
+        "lean_prompt": flag("lean_prompt"),
+    }
+
+
+def _normalize_slot(raw: Any, legacy: dict[str, Any] | None = None) -> dict[str, Any]:
+    """One provider's settings. `legacy`: the shared values of a file from
+    before these followed the provider."""
     src = raw if isinstance(raw, dict) else {}
     base_url = _got if isinstance(_got := src.get("base_url"), str) else ""
     try:
@@ -282,7 +338,6 @@ def _normalize_slot(raw: Any) -> dict[str, Any]:
         base_url = ""
     model = _got if isinstance(_got := src.get("model"), str) else ""
     key = _got if isinstance(_got := src.get("api_key"), str) else ""
-    size = src.get("model_size") if src.get("model_size") in MODEL_SIZES else "auto"
     embed_model = _got if isinstance(_got := src.get("embed_model"), str) else ""
     embed_url = _got if isinstance(_got := src.get("embed_base_url"), str) else ""
     embed_api_ = src.get("embed_api") if src.get("embed_api") in EMBED_APIS else "auto"
@@ -293,24 +348,24 @@ def _normalize_slot(raw: Any) -> dict[str, Any]:
     key_origin = _got if isinstance(_got := src.get("key_origin"), str) else None
     embed_key = _got if isinstance(_got := src.get("embed_api_key"), str) else ""
     embed_origin = _got if isinstance(_got := src.get("embed_key_origin"), str) else ""
-    raw_sampling = _got if isinstance(_got := src.get("sampling"), dict) else {}
-    sampling = {}
-    for name, value in raw_sampling.items():
-        try:
-            got = _sampler(name, value)
-        except ConfigError:
-            continue
-        if got is not None:
-            sampling[name] = got
+    current = _normalize_model_fields(src, legacy or {})
+    raw_models = _got if isinstance(_got := src.get("models"), dict) else {}
+    models = {}
+    for mid, saved in list(raw_models.items())[-MODELS_KEPT:]:
+        if isinstance(mid, str) and mid.strip() and isinstance(saved, dict):
+            models[mid.strip()[:200]] = _normalize_model_fields(saved, {})
     return {"base_url": base_url, "model": model.strip()[:200], "api_key": key.strip(),
             # None: a key saved before keys were bound; bound on read.
             "key_origin": key_origin if key.strip() else "",
-            "model_size": size, "embed_model": embed_model.strip()[:200],
+            **current, "models": models,
+            "unload_after_s": _clamp_int(
+                src.get("unload_after_s", (legacy or {}).get("unload_after_s")),
+                UNLOAD_AFTER_MIN, UNLOAD_AFTER_MAX, DEFAULTS["unload_after_s"]),
+            "embed_model": embed_model.strip()[:200],
             "embed_base_url": embed_url, "embed_api": embed_api_,
             # The embedding server's own key, bound to its address the same way.
             "embed_api_key": embed_key.strip(),
-            "embed_key_origin": embed_origin if embed_key.strip() else "",
-            "sampling": sampling}
+            "embed_key_origin": embed_origin if embed_key.strip() else ""}
 
 
 def _sampler(name: Any, value: Any) -> float | int | None:
@@ -338,11 +393,18 @@ def _normalize(raw: Any) -> dict[str, Any]:
     if provider not in PRESETS:
         provider = DEFAULTS["provider"]
     raw_slots = _got if isinstance(_got := src.get("providers"), dict) else {}
-    slots = {pid: _normalize_slot(raw_slots.get(pid)) for pid in PRESETS}
+    # These were shared before they followed the provider: every provider
+    # starts from what was set, except Thinking, which only the provider it
+    # was set for keeps (another's model may not take that level).
+    legacy = {k: src[k] for k in (*MODEL_FIELDS, "unload_after_s")
+              if k in src and k not in ("model_size", "sampling")}
+    others = {k: v for k, v in legacy.items() if k != "thinking"}
+    slots = {pid: _normalize_slot(raw_slots.get(pid), legacy if pid == provider else others)
+             for pid in PRESETS}
     if "providers" not in src and any(k in src for k in ("base_url", "model", "api_key")):
         # A file from before per-provider slots: its flat fields belong to
         # the provider it was saved with.
-        slots[provider] = _normalize_slot(src)
+        slots[provider] = _normalize_slot(src, legacy)
     for pid, slot in slots.items():
         if slot["key_origin"] is None:
             # Saved before keys were bound: bind it to where it is used now.
@@ -350,17 +412,6 @@ def _normalize(raw: Any) -> dict[str, Any]:
     return {
         "enabled": src.get("enabled") is True,
         "provider": provider,
-        "unload_after_s": _clamp_int(
-            src.get("unload_after_s"), UNLOAD_AFTER_MIN, UNLOAD_AFTER_MAX,
-            DEFAULTS["unload_after_s"],
-        ),
-        "context_max": _clamp_int(
-            src.get("context_max"), CONTEXT_MIN, CONTEXT_MAX, DEFAULTS["context_max"],
-        ),
-        "tool_format": src.get("tool_format") if src.get("tool_format") in TOOL_FORMATS
-        else DEFAULTS["tool_format"],
-        "thinking": src.get("thinking") if src.get("thinking") in THINKING
-        else DEFAULTS["thinking"],
         "allow_delete": src.get("allow_delete") is True,
         "auto_apply": src.get("auto_apply") is True,
         "providers": slots,
@@ -368,8 +419,6 @@ def _normalize(raw: Any) -> dict[str, Any]:
         "reader": _normalize_reader(src.get("reader")),
         "danbooru_lookup": src.get("danbooru_lookup") is True,
         "web_always_allow": src.get("web_always_allow") is True,
-        "choose_first": src.get("choose_first") is True,
-        "lean_prompt": src.get("lean_prompt") is True,
     }
 
 
@@ -429,17 +478,17 @@ def _active(cfg: dict[str, Any]) -> dict[str, Any]:
         "provider": cfg["provider"],
         "base_url": slot["base_url"],
         "model": slot["model"],
-        "unload_after_s": cfg["unload_after_s"],
-        "context_max": cfg["context_max"],
+        "unload_after_s": slot["unload_after_s"],
+        "context_max": slot["context_max"],
         "model_size": slot["model_size"],
-        "tool_format": cfg["tool_format"],
-        "thinking": cfg["thinking"],
+        "tool_format": slot["tool_format"],
+        "thinking": slot["thinking"],
         "allow_delete": cfg["allow_delete"],
         "auto_apply": cfg["auto_apply"],
         "danbooru_lookup": cfg["danbooru_lookup"],
         "web_always_allow": cfg["web_always_allow"],
-        "choose_first": cfg["choose_first"],
-        "lean_prompt": cfg["lean_prompt"],
+        "choose_first": slot["choose_first"],
+        "lean_prompt": slot["lean_prompt"],
         "embed_model": slot["embed_model"],
         "embed_base_url": slot["embed_base_url"],
         "embed_api": slot["embed_api"],
@@ -674,10 +723,11 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
     """Apply a partial update and return the public view.
 
     `base_url`, `model` and `api_key` apply to the provider that is active
-    after `provider` (if given) is applied. Switching provider keeps every
-    provider's own settings. `api_key`: a non-empty string replaces the
-    saved key, `""` or `None` removes it, absent leaves it alone. It is
-    write-only: no response carries it back.
+    after `provider` (if given) is applied, and so do the model's own
+    settings (`MODEL_FIELDS`, after `model` is applied). Switching provider
+    or model keeps every provider's and model's own settings. `api_key`: a
+    non-empty string replaces the saved key, `""` or `None` removes it,
+    absent leaves it alone. It is write-only: no response carries it back.
     """
     if not isinstance(patch, dict):
         raise ConfigError("body must be an object")
@@ -685,9 +735,11 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
         cfg = _read()
         for flag in ("enabled", "allow_delete", "auto_apply", "danbooru_lookup",
                      "web_always_allow", "choose_first", "lean_prompt"):
+            if flag in patch and not isinstance(patch[flag], bool):
+                raise ConfigError(f"{flag} must be true or false")
+        for flag in ("enabled", "allow_delete", "auto_apply", "danbooru_lookup",
+                     "web_always_allow"):
             if flag in patch:
-                if not isinstance(patch[flag], bool):
-                    raise ConfigError(f"{flag} must be true or false")
                 cfg[flag] = patch[flag]
         if "provider" in patch:
             if patch["provider"] not in PRESETS:
@@ -703,7 +755,10 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
         if "model" in patch:
             if not isinstance(patch["model"], str):
                 raise ConfigError("model must be a string")
-            slot["model"] = patch["model"].strip()[:200]
+            _switch_model(slot, patch["model"].strip()[:200])
+        for flag in ("choose_first", "lean_prompt"):
+            if flag in patch:
+                slot[flag] = patch[flag]
         if "embed_model" in patch:
             if not isinstance(patch["embed_model"], str):
                 raise ConfigError("embed_model must be a string")
@@ -732,9 +787,9 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
                      or PRESETS[cfg["provider"]]["base_url"])
             slot["embed_key_origin"] = origin(where) if key else ""
         if "unload_after_s" in patch:
-            cfg["unload_after_s"] = _clamp_int(
+            slot["unload_after_s"] = _clamp_int(
                 patch["unload_after_s"], UNLOAD_AFTER_MIN, UNLOAD_AFTER_MAX,
-                cfg["unload_after_s"],
+                slot["unload_after_s"],
             )
         if "sampling" in patch:
             # A partial update: a sampler set to null or "" goes back to
@@ -754,17 +809,19 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
                 raise ConfigError("model_size must be auto, small, medium or large")
             slot["model_size"] = patch["model_size"]
         if "context_max" in patch:
-            cfg["context_max"] = _clamp_int(
-                patch["context_max"], CONTEXT_MIN, CONTEXT_MAX, cfg["context_max"],
+            slot["context_max"] = _clamp_int(
+                patch["context_max"], CONTEXT_MIN, CONTEXT_MAX, slot["context_max"],
             )
         if "tool_format" in patch:
             if patch["tool_format"] not in TOOL_FORMATS:
                 raise ConfigError("tool_format must be auto, native or json")
-            cfg["tool_format"] = patch["tool_format"]
+            slot["tool_format"] = patch["tool_format"]
         if "thinking" in patch:
             if patch["thinking"] not in THINKING:
                 raise ConfigError("thinking must be auto, off, on, low, medium, high, xhigh or max")
-            cfg["thinking"] = patch["thinking"]
+            slot["thinking"] = patch["thinking"]
+        if any(k in patch for k in MODEL_FIELDS):
+            _remember_model(slot)
         if "api_key" in patch:
             key = patch["api_key"]
             if key is None:
@@ -783,6 +840,39 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
         _update_reader(cfg["reader"], patch)
         _write(_normalize(cfg))
     return public_view()
+
+
+def _model_values(slot: dict[str, Any]) -> dict[str, Any]:
+    return {k: copy.deepcopy(slot[k]) for k in MODEL_FIELDS}
+
+
+def _remember_model(slot: dict[str, Any]) -> None:
+    """Keep the slot's model settings as its current model's own (newest
+    last, so the oldest go first when there are too many)."""
+    model = slot["model"]
+    if not model:
+        return
+    models = slot["models"]
+    models.pop(model, None)
+    models[model] = _model_values(slot)
+    while len(models) > MODELS_KEPT:
+        models.pop(next(iter(models)))
+
+
+def _switch_model(slot: dict[str, Any], model: str) -> None:
+    """Change the provider's model and bring back that model's settings: the
+    ones saved with it, else the provider's with Thinking and model size
+    back to automatic (another model's level or size may not fit it)."""
+    if model == slot["model"]:
+        return
+    _remember_model(slot)
+    slot["model"] = model
+    saved = slot["models"].get(model)
+    if saved is not None:
+        slot.update(copy.deepcopy(saved))
+    else:
+        for key in RESET_ON_NEW_MODEL:
+            slot[key] = DEFAULTS.get(key, "auto")
 
 
 def _update_search(search: dict[str, Any], patch: dict[str, Any]) -> None:

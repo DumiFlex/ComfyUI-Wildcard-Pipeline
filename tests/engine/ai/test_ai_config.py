@@ -162,3 +162,75 @@ def test_a_hand_edited_sampler_out_of_range_is_dropped(_isolated):
     _isolated.write_text(json.dumps({"provider": "lmstudio", "providers": {"lmstudio": {
         "model": "m", "sampling": {"top_k": 20, "top_p": 7, "nope": 1}}}}), encoding="utf-8")
     assert ai_config.load_effective()["sampling"] == {"top_k": 20}
+
+
+def test_model_settings_follow_the_provider():
+    # The bug: Medium thinking set for Claude stuck when switching to a
+    # LM Studio Qwen that only takes on/off.
+    ai_config.update({"provider": "anthropic", "model": "claude-sonnet-5-5"})
+    ai_config.update({"thinking": "medium", "model_size": "large", "context_max": 65536,
+                      "tool_format": "native"})
+    view = ai_config.update({"provider": "lmstudio", "model": "qwen/qwen3.5-9b"})
+    assert view["thinking"] == "auto"
+    assert view["model_size"] == "auto"
+    assert view["context_max"] == 16384
+    assert view["tool_format"] == "auto"
+    ai_config.update({"thinking": "off", "context_max": 32768, "choose_first": True,
+                      "lean_prompt": True, "unload_after_s": 300,
+                      "sampling": {"top_k": 20}})
+    view = ai_config.update({"provider": "anthropic"})
+    assert (view["thinking"], view["model_size"], view["context_max"]) == ("medium", "large", 65536)
+    assert view["choose_first"] is False and view["lean_prompt"] is False
+    assert view["unload_after_s"] == 60 and view["sampling"] == {}
+    view = ai_config.update({"provider": "lmstudio"})
+    assert (view["thinking"], view["context_max"], view["unload_after_s"]) == ("off", 32768, 300)
+    assert view["choose_first"] is True and view["lean_prompt"] is True
+    assert ai_config.load_effective()["sampling"] == {"top_k": 20}
+
+
+def test_each_model_keeps_its_own_settings():
+    ai_config.update({"provider": "lmstudio", "model": "dumi/qwen3.8-27b-effort"})
+    ai_config.update({"thinking": "medium", "model_size": "medium", "context_max": 32768,
+                      "lean_prompt": False})
+    # A model with nothing saved keeps the provider's values, but Thinking
+    # and model size start at automatic.
+    view = ai_config.update({"model": "qwen/qwen3.5-9b"})
+    assert (view["thinking"], view["model_size"], view["context_max"]) == ("auto", "auto", 32768)
+    ai_config.update({"thinking": "on", "lean_prompt": True})
+    view = ai_config.update({"model": "dumi/qwen3.8-27b-effort"})
+    assert (view["thinking"], view["model_size"]) == ("medium", "medium")
+    assert view["lean_prompt"] is False
+    view = ai_config.update({"model": "qwen/qwen3.5-9b"})
+    assert (view["thinking"], view["lean_prompt"]) == ("on", True)
+    # Shared settings stay shared.
+    ai_config.update({"allow_delete": True})
+    assert ai_config.update({"provider": "ollama"})["allow_delete"] is True
+
+
+def test_settings_from_before_per_provider_ones_are_kept(_isolated):
+    _isolated.write_text(json.dumps({
+        "enabled": True, "provider": "anthropic", "thinking": "medium", "context_max": 65536,
+        "tool_format": "json", "unload_after_s": 120, "choose_first": True,
+        "providers": {"anthropic": {"model": "claude-x", "model_size": "large"},
+                      "lmstudio": {"model": "qwen/qwen3.5-9b"}},
+    }), encoding="utf-8")
+    view = ai_config.public_view()
+    assert (view["thinking"], view["context_max"], view["tool_format"]) == ("medium", 65536, "json")
+    assert view["model_size"] == "large" and view["choose_first"] is True
+    # Another provider gets the old values except Thinking, which was set
+    # for the provider in use then.
+    view = ai_config.update({"provider": "lmstudio"})
+    assert (view["thinking"], view["context_max"], view["tool_format"]) == ("auto", 65536, "json")
+    assert view["unload_after_s"] == 120 and view["model_size"] == "auto"
+    stored = json.loads(_isolated.read_text())
+    assert "thinking" not in stored and "context_max" not in stored
+
+
+def test_only_so_many_models_are_remembered():
+    ai_config.update({"provider": "ollama"})
+    for i in range(ai_config.MODELS_KEPT + 5):
+        ai_config.update({"model": f"m{i}", "thinking": "on"})
+    stored = json.loads(ai_config.config_path().read_text())
+    models = stored["providers"]["ollama"]["models"]
+    assert len(models) == ai_config.MODELS_KEPT
+    assert "m0" not in models and f"m{ai_config.MODELS_KEPT + 4}" in models
