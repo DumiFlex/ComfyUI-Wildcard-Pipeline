@@ -9,6 +9,7 @@
  * "Update existing" saves.
  */
 import { computed, nextTick, ref, watch } from "vue";
+import WpSelect from "../shared/WpSelect.vue";
 import { api } from "../../manager/api/client";
 import type { TemplateRow } from "../../manager/api/types";
 import ModalShell from "../shared/ModalShell.vue";
@@ -189,16 +190,14 @@ function pick(row: TemplateRow) {
               </div>
               <div v-if="usedCategories.length" class="wp-ltm__pop-section">
                 <div class="wp-ltm__pop-label">CATEGORY</div>
-                <select
+                <WpSelect
                   class="wp-ltm__cat-select"
-                  :value="selectedCategoryId ?? ''"
+                  :model-value="selectedCategoryId ?? ''"
+                  :options="[{ value: '', label: 'All categories' }, ...usedCategories.map((c) => ({ value: c.id, label: c.name }))]"
                   aria-label="Filter by category"
                   data-test="load-tpl-filter-category"
-                  @change="selectedCategoryId = ($event.target as HTMLSelectElement).value || null"
-                >
-                  <option value="">All categories</option>
-                  <option v-for="c in usedCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
-                </select>
+                  @update:model-value="(v) => selectedCategoryId = String(v) || null"
+                />
               </div>
               <div v-if="availableTags.length" class="wp-ltm__pop-section">
                 <div class="wp-ltm__pop-label">TAGS <span class="wp-ltm__pop-hint">click to AND-narrow</span></div>
@@ -408,17 +407,7 @@ function pick(row: TemplateRow) {
 }
 .wp-ltm__pop-hint { font-weight: 400; letter-spacing: 0; font-style: italic; }
 .wp-ltm__pop-empty { font-size: 11px; color: var(--wp-text-dim); padding: 2px 0; }
-.wp-ltm__cat-select {
-  width: 100%;
-  background: var(--wp-bg, #0e1015);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm, 6px);
-  color: var(--wp-text);
-  font-family: inherit; font-size: 11px;
-  padding: 5px 8px;
-  cursor: pointer; outline: none;
-}
-.wp-ltm__cat-select:focus { border-color: var(--wp-accent); }
+.wp-ltm__cat-select { width: 100%; height: 28px; }
 .wp-ltm__filter-tags { display: flex; flex-wrap: wrap; gap: 4px; max-height: 180px; overflow-y: auto; }
 .wp-ltm__tag-chip {
   display: inline-flex; align-items: center;

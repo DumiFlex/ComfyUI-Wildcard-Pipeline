@@ -7,6 +7,7 @@
  */
 import { computed } from "vue";
 import PickerTile from "./PickerTile.vue";
+import WpSelect from "../shared/WpSelect.vue";
 import { axisHueAt } from "../shared/axis-color";
 import { moveAxis, type GridLayout, type SweepAxisInfo, type SweepGrid } from "./picker-loop";
 import { pickKey, viewUrl, type ImageRef, type PickEdits } from "./types";
@@ -34,9 +35,9 @@ const tileSize = computed(() => (split.value || props.grid.cols.length > 4 ? "10
 function hue(axis: number): Record<string, string> {
   return { "--wp-ifg-hue": axisHueAt(axis) };
 }
-function setSlot(slot: "rows" | "cols", ev: Event): void {
-  const axis = Number((ev.target as HTMLSelectElement).value);
-  emit("update:layout", moveAxis(props.layout, slot, axis));
+const axisOptions = computed(() => props.axes.map((a, i) => ({ value: i, label: a.name })));
+function setSlot(slot: "rows" | "cols", axis: string | number): void {
+  emit("update:layout", moveAxis(props.layout, slot, Number(axis)));
 }
 function swap(): void {
   emit("update:layout", { rows: props.layout.cols, cols: props.layout.rows });
@@ -60,15 +61,11 @@ function isEdited(key: string): boolean {
   <div class="wp-ifg" :style="{ '--wp-ifp-tile': tileSize }">
     <div class="wp-ifg__bar">
       <label class="wp-ifg__slot">Rows
-        <select class="wp-ifg__select" :value="layout.rows" data-test="image-filter-grid-rows" @change="setSlot('rows', $event)">
-          <option v-for="(a, i) in axes" :key="a.uid" :value="i">{{ a.name }}</option>
-        </select>
+        <WpSelect class="wp-ifg__select" :model-value="layout.rows" :options="axisOptions" data-test="image-filter-grid-rows" @update:model-value="(v) => setSlot('rows', v)" />
       </label>
       <button type="button" class="wp-ifg__swap" title="Swap rows and columns" data-test="image-filter-grid-swap" @click="swap">⇄</button>
       <label class="wp-ifg__slot">Columns
-        <select class="wp-ifg__select" :value="layout.cols" data-test="image-filter-grid-cols" @change="setSlot('cols', $event)">
-          <option v-for="(a, i) in axes" :key="a.uid" :value="i">{{ a.name }}</option>
-        </select>
+        <WpSelect class="wp-ifg__select" :model-value="layout.cols" :options="axisOptions" data-test="image-filter-grid-cols" @update:model-value="(v) => setSlot('cols', v)" />
       </label>
       <span v-if="grid.splitAxes.length" class="wp-ifg__slot">Split by
         <span v-for="a in grid.splitAxes" :key="a.axis" class="wp-ifg__name" :style="hue(a.axis)">{{ a.name }}</span>
@@ -156,8 +153,7 @@ function isEdited(key: string): boolean {
 .wp-ifg { display: flex; flex-direction: column; min-height: 0; flex: 1; width: 100%; }
 .wp-ifg__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--wp-border); background: var(--wp-bg-deep, var(--wp-bg)); font: 11px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); flex-shrink: 0; }
 .wp-ifg__slot { display: inline-flex; align-items: center; gap: 6px; }
-.wp-ifg__select { padding: 3px 6px; border: 1px solid var(--wp-border); border-radius: 4px; background: var(--wp-bg3); color: var(--wp-text); font: 11px var(--wp-font-mono, monospace); cursor: pointer; }
-.wp-ifg__select:focus { outline: none; border-color: var(--wp-accent); }
+.wp-ifg__select { font-family: var(--wp-font-mono, monospace); }
 .wp-ifg__swap { background: transparent; border: 0; padding: 2px 4px; color: var(--wp-accent-text, var(--wp-accent)); font-size: 14px; cursor: pointer; }
 .wp-ifg__spacer { flex: 1; }
 .wp-ifg__hint { font-size: 10.5px; }

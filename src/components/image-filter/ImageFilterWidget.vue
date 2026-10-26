@@ -7,6 +7,8 @@
  * whole next config (`src/widgets/image_filter.ts` serializes it).
  */
 import { computed } from "vue";
+import WpNumber from "../shared/WpNumber.vue";
+import WpSelect from "../shared/WpSelect.vue";
 import {
   clampTimeout,
   viewUrl,
@@ -47,9 +49,22 @@ const TIMEOUT_STEP = 30;
 function setTimeoutSecs(n: number): void {
   patch({ timeout: clampTimeout(n) });
 }
-function onTimeoutInput(ev: Event): void {
-  const n = Number((ev.target as HTMLInputElement).value);
-  setTimeoutSecs(Number.isFinite(n) ? n : props.modelValue.timeout);
+const SEND_AS: { value: SendAs; label: string }[] = [
+  { value: "same_shape", label: "Same shape" },
+  { value: "per_image", label: "One per image" },
+];
+const ON_TIMEOUT: { value: OnTimeout; label: string }[] = [
+  { value: "keep_all", label: "keep all" },
+  { value: "keep_first", label: "keep the first" },
+  { value: "stop", label: "stop this branch" },
+];
+function setSendAs(v: string | number): void {
+  const hit = SEND_AS.find((o) => o.value === v);
+  if (hit) patch({ send_as: hit.value });
+}
+function setOnTimeout(v: string | number): void {
+  const hit = ON_TIMEOUT.find((o) => o.value === v);
+  if (hit) patch({ on_timeout: hit.value });
 }
 
 const MAX_THUMBS = 12;
@@ -95,52 +110,39 @@ const summary = computed(() => {
         </div>
         <div class="wp-ifw__row">
           <span class="wp-ifw__row-label" title="One per image: every picked image becomes its own item, with its own copy of its frame's prompt and conditioning">Send picks as</span>
-          <select
+          <WpSelect
             class="wp-ifw__select"
-            :value="modelValue.send_as"
+            :model-value="modelValue.send_as"
+            :options="SEND_AS"
             aria-label="Send picks as"
             data-test="if-send-as"
-            @change="patch({ send_as: ($event.target as HTMLSelectElement).value as SendAs })"
-          >
-            <option value="same_shape">Same shape</option>
-            <option value="per_image">One per image</option>
-          </select>
+            @update:model-value="setSendAs"
+          />
         </div>
         <div class="wp-ifw__row" :class="{ 'is-off': modelValue.mode === 'pass_all' }">
           <span class="wp-ifw__row-label" title="Seconds to wait for your picks. 0 waits until you answer. The picker can't send an empty pick, so this is also what happens when nothing gets picked.">Timeout</span>
           <span class="wp-ifw__timeout">
-            <span class="wp-ifw__num-wrap">
-              <input
-                type="number"
-                class="wp-ifw__num"
-                min="0"
-                :step="TIMEOUT_STEP"
-                :value="modelValue.timeout"
-                aria-label="Timeout in seconds"
-                data-test="if-timeout"
-                @keydown.stop
-                @change="onTimeoutInput"
-              >
-              <span class="wp-ifw__spin">
-                <button type="button" class="wp-ifw__spin-btn" tabindex="-1" aria-label="Longer timeout" data-test="if-timeout-up" @click="setTimeoutSecs(modelValue.timeout + TIMEOUT_STEP)">
-                  <svg width="6" height="4" viewBox="0 0 8 5"><path d="M0 5 L4 0 L8 5 Z" fill="currentColor" /></svg></button>
-                <button type="button" class="wp-ifw__spin-btn" tabindex="-1" aria-label="Shorter timeout" data-test="if-timeout-down" @click="setTimeoutSecs(modelValue.timeout - TIMEOUT_STEP)">
-                  <svg width="6" height="4" viewBox="0 0 8 5"><path d="M0 0 L4 5 L8 0 Z" fill="currentColor" /></svg></button>
-              </span>
-            </span>
+            <WpNumber
+              class="wp-ifw__num-wrap"
+              :model-value="modelValue.timeout"
+              :min="0"
+              :step="TIMEOUT_STEP"
+              aria-label="Timeout in seconds"
+              up-label="Longer timeout"
+              down-label="Shorter timeout"
+              data-test="if-timeout"
+              @update:model-value="setTimeoutSecs"
+            />
             <span class="wp-ifw__unit">{{ modelValue.timeout === 0 ? "no limit" : "s, then" }}</span>
-            <select
+            <WpSelect
               v-if="modelValue.timeout > 0"
               class="wp-ifw__select"
-              :value="modelValue.on_timeout"
+              :model-value="modelValue.on_timeout"
+              :options="ON_TIMEOUT"
               aria-label="After the timeout"
               data-test="if-on-timeout"
-              @change="patch({ on_timeout: ($event.target as HTMLSelectElement).value as OnTimeout })"
-            >
-              <option value="keep_all">keep all</option>
-              <option value="keep_first">keep the first</option>
-              <option value="stop">stop this branch</option>
-            </select>
+              @update:model-value="setOnTimeout"
+            />
           </span>
         </div>
       </div>
@@ -174,19 +176,10 @@ const summary = computed(() => {
 .wp-ifw__seg-btn { padding: 2px 7px; border: 0; border-radius: 2px; background: transparent; color: var(--wp-text-dim, var(--wp-text3)); font: 10.5px var(--wp-font-sans, sans-serif); cursor: pointer; white-space: nowrap; }
 .wp-ifw__seg-btn:hover { color: var(--wp-text); }
 .wp-ifw__seg-btn.is-on { background: var(--wp-accent); color: #fff; }
-.wp-ifw__select { height: 20px; padding: 0 4px; background: var(--wp-bg2); color: var(--wp-text); border: 1px solid var(--wp-border); border-radius: 3px; font: 10.5px var(--wp-font-sans, sans-serif); cursor: pointer; }
+.wp-ifw__select { height: 20px; }
 .wp-ifw__timeout { display: flex; align-items: center; gap: 6px; }
 .wp-ifw__unit { font-size: 10px; color: var(--wp-text-dim, var(--wp-text3)); white-space: nowrap; }
-/* Custom ± arrows, same as the seed rows and the sweep Limit. */
-.wp-ifw__num-wrap { display: inline-flex; align-items: stretch; width: 64px; height: 20px; overflow: hidden; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: 3px; }
-.wp-ifw__num-wrap:focus-within { border-color: var(--wp-accent); }
-.wp-ifw__num { flex: 1; min-width: 0; background: transparent; border: 0; padding: 0 5px; color: var(--wp-text); font: 10.5px var(--wp-font-mono, monospace); text-align: right; -moz-appearance: textfield; appearance: textfield; }
-.wp-ifw__num:focus { outline: none; }
-.wp-ifw__num::-webkit-outer-spin-button, .wp-ifw__num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.wp-ifw__spin { display: flex; flex-direction: column; width: 14px; flex-shrink: 0; border-left: 1px solid var(--wp-border); background: rgba(99,102,241,.04); }
-.wp-ifw__spin-btn { flex: 1; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; padding: 0; color: var(--wp-text-dim, #7a7d88); cursor: pointer; line-height: 0; }
-.wp-ifw__spin-btn + .wp-ifw__spin-btn { border-top: 1px solid var(--wp-border); }
-.wp-ifw__spin-btn:hover { color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.12); }
+.wp-ifw__num-wrap { width: 64px; height: 20px; }
 .wp-ifw__thumbs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: 3px; }
 .wp-ifw__thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 3px; }
 .wp-ifw__thumb-more { align-self: center; font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); padding: 0 4px; }

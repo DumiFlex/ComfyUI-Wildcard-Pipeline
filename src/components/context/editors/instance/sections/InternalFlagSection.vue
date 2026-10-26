@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import WpCheck from "../../../../shared/WpCheck.vue";
 
 const props = defineProps<{
   library: boolean;
@@ -14,8 +15,7 @@ const emit = defineEmits<{
 const hasOverride = computed(() => props.modelValue !== null);
 const effective = computed(() => (props.modelValue !== null ? props.modelValue : props.library));
 
-function onToggle(ev: Event): void {
-  const v = (ev.target as HTMLInputElement).checked;
+function onToggle(v: boolean): void {
   emit("update:modelValue", v);
 }
 
@@ -40,15 +40,15 @@ function onClickReset(): void {
       </button>
     </div>
     <div class="wp-instance-section-body">
-      <label class="wp-instance-toggle">
-        <input
-          type="checkbox"
+      <div class="wp-instance-toggle">
+        <WpCheck
           data-test="if-toggle"
-          :checked="effective"
-          @change="onToggle"
+          :model-value="effective"
+          aria-label="Internal binding (engine-only)"
+          @update:model-value="onToggle"
         />
-        <span>Internal binding (engine-only)</span>
-      </label>
+        <span aria-hidden="true">Internal binding (engine-only)</span>
+      </div>
     </div>
   </section>
 </template>

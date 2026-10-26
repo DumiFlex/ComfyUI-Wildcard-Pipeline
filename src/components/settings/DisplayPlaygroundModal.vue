@@ -37,6 +37,7 @@ import {
 } from "./playground-store";
 import PlaygroundMockup from "./PlaygroundMockup.vue";
 import WpCheck from "@/components/shared/WpCheck.vue";
+import WpSelect from "@/components/shared/WpSelect.vue";
 
 type Density = "comfortable" | "compact" | "minimal";
 type Decoration = "full" | "minimal" | "off";
@@ -313,27 +314,24 @@ onBeforeUnmount(() => {
               <legend class="wp-pg__group-title">Sizing</legend>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Module density</span>
-                <select v-model="density" class="wp-pg__select">
-                  <option value="comfortable">Comfortable (default)</option>
-                  <option value="compact">Compact</option>
-                  <option value="minimal">Minimal</option>
-                </select>
+                <WpSelect
+                  v-model="density" class="wp-pg__select"
+                  :options="[{ value: 'comfortable', label: 'Comfortable (default)' }, { value: 'compact', label: 'Compact' }, { value: 'minimal', label: 'Minimal' }]"
+                />
               </label>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Decoration</span>
-                <select v-model="decoration" class="wp-pg__select">
-                  <option value="full">Full (default)</option>
-                  <option value="minimal">Minimal</option>
-                  <option value="off">Off (flat)</option>
-                </select>
+                <WpSelect
+                  v-model="decoration" class="wp-pg__select"
+                  :options="[{ value: 'full', label: 'Full (default)' }, { value: 'minimal', label: 'Minimal' }, { value: 'off', label: 'Off (flat)' }]"
+                />
               </label>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Color intensity</span>
-                <select v-model="colorIntensity" class="wp-pg__select">
-                  <option value="muted">Muted (low saturation)</option>
-                  <option value="standard">Standard (default)</option>
-                  <option value="vivid">Vivid (high saturation)</option>
-                </select>
+                <WpSelect
+                  v-model="colorIntensity" class="wp-pg__select"
+                  :options="[{ value: 'muted', label: 'Muted (low saturation)' }, { value: 'standard', label: 'Standard (default)' }, { value: 'vivid', label: 'Vivid (high saturation)' }]"
+                />
               </label>
             </fieldset>
 
@@ -341,11 +339,10 @@ onBeforeUnmount(() => {
               <legend class="wp-pg__group-title">Module identity</legend>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Module type style</span>
-                <select v-model="kindStyle" class="wp-pg__select">
-                  <option value="chip">Chip (default)</option>
-                  <option value="icon">Icon (compact)</option>
-                  <option value="both">Both (verbose)</option>
-                </select>
+                <WpSelect
+                  v-model="kindStyle" class="wp-pg__select"
+                  :options="[{ value: 'chip', label: 'Chip (default)' }, { value: 'icon', label: 'Icon (compact)' }, { value: 'both', label: 'Both (verbose)' }]"
+                />
               </label>
             </fieldset>
 
@@ -353,11 +350,10 @@ onBeforeUnmount(() => {
               <legend class="wp-pg__group-title">State markers</legend>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Indicator style</span>
-                <select v-model="indicatorStyle" class="wp-pg__select">
-                  <option value="badge">Badge (default)</option>
-                  <option value="dot">Dot (compact)</option>
-                  <option value="both">Both (verbose)</option>
-                </select>
+                <WpSelect
+                  v-model="indicatorStyle" class="wp-pg__select"
+                  :options="[{ value: 'badge', label: 'Badge (default)' }, { value: 'dot', label: 'Dot (compact)' }, { value: 'both', label: 'Both (verbose)' }]"
+                />
               </label>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Border highlights</span>
@@ -377,10 +373,10 @@ onBeforeUnmount(() => {
               </div>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Collapse stack mode</span>
-                <select v-model="collapseMode" class="wp-pg__select">
-                  <option value="independent">Independent (default)</option>
-                  <option value="accordion">Accordion (one at a time)</option>
-                </select>
+                <WpSelect
+                  v-model="collapseMode" class="wp-pg__select"
+                  :options="[{ value: 'independent', label: 'Independent (default)' }, { value: 'accordion', label: 'Accordion (one at a time)' }]"
+                />
               </label>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Focus mode (dim non-hovered)</span>
@@ -392,19 +388,17 @@ onBeforeUnmount(() => {
               <legend class="wp-pg__group-title">Accessibility</legend>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Reduce motion</span>
-                <select v-model="reduceMotion" class="wp-pg__select">
-                  <option value="auto">Match system</option>
-                  <option value="on">Always reduce</option>
-                  <option value="off">Always allow</option>
-                </select>
+                <WpSelect
+                  v-model="reduceMotion" class="wp-pg__select"
+                  :options="[{ value: 'auto', label: 'Match system' }, { value: 'on', label: 'Always reduce' }, { value: 'off', label: 'Always allow' }]"
+                />
               </label>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Contrast</span>
-                <select v-model="contrast" class="wp-pg__select">
-                  <option value="auto">Match system</option>
-                  <option value="on">High contrast</option>
-                  <option value="off">Standard</option>
-                </select>
+                <WpSelect
+                  v-model="contrast" class="wp-pg__select"
+                  :options="[{ value: 'auto', label: 'Match system' }, { value: 'on', label: 'High contrast' }, { value: 'off', label: 'Standard' }]"
+                />
               </label>
             </fieldset>
 
@@ -415,59 +409,52 @@ onBeforeUnmount(() => {
                    where the settings are expected to be mirrored, and a
                    setting that exists in the panel but not here is exactly the
                    divergence this modal keeps growing. -->
-              <label class="wp-pg__row">
+              <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Booru tag autocomplete</span>
-                <input v-model="tagAutocomplete" type="checkbox" class="wp-pg__check">
-              </label>
+                <WpCheck v-model="tagAutocomplete" aria-label="Booru tag autocomplete" />
+              </div>
               <!-- Separate switches on purpose: someone writing danbooru
                    prompts may have no LoRAs at all, and someone with 200 of
                    them may find the tag list noise. -->
-              <label class="wp-pg__row">
+              <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">LoRA autocomplete</span>
-                <input v-model="loraAutocomplete" type="checkbox" class="wp-pg__check">
-              </label>
-              <label class="wp-pg__row">
+                <WpCheck v-model="loraAutocomplete" aria-label="LoRA autocomplete" />
+              </div>
+              <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Embedding autocomplete</span>
-                <input v-model="embeddingAutocomplete" type="checkbox" class="wp-pg__check">
-              </label>
-              <label class="wp-pg__row">
+                <WpCheck v-model="embeddingAutocomplete" aria-label="Embedding autocomplete" />
+              </div>
+              <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Append ", " after a completion</span>
-                <input v-model="autocompleteSeparator" type="checkbox" class="wp-pg__check">
-              </label>
+                <WpCheck v-model="autocompleteSeparator" aria-label="Append a comma and space after a completion" />
+              </div>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Autocomplete: max suggestions</span>
-                <select v-model="autocompleteMaxSuggestions" class="wp-pg__select">
-                  <option value="5">5</option>
-                  <option value="10">10</option>
-                  <option value="20">20 (default)</option>
-                  <option value="40">40</option>
-                </select>
+                <WpSelect
+                  v-model="autocompleteMaxSuggestions" class="wp-pg__select"
+                  :options="[{ value: '5', label: '5' }, { value: '10', label: '10' }, { value: '20', label: '20 (default)' }, { value: '40', label: '40' }]"
+                />
               </label>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Autocomplete: minimum characters</span>
-                <select v-model="autocompleteMinChars" class="wp-pg__select">
-                  <option value="1">1</option>
-                  <option value="2">2</option>
-                  <option value="3">3 (default)</option>
-                  <option value="4">4</option>
-                </select>
+                <WpSelect
+                  v-model="autocompleteMinChars" class="wp-pg__select"
+                  :options="[{ value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3 (default)' }, { value: '4', label: '4' }]"
+                />
               </label>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Validation strictness</span>
-                <select v-model="validation" class="wp-pg__select">
-                  <option value="strict">Strict (default)</option>
-                  <option value="relaxed">Relaxed (hide info)</option>
-                  <option value="permissive">Permissive (off)</option>
-                </select>
+                <WpSelect
+                  v-model="validation" class="wp-pg__select"
+                  :options="[{ value: 'strict', label: 'Strict (default)' }, { value: 'relaxed', label: 'Relaxed (hide info)' }, { value: 'permissive', label: 'Permissive (off)' }]"
+                />
               </label>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Toast lifetime</span>
-                <select v-model="toastLifetime" class="wp-pg__select">
-                  <option value="short">Short (3 s)</option>
-                  <option value="default">Default (5 s)</option>
-                  <option value="long">Long (10 s)</option>
-                  <option value="sticky">Sticky</option>
-                </select>
+                <WpSelect
+                  v-model="toastLifetime" class="wp-pg__select"
+                  :options="[{ value: 'short', label: 'Short (3 s)' }, { value: 'default', label: 'Default (5 s)' }, { value: 'long', label: 'Long (10 s)' }, { value: 'sticky', label: 'Sticky' }]"
+                />
               </label>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Suppress info toasts</span>
@@ -491,10 +478,10 @@ onBeforeUnmount(() => {
               </div>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Bundle master OFF behavior</span>
-                <select v-model="bundleMasterOffBehavior" class="wp-pg__select">
-                  <option value="preserve-manual">Preserve manual (default)</option>
-                  <option value="cascade-all">Cascade — clear everyone</option>
-                </select>
+                <WpSelect
+                  v-model="bundleMasterOffBehavior" class="wp-pg__select"
+                  :options="[{ value: 'preserve-manual', label: 'Preserve manual (default)' }, { value: 'cascade-all', label: 'Cascade — clear everyone' }]"
+                />
               </label>
             </fieldset>
           </section>
@@ -659,20 +646,7 @@ onBeforeUnmount(() => {
   flex: 1;
   min-width: 0;
 }
-.wp-pg__select {
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text);
-  font: 12px var(--wp-font-sans);
-  padding: 4px 8px;
-  cursor: pointer;
-  min-width: 160px;
-}
-.wp-pg__select:focus-visible {
-  outline: 2px solid var(--wp-violet);
-  outline-offset: 1px;
-}
+.wp-pg__select { min-width: 160px; height: 26px; font-size: 12px; }
 .wp-pg__preview {
   display: flex;
   flex-direction: column;

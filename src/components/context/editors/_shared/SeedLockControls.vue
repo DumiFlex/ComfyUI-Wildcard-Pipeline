@@ -24,6 +24,7 @@
 import { computed, inject } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import { LockSeedKey } from "../../lock-seed-ctx";
+import WpNumber from "../../../shared/WpNumber.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -44,7 +45,7 @@ const lockSeedFor = inject(LockSeedKey, null);
 const instance = computed(() => props.module.instance ?? {});
 const locked = computed(() => typeof instance.value.locked_seed === "number");
 const seedValue = computed(() =>
-  typeof instance.value.locked_seed === "number" ? String(instance.value.locked_seed) : "",
+  typeof instance.value.locked_seed === "number" ? instance.value.locked_seed : null,
 );
 
 function emitInstance(patchFields: Record<string, unknown>): void {
@@ -88,11 +89,8 @@ function onLockClick(): void {
   }
 }
 
-function onSeedInput(ev: Event): void {
-  const raw = (ev.target as HTMLInputElement).value.trim();
-  if (raw === "") return;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || !Number.isInteger(n)) return;
+function onSeedInput(n: number): void {
+  if (!Number.isInteger(n)) return;
   const ui = instance.value._ui ?? {};
   emitInstance({
     locked_seed: n,
@@ -106,20 +104,6 @@ function onRollClick(): void {
   emitInstance({
     locked_seed: seed,
     _ui: { ...ui, last_locked_seed: seed },
-  });
-}
-
-function bumpSeed(direction: 1 | -1): void {
-  if (!locked.value) return;
-  const current = typeof instance.value.locked_seed === "number"
-    ? instance.value.locked_seed
-    : 0;
-  // Clamp to [0, SEED_MAX] — same safe-integer range as randomSeed.
-  const next = Math.max(0, Math.min(SEED_MAX, current + direction));
-  const ui = instance.value._ui ?? {};
-  emitInstance({
-    locked_seed: next,
-    _ui: { ...ui, last_locked_seed: next },
   });
 }
 </script>
@@ -140,39 +124,11 @@ function bumpSeed(direction: 1 | -1): void {
 
   <div v-if="locked" class="seed-block">
     <span class="seed-block__label">Seed</span>
-    <span class="seed-input-wrap">
-      <input
-        class="seed-input"
-        data-test="runtime-seed"
-        type="number"
-        step="1"
-        :value="seedValue"
-        aria-label="Locked seed"
-        @input="onSeedInput"
-      />
-      <span class="seed-spin">
-        <button
-          type="button"
-          class="seed-spin-btn"
-          data-test="runtime-seed-up"
-          tabindex="-1"
-          aria-label="Increase seed"
-          @click="bumpSeed(1)"
-        ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-          <path d="M0 5 L4 0 L8 5 Z" fill="currentColor" />
-        </svg></button>
-        <button
-          type="button"
-          class="seed-spin-btn"
-          data-test="runtime-seed-down"
-          tabindex="-1"
-          aria-label="Decrease seed"
-          @click="bumpSeed(-1)"
-        ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-          <path d="M0 0 L4 5 L8 0 Z" fill="currentColor" />
-        </svg></button>
-      </span>
-    </span>
+    <WpNumber
+      class="seed-input-wrap" :model-value="seedValue" :min="0" :max="SEED_MAX" commit="input"
+      aria-label="Locked seed" up-label="Increase seed" down-label="Decrease seed"
+      data-test="runtime-seed" @update:model-value="onSeedInput"
+    />
     <button
       type="button"
       class="seed-roll"
@@ -223,62 +179,7 @@ function bumpSeed(direction: 1 | -1): void {
   letter-spacing: 0.1em;
   color: var(--wp-accent-text, var(--wp-text));
 }
-.seed-input-wrap {
-  display: inline-flex;
-  align-items: stretch;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  height: 24px;
-  width: 200px;
-  overflow: hidden;
-}
-.seed-input-wrap:focus-within { border-color: var(--wp-accent); }
-.seed-input {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  padding: 0 7px;
-  font: 11px var(--wp-font-mono);
-  color: var(--wp-text);
-  text-align: right;
-  min-width: 0;
-  -moz-appearance: textfield;
-}
-.seed-input::-webkit-outer-spin-button,
-.seed-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.seed-input:focus { outline: none; }
-.seed-spin {
-  display: flex;
-  flex-direction: column;
-  width: 14px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--wp-border);
-  background: rgba(99, 102, 241, 0.04);
-}
-.seed-spin-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  line-height: 0;
-}
-.seed-spin-btn + .seed-spin-btn {
-  border-top: 1px solid var(--wp-border);
-}
-.seed-spin-btn:hover {
-  color: var(--wp-accent-text, var(--wp-text));
-  background: rgba(99, 102, 241, 0.12);
-}
+.seed-input-wrap { width: 200px; }
 .seed-roll {
   background: transparent;
   border: 0;

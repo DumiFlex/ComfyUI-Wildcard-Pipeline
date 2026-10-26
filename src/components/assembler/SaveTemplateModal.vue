@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { api } from "../../manager/api/client";
 import ModalShell from "../shared/ModalShell.vue";
+import WpSelect from "../shared/WpSelect.vue";
 import { pushToast } from "../shared/toast-store";
 
 const props = defineProps<{
@@ -135,15 +136,14 @@ async function submit(mode: "update" | "new") {
         <div class="wp-stm-row">
           <div class="wp-stm-field wp-stm-field--grow">
             <label class="wp-stm-field__label" for="wp-stm-cat">Category</label>
-            <select
+            <WpSelect
               id="wp-stm-cat"
-              v-model="categoryId"
-              class="wp-stm-input wp-stm-select"
+              class="wp-stm-select"
+              :model-value="categoryId ?? ''"
+              :options="[{ value: '', label: 'Uncategorized' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]"
               data-test="save-tpl-category"
-            >
-              <option :value="null">Uncategorized</option>
-              <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
+              @update:model-value="(v) => categoryId = String(v) || null"
+            />
           </div>
           <div class="wp-stm-field wp-stm-field--grow">
             <label class="wp-stm-field__label" for="wp-stm-tags">Tags (comma-separated)</label>
@@ -274,7 +274,7 @@ async function submit(mode: "update" | "new") {
 }
 .wp-stm-input:focus { outline: 1px solid var(--wp-accent-500, var(--wp-accent)); }
 .wp-stm-input--multi { resize: vertical; overscroll-behavior: contain; min-height: 46px; }
-.wp-stm-select { cursor: pointer; }
+.wp-stm-select { width: 100%; height: 32px; font-size: 13px; }
 .wp-stm-preview {
   margin: 0;
   padding: 8px 10px;
