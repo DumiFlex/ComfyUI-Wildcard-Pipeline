@@ -8,7 +8,9 @@
  * Once an answer shows, the request box becomes a follow-up box (see
  * `useAiConversation`): Refine sends it with the conversation so far, Try
  * again re-asks, Start over drops the conversation. The requests that led to
- * the shown answer are listed above it, with arrows to flip between answers.
+ * the shown answer are listed above it as steps: a step's arrows flip
+ * between its tries (Try again) and between different refines of the same
+ * answer, and clicking a step shows its answer.
  */
 import { computed, ref } from "vue";
 import Button from "../ui/Button.vue";
@@ -20,6 +22,7 @@ import ChatInputMarks from "./ChatInputMarks.vue";
 import { useAiConfig } from "../../composables/useAiConfig";
 import type { AiImages } from "../../composables/useAiImages";
 import type { SearchFound } from "../../composables/searchFound";
+import type { AiStep } from "../../composables/useAiConversation";
 
 interface Props {
   placeholder: string;
@@ -35,10 +38,9 @@ interface Props {
   scope?: string;
   /** The request box may stay empty (it only steers the answer). */
   optional?: boolean;
-  /** Requests that led to the shown answer, first to last. */
-  asked?: string[];
-  answerIndex?: number;
-  answerCount?: number;
+  /** The requests on the shown branch, first to last
+   *  (`useAiConversation().steps`). */
+  steps?: AiStep[];
   /** No box or title: the parent panel draws them (wildcard tabs). */
   bare?: boolean;
   hint?: string;
@@ -56,7 +58,7 @@ interface Props {
 /** The instruction box, for its `@` / `$` / tag completions. */
 const box = ref<HTMLTextAreaElement | null>(null);
 const props = withDefaults(defineProps<Props>(), {
-  asked: () => [], answerIndex: 0, answerCount: 0, hint: "You review everything first.",
+  steps: () => [], hint: "You review everything first.",
 });
 const instruction = defineModel<string>({ required: true });
 const emit = defineEmits<{
@@ -64,7 +66,8 @@ const emit = defineEmits<{
   (e: "refine"): void;
   (e: "retry"): void;
   (e: "restart"): void;
-  (e: "go", delta: number): void;
+  (e: "show", at: number): void;
+  (e: "flip", at: number, kind: "try" | "refine", delta: number): void;
   (e: "stop"): void;
   (e: "close"): void;
   (e: "allow-research"): void;
@@ -116,33 +119,76 @@ function onKeydown(ev: KeyboardEvent): void {
       >{{ modelLabel }}</span>
     </div>
     <slot name="top" />
-    <div v-if="answered && asked.length" class="wp-ai-frame__thread" data-test="ai-thread">
-      <ol class="wp-ai-frame__asks">
-        <li v-for="(a, i) in asked" :key="i" data-test="ai-asked">
-          <i :class="['pi', i === 0 ? 'pi-comment' : 'pi-reply']" aria-hidden="true" />
-          <span>{{ a || "Asked without a note" }}</span>
-        </li>
-      </ol>
-      <span v-if="answerCount > 1" class="wp-ai-frame__nav" data-test="ai-answer-nav">
+    <ol v-if="answered && steps.length" class="wp-ai-frame__steps" data-test="ai-thread">
+      <li
+        v-for="(st, k) in steps"
+        :key="st.at"
+        class="wp-ai-frame__step"
+        :data-shown="st.shown ? 'true' : 'false'"
+        :data-after="st.after ? 'true' : 'false'"
+        data-test="ai-step"
+      >
         <button
           type="button"
-          class="wp-ai-frame__nav-btn"
-          aria-label="Earlier answer"
-          data-test="ai-prev"
-          :disabled="loading || answerIndex <= 0"
-          @click="emit('go', -1)"
-        ><i class="pi pi-chevron-left" aria-hidden="true" /></button>
-        <span class="wp-ai-frame__nav-label">Answer {{ answerIndex + 1 }} of {{ answerCount }}</span>
-        <button
-          type="button"
-          class="wp-ai-frame__nav-btn"
-          aria-label="Later answer"
-          data-test="ai-next"
-          :disabled="loading || answerIndex >= answerCount - 1"
-          @click="emit('go', 1)"
-        ><i class="pi pi-chevron-right" aria-hidden="true" /></button>
-      </span>
-    </div>
+          class="wp-ai-frame__step-text"
+          :disabled="loading || st.shown"
+          :title="st.shown ? 'This answer is showing' : 'Show this answer'"
+          data-test="ai-asked"
+          @click="emit('show', st.at)"
+        >
+          <i :class="['pi', k === 0 ? 'pi-comment' : 'pi-reply']" aria-hidden="true" />
+          <span>{{ st.text || "Asked without a note" }}</span>
+        </button>
+        <span
+          v-if="st.refines > 1"
+          class="wp-ai-frame__nav"
+          title="Different follow-ups to the same answer"
+          data-test="ai-refine-nav"
+        >
+          <button
+            type="button"
+            class="wp-ai-frame__nav-btn"
+            aria-label="Earlier refine"
+            data-test="ai-refine-prev"
+            :disabled="loading || st.refine <= 0"
+            @click="emit('flip', st.at, 'refine', -1)"
+          ><i class="pi pi-chevron-left" aria-hidden="true" /></button>
+          <span class="wp-ai-frame__nav-label">refine {{ st.refine + 1 }} of {{ st.refines }}</span>
+          <button
+            type="button"
+            class="wp-ai-frame__nav-btn"
+            aria-label="Later refine"
+            data-test="ai-refine-next"
+            :disabled="loading || st.refine >= st.refines - 1"
+            @click="emit('flip', st.at, 'refine', 1)"
+          ><i class="pi pi-chevron-right" aria-hidden="true" /></button>
+        </span>
+        <span
+          v-if="st.tries > 1"
+          class="wp-ai-frame__nav"
+          title="Try again asks the same request fresh; flip between its tries"
+          data-test="ai-try-nav"
+        >
+          <button
+            type="button"
+            class="wp-ai-frame__nav-btn"
+            aria-label="Earlier try"
+            data-test="ai-try-prev"
+            :disabled="loading || st.try <= 0"
+            @click="emit('flip', st.at, 'try', -1)"
+          ><i class="pi pi-chevron-left" aria-hidden="true" /></button>
+          <span class="wp-ai-frame__nav-label"><i class="pi pi-refresh" aria-hidden="true" /> try {{ st.try + 1 }} of {{ st.tries }}</span>
+          <button
+            type="button"
+            class="wp-ai-frame__nav-btn"
+            aria-label="Later try"
+            data-test="ai-try-next"
+            :disabled="loading || st.try >= st.tries - 1"
+            @click="emit('flip', st.at, 'try', 1)"
+          ><i class="pi pi-chevron-right" aria-hidden="true" /></button>
+        </span>
+      </li>
+    </ol>
     <textarea
       ref="box"
       v-model="instruction"
@@ -166,7 +212,7 @@ function onKeydown(ev: KeyboardEvent): void {
       <Button v-if="loading" size="sm" icon="pi-stop" data-test="ai-stop" @click="emit('stop')">Stop</Button>
       <template v-else-if="answered">
         <Button variant="ghost" size="sm" data-test="ai-restart" title="Drop this conversation and edit the first request" @click="emit('restart')">Start over</Button>
-        <Button variant="ghost" size="sm" icon="pi-refresh" data-test="ai-retry" :disabled="blocked" title="Ask the same thing again" @click="emit('retry')">Try again</Button>
+        <Button variant="ghost" size="sm" icon="pi-refresh" data-test="ai-retry" :disabled="blocked" title="Ask the shown step's request again, fresh; the answer is added to that step's tries" @click="emit('retry')">Try again</Button>
         <Button
           variant="primary"
           size="sm"
@@ -241,13 +287,22 @@ function onKeydown(ev: KeyboardEvent): void {
   border: 1px solid color-mix(in oklab, var(--wp-warn) 45%, transparent);
 }
 .wp-ai-frame__model[data-local="true"] { color: var(--wp-success); border-color: color-mix(in oklab, var(--wp-success) 45%, transparent); }
-.wp-ai-frame__thread { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
-.wp-ai-frame__asks { list-style: none; margin: 0; padding: 0; flex: 1 1 240px; display: flex; flex-direction: column; gap: 3px; }
-.wp-ai-frame__asks > li { display: flex; gap: 8px; align-items: baseline; font-size: 12px; color: var(--wp-text-muted); overflow-wrap: anywhere; }
-.wp-ai-frame__asks > li:last-child { color: var(--wp-text); }
-.wp-ai-frame__asks .pi { font-size: 11px; color: var(--wp-accent-text); }
+.wp-ai-frame__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.wp-ai-frame__step { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; padding: 2px 4px; border-radius: 5px; }
+.wp-ai-frame__step[data-shown="true"] { background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent); }
+.wp-ai-frame__step[data-after="true"] { opacity: 0.6; }
+.wp-ai-frame__step-text {
+  flex: 1 1 200px; min-width: 0; display: flex; gap: 8px; align-items: baseline; padding: 2px 0;
+  border: 0; background: none; text-align: left; font-size: 12px; color: var(--wp-text-muted);
+  overflow-wrap: anywhere; cursor: pointer;
+}
+.wp-ai-frame__step-text:hover:not(:disabled) { color: var(--wp-text); }
+.wp-ai-frame__step-text:disabled { cursor: default; }
+.wp-ai-frame__step[data-shown="true"] .wp-ai-frame__step-text { color: var(--wp-text); }
+.wp-ai-frame__step-text .pi { font-size: 11px; color: var(--wp-accent-text); }
 .wp-ai-frame__nav { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--wp-text-muted); white-space: nowrap; }
 .wp-ai-frame__nav-label { font-variant-numeric: tabular-nums; }
+.wp-ai-frame__nav-label .pi { font-size: 10px; color: var(--wp-accent-text); }
 .wp-ai-frame__nav-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; padding: 0;

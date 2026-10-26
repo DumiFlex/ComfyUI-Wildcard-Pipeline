@@ -97,8 +97,13 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         and sends a revised answer.
       </p>
       <ul>
-        <li><b>Try again</b> asks the same thing for another take.</li>
-        <li>The arrows next to <b>Answer 2 of 3</b> flip back to earlier answers.</li>
+        <li><b>Try again</b> asks the same request afresh for another take. The new try goes on
+          that request's own line as <b>try 2 of 2</b>, so tries never mix with refinements.</li>
+        <li>Your requests are listed above the answer, one line per step. A line's arrows flip
+          between its tries, and between different refines of the same answer (<b>refine 1 of 2</b>).
+          The lines under it follow the branch you flip to.</li>
+        <li>Click an earlier line to see its answer. Refine or Try again from there starts a new
+          branch; nothing is overwritten.</li>
         <li><b>Start over</b> puts your first request back in the box.</li>
         <li>Adding or applying ends the conversation; the next request starts fresh.</li>
       </ul>

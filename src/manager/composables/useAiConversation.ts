@@ -8,6 +8,13 @@
  * request, "Start over" drops the conversation. Every answer is kept, so the
  * user can flip back to an earlier one and refine from there.
  *
+ * The answers form a tree. A step is one request: the first ask or a
+ * refine. Try again adds a try to the shown step (same request, asked
+ * fresh), so tries never mix with refinements; a refine from any try starts
+ * a step under it, and two different refines of one answer are sibling
+ * steps. `steps` is the path to the end of the shown branch, each with its
+ * try and refine switchers (`flip`); `show` looks back at a step's answer.
+ *
  * What the request is about (the editor's rows, rules, …) is captured once
  * when the conversation starts and reused by every follow-up, so the model's
  * earlier answers keep pointing at the same things.
@@ -40,6 +47,25 @@ export interface AiExchange<Res, Ctx> {
    *  Going back to an earlier answer and refining it starts a branch: the
    *  new answer is added at the end, and nothing is overwritten. */
   parent: number;
+  /** For Try again, the first try of this request (its index), else -1. */
+  tryOf: number;
+}
+
+/** One request on the shown path, with its switchers. */
+export interface AiStep {
+  /** Index of this step's exchange (the try on the path). */
+  at: number;
+  text: string;
+  /** Its answer is the one showing. */
+  shown: boolean;
+  /** After the shown step (looked back past it). */
+  after: boolean;
+  /** 0-based try on the path, of `tries`; one try has no switcher. */
+  try: number;
+  tries: number;
+  /** 0-based refine among the different follow-ups to the same answer. */
+  refine: number;
+  refines: number;
 }
 
 export interface AiConversationOptions<Res, Ctx> {
@@ -68,6 +94,11 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
   const error = ref("");
   const exchanges = shallowRef<AiExchange<Res, Ctx>[]>([]);
   const index = ref(-1);
+  /** The end of the shown branch; `index` is on its path. */
+  const tip = ref(-1);
+  /** The child last on a shown path, per exchange, so flipping back to a
+   *  branch returns to where the user was in it. */
+  const lastChild = new Map<number, number>();
   let controller: AbortController | null = null;
   /** Searches run or skipped in this conversation. */
   const searched = ref<string[]>([]);
@@ -86,6 +117,22 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
     current.value ? [...current.value.history.map((t) => t.instruction), current.value.instruction] : [],
   );
   const count = computed(() => exchanges.value.length);
+  /** The requests from the first ask to the end of the shown branch. */
+  const steps = computed<AiStep[]>(() => {
+    const all = exchanges.value;
+    const path: number[] = [];
+    for (let i = tip.value; i >= 0 && i < all.length && path.length <= all.length; i = all[i].parent) path.unshift(i);
+    const shownAt = path.indexOf(index.value);
+    return path.map((at, k) => {
+      const tries = triesOf(at);
+      const refines = refinesOf(at);
+      return {
+        at, text: all[at].instruction, shown: k === shownAt, after: shownAt >= 0 && k > shownAt,
+        try: tries.indexOf(at), tries: tries.length,
+        refine: refines.indexOf(firstTry(at)), refines: refines.length,
+      };
+    });
+  });
   /** The answers that led to the shown one, oldest first, it included. */
   const chain = computed<Res[]>(() => {
     const out: Res[] = [];
@@ -107,7 +154,7 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
   const research = computed(() => pendingResearch(chain.value.map((r) => r.research ?? []), searched.value));
 
   async function request(
-    text: string, history: AiTurn[], ctx: Ctx, fresh: boolean, parent = -1,
+    text: string, history: AiTurn[], ctx: Ctx, fresh: boolean, parent = -1, tryOf = -1,
   ): Promise<boolean> {
     controller?.abort();
     const mine = new AbortController();
@@ -123,9 +170,12 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
         ...(skip ? { skipped: true } : {}),
       }, mine.signal);
       skipped = false;
-      const entry = { instruction: text, history, ctx, result: res, parent: fresh ? -1 : parent };
+      const entry = { instruction: text, history, ctx, result: res, parent: fresh ? -1 : parent, tryOf: fresh ? -1 : tryOf };
+      if (fresh) lastChild.clear();
       exchanges.value = fresh ? [entry] : [...exchanges.value, entry];
       index.value = exchanges.value.length - 1;
+      tip.value = index.value;
+      remember(tip.value);
       error.value = opts.emptyMessage?.(res) ?? "";
       return true;
     } catch (err) {
@@ -214,21 +264,93 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
   /** The shown answer's request again, same context. */
   async function retry(): Promise<void> {
     const cur = current.value;
-    if (cur) await request(cur.instruction, cur.history, cur.ctx, false, cur.parent);
+    if (cur) await request(cur.instruction, cur.history, cur.ctx, false, cur.parent, firstTry(index.value));
   }
 
   function go(delta: number): void {
     const next = index.value + delta;
     if (next >= 0 && next < exchanges.value.length) {
       index.value = next;
+      tip.value = next;
+      remember(next);
       error.value = "";
     }
+  }
+
+  function firstTry(i: number): number {
+    const e = exchanges.value[i];
+    return e && e.tryOf >= 0 ? e.tryOf : i;
+  }
+
+  /** The tries of `i`'s request, oldest first. */
+  function triesOf(i: number): number[] {
+    const first = firstTry(i);
+    return exchanges.value.flatMap((e, j) => (j === first || e.tryOf === first ? [j] : []));
+  }
+
+  /** The different requests that follow up `i`'s parent (their first
+   *  tries), oldest first; one for the first ask. */
+  function refinesOf(i: number): number[] {
+    const parent = exchanges.value[i]?.parent ?? -1;
+    if (parent < 0) return [firstTry(i)];
+    return exchanges.value.flatMap((e, j) => (e.parent === parent && e.tryOf < 0 ? [j] : []));
+  }
+
+  /** Note the path to `i` so a later flip comes back along it. */
+  function remember(i: number): void {
+    const all = exchanges.value;
+    for (let c = i; c >= 0 && all[c].parent >= 0; c = all[c].parent) lastChild.set(all[c].parent, c);
+  }
+
+  /** The end of the branch under `i`: where the user last was, else the
+   *  newest answer at each level. */
+  function branchEnd(i: number): number {
+    const all = exchanges.value;
+    for (let guard = 0; guard < all.length; guard++) {
+      let next = lastChild.get(i) ?? -1;
+      if (next < 0) for (let j = all.length - 1; j > i && next < 0; j--) if (all[j].parent === i) next = j;
+      if (next < 0 || all[next]?.parent !== i) break;
+      i = next;
+    }
+    return i;
+  }
+
+  /** Look at a step's answer; the steps after it stay listed. */
+  function show(at: number): void {
+    if (loading.value || !steps.value.some((s) => s.at === at)) return;
+    index.value = at;
+    error.value = "";
+  }
+
+  /** Switch a step to its previous / next try, or to a sibling refine, and
+   *  show that answer; the steps under it follow its own branch. */
+  function flip(at: number, kind: "try" | "refine", delta: number): void {
+    if (loading.value) return;
+    const list = kind === "try" ? triesOf(at) : refinesOf(at);
+    const here = list.indexOf(kind === "try" ? at : firstTry(at));
+    let next = list[here + delta];
+    if (next === undefined || here < 0) return;
+    // A sibling refine opens on the try the user last had there.
+    if (kind === "refine") {
+      const parent = exchanges.value[at].parent;
+      const last = lastChild.get(parent);
+      if (last !== undefined && firstTry(last) === next) next = last;
+      else next = triesOf(next).pop() ?? next;
+    }
+    const parent = exchanges.value[next].parent;
+    if (parent >= 0) lastChild.set(parent, next);
+    tip.value = branchEnd(next);
+    remember(tip.value);
+    index.value = next;
+    error.value = "";
   }
 
   /** Forget the answers (after applying them, or Discard). */
   function clear(): void {
     exchanges.value = [];
     index.value = -1;
+    tip.value = -1;
+    lastChild.clear();
     error.value = "";
     forgetSearches();
   }
@@ -261,8 +383,8 @@ export function useAiConversation<Res extends { answer: Record<string, unknown>;
   }
 
   return {
-    instruction, loading, error, result, asked, index, count, chain, branchedFrom, research, searching,
-    ask, refine, retry, go, clear, restart, stop, chat, allowResearch, skipResearch, web, useFound, skipFound,
+    instruction, loading, error, result, asked, index, count, steps, chain, branchedFrom, research, searching,
+    ask, refine, retry, go, show, flip, clear, restart, stop, chat, allowResearch, skipResearch, web, useFound, skipFound,
   };
 }
 

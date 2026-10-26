@@ -433,7 +433,7 @@
     },
     {
      "title": "Close, but not quite? Refine it",
-     "text": "Type a follow-up in the request box (\"darker\", \"shorter names\", \"keep the first three\") and press Refine. The model gets the conversation so far, including what you unticked, and sends a revised answer.\n- Try again asks the same thing for another take.\n- The arrows next to Answer 2 of 3 flip back to earlier answers.\n- Start over puts your first request back in the box.\n- Adding or applying ends the conversation; the next request starts fresh."
+     "text": "Type a follow-up in the request box (\"darker\", \"shorter names\", \"keep the first three\") and press Refine. The model gets the conversation so far, including what you unticked, and sends a revised answer.\n- Try again asks the same request afresh for another take. The new try goes on that request's own line as try 2 of 2, so tries never mix with refinements.\n- Your requests are listed above the answer, one line per step. A line's arrows flip between its tries, and between different refines of the same answer (refine 1 of 2). The lines under it follow the branch you flip to.\n- Click an earlier line to see its answer. Refine or Try again from there starts a new branch; nothing is overwritten.\n- Start over puts your first request back in the box.\n- Adding or applying ends the conversation; the next request starts fresh."
     },
     {
      "title": "Images and web search",
