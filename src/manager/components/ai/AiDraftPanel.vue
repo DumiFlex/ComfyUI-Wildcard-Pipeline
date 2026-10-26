@@ -23,6 +23,7 @@ import { api } from "../../api/client";
 import type { AiDraftGroup, AiDraftOption, AiWildcardDraftResult } from "../../api/types";
 import type { ParsedBulkOption } from "../../utils/bulkParse";
 import { keptNote, useAiConversation } from "../../composables/useAiConversation";
+import { optionCount } from "../../utils/asked-count";
 
 interface Props {
   /** The saved wildcard's id; unset for a new one. */
@@ -31,6 +32,9 @@ interface Props {
   varBinding: string;
   /** Current option values, blank rows included (the server ignores them). */
   existingValues: string[];
+  /** The same rows with their tags and negatives, so the model sees how
+   *  the list is tagged; unset sends values only. */
+  existingOptions?: Array<{ value: string; sub_categories?: string[]; negative?: string }>;
   existingTags: string[];
   /** The wildcard\'s description and library tags: what it is for. */
   description?: string;
@@ -53,8 +57,10 @@ const count = ref<number>(10);
 /** Indices of result rows the user unticked. */
 const unticked = ref<Set<number>>(new Set());
 
+type Row = { value: string; sub_categories?: string[]; negative?: string };
 type Ctx = {
   values: string[];
+  rows?: Row[];
   tags: string[];
   tagGroups?: Record<string, string[]>;
   kinds?: Record<string, "accepts">;
@@ -63,11 +69,20 @@ const pics = useAiImages();
 const convo = useAiConversation<AiWildcardDraftResult, Ctx>({
   capture: () => ({
     values: props.existingValues.filter((v) => v.trim()),
+    rows: props.existingOptions?.filter((o) => o.value.trim()).map((o) => ({
+      value: o.value,
+      ...(o.sub_categories?.length ? { sub_categories: [...o.sub_categories] } : {}),
+      ...(o.negative ? { negative: o.negative } : {}),
+    })),
     tags: props.existingTags,
     tagGroups: props.tagGroups,
     kinds: props.tagGroupKinds,
   }),
   send: ({ instruction, history, ctx, web, searched, skipped }, signal) => {
+    // "draft 6 desert weather options" sets How many to 6 (bench W18 got
+    // 10); a refine keeps the count its draft had.
+    const named = history?.length ? 0 : optionCount(instruction);
+    if (named) count.value = named;
     const n = Math.min(100, Math.max(1, Math.round(Number(count.value) || 10)));
     count.value = n;
     return api.ai.draftWildcard({
@@ -85,7 +100,7 @@ const convo = useAiConversation<AiWildcardDraftResult, Ctx>({
         description: props.description ?? "",
         tags: props.labels ?? [],
         payload: {
-          options: ctx.values.map((value) => ({ value })),
+          options: ctx.rows ?? ctx.values.map((value) => ({ value })),
           sub_categories: ctx.tags,
           ...(ctx.tagGroups && Object.keys(ctx.tagGroups).length ? { tag_groups: ctx.tagGroups } : {}),
           ...(ctx.kinds && Object.keys(ctx.kinds).length ? { tag_group_kinds: ctx.kinds } : {}),
@@ -156,15 +171,23 @@ async function run(text: string, n: number): Promise<string> {
   if (!res || !res.options.length) return `couldn't: ${error.value || "the model didn't answer"}`;
   const shown = res.options.slice(0, 15).map((o) => o.value).join("; ");
   const more = res.options.length > 15 ? `; and ${res.options.length - 15} more` : "";
-  const skipped = skippedSummary.value ? ` Skipped: ${skippedSummary.value}.` : "";
+  const skipped = (skippedSummary.value ? ` Skipped: ${skippedSummary.value}.` : "")
+    + (leftOffSummary.value ? ` Left off: ${leftOffSummary.value}.` : "");
   return `drafted ${res.options.length} options in the wildcard's AI panel: ${shown}${more}.${skipped} `
     + "Nothing is added yet: the user ticks the ones to keep and presses Add, then Save.";
 }
 
 defineExpose({ run });
 
+/** Tags and negatives left off the kept options ("#desert", "6 negatives"),
+ *  told apart from options that were skipped. */
+const LEFT_OFF = /^(#\S+|\d+ negatives?)$/;
+const leftOffSummary = computed(() => (result.value?.skipped ?? [])
+  .filter((x) => LEFT_OFF.test(x.text))
+  .map((x) => `${x.text} (${x.reason})`).join(", "));
+
 const skippedSummary = computed(() => {
-  const s = result.value?.skipped ?? [];
+  const s = (result.value?.skipped ?? []).filter((x) => !LEFT_OFF.test(x.text));
   if (!s.length) return "";
   const byReason = new Map<string, number>();
   for (const x of s) byReason.set(x.reason, (byReason.get(x.reason) ?? 0) + 1);
@@ -237,7 +260,7 @@ const skippedSummary = computed(() => {
         </li>
       </ul>
       <p class="wp-ai-draft__summary">
-        {{ result.options.length }} suggested<template v-if="skippedSummary"> · skipped {{ skippedSummary }}</template>
+        {{ result.options.length }} suggested<template v-if="skippedSummary"> · skipped {{ skippedSummary }}</template><template v-if="leftOffSummary"> · left off {{ leftOffSummary }}</template>
         <template v-if="result.new_tags.length"> · new tags (dashed) are created when you add</template>
       </p>
       <ul v-if="groups.length" class="wp-ai-draft__groups" data-test="ai-draft-groups">

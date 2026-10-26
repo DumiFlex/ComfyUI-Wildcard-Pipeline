@@ -1850,6 +1850,22 @@ async def test_an_empty_edit_answer_to_a_request_over_every_option_is_asked_once
     assert len(fake_llm.seen) - seen == 2
 
 
+async def test_a_partial_answer_to_a_request_over_every_option_is_asked_once_more(
+        wp_client, fake_llm):
+    # Bench W11/W17: "tag each …" answered for 5 or 6 of 12 options.
+    ai_config.update({"enabled": True, "provider": "lmstudio",
+                      "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
+    body = {**_edit_body("retag"), "instruction": "tag each option by era"}
+    fake_llm.overrides["wildcard_retag"] = [
+        {"options": [{"id": 1, "tags": ["medieval"]}]},
+        {"options": [{"id": 1, "tags": ["medieval"]}, {"id": 2, "tags": ["modern"]}]}]
+    seen = len(fake_llm.seen)
+    out = await (await wp_client.post("/wp/api/ai/wildcard/edit", json=body)).json()
+    assert [c["after"]["tags"] for c in out["changes"]] == [["medieval"], ["modern"]]
+    assert len(fake_llm.seen) - seen == 2
+    assert "left out options 2" in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
+
+
 async def test_the_chat_changes_the_same_named_item_it_showed_not_another(wp_client, fake_llm):
     """Haiku, 2026-10-21, three wildcards named Weather: the answer showed
     one, the next turn read and edited another by id. The shown one is the

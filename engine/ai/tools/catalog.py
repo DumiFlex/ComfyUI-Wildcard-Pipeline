@@ -238,7 +238,9 @@ TOOLS: list[Tool] = [
         "rewrite, retag, reweight, negatives, fallback, empty option, tag groups (make, "
         "rename, ungroup, switch kind), rename or drop tags.",
         '{"id": wildcard id, "remove": [option numbers], "rewrite": [{"n": number, "text"}], '
-        '"retag": [{"n": number, "tags": [option tags]}], "weights": [{"n": number, '
+        '"retag": [{"n": number, "tags": [option tags]}] to set an option\'s whole tag list, '
+        '"add_tags": [{"n": number, "tags": [tags to add]}] to add tags and keep its others, '
+        '"weights": [{"n": number, '
         '"weight": 0-100}], "negatives": [{"n": number, "negative": text or ""}], '
         '"fallback": option number (0 for none), "null_weight": weight of the empty option '
         '(0 removes it), "axes": [{"name", "kind", "tags"}] to group existing tags (a tag '
@@ -252,6 +254,7 @@ TOOLS: list[Tool] = [
             "id": s("wildcard id or name"), "remove": _NUMS,
             "rewrite": arr(obj({"n": n(integer=True), "text": s()}, ("n", "text"))),
             "retag": arr(obj({"n": n(integer=True), "tags": arr(s())}, ("n", "tags"))),
+            "add_tags": arr(obj({"n": n(integer=True), "tags": arr(s())}, ("n", "tags"))),
             "weights": arr(obj({"n": n(integer=True), "weight": n()}, ("n", "weight"))),
             "negatives": arr(obj({"n": n(integer=True), "negative": s()}, ("n", "negative"))),
             "fallback": n("option number, 0 for none", integer=True),
@@ -600,11 +603,12 @@ TOOLS: list[Tool] = [
         "draft_options", "client",
         "Open a wildcard and draft new options with its AI panel; the user ticks the ones "
         "to add.",
-        '{"id": wildcard, "instruction": what options to write, "count": how many (10)}: '
+        '{"id": wildcard, "instruction": what options to write, "count": how many the user '
+        'asked for}: '
         "opens the wildcard and drafts options in its AI panel, where the user picks which "
         "to add. Use add_options instead when you know the exact options.",
         obj({"id": s("wildcard id or name"), "instruction": s("what options to write"),
-             "count": n("how many, 1-50", integer=True)}, ("id", "instruction")),
+             "count": n("how many the user asked for, 1-50", integer=True)}, ("id", "instruction")),
         ("wildcards",),
     ),
     Tool(

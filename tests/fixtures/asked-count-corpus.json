@@ -1,0 +1,25 @@
+{
+  "_comment": "Shared by engine/ai/asked.py::option_count and src/manager/utils/asked-count.ts: [request, count]. 0 means the request names no count.",
+  "cases": [
+    ["Open @Weather and draft 6 desert weather options there for me to pick from.", 6],
+    ["8 more outfits for a rainy city at night", 8],
+    ["10 hairstyles for fantasy characters, tagged by length: short or long", 10],
+    ["6 more outfits, 3 casual and 3 formal", 6],
+    ["3 more pairs of shoes, each tagged with the outfits it suits", 3],
+    ["accessories like the ones in this picture, 4 options", 4],
+    ["give me a dozen tavern names", 12],
+    ["five spooky forest settings", 5],
+    ["1 option for winter", 1],
+    ["more everyday outfits, spread across the four seasons", 0],
+    ["keep each one under 5 words", 0],
+    ["outfits from the 1920s", 0],
+    ["add 2 tags each", 0],
+    ["a 3-piece suit and similar", 0],
+    ["make them 50% shorter", 0],
+    ["draft 6 for me", 0],
+    ["darker colours, and shorter", 0],
+    ["weather at 0.5 weight, 7 options", 7],
+    ["{2$$, a|b} style picks", 0],
+    ["", 0]
+  ]
+}

@@ -107,13 +107,17 @@ scarf". Only name wildcards listed under "Wildcards you can point at".
 reword one.
 - weight: 1, unless the request asks for some options to be rarer (below 1) or \
 more common (above 1).
-- tags: labels for filtering and rules. Prefer the wildcard's existing tags. A \
-new tag is one lowercase word (letters, digits, _ or -). Use [] when no tag fits \
-or the wildcard has no tags and the request doesn't ask for any.
+- tags: labels for filtering and rules. Tag new options the way the existing \
+options are tagged, with the wildcard's existing tags. A new tag is one \
+lowercase word (letters, digits, _ or -), only when the request asks for it. \
+A tag on every new option, or one that repeats what the wildcard is ("outfit" \
+on outfits), filters nothing: leave it out. Use [] when no tag fits or the \
+wildcard has no tags and the request doesn't ask for any.
 - negative: words for the negative prompt when this option is picked, for \
 things the option invites but the image shouldn't show ("strawberry blonde" \
 → "strawberry, fruit"). Only when the request asks for negatives or the \
-option clearly needs one; otherwise "".
+existing options have them; otherwise "". Never another option's words or the \
+opposite of this one.
 
 Write what the request asks for, in the language of the existing options. Don't \
 add commentary or disclaimers; the output is data for the user's own library.\
@@ -169,12 +173,17 @@ def build_user_prompt(
     return "\n".join(lines)
 
 
+#: A weight copied from the prompt's "[weight 0.1; tags …]" note as a tag
+#: (bench W11: "weight_0.1").
+_NOTE_TAG = re.compile(r"weight[_-]?\d", re.I)
+
+
 def _clean_tag(raw: Any) -> str | None:
     if not isinstance(raw, str):
         return None
     tag = re.sub(r"\s+", "_", raw.strip().lstrip("#"))
     tag = _TAG_BAD.sub("", tag)
-    if not tag or validate_subcat_name(tag):
+    if not tag or validate_subcat_name(tag) or _NOTE_TAG.match(tag):
         return None
     return tag
 
@@ -205,6 +214,7 @@ def clean_text(
 def compile_options(
     raw: Any, *, existing_payload: dict[str, Any], limit: int = MAX_COUNT,
     refs: ai_refs.RefIndex | None = None, self_id: str | None = None,
+    request: str | None = None, labels: list[str] | None = None, own_name: str = "",
 ) -> dict[str, Any]:
     """Turn the model's answer into insertable options.
 
@@ -212,6 +222,10 @@ def compile_options(
     option is ``{"value", "weight", "tags", "negative"}``, the same shape the
     editor's bulk-add path takes, so the editor assigns ids and owns the
     insert. Raises ValueError when the answer isn't the expected shape at all.
+
+    With ``request`` (the Draft panel's typed ask) the answer is also held to
+    it, see `_hold_to_request`. ``labels`` are the wildcard's library tags
+    and ``own_name`` its name and variable.
     """
     if not isinstance(raw, dict) or not isinstance(raw.get("options"), list):
         raise ValueError("the model's answer wasn't a list of options")
@@ -239,6 +253,9 @@ def compile_options(
         if not isinstance(text, str):
             continue
         text = re.sub(r"\s+", " ", text).strip()
+        if request is not None:
+            # The prompt lists "- text  [tags a, b]".
+            text = _NOTE.sub("", text).strip()
         if not text:
             continue
         if len(out) >= limit:
@@ -295,8 +312,87 @@ def compile_options(
             fb_taken = True
         out.append(row)
 
+    if request is not None:
+        new_tags = _hold_to_request(out, new_tags, skipped, request=request, labels=labels,
+                                    own_name=own_name, registry=registry,
+                                    existing=[o for o in existing_opts if isinstance(o, dict)])
     _validate_merged(existing_payload, out, new_tags)
     return {"options": out, "new_tags": new_tags, "skipped": skipped}
+
+
+#: The "[tags a, b]" note the draft prompt puts after an existing option.
+_NOTE = re.compile(r"\s*\[tags [^\]]*\]\s*$")
+_ASKS_NEGATIVES = re.compile(r"\bnegativ", re.I)
+_ASKS_TAGS = re.compile(r"\btag", re.I)
+
+
+def _stem(word: str) -> str:
+    w = word.lower()
+    return w[:-1] if len(w) > 3 and w.endswith("s") else w
+
+
+def _hold_to_request(
+    out: list[dict[str, Any]], new_tags: list[str], skipped: list[dict[str, str]], *,
+    request: str, labels: list[str] | None, own_name: str, registry: list[str],
+    existing: list[dict[str, Any]],
+) -> list[str]:
+    """Tags and negatives the request didn't ask for, off the drafted
+    options (bench W1, W3, W5, W6, W18: "desert" on every desert option,
+    the library tag "bench" on every outfit, "long hair" as the negative
+    of a short cut, other outfits as a trench coat's negatives). Returns
+    the new tags still in use.
+
+    - A wildcard's library tag is not an option tag (the retag path drops
+      it too), nor is one that repeats its name or variable.
+    - A new tag on every new option (3 or more) filters nothing, unless
+      the request asks for that tag.
+    - Negatives only when the request asks for them or existing options
+      have them; then never words of another option.
+    """
+    reg = {t.lower() for t in registry}
+    words = {_stem(w) for w in re.findall(r"[A-Za-z][\w-]*", request)}
+    asks_tags = bool(_ASKS_TAGS.search(request))
+
+    def drop(tag: str, reason: str) -> None:
+        for o in out:
+            if tag in o["tags"]:
+                o["tags"].remove(tag)
+        if not any(x["text"] == f"#{tag}" for x in skipped):
+            skipped.append({"text": f"#{tag}", "reason": reason})
+
+    lab = {t.lower() for t in labels or []} - reg
+    self_words = {_stem(w) for w in re.findall(r"[A-Za-z][\w-]*", own_name)} - {""}
+    for tag in list(new_tags):
+        low = tag.lower()
+        if low in lab:
+            drop(tag, "the wildcard's own library tag")
+        elif _stem(low) in self_words and not (asks_tags and _stem(low) in words):
+            drop(tag, "repeats what the wildcard is")
+        elif (len(out) >= 3 and all(tag in o["tags"] for o in out)
+              and not (asks_tags and _stem(low) in words)):
+            drop(tag, "on every new option, so it filters nothing")
+    used = {t for o in out for t in o["tags"]}
+    new_tags = [t for t in new_tags if t in used]
+
+    if not _ASKS_NEGATIVES.search(request) and not any(o.get("negative") for o in existing):
+        n = sum(1 for o in out if o["negative"])
+        for o in out:
+            o["negative"] = ""
+        if n:
+            skipped.append({"text": f"{n} negative{'s' if n != 1 else ''}",
+                            "reason": "not asked for"})
+        return new_tags
+    texts = [o["value"].lower() for o in out] + [
+        str(o.get("value") or "").lower() for o in existing]
+    for o in out:
+        if not o["negative"]:
+            continue
+        own = o["value"].lower()
+        parts = [p.strip() for p in o["negative"].split(",")]
+        kept = [p for p in parts if p and not any(
+            re.search(rf"\b{re.escape(p.lower())}\b", t) for t in texts if t != own)]
+        o["negative"] = ", ".join(kept)
+    return new_tags
 
 
 def _validate_merged(

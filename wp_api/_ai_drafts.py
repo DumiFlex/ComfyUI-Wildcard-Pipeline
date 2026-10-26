@@ -96,6 +96,14 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     self_id = _got if isinstance(_got := wc.get("id"), str) else None
     refs = _ref_index(_wildcards(request), self_id, payload, name)
     existing_texts = [ai_refs.display_text(t, refs) for t in existing_texts]
+    # Each with its tags, so the model tags new options the same way
+    # instead of inventing its own scheme (bench W3: three runs, three).
+    tagged = [
+        _str_list(o.get("sub_categories"), limit=20) for o in options
+        if isinstance(o, dict) and isinstance(o.get("value"), str) and o["value"].strip()
+    ][:5000]
+    existing_texts = [t + (f"  [tags {', '.join(g)}]" if g else "")
+                      for t, g in zip(existing_texts, tagged, strict=True)]
     first = ai_wildcard.build_user_prompt(kinds=kinds,
         instruction=ai_followup.first_instruction(turns, instruction), count=asked,
         name=name[:200], var_binding=var[:100],
@@ -119,6 +127,10 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
                 "sub_categories": tags,
             },
             limit=count, refs=refs, self_id=self_id,
+            # A refine is held to the first request too ("with negatives").
+            request=" ".join(dict.fromkeys(
+                (ai_followup.first_instruction(turns, instruction), instruction))),
+            labels=labels, own_name=f"{name} {var}",
         )
 
     try:
@@ -247,18 +259,30 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     )
     try:
         answer = await _ask(extra=webs.note, **ask)
-        if ai_edit.answered_nothing(action, answer, instruction):
+        nudged = ai_edit.answered_nothing(action, answer, instruction)
+        if nudged:
             # The base 9B answered "tag each by …" with an empty list every
             # time (panel eval 2026-10-21): the system prompt's "only list
             # the options you change" read as "change nothing". One re-ask.
             answer = await _ask(extra="\n\n".join(x for x in (webs.note, ai_edit.EMPTY_NUDGE)
                                                   if x), **ask)
+        missing = [] if nudged else ai_edit.left_out(action, answer, instruction,
+                                                     [r["id"] for r in rows])
+        if missing:
+            # One re-ask in all: the empty answer's, or this one.
+            again = await _ask(extra="\n\n".join(
+                x for x in (webs.note, ai_edit.left_out_nudge(missing)) if x), **ask)
+            # The second answer stands only when it covers more.
+            if isinstance(again, dict) and again.get("options") and len(ai_edit.left_out(
+                    action, again, instruction, [r["id"] for r in rows])) < len(missing):
+                answer = again
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
     answer, research = webs.take(answer)
     try:
         result = ai_edit.compile_edit(action, answer, options=rows, registry=tags,
-                                      refs=refs, self_id=self_id, labels=labels)
+                                      refs=refs, self_id=self_id, labels=labels,
+                                      instruction=instruction)
     except ValueError as e:
         return json_error(
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",

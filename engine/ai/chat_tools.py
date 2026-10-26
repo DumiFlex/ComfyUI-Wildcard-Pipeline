@@ -266,6 +266,10 @@ class MoreTools:
             tgt = self.names.get(str(p.get("target_wildcard_id")), "?")
             lines = [f"Source: {src} ({p.get('source_wildcard_id')}). Target: {tgt} "
                      f"({p.get('target_wildcard_id')}).",
+                     # Bench W16: all three 9B runs blamed this constraint
+                     # for the SOURCE option being rare.
+                     f"It changes {tgt}'s odds only, after {src} picks; it never changes "
+                     f"how often {src}'s options come up.",
                      f"Reaches {_reach_text(p.get('target_select'))}."]
             rows = constraint_rows(p)
             lines.append(f"Rules ({len(rows)}):")
