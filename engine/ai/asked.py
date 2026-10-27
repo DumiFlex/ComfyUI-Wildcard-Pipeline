@@ -50,7 +50,8 @@ def option_count(text: str) -> int:
     """How many options `text` asks for (1 to `MAX`), or 0 when it names no
     count: the first number followed, within a few words, by a plural noun
     ("6 desert weather options", "8 more outfits", "3 pairs of shoes",
-    "a dozen names"). "under 5 words", "1920s", "2 tags each" are not counts."""
+    "a dozen names", "6 more, bolder"). "under 5 words", "1920s", "2 tags each" and
+    "one option each" are not counts."""
     if not isinstance(text, str):
         return 0
     for m in _COUNT.finditer(text):
@@ -64,12 +65,29 @@ def option_count(text: str) -> int:
         run = _RUN.match(text, m.end())
         if not run:
             continue
-        for i, low in enumerate(run.group(1).lower().split()):
+        words = run.group(1).lower().split()
+        for i, low in enumerate(words):
             if low in _NOT_NOUNS or (low in _STOPS and i > 0):
                 break
             if (low.endswith("s") and len(low) > 3) or (n == 1 and low in ("option", "one")):
+                # "one option each", "3 options per class": a share, not a total.
+                after = words[i + 1] if i + 1 < len(words) else _next_word(text, run.end())
+                if after in _PER:
+                    break
+                return n
+            if low == "more" and i == len(words) - 1:
+                # "6 more, bolder than what's there": the noun is left out.
                 return n
     return 0
+
+
+#: After a counted noun: the count is per something, not the total.
+_PER = {"each", "per", "apiece", "every"}
+
+
+def _next_word(text: str, at: int) -> str:
+    m = re.match(r"\s+([A-Za-z]+)", text[at:])
+    return m.group(1).lower() if m else ""
 
 
 _HALF = re.compile(r"\bhalf\b|\bhalve[sd]?\b", re.I)
