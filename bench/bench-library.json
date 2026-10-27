@@ -1,0 +1,2266 @@
+{
+ "schema_version": 9,
+ "exported_at": "2026-10-26T12:07:19.562271Z",
+ "bundles": [
+  {
+   "id": "b00000b1",
+   "name": "Bench character",
+   "description": "A fantasy character in the weather, with every kind of item.",
+   "color": null,
+   "category_id": "bench_characters",
+   "tags": [
+    "bench"
+   ],
+   "is_favorite": false,
+   "children": [
+    {
+     "id": "b0000001",
+     "type": "wildcard",
+     "enabled": true,
+     "meta": {
+      "name": "Race"
+     },
+     "payload": {
+      "sub_categories": [
+       "common",
+       "fey",
+       "stout",
+       "wild"
+      ],
+      "options": [
+       {
+        "id": "o001",
+        "value": "human",
+        "weight": 1,
+        "sub_categories": [
+         "common"
+        ]
+       },
+       {
+        "id": "o002",
+        "value": "elf",
+        "weight": 1,
+        "sub_categories": [
+         "fey"
+        ]
+       },
+       {
+        "id": "o003",
+        "value": "dwarf",
+        "weight": 1,
+        "sub_categories": [
+         "stout"
+        ]
+       },
+       {
+        "id": "o004",
+        "value": "orc",
+        "weight": 1,
+        "sub_categories": [
+         "wild"
+        ]
+       },
+       {
+        "id": "o005",
+        "value": "halfling",
+        "weight": 0.5,
+        "sub_categories": [
+         "stout"
+        ]
+       }
+      ],
+      "var_binding": "race",
+      "tag_groups": {
+       "LINEAGE": [
+        "common",
+        "fey",
+        "stout",
+        "wild"
+       ]
+      }
+     },
+     "instance": {}
+    },
+    {
+     "id": "b0000041",
+     "type": "constraint",
+     "enabled": true,
+     "meta": {
+      "name": "Race → class"
+     },
+     "payload": {
+      "source_wildcard_id": "b0000001",
+      "target_wildcard_id": "b0000002",
+      "matrix": {
+       "fey": {
+        "magic": {
+         "mode": "boost",
+         "factor": 2
+        }
+       },
+       "wild": {
+        "magic": {
+         "mode": "reduce",
+         "factor": 0.3
+        }
+       }
+      },
+      "exceptions": [
+       {
+        "source_value": "dwarf",
+        "target_value": "mage",
+        "mode": "exclude",
+        "factor": 0
+       }
+      ]
+     },
+     "instance": {}
+    },
+    {
+     "id": "b0000002",
+     "type": "wildcard",
+     "enabled": true,
+     "meta": {
+      "name": "Class"
+     },
+     "payload": {
+      "sub_categories": [
+       "magic",
+       "martial"
+      ],
+      "options": [
+       {
+        "id": "o006",
+        "value": "warrior",
+        "weight": 1,
+        "sub_categories": [
+         "martial"
+        ]
+       },
+       {
+        "id": "o007",
+        "value": "mage",
+        "weight": 1,
+        "sub_categories": [
+         "magic"
+        ]
+       },
+       {
+        "id": "o008",
+        "value": "rogue",
+        "weight": 1,
+        "sub_categories": [
+         "martial"
+        ]
+       },
+       {
+        "id": "o009",
+        "value": "cleric",
+        "weight": 1,
+        "sub_categories": [
+         "magic"
+        ]
+       },
+       {
+        "id": "o010",
+        "value": "ranger",
+        "weight": 1,
+        "sub_categories": [
+         "martial"
+        ]
+       }
+      ],
+      "var_binding": "class",
+      "tag_groups": {
+       "ROLE": [
+        "magic",
+        "martial"
+       ]
+      }
+     },
+     "instance": {}
+    },
+    {
+     "id": "b0000031",
+     "type": "derivation",
+     "enabled": true,
+     "meta": {
+      "name": "Title from class"
+     },
+     "payload": {
+      "rules": [
+       {
+        "id": "r001",
+        "branches": [
+         {
+          "condition": {
+           "var": "class",
+           "op": "equals",
+           "value": "mage"
+          },
+          "action": {
+           "target_var": "title",
+           "mode": "replace",
+           "value": "Archmage"
+          }
+         },
+         {
+          "condition": {
+           "var": "class",
+           "op": "equals",
+           "value": "warrior"
+          },
+          "action": {
+           "target_var": "title",
+           "mode": "replace",
+           "value": "Warlord"
+          }
+         }
+        ],
+        "else": {
+         "action": {
+          "target_var": "title",
+          "mode": "replace",
+          "value": "Adventurer"
+         }
+        }
+       }
+      ]
+     },
+     "instance": {}
+    },
+    {
+     "id": "b0000003",
+     "type": "wildcard",
+     "enabled": true,
+     "meta": {
+      "name": "Weapon"
+     },
+     "payload": {
+      "sub_categories": [
+       "arcane",
+       "blade",
+       "blunt",
+       "ranged"
+      ],
+      "options": [
+       {
+        "id": "o011",
+        "value": "longsword",
+        "weight": 1,
+        "sub_categories": [
+         "blade"
+        ]
+       },
+       {
+        "id": "o012",
+        "value": "oak staff",
+        "weight": 1,
+        "sub_categories": [
+         "arcane"
+        ]
+       },
+       {
+        "id": "o013",
+        "value": "twin daggers",
+        "weight": 1,
+        "sub_categories": [
+         "blade"
+        ]
+       },
+       {
+        "id": "o014",
+        "value": "war mace",
+        "weight": 1,
+        "sub_categories": [
+         "blunt"
+        ]
+       },
+       {
+        "id": "o015",
+        "value": "longbow",
+        "weight": 1,
+        "sub_categories": [
+         "ranged"
+        ]
+       },
+       {
+        "id": "o016",
+        "value": "crossbow",
+        "weight": 1,
+        "sub_categories": [
+         "ranged"
+        ]
+       }
+      ],
+      "var_binding": "weapon",
+      "tag_groups": {
+       "KIND": [
+        "arcane",
+        "blade",
+        "blunt",
+        "ranged"
+       ]
+      }
+     },
+     "instance": {}
+    },
+    {
+     "id": "b0000004",
+     "type": "wildcard",
+     "enabled": true,
+     "meta": {
+      "name": "Outfit"
+     },
+     "payload": {
+      "sub_categories": [
+       "casual",
+       "formal"
+      ],
+      "options": [
+       {
+        "id": "o017",
+        "value": "denim jacket and white t-shirt",
+        "weight": 1,
+        "sub_categories": [
+         "casual"
+        ]
+       },
+       {
+        "id": "o018",
+        "value": "black leather biker jacket",
+        "weight": 1,
+        "sub_categories": [
+         "casual"
+        ]
+       },
+       {
+        "id": "o019",
+        "value": "yellow raincoat with rubber boots",
+        "weight": 1,
+        "sub_categories": [
+         "casual"
+        ]
+       },
+       {
+        "id": "o020",
+        "value": "linen summer dress",
+        "weight": 1,
+        "sub_categories": [
+         "casual"
+        ]
+       },
+       {
+        "id": "o021",
+        "value": "tailored navy business suit",
+        "weight": 1,
+        "sub_categories": [
+         "formal"
+        ]
+       },
+       {
+        "id": "o022",
+        "value": "chainmail hauberk with a tabard",
+        "weight": 1,
+        "sub_categories": [
+         "formal"
+        ]
+       },
+       {
+        "id": "o023",
+        "value": "hooded wool cloak",
+        "weight": 1,
+        "sub_categories": [
+         "casual"
+        ]
+       },
+       {
+        "id": "o024",
+        "value": "wool coat with a fur collar",
+        "weight": 0.1,
+        "sub_categories": [
+         "formal"
+        ]
+       },
+       {
+        "id": "o025",
+        "value": "sequined evening gown",
+        "weight": 1,
+        "sub_categories": [
+         "formal"
+        ]
+       },
+       {
+        "id": "o026",
+        "value": "hoodie and cargo pants",
+        "weight": 1,
+        "sub_categories": [
+         "casual"
+        ]
+       },
+       {
+        "id": "o027",
+        "value": "velvet doublet and breeches",
+        "weight": 1,
+        "sub_categories": [
+         "formal"
+        ]
+       },
+       {
+        "id": "o028",
+        "value": "floral sundress with sandals",
+        "weight": 1,
+        "sub_categories": [
+         "casual"
+        ]
+       }
+      ],
+      "var_binding": "outfit",
+      "tag_groups": {
+       "FORMALITY": [
+        "casual",
+        "formal"
+       ]
+      }
+     },
+     "instance": {}
+    },
+    {
+     "id": "b0000042",
+     "type": "constraint",
+     "enabled": true,
+     "meta": {
+      "name": "Outfit → shoes"
+     },
+     "payload": {
+      "source_wildcard_id": "b0000004",
+      "target_wildcard_id": "b0000005",
+      "matrix": {
+       "casual": {
+        "casual": {
+         "mode": "only",
+         "factor": 1
+        }
+       },
+       "formal": {
+        "formal": {
+         "mode": "only",
+         "factor": 1
+        }
+       }
+      },
+      "exceptions": []
+     },
+     "instance": {}
+    },
+    {
+     "id": "b0000005",
+     "type": "wildcard",
+     "enabled": true,
+     "meta": {
+      "name": "Shoes"
+     },
+     "payload": {
+      "sub_categories": [
+       "casual",
+       "formal"
+      ],
+      "options": [
+       {
+        "id": "o029",
+        "value": "leather boots",
+        "weight": 1,
+        "sub_categories": [
+         "casual",
+         "formal"
+        ]
+       },
+       {
+        "id": "o030",
+        "value": "white sneakers",
+        "weight": 1,
+        "sub_categories": [
+         "casual"
+        ]
+       },
+       {
+        "id": "o031",
+        "value": "black heels",
+        "weight": 1,
+        "sub_categories": [
+         "formal"
+        ]
+       },
+       {
+        "id": "o032",
+        "value": "loafers",
+        "weight": 1,
+        "sub_categories": [
+         "casual",
+         "formal"
+        ]
+       }
+      ],
+      "var_binding": "shoes",
+      "tag_groups": {
+       "FORMALITY": [
+        "casual",
+        "formal"
+       ]
+      },
+      "tag_group_kinds": {
+       "FORMALITY": "accepts"
+      }
+     },
+     "instance": {}
+    },
+    {
+     "id": "b0000009",
+     "type": "wildcard",
+     "enabled": true,
+     "meta": {
+      "name": "Accessory"
+     },
+     "payload": {
+      "sub_categories": [],
+      "options": [
+       {
+        "id": "o052",
+        "value": "a @{b0000008:warm} silk scarf",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "o053",
+        "value": "a @{b0000008} leather belt",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "o054",
+        "value": "a @{b0000008:cool} brooch",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "o055",
+        "value": "",
+        "weight": 2,
+        "sub_categories": [],
+        "is_null": true
+       }
+      ],
+      "var_binding": "accessory"
+     },
+     "instance": {}
+    },
+    {
+     "id": "b000000a",
+     "type": "wildcard",
+     "enabled": true,
+     "meta": {
+      "name": "Hair colour"
+     },
+     "payload": {
+      "sub_categories": [],
+      "options": [
+       {
+        "id": "o056",
+        "value": "silver hair",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "o057",
+        "value": "red hair",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "o058",
+        "value": "black hair",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "o059",
+        "value": "brown hair",
+        "weight": 1,
+        "sub_categories": [],
+        "fallback": true
+       }
+      ],
+      "var_binding": "hair_color"
+     },
+     "instance": {}
+    },
+    {
+     "id": "b0000007",
+     "type": "wildcard",
+     "enabled": true,
+     "meta": {
+      "name": "Mood"
+     },
+     "payload": {
+      "sub_categories": [
+       "bright",
+       "dark"
+      ],
+      "options": [
+       {
+        "id": "o041",
+        "value": "cheerful",
+        "weight": 1,
+        "sub_categories": [
+         "bright"
+        ]
+       },
+       {
+        "id": "o042",
+        "value": "melancholic",
+        "weight": 1,
+        "sub_categories": [
+         "dark"
+        ]
+       },
+       {
+        "id": "o043",
+        "value": "tense",
+        "weight": 1,
+        "sub_categories": [
+         "dark"
+        ]
+       },
+       {
+        "id": "o044",
+        "value": "serene",
+        "weight": 1,
+        "sub_categories": [
+         "bright"
+        ]
+       },
+       {
+        "id": "o045",
+        "value": "mysterious",
+        "weight": 1,
+        "sub_categories": [
+         "dark"
+        ]
+       }
+      ],
+      "var_binding": "mood",
+      "tag_groups": {
+       "TONE": [
+        "bright",
+        "dark"
+       ]
+      }
+     },
+     "instance": {}
+    },
+    {
+     "id": "b0000043",
+     "type": "constraint",
+     "enabled": true,
+     "meta": {
+      "name": "Mood → weather"
+     },
+     "payload": {
+      "source_wildcard_id": "b0000007",
+      "target_wildcard_id": "b0000006",
+      "matrix": {
+       "dark": {
+        "wet": {
+         "mode": "boost",
+         "factor": 2
+        }
+       },
+       "bright": {
+        "wet": {
+         "mode": "reduce",
+         "factor": 0.5
+        }
+       }
+      },
+      "exceptions": []
+     },
+     "instance": {}
+    },
+    {
+     "id": "b0000006",
+     "type": "wildcard",
+     "enabled": true,
+     "meta": {
+      "name": "Weather"
+     },
+     "payload": {
+      "sub_categories": [
+       "cold",
+       "dry",
+       "wet"
+      ],
+      "options": [
+       {
+        "id": "o033",
+        "value": "clear sunny sky",
+        "weight": 1,
+        "sub_categories": [
+         "dry"
+        ]
+       },
+       {
+        "id": "o034",
+        "value": "light drizzle",
+        "weight": 1,
+        "sub_categories": [
+         "wet"
+        ]
+       },
+       {
+        "id": "o035",
+        "value": "heavy rain",
+        "weight": 1,
+        "sub_categories": [
+         "wet"
+        ]
+       },
+       {
+        "id": "o036",
+        "value": "thick fog",
+        "weight": 1,
+        "sub_categories": [
+         "wet"
+        ]
+       },
+       {
+        "id": "o037",
+        "value": "snowfall",
+        "weight": 1,
+        "sub_categories": [
+         "cold"
+        ]
+       },
+       {
+        "id": "o038",
+        "value": "thunderstorm",
+        "weight": 1,
+        "sub_categories": [
+         "wet"
+        ]
+       },
+       {
+        "id": "o039",
+        "value": "overcast sky",
+        "weight": 1,
+        "sub_categories": [
+         "dry"
+        ]
+       },
+       {
+        "id": "o040",
+        "value": "heat haze",
+        "weight": 1,
+        "sub_categories": [
+         "dry"
+        ]
+       }
+      ],
+      "var_binding": "weather",
+      "tag_groups": {
+       "CONDITION": [
+        "cold",
+        "dry",
+        "wet"
+       ]
+      }
+     },
+     "instance": {}
+    },
+    {
+     "id": "b0000032",
+     "type": "derivation",
+     "enabled": true,
+     "meta": {
+      "name": "Light from weather"
+     },
+     "payload": {
+      "rules": [
+       {
+        "id": "r002",
+        "branches": [
+         {
+          "condition": {
+           "var": "weather",
+           "op": "contains",
+           "value": "rain"
+          },
+          "action": {
+           "target_var": "light",
+           "mode": "replace",
+           "value": "wet reflections, moody light"
+          },
+          "extra_actions": [
+           {
+            "target_var": "light",
+            "mode": "negative",
+            "value": "harsh sunlight"
+           }
+          ]
+         },
+         {
+          "condition": {
+           "var": "weather",
+           "op": "contains",
+           "value": "sunny"
+          },
+          "action": {
+           "target_var": "light",
+           "mode": "replace",
+           "value": "golden hour"
+          }
+         }
+        ],
+        "else": {
+         "action": {
+          "target_var": "light",
+          "mode": "replace",
+          "value": "soft daylight"
+         }
+        }
+       }
+      ]
+     },
+     "instance": {}
+    },
+    {
+     "id": "b0000021",
+     "type": "combine",
+     "enabled": true,
+     "meta": {
+      "name": "Character phrase"
+     },
+     "payload": {
+      "template": "a $mood $race $class wearing $outfit and $shoes",
+      "output_var": "character",
+      "input_vars": [
+       "mood",
+       "race",
+       "class",
+       "outfit",
+       "shoes"
+      ],
+      "negative": "extra limbs"
+     },
+     "instance": {}
+    },
+    {
+     "id": "b0000022",
+     "type": "combine",
+     "enabled": true,
+     "meta": {
+      "name": "Scene phrase"
+     },
+     "payload": {
+      "template": "$weather, $light",
+      "output_var": "scene",
+      "input_vars": [
+       "weather",
+       "light"
+      ]
+     },
+     "instance": {}
+    },
+    {
+     "id": "b0000011",
+     "type": "fixed_values",
+     "enabled": true,
+     "meta": {
+      "name": "Anime style"
+     },
+     "payload": {
+      "values": [
+       {
+        "id": "v001",
+        "name": "quality",
+        "value": "masterpiece, best quality, highly detailed",
+        "negative": "worst quality, low quality, jpeg artifacts"
+       },
+       {
+        "id": "v002",
+        "name": "style",
+        "value": "anime screencap, cel shading",
+        "negative": "photo, 3d render, realistic"
+       }
+      ]
+     },
+     "instance": {}
+    },
+    {
+     "id": "b0000012",
+     "type": "fixed_values",
+     "enabled": true,
+     "meta": {
+      "name": "Camera"
+     },
+     "payload": {
+      "values": [
+       {
+        "id": "v003",
+        "name": "camera",
+        "value": "cowboy shot, looking at viewer"
+       },
+       {
+        "id": "v004",
+        "name": "lens",
+        "value": "50mm lens, shallow depth of field"
+       }
+      ]
+     },
+     "instance": {}
+    }
+   ],
+   "payload_hash": "f37b59636aa5f19629eac101781e53c60581273404e0b8a64c2240b6f24e9e4a",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.554653Z",
+   "updated_at": "2026-10-26T12:07:19.554653Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  }
+ ],
+ "wildcards": [
+  {
+   "id": "b0000001",
+   "type": "wildcard",
+   "name": "Race",
+   "description": "The character's race.",
+   "category_id": "bench_characters",
+   "tags": [
+    "bench",
+    "charcter"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "sub_categories": [
+     "common",
+     "fey",
+     "stout",
+     "wild"
+    ],
+    "options": [
+     {
+      "id": "o001",
+      "value": "human",
+      "weight": 1,
+      "sub_categories": [
+       "common"
+      ]
+     },
+     {
+      "id": "o002",
+      "value": "elf",
+      "weight": 1,
+      "sub_categories": [
+       "fey"
+      ]
+     },
+     {
+      "id": "o003",
+      "value": "dwarf",
+      "weight": 1,
+      "sub_categories": [
+       "stout"
+      ]
+     },
+     {
+      "id": "o004",
+      "value": "orc",
+      "weight": 1,
+      "sub_categories": [
+       "wild"
+      ]
+     },
+     {
+      "id": "o005",
+      "value": "halfling",
+      "weight": 0.5,
+      "sub_categories": [
+       "stout"
+      ]
+     }
+    ],
+    "var_binding": "race",
+    "tag_groups": {
+     "LINEAGE": [
+      "common",
+      "fey",
+      "stout",
+      "wild"
+     ]
+    }
+   },
+   "payload_hash": "e9cfadd6864f7b799003bd90568af34852d86fea9759b0d20d437e1e2b0b0abe",
+   "snapshot_fingerprint": "93e8d54c",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.537728Z",
+   "updated_at": "2026-10-26T12:07:19.537728Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "b0000002",
+   "type": "wildcard",
+   "name": "Class",
+   "description": "The character's class.",
+   "category_id": "bench_characters",
+   "tags": [
+    "bench",
+    "character"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "sub_categories": [
+     "magic",
+     "martial"
+    ],
+    "options": [
+     {
+      "id": "o006",
+      "value": "warrior",
+      "weight": 1,
+      "sub_categories": [
+       "martial"
+      ]
+     },
+     {
+      "id": "o007",
+      "value": "mage",
+      "weight": 1,
+      "sub_categories": [
+       "magic"
+      ]
+     },
+     {
+      "id": "o008",
+      "value": "rogue",
+      "weight": 1,
+      "sub_categories": [
+       "martial"
+      ]
+     },
+     {
+      "id": "o009",
+      "value": "cleric",
+      "weight": 1,
+      "sub_categories": [
+       "magic"
+      ]
+     },
+     {
+      "id": "o010",
+      "value": "ranger",
+      "weight": 1,
+      "sub_categories": [
+       "martial"
+      ]
+     }
+    ],
+    "var_binding": "class",
+    "tag_groups": {
+     "ROLE": [
+      "magic",
+      "martial"
+     ]
+    }
+   },
+   "payload_hash": "8a7b47b77d6cde8f841ad011a9c7cdf57ec13421efc569fd9de63a2d794be68b",
+   "snapshot_fingerprint": "0ebe3afe",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.538570Z",
+   "updated_at": "2026-10-26T12:07:19.538570Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "b0000003",
+   "type": "wildcard",
+   "name": "Weapon",
+   "description": "What the character carries.",
+   "category_id": "bench_characters",
+   "tags": [
+    "bench"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "sub_categories": [
+     "arcane",
+     "blade",
+     "blunt",
+     "ranged"
+    ],
+    "options": [
+     {
+      "id": "o011",
+      "value": "longsword",
+      "weight": 1,
+      "sub_categories": [
+       "blade"
+      ]
+     },
+     {
+      "id": "o012",
+      "value": "oak staff",
+      "weight": 1,
+      "sub_categories": [
+       "arcane"
+      ]
+     },
+     {
+      "id": "o013",
+      "value": "twin daggers",
+      "weight": 1,
+      "sub_categories": [
+       "blade"
+      ]
+     },
+     {
+      "id": "o014",
+      "value": "war mace",
+      "weight": 1,
+      "sub_categories": [
+       "blunt"
+      ]
+     },
+     {
+      "id": "o015",
+      "value": "longbow",
+      "weight": 1,
+      "sub_categories": [
+       "ranged"
+      ]
+     },
+     {
+      "id": "o016",
+      "value": "crossbow",
+      "weight": 1,
+      "sub_categories": [
+       "ranged"
+      ]
+     }
+    ],
+    "var_binding": "weapon",
+    "tag_groups": {
+     "KIND": [
+      "arcane",
+      "blade",
+      "blunt",
+      "ranged"
+     ]
+    }
+   },
+   "payload_hash": "b6f864becf837a6f0aa2c2630dfcd6fbd4c5d4998e2580fc45477c6137b0a115",
+   "snapshot_fingerprint": "8facc5ba",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.539162Z",
+   "updated_at": "2026-10-26T12:07:19.539162Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "b0000004",
+   "type": "wildcard",
+   "name": "Outfit",
+   "description": "What the character wears.",
+   "category_id": "bench_clothing",
+   "tags": [
+    "bench"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "sub_categories": [
+     "casual",
+     "formal"
+    ],
+    "options": [
+     {
+      "id": "o017",
+      "value": "denim jacket and white t-shirt",
+      "weight": 1,
+      "sub_categories": [
+       "casual"
+      ]
+     },
+     {
+      "id": "o018",
+      "value": "black leather biker jacket",
+      "weight": 1,
+      "sub_categories": [
+       "casual"
+      ]
+     },
+     {
+      "id": "o019",
+      "value": "yellow raincoat with rubber boots",
+      "weight": 1,
+      "sub_categories": [
+       "casual"
+      ]
+     },
+     {
+      "id": "o020",
+      "value": "linen summer dress",
+      "weight": 1,
+      "sub_categories": [
+       "casual"
+      ]
+     },
+     {
+      "id": "o021",
+      "value": "tailored navy business suit",
+      "weight": 1,
+      "sub_categories": [
+       "formal"
+      ]
+     },
+     {
+      "id": "o022",
+      "value": "chainmail hauberk with a tabard",
+      "weight": 1,
+      "sub_categories": [
+       "formal"
+      ]
+     },
+     {
+      "id": "o023",
+      "value": "hooded wool cloak",
+      "weight": 1,
+      "sub_categories": [
+       "casual"
+      ]
+     },
+     {
+      "id": "o024",
+      "value": "wool coat with a fur collar",
+      "weight": 0.1,
+      "sub_categories": [
+       "formal"
+      ]
+     },
+     {
+      "id": "o025",
+      "value": "sequined evening gown",
+      "weight": 1,
+      "sub_categories": [
+       "formal"
+      ]
+     },
+     {
+      "id": "o026",
+      "value": "hoodie and cargo pants",
+      "weight": 1,
+      "sub_categories": [
+       "casual"
+      ]
+     },
+     {
+      "id": "o027",
+      "value": "velvet doublet and breeches",
+      "weight": 1,
+      "sub_categories": [
+       "formal"
+      ]
+     },
+     {
+      "id": "o028",
+      "value": "floral sundress with sandals",
+      "weight": 1,
+      "sub_categories": [
+       "casual"
+      ]
+     }
+    ],
+    "var_binding": "outfit",
+    "tag_groups": {
+     "FORMALITY": [
+      "casual",
+      "formal"
+     ]
+    }
+   },
+   "payload_hash": "dcf1959ee3178bdc2f64757de80030c923bf70d94eaf4509054084918bcf2d45",
+   "snapshot_fingerprint": "982966e4",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.539739Z",
+   "updated_at": "2026-10-26T12:07:19.539739Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "b0000005",
+   "type": "wildcard",
+   "name": "Shoes",
+   "description": "Footwear; each pair lists the outfits it suits.",
+   "category_id": "bench_clothing",
+   "tags": [
+    "bench"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "sub_categories": [
+     "casual",
+     "formal"
+    ],
+    "options": [
+     {
+      "id": "o029",
+      "value": "leather boots",
+      "weight": 1,
+      "sub_categories": [
+       "casual",
+       "formal"
+      ]
+     },
+     {
+      "id": "o030",
+      "value": "white sneakers",
+      "weight": 1,
+      "sub_categories": [
+       "casual"
+      ]
+     },
+     {
+      "id": "o031",
+      "value": "black heels",
+      "weight": 1,
+      "sub_categories": [
+       "formal"
+      ]
+     },
+     {
+      "id": "o032",
+      "value": "loafers",
+      "weight": 1,
+      "sub_categories": [
+       "casual",
+       "formal"
+      ]
+     }
+    ],
+    "var_binding": "shoes",
+    "tag_groups": {
+     "FORMALITY": [
+      "casual",
+      "formal"
+     ]
+    },
+    "tag_group_kinds": {
+     "FORMALITY": "accepts"
+    }
+   },
+   "payload_hash": "69d7670fc4d15f1fc142189762ba1c9d6dc1465e6e527b02b05b57842a5c3825",
+   "snapshot_fingerprint": "290aa89a",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.540392Z",
+   "updated_at": "2026-10-26T12:07:19.540392Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "b0000006",
+   "type": "wildcard",
+   "name": "Weather",
+   "description": "The weather in the scene.",
+   "category_id": "bench_scene",
+   "tags": [
+    "bench"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "sub_categories": [
+     "cold",
+     "dry",
+     "wet"
+    ],
+    "options": [
+     {
+      "id": "o033",
+      "value": "clear sunny sky",
+      "weight": 1,
+      "sub_categories": [
+       "dry"
+      ]
+     },
+     {
+      "id": "o034",
+      "value": "light drizzle",
+      "weight": 1,
+      "sub_categories": [
+       "wet"
+      ]
+     },
+     {
+      "id": "o035",
+      "value": "heavy rain",
+      "weight": 1,
+      "sub_categories": [
+       "wet"
+      ]
+     },
+     {
+      "id": "o036",
+      "value": "thick fog",
+      "weight": 1,
+      "sub_categories": [
+       "wet"
+      ]
+     },
+     {
+      "id": "o037",
+      "value": "snowfall",
+      "weight": 1,
+      "sub_categories": [
+       "cold"
+      ]
+     },
+     {
+      "id": "o038",
+      "value": "thunderstorm",
+      "weight": 1,
+      "sub_categories": [
+       "wet"
+      ]
+     },
+     {
+      "id": "o039",
+      "value": "overcast sky",
+      "weight": 1,
+      "sub_categories": [
+       "dry"
+      ]
+     },
+     {
+      "id": "o040",
+      "value": "heat haze",
+      "weight": 1,
+      "sub_categories": [
+       "dry"
+      ]
+     }
+    ],
+    "var_binding": "weather",
+    "tag_groups": {
+     "CONDITION": [
+      "cold",
+      "dry",
+      "wet"
+     ]
+    }
+   },
+   "payload_hash": "0761a90987df1aeb206e21c476994e5360a61f6d8eb625f85ad7ed950a982ad1",
+   "snapshot_fingerprint": "806f3952",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.541291Z",
+   "updated_at": "2026-10-26T12:07:19.541291Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "b0000007",
+   "type": "wildcard",
+   "name": "Mood",
+   "description": "The character's mood.",
+   "category_id": "bench_characters",
+   "tags": [
+    "bench",
+    "charcter"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "sub_categories": [
+     "bright",
+     "dark"
+    ],
+    "options": [
+     {
+      "id": "o041",
+      "value": "cheerful",
+      "weight": 1,
+      "sub_categories": [
+       "bright"
+      ]
+     },
+     {
+      "id": "o042",
+      "value": "melancholic",
+      "weight": 1,
+      "sub_categories": [
+       "dark"
+      ]
+     },
+     {
+      "id": "o043",
+      "value": "tense",
+      "weight": 1,
+      "sub_categories": [
+       "dark"
+      ]
+     },
+     {
+      "id": "o044",
+      "value": "serene",
+      "weight": 1,
+      "sub_categories": [
+       "bright"
+      ]
+     },
+     {
+      "id": "o045",
+      "value": "mysterious",
+      "weight": 1,
+      "sub_categories": [
+       "dark"
+      ]
+     }
+    ],
+    "var_binding": "mood",
+    "tag_groups": {
+     "TONE": [
+      "bright",
+      "dark"
+     ]
+    }
+   },
+   "payload_hash": "ef947e2b36a7bc23351c0e24f3e800465fe86a80101d5927a37402320c561d62",
+   "snapshot_fingerprint": "89fdbb06",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.544496Z",
+   "updated_at": "2026-10-26T12:07:19.544496Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "b0000008",
+   "type": "wildcard",
+   "name": "Palette",
+   "description": "Colour words other wildcards draw from (no variable of its own).",
+   "category_id": "bench_style",
+   "tags": [
+    "bench"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "sub_categories": [
+     "cool",
+     "warm"
+    ],
+    "options": [
+     {
+      "id": "o046",
+      "value": "crimson",
+      "weight": 1,
+      "sub_categories": [
+       "warm"
+      ]
+     },
+     {
+      "id": "o047",
+      "value": "amber",
+      "weight": 1,
+      "sub_categories": [
+       "warm"
+      ]
+     },
+     {
+      "id": "o048",
+      "value": "gold",
+      "weight": 1,
+      "sub_categories": [
+       "warm"
+      ]
+     },
+     {
+      "id": "o049",
+      "value": "teal",
+      "weight": 1,
+      "sub_categories": [
+       "cool"
+      ]
+     },
+     {
+      "id": "o050",
+      "value": "navy",
+      "weight": 1,
+      "sub_categories": [
+       "cool"
+      ]
+     },
+     {
+      "id": "o051",
+      "value": "silver",
+      "weight": 1,
+      "sub_categories": [
+       "cool"
+      ]
+     }
+    ],
+    "tag_groups": {
+     "TEMPERATURE": [
+      "cool",
+      "warm"
+     ]
+    }
+   },
+   "payload_hash": "6834f4b9b3248e0d606431a1da0b275b9e3a6daaecb8466f494ca278bda08391",
+   "snapshot_fingerprint": "4b6168ba",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.545835Z",
+   "updated_at": "2026-10-26T12:07:19.545835Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "b0000009",
+   "type": "wildcard",
+   "name": "Accessory",
+   "description": "A small accessory, coloured from the palette.",
+   "category_id": "bench_clothing",
+   "tags": [
+    "bench"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "sub_categories": [],
+    "options": [
+     {
+      "id": "o052",
+      "value": "a @{b0000008:warm} silk scarf",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "o053",
+      "value": "a @{b0000008} leather belt",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "o054",
+      "value": "a @{b0000008:cool} brooch",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "o055",
+      "value": "",
+      "weight": 2,
+      "sub_categories": [],
+      "is_null": true
+     }
+    ],
+    "var_binding": "accessory"
+   },
+   "payload_hash": "eef9a1f67324cb1aa4187a75ab4989b1b710e4bdcec065588a907e9fa1e04803",
+   "snapshot_fingerprint": "3b07bed5",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.546502Z",
+   "updated_at": "2026-10-26T12:07:19.546502Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "b000000a",
+   "type": "wildcard",
+   "name": "Hair colour",
+   "description": "Hair colour; plain brown is the fallback.",
+   "category_id": "bench_characters",
+   "tags": [
+    "bench",
+    "character"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "sub_categories": [],
+    "options": [
+     {
+      "id": "o056",
+      "value": "silver hair",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "o057",
+      "value": "red hair",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "o058",
+      "value": "black hair",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "o059",
+      "value": "brown hair",
+      "weight": 1,
+      "sub_categories": [],
+      "fallback": true
+     }
+    ],
+    "var_binding": "hair_color"
+   },
+   "payload_hash": "8443b8a353bdd7f82a43bf13b99d1c54cd4e29e0d93d76020dd67c765077f8e0",
+   "snapshot_fingerprint": "56cc1c23",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.546986Z",
+   "updated_at": "2026-10-26T12:07:19.546986Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "b000000b",
+   "type": "wildcard",
+   "name": "Weather copy",
+   "description": "The weather in the scene.",
+   "category_id": null,
+   "tags": [
+    "bench",
+    "wip"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "sub_categories": [
+     "cold",
+     "dry",
+     "wet"
+    ],
+    "options": [
+     {
+      "id": "o033",
+      "value": "clear sunny sky",
+      "weight": 1,
+      "sub_categories": [
+       "dry"
+      ]
+     },
+     {
+      "id": "o034",
+      "value": "light drizzle",
+      "weight": 1,
+      "sub_categories": [
+       "wet"
+      ]
+     },
+     {
+      "id": "o035",
+      "value": "heavy rain",
+      "weight": 1,
+      "sub_categories": [
+       "wet"
+      ]
+     },
+     {
+      "id": "o036",
+      "value": "thick fog",
+      "weight": 1,
+      "sub_categories": [
+       "wet"
+      ]
+     },
+     {
+      "id": "o037",
+      "value": "snowfall",
+      "weight": 1,
+      "sub_categories": [
+       "cold"
+      ]
+     },
+     {
+      "id": "o038",
+      "value": "thunderstorm",
+      "weight": 1,
+      "sub_categories": [
+       "wet"
+      ]
+     },
+     {
+      "id": "o039",
+      "value": "overcast sky",
+      "weight": 1,
+      "sub_categories": [
+       "dry"
+      ]
+     },
+     {
+      "id": "o040",
+      "value": "heat haze",
+      "weight": 1,
+      "sub_categories": [
+       "dry"
+      ]
+     }
+    ],
+    "var_binding": "weather",
+    "tag_groups": {
+     "CONDITION": [
+      "cold",
+      "dry",
+      "wet"
+     ]
+    }
+   },
+   "payload_hash": "0761a90987df1aeb206e21c476994e5360a61f6d8eb625f85ad7ed950a982ad1",
+   "snapshot_fingerprint": "c577dab5",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.547656Z",
+   "updated_at": "2026-10-26T12:07:19.547656Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  }
+ ],
+ "fixed_values": [
+  {
+   "id": "b0000011",
+   "type": "fixed_values",
+   "name": "Anime style",
+   "description": "Quality and style words for anime checkpoints.",
+   "category_id": "bench_style",
+   "tags": [
+    "bench"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "values": [
+     {
+      "id": "v001",
+      "name": "quality",
+      "value": "masterpiece, best quality, highly detailed",
+      "negative": "worst quality, low quality, jpeg artifacts"
+     },
+     {
+      "id": "v002",
+      "name": "style",
+      "value": "anime screencap, cel shading",
+      "negative": "photo, 3d render, realistic"
+     }
+    ]
+   },
+   "payload_hash": "f889e684c20ae925c2e6bfd97eb4704df7d2b1828636578da37cba587d459dec",
+   "snapshot_fingerprint": "b9909758",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.548371Z",
+   "updated_at": "2026-10-26T12:07:19.548371Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "b0000012",
+   "type": "fixed_values",
+   "name": "Camera",
+   "description": "Framing words.",
+   "category_id": "bench_style",
+   "tags": [
+    "bench",
+    "wip"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "values": [
+     {
+      "id": "v003",
+      "name": "camera",
+      "value": "cowboy shot, looking at viewer"
+     },
+     {
+      "id": "v004",
+      "name": "lens",
+      "value": "50mm lens, shallow depth of field"
+     }
+    ]
+   },
+   "payload_hash": "cb7bbc22fe57ce1ab6a9dbd32489586bf02319b37e21cd9535d2d3074dd89d67",
+   "snapshot_fingerprint": "ebf64963",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.548881Z",
+   "updated_at": "2026-10-26T12:07:19.548881Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  }
+ ],
+ "combines": [
+  {
+   "id": "b0000021",
+   "type": "combine",
+   "name": "Character phrase",
+   "description": "One phrase for the character.",
+   "category_id": "bench_characters",
+   "tags": [
+    "bench"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "template": "a $mood $race $class wearing $outfit and $shoes",
+    "output_var": "character",
+    "input_vars": [
+     "mood",
+     "race",
+     "class",
+     "outfit",
+     "shoes"
+    ],
+    "negative": "extra limbs"
+   },
+   "payload_hash": "cd926a553c7964426308814d401ab8bb74cf14f387a6a4486786160b51fcca22",
+   "snapshot_fingerprint": "8f25c7bb",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.549447Z",
+   "updated_at": "2026-10-26T12:07:19.549447Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "b0000022",
+   "type": "combine",
+   "name": "Scene phrase",
+   "description": "Weather and light together.",
+   "category_id": "bench_scene",
+   "tags": [
+    "bench"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "template": "$weather, $light",
+    "output_var": "scene",
+    "input_vars": [
+     "weather",
+     "light"
+    ]
+   },
+   "payload_hash": "578aa63a1dd4a716c796a1f61e9f6efd1e66757ae6eae5490190ca094a1f6141",
+   "snapshot_fingerprint": "7fc51316",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.549894Z",
+   "updated_at": "2026-10-26T12:07:19.549894Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  }
+ ],
+ "derivations": [
+  {
+   "id": "b0000031",
+   "type": "derivation",
+   "name": "Title from class",
+   "description": "Gives each class a title.",
+   "category_id": "bench_characters",
+   "tags": [
+    "bench"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "rules": [
+     {
+      "id": "r001",
+      "branches": [
+       {
+        "condition": {
+         "var": "class",
+         "op": "equals",
+         "value": "mage"
+        },
+        "action": {
+         "target_var": "title",
+         "mode": "replace",
+         "value": "Archmage"
+        }
+       },
+       {
+        "condition": {
+         "var": "class",
+         "op": "equals",
+         "value": "warrior"
+        },
+        "action": {
+         "target_var": "title",
+         "mode": "replace",
+         "value": "Warlord"
+        }
+       }
+      ],
+      "else": {
+       "action": {
+        "target_var": "title",
+        "mode": "replace",
+        "value": "Adventurer"
+       }
+      }
+     }
+    ]
+   },
+   "payload_hash": "239bf8d48bfeb9bfae68f8ee7814bb4a1cadf0ea158e71b3e1d61377e17a9acf",
+   "snapshot_fingerprint": "05a05867",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.550478Z",
+   "updated_at": "2026-10-26T12:07:19.550478Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "b0000032",
+   "type": "derivation",
+   "name": "Light from weather",
+   "description": "Sets $light from the weather.",
+   "category_id": "bench_scene",
+   "tags": [
+    "bench"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "rules": [
+     {
+      "id": "r002",
+      "branches": [
+       {
+        "condition": {
+         "var": "weather",
+         "op": "contains",
+         "value": "rain"
+        },
+        "action": {
+         "target_var": "light",
+         "mode": "replace",
+         "value": "wet reflections, moody light"
+        },
+        "extra_actions": [
+         {
+          "target_var": "light",
+          "mode": "negative",
+          "value": "harsh sunlight"
+         }
+        ]
+       },
+       {
+        "condition": {
+         "var": "weather",
+         "op": "contains",
+         "value": "sunny"
+        },
+        "action": {
+         "target_var": "light",
+         "mode": "replace",
+         "value": "golden hour"
+        }
+       }
+      ],
+      "else": {
+       "action": {
+        "target_var": "light",
+        "mode": "replace",
+        "value": "soft daylight"
+       }
+      }
+     }
+    ]
+   },
+   "payload_hash": "51ad7a4443aeaacd7bebf3f213e22a49c5f50f13b17986fcdfdb8e5672951eb1",
+   "snapshot_fingerprint": "fe2ee2ac",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.550990Z",
+   "updated_at": "2026-10-26T12:07:19.550990Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  }
+ ],
+ "constraints": [
+  {
+   "id": "b0000041",
+   "type": "constraint",
+   "name": "Race → class",
+   "description": "Which races lean to which classes.",
+   "category_id": "bench_characters",
+   "tags": [
+    "bench"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "source_wildcard_id": "b0000001",
+    "target_wildcard_id": "b0000002",
+    "matrix": {
+     "fey": {
+      "magic": {
+       "mode": "boost",
+       "factor": 2
+      }
+     },
+     "wild": {
+      "magic": {
+       "mode": "reduce",
+       "factor": 0.3
+      }
+     }
+    },
+    "exceptions": [
+     {
+      "source_value": "dwarf",
+      "target_value": "mage",
+      "mode": "exclude",
+      "factor": 0
+     }
+    ]
+   },
+   "payload_hash": "c5f1e4be531e7d69f73ed4de83627938518920a19c3ecbdb78478d93fde54733",
+   "snapshot_fingerprint": "38908e94",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.551827Z",
+   "updated_at": "2026-10-26T12:07:19.551827Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "b0000042",
+   "type": "constraint",
+   "name": "Outfit → shoes",
+   "description": "Shoes only go with outfits they suit.",
+   "category_id": "bench_clothing",
+   "tags": [
+    "bench"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "source_wildcard_id": "b0000004",
+    "target_wildcard_id": "b0000005",
+    "matrix": {
+     "casual": {
+      "casual": {
+       "mode": "only",
+       "factor": 1
+      }
+     },
+     "formal": {
+      "formal": {
+       "mode": "only",
+       "factor": 1
+      }
+     }
+    },
+    "exceptions": []
+   },
+   "payload_hash": "e75083b0d4104436128664ff62b17b0eae1fb141ee4e5c3eac8645380d4815fa",
+   "snapshot_fingerprint": "734e29a3",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.552785Z",
+   "updated_at": "2026-10-26T12:07:19.552785Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "b0000043",
+   "type": "constraint",
+   "name": "Mood → weather",
+   "description": "Dark moods bring wet weather.",
+   "category_id": "bench_scene",
+   "tags": [
+    "bench"
+   ],
+   "is_favorite": false,
+   "payload": {
+    "source_wildcard_id": "b0000007",
+    "target_wildcard_id": "b0000006",
+    "matrix": {
+     "dark": {
+      "wet": {
+       "mode": "boost",
+       "factor": 2
+      }
+     },
+     "bright": {
+      "wet": {
+       "mode": "reduce",
+       "factor": 0.5
+      }
+     }
+    },
+    "exceptions": []
+   },
+   "payload_hash": "86671b738702c38eab7c51e9efd7bab33680c3ed1a3ece9cef1b17b199f7ac8d",
+   "snapshot_fingerprint": "18807d5e",
+   "version": 1,
+   "created_at": "2026-10-26T12:07:19.553615Z",
+   "updated_at": "2026-10-26T12:07:19.553615Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  }
+ ],
+ "categories": [
+  {
+   "id": "bench_characters",
+   "name": "Bench: Characters",
+   "color": "#a78bfa",
+   "icon": "pi-user",
+   "sort_order": 0
+  },
+  {
+   "id": "bench_clothing",
+   "name": "Bench: Clothing",
+   "color": "#f472b6",
+   "icon": "pi-shopping-bag",
+   "sort_order": 0
+  },
+  {
+   "id": "bench_scene",
+   "name": "Bench: Scene",
+   "color": "#34d399",
+   "icon": "pi-image",
+   "sort_order": 0
+  },
+  {
+   "id": "bench_style",
+   "name": "Bench: Style",
+   "color": "#fbbf24",
+   "icon": "pi-palette",
+   "sort_order": 0
+  },
+  {
+   "id": "old_stuff",
+   "name": "Old stuff",
+   "color": "#9ca3af",
+   "icon": "pi-folder",
+   "sort_order": 0
+  }
+ ],
+ "templates": [
+  {
+   "id": "b00000c1",
+   "name": "Bench portrait",
+   "description": "Portrait of the bench character.",
+   "category_id": "bench_style",
+   "tags": [
+    "bench"
+   ],
+   "is_favorite": false,
+   "template_string": "$quality, $style, $character, $accessory, $hair_color, the $title, holding a $weapon, $scene, $camera, $lens",
+   "negative_template": "$negatives, bad anatomy, bad hands",
+   "created_at": "2026-10-26T12:07:19.560070Z",
+   "updated_at": "2026-10-26T12:07:19.560070Z"
+  }
+ ]
+}
