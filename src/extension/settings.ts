@@ -12,6 +12,10 @@
 // can attach the runtime injection to a JS module. A bare CSS import
 // from main.ts emits a chunk with no JS owner and the plugin warns.
 import { reactive } from "vue";
+// Canvas theme tokens + shared `.wp-*` classes. Loaded ONCE here, in the boot
+// chunk; SFCs never `@import` it (every copy used to land in its own lazy
+// chunk, 15 copies in all). Comes first so the sheets below can override it.
+import "../components/shared/theme.css";
 import "../components/shared/a11y.css";
 import "../components/shared/display-prefs.css";
 import "../components/shared/vue-nodes.css";

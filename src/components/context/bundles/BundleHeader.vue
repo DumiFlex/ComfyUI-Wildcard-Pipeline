@@ -277,7 +277,6 @@ const summary = computed(() => {
  * unscoped means the PlaygroundMockup (settings preview) can render
  * a real-looking bundle header without us replicating the rules in
  * another file. */
-@import "../../shared/theme.css";
 @import "../../shared/row-primitives.css";
 
 .wp-bundle-header {

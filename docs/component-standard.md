@@ -52,6 +52,7 @@ Don't add synonyms such as `kind`, `small`, `busy` or `visible` for these meanin
 - A component in `src/components/shared/` uses only the names both surfaces define. The list is `SHARED_TOKENS` in `src/components/shared/shared-tokens.test.ts`; the test fails when either side stops defining one, or when a shared overlay reads a name outside it. That is how one component wears the canvas colours in a node and the manager colours on a page.
 - Shadows follow the floating thing's size: `--wp-shadow-sm` for resting cards, `--wp-shadow-md` for menus, popovers, tooltips and dropdown lists, `--wp-shadow-lg` for dialogs, `--wp-shadow-xl` for drawers and full-page panels. A small menu never gets a dialog's shadow.
 - Every component must work in both light and dark.
+- A component never `@import`s `theme.css`: the canvas loads it once from the boot chunk (`extension/settings.ts`), so its tokens and `.wp-*` classes are always there.
 - A component never writes to `:root`. The canvas colour sets in `theme.css` skip `html.wp-manager`, and a canvas piece shown in the manager puts `wp-canvas-scope` on its own root.
 
 ## 6. Accessible by default

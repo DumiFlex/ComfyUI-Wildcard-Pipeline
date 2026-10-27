@@ -197,8 +197,6 @@ async function submit(mode: "update" | "new") {
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .wp-stm {
   width: min(560px, 100%);
   max-height: calc(100vh - 40px);

@@ -60,7 +60,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 </script>
 
 <style>
-@import "./theme.css";
 @import "./_modal-motion.css";
 </style>
 

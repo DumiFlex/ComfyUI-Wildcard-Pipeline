@@ -671,7 +671,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
 @import "../shared/_modal-motion.css";
 
 .wp-ptl-overlay {

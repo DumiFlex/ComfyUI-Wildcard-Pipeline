@@ -1,14 +1,17 @@
 /* Theme tokens shared across WP widgets.
  * Brand palette pinned to public/images/favicon.svg — indigo / violet / teal.
  *
- * NOT wrapped in `@layer wp-extension` even though we wrap the
- * extension's other CSS in that layer for cascade-priority isolation.
- * The reason: Vue's <style scoped> scoper (`@vue/compiler-sfc`)
- * can't parse `@layer` at-rules in CSS that gets @imported into a
- * scoped block, and theme.css IS imported into both scoped and
- * unscoped Vue style blocks. Rules below are `:root` custom-property
- * definitions + `.wp-*` and `.var-*` prefixed classes; the namespace
- * prefix is the primary isolation here.
+ * Loaded ONCE, from `extension/settings.ts` (canvas boot chunk); the
+ * manager never loads it. Never `@import` it from an SFC style block:
+ * each import inlined the whole sheet into that component's lazy chunk
+ * (15 copies on the canvas), and inside `<style scoped>` the `:root`
+ * blocks get scoped and match nothing. `theme.test.ts` guards this.
+ *
+ * NOT wrapped in `@layer wp-extension` (unlike the extension's other
+ * CSS): the `.wp-*` / `.var-*` classes below must keep beating ComfyUI's
+ * own unlayered rules the way they did while the sheet was imported
+ * per SFC. Rules are `:root` custom-property definitions + `.wp-*` and
+ * `.var-*` prefixed classes; the namespace prefix is the isolation here.
  *
  * The colour blocks skip `html.wp-manager`: the manager has its own tokens
  * with the same names, so a canvas piece mounted there (the component kit)

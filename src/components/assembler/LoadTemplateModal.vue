@@ -277,8 +277,6 @@ function pick(row: TemplateRow) {
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .wp-ltm {
   background: var(--wp-bg-2, #15151f);
   border: 1px solid var(--wp-border-strong, var(--wp-border));

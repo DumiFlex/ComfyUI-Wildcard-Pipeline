@@ -148,8 +148,6 @@ function isEdited(key: string): boolean {
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .wp-ifg { display: flex; flex-direction: column; min-height: 0; flex: 1; width: 100%; }
 .wp-ifg__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--wp-border); background: var(--wp-bg-deep, var(--wp-bg)); font: 11px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); flex-shrink: 0; }
 .wp-ifg__slot { display: inline-flex; align-items: center; gap: 6px; }

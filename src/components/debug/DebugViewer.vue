@@ -562,7 +562,6 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
 </template>
 
 <style>
-@import "../shared/theme.css";
 /* `wp-row-flash` keyframes, shared with the Context / Injector widgets. */
 @import "../shared/row-primitives.css";
 </style>

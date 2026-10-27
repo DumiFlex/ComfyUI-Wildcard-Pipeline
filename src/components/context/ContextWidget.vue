@@ -949,7 +949,6 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
 </template>
 
 <style>
-@import "../shared/theme.css";
 @import "../shared/row-primitives.css";
 @import "./editors/_modal-head.css";
 @import "./editors/_modal-template-ctrls.css";

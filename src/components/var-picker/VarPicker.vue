@@ -174,8 +174,6 @@ function onSearchKeydown(ev: KeyboardEvent): void {
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .wp-var-picker {
   display: flex;
   flex-direction: column;
