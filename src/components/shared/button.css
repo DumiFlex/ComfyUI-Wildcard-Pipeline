@@ -27,7 +27,9 @@
   font-family: inherit;
   font-size: 12.5px;
   font-weight: 500;
-  line-height: 1;
+  /* Normal, not 1: a line box shorter than the font's ascent + descent
+     gets its negative leading rounded unevenly and the label rides high. */
+  line-height: normal;
   cursor: pointer;
   background: var(--wp-bg-3);
   color: var(--wp-text);
@@ -44,6 +46,13 @@
   box-shadow: var(--wp-focus-ring);
 }
 .wp-btn .pi, .wp-btn svg { font-size: 13px; }
+/* The label box (not on a link, which has no fixed height) is trimmed to
+ * the cap height where the browser can, so the
+ * flex centring puts the capitals, not the ascender-to-descender box, on the
+ * button's middle line, level with the icon. */
+@supports (text-box: trim-both cap alphabetic) {
+  .wp-btn:not(.wp-btn--link) .wp-btn__label { text-box: trim-both cap alphabetic; }
+}
 
 /* Sizes */
 .wp-btn--sm { height: var(--wp-control-h-sm); padding: 0 8px; gap: 4px; font-size: 12px; border-radius: 6px; }
@@ -89,6 +98,7 @@
   color: var(--wp-accent-text);
   height: auto;
   padding: 0;
+  line-height: 1;
 }
 .wp-btn--link:hover {
   background: transparent;
