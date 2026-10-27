@@ -93,7 +93,7 @@ A panel closes once its trigger has scrolled out of view. A scroll inside the pa
 
 ## 8. Canvas twins share a stylesheet
 
-When the canvas needs its own version of a manager control (Button, Switch, Select, Number), both versions use the same stylesheet in `src/components/shared/`. A change to one then changes both. The kit shows each shared piece in both looks (`kit/KitLooks.vue` draws a demo twice: canvas colours at `sm`, manager colours at `md`).
+When the canvas needs its own version of a manager control (Button, Switch, Select, Number), both versions use the same stylesheet in `src/components/shared/`. A change to one then changes both. The kit shows each shared piece in both looks (`kit/KitLooks.vue` draws a demo twice, at the canvas size `sm` and the manager size `md`; the manager never loads the canvas colours, so both wear the manager's).
 
 Better still is one component for both sides, with only `size` changing. `WpSwitch` is the on/off switch everywhere (the manager's `Toggle` is `WpSwitch` at `md`), and `WpTabs` and `WpSegmented` are the tabs and value pickers everywhere. A canvas widget never draws its own `role="switch"`, tab strip or joined-button group.
 

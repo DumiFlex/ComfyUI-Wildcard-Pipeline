@@ -15,13 +15,13 @@ describe("WpSwitch", () => {
   });
 
   it("defaults to the canvas size and the track look", () => {
-    const w = mount(WpSwitch);
+    const w = mount(WpSwitch).get('[role="switch"]');
     expect(w.classes()).toEqual(expect.arrayContaining(["wp-switch", "wp-switch--sm"]));
     expect(w.find(".wp-switch__track").exists()).toBe(true);
   });
 
   it("draws the chip look with its icon and label", () => {
-    const w = mount(WpSwitch, { props: { modelValue: true, variant: "chip", icon: "pi-lock", label: "Lock pick" } });
+    const w = mount(WpSwitch, { props: { modelValue: true, variant: "chip", icon: "pi-lock", label: "Lock pick" } }).get('[role="switch"]');
     expect(w.classes()).toContain("wp-switch--chip");
     expect(w.find(".wp-switch__track").exists()).toBe(false);
     expect(w.find(".pi-lock").exists()).toBe(true);
@@ -30,22 +30,23 @@ describe("WpSwitch", () => {
   });
 
   it("shows mixed only while off, and reads as off", () => {
-    expect(mount(WpSwitch, { props: { mixed: true } }).classes()).toContain("wp-switch--mixed");
-    const on = mount(WpSwitch, { props: { mixed: true, modelValue: true } });
+    expect(mount(WpSwitch, { props: { mixed: true } }).get('[role="switch"]').classes()).toContain("wp-switch--mixed");
+    const on = mount(WpSwitch, { props: { mixed: true, modelValue: true } }).get('[role="switch"]');
     expect(on.classes()).not.toContain("wp-switch--mixed");
-    expect(mount(WpSwitch, { props: { mixed: true } }).attributes("aria-checked")).toBe("false");
+    expect(mount(WpSwitch, { props: { mixed: true } }).get('[role="switch"]').attributes("aria-checked")).toBe("false");
   });
 
-  it("ignores input and leaves the tab order when disabled", async () => {
+  it("ignores input when disabled, staying focusable so its tooltip shows", async () => {
     const w = mount(WpSwitch, { props: { disabled: true } });
-    expect(w.attributes("aria-disabled")).toBe("true");
-    expect(w.attributes("tabindex")).toBe("-1");
-    await w.trigger("click");
-    await w.trigger("keydown", { key: "Enter" });
+    const sw = w.get('[role="switch"]');
+    expect(sw.attributes("aria-disabled")).toBe("true");
+    expect(sw.attributes("tabindex")).toBe("0");
+    await sw.trigger("click");
+    await sw.trigger("keydown", { key: "Enter" });
     expect(w.emitted("update:modelValue")).toBeUndefined();
   });
 
   it("marks invalid", () => {
-    expect(mount(WpSwitch, { props: { invalid: true } }).attributes("aria-invalid")).toBe("true");
+    expect(mount(WpSwitch, { props: { invalid: true } }).get('[role="switch"]').attributes("aria-invalid")).toBe("true");
   });
 });

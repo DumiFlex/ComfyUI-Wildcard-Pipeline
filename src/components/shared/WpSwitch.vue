@@ -12,9 +12,11 @@
  *
  * The root is a focusable span, not a button, so the switch can sit inside a
  * clickable header row (derivation rules) without nesting buttons. Space and
- * Enter flip it. One component on both sides means one stylesheet: the
- * scoped block below reads only SHARED_TOKENS, so it wears each side's
- * colours. (Scoped and unlayered on purpose: the manager's Tailwind preflight
+ * Enter flip it. A disabled switch stays in the tab order (aria-disabled, as
+ * the ARIA guide allows) so its tooltip still says why it is off.
+ *
+ * One component on both sides means one stylesheet: the scoped block below
+ * reads only SHARED_TOKENS, so it wears each side's colours. (Scoped and unlayered on purpose: the manager's Tailwind preflight
  * is unlayered and would beat a layered border.)
  */
 const props = withDefaults(
@@ -41,8 +43,6 @@ function flip(): void {
 </script>
 
 <template>
-  <!-- It is focusable: tabindex is bound (0, or -1 while disabled), which the rule cannot read. -->
-  <!-- eslint-disable-next-line vuejs-accessibility/interactive-supports-focus -->
   <span
     class="wp-switch"
     :class="[`wp-switch--${size}`, { 'wp-switch--chip': variant === 'chip', 'wp-switch--mixed': mixed && !modelValue }]"
@@ -50,7 +50,7 @@ function flip(): void {
     :aria-checked="modelValue === true"
     :aria-disabled="disabled || undefined"
     :aria-invalid="invalid || undefined"
-    :tabindex="disabled ? -1 : 0"
+    tabindex="0"
     @click="flip"
     @keydown.space.stop.prevent="flip"
     @keydown.enter.prevent.stop="flip"
