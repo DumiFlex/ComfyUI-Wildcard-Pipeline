@@ -179,7 +179,7 @@ describe("RuntimeSection", () => {
 
   it("seed-scope toggle is off (vary) by default", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule() } });
-    expect(w.find('[data-test="runtime-hold"]').classes()).not.toContain("toggle--on");
+    expect(w.find('[data-test="runtime-hold"]').attributes("aria-checked")).toBe("false");
   });
 
   it("clicking seed-scope toggle emits patch with seed_scope = hold", async () => {

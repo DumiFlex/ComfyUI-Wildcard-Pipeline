@@ -1623,24 +1623,9 @@ input, textarea, select { font: inherit; }
   display: contents;
 }
 
-/* ---------- Toggle ---------- */
-.wp-toggle { width: 32px; height: 18px; background: var(--wp-bg-3); border-radius: 999px; border: 1px solid var(--wp-border); position: relative; cursor: pointer; transition: background .15s; flex-shrink: 0; padding: 0; }
-.wp-toggle::after { content: ""; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; background: #fff; /* audit-exempt: white knob on colored toggle track */ border-radius: 50%; transition: transform .15s; }
-.wp-toggle[data-on="true"] { background: var(--wp-accent-600); border-color: var(--wp-accent-500); }
-.wp-toggle[data-on="true"]::after { transform: translateX(14px); }
-.wp-toggle:disabled { opacity: 0.45; cursor: not-allowed; }
-.wp-toggle:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
-
-/* Inline toggle wrapper (label + switch) — min-height fills canonical hit-target. */
-.wp-toggle-row {
-  display: inline-flex; align-items: center; gap: 8px;
-  min-height: var(--wp-input-h);
-  cursor: pointer;
-  user-select: none;
-  font-size: 12.5px;
-  color: var(--wp-text);
-}
-.wp-toggle-row__label { color: var(--wp-text-muted); }
+/* ---------- Toggle ----------
+   Toggle.vue wraps the shared WpSwitch; its look lives in
+   components/shared/WpSwitch.vue (one sheet for canvas + manager). */
 
 /* ---------- Checkbox ----------
    Canonical geometry matches the wildcard pool's per-option box

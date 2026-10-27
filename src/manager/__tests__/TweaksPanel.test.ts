@@ -81,7 +81,7 @@ describe("TweaksPanel.vue", () => {
     const tweaks = useTweaksStore();
     expect(ui.sidebarCollapsed).toBe(false);
     // Click the underlying switch button rendered by Toggle.
-    const switchBtn = wrap.find('[data-test="tweaks-sidebar-toggle"] .wp-toggle');
+    const switchBtn = wrap.find('[data-test="tweaks-sidebar-toggle"]');
     await switchBtn.trigger("click");
     expect(ui.sidebarCollapsed).toBe(true);
     expect(tweaks.sidebarMode).toBe("collapsed");

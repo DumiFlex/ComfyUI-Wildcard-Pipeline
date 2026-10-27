@@ -21,32 +21,32 @@ function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
 describe("fixed-values RuntimeSection — frameActive gating", () => {
   it("hide toggle is NOT disabled in base mode (frameActive absent)", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule() } });
-    expect(w.find('[data-test="runtime-hide"]').attributes("disabled")).toBeUndefined();
+    expect(w.find('[data-test="runtime-hide"]').attributes("aria-disabled")).toBeUndefined();
   });
 
   it("hold toggle is NOT disabled in base mode (frameActive absent)", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule() } });
-    expect(w.find('[data-test="runtime-hold"]').attributes("disabled")).toBeUndefined();
+    expect(w.find('[data-test="runtime-hold"]').attributes("aria-disabled")).toBeUndefined();
   });
 
   it("hide toggle is NOT disabled when frameActive=false", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule(), frameActive: false } });
-    expect(w.find('[data-test="runtime-hide"]').attributes("disabled")).toBeUndefined();
+    expect(w.find('[data-test="runtime-hide"]').attributes("aria-disabled")).toBeUndefined();
   });
 
   it("hold toggle is NOT disabled when frameActive=false", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule(), frameActive: false } });
-    expect(w.find('[data-test="runtime-hold"]').attributes("disabled")).toBeUndefined();
+    expect(w.find('[data-test="runtime-hold"]').attributes("aria-disabled")).toBeUndefined();
   });
 
   it("hide toggle IS disabled when frameActive=true", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule(), frameActive: true } });
-    expect(w.find('[data-test="runtime-hide"]').attributes("disabled")).toBeDefined();
+    expect(w.find('[data-test="runtime-hide"]').attributes("aria-disabled")).toBe("true");
   });
 
   it("hold toggle IS disabled when frameActive=true", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule(), frameActive: true } });
-    expect(w.find('[data-test="runtime-hold"]').attributes("disabled")).toBeDefined();
+    expect(w.find('[data-test="runtime-hold"]').attributes("aria-disabled")).toBe("true");
   });
 
   it("shows frame-active hint when frameActive=true", () => {

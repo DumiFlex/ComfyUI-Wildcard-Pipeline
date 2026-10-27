@@ -151,6 +151,7 @@ function removePin(name: string): void {
           <span class="wp-trs__kind">{{ KIND_META[v.kind].label }}</span>
           <Toggle
             class="wp-trs__switch"
+            size="sm"
             :model-value="v.enabled"
             :aria-label="v.enabled ? `Switch off ${v.name}` : `Switch on ${v.name}`"
             data-test="stack-toggle"
@@ -265,14 +266,6 @@ function removePin(name: string): void {
   color: var(--kc); text-transform: uppercase; letter-spacing: .05em;
 }
 .wp-trs__switch { flex: none; min-height: 0; }
-/* A quieter, smaller switch than the form one: seven of them sit in a row. */
-.wp-trs__switch :deep(.wp-toggle) { width: 26px; height: 14px; }
-.wp-trs__switch :deep(.wp-toggle)::after { width: 10px; height: 10px; }
-.wp-trs__switch :deep(.wp-toggle[data-on="true"]) {
-  background: color-mix(in oklab, var(--wp-accent-600) 55%, var(--wp-bg-3));
-  border-color: color-mix(in oklab, var(--wp-accent-500) 60%, var(--wp-border));
-}
-.wp-trs__switch :deep(.wp-toggle[data-on="true"])::after { transform: translateX(12px); }
 .wp-trs__name {
   font-weight: var(--wp-weight-medium); line-height: var(--wp-line-base);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;

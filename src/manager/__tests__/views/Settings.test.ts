@@ -47,9 +47,8 @@ describe("Settings › General › Updates", () => {
     const wrap = await mountSettings();
     const ui = useUiStore();
     const spy = vi.spyOn(ui, "setCheckOnLaunch");
-    // The Toggle's clickable control is an inner <button role="switch">;
-    // the data-test attribute falls through to the outer <label>.
-    await wrap.get('[data-test="settings-check-on-launch"]').get("button").trigger("click");
+    // The data-test falls through to the Toggle's role="switch" root.
+    await wrap.get('[data-test="settings-check-on-launch"]').trigger("click");
     expect(spy).toHaveBeenCalledWith(false);
   });
 
