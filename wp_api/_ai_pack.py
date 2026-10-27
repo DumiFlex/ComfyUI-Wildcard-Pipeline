@@ -82,17 +82,18 @@ def _canvas(body: dict[str, Any]) -> list[dict[str, Any]] | None:
     return raw if isinstance(raw, list) else None
 
 
-async def _check_request(cfg: dict[str, Any], body: dict[str, Any]) -> None:
+async def _check_request(cfg: dict[str, Any], body: dict[str, Any]) -> str:
     """The request the manager sends back with a plan, as the code checks
     read it: a request in another language becomes its English
     restatement (`engine/ai/lang.py`, asked once and kept) when the plan
     itself is written in English, so its words are matched against the
-    plan's."""
+    plan's. Returns the user's own words, for what the model reads."""
     raw = body.get("request")
     if not isinstance(raw, str) or not raw.strip():
-        return
+        return ""
     english = await _ai_lang.check_text(cfg, raw)
     body["request"] = ai_lang.for_content(raw, english, body.get("plan"))
+    return raw
 
 
 async def _english_parts(cfg: dict[str, Any], *parts: str) -> str:
@@ -521,7 +522,7 @@ async def post_pack_review(request: web.Request) -> web.Response:
     body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
-    await _check_request(cfg, body)
+    own_words = await _check_request(cfg, body)
     library = _reusable(request)
     base = _pack_base(request, body, library)
     if isinstance(base, web.Response):
@@ -539,7 +540,7 @@ async def post_pack_review(request: web.Request) -> web.Response:
         try:
             answer = await _ai_client.complete_json(
                 cfg, system=ai_pack.review_system(plan),
-                user=ai_pack.review_prompt(plan, findings, asked, recheck),
+                user=ai_pack.review_prompt(plan, findings, own_words, recheck),
                 schema=ai_pack.review_schema(plan), schema_name="pack_review",
                 temperature=0.3,
             )
