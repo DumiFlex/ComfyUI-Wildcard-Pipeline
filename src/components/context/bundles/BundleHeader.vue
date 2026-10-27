@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { BundleInstance } from "../../../widgets/_shared";
+import WpCheck from "../../shared/WpCheck.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -151,15 +152,16 @@ const summary = computed(() => {
         aria-hidden="true"
       ></i>
     </button>
-    <label class="wp-bundle-enabled" draggable="false" :title="instance.enabled ? 'Disable bundle (cascades to children)' : 'Enable bundle'">
-      <input
-        type="checkbox"
-        :checked="instance.enabled"
-        :aria-label="`enable bundle ${name}`"
-        @change="(ev) => emit('toggle-enabled', (ev.target as HTMLInputElement).checked)"
-      />
-      <span class="wp-bundle-enabled-mark"></span>
-    </label>
+    <WpCheck
+      class="wp-bundle-enabled"
+      size="sm"
+      draggable="false"
+      data-test="bundle-enabled"
+      :title="instance.enabled ? 'Disable bundle (cascades to children)' : 'Enable bundle'"
+      :model-value="instance.enabled"
+      :aria-label="`enable bundle ${name}`"
+      @update:model-value="(next) => emit('toggle-enabled', next)"
+    />
     <span class="wp-row-type-icon wp-bundle-icon" aria-hidden="true">
       <i class="pi pi-box"></i>
     </span>
@@ -342,27 +344,8 @@ const summary = computed(() => {
 }
 .wp-bundle-collapse .pi { font-size: 10px; }
 .wp-bundle-collapse:hover { color: var(--wp-text); }
-.wp-bundle-enabled { display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; }
-.wp-bundle-enabled input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
-.wp-bundle-enabled-mark {
-  display: block;
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  border: 1px solid var(--wp-border2, var(--wp-border));
-  background: var(--wp-bg2);
-  transition: background-color var(--wp-motion-hover), border-color var(--wp-motion-hover);
-}
-.wp-bundle-enabled input:checked + .wp-bundle-enabled-mark {
-  background: var(--b);
-  border-color: var(--b);
-}
+/* The on/off box is WpCheck; checked, it takes the bundle colour. */
+.wp-bundle-enabled { --check-on: var(--b); }
 /* Bundle icon base from shared .wp-row-type-icon (16×16 inline-flex).
  * Bundle-specific override: color from bundle frame token, font-size
  * 12 for visual parity with ModuleRow's .wp-row-type-icon density.

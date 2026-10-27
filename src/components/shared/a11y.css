@@ -105,7 +105,7 @@
   .wp-pill,
   .wp-tag-chip,
   .wp-kind-chip,
-  .wp-toggle-mark
+  .wp-check
 ) {
   border-width: 2px !important;
 }
@@ -124,7 +124,8 @@
   .wp-chip--toggle,
   .wp-pill,
   .wp-tag-chip,
-  .wp-kind-chip
+  .wp-kind-chip,
+  .wp-check
 ):focus-visible,
 .wp-a11y-high-contrast :is(
   .wp-context,
@@ -137,11 +138,4 @@
   outline-offset: 2px !important;
 }
 
-/* Toggle mark uses an adjacent-sibling box-shadow ring instead of an
- * outline because the actual focused element is the visually hidden
- * <input>. Bump the ring width to match the rest of the high-contrast
- * pass so toggles don't feel like a weaker focus target than buttons. */
-.wp-a11y-high-contrast .wp-toggle input:focus-visible + .wp-toggle-mark {
-  box-shadow: 0 0 0 3px var(--wp-violet) !important;
-}
 }  /* end @layer wp-extension */

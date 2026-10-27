@@ -1905,7 +1905,7 @@ describe("ContextWidget drag-drop overhaul", () => {
   it("inline controls opt out of dragging via draggable=false", () => {
     const wrapper = mountFour();
     expect(wrapper.find(".wp-collapse-btn").attributes("draggable")).toBe("false");
-    expect(wrapper.find(".wp-toggle").attributes("draggable")).toBe("false");
+    expect(wrapper.find('[data-test="module-enabled"]').attributes("draggable")).toBe("false");
     expect(wrapper.find(".wp-mod-actions").attributes("draggable")).toBe("false");
     wrapper.unmount();
   });
