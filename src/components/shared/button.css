@@ -1,13 +1,14 @@
 /* Button — the one .wp-btn stylesheet, shared by the manager Button
  * (manager/components/ui/Button.vue, loaded globally by manager/main.ts) and
- * the canvas Button twin (component standard, rule 8; not built yet, so
- * canvas `.wp-btn` uses still carry their own rules). It reads only the
+ * the canvas twin WpButton (components/shared/WpButton.vue, component
+ * standard rule 8), which pulls it in scoped. It reads only the
  * SHARED_TOKENS names, so it wears the manager colours on a page and the
  * canvas colours in a node.
  *
  * Unlayered on purpose: the manager loads it beside tokens.css, where an
- * unlayered reset would otherwise beat it. The canvas imports it inside
- * `@layer wp-extension`.
+ * unlayered reset would otherwise beat it. The canvas never loads it
+ * globally: WpButton's scoped copy keeps its tone classes off the row icon
+ * buttons (`.wp-btn--icon-sm.wp-btn--danger` in row-primitives.css).
  *
  * Heights follow the control scale: sm 24 / md 32 / lg 40.
  *
