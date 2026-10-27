@@ -38,7 +38,7 @@ describe("AiSyntax", () => {
     const values: CardView = { kind: "values", rows: [{ name: "mood", value: "calm, $weather light", negative: "{dark|gloomy}" }] };
     const v = mount(AiCardView, { props: { view: values } });
     expect(v.find("td .wp-ai-syn__var").text()).toBe("$weather");
-    expect(v.find(".wp-ai-card-view__neg .wp-ai-syn__pick").text()).toBe("{dark|gloomy}");
+    expect(v.find(".wp-ai-values__neg .wp-ai-syn__pick").text()).toBe("{dark|gloomy}");
     const p = {
       pid: "p1", tool: "create_wildcard", title: "Create wildcard Window", summary: "", preview: [], after: null,
       warnings: [], fixes: [],

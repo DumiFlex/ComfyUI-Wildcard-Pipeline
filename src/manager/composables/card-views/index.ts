@@ -9,6 +9,8 @@ import type { AiChatProposal } from "../../api/types";
 import { createView } from "./create";
 import { infoView } from "./info";
 import { manageView } from "./manage";
+import { rulesView } from "./rules";
+import { deleteView, textDiff, valuesDiff } from "./values";
 import type { CardView, CardViewContext } from "./types";
 import { wildcardView } from "./wildcard";
 
@@ -18,6 +20,9 @@ const BUILDERS: Builder[] = [
   (p) => createView(p),
   (p, ctx) => infoView(p.op, ctx),
   (p) => wildcardView(p.op),
+  (p) => rulesView(p),
+  (p) => valuesDiff(p.op) ?? textDiff(p.op),
+  (p, ctx) => deleteView(p.op, ctx),
   (p, ctx) => manageView(p.op, ctx),
 ];
 

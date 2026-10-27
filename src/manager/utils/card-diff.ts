@@ -77,3 +77,81 @@ export function shares(weights: readonly number[]): number[] {
   const sum = weights.reduce((a, w) => a + (Number.isFinite(w) && w > 0 ? w : 0), 0);
   return weights.map((w) => (sum > 0 && Number.isFinite(w) && w > 0 ? (w / sum) * 100 : 0));
 }
+
+export interface TextPart {
+  text: string;
+  change: "added" | "removed" | "same";
+}
+
+/** Text as words and the spaces and punctuation between them, so a diff
+ *  marks whole words ("$mood" stays one piece). */
+function tokens(text: string): string[] {
+  return text.match(/[\p{L}\p{N}_$@#.:-]+|\s+|[^\p{L}\p{N}_$@#.:\s-]/gu) ?? [];
+}
+
+/** Longest a word diff tries before it shows old → new whole. */
+const MAX_CELLS = 250_000;
+
+/**
+ * Old text → new as one run of parts: words kept, added and removed, in
+ * reading order (a removed run before the added run that replaced it).
+ * Very long texts with little in common come back as all-removed then
+ * all-added, which reads the same.
+ */
+export function diffWords(before: string, after: string): TextPart[] {
+  if (before === after) return before ? [{ text: before, change: "same" }] : [];
+  const a = tokens(before);
+  const b = tokens(after);
+  if (a.length * b.length > MAX_CELLS) {
+    return [
+      ...(before ? [{ text: before, change: "removed" as const }] : []),
+      ...(after ? [{ text: after, change: "added" as const }] : []),
+    ];
+  }
+  // Longest common run, filled from the end so the walk reads forward.
+  const w = b.length + 1;
+  const lcs = new Uint32Array((a.length + 1) * w);
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      lcs[i * w + j] = a[i] === b[j] ? lcs[(i + 1) * w + j + 1] + 1
+        : Math.max(lcs[(i + 1) * w + j], lcs[i * w + j + 1]);
+    }
+  }
+  const out: TextPart[] = [];
+  const push = (text: string, change: TextPart["change"]) => {
+    const last = out[out.length - 1];
+    if (last && last.change === change) last.text += text;
+    else out.push({ text, change });
+  };
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      push(a[i], "same"); i++; j++;
+    } else if (lcs[(i + 1) * w + j] >= lcs[i * w + j + 1]) {
+      push(a[i], "removed"); i++;
+    } else {
+      push(b[j], "added"); j++;
+    }
+  }
+  while (i < a.length) push(a[i++], "removed");
+  while (j < b.length) push(b[j++], "added");
+  // A bare space kept between two changes reads as part of the new words
+  // ("$mood, night" rather than "$mood," · " " · "night").
+  const tidy: TextPart[] = [];
+  out.forEach((part, k) => {
+    const gap = part.change === "same" && !part.text.trim() && k > 0 && k < out.length - 1
+      && out[k - 1].change !== "same" && out[k + 1].change !== "same";
+    const both = gap && out[k - 1].change === "removed" && out[k + 1].change === "removed";
+    const next: TextPart = gap ? { ...part, change: both ? "removed" : "added" } : part;
+    const last = tidy[tidy.length - 1];
+    if (last && last.change === next.change) last.text += next.text;
+    else tidy.push({ ...next });
+  });
+  return tidy;
+}
+
+/** `$names` a text reads (`$name`, `$name.0`, `$name.neg` read `$name`). */
+export function readVars(text: string): string[] {
+  return [...new Set([...text.matchAll(/\$([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]))];
+}
