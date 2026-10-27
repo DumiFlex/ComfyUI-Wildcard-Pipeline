@@ -140,3 +140,47 @@ describe("rule change views", () => {
     expect(w.get('[data-test="ai-card-unchanged"]').text()).toContain("1 unchanged");
   });
 });
+
+describe("value and text change views", () => {
+  it("draws fixed values as a table with the changed rows marked", () => {
+    const view: CardView = { kind: "values", same: 1, rows: [
+      { name: "quality", value: "masterpiece, best quality", negative: "lowres", change: "changed", wasValue: "masterpiece", wasName: null, wasNegative: null },
+      { name: "style", value: "flat", negative: "", change: "same" },
+      { name: "lens", value: "85mm", negative: "fisheye", change: "added" },
+    ] };
+    const w = mount(AiCardView, { props: { view } });
+    expect(w.findAll("thead th").map((t) => t.text())).toEqual(["", "Variable", "Value", "Negative"]);
+    const rows = w.findAll('[data-test="ai-card-value-row"]');
+    expect(rows.map((r) => r.attributes("data-change"))).toEqual(["changed", "added"]);
+    expect(rows[0].text()).toMatch(/masterpiece\s*→\s*masterpiece, best quality/);
+    expect(w.get('[data-test="ai-card-unchanged"]').text()).toBe("1 value unchanged");
+    // A create card's table has no change column.
+    const create = mount(AiCardView, { props: { view: { kind: "values", rows: [{ name: "a", value: "b", negative: "" }] } } });
+    expect(create.findAll("thead th").map((t) => t.text())).toEqual(["Variable", "Value"]);
+  });
+
+  it("draws a text change word by word with the variables it reads", () => {
+    const w = mount(AiCardView, { props: { view: {
+      kind: "text-diff", reads: { added: ["mood"], removed: ["season"] },
+      rows: [{ label: "Prompt", parts: [{ text: "$quality, ", change: "same" }, { text: "$season", change: "removed" }, { text: "$mood", change: "added" }] }],
+    } } });
+    expect(w.findAll(".wp-ai-textdiff__part").map((p) => p.attributes("data-change"))).toEqual(["same", "removed", "added"]);
+    expect(w.get('[data-test="ai-card-reads"]').text()).toMatch(/Now reads\s*\$mood\s*·\s*No longer reads\s*\$season/);
+  });
+
+  it("draws what a delete removes as library rows", () => {
+    const w = mount(AiCardView, { props: { view: {
+      kind: "delete",
+      items: [{ name: "Lorem", type: "wildcard", category: { name: "Scenes", color: "#0af", icon: null }, rating: "NSFW" }],
+      categories: [{ name: "Old", color: null, icon: null, count: 0 }],
+      tags: [{ tag: "misc", count: 3 }],
+    } } });
+    const item = w.get('[data-test="ai-card-delete-item"]');
+    expect(item.text()).toContain("Lorem");
+    expect(item.find(".wp-cat-chip").text()).toBe("Scenes");
+    expect(item.text()).toContain("NSFW");
+    expect(w.text()).toContain("empty");
+    expect(w.text()).toContain("off 3 items");
+    expect(w.text()).toContain("Undo makes them again");
+  });
+});

@@ -33,6 +33,8 @@ MAX_SEEDS = 500
 DEFAULT_SEEDS = 100
 SAMPLES = 3
 TOP_VALUES = 5
+# Values a compared run keeps from the run before the change.
+BEFORE_VALUES = 1000
 _REACH = re.compile(r"^(all|first|next)(?:\s+(\d+))?$")
 
 
@@ -991,7 +993,7 @@ class MoreTools:
         return self._entry(row, uid, dict(c.get("instance") or {}), origin)
 
     def _run(self, modules: list[dict[str, Any]], pins: dict[str, str], seeds: int,
-             template: dict[str, Any] | None) -> dict[str, Any]:
+             template: dict[str, Any] | None, value_limit: int = TOP_VALUES) -> dict[str, Any]:
         from engine.pipeline import PipelineEngine
         from engine.scenario import run_scenario
 
@@ -1000,7 +1002,7 @@ class MoreTools:
         catalog = ai_pack.ref_catalog(modules, rows)
         seed_list = list(range(1, seeds + 1))
         report = run_scenario(modules, seeds=seed_list, catalog=catalog, pins=pins,
-                              sample_limit=0, value_limit=TOP_VALUES)
+                              sample_limit=0, value_limit=value_limit)
         report["prompts"] = []
         if template is not None:
             for seed in seed_list[:SAMPLES]:
@@ -1048,7 +1050,9 @@ class MoreTools:
             # Everything in the stack is new in this answer: nothing to compare.
             report, modules = self._run(after_modules, pins, seeds, template), after_modules
         else:
-            before = self._run(modules, pins, seeds, template)
+            # Every value of the run before, so a value outside its top few
+            # reads its real share, not 0% (#11: "0% → 22%" on an old option).
+            before = self._run(modules, pins, seeds, template, value_limit=BEFORE_VALUES)
             report, modules = self._run(after_modules, pins, seeds, template), after_modules
         frames = self._loop_frames(modules, pins)
         stuck = [] if frames else self._stuck(report, modules, pins)
@@ -1172,14 +1176,23 @@ class MoreTools:
             total = sum(var["counts"].values()) + var["other"]
             return round(100 * var["counts"].get(value, 0) / total) if total else 0
 
+        def was_pct(var: dict[str, Any] | None, value: str) -> int | None:
+            """A value's share before the change: 0 when that run never set it,
+            None when its count was cut off (then the card shows no "was")."""
+            if not var:
+                return 0
+            if value not in var["counts"] and var["other"]:
+                return None
+            return pct(var, value)
+
         variables = []
         for name, v in list(report["variables"].items())[:12]:
             was = (before or {}).get("variables", {}).get(name) if before else None
             tops = []
             for k in list(v["counts"].keys())[:TOP_VALUES]:
                 top: dict[str, Any] = {"v": _short(self._show(k), 80), "pct": pct(v, k)}
-                if before is not None:
-                    top["was"] = pct(was, k) or 0
+                if before is not None and (share := was_pct(was, k)) is not None:
+                    top["was"] = share
                 tops.append(top)
             variables.append({"name": name, "distinct": v["distinct"], "tops": tops,
                               **({"internal": True} if v.get("internal") else {})})
