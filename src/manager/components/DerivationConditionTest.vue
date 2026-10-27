@@ -12,8 +12,10 @@
  * This lets users tell "did this wildcard run?" from "did it run and resolve
  * to the null option?" from "did it run and produce a value?".
  */
+import { computed } from "vue";
 import RichTextInput from "./RichTextInput.vue";
 import Select from "./ui/Select.vue";
+import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
 import VarAutocompleteInput from "./VarAutocompleteInput.vue";
 import type { VarProducerLike } from "./RefChip.vue";
 import type { DerivationCondition, DerivationOp } from "../api/types";
@@ -58,6 +60,17 @@ type EmptinessRefinement = "any" | "empty" | "value";
 interface Parts { base: BaseOp; not: boolean; refinement: EmptinessRefinement }
 
 /** A stored op as dropdown test + NOT + (for exists) any / empty / has value. */
+const REFINEMENTS: SegmentedOption<EmptinessRefinement>[] = [
+  { value: "any", label: "any", hint: "Just check that the variable is set in the context (value irrelevant)" },
+  { value: "empty", label: "∅ is empty", hint: "Variable is set AND its value is empty (e.g. wildcard rolled the null option)" },
+  { value: "value", label: "✓ has value", hint: "Variable is set AND its value is non-empty" },
+];
+
+/** "Is empty" is gone under NOT (NOT empty is just NOT has value). */
+const refinementOptions = computed(() => REFINEMENTS
+  .filter((o) => o.value !== "empty" || !partsOf(props.modelValue.op).not)
+  .map((o) => ({ ...o, testId: `cond-refinement-${o.value}-${props.testId}` })));
+
 function partsOf(op: DerivationOp): Parts {
   switch (op) {
     case "not_equals": return { base: "equals", not: true, refinement: "any" };
@@ -152,42 +165,16 @@ function set(patch: Partial<DerivationCondition>): void {
             @update:model-value="(v) => change({ base: v as BaseOp, refinement: 'any' })"
           />
         </div>
-        <div
+        <WpSegmented
           v-if="supportsRefinement(modelValue.op)"
           class="dvr-refinement"
+          size="sm"
+          :model-value="partsOf(modelValue.op).refinement"
+          :options="refinementOptions"
           :data-test="`cond-refinement-${testId}`"
-          role="radiogroup"
           aria-label="Variable value refinement"
-        >
-          <button
-            type="button"
-            class="dvr-refinement__btn"
-            :class="{ 'dvr-refinement__btn--active': partsOf(modelValue.op).refinement === 'any' }"
-            :aria-pressed="partsOf(modelValue.op).refinement === 'any'"
-            :data-test="`cond-refinement-any-${testId}`"
-            title="Just check that the variable is set in the context (value irrelevant)"
-            @click="change({ refinement: 'any' })"
-          >any</button>
-          <button
-            v-if="!partsOf(modelValue.op).not"
-            type="button"
-            class="dvr-refinement__btn"
-            :class="{ 'dvr-refinement__btn--active': partsOf(modelValue.op).refinement === 'empty' }"
-            :aria-pressed="partsOf(modelValue.op).refinement === 'empty'"
-            :data-test="`cond-refinement-empty-${testId}`"
-            title="Variable is set AND its value is empty (e.g. wildcard rolled the null option)"
-            @click="change({ refinement: 'empty' })"
-          >∅ is empty</button>
-          <button
-            type="button"
-            class="dvr-refinement__btn"
-            :class="{ 'dvr-refinement__btn--active': partsOf(modelValue.op).refinement === 'value' }"
-            :aria-pressed="partsOf(modelValue.op).refinement === 'value'"
-            :data-test="`cond-refinement-value-${testId}`"
-            title="Variable is set AND its value is non-empty"
-            @click="change({ refinement: 'value' })"
-          >✓ has value</button>
-        </div>
+          @update:model-value="(v) => change({ refinement: v })"
+        />
       </div>
     </div>
     <div class="dvr-value-row">
@@ -281,46 +268,16 @@ function set(patch: Partial<DerivationCondition>): void {
   position: absolute;
   top: calc(100% + var(--wp-space-3));
   right: 0;
-  display: inline-flex;
-  gap: 0;
-  font: 10px/1.4 var(--wp-font-sans, sans-serif); /* audit-exempt: micro segmented switch */
-  white-space: nowrap;
   z-index: 1;
-  border-radius: 4px;
-  overflow: hidden;
-  border: 1px solid var(--wp-border, #2a2d35);
-  background: color-mix(in srgb, var(--wp-text) 2%, transparent);
-}
-.dvr-refinement__btn {
-  padding: 2px 8px;
-  background: transparent;
-  border: 0;
-  border-right: 1px solid var(--wp-border, #2a2d35);
-  color: var(--wp-text-muted, #9ca3af);
-  cursor: pointer;
-  font: inherit;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  transition: background 0.12s, color 0.12s;
-}
-.dvr-refinement__btn:last-child { border-right: 0; }
-.dvr-refinement__btn:hover {
-  background: color-mix(in srgb, var(--wp-accent, #6366f1) 12%, transparent);
-  color: var(--wp-text, #fff);
-}
-.dvr-refinement__btn--active {
-  background: color-mix(in srgb, var(--wp-accent, #6366f1) 30%, transparent);
-  color: var(--wp-text, #fff);
 }
 /* Reserve space for the tick under the op cell when it's rendered.
  * Without this, the absolute-positioned tick would overlap the
  * VALUE row beneath. Bumps the value-row's top margin only when the
  * grid has the `--has-tick` modifier set by the template. */
-/* Switch height (~18px) + its 6px offset + an 8px gap above VALUE, less
- * the grid's own 4px bottom margin. Was 16px, which left the switch
- * sitting on the VALUE box's top border. */
+/* Switch height + its offset + an 8px gap above VALUE, less the grid's
+ * own 4px bottom margin. */
 .dvr-grid--has-tick + .dvr-value-row {
-  margin-top: 28px; /* audit-exempt: clears the absolute refinement switch */
+  margin-top: calc(var(--wp-control-h-sm) + var(--wp-space-3) + 4px);
 }
 .dvr-regex-help {
   display: inline-flex;

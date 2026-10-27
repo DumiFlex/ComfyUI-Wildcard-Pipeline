@@ -6,29 +6,29 @@ import type { SelectOption } from "../../ui/select-types";
 import HsvPicker from "../../../../components/shared/HsvPicker.vue";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
-import SegControl, { type SegOption } from "../SegControl.vue";
+import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
 import { useUiStore, type DensityMode, type MotionMode, type StartPage, type ThemeMode } from "../../../stores/uiStore";
 import { ACCENT_OPTIONS, SWATCH_PREVIEW, useTweaksStore } from "../../../stores/tweaksStore";
 
 const ui = useUiStore();
 const tweaks = useTweaksStore();
 
-const THEMES: SegOption<ThemeMode>[] = [
+const THEMES: SegmentedOption<ThemeMode>[] = [
   { value: "dark", label: "Dark", icon: "pi-moon" },
   { value: "light", label: "Light", icon: "pi-sun" },
   { value: "auto", label: "Auto", icon: "pi-desktop" },
 ];
-const DENSITIES: SegOption<DensityMode>[] = [
+const DENSITIES: SegmentedOption<DensityMode>[] = [
   { value: "compact", label: "Compact" },
   { value: "comfortable", label: "Comfortable" },
   { value: "cozy", label: "Cozy" },
 ];
 type SidebarChoice = "expanded" | "collapsed";
-const SIDEBAR: SegOption<SidebarChoice>[] = [
+const SIDEBAR: SegmentedOption<SidebarChoice>[] = [
   { value: "expanded", label: "Labels" },
   { value: "collapsed", label: "Icons only" },
 ];
-const MOTION: SegOption<MotionMode>[] = [
+const MOTION: SegmentedOption<MotionMode>[] = [
   { value: "auto", label: "Match system" },
   { value: "reduce", label: "Always reduce" },
 ];
@@ -49,7 +49,7 @@ function setSidebar(v: SidebarChoice): void {
 <template>
   <SettingGroup title="Look">
     <SettingRow label="Theme" hint="Dark, light, or follow the system." setting-key="theme">
-      <SegControl
+      <WpSegmented
         :model-value="ui.themeMode"
         :options="THEMES"
         aria-label="Theme"
@@ -102,7 +102,7 @@ function setSidebar(v: SidebarChoice): void {
       hint="Spacing and control height across the manager. The canvas nodes have their own density under Canvas."
       setting-key="density"
     >
-      <SegControl
+      <WpSegmented
         :model-value="ui.density"
         :options="DENSITIES"
         aria-label="Density"
@@ -111,7 +111,7 @@ function setSidebar(v: SidebarChoice): void {
       />
     </SettingRow>
     <SettingRow label="Reduce motion" hint="Turn animations and transitions off in the manager." setting-key="motion">
-      <SegControl
+      <WpSegmented
         :model-value="ui.motion"
         :options="MOTION"
         aria-label="Reduce motion"
@@ -123,7 +123,7 @@ function setSidebar(v: SidebarChoice): void {
 
   <SettingGroup title="Layout">
     <SettingRow label="Sidebar" hint="Show the navigation with labels, or as icons only." setting-key="sidebar">
-      <SegControl
+      <WpSegmented
         :model-value="ui.sidebarCollapsed ? 'collapsed' : 'expanded'"
         :options="SIDEBAR"
         aria-label="Sidebar"

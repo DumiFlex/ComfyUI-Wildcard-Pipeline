@@ -14,7 +14,7 @@ import Checkbox from "../ui/Checkbox.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
 import { useAiImages } from "../../composables/useAiImages";
 import ConstraintPreview from "../ConstraintPreview.vue";
-import SegControl, { type SegOption } from "../settings/SegControl.vue";
+import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
 import { mergeAiRules, type PreviewWildcard } from "../../utils/constraint-preview";
 import { api } from "../../api/client";
 import { keptNote, useAiConversation } from "../../composables/useAiConversation";
@@ -105,7 +105,7 @@ const tickedExceptions = computed(() =>
 const tickedCount = computed(() => tickedCells.value.length + tickedExceptions.value.length);
 
 type View = "rules" | "preview";
-const VIEWS: SegOption<View>[] = [
+const VIEWS: SegmentedOption<View>[] = [
   { value: "rules", label: "Rules", icon: "pi-list" },
   { value: "preview", label: "Preview", icon: "pi-table" },
 ];
@@ -162,7 +162,7 @@ function shown(v: string): string {
     @close="close"
   >
     <template v-if="result && count">
-      <SegControl
+      <WpSegmented
         v-if="canPreview"
         v-model="view"
         :options="VIEWS"

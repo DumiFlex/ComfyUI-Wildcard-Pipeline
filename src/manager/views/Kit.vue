@@ -135,6 +135,7 @@ const groups = computed(() =>
   background: var(--wp-bg); border: 1px solid var(--wp-border); border-radius: var(--wp-radius);
   color: var(--wp-text); font-size: 12px;
 }
+.wp-kit__tab-panel { padding-top: var(--wp-space-5); }
 .wp-kit__caption { margin: 0; color: var(--wp-text-dim); font-size: var(--wp-text-xs); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
 .wp-kit__list { margin: 0; padding-left: 18px; color: var(--wp-text-muted); font-size: var(--wp-text-sm); }
 .wp-kit__icons {
