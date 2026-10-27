@@ -10,5 +10,6 @@ const unpicked = ref(false);
   <Checkbox v-model="picked" label="Include in bundle" />
   <Checkbox v-model="unpicked" label="Hide from prompt" />
   <Checkbox :model-value="false" indeterminate label="Some selected" />
-  <Checkbox :model-value="true" disabled label="Disabled" />
+  <Checkbox :model-value="true" disabled label="Disabled, ticked" />
+  <Checkbox :model-value="false" disabled label="Disabled" />
 </template>

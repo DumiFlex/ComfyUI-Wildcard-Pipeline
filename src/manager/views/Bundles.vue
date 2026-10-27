@@ -277,6 +277,7 @@ function frameColor(row: BundleRow): string {
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-box"
         headline="No bundles yet"
         body="Bundles group modules together for reuse. Create your first to package modules into a unit."

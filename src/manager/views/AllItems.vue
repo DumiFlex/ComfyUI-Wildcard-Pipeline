@@ -404,6 +404,7 @@ function refresh() {
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-objects-column"
         headline="Library is empty"
         body="Create a module from any kind to populate your library."
