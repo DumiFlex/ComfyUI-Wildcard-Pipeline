@@ -64,7 +64,8 @@ import { usePackBuilder } from "../../composables/usePackBuilder";
 import { useCategoryStore } from "../../stores/categoryStore";
 import { useTemplateStore } from "../../stores/templateStore";
 import { starterQuestions, type StarterLibrary } from "../../utils/chat-starters";
-import { cardMeta, cardOptions, cardView, draftRoute, otherPreview, type CardOption } from "../../composables/aiCards";
+import { cardMeta, cardOptions, cardViews, draftRoute, otherPreview, type CardOption, type CardView } from "../../composables/aiCards";
+import { useCardViewContext } from "../../composables/card-views/context";
 import { isWebCall, webCallCard, type WebCall } from "../../utils/web-calls";
 
 const PREVIEW_LINES = 6;
@@ -613,6 +614,22 @@ function categoryLabel(p: AiChatProposal): string {
   return m.categoryId ? categories.items.find((c) => c.id === m.categoryId)?.name ?? m.categoryId : "";
 }
 
+/** Categories by id, for the chips a change card draws. */
+const viewContext = useCardViewContext();
+
+/** What a card draws in its editor's own way (`composables/card-views`). */
+function views(p: AiChatProposal): CardView[] {
+  return cardViews(p, viewContext);
+}
+
+/** Options an add-options card leaves as they are. */
+function untouched(p: AiChatProposal): number {
+  const op = p.op;
+  if (op.op !== "update") return 0;
+  const before = (op.before?.payload as { options?: unknown[] } | undefined)?.options;
+  return Array.isArray(before) ? before.length : 0;
+}
+
 function isSkipped(entry: ChatAssistantEntry, p: AiChatProposal, id: string): boolean {
   return !!entry.skip?.[p.pid]?.includes(id);
 }
@@ -1069,7 +1086,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
             </dl>
             <div v-if="cardOptions(p)" class="wp-ai-chat__opts" data-test="ai-chat-card-options">
               <div class="wp-ai-chat__opts-head">
-                <span>{{ keptCount(entry, p) }} of {{ cardOptions(p)!.length }} option{{ cardOptions(p)!.length === 1 ? "" : "s" }}{{ entry.status[p.pid] ? "" : " ticked" }}</span>
+                <span>{{ keptCount(entry, p) }} of {{ cardOptions(p)!.length }} option{{ cardOptions(p)!.length === 1 ? "" : "s" }}{{ entry.status[p.pid] ? "" : " ticked" }}<template v-if="untouched(p)"> · {{ untouched(p) }} existing unchanged</template></span>
                 <button
                   v-if="!entry.status[p.pid] && cardOptions(p)!.length > 1"
                   type="button"
@@ -1098,7 +1115,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
                 @click="toggle(i, p)"
               >{{ expanded.has(key(i, p)) ? "Show less" : `Show all ${cardOptions(p)!.length}` }}</button>
             </div>
-            <AiCardView v-if="cardView(p)" :view="cardView(p)!" />
+            <template v-if="views(p).length">
+              <p v-if="(p.parts?.length ?? 0) > 1" class="wp-ai-chat__card-parts" data-test="ai-chat-card-parts">{{ p.parts!.length }} changes in one: {{ p.parts!.map((part) => part.title).join(" · ") }}</p>
+              <AiCardView v-for="(v, j) in views(p)" :key="j" :view="v" />
+            </template>
             <ol v-else-if="cardSteps(p)" class="wp-ai-chat__card-steps" data-test="ai-chat-card-steps">
               <li v-for="(part, j) in cardSteps(p)" :key="j">
                 <span class="wp-ai-chat__step-title">{{ part.title }}</span>
@@ -1111,7 +1131,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               <li v-for="(line, j) in otherLines(i, p)" :key="j"><AiSyntax :text="line" /></li>
             </ul>
             <button
-              v-if="!cardOptions(p) && !cardView(p) && p.preview.length > PREVIEW_LINES"
+              v-if="!cardOptions(p) && !views(p).length && p.preview.length > PREVIEW_LINES"
               type="button"
               class="wp-ai-chat__more"
               data-test="ai-chat-more"
@@ -1530,6 +1550,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__icon-btn:hover, .wp-ai-chat__icon-btn:focus-visible { color: var(--wp-text); background: var(--wp-bg-3); }
 .wp-ai-chat__zoom:hover { color: var(--wp-text); background: var(--wp-bg-3); }
 .wp-ai-chat__card-summary { font-size: 12px; color: var(--wp-text-muted); }
+.wp-ai-chat__card-parts { margin: 0; font-size: 11.5px; color: var(--wp-text-muted); }
 .wp-ai-chat__card-steps { margin: 4px 0; padding-left: 20px; display: grid; gap: 4px; }
 .wp-ai-chat__card-steps > li::marker { color: var(--wp-text-dim); font-size: 11px; }
 .wp-ai-chat__step-title { font-size: 12px; font-weight: 600; color: var(--wp-text); }

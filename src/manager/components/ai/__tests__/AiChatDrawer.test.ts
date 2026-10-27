@@ -737,9 +737,36 @@ describe("AiChatDrawer", () => {
     await w.get('[data-test="ai-chat-input"]').setValue("tidy outfit");
     await w.get('[data-test="ai-chat-input"]').trigger("keydown", { key: "Enter" });
     await flushPromises();
+    // The card draws what the merged op does, and names the changes it holds.
+    expect(w.get('[data-test="ai-chat-card-parts"]').text()).toBe("2 changes in one: Change options in Outfit · Update Outfit");
+    const info = w.get('[data-test="ai-card-info"]');
+    expect(info.text()).toContain("Description");
+    expect(info.get('[data-test="ai-card-category-to"]').text()).toBe("Clothes");
+    expect(info.text()).toContain("new");
+    expect(w.find('[data-test="ai-chat-card-steps"]').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("keeps the numbered steps of a merged card it can't draw", async () => {
+    vi.mocked(api.ai.chat).mockResolvedValueOnce({
+      chat_id: "c1", message: "Done.", model: "m", steps: [],
+      proposals: [{
+        pid: "p2", tool: "edit_options", title: "Change Outfit", summary: "weights",
+        preview: ["wool coat ×1 → ×4"], warnings: [], after: null,
+        parts: [
+          { tool: "edit_options", title: "Change options in Outfit", summary: "weights", preview: ["wool coat ×1 → ×4"] },
+          { tool: "edit_options", title: "Change options in Outfit", summary: "tags", preview: ["#warm on wool coat"] },
+        ],
+        op: { op: "update", kind: "module", type: "wildcard", id: "m1", name: "Outfit", body: {}, before: {} },
+      }],
+    });
+    const { w } = await mountIt();
+    await w.get('[data-test="ai-chat-input"]').setValue("tidy outfit");
+    await w.get('[data-test="ai-chat-input"]').trigger("keydown", { key: "Enter" });
+    await flushPromises();
     const steps = w.get('[data-test="ai-chat-card-steps"]').findAll(":scope > li");
-    expect(steps.map((s) => s.get(".wp-ai-chat__step-title").text())).toEqual(["Change options in Outfit", "Update Outfit"]);
-    expect(steps[1].text()).toContain("Clothes (new)");
+    expect(steps).toHaveLength(2);
+    expect(steps[1].text()).toContain("#warm on wool coat");
     w.unmount();
   });
 
