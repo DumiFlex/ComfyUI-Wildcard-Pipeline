@@ -282,8 +282,6 @@ function toggleOverrideStrategy(): void {
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .wp-seedlist {
   display: flex;
   flex-direction: column;

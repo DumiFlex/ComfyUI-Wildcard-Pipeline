@@ -450,8 +450,8 @@ function isOverridden(rid: RuleId): boolean {
 
 <style scoped>
 /* Tokens (`--wp-*`) resolve from the globally-loaded theme.css `:root`
-   (plus the SPA's tokens.css) — deliberately NOT @imported here so the
-   cleaner CSS chunk stays out of the bundle-size gate. Every var below
+   (plus the SPA's tokens.css); SFCs never @import it (see its header).
+   Every var below
    carries a fallback chain for the cleaner-loaded-first edge case. */
 
 /* Flat layout — sits directly against the litegraph node body like

@@ -618,10 +618,6 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   </div>
 </template>
 
-<style>
-@import "../shared/theme.css";
-</style>
-
 <style scoped>
 /* ======================================================
    NEW LAYOUT — .wp-asm-helper

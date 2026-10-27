@@ -360,8 +360,6 @@ function toggleTotalInternal(): void {
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .wp-loop {
   display: flex;
   flex-direction: column;

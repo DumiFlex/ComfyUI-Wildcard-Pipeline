@@ -104,8 +104,6 @@ const preview = computed(() => {
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .wp-swm { width: 520px; max-width: 100%; max-height: 86vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: 6px; overflow: hidden; color: var(--wp-text); font-size: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.55); }
 .wp-swm__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); background: linear-gradient(180deg, color-mix(in srgb, var(--wp-accent) 18%, var(--wp-bg2)) 0%, var(--wp-bg2) 100%); }
 .wp-swm__head-icon { color: var(--wp-accent); width: 24px; display: flex; justify-content: center; }

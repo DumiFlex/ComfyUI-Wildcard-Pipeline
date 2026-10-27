@@ -61,3 +61,4 @@ The assistant is new and **off by default**. Turn it on in **Settings › AI ass
 - **Rules and runs.** A linked-picks rule no longer empties a wildcard that links onward, a bundle inserted twice keeps each copy's constraints to itself, a held wildcard stays put over a Loop, and a later derivation rule reads what an earlier one wrote.
 - **Clearer warnings.** A deleted pinned option says **Pinned option missing**, recipe wildcards no longer warn on every run, and Hide/Hold no longer show "unknown field".
 - **Long sessions stay fast.** Deleting a node shuts its widget down, and WP Context no longer leaves a database connection open on every run.
+- **Smaller canvas download.** The canvas colour sheet loads once instead of being copied into 15 separate files, about 38 KB less (gzipped) to load across the nodes.

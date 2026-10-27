@@ -267,8 +267,6 @@ function moveAxis(uid: string, dir: -1 | 1): void {
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .wp-sweep { display: flex; flex-direction: column; gap: 6px; }
 .wp-sweep--on {
   padding: 6px 7px;

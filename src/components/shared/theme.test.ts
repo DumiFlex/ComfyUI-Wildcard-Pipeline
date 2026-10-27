@@ -9,8 +9,8 @@
 // degrades the off-branch theme.
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, readdirSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 const themeCss = readFileSync(
   resolve(__dirname, "./theme.css"),
@@ -121,5 +121,31 @@ describe("theme.css token parity", () => {
     // theme accidentally copied over). Dark tint uses 15, 15, 30.
     expect(lightHover?.[1]).not.toContain("255");
     expect(lightHover?.[1]).toContain("15");
+  });
+});
+
+describe("theme.css loads once", () => {
+  // Every SFC `@import` of theme.css inlined the whole sheet into that
+  // component's lazy chunk. It loads once from extension/settings.ts (canvas
+  // boot chunk); see the sheet's header.
+  function vueFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) return e.name === "node_modules" ? [] : vueFiles(p);
+      return e.name.endsWith(".vue") ? [p] : [];
+    });
+  }
+
+  it("no SFC style block imports theme.css", () => {
+    const src = resolve(__dirname, "../..");
+    const offenders = vueFiles(src).filter((f) =>
+      /@import\s+["'][^"']*theme\.css["']/.test(readFileSync(f, "utf8")),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("the canvas boot chunk imports it", () => {
+    const settings = readFileSync(resolve(__dirname, "../../extension/settings.ts"), "utf8");
+    expect(settings).toMatch(/import "\.\.\/components\/shared\/theme\.css";/);
   });
 });

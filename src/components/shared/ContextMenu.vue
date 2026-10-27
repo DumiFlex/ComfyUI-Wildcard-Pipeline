@@ -245,10 +245,6 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
   </Teleport>
 </template>
 
-<style>
-@import "./theme.css";
-</style>
-
 <style scoped>
 .wp-ctxmenu {
   position: fixed;

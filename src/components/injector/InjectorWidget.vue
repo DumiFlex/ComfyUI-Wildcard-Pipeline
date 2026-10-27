@@ -939,8 +939,6 @@ defineExpose({ addRow, addGeneralRow, removeRow });
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .wp-inj-widget {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border-soft, var(--wp-border));

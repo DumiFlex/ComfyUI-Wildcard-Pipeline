@@ -313,8 +313,6 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 </style>
 
 <style scoped>
-@import "../shared/theme.css";
-
 /* Skeleton frames — geometry mirrors `.wp-bp__row` so the placeholder
  * stack matches the loaded list layout (no jump on resolve). */
 .wp-bp__skel-list {

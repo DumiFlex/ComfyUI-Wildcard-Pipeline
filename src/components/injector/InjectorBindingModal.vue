@@ -663,8 +663,6 @@ function onKeydown(ev: KeyboardEvent): void {
 </style>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .ibm__overlay {
   position: fixed;
   inset: 0;

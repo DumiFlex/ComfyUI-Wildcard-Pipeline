@@ -82,10 +82,6 @@ onBeforeUnmount(() => {
   </Teleport>
 </template>
 
-<style>
-@import "./theme.css";
-</style>
-
 <style scoped>
 .wp-toast-stack {
   position: fixed;

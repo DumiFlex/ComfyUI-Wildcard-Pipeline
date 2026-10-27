@@ -6,9 +6,10 @@
  * entry the manager can show has a demo in `kit/demos/<id>.vue` and every kit-folder
  * component has an entry.
  *
- * Canvas-only pieces (ModalShell, ContextMenu, the canvas toast) are not
- * mounted here: their stylesheet sets the canvas colours on :root and would
- * repaint the whole manager. Their entries show how to use them instead.
+ * Shared pieces mounted here (ModalShell, ContextMenu) read only shared token
+ * names, so they wear the manager's colours; the canvas sheet (theme.css) is
+ * never loaded in the manager. The canvas toast stays canvas-only (its classes
+ * clash with the manager's toast).
  */
 import { computed, type Component } from "vue";
 import KitEntry from "../kit/KitEntry.vue";

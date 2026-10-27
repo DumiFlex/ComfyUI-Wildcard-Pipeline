@@ -222,7 +222,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-@import "./theme.css";
 .sm-overlay { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,.62); font-family: var(--wp-font-sans, sans-serif); }
 /* 560px, up from 486px: the toolbar (iterations · strategy · N locked · N
  * bypassed · Lock all · Unlock all · Copy) and each row's three toggles were

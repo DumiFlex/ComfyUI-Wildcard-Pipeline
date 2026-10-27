@@ -326,7 +326,6 @@ function onDragEnd(): void {
 
 <style scoped>
 @import "../shared/var-binding-input.css";
-@import "../shared/theme.css";
 @import "../shared/row-primitives.css";
 
 /* Card-framed row — mirrors .wp-module shape. Type-color left stripe
