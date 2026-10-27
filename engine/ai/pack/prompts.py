@@ -52,17 +52,32 @@ def _score(row: dict[str, Any], words: set[str]) -> int:
     p = _got if isinstance(_got := row.get("payload"), dict) else {}
     text = " ".join([str(row.get("name") or ""), _row_var(row),
                      *[t for t in p.get("sub_categories") or [] if isinstance(t, str)],
-                     str(row.get("description") or "")]).lower()
+                     str(row.get("description") or ""),
+                     *(str(o.get("value") or "") for o in (p.get("options") or [])[:40]
+                       if isinstance(o, dict))]).lower()
     have = set(re.findall(r"[a-z0-9]+", text.replace("_", " ")))
+    have |= {w.rstrip("s") for w in have}
     return len(words & have)
 
 
+#: A request that asks for the library as such ("use my wildcards"): every
+#: row is listed, related or not.
+_WHOLE_LIBRARY = re.compile(r"\b(?:my|our)\s+(?:own\s+)?(?:library|wildcards?|items|modules)\b"
+                            r"|\b(?:reuse|from)\s+(?:my|the)\s+library\b", re.I)
+
+
 def inventory(library: list[dict[str, Any]] | None, request: str) -> list[dict[str, Any]]:
-    """The library rows a pack could reuse, the most relevant to the
-    request first: ``[{name, type, var, count, tags}]``."""
+    """The library rows a pack could reuse that the request has a word in
+    common with (all of them when it asks for the library itself), the most
+    relevant first: ``[{name, type, var, count, tags}]``."""
     words = _words_of(request) | {w.rstrip("s") for w in _words_of(request)}
     rows = [r for r in library or [] if r.get("type") in REUSABLE
             and isinstance(r.get("payload"), dict) and _row_var(r)]
+    # Only rows the request has a word in common with: listed, an unrelated
+    # Race and Class made a 9B plan them into an everyday outfits pack and a
+    # Star Wars one (bench P2, N5, 2026-10-26).
+    if not _WHOLE_LIBRARY.search(request):
+        rows = [r for r in rows if _score(r, words) > 0]
     scored = sorted(rows, key=lambda r: (-_score(r, words), -len(
         r["payload"].get("options") or r["payload"].get("values") or [])))
     out = []

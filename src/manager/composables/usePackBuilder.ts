@@ -1428,7 +1428,9 @@ async function rebuild(key: string, note = ""): Promise<void> {
     for (const k of [key, ...dependents(p, key)]) {
       const item = p.items.find((i) => i.key === k);
       stage.value = `Building ${item?.name ?? k}…`;
-      setState(k, { status: "building", fixed: undefined, error: undefined });
+      // A rebuild sent to fix a problem remembers it, so the list can say
+      // whether it went ("fixed:") or stayed ("still:") once the check runs.
+      setState(k, { status: "building", fixed: k === key && note ? [note] : undefined, error: undefined });
       await buildOne(p, k, k === key ? note : "", mine.signal);
     }
     await runCheck(p, mine.signal);

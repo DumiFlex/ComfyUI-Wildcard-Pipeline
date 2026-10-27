@@ -36,6 +36,13 @@ function text(ev: Event): string {
   return (ev.target as HTMLInputElement | HTMLTextAreaElement).value;
 }
 
+/** A graph slot's "what" without the axes the plan line adds to it: the
+ *  axes are edited below, and showing them here twice read as a repeat
+ *  (and an edit wrote them into the slot's own words). */
+const aboutText = computed(() => (graphed.value && wild.value
+  ? i.value.about.replace(/\.\s+(?:Axes: |Sweep axis).*$/s, "")
+  : i.value.about));
+
 function set(field: keyof AiPackItem, value: unknown): void {
   pb.editItem(i.value.key, { [field]: value } as Partial<AiPackItem>);
 }
@@ -96,7 +103,7 @@ async function send(): Promise<void> {
     </div>
     <label v-if="i.kind !== 'library' && (!graphed || wild)" class="wp-pack-edit__field">
       <span>{{ i.kind === 'derivation' ? 'Rules, in plain words' : i.kind === 'constraint' ? 'What it rules out or favours' : 'What it holds' }}</span>
-      <textarea class="wp-textarea wp-pack-edit__about" rows="2" :value="i.about" :disabled="busy" data-test="pack-edit-about" @change="set('about', text($event))" />
+      <textarea class="wp-textarea wp-pack-edit__about" rows="2" :value="aboutText" :disabled="busy" data-test="pack-edit-about" @change="set('about', text($event))" />
     </label>
     <PackGraphItem v-if="graphed" :item="i" />
     <label v-if="wild && !graphed" class="wp-pack-edit__field">
