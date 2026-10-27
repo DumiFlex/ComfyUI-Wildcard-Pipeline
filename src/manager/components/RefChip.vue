@@ -1,5 +1,6 @@
 <!-- src/manager/components/RefChip.vue -->
 <script setup lang="ts">
+import { copyText } from "@/components/shared/clipboard";
 import { computed, inject, ref, onBeforeUnmount, watch } from "vue";
 import { varColorIndex } from "../../components/shared/var-color";
 import { KIND_ICON_MAP } from "../../components/shared/kind-icons";
@@ -533,7 +534,7 @@ const copied = ref(false);
 let copiedTimer: number | undefined;
 function copyId(): void {
   if (!props.uuid) return;
-  void navigator.clipboard?.writeText(props.uuid);
+  void copyText(props.uuid);
   copied.value = true;
   if (copiedTimer !== undefined) window.clearTimeout(copiedTimer);
   copiedTimer = window.setTimeout(() => { copied.value = false; }, 1200);

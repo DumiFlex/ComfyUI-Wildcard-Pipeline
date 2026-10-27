@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CloseButton from "@/components/shared/CloseButton.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
@@ -996,8 +997,8 @@ function clearImport() {
           :disabled="aiChat.loading.value"
           @click="upgradeWithAi"
         >Tag and connect with AI</Button>
-        <Button
-          variant="ghost" size="sm" icon="pi-times" aria-label="Dismiss"
+        <CloseButton
+          size="sm" label="Dismiss"
           data-test="io-ai-upgrade-dismiss"
           @click="upgradeNames = []"
         />

@@ -9,6 +9,7 @@
  *
  * Click outside / Esc closes. Body scroll is locked while open.
  */
+import CloseButton from "@/components/shared/CloseButton.vue";
 import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import Button from "./ui/Button.vue";
 import RelativeDate from "./RelativeDate.vue";
@@ -118,10 +119,8 @@ watch(
               oldest is overwritten on save
             </p>
           </div>
-          <Button
-            icon="pi-times"
-            variant="ghost"
-            aria-label="Close history"
+          <CloseButton
+            label="Close history"
             data-test="history-close"
             @click="close"
           />

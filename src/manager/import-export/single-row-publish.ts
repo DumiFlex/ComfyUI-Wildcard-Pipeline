@@ -18,6 +18,7 @@
  * its own.
  */
 
+import { copyText } from "@/components/shared/clipboard";
 import type { Router } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
 import {
@@ -800,12 +801,6 @@ export function isCopyableKind(pub: PublishablePayload): boolean {
 export async function copyPayloadToClipboard(
   pub: PublishablePayload,
 ): Promise<boolean> {
-  if (typeof navigator === "undefined" || !navigator.clipboard) return false;
   if (!isCopyableKind(pub)) return false;
-  try {
-    await navigator.clipboard.writeText(JSON.stringify(buildCopyableRow(pub), null, 2));
-    return true;
-  } catch {
-    return false;
-  }
+  return copyText(JSON.stringify(buildCopyableRow(pub), null, 2));
 }

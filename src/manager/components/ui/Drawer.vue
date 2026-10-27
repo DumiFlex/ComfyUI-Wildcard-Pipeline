@@ -5,9 +5,9 @@
  * Tab stays inside it and focus goes back where it was. With `modal` off
  * there is no backdrop, Tab moves on to the page and the page stays usable.
  */
+import CloseButton from "@/components/shared/CloseButton.vue";
 import { ref, useId, useSlots } from "vue";
 import { useDialogFocus } from "@/components/shared/useDialogFocus";
-import Button from "./Button.vue";
 
 interface Props {
   open: boolean;
@@ -66,7 +66,7 @@ useDialogFocus(panel, () => props.open, {
           <h3 v-if="title" :id="titleId" class="wp-drawer__title">{{ title }}</h3>
           <slot name="header" />
           <span class="wp-spacer" />
-          <Button variant="ghost" icon="pi-times" aria-label="Close" data-test="drawer-close" @click="close" />
+          <CloseButton kbd="Esc" data-test="drawer-close" @click="close" />
         </header>
         <div class="wp-drawer__body">
           <slot />

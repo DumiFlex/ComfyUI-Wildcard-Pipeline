@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import CloseButton from "@/components/shared/CloseButton.vue";
 import { computed, ref, useId, useSlots } from "vue";
 import { useDialogFocus } from "@/components/shared/useDialogFocus";
-import Icon from "./Icon.vue";
 
 interface Props {
   open: boolean;
@@ -62,14 +62,7 @@ useDialogFocus(dialog, () => props.open, {
           <!-- A custom header puts :id="titleId" on its own heading. -->
           <slot name="header" :title-id="titleId" />
           <span class="wp-spacer" />
-          <button
-            type="button"
-            class="wp-topbar__icon-btn"
-            aria-label="Close"
-            @click="close"
-          >
-            <Icon name="times" />
-          </button>
+          <CloseButton kbd="Esc" @click="close" />
         </header>
         <div class="wp-modal__body">
           <slot />

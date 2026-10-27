@@ -5,6 +5,7 @@
  * Markdown copy: prompt, reply, thinking, tool calls, tokens) and Copy
  * JSON. Loaded only while the log is on.
  */
+import CloseButton from "@/components/shared/CloseButton.vue";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
 import {
@@ -95,9 +96,7 @@ watch(() => aiDebugSent.value.length, () => {
     <header class="wp-ai-debug__head">
       <h2 class="wp-ai-debug__title">AI debug log</h2>
       <button type="button" class="wp-ai-debug__link" data-test="ai-debug-clear" @click="clear">Clear</button>
-      <button type="button" class="wp-ai-debug__close" aria-label="Close" data-test="ai-debug-close" @click="emit('close')">
-        <i class="pi pi-times" aria-hidden="true" />
-      </button>
+      <CloseButton data-test="ai-debug-close" @click="emit('close')" />
     </header>
     <p class="wp-ai-debug__note">
       Each AI request with every model call it made: the prompt as sent, the reply, thinking,
@@ -167,11 +166,11 @@ watch(() => aiDebugSent.value.length, () => {
 }
 .wp-ai-debug__head { display: flex; align-items: center; gap: 8px; }
 .wp-ai-debug__title { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
-.wp-ai-debug__link, .wp-ai-debug__close {
+.wp-ai-debug__link {
   background: none; border: 0; color: var(--wp-text-muted); cursor: pointer;
   font: inherit; font-size: 12px; padding: 2px 6px; border-radius: 4px;
 }
-.wp-ai-debug__link:hover, .wp-ai-debug__close:hover { color: var(--wp-text); }
+.wp-ai-debug__link:hover { color: var(--wp-text); }
 .wp-ai-debug__note, .wp-ai-debug__empty { margin: 0; font-size: 12px; color: var(--wp-text-muted); line-height: 1.45; }
 .wp-ai-debug__note code { font-size: 11px; word-break: break-all; }
 .wp-ai-debug__error { margin: 0; font-size: 12px; color: var(--wp-danger-text); }
@@ -189,7 +188,7 @@ watch(() => aiDebugSent.value.length, () => {
 .wp-ai-debug__meta { font-size: 11px; color: var(--wp-text-muted); font-variant-numeric: tabular-nums; }
 .wp-ai-debug__err { font-size: 11px; color: var(--wp-danger-text); overflow-wrap: anywhere; }
 .wp-ai-debug__actions { display: flex; gap: 4px; flex-shrink: 0; }
-.wp-ai-debug__link:focus-visible, .wp-ai-debug__close:focus-visible {
+.wp-ai-debug__link:focus-visible {
   outline: 2px solid var(--wp-accent); outline-offset: 1px;
 }
 </style>
