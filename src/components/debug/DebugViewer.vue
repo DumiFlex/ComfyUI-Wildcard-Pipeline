@@ -13,6 +13,9 @@ import { computed, nextTick, ref, watch } from "vue";
 import { highlightJson } from "./highlight";
 import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
 import WpTabs, { type TabItem } from "../shared/WpTabs.vue";
+import WpButton from "../shared/WpButton.vue";
+import CopyButton from "../shared/CopyButton.vue";
+import { copyText } from "../shared/clipboard";
 import DebugVariables from "./DebugVariables.vue";
 import DebugTrace from "./DebugTrace.vue";
 import DebugWarnings from "./DebugWarnings.vue";
@@ -235,15 +238,8 @@ const tabText = computed(() => {
   }
 });
 const rawHtml = computed(() => (activeTab.value === "raw" && raw.value ? highlightJson(JSON.stringify(raw.value, null, 2)) : ""));
-const copyFlash = ref(false);
 async function clipboardWrite(text: string): Promise<void> {
-  if (!text) return;
-  try { await navigator.clipboard.writeText(text); } catch { /* permission denied */ }
-}
-async function copyTab(): Promise<void> {
-  await clipboardWrite(tabText.value);
-  copyFlash.value = true;
-  window.setTimeout(() => { copyFlash.value = false; }, 1200);
+  if (text) await copyText(text);
 }
 function downloadJson(): void {
   if (!raw.value) return;
@@ -405,23 +401,14 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
         </button>
         <span v-else class="wp-dbg-head__ok" data-test="dbg-head-ok"><i class="pi pi-check-circle" aria-hidden="true" /> clean run</span>
         <div class="wp-dbg-head__actions">
-          <button
-            type="button"
-            class="wp-btn wp-btn--icon"
-            :class="{ 'is-flashed': copyFlash }"
-            data-test="dbg-copy"
-            :title="copyFlash ? 'Copied' : 'Copy this tab as JSON'"
-            aria-label="Copy JSON"
-            @click="copyTab"
-          ><i :class="['pi', copyFlash ? 'pi-check' : 'pi-copy']" /></button>
-          <button
-            type="button"
-            class="wp-btn wp-btn--icon"
+          <CopyButton :text="() => tabText" label="Copy this tab as JSON" size="sm" data-test="dbg-copy" />
+          <WpButton
+            variant="ghost"
+            icon="pi-download"
             data-test="dbg-download"
-            title="Download the full snapshot as JSON"
-            aria-label="Download snapshot JSON"
+            aria-label="Download the full snapshot as JSON"
             @click="downloadJson"
-          ><i class="pi pi-download" /></button>
+          />
         </div>
       </header>
 
@@ -451,14 +438,14 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
           aria-label="Filter"
           clear-label="Clear filter"
         />
-        <button
+        <WpButton
           v-if="activeTab === 'trace' && model.steps.length"
-          type="button"
-          class="wp-btn wp-btn--icon"
+          variant="ghost"
+          :icon="allOpen ? 'pi-angle-double-up' : 'pi-angle-double-down'"
           data-test="dbg-expand-all"
-          :title="allOpen ? 'Collapse every step' : 'Expand every step'"
+          :aria-label="allOpen ? 'Collapse every step' : 'Expand every step'"
           @click="toggleAll"
-        ><i :class="['pi', allOpen ? 'pi-angle-double-up' : 'pi-angle-double-down']" /></button>
+        />
       </nav>
 
       <div class="wp-dbg-body">
@@ -659,23 +646,6 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
   margin-bottom: 3px;
 }
 
-.wp-btn--icon {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--wp-text-dim);
-  padding: 4px;
-  border-radius: var(--wp-radius, 4px);
-  cursor: pointer;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 2px;
-}
-.wp-btn--icon:hover { background: var(--wp-bg2); border-color: var(--wp-border-soft, var(--wp-border2)); color: var(--wp-text); }
-.wp-btn--icon.is-flashed { border-color: var(--wp-green); color: var(--wp-green); }
-.wp-btn--icon .pi { font-size: 11px; }
 
 .wp-dbg-body {
   flex: 1;

@@ -51,6 +51,11 @@ export const KIT_ENTRIES: KitEntry[] = [
     use: "The same look on a plain <button> where the Button component can't go: inside a canvas widget, or a router-link that must stay an <a>.",
   },
   {
+    id: "wp-button", name: "WpButton", group: "actions", file: "src/components/shared/WpButton.vue", surfaces: ["canvas", "manager"],
+    use: "Every button inside a canvas widget or canvas dialog: the canvas twin of Button, with the same variants, sizes and stylesheet (button.css), a PrimeIcons icon and the canvas size sm by default. Leave out the text for an icon button; its aria-label is also its tooltip. A shared piece that shows on both sides uses it too; manager screens use Button.",
+    instead: "A <button> with its own __btn class and colours.",
+  },
+  {
     id: "copy-button", name: "CopyButton", group: "actions", file: "src/components/shared/CopyButton.vue", surfaces: ["manager", "canvas"],
     use: "Copy text to the clipboard. The icon turns into a check (or a cross when the copy fails) and says so to screen readers, so no toast is needed. Works on plain-http pages too.",
     instead: "A button that calls navigator.clipboard and shows its own message.",
@@ -327,6 +332,7 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "disclosure": `<Disclosure v-model:open="open" label="Advanced" :count="3">…</Disclosure>`,
   "data-table": `<DataTable v-model:sort="sort" v-model:selected="picked" :columns="columns" :rows="rows" row-key="id" selectable aria-label="Tags" />`,
   "banner": `<Banner tone="warn" title="2 modules are out of date" dismissible @dismiss="hide">Update them before you publish.</Banner>`,
+  "wp-button": `<WpButton variant="primary" icon="pi-plus" @click="add">Add module</WpButton>`,
   "copy-button": `<CopyButton :text="prompt" label="Copy prompt" />`,
   "close-button": `<CloseButton kbd="Esc" @click="close" />`,
   "card": `<Card title="Options" subtitle="12 options">…</Card>`,

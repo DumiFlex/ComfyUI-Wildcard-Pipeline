@@ -4,6 +4,7 @@
  *  captures it; locked exposes a seed input + ±spinners + roll. */
 import WpNumber from "./WpNumber.vue";
 import WpSwitch from "./WpSwitch.vue";
+import WpButton from "./WpButton.vue";
 import { vTooltip } from "./tooltip";
 
 const props = defineProps<{
@@ -56,17 +57,15 @@ function onSeed(n: number | null) {
       @update:model-value="emit('bypass', { index, bypassed: !bypassed })" />
     <WpSwitch variant="chip" :icon="locked ? 'pi-lock' : 'pi-lock-open'" :label="locked ? 'Locked' : 'Lock'"
       data-test="seedrow-lock" :model-value="locked" @update:model-value="onLock" />
-    <button type="button" class="toggle toggle--prev" data-test="seedrow-lockprev"
-      :disabled="previous == null || undefined"
-      :title="previous == null
+    <WpButton
+      v-tooltip="previous == null
         ? 'No previous run captured for this frame'
         : `Lock the seed this frame used last run (${previous})`"
+      variant="outline" icon="pi-history" data-test="seedrow-lockprev"
+      :disabled="previous == null"
       @click="lockPrevious">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 3v5h5" /><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" /><path d="M12 7v5l3 2" />
-      </svg>
       Prev
-    </button>
+    </WpButton>
     <span class="srow__fill" />
     <span v-if="!locked" class="derived">
       <span class="derived__val" data-test="seedrow-derived">{{ derived }}</span>
@@ -109,14 +108,6 @@ function onSeed(n: number | null) {
 .srow__idx { flex-shrink: 0; width: 30px; text-align: right; font: 600 11px var(--wp-font-mono, monospace); color: var(--wp-text-dim, #7a7d88); }
 .srow--locked .srow__idx { color: var(--wp-accent-text, #c4b5fd); }
 .srow__fill { flex: 1; }
-.toggle { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid var(--wp-border); border-radius: 3px; font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); cursor: pointer; background: var(--wp-bg-deep, var(--wp-bg)); flex-shrink: 0; }
-.toggle:hover { border-color: var(--wp-border-strong, var(--wp-border2)); }
-.toggle svg { color: var(--wp-text-dim, var(--wp-text3)); }
-/* "Lock previous run's seed" — secondary action; greys out when the frame has
-   no captured previous (no prior run). */
-.toggle--prev { color: var(--wp-text-dim, var(--wp-text3)); }
-.toggle:disabled { opacity: .4; cursor: not-allowed; }
-.toggle:disabled:hover { border-color: var(--wp-border); color: var(--wp-text-dim, var(--wp-text3)); }
 /* Same shrink rule as the locked column, so a 15-digit derived seed clips
  * instead of shoving the DERIVED tag past the panel edge. */
 .derived { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }

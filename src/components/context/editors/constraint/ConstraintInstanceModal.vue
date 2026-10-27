@@ -46,6 +46,7 @@ import {
 import { collectTransitiveDeps } from "../../../../manager/community/transitive-deps";
 import { downloadDepsForDangling } from "../../../../manager/community/download-and-reattach";
 import { installEnvelope } from "../../../../manager/import-export/install";
+import WpButton from "../../../shared/WpButton.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
@@ -764,28 +765,13 @@ function onSpaClick(): void {
         <i class="pi pi-external-link" aria-hidden="true" />
         Edit library entry in SPA
       </a>
-      <button
-        type="button"
-        class="wp-cnm__btn wp-cnm__btn--quiet"
-        data-test="cnm-clear-all"
-        title="Clear all instance overrides on this constraint"
-        @click="emit('clear-all-overrides')"
-      >
-        <i class="pi pi-replay" aria-hidden="true" />
-        Reset overrides
-      </button>
+      <WpButton variant="ghost" icon="pi-replay" data-test="cnm-clear-all" title="Clear all instance overrides on this constraint" @click="emit('clear-all-overrides')">Reset overrides</WpButton>
       <span class="wp-cnm__hint">
         <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
-      <button
-        v-if="canSaveToLibrary"
-        type="button"
-        class="wp-cnm__btn"
-        data-test="cnm-save-lib"
-        @click="emit('save-to-library')"
-      >Save to library</button>
-      <button type="button" class="wp-cnm__btn" data-test="cnm-cancel" @click="emit('cancel')">Cancel</button>
-      <button type="button" class="wp-cnm__btn wp-cnm__btn--primary" data-test="cnm-save" @click="emit('save')">Save</button>
+      <WpButton v-if="canSaveToLibrary" data-test="cnm-save-lib" @click="emit('save-to-library')">Save to library</WpButton>
+      <WpButton data-test="cnm-cancel" @click="emit('cancel')">Cancel</WpButton>
+      <WpButton variant="primary" data-test="cnm-save" @click="emit('save')">Save</WpButton>
     </footer>
     </div>
 
@@ -855,42 +841,6 @@ function onSpaClick(): void {
   border-radius: 2px;
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.wp-cnm__btn {
-  padding: 5px 12px;
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  background: transparent;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 11px var(--wp-font-sans);
-  cursor: pointer;
-}
-.wp-cnm__btn--primary {
-  border-color: var(--wp-accent);
-  background: var(--wp-accent);
-  color: white;
-}
-.wp-cnm__btn:hover {
-  border-color: var(--wp-border-strong, var(--wp-border2));
-  color: var(--wp-text);
-}
-.wp-cnm__btn--primary:hover {
-  border-color: var(--wp-accent2, var(--wp-accent));
-  background: var(--wp-accent2, var(--wp-accent));
-  color: white;
-}
-.wp-cnm__btn--quiet {
-  border-color: transparent;
-  color: var(--wp-text-dim, var(--wp-text3));
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-}
-.wp-cnm__btn--quiet:hover {
-  border-color: var(--wp-border);
-  color: var(--wp-text-muted, var(--wp-text2));
-}
-.wp-cnm__btn--quiet .pi { font-size: 10px; }
 /* Inline download-failure note under the reattach banner — the modal has no
  * toast surface, so a failed community pull reports here. */
 .wp-cnm__dl-error {

@@ -5,6 +5,7 @@ import ModalShell from "../shared/ModalShell.vue";
 import ConfirmDialog from "../shared/ConfirmDialog.vue";
 import { api } from "../../manager/api/client";
 import type { BundleRow } from "../../manager/api/types";
+import WpButton from "../shared/WpButton.vue";
 
 const props = defineProps<{
   visible: boolean;
@@ -281,13 +282,8 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
           <span class="wp-bp__kbd">esc</span>
           <span class="wp-bp__hint-label">cancel</span>
         </div>
-        <button type="button" class="wp-bp__btn" @click="emit('close')">Cancel</button>
-        <button
-          type="button"
-          class="wp-bp__btn wp-bp__btn--primary"
-          data-testid="bundle-picker-create"
-          @click="emit('create')"
-        ><i class="pi pi-plus" aria-hidden="true" /> Create Bundle</button>
+        <WpButton @click="emit('close')">Cancel</WpButton>
+        <WpButton variant="primary" icon="pi-plus" data-testid="bundle-picker-create" @click="emit('create')">Create Bundle</WpButton>
       </div>
     </div>
   </ModalShell>
@@ -545,23 +541,4 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 }
 .wp-bp__hint-sep { color: var(--wp-text3); margin: 0 1px; }
 .wp-bp__hint-label { color: var(--wp-text-dim, var(--wp-text3)); }
-.wp-bp__btn {
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  color: var(--wp-text);
-  padding: 7px 16px;
-  border-radius: 4px;
-  font: 500 12px var(--wp-font-sans);
-  cursor: pointer;
-}
-.wp-bp__btn:hover { background: var(--wp-bg3); }
-.wp-bp__btn--primary {
-  background: var(--wp-accent);
-  color: white;
-  border-color: var(--wp-accent);
-  font-weight: 600;
-}
-.wp-bp__btn--primary:hover {
-  background: color-mix(in srgb, var(--wp-accent) 90%, white);
-}
 </style>

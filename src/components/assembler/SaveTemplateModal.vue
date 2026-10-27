@@ -4,6 +4,7 @@ import { api } from "../../manager/api/client";
 import ModalShell from "../shared/ModalShell.vue";
 import WpSelect from "../shared/WpSelect.vue";
 import { pushToast } from "../shared/toast-store";
+import WpButton from "../shared/WpButton.vue";
 
 const props = defineProps<{
   open: boolean;
@@ -174,23 +175,10 @@ async function submit(mode: "update" | "new") {
       </div>
 
       <footer class="wp-stm__foot">
-        <button type="button" class="wp-stm-btn" data-test="save-tpl-cancel" @click="emit('close')">Cancel</button>
+        <WpButton data-test="save-tpl-cancel" @click="emit('close')">Cancel</WpButton>
         <span class="wp-stm-spacer" />
-        <button
-          v-if="updateTargetId"
-          type="button"
-          class="wp-stm-btn"
-          :disabled="!canSubmit"
-          data-test="save-tpl-save-new"
-          @click="submit('new')"
-        >Save as new entry</button>
-        <button
-          type="button"
-          class="wp-stm-btn wp-stm-btn--primary"
-          :disabled="!canSubmit"
-          data-test="save-tpl-submit"
-          @click="submit(updateTargetId ? 'update' : 'new')"
-        >{{ updateTargetId ? "Update existing" : "Save" }}</button>
+        <WpButton v-if="updateTargetId" :disabled="!canSubmit" data-test="save-tpl-save-new" @click="submit('new')">Save as new entry</WpButton>
+        <WpButton variant="primary" :disabled="!canSubmit" data-test="save-tpl-submit" @click="submit(updateTargetId ? 'update' : 'new')">{{ updateTargetId ? "Update existing" : "Save" }}</WpButton>
       </footer>
     </div>
   </ModalShell>
@@ -318,25 +306,4 @@ async function submit(mode: "update" | "new") {
   background: var(--wp-bg-1);
 }
 .wp-stm-spacer { flex: 1; }
-.wp-stm-btn {
-  height: 30px;
-  padding: 0 13px;
-  border-radius: 6px;
-  border: 1px solid var(--wp-border);
-  background: var(--wp-bg-3);
-  color: var(--wp-text);
-  font-size: 12px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background var(--wp-motion-quick) ease, border-color var(--wp-motion-quick) ease;
-}
-.wp-stm-btn:hover:not(:disabled) { background: var(--wp-bg-4); border-color: var(--wp-border-strong); }
-.wp-stm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.wp-stm-btn--primary {
-  background: var(--wp-accent-600, var(--wp-accent));
-  border-color: var(--wp-accent-500, var(--wp-accent));
-  color: #fff;
-}
-.wp-stm-btn--primary:hover:not(:disabled) { background: var(--wp-accent-500, var(--wp-accent)); }
 </style>

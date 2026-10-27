@@ -12,6 +12,7 @@
  *              reset overrides)
  */
 import { onBeforeUnmount, watch } from "vue";
+import WpButton from "./WpButton.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -87,19 +88,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
         </div>
         <p v-if="body" class="wp-confirm__body" data-test="confirm-body">{{ body }}</p>
         <div class="wp-confirm__foot">
-          <button
-            type="button"
-            class="wp-confirm__btn"
-            data-test="confirm-cancel"
-            @click="onCancel"
-          >{{ cancelLabel }}</button>
-          <button
-            type="button"
-            class="wp-confirm__btn wp-confirm__btn--primary"
-            :class="{ 'wp-confirm__btn--danger': variant === 'danger' }"
-            data-test="confirm-confirm"
-            @click="onConfirm"
-          >{{ confirmLabel }}</button>
+          <WpButton data-test="confirm-cancel" @click="onCancel">{{ cancelLabel }}</WpButton>
+          <WpButton :variant="variant === 'danger' ? 'danger' : 'primary'" data-test="confirm-confirm" @click="onConfirm">{{ confirmLabel }}</WpButton>
         </div>
       </div>
     </div>
@@ -169,37 +159,5 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   padding: 10px 14px;
   background: var(--wp-bg-3);
   border-top: 1px solid var(--wp-border);
-}
-.wp-confirm__btn {
-  padding: 6px 14px;
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  background: transparent;
-  color: var(--wp-text-muted);
-  font: 11px var(--wp-font-sans);
-  cursor: pointer;
-}
-.wp-confirm__btn:hover {
-  border-color: var(--wp-border-soft, var(--wp-border));
-  color: var(--wp-text);
-}
-.wp-confirm__btn--primary {
-  border-color: var(--wp-accent);
-  background: var(--wp-accent);
-  color: white;
-}
-.wp-confirm__btn--primary:hover {
-  background: var(--wp-accent-600);
-  border-color: var(--wp-accent-600);
-  color: white;
-}
-.wp-confirm__btn--danger {
-  border-color: var(--wp-danger, var(--wp-red));
-  background: var(--wp-danger, var(--wp-red));
-  color: white;
-}
-.wp-confirm__btn--danger:hover {
-  background: var(--wp-red);
-  border-color: var(--wp-red);
 }
 </style>
