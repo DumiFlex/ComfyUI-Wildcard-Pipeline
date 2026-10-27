@@ -2239,7 +2239,7 @@
     },
     {
      "title": "Advanced",
-     "text": "Move settings between machines, or start over.\n- Export settings: Save every preference to a JSON file.\n- Import settings: Load a settings file from another machine.\n- Reset browser preferences: Clear this device's preferences. Your library is untouched."
+     "text": "Move settings between machines, start over, or open the component kit.\n- Export settings: Save every preference to a JSON file.\n- Import settings: Load a settings file from another machine.\n- Component kit: Every shared control with when to use it, for people building the extension.\n- Reset browser preferences: Clear this device's preferences. Your library is untouched."
     }
    ]
   }

@@ -23,7 +23,7 @@ export const SECTIONS: SectionDef[] = [
   { id: "test-runner", label: "Test Runner", icon: "pi-play", blurb: "What a new Test Runner scenario starts with." },
   { id: "ai", label: "AI assistant", icon: "pi-microchip-ai", blurb: "Use your own model (Claude, OpenAI or a local server) to draft modules." },
   { id: "library", label: "Library & data", icon: "pi-database", blurb: "Your module database, backups and maintenance." },
-  { id: "advanced", label: "Advanced", icon: "pi-cog", blurb: "Move settings between machines, or start over." },
+  { id: "advanced", label: "Advanced", icon: "pi-cog", blurb: "Move settings between machines, start over, or open the component kit." },
 ];
 
 export interface SettingEntry {
@@ -110,6 +110,7 @@ const STATIC_ENTRIES: SettingEntry[] = [
 
   { key: "export-settings", section: "advanced", label: "Export settings", hint: "Save every preference to a JSON file.", keywords: "backup transfer json" },
   { key: "import-settings", section: "advanced", label: "Import settings", hint: "Load a settings file from another machine.", keywords: "restore transfer json" },
+  { key: "component-kit", section: "advanced", label: "Component kit", hint: "Every shared control with when to use it, for people building the extension.", keywords: "kit components design system buttons inputs tokens colours contributors developers ui" },
   { key: "reset-prefs", section: "advanced", label: "Reset browser preferences", hint: "Clear this device's preferences. Your library is untouched.", keywords: "reset clear localstorage" },
 ];
 
