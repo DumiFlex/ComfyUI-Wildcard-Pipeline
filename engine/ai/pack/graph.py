@@ -53,6 +53,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from engine.ai import derivation as ai_derivation
 from engine.ai.pack._common import (
     _STR,
     _STRS,
@@ -73,6 +74,7 @@ from engine.ai.pack._common import (
     _tag,
     _var,
 )
+from engine.ai.pack.neg_tidy import dedupe, fit_ratings, tidy_negative
 from engine.ai.pack.plan import _NEGATIVEISH, MAX_TAGS, _row_var, _slug_var
 from engine.ai.pack.settings import MAX_SWEEP_OPTIONS, parse_run, parse_settings
 from engine.modules.derivation_handler import _ctx_get
@@ -786,6 +788,7 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
     lead = _placeholders(_clean(raw.get("lead"), MAX_TEXT), by_name, warnings)
     tail = _placeholders(_clean(raw.get("tail"), MAX_TEXT), by_name, warnings)
     lead, tail, order, read = _text_reads(lead, tail, order, by_name, warnings)
+    lead, tail = _plan_words(lead, warnings), _plan_words(tail, warnings)
     for s in slots:
         if s["show"] == "prompt" and s["var"] not in order and s["var"] not in read:
             order.append(s["var"])
@@ -844,6 +847,57 @@ def _template(raw: Any, slots: list[dict[str, Any]], fixed: list[dict[str, Any]]
     lead, tail = _fixed_repeats(lead, tail, fixed, order, read, warnings)
     return {"lead": lead, "order": order[:MAX_TEMPLATE_PARTS], "tail": tail,
             "negative": negative}
+
+
+#: One-word lead or tail parts that name a part of the prompt, not words
+#: of it: "character, look, outfit, pose, expression, place, light" led
+#: every prompt of a 9B pack (bench P7, 2026-10-26).
+_PART_NAMES = frozenset("""
+character subject look looks outfit outfits clothing clothes pose poses expression
+expressions place places location setting settings scene scenes background backgrounds
+light lighting mood moods style styles camera angle angles composition action actions
+hair hairstyle accessory accessories footwear shoes weather season time era species race
+class weapon weapons prop props item items detail details
+""".split())
+#: A "no …" / "never …" part: a rule, which prints as text in a positive
+#: prompt ("no elf, no beast", bench Z18).
+_NEGATED_PART = re.compile(r"^(?:no|not|never|without|avoid)\s+\S", re.I)
+#: Danbooru tags that start with "no" and are picture words: "no humans,
+#: scenery" is how a landscape pack keeps a person out on tag models.
+_NO_TAGS = frozenset(f"no {w}" for w in """
+humans pupils shoes headwear hat bra panties nose mouth eyes socks gloves sclera lineart
+legwear pants shirt pussy penis nipples testicles blush wings tail ears eyewear
+""".split())
+
+
+#: Loop and Model Info variables: for rules to read, never printed
+#: ("$model_family $model_name $iteration" led a Pony template, 9B bench
+#: T3; critiques #4/#22).
+_RULE_ONLY_VAR = re.compile(r"\$+(?:iteration|iteration_total|model_family|model_variant|"
+                            r"model_name)", re.I)
+
+
+def _plan_words(text: str, warnings: list[str]) -> str:
+    """The lead or tail without the planner's own words: parts that only
+    name a part of the prompt, and "no …" parts (rules, not picture
+    words; a positive prompt can't say "no")."""
+    if not text:
+        return text
+    kept, gone = [], []
+    for chunk in text.split(","):
+        c = chunk.strip()
+        if not c:
+            continue
+        negated = _NEGATED_PART.match(c) and re.sub(r"\s+", " ", c.lower()) not in _NO_TAGS
+        if ((c.lower() in _PART_NAMES or negated) and "$" not in c) \
+                or _RULE_ONLY_VAR.fullmatch(c):
+            gone.append(c)
+        else:
+            kept.append(c)
+    if gone:
+        warnings.append(f"Took \"{', '.join(gone)}\" out of the template text: it names a part "
+                        "of the prompt or a rule, which would print as words")
+    return ", ".join(kept)
 
 
 def _fixed_repeats(lead: str, tail: str, fixed: list[dict[str, Any]], order: list[str],
@@ -1458,6 +1512,50 @@ _WRITING = re.compile(r"\b(?:danbooru|booru|tags?|sentences?|natural language|pr
                       r"syntax|prompt (?:format|style))\b", re.I)
 
 
+def show_unread(graph: dict[str, Any]) -> list[str]:
+    """Every pick the pack makes reaches the prompt. A prompt slot (or a
+    fixed value, a derived variable) the template's order lost after the
+    parse goes back in; an internal slot no relation reads and no text
+    names is a pick that does nothing, so it shows. When the order would
+    still read no slot at all, the internal slots that aren't drawn lists
+    show: a template that reads only its lead printed "high quality,
+    detailed, The Hero Awakens" for an 11-slot story (9B bench P8 and Z22
+    "Reads .", 2026-10-26). Returns the lines saying so."""
+    t = graph["template"]
+    lines: list[str] = []
+    rel_slots = {r["from"]["slot"] for r in graph["relations"]} | {
+        (r.get("to") or {}).get("slot") for r in graph["relations"]}
+    drawn = {r["from"]["slot"] for r in graph["relations"] if r["kind"] == "draw"}
+    texts = " ".join([t["lead"], t["tail"], *(f["text"] for f in graph["fixed"]),
+                      *(r.get("text") or "" for r in graph["relations"]),
+                      *(r.get("otherwise") or "" for r in graph["relations"])])
+    said = {v.lower() for v in _VAR.findall(texts)}
+    for s in graph["slots"]:
+        if s["show"] == "internal" and s["name"] not in rel_slots \
+                and s["var"].lower() not in said:
+            s["show"] = "prompt"
+            lines.append(f"{s['name']} shows in the prompt: it was internal, and no rule read it")
+    wanted = [s["var"] for s in graph["slots"] if s["show"] == "prompt"]
+    wanted += [f["var"] for f in graph["fixed"]]
+    wanted += [r["var"] for r in graph["relations"] if r["kind"] == "derive"]
+    for var in dict.fromkeys(wanted):
+        if var not in t["order"] and var.lower() not in said:
+            t["order"].append(var)
+            lines.append(f"Added ${var} to the template so it shows")
+    slot_vars = {s["var"] for s in graph["slots"]}
+    if not (set(t["order"]) | said) & slot_vars:
+        shown = [s for s in graph["slots"] if s["name"] not in drawn]
+        for s in shown:
+            s["show"] = "prompt"
+            if s["var"] not in t["order"]:
+                t["order"].append(s["var"])
+        if shown:
+            lines.append("The template read none of the picks, so it reads "
+                         + ", ".join(f"${s['var']}" for s in shown) + " now")
+    t["order"] = t["order"][:MAX_TEMPLATE_PARTS]
+    return lines
+
+
 def drop_writing_slots(graph: dict[str, Any], locked: list[str]) -> list[str]:
     """An internal slot that picks how the prompt is written, that no
     relation reads and nothing prints, goes: the checkpoint and the
@@ -1549,6 +1647,17 @@ def template_order(graph: dict[str, Any], settings: Any = None) -> list[str]:
     return order[:MAX_TEMPLATE_PARTS]
 
 
+#: What each family's row of the quality rule writes, as the planner is told.
+_QUALITY_ROWS = {
+    "pony": "pony → score_9, score_8_up, score_7_up",
+    "illustrious": "illustrious or noobai → masterpiece, best quality, very aesthetic",
+    "noobai": "illustrious or noobai → masterpiece, best quality, very aesthetic",
+    "flux": "flux → a short natural phrase (\"high quality photo, sharp focus\"), no tags",
+    "sd3": "sd3 → a short natural phrase (\"high quality, detailed\"), no tags",
+    "sdxl": "sdxl → masterpiece, best quality, highly detailed",
+}
+
+
 def run_items(graph: dict[str, Any], settings: Any = None) -> list[dict[str, Any]]:
     """The items the run style and the model setting need that the graph
     doesn't carry: the story beat and the model-family quality derivations
@@ -1556,12 +1665,17 @@ def run_items(graph: dict[str, Any], settings: Any = None) -> list[dict[str, Any
     items: list[dict[str, Any]] = []
     if model_quality(graph, settings):
         fams = model_families(graph)
+        # One row per family the pack runs on, never rows for others: a
+        # Pony and Flux pack got Illustrious rows and Flux no words of its
+        # own (9B bench P7, 2026-10-26).
+        rows = [_QUALITY_ROWS.get(f, f"{f} → its own quality words, in the way it reads a "
+                                     "prompt") for f in fams] if fams else [
+            _QUALITY_ROWS["pony"], _QUALITY_ROWS["illustrious"]]
         items.append({
             "kind": "derivation", "name": "Model quality", "var": QUALITY_VAR, "section": "",
             "about": "Sets $quality from $model_variant"
                      + (f" (the pack runs on {', '.join(fams)})" if len(fams) > 1 else "")
-                     + ": pony → score_9, score_8_up, score_7_up; illustrious or noobai → "
-                     "masterpiece, best quality, very aesthetic; else the pack's own quality "
+                     + ": " + "; ".join(dict.fromkeys(rows)) + "; else the pack's own quality "
                      "words.",
             "count": 0, "tags": [], "source": "", "target": "", "use": ""})
     if story_beat(graph):
@@ -1601,9 +1715,36 @@ def library_slots(graph: dict[str, Any], library: list[dict[str, Any]] | None,
         hits = [r for r in rows if str(r.get("name") or "").lower() == s["name"].lower()]
         if not hits:
             hits = [r for r in rows if _row_var(r) == s["var"]]
-        if len(hits) == 1:
+        if len(hits) == 1 and _row_fits(graph, s, hits[0]):
             out[s["var"]] = hits[0]
     return out
+
+
+def _row_fits(graph: dict[str, Any], slot: dict[str, Any], row: dict[str, Any]) -> bool:
+    """Whether a library wildcard named like a slot is about the same
+    things: its options, tags or description share a word with what the
+    slot and the pack say (beyond the shared name). A name alone put the
+    user's fantasy Race ("stoneborn kin") into a Star Wars pack and a
+    couples pack (9B bench N5, Z18, 2026-10-26). A slot that says nothing
+    of its own beyond its name takes the row."""
+    def words(text: str) -> set[str]:
+        out: set[str] = set()
+        for w in re.findall(r"[a-z][a-z'-]*[a-z]", text.lower().replace("_", " ")):
+            if len(w) >= 3 and w not in _REQUEST_STOP:
+                out |= _stems(w)
+        return out
+
+    name = words(f"{slot['name']} {slot['var']} {row.get('name') or ''} {_row_var(row)}")
+    if not words(slot["what"]) - name:
+        return True
+    mine = words(" ".join([slot["what"], graph.get("title") or "",
+                           graph.get("summary") or ""])) - name
+    p = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+    theirs = words(" ".join([str(row.get("description") or ""),
+                             *(str(t) for t in p.get("sub_categories") or []),
+                             *(str(o.get("value") or "") for o in p.get("options") or []
+                               if isinstance(o, dict))])) - name
+    return bool(mine & theirs)
 
 
 def apply_library(graph: dict[str, Any], library: list[dict[str, Any]] | None,
@@ -1798,11 +1939,24 @@ def _wired(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict[str, A
         return {"kind": kind, **axis_payload(graph, slot)}
     if kind == "fixed_values":
         f = next(x for x in graph["fixed"] if x["var"] == item["var"])
-        row: dict[str, Any] = {"id": "val00001", "name": f["var"], "value": f["text"]}
-        if f["negative"]:
-            row["negative"] = f["negative"]
+        text, _ = fit_ratings(f["text"], graph.get("rating") or "")
+        fwarn: list[str] = []
+        if model_families(graph) != ["pony"] and f["var"] != QUALITY_VAR:
+            text, n = _unpony(text)
+            if n:
+                fwarn.append(f"Took Pony's score tags out of ${f['var']}: the pack doesn't run "
+                             "on Pony alone")
+        row: dict[str, Any] = {"id": "val00001", "name": f["var"], "value": text}
+        neg, gone = tidy_negative(f["negative"], text)
+        if model_families(graph) != ["pony"]:
+            neg, _ = _unpony(neg)
+        if gone:
+            fwarn.append("Took " + ", ".join(f'"{g}"' for g in gone[:6]) + f" out of "
+                         f"${f['var']}'s negative: it repeated its own words or itself")
+        if neg:
+            row["negative"] = neg
         return {"kind": kind, "payload": {"values": [row]},
-                "preview": [f"${f['var']} = {f['text']}"], "warnings": []}
+                "preview": [f"${f['var']} = {text}"], "warnings": fwarn}
     if kind == "constraint":
         src, dst = slot_by_var(graph, item["source"]), slot_by_var(graph, item["target"])
         sid, tid = _dep_ids(plan, built, item["source"]), _dep_ids(plan, built, item["target"])
@@ -1861,13 +2015,15 @@ def _wired(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict[str, A
                 if src is None:
                     raise PlanError(f"{item['name']} reads {r['from']['slot']}, which the "
                                     "graph no longer has")
+                mode = "replace" if r["kind"] == "derive" and n == 0 else "append"
                 branches.append({
                     "condition": {"var": f"{src['var']}.{axis}", "op": "equals",
                                   "value": r["from"]["value"]},
-                    "action": {"target_var": item["var"],
-                               "mode": "replace" if r["kind"] == "derive" and n == 0
-                               else "append",
-                               "value": r["text"]},
+                    # Added words come after a comma: as written the engine
+                    # glued them on ("war hammerblade", "matte finishformal",
+                    # 9B bench 2026-10-26).
+                    "action": {"target_var": item["var"], "mode": mode,
+                               "value": ai_derivation.join_piece(mode, r["text"])},
                 })
             rule: dict[str, Any] = {"id": f"rule{n + 1:04d}", "branches": branches}
             if n == 0 and otherwise:
@@ -1892,9 +2048,28 @@ def _wired(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict[str, A
         # writes one anyway.
         negative = "" if parse_settings(plan.get("settings"))["negatives"] == "none" \
             else t["negative"] or ""
+        twarn: list[str] = []
+        body, n_rated = fit_ratings(body, graph.get("rating") or "")
+        if n_rated:
+            twarn.append(f"Set {n_rated} rating tag(s) to the pack's rating and spelling")
+        negative = dedupe(negative)
+        if model_families(graph) != ["pony"]:
+            negative, n = _unpony(negative)
+            if n:
+                twarn.append("Took Pony's score tags out of the negative: the pack doesn't run "
+                             "on Pony alone")
+        # The standing negative never bans what a slot picks ("midnight" in
+        # the negative of a pack that rolls midnight, 9B bench 2026-10-26).
+        picks = [str(o.get("value") or "") for i in plan["items"]
+                 if i["kind"] in ("wildcard", "library") and i["key"] in built
+                 for o in built[i["key"]]["payload"].get("options") or [] if isinstance(o, dict)]
+        negative, gone = tidy_negative(negative, siblings=picks)
+        if gone:
+            twarn.append("Took " + ", ".join(f'"{g}"' for g in gone[:6]) + " out of the "
+                         "negative: the pack picks them, or they were said twice")
         return {"kind": kind, "payload": {"template_string": body,
                                          "negative_template": negative},
-                "preview": [body], "warnings": []}
+                "preview": [body], "warnings": twarn}
     raise PlanError(f"{item['name']} isn't wired by the graph")
 
 
@@ -2251,6 +2426,19 @@ def scope_notes(rows: list[dict[str, Any]], others: dict[str, list[str]]
     return kept, warnings
 
 
+#: The words a slot never has, as its ``what`` carries them: "…; Never:
+#: fur, wool." (``graph_change.land_drops`` writes it).
+_NEVER_WORDS = re.compile(r"\bNever:\s*([^.;]+)", re.I)
+
+
+def slot_never(slot: dict[str, Any]) -> list[str]:
+    """The words a slot's options never say (its ``what``'s "Never: …")."""
+    out: list[str] = []
+    for m in _NEVER_WORDS.finditer(slot.get("what") or ""):
+        out += [w.strip().lower() for w in m.group(1).split(",") if w.strip()]
+    return list(dict.fromkeys(out))
+
+
 def compile_slot(
     graph: dict[str, Any], slot: dict[str, Any], answer: Any, *, limit: int | None = None,
     existing: dict[str, Any] | None = None, others: dict[str, list[str]] | None = None,
@@ -2282,6 +2470,11 @@ def compile_slot(
         raise ValueError("the model's answer wasn't a list of options")
     kinds = axis_kinds(graph, slot)
     values = {a["name"]: a["values"] for a in slot["axes"]}
+    # Words the user dropped from this slot ("drop fur"): no option says
+    # them, in the first build or any fill or repair after (9B bench P5,
+    # 2026-10-26: fur came back in the repair pass).
+    banned = slot_never(slot)
+    dropped_banned: list[str] = []
     warnings: list[str] = []
     raw_options = []
     for o in answer["add" if adding else "options"]:
@@ -2305,6 +2498,9 @@ def compile_slot(
             warnings.append(f"Left out \"{_clean(o.get('text'), 40)}\": no {', '.join(missing)}"
                             " value")
             continue
+        if banned and any(_has_word(str(o.get("text") or "").lower(), w) for w in banned):
+            dropped_banned.append(_clean(o.get("text"), 40))
+            continue
         raw_options.append({"text": o.get("text"), "weight": o.get("weight", 1),
                             "tags": tags, "negative": o.get("negative") or ""})
     # A fill keeps what is there: its options stay, ids and all, and the
@@ -2327,10 +2523,21 @@ def compile_slot(
     taken: set[str] = {o["id"] for o in kept}
     rows: list[dict[str, Any]] = []
     fams = model_families(graph)
-    off_pony = bool(fams) and fams != ["pony"]
+    # A pack that doesn't run on Pony alone gets none of its score tags; one
+    # with no model named counts too (9B bench P9: Pony score negatives on a
+    # pack with no model).
+    off_pony = fams != ["pony"]
     unponied = 0
+    sloppy: list[str] = []
+    rated = 0
+    siblings = [str(o["value"]) for o in options]
     for o in options:
         value, negative = o["value"], o["negative"]
+        value, n_rated = fit_ratings(value, graph.get("rating") or "")
+        rated += n_rated
+        if negative:
+            negative, gone = tidy_negative(negative, value, siblings)
+            sloppy += [g for g in gone if g not in sloppy]
         if off_pony:
             # Score, source and rating tags in a slot's options print on
             # every model; the quality rule gives them to Pony (9B pack 11,
@@ -2345,9 +2552,18 @@ def compile_slot(
         if negative:
             row["negative"] = negative
         rows.append(row)
+    if dropped_banned:
+        warnings.append("Left out " + ", ".join(f'"{t}"' for t in dropped_banned[:4])
+                        + ": the slot never has " + ", ".join(banned))
     if unponied:
         warnings.append(f"Took Pony's score tags out of {unponied} option(s): the quality rule "
                         "gives them to Pony only")
+    if sloppy:
+        warnings.append("Took " + ", ".join(f'"{g}"' for g in sloppy[:6])
+                        + " out of the options' negatives: a negative never names the "
+                        "option's own words, another option of the slot, an id or a repeat")
+    if rated:
+        warnings.append(f"Set {rated} rating tag(s) to the pack's rating and spelling")
     rows, scoped = scope_notes(rows, others or {})
     warnings += scoped
     if not rows and not kept:
@@ -2483,6 +2699,47 @@ def _expected(text: str, ctx: dict[str, Any]) -> str:
     return _norm(_VAR.sub(lambda m: _ctx_get(ctx, m.group(1)), text)).strip(" ,")
 
 
+#: Shortest option text the text check of a rule looks for: shorter
+#: pieces ("red", "hat") show inside too many other words' company.
+_MIN_BANNED = 4
+
+
+def _banned_texts(rel: dict[str, Any], payload: dict[str, Any] | None, kept: set[str],
+                  src_vals: set[str]) -> list[str]:
+    """The option texts of the target a rule rules out, as the prompt
+    would show them: an ``exclude`` bans the options carrying its target
+    value, an ``only`` row the options carrying none of the tags the row
+    names (``kept``). A text an allowed option also says, or one of the
+    source's own values, is never banned: seeing it proves nothing."""
+    if payload is None:
+        return []
+    banned: set[str] = set()
+    fine: set[str] = set()
+    target = (rel.get("to") or {}).get("value", "")
+    for o in payload.get("options") or []:
+        if not isinstance(o, dict) or o.get("is_null"):
+            continue
+        tags = set(o.get("sub_categories") or [])
+        out = target in tags if rel["kind"] == "exclude" else not (tags & kept)
+        for c in _norm(_REF.sub("", str(o.get("value") or ""))).split(","):
+            c = c.strip(" .")
+            if len(c) >= _MIN_BANNED:
+                (banned if out else fine).add(c)
+    # "boots" banned while "leather boots" is allowed would read every
+    # allowed pick as a break.
+    return sorted(b for b in banned - fine - src_vals
+                  if not any(_has_word(f, b) for f in fine))
+
+
+def _shown(row: dict[str, Any], said: list[str]) -> None:
+    """Keep the first few banned words a broken rule's prompts showed."""
+    if said:
+        got = row.setdefault("shown", [])
+        for w in said:
+            if w not in got and len(got) < 4:
+                got.append(w)
+
+
 def _picked_tags(graph: dict[str, Any], payloads: dict[str, dict[str, Any]], slot_name: str,
                  ctx: dict[str, Any]) -> tuple[set[str], bool] | None:
     """The tags the run's pick for a slot carries, and whether that pick
@@ -2577,6 +2834,13 @@ def verify_relations(plan: dict[str, Any], built: dict[str, Any],
         if r["kind"] == "only":
             only_rows.setdefault((r["from"]["slot"], r["from"]["value"], r["to"]["slot"]),
                                  set()).add(r["to"]["value"])
+    # Every tag a source row says something about (only, boost, reduce):
+    # an "only" row keeps those options, so their text isn't banned.
+    row_tags: dict[tuple[str, str, str], set[str]] = {}
+    for r in graph["relations"]:
+        if r["kind"] in ("only", "boost", "reduce") and r.get("to"):
+            row_tags.setdefault((r["from"]["slot"], r["from"]["value"], r["to"]["slot"]),
+                                set()).add(r["to"]["value"])
     by_var: dict[str, list[dict[str, Any]]] = {}
     for r in graph["relations"]:
         if r["kind"] == "derive":
@@ -2597,6 +2861,15 @@ def verify_relations(plan: dict[str, Any], built: dict[str, Any],
         src_slot = next((s for s in graph["slots"] if s["name"] == src["slot"]), None)
         src_vals = {v.lower() for a in (src_slot or {}).get("axes") or [] for v in a["values"]}
         words = [w for w in words if w.lower() not in src_vals]
+        # What the row rules out, as text: a rule held by tags while another
+        # item (a derivation, another slot) printed the very thing it bans
+        # ("lingerie set … fully nude", "nude … leather armor": "rules held,
+        # no warnings", 9B bench P13/Z18 2026-10-26).
+        banned = _banned_texts(r, payloads.get(dst.get("slot", "")),
+                               only_rows.get((src["slot"], src["value"], dst.get("slot", "")),
+                                             set()) | row_tags.get(
+                                   (src["slot"], src["value"], dst.get("slot", "")), set()),
+                               src_vals) if kind in ("exclude", "only") else []
         for n, ctx in enumerate(runs):
             got_src = _picked_tags(graph, payloads, src["slot"], ctx)
             if got_src is None:
@@ -2613,17 +2886,26 @@ def verify_relations(plan: dict[str, Any], built: dict[str, Any],
                 dt, fell = got_dst
                 prompt = rendered[n] if rendered and n < len(rendered) else ""
                 own = str(ctx.get(src_slot["var"]) or "").lower() if src_slot else ""
-                said = [w for w in words if _has_word(prompt, w)
+                said = [w for w in [*words, *banned] if _has_word(prompt, w)
                         and not _has_word(own, w)] if prompt else []
+                if fell:
+                    # The fallback stands in when nothing else is left: its
+                    # own text is allowed, a copy from another item isn't.
+                    dst_slot = next((x for x in graph["slots"] if x["name"] == dst["slot"]),
+                                    None)
+                    mine = _norm(ctx.get(dst_slot["var"])) if dst_slot else ""
+                    said = [w for w in said if not _has_word(mine, w)]
                 nested = _drawn_tags(graph, payloads, dst["slot"], ctx)
                 if not dt and not said and not nested:
                     continue
                 row["seen"] += 1
                 allowed = only_rows.get((src["slot"], src["value"], dst["slot"]), set())
-                if kind == "exclude" and not fell and (dst["value"] in dt or said):
+                if kind == "exclude" and ((not fell and dst["value"] in dt) or said):
                     row["broken"] += 1
-                elif kind == "only" and not fell and dt and not (dt & allowed):
+                    _shown(row, said)
+                elif kind == "only" and ((not fell and dt and not (dt & allowed)) or said):
                     row["broken"] += 1
+                    _shown(row, said)
                 elif kind == "exclude" and any(dst["value"] in t for t in nested):
                     row["broken"] += 1
                 elif kind == "only" and any(t and not (t & allowed) for t in nested):
@@ -3156,6 +3438,9 @@ kinds type types sort sorts shared type typed myself itself must empty narrow
 none call decide decides decided either any whatever default defaults small large big
 specialized specialised specific general separation separate separated concern concerns
 structure structured section sections held vary varies varying varied each
+add adds added adding drop drops dropped dropping remove removes removed removing replace
+replaces replaced swap swaps swapped change changes changed changing instead rid lose
+bad good better worse happen happens happened happening shot shots
 """.split())
 
 
@@ -3380,6 +3665,13 @@ STORY_QUESTION = ("The request reads like a story. Run it as a story over a Loop
                   "per step, the cast held), or as single images?")
 SWEEP_QUESTION = ("Which slots does the sweep sheet compare? Pick 2 or 3 short ones; the rest "
                   "are held.")
+#: A request about a pair of people that never says who they are.
+_PAIR_ASK = re.compile(r"\b(?:couples?|partners?|lovers|pairs? of (?:people|lovers)|two people|"
+                       r"duos?|romance|romantic)\b", re.I)
+_PAIR_SAID = re.compile(r"\b(?:m[ae]n|wom[ae]n|girls?|boys?|guys?|males?|females?|gay|lesbians?|"
+                        r"yuri|yaoi|straight|het(?:ero)?|hetero(?:sexual)?|husband|wife|"
+                        r"boyfriend|girlfriend|1girl|1boy|2girls|2boys|mixed)\b", re.I)
+PAIR_QUESTION = "Who are the two people in the pack?"
 
 
 def code_questions(graph: dict[str, Any], request: str,
@@ -3405,6 +3697,14 @@ def code_questions(graph: dict[str, Any], request: str,
             and SWEEP_QUESTION not in asked:
         out.append({"header": "Sweep axes", "question": SWEEP_QUESTION, "multi": True,
                     "choices": [s["name"] for s in prompt][:8], "binds": {"set": "sweep"}})
+    # A couples pack that never says who the couple is: the planner took
+    # both partners as women from the library's tags (9B bench Z17,
+    # 2026-10-26). Asked, never guessed; the answer goes to the planner.
+    if _PAIR_ASK.search(request or "") and not _PAIR_SAID.search(request or "") \
+            and PAIR_QUESTION not in asked:
+        out.append({"header": "The couple", "question": PAIR_QUESTION, "multi": True,
+                    "choices": ["A woman and a man", "Two women", "Two men",
+                                "Any of these, varied"]})
     return out
 
 
@@ -3498,6 +3798,7 @@ def compile_graph_plan(raw: Any, **kw: Any) -> dict[str, Any]:
         applied.append("Took \"" + ", ".join(gone) + "\" out of the lead: the request names "
                        "no person")
     applied += apply_library(graph, kw.get("library"), kw.get("settings"))
+    applied += show_unread(graph)
     _story_holds(graph["slots"], parse_run(graph["run"]), graph["warnings"])
     if graph["anchor"] not in {s["var"] for s in graph["slots"]}:
         # The code took the anchor's slot out (a Quality slot now fixed

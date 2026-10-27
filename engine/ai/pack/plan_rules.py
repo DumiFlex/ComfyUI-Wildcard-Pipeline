@@ -7,7 +7,6 @@ import re
 from typing import Any
 
 from engine.ai.pack._common import (
-    _NEVER,
     _STOP,
     _TAG_REF,
     MAX_ABOUT,
@@ -537,9 +536,11 @@ def _never_from_request(raw_items: list[dict[str, Any]], request: str,
         if x.get("kind") != "constraint":
             continue
         about = str(x.get("about") or "")
-        if _NEVER.search(about) and not _SOFTEN.search(about) \
-                and not re.search(r"\breduce", about, re.I):
-            continue  # already says never: the built rules are checked for it
+        if not _SOFTEN.search(about) and not re.search(r"\breduce", about, re.I):
+            # Already says never (the built rules are checked for it), or it
+            # is no softened rule at all: a "goes with" rule got "Never:
+            # exclude it" glued on (9B bench P3-P5, 2026-10-26).
+            continue
         words = _stems(f"{x.get('name') or ''} {about}")
         if not any(len(words & s) >= 2 for s in said):
             continue
