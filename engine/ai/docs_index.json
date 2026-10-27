@@ -2215,7 +2215,7 @@
    "sections": [
     {
      "title": "What's in it",
-     "text": "- Tokens: the colours, type sizes, spacing and corners, with the value each has right now.\n- Actions (2): Things you press.\n- Inputs (9): Things you type into or pick from a list.\n- Choices (5): On or off, one of a few, which tab.\n- Display (6): Showing a thing: cards, chips, icons, empty pages.\n- Feedback (3): Telling the user what happened or that something is busy.\n- Dialogs and menus (4): Anything that opens above the page.\n- Library pieces (8): Bigger parts built from the kit that several screens share. Reuse them before writing another.\n- Brand (1): The logo.\nA few pieces only work on the canvas (the node dialog, the right-click menu and the canvas toast). The kit lists them with how to use them instead of a live demo."
+     "text": "- Tokens: the colours, type sizes, spacing and corners, with the value each has right now.\n- Actions (2): Things you press.\n- Inputs (9): Things you type into or pick from a list.\n- Choices (5): On or off, one of a few, which tab.\n- Display (6): Showing a thing: cards, chips, icons, empty pages.\n- Feedback (4): Telling the user what happened or that something is busy.\n- Dialogs and menus (4): Anything that opens above the page.\n- Library pieces (8): Bigger parts built from the kit that several screens share. Reuse them before writing another.\n- Brand (1): The logo.\nA few pieces only work on the canvas (the node dialog, the right-click menu and the canvas toast). The kit lists them with how to use them instead of a live demo."
     },
     {
      "title": "Reuse first",
