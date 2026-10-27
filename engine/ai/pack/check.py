@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from engine.ai import lint as ai_lint
+from engine.ai import ratings as ai_ratings
 from engine.ai.pack import graph as pack_graph
 from engine.ai.pack._common import (
     CHECK_SEEDS,
@@ -221,6 +222,12 @@ def check_pack(
             problems.setdefault(k, []).append(said)
         for k, said in _literal_names(owned, runs, prompts, item["key"], set(unset)).items():
             problems.setdefault(k, []).append(said)
+        mixed = [lv for p in prompts if len(lv := ai_ratings.rating_levels(p["text"])) > 1]
+        if mixed:
+            problems.setdefault(item["key"], []).append(
+                f"{len(mixed)} of {len(prompts)} sample prompts say two ratings at once ("
+                + ", ".join(f"rating_{x}" for x in mixed[0])
+                + "); keep one rating tag per prompt")
         if braces:
             problems.setdefault(item["key"], []).append(
                 "the prompt shows { } or @{ } as written: a variable it reads holds a pick "
@@ -344,6 +351,9 @@ def _printed_names(plan: dict[str, Any], built: dict[str, Any], runs: list[dict[
             pl = built[i["key"]]["payload"]
             names |= {str(t).lower() for t in pl.get("sub_categories") or [] if "_" in str(t)}
             names |= {str(t).lower() for t in i.get("tags") or [] if "_" in str(t)}
+    # Pony's score, source and rating tags are prompt words, not names
+    # (bench Z19: "rating_explicit" was reported as one).
+    names = {n for n in names if not pack_graph.PONY_ONLY.fullmatch(n)}
     if not names:
         return {}
     writers = [(i, item_io(i, built[i["key"]]["payload"])[1]) for i in plan["items"]

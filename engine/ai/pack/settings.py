@@ -222,8 +222,9 @@ Plan what the request needs, up to 60 items. Don't add commentary; the \
 output is data for the user's own library.
 
 A pack rated nsfw is for adults only: every character is an adult, and no \
-child or real-person subject is ever planned. A costume or role the user \
-asks for (a school uniform, a maid) is worn by an adult.
+child or real-person subject is ever planned, nor sex without consent. A \
+costume or role the user asks for (a school uniform, a maid) is worn by an \
+adult; adult body words (petite, slim, curvy) are fine.
 
 """ + ai_guide.STRUCTURE + "\n" + ai_guide.BLUEPRINTS + "\n" + ai_guide.WHICH + "\n" \
     + ai_guide.NODES + "\n" + ai_guide.COHERENCE

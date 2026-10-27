@@ -33,6 +33,7 @@ from engine.ai import index as ai_index
 from engine.ai import library_vars
 from engine.ai import lint as ai_lint
 from engine.ai import patterns as ai_patterns
+from engine.ai import ratings as ai_ratings
 from engine.ai import react as ai_react
 from engine.ai import refs as ai_refs
 from engine.ai import safety as ai_safety
@@ -784,6 +785,9 @@ class Library(MoreTools, ManageTools):
         #: Words of the user's message that could be variable names: a
         #: clash with one of them is what the user asked for.
         self.asked_words: set[str] = set()
+        #: The user's message this turn: a rating lowered to safe or an
+        #: adult tag taken off needs its say-so (`ratings.keep_nsfw`).
+        self.user_text = ""
         self.cat_by_lower = {c["name"].lower(): c["id"] for c in categories}
         self.names = {i: m.get("name") or "" for i, m in self.modules.items()}
         self.tags = ai_describe.library_tags([*modules, *bundles, *(templates or [])])
@@ -1345,18 +1349,21 @@ class Library(MoreTools, ManageTools):
         type_ = _short(args.get("type"), 30).lower()
         tag = _short(args.get("tag"), 40).lower().lstrip("#")
         category = _short(args.get("category"), 60).strip().lower()
+        rating = _short(args.get("rating"), 10).strip().lower()
+        if rating and rating not in ("safe", "nsfw"):
+            raise ValueError("rating is safe or nsfw")
         if category and category != "none" and category not in self.cat_by_lower:
             cats = ", ".join(sorted(self.categories.values())) or "none yet"
             raise ValueError(f"no category {category!r}; the categories are: {cats}. "
                              "Use \"none\" for items with no category")
         own, widened = ai_search.expand(query)
         if self.index is not None and own:
-            return self._search_index(query, type_, tag, category)
+            return self._search_index(query, type_, tag, category, rating)
         phrase = query.strip()
         ranked: list[tuple[float, int, dict[str, Any], list[str], list[str]]] = []
         rows = [*self.modules.values(), *self.bundles.values(), *self.templates.values()]
         for n, r in enumerate(rows):
-            if not self._fits(r, type_, tag, category):
+            if not self._fits(r, type_, tag, category, rating):
                 continue
             where: list[str] = []
             snips: list[str] = []
@@ -1375,7 +1382,7 @@ class Library(MoreTools, ManageTools):
         # A listing by category (an organize ask) is meant to be whole: one
         # call, not a search per type and per tag until the steps run out
         # (Haiku and the 9B, 2026-10-21).
-        cap = MAX_SEARCH_LISTING if category and not own else MAX_SEARCH
+        cap = MAX_SEARCH_LISTING if (category or rating) and not own else MAX_SEARCH
         hits = [self._hit_line(r, [_FIELD_NAMES[w] for w in where], snips)
                 for _points, _n, r, where, snips in ranked[:cap]]
         total = len(ranked)
@@ -1386,9 +1393,13 @@ class Library(MoreTools, ManageTools):
             head += " (best first; broad words widened to related ones)"
         return head + ":\n" + "\n".join(hits) + more
 
-    def _fits(self, r: dict[str, Any], type_: str, tag: str, category: str = "") -> bool:
+    def _fits(self, r: dict[str, Any], type_: str, tag: str, category: str = "",
+              rating: str = "") -> bool:
         kind = self._kind(r)
         if type_ and type_ not in (kind, kind.replace("_", " ")):
+            return False
+        # Templates carry no rating, so a rating filter leaves them out.
+        if rating and (kind == "template" or (r.get("content_rating") or "safe") != rating):
             return False
         tags = [t for t in r.get("tags") or [] if isinstance(t, str)]
         if tag and tag not in (t.lower() for t in tags):
@@ -1409,6 +1420,8 @@ class Library(MoreTools, ManageTools):
                          "library yet")
         if cat:
             extra.append(f"category {cat}")
+        if r.get("content_rating") == "nsfw":
+            extra.append("rated nsfw")
         if tags:
             extra.append("tags " + ", ".join(tags))
         if r.get("description"):
@@ -1422,22 +1435,23 @@ class Library(MoreTools, ManageTools):
             line += "\n    e.g. " + " | ".join(_short(t, 90) for t in snips)
         return line
 
-    def _search_index(self, query: str, type_: str, tag: str, category: str = "") -> str:
+    def _search_index(self, query: str, type_: str, tag: str, category: str = "",
+                      rating: str = "") -> str:
         """`search` over the library index (saved items), plus any item this
         chat proposed or the open editor changed, scored the old way."""
         assert self.index is not None
-        fetch = MAX_SEARCH * (4 if tag or type_ or category else 1) + 1
+        fetch = MAX_SEARCH * (4 if tag or type_ or category or rating else 1) + 1
         qvec, self.qvec = self.qvec, None
         hits = [h for h in self.index.search(query, limit=fetch, qvec=qvec,
                                              model=self.embed_model)
                 if (r := self.get(h.id)) is not None and not r.get("_proposed")
-                and h.id != self.editor_id and self._fits(r, type_, tag, category)]
+                and h.id != self.editor_id and self._fits(r, type_, tag, category, rating)]
         own, widened = ai_search.expand(query)
         fresh: list[tuple[float, dict[str, Any], list[str], list[str]]] = []
         for r in [*self.modules.values(), *self.bundles.values(), *self.templates.values()]:
             if not (r.get("_proposed") or r.get("id") == self.editor_id):
                 continue
-            if not self._fits(r, type_, tag, category):
+            if not self._fits(r, type_, tag, category, rating):
                 continue
             entry = ai_search.Entry(r)
             points, where = ai_search.score(entry, own, widened, query.strip())
@@ -2291,6 +2305,16 @@ class Library(MoreTools, ManageTools):
         rms = {
             t.lower() for t in (args.get("tags_remove") or []) if isinstance(t, str)
         } & have
+        rating = args.get("rating") if kind != "template" else None
+        was = r.get("content_rating") or "safe"
+        rating, kept_rms, held = ai_ratings.keep_nsfw(
+            was, tags, rating if rating in ("safe", "nsfw") else None, sorted(rms),
+            self.user_text)
+        rms = set(kept_rms)
+        if kind != "template" and rating is None and was == "safe" and (
+                ai_ratings.nsfw_tagged(adds)):
+            # Tagged #nsfw now: rated so too.
+            rating = "nsfw"
         if adds or rms:
             lower = {t.lower(): t for t in self.tags}
             added = list(dict.fromkeys(lower.get(a.lower(), a.lower()) for a in adds))
@@ -2315,18 +2339,17 @@ class Library(MoreTools, ManageTools):
                     body["category_id"], before["category_id"] = cid, r.get("category_id")
                     preview.append(f"Category: {args['category'].strip()}"
                                    + (" (new)" if new_cat else ""))
-        rating = args.get("rating") if kind != "template" else None
-        if rating in ("safe", "nsfw") and rating != (r.get("content_rating") or "safe"):
+        if rating in ("safe", "nsfw") and rating != was:
             body["content_rating"] = rating
-            before["content_rating"] = r.get("content_rating") or "safe"
+            before["content_rating"] = was
             preview.append(f"Rating: {rating}")
         if not body:
-            raise ValueError("that changes nothing")
+            raise ValueError("that changes nothing" + (f" ({held[0]})" if held else ""))
         return {
             "title": f"Update {r.get('name')}",
             "summary": f"{kind} info",
             "preview": preview,
-            "warnings": [],
+            "warnings": held,
             # Auto-apply may apply it: a rating change or a rename stays a
             # normal card, because it changes what people see.
             **({} if "content_rating" in body or "name" in body else {"risk": "low"}),
@@ -2494,6 +2517,20 @@ class Library(MoreTools, ManageTools):
         self._pending[body["id"]] = (pid, self.modules[body["id"]])
         self.earlier_proposals.setdefault(old_pid, {})["status"] = "replaced"
 
+    def _rate_new(self, proposal: dict[str, Any], args: dict[str, Any]) -> None:
+        """A new module or bundle gets the rating the model gave, raised to
+        NSFW when its tags or text say so (bench Z11: tagged #nsfw, rated
+        Safe)."""
+        body = proposal["op"]["body"]
+        text = json.dumps({k: body.get(k) for k in ("name", "description", "payload")},
+                          ensure_ascii=False)
+        rating, why = ai_ratings.rate_new(args.get("rating"), body.get("tags") or [], text)
+        body["content_rating"] = rating
+        if rating == "nsfw":
+            proposal["preview"] = [*(proposal.get("preview") or []), "Rating: nsfw"]
+        if why:
+            proposal["warnings"] = [*(proposal.get("warnings") or []), why]
+
     def run(self, tool: str, args: dict[str, Any]) -> str | dict[str, Any]:
         """A read tool's text, or a change tool's proposal (with `pid`, and
         `after` when it builds on an earlier proposal). Raises ValueError."""
@@ -2521,6 +2558,8 @@ class Library(MoreTools, ManageTools):
         pid = f"p{self._next_pid}"
         proposal = {"pid": pid, "tool": tool, **proposal, "after": after}
         op = proposal["op"]
+        if op["op"] == "create" and op.get("kind") in ("module", "bundle"):
+            self._rate_new(proposal, args)
         if op["op"] == "categories":
             self._note_categories(op, pid)
         if op["op"] == "bulk":
