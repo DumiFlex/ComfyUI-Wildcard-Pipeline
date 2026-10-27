@@ -8,7 +8,8 @@
  * lines, nested blocks), GitHub tables with column alignment, and `---`
  * rules. Inline: **bold**, *italic* / _italic_, ***both***, ~~struck~~,
  * `code`, backslash escapes and [[Name]] item mentions, which the chat turns
- * into chips that open the item. Anything else stays as text.
+ * into chips that open the item (also when written in backticks,
+ * `` `[[Name]]` ``). Anything else stays as text.
  *
  * A quote opening with a GitHub alert (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`,
  * `[!WARNING]`, `[!CAUTION]`) or `> **Note**` / `> **Warning**` carries a
@@ -97,7 +98,9 @@ export function parseInline(text: string): Inline[] {
     else if (m[3] !== undefined) {
       // A code span keeps one leading/trailing space off, like CommonMark.
       const v = m[3].length > 2 && m[3].startsWith(" ") && m[3].endsWith(" ") ? m[3].slice(1, -1) : m[3];
-      out.push({ t: "code", v });
+      // A mention in backticks is still a mention (models write `[[Name]]`).
+      const ref = /^\[\[([^[\]\n]{1,80})\]\]$/.exec(v.trim());
+      out.push(ref ? { t: "ref", v: ref[1].trim() } : { t: "code", v });
     } else if (m[4] !== undefined) out.push({ t: "ref", v: m[4].trim() });
     else if (m[5] !== undefined) push(m[5]);
     else if (m[6] !== undefined) out.push({ t: "link", c: parseInline(m[6]), href: m[7] ?? "" });

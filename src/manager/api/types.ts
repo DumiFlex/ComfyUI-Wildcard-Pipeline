@@ -1701,6 +1701,8 @@ export interface AiChatRef {
   id: string; type: string; name: string; shared?: string;
   /** The card (pid) that creates it: not in the library yet. */
   pending?: string;
+  /** Its category id, for the category chip in an item list. */
+  category?: string;
 }
 
 /* ── Pack builder ───────────────────────────────────────────────────── */

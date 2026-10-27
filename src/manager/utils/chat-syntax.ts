@@ -61,15 +61,35 @@ function nameRefs(text: string, ref: Ref): Array<VNode | string> {
   return out;
 }
 
+/** Set when the workflow runs (the Loop, WP Model Info), never by an item:
+ *  rules read them, nothing in the library writes them. Mirrors
+ *  `engine/ai/library_vars.py::RUNTIME_VARS`. */
+const RUN_VARS: Record<string, string> = {
+  iteration: "the Loop", iteration_total: "the Loop",
+  model_family: "WP Model Info", model_variant: "WP Model Info", model_name: "WP Model Info",
+};
+
+/** A `$name` the way the editors draw it: the name in its own colour, an
+ *  accessor (`.0`, `.SHOES`) in the accessor amber, `.neg` in red. A
+ *  variable the run sets is marked read-only. */
+function varNode(raw: string, name: string): VNode {
+  const head = `$${name}`;
+  const tail = raw.startsWith(head) ? raw.slice(head.length) : "";
+  const by = RUN_VARS[name];
+  return h("span", {
+    class: by ? "wp-ai-syn__var wp-ai-syn__var--run" : "wp-ai-syn__var",
+    style: { color: `var(--wp-var-${varColorIndex(name)})` },
+    title: by ? `Set by ${by} when the workflow runs: rules can read it, nothing writes it` : undefined,
+  }, tail ? [raw.slice(0, head.length), h("span", {
+    class: tail === ".neg" || tail.endsWith(".neg") ? "wp-ai-syn__acc wp-ai-syn__acc--neg" : "wp-ai-syn__acc",
+  }, tail)] : raw);
+}
+
 function tokens(text: string, ref: Ref): Array<VNode | string> {
   const out: Array<VNode | string> = [];
   for (const t of tokenizeRich(text)) {
     switch (t.kind) {
-      case "var":
-        out.push(h("span", {
-          class: "wp-ai-syn__var", style: { color: `var(--wp-var-${varColorIndex(t.meta?.name ?? "")})` },
-        }, t.raw));
-        break;
+      case "var": out.push(varNode(t.raw, t.meta?.name ?? "")); break;
       case "ref": out.push(ref(t.raw, t.meta?.name)); break;
       case "dp-brace": out.push(h("span", { class: "wp-ai-syn__pick" }, t.raw)); break;
       case "dp-multi": out.push(h("span", { class: "wp-ai-syn__multi" }, t.raw)); break;

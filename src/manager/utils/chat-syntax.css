@@ -1,5 +1,10 @@
 /* Coloured prompt syntax in the chat (`chat-syntax.ts`): rendered by `h`, so styled by class, unscoped. */
-.wp-ai-syn__var { font-family: var(--wp-font-mono, ui-monospace, monospace); font-size: 0.95em; font-weight: 500; }
+/* Like the editors' `$var` (RefChip): the sentence's own font, semibold, its colour. */
+.wp-ai-syn__var { font-weight: 600; }
+.wp-ai-syn__acc { color: var(--wp-axis, #fbbf24); }
+.wp-ai-syn__acc--neg { color: var(--wp-danger, #ef4444); }
+/* Set by the run, read-only: a dotted rule and a help cursor for its tooltip. */
+.wp-ai-syn__var--run { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
 .wp-ai-syn__ref {
   display: inline-flex; align-items: baseline; gap: 4px; max-width: 100%; padding: 0 6px; border-radius: 6px;
   border: 1px solid color-mix(in srgb, var(--wp-accent-500) 45%, transparent);

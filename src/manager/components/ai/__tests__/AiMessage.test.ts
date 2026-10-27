@@ -1,6 +1,8 @@
 import { mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
+import { createPinia, setActivePinia } from "pinia";
+import { useCategoryStore } from "../../../stores/categoryStore";
 import AiMessage from "../AiMessage.vue";
 
 const push = vi.fn();
@@ -25,6 +27,63 @@ describe("AiMessage", () => {
     expect(w.find(".wp-ai-syn__lora").text()).toBe("<lora:detail:0.6>");
     expect(w.find(".wp-ai-syn__emb").text()).toBe("embedding:bad_hands");
     expect(w.find(".wp-ai-syn__tag").text()).toBe("#portrait");
+  });
+
+  it("draws variables like the editors: accessors marked, run-time ones read-only", () => {
+    const w = mount(AiMessage, { props: { text: "Read $outfit.SHOES, $hair.neg and $model_family." } });
+    const vars = w.findAll(".wp-ai-syn__var");
+    expect(vars.map((v) => v.text())).toEqual(["$outfit.SHOES", "$hair.neg", "$model_family"]);
+    expect(vars[0].find(".wp-ai-syn__acc").text()).toBe(".SHOES");
+    expect(vars[1].find(".wp-ai-syn__acc--neg").text()).toBe(".neg");
+    expect(vars[2].classes()).toContain("wp-ai-syn__var--run");
+    expect(vars[2].attributes("title")).toContain("WP Model Info");
+    expect(vars[0].classes()).not.toContain("wp-ai-syn__var--run");
+  });
+
+  it("makes a mention in backticks a chip (#2)", () => {
+    const w = mount(AiMessage, {
+      props: { text: "Open `[[Hair Color]]`.", refs: { "Hair Color": { id: "ab12cd34", type: "wildcard", name: "Hair Color" } } },
+    });
+    expect(w.find("[data-test='ai-msg-chip']").text()).toBe("Hair Color");
+    expect(w.find("code").exists()).toBe(false);
+  });
+
+  it("draws a list of three or more items as an item list", () => {
+    const refs = {
+      a: { id: "aaaa0001", type: "wildcard", name: "Hair" },
+      b: { id: "aaaa0002", type: "fixed_values", name: "Quality" },
+      c: { id: "aaaa0003", type: "derivation", name: "Mood rules" },
+    };
+    const w = mount(AiMessage, { props: { text: "- [[a]] — hair colours\n- [[b]]: quality tags\n- [[c]]", refs } });
+    const list = w.find("[data-test='ai-msg-items']");
+    expect(list.exists()).toBe(true);
+    const rows = list.findAll("li");
+    expect(rows.map((r) => r.find("[data-test='ai-msg-chip']").text())).toEqual(["Hair", "Quality", "Mood rules"]);
+    expect(rows[0].find(".wp-ai-msg__item-rest").text()).toBe("hair colours");
+    expect(rows[1].find(".wp-ai-msg__item-rest").text()).toBe("quality tags");
+    expect(rows[2].find(".wp-ai-msg__item-rest").exists()).toBe(false);
+  });
+
+  it("shows each listed item's category chip", () => {
+    setActivePinia(createPinia());
+    useCategoryStore().items = [{ id: "c1", name: "Clothes", color: "#f00", icon: null, sort_order: 1 }];
+    const refs = {
+      a: { id: "aaaa0001", type: "wildcard", name: "Hat", category: "c1" },
+      b: { id: "aaaa0002", type: "wildcard", name: "Shoes", category: "c1" },
+      c: { id: "aaaa0003", type: "wildcard", name: "Mood" },
+    };
+    const w = mount(AiMessage, { props: { text: "1. [[a]]\n2. [[b]]\n3. [[c]]", refs } });
+    const rows = w.findAll("[data-test='ai-msg-items'] li");
+    expect(rows.map((r) => r.find(".wp-ai-msg__item-cat").exists())).toEqual([true, true, false]);
+    expect(rows[0].text()).toContain("Clothes");
+  });
+
+  it("keeps a list a list when an item isn't a mention or there are only two", () => {
+    const refs = { a: { id: "aaaa0001", type: "wildcard", name: "Hair" }, b: { id: "aaaa0002", type: "wildcard", name: "Eyes" } };
+    const two = mount(AiMessage, { props: { text: "- [[a]]\n- [[b]]", refs } });
+    expect(two.find("[data-test='ai-msg-items']").exists()).toBe(false);
+    const mixed = mount(AiMessage, { props: { text: "- [[a]]\n- [[b]]\n- then test it", refs } });
+    expect(mixed.find("[data-test='ai-msg-items']").exists()).toBe(false);
   });
 
   it("turns Tip / Warning lines into callouts", () => {

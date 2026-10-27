@@ -1180,7 +1180,10 @@ class Library(MoreTools, ManageTools):
           when several items have that name: the one with the variable
           written next to it, else the one this answer read, else the open
           one (`_pick_named`);
-        - ``**A** → **B**`` becomes the constraint from A to B.
+        - ``**A** → **B**`` becomes the constraint from A to B;
+        - a code span holding a mention (`` `[[Name]]` ``) or exactly the
+          name of one item (`` `Hair Color` ``) becomes a chip: models put
+          names in backticks, which kept them plain code.
         """
         if not message:
             return message
@@ -1300,6 +1303,17 @@ class Library(MoreTools, ManageTools):
             return self._chip(row) if row is not None else m.group(0)
         line = re.sub(r"\[\[([^\[\]\n]{1,80})\]\]", chip, line)
 
+        # A name in a code span: `[[Name]]`, or exactly one item's name.
+        def coded(m: re.Match[str]) -> str:
+            body = m.group(1).strip()
+            if re.fullmatch(r"\[\[[^\[\]\n]{1,80}\]\]", body):
+                return body
+            if self._name_count(body) != 1:
+                return m.group(0)
+            row = self._pick_named(body)
+            return self._chip(row) if row is not None else m.group(0)
+        line = re.sub(r"(?<!`)`([^`\n]{2,80})`(?!`)", coded, line)
+
         # "**A** → **B**": the constraint between them.
         def pair(m: re.Match[str]) -> str:
             row = self._constraint_between(m.group(2), m.group(4))
@@ -1332,6 +1346,9 @@ class Library(MoreTools, ManageTools):
                     refs[raw] = {"id": "", "type": "", "name": name, "shared": str(same)}
                 continue
             ref = {"id": row["id"], "type": self._kind(row), "name": str(row.get("name") or name)}
+            if row.get("category_id"):
+                # For item lists, which show each item's category chip.
+                ref["category"] = str(row["category_id"])
             if row.get("_proposed"):
                 # Not created yet: the chip says so instead of opening it.
                 ref["pending"] = str(row["_proposed"])
