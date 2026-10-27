@@ -705,7 +705,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
           :error="outputVarError"
         >
           <div class="wp-input-group cb-output-var">
-            <span class="wp-input-group__addon">$</span>
+            <span class="wp-input-group__affix wp-input-group__affix--prefix" aria-hidden="true">$</span>
             <input
               class="wp-input"
               :value="outputVar"

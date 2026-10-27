@@ -12,10 +12,31 @@ describe("Input.vue", () => {
     expect(emitted![0]).toEqual(["hello"]);
   });
 
-  it("renders icon addon when icon prop set", () => {
+  it("renders an inline icon when icon prop set", () => {
     const wrap = mount(Input, { props: { modelValue: "x", icon: "search" } });
     expect(wrap.find(".wp-input-group").exists()).toBe(true);
-    expect(wrap.find(".wp-input-group__addon .pi-search").exists()).toBe(true);
+    expect(wrap.find(".wp-input-group__icon .pi-search").exists()).toBe(true);
+  });
+
+  it("puts the prefix before the text and the suffix after it", () => {
+    const wrap = mount(Input, { props: { modelValue: "hair", prefix: "$", suffix: "px" } });
+    const kids = [...wrap.get(".wp-input-group").element.children];
+    const input = kids.findIndex((k) => k.tagName === "INPUT");
+    expect(kids[input - 1].textContent).toBe("$");
+    expect(kids[input + 1].textContent).toBe("px");
+  });
+
+  it("readonly keeps the value, blocks the stepper and shows a lock", async () => {
+    const wrap = mount(Input, { props: { modelValue: 2, type: "number", readonly: true } });
+    expect(wrap.get("input").attributes("readonly")).toBeDefined();
+    expect(wrap.find(".wp-input-group--readonly .pi-lock").exists()).toBe(true);
+    await wrap.findAll(".wp-input-number__btn")[0].trigger("click");
+    expect(wrap.emitted("update:modelValue")).toBeUndefined();
+  });
+
+  it("takes the lg size", () => {
+    const wrap = mount(Input, { props: { modelValue: "", size: "lg" } });
+    expect(wrap.get("input").classes()).toContain("wp-input--lg");
   });
 
   it("reflects error state via aria-invalid", () => {

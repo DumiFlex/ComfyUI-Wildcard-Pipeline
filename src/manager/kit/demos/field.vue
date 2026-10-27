@@ -12,7 +12,7 @@ const name = ref("Hair colour");
       <Input id="kit-field-name" v-model="name" />
     </Field>
     <Field label="Writes" error="$subject isn't set by anything upstream." for="kit-field-var">
-      <Input id="kit-field-var" model-value="subject" addon="$" error />
+      <Input id="kit-field-var" model-value="subject" prefix="$" error />
     </Field>
   </div>
 </template>

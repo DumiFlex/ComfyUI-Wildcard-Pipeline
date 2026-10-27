@@ -781,7 +781,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
             </td>
             <td>
               <div class="wp-input-group">
-                <span class="wp-input-group__addon">$</span>
+                <span class="wp-input-group__affix wp-input-group__affix--prefix" aria-hidden="true">$</span>
                 <input
                   class="wp-input"
                   :value="v.name"

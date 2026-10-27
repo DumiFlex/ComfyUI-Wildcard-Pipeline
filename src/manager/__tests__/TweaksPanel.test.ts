@@ -49,11 +49,11 @@ describe("TweaksPanel.vue", () => {
     expect(tweaks.density).toBe("comfortable");
     await wrap.find('[data-test="tweaks-density-compact"]').trigger("change");
     expect(tweaks.density).toBe("compact");
-    expect(document.documentElement.style.getPropertyValue("--wp-input-h")).toBe("32px");
+    expect(document.documentElement.classList.contains("wp-density-compact")).toBe(true);
 
     await wrap.find('[data-test="tweaks-density-comfortable"]').trigger("change");
     expect(tweaks.density).toBe("comfortable");
-    expect(document.documentElement.style.getPropertyValue("--wp-input-h")).toBe("38px");
+    expect(document.documentElement.classList.contains("wp-density-compact")).toBe(false);
   });
 
   it("close button calls closePanel", async () => {

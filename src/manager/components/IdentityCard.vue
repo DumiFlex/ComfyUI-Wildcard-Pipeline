@@ -217,7 +217,7 @@ defineExpose({ describe });
         class="identity-grid__full"
       >
         <div class="wp-input-group">
-          <span class="wp-input-group__addon">$</span>
+          <span class="wp-input-group__affix wp-input-group__affix--prefix" aria-hidden="true">$</span>
           <input
             class="wp-input wp-mono"
             :value="varBinding ?? ''"

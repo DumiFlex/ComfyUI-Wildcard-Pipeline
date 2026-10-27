@@ -1,0 +1,134 @@
+/* Button — the one .wp-btn stylesheet, shared by the manager Button
+ * (manager/components/ui/Button.vue, loaded globally by manager/main.ts) and
+ * the canvas Button twin (component standard, rule 8). It reads only the
+ * SHARED_TOKENS names, so it wears the manager colours on a page and the
+ * canvas colours in a node.
+ *
+ * Unlayered on purpose: the manager loads it beside tokens.css, where an
+ * unlayered reset would otherwise beat it. The canvas imports it inside
+ * `@layer wp-extension`.
+ *
+ * Heights follow the control scale: sm 24 / md 32 / lg 40.
+ *
+ * States:
+ *   disabled — 45% opacity, not-allowed cursor, no hover change; the filled
+ *              secondary drops its fill so it no longer reads as a live
+ *              secondary button.
+ *   loading  — keeps its own colours (aria-busy), progress cursor, so the
+ *              label stays readable while it works.
+ */
+
+.wp-btn {
+  height: var(--wp-control-h-md);
+  padding: 0 12px;
+  border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  background: var(--wp-bg-3);
+  color: var(--wp-text);
+  border: 1px solid var(--wp-border);
+  transition: background .12s, border-color .12s, color .12s, opacity .12s, transform .04s;
+  white-space: nowrap;
+  user-select: none;
+  box-sizing: border-box;
+}
+.wp-btn:hover { background: var(--wp-bg-4); border-color: var(--wp-border-strong); }
+.wp-btn:active { transform: translateY(0.5px); }
+.wp-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--wp-focus-ring);
+}
+.wp-btn .pi, .wp-btn svg { font-size: 13px; }
+
+/* Sizes */
+.wp-btn--sm { height: var(--wp-control-h-sm); padding: 0 8px; gap: 4px; font-size: 12px; border-radius: 6px; }
+.wp-btn--sm .pi, .wp-btn--sm svg { font-size: 12px; }
+.wp-btn--md { /* the default size */ }
+.wp-btn--lg { height: var(--wp-control-h-lg); padding: 0 var(--wp-space-6); font-size: 13.5px; border-radius: var(--wp-radius); }
+.wp-btn--icon { width: var(--wp-control-h-md); padding: 0; }
+.wp-btn--icon.wp-btn--sm { width: var(--wp-control-h-sm); }
+.wp-btn--icon.wp-btn--lg { width: var(--wp-control-h-lg); }
+
+/* Variants */
+.wp-btn--secondary { /* the default look */ }
+
+.wp-btn--primary {
+  background: linear-gradient(180deg, var(--wp-accent-500), var(--wp-accent-600));
+  border-color: var(--wp-accent-600);
+  color: #fff; /* audit-exempt: white on saturated accent-500/600 gradient ≥4.5:1 both themes */
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--wp-accent-500) 40%, transparent) inset;
+}
+.wp-btn--primary:hover {
+  background: linear-gradient(180deg, var(--wp-accent-400), var(--wp-accent-500));
+  border-color: var(--wp-accent-500);
+}
+.wp-btn--primary:active { box-shadow: 0 0 0 1px color-mix(in oklab, var(--wp-accent-600) 70%, #000) inset; }
+.wp-btn--primary:focus-visible {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--wp-accent-500) 40%, transparent) inset,
+              var(--wp-focus-ring);
+}
+
+.wp-btn--ghost { background: transparent; border-color: transparent; color: var(--wp-text-muted); }
+.wp-btn--ghost:hover { background: var(--wp-bg-3); border-color: transparent; color: var(--wp-text); }
+.wp-btn--ghost:active { background: var(--wp-bg-4); }
+
+/* Outline is neutral: a bordered ghost. An accent outline read as a second
+ * primary next to the real one. */
+.wp-btn--outline { background: transparent; border-color: var(--wp-border-strong); color: var(--wp-text); }
+.wp-btn--outline:hover { background: var(--wp-bg-3); border-color: var(--wp-border-strong); }
+.wp-btn--outline:active { background: var(--wp-bg-4); }
+
+.wp-btn--link {
+  background: transparent;
+  border-color: transparent;
+  color: var(--wp-accent-text);
+  height: auto;
+  padding: 0;
+}
+.wp-btn--link:hover {
+  background: transparent;
+  border-color: transparent;
+  color: var(--wp-accent-text-strong);
+  text-decoration: underline;
+}
+.wp-btn--link:focus-visible { box-shadow: none; text-decoration: underline; }
+
+.wp-btn--danger { color: var(--wp-danger); }
+.wp-btn--danger:hover {
+  background: color-mix(in oklab, var(--wp-danger) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-danger) 40%, transparent);
+  color: var(--wp-danger-text);
+}
+.wp-btn--danger:active { background: color-mix(in oklab, var(--wp-danger) 22%, transparent); }
+.wp-btn--danger:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-danger) 35%, transparent); /* danger uses its own ring color */
+}
+
+/* Disabled (not loading): faded, flat, and hover does nothing. */
+.wp-btn:disabled:not([aria-busy="true"]),
+.wp-btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+.wp-btn--secondary:disabled:not([aria-busy="true"]),
+.wp-btn--secondary[aria-disabled="true"] {
+  background: transparent;
+  border-color: var(--wp-border);
+  color: var(--wp-text-muted);
+}
+.wp-btn--secondary:disabled:not([aria-busy="true"]):hover { background: transparent; border-color: var(--wp-border); }
+.wp-btn--primary:disabled:not([aria-busy="true"]):hover {
+  background: linear-gradient(180deg, var(--wp-accent-500), var(--wp-accent-600));
+  border-color: var(--wp-accent-600);
+}
+.wp-btn--ghost:disabled:hover { background: transparent; color: var(--wp-text-muted); }
+.wp-btn--outline:disabled:hover { background: transparent; border-color: var(--wp-border-strong); }
+.wp-btn--danger:disabled:hover { background: var(--wp-bg-3); border-color: var(--wp-border); color: var(--wp-danger); }
+
+/* Loading keeps the button's own colours; only the cursor says "wait". */
+.wp-btn[aria-busy="true"] { cursor: progress; transform: none; }

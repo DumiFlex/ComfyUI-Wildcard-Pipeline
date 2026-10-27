@@ -26,8 +26,22 @@ describe("LoadingMark", () => {
   });
 
   it("gives every mark its own gradient ids", () => {
-    const a = mount(LoadingMark).get("linearGradient").attributes("id");
-    const b = mount(LoadingMark).get("linearGradient").attributes("id");
+    const a = mount(LoadingMark, { props: { block: true } }).get("linearGradient").attributes("id");
+    const b = mount(LoadingMark, { props: { block: true } }).get("linearGradient").attributes("id");
     expect(a).not.toBe(b);
+  });
+
+  it("draws the sparkle inline and the full logo as a block", () => {
+    expect(mount(LoadingMark).get("svg").attributes("data-variant")).toBe("sparkle");
+    const block = mount(LoadingMark, { props: { block: true } }).get("svg");
+    expect(block.attributes("data-variant")).toBe("logo");
+    expect(block.attributes("width")).toBe("40");
+    expect(mount(LoadingMark, { props: { size: 32 } }).get("svg").attributes("data-variant")).toBe("logo");
+    expect(mount(LoadingMark, { props: { block: true, variant: "sparkle" } }).get("svg").attributes("data-variant")).toBe("sparkle");
+  });
+
+  it("draws in the text colour when mono", () => {
+    const w = mount(LoadingMark, { props: { mono: true } });
+    expect(w.findAll("path").every((p) => p.attributes("fill") === "currentColor")).toBe(true);
   });
 });

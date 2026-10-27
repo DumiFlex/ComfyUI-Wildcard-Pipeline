@@ -7,10 +7,17 @@ interface Props {
   type?: string;
   placeholder?: string;
   disabled?: boolean;
+  /** Shown but not editable: dimmer fill, no focus ring, a lock icon. */
+  readonly?: boolean;
   error?: boolean;
-  size?: "sm" | "md";
+  /** Height on the control scale: sm 24 / md 32 / lg 40. */
+  size?: "sm" | "md" | "lg";
+  /** Icon before the text (a search glass). Drawn inline, no box. */
   icon?: string;
-  addon?: string;
+  /** Text before the value, e.g. `$` for a variable name. */
+  prefix?: string;
+  /** Text after the value, e.g. a unit. */
+  suffix?: string;
   id?: string;
   ariaLabel?: string;
   min?: number | string;
@@ -31,6 +38,7 @@ const emit = defineEmits<{
 const inputClasses = computed(() => [
   "wp-input",
   props.size === "sm" && "wp-input--sm",
+  props.size === "lg" && "wp-input--lg",
   props.type === "number" && "wp-input--number",
 ]);
 
@@ -46,7 +54,16 @@ const isNumber = computed(() => props.type === "number");
  *  number inputs — the browser never grid-validates, while `bump()` keeps
  *  stepping by `props.step`. */
 const nativeStep = computed(() => (isNumber.value ? "any" : props.step));
-const wrapped = computed(() => Boolean(props.icon || props.addon) || isNumber.value);
+const wrapped = computed(() =>
+  Boolean(props.icon || props.prefix || props.suffix || props.readonly) || isNumber.value);
+const groupClasses = computed(() => [
+  "wp-input-group",
+  props.size === "sm" && "wp-input-group--sm",
+  props.size === "lg" && "wp-input-group--lg",
+  isNumber.value && "wp-input-group--number",
+  props.readonly && "wp-input-group--readonly",
+  props.disabled && "wp-input-group--disabled",
+]);
 
 function onInput(e: Event) {
   const target = e.target as HTMLInputElement;
@@ -70,7 +87,7 @@ function onInput(e: Event) {
  *  arrow-stepping does the math in float64 and surfaces fuzz (e.g.
  *  `1.4 - 0.1 = 1.2999999999999998`). Mouse wheel does the same. */
 function onKeydown(e: KeyboardEvent) {
-  if (!isNumber.value) return;
+  if (!isNumber.value || props.readonly) return;
   if (e.key === "ArrowUp") {
     e.preventDefault();
     bump(1);
@@ -98,7 +115,7 @@ function onWheel(e: WheelEvent) {
  *  option's weight=1 with step=0.1 produced `1,2000000000000002` (locale
  *  comma decimal separator) which read as "20000" in the UI. */
 function bump(direction: 1 | -1) {
-  if (props.disabled) return;
+  if (props.disabled || props.readonly) return;
   const stepNum = Number(props.step ?? 1) || 1;
   const current = Number(props.modelValue) || 0;
   let next = current + direction * stepNum;
@@ -118,10 +135,11 @@ function bump(direction: 1 | -1) {
 </script>
 
 <template>
-  <div v-if="wrapped" class="wp-input-group" :class="{ 'wp-input-group--number': isNumber }">
-    <span v-if="icon" class="wp-input-group__addon">
+  <div v-if="wrapped" :class="groupClasses" :aria-invalid="error || undefined">
+    <span v-if="icon" class="wp-input-group__icon" aria-hidden="true">
       <Icon :name="icon" />
     </span>
+    <span v-if="prefix" class="wp-input-group__affix wp-input-group__affix--prefix" aria-hidden="true">{{ prefix }}</span>
     <input
       :id="id"
       :class="inputClasses"
@@ -129,6 +147,7 @@ function bump(direction: 1 | -1) {
       :value="modelValue"
       :placeholder="placeholder"
       :disabled="disabled"
+      :readonly="readonly"
       :aria-label="ariaLabel"
       :aria-invalid="error || undefined"
       :min="min"
@@ -149,18 +168,21 @@ function bump(direction: 1 | -1) {
         type="button"
         class="wp-input-number__btn"
         tabindex="-1"
-        :disabled="disabled"
+        :disabled="disabled || readonly"
         @click="bump(1)"
       ><Icon name="pi-chevron-up" :size="9" /></button>
       <button
         type="button"
         class="wp-input-number__btn"
         tabindex="-1"
-        :disabled="disabled"
+        :disabled="disabled || readonly"
         @click="bump(-1)"
       ><Icon name="pi-chevron-down" :size="9" /></button>
     </span>
-    <span v-if="addon" class="wp-input-group__addon wp-input-group__addon--right">{{ addon }}</span>
+    <span v-if="suffix" class="wp-input-group__affix wp-input-group__affix--suffix" aria-hidden="true">{{ suffix }}</span>
+    <span v-if="readonly" class="wp-input-group__lock" aria-hidden="true">
+      <Icon name="pi-lock" :size="11" />
+    </span>
   </div>
   <input
     v-else
@@ -170,6 +192,7 @@ function bump(direction: 1 | -1) {
     :value="modelValue"
     :placeholder="placeholder"
     :disabled="disabled"
+    :readonly="readonly"
     :aria-label="ariaLabel"
     :aria-invalid="error || undefined"
     :min="min"

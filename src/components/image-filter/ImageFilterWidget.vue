@@ -179,7 +179,7 @@ const summary = computed(() => {
 .wp-ifw__select { height: 20px; }
 .wp-ifw__timeout { display: flex; align-items: center; gap: 6px; }
 .wp-ifw__unit { font-size: 10px; color: var(--wp-text-dim, var(--wp-text3)); white-space: nowrap; }
-.wp-ifw__num-wrap { width: 64px; height: 20px; }
+.wp-ifw__num-wrap { width: 64px; }
 .wp-ifw__thumbs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: 3px; }
 .wp-ifw__thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 3px; }
 .wp-ifw__thumb-more { align-self: center; font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); padding: 0 4px; }

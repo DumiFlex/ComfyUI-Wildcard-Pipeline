@@ -153,8 +153,7 @@ onMounted(() => {
     </div>
 
     <div v-else-if="store.loading && !store.info" data-test="database-loading" class="wp-db__loading">
-      <LoadingMark decorative />
-      <span>Loading database info…</span>
+      <LoadingMark block :size="32">Loading database info…</LoadingMark>
     </div>
 
     <div v-else-if="store.info">

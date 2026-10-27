@@ -4,34 +4,25 @@
  *
  * Variants:
  *   primary   — solid accent; main CTA per surface
- *   secondary — subtle filled; default (alias of the base .wp-btn style)
+ *   secondary — subtle filled; default
  *   ghost     — transparent with hover bg; tertiary
  *   danger    — red-tinted; destructive actions
  *   link      — text-only; inline CTAs
- *   outline   — bordered ghost; "neutral but visible"
+ *   outline   — neutral bordered ghost (not accent: an accent outline read as
+ *               a second primary)
  *
- * Sizes: sm (28px) / md (32px, default) / lg (40px).
+ * Sizes follow the control scale: sm 24 / md 32 (default) / lg 40.
  *
  * States: default · hover · active · focus-visible · disabled · loading.
- * Loading state replaces the lead icon with a spinner, sets
- * aria-busy="true", and disables click events. Disabled and loading
- * apply the same visual treatment (opacity 0.45, cursor: not-allowed).
+ * Disabled fades to 45% with a not-allowed cursor and no hover change.
+ * Loading keeps the variant's own colours, swaps the lead icon for the
+ * sparkle LoadingMark in the label colour, sets aria-busy and ignores clicks.
  *
  * Icon-only mode auto-engages when no slot content is provided (.wp-btn--icon).
  * Pass `aria-label` for screen reader text when using icon-only mode.
  *
- * Variant × State matrix (CSS coverage in tokens.css .wp-btn block):
- *
- *              default  hover  active  focus-visible  disabled  loading
- *   primary      ✓       ✓      ✓         ✓*           ✓†        ✓†
- *   secondary    ✓       ✓      ✓         ✓            ✓†        ✓†
- *   ghost        ✓       ✓      ✓         ✓            ✓†        ✓†
- *   danger       ✓       ✓      ✓         ✓*           ✓†        ✓†
- *   link         ✓       ✓      ✓         ✓*           ✓†        ✓†
- *   outline      ✓       ✓      ✓         ✓            ✓†        ✓†
- *
- *   * variant-specific focus-visible override (different ring color/shadow)
- *   † shared via base .wp-btn:disabled / .wp-btn[aria-busy="true"] rule
+ * The styles live in components/shared/button.css, shared with the canvas
+ * Button twin.
  */
 import { computed, useSlots } from "vue";
 import Icon from "./Icon.vue";
@@ -94,7 +85,7 @@ function onClick(e: MouseEvent) {
     :aria-busy="loading || undefined"
     @click="onClick"
   >
-    <LoadingMark v-if="loading" decorative />
+    <LoadingMark v-if="loading" variant="sparkle" mono :size="size === 'lg' ? 16 : 14" decorative />
     <Icon v-else-if="icon" :name="icon" />
     <slot />
     <Icon v-if="iconRight" :name="iconRight" />

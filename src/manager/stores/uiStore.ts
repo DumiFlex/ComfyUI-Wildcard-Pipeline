@@ -163,13 +163,6 @@ export function readTestRunnerDefaults(): TestRunnerDefaults {
   }
 }
 
-/** Control heights per density (the values the Tweaks panel always set). */
-const DENSITY_CONTROL_H: Record<DensityMode, string> = {
-  compact: "32px",
-  comfortable: "38px",
-  cozy: "44px",
-};
-
 /**
  * Whether an axis with no tags in it survives a save.
  *
@@ -345,9 +338,11 @@ export const useUiStore = defineStore("ui", () => {
     const html = document.documentElement;
     html.classList.toggle("wp-density-compact", mode === "compact");
     html.classList.toggle("wp-density-cozy", mode === "cozy");
-    const h = DENSITY_CONTROL_H[mode];
-    html.style.setProperty("--wp-input-h", h);
-    html.style.setProperty("--wp-btn-h", h);
+    // Control heights follow the 24/32/40 scale times --wp-density (set by
+    // the classes above), so nothing is written inline any more. Clear what
+    // an older build left behind.
+    html.style.removeProperty("--wp-input-h");
+    html.style.removeProperty("--wp-btn-h");
   }
 
   function applyMotionToDocument(mode: MotionMode): void {

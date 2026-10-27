@@ -53,7 +53,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   // Inputs
   {
     id: "input", name: "Input", group: "inputs", file: "src/manager/components/ui/Input.vue", surfaces: ["manager"],
-    use: "One-line text in the manager, with an optional icon or a fixed prefix (addon) like $ for variable names.",
+    use: "One-line text in the manager, on the 24/32/40 scale (size sm/md/lg). Optional inline icon, a prefix like $ for variable names, a suffix like a unit, and a readonly look (dashed, dimmer, lock).",
     instead: "A bare <input> with its own border and focus ring.",
   },
   {
@@ -260,7 +260,7 @@ export const KIT_FOLDERS = ["src/manager/components/ui", "src/components/shared"
 export const KIT_EXAMPLES: Record<string, string> = {
   "button": `<Button variant="primary" icon="pi-plus" @click="add">New module</Button>`,
   "btn-css": `<button class="wp-btn wp-btn--primary wp-btn--sm">Run</button>`,
-  "input": `<Input v-model="name" addon="$" aria-label="Variable name" />`,
+  "input": `<Input v-model="name" prefix="$" aria-label="Variable name" />`,
   "textarea": `<Textarea v-model="notes" :rows="3" auto-resize />`,
   "field": `<Field label="Name" hint="Shown in the library." for="name"><Input id="name" v-model="name" /></Field>`,
   "select": `<Select v-model="category" :options="options" clearable />`,
