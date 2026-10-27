@@ -241,7 +241,8 @@ def test_plan_prompt_carries_settings_decisions_inventory_images_and_web():
                             library=lib, images=2, web=True)
     assert "only the template's standing negative" in text
     assert "Races? → elf" in text and "never ask them again" in text
-    assert text.index("Elf Hair") < text.index("Cars")
+    # Only what the request has a word in common with is listed (bench P2, N5).
+    assert "Elf Hair" in text and "Cars" not in text
     assert "attached 2 reference images" in text
     assert "Web search is on" in text
     assert "Elf Hair" not in pack.plan_prompt("elf", library=lib, settings={"library": "new"})

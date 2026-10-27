@@ -90,8 +90,9 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         <li><b>How it fits together</b> under the title is the planner's own account of which pick
           decides which, and why each rule is there.</li>
         <li><b>Web search.</b> If it's set up, the planner may ask to search first (a franchise's
-          characters, an era's clothing). <b>Search and update the plan</b> shows what was found;
-          then <b>Use what fits</b>, <b>Use N ticked</b> or <b>None of these</b>. <b>Skip the
+          characters, an era's clothing). <b>Search the web</b> shows what was found;
+          then <b>Use what fits</b> or <b>Use N ticked</b> updates the plan with it, and <b>None of
+          these</b> keeps the plan as it is. <b>Skip the
           search</b> doesn't search.</li>
       </ul>
     </DocSection>
@@ -108,7 +109,14 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         After the build, each problem on an item has <b>Fix with AI</b> (rebuild it with the problem
         as a note), <b>Explain</b> and <b>Dismiss</b>. The test run also shows each variable's most
         common values, options that never came up, and a few sample prompts. A story pack plays
-        every frame of its Loop.
+        every frame of its Loop. An item the code wrote from the plan (a constraint, derivation or
+        template on a graph plan) has <b>Change the plan</b> instead of Fix with AI, since a rebuild
+        would write the same thing. A problem marked <b>still</b> after a fix says why under it.
+      </p>
+      <p>
+        The quick checks under the plan only look at names: an empty list means every rule names
+        slots and values the plan has, not that the rules do what you meant. The test run is what
+        checks them on real prompts.
       </p>
     </DocSection>
 
@@ -181,7 +189,21 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
           <li>A rule writing a bare number ("1.5" for "long styles more common") is a weight on the
             tagged options, not text. A Quality slot becomes fixed values; a Negative slot becomes
             the template's negative. The per-model quality rule gets an "otherwise" with the pack's
-            own quality words, so <code>$quality</code> is set even without WP Model Info.</li>
+            own quality words, so <code>$quality</code> is set even without WP Model Info, and only
+            has rows for the model families the pack runs on.</li>
+          <li>An "adds to" rule joins its words with a comma ("scarf, mittens"), never glued onto
+            the last word.</li>
+          <li>A slot nothing reads is shown in the prompt, and the template never prints loop or
+            model variables (<code>$iteration</code>, <code>$model_family</code>); those only feed
+            rules. Rating tags follow the pack's rating and style (no Pony <code>rating_*</code>
+            tags on a pack that isn't just for Pony), and negatives drop words that are the pack's
+            own options or repeat.</li>
+          <li>A library wildcard is reused only when it fits what the slot is about, and the planner
+            sees only library items that match the request unless you ask for the whole library.
+            A couple pack asks who the two people are.</li>
+          <li>"Drop the hoods" in Change with AI keeps hoods out of that slot's options, and a
+            change can't add a rule against what it asked for ("more scarves" never adds a rule
+            that keeps scarves out).</li>
         </ul>
       </DocDetails>
       <DocDetails title="How building and checking work">
@@ -195,9 +217,14 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
           <li>Before each test, words the prompt says twice are removed from the later item, but
             only when every test run reads the same without them.</li>
           <li>The test run checks every relation on real runs ("never gets" that still happened, a
-            rule that never fired) and says how many held. An item with a problem (a rule that never
+            rule that never fired) and says how many held. It also reads the prompt text, so a rule that
+            held on the picks but whose banned words still show up (through another item) is broken,
+            with what the prompt showed. A constraint with no rules, or a rule that prints a second
+            pick of a one-pick slot, is a problem too. An item with a problem (a rule that never
             applies, a variable nothing sets, a prompt showing what a rule keeps out, like snow in a
             desert) is rebuilt with the problem as a note, up to twice.</li>
+          <li>An item or review cut off at the output limit is asked once more for a shorter
+            answer.</li>
           <li>An item that takes longer than 4 minutes is stopped; <b>Skip this item</b> moves on. If
             the template fails twice, a plain one that reads every pick is written for you.</li>
           <li>Findings are known by what they're about, not their wording, so a dismissal holds. One

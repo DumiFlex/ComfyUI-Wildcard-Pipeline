@@ -42,6 +42,15 @@ CUT_OFF_NOTE = ("Your last plan ran past the output limit. Write it again shorte
                 "slots the request needs, a short `what` per slot, few assumptions.")
 
 
+#: Sent with an item asked again after its answer ran into the output limit.
+ITEM_CUT_OFF_NOTE = ("Your last answer ran past the output limit. Write it again shorter: "
+                     "short option texts, no repeats, only the fields asked for.")
+
+#: Sent with the plan review asked again after it ran into the output limit.
+REVIEW_CUT_OFF_NOTE = ("Your last review ran past the output limit. Write it again shorter: "
+                       "only the most important problems, one short line each.")
+
+
 def plan_retry_note(error: str) -> str:
     """Sent with a plan request asked again after the answer couldn't be used."""
     return (f"Your last plan couldn't be used: {error}. Write the whole plan again with "
