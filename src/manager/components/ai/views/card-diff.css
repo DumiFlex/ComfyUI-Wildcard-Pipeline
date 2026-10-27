@@ -15,3 +15,5 @@
 .wp-ai-diff__chip[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger, #e5484d) 14%, transparent); color: var(--wp-danger, #e5484d); text-decoration: line-through; }
 .wp-ai-diff__new { font-size: 10.5px; color: var(--wp-success, #30a46c); margin-left: 4px; }
 .wp-ai-diff__more { margin: 0; font-size: 11.5px; color: var(--wp-text-muted); }
+/* The row's change in words, for screen readers (the mark is hidden from them). */
+.wp-ai-diff__sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

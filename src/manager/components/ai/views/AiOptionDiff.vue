@@ -40,8 +40,8 @@ function shareMoved(r: OptionDiffRow): boolean {
         <span v-if="view.same && !full" data-test="ai-card-unchanged"> · {{ view.same }} unchanged</span>
       </p>
       <ul class="wp-ai-optdiff__rows">
-        <li v-for="r in shown" :key="r.id + r.change" :data-change="r.change" :aria-label="LABEL[r.change]" data-test="ai-card-option-row">
-          <span class="wp-ai-diff__mark" aria-hidden="true">{{ MARK[r.change] }}</span>
+        <li v-for="r in shown" :key="r.id + r.change" :data-change="r.change" data-test="ai-card-option-row">
+          <span class="wp-ai-diff__mark" aria-hidden="true">{{ MARK[r.change] }}</span><span class="wp-ai-diff__sr">{{ LABEL[r.change] }}: </span>
           <div class="wp-ai-optdiff__body">
             <div class="wp-ai-optdiff__line">
               <span class="wp-ai-optdiff__text" :class="{ 'wp-ai-diff__was': r.change === 'removed', 'wp-ai-optdiff__clamp': !full }">

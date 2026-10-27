@@ -33,8 +33,8 @@ function icon(r: BundleRowView): string {
       <span v-if="view.same && !full" data-test="ai-card-unchanged"> · {{ view.same }} unchanged</span>
     </p>
     <ol class="wp-ai-bundle__rows">
-      <li v-for="(r, i) in shown" :key="i" :data-change="r.change" :aria-label="LABEL[r.change]" data-test="ai-card-bundle-row">
-        <span class="wp-ai-diff__mark" aria-hidden="true">{{ MARK[r.change] }}</span>
+      <li v-for="(r, i) in shown" :key="i" :data-change="r.change" data-test="ai-card-bundle-row">
+        <span class="wp-ai-diff__mark" aria-hidden="true">{{ MARK[r.change] }}</span><span class="wp-ai-diff__sr">{{ LABEL[r.change] }}: </span>
         <span class="wp-ai-bundle__at wp-mono">{{ r.at }}</span>
         <i :class="icon(r)" class="wp-ai-bundle__icon" aria-hidden="true" />
         <span class="wp-ai-bundle__body">
