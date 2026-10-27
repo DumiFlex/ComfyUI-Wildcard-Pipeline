@@ -47,6 +47,13 @@ describe("WpTabs", () => {
     expect(w.props("modelValue")).toBe("a");
   });
 
+  it("keeps the first enabled tab reachable when the value matches none", async () => {
+    const w = mount(WpTabs, { props: { modelValue: "b", tabs: TABS } });
+    expect(w.findAll("[role=tab]").map((t) => t.attributes("tabindex"))).toEqual(["0", "-1", "-1"]);
+    await w.find(CURRENT).trigger("keydown", { key: "ArrowLeft" });
+    expect(w.emitted("update:modelValue")?.[0]).toEqual(["c"]);
+  });
+
   it("wires the panel to its tab when a #panel slot is given", () => {
     const w = mount(WpTabs, { props: { modelValue: "c", tabs: TABS }, slots: { panel: "<p>body</p>" } });
     const panel = w.find("[role=tabpanel]");

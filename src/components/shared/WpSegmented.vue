@@ -62,7 +62,7 @@ function onKeydown(ev: KeyboardEvent): void {
   let next: number;
   switch (ev.key) {
     case "ArrowRight": case "ArrowDown": next = (at + 1) % live.length; break;
-    case "ArrowLeft": case "ArrowUp": next = (at - 1 + live.length) % live.length; break;
+    case "ArrowLeft": case "ArrowUp": next = at < 0 ? live.length - 1 : (at - 1 + live.length) % live.length; break;
     case "Home": next = 0; break;
     case "End": next = live.length - 1; break;
     default: return;

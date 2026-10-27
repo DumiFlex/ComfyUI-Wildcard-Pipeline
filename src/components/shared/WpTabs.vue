@@ -58,6 +58,12 @@ function focusTab(id: string): void {
   });
 }
 
+/** The tab that takes Tab focus: the current one, else the first enabled. */
+function tabStop(): T | undefined {
+  const enabled = props.tabs.filter((t) => !t.disabled);
+  return (enabled.find((t) => t.id === props.modelValue) ?? enabled[0])?.id;
+}
+
 function onKeydown(ev: KeyboardEvent): void {
   const enabled = props.tabs.filter((t) => !t.disabled);
   if (!enabled.length) return;
@@ -65,7 +71,7 @@ function onKeydown(ev: KeyboardEvent): void {
   let next: number;
   switch (ev.key) {
     case "ArrowRight": next = (at + 1) % enabled.length; break;
-    case "ArrowLeft": next = (at - 1 + enabled.length) % enabled.length; break;
+    case "ArrowLeft": next = at < 0 ? enabled.length - 1 : (at - 1 + enabled.length) % enabled.length; break;
     case "Home": next = 0; break;
     case "End": next = enabled.length - 1; break;
     default: return;
@@ -94,7 +100,7 @@ function onKeydown(ev: KeyboardEvent): void {
         class="wp-tabset__tab"
         :aria-selected="t.id === modelValue"
         :aria-controls="slots.panel ? panelId(t.id) : undefined"
-        :tabindex="t.id === modelValue ? 0 : -1"
+        :tabindex="t.id === tabStop() ? 0 : -1"
         :disabled="t.disabled"
         :data-active="t.id === modelValue"
         :data-test="testPrefix ? `${testPrefix}-${t.id}` : undefined"
