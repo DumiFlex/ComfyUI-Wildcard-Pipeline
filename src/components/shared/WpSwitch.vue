@@ -84,26 +84,26 @@ function flip(): void {
 
 /* Track look */
 .wp-switch__track {
-  --wp-switch-w: 26px;
-  --wp-switch-h: 14px;
+  --switch-w: 26px;
+  --switch-h: 14px;
   position: relative;
   flex-shrink: 0;
-  width: var(--wp-switch-w);
-  height: var(--wp-switch-h);
+  width: var(--switch-w);
+  height: var(--switch-h);
   box-sizing: border-box;
   border: 1px solid var(--wp-border-strong);
   border-radius: 999px;
   background: var(--wp-bg-3);
   transition: background var(--wp-motion-quick), border-color var(--wp-motion-quick);
 }
-.wp-switch--md .wp-switch__track { --wp-switch-w: 32px; --wp-switch-h: 18px; }
-.wp-switch--lg .wp-switch__track { --wp-switch-w: 40px; --wp-switch-h: 22px; }
+.wp-switch--md .wp-switch__track { --switch-w: 32px; --switch-h: 18px; }
+.wp-switch--lg .wp-switch__track { --switch-w: 40px; --switch-h: 22px; }
 .wp-switch__knob {
   position: absolute;
   top: 1px;
   left: 1px;
-  width: calc(var(--wp-switch-h) - 4px);
-  height: calc(var(--wp-switch-h) - 4px);
+  width: calc(var(--switch-h) - 4px);
+  height: calc(var(--switch-h) - 4px);
   border-radius: 50%;
   background: var(--wp-text-dim);
   transition: transform var(--wp-motion-quick), background var(--wp-motion-quick);
@@ -112,12 +112,12 @@ function flip(): void {
 .wp-switch[aria-checked="true"] .wp-switch__track { background: var(--wp-accent); border-color: var(--wp-accent); }
 .wp-switch[aria-checked="true"] .wp-switch__knob {
   background: white; /* the knob on the accent track, both themes */
-  transform: translateX(calc(var(--wp-switch-w) - var(--wp-switch-h)));
+  transform: translateX(calc(var(--switch-w) - var(--switch-h)));
 }
 .wp-switch--mixed .wp-switch__track { border-style: dashed; border-color: var(--wp-accent); }
 .wp-switch--mixed .wp-switch__knob {
   background: var(--wp-accent);
-  transform: translateX(calc((var(--wp-switch-w) - var(--wp-switch-h)) / 2));
+  transform: translateX(calc((var(--switch-w) - var(--switch-h)) / 2));
 }
 .wp-switch:focus-visible .wp-switch__track,
 .wp-switch--chip:focus-visible { box-shadow: var(--wp-focus-ring); }
