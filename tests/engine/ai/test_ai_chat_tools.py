@@ -478,3 +478,27 @@ def test_a_new_wildcard_keeps_the_category_a_later_step_gives_it():
         {"text": "linen shirt"}]})
     filed = lib.run("update_info", {"id": made["op"]["body"]["id"], "category": "Clothes"})
     assert filed["op"]["op"] == "create" and filed["op"]["new_category"] == "Clothes"
+
+
+def test_a_compared_test_card_gives_old_values_their_real_share():
+    """#11: a value outside the before run's top five read "0% → 22%"."""
+    opts = [{"id": f"o{i}", "value": f"look {i}", "weight": 1, "sub_categories": []}
+            for i in range(8)]
+    lib = chat.Library([{"id": "aaaa0011", "type": "wildcard", "name": "Look", "tags": [],
+                         "payload": {"var_binding": "look", "options": opts}}], [], [])
+    lib.run("edit_options", {"id": "aaaa0011", "weights": [{"n": 8, "weight": 20}]})
+    lib.run("run_test", {"stack": ["Look"], "seeds": 200, "proposed": True})
+    card = lib.last_card
+    assert card["compared"] is True
+    top = {t["v"]: t for t in card["vars"][0]["tops"]}
+    # look 7 was one of eight (about 12%), not 0%.
+    assert 5 <= top["look 7"]["was"] <= 20
+    assert top["look 7"]["pct"] > top["look 7"]["was"]
+
+
+def test_a_test_step_names_items_not_ids():
+    """#11: "Ran b0000006 on 100 seeds" said nothing to the user."""
+    lib = _lib()
+    assert chat.args_note("run_test", {"stack": ["aaaa0002", "aaaa0001#Outfit"]}, lib) \
+        == "Ran Season, Outfit on 100 seeds"
+    assert chat.args_note("run_test", {"stack": ["nope"]}, lib) == "Ran nope on 100 seeds"

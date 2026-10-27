@@ -89,7 +89,11 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         struck through, an added action with <b>+</b>), a constraint change marks the changed cells
         of its grid and its changed exceptions, and a bundle change lists its items in order with
         <b>+</b> added, struck through removed, <b>↕</b> moved (from its old place), on → off and
-        use settings old → new. Parts a change leaves alone fold into "N unchanged".
+        use settings old → new. A fixed values change shows its Variable / Value / Negative table
+        with the changed cells old → new, a template or combine change marks the words it adds and
+        drops along with the variables it now reads or no longer reads, and a delete card lists
+        what goes with its category chip and rating, how many items a dropped category or tag
+        leaves, and that Undo makes them again. Parts a change leaves alone fold into "N unchanged".
       </p>
       <p>
         Three or more cards of one kind come as one <b>group card</b> with a row per item. Untick

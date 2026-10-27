@@ -4,7 +4,7 @@
  * them the way the item's editor would. A card with no view keeps the
  * server's preview lines.
  */
-import type { Change, TagDiff } from "../../utils/card-diff";
+import type { Change, TagDiff, TextPart } from "../../utils/card-diff";
 
 export interface ConstraintRowView {
   from: string; to: string; byTag: boolean; effect: string; factor: number | null;
@@ -33,6 +33,16 @@ export interface BundleRowView {
   wasEnabled: boolean | null;
   use: string;
   wasUse: string | null;
+}
+
+/** One fixed value; the `was*` fields are set on a change card when that
+ *  part changed. */
+export interface ValueRowView {
+  name: string; value: string; negative: string;
+  change?: Change;
+  wasName?: string | null;
+  wasValue?: string | null;
+  wasNegative?: string | null;
 }
 
 /** A category the way `CategoryChip` draws it. `isNew`: the card makes it. */
@@ -77,8 +87,25 @@ export type CardView =
       ruleChanges?: Change[];
     }
   | { kind: "bundle"; rows: BundleRowView[]; same: number; before: number; after: number }
-  | { kind: "values"; rows: Array<{ name: string; value: string; negative: string }> }
+  | {
+      kind: "values"; rows: ValueRowView[];
+      /** On a change card: values left alone (folded in the chat). */
+      same?: number;
+    }
   | { kind: "text"; rows: Array<{ label: string; text: string }> }
+  | {
+      kind: "text-diff";
+      /** Each text old → new, word by word (unchanged texts left out). */
+      rows: Array<{ label: string; parts: TextPart[] }>;
+      /** Variables the change starts or stops reading. */
+      reads: { added: string[]; removed: string[] };
+    }
+  | {
+      kind: "delete";
+      items: Array<{ name: string; type: string; category: CatChipView | null; rating: string }>;
+      categories: Array<CatChipView & { count: number }>;
+      tags: Array<{ tag: string; count: number }>;
+    }
   | { kind: "info"; rows: InfoRowView[] }
   | {
       kind: "options";

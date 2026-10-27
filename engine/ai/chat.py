@@ -2851,6 +2851,18 @@ def _skipped(skipped: list[dict[str, str]]) -> str:
                             for s in skipped[:5]) + ")"
 
 
+def _item_name(raw: Any, lib: Library | None) -> Any:
+    """A stack entry as the user knows it: the item's name, not the id or
+    chip the model passed ("Ran b0000006" read as nothing)."""
+    if lib is None or not isinstance(raw, str):
+        return raw
+    try:
+        row = lib._find_loose(raw)
+    except Exception:  # noqa: BLE001 - a step note never fails the turn
+        row = None
+    return row.get("name") or raw if row is not None else raw
+
+
 def args_note(tool: str, args: dict[str, Any], lib: Library | None = None) -> str:
     """A short line for the user saying what a read tool looked at."""
     if tool == "search":
@@ -2872,7 +2884,8 @@ def args_note(tool: str, args: dict[str, Any], lib: Library | None = None) -> st
         return f"Read the docs: {title}{sec}"
     if tool == "run_test":
         stack = _got if isinstance(_got := args.get("stack"), list) else []
-        names = [_short(x.get("item") if isinstance(x, dict) else x, 30) for x in stack[:4]]
+        names = [_short(_item_name(x.get("item") if isinstance(x, dict) else x, lib), 30)
+                 for x in stack[:4]]
         more = f" +{len(stack) - 4}" if len(stack) > 4 else ""
         n = _got if isinstance(_got := args.get("seeds"), int) else 100
         return f"Ran {', '.join(names)}{more} on {n} seeds" + (
