@@ -128,6 +128,14 @@ const groups = computed(() =>
   display: flex; flex-direction: column; align-items: flex-start; gap: 12px; max-width: 360px; padding: 16px;
   background: var(--wp-bg-2); border: 1px solid var(--wp-border-strong); border-radius: var(--wp-radius-lg); box-shadow: var(--wp-shadow-lg); color: var(--wp-text); font-size: var(--wp-text-sm);
 }
+/* The canvas look of a shared piece: the canvas colour set (theme.css
+   .wp-canvas-scope) on a node-coloured panel. */
+.wp-kit__canvas {
+  display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 420px; padding: 12px;
+  background: var(--wp-bg); border: 1px solid var(--wp-border); border-radius: var(--wp-radius);
+  color: var(--wp-text); font-size: 12px;
+}
+.wp-kit__caption { margin: 0; color: var(--wp-text-dim); font-size: var(--wp-text-xs); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
 .wp-kit__list { margin: 0; padding-left: 18px; color: var(--wp-text-muted); font-size: var(--wp-text-sm); }
 .wp-kit__icons {
   list-style: none; margin: 0; padding: 0;

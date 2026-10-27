@@ -10,7 +10,7 @@ import Button from "../ui/Button.vue";
 import {
   aiDebugSent, aiDebugUnseen, clearAiDebug, fetchAiDebug, listAiDebug, type AiDebugRow,
 } from "../../api/ai-debug";
-import { copyText } from "../../utils/clipboard";
+import { copyText } from "@/components/shared/clipboard";
 
 const emit = defineEmits<{ close: [] }>();
 
