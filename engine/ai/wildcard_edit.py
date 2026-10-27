@@ -333,9 +333,9 @@ def compile_edit(
                 continue
             if not text or text == opt["value"]:
                 continue
-            if adult.sexual_minor(text):
-                skipped.append({"text": text[:80],
-                                "reason": "it names a minor in a sexual context"})
+            why = adult.blocked(text)
+            if why:
+                skipped.append({"text": text[:80], "reason": why})
                 continue
             nk = _norm_key(text)
             if final_texts.get(nk, oid) != oid:

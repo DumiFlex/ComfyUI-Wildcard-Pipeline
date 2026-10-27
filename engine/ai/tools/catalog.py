@@ -19,6 +19,7 @@ _META = {
     "description": s("one or two sentences on what it is for"),
     "tags": arr(s(), "library tags"),
     "category": s("category name, or \"\" for none"),
+    "rating": s("nsfw for sexual or explicit content, else safe", enum=["safe", "nsfw"]),
 }
 _OPTION = obj({
     "text": s("the option text; @{Name} puts in a pick from another wildcard, "
@@ -93,16 +94,18 @@ TOOLS: list[Tool] = [
         "descriptions, option texts, values, rules), best match first.",
         '{"query": words, "type": optional module type, "bundle" or "template", "tag": '
         'optional tag, "category": optional category name, or "none" for items with no '
-        'category}: items ranked by how well their name, variable, tags, description '
-        'AND content (option texts, values, rules) match, with matching options as '
-        'examples. Broad subjects widen on their own ("character" also finds hair, eyes, '
-        'outfits). Search the subject, not the user\'s whole sentence. Empty query lists '
-        'everything of that type or category (a category listing goes up to 100).',
+        'category, "rating": optional safe or nsfw}: items ranked by how well their name, '
+        'variable, tags, description AND content (option texts, values, rules) match, with '
+        'matching options as examples. Broad subjects widen on their own ("character" also '
+        'finds hair, eyes, outfits). Search the subject, not the user\'s whole sentence. '
+        'Empty query lists everything of that type, category or rating (a category listing '
+        'goes up to 100; templates have no rating).',
         obj({"query": s("the subject, a few words; empty lists everything of the type"),
              "type": s("wildcard, fixed_values, combine, derivation, constraint, bundle or "
                        "template"),
              "tag": s("only items with this tag"),
-             "category": s("only items in this category; none for items with no category")}),
+             "category": s("only items in this category; none for items with no category"),
+             "rating": s("only items with this rating: safe or nsfw")}),
         ("core",),
     ),
     Tool(
@@ -215,7 +218,8 @@ TOOLS: list[Tool] = [
         "vocabulary with no variable, only when other options point at it with @{Name}). "
         "Options that point at other wildcards carry their @{Name} here, in the same card.",
         '{"name", "var": variable name without $ ("" for a vocabulary), "description", '
-        '"tags": [library tags], "category": name or "", "options": [{"text", "weight": 1, '
+        '"tags": [library tags], "category": name or "", "rating": "nsfw" for sexual '
+        'content else "safe", "options": [{"text", "weight": 1, '
         '"tags": [option tags], "negative": "", "fallback": false}], "axes": [{"name", '
         '"kind": "classify"|"accepts", "tags"}] or [], "null_weight": 0}',
         obj({"name": s(), "var": s("variable name without $, \"\" for a vocabulary"), **_META,
@@ -281,7 +285,8 @@ TOOLS: list[Tool] = [
         "nested group. A branch can run several actions in order. At most 20 rules, 12 "
         "branches a rule, 8 conditions a branch and 6 actions a branch: split bigger jobs, "
         "or use a constraint.",
-        '{"name", "description", "tags", "category", "rules": [{"summary", "branches": '
+        '{"name", "description", "tags", "category", "rating": safe|nsfw, '
+        '"rules": [{"summary", "branches": '
         '[{"match": "all"|"any", "conditions": [{"var", "op": equals|not_equals|contains|'
         "not_contains|matches|not_matches|exists|not_exists|is_empty|is_not_empty|is_set|"
         "is_unset, "
@@ -312,7 +317,8 @@ TOOLS: list[Tool] = [
         "create_constraint", "change",
         "Propose a constraint: a SOURCE wildcard's pick changes the odds of a TARGET "
         "wildcard's options (exclude, reduce, boost, only).",
-        '{"name", "description", "tags", "category", "source_id", "target_id", "rules": '
+        '{"name", "description", "tags", "category", "rating": safe|nsfw, '
+        '"source_id", "target_id", "rules": '
         '[{"source": "#tag" or option text, '
         '"target": "#tag" or option text, "effect": exclude|reduce|boost|only, "factor", '
         '"reason"}], "reach": "all" | "first" | "next N"}',
@@ -325,7 +331,8 @@ TOOLS: list[Tool] = [
     Tool(
         "create_fixed_values", "change",
         "Propose fixed values: variables set to the same text every run.",
-        '{"name", "description", "tags", "category", "values": [{"name": variable, "value": '
+        '{"name", "description", "tags", "category", "rating": safe|nsfw, '
+        '"values": [{"name": variable, "value": '
         'text (may use {a|b}, no $), "negative": ""}]}',
         obj({"name": s(), **_META, "values": arr(obj({
             "name": s("variable name"), "value": s("text, may use {a|b}"),
@@ -350,7 +357,7 @@ TOOLS: list[Tool] = [
         "create_combine", "change",
         "Propose a combine: a template that joins variables into a new one.",
         '{"name", "var": the variable it sets, "description", "tags", "category", '
-        '"template": text reading $variables (may use {a|b}), "negative": ""}',
+        '"rating": safe|nsfw, "template": text reading $variables (may use {a|b}), "negative": ""}',
         obj({"name": s(), "var": s("the variable it sets"), **_META,
              "template": s("text reading $variables"), "negative": s()},
             ("name", "var", "template")),
@@ -417,7 +424,8 @@ TOOLS: list[Tool] = [
         "Propose a bundle: a saved stack of modules in order, each with per-use settings. "
         "A bundle can hold other bundles (sub-bundles, one level deep) to group a pack's "
         "parts, e.g. an Outfit sub-bundle and a Scene sub-bundle in one Character bundle.",
-        '{"name", "description", "tags", "category", "items": [name or id (modules or '
+        '{"name", "description", "tags", "category", "rating": safe|nsfw, '
+        '"items": [name or id (modules or '
         'sub-bundles), or {"item": name or id, "use": per-use settings}], "order": "auto" '
         '(default: producers, then constraints before their target, rules, combines; '
         'sub-bundles stay where given) or "as_given"}. A sub-bundle can\'t hold bundles '

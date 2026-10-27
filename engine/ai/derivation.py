@@ -704,8 +704,9 @@ def _compile_actions(
             warnings.append(f"\"{value[:60]}\" only says what to leave out: it adds "
                             f"{left_out[:60]} to ${target}'s negative instead")
             mode, value = "negative", left_out
-        if mode not in NEGATIVE_MODES and adult.sexual_minor(value):
-            raise _Drop("it names a minor in a sexual context")
+        why = adult.blocked(value) if mode not in NEGATIVE_MODES else ""
+        if why:
+            raise _Drop(why)
         for read in _VAR_READ.findall(value):
             if read not in catalog and read != target:
                 warnings.append(unset_note(read))

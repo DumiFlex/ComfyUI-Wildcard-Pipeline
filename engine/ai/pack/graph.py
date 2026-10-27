@@ -1775,6 +1775,10 @@ def wired_payload(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict
     minor words out, the youth negative on the template; ValueError when
     nothing would be left)."""
     out = _wired(plan, key, built)
+    from engine.ai import ratings as ai_ratings
+    fixed, spaced = ai_ratings.payload_rating_tags(out["kind"], out["payload"])
+    if spaced:
+        out = {**out, "payload": fixed}
     if plan.get("rating") == "nsfw":
         from engine.ai.pack.adult_pack import adult_check
         payload, said = adult_check(out["kind"], out["payload"], plan)
