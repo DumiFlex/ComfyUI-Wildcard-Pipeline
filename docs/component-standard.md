@@ -43,7 +43,7 @@ Don't add synonyms such as `kind`, `small`, `busy` or `visible` for these meanin
 
 - Controls come in three heights: 24 px (`sm`), 32 px (`md`) and 40 px (`lg`). Buttons, inputs, selects, number fields and segmented controls share these heights.
 - The canvas defaults to `sm`, the manager to `md`.
-- Today's Button (28/36/44), Input (38) and WpNumber (28) are not on this scale yet. The fix-up PRs move them onto it; new controls start on it.
+- Button, Input, Select and WpNumber are on it (`size` sm/md/lg). The manager's Density setting scales all three heights together through `--wp-density`.
 - Hit targets are at least 20 px on the canvas and 24 px in the manager. An icon inside a chip may draw smaller, but its click area must not be.
 
 ## 5. Tokens only
@@ -80,6 +80,15 @@ Anything that floats goes through the kit's overlays and positions with `floatin
 | Dialog | `Modal` (manager), `ModalShell` / `ConfirmDialog` (canvas) |
 
 Anything that floats next to a trigger follows it when the page scrolls or resizes; a menu opened at the pointer closes on scroll. Never write another Teleport with its own placement maths, scroll handling or outside-click handler.
+
+A floating panel follows its trigger when the page or a scroller under it moves, and closes only once the trigger has left the view. A scroll inside the panel itself changes nothing.
+
+## 7b. Loading, empty and disabled
+
+- Loading: `LoadingMark`. A page or panel that is loading gets the full logo (`block`); a tight inline spot (a text row, a button, a list item) gets the sparkle, which is the default below 24 px. A busy button keeps its own colours and draws the sparkle in its label colour.
+- Empty: `EmptyState` with `size` `page` (an empty list page), `panel` (the default, in a card or panel) or `inline` (one row).
+- Disabled: 45% opacity and a not-allowed cursor, with no hover change. A ticked checkbox or picked radio turns grey, so it can't be mistaken for a live one.
+- Readonly: dashed border, dimmer fill, no focus ring, and a lock on Input.
 
 ## 8. Canvas twins share a stylesheet
 
