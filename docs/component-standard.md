@@ -81,7 +81,7 @@ Anything that floats goes through the kit's overlays and positions with `floatin
 
 Anything that floats next to a trigger follows it when the page scrolls or resizes; a menu opened at the pointer closes on scroll. Never write another Teleport with its own placement maths, scroll handling or outside-click handler.
 
-A floating panel follows its trigger when the page or a scroller under it moves, and closes only once the trigger has left the view. A scroll inside the panel itself changes nothing.
+A panel closes once its trigger has scrolled out of view. A scroll inside the panel itself changes nothing.
 
 ## 7b. Loading, empty and disabled
 
