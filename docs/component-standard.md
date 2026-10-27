@@ -6,7 +6,7 @@ Every custom control in the extension follows these rules. The component kit (Se
 
 | Folder | What goes there |
 |---|---|
-| `src/components/shared/` | Pieces the canvas uses, and pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`), controls (`SearchInput`, `WpNumber`, `WpCheck`, `WpSelect`, `WpTabs`, `WpSegmented`, `Disclosure`, `Banner`, `CopyButton`, `CloseButton`) and the toast look (`ToastCard`). |
+| `src/components/shared/` | Pieces the canvas uses, and pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`), controls (`SearchInput`, `WpNumber`, `WpCheck`, `WpSelect`, `WpButton`, `WpSwitch`, `WpTabs`, `WpSegmented`, `Disclosure`, `Banner`, `CopyButton`, `CloseButton`) and the toast look (`ToastCard`). |
 | `src/manager/components/ui/` | Manager-only controls: `Button`, `Input`, `Select`, `Modal`, `ConfirmModal`, `Drawer`, `DataTable` and the rest. |
 
 A component anywhere else is a part of one screen, not a control. If a second screen needs it, move it into a kit folder first.
@@ -96,6 +96,8 @@ A panel closes once its trigger has scrolled out of view. A scroll inside the pa
 When the canvas needs its own version of a manager control (Button, Switch, Select, Number), both versions use the same stylesheet in `src/components/shared/`. A change to one then changes both. The kit shows each shared piece in both looks (`kit/KitLooks.vue` draws a demo twice, at the canvas size `sm` and the manager size `md`; the manager never loads the canvas colours, so both wear the manager's).
 
 Better still is one component for both sides, with only `size` changing. `WpSwitch` is the on/off switch everywhere (the manager's `Toggle` is `WpSwitch` at `md`), and `WpTabs` and `WpSegmented` are the tabs and value pickers everywhere. A canvas widget never draws its own `role="switch"`, tab strip or joined-button group.
+
+`WpButton` is the canvas Button: the manager `Button`'s variants, sizes and `button.css`, pulled in scoped (so the 20 px row icon buttons, `.wp-btn--icon-sm` in `row-primitives.css`, keep their own tone classes), with a PrimeIcons `icon` and `sm` by default. Every canvas dialog footer and toolbar button is a `WpButton`; never another `__btn` class with its own colours. Every checkmark box is `WpCheck`, including the 12 px on/off box of module, bundle and injector rows (`size="sm"`). The Settings live preview (`components/settings/`) uses the same pieces as the nodes it previews.
 
 ## 9. Isolation
 
