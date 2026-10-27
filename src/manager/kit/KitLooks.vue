@@ -1,20 +1,21 @@
 <script setup lang="ts">
 /**
- * Shows a shared piece twice: as the canvas draws it (inside
- * `wp-canvas-scope`, the canvas colours, size `sm`) and as the manager draws
- * it (size `md`). The slot gets the size to pass on:
+ * Shows a shared piece at both sides' sizes: the canvas size (`sm`) and the
+ * manager size (`md`). Both wear the manager's colours here (the manager never
+ * loads the canvas sheet); on the canvas the same piece reads the canvas
+ * colours from the shared tokens. The slot gets the size to pass on:
  *
  *   <KitLooks v-slot="{ size }"><WpSwitch v-model="on" :size="size" /></KitLooks>
  */
 const LOOKS = [
-  { id: "canvas", label: "Canvas", size: "sm", scope: "wp-canvas-scope" },
-  { id: "manager", label: "Manager", size: "md", scope: "" },
+  { id: "canvas", label: "Canvas size (sm)", size: "sm" },
+  { id: "manager", label: "Manager size (md)", size: "md" },
 ] as const;
 </script>
 
 <template>
   <div class="wp-kit-looks">
-    <section v-for="l in LOOKS" :key="l.id" class="wp-kit-looks__side" :class="l.scope" :data-kit-look="l.id">
+    <section v-for="l in LOOKS" :key="l.id" class="wp-kit-looks__side" :data-kit-look="l.id">
       <span class="wp-kit-looks__label">{{ l.label }}</span>
       <div class="wp-kit-looks__body">
         <slot :size="l.size" :surface="l.id" />
