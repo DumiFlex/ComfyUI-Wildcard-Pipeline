@@ -61,7 +61,8 @@ export const RULES = [
     id: "manager-raw-button",
     pattern: /<button\b/g,
     only: "src/manager/",
-    allow: [],
+    // DataTable's sort control is the header text itself, not a Button.
+    allow: ["src/manager/components/ui/DataTable.vue"],
     fix: "Use Button. A raw <button> needs a reason the kit can't cover.",
   },
   {
