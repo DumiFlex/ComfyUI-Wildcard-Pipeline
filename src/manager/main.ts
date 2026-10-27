@@ -10,6 +10,10 @@ import { installStartPage } from "./router/start-page";
 import { useUiStore } from "./stores/uiStore";
 import { useTweaksStore } from "./stores/tweaksStore";
 
+// Marks the manager page so the canvas colour tokens (components/shared/theme.css)
+// stay off it; the manager's own tokens use the same names.
+document.documentElement.classList.add("wp-manager");
+
 const app = createApp(App);
 const pinia = createPinia();
 app.use(pinia);

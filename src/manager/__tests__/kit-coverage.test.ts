@@ -31,7 +31,16 @@ describe("component kit registry", () => {
         if (!listed.has(file)) missing.push(file);
       }
     }
-    expect(missing, "Add these to KIT_ENTRIES (src/manager/kit/registry.ts) with a demo on the kit page").toEqual([]);
+    expect(missing, "Add these to KIT_ENTRIES (src/manager/kit/registry.ts) with a demo in src/manager/kit/demos/<id>.vue").toEqual([]);
+  });
+
+  it("names every demo file after an entry", () => {
+    const ids = new Set(KIT_ENTRIES.map((e) => e.id));
+    const stray = readdirSync(join(ROOT, "src/manager/kit/demos"))
+      .filter((n) => n.endsWith(".vue"))
+      .map((n) => n.slice(0, -".vue".length))
+      .filter((id) => !ids.has(id));
+    expect(stray, "Each kit/demos/<id>.vue needs a KIT_ENTRIES entry with that id").toEqual([]);
   });
 
   it("points every entry and exemption at a file that exists", () => {

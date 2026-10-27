@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch, nextTick } from "vue";
+import { placeFloating, viewportSize, type Placement } from "./floating";
 
 export interface ContextMenuItem {
   label: string;
@@ -54,11 +55,26 @@ const props = defineProps<{
   y: number;
   items: ContextMenuEntry[];
   header?: ContextMenuHeader;
+  /** Open next to this element instead of at x/y (DropdownMenu's trigger).
+   *  A click on it doesn't count as "outside", so the trigger can toggle. */
+  anchor?: HTMLElement | null;
+  placement?: Placement;
 }>();
 
 const emit = defineEmits<{ (e: "close"): void }>();
 
 const activeIndex = ref(-1);
+const menuEl = ref<HTMLElement | null>(null);
+/** Where the menu sits: x/y (or the anchor), moved to stay on screen. */
+const pos = ref({ x: 0, y: 0 });
+
+function place(): void {
+  const el = menuEl.value;
+  const size = el ? { width: el.offsetWidth, height: el.offsetHeight } : { width: 0, height: 0 };
+  const from = props.anchor?.getBoundingClientRect() ?? { left: props.x, top: props.y, width: 0, height: 0 };
+  const at = placeFloating(from, size, viewportSize(), { placement: props.placement ?? "bottom-start", gap: props.anchor ? 4 : 0 });
+  pos.value = { x: at.x, y: at.y };
+}
 
 function pickableIndices(): number[] {
   const out: number[] = [];
@@ -98,6 +114,7 @@ function onWindowPointerDown(ev: PointerEvent) {
     if (el instanceof HTMLElement && el.classList?.contains("wp-ctxmenu")) {
       return;
     }
+    if (props.anchor && el === props.anchor) return;
   }
   emit("close");
 }
@@ -122,6 +139,7 @@ function onKey(ev: KeyboardEvent) {
 watch(() => props.visible, async (v) => {
   if (v) {
     activeIndex.value = -1;
+    pos.value = { x: props.x, y: props.y };
     // Capture phase so descendant `@click.stop` handlers (trace
     // value cells, seed buttons, etc) can't prevent the close.
     window.addEventListener("pointerdown", onWindowPointerDown, true);
@@ -131,6 +149,7 @@ watch(() => props.visible, async (v) => {
     // contextmenu happens BEFORE the listener is wired, so this is
     // mostly belt-and-braces).
     await nextTick();
+    place();
   } else {
     window.removeEventListener("pointerdown", onWindowPointerDown, true);
     window.removeEventListener("keydown", onKey);
@@ -157,8 +176,9 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
   <Teleport to="body">
     <ul
       v-if="visible"
-      class="wp-ctxmenu"
-      :style="{ left: `${x}px`, top: `${y}px` }"
+      ref="menuEl"
+      class="wp-ctxmenu wp-canvas-scope"
+      :style="{ left: `${pos.x}px`, top: `${pos.y}px` }"
       role="menu"
       @click.stop
       @contextmenu.prevent

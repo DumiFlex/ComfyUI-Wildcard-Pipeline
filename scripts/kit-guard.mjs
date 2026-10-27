@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url).replace(/^\/@fs/, "")), "..");
 
 /** Files that ARE the kit, or demo it, may use what they replace. */
-const KIT_PAGE = ["src/manager/views/Kit.vue"];
+const KIT_PAGE = ["src/manager/views/Kit.vue", "src/manager/kit/demos/"];
 
 export const RULES = [
   {
@@ -53,6 +53,7 @@ export const RULES = [
       "src/manager/components/ui/Modal.vue",
       "src/components/shared/ModalShell.vue",
       "src/components/shared/ConfirmDialog.vue",
+      "src/manager/components/ui/Drawer.vue",
     ],
     fix: "Use Modal (manager), or ModalShell / ConfirmDialog (canvas).",
   },
@@ -93,7 +94,7 @@ export function countAll(root = ROOT) {
   const out = {};
   for (const rule of RULES) out[rule.id] = {};
   for (const file of files) {
-    if (KIT_PAGE.includes(file)) continue;
+    if (KIT_PAGE.some((k) => file === k || (k.endsWith("/") && file.startsWith(k)))) continue;
     const text = stripComments(readFileSync(join(root, file), "utf8"));
     for (const rule of RULES) {
       if (rule.only && !file.startsWith(rule.only)) continue;

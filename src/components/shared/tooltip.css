@@ -1,0 +1,28 @@
+/* The one shared tooltip element (tooltip.ts). Colours come from tokens both
+ * the canvas and the manager define. */
+@layer wp-extension {
+  .wp-tooltip {
+    position: fixed;
+    z-index: 10001;
+    max-width: 280px;
+    padding: 5px 8px;
+    border-radius: var(--wp-radius-sm);
+    background: var(--wp-text);
+    color: var(--wp-bg-1);
+    font: 500 12px/1.4 var(--wp-font-sans);
+    pointer-events: none;
+    white-space: normal;
+    overflow-wrap: break-word;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 90ms ease-out, visibility 0s linear 90ms;
+  }
+  .wp-tooltip[data-open] {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 90ms ease-out;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wp-tooltip, .wp-tooltip[data-open] { transition: none; }
+  }
+}

@@ -166,7 +166,27 @@ export const KIT_ENTRIES: KitEntry[] = [
     instead: "A div with role=\"dialog\" and its own backdrop.",
   },
   {
-    id: "modal-shell", name: "ModalShell", group: "overlays", file: "src/components/shared/ModalShell.vue", surfaces: ["canvas"],
+    id: "drawer", name: "Drawer", group: "overlays", file: "src/manager/components/ui/Drawer.vue", surfaces: ["manager"],
+    use: "A panel that slides in from the side: an inspector, history, settings beside the work. Escape closes it and focus goes back. Turn modal off to keep the page usable behind it.",
+    instead: "Another fixed side panel with its own width, header and close button.",
+  },
+  {
+    id: "popover", name: "Popover", group: "overlays", file: "src/components/shared/Popover.vue", surfaces: ["canvas", "manager"],
+    use: "A panel anchored to a button: a colour picker, a filter, a small form. It flips to stay on screen, follows on scroll and closes on Escape or a click outside. Every floating panel builds on it.",
+    instead: "A Teleport with its own placement maths and outside-click handler.",
+  },
+  {
+    id: "dropdown-menu", name: "DropdownMenu", group: "overlays", file: "src/components/shared/DropdownMenu.vue", surfaces: ["canvas", "manager"],
+    use: "A list of actions behind a button (the ⋯ menu, More, Add…). Arrows, Home/End and Enter work. Takes the same items as ContextMenu, so a row's right-click and ⋯ menus can share one list.",
+    instead: "A hand-built menu of buttons under a ⋯ button.",
+  },
+  {
+    id: "tooltip", name: "Tooltip (v-tooltip)", group: "overlays", file: "src/components/shared/tooltip.ts", surfaces: ["canvas", "manager"],
+    use: "A short hint on hover and on keyboard focus. One attribute: v-tooltip=\"'Copy the prompt'\". Icon-only buttons still need an aria-label; the tooltip is for sighted mouse and keyboard users.",
+    instead: "title=\"…\", which is slow, can't be styled, never shows from the keyboard and is cut off on the canvas.",
+  },
+  {
+    id: "modal-shell", name: "ModalShell", group: "overlays", file: "src/components/shared/ModalShell.vue", surfaces: ["canvas", "manager"],
     use: "The backdrop, focus trap and Escape handling for a canvas dialog. Put the dialog's own frame inside.",
   },
   {
@@ -174,8 +194,8 @@ export const KIT_ENTRIES: KitEntry[] = [
     use: "Ask before something that can't be undone. Name the action on the confirm button (Delete, not OK).",
   },
   {
-    id: "context-menu", name: "ContextMenu", group: "overlays", file: "src/components/shared/ContextMenu.vue", surfaces: ["canvas"],
-    use: "A right-click or ⋯ menu: sections, icons, dividers, a danger item.",
+    id: "context-menu", name: "ContextMenu", group: "overlays", file: "src/components/shared/ContextMenu.vue", surfaces: ["canvas", "manager"],
+    use: "A right-click menu at the pointer: sections, icons, dividers, a danger item. It stays on screen near the edges. For a menu behind a button use DropdownMenu.",
     instead: "Another absolutely positioned list of buttons.",
   },
   // Library pieces
@@ -267,7 +287,11 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "modal": `<Modal v-model:open="open" title="Rename"><template #footer>…</template></Modal>`,
   "modal-shell": `<ModalShell :visible="open" @close="open = false"><div class="my-dialog">…</div></ModalShell>`,
   "confirm-dialog": `<ConfirmDialog :visible="ask" title="Delete Hair colour?" confirm-label="Delete" variant="danger" @confirm="del" @cancel="ask = false" />`,
-  "context-menu": `<ContextMenu :visible="open" :x="x" :y="y" :items="items" @close="open = false" />`,
+  "context-menu": `<ContextMenu :visible="open" :x="ev.clientX" :y="ev.clientY" :items="items" @close="open = false" />`,
+  "drawer": `<Drawer v-model:open="open" title="History" width="380px">…<template #footer>…</template></Drawer>`,
+  "popover": `<Popover v-model:open="open" label="Colour"><template #trigger="{ props }"><Button v-bind="props">Colour</Button></template>…</Popover>`,
+  "dropdown-menu": `<DropdownMenu :items="actions" label="Hair colour actions"><template #trigger="{ props }"><Button v-bind="props" variant="ghost" icon="pi-ellipsis-h" /></template></DropdownMenu>`,
+  "tooltip": `<Button v-tooltip="'Copy the prompt'" variant="ghost" icon="pi-copy" aria-label="Copy" />`,
   "logo": `<Logo :size="28" />`,
   "rich-text": `<RichTextInput v-model="template" surface="assembler" multiline :var-suggestions="vars" />`,
   "negative-field": `<NegativeField v-model="option.negative" label="option" />`,
