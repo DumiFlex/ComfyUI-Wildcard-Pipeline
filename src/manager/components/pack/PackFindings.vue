@@ -35,7 +35,7 @@ function patchLabel(f: AiPackFinding): string {
 <template>
   <div class="wp-pack-findings" data-test="pack-review">
     <p v-if="!pb.findings.value.length" class="wp-pack-findings__ok">
-      <i class="pi pi-check" aria-hidden="true" /> Nothing to fix: every rule has what it needs.
+      <i class="pi pi-check" aria-hidden="true" /> The quick checks found nothing: every rule names slots and values the plan has. They don't judge what a rule means; Review with AI does.
     </p>
     <ul v-else class="wp-pack-findings__list">
       <li v-for="f in pb.findings.value" :key="f.id" :data-level="f.level" data-test="pack-finding">
