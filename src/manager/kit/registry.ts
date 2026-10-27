@@ -10,7 +10,7 @@
  * Every user-facing string is in this file so the page is easy to translate.
  */
 
-export type KitGroup = "actions" | "inputs" | "choice" | "display" | "feedback" | "overlays" | "brand";
+export type KitGroup = "actions" | "inputs" | "choice" | "display" | "feedback" | "overlays" | "pieces" | "brand";
 export type KitSurface = "manager" | "canvas";
 
 export interface KitEntry {
@@ -35,6 +35,7 @@ export const KIT_GROUPS: { id: KitGroup; label: string; blurb: string }[] = [
   { id: "display", label: "Display", blurb: "Showing a thing: cards, chips, icons, empty pages." },
   { id: "feedback", label: "Feedback", blurb: "Telling the user what happened or that something is busy." },
   { id: "overlays", label: "Dialogs and menus", blurb: "Anything that opens above the page." },
+  { id: "pieces", label: "Library pieces", blurb: "Bigger parts built from the kit that several screens share. Reuse them before writing another." },
   { id: "brand", label: "Brand", blurb: "The logo." },
 ];
 
@@ -173,6 +174,40 @@ export const KIT_ENTRIES: KitEntry[] = [
     use: "A right-click or ⋯ menu: sections, icons, dividers, a danger item.",
     instead: "Another absolutely positioned list of buttons.",
   },
+  // Library pieces
+  {
+    id: "rich-text", name: "RichTextInput", group: "pieces", file: "src/manager/components/RichTextInput.vue", surfaces: ["manager"],
+    use: "Prompt text: colours $variables, @{references}, {a|b} picks, LoRAs and #tags, and completes them as you type. Every template, combine and option text box uses it.",
+    instead: "A Textarea for text that holds prompt syntax.",
+  },
+  {
+    id: "negative-field", name: "NegativeField", group: "pieces", file: "src/manager/components/NegativeField.vue", surfaces: ["manager"],
+    use: "The folded \"Negative\" box under an option, value or template. Opens when clicked or when it has text.",
+  },
+  {
+    id: "breadcrumb", name: "Breadcrumb", group: "pieces", file: "src/manager/components/Breadcrumb.vue", surfaces: ["manager"],
+    use: "The Library › Wildcards › Hair colour trail at the top of an editor.",
+  },
+  {
+    id: "draft-banner", name: "DraftBanner", group: "pieces", file: "src/manager/components/DraftBanner.vue", surfaces: ["manager"],
+    use: "Offer to restore unsaved changes found when an editor opens.",
+  },
+  {
+    id: "selection-toolbar", name: "SelectionToolbar", group: "pieces", file: "src/manager/components/SelectionToolbar.vue", surfaces: ["manager"],
+    use: "The bar that appears when rows are selected: tag, weight, negative, move and delete them together.",
+  },
+  {
+    id: "validity-icon", name: "ValidityIcon", group: "pieces", file: "src/manager/components/ValidityIcon.vue", surfaces: ["manager"],
+    use: "The check, warning or error mark in a list's Valid column, with the problems in its tooltip.",
+  },
+  {
+    id: "relative-date", name: "RelativeDate", group: "pieces", file: "src/manager/components/RelativeDate.vue", surfaces: ["manager"],
+    use: "\"5 min ago\" for a timestamp, with the full date on hover.",
+  },
+  {
+    id: "icon-picker", name: "IconPicker", group: "pieces", file: "src/manager/components/IconPicker.vue", surfaces: ["manager"],
+    use: "Pick an icon for a category or bundle from the curated set.",
+  },
   // Brand
   {
     id: "logo", name: "Logo", group: "brand", file: "src/components/shared/Logo.vue", surfaces: ["manager", "canvas"],
@@ -229,6 +264,14 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "confirm-dialog": `<ConfirmDialog :visible="ask" title="Delete Hair colour?" confirm-label="Delete" variant="danger" @confirm="del" @cancel="ask = false" />`,
   "context-menu": `<ContextMenu :visible="open" :x="x" :y="y" :items="items" @close="open = false" />`,
   "logo": `<Logo :size="28" />`,
+  "rich-text": `<RichTextInput v-model="template" surface="assembler" multiline :var-suggestions="vars" />`,
+  "negative-field": `<NegativeField v-model="option.negative" label="option" />`,
+  "breadcrumb": `<Breadcrumb :items="[{ to: '/wildcards', label: 'Wildcards' }, { label: name }]" />`,
+  "draft-banner": `<DraftBanner :has-draft="hasDraft" :age-ms="age" @restore="restore" @discard="discard" />`,
+  "selection-toolbar": `<SelectionToolbar :count="selected.length" :tags="tags" @apply-tag="tag" @delete-selected="del" />`,
+  "validity-icon": `<ValidityIcon :issues="validate(row)" />`,
+  "relative-date": `<RelativeDate :value="row.updated_at" />`,
+  "icon-picker": `<IconPicker v-model="icon" aria-label="Category icon" />`,
 };
 
 export function kitEntry(id: string): KitEntry {

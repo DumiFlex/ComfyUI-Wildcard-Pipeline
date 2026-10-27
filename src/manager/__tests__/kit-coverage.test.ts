@@ -3,11 +3,17 @@ import { join, resolve } from "node:path";
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it } from "vitest";
+import { createMemoryHistory, createRouter } from "vue-router";
 
 import Kit from "../views/Kit.vue";
 import { KIT_ENTRIES, KIT_EXEMPT, KIT_FOLDERS, KIT_GROUPS } from "../kit/registry";
 
 const ROOT = resolve(__dirname, "../../..");
+
+function mountKit(opts: { attachTo?: HTMLElement } = {}) {
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: "/:p(.*)*", component: { template: "<div />" } }] });
+  return mount(Kit, { ...opts, global: { plugins: [router] } });
+}
 
 beforeEach(() => {
   setActivePinia(createPinia());
@@ -47,7 +53,7 @@ describe("component kit registry", () => {
 
 describe("Kit.vue", () => {
   it("shows every entry, and a live demo for each one the manager can show", () => {
-    const wrap = mount(Kit, { attachTo: document.body });
+    const wrap = mountKit({ attachTo: document.body });
     for (const e of KIT_ENTRIES) {
       const card = wrap.find(`[data-kit-entry="${e.id}"]`);
       expect(card.exists(), e.id).toBe(true);
@@ -60,7 +66,7 @@ describe("Kit.vue", () => {
   });
 
   it("filters the sample list with ListFilter", async () => {
-    const wrap = mount(Kit);
+    const wrap = mountKit();
     const box = wrap.find('[data-test="kit-filter-search"]');
     await box.setValue("mood");
     expect(wrap.find('[data-kit-entry="list-filter"]').findAll("li")).toHaveLength(2);

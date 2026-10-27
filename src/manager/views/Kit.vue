@@ -24,7 +24,15 @@ import Select from "../components/ui/Select.vue";
 import Textarea from "../components/ui/Textarea.vue";
 import Toggle from "../components/ui/Toggle.vue";
 import type { SelectOption } from "../components/ui/select-types";
+import Breadcrumb from "../components/Breadcrumb.vue";
 import CategoryChip from "../components/CategoryChip.vue";
+import DraftBanner from "../components/DraftBanner.vue";
+import IconPicker from "../components/IconPicker.vue";
+import NegativeField from "../components/NegativeField.vue";
+import RelativeDate from "../components/RelativeDate.vue";
+import RichTextInput from "../components/RichTextInput.vue";
+import SelectionToolbar from "../components/SelectionToolbar.vue";
+import ValidityIcon from "../components/ValidityIcon.vue";
 import ColorPicker from "../components/ColorPicker.vue";
 import { allCuratedIcons } from "../components/icon-catalog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
@@ -81,6 +89,12 @@ const TABS = [
 const modalOpen = ref(false);
 const confirmOpen = ref(false);
 const icons = allCuratedIcons();
+const template = ref("$mood portrait of $subject, {soft|warm} light, <lora:film_grain:0.6>, #portrait");
+const negative = ref("blurry, cropped");
+const pickedIcon = ref<string | null>("user");
+const draftShown = ref(true);
+const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+const yesterday = new Date(Date.now() - 26 * 3600_000).toISOString();
 
 function pushToast(kind: "success" | "warn"): void {
   if (kind === "success") {
@@ -328,6 +342,57 @@ function pushToast(kind: "success" | "warn"): void {
                 />
               </template>
 
+              <template v-else-if="e.id === 'rich-text'">
+                <div class="wp-kit__stack wp-kit__stack--wide">
+                  <RichTextInput
+                    v-model="template"
+                    surface="assembler"
+                    multiline
+                    :rows="2"
+                    :var-suggestions="['mood', 'subject', 'hair']"
+                    aria-label="Template"
+                  />
+                </div>
+              </template>
+
+              <template v-else-if="e.id === 'negative-field'">
+                <div class="wp-kit__stack wp-kit__stack--wide">
+                  <NegativeField v-model="negative" label="option" always-open />
+                </div>
+              </template>
+
+              <template v-else-if="e.id === 'breadcrumb'">
+                <Breadcrumb :items="[{ to: '/wildcards', label: 'Wildcards' }, { label: 'Hair colour' }]" />
+              </template>
+
+              <template v-else-if="e.id === 'draft-banner'">
+                <div class="wp-kit__stack wp-kit__stack--wide">
+                  <DraftBanner :has-draft="draftShown" :age-ms="12 * 60_000" @restore="draftShown = false" @discard="draftShown = false" />
+                  <Button v-if="!draftShown" size="sm" @click="draftShown = true">Show it again</Button>
+                </div>
+              </template>
+
+              <template v-else-if="e.id === 'selection-toolbar'">
+                <div class="wp-kit__stack wp-kit__stack--wide">
+                  <SelectionToolbar :count="3" :tags="['winter', 'summer', 'formal']" :common-tags="['winter']" reorderable negatives />
+                </div>
+              </template>
+
+              <template v-else-if="e.id === 'validity-icon'">
+                <span class="wp-kit__inline"><ValidityIcon :issues="[]" /> No problems</span>
+                <span class="wp-kit__inline"><ValidityIcon :issues="[{ severity: 'warn', message: 'Uses $subject, which nothing sets.' }]" /> A warning</span>
+                <span class="wp-kit__inline"><ValidityIcon :issues="[{ severity: 'error', message: 'Points at a wildcard that is gone.' }]" /> An error</span>
+              </template>
+
+              <template v-else-if="e.id === 'relative-date'">
+                <span class="wp-kit__inline">Edited <RelativeDate :value="fiveMinAgo" /></span>
+                <span class="wp-kit__inline">Edited <RelativeDate :value="yesterday" /></span>
+              </template>
+
+              <template v-else-if="e.id === 'icon-picker'">
+                <IconPicker v-model="pickedIcon" aria-label="Category icon" />
+              </template>
+
               <template v-else-if="e.id === 'logo'">
                 <Logo :size="16" /><Logo :size="20" /><Logo :size="28" /><Logo :size="40" />
               </template>
@@ -378,6 +443,7 @@ function pushToast(kind: "success" | "warn"): void {
 .wp-kit__group-title { margin: 0; font-size: var(--wp-text-lg); font-weight: 600; color: var(--wp-text); }
 .wp-kit__group-blurb { margin: calc(-1 * var(--wp-space-3)) 0 0; color: var(--wp-text-muted); font-size: var(--wp-text-sm); }
 .wp-kit__stack { display: flex; flex-direction: column; gap: var(--wp-space-4); width: 100%; max-width: 420px; }
+.wp-kit__stack--wide { max-width: 720px; }
 .wp-kit__row { display: flex; align-items: center; gap: var(--wp-space-4); flex-wrap: wrap; }
 .wp-kit__inline { display: inline-flex; align-items: center; gap: var(--wp-space-3); color: var(--wp-text); font-size: var(--wp-text-base); }
 .wp-kit__muted { margin: 0; color: var(--wp-text-muted); font-size: var(--wp-text-sm); }

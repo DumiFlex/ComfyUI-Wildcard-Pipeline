@@ -2199,6 +2199,31 @@
    ]
   },
   {
+   "id": "component-kit",
+   "title": "Component kit",
+   "group": "reference",
+   "blurb": "Every shared control, colour and size, shown live.",
+   "keywords": [
+    "kit",
+    "components",
+    "design",
+    "buttons",
+    "tokens",
+    "colours",
+    "contributors"
+   ],
+   "sections": [
+    {
+     "title": "What's in it",
+     "text": "- Tokens: the colours, type sizes, spacing and corners, with the value each has right now.\n- Actions (2): Things you press.\n- Inputs (9): Things you type into or pick from a list.\n- Choices (5): On or off, one of a few, which tab.\n- Display (6): Showing a thing: cards, chips, icons, empty pages.\n- Feedback (3): Telling the user what happened or that something is busy.\n- Dialogs and menus (4): Anything that opens above the page.\n- Library pieces (8): Bigger parts built from the kit that several screens share. Reuse them before writing another.\n- Brand (1): The logo.\nA few pieces only work on the canvas (the node dialog, the right-click menu and the canvas toast). The kit lists them with how to use them instead of a live demo."
+    },
+    {
+     "title": "Reuse first",
+     "text": "New screens are built from kit entries. A new control is made only when nothing in the kit fits, and it goes into the kit in the same change, with a demo. Two checks keep this honest: one fails when a shared control has no kit entry, the other fails when a file adds a hand-made button, select, number box, dialog or colour.\nYou can also open the kit from Settings › Advanced › Component kit."
+    }
+   ]
+  },
+  {
    "id": "settings",
    "title": "Settings",
    "group": "settings",

@@ -27,7 +27,7 @@ The assistant is new and **off by default**. Turn it on in **Settings › AI ass
 - **Docs rewritten in plain words.** Every docs page and node help panel is shorter, with new screenshots of the current nodes. New **How to** pages cover variations in one click, making two picks agree, keeping something the same, sharing a pack and fixing common problems. The AI docs are split into short pages, and importing A1111/Forge wildcard packs has its own page.
 - **New guides** for pack structure, writing prompts per image model, and adult (NSFW) packs.
 - **A new loading mark** replaces the spinners in the manager.
-- **Component kit.** **Settings › Advanced › Component kit** shows every shared control (buttons, fields, dropdowns, checkboxes, chips, dialogs, colours and type) with when to use each, for anyone building on the extension.
+- **Component kit.** **Settings › Advanced › Component kit** (or **Docs › Reference › Component kit**) shows every shared control (buttons, fields, dropdowns, checkboxes, chips, dialogs, prompt boxes, the selection bar, colours and type) with when to use each, for anyone building on the extension.
 
 ### Wildcard pack import
 
