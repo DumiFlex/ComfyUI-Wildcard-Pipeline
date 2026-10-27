@@ -58,6 +58,17 @@ _VAR_READ = re.compile(r"\$([a-zA-Z_][a-zA-Z0-9_]*)")
 _STR = {"type": "string"}
 
 
+
+def join_piece(mode: Any, value: str) -> str:
+    """The engine joins append / prepend text as written: "tie" + "watch"
+    is "tiewatch". A list piece gets its comma (", watch" / "watch, ");
+    text that already brings its own separator is kept as it is."""
+    if value and mode == "append" and not re.match(r"[,;.\s]", value):
+        return ", " + value
+    if value and mode == "prepend" and not re.search(r"[,;.\s]$", value):
+        return value + ", "
+    return value
+
 def _obj(props: dict[str, Any]) -> dict[str, Any]:
     return {
         "type": "object", "additionalProperties": False,
@@ -887,12 +898,7 @@ def _compile_action(
         raise _Drop(f"{a.get('target_var')!r} isn't a variable name")
     value = _got if isinstance(_got := a.get("value"), str) else ""
     value = _unquote(re.sub(r"\s+", " ", value).strip())[:MAX_VALUE_LEN]
-    # The engine joins append / prepend text as written: "tie" + "watch"
-    # is "tiewatch". A list piece gets its comma.
-    if value and mode == "append" and not re.match(r"[,;.\s]", value):
-        value = ", " + value
-    elif value and mode == "prepend" and not re.search(r"[,;.]$", value):
-        value = value + ", "
+    value = join_piece(mode, value)
     try:
         value = ai_refs.compile_text(value, surface="action", refs=refs)
     except ValueError as e:

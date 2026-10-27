@@ -227,6 +227,9 @@ def compile_fixed(
             value = value or str(row.get("value") or "")
             if "negative" not in item:
                 negative = str(row.get("negative") or "")
+        # A value that only keeps words out ("bad anatomy, extra fingers" as
+        # its negative, nothing in the prompt) is a value too (9B bench Z9,
+        # 2026-10-26: a Pony preset's anatomy negatives were dropped).
         negative = clean_negative(negative, value)
         if not value and not negative:
             skipped.append({"text": name, "reason": "empty"})
