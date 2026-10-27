@@ -47,7 +47,7 @@ function setOpen(v: boolean): void {
 }
 
 const triggerProps = computed(() => ({
-  "aria-haspopup": props.role === "group" ? "true" : props.role,
+  "aria-haspopup": (props.role === "group" ? "true" : props.role) as "true" | "dialog" | "menu" | "listbox",
   "aria-expanded": props.open,
   "aria-controls": props.open ? id : undefined,
   onClick: () => setOpen(!props.open),

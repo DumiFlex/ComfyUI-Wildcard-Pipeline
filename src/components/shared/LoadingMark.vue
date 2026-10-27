@@ -44,6 +44,11 @@ const slots = useSlots();
 const id = `wp-lm-${nextId++}`;
 const px = computed(() => props.size ?? (props.block ? 40 : 14));
 const drawing = computed(() => props.variant ?? (props.block || px.value >= 24 ? "logo" : "sparkle"));
+/** The logo's own colours (brand, not theme tokens: the mark looks the same
+ *  in light and dark). */
+const VIOLET = "#a970ff";
+const INDIGO = "#6366f1";
+const TEAL = "#33d6c6";
 const fill = (colour: string): string => (props.mono ? "currentColor" : colour);
 </script>
 
@@ -67,25 +72,25 @@ const fill = (colour: string): string => (props.mono ? "currentColor" : colour);
       <template v-if="drawing === 'logo'">
         <defs v-if="!mono">
           <linearGradient :id="`${id}a`" x1="312.56" y1="897.19" x2="312.56" y2="2" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stop-color="#a970ff" />
-            <stop offset="1" stop-color="#6366f1" />
+            <stop offset="0" :stop-color="VIOLET" />
+            <stop offset="1" :stop-color="INDIGO" />
           </linearGradient>
           <linearGradient :id="`${id}b`" x1="711.44" y1="126.81" x2="711.44" y2="1022" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stop-color="#6366f1" />
-            <stop offset="1" stop-color="#33d6c6" />
+            <stop offset="0" :stop-color="INDIGO" />
+            <stop offset="1" :stop-color="TEAL" />
           </linearGradient>
         </defs>
         <path class="wp-lm__ring wp-lm__ring--a" :fill="fill(`url(#${id}a)`)" :d="RING_A" />
         <path class="wp-lm__ring wp-lm__ring--b" :fill="fill(`url(#${id}b)`)" :d="RING_B" />
-        <path class="wp-lm__star wp-lm__star--big" :fill="fill('#a970ff')" :d="STAR_BIG" />
-        <path class="wp-lm__star wp-lm__star--tw" :fill="fill('#6366f1')" :d="STAR_A" />
-        <path class="wp-lm__star wp-lm__star--tw" :fill="fill('#33d6c6')" :d="STAR_B" />
+        <path class="wp-lm__star wp-lm__star--big" :fill="fill(VIOLET)" :d="STAR_BIG" />
+        <path class="wp-lm__star wp-lm__star--tw" :fill="fill(INDIGO)" :d="STAR_A" />
+        <path class="wp-lm__star wp-lm__star--tw" :fill="fill(TEAL)" :d="STAR_B" />
       </template>
       <g v-else transform="translate(512 512) scale(1.45) translate(-512 -512)">
-        <path class="wp-lm__star wp-lm__star--big" :fill="fill('#a970ff')" :d="STAR_BIG" />
+        <path class="wp-lm__star wp-lm__star--big" :fill="fill(VIOLET)" :d="STAR_BIG" />
         <g class="wp-lm__swap">
-          <path class="wp-lm__star" :fill="fill('#6366f1')" :d="STAR_A" />
-          <path class="wp-lm__star" :fill="fill('#33d6c6')" :d="STAR_B" />
+          <path class="wp-lm__star" :fill="fill(INDIGO)" :d="STAR_A" />
+          <path class="wp-lm__star" :fill="fill(TEAL)" :d="STAR_B" />
         </g>
       </g>
     </svg>

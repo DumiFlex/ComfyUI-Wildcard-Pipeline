@@ -453,7 +453,11 @@ const foreignPoolNote = computed<string | null>(() => {
   return `also in ${where} — other nodes don't share pools`;
 });
 
+/** The chip the open card belongs to, so the card can follow it on scroll. */
+let popAnchor: HTMLElement | null = null;
+
 function positionPop(el: HTMLElement): void {
+  popAnchor = el;
   const r = el.getBoundingClientRect();
   const POP_H = 120;
   const gap = 6;
@@ -538,7 +542,35 @@ function openInNewWindow(): void {
   if (editHref.value) window.open(editHref.value, "_blank", "noopener");
 }
 
-onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverTimer); });
+/** Any scroll under the open card moves it with its chip, like every kit
+ *  overlay; once the chip has scrolled out of view the card closes. A
+ *  scroll inside the card itself changes nothing. */
+function followPop(ev: Event): void {
+  const from = ev.target as Element | null;
+  if (from?.closest?.(".wp-refchip-pop")) return;
+  if (!popAnchor || !popAnchor.isConnected) { hoverOpen.value = false; return; }
+  const r = popAnchor.getBoundingClientRect();
+  if (r.bottom < 0 || r.top > window.innerHeight) { hoverOpen.value = false; return; }
+  positionPop(popAnchor);
+}
+watch(hoverOpen, (open) => {
+  if (typeof window === "undefined") return;
+  if (open) {
+    window.addEventListener("scroll", followPop, true);
+    window.addEventListener("resize", followPop);
+  } else {
+    window.removeEventListener("scroll", followPop, true);
+    window.removeEventListener("resize", followPop);
+  }
+});
+
+onBeforeUnmount(() => {
+  if (hoverTimer !== undefined) window.clearTimeout(hoverTimer);
+  if (typeof window !== "undefined") {
+    window.removeEventListener("scroll", followPop, true);
+    window.removeEventListener("resize", followPop);
+  }
+});
 </script>
 
 <template>

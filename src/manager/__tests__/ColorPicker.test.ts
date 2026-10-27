@@ -5,7 +5,7 @@ import ColorPicker from "../components/ColorPicker.vue";
 function makeWrapper(modelValue = "#7c3aed") {
   return mount(ColorPicker, {
     props: { modelValue },
-    global: { plugins: [] },
+    global: { plugins: [], stubs: { Teleport: true } },
   });
 }
 
@@ -55,16 +55,21 @@ describe("ColorPicker.vue", () => {
   it("uses provided ariaLabel on the swatch button", () => {
     const wrap = mount(ColorPicker, {
       props: { modelValue: "#abcdef", ariaLabel: "Pick brand color" },
-      global: { plugins: [] },
+      global: { plugins: [], stubs: { Teleport: true } },
     });
-    expect(wrap.get('[data-test="color-swatch"]').attributes("aria-label"))
+    expect(wrap.get('[data-test="color-trigger"]').attributes("aria-label"))
       .toBe("Pick brand color");
+  });
+
+  it("shows the hex next to the swatch in the closed picker", () => {
+    const wrap = makeWrapper("#A78BFA");
+    expect(wrap.get('[data-test="color-trigger"]').text()).toContain("#a78bfa");
   });
 
   it("supports custom presets prop", async () => {
     const wrap = mount(ColorPicker, {
       props: { modelValue: "#000000", presets: ["#111111", "#222222"] },
-      global: { plugins: [] },
+      global: { plugins: [], stubs: { Teleport: true } },
     });
     await openPopover(wrap);
     expect(wrap.findAll('[data-test="color-preset"]').length).toBe(2);
