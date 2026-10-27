@@ -296,7 +296,9 @@ async def test_derivation_draft_uses_library_variables(wp_client, fake_llm):
     [r] = body["rules"]
     cond = r["rule"]["branches"][0]["condition"]
     assert cond == {"var": "class", "op": "equals", "value": "mage"}
-    assert r["warnings"] == []
+    # No template reads $title yet, which the rule says (bench Z8).
+    assert r["warnings"] == ["Nothing in your library reads $title yet; a template or "
+                             "combine has to read it for it to print"]
     assert body["model"] == "m1"
     prompt = fake_llm.seen[-1]["body"]["messages"][1]["content"]
     assert '$class (wildcard "Class"): mage, warrior' in prompt

@@ -1106,6 +1106,9 @@ export interface AiWildcardDraftResult {
   /** Tag groups the request asked for (older servers leave it out). */
   groups?: AiDraftGroup[];
   skipped: Array<{ text: string; reason: string }>;
+  /** What the code found wrong with the draft as a whole ("you asked for
+   *  tags, but none came back"); older servers leave it out. */
+  warnings?: string[];
   /** The model's one-line reason when it changed nothing, else "". */
   note?: string;
   model: string;
@@ -1145,6 +1148,8 @@ export interface AiWildcardEditChange {
   before: { value?: string; tags?: string[]; weight?: number };
   after: { value?: string; tags?: string[]; weight?: number } | null;
   reason?: string;
+  /** A rewrite to Danbooru tags: the pieces the installed tag list lacks. */
+  warning?: string;
 }
 
 export interface AiWildcardEditResult {
@@ -1152,6 +1157,9 @@ export interface AiWildcardEditResult {
   changes: AiWildcardEditChange[];
   new_tags: string[];
   skipped: Array<{ text: string; reason: string }>;
+  /** What the code found wrong with the edit as a whole ("removes every
+   *  option", a tag now on every option); older servers leave it out. */
+  warnings?: string[];
   /** The model's one-line reason when it changed nothing, else "". */
   note?: string;
   model: string;
@@ -1173,6 +1181,9 @@ export interface AiDerivationDraftRule {
   /** Things that work but look wrong: a variable nothing sets, an option
    *  the wildcard doesn't have. */
   warnings: string[];
+  /** Set when the rule changes one the module already has: that rule's id
+   *  (the rule keeps it). Apply replaces it in place. */
+  replaces?: string;
 }
 
 export interface AiDerivationDraftResult {
@@ -2160,10 +2171,29 @@ export interface AiTextDraftRequest extends AiConversational {
 
 /** Fixed values: the whole value list. Combine: its payload. Template:
  *  `{template_string, negative_template}`. */
+/** A fixed value the AI wrote or changed (`rows` of a fixed values draft). */
+export interface AiFixedRow {
+  id: string;
+  name: string;
+  value: string;
+  negative: string;
+  status: "new" | "changed";
+  /** What a changed value held before. */
+  before?: { value: string; negative: string };
+}
+
 export interface AiTextDraftResult {
   payload: Record<string, unknown>;
   preview: string[];
   warnings: string[];
+  /** Fixed values only: the new and changed values, one by one (older
+   *  servers leave it out; the panel then shows `preview`). */
+  rows?: AiFixedRow[];
+  /** Combines and templates: a few example renders from the library's
+   *  own options. */
+  samples?: string[];
+  /** Combines and templates: the text and negative before the draft. */
+  before?: { template: string; negative: string };
   model: string;
   answer: Record<string, unknown>;
   /** Web searches the model would like to run (only when web search is set

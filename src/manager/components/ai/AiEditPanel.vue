@@ -223,6 +223,9 @@ function fmtWeight(w: number | undefined): string {
               <span class="wp-ai-edit__old"><AiSyntax :text="c.before.value ?? ''" /></span>
               <i class="pi pi-arrow-right wp-ai-edit__arrow" aria-hidden="true" />
               <span class="wp-ai-edit__new"><AiSyntax :text="c.after?.value ?? ''" /></span>
+              <span v-if="c.warning" class="wp-ai-edit__row-warn" data-test="ai-edit-row-warning">
+                <i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ c.warning }}
+              </span>
             </template>
             <template v-else>
               <span class="wp-ai-edit__label"><AiSyntax :text="options.find((o) => o.id === c.option_id)?.value ?? ''" /></span>
@@ -250,6 +253,9 @@ function fmtWeight(w: number | undefined): string {
           </label>
         </li>
       </ul>
+      <p v-for="w in result.warnings ?? []" :key="w" class="wp-ai-edit__warn" data-test="ai-edit-warning">
+        <i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ w }}
+      </p>
       <p class="wp-ai-edit__summary">
         {{ result.changes.length }} change{{ result.changes.length === 1 ? "" : "s" }} suggested<template v-if="skippedSummary"> · skipped {{ skippedSummary }}</template>
         <template v-if="result.new_tags.length"> · new tags (dashed) are created when you apply</template>
@@ -324,5 +330,7 @@ function fmtWeight(w: number | undefined): string {
 }
 .wp-ai-edit__w { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--wp-text); }
 .wp-ai-edit__summary, .wp-ai-edit__note { margin: 0; font-size: 12px; color: var(--wp-text-dim); }
+.wp-ai-edit__warn { margin: 0; font-size: 12px; color: var(--wp-warn); display: flex; gap: 6px; align-items: center; }
+.wp-ai-edit__row-warn { flex-basis: 100%; font-size: 11px; color: var(--wp-warn); display: inline-flex; gap: 4px; align-items: center; }
 .wp-ai-edit__actions { display: flex; justify-content: flex-end; gap: 8px; }
 </style>

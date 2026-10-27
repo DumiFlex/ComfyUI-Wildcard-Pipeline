@@ -5,7 +5,10 @@
  * and options for the model and checks every rule against the engine, so
  * what comes back can be appended as is. Each rule is shown in plain words
  * with a tick box; "Add" emits the ticked ones and the editor appends them.
- * Nothing is saved until the user presses Save.
+ * A rule that changes one the module has ("add a branch for rogues")
+ * carries `replaces`: it is marked "Changes rule N" with its new lines
+ * marked, and the editor puts it in that rule's place. Nothing is saved
+ * until the user presses Save.
  */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
@@ -14,7 +17,7 @@ import AiPanelFrame from "./AiPanelFrame.vue";
 import { useAiImages } from "../../composables/useAiImages";
 import { api } from "../../api/client";
 import type { AiDerivationDraftResult, DerivationRule } from "../../api/types";
-import { ruleLines } from "../../utils/ai-rule-text";
+import { changedLines, ruleLines } from "../../utils/ai-rule-text";
 import { keptNote, useAiConversation } from "../../composables/useAiConversation";
 
 const props = defineProps<{
@@ -72,6 +75,26 @@ function toggle(i: number): void {
   unticked.value = next;
 }
 
+/** For a rule that changes an existing one: its number and which lines
+ *  are new. */
+function changeOf(r: AiDerivationDraftResult["rules"][number]): { at: number; marks: boolean[] } | null {
+  if (!r.replaces) return null;
+  const at = props.rules.findIndex((x) => x.id === r.replaces);
+  if (at < 0) return null;
+  return { at: at + 1, marks: changedLines(props.rules[at], r.rule) };
+}
+const changes = computed(() => (result.value?.rules ?? []).map(changeOf));
+const addLabel = computed(() => {
+  const picked = (result.value?.rules ?? []).filter((_, i) => !unticked.value.has(i));
+  const changed = picked.filter((_, i) => !!changes.value[i]).length;
+  const added = picked.length - changed;
+  const parts = [
+    added ? `add ${added} rule${added === 1 ? "" : "s"}` : "",
+    changed ? `change ${changed}` : "",
+  ].filter(Boolean).join(", ");
+  return parts.charAt(0).toUpperCase() + parts.slice(1) || "Add 0 rules";
+});
+
 function add(): void {
   if (!ticked.value.length) return;
   emit("add", ticked.value);
@@ -116,9 +139,15 @@ function close(): void {
           <label class="wp-ai-rules__head">
             <Checkbox class="wp-checkbox--inline wp-ai-rules__check" :model-value="!unticked.has(i)" @update:model-value="toggle(i)" />
             <span class="wp-ai-rules__summary">{{ r.summary }}</span>
+            <span v-if="changes[i]" class="wp-ai-rules__changes" data-test="ai-rule-changes">Changes rule {{ changes[i]?.at }}</span>
           </label>
           <ol class="wp-ai-rules__lines">
-            <li v-for="(line, li) in ruleLines(r.rule)" :key="li">
+            <li
+              v-for="(line, li) in ruleLines(r.rule)"
+              :key="li"
+              :data-new="changes[i]?.marks[li] ? 'true' : 'false'"
+              :title="changes[i]?.marks[li] ? 'New or changed in this rule' : undefined"
+            >
               <span class="wp-ai-rules__lead">{{ line.lead }}</span>
               <span v-if="line.when" class="wp-ai-rules__when">{{ line.when }}</span>
               <span class="wp-ai-rules__then">
@@ -143,9 +172,11 @@ function close(): void {
           :disabled="!ticked.length"
           data-test="ai-apply"
           @click="add"
-        >Add {{ ticked.length }} rule{{ ticked.length === 1 ? "" : "s" }}</Button>
+        >{{ addLabel }}</Button>
       </div>
-      <p class="wp-ai-rules__note">They go to the end of the list. Nothing is saved until you press Save.</p>
+      <p class="wp-ai-rules__note">
+        New rules go to the end of the list<template v-if="changes.some(Boolean)">; a changed rule stays in its place, with its lines kept</template>. Nothing is saved until you press Save.
+      </p>
     </template>
   </AiPanelFrame>
 </template>
@@ -174,6 +205,29 @@ function close(): void {
 .wp-ai-rules__summary { font-weight: 600; font-size: 13px; color: var(--wp-text); }
 .wp-ai-rules__lines { list-style: none; margin: 6px 0 0 24px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
 .wp-ai-rules__lines > li { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; font-size: 12px; }
+.wp-ai-rules__changes {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--wp-surface-2, rgba(127, 127, 127, 0.15));
+  color: var(--wp-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.wp-ai-rules__lines > li { position: relative; }
+.wp-ai-rules__lines > li[data-new="true"]::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--wp-success);
+}
+.wp-ai-rules__lines > li[data-new="true"] .wp-ai-rules__lead { color: var(--wp-success); }
 .wp-ai-rules__lead { font-weight: 700; font-size: 11px; color: var(--wp-accent-text); min-width: 52px; }
 .wp-ai-rules__when { font-family: var(--wp-font-mono, monospace); color: var(--wp-text); overflow-wrap: anywhere; }
 .wp-ai-rules__when::after { content: " →"; color: var(--wp-text-dim); }
