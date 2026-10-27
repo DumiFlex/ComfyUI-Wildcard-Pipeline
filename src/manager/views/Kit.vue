@@ -34,6 +34,7 @@ import RichTextInput from "../components/RichTextInput.vue";
 import SelectionToolbar from "../components/SelectionToolbar.vue";
 import ValidityIcon from "../components/ValidityIcon.vue";
 import ColorPicker from "../components/ColorPicker.vue";
+import AiWorking from "../components/ai/AiWorking.vue";
 import { allCuratedIcons } from "../components/icon-catalog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
 import HsvPicker from "@/components/shared/HsvPicker.vue";
@@ -316,6 +317,15 @@ function pushToast(kind: "success" | "warn"): void {
                 <LoadingMark :size="16" label="Loading" />
                 <LoadingMark :size="20">Loading bundle…</LoadingMark>
                 <div class="wp-kit__stack"><LoadingMark block>Loading the library…</LoadingMark></div>
+              </template>
+
+              <template v-else-if="e.id === 'ai-working'">
+                <div class="wp-kit__stack">
+                  <AiWorking text="Loading bundle" variant="typing" />
+                  <AiWorking text="Loading bundle" variant="shuffle" />
+                  <AiWorking text="Loading bundle" variant="orbit" />
+                  <AiWorking text="Loading bundle" variant="burst" />
+                </div>
               </template>
 
               <template v-else-if="e.id === 'modal'">

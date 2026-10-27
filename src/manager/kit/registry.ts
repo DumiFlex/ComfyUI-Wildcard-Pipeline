@@ -155,6 +155,10 @@ export const KIT_ENTRIES: KitEntry[] = [
     use: "Anything busy. Give it a label, or slot text for a \"Loading bundle…\" row; block fills an empty panel.",
     instead: "A spinner or plain \"Loading…\" text.",
   },
+  {
+    id: "ai-working", name: "AiWorking", group: "feedback", file: "src/manager/components/ai/AiWorking.vue", surfaces: ["manager"],
+    use: "The \"the AI is working\" line: one of four animated sparkle marks (typing, shuffle, orbit, burst), a changing word and the time so far. Pass text for your own status, or leave it out to follow the AI request in flight.",
+  },
   // Overlays
   {
     id: "modal", name: "Modal", group: "overlays", file: "src/manager/components/ui/Modal.vue", surfaces: ["manager"],
@@ -259,6 +263,7 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "toast": `useToast().push({ severity: "success", summary: "Saved", action: { label: "Undo", run: undo } })`,
   "canvas-toast": `pushToast("Copied to the library", { severity: "success" })`,
   "loading-mark": `<LoadingMark block>Loading bundle…</LoadingMark>`,
+  "ai-working": `<AiWorking text="Planning the pack" variant="orbit" />`,
   "modal": `<Modal v-model:open="open" title="Rename"><template #footer>…</template></Modal>`,
   "modal-shell": `<ModalShell :visible="open" @close="open = false"><div class="my-dialog">…</div></ModalShell>`,
   "confirm-dialog": `<ConfirmDialog :visible="ask" title="Delete Hair colour?" confirm-label="Delete" variant="danger" @confirm="del" @cancel="ask = false" />`,
