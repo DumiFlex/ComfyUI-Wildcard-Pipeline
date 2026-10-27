@@ -6,6 +6,7 @@
  *
  *   <Button v-tooltip="'Copy the prompt'" icon="pi-copy" aria-label="Copy" />
  *   <span v-tooltip="{ text: 'Runs first', placement: 'right' }">…</span>
+ *   <Button v-tooltip="{ text: 'Copy to clipboard', kbd: 'Ctrl C' }" … />
  *
  * One tooltip element is shared by the whole page, so a thousand hints
  * cost one node. State per element lives in a WeakMap (no expando keys).
@@ -14,10 +15,20 @@ import type { Directive } from "vue";
 import { placeFloating, viewportSize, type Placement } from "./floating";
 import "./tooltip.css";
 
-export type TooltipValue = string | null | undefined | { text: string | null | undefined; placement?: Placement };
+export type TooltipValue =
+  | string
+  | null
+  | undefined
+  | {
+    text: string | null | undefined;
+    placement?: Placement;
+    /** A shortcut shown after the text, e.g. "Ctrl C". */
+    kbd?: string;
+  };
 
 interface State {
   text: string;
+  kbd: string;
   placement: Placement;
   timer: number | undefined;
   off: () => void;
@@ -33,9 +44,9 @@ let owner: HTMLElement | null = null;
 let lastHidden = 0;
 let uid = 0;
 
-function read(v: TooltipValue): { text: string; placement: Placement } {
-  if (v && typeof v === "object") return { text: v.text ?? "", placement: v.placement ?? "top" };
-  return { text: v ?? "", placement: "top" };
+function read(v: TooltipValue): { text: string; kbd: string; placement: Placement } {
+  if (v && typeof v === "object") return { text: v.text ?? "", kbd: v.kbd ?? "", placement: v.placement ?? "top" };
+  return { text: v ?? "", kbd: "", placement: "top" };
 }
 
 function tip(): HTMLDivElement {
@@ -53,6 +64,12 @@ function show(el: HTMLElement): void {
   if (!s || !s.text || !el.isConnected) return;
   const t = tip();
   t.textContent = s.text;
+  if (s.kbd) {
+    const k = document.createElement("kbd");
+    k.className = "wp-tooltip__kbd";
+    k.textContent = s.kbd;
+    t.append(" ", k);
+  }
   t.dataset.open = "true";
   owner = el;
   const ids = (el.getAttribute("aria-describedby") ?? "").split(" ").filter(Boolean);

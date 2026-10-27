@@ -177,7 +177,7 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
     <ul
       v-if="visible"
       ref="menuEl"
-      class="wp-ctxmenu wp-canvas-scope"
+      class="wp-ctxmenu"
       :style="{ left: `${pos.x}px`, top: `${pos.y}px` }"
       role="menu"
       @click.stop
@@ -239,10 +239,10 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
 .wp-ctxmenu {
   position: fixed;
   z-index: 10000;
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border-strong);
   border-radius: var(--wp-radius-sm);
-  box-shadow: var(--wp-shadow-sm, 0 4px 16px rgba(0, 0, 0, 0.5));
+  box-shadow: var(--wp-shadow-md);
   /* Tighter padding than the old 4px-0 to match the v2 mockup. Items
    * carry their own 6px padding + rounded corners so the menu reads
    * as a stack of pills, not a flat list. */
@@ -265,7 +265,7 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
   gap: 6px;
   padding: 6px 8px 4px 8px;
   font: 600 10px/1 var(--wp-font-sans);
-  color: var(--wp-text-dim, var(--wp-text3));
+  color: var(--wp-text-dim);
   border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
   margin-bottom: 4px;
 }
@@ -282,7 +282,7 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
   font: 600 9px/1 var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--wp-text3);
+  color: var(--wp-text-dim);
   padding: 6px 8px 4px 8px;
 }
 .wp-ctxmenu__item {
@@ -312,10 +312,10 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
   color: var(--wp-accent);
 }
 .wp-ctxmenu__item--disabled {
-  color: var(--wp-text3);
+  color: var(--wp-text-dim);
   cursor: not-allowed;
 }
-.wp-ctxmenu__item--disabled:hover { background: transparent; color: var(--wp-text3); }
+.wp-ctxmenu__item--disabled:hover { background: transparent; color: var(--wp-text-dim); }
 .wp-ctxmenu__icon,
 .wp-ctxmenu__icon-spacer {
   width: 14px;
@@ -338,7 +338,7 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
   color: inherit;
 }
 .wp-ctxmenu__sub {
-  color: var(--wp-text-dim, var(--wp-text3));
+  color: var(--wp-text-dim);
   font: 400 10px/1.3 var(--wp-font-sans);
   white-space: normal;
 }

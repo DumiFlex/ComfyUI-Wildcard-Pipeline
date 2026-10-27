@@ -134,6 +134,17 @@ describe("v-tooltip", () => {
     w.unmount();
   });
 
+  it("shows a shortcut after the text", () => {
+    vi.useFakeTimers();
+    const w = mount(defineComponent({
+      render: () => withDirectives(h("button", { type: "button", class: "k" }, "Copy"), [[vTooltip, { text: "Copy to clipboard", kbd: "Ctrl C" }]]),
+    }), { attachTo: document.body });
+    w.find(".k").element.dispatchEvent(new PointerEvent("pointerenter"));
+    vi.advanceTimersByTime(500);
+    expect(document.querySelector(".wp-tooltip[data-open] .wp-tooltip__kbd")?.textContent).toBe("Ctrl C");
+    w.unmount();
+  });
+
   it("follows a changed text and hides on Escape", async () => {
     vi.useFakeTimers();
     const text = ref<string>("One");

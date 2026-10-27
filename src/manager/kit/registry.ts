@@ -182,7 +182,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "tooltip", name: "Tooltip (v-tooltip)", group: "overlays", file: "src/components/shared/tooltip.ts", surfaces: ["canvas", "manager"],
-    use: "A short hint on hover and on keyboard focus. One attribute: v-tooltip=\"'Copy the prompt'\". Icon-only buttons still need an aria-label; the tooltip is for sighted mouse and keyboard users.",
+    use: "A short hint on hover and on keyboard focus. One attribute: v-tooltip=\"'Copy the prompt'\", or an object with a shortcut (kbd: 'Ctrl C'). Icon-only buttons still need an aria-label; the tooltip is for sighted mouse and keyboard users.",
     instead: "title=\"…\", which is slow, can't be styled, never shows from the keyboard and is cut off on the canvas.",
   },
   {
@@ -291,7 +291,7 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "drawer": `<Drawer v-model:open="open" title="History" width="380px">…<template #footer>…</template></Drawer>`,
   "popover": `<Popover v-model:open="open" label="Colour"><template #trigger="{ props }"><Button v-bind="props">Colour</Button></template>…</Popover>`,
   "dropdown-menu": `<DropdownMenu :items="actions" label="Hair colour actions"><template #trigger="{ props }"><Button v-bind="props" variant="ghost" icon="pi-ellipsis-h" /></template></DropdownMenu>`,
-  "tooltip": `<Button v-tooltip="'Copy the prompt'" variant="ghost" icon="pi-copy" aria-label="Copy" />`,
+  "tooltip": `<Button v-tooltip="{ text: 'Copy to clipboard', kbd: 'Ctrl C' }" variant="ghost" icon="pi-copy" aria-label="Copy" />`,
   "logo": `<Logo :size="28" />`,
   "rich-text": `<RichTextInput v-model="template" surface="assembler" multiline :var-suggestions="vars" />`,
   "negative-field": `<NegativeField v-model="option.negative" label="option" />`,
