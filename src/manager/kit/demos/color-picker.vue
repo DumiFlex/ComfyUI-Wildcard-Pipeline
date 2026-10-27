@@ -10,5 +10,6 @@ const dark = ref("#1f2937");
   <div class="wp-kit__row">
     <ColorPicker v-model="colour" aria-label="Category colour" />
     <ColorPicker v-model="dark" aria-label="Dark category colour" />
+    <ColorPicker v-model="colour" compact aria-label="Compact colour" />
   </div>
 </template>

@@ -1213,6 +1213,7 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
             <ColorPicker
               v-model="color"
               :presets="COLOR_PRESETS"
+              compact
               aria-label="Bundle frame color"
             />
           </template>
