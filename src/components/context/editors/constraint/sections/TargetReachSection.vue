@@ -21,7 +21,6 @@
  * surfaced on the modal. Writes flow up via `update:modelValue` — the
  * modal threads the new `TargetSelect` into `module.instance.target_select`.
  */
-import WpNumber from "../../../../shared/WpNumber.vue";
 import { computed } from "vue";
 import {
   carrierOptionIdsFor,
@@ -29,6 +28,8 @@ import {
   type TargetSelect,
 } from "../../../../../extension/constraint-pairs";
 import WpCheck from "../../../../shared/WpCheck.vue";
+import WpNumber from "../../../../shared/WpNumber.vue";
+import WpSegmented, { type SegmentedOption } from "../../../../shared/WpSegmented.vue";
 import { clauseActions } from "../../../../../extension/derivation-conditions";
 
 type PickEntry = NonNullable<TargetSelect["picks"]>[number];
@@ -86,11 +87,11 @@ const picks = computed<PickEntry[]>(() => {
  *  modal didn't supply one (headless / legacy mounts). */
 const targetLabel = computed<string>(() => props.targetName?.trim() || "target");
 
-const MODES: Array<{ key: TargetSelect["mode"]; label: string }> = [
-  { key: "first", label: "first" },
-  { key: "next", label: "next N" },
-  { key: "all", label: "all" },
-  { key: "pick", label: "pick" },
+const MODE_OPTIONS: SegmentedOption<TargetSelect["mode"]>[] = [
+  { value: "first", label: "first" },
+  { value: "next", label: "next N" },
+  { value: "all", label: "all" },
+  { value: "pick", label: "pick" },
 ];
 
 /** Switch reach mode. Entering `next` defaults `count:1`; entering `pick`
@@ -290,21 +291,17 @@ const hint = computed<string>(() => {
     <div class="rh__label">Target reach</div>
 
     <div class="rh-row">
-    <div class="rh-seg" role="group" aria-label="Target reach mode">
-      <button
-        v-for="m in MODES"
-        :key="m.key"
-        type="button"
-        class="rh-btn"
-        :class="{ active: mode === m.key }"
-        :aria-pressed="mode === m.key"
-        :data-test="`reach-mode-${m.key}`"
-        @click="setMode(m.key)"
-      >{{ m.label }}</button>
-    </div>
-    <WpNumber
+      <WpSegmented
+        :model-value="mode"
+        :options="MODE_OPTIONS"
+        size="sm"
+        aria-label="Target reach mode"
+        test-prefix="reach-mode"
+        @update:model-value="setMode"
+      />
+      <WpNumber
         v-if="mode === 'next'"
-        class="rh-step"
+        class="rh-count"
         :model-value="count"
         :min="1"
         commit="input"
@@ -355,9 +352,8 @@ const hint = computed<string>(() => {
 .rh {
   padding: 12px 16px;
   /* Subtle neutral demarcation. The earlier accent wash + inset rail read
-     as too loud; a faint text-tinted panel (same idiom as `.rh-seg` /
-     row hover below) sets the section apart on both light + dark without
-     shouting. */
+     as too loud; a faint text-tinted panel (same idiom as the row hover
+     below) sets the section apart on both light + dark without shouting. */
   background: color-mix(in srgb, var(--wp-text) 3%, transparent);
   border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
 }
@@ -369,41 +365,9 @@ const hint = computed<string>(() => {
   margin-bottom: 8px;
 }
 
-/* ── Segmented control — mirrors CellRulePopover `.pop-btn` group. ── */
-.rh-seg {
-  display: inline-flex;
-  align-items: stretch;
-  gap: 0;
-  border: 1px solid var(--wp-border);
-  border-radius: 4px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--wp-text) 2%, transparent);
-}
-.rh-btn {
-  padding: 6px 12px;
-  border: 0;
-  border-right: 1px solid var(--wp-border);
-  background: transparent;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 600 10px var(--wp-font-sans);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-}
-.rh-btn:last-of-type { border-right: 0; }
-.rh-btn:hover { color: var(--wp-text); background: color-mix(in srgb, var(--wp-text) 6%, transparent); }
-.rh-btn.active {
-  /* White-on-accent, matching the modal footer's `.wp-cnm__btn--primary`
-   * (the accent is a saturated purple in both light + dark themes, so a
-   * hard white reads on both — `--wp-accent-on` isn't reliably defined). */
-  background: var(--wp-accent);
-  color: #fff;
-}
-
-/* Stepper sits flush after the segmented group: number field + a stacked
-   ▲/▼ arrow column. */
-.rh-row { display: flex; align-items: center; gap: 6px; }
-.rh-step { width: 64px; }
+/* Reach mode + the `next N` count, side by side. */
+.rh-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rh-count { width: 64px; }
 
 /* ── Pick checklist ─────────────────────────────────────────────── */
 .rh-pick {

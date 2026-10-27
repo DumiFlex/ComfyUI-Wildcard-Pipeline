@@ -147,31 +147,20 @@
         </div>
         </div><!-- /wp-picker__toolbar-top -->
 
-        <div class="wp-picker-tabs" role="tablist">
-          <button
-            type="button"
-            data-test="picker-tab-all"
-            data-testid="picker-tab-all"
-            :class="['wp-picker-tab', { active: kindFilter === 'all' }]"
-            role="tab"
-            :aria-selected="kindFilter === 'all'"
-            @click="kindFilter = 'all'"
-          ><i class="pi pi-th-large" />All <span class="wp-pill-count">{{ totalCount }}</span></button>
-
-          <button
-            v-for="(label, kind) in KIND_LABELS"
-            :key="kind"
-            type="button"
-            :data-test="`picker-tab-${kind}`"
-            :data-k="kind"
-            :class="['wp-picker-tab', { active: kindFilter === kind }]"
-            role="tab"
-            :aria-selected="kindFilter === kind"
-            @click="kindFilter = kind as KindFilter"
-          ><i :class="kindIcon(kind)" />{{ label }}
-            <span class="wp-pill-count">{{ countByKind(kind) }}</span>
-          </button>
-        </div>
+        <WpTabs
+          v-model="kindFilter"
+          class="wp-picker-tabs"
+          :tabs="kindTabs"
+          size="sm"
+          aria-label="Module kinds"
+          test-prefix="picker-tab"
+        >
+          <template #tab="{ tab }">
+            <i class="pi wp-picker-tab__icon" :class="tab.icon" :data-k="tab.id" aria-hidden="true" />
+            <span>{{ tab.label }}</span>
+            <span class="wp-pill-count">{{ tab.count }}</span>
+          </template>
+        </WpTabs>
       </div>
 
       <!-- Click-shield: when popover is open, a transparent layer
@@ -371,6 +360,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import ModalShell from "../shared/ModalShell.vue";
 import WpSelect from "../shared/WpSelect.vue";
 import { kindIcon } from "../shared/kind-icons";
+import WpTabs, { type TabItem } from "../shared/WpTabs.vue";
 
 interface PickerModule {
   id: string;
@@ -589,6 +579,16 @@ const KIND_LABELS: Record<string, string> = {
   constraint:   "Constraints",
 };
 
+const kindTabs = computed((): TabItem<KindFilter>[] => [
+  { id: "all", label: "All", icon: "pi-th-large", count: totalCount.value },
+  ...Object.entries(KIND_LABELS).map(([kind, label]) => ({
+    id: kind as KindFilter,
+    label,
+    icon: kindIcon(kind).replace(/^pi\s+/, ""),
+    count: countByKind(kind),
+  })),
+]);
+
 // Empty-state "create" deep-links into the manager SPA's new-module editor
 // for the active kind (the picker runs on the canvas; the SPA is the
 // authoring surface). Mirrors topbar.ts's `/wp/<route>` window.open.
@@ -804,7 +804,7 @@ function getRowButtons(): HTMLButtonElement[] {
 
 function getKindTabs(): HTMLButtonElement[] {
   if (!rootEl.value) return [];
-  return Array.from(rootEl.value.querySelectorAll<HTMLButtonElement>(".wp-picker-tab"));
+  return Array.from(rootEl.value.querySelectorAll<HTMLButtonElement>('.wp-picker-tabs [role="tab"]'));
 }
 
 // ── Capture-phase key isolation ───────────────────────────────────
@@ -1132,33 +1132,14 @@ onBeforeUnmount(detachCaptureListeners);
 }
 .wp-picker__toolbar-top > .wp-picker__search { flex: 1; min-width: 0; }
 
-.wp-picker-tabs {
-  display: flex;
-  gap: 2px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--wp-border);
-  align-items: center;
-}
-.wp-picker-tab {
-  background: transparent;
-  border: none;
-  padding: 9px 12px;
-  font: 500 11px/1 var(--wp-font-sans);
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border-bottom: 2px solid transparent;
-}
-.wp-picker-tab:hover { color: var(--wp-text); }
-.wp-picker-tab.active { color: var(--wp-text); border-bottom-color: var(--wp-accent); }
-.wp-picker-tab .pi { font-size: 13px; }
-.wp-picker-tab[data-k="wildcard"]    .pi { color: var(--wp-kind-wildcard); }
-.wp-picker-tab[data-k="fixed_values"] .pi { color: var(--wp-kind-fixed); }
-.wp-picker-tab[data-k="combine"]     .pi { color: var(--wp-kind-combine); }
-.wp-picker-tab[data-k="derivation"]  .pi { color: var(--wp-kind-derivation); }
-.wp-picker-tab[data-k="constraint"]  .pi { color: var(--wp-kind-constraint); }
+/* The kind tabs are the shared WpTabs; the icons wear their kind colour. */
+.wp-picker-tabs { padding: 0 12px; }
+.wp-picker-tab__icon { font-size: 13px; }
+.wp-picker-tab__icon[data-k="wildcard"]     { color: var(--wp-kind-wildcard); }
+.wp-picker-tab__icon[data-k="fixed_values"] { color: var(--wp-kind-fixed); }
+.wp-picker-tab__icon[data-k="combine"]      { color: var(--wp-kind-combine); }
+.wp-picker-tab__icon[data-k="derivation"]   { color: var(--wp-kind-derivation); }
+.wp-picker-tab__icon[data-k="constraint"]   { color: var(--wp-kind-constraint); }
 .wp-pill-count {
   font-family: var(--wp-font-mono);
   font-size: 10px;

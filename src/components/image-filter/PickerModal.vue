@@ -12,6 +12,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
+import WpSegmented, { type SegmentedOption } from "../shared/WpSegmented.vue";
 import MaskPainter from "./MaskPainter.vue";
 import PickerTile from "./PickerTile.vue";
 import SweepGrid from "./SweepGrid.vue";
@@ -106,6 +107,7 @@ const layout = ref<GridLayout>(defaultGridLayout());
 watch(() => axes.value.map((a) => a.uid).join(" "), () => { layout.value = defaultGridLayout(); });
 const grid = computed(() => sweepGrid(labels.value, axes.value, layout.value));
 const view = ref<"grid" | "frames">("grid");
+const VIEW_OPTIONS: SegmentedOption<"grid" | "frames">[] = [{ value: "grid", label: "Grid" }, { value: "frames", label: "Frames" }];
 const showGrid = computed(() => view.value === "grid" && !!grid.value);
 
 function frameTitle(frame: number): string {
@@ -188,6 +190,7 @@ function togglePin(): void {
 
 const painting = ref(false);
 const tool = ref<"brush" | "eraser">("brush");
+const TOOL_OPTIONS: SegmentedOption<"brush" | "eraser">[] = [{ value: "brush", label: "Brush" }, { value: "eraser", label: "Eraser" }];
 const brush = ref(40);
 const painter = ref<InstanceType<typeof MaskPainter> | null>(null);
 function togglePaint(): void {
@@ -422,10 +425,14 @@ const fitStyle = computed(() => {
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
           Fit
         </button>
-        <div v-if="grid && !zoomCell" class="wp-ifp__seg" role="group" aria-label="Layout">
-          <button type="button" :class="{ 'is-on': view === 'grid' }" data-test="image-filter-view-grid" @click="view = 'grid'">Grid</button>
-          <button type="button" :class="{ 'is-on': view === 'frames' }" data-test="image-filter-view-frames" @click="view = 'frames'">Frames</button>
-        </div>
+        <WpSegmented
+          v-if="grid && !zoomCell"
+          v-model="view"
+          :options="VIEW_OPTIONS"
+          size="sm"
+          aria-label="Layout"
+          test-prefix="image-filter-view"
+        />
         <button type="button" class="wp-ifp__icon-btn" title="Hide for now (the run keeps waiting)" data-test="image-filter-minimize" @click="emit('minimize')">
           <svg width="12" height="12" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14" /></svg>
         </button>
@@ -589,10 +596,7 @@ const fitStyle = computed(() => {
             >{{ painting ? "Done" : "Paint" }}</button>
           </div>
           <template v-if="painting">
-            <div class="wp-ifp__seg wp-ifp__seg--full" role="group" aria-label="Tool">
-              <button type="button" :class="{ 'is-on': tool === 'brush' }" @click="tool = 'brush'">Brush</button>
-              <button type="button" :class="{ 'is-on': tool === 'eraser' }" @click="tool = 'eraser'">Eraser</button>
-            </div>
+            <WpSegmented v-model="tool" :options="TOOL_OPTIONS" size="sm" block aria-label="Tool" test-prefix="image-filter-tool" />
             <label class="wp-ifp__size">Size <input v-model.number="brush" type="range" min="4" max="160"> <span>{{ brush }}</span></label>
             <div class="wp-ifp__row">
               <button type="button" class="wp-ifp__mini" @click="painter?.invert()">Invert</button>
@@ -710,12 +714,6 @@ const fitStyle = computed(() => {
 .wp-ifp__zoom-btn:hover { border-color: var(--wp-accent); }
 .wp-ifp__zoom-btn.is-on { background: color-mix(in srgb, var(--wp-accent) 25%, var(--wp-bg3)); border-color: var(--wp-accent); }
 .wp-ifp__sub b { font-weight: 600; color: var(--wp-text-muted, var(--wp-text2)); }
-.wp-ifp__seg { display: inline-flex; border: 1px solid var(--wp-border); border-radius: 4px; overflow: hidden; }
-.wp-ifp__seg button { padding: 3px 9px; border: 0; background: var(--wp-bg3); color: var(--wp-text-muted, var(--wp-text2)); font: 11px var(--wp-font-sans); cursor: pointer; }
-.wp-ifp__seg button + button { border-left: 1px solid var(--wp-border); }
-.wp-ifp__seg button.is-on { background: color-mix(in srgb, var(--wp-accent) 25%, var(--wp-bg3)); color: var(--wp-text); }
-.wp-ifp__seg--full { display: flex; }
-.wp-ifp__seg--full button { flex: 1; }
 
 .wp-ifp__body { overflow-y: auto; padding: 12px 14px; flex: 1; min-height: 0; display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; }
 .wp-ifp.is-fit { height: 90vh; }
