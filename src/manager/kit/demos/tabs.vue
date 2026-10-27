@@ -22,7 +22,7 @@ const CANVAS_TABS = [
   <div class="wp-kit__stack wp-kit__stack--wide">
     <WpTabs v-model="tab" :tabs="TABS" aria-label="Editor sections">
       <template #panel="{ id }">
-        <p class="wp-kit__muted">The {{ id }} panel. Focus a tab and use the arrow keys, Home and End.</p>
+        <p class="wp-kit__muted wp-kit__tab-panel">The {{ id }} panel. Focus a tab and use the arrow keys, Home and End.</p>
       </template>
     </WpTabs>
     <div class="wp-kit__canvas wp-canvas-scope">

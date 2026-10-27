@@ -23,6 +23,7 @@ import SamplesPanel from "../components/test-runner/SamplesPanel.vue";
 import WarningsPanel from "../components/test-runner/WarningsPanel.vue";
 import ComparePanel from "../components/test-runner/ComparePanel.vue";
 import AiRunBar from "../components/test-runner/AiRunBar.vue";
+import WpTabs, { type TabItem } from "@/components/shared/WpTabs.vue";
 import { useAiConfig } from "../composables/useAiConfig";
 import TraceDrawer from "../components/test-runner/TraceDrawer.vue";
 import InspectorDrawer from "../components/test-runner/InspectorDrawer.vue";
@@ -88,19 +89,17 @@ const uniqueOutputs = computed(() => {
   return out ? result.value?.variables[out]?.distinct ?? null : null;
 });
 
-const TABS = computed<{ id: Tab; label: string; count?: number }[]>(() => [
+const TABS = computed<TabItem<Tab>[]>(() => [
   { id: "variables", label: "Variables", count: result.value ? Object.keys(result.value.variables).length : undefined },
   { id: "outputs", label: "Outputs" },
   { id: "samples", label: "Samples", count: result.value?.samples.length },
   { id: "warnings", label: "Warnings", count: result.value ? warningCount.value + result.value.failed : undefined },
-  { id: "compare", label: "Compare", count: wb.diff.value ? wb.diff.value.changed.length : undefined },
+  // The Compare count is a change count, not a total, so it is coloured.
+  {
+    id: "compare", label: "Compare", count: wb.diff.value ? wb.diff.value.changed.length : undefined,
+    tone: wb.diff.value ? (wb.diff.value.same ? "success" : "warn") : undefined,
+  },
 ]);
-
-/** Tab badge tone: the Compare count is a change count, not a total. */
-function countTone(id: Tab): string | undefined {
-  if (id !== "compare" || !wb.diff.value) return undefined;
-  return wb.diff.value.same ? "ok" : "warn";
-}
 
 function openTrace(seed: number): void {
   inspectIndex.value = null;
@@ -404,42 +403,43 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
           <AiRunBar v-if="ai.ready.value" :result="result" />
           <section class="wp-tr__results" aria-label="Results">
-            <div class="wp-tr__tabs" role="tablist" data-ai-anchor="result-tabs" data-ai-label="Result tabs: variables, outputs, samples, warnings, compare">
-              <button
-                v-for="t in TABS"
-                :key="t.id"
-                type="button"
-                role="tab"
-                :aria-selected="tab === t.id"
-                :data-test="`tab-${t.id}`"
-                @click="tab = t.id"
-              >{{ t.label }}<span v-if="t.count !== undefined" class="wp-tr__count" :data-tone="countTone(t.id)">{{ t.count }}</span></button>
-            </div>
-            <div class="wp-tr__pane" role="tabpanel">
-              <VariablesPanel v-if="tab === 'variables'" :result="result" :views="wb.stackViews.value" :output-var="wb.outputVar.value" />
-              <OutputsPanel
-                v-else-if="tab === 'outputs'"
-                :result="result"
-                :views="wb.stackViews.value"
-                :output-var="wb.outputVar.value"
-                @open="openTrace"
-                @update:output-var="(v) => (draft.output_var = v)"
-              />
-              <SamplesPanel v-else-if="tab === 'samples'" :result="result" :views="wb.stackViews.value" :output-var="wb.outputVar.value" :selected-seed="traceSeed" @open="openTrace" />
-              <WarningsPanel v-else-if="tab === 'warnings'" :result="result" :uuid-to-name="uuidToName" @open="openTrace" />
-              <ComparePanel
-                v-else
-                :result="result"
-                :baseline="wb.baseline.value"
-                :diff="wb.diff.value"
-                :saved="!!draft.id && !wb.dirty.value"
-                :running="wb.running.value"
-                @set-baseline="wb.setBaseline"
-                @clear-baseline="wb.clearBaseline"
-                @run-baseline-seeds="wb.runBaselineSeeds"
-                @open="openTrace"
-              />
-            </div>
+            <WpTabs
+              v-model="tab"
+              class="wp-tr__tabs"
+              :tabs="TABS"
+              aria-label="Results"
+              test-prefix="tab"
+              data-ai-anchor="result-tabs"
+              data-ai-label="Result tabs: variables, outputs, samples, warnings, compare"
+            >
+              <template #panel>
+                <div class="wp-tr__pane">
+                  <VariablesPanel v-if="tab === 'variables'" :result="result" :views="wb.stackViews.value" :output-var="wb.outputVar.value" />
+                  <OutputsPanel
+                    v-else-if="tab === 'outputs'"
+                    :result="result"
+                    :views="wb.stackViews.value"
+                    :output-var="wb.outputVar.value"
+                    @open="openTrace"
+                    @update:output-var="(v) => (draft.output_var = v)"
+                  />
+                  <SamplesPanel v-else-if="tab === 'samples'" :result="result" :views="wb.stackViews.value" :output-var="wb.outputVar.value" :selected-seed="traceSeed" @open="openTrace" />
+                  <WarningsPanel v-else-if="tab === 'warnings'" :result="result" :uuid-to-name="uuidToName" @open="openTrace" />
+                  <ComparePanel
+                    v-else
+                    :result="result"
+                    :baseline="wb.baseline.value"
+                    :diff="wb.diff.value"
+                    :saved="!!draft.id && !wb.dirty.value"
+                    :running="wb.running.value"
+                    @set-baseline="wb.setBaseline"
+                    @clear-baseline="wb.clearBaseline"
+                    @run-baseline-seeds="wb.runBaselineSeeds"
+                    @open="openTrace"
+                  />
+                </div>
+              </template>
+            </WpTabs>
           </section>
         </template>
 
@@ -534,20 +534,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 .wp-tr__stats strong[data-warn="true"] { color: var(--wp-warn); }
 .wp-tr__stats em { font-style: normal; font-size: var(--wp-text-xs); color: var(--wp-text-muted); }
 .wp-tr__results { background: var(--wp-bg-2); border: 1px solid var(--wp-border); border-radius: var(--wp-radius); }
-.wp-tr__tabs { display: flex; gap: var(--wp-space-1); padding: 0 var(--wp-space-5); border-bottom: 1px solid var(--wp-border); overflow-x: auto; }
-.wp-tr__tabs button {
-  background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer;
-  padding: var(--wp-space-5) var(--wp-space-5); color: var(--wp-text-muted); font-size: var(--wp-text-base);
-  display: inline-flex; gap: var(--wp-space-3); align-items: center; white-space: nowrap;
-}
-.wp-tr__tabs button[aria-selected="true"] { color: var(--wp-text); border-bottom-color: var(--wp-accent-500); }
-.wp-tr__tabs button:focus-visible { outline: 2px solid var(--wp-border-focus); outline-offset: -2px; }
-.wp-tr__count {
-  font: var(--wp-text-xs) var(--wp-font-mono); background: var(--wp-bg-4); color: var(--wp-text-muted);
-  border-radius: 999px; padding: 0 var(--wp-space-3); /* audit-exempt: pill */
-}
-.wp-tr__count[data-tone="ok"] { background: color-mix(in oklab, var(--wp-success) 16%, transparent); color: var(--wp-success); }
-.wp-tr__count[data-tone="warn"] { background: color-mix(in oklab, var(--wp-warn) 16%, transparent); color: var(--wp-warn); }
+/* The tab row lines up with the pane's padding. */
+.wp-tr__tabs :deep(.wp-tabset__list) { padding: 0 var(--wp-space-5); }
 .wp-tr__pane { padding: var(--wp-space-6); }
 /* Page area narrower than 700px (usePageWidth; the chat can take the rest). */
 .wp-content[data-lt~="700"] .wp-tr { grid-template-columns: 1fr; height: auto; }

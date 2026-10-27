@@ -5,7 +5,7 @@
  * doesn't lose a draft the user is still reviewing.
  */
 import { computed, nextTick, ref, watch } from "vue";
-import SegControl, { type SegOption } from "../settings/SegControl.vue";
+import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
 import AiDraftPanel from "./AiDraftPanel.vue";
 import AiEditPanel from "./AiEditPanel.vue";
 import type {
@@ -41,7 +41,7 @@ const emit = defineEmits<{
   (e: "update:pending", pending: boolean): void;
 }>();
 
-const MODES: SegOption<Mode>[] = [
+const MODES: SegmentedOption<Mode>[] = [
   { value: "add", label: "Add", icon: "pi-plus" },
   { value: "remove", label: "Remove", icon: "pi-trash" },
   { value: "rewrite", label: "Rewrite", icon: "pi-pencil" },
@@ -99,7 +99,7 @@ defineExpose({ draft, edit });
   <div class="wp-ai-panel" data-test="ai-wildcard-panel">
     <div class="wp-ai-panel__head">
       <span class="wp-ai-panel__title"><i class="pi pi-microchip-ai" aria-hidden="true" /> AI</span>
-      <SegControl v-model="mode" :options="MODES" aria-label="What should the AI do?" test-prefix="ai-mode" />
+      <WpSegmented v-model="mode" :options="MODES" aria-label="What should the AI do?" test-prefix="ai-mode" />
       <span
         class="wp-ai-panel__model"
         :data-local="isLocal ? 'true' : 'false'"

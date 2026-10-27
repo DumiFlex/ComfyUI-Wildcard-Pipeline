@@ -360,8 +360,8 @@ describe("DerivationRuleCard.vue", () => {
       }],
     });
     const wrap = mountCard(rule, 0);
-    expect(wrap.find('[data-test="cond-refinement-value-0-0"]').classes())
-      .toContain("dvr-refinement__btn--active");
+    expect(wrap.find('[data-test="cond-refinement-value-0-0"]').attributes("aria-checked"))
+      .toBe("true");
     await wrap.find('[data-test="cond-refinement-any-0-0"]').trigger("click");
     expect(JSON.stringify(wrap.emitted())).toContain('"op":"not_exists"');
   });
@@ -387,8 +387,8 @@ describe("DerivationRuleCard.vue", () => {
       }],
     });
     const wrap = mountCard(rule, 0);
-    expect(wrap.find('[data-test="cond-refinement-any-0-0"]').classes())
-      .toContain("dvr-refinement__btn--active");
+    expect(wrap.find('[data-test="cond-refinement-any-0-0"]').attributes("aria-checked"))
+      .toBe("true");
   });
 
   it("'is empty' position is active when saved op is is_empty", () => {
@@ -402,8 +402,8 @@ describe("DerivationRuleCard.vue", () => {
     const sel = wrap.find('[data-test="cond-op-0-0"]').findComponent({ name: "Select" });
     // Dropdown shows bare `exists`; refinement captures the variant.
     expect(sel.props("modelValue")).toBe("exists");
-    expect(wrap.find('[data-test="cond-refinement-empty-0-0"]').classes())
-      .toContain("dvr-refinement__btn--active");
+    expect(wrap.find('[data-test="cond-refinement-empty-0-0"]').attributes("aria-checked"))
+      .toBe("true");
   });
 
   it("'has value' position is active when saved op is is_set", () => {
@@ -414,8 +414,8 @@ describe("DerivationRuleCard.vue", () => {
       }],
     });
     const wrap = mountCard(rule, 0);
-    expect(wrap.find('[data-test="cond-refinement-value-0-0"]').classes())
-      .toContain("dvr-refinement__btn--active");
+    expect(wrap.find('[data-test="cond-refinement-value-0-0"]').attributes("aria-checked"))
+      .toBe("true");
   });
 
   it("clicking 'is empty' on a bare exists rule emits is_empty", async () => {

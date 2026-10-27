@@ -2,12 +2,12 @@
 import WpNumber from "@/components/shared/WpNumber.vue";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
-import SegControl, { type SegOption } from "../SegControl.vue";
+import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
 import { MAX_TEST_RUNNER_SEEDS, useUiStore } from "../../../stores/uiStore";
 
 const ui = useUiStore();
 
-const MODES: SegOption<"range" | "random">[] = [
+const MODES: SegmentedOption<"range" | "random">[] = [
   { value: "range", label: "Range" },
   { value: "random", label: "Random" },
 ];
@@ -23,7 +23,7 @@ const MODES: SegOption<"range" | "random">[] = [
       hint="Range uses consecutive seeds, so seed N here is seed N on the canvas and results compare run to run. Random picks a fresh set every run."
       setting-key="tr-mode"
     >
-      <SegControl
+      <WpSegmented
         :model-value="ui.testRunnerDefaults.mode"
         :options="MODES"
         aria-label="Seed mode"

@@ -20,6 +20,10 @@ export interface SegmentedOption<V extends string = string> {
   /** A PrimeIcons class, e.g. `pi-moon`. */
   icon?: string;
   disabled?: boolean;
+  /** A tooltip saying what the option does. */
+  hint?: string;
+  /** This option's `data-test`, when `testPrefix` doesn't fit. */
+  testId?: string;
 }
 
 const props = withDefaults(defineProps<{
@@ -84,14 +88,14 @@ function onKeydown(ev: KeyboardEvent): void {
     <button
       v-for="o in options"
       :key="o.value"
-      v-tooltip="iconOnly ? o.label : null"
+      v-tooltip="o.hint ?? (iconOnly ? o.label : null)"
       type="button"
       role="radio"
       class="wp-segmented__opt"
       :aria-checked="modelValue === o.value"
       :aria-label="iconOnly ? o.label : undefined"
       :data-active="modelValue === o.value ? 'true' : 'false'"
-      :data-test="testPrefix ? `${testPrefix}-${o.value}` : undefined"
+      :data-test="o.testId ?? (testPrefix ? `${testPrefix}-${o.value}` : undefined)"
       :tabindex="o.value === tabStop() && !disabled ? 0 : -1"
       :disabled="disabled || o.disabled"
       @click="pick(o.value)"

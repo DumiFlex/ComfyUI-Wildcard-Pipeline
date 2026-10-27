@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="T extends string">
 /**
  * Tabs: a row of tabs that switch the panel under them. Works on the canvas
  * (`size="sm"`) and in the manager (`md`, the default).
@@ -17,26 +17,28 @@
  */
 import { nextTick, ref, useId, useSlots } from "vue";
 
-export interface TabItem {
-  id: string;
+export interface TabItem<I extends string = string> {
+  id: I;
   label: string;
   /** A PrimeIcons class, e.g. `pi-list`. */
   icon?: string;
   disabled?: boolean;
   /** A small count after the label (rows, errors…). */
   count?: number | string;
+  /** Colour of the count: `success` for all good, `warn` for problems. */
+  tone?: "neutral" | "success" | "warn" | "danger";
 }
 
 const props = withDefaults(defineProps<{
-  modelValue: string;
-  tabs: TabItem[];
+  modelValue: T;
+  tabs: TabItem<T>[];
   size?: "sm" | "md";
   ariaLabel?: string;
   /** `data-test` of each tab is `<testPrefix>-<id>`. */
   testPrefix?: string;
 }>(), { size: "md" });
 
-const emit = defineEmits<{ (e: "update:modelValue", id: string): void }>();
+const emit = defineEmits<{ (e: "update:modelValue", id: T): void }>();
 const slots = useSlots();
 
 const uid = `wp-tabs-${useId()}`;
@@ -44,7 +46,7 @@ const tabId = (id: string): string => `${uid}-tab-${id}`;
 const panelId = (id: string): string => `${uid}-panel-${id}`;
 const listEl = ref<HTMLElement | null>(null);
 
-function select(id: string): void {
+function select(id: T): void {
   if (id !== props.modelValue) emit("update:modelValue", id);
 }
 
@@ -102,7 +104,7 @@ function onKeydown(ev: KeyboardEvent): void {
         <slot name="tab" :tab="t" :active="t.id === modelValue">
           <i v-if="t.icon" class="pi" :class="t.icon" aria-hidden="true" />
           <span>{{ t.label }}</span>
-          <span v-if="t.count !== undefined" class="wp-tabset__count">{{ t.count }}</span>
+          <span v-if="t.count !== undefined" class="wp-tabset__count" :data-tone="t.tone">{{ t.count }}</span>
         </slot>
       </button>
     </div>
@@ -168,7 +170,10 @@ function onKeydown(ev: KeyboardEvent): void {
   text-align: center;
 }
 .wp-tabset__tab[data-active="true"] .wp-tabset__count { background: var(--wp-accent-glow); color: var(--wp-accent-text); }
-.wp-tabset__panel { min-width: 0; padding-top: var(--wp-space-5); }
+.wp-tabset__count[data-tone="success"] { background: color-mix(in srgb, var(--wp-success) 16%, transparent); color: var(--wp-success); }
+.wp-tabset__count[data-tone="warn"] { background: color-mix(in srgb, var(--wp-warn) 16%, transparent); color: var(--wp-warn); }
+.wp-tabset__count[data-tone="danger"] { background: color-mix(in srgb, var(--wp-danger) 16%, transparent); color: var(--wp-danger); }
+.wp-tabset__panel { min-width: 0; }
 .wp-tabset__panel:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--wp-border-focus); border-radius: var(--wp-radius-sm); }
 @media (prefers-reduced-motion: reduce) {
   .wp-tabset__tab { transition: none; }

@@ -9,6 +9,7 @@
  */
 import SearchInput from "@/components/shared/SearchInput.vue";
 import { computed, ref, watch } from "vue";
+import WpTabs, { type TabItem } from "@/components/shared/WpTabs.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 import type { BundleRow, ModuleRow, ModuleType } from "../api/types";
 
@@ -40,13 +41,13 @@ interface KindTab {
 }
 
 const KIND_TABS: KindTab[] = [
-  { type: "all",          label: "All",           icon: "pi pi-objects-column" },
-  { type: "wildcard",     label: "Wildcards",     icon: "pi pi-sparkles" },
-  { type: "fixed_values", label: "Fixed Values",  icon: "pi pi-tag" },
-  { type: "combine",      label: "Combines",      icon: "pi pi-link" },
-  { type: "derivation",   label: "Derivations",   icon: "pi pi-arrow-right-arrow-left" },
-  { type: "constraint",   label: "Constraints",   icon: "pi pi-filter" },
-  { type: "bundle",       label: "Bundles",       icon: "pi pi-box" },
+  { type: "all",          label: "All",           icon: "pi-objects-column" },
+  { type: "wildcard",     label: "Wildcards",     icon: "pi-sparkles" },
+  { type: "fixed_values", label: "Fixed Values",  icon: "pi-tag" },
+  { type: "combine",      label: "Combines",      icon: "pi-link" },
+  { type: "derivation",   label: "Derivations",   icon: "pi-arrow-right-arrow-left" },
+  { type: "constraint",   label: "Constraints",   icon: "pi-filter" },
+  { type: "bundle",       label: "Bundles",       icon: "pi-box" },
 ];
 
 const KIND_LABEL: Record<ModuleType, string> = {
@@ -102,6 +103,9 @@ const counts = computed<Record<string, number>>(() => {
   return c;
 });
 
+const kindTabs = computed<TabItem<PickerTab>[]>(() =>
+  KIND_TABS.map((t) => ({ id: t.type, label: t.label, icon: t.icon, count: counts.value[t.type] ?? 0 })));
+
 function close() { emit("close"); }
 function pickModule(row: ModuleRow) {
   emit("pick", row);
@@ -135,24 +139,13 @@ function pickBundle(row: BundleRow) {
         </div>
 
         <div class="wp-bundle-add__body">
-          <div class="wp-bundle-add__tabs" role="tablist" aria-label="Module kind">
-            <button
-              v-for="tab in KIND_TABS"
-              :key="tab.type"
-              type="button"
-              role="tab"
-              class="wp-bundle-add__tab"
-              :data-kind="tab.type"
-              :data-active="activeTab === tab.type ? '' : null"
-              :aria-selected="activeTab === tab.type"
-              :data-test="`bundle-add-tab-${tab.type}`"
-              @click="activeTab = tab.type"
-            >
-              <i :class="tab.icon" />
-              <span class="wp-bundle-add__tab-label">{{ tab.label }}</span>
-              <span class="wp-bundle-add__tab-count">{{ counts[tab.type] ?? 0 }}</span>
-            </button>
-          </div>
+          <WpTabs
+            v-model="activeTab"
+            :tabs="kindTabs"
+            size="sm"
+            aria-label="Module kind"
+            test-prefix="bundle-add-tab"
+          />
 
           <SearchInput
             v-model="search"
@@ -270,35 +263,6 @@ function pickBundle(row: BundleRow) {
   padding: var(--wp-space-5) var(--wp-space-6);
   min-height: 0;
   flex: 1;
-}
-
-.wp-bundle-add__tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--wp-space-2);
-}
-.wp-bundle-add__tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px; /* audit-exempt: 5px optical gap between icon and text inside pill */
-  padding: var(--wp-space-2) 9px; /* audit-exempt: 9px horiz matches pill chrome */
-  border: 1px solid var(--wp-border);
-  border-radius: 999px;
-  background: var(--wp-bg);
-  color: var(--wp-text-dim);
-  font-size: var(--wp-text-xs);
-  cursor: pointer;
-}
-.wp-bundle-add__tab[data-active] {
-  background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500) 42%, transparent);
-  color: var(--wp-accent-500);
-}
-.wp-bundle-add__tab-count {
-  font-size: 9.5px; /* audit-exempt: micro count badge inside pill — below scale floor */
-  padding: 0 var(--wp-space-3);
-  border-radius: 999px;
-  background: color-mix(in oklab, currentColor 16%, transparent);
 }
 
 
