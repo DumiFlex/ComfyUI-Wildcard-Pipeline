@@ -268,3 +268,34 @@ def describe_for(catalog: dict[str, dict[str, Any]], request: str, *,
         if len(rest) > MAX_VARS_SHOWN:
             out += f" (+{len(rest) - MAX_VARS_SHOWN} more)"
     return out
+
+
+def read_vars(modules: list[dict[str, Any]], templates: list[dict[str, Any]] | None = None,
+              ) -> set[str]:
+    """Every variable something in the library reads: combines and saved
+    templates (``$name`` in their text, negatives included), derivation
+    conditions and action values, and wildcard options that point at a
+    variable. A derivation that sets one outside this set prints nowhere
+    until a template reads it (bench Z8 set $detail, which nothing read)."""
+    texts: list[str] = []
+
+    def walk(x: Any) -> None:
+        if isinstance(x, str):
+            texts.append(x)
+        elif isinstance(x, dict):
+            if isinstance(x.get("var"), str):
+                texts.append("$" + x["var"])
+            for k, v in x.items():
+                if k not in ("target_var", "output_var", "var_binding", "name", "id"):
+                    walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+
+    for m in modules:
+        if isinstance(m, dict) and m.get("type") in ("combine", "derivation", "wildcard"):
+            walk(m.get("payload"))
+    for t in templates or []:
+        if isinstance(t, dict):
+            texts.extend(str(t.get(k) or "") for k in ("template_string", "negative_template"))
+    return {n.split(".")[0] for n in _VAR.findall(" ".join(texts))}

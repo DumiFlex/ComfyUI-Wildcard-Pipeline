@@ -26,6 +26,13 @@ const REACH = 4;
 const RUN = new RegExp(String.raw`^\s+((?:[A-Za-z][A-Za-z'’-]*[ \t]+){0,${REACH - 1}}[A-Za-z][A-Za-z'’-]*)`);
 const BEFORE = /\b(?:the|these|those|all|my|its|their|under|over|than|max|maximum|least|most|every|only|first|last)\s+$/i;
 const MAX = 100;
+/** After a counted noun: the count is per something, not the total. */
+const PER = new Set(["each", "per", "apiece", "every"]);
+
+function nextWord(rest: string): string {
+  const m = /^\s+([A-Za-z]+)/.exec(rest);
+  return m ? m[1].toLowerCase() : "";
+}
 
 /** The count `text` asks for (1 to 100), or 0 when it names none. */
 export function optionCount(text: string): number {
@@ -43,8 +50,15 @@ export function optionCount(text: string): number {
       const low = words[i];
       if (NOT_NOUNS.has(low) || (STOPS.has(low) && i > 0)) break;
       if ((low.endsWith("s") && low.length > 3) || (n === 1 && (low === "option" || low === "one"))) {
+        // "one option each", "3 options per class": a share, not a total.
+        const after = i + 1 < words.length
+          ? words[i + 1]
+          : nextWord(text.slice(at + m[0].length + run[0].length));
+        if (PER.has(after)) break;
         return n;
       }
+      // "6 more, bolder than what's there": the noun is left out.
+      if (low === "more" && i === words.length - 1) return n;
     }
   }
   return 0;

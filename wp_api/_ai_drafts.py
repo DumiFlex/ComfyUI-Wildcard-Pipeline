@@ -21,6 +21,7 @@ from engine.db.repositories import (
     CategoryRepository,
     ModuleNotFound,
     ModuleRepository,
+    TemplateRepository,
 )
 from wp_api import (
     _ai_client,
@@ -146,19 +147,30 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
             status=502,
         )
-    note = ai_wildcard.bleed_note(name, var, result["options"], instruction)
-    if note:
+    asked_first = ai_followup.first_instruction(turns, instruction)
+    real_opts = [o for o in options if isinstance(o, dict)]
+
+    def problems(res: dict[str, Any]) -> list[str]:
+        return [x for x in (
+            ai_wildcard.bleed_note(name, var, res["options"], instruction),
+            ai_wildcard.untagged_note(asked_first, res["options"], real_opts)) if x]
+
+    notes = problems(result)
+    if notes:
         # One re-ask with what the code found; the first answer stands when
         # the second is no better.
         try:
             again, _ = webs.take(await _ask(extra="\n\n".join(
-                x for x in (webs.note, note) if x), **ask))
+                x for x in (webs.note, *notes) if x), **ask))
             better = compiled(again)
-            if len(better["options"]) >= len(result["options"]) and not \
-                    ai_wildcard.bleed_note(name, var, better["options"], instruction):
+            if len(better["options"]) >= len(result["options"]) and \
+                    len(problems(better)) < len(notes):
                 answer, result = again, better
         except (_ai_client.AIError, ValueError):
             pass
+    if ai_wildcard.untagged_note(asked_first, result["options"], real_opts):
+        result.setdefault("warnings", []).append(
+            "You asked for tags, but no option came back tagged; tag them, or Try again")
     groups, group_notes = ai_wildcard.new_groups(
         answer.get("axes") if isinstance(answer, dict) else None,
         existing_payload={"sub_categories": tags, "tag_groups": axes, "tag_group_kinds": kinds},
@@ -241,6 +253,8 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     description, labels = ai_about.clean(wc.get("description"), wc.get("tags"))
     self_id = _got if isinstance(_got := wc.get("id"), str) else None
     refs = _ref_index(_wildcards(request), self_id, payload, name)
+    known_tag = _known_tag() if action == "rewrite" and ai_edit.wants_booru(instruction) \
+        else None
     first = ai_edit.build_edit_prompt(
         action=action, instruction=ai_followup.first_instruction(turns, instruction),
         name=name[:200], var_binding=var[:100],
@@ -282,12 +296,29 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     try:
         result = ai_edit.compile_edit(action, answer, options=rows, registry=tags,
                                       refs=refs, self_id=self_id, labels=labels,
-                                      instruction=instruction)
+                                      instruction=instruction, known_tag=known_tag)
     except ValueError as e:
         return json_error(
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
             status=502,
         )
+    if action == "remove" and len(rows) >= 3 and len(result["changes"]) == len(rows):
+        # Bench W8: "drop anything that could not exist before 1900" removed
+        # all 12 outfits. One re-ask; the second answer stands when it keeps
+        # some, else the draft says so.
+        try:
+            again, _ = webs.take(await _ask(extra="\n\n".join(
+                x for x in (webs.note, ai_edit.ALL_REMOVED_NUDGE) if x), **ask))
+            retry = ai_edit.compile_edit(action, again, options=rows, registry=tags,
+                                         refs=refs, self_id=self_id, labels=labels,
+                                         instruction=instruction)
+            if 0 < len(retry["changes"]) < len(rows):
+                answer, result = again, retry
+        except (_ai_client.AIError, ValueError):
+            pass
+        if len(result["changes"]) == len(rows):
+            result["warnings"] = ["This removes every option; check the reasons before "
+                                  "you apply it"]
     if not result["changes"] and result["skipped"] and all(
             x["reason"] == "not an option in the list" for x in result["skipped"]):
         # Small models write prose where the option number goes: every change
@@ -302,6 +333,14 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     result["answer"] = answer
     result["research"] = research
     return json_ok(result)
+
+
+def _known_tag() -> Any:
+    """The installed tag list's exact lookup, or None when there is none."""
+    from wp_api import tags as _tags
+
+    idx = _tags._get_index()
+    return idx.has if idx is not None else None
 
 
 async def post_derivation_draft(request: web.Request) -> web.Response:
@@ -332,7 +371,11 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
 
     with db_session(request) as conn:
         modules = ModuleRepository(conn).list()
+        templates = TemplateRepository(conn).list()
     catalog = library_vars.build_catalog(modules)
+    drv_id = _got if isinstance(_got := drv.get("id"), str) else None
+    reads = library_vars.read_vars([m for m in modules if m.get("id") != drv_id], templates) \
+        | library_vars.read_vars([{"type": "derivation", "payload": {"rules": rules}}])
     refs = ai_refs.RefIndex([m for m in modules if m.get("type") == "wildcard"])
     focus = [
         n for line in (ai_derivation.describe_rule(r) for r in rules)
@@ -347,21 +390,26 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
             catalog, " ".join([ai_followup.first_instruction(turns, instruction), name,
                                description]), focus=focus),
         existing_rules=[ai_derivation.describe_rule(r) for r in rules],
-        refs_text=refs.describe(),
+        refs_text=refs.describe(), numbered=bool(rules),
     )
     try:
         answer = await _ask(
             cfg, first=first, turns=turns, instruction=instruction,
-            system=ai_derivation.SYSTEM_PROMPT,
-            schema=ai_derivation.SCHEMA, schema_name="derivation_rules", temperature=0.3,
+            system=ai_derivation.SYSTEM_PROMPT + (
+                "\n\n" + ai_derivation.EDIT_NOTE if rules else ""),
+            schema=ai_derivation.EDIT_SCHEMA if rules else ai_derivation.SCHEMA,
+            schema_name="derivation_rules", temperature=0.3,
             images=images or None, quick=True,
         )
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
+    asked = ai_followup.first_instruction(turns, instruction)
     try:
         result = ai_derivation.compile_rules(
             answer, catalog=catalog,
             taken_ids={r["id"] for r in rules if isinstance(r.get("id"), str)}, refs=refs,
+            existing=rules, request=" ".join(dict.fromkeys((asked, instruction))),
+            read_vars=reads,
         )
     except ValueError as e:
         return json_error(
@@ -481,12 +529,15 @@ async def post_text_draft(request: web.Request) -> web.Response:
     item_id = _got if isinstance(_got := item.get("id"), str) else None
     catalog = library_vars.build_catalog([m for m in modules if m.get("id") != item_id])
     description, labels = ai_about.clean(item.get("description"), item.get("tags"))
+    asked = ai_followup.first_instruction(turns, instruction)
+    # Both asks: a refine is held to the first request too.
+    held_to = " ".join(dict.fromkeys((asked, instruction)))
     first = text_items.build_prompt(
-        kind=kind, instruction=ai_followup.first_instruction(turns, instruction),
+        kind=kind, instruction=asked,
         name=name[:200], description=description,
         catalog_text=library_vars.describe_for(
-            catalog, " ".join([ai_followup.first_instruction(turns, instruction), name,
-                               description, current[:2000], out_var]),
+            text_items.prompt_catalog(kind, catalog, asked),
+            " ".join([asked, name, description, current[:2000], out_var]),
             keep=_catalog_size(kind)[0], values=_catalog_size(kind)[1]),
         labels=labels, current=current[:4000], out_var=out_var,
     )
@@ -508,39 +559,55 @@ async def post_text_draft(request: web.Request) -> web.Response:
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
     answer, research = webs.take(answer)
-    unset = text_items.left_out(kind, answer, instruction)
-    if unset:
-        # One re-ask naming what the request asked for; the first answer
-        # stands when the second leaves out no less of it.
+
+    def problems(raw: Any) -> list[str]:
+        unset = text_items.left_out(kind, raw, instruction)
         names = ", ".join(f"${v}" for v in unset)
-        note = (f"Set {names} too: the request asks for it. Answer with the whole list again."
-                if kind == "fixed_values" else
-                f"Read {names} too: the request asks for it. Answer with the whole text again.")
+        notes = [(f"Set {names} too: the request asks for it. Answer with the whole list again."
+                  if kind == "fixed_values" else
+                  f"Read {names} too: the request asks for it. Answer with the whole text "
+                  "again.")] if unset else []
+        return notes + text_items.recheck_notes(kind, raw, held_to)
+
+    notes = problems(answer)
+    if notes:
+        # One re-ask naming what the code found; the first answer stands
+        # when the second misses no less of the request.
         try:
             again, _ = webs.take(await _ask(
-                extra="\n\n".join(x for x in (webs.note, note) if x), **ask))
-            if len(text_items.left_out(kind, again, instruction)) < len(unset):
+                extra="\n\n".join(x for x in (webs.note, *notes) if x), **ask))
+            if len(problems(again)) < len(notes):
                 answer = again
         except _ai_client.AIError:
             pass
+    had = text_items.reads(str(payload.get("template") or "") if kind == "combine"
+                           else str(item.get("template_string") or ""))
     try:
         if kind == "fixed_values":
-            result = text_items.compile_fixed(answer, existing=payload)
+            result = text_items.compile_fixed(answer, existing=payload, request=held_to)
         elif kind == "combine":
             result = text_items.compile_combine(answer, out_var=out_var, catalog=catalog,
-                                                existing=payload)
+                                                existing=payload, request=held_to)
         else:
-            result = text_items.compile_template(answer, catalog=catalog, request=" ".join(
-                dict.fromkeys((ai_followup.first_instruction(turns, instruction), instruction))))
+            result = text_items.compile_template(answer, catalog=catalog, request=held_to)
         if kind != "fixed_values":
             body = result["payload"].get("template") or result["payload"].get("template_string")
             gone = text_items.missing_asked(str(body or ""), instruction)
             if gone:
                 result["warnings"] = [*result["warnings"], gone]
             extra = text_items.unasked(str(body or ""), instruction,
-                                       text_items.reads(str(body or "")))
+                                       text_items.reads(str(body or "")), had)
             if extra:
                 result["warnings"] = [*result["warnings"], extra]
+            result["samples"] = text_items.samples(str(body or ""), catalog,
+                                                   seed=f"{name}:{instruction}",
+                                                   texts=text_items.sample_texts(modules, item_id))
+            result["before"] = {
+                "template": str(payload.get("template") or "") if kind == "combine"
+                else str(item.get("template_string") or ""),
+                "negative": str(payload.get("negative") or "") if kind == "combine"
+                else str(item.get("negative_template") or ""),
+            }
     except ValueError as e:
         return json_error(
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
