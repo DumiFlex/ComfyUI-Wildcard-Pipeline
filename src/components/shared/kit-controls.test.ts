@@ -76,6 +76,11 @@ describe("WpSegmented", () => {
     expect(w.emitted("update:modelValue")).toEqual([["z"]]);
   });
 
+  it("fills its row with block", () => {
+    const w = mount(WpSegmented, { props: { modelValue: "x", options: OPTS, block: true } });
+    expect(w.attributes("data-block")).toBe("true");
+  });
+
   it("names icon-only options by their label and ignores clicks when disabled", async () => {
     const w = mount(WpSegmented, { props: { modelValue: "x", options: OPTS, iconOnly: true, disabled: true } });
     const radios = w.findAll("[role=radio]");

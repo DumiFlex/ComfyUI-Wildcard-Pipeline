@@ -12,6 +12,7 @@ import { computed, nextTick, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Chip from "../components/ui/Chip.vue";
+import DataTable, { type DataColumn, type DataSort } from "../components/ui/DataTable.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
 import Input from "../components/ui/Input.vue";
 import ConfirmModal from "../components/ui/ConfirmModal.vue";
@@ -40,6 +41,19 @@ const shown = computed(() => {
   const q = query.value.trim().toLowerCase();
   return q ? counts.value.filter((c) => c.tag.toLowerCase().includes(q)) : counts.value;
 });
+
+const COLUMNS: DataColumn<LibraryTagCount>[] = [
+  { key: "tag", label: "Tag", sortable: true },
+  { key: "modules", label: "Modules", sortable: true, firstDir: "desc", mono: true, width: "110px" },
+  { key: "bundles", label: "Bundles", sortable: true, firstDir: "desc", mono: true, width: "110px" },
+  { key: "templates", label: "Templates", sortable: true, firstDir: "desc", mono: true, width: "110px" },
+  {
+    key: "actions", label: "Actions", class: "wp-tags-col--actions", align: "right", width: "140px",
+    headAttrs: { "data-ai-anchor": "actions", "data-ai-label": "Open, rename (or merge) and delete" },
+  },
+];
+/** Unsorted keeps the library order (most used first). */
+const sort = ref<DataSort | null>(null);
 
 async function refresh() {
   loading.value = true;
@@ -214,97 +228,84 @@ registerPageNote(() => {
       />
     </div>
 
-    <div class="wp-table-wrap wp-table-wrap--scroll">
-      <table class="wp-table wp-table--sticky-head" data-ai-anchor="tags" data-ai-label="Tags table">
-        <thead>
-          <tr>
-            <th>Tag</th>
-            <th class="wp-tags-col--count">Modules</th>
-            <th class="wp-tags-col--count">Bundles</th>
-            <th class="wp-tags-col--count">Templates</th>
-            <th class="wp-tags-col--actions" data-ai-anchor="actions" data-ai-label="Open, rename (or merge) and delete">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="counts.length === 0">
-            <td colspan="5">
-              <EmptyState
-                icon="pi-hashtag"
-                headline="No tags yet"
-                body="Tag an item on its Identity card, or select several in a list and use Add tag."
-                variant="library"
-              />
-            </td>
-          </tr>
-          <tr v-else-if="shown.length === 0">
-            <td colspan="5" class="wp-dim">No tag matches "{{ query }}".</td>
-          </tr>
-          <tr
-            v-for="c in shown"
-            :key="c.tag"
-            class="wp-tags-row"
-            :data-test="`tag-row-${c.tag}`"
-          >
-            <td>
-              <!-- .stop: Enter on a name that already exists opens the merge
-                   confirm, which listens for Enter on window. Letting this
-                   keydown bubble would confirm the merge unseen. -->
-              <Input
-                v-if="editing && editing.tag === c.tag"
-                v-model="editing.name"
-                aria-label="New tag name"
-                data-test="tag-rename-input"
-                @keydown.enter.stop.prevent="saveRename"
-                @keydown.esc.stop="cancelRename"
-              />
-              <button
-                v-else
-                type="button"
-                class="wp-tags-open"
-                :title="`Show items tagged '${c.tag}'`"
-                @click="open(c)"
-              >
-                <Chip tone="accent">{{ c.tag }}</Chip>
-              </button>
-            </td>
-            <td class="wp-mono">{{ c.modules || "—" }}</td>
-            <td class="wp-mono">{{ c.bundles || "—" }}</td>
-            <td class="wp-mono">{{ c.templates || "—" }}</td>
-            <td class="wp-tags-col--actions">
-              <template v-if="editing && editing.tag === c.tag">
-                <Button
-                  variant="primary" size="sm" icon="pi-check"
-                  :aria-label="`Save ${c.tag}`" data-test="tag-rename-save"
-                  @click="saveRename"
-                />
-                <Button
-                  variant="ghost" size="sm" icon="pi-times"
-                  :aria-label="`Cancel renaming ${c.tag}`"
-                  @click="cancelRename"
-                />
-              </template>
-              <template v-else>
-                <Button
-                  variant="ghost" size="sm" icon="pi-list"
-                  :aria-label="`Show items tagged ${c.tag}`" :data-test="`tag-open-${c.tag}`"
-                  @click="open(c)"
-                />
-                <Button
-                  variant="ghost" size="sm" icon="pi-pencil"
-                  :aria-label="`Rename ${c.tag}`" :data-test="`tag-rename-${c.tag}`"
-                  @click="startRename(c)"
-                />
-                <Button
-                  variant="ghost" size="sm" icon="pi-trash"
-                  :aria-label="`Delete ${c.tag}`" :data-test="`tag-delete-${c.tag}`"
-                  @click="deletePending = c"
-                />
-              </template>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      v-model:sort="sort"
+      class="wp-table-wrap--scroll"
+      :columns="COLUMNS"
+      :rows="shown"
+      row-key="tag"
+      :row-attrs="(c) => ({ class: 'wp-tags-row', 'data-test': `tag-row-${c.tag}` })"
+      aria-label="Tags"
+      data-ai-anchor="tags"
+      data-ai-label="Tags table"
+    >
+      <template #empty>
+        <EmptyState
+          v-if="counts.length === 0"
+          icon="pi-hashtag"
+          headline="No tags yet"
+          body="Tag an item on its Identity card, or select several in a list and use Add tag."
+          variant="library"
+        />
+        <span v-else class="wp-dim">No tag matches "{{ query }}".</span>
+      </template>
+      <template #cell-tag="{ row: c }">
+        <!-- .stop: Enter on a name that already exists opens the merge
+             confirm, which listens for Enter on window. Letting this
+             keydown bubble would confirm the merge unseen. -->
+        <Input
+          v-if="editing && editing.tag === c.tag"
+          v-model="editing.name"
+          aria-label="New tag name"
+          data-test="tag-rename-input"
+          @keydown.enter.stop.prevent="saveRename"
+          @keydown.esc.stop="cancelRename"
+        />
+        <button
+          v-else
+          type="button"
+          class="wp-tags-open"
+          :title="`Show items tagged '${c.tag}'`"
+          @click="open(c)"
+        >
+          <Chip tone="accent">{{ c.tag }}</Chip>
+        </button>
+      </template>
+      <template #cell-modules="{ value }">{{ value || "—" }}</template>
+      <template #cell-bundles="{ value }">{{ value || "—" }}</template>
+      <template #cell-templates="{ value }">{{ value || "—" }}</template>
+      <template #cell-actions="{ row: c }">
+        <template v-if="editing && editing.tag === c.tag">
+          <Button
+            variant="primary" size="sm" icon="pi-check"
+            :aria-label="`Save ${c.tag}`" data-test="tag-rename-save"
+            @click="saveRename"
+          />
+          <Button
+            variant="ghost" size="sm" icon="pi-times"
+            :aria-label="`Cancel renaming ${c.tag}`"
+            @click="cancelRename"
+          />
+        </template>
+        <template v-else>
+          <Button
+            variant="ghost" size="sm" icon="pi-list"
+            :aria-label="`Show items tagged ${c.tag}`" :data-test="`tag-open-${c.tag}`"
+            @click="open(c)"
+          />
+          <Button
+            variant="ghost" size="sm" icon="pi-pencil"
+            :aria-label="`Rename ${c.tag}`" :data-test="`tag-rename-${c.tag}`"
+            @click="startRename(c)"
+          />
+          <Button
+            variant="ghost" size="sm" icon="pi-trash"
+            :aria-label="`Delete ${c.tag}`" :data-test="`tag-delete-${c.tag}`"
+            @click="deletePending = c"
+          />
+        </template>
+      </template>
+    </DataTable>
   </div>
 
   <ConfirmModal
@@ -332,8 +333,7 @@ registerPageNote(() => {
 
 .wp-tags-search { max-width: 320px; }
 
-.wp-tags-col--count   { width: 110px; }
-.wp-tags-col--actions { width: 140px; text-align: right; white-space: nowrap; }
+.wp-tags-col--actions { white-space: nowrap; }
 .wp-tags-col--actions .wp-btn + .wp-btn { margin-left: var(--wp-space-2); }
 
 .wp-tags-open {

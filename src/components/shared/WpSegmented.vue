@@ -33,6 +33,8 @@ const props = withDefaults(defineProps<{
   /** Show only the icons; each label names its button and is its tooltip. */
   iconOnly?: boolean;
   disabled?: boolean;
+  /** Fill the row: options share the width and long labels end in "…". */
+  block?: boolean;
   ariaLabel?: string;
   /** `data-test` of each option is `<testPrefix>-<value>`. */
   testPrefix?: string;
@@ -84,6 +86,7 @@ function onKeydown(ev: KeyboardEvent): void {
     :aria-disabled="disabled || undefined"
     :data-size="size"
     :data-icon-only="iconOnly || undefined"
+    :data-block="block || undefined"
   >
     <button
       v-for="o in options"
@@ -102,7 +105,7 @@ function onKeydown(ev: KeyboardEvent): void {
       @keydown="onKeydown"
     >
       <i v-if="o.icon" class="pi" :class="o.icon" aria-hidden="true" />
-      <span v-if="!iconOnly">{{ o.label }}</span>
+      <span v-if="!iconOnly" class="wp-segmented__label">{{ o.label }}</span>
     </button>
   </div>
 </template>
@@ -147,6 +150,9 @@ function onKeydown(ev: KeyboardEvent): void {
   gap: 4px;
 }
 .wp-segmented[data-size="lg"] .wp-segmented__opt { padding: 0 var(--wp-space-6); font-size: var(--wp-text-base); }
+.wp-segmented[data-block] { display: flex; width: 100%; }
+.wp-segmented[data-block] .wp-segmented__opt { flex: 1 1 0; }
+.wp-segmented__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .wp-segmented[data-icon-only] .wp-segmented__opt { aspect-ratio: 1; padding: 0; }
 .wp-segmented__opt:hover:not(:disabled) { color: var(--wp-text); background: var(--wp-bg-3); }
 .wp-segmented__opt[data-active="true"] {
