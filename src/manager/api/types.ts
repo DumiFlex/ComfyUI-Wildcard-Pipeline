@@ -2095,6 +2095,10 @@ export interface AiPackItemResult {
   model: string;
   /** What the model thought while building it, when its server sends it. */
   thinking?: string;
+  /** The code writes this item from the plan (a graph plan's rules, presets
+   *  and template): a rebuild gives the same payload, so a problem on it is
+   *  fixed in the plan, not with "Fix with AI". */
+  wired?: boolean;
 }
 
 export interface AiPackCheck {

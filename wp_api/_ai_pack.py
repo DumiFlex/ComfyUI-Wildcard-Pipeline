@@ -101,6 +101,16 @@ def _pack_body(
     return plan, ai_pack.parse_built(plan, body.get("built"))
 
 
+def _cut_off_twice(message: str) -> str:
+    """The error for an answer cut off at the output limit after the retry
+    asked for less: what to try next, in the pack builder's terms."""
+    if message != _ai_client.CUT_OFF_MESSAGE:
+        return message
+    return ("the model's answer ran past its output limit twice, even when asked for less. "
+            "Rebuild it with a note asking for fewer options or shorter text, or raise the "
+            "output limit in Settings › AI assistant.")
+
+
 async def _repair_refs(cfg: dict[str, Any], plan: dict[str, Any], **kw: Any) -> dict[str, Any]:
     """One repair call for the relations a graph plan dropped, on an enum
     of what the graph declares; a failed call keeps the plan as it is."""
@@ -408,7 +418,8 @@ async def post_pack_change(request: web.Request) -> web.Response:
                 temperature=0.4,
             )
             new = ai_pack.apply_graph_change(plan, key, answer, library=library, base=base,
-                                             canvas=_canvas(body), request=asked)
+                                             canvas=_canvas(body), request=asked,
+                                             instruction=instruction)
             if new["bad_refs"]:
                 new = await _repair_refs(cfg, new, library=library, base=base,
                                          canvas=_canvas(body), request=asked)
@@ -498,15 +509,21 @@ async def post_pack_review(request: web.Request) -> web.Response:
         raw = body.get("recheck")
         recheck = [ai_safety.strip_invisible(t).strip()[:300] for t in raw[:ai_pack.MAX_RECHECK]
                    if isinstance(t, str) and t.strip()] if isinstance(raw, list) else None
+        ask = {"system": ai_pack.review_system(plan),
+               "user": ai_pack.review_prompt(plan, findings, asked, recheck),
+               "schema": ai_pack.review_schema(plan), "schema_name": "pack_review",
+               "temperature": 0.3}
         try:
-            answer = await _ai_client.complete_json(
-                cfg, system=ai_pack.review_system(plan),
-                user=ai_pack.review_prompt(plan, findings, asked, recheck),
-                schema=ai_pack.review_schema(plan), schema_name="pack_review",
-                temperature=0.3,
-            )
+            try:
+                answer = await _ai_client.complete_json(cfg, **ask)
+            except _ai_client.AIError as e:
+                # Cut off at the output limit: once more, asked for less.
+                if e.message != _ai_client.CUT_OFF_MESSAGE:
+                    raise
+                answer = await _ai_client.complete_json(
+                    cfg, **{**ask, "user": ask["user"] + "\n\n" + ai_pack.REVIEW_CUT_OFF_NOTE})
         except _ai_client.AIError as e:
-            return json_error(e.message, status=e.status)
+            return json_error(_cut_off_twice(e.message), status=e.status)
         findings += ai_pack.compile_review(answer, plan, findings, recheck)
     return json_ok({"findings": findings, "note": ai_pack.review_note(findings),
                     "plan": plan})
@@ -532,7 +549,16 @@ async def post_pack_item(request: web.Request) -> web.Response:
     key = body.get("key")
     note = _got if isinstance(_got := body.get("note"), str) else ""
     if not isinstance(key, str) or key not in {i["key"] for i in plan["items"]}:
-        return json_error("no such item in the plan", status=400)
+        # The plan is compiled again from what the browser sent; an item
+        # that compile no longer makes (a rule whose slot went) can't be
+        # built (9B bench P11: "no such item in the plan" on a constraint).
+        sent = _got if isinstance(_got := body.get("plan"), dict) else {}
+        items = _got if isinstance(_got := sent.get("items"), list) else []
+        name = next((str(i.get("name") or "") for i in items
+                     if isinstance(i, dict) and i.get("key") == key), "")
+        return json_error((f"{name or 'This item'} isn't in the plan any more: the plan changed "
+                           "when it was read back. Go back to the plan and build again, or skip "
+                           "it"), status=400)
     if next(i for i in plan["items"] if i["key"] == key)["kind"] == "library":
         try:
             out = ai_pack.library_item(plan, key, library)
@@ -548,7 +574,8 @@ async def post_pack_item(request: web.Request) -> web.Response:
         item = next(i for i in plan["items"] if i["key"] == key)
         return json_ok({"key": key, "id": item["id"], "kind": wired["kind"],
                         "payload": wired["payload"], "preview": wired["preview"],
-                        "warnings": wired["warnings"], "repair": "", "model": cfg["model"]})
+                        "warnings": wired["warnings"], "repair": "", "model": cfg["model"],
+                        "wired": True})
     kinds = await _vocab_kinds(body)
     try:
         req = ai_pack.item_request(plan, key, built, note[:1500], library=library)
@@ -563,7 +590,17 @@ async def post_pack_item(request: web.Request) -> web.Response:
         and note.startswith("your last answer failed")
     old = built.get(key)
     try:
-        answer = await _ai_client.complete_json(cfg, **req)
+        try:
+            answer = await _ai_client.complete_json(cfg, **req)
+        except _ai_client.AIError as e:
+            # An answer that ran into the output limit is most often a
+            # model repeating itself: one more sample, asked for less
+            # (9B bench P6/P10/Z19: the error told the user to raise the
+            # context, which a retry fixes).
+            if e.message != _ai_client.CUT_OFF_MESSAGE:
+                raise
+            answer = await _ai_client.complete_json(
+                cfg, **{**req, "user": req["user"] + "\n\n" + ai_pack.ITEM_CUT_OFF_NOTE})
         out = ai_pack.compile_item(
             plan, key, built, answer, taken={b["id"] for b in built.values()},
             item_id=old["id"] if old else "", library=library,
@@ -576,7 +613,7 @@ async def post_pack_item(request: web.Request) -> web.Response:
             except ValueError as e2:
                 return json_error(f"the model's answer couldn't be used ({e2})", status=502)
         elif isinstance(e, _ai_client.AIError):
-            return json_error(e.message, status=e.status)
+            return json_error(_cut_off_twice(e.message), status=e.status)
         else:
             return json_error(
                 f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
