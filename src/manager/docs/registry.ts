@@ -225,6 +225,9 @@ export const DOC_PAGES: DocPageMeta[] = [
   { id: "warning-types", title: "Warning & conflict types", group: "reference", icon: "pi pi-list", tone: "neutral",
     blurb: "Every warning, what it means and what to do.", keywords: ["warning", "error", "conflict", "reference"],
     ...page(() => import("./pages/reference/warning-types.vue")) },
+  { id: "component-kit", title: "Component kit", group: "reference", icon: "pi pi-th-large", tone: "neutral",
+    blurb: "Every shared control, colour and size, shown live.", keywords: ["kit", "components", "design", "buttons", "tokens", "colours", "contributors"],
+    ...page(() => import("./pages/reference/component-kit.vue")) },
 ];
 
 export function pagesByGroup(group: DocGroupId): DocPageMeta[] {

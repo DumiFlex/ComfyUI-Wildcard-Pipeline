@@ -23,6 +23,7 @@
     "check:spacing": "node scripts/check-spacing-tokens.mjs",
     "check:typography": "node scripts/check-typography-tokens.mjs",
     "check:radius": "node scripts/check-radius-tokens.mjs",
+    "kit:baseline": "WP_WRITE_KIT_BASELINE=1 vitest run scripts/kit-guard.test.mjs",
     "test": "vitest run --passWithNoTests",
     "docs:index": "WP_WRITE_DOCS_INDEX=1 vitest run src/manager/docs/__tests__/docs-index.test.ts",
     "test:watch": "vitest",

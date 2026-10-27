@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { useRouter } from "vue-router";
 import Button from "../../ui/Button.vue";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
@@ -14,6 +15,7 @@ import {
 } from "../../../utils/settings-transfer";
 
 const toast = useToast();
+const router = useRouter();
 const exporting = ref(false);
 const importing = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -87,6 +89,18 @@ async function onFile(e: Event): Promise<void> {
       >
       <Button variant="secondary" icon="pi-upload" :loading="importing" data-test="settings-import" @click="fileInput?.click()">
         Import…
+      </Button>
+    </SettingRow>
+  </SettingGroup>
+
+  <SettingGroup title="For contributors">
+    <SettingRow
+      label="Component kit"
+      hint="Every shared control with when to use it, in the current theme. Check it before building a new one."
+      setting-key="component-kit"
+    >
+      <Button variant="secondary" icon="pi-th-large" data-test="settings-open-kit" @click="router.push({ name: 'kit' })">
+        Open the kit
       </Button>
     </SettingRow>
   </SettingGroup>

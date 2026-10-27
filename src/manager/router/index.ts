@@ -38,6 +38,7 @@ const routes: RouteRecordRaw[] = [
       { path: "pack-builder", name: "pack-builder", component: () => import("../views/PackBuilder.vue") },
       { path: "settings/:section?", name: "settings", component: () => import("../views/Settings.vue"), props: true },
       { path: "whats-new", name: "whats-new", component: () => import("../views/WhatsNew.vue") },
+      { path: "kit", name: "kit", component: () => import("../views/Kit.vue") },
       // Both docs routes render the same Docs.vue. They share a `layoutKey`
       // so AppLayout's keyed <RouterView> does NOT remount the view when
       // switching between doc pages — the nav stays mounted (preserving its

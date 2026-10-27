@@ -35,10 +35,25 @@ pnpm install
 | Python types | `pyright engine wp_nodes wp_api` (settings in `[tool.pyright]` in `pyproject.toml`; CI runs it) |
 | Engine-parity fixtures | `python scripts/dump_engine_shapes.py` after any payload shape change |
 | Docs search index | `pnpm docs:index` after editing a docs page |
+| Kit guard baseline | `pnpm kit:baseline` after replacing hand-rolled controls with kit ones |
 
 `CLAUDE.md` at the repo root lists the conventions the code relies on (engine
 isolation, CSS prefixes, schema versions). Read it before a change that crosses
 the engine, the nodes and the frontend.
+
+## UI: use the component kit
+
+Open **Settings › Advanced › Component kit** (`/wp/kit`) before building a
+screen. It shows every shared control live in the current theme, with when to
+use it and how to write it. Use those. When nothing fits, make the new
+component in `src/manager/components/ui/` (manager) or `src/components/shared/`
+(canvas and manager), and add its entry to `src/manager/kit/registry.ts` and a
+demo to `src/manager/views/Kit.vue` in the same PR. Two tests hold this:
+`kit-coverage.test.ts` fails on a kit-folder component without an entry, and
+`scripts/kit-guard.test.mjs` fails when a file adds a native select, number,
+checkbox or range input, an inline `<svg>`, its own `role="dialog"`, a raw
+`<button>` in the manager or a raw hex colour. When a file gets fewer, run
+`pnpm kit:baseline` and commit the lower baseline.
 
 ## Commit messages
 
