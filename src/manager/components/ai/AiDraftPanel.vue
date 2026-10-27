@@ -269,6 +269,9 @@ const skippedSummary = computed(() => {
           <span v-if="o.negative" class="wp-ai-draft__neg" title="Negative">− <AiSyntax :text="o.negative" /></span>
         </li>
       </ul>
+      <p v-for="w in result.warnings ?? []" :key="w" class="wp-ai-draft__warn" data-test="ai-draft-warning">
+        <i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ w }}
+      </p>
       <p class="wp-ai-draft__summary">
         {{ result.options.length }} suggested<template v-if="skippedSummary"> · skipped {{ skippedSummary }}</template><template v-if="leftOffSummary"> · left off {{ leftOffSummary }}</template>
         <template v-if="result.new_tags.length"> · new tags (dashed) are created when you add</template>
@@ -332,6 +335,7 @@ const skippedSummary = computed(() => {
 .wp-ai-draft__tag[data-new="true"] { border-style: dashed; border-color: var(--wp-accent-400); color: var(--wp-accent-text); }
 .wp-ai-draft__neg { font-size: 11px; color: var(--wp-danger-text, var(--wp-danger)); }
 .wp-ai-draft__summary, .wp-ai-draft__note { margin: 0; font-size: 12px; color: var(--wp-text-dim); }
+.wp-ai-draft__warn { margin: 0; font-size: 12px; color: var(--wp-warn); display: flex; gap: 6px; align-items: center; }
 .wp-ai-draft__actions { display: flex; justify-content: flex-end; gap: 8px; }
 .wp-ai-draft__groups { margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--wp-text-dim); }
 .wp-ai-draft__group-kind {

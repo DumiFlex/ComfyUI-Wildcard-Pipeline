@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Callable
 from typing import Any
 
 from engine.ai import about, adult
@@ -186,6 +187,38 @@ def left_out_nudge(missing: list[str]) -> str:
             "doesn't apply to it.")
 
 
+#: A removal reason that argues for keeping the option ("common pre-1900",
+#: "existed in the 1800s", "fits the theme").
+_KEEP_WORDS = re.compile(
+    r"\b(?:keep|kept|fine|fits?|suits?|appropriate|authentic|existed|exists|available|"
+    r"common|plausible|period|historical|traditional|timeless|ancient|medieval|"
+    r"pre-?\d{3,4}s?|before \d{3,4}s?)\b", re.I)
+#: Words that turn such a reason into one for removing it ("did not exist
+#: before 1900", "too modern", "invented in 1950").
+_REMOVE_WORDS = re.compile(
+    r"\b(?:not|never|no|n't|without|isn't|wasn't|didn't|doesn't|too|modern|invented|"
+    r"after|post|later|anachronis\w*|contemporary|recent|only|but)\b|n't\b", re.I)
+
+
+def argues_keep(reason: str, instruction: str = "") -> bool:
+    """Whether a removal's own reason argues for keeping the option. Bench
+    W8 ("drop anything that could not exist before 1900"): all 12 outfits
+    removed, reasons like "common pre-1900". A keep word the request itself
+    uses ("drop the traditional ones") is a reason to remove."""
+    if not reason:
+        return False
+    asked = {w.lower() for w in re.findall(r"[\w-]+", instruction or "")}
+    keep = [m.group(0) for m in _KEEP_WORDS.finditer(reason)
+            if m.group(0).lower() not in asked]
+    return bool(keep) and not _REMOVE_WORDS.search(reason)
+
+
+ALL_REMOVED_NUDGE = (
+    "Your last answer removed every option in the list. Remove only the options the "
+    "request clearly matches, and keep the rest; a reason must say why the option matches "
+    "the request.")
+
+
 def build_edit_prompt(
     *, action: str, instruction: str, name: str, var_binding: str,
     options: list[dict[str, Any]], tags: list[str],
@@ -257,6 +290,7 @@ def compile_edit(
     refs: ai_refs.RefIndex | None = None, self_id: str | None = None,
     labels: list[str] | None = None, instruction: str = "",
     frame: dict[str, Any] | None = None,
+    known_tag: Callable[[str], bool] | None = None,
 ) -> dict[str, Any]:
     """Check the model's answer against the options it was shown. ``labels``
     are the wildcard's own (library) tags: a retag never copies one onto an
@@ -319,6 +353,10 @@ def compile_edit(
                 re.sub(r"\s+", " ", reason).strip()[:MAX_REASON_LEN]
                 if isinstance(reason, str) else ""
             )
+            if argues_keep(reason, instruction):
+                skipped.append({"text": opt["value"][:80],
+                                "reason": "kept, as its own reason says it fits"})
+                continue
             changes.append({
                 "id": oid, "before": {"value": opt["value"]}, "after": None, "reason": reason,
             })
@@ -409,9 +447,47 @@ def compile_edit(
     used = {t for c in changes if c["after"] and "tags" in c["after"] for t in c["after"]["tags"]}
     new_tags = [t for t in new_tags if t in used]
     _validate_changed(changes, by_id, registry, new_tags)
+    warnings: list[str] = []
+    if action == "retag":
+        warnings += _everywhere(changes, options)
+    if action == "rewrite" and known_tag is not None:
+        _check_tags(changes, known_tag)
     # The model's reason only matters when it changed nothing.
     return {"changes": changes, "new_tags": new_tags, "skipped": skipped,
-            "note": note if not changes else ""}
+            "warnings": warnings, "note": note if not changes else ""}
+
+
+def _everywhere(changes: list[dict[str, Any]], options: list[dict[str, Any]]) -> list[str]:
+    """A tag the retag puts on every option filters nothing (bench Z5: one
+    explicitness tag on all of them). Only with 3 or more options."""
+    if len(options) < 3:
+        return []
+    after = {c["id"]: c["after"]["tags"] for c in changes if c["after"]}
+    final = [set(after.get(o["id"], o.get("sub_categories") or [])) for o in options]
+    added = {t for c in changes if c["after"] for t in c["after"]["tags"]
+             if t not in (c["before"].get("tags") or [])}
+    return [f"#{t} is now on every option, so it filters nothing; tag only the options "
+            "it fits" for t in sorted(added) if all(t in f for f in final)]
+
+
+#: Words of a tag-style option: comma-separated pieces.
+_PIECE = re.compile(r"\s*,\s*")
+
+
+def wants_booru(instruction: str) -> bool:
+    """Whether a rewrite asks for Danbooru / booru tags."""
+    return bool(re.search(r"\b(?:danbooru|booru|e621)\b", instruction or "", re.I))
+
+
+def _check_tags(changes: list[dict[str, Any]], known: Callable[[str], bool]) -> None:
+    """Bench W9: "short Danbooru-style tags" made up tags. With the tag list
+    installed, each rewrite names the pieces the list doesn't have."""
+    for c in changes:
+        text = (c.get("after") or {}).get("value") or ""
+        pieces = [p.strip() for p in _PIECE.split(text) if p.strip()]
+        unknown = [p for p in pieces if "{" not in p and "@" not in p and not known(p)]
+        if unknown:
+            c["warning"] = "Not in your tag list: " + ", ".join(unknown[:6])
 
 
 def _validate_changed(
