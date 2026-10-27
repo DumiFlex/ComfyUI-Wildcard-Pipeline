@@ -68,9 +68,11 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
     <DocSection title="Content rules">
       <p>
-        One rule is enforced in every AI feature: the assistant never writes a minor in a sexual
-        context. Options, values, rules or templates that pair a minor word with a sexual one are left
-        out, and a request that asks for it is refused. Your own edits are never checked or changed.
+        Two rules are enforced in every AI feature: the assistant never writes a minor in a sexual
+        context, and never sex without consent. Options, values, rules or templates that pair a
+        minor word or a non-consent word with a sexual one are left out, and a request that asks for
+        it is refused. Negated words ("no minors") don't count, and adult body words (petite, slim)
+        are never touched. Your own edits are never checked or changed.
         See Adult (NSFW) packs for the full safeguards.
       </p>
     </DocSection>

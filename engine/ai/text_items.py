@@ -198,8 +198,9 @@ def compile_fixed(
         if not value:
             skipped.append({"text": name, "reason": "empty"})
             continue
-        if adult.sexual_minor(value):
-            skipped.append({"text": name, "reason": "it names a minor in a sexual context"})
+        why = adult.blocked(value)
+        if why:
+            skipped.append({"text": name, "reason": why})
             continue
         if row is None:
             row = {"id": _new_id(taken), "name": name}
@@ -357,8 +358,9 @@ def compile_combine(
     if not text:
         raise ValueError("the template is empty")
     negative = ai_refs.compile_text(_flat(raw.get("negative"), MAX_TEXT), surface="combine")
-    if adult.sexual_minor(text):
-        raise ValueError("it names a minor in a sexual context")
+    why = adult.blocked(text)
+    if why:
+        raise ValueError(why)
     warnings: list[str] = []
     text = _fix_axes(text, catalog, warnings)
     if out_var in reads(text):
@@ -378,8 +380,12 @@ def compile_combine(
     return {"payload": payload, "preview": preview, "warnings": warnings}
 
 
-def compile_template(raw: Any, *, catalog: dict[str, Any] | None = None) -> dict[str, Any]:
-    """``{payload: {template_string, negative_template}, preview, warnings}``."""
+def compile_template(raw: Any, *, catalog: dict[str, Any] | None = None,
+                     request: str = "") -> dict[str, Any]:
+    """``{payload: {template_string, negative_template}, preview, warnings}``.
+    A ``request`` that asks the negative to keep youth out ("a negative
+    against anything youthful") gets the youth words the model left out
+    (bench Z10: the saved negative had none)."""
     if not isinstance(raw, dict) or not isinstance(raw.get("template"), str):
         raise ValueError("the answer had no template")
     warnings: list[str] = []
@@ -391,14 +397,21 @@ def compile_template(raw: Any, *, catalog: dict[str, Any] | None = None) -> dict
     negative = ai_refs.compile_text(
         _first_pick(_unbrace(_flat(raw.get("negative"), MAX_TEMPLATE), warnings), warnings),
         surface="template")
-    if adult.sexual_minor(text):
-        raise ValueError("it names a minor in a sexual context")
+    why = adult.blocked(text)
+    if why:
+        raise ValueError(why)
     text = _fix_axes(text, catalog, warnings)
     unknown = _unknown(text, catalog)
     if unknown:
         warnings.append("Reads $" + ", $".join(unknown) + ", which nothing in the library sets")
     if not reads(text):
         warnings.append("It reads no variables, so it's the same every run")
+    if adult.asks_youth_negative(request) and not adult.youth_words(negative):
+        style = "tags" if text.count(",") >= 3 else "sentences"
+        negative, added = adult.with_youth_negative(negative, style)
+        if added:
+            warnings.append("Added " + ", ".join(added) + " to the negative: the request "
+                            "asks it to keep youth out")
     if re.search(r"\$\w+[^$]{0,40}\s(?:OR|or)\s[^$]{0,40}\$", text):
         warnings.append("It joins picks with \"or\", but the Assembler prints every one; "
                         "read the one pick instead")

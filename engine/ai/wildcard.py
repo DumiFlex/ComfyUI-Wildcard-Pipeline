@@ -269,8 +269,9 @@ def compile_options(
         except ValueError as e:
             skipped.append({"text": text, "reason": str(e)})
             continue
-        if adult.sexual_minor(text):
-            skipped.append({"text": text[:80], "reason": "it names a minor in a sexual context"})
+        why = adult.blocked(text)
+        if why:
+            skipped.append({"text": text[:80], "reason": why})
             continue
         if ai_negation.excluded(text):
             skipped.append({"text": text[:80], "reason": "it only says what to leave out, "

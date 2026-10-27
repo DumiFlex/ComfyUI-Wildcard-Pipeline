@@ -48,26 +48,35 @@ def adult_check(kind: str, payload: dict[str, Any],
                  plan: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     """An nsfw pack's item, model-written or wired from the graph. The
     pack is a sexual context, so text with a minor word (child, loli, "16
-    years old", and here schoolgirl, teen, little girl too) is left out,
-    as `adult.sexual_minor` does everywhere (ValueError, so the item is
-    rebuilt, when nothing would be left). A costume an adult can wear
-    (school uniform) stays, with a warning for the user to judge. The
+    years old", and here schoolgirl, teen, little girl too) or with sex
+    without consent (rape, against her will, violation) is left out, as
+    `adult.blocked` does everywhere (ValueError, so the item is rebuilt,
+    when nothing would be left). Negated words ("no minors") don't count.
+    A costume an adult can wear (school uniform) stays, with a warning for the user to judge. The
     template's negative gets the youth block while the youth_negative
     setting is on, and no negative (template, option, value or rule) keeps
     a word that pushes the image away from adults ("mature")."""
     why = "an adult pack never names a minor"
+    why_consent = "an adult pack never shows sex without consent"
     said: list[str] = []
 
+    def minor(t: str) -> list[str]:
+        return ai_adult.minor_words(t, sexual=True)
+
     def keep(rows: list[Any], text: Any, noun: str) -> list[Any]:
-        bad = [r for r in rows if ai_adult.minor_words(text(r), sexual=True)]
+        bad = [r for r in rows if ai_adult.blocked(text(r), sexual=True)]
         kept = [r for r in rows if r not in bad]
         if bad and not kept:
-            raise ValueError(f"every {noun} names a minor; {why}")
-        if bad:
-            words = ", ".join(dict.fromkeys(w for r in bad
-                                            for w in ai_adult.minor_words(text(r), sexual=True)))
-            more = f" and {len(bad) - 1} more" if len(bad) > 1 else ""
-            said.append(f"Left out \"{text(bad[0])[:40]}\"{more}: {why} ({words})")
+            raise ValueError(f"every {noun} names a minor or sex without consent; "
+                             "an adult pack never does")
+        for test, reason in ((minor, why), (ai_adult.noncon_words, why_consent)):
+            hit = [r for r in bad if test(text(r))]
+            if not hit:
+                continue
+            words = ", ".join(dict.fromkeys(w for r in hit for w in test(text(r))))
+            more = f" and {len(hit) - 1} more" if len(hit) > 1 else ""
+            said.append(f"Left out \"{text(hit[0])[:40]}\"{more}: {reason} ({words})")
+            bad = [r for r in bad if r not in hit]
         return kept
 
     def negatives(text: str, what: str) -> str:
@@ -164,8 +173,10 @@ def adult_check(kind: str, payload: dict[str, Any],
         texts = [writes(r) for r in kept]
     elif kind in ("combine", "template"):
         text = str(payload.get("template" if kind == "combine" else "template_string") or "")
-        if ai_adult.minor_words(text, sexual=True):
+        if minor(text):
             raise ValueError(f"it names a minor; {why}")
+        if ai_adult.noncon_words(text):
+            raise ValueError(f"it shows sex without consent; {why_consent}")
         texts = [text]
     flagged = [t for t in texts if ai_adult.youth_words(t)]
     if flagged:

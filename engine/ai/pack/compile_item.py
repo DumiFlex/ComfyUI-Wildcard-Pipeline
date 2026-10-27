@@ -9,6 +9,7 @@ from typing import Any
 from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
 from engine.ai import fits as ai_fits
+from engine.ai import ratings as ai_ratings
 from engine.ai import text_items
 from engine.ai import wildcard as ai_wildcard
 from engine.ai.pack import graph as pack_graph
@@ -373,6 +374,11 @@ def compile_item(
         warnings = [*warnings, *said, *fixed, *more]
         if plan.get("style") == "tags":
             payload = {**payload, "template_string": tag_commas(payload["template_string"])}
+    payload, spaced = ai_ratings.payload_rating_tags(kind, payload)
+    if spaced:
+        # P13 printed "rating explicit" next to "rating_safe".
+        warnings = [*warnings, f"Wrote {spaced} rating tag(s) as rating_<level>, the spelling "
+                    "Pony reads"]
     if plan.get("rating") == "nsfw":
         payload, said = adult_check(kind, payload, plan)
         warnings += said
