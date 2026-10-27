@@ -244,7 +244,7 @@ function onReset(): void {
   border: 1px solid var(--wp-border-strong, var(--wp-border, #353841));
   border-radius: 6px;
   padding: 10px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--wp-shadow-md);
   min-width: 240px;
   font: 11px var(--wp-font-sans, sans-serif);
   color: var(--wp-text, #e0e0e8);

@@ -280,6 +280,6 @@ function onResetColor(): void {
   background: var(--wp-bg2);
   border: 1px solid var(--wp-border);
   border-radius: 4px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--wp-shadow-md);
 }
 </style>

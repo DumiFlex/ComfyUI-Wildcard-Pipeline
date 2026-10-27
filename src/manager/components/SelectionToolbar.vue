@@ -361,7 +361,7 @@ function applyWeight() {
   border: 1px solid var(--wp-border);
   border-radius: 8px;
   background: var(--wp-bg-1);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--wp-shadow-md);
 }
 .wpc-seltoolbar__menu--weight { flex-direction: row; align-items: center; min-width: 0; }
 .wpc-seltoolbar__menu--weight :deep(.wp-input-group) { width: 96px; }

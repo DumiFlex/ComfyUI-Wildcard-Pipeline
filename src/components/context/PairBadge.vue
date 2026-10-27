@@ -442,7 +442,7 @@ const multiEntryTitle = computed<string>(() =>
   background: var(--wp-bg-1, var(--wp-bg2, #1a1d24));
   border: 1px solid var(--wp-border-strong, var(--wp-border, #353841));
   border-radius: 5px;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--wp-shadow-md);
   font: 11px var(--wp-font-sans, sans-serif);
   color: var(--wp-text, #e0e0e8);
   pointer-events: auto;

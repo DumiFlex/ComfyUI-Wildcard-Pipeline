@@ -1393,7 +1393,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   container: wp-ai-chat / inline-size;
   background: var(--wp-bg-1);
   border-left: 1px solid var(--wp-border);
-  box-shadow: -8px 0 24px rgb(0 0 0 / 0.25);
+  box-shadow: var(--wp-shadow-xl);
 }
 /* The left edge: a splitter the user drags or moves with the arrow keys. */
 .wp-ai-chat__grip {
@@ -1501,7 +1501,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   position: absolute; left: -8px; bottom: -12px; min-width: 24px; height: 22px; padding: 0 5px;
   display: inline-flex; align-items: center; justify-content: center; border-radius: 11px;
   font-size: 13px; line-height: 1; background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border); box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+  border: 1px solid var(--wp-border); box-shadow: var(--wp-shadow-sm);
   animation: wp-ai-chat-react 0.32s cubic-bezier(0.3, 1.6, 0.5, 1) both;
 }
 @keyframes wp-ai-chat-react {

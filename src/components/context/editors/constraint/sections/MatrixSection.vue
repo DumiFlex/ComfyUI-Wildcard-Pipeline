@@ -718,7 +718,7 @@ onBeforeUnmount(() => {
   color: color-mix(in srgb, var(--ax) 80%, var(--wp-text));
   background: color-mix(in srgb, var(--ax) 16%, var(--wp-bg-deep, #0e1015));
   border-left: 3px solid var(--ax);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--wp-bg, #000) 55%, transparent);
+  box-shadow: var(--wp-shadow-sm);
 }
 .mx-grp-head--bucket .chip { border-left-style: dashed; }
 
@@ -768,8 +768,7 @@ onBeforeUnmount(() => {
               0 2px 6px color-mix(in srgb, var(--wp-text) 20%, transparent);
 }
 .mx-cell.open {
-  box-shadow: 0 0 0 2px var(--wp-accent, #c4b5fd),
-              0 4px 12px color-mix(in srgb, var(--wp-text) 25%, transparent);
+  box-shadow: 0 0 0 2px var(--wp-accent, #c4b5fd), var(--wp-shadow-md);
 }
 .mx-cell.s-neutral {
   background: color-mix(in srgb, var(--wp-text) 4%, transparent);
