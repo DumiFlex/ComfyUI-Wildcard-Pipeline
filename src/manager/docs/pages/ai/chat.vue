@@ -79,6 +79,14 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         ]"
       />
       <p>
+        A card draws the change the way its editor shows the item. A wildcard change lists the
+        options it touches: <b>+</b> for a new one, struck through for a removed one, and old → new
+        for a changed text, share of the draw, tag, negative or fallback. The options it leaves
+        alone fold into "N unchanged"; the magnifier lists them too. A change to an item's
+        description, tags, category or rating shows each as old → new, with the category's own
+        chip. Category, tag and bulk cards show the chips you see in the library.
+      </p>
+      <p>
         Three or more cards of one kind come as one <b>group card</b> with a row per item. Untick
         the rows you don't want and press <b>Apply</b>. <b>Undo all</b> takes them all back.
       </p>

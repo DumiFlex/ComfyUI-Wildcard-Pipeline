@@ -1,16 +1,24 @@
 <script setup lang="ts">
 /**
- * AiCardView — what a chat create card makes, laid out the way its editor
- * shows it: a constraint as source → target rule rows, a derivation as
- * IF / ELIF / ELSE per rule, fixed values as a table, a combine or template
- * as its text, prompt syntax coloured (`AiSyntax`). Read-only; "Open in editor" is where it gets changed.
+ * AiCardView — what a chat card makes or changes, laid out the way its
+ * editor shows it (one view from `composables/card-views`): a constraint
+ * as source → target rule rows, a derivation as IF / ELIF / ELSE per rule,
+ * fixed values as a table, a combine or template as its text, prompt
+ * syntax coloured (`AiSyntax`). A change draws old → new with the views in
+ * `views/`: an item's fields, a wildcard's options, categories, tags and
+ * bulk changes. Read-only; "Open in editor" is where it gets changed.
  *
  * In the chat it stays small: the grid, rules, rows and text are capped
  * (with "+N more") and the card's magnifier shows it `full` in a modal.
  */
 import { computed } from "vue";
-import type { CardView, ConstraintRowView } from "../../composables/aiCards";
+import type { CardView, ConstraintRowView } from "../../composables/card-views/types";
 import AiSyntax from "./AiSyntax.vue";
+import AiBulkView from "./views/AiBulkView.vue";
+import AiCategoryView from "./views/AiCategoryView.vue";
+import AiInfoDiff from "./views/AiInfoDiff.vue";
+import AiOptionDiff from "./views/AiOptionDiff.vue";
+import AiTagView from "./views/AiTagView.vue";
 
 const props = defineProps<{ view: CardView; full?: boolean }>();
 
@@ -128,7 +136,13 @@ function effectText(effect: string, factor: number | null): string {
       <p v-if="more(view.rows, CAP.rows)" class="wp-ai-card-view__more" data-test="ai-card-more">+{{ more(view.rows, CAP.rows) }} more value{{ more(view.rows, CAP.rows) === 1 ? "" : "s" }}</p>
     </template>
 
-    <dl v-else class="wp-ai-card-view__text">
+    <AiInfoDiff v-else-if="view.kind === 'info'" :rows="view.rows" :full="full" />
+    <AiOptionDiff v-else-if="view.kind === 'options'" :view="view" :full="full" />
+    <AiCategoryView v-else-if="view.kind === 'categories'" :view="view" />
+    <AiTagView v-else-if="view.kind === 'tags'" :view="view" />
+    <AiBulkView v-else-if="view.kind === 'bulk'" :view="view" :full="full" />
+
+    <dl v-else-if="view.kind === 'text'" class="wp-ai-card-view__text">
       <template v-for="r in view.rows" :key="r.label">
         <dt>{{ r.label }}</dt>
         <dd :class="{ 'wp-ai-card-view__clamp wp-ai-card-view__clamp--6': !full }"><AiSyntax :text="r.text" /></dd>
@@ -138,7 +152,7 @@ function effectText(effect: string, factor: number | null): string {
 </template>
 
 <style scoped>
-.wp-ai-card-view { font-size: 12.5px; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 6px; background: var(--wp-bg-sunken, rgb(0 0 0 / 15%)); }
+.wp-ai-card-view { font-size: 12.5px; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 6px; background: var(--wp-bg-sunken, var(--wp-bg)); }
 .wp-ai-card-view__line { margin: 0; }
 .wp-ai-card-view__grid { border-collapse: collapse; font-size: 11.5px; }
 .wp-ai-card-view__grid th, .wp-ai-card-view__grid td { padding: 2px 6px; border: 1px solid var(--wp-border); text-align: center; font-weight: 400; }
