@@ -14,6 +14,7 @@ import re
 from typing import Any
 
 from engine.ai import describe as ai_describe
+from engine.ai import ratings as ai_ratings
 
 #: Per delete card.
 MAX_DELETE_ITEMS = 10
@@ -380,6 +381,8 @@ class ManageTools(_Colors):
         #: this way: their card's pid.
         on_card: dict[str, str] = {}
         seen: set[str] = set()
+        held: list[str] = []
+        said = getattr(self, "user_text", "") or ""
         cards = getattr(self, "bulk_cards", None) or {}
         for value in raw:
             row = self._find(value)  # type: ignore[attr-defined]
@@ -393,16 +396,23 @@ class ManageTools(_Colors):
                     "template" if row["id"] in self.templates else "module")
             body: dict[str, Any] = {}
             tags = [t for t in row.get("tags") or [] if isinstance(t, str)]
-            if adds or rms:
-                now = [t for t in tags if t.lower() not in rms]
+            was = row.get("content_rating") or "safe"
+            # An NSFW item lowered to safe, or #nsfw taken off, only when the
+            # user's words ask (bench Z15, L5).
+            item_rating, kept_rms, notes = ai_ratings.keep_nsfw(
+                was, tags, rating, sorted(rms), said)
+            held += [n for n in notes if n not in held]
+            item_rms = set(kept_rms)
+            if adds or item_rms:
+                now = [t for t in tags if t.lower() not in item_rms]
                 now += [a for a in adds if a not in {t.lower() for t in now}]
                 if now != tags:
                     body["tags"] = now
             if category is not None and (clear or cid or new_cat):
                 if (None if clear else cid) != row.get("category_id") or new_cat:
                     body["category_id"] = None if clear else cid
-            if rating and kind != "template" and rating != (row.get("content_rating") or "safe"):
-                body["content_rating"] = rating
+            if item_rating and kind != "template" and item_rating != was:
+                body["content_rating"] = item_rating
             if not body:
                 continue
             pid = cards.get(bulk_key(row["id"], body, new_cat))
@@ -423,7 +433,8 @@ class ManageTools(_Colors):
                              + "; don't propose it again: answer now")
         if not items:
             raise ValueError("that changes nothing" + (
-                f" (not found: {', '.join(missing[:8])})" if missing else ""))
+                f" (not found: {', '.join(missing[:8])})" if missing else "")
+                + (f" ({held[0]})" if held else ""))
         what = []
         if category is not None:
             what.append("no category" if clear else f"category {category.strip()}"
@@ -440,7 +451,7 @@ class ManageTools(_Colors):
             "summary": f"{n} item{'s' if n != 1 else ''}",
             "preview": [str(it["name"]) for it in items[:40]]
             + ([f"… and {n - 40} more"] if n > 40 else []),
-            "warnings": [f"Not found: {', '.join(missing[:8])}"] if missing else [],
+            "warnings": ([f"Not found: {', '.join(missing[:8])}"] if missing else []) + held,
             "op": {"op": "bulk", "kind": "bulk", "items": items, "new_category": new_cat},
         }
 

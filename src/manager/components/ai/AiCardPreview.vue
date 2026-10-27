@@ -11,7 +11,8 @@ import Button from "../ui/Button.vue";
 import AiCardView from "./AiCardView.vue";
 import AiTestCard from "./AiTestCard.vue";
 import AiSyntax from "./AiSyntax.vue";
-import { cardMeta, cardOptions, cardView, otherPreview } from "../../composables/aiCards";
+import { cardMeta, cardOptions, cardViews, otherPreview } from "../../composables/aiCards";
+import { useCardViewContext } from "../../composables/card-views/context";
 import type { AiChatProposal, AiTestCard as TestCard } from "../../api/types";
 
 const props = defineProps<{
@@ -38,8 +39,9 @@ const emit = defineEmits<{
 const p = computed(() => props.proposal ?? null);
 const meta = computed(() => (p.value ? cardMeta(p.value) : null));
 const options = computed(() => (p.value ? cardOptions(p.value) : null));
-const view = computed(() => (p.value ? cardView(p.value) : null));
-const lines = computed(() => (p.value && !view.value ? otherPreview(p.value, options.value) : []));
+const viewContext = useCardViewContext();
+const views = computed(() => (p.value ? cardViews(p.value, viewContext) : []));
+const lines = computed(() => (p.value && !views.value.length ? otherPreview(p.value, options.value) : []));
 const title = computed(() => p.value?.title ?? (props.test ? "Test run" : ""));
 const pending = computed(() => !!p.value && props.canApply !== undefined);
 </script>
@@ -73,7 +75,7 @@ const pending = computed(() => !!p.value && props.canApply !== undefined);
             </li>
           </ol>
         </section>
-        <AiCardView v-if="view" :view="view" full />
+        <template v-if="views.length"><AiCardView v-for="(v, j) in views" :key="j" :view="v" full /></template>
         <ul v-else-if="lines.length" class="wp-ai-preview__lines">
           <li v-for="(l, i) in lines" :key="i"><AiSyntax :text="l" /></li>
         </ul>

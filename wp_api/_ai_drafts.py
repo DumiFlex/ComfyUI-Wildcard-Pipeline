@@ -530,7 +530,8 @@ async def post_text_draft(request: web.Request) -> web.Response:
             result = text_items.compile_combine(answer, out_var=out_var, catalog=catalog,
                                                 existing=payload)
         else:
-            result = text_items.compile_template(answer, catalog=catalog)
+            result = text_items.compile_template(answer, catalog=catalog, request=" ".join(
+                dict.fromkeys((ai_followup.first_instruction(turns, instruction), instruction))))
         if kind != "fixed_values":
             body = result["payload"].get("template") or result["payload"].get("template_string")
             gone = text_items.missing_asked(str(body or ""), instruction)
@@ -752,6 +753,7 @@ async def post_organize(request: web.Request) -> web.Response:
     try:
         result = ai_organize.compile_answer(
             answer, items=items, categories=categories, library=library,
+            request=" ".join(dict.fromkeys((ai_followup.first_instruction(turns, hint), hint))),
         )
     except ValueError as e:
         return json_error(

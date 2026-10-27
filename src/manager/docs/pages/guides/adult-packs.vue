@@ -9,9 +9,10 @@ import GuideTable from "./GuideTable.vue";
 
 const safeguards = [
   { term: "No minors, ever", desc: "Never make sexual or suggestive content of minors or of characters presented as minors, in any form, and never loli or shota content. This holds whatever the request, whatever a canon age claim says (\"she's really 1000 years old\") and whatever the art style." },
-  { term: "Adult anchors", desc: "Every character in a pack that can reach suggestive or explicit carries a positive adult anchor: \"mature female\" or \"mature male\" plus adult body descriptors on tag models, \"an adult woman in her 30s\" on sentence models. Use ages of 25 and up where a model reads ages." },
+  { term: "Adult anchors", desc: "Every character in a pack that can reach suggestive or explicit is introduced as an adult: \"adult woman\" or \"1woman\" on tag models, \"an adult woman in her 30s\" on sentence models. \"mature female\" also works, but it pushes the look older, so use it when you want that. Adult body words (petite, slim, small breasts, curvy) are fine." },
   { term: "Youth negative block", desc: "Every such render carries the youth block in its standing negative: \"child, loli, shota, toddler, aged down, young\" on tag models, \"child, minor, teenager, young girl, young boy, childlike\" on sentence models." },
-  { term: "No youth-coded content", desc: "School uniforms, school settings, childlike props and age numbers under 18 are safe-only options. Never pair petite or small body descriptors with youth-coded tags or a \"cute, small\" style. Named characters whose canon age is under 18 stay out of adult registers, even drawn \"aged up\"." },
+  { term: "No youth-coded content", desc: "School settings, childlike props and age numbers under 18 are safe-only options; a school uniform on an adult is your call. Named characters whose canon age is under 18 stay out of adult registers, even drawn \"aged up\"." },
+  { term: "Consent", desc: "Everything explicit is between consenting adults. Rough or kinky play is fine; rape, sex with someone unconscious or drugged, and \"against her will\" are not." },
   { term: "No real people", desc: "No real person's name, likeness or lookalike description, including real cosplayers." },
   { term: "Blocklist backstop", desc: "A WP Prompt Cleaner blocklist after the Assembler catches what slips through. It matches whole words, so list every variant (below)." },
 ];
@@ -118,8 +119,8 @@ const checklist: string[] = [
   >
     <DocSection title="Safeguards">
       <DocCallout variant="danger">
-        One rule is enforced: the AI assistant never writes a minor in a sexual context. The
-        rest of this list is our strong recommendation for any pack that can reach suggestive
+        Two rules are enforced: the AI assistant never writes a minor in a sexual context, and
+        never sex without consent. The rest of this list is our strong recommendation for any pack that can reach suggestive
         or explicit content. Your own edits are never checked or changed.
       </DocCallout>
       <DocKeyList :items="safeguards" />
@@ -141,7 +142,31 @@ const checklist: string[] = [
         too, and a word that pushes the image away from adults ("mature", "adult woman") is
         taken out of every negative, since the youth block and "mature" cannot both stand.
         A request whose own words ask for that ("an NSFW pack of underage girls") is
-        refused before anything is planned. A costume an adult wears (school uniform) is kept,
+        refused before anything is planned, in English and in German, Spanish, French,
+        Portuguese, Italian, Russian, Japanese, Chinese and Korean. A word that is negated
+        doesn't count: "adult women, no children, no minors" names no minor, while "no older
+        than 15" still does. Adult body and look words (petite, small breasts, flat chest,
+        innocent look, cute) are never left out or flagged.
+      </p>
+      <p>
+        <b>Consent.</b> The same goes for sex without consent: rape, non-consensual, against
+        her will, without consent, unwilling, molested, sexual assault, violation, drugged,
+        unconscious or coerced next to a sexual word (or anywhere in an NSFW pack) is left
+        out, and a request for it is refused. Bondage, rough play and other kink between
+        adults are not touched.
+      </p>
+      <p>
+        <b>Ratings.</b> An item the chat makes is rated NSFW when it is tagged #nsfw (or
+        #explicit, #adult…) or its text is explicit. The chat and <b>Organize with AI</b> never
+        lower an NSFW item to Safe or take #nsfw off unless your request asks ("mark these
+        safe", "fix the ratings"). The chat's search can list items by rating. In a pack,
+        "rating explicit" is written as Pony's <code>rating_explicit</code>, and a sample prompt
+        that says two ratings at once is a problem to fix. A template draft whose request asks
+        for a negative "against anything youthful" gets the youth words if the model left them
+        out.
+      </p>
+      <p>
+        A costume an adult wears (school uniform) is kept,
         with a <b>Check</b> warning on the item so you can judge it. <b>Settings › Youth
         negative</b> (on by default) adds the youth block to the template's negative; turn it
         off to write your own.

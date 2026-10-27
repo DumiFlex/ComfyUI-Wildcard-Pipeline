@@ -778,7 +778,10 @@ def _scope_edits(lib: Any, meta: dict[str, Any], ask: _Ask, log: list[dict[str, 
         meta["ref_asks"] = sorted(ai_chat.ref_asks(text))
         meta["asked_words"] = sorted({w.lower() for m in _VAR_WORD.findall(text)
                                       for w in m if w})
+        # A rating lowered to safe needs the user's say-so (ratings.keep_nsfw).
+        meta["user_text"] = text[:2000]
     lib.ref_asks = set(meta.get("ref_asks") or [])
+    lib.user_text = str(meta.get("user_text") or "")
     lib.asked_words = set(meta.get("asked_words") or [])
     # An item the answer reads in full may be changed when the user asked
     # for a change ("add negatives to the stormy options"), not a new item.
