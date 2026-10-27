@@ -1446,6 +1446,61 @@ async function rebuild(key: string, note = ""): Promise<void> {
   }
 }
 
+/** What "Fix all with AI" rebuilds after a build: each item the check
+ *  flags, with its problems (less the dismissed ones) as the note. Library
+ *  items and items the code writes from the plan (`wired`) are left out,
+ *  since a rebuild gives them the same; their rows say "Change the plan". */
+function fixAllNotes(): Map<string, string[]> {
+  const p = plan.value;
+  const c = check.value;
+  const notes = new Map<string, string[]>();
+  if (!p || !c) return notes;
+  for (const [key, list] of Object.entries(c.problems)) {
+    const item = p.items.find((i) => i.key === key);
+    const result = states.value[key]?.result;
+    if (!item || !result || result.wired || item.kind === "library") continue;
+    const open = list.filter((t) => !dismissedNotes.value.has(`${key}:${t}`));
+    if (open.length) notes.set(key, open);
+  }
+  return notes;
+}
+
+/** How many items "Fix all with AI" would rebuild. */
+const fixAllCount = computed(() => fixAllNotes().size);
+
+/** Rebuild every flagged item at once, as each row's Fix with AI would:
+ *  wildcards first and the constraints on them after, then one check. */
+async function fixAll(): Promise<void> {
+  const p = plan.value;
+  if (!p || working.value) return;
+  const notes = fixAllNotes();
+  if (!notes.size) return;
+  for (const key of [...notes.keys()]) {
+    for (const dep of dependents(p, key)) if (!notes.has(dep)) notes.set(dep, []);
+  }
+  const mine = new AbortController();
+  controller = mine;
+  working.value = true;
+  error.value = "";
+  try {
+    for (const item of buildOrder(p).filter((i) => notes.has(i.key))) {
+      const problems = notes.get(item.key) ?? [];
+      stage.value = `Fixing ${item.name}…`;
+      setState(item.key, { status: "fixing", fixed: problems.length ? problems : undefined, error: undefined });
+      await buildOne(p, item.key, problems.join("; "), mine.signal);
+    }
+    await runCheck(p, mine.signal);
+  } catch (err) {
+    if (!isAbort(err)) error.value = message(err);
+  } finally {
+    if (controller === mine) {
+      controller = null;
+      working.value = false;
+      stage.value = "";
+    }
+  }
+}
+
 /** Leave a failed or waiting item out of the pack. */
 function skipItem(key: string): void {
   const s = states.value[key];
@@ -1562,7 +1617,7 @@ export function usePackBuilder() {
   return {
     convo, plan, draft, removed, edited, states, phase, working, stage, current, check,
     installed, error, builtCount, summary, askPlan, refinePlan, canRefine, awaitingSearch, removeItem, build,
-    rebuild, stop, install, undoInstall, backToPlan, reset, sample, findings, reviewing,
+    rebuild, fixAll, fixAllCount, stop, install, undoInstall, backToPlan, reset, sample, findings, reviewing,
     reviewPlan, fixFindings, unfixed, stuck, notice, settings, decisions, picks, questions, answeredCount, choose,
     setOther, decideFor, decideAll, pickFor, reopenDecision, changeAssumption, editItem, slotOf, relationsOf, editGraph, editSlot, editRelation, removeRelation, addRelation, addSlot, editTemplate, locked, changes, dropped, reopened, resendImages,
     addItem, editPlan, applyFinding, dismissFinding, selected, toggleSelected, changeItem,
