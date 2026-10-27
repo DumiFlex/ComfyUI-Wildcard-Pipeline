@@ -23,6 +23,7 @@
  * Images can be attached (button, paste or drop) when the model sees them;
  * they are shrunk in the browser first (`utils/chat-image.ts`).
  */
+import CloseButton from "@/components/shared/CloseButton.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { isNavigationFailure, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import Button from "../ui/Button.vue";
@@ -864,13 +865,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         title="Start a new chat"
         @click="newChat"
       ><span class="wp-ai-chat__btn-label">New chat</span></Button>
-      <button
-        type="button"
+      <CloseButton
         class="wp-ai-chat__close"
-        aria-label="Close the assistant"
+        label="Close the assistant"
         data-test="ai-chat-close"
         @click="chat.open.value = false"
-      ><i class="pi pi-times" aria-hidden="true" /></button>
+      />
     </header>
     <p v-if="modelNote" class="wp-ai-chat__model-note" role="status" data-test="ai-chat-model-note">{{ modelNote }}</p>
 
@@ -1475,11 +1475,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   font-family: var(--wp-font-mono, monospace); font-size: 11px; color: var(--wp-text-dim);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.wp-ai-chat__close {
-  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
-  border: 0; border-radius: 6px; background: none; color: var(--wp-text-muted); cursor: pointer;
-}
-.wp-ai-chat__close:hover { color: var(--wp-text); background: var(--wp-bg-2); }
 .wp-ai-chat__body {
   flex: 1; overflow-y: auto; overscroll-behavior: contain;
   padding: 14px 12px; display: flex; flex-direction: column; gap: 12px;

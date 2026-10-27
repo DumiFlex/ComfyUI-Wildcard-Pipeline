@@ -20,6 +20,7 @@
  * items array before handing it to ModuleListView gives us the OR
  * we actually want.
  */
+import CopyButton from "@/components/shared/CopyButton.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { libraryVersion, markDeleted } from "../composables/useLibraryChanged";
 import { useRoute, useRouter } from "vue-router";
@@ -280,15 +281,6 @@ function editRow(row: LibraryRow) {
   router.push({ path: `/${meta.slug}/${row.id}/edit`, query: { returnTo } });
 }
 
-async function copyId(id: string) {
-  try {
-    await navigator.clipboard.writeText(id);
-    toast.push({ severity: "info", summary: "ID copied", detail: id, life: 1500 });
-  } catch {
-    toast.push({ severity: "error", summary: "Copy failed", life: 2000 });
-  }
-}
-
 async function fav(row: LibraryRow) {
   try {
     // Server toggles the flag itself — no boolean argument needed.
@@ -511,11 +503,12 @@ function refresh() {
     <template #name="{ row }">
       <div class="wp-row-name">
         <span class="wp-row-name__text" @click="editRow(row)">{{ row.name }}</span>
-        <span
+        <CopyButton
           class="wp-id"
-          :title="`Click to copy ${row.id}`"
-          @click.stop="copyId(row.id)"
-        >{{ row.id }}</span>
+          :text="row.id"
+          :label="`Copy ID ${row.id}`"
+          @click.stop
+        >{{ row.id }}</CopyButton>
       </div>
     </template>
 

@@ -8,6 +8,7 @@
  * and appends to `children[]`.
  */
 import SearchInput from "@/components/shared/SearchInput.vue";
+import CloseButton from "@/components/shared/CloseButton.vue";
 import { computed, ref, watch } from "vue";
 import WpTabs, { type TabItem } from "@/components/shared/WpTabs.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
@@ -128,14 +129,13 @@ function pickBundle(row: BundleRow) {
         <div class="wp-bundle-add__head">
           <i class="pi pi-plus" aria-hidden="true" />
           <span class="wp-bundle-add__title">Add child to bundle</span>
-          <button
-            type="button"
+          <CloseButton
             class="wp-bundle-add__close"
-            aria-label="Close picker"
-            title="Close"
+            label="Close picker"
+            kbd="Esc"
             data-test="bundle-add-close"
             @click="close"
-          ><i class="pi pi-times" /></button>
+          />
         </div>
 
         <div class="wp-bundle-add__body">
@@ -244,17 +244,7 @@ function pickBundle(row: BundleRow) {
   font-weight: 600;
   font-size: var(--wp-text-base);
 }
-.wp-bundle-add__close {
-  margin-left: auto;
-  width: 26px; height: 26px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-dim);
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-}
-.wp-bundle-add__close:hover { background: var(--wp-bg); color: var(--wp-text); }
+.wp-bundle-add__close { margin-left: auto; }
 
 .wp-bundle-add__body {
   display: flex;
