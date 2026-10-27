@@ -119,6 +119,14 @@ function onWindowPointerDown(ev: PointerEvent) {
   emit("close");
 }
 
+// A menu opened from a trigger follows it as the page scrolls; one opened
+// at the pointer closes instead, since the spot it was opened on has moved.
+function onScroll(ev: Event): void {
+  if (ev.target instanceof Node && menuEl.value?.contains(ev.target)) return;
+  if (props.anchor) place();
+  else emit("close");
+}
+
 function onKey(ev: KeyboardEvent) {
   switch (ev.key) {
     case "Escape": ev.preventDefault(); emit("close"); break;
@@ -144,6 +152,8 @@ watch(() => props.visible, async (v) => {
     // value cells, seed buttons, etc) can't prevent the close.
     window.addEventListener("pointerdown", onWindowPointerDown, true);
     window.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", place);
     // Defer one tick so the right-click that opened the menu doesn't
     // immediately close it (the synthetic mousedown that preceded the
     // contextmenu happens BEFORE the listener is wired, so this is
@@ -153,12 +163,16 @@ watch(() => props.visible, async (v) => {
   } else {
     window.removeEventListener("pointerdown", onWindowPointerDown, true);
     window.removeEventListener("keydown", onKey);
+    window.removeEventListener("scroll", onScroll, true);
+    window.removeEventListener("resize", place);
   }
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("pointerdown", onWindowPointerDown, true);
   window.removeEventListener("keydown", onKey);
+  window.removeEventListener("scroll", onScroll, true);
+  window.removeEventListener("resize", place);
 });
 
 function pick(item: ContextMenuItem) {

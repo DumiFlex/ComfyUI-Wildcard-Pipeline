@@ -1,6 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h, nextTick, ref, withDirectives, type Ref } from "vue";
+import ContextMenu from "./ContextMenu.vue";
 import DropdownMenu from "./DropdownMenu.vue";
 import Popover from "./Popover.vue";
 import { vTooltip } from "./tooltip";
@@ -106,6 +107,35 @@ describe("DropdownMenu", () => {
     await trig.trigger("click");
     await nextTick();
     expect(document.querySelector(".wp-ctxmenu")).toBeNull();
+    w.unmount();
+  });
+});
+
+describe("menus on scroll", () => {
+  it("a menu opened from a trigger follows it", async () => {
+    const trig = document.createElement("button");
+    document.body.append(trig);
+    let top = 100;
+    trig.getBoundingClientRect = () => ({ left: 40, top, width: 30, height: 20, right: 70, bottom: top + 20, x: 40, y: top, toJSON: () => ({}) });
+    const w = mount(ContextMenu, { attachTo: document.body, props: { visible: false, x: 0, y: 0, anchor: trig, items: [{ label: "Rename", onSelect: () => undefined }] } });
+    await w.setProps({ visible: true });
+    await nextTick(); await nextTick();
+    const menu = document.querySelector<HTMLElement>(".wp-ctxmenu");
+    const before = menu?.style.top;
+    top = 40;
+    window.dispatchEvent(new Event("scroll"));
+    await nextTick();
+    expect(menu?.style.top).not.toBe(before);
+    expect(w.emitted("close")).toBeUndefined();
+    w.unmount();
+  });
+
+  it("a menu opened at the pointer closes", async () => {
+    const w = mount(ContextMenu, { attachTo: document.body, props: { visible: false, x: 10, y: 10, items: [{ label: "Rename", onSelect: () => undefined }] } });
+    await w.setProps({ visible: true });
+    await nextTick();
+    window.dispatchEvent(new Event("scroll"));
+    expect(w.emitted("close")).toHaveLength(1);
     w.unmount();
   });
 });

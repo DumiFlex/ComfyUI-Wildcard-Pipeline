@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <Transition name="wp-modal" appear>
-      <div v-if="visible" ref="overlayEl" class="wp-modal-overlay wp-canvas-scope" @click="$emit('close')">
+      <div v-if="visible" ref="overlayEl" class="wp-modal-overlay" @click="$emit('close')">
         <div class="wp-modal-wrapper" role="dialog" aria-modal="true" @click.stop>
           <slot></slot>
         </div>

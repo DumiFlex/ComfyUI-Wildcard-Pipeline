@@ -125,7 +125,7 @@ const groups = computed(() =>
 }
 .wp-kit__canvas-dialog {
   display: flex; flex-direction: column; align-items: flex-start; gap: 12px; max-width: 360px; padding: 16px;
-  background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: var(--wp-radius); color: var(--wp-text); font-size: 12px;
+  background: var(--wp-bg-2); border: 1px solid var(--wp-border-strong); border-radius: var(--wp-radius-lg); box-shadow: var(--wp-shadow-lg); color: var(--wp-text); font-size: var(--wp-text-sm);
 }
 .wp-kit__list { margin: 0; padding-left: 18px; color: var(--wp-text-muted); font-size: var(--wp-text-sm); }
 .wp-kit__icons {

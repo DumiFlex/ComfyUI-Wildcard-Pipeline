@@ -13,8 +13,8 @@
  * The colour blocks skip `html.wp-manager`: the manager has its own tokens
  * with the same names, so a canvas piece mounted there (the component kit)
  * would repaint it. A canvas piece that can show in the manager puts
- * `wp-canvas-scope` on its own root (ModalShell) to get these. Shared pieces
- * (ContextMenu, Popover, the tooltip) use names both sides define instead,
+ * `wp-canvas-scope` on its own root to get these. Shared pieces
+ * (ModalShell, ContextMenu, Popover, the tooltip) use names both sides define instead,
  * so they wear the colours of whichever side they are on.
  */
 :root:not(.wp-manager), .wp-canvas-scope {
