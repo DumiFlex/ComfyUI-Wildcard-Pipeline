@@ -59,7 +59,7 @@ describe("ContextWidget.vue", () => {
     // It teleports its modal to <body> and renders a search input + tab strip.
     const search = document.querySelector('[data-testid="picker-search"]');
     expect(search).not.toBeNull();
-    const allTab = document.querySelector('[data-testid="picker-tab-all"]');
+    const allTab = document.querySelector('[data-test="picker-tab-all"]');
     expect(allTab).not.toBeNull();
   });
 

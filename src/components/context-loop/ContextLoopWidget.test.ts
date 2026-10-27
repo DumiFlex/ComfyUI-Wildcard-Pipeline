@@ -9,10 +9,10 @@ import { deriveLoopSeeds } from "../shared/seed-derive";
 describe("ContextLoopWidget", () => {
   it("renders defaults — hash chip active, both switches off, internal toggles on", () => {
     const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig() } });
-    expect(w.find('[data-test="loop-strategy-hash_index"]').classes()).toContain("wp-loop__chip--active");
-    expect(w.find('[data-test="loop-strategy-sequential"]').classes()).not.toContain("wp-loop__chip--active");
-    expect(w.find('[data-test="loop-override-toggle"]').classes()).not.toContain("wp-loop__switch--on");
-    expect(w.find('[data-test="loop-bypass-toggle"]').classes()).not.toContain("wp-loop__switch--on");
+    expect(w.find('[data-test="loop-strategy-hash_index"]').attributes("aria-checked")).toBe("true");
+    expect(w.find('[data-test="loop-strategy-sequential"]').attributes("aria-checked")).toBe("false");
+    expect(w.find('[data-test="loop-override-toggle"]').attributes("aria-checked")).toBe("false");
+    expect(w.find('[data-test="loop-bypass-toggle"]').attributes("aria-checked")).toBe("false");
     // Both internal toggles default to ON.
     expect(w.find('[data-test="loop-iteration-internal"]').classes()).toContain("wp-loop__pi-btn--on");
     expect(w.find('[data-test="loop-total-internal"]').classes()).toContain("wp-loop__pi-btn--on");

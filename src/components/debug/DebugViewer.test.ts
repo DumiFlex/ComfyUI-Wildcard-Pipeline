@@ -89,11 +89,11 @@ describe("DebugViewer", () => {
 
   it("opens on Variables with four tabs and counts", () => {
     const w = mountRun();
-    const tabs = w.findAll(".wp-dbg-tab");
-    expect(tabs.map((t) => t.text().replace(/\s+/g, " ").trim())).toEqual([
-      "Variables 5", "Trace 6", "Warnings 1", "Raw",
+    const tabs = w.findAll('[role="tab"]');
+    expect(tabs.map((t) => [t.find("span").text(), t.find(".wp-tabset__count").exists() ? t.find(".wp-tabset__count").text() : ""])).toEqual([
+      ["Variables", "5"], ["Trace", "6"], ["Warnings", "1"], ["Raw", ""],
     ]);
-    expect(w.find(".wp-dbg-tab.is-active").text()).toContain("Variables");
+    expect(w.find('[role="tab"][aria-selected="true"]').text()).toContain("Variables");
   });
 
   it("summarises the run in the header", async () => {
@@ -101,7 +101,7 @@ describe("DebugViewer", () => {
     expect(w.find('[data-test="dbg-seed"]').text()).toContain("7");
     expect(w.find('[data-test="dbg-head-warn"]').text()).toContain("1 warning");
     await w.find('[data-test="dbg-head-warn"]').trigger("click");
-    expect(w.find(".wp-dbg-tab.is-active").text()).toContain("Warnings");
+    expect(w.find('[role="tab"][aria-selected="true"]').text()).toContain("Warnings");
     const clean = mountRun({}, { a: "1", __wp_trace__: [] });
     expect(clean.find('[data-test="dbg-head-ok"]').exists()).toBe(true);
   });
@@ -123,7 +123,7 @@ describe("DebugViewer", () => {
     const light = w.findAll('[data-test="dbg-var"]').find((r) => r.text().includes("$light"));
     await light?.find('[data-test="dbg-var-src"]').trigger("click");
     await flushPromises();
-    expect(w.find(".wp-dbg-tab.is-active").text()).toContain("Trace");
+    expect(w.find('[role="tab"][aria-selected="true"]').text()).toContain("Trace");
     const step = w.find('[data-step-key="3"]');
     expect(step.classes()).toContain("is-open");
     expect(step.find('[data-test="dbg-rule"]').exists()).toBe(true);

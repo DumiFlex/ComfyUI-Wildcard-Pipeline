@@ -12,6 +12,7 @@ import SearchInput from "../shared/SearchInput.vue";
 import { computed, nextTick, ref, watch } from "vue";
 import { highlightJson } from "./highlight";
 import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
+import WpTabs, { type TabItem } from "../shared/WpTabs.vue";
 import DebugVariables from "./DebugVariables.vue";
 import DebugTrace from "./DebugTrace.vue";
 import DebugWarnings from "./DebugWarnings.vue";
@@ -262,13 +263,15 @@ async function copySeed(): Promise<void> {
   window.setTimeout(() => { seedCopied.value = false; }, 1200);
 }
 
-const tabs = computed(() => {
+const tabs = computed((): TabItem<TabId>[] => {
   const m = model.value;
+  const shown = (n: number | undefined): number | undefined => (n ? n : undefined);
+  const tone = warnTone.value === "error" ? "danger" : warnTone.value === "warning" ? "warn" : undefined;
   return [
-    { id: "vars" as const, label: "Variables", count: m?.variables.length ?? 0 },
-    { id: "trace" as const, label: "Trace", count: m?.steps.length ?? 0 },
-    { id: "warnings" as const, label: "Warnings", count: m?.warnings.length ?? 0 },
-    { id: "raw" as const, label: "Raw", count: 0 },
+    { id: "vars", label: "Variables", count: shown(m?.variables.length) },
+    { id: "trace", label: "Trace", count: shown(m?.steps.length) },
+    { id: "warnings", label: "Warnings", count: shown(m?.warnings.length), tone },
+    { id: "raw", label: "Raw" },
   ];
 });
 const warnTone = computed(() => {
@@ -422,24 +425,16 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
         </div>
       </header>
 
-      <nav class="wp-dbg-tabs" role="tablist">
-        <button
-          v-for="t in tabs"
-          :key="t.id"
-          type="button"
-          role="tab"
-          :class="['wp-dbg-tab', { 'is-active': activeTab === t.id }]"
-          :aria-selected="activeTab === t.id"
-          :data-test="`dbg-tab-${t.id}`"
-          @click="activeTab = t.id"
-        >
-          {{ t.label }}
-          <span
-            v-if="t.count"
-            class="wp-dbg-tab__badge"
-            :class="{ [`is-${warnTone}`]: t.id === 'warnings' && warnTone }"
-          >{{ t.count }}</span>
-        </button>
+      <nav class="wp-dbg-tabs">
+        <WpTabs
+          class="wp-dbg-tabs__list"
+          :model-value="activeTab"
+          :tabs="tabs"
+          size="sm"
+          aria-label="Debug views"
+          test-prefix="dbg-tab"
+          @update:model-value="activeTab = $event"
+        />
         <span
           v-if="activeTab === 'vars' && model.negativeCount"
           class="wp-dbg-tabs__neg"
@@ -643,30 +638,10 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
   gap: 2px;
   border-bottom: 1px solid var(--wp-border);
 }
-.wp-dbg-tab {
-  background: transparent;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  font: 500 11px/1 var(--wp-font-sans);
-  color: var(--wp-text-muted);
-  padding: 7px 9px 6px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.wp-dbg-tab:hover { color: var(--wp-text); }
-.wp-dbg-tab.is-active { color: var(--wp-text); border-bottom-color: var(--wp-accent); }
-.wp-dbg-tab__badge {
-  font: 600 9px/1 var(--wp-font-mono);
-  padding: 2px 4px;
-  border-radius: 6px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  color: var(--wp-text-dim);
-}
-.wp-dbg-tab__badge.is-warning { background: color-mix(in oklab, var(--wp-warn) 22%, transparent); color: var(--wp-warn); }
-.wp-dbg-tab__badge.is-error { background: color-mix(in oklab, var(--wp-red, #e5484d) 22%, transparent); color: var(--wp-red, #e5484d); }
+/* The tabs are the shared WpTabs; the nav draws the one underline under
+ * them and the filter beside them. */
+.wp-dbg-tabs__list { flex: 0 1 auto; min-width: 0; }
+.wp-dbg-tabs__list :deep(.wp-tabset__list) { border-bottom: 0; }
 .wp-dbg-tabs__neg {
   margin-left: auto;
   font: 600 9.5px/1 var(--wp-font-mono);
@@ -677,7 +652,6 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
   color: var(--wp-red, #e5484d);
 }
 .wp-dbg-tabs__neg + .wp-dbg-filter { margin-left: 6px; }
-.wp-dbg-tab__badge.is-info { background: color-mix(in oklab, var(--wp-info, var(--wp-accent)) 22%, transparent); color: var(--wp-info, var(--wp-accent)); }
 
 .wp-dbg-filter {
   margin-left: auto;
