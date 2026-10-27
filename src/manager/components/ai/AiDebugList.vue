@@ -163,7 +163,7 @@ watch(() => aiDebugSent.value.length, () => {
   color: var(--wp-text);
   border: 1px solid var(--wp-border);
   border-radius: 10px;
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
 }
 .wp-ai-debug__head { display: flex; align-items: center; gap: 8px; }
 .wp-ai-debug__title { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }

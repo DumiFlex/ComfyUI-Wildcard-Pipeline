@@ -101,6 +101,23 @@
   --wp-space-7-base: 24px;
   --wp-space-8-base: 32px;
 
+  /* Shared names (2026-10-27): the canvas's motion and soft-border names,
+   * so a shared component (components/shared/) reads the same names here.
+   * SHARED_TOKENS in components/shared/shared-tokens.test.ts lists them. */
+  --wp-motion-quick:    120ms;
+  --wp-motion-hover:    150ms;
+  --wp-motion-fade:     180ms;
+  --wp-motion-swap:     200ms;
+  --wp-motion-flip:     280ms;
+  --wp-motion-pulse:    420ms;
+  --wp-motion-collapse: 450ms;
+  --wp-motion-stagger:   60ms;
+  --wp-motion-shimmer: 1400ms;
+  --wp-motion-curve-collapse: cubic-bezier(0.4, 0, 0.2, 1);
+  --wp-motion-curve-flip:     cubic-bezier(0.22, 1, 0.36, 1);
+  --wp-motion-curve-linear:   linear;
+  --wp-border-soft: var(--wp-border);
+
   /* Density multiplier — comfortable=1, compact=0.85. Set on <html>
    * via uiStore.setDensity. Defaults to 1 here so a fresh boot before
    * the store applies its class reads as comfortable. */
@@ -174,11 +191,11 @@
   --wp-sidebar-w: 232px;
   --wp-topbar-h:  48px;
 
-  --wp-shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
-  --wp-shadow:    0 4px 16px rgba(0,0,0,0.35);
-  --wp-shadow-md: 0 12px 28px rgba(0,0,0,0.35);
-  --wp-shadow-lg: 0 12px 40px rgba(0,0,0,0.5);
-  --wp-shadow-xl: 0 20px 60px rgba(0,0,0,0.5);
+  --wp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --wp-shadow:    0 2px 8px rgba(0, 0, 0, 0.3);
+  --wp-shadow-md: 0 1px 2px rgba(0, 0, 0, 0.24), 0 4px 12px rgba(0, 0, 0, 0.28);
+  --wp-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --wp-shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.45);
 
   /* Elevation — semantic aliases over the shadow scale. Pick by
    * purpose (resting, popover, modal) rather than visual weight.
@@ -190,7 +207,7 @@
    */
   --wp-elev-0: none;
   --wp-elev-1: var(--wp-shadow-sm);
-  --wp-elev-2: var(--wp-shadow);
+  --wp-elev-2: var(--wp-shadow-md);
   --wp-elev-3: var(--wp-shadow-lg);
   --wp-elev-4: var(--wp-shadow-xl);
 
@@ -268,11 +285,11 @@
    * for WCAG AA on the darkest light-mode surface. */
   --wp-text-dim:    #6e6e7e;
 
-  --wp-shadow-sm: 0 1px 2px rgba(15,15,30,0.06);
-  --wp-shadow:    0 4px 16px rgba(15,15,30,0.08);
-  --wp-shadow-md: 0 8px 22px rgba(15,15,30,0.10);
-  --wp-shadow-lg: 0 12px 40px rgba(15,15,30,0.12);
-  --wp-shadow-xl: 0 20px 50px rgba(15,15,30,0.16);
+  --wp-shadow-sm: 0 1px 2px rgba(15, 15, 30, 0.06);
+  --wp-shadow:    0 2px 8px rgba(15, 15, 30, 0.08);
+  --wp-shadow-md: 0 1px 2px rgba(15, 15, 30, 0.06), 0 4px 12px rgba(15, 15, 30, 0.10);
+  --wp-shadow-lg: 0 8px 24px rgba(15, 15, 30, 0.12);
+  --wp-shadow-xl: 0 16px 40px rgba(15, 15, 30, 0.16);
 
   /* Phase 4 — flip the dark-theme white tints to dark tints so subtle
    * surfaces remain visible on light bg. */
@@ -1960,7 +1977,7 @@ input, textarea, select { font: inherit; }
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border-strong);
   border-radius: 8px;
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
   overflow: hidden;
   max-height: 280px;
   display: flex; flex-direction: column;
@@ -2003,7 +2020,7 @@ input, textarea, select { font: inherit; }
   background: var(--wp-bg-3);
   border: 1px solid var(--wp-border-strong);
   border-radius: 7px;
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
   z-index: 9999;
   padding: 4px;
   max-height: 240px;

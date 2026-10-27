@@ -54,6 +54,8 @@ Thumbs.db
 !/docs/import-export-contract.md
 # Network behaviour + download hardening, linked from the README
 !/docs/network-access.md
+# Rules every custom control follows, linked from CLAUDE.md
+!/docs/component-standard.md
 # Curated release highlights — read by .releaserc.js at release time, so it
 # must be tracked (the release step commits the cleared file back).
 !/docs/release-notes/

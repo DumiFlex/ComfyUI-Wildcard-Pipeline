@@ -191,7 +191,7 @@ onBeforeUnmount(close);
   background: var(--wp-bg-3);
   border: 1px solid var(--wp-border-strong);
   border-radius: var(--wp-radius);
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
 }
 .wp-iconpick__clear {
   width: 100%;

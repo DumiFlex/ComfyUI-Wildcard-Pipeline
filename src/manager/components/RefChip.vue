@@ -908,7 +908,7 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border-strong);
   border-radius: 7px;
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
   /* Was 10px — the "unnecessarily small" the report called out. 12px reads as a
      panel, not a tooltip afterthought. */
   font: 12px/1.55 var(--wp-font-mono, monospace);
