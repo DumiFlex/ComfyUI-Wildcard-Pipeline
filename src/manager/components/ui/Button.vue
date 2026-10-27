@@ -87,7 +87,7 @@ function onClick(e: MouseEvent) {
   >
     <LoadingMark v-if="loading" variant="sparkle" mono :size="size === 'lg' ? 16 : 14" decorative />
     <Icon v-else-if="icon" :name="icon" />
-    <slot />
+    <span v-if="hasContent" class="wp-btn__label"><slot /></span>
     <Icon v-if="iconRight" :name="iconRight" />
   </button>
 </template>
