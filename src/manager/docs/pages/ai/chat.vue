@@ -285,6 +285,29 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
           ahead?", since the card is already the asking.
         </p>
         <p>
+          <b>Reply against the cards.</b> The reply is also checked against what its cards really
+          do, and a grey note says where they differ: a weight or factor no card sets, a bundle
+          child it says moved when the card moves nothing, or "created successfully" before you
+          pressed Apply. Notes about missing cards skip delete and tidy answers. Tool names in a
+          reply are said in plain words.
+        </p>
+        <p>
+          <b>Deleting.</b> A delete card only names what you asked to delete. If the item you
+          named doesn't exist, the assistant says so instead of offering to delete something
+          similar, and "delete the Weather category" never deletes a Weather wildcard. "Delete
+          everything tagged wip" still covers items you didn't name one by one. With deleting off,
+          the reply says where to turn it on.
+        </p>
+        <p>
+          <b>Asking for less.</b> "Switch off" in a bundle switches the child off and never
+          removes it, and "move Hair colour after Race" moves it. A rewritten derivation rule keeps
+          its ELSE unless you ask to drop it. Removing a misspelt tag adds the tag it
+          meant. A new item, or a rename, that takes the
+          name of one you have gets a warning. A test right after a change card runs with the
+          change, plus the items that set what the tested item reads. <b>Explain</b> on selected
+          text only explains.
+        </p>
+        <p>
           <b>Limits.</b> One answer reads about 6 items with a small model, 8 with a medium one and
           12 with a large or cloud one before it must answer. A local model gets up to 20 minutes
           per answer, a cloud model 10. "Cut off" means the model hit its output limit; thinking

@@ -137,3 +137,35 @@ def test_a_new_category_gets_an_icon_and_color_that_fit_its_name():
     # A category a card files an item into comes with its look too.
     filed = _lib().run("update_info", {"id": next(iter(_lib().modules)), "category": "Lighting"})
     assert filed["op"]["new_category_style"] == {"color": "#f59e0b", "icon": "sun"}
+
+
+def _asked(text):
+    lib = _lib()
+    lib.named = lib.named_in(text)
+    lib.delete_scope = chat_manage.delete_scope(text)
+    return lib
+
+
+def test_a_delete_only_targets_what_the_user_named():
+    # Bench W23: "Delete the Hairstyle wildcard" (none) proposed deleting Hair colour.
+    with pytest.raises(ValueError, match="didn't name .*Season.*never delete a different"):
+        _asked("Delete the Weather wildcard.").run("delete_items", {"items": ["Season"]})
+    assert _asked("Delete the Season wildcard.").run(
+        "delete_items", {"items": ["Season"]})["title"] == "Delete Season"
+    # A bulk ask covers items it doesn't name one by one.
+    assert _asked("Delete everything tagged warm.").run("delete_items", {"items": ["Season"]})
+
+
+def test_a_category_delete_never_deletes_items_of_that_name():
+    # Bench L8: "the Old stuff category, and the Weapons and Weather ones" deleted wildcards.
+    lib = _asked("Delete the Places category and the Outfit one too.")
+    with pytest.raises(ValueError, match="categories or tags, not items"):
+        lib.run("delete_items", {"items": ["Outfit"]})
+    assert lib.run("delete_items", {"categories": ["Places"]})
+
+
+def test_delete_scope_reads_the_message():
+    assert chat_manage.delete_scope("Make a weather wildcard") == {}
+    scope = chat_manage.delete_scope("Remove the fur options")
+    assert scope["delete"] is False and scope["bulk"] is False
+    assert chat_manage.delete_scope("delete them all")["bulk"] is True

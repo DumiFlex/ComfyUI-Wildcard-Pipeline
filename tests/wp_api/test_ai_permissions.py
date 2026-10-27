@@ -117,3 +117,31 @@ async def test_a_module_back_at_its_id_clears_the_orphan_flags(wp_client):
     await _json(await wp_client.post("/wp/api/modules", json={**mod, "id": m["id"]}), 201)
     got = await _json(await wp_client.get(f"/wp/api/bundles/{b['id']}"))
     assert "orphaned" not in (got["children"][0].get("meta") or {})
+
+
+async def test_a_delete_of_an_item_the_user_never_named_is_refused(wp_client, fake_llm):
+    # Bench W23: "Delete the Hairstyle wildcard" (none) proposed deleting another item.
+    src, _tgt = await _two_wildcards(wp_client)
+    _on(fake_llm, allow_delete=True)
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "delete_items",
+                                   "args": json.dumps({"items": [src]})}]},
+        {"message": "There is no Hairstyle wildcard. Did you mean Class?", "calls": []}])
+    out = await _chat(wp_client, "Delete the Hairstyle wildcard.")
+    assert out["proposals"] == []
+    said = json.dumps(fake_llm.seen[-1]["body"]["messages"])
+    assert "the user didn't name" in said
+    # No "(No wildcard card came…)" note under a delete answer (bench W23, F6).
+    assert "card came" not in out["message"]
+
+
+async def test_deleting_off_says_where_to_turn_it_on(wp_client, fake_llm):
+    # Bench W22: the reply never said deleting is off in Settings.
+    await _two_wildcards(wp_client)
+    _on(fake_llm)
+    fake_llm.chat_steps.append({"message": "There's no Hairstyle; maybe Class?", "calls": []})
+    out = await _chat(wp_client, "Delete the Hairstyle wildcard.")
+    assert "Settings › AI assistant › Permissions" in out["message"]
+    fake_llm.chat_steps.append({"message": "Done thinking.", "calls": []})
+    out = await _chat(wp_client, "Remove the warm options from Weapon.")
+    assert "Permissions" not in out["message"]

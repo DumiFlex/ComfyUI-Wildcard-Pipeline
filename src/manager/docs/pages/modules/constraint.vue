@@ -16,7 +16,7 @@ const reweightModes = [
   { term: "Boost", desc: "Makes the target options more likely, by the factor you set." },
   { term: "Reduce", desc: "Makes them less likely, without removing them." },
   { term: "Exclude", desc: "Removes them from the pool for this source pick." },
-  { term: "Only", desc: "An allow-list: when the source picks this, the target can only pick options with a rule of their own in this row. Everything else is shut out, including options you add to the target later." },
+  { term: "Only", desc: "Makes the row a guest list. When the source picks this, the target can only pick options this row says something about: the ones set to Only, plus any you boosted or reduced (they keep those odds). Everything the row doesn't mention is off, including options you add later." },
 ];
 </script>
 
@@ -98,6 +98,9 @@ const reweightModes = [
         <li>In the matrix, Only works on tags: summer → open means a summer pick can only reach
           targets tagged open. The rest of that row shows a faint × so you can see what's shut out. A
           Neutral cell doesn't count as a rule.</li>
+        <li>Boost and Reduce in the same row stay on the guest list with their odds. Formal → Only
+          heels, Boost loafers ×2: a formal outfit gets heels or loafers (loafers twice as often),
+          never sneakers or boots.</li>
         <li>Other source values are unaffected: a "biker" pick still rolls every outfit.</li>
       </ul>
     </DocSection>

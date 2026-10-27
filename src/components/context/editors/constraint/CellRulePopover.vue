@@ -170,7 +170,7 @@ function onReset(): void {
         class="pop-btn b-only"
         :class="{ active: state === 'only' }"
         :aria-pressed="state === 'only'"
-        title="Link: when this source tag fires, only targets with a rule in this row can be picked"
+        title="Guest list: when this source tag fires, the target only picks options this row has a rule for (boost and reduce keep their odds)"
         @click="pickState('only')"
       >
         <span class="b-glyph">✓</span> Only

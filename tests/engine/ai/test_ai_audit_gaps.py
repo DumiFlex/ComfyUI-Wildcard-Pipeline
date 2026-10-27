@@ -52,6 +52,31 @@ def test_bundle_children_off_and_on():
     assert "Off: wildcard Outfit" in p["preview"]
 
 
+def test_switch_off_asked_is_never_a_removal():
+    # Bench B4: "switch off the accessory" removed it, both runs.
+    lib = _lib()
+    lib.user_text = "Switch off the outfit in Kit."
+    p = lib.run("edit_bundle", {"id": "Kit", "remove": [2]})
+    kids = p["op"]["body"]["children"]
+    assert len(kids) == 2 and kids[1]["enabled"] is False
+    assert any("Switched off, not removed" in w for w in p["warnings"])
+    lib.user_text = "Remove the outfit from Kit."
+    assert len(lib.run("edit_bundle", {"id": "Kit", "remove": [2]})["op"]["body"]["children"]) == 1
+
+
+def test_bundle_move_after_and_before():
+    # Bench B4: "move hair colour right after race" had no op and never happened.
+    lib = _lib()
+    old = [c["id"] for c in lib.bundles["bbbb0001"]["children"]]
+    p = lib.run("edit_bundle", {"id": "Kit", "move": [{"item": 1, "after": 2}]})
+    assert [c["id"] for c in p["op"]["body"]["children"]] == [old[1], old[0]]
+    assert p["preview"][0].startswith("Moved: ")
+    q = _lib().run("edit_bundle", {"id": "Kit", "move": [{"item": "Outfit", "before": "1"}]})
+    assert [c["id"] for c in q["op"]["body"]["children"]] == [old[1], old[0]]
+    with pytest.raises(ValueError, match="changes nothing"):
+        _lib().run("edit_bundle", {"id": "Kit", "move": [{"item": 1, "after": 1}]})
+
+
 def test_edit_options_moves_and_renames_the_variable():
     lib = _lib()
     p = lib.run("edit_options", {"id": "Outfit", "move": [{"n": 3, "to": 1}]})

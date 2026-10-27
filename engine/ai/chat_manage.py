@@ -9,6 +9,7 @@ items again at the same ids. See `/pr-drafts/ai-permissions-phase8.md`.
 from __future__ import annotations
 
 import copy
+import difflib
 import json
 import re
 from typing import Any
@@ -158,6 +159,55 @@ class _Colors:
         return out | {str(st["color"]) for st in styles or [] if st.get("color")}
 
 
+#: A message asking to delete something.
+_DELETE_ASK = re.compile(r"\b(?:delete|remove|get rid of|erase|trash)\b", re.I)
+#: Words that make a delete ask cover items the user didn't name one by one
+#: ("delete everything tagged wip", "remove the duplicates", "delete them").
+_DELETE_BULK = re.compile(r"\b(?:all|every\w*|each|tagged|unused|empty|duplicates?|cop(?:y|ies)|"
+                          r"these|those|them|both|any|rest|others?|selected|unapplied)\b", re.I)
+#: Kinds of item a delete ask names.
+_ITEM_WORDS = re.compile(r"\b(?:wildcards?|bundles?|templates?|combines?|derivations?|"
+                         r"constraints?|fixed[ -]values?|items?|modules?|presets?|rules?)\b",
+                         re.I)
+_GROUP_WORDS = re.compile(r"\b(?:categor(?:y|ies)|tags?)\b", re.I)
+
+
+def delete_scope(text: str) -> dict[str, Any]:
+    """What a user message lets a delete card target: {} when it asks no
+    delete. ``bulk``: it may cover items not named one by one; ``groups``:
+    it names categories or tags and no kind of item, so no item is meant
+    (bench L8: "Delete the Old stuff category, and the Weapons and Weather
+    ones" deleted the Weather and Weapon wildcards)."""
+    if not text or not _DELETE_ASK.search(text):
+        return {}
+    return {"asked": text.strip()[:200],
+            # "remove" is often an edit ("remove the fur options"); these never are.
+            "delete": bool(re.search(r"\b(?:delete|erase|trash)\b", text, re.I)),
+            "bulk": bool(_DELETE_BULK.search(text)),
+            "groups": bool(_GROUP_WORDS.search(text)) and not _ITEM_WORDS.search(text)}
+
+
+#: A message asking to fix a misspelt tag.
+_TYPO_ASK = re.compile(r"\b(?:typos?|misspel\w*|spell\w*|fix\w*|correct\w*|wrong\w*|"
+                       r"by mistake)\b", re.I)
+
+
+def typo_of(tag: str, tags: list[str], asked: str) -> str | None:
+    """The tag a removed `tag` is a typo of, when the user asked for a typo
+    fix: one library tag (or word of the message) spelt nearly the same.
+    Bench L5 / L1: "fixed typo charcter → character", and the card only
+    removed #charcter."""
+    if not asked or not _TYPO_ASK.search(asked):
+        return None
+    low = tag.lower()
+    pool = [t.lower() for t in tags if t.lower() != low]
+    close = difflib.get_close_matches(low, pool, n=2, cutoff=0.8)
+    if not close:
+        words = {w for w in re.findall(r"[a-z][a-z0-9_-]{2,}", asked.lower()) if w != low}
+        close = difflib.get_close_matches(low, sorted(words), n=2, cutoff=0.8)
+    return close[0] if len(close) == 1 else None
+
+
 class ManageTools(_Colors):
     """Needs `modules`, `bundles`, `templates`, `category_rows`, `get`,
     `_find`, `_used_by`, `_kind`, `not_found` and `tags` from Library."""
@@ -168,6 +218,9 @@ class ManageTools(_Colors):
     category_rows: dict[str, dict[str, Any]]
     tags: list[str]
     allow_delete: bool
+    #: `delete_scope` of the user's message; {} leaves deletes unchecked.
+    delete_scope: dict[str, Any]
+    named: set[str] | None
     proposed_categories: dict[str, tuple[str, str]]
     bulk_cards: dict[tuple[str, str], str]
 
@@ -373,8 +426,16 @@ class ManageTools(_Colors):
         rms = {t.lstrip("#").lower() for t in args.get("tags_remove") or []
                if isinstance(t, str)}
         rating = args.get("rating") if args.get("rating") in ("safe", "nsfw") else None
+        notes: list[str] = []
+        if rms and not adds:
+            for t in sorted(rms):
+                fixed = typo_of(t, self.tags, getattr(self, "user_text", "") or "")
+                if fixed:
+                    adds.append(fixed)
+                    notes.append(f"Adds #{fixed}: #{t} is a typo of it")
         if category is None and not adds and not rms and not rating:
-            raise ValueError("say what to change: category, tags_add, tags_remove or rating")
+            raise ValueError("say what to change: category, tags_add, tags_remove or rating"
+                             + "".join(f"; {n}" for n in notes))
         items: list[dict[str, Any]] = []
         missing: list[str] = []
         #: Items an earlier update_many card of this answer already changes
@@ -451,7 +512,8 @@ class ManageTools(_Colors):
             "summary": f"{n} item{'s' if n != 1 else ''}",
             "preview": [str(it["name"]) for it in items[:40]]
             + ([f"… and {n - 40} more"] if n > 40 else []),
-            "warnings": ([f"Not found: {', '.join(missing[:8])}"] if missing else []) + held,
+            "warnings": notes + ([f"Not found: {', '.join(missing[:8])}"] if missing else [])
+            + held,
             "op": {"op": "bulk", "kind": "bulk", "items": items, "new_category": new_cat},
         }
 
@@ -498,6 +560,28 @@ class ManageTools(_Colors):
 
     # ── delete ───────────────────────────────────────────────────────────
 
+    def _check_delete(self, row: dict[str, Any]) -> None:
+        """Refuse deleting an item the user's delete ask doesn't cover. On
+        the 2026-10-26 bench the 9B, told to delete a Hairstyle wildcard
+        that didn't exist, proposed deleting Hair colour (W23), and Bench
+        character for a missing Bench scene (B7)."""
+        scope = self.delete_scope
+        if not scope or self.named is None:
+            return
+        chip = f"[[{row['id']}#{str(row.get('name') or '').strip()}]]"
+        kind = self._kind(row).replace("_", " ")  # type: ignore[attr-defined]
+        if scope.get("groups"):
+            raise ValueError(
+                f"the user asked to delete categories or tags, not items: {chip} is a {kind}. "
+                "Delete the category or tag with that name (categories / tags), or ask which "
+                "they mean")
+        if row["id"] in self.named or scope.get("bulk"):
+            return
+        raise ValueError(
+            f"the user didn't name {chip}; they asked: \"{scope.get('asked')}\". If no item has "
+            "the name they gave, tell them so plainly (you may ask whether they mean a close "
+            "one by name); never delete a different item instead")
+
     def delete_items(self, args: dict[str, Any]) -> dict[str, Any]:
         if not self.allow_delete:
             raise ValueError(DELETE_OFF)
@@ -527,6 +611,7 @@ class ManageTools(_Colors):
                                  "dismiss that card instead")
             if row["id"] in gone:
                 continue
+            self._check_delete(row)
             gone.add(row["id"])
             kind = ("bundle" if row["id"] in self.bundles else
                     "template" if row["id"] in self.templates else "module")

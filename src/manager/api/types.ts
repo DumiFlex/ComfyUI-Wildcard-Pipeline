@@ -1336,6 +1336,8 @@ export interface AiChatPage {
   id?: string;
   /** Docs page id on a docs page. */
   doc?: string;
+  /** Settings section on the settings page, as `open {"page": "settings", "section"}` takes it. */
+  section?: string;
   /** A short description of what the page shows (filters, selection, results). */
   note?: string;
   editor?: AiChatEditorState;

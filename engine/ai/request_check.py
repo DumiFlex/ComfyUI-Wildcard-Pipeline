@@ -19,6 +19,11 @@ from collections.abc import Callable, Iterator
 from typing import Any
 
 _CONSTRAINT_TOOLS = frozenset({"create_constraint", "edit_constraint"})
+#: Cards that delete or tidy items: an answer of only these makes nothing the
+#: feature checks look for. "Delete the Mood → weather constraint" asks for
+#: no constraint (bench X7, R7, T6: "No card has a constraint" under deletes).
+TIDY_TOOLS = frozenset({"delete_items", "update_many", "update_info", "edit_tags",
+                        "edit_categories"})
 
 
 def _walk(value: Any) -> Iterator[tuple[str, Any]]:
@@ -99,7 +104,8 @@ def gaps(request: str, cards: list[dict[str, Any]],
     in `FEATURES` order. An "only" rule counts as the constraint too.
     ``wants``: what a request frame says the ask wants, for a request in
     another language; it decides instead of the words."""
-    if not cards or (not request and wants is None):
+    if not cards or (not request and wants is None) \
+            or all(c.get("tool") in TIDY_TOOLS for c in cards):
         return []
     if wants is not None:
         out = [name for key, (name, _words, has) in zip(WANT_KEYS, FEATURES, strict=True)

@@ -502,3 +502,74 @@ def test_a_test_step_names_items_not_ids():
     assert chat.args_note("run_test", {"stack": ["aaaa0002", "aaaa0001#Outfit"]}, lib) \
         == "Ran Season, Outfit on 100 seeds"
     assert chat.args_note("run_test", {"stack": ["nope"]}, lib) == "Ran nope on 100 seeds"
+
+
+def _with_else():
+    lib = _lib()
+    lib.modules["aaaa0003"]["payload"]["rules"][0]["else"] = {
+        "action": {"target_var": "extra", "mode": "replace", "value": "gloves"}}
+    return lib
+
+
+_NEW_RULE = {"n": 1, "rule": {"summary": "", "branches": [{"match": "all", "conditions": [
+    {"var": "season", "op": "equals", "value": "summer"}],
+    "actions": [{"target_var": "extra", "mode": "replace", "value": "hat"}]}]}}
+
+
+def test_a_rule_rewrite_keeps_its_else_unless_asked():
+    # Bench R6: "rogues should be called Shadowblade" lost the ELSE "Adventurer".
+    lib = _with_else()
+    lib.user_text = "Summer should give a hat."
+    p = lib.run("edit_rules", {"id": "Extras", "replace": [_NEW_RULE]})
+    assert p["op"]["body"]["payload"]["rules"][0]["else"]["action"]["value"] == "gloves"
+    assert any("Kept rule 1's ELSE" in w for w in p["warnings"])
+    lib = _with_else()
+    lib.user_text = "Summer gives a hat, and drop the otherwise part."
+    p = lib.run("edit_rules", {"id": "Extras", "replace": [_NEW_RULE]})
+    assert "else" not in p["op"]["body"]["payload"]["rules"][0]
+
+
+def test_a_new_item_or_rename_onto_a_taken_name_warns():
+    # Bench R6 / B5 / Z13: a second "Title from class" instead of the edit.
+    lib = _lib()
+    p = lib.run("create_derivation", {"name": "Extras", "rules": [_NEW_RULE["rule"]]})
+    assert any("already a derivation named Extras" in w and "change it instead" in w
+               for w in p["warnings"])
+    # Another kind may share the name.
+    q = _lib().run("create_fixed_values", {"name": "Extras", "values": [
+        {"name": "extra_q", "value": "x"}]})
+    assert not any("already a" in w for w in q["warnings"])
+    # Bench L6: "Weather copy" renamed to "Weather".
+    r = _lib().run("update_info", {"id": "Colors", "name": "Season"})
+    assert any("already a wildcard named Season" in w for w in r["warnings"])
+
+
+def test_tidy_fixes_typos():
+    # Bench L5: "tagged charcter by mistake, fix it" removed #charcter, added nothing.
+    lib = _lib()
+    lib.modules["aaaa0001"]["tags"] = ["charcter"]
+    lib.modules["aaaa0002"]["tags"] = ["character"]
+    lib.tags = ["character", "charcter"]
+    lib.user_text = "Outfit is tagged charcter by mistake, fix it."
+    p = lib.run("update_info", {"id": "Outfit", "tags_remove": ["charcter"]})
+    assert p["op"]["body"]["tags"] == ["character"]
+    assert any("typo" in w for w in p["warnings"])
+    q = lib.run("update_many", {"ids": ["Outfit"], "tags_remove": ["charcter"]})
+    assert q["op"]["items"][0]["body"] == {"tags": ["character"]}
+
+
+def test_run_test_adds_what_a_combine_reads():
+    # Bench K4: a combine reading $weather and $mood tested alone printed ",".
+    out = _lib().run("run_test", {"stack": ["Look"], "seeds": 5})
+    assert "added Season before Look: it sets $season" in out
+    assert "added Outfit before Look: it sets $outfit" in out
+    assert "Unknown variable" not in out
+
+
+def test_run_test_after_a_change_card_runs_with_it():
+    # Bench R5: run_test right after the change card ran without it.
+    lib = _lib()
+    lib.run("add_options", {"id": "Season", "options": [{"text": "monsoon"}]})
+    lib.run("run_test", {"stack": ["Season"], "seeds": 40})
+    assert lib.last_card is not None
+    assert "monsoon" in str(lib.last_card)

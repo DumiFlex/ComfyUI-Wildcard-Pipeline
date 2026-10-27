@@ -118,6 +118,8 @@ class MoreTools:
     bundles: dict[str, dict[str, Any]]
     templates: dict[str, dict[str, Any]]
     names: dict[str, str]
+    #: The user's message this answer is for ("" in tests and other callers).
+    user_text: str
 
     # ── shared ───────────────────────────────────────────────────────────
 
@@ -518,6 +520,13 @@ class MoreTools:
                 warnings += [f"Left out rule {n}: {s['reason']}" for s in compiled["skipped"]]
                 continue
             new = {**compiled["rules"][0]["rule"], "id": rules[n - 1].get("id")}
+            kept_else = rules[n - 1].get("else")
+            if isinstance(kept_else, dict) and not isinstance(new.get("else"), dict) \
+                    and not _DROP_ELSE.search(self.user_text):
+                # Bench R6: "rogues should be called Shadowblade" rewrote the
+                # rule without its ELSE "Adventurer", so clerics lost a title.
+                new["else"] = copy.deepcopy(kept_else)
+                warnings.append(f"Kept rule {n}'s ELSE: the request didn't ask to drop it")
             preview.append(f"{n}. {self._show(ai_derivation.describe_rule(rules[n - 1]))} → "
                            f"{self._show(ai_derivation.describe_rule(new))}")
             warnings += compiled["rules"][0]["warnings"]
@@ -827,6 +836,15 @@ class MoreTools:
                     preview.append(f"{'Off' if not on else 'On'}: {kids[n - 1].get('type')} "
                                    f"{cname}")
         gone = {n for n in (_num(v, len(kids)) for v in args.get("remove") or []) if n}
+        if gone and _OFF_ASK.search(self.user_text) and not _REMOVE_ASK.search(self.user_text):
+            # Bench B4: "switch off the accessory" removed it, both runs.
+            for n in sorted(gone):
+                if kids[n - 1].get("enabled") is not False:
+                    kids[n - 1]["enabled"] = False
+                    preview.append(f"Off: {kids[n - 1].get('type')} {self._kid_name(kids[n - 1])}")
+            warnings.append("Switched off, not removed: the user asked to switch "
+                            + ("it" if len(gone) == 1 else "them") + " off")
+            gone = set()
         for n in sorted(gone):
             meta = kids[n - 1].get("meta") or {}
             preview.append(f"− {kids[n - 1].get('type')} "
@@ -838,6 +856,11 @@ class MoreTools:
         kids += added
         if added and args.get("order") != "as_given":
             kids = self._order(kids)
+        for x in args.get("move") or []:
+            if isinstance(x, dict):
+                line = self._move_kid(kids, x, warnings)
+                if line:
+                    preview.append(line)
         if not preview:
             raise ValueError("that changes nothing" + "".join(f"; {w}" for w in warnings[:3]))
         return {
@@ -848,6 +871,43 @@ class MoreTools:
                    "name": r.get("name"), "body": {"children": [self._stored(k) for k in kids]},
                    "before": {"children": old}},
         }
+
+    def _kid_name(self, k: dict[str, Any]) -> str:
+        meta = _got if isinstance(_got := k.get("meta"), dict) else {}
+        return str(meta.get("name") or k.get("name") or self.names.get(str(k.get("id")), "")
+                   or k.get("id") or "")
+
+    def _kid_at(self, kids: list[dict[str, Any]], raw: Any) -> int | None:
+        """A child's 0-based place, by the number read shows or by name."""
+        n = _num(raw, len(kids)) if not isinstance(raw, str) or raw.strip().isdigit() else None
+        if n is not None:
+            return n - 1
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        row = self._find_loose(raw)
+        want = row["id"] if row is not None else None
+        low = raw.strip().lower()
+        for i, k in enumerate(kids):
+            if k.get("id") == want or self._kid_name(k).strip().lower() == low:
+                return i
+        return None
+
+    def _move_kid(self, kids: list[dict[str, Any]], x: dict[str, Any],
+                  warnings: list[str]) -> str:
+        """Move one child right after or before another, in place (bench B4:
+        "move hair colour right after race" had no op of its own, and the
+        reply said it moved when nothing did)."""
+        where = "after" if x.get("after") is not None else "before"
+        at, to = self._kid_at(kids, x.get("item", x.get("n"))), self._kid_at(kids, x.get(where))
+        if at is None or to is None or at == to:
+            warnings.append(f"Left out move {_short(x.get('item', x.get('n')), 30)}: name two "
+                            "different items of the bundle")
+            return ""
+        kid = kids.pop(at)
+        to = to - 1 if to > at else to
+        kids.insert(to + 1 if where == "after" else to, kid)
+        return (f"Moved: {kid.get('type')} {self._kid_name(kid)} {where} "
+                f"{self._kid_name(kids[to + (0 if where == 'after' else 1)])}")
 
     # ── shared update proposal ───────────────────────────────────────────
 
@@ -917,9 +977,89 @@ class MoreTools:
             else:
                 by_id[row["id"]] = x
         ids, notes = self.with_needs(list(by_id))
+        pins = args.get("pins") if isinstance(args.get("pins"), dict) else {}
+        ids, more = self.with_writers(ids, {str(k).lstrip("$") for k in pins})
+        notes += more
         if not notes:
             return args, []
         return {**args, "stack": [by_id.get(i, i) for i in ids] + rest}, notes
+
+    def _row_now(self, mid: str) -> dict[str, Any] | None:
+        return self._current(mid)[0] if mid in self.modules else None  # type: ignore
+
+    def _sets(self, row: dict[str, Any]) -> set[str]:
+        p = _got if isinstance(_got := row.get("payload"), dict) else {}
+        out = {str(v) for v in (p.get("var_binding"), p.get("output_var")) if v}
+        out |= {str(v.get("name")) for v in p.get("values") or []
+                if isinstance(v, dict) and v.get("name")}
+        if row.get("type") == "derivation":
+            for rule in p.get("rules") or []:
+                if not isinstance(rule, dict):
+                    continue
+                for c in [*(rule.get("branches") or []), rule.get("else")]:
+                    if isinstance(c, dict):
+                        out |= {str(a["target_var"]) for a in clause_actions(c)
+                                if isinstance(a, dict) and a.get("target_var")
+                                and a.get("mode") not in ("negative", "negative_replace")}
+        return out
+
+    @staticmethod
+    def _reads(row: dict[str, Any]) -> list[str]:
+        """The variables an item reads to do its work: a combine's inputs, a
+        derivation's conditions and the $vars inside its values."""
+        p = _got if isinstance(_got := row.get("payload"), dict) else {}
+        if row.get("type") == "combine":
+            found = [str(v) for v in p.get("input_vars") or []] + text_items.reads(
+                str(p.get("template") or ""))
+        elif row.get("type") == "derivation":
+            found = []
+            for rule in p.get("rules") or []:
+                if not isinstance(rule, dict):
+                    continue
+                for b in rule.get("branches") or []:
+                    if isinstance(b, dict):
+                        found += [str(c.get("var") or "").split(".")[0]
+                                  for c in _conditions(b.get("condition"))]
+        else:
+            return []
+        return [v for v in dict.fromkeys(found) if v]
+
+    def with_writers(self, ids: list[str], pinned: set[str]) -> tuple[list[str], list[str]]:
+        """A stack's ids with the item that sets each variable a combine or
+        derivation on it reads, put before the reader. Bench K4/K5: a
+        combine reading $weather and $mood tested alone printed "," and
+        "Unknown variable"; the 9B then explained the warnings away."""
+        out = list(ids)
+        notes: list[str] = []
+        for mid in list(ids):
+            row = self._row_now(mid)
+            if row is None:
+                continue
+            have: set[str] = set(pinned) | set(LOOP_VARS)
+            for other in out:
+                o = self._row_now(other)
+                if o is not None:
+                    have |= self._sets(o)
+                for c in (self.bundles.get(other) or {}).get("children") or []:
+                    if isinstance(c, dict) and isinstance(c.get("payload"), dict):
+                        have |= self._sets(c)
+            for var in self._reads(row):
+                if var in have:
+                    continue
+                writers = [m for m in self.modules.values() if m.get("id") not in out
+                           and m.get("type") != "constraint" and var in self._sets(m)]
+                if len(writers) > 1:
+                    known = set(getattr(self, "named", None) or ()) | set(
+                        getattr(self, "touched", None) or ()) | set(getattr(self, "_created", {}))
+                    writers = [w for w in writers if w["id"] in known] or writers
+                if len(writers) != 1:
+                    continue
+                w = writers[0]
+                out.insert(out.index(mid), w["id"])
+                have |= self._sets(w)
+                notes.append(f"added {w.get('name')} before {row.get('name')}: it sets ${var}, "
+                             f"which {row.get('name')} reads")
+        return out, notes
 
     def _stack(self, raw: Any, proposed: bool) -> tuple[list[dict[str, Any]], list[str]]:
         warnings: list[str] = []
@@ -1034,8 +1174,12 @@ class MoreTools:
         # model often leaves out "proposed" and then gets "nothing to run".
         named = [self._find_loose(x.get("item") or x.get("id") if isinstance(x, dict) else x)
                  for x in (args.get("stack") if isinstance(args.get("stack"), list) else [])]
+        # A stack item a card of this answer changes runs with that change too
+        # (bench R5: "Ran Race, Class, …" right after the change card, without it).
         proposed = (bool(args.get("proposed")) and bool(self._pending)  # type: ignore
-                    ) or any(r is not None and r.get("_proposed") for r in named)
+                    ) or any(r is not None and (r.get("_proposed")
+                                                or r["id"] in self._pending)  # type: ignore
+                             for r in named)
         modules, warnings = self._stack(args.get("stack"), False)
         warnings = needs + warnings
         after_modules: list[dict[str, Any]] = []
@@ -1282,6 +1426,15 @@ def _conditions(cond: Any) -> list[dict[str, Any]]:
     if isinstance(cond.get("conditions"), list):
         return [c for x in cond["conditions"] for c in _conditions(x)]
     return [cond]
+
+
+#: A message asking to drop a rule's catch-all.
+_DROP_ELSE = re.compile(r"\b(?:remove|drop|delete|no|without|get rid of)\b[^.\n]{0,30}"
+                        r"\b(?:else|otherwise|catch-?all|default)\b", re.I)
+#: A message asking to switch something off, and one asking to take it out.
+_OFF_ASK = re.compile(r"\b(?:switch|turn|toggle|set)\w*\s+(?:\w+\s+){0,4}?off\b|"
+                      r"\b(?:disabl|deactivat|mut)\w*", re.I)
+_REMOVE_ASK = re.compile(r"\b(?:remove|delete|drop|take\s+out|get\s+rid)\b", re.I)
 
 
 def _num(raw: Any, size: int) -> int | None:

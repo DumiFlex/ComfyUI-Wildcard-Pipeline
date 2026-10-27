@@ -437,12 +437,19 @@ TOOLS: list[Tool] = [
     Tool(
         "edit_bundle", "change",
         "Propose changes to a bundle that exists: add or remove children (modules or "
-        "sub-bundles), switch them off or on, change their use settings or order.",
+        "sub-bundles), switch them off or on, change their use settings, or move one "
+        "after or before another. Switching off keeps a child in the bundle; remove takes "
+        "it out.",
         '{"id", "add": [like items], "remove": [numbers], "off": [numbers], "on": [numbers], '
-        '"use": [{"n", "use"}], "order"?}. Numbers are the order read shows.',
+        '"use": [{"n", "use"}], "move": [{"item": number or name, "after" or "before": '
+        'number or name}], "order"?}. Numbers are the order read shows.',
         obj({"id": s("bundle id or name"), "add": arr(_ITEM), "remove": _NUMS,
              "off": _NUMS, "on": _NUMS,
              "use": arr(obj({"n": n(integer=True), "use": _USE}, ("n", "use"))),
+             "move": arr(obj({"item": s("number or name of the child to move"),
+                              "after": s("number or name it goes right after"),
+                              "before": s("number or name it goes right before")},
+                             ("item",))),
              "order": s("auto or as_given")}, ("id",)),
         ("bundles",),
     ),

@@ -45,6 +45,11 @@ PAGES = ("dashboard", "all", "wildcards", "fixed-values", "combines", "derivatio
          "pack-builder", "settings", "whats-new", "community")
 SETTINGS_SECTIONS = ("general", "appearance", "editing", "autocomplete", "canvas",
                      "test-runner", "ai", "library", "advanced")
+#: Names a model gives settings sections (the docs page is "ai-assistant",
+#: the section "ai"; bench C4 mixed them up), lower-case with spaces.
+SECTION_ALIASES = {"ai assistant": "ai", "assistant": "ai", "ai settings": "ai",
+                   "test runner": "test-runner", "tests": "test-runner",
+                   "auto complete": "autocomplete"}
 
 
 def _text(value: Any, n: int) -> str:
@@ -108,7 +113,8 @@ def _open(lib: Any, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
         out: dict[str, Any] = {"page": name}
         label = f"Opened the {name} list" if name in LIST_PAGES else f"Opened {name}"
         if name == "settings" and args.get("section"):
-            section = _text(args.get("section"), 30).lower()
+            section = _text(args.get("section"), 30).lower().strip()
+            section = SECTION_ALIASES.get(section.replace("_", " ").replace("-", " "), section)
             if section not in SETTINGS_SECTIONS:
                 raise ValueError(f"no settings section {section!r}; sections: "
                                  + ", ".join(SETTINGS_SECTIONS))

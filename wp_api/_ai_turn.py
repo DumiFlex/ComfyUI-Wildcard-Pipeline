@@ -15,7 +15,9 @@ from engine.ai import ask as ai_ask
 from engine.ai import budget as ai_budget
 from engine.ai import cards as ai_cards
 from engine.ai import chat as ai_chat
+from engine.ai import chat_manage as ai_manage
 from engine.ai import chatlog as ai_chatlog
+from engine.ai import claims as ai_claims
 from engine.ai import client_tools as ai_client_tools
 from engine.ai import config as ai_config
 from engine.ai import examples as ai_examples
@@ -806,6 +808,10 @@ def _scope_edits(lib: Any, meta: dict[str, Any], ask: _Ask, log: list[dict[str, 
         # A rating lowered to safe needs the user's say-so (ratings.keep_nsfw),
         # read in English too when the message isn't.
         meta["user_text"] = "\n".join(dict.fromkeys((text[:2000], check[:2000])))
+        meta["delete_scope"] = ai_manage.delete_scope(meta["user_text"])
+        meta["read_only"] = ai_chat.explain_ask(text)
+    lib.read_only = bool(meta.get("read_only"))
+    lib.delete_scope = dict(meta.get("delete_scope") or {})
     lib.ref_asks = set(meta.get("ref_asks") or [])
     lib.user_text = str(meta.get("user_text") or "")
     lib.asked_words = set(meta.get("asked_words") or [])
@@ -1190,7 +1196,9 @@ async def _run_call(t: _Turn, run: _Calls, at: int, call: dict[str, Any]) -> Non
         # Only what this chat offers; more_tools unlocks the rest.
         run.needs_reply = True
         group = next((g for g in spec.groups if g in ai_tools.MORE_GROUPS), "")
-        how = (f'call more_tools with {{"group": "{group}"}} first, then {tool}'
+        # The group's contents too: bench N4 never opened "lists" for the tags.
+        how = (f'call more_tools with {{"group": "{group}"}} '
+               f"({ai_tools.MORE_GROUPS[group]}) first, then {tool}"
                if group else "call more_tools first")
         run.result(call, f"{tool}: error: {tool} isn't available here; {how}")
         t.steps.append({"tool": tool, "note": f"{tool} isn't available here", "ok": False})
@@ -1731,8 +1739,15 @@ def _claim_notes(t: _Turn) -> None:
     if not t.pause and proposals and (said := ai_request_check.claimed(
             ai_request_check.gaps(text or "", proposals), message)):
         what = " or ".join(ai_request_check.short_name(n) for n in said)
-        message = (message.rstrip() + f"\n\n*(No card in this answer has {what}, so it "
-                   "isn't made yet. Ask me to add it.)*")
+        message = (message.rstrip() + f"\n\n*(You asked for {what}, but no card in this "
+                   "answer has it yet, so it isn't made. Ask me to add it.)*")
+    if not t.pause and proposals:
+        message = _card_claims(message, proposals)
+    if not t.pause and not t.lib.allow_delete and t.lib.delete_scope.get("delete") \
+            and not _DELETE_SETTING.search(message or ""):
+        # Bench W22: deleting off and the item missing, the 9B offered
+        # another item and never said where deleting is switched on.
+        message = message.rstrip() + "\n\n" + DELETE_IS_OFF
     if not t.pause and t.cfg.get("local") and not t.meta.get("cloud_offered") and _struggled(
             message, t.errors, t.queue, bool(proposals)):
         # A local model struggled: say once per chat that a cloud model the
@@ -1742,8 +1757,28 @@ def _claim_notes(t: _Turn) -> None:
         if cloud:
             t.meta["cloud_offered"] = True
             message = message.rstrip() + "\n\n" + CLOUD_OFFER.format(name=cloud[0])
-    # Chips for the items it names; no bare ids for the user.
+    # Tool names said in plain words, then chips for the items it names; no
+    # bare ids for the user.
+    message = ai_claims.plain_tool_names(message, tuple(ai_tools.BY_NAME))
     t.message = t.lib.link_items(message)
+
+
+def _card_claims(message: str, proposals: list[dict[str, Any]]) -> str:
+    """Notes on what the answer says its cards do that they don't: a weight
+    or factor no card sets, a move no bundle card makes, a change said to
+    be done before Apply (`engine/ai/claims.py`)."""
+    notes: list[str] = []
+    if nums := ai_claims.unbacked_numbers(message, proposals):
+        said = ", ".join(nums[:4])
+        what = "a weight or factor" if len(nums) == 1 else "weights or factors"
+        notes.append(f"*(The answer names {what} ({said}) that no card sets: what the "
+                     "cards show is what applies.)*")
+    if ai_claims.unbacked_move(message, proposals):
+        notes.append("*(The bundle card moves nothing: the order stays as it was. Ask me to "
+                     "move it.)*")
+    if ai_claims.says_done(message):
+        notes.append(ai_claims.NOT_APPLIED)
+    return message.rstrip() + "".join("\n\n" + n for n in notes) if notes else message
 
 
 def _trace(t: _Turn) -> dict[str, Any]:
@@ -1849,21 +1884,9 @@ def _adopt_earlier(lib: Any, log: list[dict[str, Any]], meta: dict[str, Any]) ->
 #: An answer saying it made a change ("I've created …").
 _CLAIMS = re.compile(r"\b(?:I(?:'ve| have)?|I've now)\s+(?:just\s+)?(?:created|made|added|built|"
                      r"set up|saved|updated|applied|proposed)\b", re.I)
-#: The kind of item such an answer says it made ("I've proposed a combine").
-_CLAIM_KIND = re.compile(r"\bI(?:'ve| have)?\s+(?:just\s+)?(?:created|made|added|built|set up|"
-                         r"proposed)\b[^.\n]{0,80}?\b(fixed[ -]values?|combine|template|bundle|"
-                         r"constraint|derivation|wildcard)s?\b", re.I)
-
-
 def _missing_kinds(message: str, proposals: list[dict[str, Any]]) -> list[str]:
     """Kinds the answer says it made that no card of this answer is."""
-    have = set()
-    for p in proposals:
-        op = p.get("op") or {}
-        have.add(str(op.get("type") or (op.get("body") or {}).get("type") or op.get("kind")))
-    said = [re.sub(r"fixed[ -]values?", "fixed_values", m.group(1).lower())
-            for m in _CLAIM_KIND.finditer(message or "")]
-    return [k for k in dict.fromkeys(said) if k not in have]
+    return ai_claims.missing_kinds(message, proposals)
 
 
 #: A message asking the chat to sort the library: an answer with no card
@@ -1948,6 +1971,12 @@ NOTHING_TESTED = ("*(No test ran in this answer, so what it says about test resu
                   "checked. Ask me to run the test.)*")
 NOTHING_PROPOSED = ("*(Nothing was proposed in this answer, so nothing changed. Ask me to "
                     "propose it and a card will show.)*")
+
+
+#: An answer that already says where deleting is switched on.
+_DELETE_SETTING = re.compile(r"\bPermissions\b|\bSettings\b[^.\n]{0,40}\bAI\b", re.I)
+DELETE_IS_OFF = ("*(Deleting is turned off, so I can't delete anything. You can let the "
+                 "assistant delete in Settings › AI assistant › Permissions.)*")
 
 
 #: The same refusal this many times in one answer, and the model must answer.

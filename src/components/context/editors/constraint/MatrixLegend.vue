@@ -55,7 +55,7 @@ function toggle(): void {
       <div class="legend-row">
         <span class="legend-sample s-only"><span class="glyph">✓</span></span>
         <span class="legend-name n-only">Only</span>
-        <span class="legend-desc">Links picks. When the source sub-cat is picked, only target values with a rule in this row can be picked; everything else in the row is excluded.</span>
+        <span class="legend-desc">Makes the row a guest list. When the source picks this, the target can only pick options the row says something about: the ones set to Only, plus any you boosted or reduced (they keep those odds). Everything else is off.</span>
       </div>
       <div v-if="showAccepts" class="legend-row">
         <span class="legend-sample s-axis"><i class="pi pi-sync glyph" aria-hidden="true" /></span>
