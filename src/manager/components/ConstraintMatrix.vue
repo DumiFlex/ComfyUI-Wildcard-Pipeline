@@ -689,7 +689,7 @@ defineExpose({ cellAt });
   color: color-mix(in srgb, var(--ax) 80%, var(--wp-text));
   background: color-mix(in srgb, var(--ax) 16%, var(--wp-bg-1));
   border-left: 3px solid var(--ax);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--wp-bg) 55%, transparent);
+  box-shadow: var(--wp-shadow-sm);
 }
 
 /* Row tag chip — one per source sub-category, left accent in the axis hue. */
@@ -763,8 +763,7 @@ defineExpose({ cellAt });
               0 2px 6px color-mix(in srgb, var(--wp-text) 20%, transparent);
 }
 .wp-mx-cell.open {
-  box-shadow: 0 0 0 2px var(--wp-accent, #c4b5fd),
-              0 4px 12px color-mix(in srgb, var(--wp-text) 25%, transparent);
+  box-shadow: 0 0 0 2px var(--wp-accent, #c4b5fd), var(--wp-shadow-md);
 }
 .wp-mx-cell.s-neutral {
   background: color-mix(in srgb, var(--wp-text) 5%, transparent);

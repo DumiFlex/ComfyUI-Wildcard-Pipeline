@@ -111,7 +111,7 @@
   background: var(--wp-bg2);
   border: 1px solid var(--wp-border);
   border-radius: 3px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--wp-shadow-md);
   z-index: 10020;
   padding: 3px;
   display: flex;

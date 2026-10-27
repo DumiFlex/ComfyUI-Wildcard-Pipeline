@@ -173,7 +173,7 @@ watch(
   padding: 0 11px;
   margin-top: -6px;
   background: color-mix(in oklab, var(--wp-accent-500) 18%, var(--wp-bg-1));
-  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+  box-shadow: var(--wp-shadow-md);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, var(--wp-border));
   border-radius: 7px;
   color: var(--wp-text);

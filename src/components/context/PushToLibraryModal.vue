@@ -683,7 +683,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   background: var(--wp-bg-1, #0b0b12);
   border: 1px solid var(--wp-border-strong, var(--wp-border, #2a2a3a));
   border-radius: var(--wp-radius-lg, 10px);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--wp-shadow-lg);
   display: flex; flex-direction: column;
   overflow: hidden;
   color: var(--wp-text, #e7e7ee);

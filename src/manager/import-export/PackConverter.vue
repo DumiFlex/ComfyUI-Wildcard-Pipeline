@@ -1105,7 +1105,7 @@ const PAGE = 150;
   display: flex; align-items: center; justify-content: space-between; gap: var(--wp-space-5);
   padding: var(--wp-space-4) var(--wp-space-5); border: 1px solid var(--wp-border); border-radius: var(--wp-radius-md); background: var(--wp-bg-2);
 }
-.wp-pack__footer { position: sticky; bottom: var(--wp-space-4); box-shadow: 0 6px 24px rgb(0 0 0 / 0.25); }
+.wp-pack__footer { position: sticky; bottom: var(--wp-space-4); box-shadow: var(--wp-shadow-md); }
 .wp-pack__footer-text, .wp-pack__bar-text { color: var(--wp-text-muted); flex: 1; }
 .wp-pack__bar-text strong { color: var(--wp-text); }
 .wp-pack__bar-icon { color: var(--wp-accent-500); }

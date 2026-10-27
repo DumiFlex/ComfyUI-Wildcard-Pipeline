@@ -157,7 +157,7 @@ onBeforeUnmount(() => {
   display: inline-flex; align-items: center; height: 30px; padding: 0 3px;
   border-radius: 8px; background: var(--wp-bg-1);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 45%, var(--wp-border));
-  box-shadow: 0 4px 14px rgb(0 0 0 / 0.3);
+  box-shadow: var(--wp-shadow-md);
   animation: wp-ai-sel-in 0.14s ease-out both;
 }
 .wp-ai-sel__btn {

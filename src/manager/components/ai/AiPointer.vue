@@ -241,7 +241,7 @@ function announce(list: AiPointer[]): string {
   color: #fff;
   font-size: 12.5px;
   line-height: 1.35;
-  box-shadow: 0 6px 18px rgb(0 0 0 / 30%);
+  box-shadow: var(--wp-shadow-md);
 }
 .wp-ai-pointer__caption[data-off] { opacity: 0.92; }
 /* Icon and text side by side with a real gap. Inline, the template's

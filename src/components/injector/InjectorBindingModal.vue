@@ -680,7 +680,7 @@ function onKeydown(ev: KeyboardEvent): void {
   background: var(--wp-bg2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius, 6px);
-  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--wp-shadow-lg);
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 48px);

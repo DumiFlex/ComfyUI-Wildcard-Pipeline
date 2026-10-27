@@ -287,7 +287,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--wp-border);
   background: var(--wp-bg-1);
   cursor: default;
-  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--wp-shadow-lg);
 }
 .wp-doc-img-lightbox__cap {
   max-width: min(95vw, 920px);
