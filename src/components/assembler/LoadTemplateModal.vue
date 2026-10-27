@@ -224,7 +224,7 @@ function pick(row: TemplateRow) {
 
       <div class="wp-ltm__body">
         <div v-if="loading" class="wp-ltm__state" aria-busy="true">
-          <LoadingMark decorative /> Loading templates…
+          <LoadingMark block :size="32">Loading templates…</LoadingMark>
         </div>
         <div v-else-if="loadError" class="wp-ltm__state wp-ltm__state--error">
           <i class="pi pi-exclamation-triangle" aria-hidden="true" />

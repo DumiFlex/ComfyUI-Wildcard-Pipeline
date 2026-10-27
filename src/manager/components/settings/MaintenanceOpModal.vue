@@ -83,8 +83,7 @@ function onClose(): void { emit("close"); }
     </div>
 
     <div v-else-if="phase === 'loading'" class="wp-maintop wp-maintop--loading" data-test="maintop-spinner">
-      <LoadingMark :size="18" decorative />
-      <span>Running {{ op }}…</span>
+      <LoadingMark block :size="32">Running {{ op }}…</LoadingMark>
     </div>
 
     <div v-else-if="phase === 'result-ok'" class="wp-maintop">
