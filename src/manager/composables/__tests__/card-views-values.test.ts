@@ -77,3 +77,15 @@ describe("card views: delete", () => {
     expect(v.tags).toEqual([{ tag: "misc", count: 0 }]);
   });
 });
+
+describe("card views: text diff keeps fields the change leaves out", () => {
+  it("doesn't show an unsent negative as deleted", () => {
+    const v = only(cardViews(card({
+      op: "update", kind: "template", type: "template", id: "t1", name: "Main",
+      before: { template_string: "$subject, $season", negative_template: "lowres" },
+      body: { template_string: "$subject, $mood" },
+    })), "text-diff");
+    expect(v.rows.map((r) => r.label)).toEqual(["Prompt"]);
+    expect(v.reads).toEqual({ added: ["mood"], removed: ["season"] });
+  });
+});

@@ -32,21 +32,26 @@ export function valuesDiff(op: AiChatOp): CardView | null {
   return same === rows.length ? null : { kind: "values", rows, same };
 }
 
+/** One text old → new; a field the change doesn't send stays as it was. */
+function text(was: object, now: object, k: string): [string, string] {
+  const old = str(Reflect.get(was, k));
+  return [old, k in now ? str(Reflect.get(now, k)) : old];
+}
+
 /** The texts of a combine or template change, by label. */
 function texts(op: AiChatOp): Array<[string, string, string]> | null {
   if (op.op !== "update") return null;
   if (op.kind === "template") {
     const was = op.before ?? {};
     const now = op.body;
-    return [["Prompt", str(was.template_string), str(now.template_string)],
-      ["Negative", str(was.negative_template), str(now.negative_template)]];
+    return [["Prompt", ...text(was, now, "template_string")], ["Negative", ...text(was, now, "negative_template")]];
   }
   if (op.kind === "module" && op.type === "combine" && isObj(op.body.payload)) {
     const was = isObj(op.before?.payload) ? op.before.payload : {};
     const now = op.body.payload;
-    const out = str(now.output_var) || str(was.output_var);
-    return [["Sets", str(was.output_var) && `$${str(was.output_var)}`, out && `$${out}`],
-      ["Text", str(was.template), str(now.template)], ["Negative", str(was.negative), str(now.negative)]];
+    const [wasOut, out] = text(was, now, "output_var");
+    return [["Sets", wasOut && `$${wasOut}`, out && `$${out}`],
+      ["Text", ...text(was, now, "template")], ["Negative", ...text(was, now, "negative")]];
   }
   return null;
 }
