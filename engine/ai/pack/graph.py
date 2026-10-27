@@ -862,6 +862,12 @@ class weapon weapons prop props item items detail details
 #: A "no …" / "never …" part: a rule, which prints as text in a positive
 #: prompt ("no elf, no beast", bench Z18).
 _NEGATED_PART = re.compile(r"^(?:no|not|never|without|avoid)\s+\S", re.I)
+#: Danbooru tags that start with "no" and are picture words: "no humans,
+#: scenery" is how a landscape pack keeps a person out on tag models.
+_NO_TAGS = frozenset(f"no {w}" for w in """
+humans pupils shoes headwear hat bra panties nose mouth eyes socks gloves sclera lineart
+legwear pants shirt pussy penis nipples testicles blush wings tail ears eyewear
+""".split())
 
 
 #: Loop and Model Info variables: for rules to read, never printed
@@ -882,7 +888,8 @@ def _plan_words(text: str, warnings: list[str]) -> str:
         c = chunk.strip()
         if not c:
             continue
-        if ((c.lower() in _PART_NAMES or _NEGATED_PART.match(c)) and "$" not in c) \
+        negated = _NEGATED_PART.match(c) and re.sub(r"\s+", " ", c.lower()) not in _NO_TAGS
+        if ((c.lower() in _PART_NAMES or negated) and "$" not in c) \
                 or _RULE_ONLY_VAR.fullmatch(c):
             gone.append(c)
         else:
@@ -2718,7 +2725,10 @@ def _banned_texts(rel: dict[str, Any], payload: dict[str, Any] | None, kept: set
             c = c.strip(" .")
             if len(c) >= _MIN_BANNED:
                 (banned if out else fine).add(c)
-    return sorted(banned - fine - src_vals)
+    # "boots" banned while "leather boots" is allowed would read every
+    # allowed pick as a break.
+    return sorted(b for b in banned - fine - src_vals
+                  if not any(_has_word(f, b) for f in fine))
 
 
 def _shown(row: dict[str, Any], said: list[str]) -> None:

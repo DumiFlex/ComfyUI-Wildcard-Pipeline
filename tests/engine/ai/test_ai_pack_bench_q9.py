@@ -124,6 +124,7 @@ def test_negatives_tidied():
                               ["white sneakers", "dwarf"])
     assert neg == "blurry"
     assert set(gone) == {"sneakers", "dwarf", "pose_1", "blurry"}
+    assert tidy_negative("deformed hands, hands", "hands on hips") == ("deformed hands", ["hands"])
     assert dedupe("mutation, bad hands, mutation") == "mutation, bad hands"
     assert fit_ratings("rating explicit, rating_safe, nude", "nsfw") == (
         "rating_explicit, nude", 2)
@@ -228,3 +229,16 @@ def test_loop_and_model_vars_stay_out_of_the_template_text():
     g = copy.deepcopy(GRAPH)
     g["template"]["lead"] = "$model_family, $iteration, 1girl"
     assert pg.compile_graph(g)["template"]["lead"] == "1girl"
+
+
+def test_plan_words_keep_booru_no_tags_and_banned_texts_skip_allowed_words() -> None:
+    from engine.ai.pack.graph import _banned_texts, _plan_words
+    warnings: list[str] = []
+    assert _plan_words("no humans, scenery, no elf, never snow, outfit", warnings) == \
+        "no humans, scenery"
+    assert warnings
+    payload = {"options": [{"value": "boots", "sub_categories": ["winter"]},
+                           {"value": "leather boots", "sub_categories": ["summer"]},
+                           {"value": "snow boots, parka", "sub_categories": ["winter"]}]}
+    rel = {"kind": "exclude", "to": {"value": "winter"}}
+    assert _banned_texts(rel, payload, set(), set()) == ["parka", "snow boots"]

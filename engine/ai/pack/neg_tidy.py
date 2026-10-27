@@ -52,14 +52,16 @@ def tidy_negative(negative: str, own: str = "", siblings: Iterable[str] = (),
     seen: set[str] = set()
     for p in _parts(negative):
         k = _key(p)
-        head = k.split()[-1] if k.split() else ""
+        # Only a part made of the option's own words goes ("sneakers" for
+        # "white sneakers"); "deformed hands" on "hands on hips" stays.
+        words = _words(k)
         if not k or k in seen:
             if k:
                 gone.append(p)
             continue
         seen.add(k)
         if _ID_LIKE.match(k) or k in id_set or k in own_parts or k in sib \
-                or (len(head) >= 4 and head in own_words):
+                or (words and words <= own_words):
             gone.append(p)
             continue
         kept.append(p)
