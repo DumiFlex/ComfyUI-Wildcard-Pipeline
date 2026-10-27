@@ -3,6 +3,8 @@
  *  JSON failed to parse. Styles live in `context-widget.css`. */
 /** `showRaw` ("View raw") is owned by the widget so it survives the panel
  *  unmounting and coming back. */
+import WpButton from "../shared/WpButton.vue";
+
 defineProps<{ error: string; raw: string; showRaw: boolean }>();
 defineEmits<{ reset: []; toggleRaw: [] }>();
 </script>
@@ -19,18 +21,8 @@ defineEmits<{ reset: []; toggleRaw: [] }>();
       </div>
     </div>
     <div class="wp-recovery__actions">
-      <button type="button" class="wp-recovery__btn" @click="$emit('toggleRaw')">
-        <i class="pi" :class="showRaw ? 'pi-eye-slash' : 'pi-eye'" aria-hidden="true"></i>
-        {{ showRaw ? "Hide raw" : "View raw" }}
-      </button>
-      <button
-        type="button"
-        class="wp-recovery__btn wp-recovery__btn--danger"
-        @click="$emit('reset')"
-      >
-        <i class="pi pi-refresh" aria-hidden="true"></i>
-        Reset to empty
-      </button>
+      <WpButton :icon="showRaw ? 'pi-eye-slash' : 'pi-eye'" @click="$emit('toggleRaw')">{{ showRaw ? "Hide raw" : "View raw" }}</WpButton>
+      <WpButton variant="danger" icon="pi-refresh" @click="$emit('reset')">Reset to empty</WpButton>
     </div>
     <pre v-if="showRaw" class="wp-recovery__raw">{{ raw }}</pre>
   </div>

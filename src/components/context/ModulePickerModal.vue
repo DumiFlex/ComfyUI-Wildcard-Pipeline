@@ -325,14 +325,8 @@
           · <kbd>esc</kbd> cancel
         </span>
         <span class="wp-picker__footer-spacer"></span>
-        <button type="button" class="wp-picker__btn" @click="$emit('close')">Cancel</button>
-        <button
-          type="button"
-          class="wp-picker__btn wp-picker__btn--primary"
-          data-test="picker-add-btn"
-          :disabled="selected.size === 0"
-          @click="commitAdd"
-        ><i class="pi pi-plus" aria-hidden="true"></i> Add {{ selected.size }} {{ selected.size === 1 ? "module" : "modules" }}</button>
+        <WpButton @click="$emit('close')">Cancel</WpButton>
+        <WpButton variant="primary" icon="pi-plus" data-test="picker-add-btn" :disabled="selected.size === 0" @click="commitAdd">Add {{ selected.size }} {{ selected.size === 1 ? "module" : "modules" }}</WpButton>
       </footer>
     </div>
   </ModalShell>
@@ -361,6 +355,7 @@ import ModalShell from "../shared/ModalShell.vue";
 import WpSelect from "../shared/WpSelect.vue";
 import { kindIcon } from "../shared/kind-icons";
 import WpTabs, { type TabItem } from "../shared/WpTabs.vue";
+import WpButton from "../shared/WpButton.vue";
 
 interface PickerModule {
   id: string;
@@ -1447,42 +1442,6 @@ onBeforeUnmount(detachCaptureListeners);
   margin: 0 1px;
 }
 .wp-picker__footer-spacer { flex: 1; }
-.wp-picker__btn {
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 6px;
-  border: 1px solid var(--wp-border);
-  background: var(--wp-bg-3);
-  color: var(--wp-text);
-  font-size: 12px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  display: inline-flex; align-items: center; gap: 6px;
-  transition: background var(--wp-motion-quick) ease, border-color var(--wp-motion-quick) ease;
-}
-.wp-picker__btn:hover:not(:disabled) {
-  background: var(--wp-bg-4);
-  border-color: var(--wp-border-strong);
-}
-.wp-picker__btn:focus-visible {
-  outline: none;
-  border-color: var(--wp-accent-500);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 25%, transparent);
-}
-.wp-picker__btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.wp-picker__btn--primary {
-  background: var(--wp-accent-600);
-  border-color: var(--wp-accent-500);
-  color: #fff;
-}
-.wp-picker__btn--primary:hover:not(:disabled) { background: var(--wp-accent-500); }
-.wp-picker__btn--primary:focus-visible {
-  /* Already on-accent; brighten the halo a notch so the ring is
-   * visible against the violet body. */
-  border-color: var(--wp-accent-300);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-300) 35%, transparent);
-}
 
 /* ── Inline filter buttons (toolbar) ────────────────────────────
  * Square icon buttons sitting next to the search box. Off = ghost

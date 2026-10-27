@@ -11,6 +11,7 @@ import ModalShell from "../shared/ModalShell.vue";
 import SweepPanel from "./SweepPanel.vue";
 import { liveAxes, sweepTotal, type SweepConfig } from "./types";
 import type { SweepCandidate } from "./sweep-candidates";
+import WpButton from "../shared/WpButton.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -97,7 +98,7 @@ const preview = computed(() => {
       <div class="wp-swm__foot">
         <span class="wp-swm__foot-hint">Changes save as you make them.</span>
         <span class="wp-swm__spacer" />
-        <button type="button" class="wp-swm__btn" data-test="sweep-modal-done" @click="emit('close')">Done</button>
+        <WpButton variant="primary" data-test="sweep-modal-done" @click="emit('close')">Done</WpButton>
       </div>
     </div>
   </ModalShell>
@@ -127,5 +128,4 @@ const preview = computed(() => {
 .wp-swm__foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; flex-shrink: 0; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
 .wp-swm__foot-hint { font: 10px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-swm__spacer { flex: 1; }
-.wp-swm__btn { padding: 6px 14px; border: 1px solid var(--wp-accent); border-radius: 3px; background: var(--wp-accent); color: #fff; font: 11px var(--wp-font-sans); cursor: pointer; }
 </style>

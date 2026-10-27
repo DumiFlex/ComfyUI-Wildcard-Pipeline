@@ -78,6 +78,6 @@ describe("ConfirmDialog", () => {
       ...mountOpts,
       props: { visible: true, title: "Discard?", variant: "danger" },
     });
-    expect(w.find('[data-test="confirm-confirm"]').classes()).toContain("wp-confirm__btn--danger");
+    expect(w.find('[data-test="confirm-confirm"]').classes()).toContain("wp-btn--danger");
   });
 });

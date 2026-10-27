@@ -318,35 +318,7 @@
   word-break: break-word;
 }
 .wp-recovery__actions { display: flex; gap: 6px; }
-.wp-recovery__btn {
-  flex: 1;
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text2);
-  font-family: var(--wp-font-sans, sans-serif);
-  font-size: 11px;
-  padding: 4px 8px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: background var(--wp-motion-quick), border-color var(--wp-motion-quick), color var(--wp-motion-quick);
-}
-.wp-recovery__btn:hover {
-  background: var(--wp-bg4);
-  border-color: var(--wp-border2);
-  color: var(--wp-text);
-}
-.wp-recovery__btn--danger {
-  color: var(--wp-red);
-  border-color: var(--wp-red);
-}
-.wp-recovery__btn--danger:hover {
-  background: var(--wp-red-bg);
-  color: var(--wp-red);
-}
+.wp-recovery__actions > .wp-btn { flex: 1; }
 .wp-recovery__raw {
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
@@ -472,7 +444,7 @@
 .wp-empty-hero-actions { display: flex; gap: 6px; margin-top: 4px; }
 
 /* Kept for CSS cascade completeness — actual value that gets used in
- * empty-state CTA is via .wp-btn--primary below. Placeholder rule to avoid
+ * empty-state CTA is the shared WpButton (ContextAddActions). Placeholder rule to avoid
  * breaking any potential refs to these old class names (none after Task 10). */
 .wp-emptystate__cta {
   background: var(--wp-brand-gradient);
@@ -850,28 +822,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* ── Generic button system (Task 10) ────────────────────────────────────
- * .wp-btn--icon-sm (Task 9) already exists for inline card actions;
- * these are the larger toolbar/footer variants. */
-.wp-btn {
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border2);
-  color: var(--wp-text);
-  font: 500 11px/1 var(--wp-font-sans);
-  padding: 5px 9px;
-  border-radius: var(--wp-radius, 4px);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  transition: background var(--wp-motion-quick) ease, border-color var(--wp-motion-quick) ease;
-}
-.wp-btn:hover { background: var(--wp-bg4); border-color: var(--wp-border, var(--wp-border2)); }
-.wp-btn--icon { padding: 5px 6px; width: 26px; height: 26px; justify-content: center; }
-.wp-btn--icon .pi { font-size: 12px; }
-.wp-btn--primary { background: var(--wp-accent); border-color: var(--wp-accent); color: #fff; }
-.wp-btn--primary:hover { background: var(--wp-accent); border-color: var(--wp-accent); filter: brightness(1.08); }
 
 /* ── Footer (Task 10) ───────────────────────────────────────────────── */
 .wp-w-footer { display: flex; gap: 4px; padding-top: 4px; border-top: 1px dashed var(--wp-border-soft, var(--wp-border2)); }

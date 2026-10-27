@@ -29,6 +29,7 @@ import {
 } from "./picker-state";
 import { axisHueAt } from "../shared/axis-color";
 import { frameValues, promptRuns, valuesText } from "./picker-details";
+import WpButton from "../shared/WpButton.vue";
 
 const props = withDefaults(
   defineProps<{ request: WaitingRequest; moreWaiting?: number; graph?: LiteGraphLike }>(),
@@ -673,24 +674,10 @@ const fitStyle = computed(() => {
           <span v-if="leftLabel" class="wp-ifp__left" :class="{ 'is-low': (left ?? 99) <= 30 }">{{ leftLabel }}</span>
         </div>
         <span class="wp-ifp__spacer" />
-        <button
-          v-if="canSendToLoop"
-          type="button"
-          class="wp-ifp__btn"
-          :disabled="pickedFrames === 0"
-          title="Lock the picked frames' seeds in the Context Loop and bypass the rest, so the next run repeats only your picks"
-          data-test="image-filter-send-loop"
-          @click="sendToLoop"
-        >Send to Loop</button>
-        <button type="button" class="wp-ifp__btn wp-ifp__btn--danger" title="Skip everything after this node for this run" data-test="image-filter-stop" @click="stop">Stop branch</button>
-        <button type="button" class="wp-ifp__btn" data-test="image-filter-keep-all" @click="keepAll">Keep all {{ total }}</button>
-        <button
-          type="button"
-          class="wp-ifp__btn wp-ifp__btn--primary"
-          :disabled="pickedList.length === 0"
-          data-test="image-filter-keep-picked"
-          @click="keepPicked"
-        >{{ pickedList.length ? `Keep ${pickedList.length} picked` : "Keep picked" }}</button>
+        <WpButton v-if="canSendToLoop" :disabled="pickedFrames === 0" title="Lock the picked frames' seeds in the Context Loop and bypass the rest, so the next run repeats only your picks" data-test="image-filter-send-loop" @click="sendToLoop">Send to Loop</WpButton>
+        <WpButton variant="danger" title="Skip everything after this node for this run" data-test="image-filter-stop" @click="stop">Stop branch</WpButton>
+        <WpButton data-test="image-filter-keep-all" @click="keepAll">Keep all {{ total }}</WpButton>
+        <WpButton variant="primary" :disabled="pickedList.length === 0" data-test="image-filter-keep-picked" @click="keepPicked">{{ pickedList.length ? `Keep ${pickedList.length} picked` : "Keep picked" }}</WpButton>
       </div>
     </div>
   </ModalShell>
@@ -796,10 +783,4 @@ const fitStyle = computed(() => {
 .wp-ifp__left { color: var(--wp-text-dim, var(--wp-text3)); font-family: var(--wp-font-mono, monospace); }
 .wp-ifp__left.is-low { color: var(--wp-amber, #fbbf24); }
 .wp-ifp__spacer { flex: 1; }
-.wp-ifp__btn { padding: 6px 12px; border: 1px solid var(--wp-border); border-radius: 3px; background: var(--wp-bg2); color: var(--wp-text); font: 11px var(--wp-font-sans); cursor: pointer; }
-.wp-ifp__btn:hover { border-color: var(--wp-text-dim, #666); }
-.wp-ifp__btn:disabled { opacity: .45; cursor: default; }
-.wp-ifp__btn--danger { color: var(--wp-red, #f08a8a); }
-.wp-ifp__btn--danger:hover { border-color: var(--wp-red, #f08a8a); }
-.wp-ifp__btn--primary { background: var(--wp-accent); border-color: var(--wp-accent); color: #fff; font-weight: 600; }
 </style>

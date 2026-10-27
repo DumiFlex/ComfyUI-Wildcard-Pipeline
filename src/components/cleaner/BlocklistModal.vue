@@ -10,6 +10,7 @@
 import { ref, watch, computed } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
 import type { BlocklistKind } from "./types";
+import WpButton from "../shared/WpButton.vue";
 
 const props = defineProps<{
   visible: boolean;
@@ -89,16 +90,8 @@ function onCancel(): void {
         </div>
       </div>
       <footer class="wp-blocklist__foot">
-        <button
-          data-test="blocklist-cancel"
-          class="wp-blocklist__btn"
-          @click="onCancel"
-        >Cancel</button>
-        <button
-          data-test="blocklist-save"
-          class="wp-blocklist__btn wp-blocklist__btn--primary"
-          @click="onSave"
-        >Save</button>
+        <WpButton data-test="blocklist-cancel" @click="onCancel">Cancel</WpButton>
+        <WpButton variant="primary" data-test="blocklist-save" @click="onSave">Save</WpButton>
       </footer>
     </div>
   </ModalShell>
@@ -192,27 +185,5 @@ function onCancel(): void {
   gap: 6px;
   justify-content: flex-end;
   border-top: 1px solid var(--wp-border);
-}
-.wp-blocklist__btn {
-  font-size: 12px;
-  padding: 6px 14px;
-  background: transparent;
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm, 4px);
-  cursor: pointer;
-}
-.wp-blocklist__btn:hover {
-  border-color: var(--wp-border2, var(--wp-border-strong));
-  background: var(--wp-bg2, var(--wp-bg-2));
-}
-.wp-blocklist__btn--primary {
-  background: var(--wp-accent);
-  color: #fff;
-  border-color: var(--wp-accent);
-}
-.wp-blocklist__btn--primary:hover {
-  background: var(--wp-accent2, var(--wp-accent-600, var(--wp-accent)));
-  border-color: var(--wp-accent2, var(--wp-accent-600, var(--wp-accent)));
 }
 </style>
