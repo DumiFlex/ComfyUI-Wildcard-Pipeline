@@ -84,7 +84,12 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         for a changed text, share of the draw, tag, negative or fallback. The options it leaves
         alone fold into "N unchanged"; the magnifier lists them too. A change to an item's
         description, tags, category or rating shows each as old → new, with the category's own
-        chip. Category, tag and bulk cards show the chips you see in the library.
+        chip. Category, tag and bulk cards show the chips you see in the library. A derivation
+        change shows its IF / ELIF / ELSE blocks with the changed branches marked (a dropped ELSE
+        struck through, an added action with <b>+</b>), a constraint change marks the changed cells
+        of its grid and its changed exceptions, and a bundle change lists its items in order with
+        <b>+</b> added, struck through removed, <b>↕</b> moved (from its old place), on → off and
+        use settings old → new. Parts a change leaves alone fold into "N unchanged".
       </p>
       <p>
         Three or more cards of one kind come as one <b>group card</b> with a row per item. Untick
