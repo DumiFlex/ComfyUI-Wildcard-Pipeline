@@ -41,12 +41,12 @@ describe("derivation RuntimeSection", () => {
     const hold = w.find('[data-test="runtime-hold"]');
     expect(hold.exists()).toBe(true);
     expect(hold.text()).toContain("Hold across run");
-    expect(hold.classes()).not.toContain("toggle--on");
+    expect(hold.attributes("aria-checked")).toBe("false");
   });
 
   it("Hold toggle reflects seed_scope=hold as on", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule({ instance: { seed_scope: "hold" } }) } });
-    expect(w.find('[data-test="runtime-hold"]').classes()).toContain("toggle--on");
+    expect(w.find('[data-test="runtime-hold"]').attributes("aria-checked")).toBe("true");
   });
 
   it("clicking Hold emits seed_scope = hold; clicking when held emits vary", async () => {
@@ -60,7 +60,7 @@ describe("derivation RuntimeSection", () => {
 
   it("Hold toggle is disabled while a loop edit-frame is active", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule(), frameActive: true } });
-    expect(w.find('[data-test="runtime-hold"]').attributes("disabled")).toBeDefined();
+    expect(w.find('[data-test="runtime-hold"]').attributes("aria-disabled")).toBe("true");
   });
 
   it("seed input hidden when not locked", () => {

@@ -28,37 +28,37 @@ describe("wildcard RuntimeSection — frameActive gating", () => {
   it("hide toggle is NOT disabled in base mode (frameActive absent)", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule() } });
     const btn = w.find('[data-test="runtime-hide"]');
-    expect(btn.attributes("disabled")).toBeUndefined();
+    expect(btn.attributes("aria-disabled")).toBeUndefined();
   });
 
   it("hold toggle is NOT disabled in base mode (frameActive absent)", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule() } });
     const btn = w.find('[data-test="runtime-hold"]');
-    expect(btn.attributes("disabled")).toBeUndefined();
+    expect(btn.attributes("aria-disabled")).toBeUndefined();
   });
 
   it("hide toggle is NOT disabled when frameActive=false", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule(), frameActive: false } });
     const btn = w.find('[data-test="runtime-hide"]');
-    expect(btn.attributes("disabled")).toBeUndefined();
+    expect(btn.attributes("aria-disabled")).toBeUndefined();
   });
 
   it("hold toggle is NOT disabled when frameActive=false", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule(), frameActive: false } });
     const btn = w.find('[data-test="runtime-hold"]');
-    expect(btn.attributes("disabled")).toBeUndefined();
+    expect(btn.attributes("aria-disabled")).toBeUndefined();
   });
 
   it("hide toggle IS disabled when frameActive=true", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule(), frameActive: true } });
     const btn = w.find('[data-test="runtime-hide"]');
-    expect(btn.attributes("disabled")).toBeDefined();
+    expect(btn.attributes("aria-disabled")).toBe("true");
   });
 
   it("hold toggle IS disabled when frameActive=true", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule(), frameActive: true } });
     const btn = w.find('[data-test="runtime-hold"]');
-    expect(btn.attributes("disabled")).toBeDefined();
+    expect(btn.attributes("aria-disabled")).toBe("true");
   });
 
   it("shows frame-active hint when frameActive=true", () => {

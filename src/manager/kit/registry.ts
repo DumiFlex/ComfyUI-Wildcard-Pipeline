@@ -119,7 +119,12 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "toggle", name: "Toggle", group: "choice", file: "src/manager/components/ui/Toggle.vue", surfaces: ["manager"],
-    use: "A setting that takes effect at once (on or off). Use a Checkbox when the choice is saved later with a button.",
+    use: "A setting that takes effect at once (on or off). Use a Checkbox when the choice is saved later with a button. It is WpSwitch at the manager size.",
+  },
+  {
+    id: "wp-switch", name: "WpSwitch", group: "choice", file: "src/components/shared/WpSwitch.vue", surfaces: ["canvas", "manager"],
+    use: "On or off, taking effect at once, on the canvas or in the manager (one component, so one stylesheet). The track look is a sliding knob; the chip look is a labelled chip that lights up, for a row of runtime switches (Hide from prompt, Lock pick). mixed draws a bulk switch where only some children are on.",
+    instead: "A button with role=\"switch\" and its own toggle--on class.",
   },
   {
     id: "radio", name: "Radio (.wp-radio)", group: "choice", file: "src/manager/styles/tokens.css", surfaces: ["manager"],
@@ -315,6 +320,7 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "checkbox": `<Checkbox v-model="picked" label="Include in bundle" />`,
   "wp-check": `<WpCheck v-model="on" aria-label="Hold" />`,
   "toggle": `<Toggle v-model="enabled" label="Show tooltips" />`,
+  "wp-switch": `<WpSwitch v-model="held" variant="chip" icon="pi-link" label="Hold across run" />`,
   "radio": `<label><input v-model="mode" type="radio" class="wp-radio" value="a"> Tags</label>`,
   "tabs": `<WpTabs v-model="tab" :tabs="[{ id: 'options', label: 'Options', count: 12 }, { id: 'rules', label: 'Rules' }]" aria-label="Editor sections" />`,
   "segmented": `<WpSegmented v-model="theme" :options="[{ value: 'dark', label: 'Dark', icon: 'pi-moon' }, { value: 'light', label: 'Light', icon: 'pi-sun' }]" aria-label="Theme" />`,

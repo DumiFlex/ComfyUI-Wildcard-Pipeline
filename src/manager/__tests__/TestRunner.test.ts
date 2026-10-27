@@ -160,7 +160,7 @@ describe("TestRunner.vue", () => {
 
   it("switching a card off and on again leaves the scenario unchanged", async () => {
     const wrap = await mountRunner();
-    const sw = () => wrap.findAll('[data-test="stack-toggle"] button')[0];
+    const sw = () => wrap.findAll('[data-test="stack-toggle"]')[0];
     await sw().trigger("click");
     expect(wrap.find('[data-test="dirty"]').exists()).toBe(true);
     expect(wrap.findAll('[data-test="stack-card"]')[0].attributes("data-off")).toBe("true");
@@ -171,7 +171,7 @@ describe("TestRunner.vue", () => {
   it("clicking a stack card opens its inspector; the switch and Escape don't", async () => {
     const wrap = await mountRunner();
     const drawer = () => wrap.find('[data-test="inspector"]');
-    await wrap.findAll('[data-test="stack-toggle"] button')[0].trigger("click");
+    await wrap.findAll('[data-test="stack-toggle"]')[0].trigger("click");
     expect(drawer().attributes("data-open")).toBe("false");
 
     await wrap.findAll('[data-test="stack-card"]')[2].trigger("click");

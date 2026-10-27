@@ -120,7 +120,7 @@ describe("Settings › General", () => {
   it("usage stats default on and the toggle remembers off", async () => {
     const { wrap } = await mountAt("general");
     const store = useUiStore();
-    const toggle = wrap.get('[data-test="settings-usage-stats"]').get("button");
+    const toggle = wrap.get('[data-test="settings-usage-stats"]');
     expect(store.usageStats).toBe(true);
     expect(toggle.attributes("aria-checked")).toBe("true");
     await toggle.trigger("click");
