@@ -31,7 +31,7 @@ import Select, { type SelectOption } from "../ui/Select.vue";
 import { api } from "../../api/client";
 import AiMessage from "./AiMessage.vue";
 import AiAsk from "./AiAsk.vue";
-import { copyText } from "../../utils/clipboard";
+import { copyText } from "@/components/shared/clipboard";
 import { plainText } from "../../utils/chat-markdown";
 import AiCardView from "./AiCardView.vue";
 import AiSyntax from "./AiSyntax.vue";

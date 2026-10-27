@@ -50,6 +50,16 @@ export const KIT_ENTRIES: KitEntry[] = [
     id: "btn-css", name: "Button classes (.wp-btn)", group: "actions", file: "src/components/shared/button.css", surfaces: ["manager", "canvas"],
     use: "The same look on a plain <button> where the Button component can't go: inside a canvas widget, or a router-link that must stay an <a>.",
   },
+  {
+    id: "copy-button", name: "CopyButton", group: "actions", file: "src/components/shared/CopyButton.vue", surfaces: ["manager", "canvas"],
+    use: "Copy text to the clipboard. The icon turns into a check (or a cross when the copy fails) and says so to screen readers, so no toast is needed. Works on plain-http pages too.",
+    instead: "A button that calls navigator.clipboard and shows its own message.",
+  },
+  {
+    id: "close-button", name: "CloseButton", group: "actions", file: "src/components/shared/CloseButton.vue", surfaces: ["manager", "canvas"],
+    use: "The × that closes a dialog, drawer, panel or banner. Other icon actions in the manager use Button with an icon and no text.",
+    instead: "A hand-made × button (or one that borrows .wp-topbar__icon-btn).",
+  },
   // Inputs
   {
     id: "input", name: "Input", group: "inputs", file: "src/manager/components/ui/Input.vue", surfaces: ["manager"],
@@ -116,9 +126,14 @@ export const KIT_ENTRIES: KitEntry[] = [
     use: "One of a few options that all need to be visible. A real radio input with the class wp-radio, so arrow keys work. Disabled turns grey.",
   },
   {
-    id: "tabs", name: "Tabs (.wp-tabs)", group: "choice", file: "src/manager/styles/tokens.css", surfaces: ["manager"],
-    use: "Switch between views of the same thing. Buttons with role=\"tab\" and aria-selected inside a role=\"tablist\".",
-    instead: "Another tab strip with its own underline.",
+    id: "tabs", name: "Tabs", group: "choice", file: "src/components/shared/WpTabs.vue", surfaces: ["manager", "canvas"],
+    use: "Switch between views of the same thing. The arrow keys move between tabs, a long row scrolls, and an optional count follows each label. size=\"sm\" on the canvas.",
+    instead: "A tab strip of buttons with role=\"tab\" and its own underline and key handling (the old .wp-tabs class).",
+  },
+  {
+    id: "segmented", name: "Segmented control", group: "choice", file: "src/components/shared/WpSegmented.vue", surfaces: ["manager", "canvas"],
+    use: "Pick one of two to five short options that all stay visible (theme, mode, view). The arrow keys move the choice. icon-only for a row of icons with tooltips.",
+    instead: "A row of joined buttons with its own active colour, or a select with three options.",
   },
   // Display
   {
@@ -143,6 +158,16 @@ export const KIT_ENTRIES: KitEntry[] = [
     id: "empty-state", name: "EmptyState", group: "display", file: "src/manager/components/ui/EmptyState.vue", surfaces: ["manager"],
     use: "A page or list with nothing in it yet: say what goes here and offer the one action that fills it. size page (an empty list page), panel (the default, in a card or panel) or inline (one row).",
   },
+  {
+    id: "disclosure", name: "Disclosure", group: "display", file: "src/components/shared/Disclosure.vue", surfaces: ["manager", "canvas"],
+    use: "A section that folds open under its heading (advanced options, details, a long list). The chevron turns and the body grows; boxed draws it as a card.",
+    instead: "A button with its own aria-expanded, chevron and v-if.",
+  },
+  {
+    id: "data-table", name: "DataTable", group: "display", file: "src/manager/components/ui/DataTable.vue", surfaces: ["manager"],
+    use: "Rows and columns: sticky header, sort by a column, tick rows, loading and empty rows. Put custom cells in #cell-<key>.",
+    instead: "A <table class=\"wp-table\"> with its own sort state and select-all.",
+  },
   // Feedback
   {
     id: "toast", name: "Toast (manager)", group: "feedback", file: "src/manager/composables/useToast.ts", surfaces: ["manager"],
@@ -156,6 +181,11 @@ export const KIT_ENTRIES: KitEntry[] = [
   {
     id: "canvas-toast", name: "Toast (canvas)", group: "feedback", file: "src/components/shared/toast-store.ts", surfaces: ["canvas"],
     use: "The same note from a canvas widget. Push to the shared toast store; never console.log a warning.",
+  },
+  {
+    id: "banner", name: "Banner", group: "feedback", file: "src/components/shared/Banner.vue", surfaces: ["manager", "canvas"],
+    use: "A message that stays on the page until it no longer applies: a draft to restore, a failed load, out-of-date items. Tone sets the colour and icon; add actions and a close button when they help.",
+    instead: "A tinted <div> with its own icon, colours and Dismiss button.",
   },
   {
     id: "loading-mark", name: "LoadingMark", group: "feedback", file: "src/components/shared/LoadingMark.vue", surfaces: ["manager", "canvas"],
@@ -286,7 +316,13 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "wp-check": `<WpCheck v-model="on" aria-label="Hold" />`,
   "toggle": `<Toggle v-model="enabled" label="Show tooltips" />`,
   "radio": `<label><input v-model="mode" type="radio" class="wp-radio" value="a"> Tags</label>`,
-  "tabs": `<div class="wp-tabs" role="tablist"><button class="wp-tab" role="tab" :aria-selected="tab === 'a'" :data-active="tab === 'a'">Options</button></div>`,
+  "tabs": `<WpTabs v-model="tab" :tabs="[{ id: 'options', label: 'Options', count: 12 }, { id: 'rules', label: 'Rules' }]" aria-label="Editor sections" />`,
+  "segmented": `<WpSegmented v-model="theme" :options="[{ value: 'dark', label: 'Dark', icon: 'pi-moon' }, { value: 'light', label: 'Light', icon: 'pi-sun' }]" aria-label="Theme" />`,
+  "disclosure": `<Disclosure v-model:open="open" label="Advanced" :count="3">…</Disclosure>`,
+  "data-table": `<DataTable v-model:sort="sort" v-model:selected="picked" :columns="columns" :rows="rows" row-key="id" selectable aria-label="Tags" />`,
+  "banner": `<Banner tone="warn" title="2 modules are out of date" dismissible @dismiss="hide">Update them before you publish.</Banner>`,
+  "copy-button": `<CopyButton :text="prompt" label="Copy prompt" />`,
+  "close-button": `<CloseButton kbd="Esc" @click="close" />`,
   "card": `<Card title="Options" subtitle="12 options">…</Card>`,
   "chip": `<Chip tone="warn" icon="pi-exclamation-triangle">2 conflicts</Chip>  <Chip :color="cat.color" :icon="cat.icon">{{ cat.name }}</Chip>`,
   "kbd": `<kbd class="wp-kbd">Ctrl</kbd> <kbd class="wp-kbd">K</kbd>`,
