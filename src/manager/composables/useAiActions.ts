@@ -319,7 +319,9 @@ function tally(parts: AutoPart[]): string {
 function readPage(host: AiActionHost, within = ""): string {
   if (within) return readWithin(within);
   const p = host.page();
-  const lines = [`Page: ${p.route}${p.id ? ` (item ${p.id})` : ""}${p.doc ? ` (docs ${p.doc})` : ""}`];
+  // The ids `open` takes, so the model can name this page back (bench C4:
+  // read_page and open disagreed on the AI settings page's name).
+  const lines = [`Page: ${p.route}${p.section ? ` (section ${p.section})` : ""}${p.id ? ` (item ${p.id})` : ""}${p.doc ? ` (docs ${p.doc})` : ""}`];
   const note = currentPageNote() || p.note;
   if (note) lines.push(note);
   const marked = anchors();

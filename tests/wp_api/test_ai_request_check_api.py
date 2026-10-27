@@ -76,7 +76,8 @@ async def test_an_answer_that_claims_the_missing_feature_is_marked(wp_client, fa
         {"message": "Proposed Weapon with fists as the fallback.", "calls": []},
     ])
     out = await _chat(wp_client, ASK)
-    assert "No card in this answer has a fallback option" in out["message"]
+    assert "You asked for a fallback option, but no card in this answer has it" \
+        in out["message"]
 
 
 async def test_a_forced_answer_still_gets_the_note(wp_client, fake_llm):
@@ -221,3 +222,19 @@ async def test_a_card_resent_with_only_its_tags_changed_still_lacks_it(wp_client
     log = " ".join(str(m["content"]) for m in fake_llm.seen[-1]["body"]["messages"])
     assert "It still lacks a fallback option" in log
     assert "check the cards against the request" not in log
+
+
+async def test_claims_the_cards_do_not_back_are_marked(wp_client, fake_llm):
+    # Bench B3 / W13 / C5: "created successfully" before Apply, a weight no
+    # card sets, and a tool name in the reply.
+    _on(fake_llm, model_size="small", tool_format="json")
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [{"tool": "create_wildcard", "args": json.dumps(WEAPON)}]},
+        *[{"message": "Weapon has been created successfully with the create_wildcard tool; "
+                      "bow is at weight 0.5.", "calls": []}] * 4,
+    ])
+    out = await _chat(wp_client, "make a weapon wildcard, bows rare")
+    msg = out["message"]
+    assert "Nothing has changed yet" in msg
+    assert "names a weight or factor (0.5) that no card sets" in msg
+    assert "create_wildcard" not in msg and "a new wildcard" in msg

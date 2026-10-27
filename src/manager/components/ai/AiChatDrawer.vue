@@ -471,8 +471,9 @@ function page(): AiChatPage {
   if (typeof id === "string" && id) out.id = id;
   const doc = route.params.page;
   if (route.name === "documentation-page" && typeof doc === "string" && doc) out.doc = doc;
-  if (route.name === "settings" && typeof route.params.section === "string") {
-    out.note = `Settings › ${route.params.section || "general"}`;
+  if (route.name === "settings") {
+    out.section = (typeof route.params.section === "string" && route.params.section) || "general";
+    out.note = `Settings › ${out.section}`;
   }
   const note = currentPageNote();
   if (note) out.note = note;

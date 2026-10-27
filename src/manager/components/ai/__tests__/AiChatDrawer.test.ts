@@ -600,10 +600,12 @@ describe("AiChatDrawer", () => {
       await flushPromises();
       expect(router.currentRoute.value.fullPath).toBe("/settings/ai");
       const resume = vi.mocked(api.ai.chat).mock.calls[1][0];
-      expect(resume).toMatchObject({ chat_id: "c1", page: { route: "settings" } });
+      expect(resume).toMatchObject({ chat_id: "c1", page: { route: "settings", section: "ai" } });
       const results = "results" in resume ? resume.results : [];
       expect(results[0]).toEqual({ id: "k1", text: "opened" });
       const read = results[1] as { text: string };
+      // The section as `open` takes it (bench C4: the two named the page differently).
+      expect(read.text).toContain("Page: settings (section ai)");
       expect(read.text).toContain("[ai-context] Context size");
       expect(read.text).toContain("[save] Save button");
       expect(results[2]).toEqual({ id: "k3", text: "pointed at Context size" });

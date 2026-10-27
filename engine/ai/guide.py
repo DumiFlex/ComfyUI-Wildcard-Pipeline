@@ -104,7 +104,9 @@ pick from a wildcard only in some cases → derivation (an action can be \
 - One pick changing another's odds ("elves rarely carry guns") → constraint \
 (exclude for "never", reduce/boost for odds, "only" for "goes with" / "just \
 these"). Exclude drops an option if ANY of its tags is excluded, so an option \
-tagged both winter and summer is gone in both: for "goes with" use only.
+tagged both winter and summer is gone in both: for "goes with" use only. Only \
+makes the row a guest list: the target keeps every option the row has a rule \
+for (only, and boost/reduce with their odds) and everything else is off.
 - Two picks that must agree ("shoes that match the outfit") → an accepts \
 axis on both wildcards (options list what they go with) and a constraint \
 keyed on it.

@@ -43,7 +43,12 @@ from engine.ai import use as ai_use
 from engine.ai import vocab as ai_vocab
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_wildcard_edit
-from engine.ai.chat_manage import ManageTools, bulk_key, default_style
+from engine.ai.chat_manage import (
+    ManageTools,
+    bulk_key,
+    default_style,
+    typo_of,
+)
 from engine.ai.chat_tools import MoreTools, _num, _reach, _reach_text
 from engine.ai.pack import recommend as pack_recommend
 from engine.modules.constraint_handler import ConstraintHandler
@@ -750,6 +755,19 @@ def ref_asks(text: str) -> set[str]:
     return set(_PICKED.findall(text))
 
 
+#: The message the Explain chip over selected text sends
+#: (`src/manager/composables/useSelectionAsk.ts::explainPrompt`).
+_EXPLAIN = re.compile(r"^\s*Explain this in simpler words:\s*\"", re.I)
+EXPLAIN_ONLY = ("the user only asked for an explanation of the text they selected: answer in "
+                "words and change nothing (no cards)")
+
+
+def explain_ask(text: str) -> bool:
+    """Whether a message is an Explain-selection ask: read-only (bench C9:
+    explaining a selection proposed new items)."""
+    return bool(isinstance(text, str) and _EXPLAIN.match(text))
+
+
 def use_instead(kind: str, create: bool = False) -> str:
     """The pointer a wrong-kind refusal ends with, so the model calls the
     right tool instead of retrying this one (all-tools eval)."""
@@ -758,8 +776,9 @@ def use_instead(kind: str, create: bool = False) -> str:
         return ""
     if create:
         tool = "create_" + kind
+    what = ai_tools.MORE_GROUPS.get(group, "")
     return (f": use {tool} (if you don't have it, call more_tools with "
-            f'{{"group": "{group}"}} first)')
+            f'{{"group": "{group}"}}' + (f" ({what})" if what else "") + " first)")
 
 class Library(MoreTools, ManageTools):
     """The rows one chat request may look at, plus the change compilers."""
@@ -774,6 +793,10 @@ class Library(MoreTools, ManageTools):
         self.category_rows = {c["id"]: dict(c) for c in categories}
         #: Settings › AI assistant › "Let the assistant delete items".
         self.allow_delete = False
+        #: What the user's delete ask covers (`chat_manage.delete_scope`).
+        self.delete_scope: dict[str, Any] = {}
+        #: An Explain-selection ask (`explain_ask`): change tools are refused.
+        self.read_only = False
         #: Library items the user named in this chat, had open, or that an
         #: earlier card changed: the only ones the edit tools may change.
         #: None (tests, other callers) leaves every item open.
@@ -2335,6 +2358,13 @@ class Library(MoreTools, ManageTools):
                 ai_ratings.nsfw_tagged(adds)):
             # Tagged #nsfw now: rated so too.
             rating = "nsfw"
+        notes: list[str] = []
+        if rms and not adds:
+            for t in sorted(rms):
+                fixed = typo_of(t, self.tags, self.user_text)
+                if fixed and fixed not in have:
+                    adds.append(fixed)
+                    notes.append(f"Adds #{fixed}: #{t} is a typo of it")
         if adds or rms:
             lower = {t.lower(): t for t in self.tags}
             added = list(dict.fromkeys(lower.get(a.lower(), a.lower()) for a in adds))
@@ -2364,12 +2394,13 @@ class Library(MoreTools, ManageTools):
             before["content_rating"] = was
             preview.append(f"Rating: {rating}")
         if not body:
-            raise ValueError("that changes nothing" + (f" ({held[0]})" if held else ""))
+            raise ValueError("that changes nothing" + (f" ({held[0]})" if held else "")
+                             + "".join(f"; {n}" for n in notes))
         return {
             "title": f"Update {r.get('name')}",
             "summary": f"{kind} info",
             "preview": preview,
-            "warnings": held,
+            "warnings": held + notes,
             # Auto-apply may apply it: a rating change or a rename stays a
             # normal card, because it changes what people see.
             **({} if "content_rating" in body or "name" in body else {"risk": "low"}),
@@ -2551,6 +2582,39 @@ class Library(MoreTools, ManageTools):
         if why:
             proposal["warnings"] = [*(proposal.get("warnings") or []), why]
 
+    def _same_name(self, op: dict[str, Any]) -> list[str]:
+        """A warning when a new item, or a rename, takes the name of a saved
+        item of the same kind: bench Z13 / B5 / R6 made a second Weather, a
+        second "Bench scene" bundle and a second "Title from class" instead
+        of changing the one there, and L6 renamed "Weather copy" to
+        "Weather" with no word about it."""
+        body = _got if isinstance(_got := op.get("body"), dict) else {}
+        name = str(body.get("name") or "").strip()
+        if not name or op.get("op") not in ("create", "update"):
+            return []
+        if op["op"] == "create":
+            kind = str(body.get("type") or op.get("kind") or "")
+            self_id = str(body.get("id") or "")
+        else:
+            row = self.get(op.get("id"))
+            if row is None:
+                return []
+            kind, self_id = self._kind(row), str(row["id"])
+        low = name.lower()
+        same = [r for r in [*self.modules.values(), *self.bundles.values(),
+                            *self.templates.values()]
+                if not r.get("_proposed") and r.get("id") != self_id
+                and str(r.get("name") or "").strip().lower() == low and self._kind(r) == kind]
+        if not same:
+            return []
+        what = kind.replace("_", " ")
+        if op["op"] == "update":
+            return [f"{self._chip(same[0])} is already a {what} named {name}: after this "
+                    "rename two have the same name"]
+        # Read by the user too, so plain words; the model knows the edit tools.
+        return [f"{self._chip(same[0])} is already a {what} named {name}: if that is the one "
+                "meant, change it instead of making a second"]
+
     def run(self, tool: str, args: dict[str, Any]) -> str | dict[str, Any]:
         """A read tool's text, or a change tool's proposal (with `pid`, and
         `after` when it builds on an earlier proposal). Raises ValueError."""
@@ -2562,6 +2626,8 @@ class Library(MoreTools, ManageTools):
             if isinstance(args.get("id"), str):
                 self.touched.append(args["id"])
             return fn(args)
+        if self.read_only and tool in CHANGE_TOOLS:
+            raise ValueError(EXPLAIN_ONLY)
         item_id = args.get("id") if tool in ITEM_TOOLS else None
         self._check_named(tool, item_id)
         after = self._current(item_id)[1]
@@ -2622,7 +2688,8 @@ class Library(MoreTools, ManageTools):
                 proposal["after"] = after = deps[-1]
                 if len(deps) > 1:
                     proposal["needs"] = deps
-        proposal["warnings"] = [*proposal.get("warnings", []), *self._broken_links(op)]
+        proposal["warnings"] = [*proposal.get("warnings", []), *self._broken_links(op),
+                                *self._same_name(op)]
         if self.editor_new and self.editor_id and op.get("id") != self.editor_id \
                 and self.editor_id in json.dumps(op.get("body") or {}):
             proposal["warnings"].append(f"Points at the new item {self.editor_id}, which exists "

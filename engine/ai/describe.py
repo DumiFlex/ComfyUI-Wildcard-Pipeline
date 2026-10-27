@@ -122,11 +122,18 @@ def summarize(kind: str, payload: Any, *, names: dict[str, str] | None = None) -
 def library_tags(rows: list[dict[str, Any]]) -> list[str]:
     """Tags used across the library, most used first."""
     counts: Counter[str] = Counter()
+    #: Each spelling's use, so "Warm" and "warm" are one tag, written the
+    #: way most items write it (bench: the tag summary had duplicates).
+    spelt: Counter[str] = Counter()
     for r in rows:
         for t in r.get("tags") or []:
             if isinstance(t, str) and t.strip():
-                counts[t.strip()] += 1
-    return [t for t, _ in counts.most_common(MAX_LIBRARY_TAGS)]
+                counts[t.strip().lower()] += 1
+                spelt[t.strip()] += 1
+    best: dict[str, str] = {}
+    for t, _ in spelt.most_common():
+        best.setdefault(t.lower(), t)
+    return [best[t] for t, _ in counts.most_common(MAX_LIBRARY_TAGS)]
 
 
 def build_prompt(
