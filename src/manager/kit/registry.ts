@@ -47,8 +47,8 @@ export const KIT_ENTRIES: KitEntry[] = [
     instead: "A <button> with its own class and colours.",
   },
   {
-    id: "btn-css", name: "Button classes (.wp-btn)", group: "actions", file: "src/components/shared/button.css", surfaces: ["manager", "canvas"],
-    use: "The same look on a plain <button> where the Button component can't go: inside a canvas widget, or a router-link that must stay an <a>.",
+    id: "btn-css", name: "Button classes (.wp-btn)", group: "actions", file: "src/components/shared/button.css", surfaces: ["manager"],
+    use: "The same look on a plain element where the Button component can't go, like a router-link that must stay an <a>. On the canvas use WpButton: the canvas never loads these classes globally.",
   },
   {
     id: "wp-button", name: "WpButton", group: "actions", file: "src/components/shared/WpButton.vue", surfaces: ["canvas", "manager"],
