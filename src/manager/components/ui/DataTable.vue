@@ -36,6 +36,10 @@ export interface DataColumn<R> {
   firstDir?: "asc" | "desc";
   /** Hide the header text (an actions column); it still names the cells. */
   hideLabel?: boolean;
+  /** A class on the column's header and cells. */
+  class?: string;
+  /** Extra attributes on the header cell (e.g. `data-ai-anchor`). */
+  headAttrs?: Record<string, string>;
 }
 
 export interface DataSort { key: string; dir: "asc" | "desc" }
@@ -161,6 +165,8 @@ const span = computed(() => props.columns.length + (props.selectable ? 1 : 0));
             v-for="c in columns"
             :key="c.key"
             scope="col"
+            v-bind="c.headAttrs ?? {}"
+            :class="c.class"
             :aria-sort="ariaSort(c)"
             :data-align="c.align"
           >
@@ -213,7 +219,7 @@ const span = computed(() => props.columns.length + (props.selectable ? 1 : 0));
               v-for="c in columns"
               :key="c.key"
               :data-align="c.align"
-              :class="{ 'wp-mono': c.mono }"
+              :class="[c.class, { 'wp-mono': c.mono }]"
             >
               <slot :name="`cell-${c.key}`" :row="row" :value="cell(row, c.key)" :index="index">{{ cell(row, c.key) ?? "" }}</slot>
             </td>
