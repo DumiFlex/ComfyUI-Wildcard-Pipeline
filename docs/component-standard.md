@@ -6,8 +6,8 @@ Every custom control in the extension follows these rules. The component kit (Se
 
 | Folder | What goes there |
 |---|---|
-| `src/components/shared/` | Pieces the canvas uses, and pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`), controls (`SearchInput`, `WpNumber`, `WpCheck`, `WpSelect`) and the toast look (`ToastCard`). |
-| `src/manager/components/ui/` | Manager-only controls: `Button`, `Input`, `Select`, `Modal`, `ConfirmModal`, `Drawer` and the rest. |
+| `src/components/shared/` | Pieces the canvas uses, and pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`), controls (`SearchInput`, `WpNumber`, `WpCheck`, `WpSelect`, `WpTabs`, `WpSegmented`, `Disclosure`, `Banner`, `CopyButton`, `CloseButton`) and the toast look (`ToastCard`). |
+| `src/manager/components/ui/` | Manager-only controls: `Button`, `Input`, `Select`, `Modal`, `ConfirmModal`, `Drawer`, `DataTable` and the rest. |
 
 A component anywhere else is a part of one screen, not a control. If a second screen needs it, move it into a kit folder first.
 
@@ -63,7 +63,8 @@ Don't add synonyms such as `kind`, `small`, `busy` or `visible` for these meanin
   - give focus back to whatever opened them;
   - dialogs keep Tab inside (use `useDialogFocus`).
 - Hints use `v-tooltip`, not `title=`.
-- Icon-only buttons have an `aria-label`.
+- Icon-only buttons have an `aria-label`. The × that closes something is `CloseButton`; a copy is `CopyButton` (or `copyText` from `components/shared/clipboard.ts` behind a menu item), never `navigator.clipboard` directly, which is missing over plain http.
+- Shared pieces style themselves in `<style scoped>`, not in `@layer wp-extension`: the manager's Tailwind reset is unlayered and would beat a layered rule on `<button>`.
 - Motion respects `prefers-reduced-motion`.
 
 ## 7. Overlays go through the kit

@@ -154,6 +154,7 @@ const span = computed(() => props.columns.length + (props.selectable ? 1 : 0));
         <tr>
           <th v-if="selectable" class="wp-data-table__check" scope="col">
             <Checkbox
+              class="wp-checkbox--inline"
               :model-value="allPicked"
               :indeterminate="somePicked"
               :disabled="loading || allKeys.length === 0"
@@ -210,6 +211,7 @@ const span = computed(() => props.columns.length + (props.selectable ? 1 : 0));
           >
             <td v-if="selectable" class="wp-data-table__check">
               <Checkbox
+                class="wp-checkbox--inline"
                 :model-value="picked.has(keyOf(row))"
                 aria-label="Select row"
                 @update:model-value="(on: boolean) => toggleRow(row, on)"

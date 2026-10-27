@@ -114,6 +114,8 @@ function onKeydown(ev: KeyboardEvent): void {
 .wp-segmented {
   display: inline-flex;
   flex: none;
+  /* Keep its own width inside a column flex parent; block fills the row. */
+  align-self: flex-start;
   max-width: 100%;
   padding: 2px;
   gap: 2px;
@@ -150,7 +152,7 @@ function onKeydown(ev: KeyboardEvent): void {
   gap: 4px;
 }
 .wp-segmented[data-size="lg"] .wp-segmented__opt { padding: 0 var(--wp-space-6); font-size: var(--wp-text-base); }
-.wp-segmented[data-block] { display: flex; width: 100%; }
+.wp-segmented[data-block] { display: flex; width: 100%; align-self: stretch; }
 .wp-segmented[data-block] .wp-segmented__opt { flex: 1 1 0; }
 .wp-segmented__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .wp-segmented[data-icon-only] .wp-segmented__opt { aspect-ratio: 1; padding: 0; }
