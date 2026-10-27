@@ -78,7 +78,7 @@ Anything that floats goes through the kit's overlays and positions with `floatin
 | Side panel | `Drawer` |
 | Dialog | `Modal` (manager), `ModalShell` / `ConfirmDialog` (canvas) |
 
-Never write another Teleport with its own placement maths or outside-click handler.
+Anything that floats next to a trigger follows it when the page scrolls or resizes; a menu opened at the pointer closes on scroll. Never write another Teleport with its own placement maths, scroll handling or outside-click handler.
 
 ## 8. Canvas twins share a stylesheet
 
