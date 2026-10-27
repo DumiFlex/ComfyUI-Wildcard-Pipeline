@@ -101,6 +101,23 @@
   --wp-space-7-base: 24px;
   --wp-space-8-base: 32px;
 
+  /* Shared names (2026-10-27): the canvas's motion and soft-border names,
+   * so a shared component (components/shared/) reads the same names here.
+   * SHARED_TOKENS in components/shared/shared-tokens.test.ts lists them. */
+  --wp-motion-quick:    120ms;
+  --wp-motion-hover:    150ms;
+  --wp-motion-fade:     180ms;
+  --wp-motion-swap:     200ms;
+  --wp-motion-flip:     280ms;
+  --wp-motion-pulse:    420ms;
+  --wp-motion-collapse: 450ms;
+  --wp-motion-stagger:   60ms;
+  --wp-motion-shimmer: 1400ms;
+  --wp-motion-curve-collapse: cubic-bezier(0.4, 0, 0.2, 1);
+  --wp-motion-curve-flip:     cubic-bezier(0.22, 1, 0.36, 1);
+  --wp-motion-curve-linear:   linear;
+  --wp-border-soft: var(--wp-border);
+
   /* Density multiplier — comfortable=1, compact=0.85. Set on <html>
    * via uiStore.setDensity. Defaults to 1 here so a fresh boot before
    * the store applies its class reads as comfortable. */
