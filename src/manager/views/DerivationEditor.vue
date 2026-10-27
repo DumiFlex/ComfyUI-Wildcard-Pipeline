@@ -388,10 +388,27 @@ onMounted(async () => {
 });
 
 function addAiRules(incoming: DerivationRule[]): void {
-  rules.value = [...rules.value, ...incoming.map(migrateRule)];
+  // A rule that keeps an existing rule's id changes that rule in place.
+  const next = [...rules.value];
+  let changed = 0;
+  for (const raw of incoming) {
+    const rule = migrateRule(raw);
+    const at = next.findIndex((r) => r.id === rule.id);
+    if (at >= 0) {
+      next[at] = rule;
+      changed += 1;
+    } else {
+      next.push(rule);
+    }
+  }
+  rules.value = next;
+  const added = incoming.length - changed;
   toast.push({
     severity: "success",
-    summary: `Added ${incoming.length} rule${incoming.length === 1 ? "" : "s"}`,
+    summary: [
+      added ? `Added ${added} rule${added === 1 ? "" : "s"}` : "",
+      changed ? `changed ${changed}` : "",
+    ].filter(Boolean).join(", ").replace(/^c/, "C"),
     detail: "Check them, then Save.",
     life: 3000,
   });

@@ -128,6 +128,15 @@ class TagIndex:
         except OSError:
             return True
 
+    def has(self, tag: str) -> bool:
+        """Whether `tag` is a tag or an alias in the file, written with
+        spaces or underscores, any case, booru escapes ignored."""
+        q = tag.strip().lower().replace("\\(", "(").replace("\\)", ")").replace(" ", "_")
+        if not q:
+            return False
+        i = bisect_left(self._names, q)
+        return i < len(self._names) and self._names[i] == q
+
     def search(self, query: str, limit: int = 20) -> list[Tag]:
         """Tags starting with `query`, most-used first.
 

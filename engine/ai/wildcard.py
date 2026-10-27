@@ -37,6 +37,7 @@ from typing import Any
 from engine.ai import about, adult
 from engine.ai import negation as ai_negation
 from engine.ai import refs as ai_refs
+from engine.ai import scripts as ai_scripts
 from engine.modules.wildcard_handler import WildcardHandler
 from engine.syntax.subcat_filter import validate_subcat_name
 
@@ -122,6 +123,19 @@ opposite of this one.
 Write what the request asks for, in the language of the existing options. Don't \
 add commentary or disclaimers; the output is data for the user's own library.\
 """
+
+
+#: Quote pairs a small model wraps a whole option in (bench N5).
+_QUOTES = {'"': '"', "\u201c": "\u201d", "`": "`"}
+
+
+def _unquote(text: str) -> str:
+    """An option written inside its own quotes, without them; one with
+    quotes inside ("a \"lucky\" charm") stays."""
+    while len(text) >= 2 and _QUOTES.get(text[0]) == text[-1] \
+            and text[0] not in text[1:-1] and text[-1] not in text[1:-1]:
+        text = text[1:-1].strip()
+    return text
 
 
 def _norm_key(text: str) -> str:
@@ -246,20 +260,25 @@ def compile_options(
     # when the wildcard already has one.
     fb_taken = any(isinstance(o, dict) and o.get("fallback") for o in existing_opts)
 
+    # The library's own words and the request: the scripts an option may use.
+    reference = " ".join([request or "", own_name, *(
+        str(o.get("value") or "") for o in existing_opts[:200] if isinstance(o, dict))])
+
     for item in raw["options"]:
         if not isinstance(item, dict):
             continue
         text = item.get("text")
         if not isinstance(text, str):
             continue
-        text = re.sub(r"\s+", " ", text).strip()
+        text = _unquote(re.sub(r"\s+", " ", text).strip())
         if request is not None:
             # The prompt lists "- text  [tags a, b]".
             text = _NOTE.sub("", text).strip()
         if not text:
             continue
-        if len(out) >= limit:
-            skipped.append({"text": text, "reason": "more than you asked for"})
+        if reference.strip() and ai_scripts.foreign(text, reference):
+            skipped.append({"text": text[:80], "reason": "written in another script than "
+                                                         "your list"})
             continue
         if len(text) > MAX_TEXT_LEN:
             skipped.append({"text": text[:80] + "…", "reason": "too long"})
@@ -317,8 +336,40 @@ def compile_options(
         new_tags = _hold_to_request(out, new_tags, skipped, request=request, labels=labels,
                                     own_name=own_name, registry=registry,
                                     existing=[o for o in existing_opts if isinstance(o, dict)])
+    if len(out) > limit:
+        kept = _trim_by_group(out, limit, request or "")
+        skipped.extend({"text": o["value"], "reason": "more than you asked for"}
+                       for o in out if not any(o is k for k in kept))
+        out = kept
+        used = {t for o in out for t in o["tags"]}
+        new_tags = [t for t in new_tags if t in used]
     _validate_merged(existing_payload, out, new_tags)
     return {"options": out, "new_tags": new_tags, "skipped": skipped}
+
+
+def _trim_by_group(out: list[dict[str, Any]], limit: int, request: str) -> list[dict[str, Any]]:
+    """The first `limit` options taken in turn from each tag group, in the
+    answer's order. Asked for 10 split by coverage, the 9B wrote 14 and the
+    first 10 held 1 sheer piece (bench Z1); 12 poses kept 0 nude (Z4). The
+    group is the tags the request names, else an option's first tag."""
+    words = {_stem(w) for w in re.findall(r"[A-Za-z][\w-]*", request)}
+
+    def key(o: dict[str, Any]) -> str:
+        named = [t for t in o["tags"] if _stem(t.lower()) in words]
+        return ",".join(sorted(named)) if named else (o["tags"][0] if o["tags"] else "")
+
+    groups: dict[str, list[int]] = {}
+    for i, o in enumerate(out):
+        groups.setdefault(key(o), []).append(i)
+    if len(groups) < 2:
+        return out[:limit]
+    picked: list[int] = []
+    queues = [list(v) for v in groups.values()]
+    while len(picked) < limit:
+        for q in queues:
+            if q and len(picked) < limit:
+                picked.append(q.pop(0))
+    return [out[i] for i in sorted(picked)]
 
 
 #: The "[tags a, b]" note the draft prompt puts after an existing option.
@@ -863,3 +914,39 @@ def bleed_note(name: str, var: str, options: list[dict[str, Any]], instruction: 
             + ", ".join(f'"{t[:40]}"' for t in texts[:3])
             + f"). {name or 'This wildcard'} holds one thing; write the options again "
             f"without any {other}.")
+
+
+#: "tagged by coverage: modest, revealing or sheer": the tags it names.
+_TAGGED_BY = re.compile(r"\btag(?:ged|s)?\b[^:.;]{0,60}:\s*([^.;]+)", re.I)
+
+
+def asked_tags(instruction: str) -> list[str]:
+    """The tag names a request lists after "tagged by …:" ("short or long"
+    → short, long), lowercased; [] when it lists none."""
+    m = _TAGGED_BY.search(instruction or "")
+    if not m:
+        return []
+    parts = re.split(r",|\bor\b|\band\b|/", m.group(1))
+    names = [re.sub(r"[^\w-]", "", p.strip().lower().split(" ")[0]) for p in parts if p.strip()]
+    return list(dict.fromkeys(n for n in names if n))[:12]
+
+
+def untagged_note(instruction: str, options: list[dict[str, Any]],
+                  existing: list[dict[str, Any]] | None = None) -> str:
+    """One re-ask's note when the request asks for tags (or every existing
+    option is tagged) and no new option carries one. Bench W1 runs 1 and
+    3, Z1, Z4: "tagged by length: short or long" came back with no tags,
+    quietly; Z20 added untagged options to a tagged list. "" otherwise."""
+    if not options or any(o.get("tags") for o in options):
+        return ""
+    named = asked_tags(instruction)
+    tagged = [o for o in existing or [] if isinstance(o, dict) and o.get("sub_categories")]
+    if named:
+        want = "one of " + ", ".join(named)
+    elif _ASKS_TAGS.search(instruction or ""):
+        want = "the tags the request asks for"
+    elif existing and len(tagged) == len([o for o in existing if isinstance(o, dict)]):
+        want = "the wildcard's existing tags, the way the existing options are tagged"
+    else:
+        return ""
+    return f"Your last answer tagged no option. Tag every option with {want}, and answer again."

@@ -121,8 +121,12 @@ def test_combine_create_and_edit():
     assert any("$nope" in w for w in p["warnings"])
     with pytest.raises(ValueError, match="@"):
         lib.run("create_combine", {"name": "S", "var": "s", "template": "@{Colors}"})
+    # A read of its own variable is taken out, the rest kept (bench K3).
+    own = lib.run("create_combine", {"name": "S", "var": "s", "template": "$s and $look"})
+    assert own["op"]["body"]["payload"]["template"] == "$look"
+    assert any("sets it" in w for w in own["warnings"])
     with pytest.raises(ValueError, match="sets itself"):
-        lib.run("create_combine", {"name": "S", "var": "s", "template": "$s and $look"})
+        lib.run("create_combine", {"name": "S", "var": "s", "template": "$s"})
     e = lib.run("edit_combine", {"id": "Look", "negative": "blurry"})
     assert e["op"]["body"]["payload"]["negative"] == "blurry"
     assert e["op"]["body"]["payload"]["template"] == "$season, $outfit"

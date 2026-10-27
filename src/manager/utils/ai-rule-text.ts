@@ -44,3 +44,11 @@ export function ruleLines(rule: DerivationRule): RuleLine[] {
   }
   return lines;
 }
+
+/** For a rule the AI changed: which of its lines are new or different
+ *  from the rule it replaces (`old`), so the panel can mark them. */
+export function changedLines(old: DerivationRule | undefined, rule: DerivationRule): boolean[] {
+  const key = (l: RuleLine) => `${l.when}→${l.then.join("|")}`;
+  const before = new Set((old ? ruleLines(old) : []).map(key));
+  return ruleLines(rule).map((l) => !before.has(key(l)));
+}

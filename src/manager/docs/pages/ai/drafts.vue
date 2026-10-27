@@ -20,7 +20,8 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         <li>Open a wildcard and press <b>AI</b> above the options. Stay on the <b>Add</b> tab.</li>
         <li>Say what you want and how many, for example <em>8 more outfits for a rainy city at
           night</em>. Press <b>Draft</b> (Ctrl + Enter). A number in the request sets <b>How
-          many</b>; without one the box decides (10 to start).</li>
+          many</b> (<em>6 more, bolder</em> is 6; <em>one option each</em> is not a total);
+          without one the box decides (10 to start).</li>
         <li>Untick anything you don't want and press <b>Add</b>. The rest go in like pasted
           options, with new tags marked.</li>
       </ol>
@@ -35,6 +36,11 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         are the wildcard's own library tags and tags that only repeat its name. Negatives stay only
         when you ask for them or the wildcard's options already have them, and never name another
         option. What was left off is listed under the result.
+      </p>
+      <p>
+        When the model writes more than you asked for, the extra is cut evenly across the tags you
+        asked for, so "10 tagged modest, revealing or sheer" keeps some of each. Ask for tags and get
+        none back, and the model is asked once more; if it still tags nothing, a warning says so.
       </p>
       <p>
         Options can use the syntax you'd type: <code>{red|blue}</code> picks one each run, and
@@ -60,8 +66,8 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       </p>
       <DocKeyList
         :items="[
-          { term: 'Remove', desc: 'Finds options matching what you describe (\'drop anything modern\') and says why. Options other modules point at stay; delete those by hand.' },
-          { term: 'Rewrite', desc: 'Changes the wording: tags to sentences, another style, shorter, typos fixed.' },
+          { term: 'Remove', desc: 'Finds options matching what you describe (\'drop anything modern\') and says why. A removal whose own reason says the option fits is left out, and an answer that removes every option is asked once more (and warns if it still does). Options other modules point at stay; delete those by hand.' },
+          { term: 'Rewrite', desc: 'Changes the wording: tags to sentences, another style, shorter, typos fixed. Ask for Danbooru tags with a tag list installed and each rewrite names the tags the list doesn\'t have.' },
           { term: 'Retag', desc: 'Sets each option\'s tags (\'tag each by the seasons it suits\'). The new tags replace the old ones, unless the request adds (\'add an intensity tag: mild or strong\'), which keeps them.' },
           { term: 'Weights', desc: 'Makes options rarer or more common. 1 is normal, 0.5 half as likely, 2 twice, 0 never. \'Half as likely\' halves each option\'s current weight (0.1 becomes 0.05), and a change that goes the other way than you asked is left out.' },
         ]"
@@ -73,11 +79,11 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       <p>The other editors have an <b>AI</b> button too. Describe what you want in your own words:</p>
       <DocKeyList
         :items="[
-          { term: 'Derivation', desc: 'For example: when $class is mage, set $title to Archmage and add robes to $outfit. It uses the real variable and option names from your library and warns about anything nothing sets. New rules go to the end.' },
+          { term: 'Derivation', desc: 'For example: when $class is mage, set $title to Archmage and add robes to $outfit. It uses the real variable and option names from your library and warns about anything nothing sets, or that nothing reads. New rules go to the end. To change a rule you have (\'rogues should be called Shadowblade\'), it edits that rule: the card says Changes rule N, marks the new lines, and keeps the rule\'s other branches and its ELSE.' },
           { term: 'Constraint', desc: 'Pick the source and target wildcards first, then press AI on the Rule matrix. For example: mages never carry swords, warriors rarely get staves. Switch to Preview to see each option\'s chances with the ticked rules.' },
-          { term: 'Fixed values', desc: 'A style preset or quality tags, each with the negative words it should add.' },
-          { term: 'Combine', desc: 'Joins variables into one phrase. Set the output variable first.' },
-          { term: 'Template', desc: 'The Assembler prompt from your variables, plus a standing negative with $negatives.' },
+          { term: 'Fixed values', desc: 'A style preset or quality tags, each with the negative words it should add. Each value is its own row (variable, value, negative) marked New or Changed, with the old text struck through, and a tick box: only the ticked rows change.' },
+          { term: 'Combine', desc: 'Joins variables into one phrase. Set the output variable first. You see the template and its negative apart, the variables it reads (new ones dashed), and a few lines of what it prints with your own options.' },
+          { term: 'Template', desc: 'The Assembler prompt from your variables, plus a standing negative with $negatives. Name a model (Pony, Flux) and it writes in that model\'s style. The prompt and the negative each have a tick box, so you can take one and keep the other.' },
         ]"
       />
       <p>
@@ -138,7 +144,24 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
             "every" or "each" option that leaves some out is asked once more for those. A rewrite
             that would make two options the same is left out.</li>
           <li>Derivation option names are fixed to the exact spelling, since the test is
-            case-sensitive.</li>
+            case-sensitive. Rules split into "when A", "when B", "otherwise" become one rule
+            with IF / ELSE IF / ELSE, and an ELSE that would overwrite an earlier rule warns.
+            "Add 'dry ground' to $season" adds instead of replacing, and an action on
+            <code>$pose.neg</code> becomes an add-to-negative on $pose.</li>
+          <li>Fixed values: a value that repeats another word for word is left out, repeated
+            negative words are cut, and a negative word the value itself prints is dropped. A
+            value that only adds negatives is kept.</li>
+          <li>Combines and templates: <code>{name}</code> for a variable becomes
+            <code>$name</code>; a combine never reads its own variable; loop and model variables
+            ($iteration, $model_family…) are left out of the text unless you name them, since
+            they are for rules. Words like <em>bad hands</em> move to the negative, brackets that
+            don't close and repeated pieces go, a word after a variable whose options already end
+            in it goes ("$hair_color hair"), and a "short" negative is kept short. A Pony
+            template starts with the score tags; a Flux or "natural sentences" template that
+            comes back as a tag list, or one that is only variables when you asked for words
+            around them, is asked once more.</li>
+          <li>Text in another writing system than your library (a stray 曝光 in an English list)
+            is left out.</li>
           <li>Constraint rules between two tags go in the matrix, between two options become
             exceptions, and a tag paired with one option becomes an exception per option. A rule for
             a pair that already has one is marked “replaces”.</li>
