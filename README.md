@@ -172,4 +172,6 @@ PRs are welcome. [CONTRIBUTING.md](.github/CONTRIBUTING.md) explains the dev set
 
 ## License
 
-[GPL-3.0-or-later](LICENSE)
+Copyright (C) 2026 DumiFlex.
+
+Wildcard Pipeline is free software, released under the [GNU General Public License v3.0 or later](LICENSE).
