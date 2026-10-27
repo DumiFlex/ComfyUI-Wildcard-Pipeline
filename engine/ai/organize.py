@@ -10,7 +10,10 @@ library's categories and tags, and answers per item:
 
 `compile_answer` maps numbers back, drops anything that changes nothing,
 reuses the library's spelling of a category or tag it already has, and marks
-new ones. Bundles have no category, so a category for one is ignored. The
+new ones. Bundles have no category, so a category for one is ignored. An
+NSFW item is never lowered to safe, and an adult tag (#nsfw) never taken
+off, unless the request asks (bench Z15: "one adult category for these"
+came back rated Safe without #nsfw); an item given #nsfw is rated NSFW. The
 manager shows the result for review; nothing is written here.
 """
 from __future__ import annotations
@@ -19,6 +22,7 @@ import re
 from typing import Any
 
 from engine.ai import describe
+from engine.ai import ratings as ai_ratings
 
 #: Items one request may carry.
 MAX_ITEMS = 60
@@ -166,6 +170,7 @@ def _find(sid: str, by_id: dict[str, dict[str, Any]],
 
 def compile_answer(
     raw: Any, *, items: list[dict[str, Any]], categories: list[str], library: list[str],
+    request: str = "",
 ) -> dict[str, Any]:
     """Returns ``{"changes": [...], "new_categories": [...], "skipped": [...]}``.
 
@@ -240,6 +245,13 @@ def compile_answer(
                 if real not in change["tags_remove"]:
                     change["tags_remove"].append(real)
         rating = entry.get("rating")
+        rating, change["tags_remove"], held = ai_ratings.keep_nsfw(
+            it["rating"], it["tags"], rating if rating in RATINGS else None,
+            change["tags_remove"], request)
+        skipped += [{"text": it["name"], "reason": h} for h in held]
+        if it["rating"] == "safe" and ai_ratings.nsfw_tagged(
+                [a["tag"] for a in change["tags_add"]]):
+            rating = "nsfw"
         if rating in RATINGS and rating != it["rating"]:
             change["rating"] = rating
         if change["category"] or change["tags_add"] or change["tags_remove"] or change["rating"]:

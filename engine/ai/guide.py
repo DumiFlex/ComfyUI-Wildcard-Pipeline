@@ -453,13 +453,17 @@ def model_note(text: str) -> str:
 #: drops clearly minor words and flags costume words), then how
 #: such packs are built.
 NSFW = """\
-Adult pack (rated nsfw). Every character is an adult, and written so: an \
-adult age or "mature female" / "mature male" style words on each character. \
-Never a child, a teen, a character whose canon age is under 18 (even "aged \
-up"), or a real person's name or likeness. A costume the user asks for \
-(school uniform) is fine on an adult: write the adult words next to it. \
-Clearly minor words (child, loli, an age under 18) are always left out; \
-words an adult can wear too (school uniform, teen) are flagged for the user. Structure: a Rating \
+Adult pack (rated nsfw). Every character is an adult: say so once where a \
+character is introduced (woman, man, adult, an age of 18 or more); don't \
+add "mature" unless the user asks for an older look. Adult body words the \
+user asks for (petite, small breasts, slim, curvy) are fine. Never a child, \
+a teen, a character whose canon age is under 18 (even "aged up"), or a real \
+person's name or likeness, and never sex without consent (rape, forced, \
+against their will, unconscious); rough or kinky play between consenting \
+adults is fine. A costume the user asks for (school uniform) is fine on an \
+adult. Clearly minor words (child, loli, an age under 18) and non-consent \
+words are always left out; words an adult can wear too (school uniform, \
+teen) are flagged for the user. Structure: a Rating \
 wildcard used "internal" (safe, nsfw) gates explicit options by constraint, \
 so the pack makes safe images too; a clothing-state wildcard (dressed, \
 partly undressed, topless, nude) with constraints to Outfit ("only" rules: \
