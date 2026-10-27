@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import CloseButton from "@/components/shared/CloseButton.vue";
-import "@/components/shared/theme.css";
 </script>
 
 <template>
@@ -11,7 +10,7 @@ import "@/components/shared/theme.css";
       <CloseButton size="lg" />
       <CloseButton disabled />
     </div>
-    <div class="wp-kit__canvas wp-canvas-scope">
+    <div class="wp-kit__canvas">
       <p class="wp-kit__caption">Canvas, size sm</p>
       <div class="wp-kit__row"><span>Seed list</span><CloseButton size="sm" /></div>
     </div>

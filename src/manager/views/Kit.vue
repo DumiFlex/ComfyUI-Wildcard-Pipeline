@@ -128,8 +128,8 @@ const groups = computed(() =>
   display: flex; flex-direction: column; align-items: flex-start; gap: 12px; max-width: 360px; padding: 16px;
   background: var(--wp-bg-2); border: 1px solid var(--wp-border-strong); border-radius: var(--wp-radius-lg); box-shadow: var(--wp-shadow-lg); color: var(--wp-text); font-size: var(--wp-text-sm);
 }
-/* The canvas look of a shared piece: the canvas colour set (theme.css
-   .wp-canvas-scope) on a node-coloured panel. */
+/* How a shared piece sits on a node: its canvas size on a node-like panel
+   (manager colours; the canvas sheet never loads here). */
 .wp-kit__canvas {
   display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 420px; padding: 12px;
   background: var(--wp-bg); border: 1px solid var(--wp-border); border-radius: var(--wp-radius);
