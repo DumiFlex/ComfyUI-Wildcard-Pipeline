@@ -550,7 +550,10 @@ function followPop(ev: Event): void {
   if (from?.closest?.(".wp-refchip-pop")) return;
   if (!popAnchor || !popAnchor.isConnected) { hoverOpen.value = false; return; }
   const r = popAnchor.getBoundingClientRect();
-  if (r.bottom < 0 || r.top > window.innerHeight) { hoverOpen.value = false; return; }
+  if (r.bottom < 0 || r.top > window.innerHeight || r.right < 0 || r.left > window.innerWidth) {
+    hoverOpen.value = false;
+    return;
+  }
   positionPop(popAnchor);
 }
 watch(hoverOpen, (open) => {
@@ -561,6 +564,7 @@ watch(hoverOpen, (open) => {
   } else {
     window.removeEventListener("scroll", followPop, true);
     window.removeEventListener("resize", followPop);
+    popAnchor = null;
   }
 });
 

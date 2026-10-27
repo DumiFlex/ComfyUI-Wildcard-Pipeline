@@ -109,7 +109,7 @@ function bump(dir: 1 | -1): void {
   --wp-cnum-spin: 16px;
   display: inline-flex; align-items: stretch; height: var(--wp-control-h-sm); min-width: 0; overflow: hidden;
   box-sizing: border-box;
-  background: var(--wp-bg); border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm);
+  background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm);
   font-size: 11px;
   transition: border-color .12s, box-shadow .12s;
 }

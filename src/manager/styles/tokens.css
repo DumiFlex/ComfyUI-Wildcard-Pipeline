@@ -171,10 +171,11 @@
   --wp-control-h-md-base: 32px;
   --wp-control-h-lg-base: 40px;
 
-  /* Applied — multiplied by density. */
-  --wp-control-h-sm: calc(var(--wp-control-h-sm-base) * var(--wp-density));
-  --wp-control-h-md: calc(var(--wp-control-h-md-base) * var(--wp-density));
-  --wp-control-h-lg: calc(var(--wp-control-h-lg-base) * var(--wp-density));
+  /* Applied — multiplied by density, rounded to whole pixels. sm never
+     drops under the 24px manager hit target, so Compact keeps it at 24. */
+  --wp-control-h-sm: max(24px, round(calc(var(--wp-control-h-sm-base) * var(--wp-density)), 1px));
+  --wp-control-h-md: round(calc(var(--wp-control-h-md-base) * var(--wp-density)), 1px);
+  --wp-control-h-lg: round(calc(var(--wp-control-h-lg-base) * var(--wp-density)), 1px);
 
   --wp-input-h:    var(--wp-control-h-md);  /* unified input height */
   --wp-input-h-sm: var(--wp-control-h-sm);
@@ -804,19 +805,6 @@ input, textarea, select { font: inherit; }
 .wp-input-group:focus-within {
   border-color: var(--wp-accent-500);
   box-shadow: var(--wp-focus-ring);
-}
-.wp-input-group__addon {
-  display: inline-flex; align-items: center; justify-content: center;
-  padding: 0 9px;
-  color: var(--wp-text-dim);
-  background: var(--wp-bg-3);
-  border-right: 1px solid var(--wp-border);
-  font-family: var(--wp-font-mono);
-  font-size: 12.5px;
-}
-.wp-input-group__addon--right {
-  border-right: none;
-  border-left: 1px solid var(--wp-border);
 }
 /* Inline icon and prefix/suffix text: no box, no divider, sitting in the
  * field's own padding so "$" reads as part of "$hair". */
@@ -2548,7 +2536,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
    Earlier the pipeline ref-select was a native <select> styled here
    to look like inline text. We now route through the shared `Select`
    component (see `components/ui/Select.vue`), which already brings
-   its own height (28px via `--wp-input-h-sm`) + chevron + focus ring.
+   its own height (`--wp-input-h-sm`, 24px at Comfortable) + chevron + focus ring.
    The leftover `height: 26px; overflow: hidden` rule was clipping the
    new trigger by ~2px at the bottom, which read as a "cut" border on
    the pipeline row. The scoped block in PipelineSteps.vue keeps the
@@ -2896,12 +2884,6 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
 }
 
 
-/* Make input-group addon icons render at proper size (PrimeIcons default 14px) instead of inheriting the 12.5px monospace size used for text addons. */
-.wp-input-group__addon .pi {
-  font-size: 14px;
-  line-height: 1;
-}
-
 /* In picker modal, give the search bar a bit more breathing room. */
 .wp-pl-picker__body .wp-input-group {
   flex-shrink: 0;
@@ -2909,12 +2891,6 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   min-height: 38px;
 }
 .wp-pl-picker__body .wp-pl-picker__tabs { flex-shrink: 0; }
-.wp-pl-picker__body .wp-input-group__addon {
-  padding: 0 12px;
-}
-.wp-pl-picker__body .wp-input-group__addon .pi {
-  font-size: 15px;
-}
 
 /* ---------- Module-kind palette (icon + bg pairs) ----------
    Source: docs/design-handoff/wildcard-pipeline/project/data.jsx KIND_META.
@@ -2985,7 +2961,8 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
 }
 
 /* Density — applied to <html> by uiStore.setDensity(). Comfortable is the
- * default (--wp-density: 1 in :root). The store also sets control heights. */
+ * default (--wp-density: 1 in :root). Control heights and spacing scale
+ * through it; the store writes no heights inline. */
 html.wp-density-compact {
   --wp-density: 0.85;
 }

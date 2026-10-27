@@ -8,6 +8,8 @@ interface Props {
   modelValue: string;
   presets?: string[];
   ariaLabel?: string;
+  /** Swatch and chevron only, for a tight spot such as a name row. */
+  compact?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -17,6 +19,7 @@ const props = withDefaults(defineProps<Props>(), {
     "#6366f1", "#10b981", "#f59e0b", "#8b5cf6",
   ],
   ariaLabel: undefined,
+  compact: false,
 });
 
 const emit = defineEmits<{
@@ -72,6 +75,7 @@ function isActivePreset(preset: string): boolean {
         v-bind="triggerProps"
         type="button"
         class="wp-color-picker__trigger"
+        :class="{ 'wp-color-picker__trigger--compact': compact }"
         :aria-label="swatchAriaLabel"
         data-test="color-trigger"
       >
@@ -81,7 +85,7 @@ function isActivePreset(preset: string): boolean {
           data-test="color-swatch"
           aria-hidden="true"
         />
-        <span class="wp-color-picker__value" aria-hidden="true">{{ shownHex }}</span>
+        <span v-if="!compact" class="wp-color-picker__value" aria-hidden="true">{{ shownHex }}</span>
         <i class="pi pi-chevron-down wp-color-picker__caret" aria-hidden="true" />
       </button>
     </template>
@@ -134,6 +138,7 @@ function isActivePreset(preset: string): boolean {
   cursor: pointer;
   transition: border-color 0.12s, box-shadow 0.12s;
 }
+.wp-color-picker__trigger--compact { min-width: 0; padding: 0 var(--wp-space-3) 0 var(--wp-space-2); gap: var(--wp-space-2); }
 .wp-color-picker__trigger:hover { border-color: var(--wp-border-strong); }
 .wp-color-picker__trigger:focus-visible { outline: none; border-color: var(--wp-accent-500); box-shadow: var(--wp-focus-ring); }
 .wp-color-picker__swatch {

@@ -347,5 +347,5 @@ function moveAxis(uid: string, dir: -1 | 1): void {
 }
 
 .wp-sweep__add { width: 100%; height: 22px; }
-.wp-sweep__limit-wrap { width: 64px; }
+.wp-sweep__limit-wrap { width: 64px; height: 20px; }
 </style>
