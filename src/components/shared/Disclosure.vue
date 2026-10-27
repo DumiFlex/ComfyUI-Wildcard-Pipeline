@@ -11,7 +11,8 @@
  *
  * Leave out `v-model:open` and it keeps its own state (`default-open` sets
  * where it starts). `#actions` sits at the right end of the heading, outside
- * the button, for controls that should not fold the section.
+ * the button, for controls that should not fold the section. `lazy` builds
+ * the body only while it is open.
  */
 import { computed, ref, useId, useSlots } from "vue";
 
@@ -26,7 +27,11 @@ const props = withDefaults(defineProps<{
   disabled?: boolean;
   /** Draw a border and a padded body, for a section that stands alone. */
   boxed?: boolean;
-}>(), { open: undefined, size: "md" });
+  /** Build the body only while open (a long list, a costly panel). */
+  lazy?: boolean;
+  /** Extra attributes on the heading button, e.g. `data-test`. */
+  triggerAttrs?: Record<string, string>;
+}>(), { open: undefined, size: "md", triggerAttrs: undefined });
 
 const emit = defineEmits<{ (e: "update:open", v: boolean): void }>();
 const slots = useSlots();
@@ -47,6 +52,7 @@ function toggle(): void {
   <div class="wp-disclosure" :data-size="size" :data-open="isOpen" :data-boxed="boxed || undefined">
     <div class="wp-disclosure__head">
       <button
+        v-bind="triggerAttrs ?? {}"
         type="button"
         class="wp-disclosure__trigger"
         :aria-expanded="isOpen"
@@ -64,7 +70,7 @@ function toggle(): void {
     </div>
     <div :id="bodyId" class="wp-disclosure__body" :inert="!isOpen || undefined">
       <div class="wp-disclosure__inner">
-        <div class="wp-disclosure__content"><slot /></div>
+        <div v-if="isOpen || !lazy" class="wp-disclosure__content"><slot /></div>
       </div>
     </div>
   </div>

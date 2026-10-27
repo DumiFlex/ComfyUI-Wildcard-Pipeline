@@ -103,6 +103,13 @@ describe("Disclosure", () => {
     expect(w.emitted("update:open")).toEqual([[true]]);
   });
 
+  it("builds a lazy body only while open, and passes attributes to the heading", async () => {
+    const w = mount(Disclosure, { props: { label: "A", lazy: true, triggerAttrs: { "data-test": "t" } }, slots: { default: "<p class='x'>in</p>" } });
+    expect(w.find(".x").exists()).toBe(false);
+    await w.find("[data-test=t]").trigger("click");
+    expect(w.find(".x").exists()).toBe(true);
+  });
+
   it("follows v-model:open", async () => {
     const w = mount(Disclosure, { props: { label: "A", open: true } });
     expect(w.find("button").attributes("aria-expanded")).toBe("true");
