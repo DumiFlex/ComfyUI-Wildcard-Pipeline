@@ -112,6 +112,8 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         every frame of its Loop. An item the code wrote from the plan (a constraint, derivation or
         template on a graph plan) has <b>Change the plan</b> instead of Fix with AI, since a rebuild
         would write the same thing. A problem marked <b>still</b> after a fix says why under it.
+        <b>Fix all with AI</b> under the test run rebuilds every item with a problem at once, each
+        with its problems as the note (wildcards first, then the rules on them), and tests again.
       </p>
       <p>
         The quick checks under the plan only look at names: an empty list means every rule names
@@ -126,7 +128,8 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
           parts, one wildcard each, to make more like it.</li>
         <li><b>Extend with AI</b> in a bundle's editor opens the Pack builder on that bundle:
           describe what to add ("a weather wildcard the outfits follow"). New items are installed
-          where they belong, and Undo puts the bundle back.</li>
+          where they belong, and Undo puts the bundle back. <b>Add to the bundle</b> waits until at
+          least one new item (not just the template) has built.</li>
         <li><b>Make sub-bundles</b> in a bundle's editor groups its children by a name you type, pick
           or let <b>Suggest with AI</b> choose. The AI only groups children that sit next to each
           other, so the run order stays the same.</li>
