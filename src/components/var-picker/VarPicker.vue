@@ -218,7 +218,7 @@ function onSearchKeydown(ev: KeyboardEvent): void {
   color: var(--wp-text-muted, #aeb1bb);
 }
 .wp-var-picker__opt:hover { background: rgba(196, 181, 253, 0.1); color: var(--wp-text); }
-.wp-var-picker__opt--active { background: color-mix(in srgb, var(--wp-accent, #6366f1) 18%, transparent); color: var(--wp-accent-text, #a5b4fc); }
+.wp-var-picker__opt--active { background: color-mix(in srgb, var(--wp-accent) 18%, transparent); color: var(--wp-accent-text, #a5b4fc); }
 .wp-var-picker__empty {
   padding: 6px 8px;
   font-style: italic;
