@@ -19,6 +19,13 @@ describe("chat-markdown inline", () => {
     expect(parseInline("hair_color is 2 * 3")).toEqual([text("hair_color is 2 * 3")]);
   });
 
+  it("reads a mention in backticks as a mention, other code as code", () => {
+    expect(parseInline("see `[[Hair Color]]` and ` [[a1b2c3d4#Eyes]] ` or `[[x]] y`")).toEqual([
+      { t: "text", v: "see " }, { t: "ref", v: "Hair Color" }, { t: "text", v: " and " },
+      { t: "ref", v: "a1b2c3d4#Eyes" }, { t: "text", v: " or " }, { t: "code", v: "[[x]] y" },
+    ]);
+  });
+
   it("keeps __wildcard__ syntax as written", () => {
     expect(parseInline("use __hair__ here")).toEqual([text("use __hair__ here")]);
   });

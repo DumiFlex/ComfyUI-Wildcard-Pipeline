@@ -77,3 +77,18 @@ def test_warnings_that_only_inform_are_notes_without_ask_to_fix():
     first = p["warnings"][0]
     assert first.startswith("Builds on the earlier change")
     assert p["notes"] == [first]
+
+
+def test_names_in_code_spans_become_chips():
+    """#2: `[[Name]]` and `Name` in backticks stayed plain code."""
+    lib = _lib()
+    assert lib.link_items("Open `[[Weapon]]` or `Class`.") == \
+        "Open [[aaaa0001#Weapon]] or [[aaaa0004#Class]]."
+    # Two items share it, or it names none: left as written.
+    assert lib.link_items("`Hair` and `$weapon`") == "`Hair` and `$weapon`"
+
+
+def test_message_refs_carry_the_category():
+    modules = [{**_w("aaaa0001", "Weapon", "weapon"), "category_id": "cat1"}]
+    refs = chat.Library(modules, [], [], []).message_refs("[[aaaa0001#Weapon]]")
+    assert refs["aaaa0001#Weapon"]["category"] == "cat1"

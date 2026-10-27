@@ -3,6 +3,9 @@
  * One assistant message: its Markdown (see `utils/chat-markdown.ts`) drawn
  * with plain elements, and [[Name]] mentions as chips that open the item.
  * A mention the server couldn't match to an item stays a plain label.
+ * A list of three or more items, each opening with a mention, is drawn as
+ * a compact item list: kind icon, name and category chip, then the rest
+ * of the line.
  *
  * Prompt syntax in the text is coloured the way the editors colour it
  * (`utils/chat-syntax.ts`, shared with the cards). A line opening with "Tip:", "Note:" or "Warning:" is a callout,
@@ -20,6 +23,8 @@
 import { computed, h, ref, watch, type VNode } from "vue";
 import { useRouter } from "vue-router";
 import { deletedIds } from "../../composables/useLibraryChanged";
+import { useCardViewContext } from "../../composables/card-views/context";
+import CategoryChip from "../CategoryChip.vue";
 import { KIND_ICON_MAP } from "../../../components/shared/kind-icons";
 import type { AiChatRef } from "../../api/types";
 import { closeOpen, parseMarkdown, type Block, type Inline, type ListItem, type Tone } from "../../utils/chat-markdown";
@@ -227,6 +232,44 @@ function table(b: Extract<Block, { t: "table" }>): VNode {
   ]);
 }
 
+/* ── Item lists ──────────────────────────────────────────────────────── */
+
+const ITEM_LIST_MIN = 3;
+const lookups = useCardViewContext();
+
+function categoryChip(id: string | undefined): VNode | null {
+  if (!id) return null;
+  let c: ReturnType<NonNullable<typeof lookups.category>> = null;
+  try { c = lookups.category?.(id) ?? null; } catch { c = null; }
+  return c ? h(CategoryChip, { name: c.name, color: c.color, icon: c.icon, class: "wp-ai-msg__item-cat" }) : null;
+}
+
+/** Each item of a list as its mention and the words after it, when every
+ *  item is one line opening with a mention of a real item. */
+function itemRows(items: ListItem[]): Array<{ ref: string; rest: Inline[] }> | null {
+  if (items.length < ITEM_LIST_MIN) return null;
+  const rows: Array<{ ref: string; rest: Inline[] }> = [];
+  for (const it of items) {
+    const b = it.blocks;
+    if (it.task !== null || b.length !== 1 || b[0].t !== "p") return null;
+    const [first, ...rest] = b[0].c;
+    if (first?.t !== "ref" || !props.refs?.[unmark(first.v)]?.id) return null;
+    // "— a wildcard of …", ": …", "- …": the joiner goes, the words stay.
+    if (rest[0]?.t === "text") rest[0] = { t: "text", v: rest[0].v.replace(/^\s*(?:[—–:-]\s*)?/, "") };
+    rows.push({ ref: first.v, rest: rest.filter((n) => n.t !== "text" || n.v) });
+  }
+  return rows;
+}
+
+function itemList(rows: Array<{ ref: string; rest: Inline[] }>, ordered: boolean): VNode {
+  return h(ordered ? "ol" : "ul", { class: "wp-ai-msg__items", "data-test": "ai-msg-items" }, rows.map((r) =>
+    h("li", { class: "wp-ai-msg__item" }, [
+      chip(r.ref),
+      categoryChip(props.refs?.[unmark(r.ref)]?.category),
+      r.rest.length ? h("span", { class: "wp-ai-msg__item-rest" }, inline(r.rest)) : null,
+    ])));
+}
+
 function item(it: ListItem): VNode {
   const body = it.blocks.map(block);
   if (it.task === null) return h("li", body);
@@ -290,10 +333,13 @@ function block(b: Block): VNode {
     }
     // Message headings sit under the drawer's own, so they start at h3.
     case "h": return h(`h${Math.min(6, b.level + 2)}`, { class: "wp-ai-msg__h", "data-level": b.level }, inline(b.c));
-    case "list":
+    case "list": {
+      const rows = itemRows(b.items);
+      if (rows) return itemList(rows, b.ordered);
       return b.ordered
         ? h("ol", b.start !== 1 ? { start: b.start } : {}, b.items.map(item))
         : h("ul", b.items.map(item));
+    }
     case "pre": return pre(b.lang, b.v);
     case "quote": {
       if (b.tone) return calloutBlocks(b.tone, b.blocks);
@@ -419,6 +465,15 @@ const Body = () => {
 @media (prefers-reduced-motion: reduce) {
   .wp-ai-msg--live :deep(.wp-ai-msg__new), .wp-ai-msg--live > :deep(:last-child:not(.wp-ai-msg__codeblock)) { animation: none; }
 }
+.wp-ai-msg :deep(.wp-ai-msg__items) {
+  list-style: none; padding: 4px; gap: 0; border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm);
+}
+.wp-ai-msg :deep(.wp-ai-msg__item) {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; padding: 3px 4px; border-radius: var(--wp-radius-sm);
+}
+.wp-ai-msg :deep(.wp-ai-msg__item + .wp-ai-msg__item) { border-top: 1px solid var(--wp-border); border-radius: 0; }
+.wp-ai-msg :deep(.wp-ai-msg__item-cat) { font-size: 11px; }
+.wp-ai-msg :deep(.wp-ai-msg__item-rest) { flex: 1 1 12em; min-width: 0; color: var(--wp-text-muted); font-size: 12.5px; }
 .wp-ai-msg :deep(.wp-ai-msg__chip[data-missing]) { cursor: default; color: var(--wp-text-muted); background: transparent; border-color: var(--wp-border); }
 .wp-ai-msg :deep(.wp-ai-msg__chip[data-deleted]) { text-decoration: line-through; }
 .wp-ai-msg :deep(.wp-ai-msg__chip[data-pending]) { cursor: default; border-style: dashed; }

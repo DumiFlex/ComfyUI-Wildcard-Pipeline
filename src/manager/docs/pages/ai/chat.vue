@@ -242,8 +242,13 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       <DocDetails>
         <p>
           <b>Replies.</b> Replies use Markdown: headings, lists, tables, quotes and code blocks with
-          a copy button. Prompt syntax is coloured like in the editors, every item it mentions is a
-          chip you can click, and lines starting "Tip:" or "Warning:" (or a GitHub-style
+          a copy button. Prompt syntax is coloured like in the editors: a variable in its own
+          colour with <code>.0</code> / <code>.SHOES</code> in amber and <code>.neg</code> in red,
+          and a variable the run sets (<code>$iteration</code>, <code>$model_family</code> and the
+          other WP Model Info ones) underlined dotted, since rules can read it but nothing writes it.
+          Every item it mentions is a chip you can click, also when the model wrote the name in
+          backticks, and a list of three or more items shows as an item list with each item's
+          category. Lines starting "Tip:" or "Warning:" (or a GitHub-style
           <code>[!NOTE]</code> alert) stand out. Links show as text and are never opened. Code blocks
           over 20 lines are folded.
         </p>
