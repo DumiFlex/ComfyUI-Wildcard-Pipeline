@@ -9,7 +9,7 @@
  */
 import { ref } from "vue";
 import Button from "./ui/Button.vue";
-import Icon from "./ui/Icon.vue";
+import Banner from "@/components/shared/Banner.vue";
 import ConfirmModal from "./ui/ConfirmModal.vue";
 import { useStaleStore } from "../stores/staleStore";
 import { useSystemStore } from "../stores/systemStore";
@@ -33,37 +33,36 @@ function onRestartCancelled() {
 
 <template>
   <Transition name="wp-stale-fade">
-    <div
+    <Banner
       v-if="stale.isStale"
       class="wp-stale"
-      role="status"
-      aria-live="polite"
+      tone="warn"
+      icon="pi-refresh"
       data-test="stale-banner"
     >
-      <Icon name="pi-refresh" />
-      <span class="wp-stale__msg">
-        <template v-if="stale.newVersion">
-          Wildcard Pipeline was updated to v{{ stale.newVersion }}. Reload to use the new version.
-        </template>
-        <template v-else>ComfyUI has restarted. This page may be out of date.</template>
-      </span>
-      <Button
-        variant="primary"
-        size="sm"
-        icon="pi-refresh"
-        data-test="stale-reload"
-        @click="() => stale.reload()"
-      >Reload page</Button>
-      <Button
-        v-if="system.canRestart"
-        variant="secondary"
-        size="sm"
-        icon="pi-power-off"
-        :loading="system.restarting"
-        data-test="stale-restart"
-        @click="askRestart"
-      >Restart ComfyUI</Button>
-    </div>
+      <template v-if="stale.newVersion">
+        Wildcard Pipeline was updated to v{{ stale.newVersion }}. Reload to use the new version.
+      </template>
+      <template v-else>ComfyUI has restarted. This page may be out of date.</template>
+      <template #actions>
+        <Button
+          variant="primary"
+          size="sm"
+          icon="pi-refresh"
+          data-test="stale-reload"
+          @click="() => stale.reload()"
+        >Reload page</Button>
+        <Button
+          v-if="system.canRestart"
+          variant="secondary"
+          size="sm"
+          icon="pi-power-off"
+          :loading="system.restarting"
+          data-test="stale-restart"
+          @click="askRestart"
+        >Restart ComfyUI</Button>
+      </template>
+    </Banner>
   </Transition>
 
   <ConfirmModal
@@ -78,22 +77,15 @@ function onRestartCancelled() {
 </template>
 
 <style scoped>
+/* A full-width bar pinned to the top of the page, not a card. */
 .wp-stale {
   position: sticky;
   top: 0;
   z-index: 50;
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-4);
-  padding: var(--wp-space-4) var(--wp-space-6);
-  background: color-mix(in oklab, var(--wp-warn) 16%, var(--wp-bg-1));
-  border-bottom: 1px solid color-mix(in oklab, var(--wp-warn) 40%, transparent);
-  color: var(--wp-text);
-  font-size: var(--wp-text-sm);
+  border-width: 0 0 1px;
+  border-radius: 0;
   box-shadow: var(--wp-elev-1);
 }
-.wp-stale .pi { color: var(--wp-warn); font-size: 16px; }
-.wp-stale__msg { flex: 1; }
 
 .wp-stale-fade-enter-active,
 .wp-stale-fade-leave-active {

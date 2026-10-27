@@ -6,8 +6,9 @@
  * stored draft exists for the current item. Lifts the identical 8-line
  * template that previously lived in each of the six editors, plus the
  * Transition wrapper so the banner fades-down on enter and out on leave.
+ * Drawn by the kit Banner (tone info).
  */
-import Icon from "./ui/Icon.vue";
+import Banner from "@/components/shared/Banner.vue";
 import Button from "./ui/Button.vue";
 import { formatDraftAge } from "../composables/useEditorDraft";
 
@@ -27,17 +28,18 @@ const emit = defineEmits<{
 
 <template>
   <Transition name="wp-banner">
-    <div
+    <Banner
       v-if="hasDraft"
-      class="wp-draft-banner"
-      role="status"
+      tone="info"
+      icon="pi-clock"
+      size="sm"
       data-test="draft-banner"
     >
-      <Icon name="pi-clock" />
-      <span>Unsaved draft from {{ formatDraftAge(ageMs) }}.</span>
-      <span class="wp-spacer" />
-      <Button variant="primary" size="sm" @click="emit('restore')">Restore</Button>
-      <Button variant="ghost" size="sm" @click="emit('discard')">Discard</Button>
-    </div>
+      Unsaved draft from {{ formatDraftAge(ageMs) }}.
+      <template #actions>
+        <Button variant="primary" size="sm" @click="emit('restore')">Restore</Button>
+        <Button variant="ghost" size="sm" @click="emit('discard')">Discard</Button>
+      </template>
+    </Banner>
   </Transition>
 </template>

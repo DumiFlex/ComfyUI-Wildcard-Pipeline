@@ -17,6 +17,7 @@
  *   - `expansion`             — body of the expanded-row drawer
  */
 import SearchInput from "@/components/shared/SearchInput.vue";
+import Banner from "@/components/shared/Banner.vue";
 import { computed, defineAsyncComponent, nextTick, ref, watch, useSlots } from "vue";
 import { useRouter } from "vue-router";
 import Button from "./ui/Button.vue";
@@ -1044,25 +1045,23 @@ defineExpose({
          `fetch` event the toolbar's Refresh control uses. Wrapped in a
          Transition so retry-success doesn't snap the banner away. -->
     <Transition name="wp-banner">
-      <div
+      <Banner
         v-if="loadError"
-        class="wp-load-error"
-        role="alert"
+        tone="danger"
+        title="Couldn't load items"
         data-test="load-error-banner"
       >
-        <i class="pi pi-exclamation-triangle wp-load-error__icon" aria-hidden="true" />
-        <div class="wp-load-error__body">
-          <strong class="wp-load-error__title">Couldn't load items</strong>
-          <span class="wp-load-error__detail">{{ loadError }}</span>
-        </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          icon="pi-refresh"
-          data-test="load-error-retry"
-          @click="emitFetch"
-        >Retry</Button>
-      </div>
+        {{ loadError }}
+        <template #actions>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="pi-refresh"
+            data-test="load-error-retry"
+            @click="emitFetch"
+          >Retry</Button>
+        </template>
+      </Banner>
     </Transition>
 
     <!-- Table. Keyboard nav lives on the SCROLL WRAPPER, not the <tbody>:
