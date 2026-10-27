@@ -43,11 +43,11 @@ export const KIT_ENTRIES: KitEntry[] = [
   // Actions
   {
     id: "button", name: "Button", group: "actions", file: "src/manager/components/ui/Button.vue", surfaces: ["manager"],
-    use: "Every button in the manager. Primary for the one main action on a surface, secondary by default, ghost for quiet toolbar actions, danger for deletes, link for inline actions. Leave out the text for an icon button and give it an aria-label.",
+    use: "Every button in the manager. Primary for the one main action on a surface, secondary by default, ghost for quiet toolbar actions, danger for deletes, link for inline actions. Leave out the text for an icon button and give it an aria-label. Sizes sm 24 / md 32 / lg 40; outline is a neutral bordered ghost; loading keeps its colours with the sparkle in the label colour; disabled fades.",
     instead: "A <button> with its own class and colours.",
   },
   {
-    id: "btn-css", name: "Button classes (.wp-btn)", group: "actions", file: "src/manager/styles/tokens.css", surfaces: ["manager", "canvas"],
+    id: "btn-css", name: "Button classes (.wp-btn)", group: "actions", file: "src/components/shared/button.css", surfaces: ["manager", "canvas"],
     use: "The same look on a plain <button> where the Button component can't go: inside a canvas widget, or a router-link that must stay an <a>.",
   },
   // Inputs
@@ -67,7 +67,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "select", name: "Select", group: "inputs", file: "src/manager/components/ui/Select.vue", surfaces: ["manager"],
-    use: "Pick one value from a list in the manager. It filters as you type and can be cleared.",
+    use: "Pick one value from a list in the manager. It filters as you type and can be cleared (the ✕ shows on hover or focus, set apart from the chevron). The list follows the field when the page scrolls.",
     instead: "A native <select>, which can't be themed in the dark.",
   },
   {
@@ -76,7 +76,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "wp-number", name: "WpNumber", group: "inputs", file: "src/components/shared/WpNumber.vue", surfaces: ["canvas", "manager"],
-    use: "Every number field. It has our up and down arrows, steps with the keys and the wheel, and clamps to min and max.",
+    use: "Every number field. It has our up and down arrows, steps with the keys and the wheel, and clamps to min and max. size sm (24, canvas default) / md (32, manager) / lg (40); suffix shows a unit.",
     instead: "<input type=\"number\"> with the browser's spinner.",
   },
   {
@@ -86,7 +86,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "color-picker", name: "ColorPicker", group: "inputs", file: "src/manager/components/ColorPicker.vue", surfaces: ["manager"],
-    use: "Pick a colour from presets or type a hex, as categories do.",
+    use: "Pick a colour from presets, the HSV square or a typed hex, as categories do. The closed picker shows the swatch, the hex and a chevron; the panel is a kit Popover.",
   },
   {
     id: "hsv-picker", name: "HsvPicker", group: "inputs", file: "src/components/shared/HsvPicker.vue", surfaces: ["canvas", "manager"],
@@ -95,7 +95,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   // Choice
   {
     id: "checkbox", name: "Checkbox", group: "choice", file: "src/manager/components/ui/Checkbox.vue", surfaces: ["manager"],
-    use: "Tick one item, or one row in a list. Supports a mixed state for \"some selected\".",
+    use: "Tick one item, or one row in a list. Supports a mixed state for \"some selected\". Disabled turns grey with a dimmed label.",
     instead: "<input type=\"checkbox\"> drawn by the browser.",
   },
   {
@@ -108,7 +108,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "radio", name: "Radio (.wp-radio)", group: "choice", file: "src/manager/styles/tokens.css", surfaces: ["manager"],
-    use: "One of a few options that all need to be visible. A real radio input with the class wp-radio, so arrow keys work.",
+    use: "One of a few options that all need to be visible. A real radio input with the class wp-radio, so arrow keys work. Disabled turns grey.",
   },
   {
     id: "tabs", name: "Tabs (.wp-tabs)", group: "choice", file: "src/manager/styles/tokens.css", surfaces: ["manager"],
@@ -118,11 +118,11 @@ export const KIT_ENTRIES: KitEntry[] = [
   // Display
   {
     id: "card", name: "Card", group: "display", file: "src/manager/components/ui/Card.vue", surfaces: ["manager"],
-    use: "A panel with an optional title row. Editors and settings are made of these.",
+    use: "A panel with an optional title row (the card's name, 14px semibold). Editors and settings are made of these.",
   },
   {
     id: "chip", name: "Chip", group: "display", file: "src/manager/components/ui/Chip.vue", surfaces: ["manager"],
-    use: "A short label: a tag, a status, a count. Tones carry meaning (success, warn, danger, info); a colour prop tints it for a category or kind.",
+    use: "A short label: a tag, a status, a count. Tones carry meaning (success, warn, danger, info); a colour prop tints it for a category or kind. removable adds a plain ✕ that keeps the chip's height.",
   },
   {
     id: "category-chip", name: "CategoryChip", group: "display", file: "src/manager/components/CategoryChip.vue", surfaces: ["manager"],
@@ -139,7 +139,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "empty-state", name: "EmptyState", group: "display", file: "src/manager/components/ui/EmptyState.vue", surfaces: ["manager"],
-    use: "A page or list with nothing in it yet: say what goes here and offer the one action that fills it.",
+    use: "A page or list with nothing in it yet: say what goes here and offer the one action that fills it. size page (an empty list page), panel (the default, in a card or panel) or inline (one row).",
   },
   // Feedback
   {
@@ -152,7 +152,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "loading-mark", name: "LoadingMark", group: "feedback", file: "src/components/shared/LoadingMark.vue", surfaces: ["manager", "canvas"],
-    use: "Anything busy. Give it a label, or slot text for a \"Loading bundle…\" row; block fills an empty panel.",
+    use: "Anything busy. Inline (a text row, a button, a list item) it draws the AI sparkle; a block (a page or panel that is loading) draws the full logo animation. Give it a label, or slot text for a \"Loading bundle…\" row; mono draws it in the text colour.",
     instead: "A spinner or plain \"Loading…\" text.",
   },
   {
@@ -230,7 +230,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "icon-picker", name: "IconPicker", group: "pieces", file: "src/manager/components/IconPicker.vue", surfaces: ["manager"],
-    use: "Pick an icon for a category or bundle from the curated set.",
+    use: "Pick an icon for a category or bundle from the curated set. The closed picker names the icon (or says Choose icon); compact drops the name for a table cell. The panel is a kit Popover.",
   },
   // Brand
   {

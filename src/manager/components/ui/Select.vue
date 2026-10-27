@@ -121,22 +121,24 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   document.removeEventListener("mousedown", onDocClick, true);
-  window.removeEventListener("scroll", closeOnScroll, true);
+  window.removeEventListener("scroll", followOnScroll, true);
   window.removeEventListener("resize", reposition);
 });
 
-function closeOnScroll(e: Event) {
-  // Capture-phase listener catches every scroll in the page so the menu
-  // closes when the user scrolls the *outer* layout (their attention has
-  // clearly moved). The one event we MUST ignore is the menu's own
-  // overflow:auto scroll — without this guard, the first wheel/touch on
-  // a long option list closes the menu on the first scroll-pixel and
-  // the scrollbar appears non-functional.
+/** Any scroll in the page moves the menu with its trigger (like every kit
+ *  overlay), instead of closing it or leaving it where the trigger used to
+ *  be. Only once the trigger has scrolled right out of view does it close. */
+function followOnScroll(e: Event) {
+  // The menu's own list scroll changes nothing about where it sits.
   const t = e.target as Element | null;
-  if (t && typeof t.closest === "function" && t.closest(".wp-select__menu")) {
+  if (t && typeof t.closest === "function" && t.closest(".wp-select__menu")) return;
+  if (!open.value || !btnRef.value) return;
+  const r = btnRef.value.getBoundingClientRect();
+  if (r.bottom < 0 || r.top > window.innerHeight || r.right < 0 || r.left > window.innerWidth) {
+    open.value = false;
     return;
   }
-  open.value = false;
+  computeMenuStyle();
 }
 function reposition() {
   if (!open.value || !btnRef.value) return;
@@ -190,7 +192,7 @@ function computeMenuStyle() {
 watch(open, (v) => {
   if (!v) {
     query.value = "";
-    window.removeEventListener("scroll", closeOnScroll, true);
+    window.removeEventListener("scroll", followOnScroll, true);
     window.removeEventListener("resize", reposition);
     return;
   }
@@ -200,7 +202,7 @@ watch(open, (v) => {
   // Highlight currently-selected option (or first).
   const idx = props.options.findIndex((o) => o.value === props.modelValue);
   active.value = idx >= 0 ? idx : 0;
-  window.addEventListener("scroll", closeOnScroll, true);
+  window.addEventListener("scroll", followOnScroll, true);
   window.addEventListener("resize", reposition);
 });
 
@@ -517,7 +519,10 @@ function onKeydown(e: KeyboardEvent) {
   opacity: 0; transition: opacity .12s, color .12s;
 }
 .wp-select__clear::after { content: ""; position: absolute; inset: -3px; }
-.wp-select__clear + .wp-select__chevron { padding-left: 8px; border-left: 1px solid var(--wp-border); }
+.wp-select__clear + .wp-select__chevron {
+  align-self: stretch; display: inline-flex; align-items: center;
+  margin: 6px 0 6px 6px; padding-left: 8px; border-left: 1px solid var(--wp-border);
+}
 .wp-select:hover .wp-select__clear,
 .wp-select:focus-visible .wp-select__clear,
 .wp-select:focus .wp-select__clear,

@@ -30,6 +30,31 @@ describe("Select.vue", () => {
     wrap.unmount();
   });
 
+  it("follows its trigger when the page scrolls instead of closing", async () => {
+    const wrap = mount(Select, {
+      props: { modelValue: null, options: opts },
+      attachTo: document.body,
+    });
+    const trigger = wrap.get("[data-test='select-trigger']");
+    let top = 100;
+    (trigger.element as HTMLElement).getBoundingClientRect = () =>
+      ({ top, bottom: top + 32, left: 20, right: 220, width: 200, height: 32, x: 20, y: top, toJSON: () => ({}) });
+    await trigger.trigger("click");
+    const menu = () => document.querySelector<HTMLElement>(".wp-select__menu");
+    expect(menu()?.style.top).toBe("136px");
+    top = 60;
+    window.dispatchEvent(new Event("scroll"));
+    await nextTick();
+    expect(menu()).not.toBeNull();
+    expect(menu()?.style.top).toBe("96px");
+    // Scrolled right out of view: nothing left to follow, so it closes.
+    top = -200;
+    window.dispatchEvent(new Event("scroll"));
+    await nextTick();
+    expect(menu()).toBeNull();
+    wrap.unmount();
+  });
+
   it("Enter on highlighted option emits update:modelValue", async () => {
     const wrap = mount(Select, {
       props: { modelValue: null, options: opts },

@@ -86,6 +86,7 @@ const ICON_PX = { page: 40, panel: 26, inline: 16 } as const;
 }
 .wp-empty__headline {
   margin: 0;
+  color: var(--wp-text);
   font-size: var(--wp-text-md);
   line-height: var(--wp-line-md, 1.4);
   font-weight: var(--wp-weight-semibold);

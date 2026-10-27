@@ -295,6 +295,7 @@ async function saveEdit() {
               <template v-if="editing && editing.id === row.id">
                 <IconPicker
                   v-model="editing.icon"
+                  compact
                   :aria-label="`Edit icon for ${row.name}`"
                   :data-test="`cat-icon-picker-${row.id}`"
                 />
