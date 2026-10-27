@@ -99,9 +99,11 @@ export const SWATCH_PREVIEW: Record<Exclude<AccentName, "custom">, string> = {
   amber:  ACCENT_PALETTES.amber["--wp-accent-500"],
 };
 
-export const DEFAULT_CUSTOM_HEX = ACCENT_PALETTES.violet["--wp-accent-500"];
+/** Orbit's accent: the logo indigo. */
+export const DEFAULT_ACCENT: Exclude<AccentName, "custom"> = "indigo";
+export const DEFAULT_CUSTOM_HEX = ACCENT_PALETTES[DEFAULT_ACCENT]["--wp-accent-500"];
 
-export const ACCENT_OPTIONS: Array<Exclude<AccentName, "custom">> = ["violet", "indigo", "teal", "rose", "amber"];
+export const ACCENT_OPTIONS: Array<Exclude<AccentName, "custom">> = ["indigo", "violet", "teal", "rose", "amber"];
 export const DENSITY_OPTIONS: Density[]   = ["compact", "comfortable", "cozy"];
 
 function hexToHsl(hex: string): { h: number; s: number; l: number } | null {
@@ -147,7 +149,7 @@ function hslToHex(h: number, s: number, l: number): string {
 
 /** Derive a 50→900 palette from a single "500" hex via HSL lightness
  *  walks. Saturation stays anchored so the ramp reads as one family
- *  rather than five unrelated colors. Falls back to the violet default
+ *  rather than five unrelated colors. Falls back to the indigo default
  *  if the hex doesn't parse. */
 export function paletteFromHex(hex: string): Record<string, string> {
   const hsl = hexToHsl(hex) ?? hexToHsl(DEFAULT_CUSTOM_HEX);
@@ -177,6 +179,10 @@ interface PersistedShape {
   /** Legacy — density now lives in the ui store, which reads this once. */
   density?: Density;
   sidebarMode?: SidebarMode;
+  /** True once the user picked an accent. Before Orbit, "violet" was the
+   *  default and got saved with any other tweak, so an unpicked "violet"
+   *  is read as the new default. */
+  accentPicked?: boolean;
 }
 
 function readStored(): PersistedShape {
@@ -205,7 +211,10 @@ function hasDocument(): boolean {
 export const useTweaksStore = defineStore("tweaks", () => {
   const stored = readStored();
 
-  const accent      = ref<AccentName>(stored.accent ?? "violet");
+  const accentPicked = ref<boolean>(stored.accentPicked === true);
+  const accent      = ref<AccentName>(
+    stored.accent && (stored.accent !== "violet" || accentPicked.value) ? stored.accent : DEFAULT_ACCENT,
+  );
   const customHex   = ref<string>(stored.customHex ?? DEFAULT_CUSTOM_HEX);
   // Density moved to the ui store (one setting, shown on the Settings page
   // and here). This panel still offers it as a quick control.
@@ -241,6 +250,7 @@ export const useTweaksStore = defineStore("tweaks", () => {
   }
 
   function setAccent(name: AccentName) {
+    accentPicked.value = true;
     accent.value = name;
     applyAccent(name);
   }
@@ -267,7 +277,8 @@ export const useTweaksStore = defineStore("tweaks", () => {
   }
 
   function reset() {
-    accent.value = "violet";
+    accent.value = DEFAULT_ACCENT;
+    accentPicked.value = false;
     customHex.value = DEFAULT_CUSTOM_HEX;
     ui.setDensity("comfortable");
     sidebarMode.value = "expanded";
@@ -289,9 +300,9 @@ export const useTweaksStore = defineStore("tweaks", () => {
 
   // Persist on every change to a tracked field.
   watch(
-    [accent, customHex, sidebarMode],
-    ([a, c, s]) => {
-      writeStored({ accent: a, customHex: c, sidebarMode: s });
+    [accent, customHex, sidebarMode, accentPicked],
+    ([a, c, s, p]) => {
+      writeStored({ accent: a, customHex: c, sidebarMode: s, accentPicked: p || undefined });
     },
   );
 

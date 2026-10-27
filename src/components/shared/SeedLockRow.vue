@@ -105,18 +105,18 @@ function onSeed(n: number) {
   background:
     repeating-linear-gradient(
       to bottom,
-      var(--wp-accent, #c4b5fd) 0 4px,
+      var(--wp-accent, #6366f1) 0 4px,
       transparent 4px 8px
     ) left / 3px 100% no-repeat,
-    color-mix(in srgb, var(--wp-accent, #c4b5fd) 11%, transparent);
+    color-mix(in srgb, var(--wp-accent, #6366f1) 11%, transparent);
   border-radius: 5px;
 }
 .srow--bypassed .derived__val { text-decoration: line-through; opacity: .65; }
-.srow--bypassed .srow__idx { color: var(--wp-accent-text, #c4b5fd); opacity: .75; }
+.srow--bypassed .srow__idx { color: var(--wp-accent-text, #a5b4fc); opacity: .75; }
 .toggle--bypass { color: var(--wp-text-dim, var(--wp-text3)); }
 .toggle--bypass.toggle--on { border-color: var(--wp-accent); color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.10); }
 .srow__idx { flex-shrink: 0; width: 30px; text-align: right; font: 600 11px var(--wp-font-mono, monospace); color: var(--wp-text-dim, #7a7d88); }
-.srow--locked .srow__idx { color: var(--wp-accent-text, #c4b5fd); }
+.srow--locked .srow__idx { color: var(--wp-accent-text, #a5b4fc); }
 .srow__fill { flex: 1; }
 .toggle { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid var(--wp-border); border-radius: 3px; font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); cursor: pointer; background: var(--wp-bg-deep, var(--wp-bg)); flex-shrink: 0; }
 .toggle:hover { border-color: var(--wp-border-strong, var(--wp-border2)); }

@@ -71,7 +71,7 @@ describe("TweaksPanel.vue", () => {
     tweaks.setAccent("rose");
     tweaks.setDensity("compact");
     await wrap.find('[data-test="tweaks-reset"]').trigger("click");
-    expect(tweaks.accent).toBe("violet");
+    expect(tweaks.accent).toBe("indigo");
     expect(tweaks.density).toBe("comfortable");
   });
 

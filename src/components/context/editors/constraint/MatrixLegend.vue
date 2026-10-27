@@ -100,8 +100,8 @@ function toggle(): void {
   letter-spacing: 0.06em;
 }
 .legend-toggle:hover {
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 8%, transparent);
-  color: var(--wp-accent-text, #c4b5fd);
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 8%, transparent);
+  color: var(--wp-accent-text, #a5b4fc);
   border-color: var(--wp-border-strong, #4a4d55);
 }
 .legend-toggle .chev { transition: transform 0.15s; display: inline-block; }

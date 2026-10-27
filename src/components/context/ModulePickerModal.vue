@@ -1312,12 +1312,12 @@ onBeforeUnmount(detachCaptureListeners);
 .wp-picker__row[data-checked]:focus-visible {
   /* Selected + focused: keep the purple tint of the checked state
    * but swap the low-opacity ring for the bright focus stroke. */
-  background: rgba(139, 92, 246, 0.18);
+  background: rgba(99, 102, 241, 0.18);
   box-shadow: inset 0 0 0 1.5px var(--wp-accent-500);
 }
 .wp-picker__row[data-checked] {
-  background: rgba(139, 92, 246, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.42);
+  background: rgba(99, 102, 241, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.42);
 }
 .wp-picker__row[data-disabled] {
   cursor: not-allowed;

@@ -72,7 +72,7 @@ describe("placeholderNameFor", () => {
 
 describe("kindTint / varTint", () => {
   it("maps fixed_values to the fixed token with an accent fallback", () => {
-    expect(kindTint("fixed_values").color).toBe("var(--wp-kind-fixed, var(--wp-accent-text, #c4b5fd))");
+    expect(kindTint("fixed_values").color).toBe("var(--wp-kind-fixed, var(--wp-accent-text, #a5b4fc))");
     expect(kindTint("wildcard").background).toContain("--wp-kind-wildcard");
   });
 

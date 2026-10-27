@@ -327,7 +327,7 @@ function onReset(): void {
   overflow: hidden;
   height: 24px;
 }
-.pop-num:focus-within { border-color: var(--wp-accent, #c4b5fd); }
+.pop-num:focus-within { border-color: var(--wp-accent, #6366f1); }
 .pop-num__field {
   flex: 1;
   background: transparent;
@@ -372,7 +372,7 @@ function onReset(): void {
 }
 .pop-num__btn:hover {
   color: var(--wp-accent-text, var(--wp-text, #fff));
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 12%, transparent);
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 12%, transparent);
 }
 
 /* ── Reset button ───────────────────────────────────────────── */
@@ -398,9 +398,9 @@ function onReset(): void {
   cursor: pointer;
 }
 .pop-reset:hover {
-  color: var(--wp-accent-text, var(--wp-accent, #c4b5fd));
-  border-color: var(--wp-accent, #c4b5fd);
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 10%, transparent);
+  color: var(--wp-accent-text, var(--wp-accent, #6366f1));
+  border-color: var(--wp-accent, #6366f1);
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 10%, transparent);
 }
 .pop-reset__glyph { font: 12px var(--wp-font-mono, monospace); line-height: 1; }
 

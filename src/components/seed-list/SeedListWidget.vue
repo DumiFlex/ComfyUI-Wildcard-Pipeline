@@ -313,9 +313,9 @@ function toggleOverrideStrategy(): void {
 }
 .wp-seedlist__chip:hover { color: var(--wp-text); border-color: var(--wp-border-strong, #4a4d55); }
 .wp-seedlist__chip--active {
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 18%, transparent);
-  border-color: var(--wp-accent, #c4b5fd);
-  color: var(--wp-accent, #c4b5fd);
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 18%, transparent);
+  border-color: var(--wp-accent, #6366f1);
+  color: var(--wp-accent, #6366f1);
 }
 .wp-seedlist__chip:disabled { cursor: not-allowed; }
 /* Wrapper dims so the lock reads at a glance. Click blocking is the
@@ -358,12 +358,12 @@ function toggleOverrideStrategy(): void {
   transition: left var(--wp-motion-hover, 120ms) ease, background var(--wp-motion-hover, 120ms) ease;
 }
 .wp-seedlist__switch--on {
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 22%, transparent);
-  border-color: var(--wp-accent, #c4b5fd);
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 22%, transparent);
+  border-color: var(--wp-accent, #6366f1);
 }
 .wp-seedlist__switch--on .wp-seedlist__switch-thumb {
   left: 15px;
-  background: var(--wp-accent, #c4b5fd);
+  background: var(--wp-accent, #6366f1);
 }
 
 /* Mute / bypass dim — same convention as WP_VarTo* and WP_ContextLoop. */

@@ -17,9 +17,24 @@ beforeEach(() => {
 });
 
 describe("tweaksStore — accent palette", () => {
-  it("defaults to violet when no preference is stored", () => {
+  it("defaults to indigo when no preference is stored", () => {
     const tweaks = useTweaksStore();
-    expect(tweaks.accent).toBe("violet");
+    expect(tweaks.accent).toBe("indigo");
+  });
+
+  it("reads a saved violet that nobody picked as the indigo default", () => {
+    localStorage.setItem("wp-tweaks-v1", JSON.stringify({ accent: "violet", sidebarMode: "collapsed" }));
+    const tweaks = useTweaksStore();
+    expect(tweaks.accent).toBe("indigo");
+    expect(tweaks.sidebarMode).toBe("collapsed");
+  });
+
+  it("keeps violet when the user picked it", async () => {
+    const first = useTweaksStore();
+    first.setAccent("violet");
+    await Promise.resolve();
+    setActivePinia(createPinia());
+    expect(useTweaksStore().accent).toBe("violet");
   });
 
   it("setAccent('indigo') writes the indigo palette to <html>", () => {
@@ -92,7 +107,7 @@ describe("tweaksStore — reset", () => {
     tweaks.reset();
     await Promise.resolve();
 
-    expect(tweaks.accent).toBe("violet");
+    expect(tweaks.accent).toBe("indigo");
     expect(tweaks.density).toBe("comfortable");
     expect(document.documentElement.style.getPropertyValue("--wp-accent-500")).toBe("");
     // Density is the ui store's now; reset puts it back to comfortable.
@@ -102,7 +117,8 @@ describe("tweaksStore — reset", () => {
     const raw = localStorage.getItem("wp-tweaks-v1");
     if (raw) {
       const parsed = JSON.parse(raw);
-      expect(parsed.accent).toBe("violet");
+      expect(parsed.accent).toBe("indigo");
+      expect(parsed.accentPicked).toBeUndefined();
     }
     expect(localStorage.getItem("wp-density-mode")).toBe("comfortable");
   });

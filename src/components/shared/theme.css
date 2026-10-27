@@ -82,14 +82,16 @@
   --wp-text-muted: var(--wp-text2);
   --wp-text-dim:   var(--wp-text3);
 
-  /* SPA accent ramp (purple/indigo). Graph-side previously had only two
-   * shades — fill in the missing rungs so chips/buttons gradients work. */
-  --wp-accent-300: #c4b5fd;
-  --wp-accent-400: #a78bfa;
-  --wp-accent-500: #8b5cf6;
-  --wp-accent-600: #7c3aed;
+  /* Orbit accent ramp (indigo, same values as the manager's tokens.css).
+   * --wp-accent above is the -500 rung; filled controls use -600. */
+  --wp-accent-300: #a5b4fc;
+  --wp-accent-400: #818cf8;
+  --wp-accent-500: #6366f1;
+  --wp-accent-600: #4f46e5;
+  --wp-accent-700: #4338ca;
+  --wp-accent-800: #3730a3;
   --wp-accent-text:        var(--wp-accent-300);
-  --wp-accent-text-strong: #ddd6fe;
+  --wp-accent-text-strong: #c7d2fe;
 
   /* Kind colors — keyed by module type. Same hex values the SPA tokens.css
    * defines so `data-kind="..."` styling stays visually consistent across
@@ -284,8 +286,8 @@
   --wp-text-dim:    #888;
 
   /* Accent text adjusted for contrast on near-white surfaces. */
-  --wp-accent-text:        #6d28d9;
-  --wp-accent-text-strong: #5b21b6;
+  --wp-accent-text:        var(--wp-accent-700);
+  --wp-accent-text-strong: var(--wp-accent-800);
 
   /* Bundle default — slate-700 for AA contrast on light bg. */
   --wp-bundle-default:     #334155;  /* slate-700 — 9.18:1 on white */

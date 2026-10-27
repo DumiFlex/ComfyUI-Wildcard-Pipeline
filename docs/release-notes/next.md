@@ -27,6 +27,7 @@ The assistant is new and **off by default**. Turn it on in **Settings › AI ass
 - **Docs rewritten in plain words.** Every docs page and node help panel is shorter, with new screenshots of the current nodes. New **How to** pages cover variations in one click, making two picks agree, keeping something the same, sharing a pack and fixing common problems. The AI docs are split into short pages, and importing A1111/Forge wildcard packs has its own page.
 - **New guides** for pack structure, writing prompts per image model, and adult (NSFW) packs.
 - **A new loading mark** replaces the spinners in the manager.
+- **One accent colour.** The manager now uses the logo's indigo as its accent (it was violet), the same one the canvas nodes use. Buttons are flat instead of gradients, and the dashboard and What's new headers are plain cards. A violet you picked yourself in **Settings › Appearance › Accent color** stays.
 
 ### Wildcard pack import
 

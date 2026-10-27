@@ -768,7 +768,7 @@ onBeforeUnmount(() => {
               0 2px 6px color-mix(in srgb, var(--wp-text) 20%, transparent);
 }
 .mx-cell.open {
-  box-shadow: 0 0 0 2px var(--wp-accent, #c4b5fd),
+  box-shadow: 0 0 0 2px var(--wp-accent, #6366f1),
               0 4px 12px color-mix(in srgb, var(--wp-text) 25%, transparent);
 }
 .mx-cell.s-neutral {

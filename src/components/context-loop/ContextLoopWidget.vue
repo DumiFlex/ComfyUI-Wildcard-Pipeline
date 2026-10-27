@@ -393,9 +393,9 @@ function toggleTotalInternal(): void {
 }
 .wp-loop__chip:hover { color: var(--wp-text); border-color: var(--wp-border-strong, #4a4d55); }
 .wp-loop__chip--active {
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 18%, transparent);
-  border-color: var(--wp-accent, #c4b5fd);
-  color: var(--wp-accent, #c4b5fd);
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 18%, transparent);
+  border-color: var(--wp-accent, #6366f1);
+  color: var(--wp-accent, #6366f1);
 }
 
 .wp-loop__row {
@@ -430,12 +430,12 @@ function toggleTotalInternal(): void {
   transition: left var(--wp-motion-hover, 120ms) ease, background var(--wp-motion-hover, 120ms) ease;
 }
 .wp-loop__switch--on {
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 22%, transparent);
-  border-color: var(--wp-accent, #c4b5fd);
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 22%, transparent);
+  border-color: var(--wp-accent, #6366f1);
 }
 .wp-loop__switch--on .wp-loop__switch-thumb {
   left: 15px;
-  background: var(--wp-accent, #c4b5fd);
+  background: var(--wp-accent, #6366f1);
 }
 
 .wp-loop__var-input {
@@ -448,7 +448,7 @@ function toggleTotalInternal(): void {
 }
 .wp-loop__var-prefix {
   font: 600 11px var(--wp-font-mono, monospace);
-  color: var(--wp-accent, #c4b5fd);
+  color: var(--wp-accent, #6366f1);
   margin-right: 4px;
 }
 .wp-loop__var-text {
@@ -479,9 +479,9 @@ function toggleTotalInternal(): void {
 }
 .wp-loop__pi-btn:hover { color: var(--wp-text); border-color: var(--wp-border-strong, #4a4d55); }
 .wp-loop__pi-btn--on {
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 18%, transparent);
-  border-color: var(--wp-accent, #c4b5fd);
-  color: var(--wp-accent, #c4b5fd);
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 18%, transparent);
+  border-color: var(--wp-accent, #6366f1);
+  color: var(--wp-accent, #6366f1);
 }
 .wp-loop__pi-btn .pi { font-size: 9px; }
 .wp-loop__pi-btn-label { font: 600 10px var(--wp-font-mono, monospace); line-height: 1; }

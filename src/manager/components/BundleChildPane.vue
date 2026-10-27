@@ -445,10 +445,10 @@ const constraintTargetValues = computed<string[]>(() => {
 /* Bundle-reference banner uses accent (purple) instead of amber to read
  * as "live link, all good" rather than "warning — frozen snapshot". */
 .wp-bpane__banner--ref {
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 12%, transparent);
-  border-left-color: var(--wp-accent-500, #8b5cf6);
+  background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 12%, transparent);
+  border-left-color: var(--wp-accent-500, #6366f1);
 }
-.wp-bpane__banner--ref .pi { color: var(--wp-accent-500, #8b5cf6); }
+.wp-bpane__banner--ref .pi { color: var(--wp-accent-500, #6366f1); }
 /* Missing-reference variant — referenced bundle deleted upstream.
  * Stronger tint than the amber default since this is an actual broken
  * link, not just an informational warning. Border-left + icon flip to
@@ -510,7 +510,7 @@ const constraintTargetValues = computed<string[]>(() => {
   gap: var(--wp-space-3);
   align-self: flex-start;
   padding: var(--wp-space-3) var(--wp-space-5);
-  background: var(--wp-accent-500, #8b5cf6);
+  background: var(--wp-accent-500, #6366f1);
   color: white;
   border-radius: var(--wp-radius-sm);
   font-size: var(--wp-text-xs);

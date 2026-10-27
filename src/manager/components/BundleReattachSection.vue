@@ -187,14 +187,14 @@ function confirm(childId: string): void {
 .rb__btn,
 .rb__confirm {
   padding: 4px 12px;
-  border: 1px solid var(--wp-accent, #8b5cf6);
+  border: 1px solid var(--wp-accent, #6366f1);
   border-radius: 4px;
   background: transparent;
   color: var(--wp-accent-text, var(--wp-text));
   font: 11px var(--wp-font-sans);
   cursor: pointer;
 }
-.rb__confirm { background: var(--wp-accent, #8b5cf6); color: #fff; margin-top: 6px; }
+.rb__confirm { background: var(--wp-accent, #6366f1); color: #fff; margin-top: 6px; }
 /* Secondary affordance beside Reattach — pulls the missing dep from the
  * community. Quieter than the primary accent border so the manual dropdown
  * stays the obvious first action; the cloud icon signals the network pull. */
@@ -206,7 +206,7 @@ function confirm(childId: string): void {
   color: var(--wp-text-muted, var(--wp-text2, var(--wp-text)));
 }
 .rb__btn--download:hover {
-  border-color: var(--wp-accent, #8b5cf6);
+  border-color: var(--wp-accent, #6366f1);
   color: var(--wp-accent-text, var(--wp-text));
 }
 .rb__btn--download .pi { font-size: 11px; }
@@ -233,8 +233,8 @@ function confirm(childId: string): void {
 .rb__cand { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 5px 8px; border-radius: 4px; cursor: pointer; color: var(--wp-text, #e7e7ee); }
 .rb__cand-name { font: 11px var(--wp-font-sans); }
 .rb__cand-id { flex-shrink: 0; font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-dim, #6e6e7c); }
-.rb__cand:hover { background: color-mix(in oklab, var(--wp-accent, #8b5cf6) 18%, transparent); }
-.rb__cand--picked { background: color-mix(in oklab, var(--wp-accent, #8b5cf6) 28%, transparent); }
+.rb__cand:hover { background: color-mix(in oklab, var(--wp-accent, #6366f1) 18%, transparent); }
+.rb__cand--picked { background: color-mix(in oklab, var(--wp-accent, #6366f1) 28%, transparent); }
 .rb__empty { padding: 5px 8px; font: 11px var(--wp-font-sans); color: var(--wp-text-dim, #6e6e7c); }
 .rb__note { margin: 6px 0 0; font: 10px var(--wp-font-sans); color: var(--wp-text-dim, #6e6e7c); }
 </style>

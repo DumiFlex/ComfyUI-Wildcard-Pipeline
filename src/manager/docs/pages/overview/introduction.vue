@@ -124,9 +124,7 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
   padding: 18px 20px;
   border-radius: var(--wp-radius-lg, 12px);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 38%, var(--wp-border));
-  background:
-    linear-gradient(120deg, color-mix(in oklab, var(--wp-accent-500) 12%, transparent), transparent 62%),
-    var(--wp-bg-1);
+  background: color-mix(in oklab, var(--wp-accent-500) 6%, var(--wp-bg-1));
 }
 .wp-doc-starter-cta__body { min-width: 0; flex: 1 1 320px; }
 .wp-doc-starter-cta__eyebrow {

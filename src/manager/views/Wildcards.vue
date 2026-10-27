@@ -568,11 +568,11 @@ function issuesFor(row: ModuleRow) {
   border-color: color-mix(in oklab, var(--wp-kind-ref) 32%, transparent);
 }
 .wp-syntax-pill--in {
-  color: var(--wp-accent-text, #c4b5fd);
-  background: rgba(139, 92, 246, 0.18);
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 18%, transparent);
-  border-color: rgba(139, 92, 246, 0.35);
-  border-color: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 35%, transparent);
+  color: var(--wp-accent-text, #a5b4fc);
+  background: rgba(99, 102, 241, 0.18);
+  background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 18%, transparent);
+  border-color: rgba(99, 102, 241, 0.35);
+  border-color: color-mix(in oklab, var(--wp-accent-500, #6366f1) 35%, transparent);
 }
 .wp-syntax-pill--dp {
   color: var(--wp-warn, #fcd34d);
@@ -591,8 +591,8 @@ function issuesFor(row: ModuleRow) {
   border-color: color-mix(in oklab, var(--wp-kind-ref) 38%, transparent);
 }
 .wp-theme-light .wp-syntax-pill--in {
-  background: rgba(139, 92, 246, 0.13);
-  border-color: rgba(139, 92, 246, 0.40);
+  background: rgba(99, 102, 241, 0.13);
+  border-color: rgba(99, 102, 241, 0.40);
 }
 .wp-theme-light .wp-syntax-pill--dp {
   /* --wp-kind-derivation flips to amber-800 (#92400e) in light mode */

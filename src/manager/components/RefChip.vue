@@ -781,7 +781,7 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
    clearly marked as part of the selection. */
 .wp-refchip ::selection,
 .wp-refchip::selection {
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 45%, transparent);
+  background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 45%, transparent);
   color: var(--wp-text, #e7e7ee);
 }
 /* A `$var` is syntax-coloured text, not a boxed chip (Dumi, 2026-10-14: the

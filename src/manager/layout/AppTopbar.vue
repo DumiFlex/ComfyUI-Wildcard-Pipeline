@@ -344,18 +344,9 @@ function openPalette(): void {
   pointer-events: none;
 }
 
-/* Wordmark gradient text — brand identity anchor #1.
- * Base color ensures legibility in browsers without background-clip: text. */
+/* Wordmark: plain text next to the logo (Orbit has no gradient text). */
 .wp-topbar__brand-text {
   color: var(--wp-text);
-}
-@supports ((background-clip: text) or (-webkit-background-clip: text)) {
-  .wp-topbar__brand-text {
-    background: var(--wp-brand-gradient);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
 }
 
 /* Command-palette discovery affordance. Lives just before the back
@@ -434,9 +425,9 @@ button.wp-topbar__update-pill:hover {
   line-height: 1;
 }
 .wp-topbar__update-pill--accent {
-  color: var(--wp-accent, #8b5cf6);
-  background: color-mix(in oklab, var(--wp-accent, #8b5cf6) 18%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent, #8b5cf6) 40%, transparent);
+  color: var(--wp-accent, #6366f1);
+  background: color-mix(in oklab, var(--wp-accent, #6366f1) 18%, transparent);
+  border-color: color-mix(in oklab, var(--wp-accent, #6366f1) 40%, transparent);
 }
 .wp-topbar__update-pill--warn {
   color: var(--wp-warn, #f59e0b);

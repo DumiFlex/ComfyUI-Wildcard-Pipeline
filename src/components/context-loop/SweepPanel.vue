@@ -272,9 +272,9 @@ function moveAxis(uid: string, dir: -1 | 1): void {
 .wp-sweep { display: flex; flex-direction: column; gap: 6px; }
 .wp-sweep--on {
   padding: 6px 7px;
-  border: 1px solid color-mix(in srgb, var(--wp-accent, #c4b5fd) 35%, var(--wp-border, #353841));
+  border: 1px solid color-mix(in srgb, var(--wp-accent, #6366f1) 35%, var(--wp-border, #353841));
   border-radius: 4px;
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 5%, transparent);
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 5%, transparent);
 }
 .wp-sweep__row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .wp-sweep__row-label { font: 10px var(--wp-font-sans, sans-serif); color: var(--wp-text-muted, #aeb1bb); }
@@ -290,13 +290,13 @@ function moveAxis(uid: string, dir: -1 | 1): void {
   transition: left var(--wp-motion-hover, 120ms) ease;
 }
 .wp-sweep__switch--on {
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 22%, transparent);
-  border-color: var(--wp-accent, #c4b5fd);
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 22%, transparent);
+  border-color: var(--wp-accent, #6366f1);
 }
-.wp-sweep__switch--on .wp-sweep__switch-thumb { left: 15px; background: var(--wp-accent, #c4b5fd); }
+.wp-sweep__switch--on .wp-sweep__switch-thumb { left: 15px; background: var(--wp-accent, #6366f1); }
 
 .wp-sweep__total { font: 10.5px var(--wp-font-sans, sans-serif); color: var(--wp-text); }
-.wp-sweep__total strong { color: var(--wp-accent, #c4b5fd); }
+.wp-sweep__total strong { color: var(--wp-accent, #6366f1); }
 .wp-sweep__total--warn strong:last-child { color: var(--wp-warning, #f59e0b); }
 .wp-sweep__math { font-family: var(--wp-font-mono, monospace); color: var(--wp-text-muted, #aeb1bb); }
 .wp-sweep__hint { font: 10px var(--wp-font-sans, sans-serif); color: var(--wp-text-dim, #7a7d88); }
@@ -313,7 +313,7 @@ function moveAxis(uid: string, dir: -1 | 1): void {
   background: none; border: 0; padding: 0; cursor: pointer; text-align: left; color: var(--wp-text);
 }
 .wp-sweep__axis-name:disabled { cursor: default; }
-.wp-sweep__axis-var { font: 600 11px var(--wp-font-mono, monospace); color: var(--wp-accent, #c4b5fd); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-sweep__axis-var { font: 600 11px var(--wp-font-mono, monospace); color: var(--wp-accent, #6366f1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wp-sweep__axis-node { font: 9.5px var(--wp-font-sans, sans-serif); color: var(--wp-text-dim, #7a7d88); white-space: nowrap; }
 .wp-sweep__axis--missing .wp-sweep__axis-node { color: var(--wp-warning, #f59e0b); }
 .wp-sweep__axis-count { font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-muted, #aeb1bb); white-space: nowrap; }
@@ -334,7 +334,7 @@ function moveAxis(uid: string, dir: -1 | 1): void {
   font: 600 9px var(--wp-font-sans, sans-serif); text-transform: uppercase; letter-spacing: .06em;
   color: var(--wp-text-dim, #7a7d88);
 }
-.wp-sweep__link:hover { color: var(--wp-accent, #c4b5fd); }
+.wp-sweep__link:hover { color: var(--wp-accent, #6366f1); }
 .wp-sweep__opts-list { display: flex; flex-wrap: wrap; gap: 3px; max-height: 120px; overflow-y: auto; }
 .wp-sweep__opt {
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -343,8 +343,8 @@ function moveAxis(uid: string, dir: -1 | 1): void {
   background: transparent; border: 1px solid var(--wp-border, #353841); color: var(--wp-text-dim, #7a7d88);
 }
 .wp-sweep__opt--on {
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 16%, transparent);
-  border-color: var(--wp-accent, #c4b5fd);
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 16%, transparent);
+  border-color: var(--wp-accent, #6366f1);
   color: var(--wp-text);
 }
 
