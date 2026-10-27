@@ -196,3 +196,9 @@ def test_a_new_bundle_nests_in_a_bundle_from_the_same_answer():
     assert outer["after"] == inner["pid"]
     tpl = lib.run("create_template", {"name": "Shot", "template": "$season"})
     assert len(tpl["op"]["body"]["id"]) == 8
+
+
+def test_off_ask_needs_an_off_word():
+    from engine.ai.chat_tools import _OFF_ASK
+    assert _OFF_ASK.search("mute the accessory") and _OFF_ASK.search("disable it")
+    assert not _OFF_ASK.search("remove the mutual friends option")

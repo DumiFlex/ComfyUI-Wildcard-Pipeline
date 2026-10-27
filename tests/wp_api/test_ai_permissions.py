@@ -145,3 +145,16 @@ async def test_deleting_off_says_where_to_turn_it_on(wp_client, fake_llm):
     fake_llm.chat_steps.append({"message": "Done thinking.", "calls": []})
     out = await _chat(wp_client, "Remove the warm options from Weapon.")
     assert "Permissions" not in out["message"]
+
+
+async def test_deleting_off_note_skips_an_edit_card(wp_client, fake_llm):
+    # "Delete the longsword option" is an options edit, not an item delete.
+    _src, tgt = await _two_wildcards(wp_client)
+    _on(fake_llm)
+    fake_llm.chat_steps.extend([
+        {"message": "", "calls": [
+            {"tool": "edit_options", "args": json.dumps({"id": tgt, "remove": [2]})}]},
+        {"message": "The card takes longsword out of Weapon.", "calls": []}])
+    out = await _chat(wp_client, f"Delete the longsword option from [[{tgt}#Weapon]].")
+    assert out["proposals"]
+    assert "Permissions" not in out["message"]

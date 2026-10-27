@@ -1743,10 +1743,11 @@ def _claim_notes(t: _Turn) -> None:
                    "answer has it yet, so it isn't made. Ask me to add it.)*")
     if not t.pause and proposals:
         message = _card_claims(message, proposals)
-    if not t.pause and not t.lib.allow_delete and t.lib.delete_scope.get("delete") \
-            and not _DELETE_SETTING.search(message or ""):
+    if not t.pause and not proposals and not t.lib.allow_delete \
+            and t.lib.delete_scope.get("delete") and not _DELETE_SETTING.search(message or ""):
         # Bench W22: deleting off and the item missing, the 9B offered
-        # another item and never said where deleting is switched on.
+        # another item and never said where deleting is switched on. Not
+        # under a card: "delete the fur options" is an edit.
         message = message.rstrip() + "\n\n" + DELETE_IS_OFF
     if not t.pause and t.cfg.get("local") and not t.meta.get("cloud_offered") and _struggled(
             message, t.errors, t.queue, bool(proposals)):
