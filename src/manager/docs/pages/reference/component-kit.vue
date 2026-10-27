@@ -34,8 +34,9 @@ const groups = KIT_GROUPS.map((g) => ({ ...g, count: KIT_ENTRIES.filter((e) => e
         <li v-for="g in groups" :key="g.id"><b>{{ g.label }}</b> ({{ g.count }}): {{ g.blurb }}</li>
       </ul>
       <p>
-        A few pieces only work on the canvas (the node dialog, the right-click menu and the canvas toast).
-        The kit lists them with how to use them instead of a live demo.
+        Pieces shared by the canvas and the manager (the node dialog, the right-click menu, popovers,
+        tooltips) are shown live too. The canvas toast is the one piece listed with how to use it
+        instead of a live demo.
       </p>
     </DocSection>
 
@@ -45,6 +46,12 @@ const groups = KIT_GROUPS.map((g) => ({ ...g, count: KIT_ENTRIES.filter((e) => e
         and it goes into the kit in the same change, with a demo. Two checks keep this honest: one fails
         when a shared control has no kit entry, the other fails when a file adds a hand-made button, select,
         number box, dialog or colour.
+      </p>
+      <p>
+        Every control follows one standard: the same prop names (size, variant, tone), one height scale,
+        colour tokens only, full keyboard use, Escape to close anything that floats, and focus back where
+        it was. Anything that floats (a panel, a menu, a hint, a side panel) uses the kit's overlays.
+        The full rules are in <code>docs/component-standard.md</code> in the repository.
       </p>
       <DocCallout variant="tip">
         You can also open the kit from <b>Settings › Advanced › Component kit</b>.

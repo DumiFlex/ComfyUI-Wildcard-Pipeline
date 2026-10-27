@@ -34,7 +34,7 @@ function findMatchingClose(css: string, openIdx: number): number {
 /** Match the `.wp-theme-light` SELECTOR — the trailing `\s*{` ensures
  *  we land on the actual block opening, not a prose reference inside
  *  a comment block. */
-const LIGHT_SELECTOR_RE = /\.wp-theme-light\s*\{/;
+const LIGHT_SELECTOR_RE = /^\.wp-theme-light[^{\n]*\{/m;
 
 function findLightBlockBounds(css: string): { open: number; close: number } | null {
   const match = LIGHT_SELECTOR_RE.exec(css);

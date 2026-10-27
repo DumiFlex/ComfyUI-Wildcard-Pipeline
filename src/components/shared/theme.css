@@ -9,8 +9,15 @@
  * unscoped Vue style blocks. Rules below are `:root` custom-property
  * definitions + `.wp-*` and `.var-*` prefixed classes; the namespace
  * prefix is the primary isolation here.
+ *
+ * The colour blocks skip `html.wp-manager`: the manager has its own tokens
+ * with the same names, so a canvas piece mounted there (the component kit)
+ * would repaint it. A canvas piece that can show in the manager puts
+ * `wp-canvas-scope` on its own root (ModalShell) to get these. Shared pieces
+ * (ContextMenu, Popover, the tooltip) use names both sides define instead,
+ * so they wear the colours of whichever side they are on.
  */
-:root {
+:root:not(.wp-manager), .wp-canvas-scope {
   /* Backgrounds — match ComfyUI's node interior */
   --wp-bg: #1e1e1e;
   --wp-bg2: #232323;
@@ -241,7 +248,7 @@
  * frame visually matches the surrounding ComfyUI chrome regardless of
  * theme. */
 
-:root, .wp-theme-dark {
+:root:not(.wp-manager), .wp-theme-dark:not(.wp-manager), .wp-canvas-scope {
   --wp-canvas-bg:   #161618;
   --wp-node-bg:     #353535;
   --wp-node-bg-2:   #2c2c2c;
@@ -254,7 +261,7 @@
   --wp-border-soft: #444;
 }
 
-.wp-theme-light {
+.wp-theme-light:not(.wp-manager), .wp-theme-light .wp-canvas-scope {
   --wp-bg:    #e8e8e8;
   --wp-bg-1:  #f5f5f5;
   --wp-bg-2:  #fff;
@@ -362,7 +369,7 @@
  * Hues chosen for contrast on `--wp-bg` (dark) AND `--wp-bg-2` (light)
  * surfaces. Pulled from a deliberate rainbow; light theme keeps the
  * same hues since saturation reads on both backgrounds. */
-:root, .wp-theme-dark {
+:root:not(.wp-manager), .wp-theme-dark:not(.wp-manager), .wp-canvas-scope {
   --wp-var-1: #93c5fd;  /* sky blue */
   --wp-var-2: #fcd34d;  /* amber */
   --wp-var-3: #86efac;  /* mint */
@@ -375,7 +382,7 @@
 
 /* Light theme — bump every var hue to its *-700 family for AA contrast
  * on near-white page surfaces. Same hues, deeper shades. */
-.wp-theme-light {
+.wp-theme-light:not(.wp-manager), .wp-theme-light .wp-canvas-scope {
   --wp-var-1: #0369a1;  /* sky-700      4.84:1 on white */
   --wp-var-2: #b45309;  /* amber-700    4.85:1 on white */
   --wp-var-3: #047857;  /* emerald-700  4.91:1 on white */

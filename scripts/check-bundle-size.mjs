@@ -301,7 +301,12 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // Zod validators ship as their own lazy chunk (shape-check-*.mjs, ~17 KB
 // gzip) that loads only when something is installed. dev sat at 485,671
 // bytes; the branch at 502,904.
-const TOTAL_LIMIT = 496 * 1024;     // 496 KB
+// RAISED 496 -> 512 KB on 2026-10-27 for the shared component kit (Dumi
+// approved one component per control for canvas + manager): ContextMenu now
+// places itself through components/shared/floating.ts (branch 508,348 bytes,
+// 444 over), and the canvas twins (Button, Switch, Tabs, Popover, Tooltip)
+// land next in widget chunks, never in boot.
+const TOTAL_LIMIT = 512 * 1024;     // 512 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
