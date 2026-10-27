@@ -1,11 +1,13 @@
 <script setup lang="ts">
+import Button from "../../components/ui/Button.vue";
 import Card from "../../components/ui/Card.vue";
 </script>
 
 <template>
   <div class="wp-kit__stack">
     <Card title="Options" subtitle="5 options">
-      <p class="wp-kit__muted">The card's body. Editors stack these.</p>
+      <template #actions><Button size="sm" icon="pi-plus">Add</Button></template>
+      <p class="wp-kit__muted">The card's body. Editors stack these. The title is the card's name, so it reads first.</p>
     </Card>
   </div>
 </template>

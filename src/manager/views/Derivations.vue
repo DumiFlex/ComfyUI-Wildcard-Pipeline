@@ -221,6 +221,7 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-arrow-right-arrow-left"
         headline="No derivations yet"
         body="Derivations branch logic on conditions to produce values. Create one to add conditional flow."

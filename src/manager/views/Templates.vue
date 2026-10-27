@@ -156,6 +156,7 @@ function toggleTag(t: string, currentTags: string[] | undefined): string[] {
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-file-edit"
         headline="No templates yet"
         body="Templates are reusable prompt skeletons. Save one from an assembler's Save button to start your library."

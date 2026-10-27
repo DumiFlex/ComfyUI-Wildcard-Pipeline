@@ -618,7 +618,9 @@ input, textarea, select { font: inherit; }
   flex-wrap: wrap;
 }
 .wp-card__title-wrap { display: flex; flex-direction: column; gap: 1px; }
-.wp-card__title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--wp-text-muted); margin: 0; font-weight: 600; }
+/* A card's name reads as its title: normal case, 14px semibold, full text
+ * colour. Uppercase stays for small group labels (Field, table heads). */
+.wp-card__title { font-size: 14px; line-height: 1.35; color: var(--wp-text); margin: 0; font-weight: 600; letter-spacing: -0.005em; }
 .wp-card__subtitle {
   font-size: 11.5px;
   color: var(--wp-text-dim);
@@ -886,16 +888,21 @@ input, textarea, select { font: inherit; }
 .wp-chip--info    { color: var(--wp-info);    background: color-mix(in oklab, var(--wp-info)    14%, transparent); border-color: color-mix(in oklab, var(--wp-info)    36%, transparent); }
 .wp-chip__dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
 .wp-chip__close {
-  /* 20×20 hit area — slimmer than 24×24 (WCAG 2.5.8 enhanced) so the
-   * chip body doesn't get inflated by the close button, but still
-   * comfortably meets WCAG 2.5.5 AA target-size baseline. Visible glyph
-   * stays small via the inner Icon component; the surrounding padding
-   * provides the rest of the click target. */
-  background: none; border: none; padding: 2px; margin-left: 1px;
-  min-width: 20px; min-height: 20px;
-  color: inherit; cursor: pointer; line-height: 0;
+  /* A plain ✕: no background zone and no box that makes a removable chip
+   * taller than a bare one. The glyph box is 12px, inside the chip's own
+   * line; the ::after reaches 4px past it on every side for a 20px click
+   * target without changing the layout. Hover only darkens the glyph. */
+  position: relative;
+  background: none; border: none; padding: 0; margin: 0 -2px 0 1px;
+  width: 12px; height: 12px;
+  color: inherit; opacity: 0.65; cursor: pointer; line-height: 0;
   display: inline-grid; place-items: center;
+  border-radius: 0;
+  transition: opacity .12s, color .12s;
 }
+.wp-chip__close::after { content: ""; position: absolute; inset: -4px; }
+.wp-chip__close:hover { opacity: 1; background: none; }
+.wp-chip__close:focus-visible { outline: 2px solid var(--wp-accent-500); outline-offset: 1px; border-radius: 2px; opacity: 1; }
 
 .wp-kbd {
   font-family: var(--wp-font-mono);
@@ -1728,8 +1735,24 @@ input, textarea, select { font: inherit; }
   color: #fff; /* audit-exempt: white dash on accent-600 background ≥4.5:1 both themes */
 }
 .wp-check svg { width: 9px; height: 9px; display: block; }
+/* Disabled: grey, not dim purple, so a ticked disabled box no longer reads
+ * as a live one in dark mode. */
 .wp-check:disabled,
-.wp-check[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+.wp-check[aria-disabled="true"] {
+  cursor: not-allowed;
+  background: var(--wp-bg-3);
+  border-color: var(--wp-border);
+  opacity: 0.6;
+}
+.wp-check:disabled[data-checked="true"],
+.wp-check:disabled[data-indeterminate="true"],
+.wp-check[aria-disabled="true"][aria-checked="true"] {
+  background: var(--wp-text-dim);
+  border-color: var(--wp-text-dim);
+  color: var(--wp-bg-1);
+}
+.wp-checkbox.is-disabled { cursor: not-allowed; }
+.wp-checkbox.is-disabled .wp-checkbox__label { opacity: 0.5; }
 .wp-check:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
 
 /* Inline checkbox wrapper (label + box) — min-height fills canonical hit-target. */
@@ -1753,7 +1776,7 @@ input, textarea, select { font: inherit; }
 .wp-radio {
   appearance: none; -webkit-appearance: none;
   width: 14px; height: 14px; margin: 0; flex-shrink: 0;
-  border: 1.5px solid var(--wp-border-soft, var(--wp-border));
+  border: 1.5px solid var(--wp-border-strong);
   border-radius: 50%;
   background: var(--wp-bg);
   display: inline-grid; place-items: center;
@@ -1767,7 +1790,10 @@ input, textarea, select { font: inherit; }
 }
 .wp-radio:checked { background: var(--wp-accent-600); border-color: var(--wp-accent-500); }
 .wp-radio:checked::before { transform: scale(1); }
-.wp-radio:disabled { opacity: 0.45; cursor: not-allowed; }
+.wp-radio:disabled { opacity: 0.6; cursor: not-allowed; background: var(--wp-bg-3); border-color: var(--wp-border); }
+.wp-radio:disabled:checked { background: var(--wp-text-dim); border-color: var(--wp-text-dim); }
+.wp-radio:disabled:checked::before { background: var(--wp-bg-1); }
+label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim); }
 .wp-radio:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
 .wp-checkbox__label { color: var(--wp-text); }
 

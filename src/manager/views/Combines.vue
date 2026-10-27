@@ -194,6 +194,7 @@ function templateParts(row: ModuleRow): TemplatePart[] {
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-link"
         headline="No combines yet"
         body="Combines join multiple modules into one templated string. Create your first composition."

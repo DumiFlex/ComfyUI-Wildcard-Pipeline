@@ -13,7 +13,7 @@ interface Props {
   options: SelectOption[];
   placeholder?: string;
   clearable?: boolean;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
   disabled?: boolean;
   error?: boolean;
   ariaLabel?: string;
@@ -91,6 +91,7 @@ const filtered = computed<SelectOption[]>(() => {
 const btnClasses = computed(() => [
   "wp-select",
   props.size === "sm" && "wp-select--sm",
+  props.size === "lg" && "wp-select--lg",
 ]);
 
 /** Surface an aria-label only when there's no visible selected text —
@@ -316,8 +317,9 @@ function onKeydown(e: KeyboardEvent) {
       <button
         v-if="clearable && selected"
         type="button"
-        class="wp-chip__close"
+        class="wp-select__clear"
         aria-label="Clear"
+        data-test="select-clear"
         @click="clear"
       >
         <Icon name="times" :size="ICON_SM" />
@@ -443,7 +445,8 @@ function onKeydown(e: KeyboardEvent) {
   outline: none;
   transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
 }
-.wp-select--sm { height: var(--wp-input-h-sm, 28px); font-size: 12px; padding: 0 8px; }
+.wp-select--sm { height: var(--wp-input-h-sm, 24px); font-size: 12px; padding: 0 8px; }
+.wp-select--lg { height: var(--wp-control-h-lg, 40px); font-size: 13.5px; padding: 0 12px; }
 .wp-select:focus-visible,
 .wp-select:focus {
   border-color: var(--wp-accent-500);
@@ -451,7 +454,7 @@ function onKeydown(e: KeyboardEvent) {
   background: var(--wp-bg-1);
 }
 .wp-select[aria-invalid="true"] { border-color: var(--wp-error-border, var(--wp-danger, #ef4444)); }
-.wp-select:disabled { opacity: 0.6; cursor: default; }
+.wp-select:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .wp-select__label-wrap {
   display: flex; align-items: center; gap: 6px;
@@ -503,6 +506,25 @@ function onKeydown(e: KeyboardEvent) {
   color: var(--wp-text-dim);
 }
 .wp-select__chevron { color: var(--wp-text-dim); font-size: 11px; margin-left: 6px; flex-shrink: 0; }
+/* Clear ✕: a plain glyph kept well clear of the chevron (a 1px rule and
+ * 8px either side) so it is not mis-clicked, and shown only while the
+ * field is hovered or focused. The ::after gives it a 20px click target. */
+.wp-select__clear {
+  position: relative;
+  display: inline-grid; place-items: center; flex-shrink: 0;
+  width: 14px; height: 14px; margin: 0 2px 0 8px; padding: 0;
+  background: none; border: none; color: var(--wp-text-dim); cursor: pointer; line-height: 0;
+  opacity: 0; transition: opacity .12s, color .12s;
+}
+.wp-select__clear::after { content: ""; position: absolute; inset: -3px; }
+.wp-select__clear + .wp-select__chevron { padding-left: 8px; border-left: 1px solid var(--wp-border); }
+.wp-select:hover .wp-select__clear,
+.wp-select:focus-visible .wp-select__clear,
+.wp-select:focus .wp-select__clear,
+.wp-select__clear:focus-visible { opacity: 1; }
+.wp-select__clear:hover { color: var(--wp-text); }
+.wp-select__clear:focus-visible { outline: 2px solid var(--wp-accent-500); outline-offset: 1px; border-radius: 2px; }
+@media (hover: none) { .wp-select__clear { opacity: 1; } }
 .wp-spacer { flex: 1 1 auto; }
 
 /* Menu — teleported to <body>. z-index 9999 matches wp-rt-suggestions, which

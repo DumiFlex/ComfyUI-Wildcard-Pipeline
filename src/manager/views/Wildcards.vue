@@ -326,6 +326,7 @@ function issuesFor(row: ModuleRow) {
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-sparkles"
         headline="No wildcards yet"
         body="Wildcards let you sample one option from a pool. Create your first to start composing prompts."

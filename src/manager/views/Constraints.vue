@@ -230,6 +230,7 @@ function formatFactor(f: number): string {
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-filter"
         headline="No constraints yet"
         body="Constraints limit which combinations of values can co-occur. Create one to prune combinations."

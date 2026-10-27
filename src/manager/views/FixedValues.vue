@@ -168,6 +168,7 @@ function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 4
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-tag"
         headline="No fixed values yet"
         body="Fixed values resolve to a single string. Create one to template static text."

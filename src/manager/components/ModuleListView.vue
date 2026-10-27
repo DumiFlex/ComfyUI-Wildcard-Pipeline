@@ -1244,6 +1244,7 @@ defineExpose({
             <td :colspan="totalCols" class="wp-table__empty-cell">
               <slot v-if="!hasActiveFilters" name="empty">
                 <EmptyState
+                  size="page"
                   icon="pi-inbox"
                   :headline="emptyMessage"
                   variant="library"
@@ -1255,6 +1256,7 @@ defineExpose({
               </slot>
               <EmptyState
                 v-else
+                size="page"
                 icon="pi-search"
                 headline="No matches"
                 body="Try a different search term or clear the filter."
