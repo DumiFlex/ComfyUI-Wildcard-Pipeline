@@ -25,7 +25,7 @@ export const RULES = [
   {
     id: "native-number",
     pattern: /type="number"/g,
-    allow: ["src/components/shared/WpNumber.vue", "src/manager/components/ui/Input.vue"],
+    allow: ["src/components/shared/WpNumber.vue"],
     fix: "Use WpNumber: our arrows, keys and wheel, clamped.",
   },
   {

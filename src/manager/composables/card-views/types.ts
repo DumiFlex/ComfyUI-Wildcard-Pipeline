@@ -45,7 +45,7 @@ export interface ValueRowView {
   wasNegative?: string | null;
 }
 
-/** A category the way `CategoryChip` draws it. `isNew`: the card makes it. */
+/** A category the way a colour Chip draws it. `isNew`: the card makes it. */
 export interface CatChipView { name: string; color: string | null; icon: string | null; isNew?: boolean }
 
 /** One field of an item, old → new. */

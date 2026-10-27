@@ -13,6 +13,12 @@ import Chip from "../../components/ui/Chip.vue";
       <Chip tone="info">v10</Chip>
       <Chip color="var(--wp-kind-combine)">Combine</Chip>
     </div>
+    <p class="wp-kit__muted">Category pills: color + icon (what CategoryChip was).</p>
+    <div class="wp-kit__row">
+      <Chip color="#60a5fa" icon="user">Characters</Chip>
+      <Chip color="#f472b6" icon="star">Styles</Chip>
+      <Chip :color="null" icon="folder">No colour</Chip>
+    </div>
     <p class="wp-kit__muted">Removable: a plain ✕, same height as a bare chip.</p>
     <div class="wp-kit__row">
       <Chip>winter</Chip>

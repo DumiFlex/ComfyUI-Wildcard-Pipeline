@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SearchInput from "@/components/shared/SearchInput.vue";
 import { computed, nextTick, ref, shallowRef, watch, type Component } from "vue";
 import { RouterLink } from "vue-router";
 import { DOC_GROUPS, pagesByGroup, findPage, searchPages, toneVar, type DocGroupId } from "../docs/registry";
@@ -58,16 +59,13 @@ watch(
 <template>
   <div class="wp-doc">
     <aside class="wp-doc__nav">
-      <div class="wp-doc__search">
-        <i class="pi pi-search" aria-hidden="true" />
-        <input
-          v-model="query"
-          data-test="doc-search"
-          type="text"
-          placeholder="Search docs…"
-          aria-label="Search documentation"
-        />
-      </div>
+      <SearchInput
+        v-model="query"
+        class="wp-doc__search"
+        data-test="doc-search"
+        placeholder="Search docs…"
+        aria-label="Search documentation"
+      />
       <template v-for="g in DOC_GROUPS" :key="g.id">
         <div v-if="groupPages(g.id).length" class="wp-doc__grp">{{ g.label }}</div>
         <RouterLink
@@ -132,27 +130,7 @@ watch(
   overflow-y: auto;
   padding: 14px 10px 28px;
 }
-.wp-doc__search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 30px;
-  padding: 0 9px;
-  background: var(--wp-bg-2);
-  border: 1px solid var(--wp-border);
-  border-radius: 7px;
-  color: var(--wp-text-dim);
-  margin-bottom: 14px;
-}
-.wp-doc__search input {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  outline: none;
-  color: var(--wp-text);
-  font: inherit;
-  font-size: 12px;
-}
+.wp-doc__search { margin-bottom: 14px; }
 /* Sticky, and no height of its own, so the button floats over the crumb row
    at the top right instead of pushing the page down. */
 .wp-doc__askbar {

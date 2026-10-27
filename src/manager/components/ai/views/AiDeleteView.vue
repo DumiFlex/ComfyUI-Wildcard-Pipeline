@@ -8,7 +8,7 @@
 import { computed } from "vue";
 import type { CardView } from "../../../composables/card-views/types";
 import { kindIcon } from "../../../../components/shared/kind-icons";
-import CategoryChip from "../../CategoryChip.vue";
+import Chip from "../../ui/Chip.vue";
 
 type View = Extract<CardView, { kind: "delete" }>;
 const props = defineProps<{ view: View; full?: boolean }>();
@@ -27,7 +27,7 @@ const icon = (type: string) => (type === "bundle" ? "pi pi-box" : kindIcon(type)
         <i :class="icon(it.type)" class="wp-ai-delete__icon" aria-hidden="true" />
         <span class="wp-ai-delete__name">{{ it.name }}</span>
         <span class="wp-ai-delete__type">{{ it.type.replace("_", " ") }}</span>
-        <CategoryChip v-if="it.category" :name="it.category.name" :color="it.category.color" :icon="it.category.icon" />
+        <Chip v-if="it.category" :color="it.category.color" :icon="it.category.icon">{{ it.category.name }}</Chip>
         <span v-if="it.rating" class="wp-ai-delete__rating">{{ it.rating }}</span>
       </li>
     </ul>
@@ -35,7 +35,7 @@ const icon = (type: string) => (type === "bundle" ? "pi pi-box" : kindIcon(type)
     <div v-if="view.categories.length" class="wp-ai-delete__group">
       <span class="wp-ai-delete__label">Categories</span>
       <span v-for="c in view.categories" :key="c.name" class="wp-ai-delete__cat">
-        <CategoryChip :name="c.name" :color="c.color" :icon="c.icon" class="wp-ai-delete__struck" />
+        <Chip :color="c.color" :icon="c.icon" class="wp-ai-delete__struck">{{ c.name }}</Chip>
         <span class="wp-ai-delete__count">{{ c.count ? `${c.count} item${c.count === 1 ? "" : "s"} keep no category` : "empty" }}</span>
       </span>
     </div>

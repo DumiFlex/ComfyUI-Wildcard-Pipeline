@@ -30,7 +30,7 @@ import { useScenarioWorkbench } from "../composables/useScenarioWorkbench";
 import { currentPageNote, registerPageNote } from "../composables/useOpenEditor";
 import { registerAiAction } from "../composables/useAiActions";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import { buildUuidToName } from "../utils/wildcardSyntax";
 import { seedLabel } from "../utils/scenario";
 import { inspectItem } from "../utils/inspect";
@@ -374,10 +374,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
       <div class="wp-tr__content">
         <StackBuilder
-          data-ai-anchor="stack"
-          data-ai-label="Stack: the modules and bundles to run"
           v-model:stack="draft.stack"
           v-model:pins="draft.pins"
+          data-ai-anchor="stack"
+          data-ai-label="Stack: the modules and bundles to run"
           :views="wb.stackViews.value"
           :unset="wb.unset.value"
           :modules="wb.modules.value"
@@ -460,21 +460,21 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       @edit="editInspected"
     />
 
-    <ConfirmDialog
-      :visible="delConfirm.visible.value"
+    <ConfirmModal
+      :open="delConfirm.visible.value"
       :title="deleteTitle"
       body="The scenario and its saved run are removed. The modules it uses stay in your library."
       confirm-label="Delete"
-      variant="danger"
+      tone="danger"
       @confirm="delConfirm.confirm(performDelete)"
       @cancel="delConfirm.cancel"
     />
-    <ConfirmDialog
-      :visible="pendingLeave !== null"
+    <ConfirmModal
+      :open="pendingLeave !== null"
       title="Discard unsaved changes?"
       body="This scenario has changes that are not saved. Leaving it drops them."
       confirm-label="Discard"
-      variant="danger"
+      tone="danger"
       @confirm="confirmLeave"
       @cancel="pendingLeave = null"
     />

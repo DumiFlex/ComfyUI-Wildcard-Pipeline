@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WpNumber from "../../../../shared/WpNumber.vue";
 import { computed, ref, watch } from "vue";
 import type { VarProducerLike } from "@/manager/components/RefChip.vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
@@ -287,12 +288,6 @@ function setPickMax(next: number): void {
   const hi = Math.max(0, Math.floor(next || 0));
   setPickRange(Math.min(pickMin.value, hi), hi);
 }
-function bumpPickMin(dir: 1 | -1): void {
-  setPickMin(pickMin.value + dir);
-}
-function bumpPickMax(dir: 1 | -1): void {
-  setPickMax(pickMax.value + dir);
-}
 function setPickSeparator(next: string): void {
   emit("update", patchInstance(props.module, "pick_separator", next));
 }
@@ -478,53 +473,29 @@ const skewedTowards = computed(() => {
          the separator joins them for a bare `$var`. -->
     <div class="pool__pick" data-test="pool-pick">
       <span class="pool__pick-label">Pick</span>
-      <span class="pool__pick-wrap">
-        <input
-          class="pool__pick-num"
-          type="number"
-          min="0"
-          :value="pickMin"
-          data-test="pool-pick-min"
-          aria-label="Minimum picks"
-          @input="setPickMin(Number(($event.target as HTMLInputElement).value))"
-        />
-        <span class="pool__pick-spin">
-          <button
-            type="button" class="pool__pick-spin-btn" tabindex="-1"
-            data-test="pool-pick-min-up" aria-label="Increase minimum picks"
-            @click="bumpPickMin(1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true"><path d="M0 5 L4 0 L8 5 Z" fill="currentColor" /></svg></button>
-          <button
-            type="button" class="pool__pick-spin-btn" tabindex="-1"
-            data-test="pool-pick-min-down" aria-label="Decrease minimum picks"
-            @click="bumpPickMin(-1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true"><path d="M0 0 L4 5 L8 0 Z" fill="currentColor" /></svg></button>
-        </span>
-      </span>
+      <WpNumber
+        class="pool__pick-wrap"
+        :model-value="pickMin"
+        :min="0"
+        commit="input"
+        aria-label="Minimum picks"
+        up-label="Increase minimum picks"
+        down-label="Decrease minimum picks"
+        data-test="pool-pick-min"
+        @update:model-value="(n) => n !== null && setPickMin(n)"
+      />
       <span class="pool__pick-dash" aria-hidden="true">–</span>
-      <span class="pool__pick-wrap">
-        <input
-          class="pool__pick-num"
-          type="number"
-          min="0"
-          :value="pickMax"
-          data-test="pool-pick-max"
-          aria-label="Maximum picks"
-          @input="setPickMax(Number(($event.target as HTMLInputElement).value))"
-        />
-        <span class="pool__pick-spin">
-          <button
-            type="button" class="pool__pick-spin-btn" tabindex="-1"
-            data-test="pool-pick-max-up" aria-label="Increase maximum picks"
-            @click="bumpPickMax(1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true"><path d="M0 5 L4 0 L8 5 Z" fill="currentColor" /></svg></button>
-          <button
-            type="button" class="pool__pick-spin-btn" tabindex="-1"
-            data-test="pool-pick-max-down" aria-label="Decrease maximum picks"
-            @click="bumpPickMax(-1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true"><path d="M0 0 L4 5 L8 0 Z" fill="currentColor" /></svg></button>
-        </span>
-      </span>
+      <WpNumber
+        class="pool__pick-wrap"
+        :model-value="pickMax"
+        :min="0"
+        commit="input"
+        aria-label="Maximum picks"
+        up-label="Increase maximum picks"
+        down-label="Decrease maximum picks"
+        data-test="pool-pick-max"
+        @update:model-value="(n) => n !== null && setPickMax(n)"
+      />
       <input
         v-if="pickMax > 1"
         class="pool__pick-sep"
@@ -585,9 +556,9 @@ const skewedTowards = computed(() => {
         <span class="pool__opt-head-cell pool__opt-head-cell--right">Category</span>
       </div>
       <OptionRow
-        :var-producers="varProducers"
         v-for="option in allOptions"
         :key="option.id"
+        :var-producers="varProducers"
         :option="option"
         :all-options="allOptions"
         :instance="instance"
@@ -689,57 +660,7 @@ const skewedTowards = computed(() => {
  * (.opt__weight-wrap + .opt__spin): bordered wrap + borderless input with the
  * native arrows suppressed + a custom up/down SVG spin column. So the two
  * controls read as one family AND keep visible arrows. */
-.pool__pick-wrap {
-  display: inline-flex;
-  align-items: stretch;
-  width: 56px;
-  height: 22px;
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.pool__pick-wrap:focus-within { border-color: var(--wp-accent); }
-.pool__pick-num {
-  flex: 1;
-  min-width: 0;
-  background: transparent;
-  border: 0;
-  padding: 0 6px;
-  font: 11px var(--wp-font-mono);
-  color: var(--wp-text);
-  text-align: right;
-  -moz-appearance: textfield;
-}
-.pool__pick-num::-webkit-outer-spin-button,
-.pool__pick-num::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.pool__pick-num:focus { outline: none; }
-.pool__pick-spin {
-  display: flex;
-  flex-direction: column;
-  width: 14px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--wp-border);
-  background: var(--wp-bg-deep, var(--wp-bg));
-}
-.pool__pick-spin-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  line-height: 0;
-}
-.pool__pick-spin-btn + .pool__pick-spin-btn { border-top: 1px solid var(--wp-border); }
-.pool__pick-spin-btn:hover { color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,0.10); }
+.pool__pick-wrap { width: 56px; }
 .pool__pick-dash { color: var(--wp-text-dim, var(--wp-text3)); }
 .pool__pick-sep {
   flex: 1;

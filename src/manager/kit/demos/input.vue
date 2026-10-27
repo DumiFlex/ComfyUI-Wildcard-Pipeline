@@ -12,7 +12,7 @@ const width = ref("1024");
     <Input v-model="name" aria-label="Name" />
     <Input v-model="variable" prefix="$" aria-label="Variable name" />
     <Input v-model="width" suffix="px" aria-label="Width" />
-    <Input model-value="" icon="pi-search" placeholder="Search modules" aria-label="Search modules" />
+    <Input model-value="" icon="pi-link" type="url" placeholder="https://…" aria-label="Link" />
     <Input model-value="Hair colour" error aria-label="Name with an error" />
     <Input model-value="hair_colour" prefix="$" readonly aria-label="Read-only variable" />
     <Input model-value="Locked" disabled aria-label="Disabled field" />

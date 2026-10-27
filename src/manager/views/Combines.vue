@@ -17,10 +17,10 @@ import Select from "../components/ui/Select.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "../components/ui/Chip.vue";
 import { categoryAssignOptions, categoryFilterOptions } from "../utils/category-options";
 import type { CategoryRow, CombinePayload, ModuleRow } from "../api/types";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 
 const route = useRoute();
@@ -161,7 +161,7 @@ function templateParts(row: ModuleRow): TemplatePart[] {
 
 <template>
   <!-- Single root vnode — AppLayout's <Transition mode="out-in"> needs
-       one root or it never paints the destination view. ConfirmDialog
+       one root or it never paints the destination view. ConfirmModal
        teleports to body anyway; wrapper here only affects vnode tracking. -->
   <div class="wp-route-root">
   <ModuleListView
@@ -288,12 +288,12 @@ function templateParts(row: ModuleRow): TemplatePart[] {
 
     <template #columns="{ row }">
       <td>
-        <CategoryChip
+        <Chip
           v-if="row.category_id && categoryById.get(row.category_id)"
-          :name="categoryById.get(row.category_id)!.name"
+         
           :color="categoryById.get(row.category_id)!.color"
           :icon="categoryById.get(row.category_id)!.icon"
-        />
+        >{{ categoryById.get(row.category_id)!.name }}</Chip>
         <span v-else class="wp-dim">—</span>
       </td>
       <td><span class="wp-mono wp-row-expand__name">{{ outputVar(row) }}</span></td>
@@ -303,7 +303,7 @@ function templateParts(row: ModuleRow): TemplatePart[] {
 
     <template #actions="{ row }">
       <Button variant="ghost" size="sm" icon="pi-pencil" aria-label="Edit" @click="edit(row)" />
-      <SendToTestRunner :kind="'combine'" :id="row.id" compact />
+      <SendToTestRunner :id="row.id" :kind="'combine'" compact />
       <Button variant="ghost" size="sm" icon="pi-clone" aria-label="Duplicate" @click="dup(row)" />
       <CommunityRowActions :row="row" kind="module" />
       <Button variant="ghost" size="sm" icon="pi-trash" aria-label="Delete" @click="del(row)" />
@@ -331,12 +331,12 @@ function templateParts(row: ModuleRow): TemplatePart[] {
     </template>
   </ModuleListView>
 
-  <ConfirmDialog
-    :visible="delConfirm.visible.value"
+  <ConfirmModal
+    :open="delConfirm.visible.value"
     :title="`Delete \&quot;${delConfirm.pending.value?.name ?? ''}\&quot;?`"
     body="This permanently removes the library entry."
     confirm-label="Delete"
-    variant="danger"
+    tone="danger"
     @confirm="delConfirm.confirm(performDelete)"
     @cancel="delConfirm.cancel"
   />

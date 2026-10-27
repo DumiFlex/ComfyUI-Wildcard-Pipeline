@@ -16,6 +16,7 @@
  *   - `actions`               — trailing per-row action buttons
  *   - `expansion`             — body of the expanded-row drawer
  */
+import SearchInput from "@/components/shared/SearchInput.vue";
 import { computed, defineAsyncComponent, nextTick, ref, watch, useSlots } from "vue";
 import { useRouter } from "vue-router";
 import Button from "./ui/Button.vue";
@@ -748,16 +749,15 @@ defineExpose({
 
     <!-- Toolbar -->
     <div class="wp-page-toolbar">
-      <div class="wp-page-toolbar__search wp-input-group" data-ai-anchor="search" data-ai-label="Search the list">
-        <span class="wp-input-group__icon" aria-hidden="true"><i class="pi pi-search" /></span>
-        <input
-          class="wp-input"
-          placeholder="Search by name, id, tag…"
-          :value="filter.q ?? ''"
-          aria-label="Search"
-          @input="(e) => { filter.q = (e.target as HTMLInputElement).value; emitFetch(); }"
-        />
-      </div>
+      <SearchInput
+        class="wp-page-toolbar__search"
+        :model-value="filter.q ?? ''"
+        placeholder="Search by name, id, tag…"
+        aria-label="Search"
+        data-ai-anchor="search"
+        data-ai-label="Search the list"
+        @update:model-value="(v) => { filter.q = v; emitFetch(); }"
+      />
       <Button
         :variant="filtersOpen ? 'outline' : 'secondary'"
         :icon="filtersOpen ? 'pi pi-filter-fill' : 'pi pi-filter'"

@@ -3,6 +3,7 @@
  * Samples tab: one row per returned seed with the variables that varied,
  * filterable by any cell text. Click a row for that seed's trace.
  */
+import SearchInput from "@/components/shared/SearchInput.vue";
 import { computed, ref } from "vue";
 import type { ScenarioRunResponse } from "../../api/types";
 import { negativeText, orderByStack, renderValue, type StackItemView } from "../../utils/scenario";
@@ -58,13 +59,14 @@ const rows = computed(() => {
 <template>
   <div class="wp-trsm" data-test="samples-panel">
     <div class="wp-trsm__bar">
-      <input
+      <SearchInput
         v-model="filter"
-        type="search"
+        class="wp-trsm__filter"
+        size="sm"
         placeholder="Filter by seed or value…"
         aria-label="Filter samples"
         data-test="samples-filter"
-      >
+      />
       <span>{{ rows.length }} of {{ result.samples.length }} returned seeds<template v-if="result.samples.length < result.runs"> (the run covered {{ result.runs }})</template></span>
     </div>
     <p v-if="!columns.length" class="wp-trsm__none" data-test="samples-empty">
@@ -112,12 +114,7 @@ const rows = computed(() => {
 <style scoped>
 .wp-trsm { display: flex; flex-direction: column; gap: var(--wp-space-5); }
 .wp-trsm__bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--wp-space-5); font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
-.wp-trsm__bar input {
-  width: min(320px, 100%); background: var(--wp-bg-1); color: var(--wp-text);
-  border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm);
-  padding: var(--wp-space-3) var(--wp-space-4); font-size: var(--wp-text-sm);
-}
-.wp-trsm__bar input:focus-visible { outline: none; border-color: var(--wp-border-focus); }
+.wp-trsm__filter { width: min(320px, 100%); }
 .wp-trsm__scroll { overflow: auto; max-height: 560px; border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm); }
 table { border-collapse: collapse; width: 100%; font-size: var(--wp-text-sm); }
 th {

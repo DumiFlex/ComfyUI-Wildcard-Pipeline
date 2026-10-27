@@ -4,6 +4,7 @@
  * AND content (option values, templates, rule values), filters by kind and
  * sorts — the picker the old single-module dropdown never had.
  */
+import SearchInput from "@/components/shared/SearchInput.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import type { BundleRow, ModuleRow, ScenarioStackItem } from "../../api/types";
 import { moduleBinding, searchText, type StackKind } from "../../utils/scenario";
@@ -38,7 +39,7 @@ function setSort(v: string | number | null): void {
 }
 const active = ref(0);
 const root = ref<HTMLElement | null>(null);
-const input = ref<HTMLInputElement | null>(null);
+const input = ref<InstanceType<typeof SearchInput> | null>(null);
 
 interface Entry {
   kind: StackKind; id: string; name: string; detail: string;
@@ -114,16 +115,14 @@ onBeforeUnmount(() => document.removeEventListener("mousedown", onDocDown));
 
 <template>
   <div ref="root" class="wp-trp" role="dialog" aria-label="Add to stack" data-test="module-picker" @keydown="onKey">
-    <input
+    <SearchInput
       ref="input"
       v-model="query"
-      class="wp-trp__search"
-      type="search"
       placeholder="Search names and content…"
       aria-label="Search modules and bundles"
       data-test="picker-search"
       @input="active = 0"
-    >
+    />
     <div class="wp-trp__kinds" role="group" aria-label="Kind">
       <button type="button" class="wp-trp__kind" :data-on="kind === 'all' ? 'true' : 'false'" @click="kind = 'all'; active = 0">All</button>
       <button
@@ -180,12 +179,6 @@ onBeforeUnmount(() => document.removeEventListener("mousedown", onDocDown));
   border-radius: var(--wp-radius); box-shadow: var(--wp-shadow-xl);
   padding: var(--wp-space-5); display: flex; flex-direction: column; gap: var(--wp-space-4);
 }
-.wp-trp__search {
-  width: 100%; background: var(--wp-bg-2); color: var(--wp-text);
-  border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm);
-  padding: var(--wp-space-4) var(--wp-space-5); font-size: var(--wp-text-base);
-}
-.wp-trp__search:focus-visible { outline: none; border-color: var(--wp-border-focus); }
 .wp-trp__kinds { display: flex; flex-wrap: wrap; gap: var(--wp-space-2); }
 .wp-trp__kind {
   border: 1px solid var(--wp-border); background: var(--wp-bg-2); color: var(--wp-text-muted);

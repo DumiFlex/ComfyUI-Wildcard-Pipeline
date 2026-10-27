@@ -6,7 +6,7 @@
  * green, text as old struck → new.
  */
 import type { InfoRowView } from "../../../composables/card-views/types";
-import CategoryChip from "../../CategoryChip.vue";
+import Chip from "../../ui/Chip.vue";
 import AiSyntax from "../AiSyntax.vue";
 
 defineProps<{ rows: InfoRowView[]; full?: boolean }>();
@@ -28,11 +28,11 @@ defineProps<{ rows: InfoRowView[]; full?: boolean }>();
           <span v-for="t in r.tags" :key="t.tag" class="wp-ai-diff__chip" :data-change="t.change" :title="t.change === 'removed' ? 'Taken off' : t.change === 'added' ? 'Added' : undefined">#{{ t.tag }}</span>
         </template>
         <template v-else-if="r.field === 'category'">
-          <CategoryChip v-if="r.from" :name="r.from.name" :color="r.from.color" :icon="r.from.icon" class="wp-ai-info__was-chip" />
+          <Chip v-if="r.from" :color="r.from.color" :icon="r.from.icon" class="wp-ai-info__was-chip">{{ r.from.name }}</Chip>
           <span v-else class="wp-ai-diff__none">none</span>
           <span class="wp-ai-diff__arrow" aria-label="becomes">→</span>
           <template v-if="r.to">
-            <CategoryChip :name="r.to.name" :color="r.to.color" :icon="r.to.icon" data-test="ai-card-category-to" />
+            <Chip :color="r.to.color" :icon="r.to.icon" data-test="ai-card-category-to">{{ r.to.name }}</Chip>
             <span v-if="r.to.isNew" class="wp-ai-diff__new">new</span>
           </template>
           <span v-else class="wp-ai-diff__none">none</span>

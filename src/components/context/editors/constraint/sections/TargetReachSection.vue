@@ -21,6 +21,7 @@
  * surfaced on the modal. Writes flow up via `update:modelValue` — the
  * modal threads the new `TargetSelect` into `module.instance.target_select`.
  */
+import WpNumber from "../../../../shared/WpNumber.vue";
 import { computed } from "vue";
 import {
   carrierOptionIdsFor,
@@ -110,20 +111,10 @@ function setMode(next: TargetSelect["mode"]): void {
   }
 }
 
-function onCountInput(ev: Event): void {
-  const raw = Number((ev.target as HTMLInputElement).value);
-  const n = Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
+/** Typed or stepped next-N count: whole numbers, at least 1. */
+function setCount(v: number | null): void {
+  const n = v !== null && Number.isFinite(v) && v >= 1 ? Math.floor(v) : 1;
   emit("update:modelValue", { mode: "next", count: n });
-}
-
-/** Custom stepper ▲/▼. The native number-input spinners are suppressed
- *  (they only show on hover and render inconsistently inside ComfyUI's
- *  embedded DOM), so explicit buttons give the always-visible arrows the
- *  user asked for. Clamped at the engine minimum of 1 (a `next 0` reach
- *  covers nothing). */
-function bumpCount(delta: number): void {
-  const next = Math.max(1, count.value + delta);
-  emit("update:modelValue", { mode: "next", count: next });
 }
 
 // ── Pick checklist ──────────────────────────────────────────────
@@ -298,6 +289,7 @@ const hint = computed<string>(() => {
   <section class="rh" data-test="reach-section">
     <div class="rh__label">Target reach</div>
 
+    <div class="rh-row">
     <div class="rh-seg" role="group" aria-label="Target reach mode">
       <button
         v-for="m in MODES"
@@ -309,37 +301,19 @@ const hint = computed<string>(() => {
         :data-test="`reach-mode-${m.key}`"
         @click="setMode(m.key)"
       >{{ m.label }}</button>
-
-      <span v-if="mode === 'next'" class="rh-step">
-        <input
-          class="rh-step__field"
-          type="number"
-          min="1"
-          step="1"
-          inputmode="numeric"
-          :value="count"
-          aria-label="Number of downstream targets"
-          data-test="reach-count"
-          @input="onCountInput"
-        />
-        <span class="rh-step__arrows">
-          <button
-            type="button"
-            class="rh-step__arrow"
-            aria-label="Increase count"
-            data-test="reach-count-up"
-            @click="bumpCount(1)"
-          >▲</button>
-          <button
-            type="button"
-            class="rh-step__arrow"
-            aria-label="Decrease count"
-            :disabled="count <= 1"
-            data-test="reach-count-down"
-            @click="bumpCount(-1)"
-          >▼</button>
-        </span>
-      </span>
+    </div>
+    <WpNumber
+        v-if="mode === 'next'"
+        class="rh-step"
+        :model-value="count"
+        :min="1"
+        commit="input"
+        aria-label="Number of downstream targets"
+        up-label="Increase count"
+        down-label="Decrease count"
+        data-test="reach-count"
+        @update:model-value="setCount"
+      />
     </div>
 
     <div v-if="mode === 'pick'" class="rh-pick" data-test="reach-picklist">
@@ -428,54 +402,8 @@ const hint = computed<string>(() => {
 
 /* Stepper sits flush after the segmented group: number field + a stacked
    ▲/▼ arrow column. */
-.rh-step {
-  display: inline-flex;
-  align-items: stretch;
-  border-left: 1px solid var(--wp-border);
-  background: var(--wp-bg-deep, var(--wp-bg));
-}
-.rh-step__field {
-  width: 38px;
-  background: transparent;
-  border: 0;
-  padding: 0 6px;
-  font: 600 12px var(--wp-font-mono);
-  color: var(--wp-text);
-  text-align: center;
-  -moz-appearance: textfield;
-}
-/* Native spinners are suppressed in favour of the custom always-visible
-   ▲/▼ buttons (native arrows only appear on hover + render inconsistently
-   in ComfyUI's embedded DOM). */
-.rh-step__field::-webkit-outer-spin-button,
-.rh-step__field::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.rh-step__field:focus { outline: none; }
-
-.rh-step__arrows {
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid var(--wp-border);
-}
-.rh-step__arrow {
-  flex: 1 1 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font-size: 7px;
-  line-height: 1;
-  cursor: pointer;
-}
-.rh-step__arrow + .rh-step__arrow { border-top: 1px solid var(--wp-border); }
-.rh-step__arrow:hover:not(:disabled) {
-  color: var(--wp-text);
-  background: color-mix(in srgb, var(--wp-text) 8%, transparent);
-}
-.rh-step__arrow:disabled { opacity: 0.3; cursor: default; }
+.rh-row { display: flex; align-items: center; gap: 6px; }
+.rh-step { width: 64px; }
 
 /* ── Pick checklist ─────────────────────────────────────────────── */
 .rh-pick {

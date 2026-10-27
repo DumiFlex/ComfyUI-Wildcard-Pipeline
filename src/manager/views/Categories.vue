@@ -8,14 +8,14 @@ import Input from "../components/ui/Input.vue";
 import ColorPicker from "../components/ColorPicker.vue";
 import IconPicker from "../components/IconPicker.vue";
 import { useCategoryStore } from "../stores/categoryStore";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "../components/ui/Chip.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { ApiError } from "../api/client";
 import { useToast } from "../composables/useToast";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 import { registerPageNote } from "../composables/useOpenEditor";
 import type { CategoryRow } from "../api/types";
@@ -332,12 +332,12 @@ async function saveEdit() {
                 />
               </template>
               <template v-else>
-                <CategoryChip
-                  :name="row.name"
+                <Chip
+                 
                   :color="row.color"
                   :icon="row.icon"
                   :data-test="`cat-name-${row.id}`"
-                />
+                >{{ row.name }}</Chip>
               </template>
             </td>
             <td>
@@ -390,19 +390,19 @@ async function saveEdit() {
   <!-- CascadeConfirmDialog for per-row category delete when refs > 0. -->
   <CascadeConfirmDialog
     v-if="cascadeDialogRow"
+    :id="cascadeDialogRow.id"
     :open="cascadeDialogRow !== null"
     kind="category"
-    :id="cascadeDialogRow.id"
     action="delete"
     @confirmed="onCatCascadeDialogConfirmed"
     @cancelled="cascadeDialogRow = null"
   />
-  <ConfirmDialog
-    :visible="delConfirm.visible.value"
+  <ConfirmModal
+    :open="delConfirm.visible.value"
     :title="`Delete category \&quot;${delConfirm.pending.value?.name ?? ''}\&quot;?`"
     body="This permanently removes the category."
     confirm-label="Delete"
-    variant="danger"
+    tone="danger"
     @confirm="delConfirm.confirm(performDelete)"
     @cancel="delConfirm.cancel"
   />

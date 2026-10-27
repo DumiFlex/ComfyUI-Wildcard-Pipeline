@@ -6,9 +6,9 @@
  * text, or the template's lead, order and negative. Every change goes to
  * the graph; the server compiles the item from it again.
  */
+import WpNumber from "@/components/shared/WpNumber.vue";
 import { computed } from "vue";
 import Checkbox from "../ui/Checkbox.vue";
-import Input from "../ui/Input.vue";
 import Select from "../ui/Select.vue";
 import type { SelectOption } from "../ui/select-types";
 import type { AiPackItem, AiPackRelation, AiPackRelationKind, AiPackSlot } from "../../api/types";
@@ -149,7 +149,7 @@ function move(v: string, by: number): void {
         </label>
         <label class="wp-pack-graph__field">
           <span>Sometimes none (%)</span>
-          <Input type="number" size="sm" :model-value="slot.sometimes_none" :min="0" :max="90" :disabled="busy" aria-label="Sometimes none" @update:model-value="(v) => setSlot({ sometimes_none: Math.max(0, Math.min(90, Math.round(Number(v)) || 0)) })" />
+          <WpNumber commit="input" size="sm" :model-value="slot.sometimes_none" :min="0" :max="90" :disabled="busy" aria-label="Sometimes none" @update:model-value="(v) => setSlot({ sometimes_none: Math.max(0, Math.min(90, Math.round(Number(v)) || 0)) })" />
         </label>
         <label class="wp-pack-graph__check">
           <Checkbox class="wp-checkbox--inline" :model-value="slot.hold === true" :disabled="busy" data-test="pack-slot-hold" @update:model-value="(v) => setSlot({ hold: v })" />
@@ -187,7 +187,7 @@ function move(v: string, by: number): void {
           <Select v-if="toKeyed(r)" size="sm" :model-value="r.to?.axis ?? ''" :options="axesOf(r.to?.slot ?? '')" :filterable="false" :disabled="busy" aria-label="Target axis" @update:model-value="(v) => setSide(n, r, 'to', { axis: String(v), value: '' })" />
           <Select v-if="toKeyed(r)" size="sm" :model-value="r.to?.value ?? ''" :options="valuesOf(r.to?.slot ?? '', r.to?.axis ?? '')" :filterable="false" :disabled="busy" aria-label="Target value" @update:model-value="(v) => setSide(n, r, 'to', { value: String(v) })" />
           <input v-if="r.kind === 'exclude' || r.kind === 'only' || r.kind === 'boost' || r.kind === 'reduce'" class="wp-input wp-input--sm" :value="(r.words ?? []).join(', ')" placeholder="about (sandals, shorts)" :disabled="busy" aria-label="What the rule is about" data-test="pack-relation-words" @change="pb.editRelation(n, { words: words(text($event)) })">
-          <Input v-if="r.kind === 'boost' || r.kind === 'reduce'" type="number" size="sm" class="wp-pack-graph__rel-factor" :model-value="r.factor ?? (r.kind === 'boost' ? 3 : 0.3)" :min="0" :max="100" :step="0.1" :disabled="busy" aria-label="Factor" @update:model-value="(v) => pb.editRelation(n, { factor: Number(v) })" />
+          <WpNumber v-if="r.kind === 'boost' || r.kind === 'reduce'" commit="input" size="sm" class="wp-pack-graph__rel-factor" :model-value="r.factor ?? (r.kind === 'boost' ? 3 : 0.3)" :min="0" :max="100" :step="0.1" :disabled="busy" aria-label="Factor" @update:model-value="(v) => pb.editRelation(n, { factor: Number(v) })" />
         </template>
         <button type="button" class="wp-pack-graph__icon" :disabled="busy" aria-label="Remove this rule" title="Remove this rule" data-test="pack-relation-remove" @click="pb.removeRelation(n)"><i class="pi pi-times" aria-hidden="true" /></button>
       </div>

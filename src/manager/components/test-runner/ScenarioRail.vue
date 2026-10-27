@@ -4,6 +4,7 @@
  * filter and a "new quick run" action. The active row is the scenario open
  * in the workbench; an unsaved quick run shows as its own row at the top.
  */
+import SearchInput from "@/components/shared/SearchInput.vue";
 import { computed, ref } from "vue";
 import Button from "../ui/Button.vue";
 import Icon, { ICON_SM } from "../ui/Icon.vue";
@@ -82,14 +83,13 @@ function itemCount(row: ScenarioRow): string {
         <h2>Scenarios</h2>
         <Button variant="ghost" size="sm" icon="pi-plus" data-test="new-quick-run" @click="emit('new')">New</Button>
       </div>
-      <input
+      <SearchInput
         v-model="filter"
-        class="wp-trr__filter"
-        type="search"
+        size="sm"
         placeholder="Filter scenarios…"
         aria-label="Filter scenarios"
         data-test="scenario-filter"
-      >
+      />
       <div v-if="uses" class="wp-trr__uses" data-test="uses-filter">
         <span>Using <strong>{{ uses.name }}</strong></span>
         <button type="button" class="wp-trr__act" aria-label="Show all scenarios" @click="emit('clear-uses')">
@@ -179,19 +179,12 @@ function itemCount(row: ScenarioRow): string {
 }
 .wp-trr__title { display: flex; align-items: center; justify-content: space-between; }
 .wp-trr__title h2 { margin: 0; font-size: var(--wp-text-md); font-weight: var(--wp-weight-semibold); }
-.wp-trr__filter {
-  width: 100%;
-  background: var(--wp-bg-2); color: var(--wp-text);
-  border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm);
-  padding: var(--wp-space-3) var(--wp-space-4); font-size: var(--wp-text-sm);
-}
 .wp-trr__uses {
   display: flex; align-items: center; justify-content: space-between; gap: var(--wp-space-3);
   font-size: var(--wp-text-xs); color: var(--wp-text-muted);
   background: var(--wp-bg-3); border-radius: var(--wp-radius-sm); padding: var(--wp-space-2) var(--wp-space-2) var(--wp-space-2) var(--wp-space-4);
 }
 .wp-trr__uses strong { color: var(--wp-text); font-weight: var(--wp-weight-medium); }
-.wp-trr__filter:focus-visible { outline: none; border-color: var(--wp-border-focus); }
 .wp-trr__list {
   list-style: none; margin: 0; padding: var(--wp-space-3);
   overflow: auto; display: flex; flex-direction: column; gap: var(--wp-space-1);

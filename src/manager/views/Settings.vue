@@ -9,6 +9,7 @@
  * search hit), so links, the command palette and the back button all work.
  * Every row a search can land on is listed in `settings-index.ts`.
  */
+import SearchInput from "@/components/shared/SearchInput.vue";
 import { computed, nextTick, ref, watch, type Component } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import Icon from "../components/ui/Icon.vue";
@@ -93,17 +94,14 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
   <div class="wp-page wp-settings" :data-wide="!searching && WIDE.has(active) ? 'true' : undefined">
     <aside class="wp-settings__nav" aria-label="Settings sections">
       <h1 class="wp-settings__title">Settings</h1>
-      <div class="wp-settings__search">
-        <Icon name="pi-search" />
-        <input
-          v-model="query"
-          type="search"
-          placeholder="Search settings"
-          aria-label="Search settings"
-          data-test="settings-search"
-          @keydown="onSearchKey"
-        >
-      </div>
+      <SearchInput
+        v-model="query"
+        class="wp-settings__search"
+        placeholder="Search settings"
+        aria-label="Search settings"
+        data-test="settings-search"
+        @keydown="onSearchKey"
+      />
       <nav class="wp-settings__sections">
         <RouterLink
           v-for="s in SECTIONS"
@@ -166,29 +164,7 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
   top: 0;
 }
 .wp-settings__title { font-size: 20px; line-height: 28px; margin: 0 0 var(--wp-space-5); }
-.wp-settings__search {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-  background: var(--wp-bg-2);
-  border: 1px solid var(--wp-border-strong, var(--wp-border));
-  border-radius: var(--wp-radius);
-  padding: 0 var(--wp-space-4);
-  color: var(--wp-text-dim);
-  margin-bottom: var(--wp-space-5);
-}
-.wp-settings__search:focus-within { border-color: var(--wp-accent-500); }
-.wp-settings__search input {
-  flex: 1;
-  min-width: 0;
-  height: 32px;
-  border: 0;
-  background: transparent;
-  color: var(--wp-text);
-  font: inherit;
-  font-size: var(--wp-text-sm);
-  outline: none;
-}
+.wp-settings__search { margin-bottom: var(--wp-space-5); }
 .wp-settings__sections { display: flex; flex-direction: column; gap: 2px; }
 .wp-settings__section-link {
   display: flex;

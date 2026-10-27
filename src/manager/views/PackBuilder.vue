@@ -13,11 +13,11 @@
  * before offering Install. "Extend with AI" on a bundle opens this page
  * aimed at that bundle (`pb.target`).
  */
+import WpNumber from "@/components/shared/WpNumber.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
-import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import AiImagePicker from "../components/ai/AiImagePicker.vue";
 import AiSearchFound from "../components/ai/AiSearchFound.vue";
@@ -333,7 +333,7 @@ const run = computed<AiPackRun>(() => draft.value?.run ?? { mode: "single", fram
 function setRunMode(mode: AiPackRun["mode"]): void {
   pb.editPlan({ run: { mode, frames: mode === "story" ? run.value.frames || 4 : 0 } });
 }
-function setRunFrames(v: string | number): void {
+function setRunFrames(v: number | null): void {
   const n = Math.round(Number(v));
   // The server keeps it within 2–12.
   pb.editPlan({ run: { mode: "story", frames: Number.isFinite(n) && n > 0 ? Math.max(2, Math.min(12, n)) : 4 } });
@@ -704,8 +704,7 @@ function stopExtending(): void {
             @update:model-value="(v) => setRunMode(v as AiPackRun['mode'])"
           />
           <template v-if="run.mode === 'story'">
-            <Input
-              type="number"
+            <WpNumber commit="input"
               size="sm"
               class="wp-pack__run-frames"
               :model-value="run.frames"

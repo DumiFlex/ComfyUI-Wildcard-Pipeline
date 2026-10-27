@@ -6,9 +6,9 @@
  * first and are never pruned; the rest are grouped by when they were last
  * used. Rename and pin don't move a chat; delete asks inline first.
  */
+import SearchInput from "@/components/shared/SearchInput.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
-import Input from "../ui/Input.vue";
 import { api } from "../../api/client";
 import type { AiChatSummary } from "../../api/types";
 import { plainMentions } from "../../utils/chat-completions";
@@ -132,10 +132,9 @@ function turnsLabel(n: number): string {
 
 <template>
   <div class="wp-ai-chats" data-test="ai-chats">
-    <Input
+    <SearchInput
       v-model="q"
       size="sm"
-      icon="pi-search"
       placeholder="Search chats"
       aria-label="Search chats"
       data-test="ai-chats-search"

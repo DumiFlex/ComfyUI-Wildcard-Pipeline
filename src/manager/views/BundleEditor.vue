@@ -132,7 +132,7 @@ import BundleReattachSection from "../components/BundleReattachSection.vue";
 import BundleSplitModal, { type SplitGroup } from "../components/BundleSplitModal.vue";
 import { useAiConfig } from "../composables/useAiConfig";
 import { usePackBuilder } from "../composables/usePackBuilder";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
@@ -1165,7 +1165,7 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
       </span>
     </template>
     <template v-if="isEdit" #header-extra>
-      <SendToTestRunner v-if="props.id" :kind="'bundle'" :id="props.id" />
+      <SendToTestRunner v-if="props.id" :id="props.id" :kind="'bundle'" />
       <CommunityRowActions
         v-if="currentRow"
         :row="currentRow"
@@ -1202,10 +1202,10 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
           :description="description"
           :category-id="categoryId"
           :tags="tags"
+          :content-rating="contentRating"
           @update:name="(v) => (name = v)"
           @update:description="(v) => (description = v)"
           @update:category-id="(v) => (categoryId = v)"
-          :content-rating="contentRating"
           @update:tags="(v) => (tags = v)"
           @update:content-rating="(v) => (contentRating = v)"
         >
@@ -1328,29 +1328,29 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
     <!-- CascadeConfirmDialog: shown when entity has downstream refs. -->
     <CascadeConfirmDialog
       v-if="isEdit && props.id"
+      :id="props.id"
       :open="cascadeDialogOpen"
       kind="bundle"
-      :id="props.id"
       action="delete"
       @confirmed="onCascadeDialogConfirmed"
       @cancelled="cascadeDialogOpen = false"
     />
-    <!-- ConfirmDialog inside EditorFrame to keep template single-root;
+    <!-- ConfirmModal inside EditorFrame to keep template single-root;
          see WildcardEditor for the multi-root Transition explanation. -->
-    <ConfirmDialog
-      :visible="showConfirm"
+    <ConfirmModal
+      :open="showConfirm"
       title="Discard unsaved changes?"
       body="You have unsaved edits. Leaving this page will discard them."
       confirm-label="Discard & leave"
       cancel-label="Stay"
-      variant="danger"
+      tone="danger"
       @confirm="onConfirmLeave"
       @cancel="onCancelLeave"
     />
     <!-- Confirm pulling a missing child dependency (+ its closure) from the
          community before any network/install side effect. -->
-    <ConfirmDialog
-      :visible="downloadConfirmOpen"
+    <ConfirmModal
+      :open="downloadConfirmOpen"
       title="Download dependencies"
       :body="downloadConfirmBody"
       confirm-label="Download & install"

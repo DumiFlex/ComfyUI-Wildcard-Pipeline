@@ -1126,21 +1126,9 @@ input, textarea, select { font: inherit; }
   font-weight: 500;
 }
 
-/* Category chip — tinted pill matching prototype `<Chip color>` (ui.jsx:323).
-   Inherits .wp-chip pill geometry; the color triple comes from inline style
-   set at the call site (color = raw color, bg = color@14%, border = color@35%). */
-.wp-cat-chip {
-  /* Mirrors `.wp-chip` density pass — same padding/font/gap so the
-   * category pills don't look chunkier than neighbouring `.wp-chip`
-   * instances on category pages. */
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 500;
-  border: 1px solid transparent;
-  white-space: nowrap;
-}
+/* A colour-tinted chip (a category, a kind): the colour triple is inline,
+   set by Chip's `color` prop; the label reads a touch heavier. */
+.wp-chip--color { font-weight: 500; }
 
 /* ---------- Wildcard syntax indicators ---------- */
 .wp-syntax-cell {
@@ -1829,37 +1817,8 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   z-index: 100;
   pointer-events: none;
 }
-.wp-toast {
-  /* Slight transparency + backdrop-blur so the toast reads as a
-   * floating overlay against whatever's underneath. Replaces the old
-   * heavy 40px black shadow that looked off against dark surfaces. */
-  background: color-mix(in oklab, var(--wp-bg-3) 94%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid var(--wp-border-strong);
-  border-left: 3px solid var(--wp-accent-500);
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-size: 12.5px;
-  display: flex; align-items: center; gap: 10px;
-  box-shadow: var(--wp-shadow-md);
-  pointer-events: auto;
-  animation: wp-slide-in .18s ease-out;
-  min-width: 220px;
-}
-.wp-toast--success { border-left-color: var(--wp-success); }
-.wp-toast--warn    { border-left-color: var(--wp-warn); }
-.wp-toast--error   { border-left-color: var(--wp-danger); }
-.wp-toast--info    { border-left-color: var(--wp-info); }
-.wp-toast__summary { font-weight: 600; }
-.wp-toast__detail  { color: var(--wp-text-muted); font-size: 11.5px; }
-.wp-toast__close {
-  margin-left: auto;
-  background: none; border: none; padding: 0;
-  color: var(--wp-text-dim); cursor: pointer;
-  line-height: 0;
-}
-.wp-toast__close:hover { color: var(--wp-text); }
+/* The toast itself is components/shared/ToastCard.vue (shared with the canvas). */
+.wp-toast-stack > * { animation: wp-slide-in .18s ease-out; }
 @keyframes wp-slide-in { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
 /* ---------- Misc utility ---------- */

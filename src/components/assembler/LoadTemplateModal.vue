@@ -8,6 +8,7 @@
  * row so the assembler can persist the load identity for round-trip
  * "Update existing" saves.
  */
+import SearchInput from "../shared/SearchInput.vue";
 import { computed, nextTick, ref, watch } from "vue";
 import WpSelect from "../shared/WpSelect.vue";
 import { api } from "../../manager/api/client";
@@ -24,8 +25,7 @@ const loading = ref(false);
 const loadError = ref<string | null>(null);
 
 const searchTerm = ref("");
-const searchFocused = ref(false);
-const searchInput = ref<HTMLInputElement | null>(null);
+const searchInput = ref<InstanceType<typeof SearchInput> | null>(null);
 const favoritesOnly = ref(false);
 const selectedCategoryId = ref<string | null>(null);
 const selectedTags = ref<Set<string>>(new Set());
@@ -141,22 +141,15 @@ function pick(row: TemplateRow) {
       </header>
 
       <div class="wp-ltm__toolbar">
-        <div class="wp-ltm__search" :class="{ 'is-focused': searchFocused }">
-          <i class="pi pi-search wp-ltm__search-icon" aria-hidden="true" />
-          <input
-            ref="searchInput"
-            v-model="searchTerm"
-            type="text"
-            placeholder="Search templates by name or text…"
-            aria-label="Search templates"
-            data-test="load-tpl-search"
-            @focus="searchFocused = true"
-            @blur="searchFocused = false"
-          />
-          <span v-if="searchTerm" class="wp-ltm__search-clear" @click="searchTerm = ''">
-            <i class="pi pi-times" aria-hidden="true" />
-          </span>
-        </div>
+        <SearchInput
+          ref="searchInput"
+          v-model="searchTerm"
+          class="wp-ltm__search"
+          size="sm"
+          placeholder="Search templates by name or text…"
+          aria-label="Search templates"
+          data-test="load-tpl-search"
+        />
 
         <button
           type="button"
@@ -337,29 +330,7 @@ function pick(row: TemplateRow) {
   gap: 6px;
   border-bottom: 1px solid var(--wp-border);
 }
-.wp-ltm__search {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  height: 28px;
-  background: var(--wp-bg-3);
-  border: 1px solid var(--wp-border);
-  border-radius: 6px;
-  display: flex; align-items: center;
-  padding: 0 8px;
-  gap: 6px;
-  transition: border-color var(--wp-motion-quick) ease, background var(--wp-motion-quick) ease;
-}
-.wp-ltm__search.is-focused { border-color: var(--wp-accent-500, var(--wp-accent)); background: var(--wp-bg-2); }
-.wp-ltm__search-icon { font-size: 11px; color: var(--wp-text-dim); flex-shrink: 0; }
-.wp-ltm__search input {
-  flex: 1;
-  background: transparent; border: none; outline: none;
-  color: var(--wp-text); font-size: 12px; font-family: inherit;
-}
-.wp-ltm__search input::placeholder { color: var(--wp-text-dim); }
-.wp-ltm__search-clear { cursor: pointer; color: var(--wp-text-dim); font-size: 10px; padding: 2px; }
-.wp-ltm__search-clear:hover { color: var(--wp-text); }
+.wp-ltm__search { flex: 1; }
 
 .wp-ltm__icon-btn {
   display: inline-flex; align-items: center; justify-content: center;

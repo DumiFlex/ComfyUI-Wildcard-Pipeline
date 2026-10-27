@@ -4,6 +4,8 @@ import WpNumber from "@/components/shared/WpNumber.vue";
 
 const count = ref<number | null>(4);
 const width = ref<number | null>(1024);
+const weight = ref<number | null>(1.5);
+const budget = ref<number | null>(null);
 </script>
 
 <template>
@@ -16,7 +18,13 @@ const width = ref<number | null>(1024);
     </div>
     <div class="wp-kit__row">
       <WpNumber v-model="width" :step="64" size="md" suffix="px" aria-label="Width" class="wp-kit__num" />
-      <WpNumber :model-value="8" size="md" disabled aria-label="Disabled count" class="wp-kit__num" />
+      <WpNumber v-model="count" size="md" disabled aria-label="Disabled count" class="wp-kit__num" />
+    </div>
+    <p class="wp-kit__muted">Decimals, nullable ("use the default") and invalid.</p>
+    <div class="wp-kit__row">
+      <WpNumber v-model="weight" :min="0.01" :step="0.1" size="md" aria-label="Weight" class="wp-kit__num" />
+      <WpNumber v-model="budget" nullable placeholder="Server" size="md" aria-label="Nullable" class="wp-kit__num" />
+      <WpNumber v-model="count" invalid size="md" aria-label="Invalid" class="wp-kit__num" />
     </div>
   </div>
 </template>

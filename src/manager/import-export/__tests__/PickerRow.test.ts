@@ -161,8 +161,8 @@ describe("PickerRow", () => {
     expect(chip.exists()).toBe(true);
     expect(chip.text()).toBe("characters");
     // Shared primitive — not a row-local class.
-    expect(chip.attributes("class") ?? "").toContain("wp-cat-chip");
-    // Inline style from catChipStyle helper carries the user color in
+    expect(chip.attributes("class") ?? "").toContain("wp-chip--color");
+    // Chip's colour tint carries the user color in
     // some form (foreground, background, or borderColor). jsdom
     // serializes hex to rgb(), so check for either spelling.
     const style = chip.attributes("style") ?? "";

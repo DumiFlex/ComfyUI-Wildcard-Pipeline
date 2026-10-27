@@ -7,8 +7,8 @@
  * Parent (BundleEditor) takes the emitted ModuleRow, builds a snapshot,
  * and appends to `children[]`.
  */
+import SearchInput from "@/components/shared/SearchInput.vue";
 import { computed, ref, watch } from "vue";
-import Input from "./ui/Input.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 import type { BundleRow, ModuleRow, ModuleType } from "../api/types";
 
@@ -154,16 +154,12 @@ function pickBundle(row: BundleRow) {
             </button>
           </div>
 
-          <div class="wp-bundle-add__search">
-            <span class="wp-bundle-add__searchicon"><i class="pi pi-search" /></span>
-            <Input
-              v-model="search"
-              placeholder="Search modules…"
-              class="wp-bundle-add__searchinput"
-              aria-label="Search modules"
-              data-test="bundle-add-search"
-            />
-          </div>
+          <SearchInput
+            v-model="search"
+            placeholder="Search modules…"
+            aria-label="Search modules"
+            data-test="bundle-add-search"
+          />
 
           <div class="wp-bundle-add__list" data-test="bundle-add-list">
             <div
@@ -305,25 +301,6 @@ function pickBundle(row: BundleRow) {
   background: color-mix(in oklab, currentColor 16%, transparent);
 }
 
-.wp-bundle-add__search {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-.wp-bundle-add__searchicon {
-  position: absolute;
-  left: 8px;
-  color: var(--wp-text-dim);
-  pointer-events: none;
-  font-size: var(--wp-text-sm);
-}
-/* `Input` renders bare here (no icon prop), so the parent-passed
- * `wp-bundle-add__searchinput` class lands directly on the
- * `<input class="wp-input">` element. `:deep(.wp-input)` looked for
- * a DESCENDANT that doesn't exist → padding-left never applied →
- * absolute-positioned search icon overlapped the placeholder text.
- * Apply padding-left to the input itself. */
-.wp-bundle-add__searchinput { flex: 1; padding-left: 26px; } /* audit-exempt: 26px = icon left(8) + glyph(~13) + gap(5) */
 
 .wp-bundle-add__list {
   display: flex;

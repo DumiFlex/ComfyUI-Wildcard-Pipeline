@@ -310,7 +310,7 @@ describe("constraint MatrixSection — popover", () => {
     });
     // red×silk is library-boost ×2.0; open the popover and type a new factor.
     await w.find('[data-test="mx-cell-red-silk"]').trigger("click");
-    await popoverWrap(w).find(".pop-num__field").setValue("2.5");
+    await popoverWrap(w).find(".pop-num .wp-cnum__field").setValue("2.5");
     const last = updates[updates.length - 1].instance as Record<string, unknown>;
     expect(last.cell_factor_overrides).toEqual({ [RED_SILK]: 2.5 });
   });
@@ -361,7 +361,7 @@ describe("constraint MatrixSection — popover", () => {
     });
     // Library factor on red×silk is 2.0; typing that exact value should clear.
     await w.find('[data-test="mx-cell-red-silk"]').trigger("click");
-    await popoverWrap(w).find(".pop-num__field").setValue("2");
+    await popoverWrap(w).find(".pop-num .wp-cnum__field").setValue("2");
     const last = updates[updates.length - 1].instance as Record<string, unknown>;
     expect(last.cell_factor_overrides ?? null).toBeNull();
   });

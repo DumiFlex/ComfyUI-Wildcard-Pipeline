@@ -6,15 +6,17 @@ type Tone = "default" | "accent" | "success" | "warn" | "danger" | "info";
 
 interface Props {
   tone?: Tone;
-  icon?: string;
+  icon?: string | null;
   removable?: boolean;
   /**
-   * Free-form color (hex or any CSS color). When set, overrides the tone
-   * styling and renders the chip as a tinted pill: text uses the raw color,
-   * background = `color @ 14%`, border = `color @ 35%`. Mirrors the
-   * prototype's `<Chip color>` pattern (ui.jsx:323-337).
+   * Free-form colour (hex or any CSS colour), e.g. a category's. When set it
+   * overrides the tone and renders a tinted pill: background = colour @ 18%,
+   * border = colour @ 42%, and the text blends the colour toward
+   * `--wp-text` so a pale pick stays readable in light mode and a dark pick
+   * in dark mode. `null` reads as no colour (a category without one).
+   * This is what CategoryChip used to be: `<Chip :color :icon>{{ name }}</Chip>`.
    */
-  color?: string;
+  color?: string | null;
 }
 const props = withDefaults(defineProps<Props>(), { tone: "default" });
 
@@ -24,14 +26,14 @@ const emit = defineEmits<{
 
 const classes = computed(() => [
   "wp-chip",
-  !props.color && props.tone !== "default" && `wp-chip--${props.tone}`,
+  props.color ? "wp-chip--color" : props.tone !== "default" && `wp-chip--${props.tone}`,
 ]);
 
 const colorStyle = computed(() => {
   if (!props.color) return undefined;
   const c = props.color;
   return {
-    color: c,
+    color: `color-mix(in oklab, ${c} 65%, var(--wp-text))`,
     background: `color-mix(in oklab, ${c} 18%, transparent)`,
     borderColor: `color-mix(in oklab, ${c} 42%, transparent)`,
   };

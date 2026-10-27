@@ -12,9 +12,8 @@
  *     tint variant in `shared/row-primitives.css`.
  *   - `showId` opt-in renders the short 8-hex id via the global `.wp-id`
  *     primitive (`manager/styles/tokens.css`).
- *   - `categoryName` + `categoryColor` use the shared `.wp-cat-chip`
- *     primitive (tokens.css) styled via `catChipStyle` from
- *     `../utils/catChip`.
+ *   - `categoryName` + `categoryColor` render the kit Chip with its
+ *     `color` tint (the same pill every list view uses for a category).
  *   - `statusBadges` render through the shared `.wp-mod-badge` family
  *     (row-primitives.css) — every consumer surface uses the same
  *     letterform and palette, no Polish-A custom chip styling left.
@@ -29,7 +28,7 @@
 import { computed, ref, useId } from "vue";
 import Checkbox from "../components/ui/Checkbox.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "../components/ui/Chip.vue";
 
 /**
  * Status-badge taxonomy — six variants paired 1:1 with
@@ -81,7 +80,7 @@ interface Props {
   checked: boolean;
   /** Entity kind for the type-icon column. */
   kind?: string;
-  /** Optional category metadata for the `.wp-cat-chip` primitive. */
+  /** Optional category metadata for the category Chip. */
   categoryName?: string;
   categoryColor?: string;
   /** PrimeIcons slug for the category, rendered inside the chip. Absent for
@@ -256,13 +255,13 @@ function onRowClick(ev: MouseEvent): void {
       >{{ shortId }}</span>
     </div>
 
-    <CategoryChip
+    <Chip
       v-if="props.categoryName"
-      :name="props.categoryName"
+     
       :color="props.categoryColor"
       :icon="props.categoryIcon"
       data-test="picker-row-cat-chip"
-    />
+    >{{ props.categoryName }}</Chip>
     <span v-else class="wp-picker-row__col-spacer" aria-hidden="true" />
 
     <span
@@ -472,17 +471,8 @@ function onRowClick(ev: MouseEvent): void {
 }
 .wp-id:hover { color: var(--wp-text-muted); }
 
-/* Category chip — mirrors prototype lines 176-177. */
-.wp-cat-chip {
-  font-size: var(--wp-text-xs);
-  font-weight: 500;
-  padding: 1px 7px;
-  border-radius: 999px;
-  border: 1px solid;
-  letter-spacing: .01em;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
+/* Category chip: the kit Chip; keep it from shrinking in the row. */
+.wp-chip--color { flex-shrink: 0; }
 
 /* Status badges — mirrors prototype lines 180-187. Picker-row local
  * override (slightly tighter than shared row-primitives baseline). */
