@@ -478,7 +478,8 @@ def test_a_new_wildcard_keeps_the_category_a_later_step_gives_it():
 
 def test_a_compared_test_card_gives_old_values_their_real_share():
     """#11: a value outside the before run's top five read "0% → 22%"."""
-    opts = [{"id": f"o{i}", "value": f"look {i}", "weight": 1, "sub_categories": []} for i in range(8)]
+    opts = [{"id": f"o{i}", "value": f"look {i}", "weight": 1, "sub_categories": []}
+            for i in range(8)]
     lib = chat.Library([{"id": "aaaa0011", "type": "wildcard", "name": "Look", "tags": [],
                          "payload": {"var_binding": "look", "options": opts}}], [], [])
     lib.run("edit_options", {"id": "aaaa0011", "weights": [{"n": 8, "weight": 20}]})
