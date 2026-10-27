@@ -287,6 +287,21 @@ def test_an_edit_keeps_the_rule_and_its_else():
     assert "edits" in ai_derivation.EDIT_SCHEMA["properties"]["rules"]["items"]["required"]
 
 
+def test_two_edits_of_one_rule_build_on_each_other():
+    old = {"id": "r1", "branches": [{"condition": {"var": "class", "op": "equals",
+                                                   "value": "mage"},
+                                     "action": _act("title", "Archmage")}]}
+    raw = {"rules": [
+        {"edits": 1, "summary": "rogues", "else_actions": [], "branches": [
+            _branch(("class", "equals", "rogue"), acts=[_act("title", "Shadowblade")])]},
+        {"edits": 1, "summary": "bards", "else_actions": [], "branches": [
+            _branch(("class", "equals", "bard"), acts=[_act("title", "Minstrel")])]},
+    ]}
+    [r] = ai_derivation.compile_rules(raw, catalog={}, existing=[old])["rules"]
+    assert [b["action"]["value"] for b in r["rule"]["branches"]] == [
+        "Archmage", "Shadowblade", "Minstrel"]
+
+
 def test_add_lands_as_append_and_exists_or_is_dropped():
     # Bench R4: "exists OR does not contain" always holds, and "add" became a set.
     raw = {"rules": [{"summary": "dry", "branches": [_branch(

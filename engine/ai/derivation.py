@@ -308,7 +308,13 @@ def compile_rules(
         if isinstance(edits, int) and not isinstance(edits, bool) and existing \
                 and 1 <= edits <= len(existing) and isinstance(existing[edits - 1], dict):
             old = existing[edits - 1]
-            rule = merge_edit(old, rule, request)
+            # Two answer rules editing one rule: the second builds on the
+            # first, which it then takes the place of.
+            prev = next((x for x in out if x.get("replaces") and x["replaces"] == old.get("id")),
+                        None)
+            if prev is not None:
+                out.remove(prev)
+            rule = merge_edit(prev["rule"] if prev else old, rule, request)
             rule = {"id": old.get("id") or _new_id(taken), **{
                 k: v for k, v in rule.items() if k != "id"}}
         else:
