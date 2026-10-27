@@ -155,6 +155,23 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       </p>
     </DocSection>
 
+    <DocSection title="Writing in another language">
+      <p>
+        Write in any language the model knows. The model always reads your own words, but some of
+        the assistant's checks read English: whether a message is a question or a change, how many
+        options it asks for, and whether the cards got the negatives, fallback or rules you asked
+        for. So a message that isn't in English is first read into English by one short model
+        call, and those checks read that. It takes a few seconds on a local model and happens only
+        for messages that aren't in English. The chat, Draft with AI and the Pack builder all do
+        this.
+      </p>
+      <p>
+        <b>Settings › AI assistant › Chat › Language you write in</b> sets it: <b>Automatic</b>
+        guesses per message, <b>English</b> never makes the call, and <b>Another language</b> makes
+        it for every message (for a language the guess misses).
+      </p>
+    </DocSection>
+
     <DocSection title="Ask about a test run or the docs">
       <p>
         After a run in the <b>Test Runner</b>, the bar above the results offers <b>Explain this

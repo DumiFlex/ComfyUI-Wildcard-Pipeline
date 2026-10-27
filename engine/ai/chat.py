@@ -788,6 +788,9 @@ class Library(MoreTools, ManageTools):
         #: The user's message this turn: a rating lowered to safe or an
         #: adult tag taken off needs its say-so (`ratings.keep_nsfw`).
         self.user_text = ""
+        #: The user's message read into a request frame when it isn't in
+        #: English (`engine/ai/lang.py`), else None.
+        self.request_frame: dict[str, Any] | None = None
         self.cat_by_lower = {c["name"].lower(): c["id"] for c in categories}
         self.names = {i: m.get("name") or "" for i, m in self.modules.items()}
         self.tags = ai_describe.library_tags([*modules, *bundles, *(templates or [])])

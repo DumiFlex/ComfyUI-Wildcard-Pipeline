@@ -89,16 +89,28 @@ _NOT_ASKS = re.compile(r"\bonly\b[^.]{0,40}?\bfrom\b|\brules?\s+rule[sd]?\s+out\
 _CHIP = re.compile(r"\[\[[^\]]*\]\]")
 
 
-def gaps(request: str, cards: list[dict[str, Any]]) -> list[str]:
+#: `FEATURES` by the request frame's `wants` keys (`engine/ai/lang.py`).
+WANT_KEYS = ("constraint", "only_rule", "fallback", "negatives", "tag_ref")
+
+
+def gaps(request: str, cards: list[dict[str, Any]],
+         wants: list[str] | None = None) -> list[str]:
     """What `request` asks for that `cards` (this answer's proposals) lack,
-    in `FEATURES` order. An "only" rule counts as the constraint too."""
-    if not request or not cards:
+    in `FEATURES` order. An "only" rule counts as the constraint too.
+    ``wants``: what a request frame says the ask wants, for a request in
+    another language; it decides instead of the words."""
+    if not cards or (not request and wants is None):
         return []
-    plain = _CHIP.sub(" ", request)
-    asks = _NOT_ASKS.sub(" ", plain)
-    out = [name for name, words, has in FEATURES
-           if (words.search(plain) if name.startswith("a tag-filtered") else words.search(asks))
-           and not has(cards)]
+    if wants is not None:
+        out = [name for key, (name, _words, has) in zip(WANT_KEYS, FEATURES, strict=True)
+               if key in wants and not has(cards)]
+    else:
+        plain = _CHIP.sub(" ", request)
+        asks = _NOT_ASKS.sub(" ", plain)
+        out = [name for name, words, has in FEATURES
+               if (words.search(plain) if name.startswith("a tag-filtered")
+                   else words.search(asks))
+               and not has(cards)]
     if len(out) > 1 and out[0] == "a constraint" and out[1].startswith('an "only"'):
         out.pop(0)
     return out

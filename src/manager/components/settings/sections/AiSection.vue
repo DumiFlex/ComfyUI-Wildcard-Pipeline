@@ -16,7 +16,7 @@ import type { SelectOption } from "../../ui/select-types";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { api } from "../../../api/client";
-import type { AiConfigPatch, AiEmbedApi, AiIndexStatus, AiModelSize, AiProviderId, AiSamplerId, AiTestResult, AiToolFormat } from "../../../api/types";
+import type { AiConfigPatch, AiEmbedApi, AiIndexStatus, AiModelSize, AiProviderId, AiRequestLanguage, AiSamplerId, AiTestResult, AiToolFormat } from "../../../api/types";
 import { useAiConfig } from "../../../composables/useAiConfig";
 import { SUGGESTIONS_SOURCE_NOTE, suggestionsFor } from "../ai-models";
 import { useUiStore } from "../../../stores/uiStore";
@@ -78,7 +78,7 @@ const perModelNote = computed(() => {
 const RECOMMENDED = {
   model_size: "auto", thinking: "auto", unload_after_s: 60,
   tool_format: "auto", choose_first: false, lean_prompt: false, allow_delete: false,
-  auto_apply: false,
+  auto_apply: false, request_language: "auto",
   web_always_allow: false,
 } as const;
 /* Context is a floor, not a pick: under 16k the chat's instructions don't
@@ -93,6 +93,7 @@ const RESET_LABELS: Record<string, string> = {
   unload_after_s: "Unload the model after", tool_format: "Tool format",
   choose_first: "Choose the tool first", lean_prompt: "Short tool list", allow_delete: "Let the assistant delete items",
   auto_apply: "Apply small changes automatically", web_always_allow: "Don't ask before web calls",
+  request_language: "Language you write in",
   explainChip: "Show Explain on selected text", chatThinking: "Show thinking",
   chatNotes: "Show working notes", chatSteps: "Show what it did", chatTyping: "Type out replies", sampling: "Sampling",
 };
@@ -311,6 +312,18 @@ const thinkingOptions = computed<SelectOption[]>(() =>
 async function setThinking(v: string | number | null): Promise<void> {
   if (!isThinking(v) || v === config.value?.thinking) return;
   await patch({ thinking: v });
+}
+const languageOptions: SelectOption[] = [
+  { value: "auto", label: "Automatic (recommended)" },
+  { value: "english", label: "English" },
+  { value: "other", label: "Another language" },
+];
+async function setLanguage(v: string | number | null): Promise<void> {
+  if (!isRequestLanguage(v) || v === (config.value?.request_language ?? "auto")) return;
+  await patch({ request_language: v });
+}
+function isRequestLanguage(v: unknown): v is AiRequestLanguage {
+  return v === "auto" || v === "english" || v === "other";
 }
 async function setToolFormat(v: string | number | null): Promise<void> {
   if (typeof v !== "string" || v === config.value?.tool_format) return;
@@ -1069,6 +1082,22 @@ const off = computed(() => !config.value?.enabled);
         </SettingGroup>
 
         <SettingGroup title="Chat">
+          <SettingRow
+            form
+            label="Language you write in"
+            recommended="Automatic"
+            hint="The assistant's checks (is this a question or a change, how many options, did the cards get the negatives you asked for) read English. A message in another language is first read into English by one short model call, a few seconds on a local model, so those checks still work; the model always gets your own words. Automatic guesses per message and never asks for English ones. English skips the call; Another language makes it for every message."
+            setting-key="ai-request-language"
+          >
+            <Select
+              :model-value="config.request_language ?? 'auto'"
+              :options="languageOptions"
+              :filterable="false"
+              aria-label="Language you write in"
+              data-test="ai-request-language"
+              @update:model-value="setLanguage"
+            />
+          </SettingRow>
           <SettingRow
             label="Show Explain on selected text"
             recommended="On"

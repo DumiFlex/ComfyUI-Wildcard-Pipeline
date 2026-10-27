@@ -20,6 +20,7 @@ from engine.ai import client_tools as ai_client_tools
 from engine.ai import config as ai_config
 from engine.ai import examples as ai_examples
 from engine.ai import guide as ai_guide
+from engine.ai import lang as ai_lang
 from engine.ai import lint as ai_lint
 from engine.ai import narrow as ai_narrow
 from engine.ai import plan_items as ai_plan
@@ -43,6 +44,7 @@ from wp_api import (
     _ai_client,
     _ai_embed,
     _ai_images,
+    _ai_lang,
     _ai_search,
     _ai_vocab,
     _ai_web,
@@ -280,10 +282,19 @@ class _Turn:
     offered: list[str] | None = None
     #: One record per model step (`ai_trace.step_record`).
     trace: list[dict[str, Any]] = field(default_factory=list)
+    #: The message read into a request frame when it isn't in English
+    #: (`engine/ai/lang.py`): what the code checks read instead of its words.
+    frame: dict[str, Any] | None = None
 
     @property
     def text(self) -> Any:
         return self.ask.text
+
+    @property
+    def check(self) -> str:
+        """The text the English checks read: the frame's restatement, else
+        the message."""
+        return ai_lang.check_text(self.frame, self.text if isinstance(self.text, str) else "")
 
     @property
     def split(self) -> bool:
@@ -544,7 +555,7 @@ async def _start_chat(
 
 
 def _permission_notes(meta: dict[str, Any], cfg: dict[str, Any], body: dict[str, Any],
-                      vocab_kinds: Any, fmt: str, ask: _Ask) -> str:
+                      vocab_kinds: Any, fmt: str, ask: _Ask, check: str) -> str:
     """What changed in the chat's tools and permissions since the last
     message, and the tool groups this message asks for by name (loaded)."""
     had = list(meta.get("tools") or [])
@@ -555,12 +566,12 @@ def _permission_notes(meta: dict[str, Any], cfg: dict[str, Any], body: dict[str,
         # The JSON prompt keeps the tools the chat started with: say how
         # the new ones are called here instead.
         perms += "\n" + ai_chat.kinds_section(ai_tools.tools(added)).strip()
-    if not ask.resume and ask.text and _ORGANIZE_ASK.search(ask.text):
+    if not ask.resume and ask.text and _ORGANIZE_ASK.search(check):
         perms = "\n".join(x for x in (perms, ai_chat.ORGANIZE_HINT) if x)
     if not ask.resume and ask.text:
         # The groups the message asks for by name come loaded: small models
         # rarely call more_tools and fake the missing tool with another.
-        for group in ai_tools.groups_for(ask.text):
+        for group in ai_tools.groups_for(check):
             if group in ai_tools.MORE_GROUPS:
                 got = _more_tools(meta, group)
                 if got.startswith("These tools"):
@@ -578,7 +589,12 @@ async def _prepare(
     message, the paused calls' results, the user's entry, the context
     profile, and which items the edit tools may change."""
     text = ask.text
-    perms = _permission_notes(meta, cfg, body, vocab_kinds, fmt, ask)
+    # A message that isn't in English: read into a request frame first, so
+    # the checks below read an English restatement (`engine/ai/lang.py`).
+    frame = await _ai_lang.frame(cfg, text, emit)
+    check = ai_lang.check_text(frame, text if isinstance(text, str) else "")
+    lib.request_frame = frame
+    perms = _permission_notes(meta, cfg, body, vocab_kinds, fmt, ask, check)
     meta, since = ai_chatlog.apply_events(meta, body.get("events"))
     route = str(ask.page.get("route") or "") if ask.page else ""
     if ask.page and route != meta.get("page_route"):
@@ -626,9 +642,11 @@ async def _prepare(
     # A question or chat gets no change tools (harness note H3); a chat that
     # already proposed cards counts a follow-up as more work.
     working = bool(meta.get("proposals"))
-    asks_kind = ai_tools.message_kind(text, working) if guided else "task"
-    short = ai_tools.shortlist(meta["tools"], text, route, working=working) if guided else None
-    plan_n = ai_plan.multi_ask(text) if guided and not _PACK_ASK.search(text) else 0
+    asks_kind = (ai_lang.message_kind(frame, working) or ai_tools.message_kind(check, working)) \
+        if guided else "task"
+    short = ai_tools.shortlist(meta["tools"], check, route, working=working,
+                               kind=asks_kind) if guided else None
+    plan_n = ai_plan.multi_ask(check) if guided and not _PACK_ASK.search(check) else 0
     tail_kinds: list[str] = []
     if plan_n and not any(n in ai_plan.PLANNABLE for n in meta["tools"]):
         plan_n = 0
@@ -636,19 +654,22 @@ async def _prepare(
         meta.pop("asks", None)  # ask pauses are counted per user message
         meta.pop("pointed", None)  # so are the parts already highlighted
         meta.pop("page_reads", None)  # and the page parts already read
-        hints = await _retrieval(lib, text, meta, prof, cfg) if text else ""
+        # The user's words and the restatement both: item names may be in
+        # either language.
+        found = text if check == text else f"{text}\n{check}"
+        hints = await _retrieval(lib, found, meta, prof, cfg) if text else ""
         pics = _ai_images.note(len(ask.images)) if ask.images else ""
-        model = ai_guide.model_note(text) if text else ""
+        model = ai_guide.model_note(check) if text else ""
         plan_hint = ai_plan.HINT if plan_n else ""
         # Small and medium models: the closest calls that worked before
         # (`engine/ai/examples.py`).
-        shown_examples = ai_examples.note(ai_examples.pick(text, meta["tools"])) \
+        shown_examples = ai_examples.note(ai_examples.pick(check, meta["tools"])) \
             if text and _splits(cfg, meta, fmt) else ""
-        steps_hint = ai_recipes.recipe(text) if text and not plan_n \
+        steps_hint = ai_recipes.recipe(check) if text and not plan_n \
             and _splits(cfg, meta, fmt) else ""
         # Small and medium models: a few lines on each feature this ask
         # touches (`engine/ai/cards.py`), once while the model can see them.
-        cards = _feature_cards(lib, text, route, meta, len(log)) \
+        cards = _feature_cards(lib, text, route, meta, len(log), check) \
             if text and _splits(cfg, meta, fmt) else []
         ai_cards.mark(meta, cards, len(log) + len(new))
         card_note = ai_cards.note(cards)
@@ -662,7 +683,7 @@ async def _prepare(
                 # "…then make each setting get only outfits that suit it"
                 # asks for a constraint without the word: room in the plan
                 # for each item kind a card brings that the count missed.
-                plan_n = min(ai_plan.MAX_ITEMS, plan_n + _unnamed_kinds(text, cards))
+                plan_n = min(ai_plan.MAX_ITEMS, plan_n + _unnamed_kinds(check, cards))
         tail_kinds = ai_trace.tail_kinds({
             "since": since, "changes": changes, "perms": perms, "images": pics, "page": note,
             "library": hints, "model": model, "examples": shown_examples,
@@ -672,7 +693,7 @@ async def _prepare(
                                     shown_examples, card_note, steps_hint, plan_hint) if x))
         new.append(ai_chatlog.user_entry(text, sent, ask.images))
         meta = ai_chatlog.move_images(log + new, meta)
-    _scope_edits(lib, meta, ask, log, paused)
+    _scope_edits(lib, meta, ask, log, paused, check)
     # Links read_result may open: the same list the searches fill.
     lib.web_urls = meta.setdefault("web_urls", [])
     _adopt_earlier(lib, log, meta)
@@ -686,7 +707,7 @@ async def _prepare(
         deadline=loop.time() + (TURN_SECONDS_LOCAL if cfg.get("local") else TURN_SECONDS),
         steps=first_steps, cap=ai_chat.MAX_STEPS, limit=ai_chat.MAX_STEPS, tail_kinds=tail_kinds,
         sent_steps=len(first_steps), read_budget=ai_chat.read_budget(prof["size"]),
-        last_answer=ai_chatlog.last_reply(log),
+        last_answer=ai_chatlog.last_reply(log), frame=frame,
     )
     if ask.resume and step >= ai_chat.MAX_STEPS - 1:
         t.forced = True  # its results tail already says to answer now
@@ -694,11 +715,13 @@ async def _prepare(
 
 
 def _feature_cards(lib: Any, text: str, route: str, meta: dict[str, Any],
-                   log_len: int) -> list[ai_cards.Card]:
-    """The feature cards one message needs, from its words, the kinds of
-    the items it @-picks and the page it was sent from."""
+                   log_len: int, check: str = "") -> list[ai_cards.Card]:
+    """The feature cards one message needs, from its words (``check``: the
+    English restatement of one in another language), the kinds of the
+    items it @-picks and the page it was sent from."""
     kinds = {lib.kind_of(i) for i in ai_cards.picked_ids(text)} - {""}
-    return ai_cards.pick(text, kinds=kinds, route=route, shown=ai_cards.sent(meta, log_len))
+    return ai_cards.pick(check or text, kinds=kinds, route=route,
+                         shown=ai_cards.sent(meta, log_len))
 
 
 _KIND_WORDS = {"create_constraint": r"constraints?", "create_derivation": r"derivations?|rules?",
@@ -743,18 +766,20 @@ def _tool_card(t: _Turn, tool: str) -> str:
 
 
 def _scope_edits(lib: Any, meta: dict[str, Any], ask: _Ask, log: list[dict[str, Any]],
-                 paused: Any) -> None:
+                 paused: Any, check: str = "") -> None:
     """The library items the edit tools may change: ones the user named in
     this chat, the page's item, and ones an earlier card already changes
     or created;
-    plus the card numbering and what `ask` may not ask again."""
+    plus the card numbering and what `ask` may not ask again. ``check``:
+    the English restatement of a message in another language."""
     text = ask.text
+    check = check or (text if isinstance(text, str) else "")
     pids = [int(p[1:]) for p in meta.get("proposals") or {} if p[1:].isdigit()]
     lib._next_pid = max(pids, default=0)
     lib.earlier_proposals = dict(meta.get("proposals") or {})
     named = set(meta.get("named") or [])
     if not ask.resume and text:
-        named |= lib.named_in(text)
+        named |= lib.named_in(text) | (lib.named_in(check) if check != text else set())
         # The items the answer they are replying to showed as chips count
         # as named too ("Now add negatives to the stormy options" after
         # "You have [[Weather]] …"; chat eval round 4 refused every edit).
@@ -775,17 +800,18 @@ def _scope_edits(lib: Any, meta: dict[str, Any], ask: _Ask, log: list[dict[str, 
     meta["named"] = sorted(named)
     lib.named = named
     if not ask.resume and text:
-        meta["ref_asks"] = sorted(ai_chat.ref_asks(text))
-        meta["asked_words"] = sorted({w.lower() for m in _VAR_WORD.findall(text)
-                                      for w in m if w})
-        # A rating lowered to safe needs the user's say-so (ratings.keep_nsfw).
-        meta["user_text"] = text[:2000]
+        meta["ref_asks"] = sorted(ai_chat.ref_asks(check))
+        meta["asked_words"] = sorted({w.lower() for said in dict.fromkeys((text, check))
+                                      for m in _VAR_WORD.findall(said) for w in m if w})
+        # A rating lowered to safe needs the user's say-so (ratings.keep_nsfw),
+        # read in English too when the message isn't.
+        meta["user_text"] = "\n".join(dict.fromkeys((text[:2000], check[:2000])))
     lib.ref_asks = set(meta.get("ref_asks") or [])
     lib.user_text = str(meta.get("user_text") or "")
     lib.asked_words = set(meta.get("asked_words") or [])
     # An item the answer reads in full may be changed when the user asked
     # for a change ("add negatives to the stormy options"), not a new item.
-    lib.edit_read = (bool(text) and not ask.resume and not ai_chat.creation_ask(text)) \
+    lib.edit_read = (bool(text) and not ask.resume and not ai_chat.creation_ask(check)) \
         or bool(answered_named)
     lib.decisions = list(meta.get("decisions") or [])  # what `ask` may not ask again
 
@@ -1183,7 +1209,7 @@ async def _run_call(t: _Turn, run: _Calls, at: int, call: dict[str, Any]) -> Non
             await _pause_call(t, run, at, call, args)
             return
         if (tool.startswith("create_") and t.steered_at in (None, t.step)
-                and _PACK_ASK.search(t.text or "")
+                and _PACK_ASK.search(t.check)
                 and "plan_pack" in (t.meta.get("tools") or [])
                 and not any(c["tool"] == "plan_pack" for c in run.calls)
                 and not any(p_["tool"] == "plan_pack" for p_ in t.proposals)):
@@ -1305,7 +1331,7 @@ async def _pause_call(t: _Turn, run: _Calls, at: int, call: dict[str, Any],
         raise ValueError(ai_client_tools.READ_PAGE_FIRST)
     try:
         cargs, label = ai_client_tools.prepare(
-            t.lib, tool, args, t.ask.text if isinstance(t.ask.text, str) else "")
+            t.lib, tool, args, t.check)
     except ai_client_tools.Shown as shown:
         run.needs_reply = True
         again = tool + _json.dumps(args, sort_keys=True, ensure_ascii=False)
@@ -1397,7 +1423,7 @@ def _add_card(t: _Turn, run: _Calls, call: dict[str, Any], args: dict[str, Any],
     out = ai_safety.clean(out)
     proposals = t.proposals
     twin = any(p_["pid"] == out.get("replaces") for p_ in proposals)
-    had = ai_request_check.gaps(t.text or "", proposals) if twin and not t.plan_n else []
+    had = ai_request_check.gaps(t.check, proposals, _wants(t)) if twin and not t.plan_n else []
     if twin:
         # A repeat of a card from this answer: the user gets one.
         old_pid, new_pid = out["replaces"], out["pid"]
@@ -1441,7 +1467,7 @@ def _add_card(t: _Turn, run: _Calls, call: dict[str, Any], args: dict[str, Any],
     if twin and not t.plan_n:
         # 9B smoke s-tag-filter: a fixed card rewritten back to plain
         # colours to get rid of a duplicate warning.
-        now = [] if t.out_of_time else ai_request_check.gaps(t.text or "", proposals)
+        now = [] if t.out_of_time else ai_request_check.gaps(t.check, proposals, _wants(t))
         lost = [n for n in now if n not in had]
         if lost:
             what = " and ".join(ai_request_check.short_name(n) for n in lost)
@@ -1512,7 +1538,7 @@ def _settle(t: _Turn, said: str, calls: list[dict[str, Any]], cut: bool,
     # it, or answered an organize ask with a list: ask once for the
     # call (9B: 3 of 3 organize and plan-a-pack turns, "the Test
     # Runner is now open" with no run).
-    organize = bool(_ORGANIZE_ASK.search(t.text or ""))
+    organize = bool(_ORGANIZE_ASK.search(t.check))
     if can_nudge and not proposals and (ai_chat.claims_change(said) or _card_as_text(said)
                                         or organize):
         if not organize or ai_chat.claims_change(said):
@@ -1539,7 +1565,7 @@ def _settle(t: _Turn, said: str, calls: list[dict[str, Any]], cut: bool,
     # Asked leave instead of proposing, or met "yes" with more talk:
     # tell it once to act. Small models loop on "Should I proceed?".
     # The stalled question isn't the answer, unless nothing better comes.
-    if can_nudge and not proposals and ai_chat.stalls(said, t.text, t.last_answer):
+    if can_nudge and not proposals and ai_chat.stalls(said, t.check, t.last_answer):
         return _nudge(t, said, ai_chat.GO_NUDGE)
     # The request asks for a feature no card has (a constraint, an
     # "only" rule, a fallback, negatives): ask once, before the test, so
@@ -1548,7 +1574,7 @@ def _settle(t: _Turn, said: str, calls: list[dict[str, Any]], cut: bool,
     # for the fix, but the missing feature still gets its one note (9B
     # smoke, s-tag-filter: plain colours with no tag ref, answered on the
     # last step). Out of time does not.
-    missing = (ai_request_check.gaps(t.text or "", proposals)
+    missing = (ai_request_check.gaps(t.check, proposals, _wants(t))
                if not calls and not t.gap_checked and not t.plan_n
                and not t.out_of_time else [])
     if missing:
@@ -1626,7 +1652,7 @@ def _early_gap(t: _Turn, calls: list[dict[str, Any]]) -> str:
     if (t.gap_checked or not t.proposals or t.plan_n or t.out_of_time
             or any(c["tool"] in ai_chat.CHANGE_TOOLS for c in calls)):
         return ""
-    missing = ai_request_check.gaps(t.text or "", t.proposals)
+    missing = ai_request_check.gaps(t.check, t.proposals, _wants(t))
     return _gap_note(t, missing) if missing else ""
 
 
@@ -1634,7 +1660,7 @@ def _still_lacks(t: _Turn) -> str:
     """What the cards still lack of the request, for a card sent again;
     it counts as the request check's note when none came yet."""
     missing = ([] if t.plan_n or t.out_of_time
-               else ai_request_check.gaps(t.text or "", t.proposals))
+               else ai_request_check.gaps(t.check, t.proposals, _wants(t)))
     if not missing:
         return ""
     if not t.gap_checked:
@@ -1642,6 +1668,11 @@ def _still_lacks(t: _Turn) -> str:
     what = " and ".join(ai_request_check.short_name(n) for n in missing)
     return (f"It still lacks {what}, which the request asks for: add it, in this card or "
             "the card that should have it.")
+
+
+def _wants(t: _Turn) -> list[str] | None:
+    """What the request frame says the ask wants (None: read the words)."""
+    return ai_lang.wants(t.frame)
 
 
 def _gap_note(t: _Turn, missing: list[str]) -> str:
@@ -1774,7 +1805,7 @@ async def _test_if_asked(t: _Turn) -> None:
     """Asked to test and never did (chat eval: the 9B wrote that it can't):
     run it here, card and all. The note goes after the answer, so the log
     stays append-only for the cache."""
-    if t.pause or not t.proposals or not _TEST_ASK.search(t.text or "") or any(
+    if t.pause or not t.proposals or not _TEST_ASK.search(t.check) or any(
             s_.get("tool") == "run_test" and s_.get("ok") for s_ in t.steps):
         return
     got = _auto_test(t.lib, t.proposals)

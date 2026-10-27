@@ -249,8 +249,9 @@ const suggested = ref<Partial<AiPackSettings> | null>(null);
 const recommended = shallowRef<AiPackRecommended | null>(null);
 let recommendFor = "";
 
-/** The recommended settings for the request as it reads now (no model
- *  call). A failure leaves none: the step works without them. */
+/** The recommended settings for the request as it reads now (no model call
+ *  for an English request; one in another language is read first). A
+ *  failure leaves none: the step works without them. */
 async function loadRecommended(): Promise<void> {
   const text = convo.instruction.value.trim();
   const key = JSON.stringify([text, suggested.value]);

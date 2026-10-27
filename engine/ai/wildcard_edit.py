@@ -23,6 +23,7 @@ from typing import Any
 
 from engine.ai import about, adult
 from engine.ai import asked as ai_asked
+from engine.ai import lang as ai_lang
 from engine.ai import refs as ai_refs
 from engine.ai.wildcard import (
     MAX_TEXT_LEN,
@@ -255,12 +256,16 @@ def compile_edit(
     action: str, raw: Any, *, options: list[dict[str, Any]], registry: list[str],
     refs: ai_refs.RefIndex | None = None, self_id: str | None = None,
     labels: list[str] | None = None, instruction: str = "",
+    frame: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Check the model's answer against the options it was shown. ``labels``
     are the wildcard's own (library) tags: a retag never copies one onto an
     option unless it is an option tag too. ``instruction`` is the user's
     request: a retag that "adds" keeps the option's tags, and a re-weight
     by a factor ("half as likely") is checked against each current weight.
+    ``frame``: the request frame of a request in another language
+    (`engine/ai/lang.py`); its weight and factor count when the words name
+    none.
 
     Returns ``{"changes": [...], "new_tags": [...], "skipped": [...], "note":
     why nothing changed, or ""}``. Each
@@ -288,8 +293,10 @@ def compile_edit(
     # turns two options into the same one.
     final_texts = {_norm_key(o["value"]): o["id"] for o in options}
     adds = action == "retag" and adds_tags(instruction)
-    factor = ai_asked.weight_factor(instruction) if action == "reweight" else None
-    way = ai_asked.weight_direction(instruction) if action == "reweight" else 0
+    factor = (ai_asked.weight_factor(instruction) or ai_lang.weight_factor(frame)) \
+        if action == "reweight" else None
+    way = (ai_asked.weight_direction(instruction) or ai_lang.weight_direction(frame)) \
+        if action == "reweight" else 0
 
     for item in raw[key]:
         if not isinstance(item, dict):

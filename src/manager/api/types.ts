@@ -890,6 +890,10 @@ export interface AiConfig {
   danbooru_lookup: boolean;
   /** Web searches, page reads and Danbooru lookups run without asking. */
   web_always_allow: boolean;
+  /** The language the user writes to the assistant in: "auto" guesses per
+   *  message; another language gets its requests read for the checks
+   *  (older servers leave it out). */
+  request_language?: AiRequestLanguage;
   /** Advanced: small models name the tool, then fill its args (off when absent). */
   choose_first?: boolean;
   /** Advanced: small models get one line per tool, its docs when first offered. */
@@ -963,6 +967,7 @@ export interface AiConfigPatch {
   reader_key?: string;
   danbooru_lookup?: boolean;
   web_always_allow?: boolean;
+  request_language?: AiRequestLanguage;
   choose_first?: boolean;
   lean_prompt?: boolean;
   /** A partial update: `null` puts one sampler back to the server's setting. */
@@ -970,6 +975,8 @@ export interface AiConfigPatch {
   allow_delete?: boolean;
   auto_apply?: boolean;
 }
+
+export type AiRequestLanguage = "auto" | "english" | "other";
 
 export type AiSamplerId = "top_p" | "top_k" | "min_p" | "repeat_penalty" | "presence_penalty";
 export type AiSampling = Partial<Record<AiSamplerId, number>>;
@@ -1072,6 +1079,9 @@ export interface AiDraftOption {
 export interface AiWildcardDraftRequest extends AiConversational {
   instruction: string;
   count: number;
+  /** How many wasn't set by hand or read from the request's English words:
+   *  the server may take the count a request in another language names. */
+  count_auto?: boolean;
   wildcard: {
     /** The saved wildcard's id, so it isn't offered as its own @{ref}
      *  and refs read the editor's unsaved options. */
@@ -1114,6 +1124,8 @@ export interface AiWildcardDraftResult {
   /** Web searches the model would like to run (only when web search is set
    *  up); the panel asks the user before running them. */
   research?: string[];
+  /** How many options were asked for (older servers leave it out). */
+  count?: number;
 }
 
 export type AiWildcardEditAction = "remove" | "rewrite" | "retag" | "reweight";

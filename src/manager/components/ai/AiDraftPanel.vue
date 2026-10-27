@@ -54,6 +54,8 @@ const emit = defineEmits<{
 }>();
 
 const count = ref<number>(10);
+/** How many was typed in its box, or given by the chat: the server leaves it. */
+const countSet = ref(false);
 /** Indices of result rows the user unticked. */
 const unticked = ref<Set<number>>(new Set());
 
@@ -93,6 +95,9 @@ const convo = useAiConversation<AiWildcardDraftResult, Ctx>({
       searched,
       skipped,
       count: n,
+      // A request in another language names its count in words the English
+      // reader above doesn't know: the server reads it then.
+      ...(!named && !countSet.value && !history?.length ? { count_auto: true } : {}),
       wildcard: {
         ...(props.moduleId ? { id: props.moduleId } : {}),
         name: props.name,
@@ -114,7 +119,10 @@ const convo = useAiConversation<AiWildcardDraftResult, Ctx>({
     : "The model didn't suggest anything. Try again or reword the request.",
 });
 const { instruction, loading, error, result } = convo;
-watch(result, () => { unticked.value = new Set(); });
+watch(result, (res) => {
+  unticked.value = new Set();
+  if (res?.count && !countSet.value) count.value = res.count;
+});
 
 const pending = computed(() => loading.value || (result.value?.options.length ?? 0) > 0);
 watch(pending, (v) => emit("update:pending", v), { immediate: true });
@@ -165,6 +173,7 @@ function cancel(): void {
  *  draft here for them to tick, and tell the chat what came back. */
 async function run(text: string, n: number): Promise<string> {
   count.value = Math.min(100, Math.max(1, Math.round(n) || 10));
+  countSet.value = true;
   instruction.value = text;
   await convo.ask();
   const res = result.value;
@@ -238,6 +247,7 @@ const skippedSummary = computed(() => {
           size="sm"
           aria-label="How many options to draft"
           data-test="ai-draft-count"
+          @update:model-value="countSet = true"
         />
       </label>
     </template>

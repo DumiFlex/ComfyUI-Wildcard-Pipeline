@@ -11,6 +11,7 @@ from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
 from engine.ai import describe as ai_describe
 from engine.ai import followup as ai_followup
+from engine.ai import lang as ai_lang
 from engine.ai import library_vars, text_items
 from engine.ai import organize as ai_organize
 from engine.ai import refs as ai_refs
@@ -24,6 +25,7 @@ from engine.db.repositories import (
 )
 from wp_api import (
     _ai_client,
+    _ai_lang,
 )
 from wp_api._ai_common import (
     _MAX_IMAGE_BODY_BYTES,
@@ -66,13 +68,20 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     count = body.get("count", 10)
     if isinstance(count, bool) or not isinstance(count, int):
         return json_error("count must be a whole number", status=400)
-    count = max(1, min(ai_wildcard.MAX_COUNT, count))
-    # A few more than wanted: some come back as repeats of the list (or of
-    # each other) and are dropped, and "3 options" should still land 3.
-    asked = ai_wildcard.over_ask(count)
     turns = _turns(body)
     if isinstance(turns, web.Response):
         return turns
+    # A request in another language: the checks read its English
+    # restatement, and with `count_auto` (the panel's How many box is
+    # neither set by hand nor read from English words) its count.
+    frame = await _ai_lang.frame(cfg, ai_followup.first_instruction(turns, instruction))
+    if body.get("count_auto") is True and not turns and ai_lang.count(frame):
+        count = ai_lang.count(frame)
+    count = max(1, min(ai_wildcard.MAX_COUNT, count))
+    check = ai_lang.check_text(frame, ai_followup.first_instruction(turns, instruction))
+    # A few more than wanted: some come back as repeats of the list (or of
+    # each other) and are dropped, and "3 options" should still land 3.
+    asked = ai_wildcard.over_ask(count)
 
     wc = _got if isinstance(_got := body.get("wildcard"), dict) else {}
     payload = _got if isinstance(_got := wc.get("payload"), dict) else {}
@@ -127,9 +136,10 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
                 "sub_categories": tags,
             },
             limit=count, refs=refs, self_id=self_id,
-            # A refine is held to the first request too ("with negatives").
+            # A refine is held to the first request too ("with negatives"),
+            # and one in another language to its restatement as well.
             request=" ".join(dict.fromkeys(
-                (ai_followup.first_instruction(turns, instruction), instruction))),
+                (ai_followup.first_instruction(turns, instruction), instruction, check))),
             labels=labels, own_name=f"{name} {var}",
         )
 
@@ -146,7 +156,8 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
             status=502,
         )
-    note = ai_wildcard.bleed_note(name, var, result["options"], instruction)
+    asked_words = " ".join(dict.fromkeys((instruction, check)))
+    note = ai_wildcard.bleed_note(name, var, result["options"], asked_words)
     if note:
         # One re-ask with what the code found; the first answer stands when
         # the second is no better.
@@ -155,7 +166,7 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
                 x for x in (webs.note, note) if x), **ask))
             better = compiled(again)
             if len(better["options"]) >= len(result["options"]) and not \
-                    ai_wildcard.bleed_note(name, var, better["options"], instruction):
+                    ai_wildcard.bleed_note(name, var, better["options"], asked_words):
                 answer, result = again, better
         except (_ai_client.AIError, ValueError):
             pass
@@ -169,6 +180,7 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     result["model"] = cfg["model"]
     result["answer"] = answer
     result["research"] = research
+    result["count"] = count
     return json_ok(result)
 
 
@@ -201,6 +213,9 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     turns = _turns(body)
     if isinstance(turns, web.Response):
         return turns
+    # A request in another language: the checks read its restatement.
+    frame = await _ai_lang.frame(cfg, instruction)
+    check = ai_lang.check_text(frame, instruction)
 
     wc = _got if isinstance(_got := body.get("wildcard"), dict) else {}
     payload = _got if isinstance(_got := wc.get("payload"), dict) else {}
@@ -259,14 +274,14 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     )
     try:
         answer = await _ask(extra=webs.note, **ask)
-        nudged = ai_edit.answered_nothing(action, answer, instruction)
+        nudged = ai_edit.answered_nothing(action, answer, check)
         if nudged:
             # The base 9B answered "tag each by …" with an empty list every
             # time (panel eval 2026-10-21): the system prompt's "only list
             # the options you change" read as "change nothing". One re-ask.
             answer = await _ask(extra="\n\n".join(x for x in (webs.note, ai_edit.EMPTY_NUDGE)
                                                   if x), **ask)
-        missing = [] if nudged else ai_edit.left_out(action, answer, instruction,
+        missing = [] if nudged else ai_edit.left_out(action, answer, check,
                                                      [r["id"] for r in rows])
         if missing:
             # One re-ask in all: the empty answer's, or this one.
@@ -274,7 +289,7 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
                 x for x in (webs.note, ai_edit.left_out_nudge(missing)) if x), **ask)
             # The second answer stands only when it covers more.
             if isinstance(again, dict) and again.get("options") and len(ai_edit.left_out(
-                    action, again, instruction, [r["id"] for r in rows])) < len(missing):
+                    action, again, check, [r["id"] for r in rows])) < len(missing):
                 answer = again
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
@@ -282,7 +297,7 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     try:
         result = ai_edit.compile_edit(action, answer, options=rows, registry=tags,
                                       refs=refs, self_id=self_id, labels=labels,
-                                      instruction=instruction)
+                                      instruction=check, frame=frame)
     except ValueError as e:
         return json_error(
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
@@ -369,7 +384,7 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
             status=502,
         )
     rules_out = [x["rule"] for x in result["rules"]]
-    gone = ai_derivation.missing_else(instruction, rules_out)
+    gone = ai_derivation.missing_else(await _ai_lang.check_text(cfg, instruction), rules_out)
     if gone:
         # Re-test on d6ac847 (9B): the catch-all was dropped in 2 of 3 drafts.
         # One short second ask for the ELSE alone (verify, then repair).
@@ -508,7 +523,9 @@ async def post_text_draft(request: web.Request) -> web.Response:
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
     answer, research = webs.take(answer)
-    unset = text_items.left_out(kind, answer, instruction)
+    # A request in another language: the checks read its restatement.
+    check = await _ai_lang.check_text(cfg, instruction)
+    unset = text_items.left_out(kind, answer, check)
     if unset:
         # One re-ask naming what the request asked for; the first answer
         # stands when the second leaves out no less of it.
@@ -519,7 +536,7 @@ async def post_text_draft(request: web.Request) -> web.Response:
         try:
             again, _ = webs.take(await _ask(
                 extra="\n\n".join(x for x in (webs.note, note) if x), **ask))
-            if len(text_items.left_out(kind, again, instruction)) < len(unset):
+            if len(text_items.left_out(kind, again, check)) < len(unset):
                 answer = again
         except _ai_client.AIError:
             pass
@@ -534,10 +551,10 @@ async def post_text_draft(request: web.Request) -> web.Response:
                 dict.fromkeys((ai_followup.first_instruction(turns, instruction), instruction))))
         if kind != "fixed_values":
             body = result["payload"].get("template") or result["payload"].get("template_string")
-            gone = text_items.missing_asked(str(body or ""), instruction)
+            gone = text_items.missing_asked(str(body or ""), check)
             if gone:
                 result["warnings"] = [*result["warnings"], gone]
-            extra = text_items.unasked(str(body or ""), instruction,
+            extra = text_items.unasked(str(body or ""), check,
                                        text_items.reads(str(body or "")))
             if extra:
                 result["warnings"] = [*result["warnings"], extra]

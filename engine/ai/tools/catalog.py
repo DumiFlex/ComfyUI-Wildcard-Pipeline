@@ -1030,7 +1030,8 @@ def _stems(text: str) -> set[str]:
 
 
 def shortlist(names: list[str], text: str, route: str | None = None,
-              extra: int = 3, working: bool = False) -> list[str] | None:
+              extra: int = 3, working: bool = False,
+              kind: str | None = None) -> list[str] | None:
     """The tools one message's steps offer a small model (research note
     "Small model tool use", T2): the core reads (`request_core`), the
     groups the message names (else the page's main group), the page tools
@@ -1039,14 +1040,15 @@ def shortlist(names: list[str], text: str, route: str | None = None,
     no change tools (`message_kind`; `working`: the chat already proposed
     cards). The prompt still lists all of the chat's tools, and
     `more_tools` (always offered) opens the rest for the turn, so a miss
-    costs one step. None when it would offer everything anyway."""
+    costs one step. None when it would offer everything anyway. ``kind``:
+    the message's kind when the caller knows it (a request frame)."""
     if not text:
         return None
     key = str(route or "")
     for suffix in ("-new", "-edit"):
         if key.endswith(suffix):
             key = key[: -len(suffix)]
-    kind = message_kind(text, working)
+    kind = kind or message_kind(text, working)
     renames_var = bool(_RENAME_VAR.search(text.lower()))
     groups = set(groups_for(text) or ([] if renames_var
                                       else PAGE_GROUPS.get(key, DEFAULT_GROUPS)[:1]))
