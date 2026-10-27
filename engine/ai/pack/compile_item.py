@@ -57,6 +57,40 @@ from engine.modules.derivation_handler import DerivationHandler, clause_actions
 from engine.modules.wildcard_handler import WildcardHandler
 
 
+def _quality_families(plan: dict[str, Any], item: dict[str, Any], payload: dict[str, Any]
+                      ) -> tuple[dict[str, Any], list[str]]:
+    """The per-family quality rule keeps only rows for the families the
+    pack runs on: a Pony and Flux pack got Illustrious and NoobAI rows it
+    never needed (9B bench P7, 2026-10-26). A row naming no family stays;
+    a rule left with no row goes, unless it is the only one."""
+    from engine.ai import guide as ai_guide
+    graph = plan.get("graph")
+    fams = set(pack_graph.model_families(graph)) if isinstance(graph, dict) else set()
+    if not fams or item.get("var") != pack_graph.QUALITY_VAR:
+        return payload, []
+    known = set(ai_guide.FAMILY_LABEL)
+    gone: list[str] = []
+    rules = []
+    for rule in payload.get("rules") or []:
+        if not isinstance(rule, dict):
+            continue
+        kept = []
+        for b in rule.get("branches") or []:
+            cond = json.dumps(b.get("condition") if isinstance(b, dict) else b).lower()
+            named = {k for k in known if re.search(r"(?<![a-z])" + k + r"(?![a-z])", cond)}
+            if named and not named & fams:
+                gone += sorted(named - set(gone))
+                continue
+            kept.append(b)
+        if kept or rule.get("else"):
+            rules.append({**rule, "branches": kept})
+    if not gone or not rules:
+        return payload, []
+    return ({**payload, "rules": rules},
+            ["Took the " + ", ".join(ai_guide.FAMILY_LABEL.get(g, g) for g in gone)
+             + " row(s) out of the quality rule: the pack doesn't run on them"])
+
+
 def _quality_one_rule(plan: dict[str, Any], item: dict[str, Any], payload: dict[str, Any]
                       ) -> tuple[dict[str, Any], list[str]]:
     """The per-family quality rule as ONE if/elif/else. Written as two rules
@@ -249,6 +283,8 @@ def compile_item(
                 seen_rules.add(same)
                 rules.append(r["rule"])
         payload = {"rules": rules}
+        payload, said = _quality_families(plan, item, payload)
+        warnings += said
         payload, said = _quality_one_rule(plan, item, payload)
         warnings += said
         payload, said = _quality_otherwise(plan, item, payload)

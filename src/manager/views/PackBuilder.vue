@@ -38,6 +38,7 @@ import { useToast } from "../composables/useToast";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
+import { stillThere as problemStill } from "../utils/pack-problems";
 import type { AiPackItem, AiPackRun } from "../api/types";
 import LoadingMark from "@/components/shared/LoadingMark.vue";
 
@@ -228,9 +229,14 @@ const settingsLine = computed(() => {
 /** Whether the problem a rebuild was asked to fix is still in the check:
  *  "fixed:" then would claim a fix that didn't happen. */
 function stillThere(key: string): boolean {
-  const asked = pb.states.value[key]?.fixed ?? [];
-  const now = problems(key);
-  return asked.some((t) => now.includes(t));
+  return problemStill(pb.states.value[key]?.fixed ?? [], problems(key));
+}
+
+/** Why a problem a Fix was sent for is still there. */
+function stillWhy(key: string): string {
+  return pb.states.value[key]?.result?.wired
+    ? "The code writes this item from the plan, so a rebuild gives the same: change the plan, or dismiss it."
+    : "The rebuild didn't clear it: rebuild with a note of your own, edit it after install, or dismiss it.";
 }
 
 const RANK: Record<AiPackItem["kind"], number> = {
@@ -559,7 +565,7 @@ function stopExtending(): void {
           <div class="wp-pack__row">
             <span class="wp-pack__spacer" />
             <Button size="sm" variant="ghost" :disabled="busy" data-test="pack-research-skip" @click="pb.skipResearch">Skip the search</Button>
-            <Button size="sm" variant="primary" icon="pi-search" :loading="pb.searching.value" :disabled="busy" data-test="pack-research-allow" @click="pb.allowResearch">Search and update the plan</Button>
+            <Button size="sm" variant="primary" icon="pi-search" :loading="pb.searching.value" :disabled="busy" data-test="pack-research-allow" @click="pb.allowResearch">Search the web</Button>
           </div>
         </section>
         <AiSearchFound
@@ -775,9 +781,10 @@ function stopExtending(): void {
               <button type="button" class="wp-pack__item-main wp-pack__expand" :aria-expanded="open.has(i.key)" @click="toggle(i.key)">
                 <span class="wp-pack__item-name">{{ i.name }}</span>
                 <span
-                  v-if="pb.states.value[i.key].fixed?.length && status(i.key) !== 'fixing'"
+                  v-if="pb.states.value[i.key].fixed?.length && status(i.key) !== 'fixing' && !pb.working.value"
                   class="wp-pack__fixed"
                   :data-still="stillThere(i.key) ? 'true' : undefined"
+                  :title="stillThere(i.key) ? stillWhy(i.key) : undefined"
                   data-test="pack-fixed"
                 >
                   {{ stillThere(i.key) ? "still: " : "fixed: " }}{{ pb.states.value[i.key].fixed?.[0] }}
@@ -821,6 +828,7 @@ function stopExtending(): void {
                 ><i class="pi pi-forward" aria-hidden="true" /></button>
               </template>
             </div>
+            <p v-if="pb.states.value[i.key].fixed?.length && status(i.key) !== 'fixing' && !pb.working.value && stillThere(i.key)" class="wp-pack__dim wp-pack__still" data-test="pack-still-why">{{ stillWhy(i.key) }}</p>
             <p v-if="pb.states.value[i.key].error" class="wp-pack__error">{{ pb.states.value[i.key].error }}</p>
             <div v-if="fixing === i.key" class="wp-pack__fixbox">
               <input
@@ -837,7 +845,8 @@ function stopExtending(): void {
               <li v-for="(w, j) in problems(i.key)" :key="j">
                 <i class="pi pi-exclamation-triangle" aria-hidden="true" /> <span>{{ w }}</span>
                 <template v-if="!pb.working.value">
-                  <button v-if="i.kind !== 'library'" type="button" class="wp-pack__mini" title="Build this item again with the warning as the note" data-test="pack-problem-fix" @click="pb.rebuild(i.key, w)">Fix with AI</button>
+                  <button v-if="pb.states.value[i.key].result?.wired" type="button" class="wp-pack__mini" title="The code writes this item from the plan, so a rebuild gives the same: change the plan" data-test="pack-problem-plan" @click="pb.backToPlan">Change the plan</button>
+                  <button v-else-if="i.kind !== 'library'" type="button" class="wp-pack__mini" title="Build this item again with the warning as the note" data-test="pack-problem-fix" @click="pb.rebuild(i.key, w)">Fix with AI</button>
                   <button type="button" class="wp-pack__mini" :disabled="chat.loading.value" title="Ask the assistant what this means" data-test="pack-problem-explain" @click="explain(w, i)">Explain</button>
                   <button type="button" class="wp-pack__mini" data-test="pack-problem-dismiss" @click="pb.dismissNote(i.key, w)">Dismiss</button>
                 </template>
@@ -895,8 +904,9 @@ function stopExtending(): void {
             <span class="wp-pack__dim">{{ v.distinct }} value{{ v.distinct === 1 ? '' : 's' }}</span>
             <div v-for="t in v.top" :key="t.value" class="wp-pack__bar">
               <span class="wp-pack__bar-fill" :style="{ width: `${Math.round(t.share * 100)}%` }" />
-              <span class="wp-pack__bar-label">{{ t.value }} {{ Math.round(t.share * 100) }}%</span>
+              <span class="wp-pack__bar-label"><template v-if="t.value">{{ t.value }}</template><i v-else>(none)</i> {{ Math.round(t.share * 100) }}%</span>
             </div>
+            <span v-if="v.distinct > v.top.length" class="wp-pack__dim wp-pack__more" data-test="pack-var-more">+{{ v.distinct - v.top.length }} more</span>
           </div>
         </Card>
         <Card v-if="pb.check.value?.prompts.length" title="Sample prompts">
@@ -1049,6 +1059,8 @@ function stopExtending(): void {
 .wp-pack__built + .wp-pack__built > .wp-pack__item { border-top: 1px solid var(--wp-border); }
 .wp-pack__fixed { font-size: 12px; color: var(--wp-success); }
 .wp-pack__fixed[data-still="true"] { color: var(--wp-warn); }
+.wp-pack__still { margin: 2px 0 0 28px; }
+.wp-pack__var > .wp-pack__dim.wp-pack__more { grid-column: 2; grid-row: auto; }
 .wp-pack__detail { padding: 0 0 8px 120px; }
 .wp-pack__preview { margin: 0; padding: 6px 8px 6px 22px; font-size: 12px; border-radius: 6px; background: var(--wp-bg-1); display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
 .wp-pack__ok { margin: 0 0 10px; color: var(--wp-success); font-size: 13px; display: flex; gap: 6px; align-items: center; }

@@ -82,6 +82,12 @@ def check_pack(
         if i["kind"] == "constraint" and i["key"] in built:
             for said in ai_lint.exclude_shared_tags(built[i["key"]]["payload"], row_by_id.get):
                 problems.setdefault(i["key"], []).append(said)
+            cp = built[i["key"]]["payload"]
+            if not any((cp.get("matrix") or {}).values()) and not cp.get("exceptions"):
+                # "Season → Weather · 0 rules" with a green check (9B bench).
+                problems.setdefault(i["key"], []).append(
+                    "it has no rules, so it changes nothing: give it a rule in the plan or "
+                    "leave it out")
         # A rule that maps one pick to another value by value is a wildcard
         # plus a constraint written out longhand (a 22-branch weather table).
         # Not the rules the code wires from the run (the story beat is
@@ -174,7 +180,9 @@ def check_pack(
         if r["checked"] and not r["holds"]:
             notes.append(f"Rule never fired in the {len(runs)} test runs: {r['text']}"
                          if r.get("why") else
-                         f"Rule broken in {r['broken']} of {r['seen']} runs: {r['text']}")
+                         f"Rule broken in {r['broken']} of {r['seen']} runs: {r['text']}"
+                         + (" (the prompt showed " + ", ".join(f'"{w}"' for w in r["shown"])
+                            + ")" if r.get("shown") else ""))
     prompts: list[dict[str, Any]] = []
     distinct = 0.0
     if tpl is not None:
@@ -210,6 +218,8 @@ def check_pack(
         for k, said in _lists_all(plan, built, runs).items():
             problems.setdefault(k, []).append(said)
         for k, said in _printed_names(plan, built, runs, text, neg).items():
+            problems.setdefault(k, []).append(said)
+        for k, said in _double_picks(plan, built, runs, text, neg).items():
             problems.setdefault(k, []).append(said)
         from engine.ai import pack_tidy
         tested = pack_tidy.runs(plan, built, library=library, base=base)
@@ -364,6 +374,75 @@ def _printed_names(plan: dict[str, Any], built: dict[str, Any], runs: list[dict[
             out[k] = (f"it puts a tag or variable name in the prompt as text ({shown}); "
                       "write words a picture shows instead")
     return out
+
+
+_MULTI_PICK = re.compile(r"\bpick (?!1\b)\d")
+
+
+def _double_picks(plan: dict[str, Any], built: dict[str, Any], runs: list[dict[str, Any]],
+                  text: str, neg: str) -> dict[str, str]:
+    """A prompt that shows two of a one-pick wildcard's options (two pairs
+    of shoes) because a rule, a combine or a preset wrote a second one:
+    ``{key of that writer: problem}``, when it happens in at least a sixth
+    of the runs. The static overlap check reads only wildcard options, so
+    text a derivation adds was never looked at (9B bench P6, 2026-10-26)."""
+    wild = []
+    for i in plan["items"]:
+        if not is_wild(i) or i["key"] not in built or _MULTI_PICK.search(i.get("use") or ""):
+            continue
+        heads = {c for o in built[i["key"]]["payload"].get("options") or [] if isinstance(o, dict)
+                 for c in sorted(_chunks(str(o.get("value") or "")))[:1]
+                 if len(c) >= 4 and "@{" not in c}
+        texts = sorted({re.sub(r"\s+", " ", str(o.get("value") or "")).strip().lower()
+                        for o in built[i["key"]]["payload"].get("options") or []
+                        if isinstance(o, dict) and o.get("value")}, key=len, reverse=True)
+        if len(heads) >= 2:
+            wild.append((i, heads, texts))
+    writers = [(i, item_io(i, built[i["key"]]["payload"])[1]) for i in plan["items"]
+               if i["key"] in built and i["kind"] in ("derivation", "combine", "fixed_values")]
+    hits: dict[tuple[str, str], list[str]] = {}
+    seen: dict[tuple[str, str], int] = {}
+    for ctx in runs:
+        try:
+            prompt = render(text, neg, ctx)[0].lower()
+        except Exception:  # noqa: BLE001 - a failed run is reported elsewhere
+            continue
+        for w, heads, texts in wild:
+            # The wildcard's own pick: a rule that adds to its variable
+            # leaves the pick at the front ("leather boots, white sneakers").
+            value = re.sub(r"\s+", " ", str(ctx.get(w["var"]) or "")).strip().lower()
+            own = next((t for t in texts if value.startswith(t)), value)
+            shown = [h for h in heads if _says(prompt, h)]
+            # "boots" inside "leather boots" is one pick, not two.
+            shown = [h for h in shown if not any(h != x and h in x for x in shown)]
+            extra = [h for h in shown if not _says(own, h)]
+            if len(shown) < 2 or not extra:
+                continue
+            for i, sets in writers:
+                said = ", ".join(str(ctx.get(v) or "") for v in sets).lower()
+                got = [h for h in extra if _says(said, h)]
+                if got:
+                    pair = (i["key"], w["key"])
+                    seen[pair] = seen.get(pair, 0) + 1
+                    words = hits.setdefault(pair, [])
+                    words += [h for h in got if h not in words]
+                    break
+    out: dict[str, str] = {}
+    need = max(2, len(runs) // 6)
+    items = {i["key"]: i for i in plan["items"]}
+    for (k, wk), n in seen.items():
+        if n < need or k in out:
+            continue
+        w = items[wk]
+        out[k] = (f"it puts a second {w['name']} pick in the prompt ("
+                  + ", ".join(f'"{x}"' for x in hits[(k, wk)][:3])
+                  + f" next to what ${w['var']} picked) in {n} of {len(runs)} runs; leave "
+                  f"that to {w['name']}")
+    return out
+
+
+def _says(text: str, phrase: str) -> bool:
+    return re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", text) is not None
 
 
 def _unseen(plan: dict[str, Any], built: dict[str, Any], runs: list[dict[str, Any]],

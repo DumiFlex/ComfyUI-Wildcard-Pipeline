@@ -16,20 +16,25 @@ The changed slot is locked like a hand edit, so the next re-plan keeps it.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from engine.ai.pack._common import _STRS, MAX_NAME, PlanError, _clean, _obj
 from engine.ai.pack.graph import (
     FIXED_SCHEMA,
     GRAPH_SYSTEM,
+    MAX_TEXT,
     RELATION_SCHEMA,
     SLOT_SCHEMA,
     TEMPLATE_SCHEMA,
+    _content_words,
     _slot_rel_words,
+    _stems,
     compile_graph_plan,
     graph_answer,
     parse_locks,
     raw_rel_sig,
+    slot_never,
 )
 from engine.ai.pack.prompts import decisions_note, run_note, settings_note
 from engine.ai.pack.settings import parse_run
@@ -231,14 +236,104 @@ def _recompile(plan: dict[str, Any], raw: dict[str, Any], lock_slots: list[str],
     return new
 
 
-def apply_change(plan: dict[str, Any], key: str, answer: Any, **kw: Any) -> dict[str, Any]:
+#: "drop fur", "remove the fur", "no more fur", "without fur": what goes.
+_DROP = re.compile(r"\b(?:drop|remove|lose|cut|ban|exclude|no more|no|without|less|fewer|"
+                   r"get rid of|take out)\s+(?:the\s+|any\s+|all\s+)?([a-z][a-z' -]{1,40})",
+                   re.I)
+#: "more sporty", "add a rain jacket", "with hats", "keep the fur": what stays or grows.
+_MORE = re.compile(r"\b(?:more|add|adds|adding|with|keep|include|plus|extra|also)\s+"
+                   r"(?:a\s+|an\s+|the\s+|some\s+)?([a-z][a-z' -]{1,40})", re.I)
+#: The verbs that take a word out of a slot for good ("drop fur").
+_DROP_LAND = re.compile(r"\b(?:drop|remove|lose|get rid of|take out|no more)\s+"
+                        r"(?:the\s+|any\s+|all\s+)?([a-z][a-z' -]{1,40})", re.I)
+#: What makes a dropped word a rule instead ("… in winter", "… when it rains").
+_CONDITION = re.compile(r"(?:in|for|on|when|during|with|if|unless|at)\b", re.I)
+_CUE_END = re.compile(r"\s*(?:,|\band\b|\bbut\b|\bfor\b|\bin\b|\bto\b|\bon\b|$)", re.I)
+
+
+def _cue_words(rx: re.Pattern[str], instruction: str) -> set[str]:
+    out: set[str] = set()
+    for m in rx.finditer(instruction or ""):
+        phrase = _CUE_END.split(m.group(1), maxsplit=1)[0]
+        for w in _content_words(phrase):
+            out |= _stems(w)
+    return out
+
+
+def against_ask(instruction: str, relations: list[dict[str, Any]],
+                old: set[str]) -> tuple[list[dict[str, Any]], list[str]]:
+    """New relations (signature not in ``old``) that go against what the
+    user asked: an exclude or reduce on what they asked MORE of ("more
+    sporty" became "winter never gets sporty shoes", 9B bench P3), a boost
+    or only on what they asked to DROP. Those go; the rest stay. Returns
+    the relations kept and the lines saying what went."""
+    more, less = _cue_words(_MORE, instruction), _cue_words(_DROP, instruction)
+    more -= less
+    kept: list[dict[str, Any]] = []
+    lines: list[str] = []
+    for r in relations:
+        if raw_rel_sig(r) in old:
+            kept.append(r)
+            continue
+        kind = str(r.get("kind") or "")
+        said: set[str] = set()
+        for w in _content_words(" ".join([str(r.get("to_value") or ""),
+                                          *(str(x) for x in r.get("words") or [])])):
+            said |= _stems(w)
+        if kind in ("exclude", "reduce") and said & more:
+            lines.append(f"Left out a new \"{kind}\" on {r.get('to_slot')} "
+                         f"{r.get('to_value')}: you asked for more of it")
+            continue
+        if kind in ("boost", "only") and said & less:
+            lines.append(f"Left out a new \"{kind}\" on {r.get('to_slot')} "
+                         f"{r.get('to_value')}: you asked to drop it")
+            continue
+        kept.append(r)
+    return kept, lines
+
+
+def land_drops(slot: dict[str, Any], instruction: str) -> list[str]:
+    """What the user drops from a slot ("drop fur") is written on the slot
+    as "Never: fur.", which every build, fill and repair of it keeps out
+    (``graph.slot_never``): asked as words alone, the model invented a
+    self-exclude and fur came back in the repair pass (9B bench P5)."""
+    words = []
+    for m in _DROP_LAND.finditer(instruction or ""):
+        parts = _CUE_END.split(m.group(1), maxsplit=1)
+        phrase = parts[0].strip(" '")
+        rest = (instruction or "")[m.start(1) + len(parts[0]):].lstrip()
+        # "drop sandals in winter" is a rule for a relation, not a word the
+        # slot never has.
+        if _CONDITION.match(rest):
+            continue
+        if phrase and len(phrase) >= 3 and len(phrase.split()) <= 3:
+            words.append(phrase.lower())
+    words = [w for w in dict.fromkeys(words) if w not in slot_never(slot)]
+    if not words:
+        return []
+    what = str(slot.get("what") or "").rstrip(" .")
+    slot["what"] = (f"{what}. Never: {', '.join(words)}." if what
+                    else f"Never: {', '.join(words)}.")[:MAX_TEXT]
+    return [f"{slot.get('name')}: never {', '.join(words)}, as you asked"]
+
+
+def apply_change(plan: dict[str, Any], key: str, answer: Any, *, instruction: str = "",
+                 **kw: Any) -> dict[str, Any]:
     """The plan with the model's answer merged into its graph and compiled
-    again (``kw``: library, base, canvas, request). Raises PlanError when
-    the answer has no usable part."""
+    again (``kw``: library, base, canvas, request). ``instruction`` (the
+    user's words for this change) lands what the code can settle: words
+    the user drops from a slot, and new relations against the ask go.
+    Raises PlanError when the answer has no usable part."""
     if not isinstance(answer, dict):
         raise PlanError("the answer wasn't a change")
     kind, what = change_target(plan, key)
     raw = graph_answer(plan)
+    old_sigs = {raw_rel_sig(r) for r in raw["relations"]}
+    said: list[str] = []
+    if instruction and isinstance(answer.get("relations"), list):
+        answer = dict(answer)
+        answer["relations"], said = against_ask(
+            instruction, [r for r in answer["relations"] if isinstance(r, dict)], old_sigs)
     lock: list[str] = []
     touched = ""
     fields: list[str] = []
@@ -250,6 +345,8 @@ def apply_change(plan: dict[str, Any], key: str, answer: Any, **kw: Any) -> dict
         old = raw["slots"][at]["name"]
         new_name = _clean(slot.get("name"), MAX_NAME) or old
         raw["slots"][at] = {**slot, "var": what, "name": new_name}
+        if instruction:
+            said += land_drops(raw["slots"][at], instruction)
         _rename(raw, old, new_name)
         rels = [r for r in (answer.get("relations") or []) if isinstance(r, dict)] \
             if isinstance(answer.get("relations"), list) else None
@@ -284,7 +381,10 @@ def apply_change(plan: dict[str, Any], key: str, answer: Any, **kw: Any) -> dict
             raise PlanError("the answer added nothing")
         lock = _add(raw, slots, fixed)
         raw["relations"] += rels
-    return _recompile(plan, raw, lock, touched=touched, template_fields=fields, **kw)
+    new = _recompile(plan, raw, lock, touched=touched, template_fields=fields, **kw)
+    if said:
+        new["applied"] = [*new.get("applied", []), *said]
+    return new
 
 
 def _add(raw: dict[str, Any], slots: list[dict[str, Any]],

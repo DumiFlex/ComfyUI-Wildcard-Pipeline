@@ -1470,7 +1470,9 @@ def test_two_quality_rules_join_into_one_so_pony_keeps_its_tags():
          "else_actions": act("high quality")}]}
     out = pack.compile_item(plan, q["key"], {}, answer)
     rules = out["payload"]["rules"]
-    assert len(rules) == 1 and len(rules[0]["branches"]) == 2
+    # The Illustrious row goes: the pack runs on Pony and Flux (bench P7).
+    assert len(rules) == 1 and len(rules[0]["branches"]) == 1
+    assert any("Illustrious" in w for w in out["warnings"])
     assert rules[0]["else"]["action"]["value"] == "masterpiece, best quality"
     assert "pony" in json.dumps(rules[0]["branches"][0])
     DerivationHandler.validate_payload(out["payload"])
@@ -1537,6 +1539,6 @@ def test_two_rows_on_one_value_go_in_one_branch():
     built = _build(plan)
     rule = next(built[i["key"]]["payload"] for i in plan["items"] if i["name"] == "Outfit rule")
     branches = rule["rules"][0]["branches"]
-    assert [b["action"]["value"] for b in branches] == ["scarf, mittens"]
+    assert [b["action"]["value"] for b in branches] == [", scarf, mittens"]
     report = pack.check_pack(plan, built, seeds=40)
     assert not [n for n in report["notes"] if "mittens" in n or "scarf" in n], report["notes"]
