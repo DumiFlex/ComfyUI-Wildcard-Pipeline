@@ -68,6 +68,7 @@
  */
 import { computed, ref } from "vue";
 import Modal from "../components/ui/Modal.vue";
+import Disclosure from "@/components/shared/Disclosure.vue";
 import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
 import ImportAsNewRename from "./ImportAsNewRename.vue";
 import Tier3ChainViz from "./conflict-rows/Tier3ChainViz.vue";
@@ -820,67 +821,60 @@ const importItemCount = computed<number>(() => {
               @update:model-value="setBatchDefault"
             />
           </div>
-          <button
-            type="button"
-            class="wp-conflict-modal__override-toggle"
-            :aria-expanded="batchExpanded ? 'true' : 'false'"
-            aria-controls="wp-conflict-modal-batch-overrides"
-            data-test="batch-override-toggle"
-            @click="batchExpanded = !batchExpanded"
-          >
-            <i
-              :class="batchExpanded ? 'pi pi-angle-down' : 'pi pi-angle-right'"
-              aria-hidden="true"
-            />
-            {{ batchExpanded ? "Hide per-conflict overrides" : "Show per-conflict overrides" }}
-          </button>
-          <div
-            v-if="batchExpanded"
-            id="wp-conflict-modal-batch-overrides"
-            class="wp-conflict-modal__override-list"
-            data-test="batch-override-list"
+          <Disclosure
+            v-model:open="batchExpanded"
+            class="wp-conflict-modal__overrides"
+            size="sm"
+            lazy
+            :label="batchExpanded ? 'Hide per-conflict overrides' : 'Show per-conflict overrides'"
+            :trigger-attrs="{ 'data-test': 'batch-override-toggle' }"
           >
             <div
-              v-for="conflict in props.batchConflicts"
-              :key="conflict.id"
-              class="wp-conflict-modal__override-row"
-              :data-test="`batch-override-row-${conflict.id}`"
+              class="wp-conflict-modal__override-list"
+              data-test="batch-override-list"
             >
-              <span
-                class="wp-row-type-icon"
-                :class="`wp-row-type-icon--${overrideRowKindClass(conflict)}`"
-                aria-hidden="true"
+              <div
+                v-for="conflict in props.batchConflicts"
+                :key="conflict.id"
+                class="wp-conflict-modal__override-row"
+                :data-test="`batch-override-row-${conflict.id}`"
               >
-                <i :class="overrideRowIconClass(conflict)" />
-              </span>
-              <div class="wp-row-name">
-                <span class="wp-picker-row__name">{{ batchRowName(conflict) }}</span>
-                <span class="wp-id">{{ conflict.id.slice(0, 8) }}</span>
                 <span
-                  class="wp-mod-badge"
-                  :class="`wp-mod-badge--${batchOverrideBadge(conflict).variant}`"
-                  :data-test="`batch-override-badge-${conflict.id}`"
-                  style="margin-left: auto"
-                >{{ batchOverrideBadge(conflict).label }}</span>
+                  class="wp-row-type-icon"
+                  :class="`wp-row-type-icon--${overrideRowKindClass(conflict)}`"
+                  aria-hidden="true"
+                >
+                  <i :class="overrideRowIconClass(conflict)" />
+                </span>
+                <div class="wp-row-name">
+                  <span class="wp-picker-row__name">{{ batchRowName(conflict) }}</span>
+                  <span class="wp-id">{{ conflict.id.slice(0, 8) }}</span>
+                  <span
+                    class="wp-mod-badge"
+                    :class="`wp-mod-badge--${batchOverrideBadge(conflict).variant}`"
+                    :data-test="`batch-override-badge-${conflict.id}`"
+                    style="margin-left: auto"
+                  >{{ batchOverrideBadge(conflict).label }}</span>
+                </div>
+                <span
+                  class="wp-override-tag"
+                  :class="batchOverrideFor(conflict.id) !== 'default'
+                    ? 'wp-override-tag--set' : ''"
+                >{{ batchOverrideFor(conflict.id) === 'default'
+                  ? 'Use batch default'
+                  : 'Override' }}</span>
+                <WpSegmented
+                  size="sm"
+                  :model-value="batchOverrideFor(conflict.id)"
+                  :options="BATCH_OVERRIDE_OPTIONS"
+                  :aria-label="`Override action for ${batchRowName(conflict)}`"
+                  :test-prefix="`batch-override-${conflict.id}`"
+                  :data-test="`batch-override-group-${conflict.id}`"
+                  @update:model-value="(v) => setBatchOverride(conflict.id, v)"
+                />
               </div>
-              <span
-                class="wp-override-tag"
-                :class="batchOverrideFor(conflict.id) !== 'default'
-                  ? 'wp-override-tag--set' : ''"
-              >{{ batchOverrideFor(conflict.id) === 'default'
-                ? 'Use batch default'
-                : 'Override' }}</span>
-              <WpSegmented
-                size="sm"
-                :model-value="batchOverrideFor(conflict.id)"
-                :options="BATCH_OVERRIDE_OPTIONS"
-                :aria-label="`Override action for ${batchRowName(conflict)}`"
-                :test-prefix="`batch-override-${conflict.id}`"
-                :data-test="`batch-override-group-${conflict.id}`"
-                @update:model-value="(v) => setBatchOverride(conflict.id, v)"
-              />
             </div>
-          </div>
+          </Disclosure>
         </div>
       </template>
 
@@ -1192,25 +1186,7 @@ const importItemCount = computed<number>(() => {
   color: var(--wp-text);
   font-weight: 600;
 }
-.wp-conflict-modal__override-toggle {
-  background: transparent;
-  border: 1px solid var(--wp-border-strong);
-  color: var(--wp-text-muted);
-  font-family: var(--wp-font);
-  font-size: var(--wp-text-xs);
-  padding: 4px 9px;
-  border-radius: var(--wp-radius-sm);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 4px;
-}
-.wp-conflict-modal__override-toggle:hover {
-  color: var(--wp-text);
-  background: var(--wp-bg-4);
-}
-.wp-conflict-modal__override-toggle .pi { font-size: 9px; }
+.wp-conflict-modal__overrides { margin-top: 4px; }
 
 /* Override list — one row per batch conflict. Prototype lines 294-304. */
 .wp-conflict-modal__override-list {
