@@ -130,10 +130,6 @@
 .wp-module--in-bundle .wp-collapse-btn .pi {
   font-size: 10px !important;
 }
-.wp-module--in-bundle .wp-toggle-mark {
-  width: 12px !important;
-  height: 12px !important;
-}
 .wp-module--in-bundle .wp-row-type-icon {
   width: 16px !important;
   height: 16px !important;
@@ -637,30 +633,6 @@
 /* .wp-collapse-btn base → src/components/shared/row-primitives.css.
  * Module-specific: PrimeIcons sets 16px on `.pi` itself; our shared
  * rule sets 10px which matches what Context wanted. */
-
-.wp-toggle { display: flex; align-items: center; cursor: pointer; flex-shrink: 0; }
-.wp-toggle input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
-.wp-toggle-mark {
-  display: block;
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  border: 1px solid var(--wp-border2);
-  background: var(--wp-bg2);
-  transition: background-color var(--wp-motion-hover), border-color var(--wp-motion-hover), box-shadow var(--wp-motion-hover);
-}
-.wp-toggle input:checked + .wp-toggle-mark { background: var(--wp-accent); border-color: var(--wp-accent); }
-.wp-toggle input:focus-visible + .wp-toggle-mark {
-  /* Distinct from accent so the ring stays visible whether the toggle is
-   * on (accent fill) or off (transparent fill). */
-  box-shadow: 0 0 0 2px var(--wp-violet);
-}
 
 /* Type icon — colored per type so users scan-recognize the module type */
 .wp-type-icon {

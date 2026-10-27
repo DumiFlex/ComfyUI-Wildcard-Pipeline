@@ -3,6 +3,7 @@ import { inject } from "vue";
 import type { ModuleEntry } from "../../widgets/_shared";
 import { ModuleRowCtxKey } from "./module-row-ctx";
 import PairBadge from "./PairBadge.vue";
+import WpCheck from "../shared/WpCheck.vue";
 
 defineProps<{ module: ModuleEntry; idx: number }>();
 
@@ -74,14 +75,11 @@ const {
         :title="isCollapsed(module) ? 'Expand' : 'Collapse'" @click="toggleCollapsed(idx)">
         <i :class="['pi', isCollapsed(module) ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i>
       </button>
-      <label class="wp-toggle" draggable="false"
-        :title="ctx && ctx.currentFrame.value != null ? (ctx.effectiveEnabled(module) ? 'Disable on this frame' : 'Enable on this frame') : (module.enabled ? 'Disable' : 'Enable')">
-        <input type="checkbox"
-          :checked="ctx ? ctx.effectiveEnabled(module) : module.enabled"
-          :aria-label="`enable ${module.meta.name}`"
-          @change="toggleEnabled(idx)" />
-        <span class="wp-toggle-mark"></span>
-      </label>
+      <WpCheck size="sm" draggable="false" data-test="module-enabled"
+        :title="ctx && ctx.currentFrame.value != null ? (ctx.effectiveEnabled(module) ? 'Disable on this frame' : 'Enable on this frame') : (module.enabled ? 'Disable' : 'Enable')"
+        :model-value="ctx ? ctx.effectiveEnabled(module) : module.enabled"
+        :aria-label="`enable ${module.meta.name}`"
+        @update:model-value="toggleEnabled(idx)" />
       <span class="wp-row-type-icon" :title="module.type" aria-hidden="true">
         <i :class="kindIcon(module.type)" />
       </span>

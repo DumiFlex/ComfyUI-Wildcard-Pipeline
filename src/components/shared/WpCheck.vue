@@ -15,15 +15,18 @@
  * buttons — this is only for true checkmark boxes.
  *
  * `aria-label` / `data-test` fall through to the single root span. Click /
- * Space / Enter toggle.
+ * Space / Enter toggle. `size="sm"` is the 12px box of the canvas rows' on/off
+ * mark (modules, bundles, injector rows). A parent can tint the checked fill
+ * with `--check-on` (a bundle header uses its bundle colour).
  */
 const props = withDefaults(
   defineProps<{
     /** Checked state — use with `v-model` or `:model-value` + `@update:model-value`. */
     modelValue?: boolean;
     disabled?: boolean;
+    size?: "sm" | "md";
   }>(),
-  { modelValue: false, disabled: false },
+  { modelValue: false, disabled: false, size: "md" },
 );
 
 const emit = defineEmits<{ "update:modelValue": [next: boolean] }>();
@@ -37,6 +40,7 @@ function toggle(): void {
 <template>
   <span
     class="wp-check"
+    :class="{ 'wp-check--sm': size === 'sm' }"
     role="checkbox"
     :aria-checked="modelValue === true"
     :aria-disabled="disabled || undefined"
@@ -84,9 +88,12 @@ function toggle(): void {
   cursor: pointer;
 }
 .wp-check svg { display: block; }
+.wp-check--sm { width: 12px; height: 12px; border-width: 1px; border-radius: 2px; }
+.wp-check--sm svg { width: 7px; height: 7px; }
+.wp-check:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
 .wp-check[aria-checked="true"] {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
+  background: var(--check-on, var(--wp-accent));
+  border-color: var(--check-on, var(--wp-accent));
 }
 .wp-check[aria-disabled="true"] {
   cursor: not-allowed;

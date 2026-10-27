@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
+import WpCheck from "../shared/WpCheck.vue";
 
 const props = defineProps<{
   row: InjectorRow;
@@ -199,16 +200,15 @@ function onDragEnd(): void {
         :aria-label="row._collapsed ? 'Expand row preview' : 'Collapse row preview'"
         @click.stop="emit('update', { _collapsed: !row._collapsed })"
       ><i :class="['pi', row._collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true" /></button>
-      <label class="wp-inj-toggle" :title="row.enabled ? 'Disable' : 'Enable'" draggable="false">
-        <input
-          type="checkbox"
-          :checked="row.enabled"
-          data-test="inj-row-enabled"
-          :aria-label="`enable injector row ${row._uid}`"
-          @change="(ev) => emit('update', { enabled: (ev.target as HTMLInputElement).checked })"
-        />
-        <span class="wp-inj-toggle-mark"></span>
-      </label>
+      <WpCheck
+        size="sm"
+        :title="row.enabled ? 'Disable' : 'Enable'"
+        draggable="false"
+        :model-value="row.enabled"
+        data-test="inj-row-enabled"
+        :aria-label="`enable injector row ${row._uid}`"
+        @update:model-value="(next) => emit('update', { enabled: next })"
+      />
 
       <span class="wp-row-type-icon" aria-hidden="true">
         <i :class="['pi', isGeneral ? 'pi-bolt' : typeIcon]" />
@@ -493,32 +493,6 @@ function onDragEnd(): void {
   border-left-style: dashed;
   border-left-color: var(--wp-warn);
   background: color-mix(in srgb, var(--wp-warn) 4%, var(--wp-bg3));
-}
-
-/* Toggle checkbox — same as Context's .wp-toggle */
-.wp-inj-toggle { display: flex; align-items: center; cursor: pointer; flex-shrink: 0; }
-.wp-inj-toggle input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
-.wp-inj-toggle-mark {
-  display: block;
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  border: 1px solid var(--wp-border2);
-  background: var(--wp-bg2);
-  transition: background-color var(--wp-motion-hover), border-color var(--wp-motion-hover);
-}
-.wp-inj-toggle input:checked + .wp-inj-toggle-mark {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
-}
-.wp-inj-toggle input:focus-visible + .wp-inj-toggle-mark {
-  box-shadow: 0 0 0 2px var(--wp-violet);
 }
 
 /* Type icon — base style lives in src/components/shared/row-primitives.css

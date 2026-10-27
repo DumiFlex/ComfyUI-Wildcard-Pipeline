@@ -91,12 +91,11 @@ describe("BundleHeader", () => {
     expect(w.emitted("toggle-collapse")).toBeTruthy();
   });
 
-  it("emits toggle-enabled with new state on checkbox change", async () => {
+  it("emits toggle-enabled with new state on checkbox click", async () => {
     const w = mount(BundleHeader, {
       props: { instance: instance({ enabled: true }), name: "x", childCount: 0 },
     });
-    const input = w.find('input[type="checkbox"]');
-    await input.setValue(false);
+    await w.get('[data-test="bundle-enabled"]').trigger("click");
     const events = w.emitted("toggle-enabled");
     expect(events).toBeTruthy();
     expect(events && events[0]).toEqual([false]);
