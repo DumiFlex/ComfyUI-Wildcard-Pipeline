@@ -76,3 +76,67 @@ describe("change card views", () => {
     expect(bulk.get('[data-test="ai-card-more"]').text()).toBe("+2 more items");
   });
 });
+
+describe("rule change views", () => {
+  it("draws a derivation change with the untouched rules folded", () => {
+    const view: CardView = {
+      kind: "derivation", ruleChanges: ["changed", "same"],
+      rules: [
+        [
+          { key: "IF", test: '$season is "snow"', wasTest: '$season is "winter"', actions: ['set $mood to "cozy"'], change: "changed",
+            acts: [{ text: 'set $mood to "cozy"', change: "same" }, { text: 'set $light to "dim"', change: "added" }] },
+          { key: "ELSE", test: "", actions: ['set $mood to "calm"'], change: "removed" },
+        ],
+        [{ key: "IF", test: '$season is "rain"', actions: ['set $mood to "wet"'], change: "same" }],
+      ],
+    };
+    const w = mount(AiCardView, { props: { view } });
+    expect(w.findAll('[data-test="ai-card-rule"]')).toHaveLength(1);
+    expect(w.get('[data-test="ai-card-unchanged"]').text()).toBe("1 rule unchanged");
+    const branches = w.findAll('[data-test="ai-card-branch"]');
+    expect(branches.map((b) => b.attributes("data-change"))).toEqual(["changed", "removed"]);
+    expect(branches[0].text()).toContain('"winter"');
+    expect(branches[0].find('li[data-change="added"]').text()).toContain("$light");
+    const full = mount(AiCardView, { props: { view, full: true } });
+    expect(full.findAll('[data-test="ai-card-rule"]')).toHaveLength(2);
+  });
+
+  it("marks changed grid cells and shows only changed exception rows", () => {
+    const view: CardView = {
+      kind: "constraint", source: "Season", target: "Outfit", reach: "", same: 2,
+      fields: [{ field: "text", label: "Reaches", from: "every use after it", to: "the next 2" }],
+      rows: [
+        { from: "#cold", to: "#light", byTag: true, effect: "reduce", factor: 0.5, change: "changed", was: { effect: "exclude", factor: null } },
+        { from: "#cold", to: "#warm", byTag: true, effect: "boost", factor: 2, change: "same", was: null },
+        { from: "#hot", to: "#light", byTag: true, effect: "boost", factor: 3, change: "added", was: null },
+        { from: "#hot", to: "#warm", byTag: true, effect: "exclude", factor: null, change: "removed", was: null },
+        { from: "snow", to: "sandals", byTag: false, effect: "exclude", factor: null, change: "same", was: null },
+        { from: "sun", to: "boots", byTag: false, effect: "exclude", factor: null, change: "added", was: null },
+      ],
+    };
+    const w = mount(AiCardView, { props: { view } });
+    const cells = w.get('[data-test="ai-card-matrix"]').findAll("tbody td");
+    expect(cells.map((c) => c.attributes("data-change"))).toEqual(["changed", "same", "added", "removed"]);
+    expect(cells[0].text()).toMatch(/never\s*×0.5/);
+    expect(cells[0].attributes("title")).toBe("never → less likely ×0.5");
+    expect(w.findAll('[data-test="ai-card-rule-row"]').map((r) => r.text())).toEqual([expect.stringContaining("sun")]);
+    expect(w.get('[data-test="ai-card-unchanged"]').text()).toBe("1 rule unchanged");
+    expect(w.text()).toContain("the next 2");
+  });
+
+  it("draws a bundle change as its ordered list", () => {
+    const row = (name: string, change: "same" | "added" | "removed" | "changed" | "moved", extra = {}) =>
+      ({ name, type: "wildcard", change, at: 1, wasAt: null, enabled: true, wasEnabled: null, use: "", wasUse: null, ...extra });
+    const view: CardView = { kind: "bundle", before: 4, after: 4, same: 1, rows: [
+      row("Season", "same"), row("Shoes", "changed", { enabled: false, wasEnabled: true }),
+      row("Outfit", "moved", { at: 3, wasAt: 2 }), row("Old", "removed"), row("Hat", "added", { use: "pick 2-3" }),
+    ] };
+    const w = mount(AiCardView, { props: { view } });
+    const rows = w.findAll('[data-test="ai-card-bundle-row"]');
+    expect(rows.map((r) => r.attributes("data-change"))).toEqual(["changed", "moved", "removed", "added"]);
+    expect(rows[0].text()).toMatch(/on\s*→\s*off/);
+    expect(rows[1].text()).toContain("moved from 2");
+    expect(rows[3].text()).toContain("pick 2-3");
+    expect(w.get('[data-test="ai-card-unchanged"]').text()).toContain("1 unchanged");
+  });
+});

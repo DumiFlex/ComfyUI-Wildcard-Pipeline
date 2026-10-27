@@ -49,13 +49,44 @@ function clause(c: unknown): string[] {
   return [c.action, ...extra].map(actionText).filter(Boolean);
 }
 
-function reachText(sel: unknown): string {
+/** A constraint's reach in words ("" for every use after it). */
+export function reachText(sel: unknown): string {
   if (!isObj(sel)) return "";
   const mode = str(sel.mode);
   if (mode === "first") return "the first one after it";
   if (mode === "next") return `the next ${typeof sel.count === "number" ? sel.count : 1}`;
   if (mode === "pick") return "picked uses";
   return "";
+}
+
+/** A constraint's tag cells and option exceptions as source → target rows. */
+export function constraintRows(payload: Obj): ConstraintRowView[] {
+  const rows: ConstraintRowView[] = [];
+  const matrix = isObj(payload.matrix) ? payload.matrix : {};
+  for (const [from, cells] of Object.entries(matrix)) {
+    if (!isObj(cells)) continue;
+    for (const [to, cell] of Object.entries(cells)) {
+      if (!isObj(cell)) continue;
+      rows.push({ from: `#${from}`, to: `#${to}`, byTag: true, effect: str(cell.mode),
+        factor: typeof cell.factor === "number" ? cell.factor : null });
+    }
+  }
+  for (const e of Array.isArray(payload.exceptions) ? payload.exceptions : []) {
+    if (!isObj(e)) continue;
+    rows.push({ from: str(e.source), to: str(e.target), byTag: false, effect: str(e.mode),
+      factor: typeof e.factor === "number" ? e.factor : null });
+  }
+  return rows;
+}
+
+/** A derivation's rules, each as its IF / ELIF / ELSE branches. */
+export function derivationRules(payload: Obj): BranchView[][] {
+  return (Array.isArray(payload.rules) ? payload.rules : []).filter(isObj).map((r) => {
+    const out: BranchView[] = (Array.isArray(r.branches) ? r.branches : []).filter(isObj)
+      .map((b, i) => ({ key: i === 0 ? "IF" as const : "ELIF" as const, test: testText(b.condition), actions: clause(b) }));
+    if (isObj(r.else)) out.push({ key: "ELSE", test: "", actions: clause(r.else) });
+    return out;
+  });
 }
 
 /** How a create card shows what it makes, or null for the plain lines. */
@@ -67,33 +98,14 @@ export function createView(p: AiChatProposal): CardView | null {
   const type = op.kind === "module" ? str(body.type) : op.kind;
   const names = p.names ?? {};
   if (type === "constraint" && payload) {
-    const rows: ConstraintRowView[] = [];
-    const matrix = isObj(payload.matrix) ? payload.matrix : {};
-    for (const [from, cells] of Object.entries(matrix)) {
-      if (!isObj(cells)) continue;
-      for (const [to, cell] of Object.entries(cells)) {
-        if (!isObj(cell)) continue;
-        rows.push({ from: `#${from}`, to: `#${to}`, byTag: true, effect: str(cell.mode),
-          factor: typeof cell.factor === "number" ? cell.factor : null });
-      }
-    }
-    for (const e of Array.isArray(payload.exceptions) ? payload.exceptions : []) {
-      if (!isObj(e)) continue;
-      rows.push({ from: str(e.source), to: str(e.target), byTag: false, effect: str(e.mode),
-        factor: typeof e.factor === "number" ? e.factor : null });
-    }
+    const rows = constraintRows(payload);
     const src = str(payload.source_wildcard_id);
     const tgt = str(payload.target_wildcard_id);
     return { kind: "constraint", source: names[src] || src, target: names[tgt] || tgt,
       reach: reachText(payload.target_select), rows };
   }
   if (type === "derivation" && payload) {
-    const rules = (Array.isArray(payload.rules) ? payload.rules : []).filter(isObj).map((r) => {
-      const out: BranchView[] = (Array.isArray(r.branches) ? r.branches : []).filter(isObj)
-        .map((b, i) => ({ key: i === 0 ? "IF" as const : "ELIF" as const, test: testText(b.condition), actions: clause(b) }));
-      if (isObj(r.else)) out.push({ key: "ELSE", test: "", actions: clause(r.else) });
-      return out;
-    });
+    const rules = derivationRules(payload);
     return { kind: "derivation", rules };
   }
   if (type === "fixed_values" && payload) {
