@@ -10,6 +10,7 @@
  * the parent owns close via outside-click / Escape. Picking a state or
  * typing a factor keeps the popover open so the user can keep tweaking.
  */
+import WpNumber from "../../../shared/WpNumber.vue";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 
 type RuleState = "neutral" | "exclude" | "boost" | "reduce" | "only";
@@ -32,12 +33,12 @@ const emit = defineEmits<{
   "close": [];
 }>();
 
-const factorInput = ref<HTMLInputElement | null>(null);
-const factorStr = ref<string>("");
+const factorInput = ref<InstanceType<typeof WpNumber> | null>(null);
+const factorVal = ref<number>(props.factor);
 const showFactor = computed(() => props.state === "boost" || props.state === "reduce");
 const stepValue = 0.1;
 
-/** Initialise the displayed factor string. `factorStr` is the LOCAL
+/** Initialise the displayed factor. `factorVal` is the LOCAL
  *  source of truth while the popover is open — incoming `props.factor`
  *  only feeds the initial value (and re-syncs on STATE transitions so
  *  entering boost/reduce shows the right default). We deliberately do
@@ -46,7 +47,7 @@ const stepValue = 0.1;
  *  `props.factor`; reacting to that would call `.select()` on every digit
  *  the user types, clobbering their input. */
 onMounted(() => {
-  factorStr.value = props.factor.toFixed(1);
+  factorVal.value = props.factor;
   if (showFactor.value) {
     void nextTick(() => {
       factorInput.value?.focus();
@@ -62,7 +63,7 @@ watch(
     // factor (commitMode in the parent sets boost=1.5 / reduce=0.5 when
     // entering from a non-factor state) and re-focus the input so the
     // user can immediately tweak.
-    factorStr.value = props.factor.toFixed(1);
+    factorVal.value = props.factor;
     if (showFactor.value) {
       void nextTick(() => {
         factorInput.value?.focus();
@@ -76,48 +77,12 @@ function pickState(next: RuleState): void {
   emit("update:state", next);
 }
 
-function onFactorInput(ev: Event): void {
-  const raw = (ev.target as HTMLInputElement).value;
-  factorStr.value = raw;
-  const n = Number(raw);
-  if (Number.isFinite(n) && n > 0) {
-    // Snap to 3 decimals on emit so fuzz tails (e.g. paste of
-    // `1.2999999999999998`, autofill, or a stray native step that beat
-    // our keydown intercept) don't leak into stored data, while still
-    // honouring legit 2-decimal precision a user might type.
-    const snapped = Math.round(n * 1000) / 1000;
-    emit("update:factor", snapped);
-  }
-}
-
-/** Arrow-key + scroll-wheel stepping on a `<input type="number">` is
- *  handled natively by the browser and produces classic float fuzz
- *  (e.g. `1.4 - 0.1 = 1.2999999999999998`). Intercept both and route
- *  them through `bump()` so the value snaps to one-decimal precision. */
-function onFactorKeydown(ev: KeyboardEvent): void {
-  if (ev.key === "ArrowUp") {
-    ev.preventDefault();
-    bump(1);
-  } else if (ev.key === "ArrowDown") {
-    ev.preventDefault();
-    bump(-1);
-  }
-}
-function onFactorWheel(ev: WheelEvent): void {
-  if (document.activeElement !== factorInput.value) return;
-  ev.preventDefault();
-  bump(ev.deltaY < 0 ? 1 : -1);
-}
-
-/** Step the value by ±0.1, clamped to > 0. Rounds to 1 decimal so
- *  `1 + 0.1` doesn't surface JS float fuzz (`1.0000000000000002`). */
-function bump(direction: 1 | -1): void {
-  const current = Number(factorStr.value) || props.factor || 1;
-  let next = current + direction * stepValue;
-  if (next <= 0) next = stepValue;
-  next = Math.round(next * 10) / 10;
-  factorStr.value = next.toFixed(1);
-  emit("update:factor", next);
+/** Typed or stepped factor. WpNumber snaps float fuzz and steps by 0.1;
+ *  anything not above zero is ignored until a real factor lands. */
+function onFactor(n: number | null): void {
+  if (n === null || !Number.isFinite(n) || n <= 0) return;
+  factorVal.value = n;
+  emit("update:factor", n);
 }
 
 function onReset(): void {
@@ -182,40 +147,18 @@ function onReset(): void {
 
     <div v-if="showFactor" class="pop-factor">
       <label class="pop-factor__label">Factor ×</label>
-      <span class="pop-num">
-        <input
-          ref="factorInput"
-          class="pop-num__field"
-          type="number"
-          step="0.1"
-          min="0.1"
-          :value="factorStr"
-          aria-label="Factor multiplier"
-          @input="onFactorInput"
-          @keydown="onFactorKeydown"
-          @wheel="onFactorWheel"
-        />
-        <span class="pop-num__spin">
-          <button
-            type="button"
-            class="pop-num__btn"
-            tabindex="-1"
-            aria-label="Increase factor"
-            @click="bump(1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-            <path d="M0 5 L4 0 L8 5 Z" fill="currentColor" />
-          </svg></button>
-          <button
-            type="button"
-            class="pop-num__btn"
-            tabindex="-1"
-            aria-label="Decrease factor"
-            @click="bump(-1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-            <path d="M0 0 L4 5 L8 0 Z" fill="currentColor" />
-          </svg></button>
-        </span>
-      </span>
+      <WpNumber
+        ref="factorInput"
+        class="pop-num"
+        :model-value="factorVal"
+        :min="stepValue"
+        :step="stepValue"
+        commit="input"
+        aria-label="Factor multiplier"
+        up-label="Increase factor"
+        down-label="Decrease factor"
+        @update:model-value="onFactor"
+      />
     </div>
 
     <div v-if="canReset" class="pop-foot">
@@ -317,63 +260,7 @@ function onReset(): void {
   letter-spacing: 0.06em;
   font-weight: 600;
 }
-.pop-num {
-  flex: 1;
-  display: inline-flex;
-  align-items: stretch;
-  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
-  border: 1px solid var(--wp-border, #353841);
-  border-radius: 3px;
-  overflow: hidden;
-  height: 24px;
-}
-.pop-num:focus-within { border-color: var(--wp-accent, #c4b5fd); }
-.pop-num__field {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  padding: 0 8px;
-  font: 600 12px var(--wp-font-mono, monospace);
-  color: var(--wp-text, #fff);
-  text-align: right;
-  width: 0;
-  min-width: 0;
-  -moz-appearance: textfield;
-}
-.pop-num__field::-webkit-outer-spin-button,
-.pop-num__field::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.pop-num__field:focus { outline: none; }
-.pop-num__spin {
-  display: flex;
-  flex-direction: column;
-  width: 16px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--wp-border, #353841);
-  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
-}
-.pop-num__btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
-  cursor: pointer;
-  line-height: 0;
-}
-.pop-num__btn + .pop-num__btn {
-  border-top: 1px solid var(--wp-border, #353841);
-}
-.pop-num__btn:hover {
-  color: var(--wp-accent-text, var(--wp-text, #fff));
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 12%, transparent);
-}
+.pop-num { flex: 1; }
 
 /* ── Reset button ───────────────────────────────────────────── */
 .pop-foot {

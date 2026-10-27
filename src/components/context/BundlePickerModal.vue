@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SearchInput from "../shared/SearchInput.vue";
 import { computed, nextTick, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
 import ConfirmDialog from "../shared/ConfirmDialog.vue";
@@ -28,7 +29,7 @@ const loading = ref(false);
 const loadError = ref<string | null>(null);
 const searchTerm = ref("");
 const focusedIdx = ref(0);
-const searchInput = ref<HTMLInputElement | null>(null);
+const searchInput = ref<InstanceType<typeof SearchInput> | null>(null);
 
 const filtered = computed(() => {
   const q = searchTerm.value.trim().toLowerCase();
@@ -159,7 +160,7 @@ function onKeydown(ev: KeyboardEvent) {
     ev.preventDefault();
     const row = list[focusedIdx.value];
     if (row) pickRow(row);
-  } else if (ev.key === "/" && document.activeElement !== searchInput.value) {
+  } else if (ev.key === "/" && document.activeElement !== searchInput.value?.el) {
     ev.preventDefault();
     searchInput.value?.focus();
   }
@@ -192,20 +193,16 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
       </header>
 
       <div class="wp-bp__toolbar">
-        <div class="wp-bp__search">
-          <i class="pi pi-search" aria-hidden="true"></i>
-          <input
-            ref="searchInput"
-            v-model="searchTerm"
-            type="text"
-            placeholder="Search bundles by name…"
-            aria-label="Search bundles"
-            data-testid="bundle-picker-search"
-          />
-          <span v-if="searchTerm" class="wp-bp__search-clear" @click="searchTerm = ''">
-            <i class="pi pi-times" aria-hidden="true"></i>
-          </span>
-        </div>
+        <SearchInput
+          ref="searchInput"
+          v-model="searchTerm"
+          class="wp-bp__search"
+          size="sm"
+          placeholder="Search bundles by name…"
+          aria-label="Search bundles"
+          shortcut="/"
+          data-testid="bundle-picker-search"
+        />
       </div>
 
       <div class="wp-bp__body">
@@ -406,32 +403,7 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   display: flex;
   gap: 8px;
 }
-.wp-bp__search {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  border-radius: 4px;
-  padding: 0 8px;
-  gap: 6px;
-}
-.wp-bp__search:focus-within { border-color: var(--wp-accent); }
-.wp-bp__search input {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  color: var(--wp-text);
-  padding: 6px 0;
-  font: 500 12px var(--wp-font-sans);
-  outline: 0;
-}
-.wp-bp__search input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
-.wp-bp__search-clear {
-  cursor: pointer;
-  color: var(--wp-text-dim, var(--wp-text3));
-  font-size: 11px;
-}
+.wp-bp__search { flex: 1; }
 
 .wp-bp__body {
   max-height: 460px;

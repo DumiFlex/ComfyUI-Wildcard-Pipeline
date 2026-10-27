@@ -4,10 +4,10 @@
  * Pipeline, editable here too (see `useCanvasSettings` for how the two stay
  * in step), plus the one run setting the engine reads from the server.
  */
+import WpNumber from "@/components/shared/WpNumber.vue";
 import { computed, ref, watch } from "vue";
 import Toggle from "../../ui/Toggle.vue";
 import Select from "../../ui/Select.vue";
-import Input from "../../ui/Input.vue";
 import type { SelectOption } from "../../ui/select-types";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
@@ -75,10 +75,9 @@ async function commitDepth(): Promise<void> {
       for="wildcard-max-ref-depth"
     >
       <span v-if="depthSaved" class="wp-set-pill" data-tone="ok">Saved</span>
-      <Input
-        id="wildcard-max-ref-depth"
-        v-model.number="depthDraft"
-        type="number"
+      <WpNumber id="wildcard-max-ref-depth" v-model.number="depthDraft"
+        size="md"
+        commit="input"
         :min="1"
         :max="32"
         :step="1"

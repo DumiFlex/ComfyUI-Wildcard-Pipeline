@@ -89,8 +89,8 @@ function onLockClick(): void {
   }
 }
 
-function onSeedInput(n: number): void {
-  if (!Number.isInteger(n)) return;
+function onSeedInput(n: number | null): void {
+  if (n === null || !Number.isInteger(n)) return;
   const ui = instance.value._ui ?? {};
   emitInstance({
     locked_seed: n,

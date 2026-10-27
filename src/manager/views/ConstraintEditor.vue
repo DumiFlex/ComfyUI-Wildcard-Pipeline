@@ -10,6 +10,7 @@
  *  4. Rule matrix (ConstraintMatrix)
  *  5. Exceptions table
  */
+import WpNumber from "@/components/shared/WpNumber.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
@@ -22,7 +23,6 @@ import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
-import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import Checkbox from "../components/ui/Checkbox.vue";
 import ListFilter from "../components/ui/ListFilter.vue";
@@ -35,7 +35,7 @@ import { useAiConfig } from "../composables/useAiConfig";
 import { useBulkSelection } from "../composables/useBulkSelection";
 import RichTextPreview from "../components/RichTextPreview.vue";
 import ConstraintMatrixGrid from "../components/ConstraintMatrix.vue";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
@@ -1138,19 +1138,10 @@ function setReachMode(mode: LibReachMode): void {
   targetSelect.value = mode === "next" ? { mode: "next", count: reachCount.value } : { mode };
 }
 
-function onReachCountInput(ev: Event): void {
-  const raw = Number((ev.target as HTMLInputElement).value);
-  const n = Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
+/** Typed or stepped next-N count; whole numbers, at least 1. */
+function setReachCount(v: number | null): void {
+  const n = v !== null && Number.isFinite(v) && v >= 1 ? Math.floor(v) : 1;
   targetSelect.value = { mode: "next", count: n };
-}
-
-/** Step the next-N reach count by ±1, clamped to >= 1. Backs the up/down
- *  stepper chevrons so the control matches the exceptions factor Input
- *  (which has stacked steppers). Reuses the same min-1 clamp as the typed
- *  path above. */
-function bumpReach(direction: 1 | -1): void {
-  const n = reachCount.value + direction;
-  targetSelect.value = { mode: "next", count: n >= 1 ? n : 1 };
 }
 
 function applyRestore(entry: ModuleHistoryEntry): void {
@@ -1331,7 +1322,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
     @restore="applyRestore"
   >
     <template v-if="isEdit" #header-extra>
-      <SendToTestRunner v-if="props.id" :kind="'constraint'" :id="props.id" />
+      <SendToTestRunner v-if="props.id" :id="props.id" :kind="'constraint'" />
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
         used by <PillCountBadge :count="cascadeRefs.length" />
       </span>
@@ -1368,10 +1359,10 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         :description="description"
         :category-id="categoryId"
         :tags="tags"
+        :content-rating="contentRating"
         @update:name="(v) => (name = v)"
         @update:description="(v) => (description = v)"
         @update:category-id="(v) => (categoryId = v)"
-        :content-rating="contentRating"
         @update:tags="(v) => (tags = v)"
         @update:content-rating="(v) => (contentRating = v)"
       />
@@ -1483,6 +1474,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
            exist at library-authoring time, so it's offered on the
            instance modal (TargetReachSection), not here. -->
       <div class="cn-reach">
+        <div class="cn-reach-row">
         <div class="cn-reach-seg" role="group" aria-label="Target reach mode">
           <button
             v-for="m in REACH_MODES"
@@ -1494,36 +1486,20 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
             :data-test="`cn-reach-mode-${m.key}`"
             @click="setReachMode(m.key)"
           >{{ m.label }}</button>
-          <span v-if="targetSelect.mode === 'next'" class="cn-reach-step">
-            <input
-              class="cn-reach-step__field"
-              type="number"
-              min="1"
-              step="1"
-              :value="reachCount"
-              aria-label="Number of downstream targets"
-              data-test="cn-reach-count"
-              @input="onReachCountInput"
-            />
-            <!-- Stacked stepper chevrons — mirrors the exceptions factor
-                 Input's spinner so both numeric controls feel the same. -->
-            <span class="cn-reach-step__spin" aria-hidden="true">
-              <button
-                type="button"
-                class="cn-reach-step__btn"
-                tabindex="-1"
-                aria-label="Increase target count"
-                @click="bumpReach(1)"
-              ><i class="pi pi-chevron-up" /></button>
-              <button
-                type="button"
-                class="cn-reach-step__btn"
-                tabindex="-1"
-                aria-label="Decrease target count"
-                @click="bumpReach(-1)"
-              ><i class="pi pi-chevron-down" /></button>
-            </span>
-          </span>
+        </div>
+        <WpNumber
+          v-if="targetSelect.mode === 'next'"
+          class="cn-reach-step"
+          size="md"
+          commit="input"
+          :model-value="reachCount"
+          :min="1"
+          aria-label="Number of downstream targets"
+          up-label="Increase target count"
+          down-label="Decrease target count"
+          data-test="cn-reach-count"
+          @update:model-value="setReachCount"
+        />
         </div>
         <span class="cn-reach-hint" data-test="cn-reach-hint">
           <template v-if="targetSelect.mode === 'all'">Re-weights every downstream target instance.</template>
@@ -1560,8 +1536,8 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         </template>
       </template>
       <AiConstraintPanel
-        ref="aiPanelRef"
         v-if="aiOpen && ai.config.value?.enabled && sourceWildcardId && targetWildcardId && !refMissing"
+        ref="aiPanelRef"
         :source-wildcard-id="sourceWildcardId"
         :target-wildcard-id="targetWildcardId"
         :source-name="sourceWildcard?.name ?? ''"
@@ -1843,10 +1819,9 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
               </Select>
             </td>
             <td>
-              <Input
-                v-if="ex.mode === 'boost' || ex.mode === 'reduce'"
+              <WpNumber v-if="ex.mode === 'boost' || ex.mode === 'reduce'"
+                commit="input"
                 :model-value="ex.factor"
-                type="number"
                 size="sm"
                 aria-label="Exception factor"
                 @update:model-value="(v) => (ex.factor = Number(v) || 0)"
@@ -1912,29 +1887,29 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
     <!-- CascadeConfirmDialog: shown when entity has downstream refs. -->
     <CascadeConfirmDialog
       v-if="isEdit && props.id"
+      :id="props.id"
       :open="cascadeDialogOpen"
       kind="constraint"
-      :id="props.id"
       action="delete"
       @confirmed="onCascadeDialogConfirmed"
       @cancelled="cascadeDialogOpen = false"
     />
-    <!-- ConfirmDialog inside EditorFrame to keep template single-root;
+    <!-- ConfirmModal inside EditorFrame to keep template single-root;
          see WildcardEditor for the multi-root Transition explanation. -->
-    <ConfirmDialog
-      :visible="showConfirm"
+    <ConfirmModal
+      :open="showConfirm"
       title="Discard unsaved changes?"
       body="You have unsaved edits. Leaving this page will discard them."
       confirm-label="Discard & leave"
       cancel-label="Stay"
-      variant="danger"
+      tone="danger"
       @confirm="onConfirmLeave"
       @cancel="onCancelLeave"
     />
     <!-- Feature 2: confirm pulling the missing dependency (+ its closure)
          from the community before any network/install side effect. -->
-    <ConfirmDialog
-      :visible="downloadConfirmOpen"
+    <ConfirmModal
+      :open="downloadConfirmOpen"
       title="Download dependencies"
       :body="downloadConfirmBody"
       confirm-label="Download & install"
@@ -2162,52 +2137,8 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
   background: var(--wp-accent);
   color: #fff;
 }
-.cn-reach-step {
-  display: inline-flex;
-  align-items: stretch;
-  border-left: 1px solid var(--wp-border);
-}
-.cn-reach-step__field {
-  width: 44px;
-  background: transparent;
-  border: 0;
-  padding: 0 8px;
-  font-size: var(--wp-text-sm);
-  color: var(--wp-text);
-  text-align: center;
-  -moz-appearance: textfield;
-}
-.cn-reach-step__field::-webkit-outer-spin-button,
-.cn-reach-step__field::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.cn-reach-step__field:focus { outline: none; }
-/* Stacked up/down stepper — native spin buttons hidden above so these
- * don't double up. Mirrors the exceptions factor Input's spinner. */
-.cn-reach-step__spin {
-  display: flex;
-  flex-direction: column;
-  width: 18px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--wp-border);
-}
-.cn-reach-step__btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  color: var(--wp-text-dim);
-  cursor: pointer;
-  line-height: 0;
-}
-.cn-reach-step__btn + .cn-reach-step__btn { border-top: 1px solid var(--wp-border); }
-.cn-reach-step__btn .pi { font-size: 8px; }
-.cn-reach-step__btn:hover {
-  color: var(--wp-text);
-  background: color-mix(in srgb, var(--wp-text) 8%, transparent);
-}
+.cn-reach-row { display: flex; align-items: center; gap: var(--wp-space-3); }
+.cn-reach-step { width: 72px; }
 .cn-reach-hint {
   font-size: var(--wp-text-xs);
   color: var(--wp-text-dim);

@@ -1,6 +1,6 @@
 <template>
   <ModalShell :visible="visible" @close="$emit('close')">
-    <div class="wp-picker" ref="rootEl" tabindex="-1">
+    <div ref="rootEl" class="wp-picker" tabindex="-1">
 
       <!-- Header -->
       <header class="wp-picker__head">
@@ -33,22 +33,15 @@
              flex-row so the toolbar's outer column layout doesn't
              stack each icon onto its own line. -->
         <div class="wp-picker__toolbar-top">
-        <div class="wp-picker__search" :class="{ 'is-focused': searchFocused }">
-          <i class="pi pi-search wp-picker__search-icon" aria-hidden="true"></i>
-          <input
-            ref="searchInput"
-            v-model="searchTerm"
-            type="text"
-            placeholder="Search modules by name or var…"
-            aria-label="Search modules"
-            data-testid="picker-search"
-            @focus="searchFocused = true"
-            @blur="searchFocused = false"
-          />
-          <span v-if="searchTerm" class="wp-picker__search-clear" @click="searchTerm = ''">
-            <i class="pi pi-times" aria-hidden="true"></i>
-          </span>
-        </div>
+        <SearchInput
+          ref="searchInput"
+          v-model="searchTerm"
+          class="wp-picker__search"
+          size="sm"
+          placeholder="Search modules by name or var…"
+          aria-label="Search modules"
+          data-testid="picker-search"
+        />
 
         <!-- Inline icon-only quick toggles. Each is a thin square
              button next to search. Active state = accent fill. -->
@@ -300,8 +293,8 @@
           <button
             type="button"
             class="wp-picker__selection-clear"
-            @click="selected.clear()"
             data-testid="picker-clear"
+            @click="selected.clear()"
           >
             Clear
           </button>
@@ -373,6 +366,7 @@
  * Every embeddable kind with a payload is pickable. Rows render
  * disabled only when their payload is missing (broken library entry).
  */
+import SearchInput from "../shared/SearchInput.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
 import WpSelect from "../shared/WpSelect.vue";
@@ -422,8 +416,7 @@ const loading = ref(false);
 const loadError = ref<string | null>(null);
 
 const searchTerm = ref("");
-const searchFocused = ref(false);
-const searchInput = ref<HTMLInputElement | null>(null);
+const searchInput = ref<InstanceType<typeof SearchInput> | null>(null);
 const rootEl = ref<HTMLDivElement | null>(null);
 
 // Use reactive() so Vue can track .has()/.size/.add()/.delete()/.clear() individually
@@ -891,7 +884,7 @@ function captureKeyDown(e: KeyboardEvent) {
   }
 
   const target = e.target as HTMLElement | null;
-  const inSearch = target === searchInput.value;
+  const inSearch = target === searchInput.value?.el;
 
   if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
 
@@ -1138,42 +1131,6 @@ onBeforeUnmount(detachCaptureListeners);
   gap: 6px;
 }
 .wp-picker__toolbar-top > .wp-picker__search { flex: 1; min-width: 0; }
-.wp-picker__search {
-  position: relative;
-  height: 28px;
-  background: var(--wp-bg-3);
-  border: 1px solid var(--wp-border);
-  border-radius: 6px;
-  display: flex; align-items: center;
-  padding: 0 8px;
-  gap: 6px;
-  transition: border-color var(--wp-motion-quick) ease, background var(--wp-motion-quick) ease;
-}
-.wp-picker__search.is-focused,
-.wp-picker__search:focus-within {
-  border-color: var(--wp-accent-500);
-  background: var(--wp-bg-2);
-}
-.wp-picker__search-icon { font-size: 11px; color: var(--wp-text-dim); flex-shrink: 0; }
-.wp-picker__search input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--wp-text);
-  font-size: 12px;
-  font-family: var(--wp-font);
-}
-.wp-picker__search input::placeholder { color: var(--wp-text-dim); }
-.wp-picker__search-clear {
-  cursor: pointer;
-  color: var(--wp-text-dim);
-  font-size: 10px;
-  padding: 2px;
-  border-radius: 999px;
-  transition: color var(--wp-motion-quick) ease;
-}
-.wp-picker__search-clear:hover { color: var(--wp-text); }
 
 .wp-picker-tabs {
   display: flex;

@@ -22,7 +22,7 @@ import { api, ApiError, type ExportBuildRequest } from "../api/client";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType, TemplateRow } from "../api/types";
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
-import PickerSearch from "./PickerSearch.vue";
+import SearchInput from "@/components/shared/SearchInput.vue";
 import { bundleSubtitle, moduleSubtitle, templateSubtitle } from "./picker-subtitle";
 import { kindIcon } from "../../components/shared/kind-icons";
 import type { DepRef } from "./PickerRow.vue";
@@ -781,8 +781,10 @@ function presetFavoritesOnly(): void {
       ><i :class="kindIcon(b.key)" aria-hidden="true" /> {{ b.title }}</button>
     </div>
 
-    <PickerSearch
+    <SearchInput
       v-model="rowQuery"
+      class="wp-export-tab__search"
+      placeholder="Search by name, $variable or id…"
       aria-label="Search library entities"
       data-test="export-tab-search"
     />
@@ -927,7 +929,7 @@ function presetFavoritesOnly(): void {
   gap: 6px;
 }
 
-/* Cross-bucket search box now lives in PickerSearch.vue (shared with Import). */
+/* The cross-bucket search box is the shared SearchInput (also on Import). */
 
 .wp-export-tab__empty {
   font-size: var(--wp-text-sm);
@@ -957,4 +959,5 @@ function presetFavoritesOnly(): void {
   color: var(--wp-text);
   font-weight: 600;
 }
+.wp-export-tab__search { margin-bottom: 6px; }
 </style>

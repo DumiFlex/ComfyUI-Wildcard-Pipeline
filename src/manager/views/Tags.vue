@@ -14,7 +14,7 @@ import Button from "../components/ui/Button.vue";
 import Chip from "../components/ui/Chip.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
 import Input from "../components/ui/Input.vue";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import { api, ApiError } from "../api/client";
 import type { LibraryTagUpdateCounts } from "../api/types";
 import { useToast } from "../composables/useToast";
@@ -307,20 +307,20 @@ registerPageNote(() => {
     </div>
   </div>
 
-  <ConfirmDialog
-    :visible="mergePending !== null"
+  <ConfirmModal
+    :open="mergePending !== null"
     :title="`Merge \&quot;${mergePending?.from ?? ''}\&quot; into \&quot;${mergePending?.into ?? ''}\&quot;?`"
     :body="`&quot;${mergePending?.into ?? ''}&quot; already exists. Every item tagged &quot;${mergePending?.from ?? ''}&quot; gets &quot;${mergePending?.into ?? ''}&quot; instead, and the two can't be told apart afterwards.`"
     confirm-label="Merge"
     @confirm="confirmMerge"
     @cancel="mergePending = null; cancelRename()"
   />
-  <ConfirmDialog
-    :visible="deletePending !== null"
+  <ConfirmModal
+    :open="deletePending !== null"
     :title="`Delete tag \&quot;${deletePending?.tag ?? ''}\&quot;?`"
     :body="`Removes it from ${deletePending?.total ?? 0} item${deletePending?.total === 1 ? '' : 's'}. The items themselves stay.`"
     confirm-label="Delete"
-    variant="danger"
+    tone="danger"
     @confirm="confirmDelete"
     @cancel="deletePending = null"
   />

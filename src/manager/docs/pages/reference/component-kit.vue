@@ -35,8 +35,10 @@ const groups = KIT_GROUPS.map((g) => ({ ...g, count: KIT_ENTRIES.filter((e) => e
       </ul>
       <p>
         Pieces shared by the canvas and the manager (the node dialog, the right-click menu, popovers,
-        tooltips) are shown live too. The canvas toast is the one piece listed with how to use it
-        instead of a live demo.
+        tooltips, the search box, the number field and the toast) are shown live too. Each of these is
+        one component on both sides: the search box in a node picker and on a manager page is the same
+        box, and so are the number fields and toasts. The canvas toast store is the one piece listed
+        with how to use it instead of a live demo.
       </p>
     </DocSection>
 

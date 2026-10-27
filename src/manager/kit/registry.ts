@@ -53,7 +53,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   // Inputs
   {
     id: "input", name: "Input", group: "inputs", file: "src/manager/components/ui/Input.vue", surfaces: ["manager"],
-    use: "One-line text in the manager, on the 24/32/40 scale (size sm/md/lg). Optional inline icon, a prefix like $ for variable names, a suffix like a unit, and a readonly look (dashed, dimmer, lock).",
+    use: "One-line text in the manager, on the 24/32/40 scale (size sm/md/lg). Optional inline icon, a prefix like $ for variable names, a suffix like a unit, and a readonly look (dashed, dimmer, lock). Numbers use WpNumber, searches SearchInput.",
     instead: "A bare <input> with its own border and focus ring.",
   },
   {
@@ -76,12 +76,17 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "wp-number", name: "WpNumber", group: "inputs", file: "src/components/shared/WpNumber.vue", surfaces: ["canvas", "manager"],
-    use: "Every number field. It has our up and down arrows, steps with the keys and the wheel, and clamps to min and max. size sm (24, canvas default) / md (32, manager) / lg (40); suffix shows a unit.",
-    instead: "<input type=\"number\"> with the browser's spinner.",
+    use: "Every number field, canvas and manager. Our up and down arrows, keys and the wheel step it and clamp to min and max; typed values snap float fuzz. size sm (24, canvas default) / md (32, manager) / lg (40); suffix shows a unit; nullable when an empty box means \"use the default\".",
+    instead: "<input type=\"number\"> with the browser's spinner, or Input type=\"number\" (removed).",
+  },
+  {
+    id: "search-input", name: "SearchInput", group: "inputs", file: "src/components/shared/SearchInput.vue", surfaces: ["canvas", "manager"],
+    use: "Every search or filter box: magnifier, text, an optional \"3 of 12\" count or key hint, and a ✕ that clears it. Escape clears it first. size sm on the canvas and in tight rows.",
+    instead: "PickerSearch, Input with a search icon, or a hand-made box with its own icon and clear button.",
   },
   {
     id: "list-filter", name: "ListFilter", group: "inputs", file: "src/manager/components/ui/ListFilter.vue", surfaces: ["manager"],
-    use: "A filter box above a long list inside an editor card, with the \"3 of 12\" count. It hides itself while the list is short.",
+    use: "SearchInput for a long list inside an editor card: the count sits in the box, and it hides itself while the list is short.",
     instead: "Another search box with its own icon and count.",
   },
   {
@@ -122,11 +127,8 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "chip", name: "Chip", group: "display", file: "src/manager/components/ui/Chip.vue", surfaces: ["manager"],
-    use: "A short label: a tag, a status, a count. Tones carry meaning (success, warn, danger, info); a colour prop tints it for a category or kind. removable adds a plain ✕ that keeps the chip's height.",
-  },
-  {
-    id: "category-chip", name: "CategoryChip", group: "display", file: "src/manager/components/CategoryChip.vue", surfaces: ["manager"],
-    use: "A category with its own colour and icon.",
+    use: "A short label: a tag, a status, a count, a category. Tones carry meaning (success, warn, danger, info); color tints it for a category or kind (the text blends toward the theme's text so any pick stays readable), and icon puts the category's icon in front. removable adds a plain ✕ that keeps the chip's height.",
+    instead: "CategoryChip (merged into Chip: <Chip :color :icon>{{ name }}</Chip>) or a hand-made pill span.",
   },
   {
     id: "kbd", name: "Key (.wp-kbd)", group: "display", file: "src/manager/styles/tokens.css", surfaces: ["manager"],
@@ -145,6 +147,11 @@ export const KIT_ENTRIES: KitEntry[] = [
   {
     id: "toast", name: "Toast (manager)", group: "feedback", file: "src/manager/composables/useToast.ts", surfaces: ["manager"],
     use: "A short note after an action, with an optional Undo. Call useToast().push(); the app shows it.",
+  },
+  {
+    id: "toast-card", name: "ToastCard", group: "feedback", file: "src/components/shared/ToastCard.vue", surfaces: ["canvas", "manager"],
+    use: "The one toast look both stacks draw (manager bottom right, canvas under the menu bar). You push to a store, never mount it yourself.",
+    instead: "A toast styled per surface.",
   },
   {
     id: "canvas-toast", name: "Toast (canvas)", group: "feedback", file: "src/components/shared/toast-store.ts", surfaces: ["canvas"],
@@ -190,8 +197,13 @@ export const KIT_ENTRIES: KitEntry[] = [
     use: "The backdrop, focus trap and Escape handling for a canvas dialog. Put the dialog's own frame inside.",
   },
   {
-    id: "confirm-dialog", name: "ConfirmDialog", group: "overlays", file: "src/components/shared/ConfirmDialog.vue", surfaces: ["canvas", "manager"],
-    use: "Ask before something that can't be undone. Name the action on the confirm button (Delete, not OK).",
+    id: "confirm-modal", name: "ConfirmModal", group: "overlays", file: "src/manager/components/ui/ConfirmModal.vue", surfaces: ["manager"],
+    use: "Ask before something that can't be undone, in the manager. Built on Modal, so Escape, Tab and focus return work like every other dialog. Name the action on the confirm button (Delete, not OK); tone=\"danger\" for deletes and discards.",
+    instead: "ConfirmDialog in a manager screen, or window.confirm().",
+  },
+  {
+    id: "confirm-dialog", name: "ConfirmDialog", group: "overlays", file: "src/components/shared/ConfirmDialog.vue", surfaces: ["canvas"],
+    use: "The same question from a canvas widget, in the node colours. In the manager use ConfirmModal.",
   },
   {
     id: "context-menu", name: "ContextMenu", group: "overlays", file: "src/components/shared/ContextMenu.vue", surfaces: ["canvas", "manager"],
@@ -266,6 +278,7 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "select": `<Select v-model="category" :options="options" clearable />`,
   "wp-select": `<WpSelect v-model="mode" :options="[{ value: 'hash', label: 'Hash' }]" aria-label="Strategy" />`,
   "wp-number": `<WpNumber v-model="count" :min="1" :max="64" aria-label="Count" />`,
+  "search-input": `<SearchInput v-model="query" placeholder="Search modules" :visible="shown.length" :total="rows.length" />`,
   "list-filter": `<ListFilter v-model="query" :total="rows.length" :visible="shown.length" noun="rules" test-prefix="rules" />`,
   "color-picker": `<ColorPicker v-model="color" aria-label="Category colour" />`,
   "hsv-picker": `<HsvPicker v-model="color" aria-label="Colour" />`,
@@ -275,17 +288,18 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "radio": `<label><input v-model="mode" type="radio" class="wp-radio" value="a"> Tags</label>`,
   "tabs": `<div class="wp-tabs" role="tablist"><button class="wp-tab" role="tab" :aria-selected="tab === 'a'" :data-active="tab === 'a'">Options</button></div>`,
   "card": `<Card title="Options" subtitle="12 options">…</Card>`,
-  "chip": `<Chip tone="warn" icon="pi-exclamation-triangle">2 conflicts</Chip>`,
-  "category-chip": `<CategoryChip name="Characters" color="#60a5fa" icon="pi-user" />`,
+  "chip": `<Chip tone="warn" icon="pi-exclamation-triangle">2 conflicts</Chip>  <Chip :color="cat.color" :icon="cat.icon">{{ cat.name }}</Chip>`,
   "kbd": `<kbd class="wp-kbd">Ctrl</kbd> <kbd class="wp-kbd">K</kbd>`,
   "icon": `<Icon name="pi-bolt" :size="ICON_MD" />`,
   "empty-state": `<EmptyState icon="pi-inbox" headline="No bundles yet" body="…"><template #cta>…</template></EmptyState>`,
   "toast": `useToast().push({ severity: "success", summary: "Saved", action: { label: "Undo", run: undo } })`,
+  "toast-card": `<ToastCard tone="success" summary="Saved Hair colour" action-label="Undo" @action="undo" @dismiss="close" />`,
   "canvas-toast": `pushToast("Copied to the library", { severity: "success" })`,
   "loading-mark": `<LoadingMark block>Loading bundle…</LoadingMark>`,
   "ai-working": `<AiWorking text="Planning the pack" variant="orbit" />`,
   "modal": `<Modal v-model:open="open" title="Rename"><template #footer>…</template></Modal>`,
   "modal-shell": `<ModalShell :visible="open" @close="open = false"><div class="my-dialog">…</div></ModalShell>`,
+  "confirm-modal": `<ConfirmModal :open="ask" title="Delete Hair colour?" confirm-label="Delete" tone="danger" @confirm="del" @cancel="ask = false" />`,
   "confirm-dialog": `<ConfirmDialog :visible="ask" title="Delete Hair colour?" confirm-label="Delete" variant="danger" @confirm="del" @cancel="ask = false" />`,
   "context-menu": `<ContextMenu :visible="open" :x="ev.clientX" :y="ev.clientY" :items="items" @close="open = false" />`,
   "drawer": `<Drawer v-model:open="open" title="History" width="380px">…<template #footer>…</template></Drawer>`,

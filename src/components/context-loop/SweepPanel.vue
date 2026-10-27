@@ -245,7 +245,7 @@ function moveAxis(uid: string, dir: -1 | 1): void {
           up-label="Increase limit"
           down-label="Decrease limit"
           data-test="sweep-limit"
-          @update:model-value="(n) => setLimit(Math.round(n))"
+          @update:model-value="(n) => n !== null && setLimit(Math.round(n))"
         />
       </div>
       <div class="wp-sweep__row" :title="HOLD_TOOLTIP">

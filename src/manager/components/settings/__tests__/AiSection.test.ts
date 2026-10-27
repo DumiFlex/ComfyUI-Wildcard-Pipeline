@@ -290,7 +290,7 @@ describe("Settings › AI assistant", () => {
       cfg({ enabled: true, provider: "lmstudio", model: "m", ...p }));
     const w = mount(AiSection, { global: { plugins: [router] } });
     await flushPromises();
-    const topK = w.find('[data-test="ai-sampler-top_k"] input');
+    const topK = w.find('[data-test="ai-sampler-top_k"]');
     await topK.setValue("20.4");
     await topK.trigger("blur");
     await flushPromises();

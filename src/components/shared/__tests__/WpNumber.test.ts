@@ -1,5 +1,5 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import WpNumber from "../WpNumber.vue";
 
 function last(w: ReturnType<typeof mount>): unknown {
@@ -47,5 +47,34 @@ describe("WpNumber", () => {
     const w = mount(WpNumber, { props: { modelValue: 1, disabled: true, dataTest: "n" } });
     await w.get('[data-test="n-up"]').trigger("click");
     expect(w.emitted("update:modelValue")).toBeUndefined();
+  });
+
+  it("emits null for a cleared nullable field, and snaps typed fuzz", async () => {
+    const w = mount(WpNumber, { props: { modelValue: 1, commit: "input", nullable: true, dataTest: "n" } });
+    await w.get('[data-test="n"]').setValue("");
+    expect(last(w)).toBeNull();
+    await w.get('[data-test="n"]').setValue("1.2999999999999998");
+    expect(last(w)).toBe(1.3);
+  });
+
+  it("steps from 0.1 without native grid validation", () => {
+    const w = mount(WpNumber, { props: { modelValue: 1, step: 0.1, min: 0.01, dataTest: "n" } });
+    const el = w.get<HTMLInputElement>('[data-test="n"]').element;
+    expect(el.getAttribute("step")).toBe("any");
+    expect(el.validity.stepMismatch).toBe(false);
+  });
+
+  it("puts class on the box and other attributes on the input", async () => {
+    const onBlur = vi.fn();
+    const w = mount(WpNumber, {
+      props: { modelValue: 1, size: "md", dataTest: "n" },
+      attrs: { class: "my-width", id: "field-id", onBlur },
+    });
+    expect(w.classes()).toContain("my-width");
+    expect(w.classes()).toContain("wp-cnum--md");
+    const input = w.get('[data-test="n"]');
+    expect(input.attributes("id")).toBe("field-id");
+    await input.trigger("blur");
+    expect(onBlur).toHaveBeenCalled();
   });
 });

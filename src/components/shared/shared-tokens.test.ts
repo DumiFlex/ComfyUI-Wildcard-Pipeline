@@ -55,9 +55,12 @@ describe("shared token names", () => {
     expect(SHARED_TOKENS.filter((t) => !manager.has(t))).toEqual([]);
   });
 
-  it("are the only --wp names the shared overlays read", () => {
+  it("are the only --wp names the shared overlays and controls read", () => {
     const shared = new Set<string>(SHARED_TOKENS);
-    const files = ["./Popover.vue", "./ContextMenu.vue", "./tooltip.css", "./DropdownMenu.vue", "./ModalShell.vue", "./_modal-motion.css", "./ConfirmDialog.vue"];
+    const files = [
+      "./Popover.vue", "./ContextMenu.vue", "./tooltip.css", "./DropdownMenu.vue", "./ModalShell.vue",
+      "./_modal-motion.css", "./ConfirmDialog.vue", "./SearchInput.vue", "./ToastCard.vue", "./WpNumber.vue",
+    ];
     const stray = files.flatMap((f) =>
       [...read(f).matchAll(/var\((--wp-[a-z0-9-]+)/g)].map((m) => m[1]).filter((n) => !shared.has(n)).map((n) => `${f}: ${n}`),
     );

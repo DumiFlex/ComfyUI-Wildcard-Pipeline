@@ -8,7 +8,7 @@ import { computed, ref } from "vue";
  * data — only the cascade-confirm path (which is gated behind "has
  * downstream refs") prompted the user. This composable normalizes the
  * no-refs path: hold the row in a `pending` ref, surface a
- * `<ConfirmDialog>` bound to `visible`, run the actual delete on
+ * `<ConfirmModal>` bound to `open`, run the actual delete on
  * confirm.
  *
  * Usage:
@@ -16,12 +16,12 @@ import { computed, ref } from "vue";
  *   // in del() handler, replace `await store.remove(row.id)` with:
  *   delConfirm.ask(row);
  *   // in template:
- *   <ConfirmDialog
- *     :visible="delConfirm.visible.value"
+ *   <ConfirmModal
+ *     :open="delConfirm.visible.value"
  *     :title="`Delete \"${delConfirm.pending.value?.name ?? ''}\"?`"
  *     body="This permanently removes the library entry."
  *     confirm-label="Delete"
- *     variant="danger"
+ *     tone="danger"
  *     @confirm="delConfirm.confirm(performDelete)"
  *     @cancel="delConfirm.cancel"
  *   />

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WpNumber from "../../../../shared/WpNumber.vue";
 import { computed, ref } from "vue";
 import {
   effectiveWeight,
@@ -307,51 +308,17 @@ function clampWeight(n: number): number {
   return Number.isFinite(n) && n > 0 ? n : WEIGHT_MIN;
 }
 
-function onWeightInput(ev: Event): void {
-  const raw = (ev.target as HTMLInputElement).value.trim();
-  if (raw === "") {
+/** Typed or stepped weight. An empty box clears the weight (back to 1);
+ *  WpNumber already snaps typed fuzz and steps with the step's precision. */
+function onWeight(n: number | null): void {
+  if (n === null) {
     emit("weight", props.option.id, null);
     return;
   }
-  const n = Number(raw);
-  if (Number.isFinite(n)) {
-    // Snap to 3 decimals so fuzz tails (e.g. autofill / native step that
-    // beat our keydown intercept) don't leak into stored data, while
-    // still honouring legit 2-decimal precision a user might type.
-    const snapped = Math.round(n * 1000) / 1000;
-    emitWeight(clampWeight(snapped));
-  }
-}
-
-/** Route ArrowUp / ArrowDown / wheel through `bumpWeight()` so the
- *  step uses rounded math instead of the browser's native float step. */
-function onWeightKeydown(ev: KeyboardEvent): void {
-  if (ev.key === "ArrowUp") {
-    ev.preventDefault();
-    bumpWeight(1);
-  } else if (ev.key === "ArrowDown") {
-    ev.preventDefault();
-    bumpWeight(-1);
-  }
-}
-function onWeightWheel(ev: WheelEvent): void {
-  const target = ev.target as HTMLInputElement;
-  if (document.activeElement !== target) return;
-  ev.preventDefault();
-  bumpWeight(ev.deltaY < 0 ? 1 : -1);
+  emitWeight(clampWeight(n));
 }
 
 const WEIGHT_STEP = 0.1;
-
-function bumpWeight(direction: 1 | -1): void {
-  if (!enabled.value) return;
-  // Round to 1 decimal so 1.0 + 0.1 doesn't drift to 1.0999... visually.
-  const next = Math.max(
-    WEIGHT_MIN,
-    Math.round((weight.value + direction * WEIGHT_STEP) * 10) / 10,
-  );
-  emitWeight(next);
-}
 
 /** Percentage label, delegated to the SPA's `formatProbability` so both
  *  editors agree digit-for-digit. The canvas modal used to round to a whole
@@ -498,45 +465,20 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
       </span>
       <span class="opt__prob-pct" data-test="opt-prob-pct">{{ fmtPct(probability) }}</span>
     </span>
-    <span class="opt__weight-wrap" :class="{ 'opt__weight-wrap--off': !enabled }">
-      <input
-        class="opt__weight"
-        data-test="opt-weight"
-        type="number"
-        step="0.1"
-        min="0.01"
-        :value="weight"
-        :disabled="!enabled"
-        :aria-label="`Weight for ${option.value}`"
-        @input="onWeightInput"
-        @keydown="onWeightKeydown"
-        @wheel="onWeightWheel"
-      />
-      <span class="opt__spin">
-        <button
-          type="button"
-          class="opt__spin-btn"
-          data-test="opt-weight-up"
-          tabindex="-1"
-          :disabled="!enabled"
-          :aria-label="`Increase weight for ${option.value}`"
-          @click="bumpWeight(1)"
-        ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-          <path d="M0 5 L4 0 L8 5 Z" fill="currentColor" />
-        </svg></button>
-        <button
-          type="button"
-          class="opt__spin-btn"
-          data-test="opt-weight-down"
-          tabindex="-1"
-          :disabled="!enabled"
-          :aria-label="`Decrease weight for ${option.value}`"
-          @click="bumpWeight(-1)"
-        ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-          <path d="M0 0 L4 5 L8 0 Z" fill="currentColor" />
-        </svg></button>
-      </span>
-    </span>
+    <WpNumber
+      class="opt__weight-wrap"
+      :model-value="weight"
+      :min="WEIGHT_MIN"
+      :step="WEIGHT_STEP"
+      commit="input"
+      nullable
+      :disabled="!enabled"
+      :aria-label="`Weight for ${option.value}`"
+      :up-label="`Increase weight for ${option.value}`"
+      :down-label="`Decrease weight for ${option.value}`"
+      data-test="opt-weight"
+      @update:model-value="onWeight"
+    />
     <span class="opt__cat">
       <span
         v-for="tag in visibleTags"
@@ -798,90 +740,10 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   text-align: right;
 }
 .opt--off .opt__prob-pct { color: var(--wp-text-dim, var(--wp-text3)); }
-/* Weight input wrapper holds the number field plus a stacked custom
- * spinner pair. The wrapper carries the border + bg so the input and
- * spinner read as a single themed control. Native browser spinners
- * are hidden via `appearance: textfield` (FF) + ::-webkit pseudo
- * elements; the up/down buttons we render do the same job but
- * styled to fit the dark/light theme. */
-.opt__weight-wrap {
-  display: inline-flex;
-  align-items: stretch;
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: 2px;
-  width: 100%;
-  height: 22px;
-  overflow: hidden;
-}
-.opt__weight-wrap:focus-within {
-  border-color: var(--wp-accent);
-}
-.opt__weight {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  padding: 0 6px;
-  font: 10px var(--wp-font-mono);
-  color: var(--wp-text-muted, var(--wp-text2));
-  text-align: right;
-  width: 100%;
-  min-width: 0;
-  -moz-appearance: textfield;
-}
-.opt__weight::-webkit-outer-spin-button,
-.opt__weight::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.opt__weight:focus {
-  outline: none;
-  color: var(--wp-text);
-}
-.opt--weighted .opt__weight {
-  color: var(--wp-accent-text, var(--wp-text));
-}
-.opt--weighted .opt__weight-wrap {
-  border-color: var(--wp-accent);
-}
-.opt--off .opt__weight-wrap {
-  background: transparent;
-  border-color: var(--wp-border-soft, var(--wp-border));
-}
-.opt--off .opt__weight {
-  color: var(--wp-text-dim, var(--wp-text3));
-}
-.opt__spin {
-  display: flex;
-  flex-direction: column;
-  width: 14px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--wp-border);
-  background: var(--wp-bg-deep, var(--wp-bg));
-}
-.opt__spin-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  line-height: 0;
-}
-.opt__spin-btn + .opt__spin-btn {
-  border-top: 1px solid var(--wp-border);
-}
-.opt__spin-btn:hover { color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,0.10); }
-.opt__spin-btn:disabled {
-  cursor: not-allowed;
-  color: var(--wp-text-dim, var(--wp-text3));
-  opacity: 0.4;
-  background: transparent;
-}
+/* The weight is a WpNumber; the row only tints it. */
+.opt__weight-wrap { width: 100%; }
+.opt--weighted .opt__weight-wrap { border-color: var(--wp-accent); }
+.opt--weighted .opt__weight-wrap :deep(.wp-cnum__field) { color: var(--wp-accent-text, var(--wp-text)); }
 /* CATEGORY column — option's sub-category tags as small chips, one per
  * axis-coloured tag. Wraps + right-aligns so multi-tag options stay
  * readable in the narrow column. Read-only here (membership is edited in

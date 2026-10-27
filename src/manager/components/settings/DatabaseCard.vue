@@ -12,7 +12,7 @@ import Button from "../ui/Button.vue";
 import Card from "../ui/Card.vue";
 import Icon from "../ui/Icon.vue";
 import MaintenanceOpModal from "./MaintenanceOpModal.vue";
-import ConfirmDialog from "../../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../ui/ConfirmModal.vue";
 import { useDatabaseStore } from "../../stores/databaseStore";
 import { useSystemStore } from "../../stores/systemStore";
 import type { MaintenanceOp, MaintenanceResult } from "../../api/types";
@@ -181,7 +181,7 @@ onMounted(() => {
         <section class="wp-db__section">
           <h3 class="wp-db__section-title">Row counts</h3>
           <dl class="wp-db__rows wp-db__rows--grid">
-            <div class="wp-db__row" v-for="[kind, n] in Object.entries(store.info.counts)" :key="kind">
+            <div v-for="[kind, n] in Object.entries(store.info.counts)" :key="kind" class="wp-db__row">
               <dt>{{ kind }}</dt><dd>{{ n }}</dd>
             </div>
           </dl>
@@ -249,12 +249,12 @@ onMounted(() => {
       @update:open="(v) => { if (!v) closeModal(); }"
     />
 
-    <ConfirmDialog
-      :visible="restartConfirmOpen"
+    <ConfirmModal
+      :open="restartConfirmOpen"
       title="Restart ComfyUI?"
       body="This kicks the running ComfyUI process. Any in-flight workflows and queued prompts will be interrupted. The page will reload automatically once the server is back."
       confirm-label="Restart"
-      variant="danger"
+      tone="danger"
       @confirm="onRestartConfirmed"
       @cancel="onRestartCancelled"
     />

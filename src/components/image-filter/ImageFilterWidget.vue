@@ -46,7 +46,8 @@ function patch(p: Partial<ImageFilterConfig>): void {
 }
 
 const TIMEOUT_STEP = 30;
-function setTimeoutSecs(n: number): void {
+function setTimeoutSecs(n: number | null): void {
+  if (n === null) return;
   patch({ timeout: clampTimeout(n) });
 }
 const SEND_AS: { value: SendAs; label: string }[] = [

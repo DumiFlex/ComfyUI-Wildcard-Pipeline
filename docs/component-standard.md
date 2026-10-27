@@ -6,8 +6,8 @@ Every custom control in the extension follows these rules. The component kit (Se
 
 | Folder | What goes there |
 |---|---|
-| `src/components/shared/` | Pieces the canvas uses, and pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`) and canvas controls (`WpCheck`, `WpSelect`, `WpNumber`). |
-| `src/manager/components/ui/` | Manager-only controls: `Button`, `Input`, `Select`, `Modal`, `Drawer` and the rest. |
+| `src/components/shared/` | Pieces the canvas uses, and pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`), controls (`SearchInput`, `WpNumber`, `WpCheck`, `WpSelect`) and the toast look (`ToastCard`). |
+| `src/manager/components/ui/` | Manager-only controls: `Button`, `Input`, `Select`, `Modal`, `ConfirmModal`, `Drawer` and the rest. |
 
 A component anywhere else is a part of one screen, not a control. If a second screen needs it, move it into a kit folder first.
 
@@ -43,7 +43,7 @@ Don't add synonyms such as `kind`, `small`, `busy` or `visible` for these meanin
 
 - Controls come in three heights: 24 px (`sm`), 32 px (`md`) and 40 px (`lg`). Buttons, inputs, selects, number fields and segmented controls share these heights.
 - The canvas defaults to `sm`, the manager to `md`.
-- Button, Input, Select and WpNumber are on it (`size` sm/md/lg). The manager's Density setting scales all three heights together through `--wp-density`.
+- Button, Input, Select and WpNumber are on it (`size` sm/md/lg). The manager's Density setting scales all three heights together through `--wp-density`. `SearchInput` takes `size` on the scale too (canvas `sm`, manager forms `md`).
 - Hit targets are at least 20 px on the canvas and 24 px in the manager. An icon inside a chip may draw smaller, but its click area must not be.
 
 ## 5. Tokens only
@@ -77,7 +77,7 @@ Anything that floats goes through the kit's overlays and positions with `floatin
 | Menu at the pointer | `ContextMenu` |
 | Hint | `v-tooltip` |
 | Side panel | `Drawer` |
-| Dialog | `Modal` (manager), `ModalShell` / `ConfirmDialog` (canvas) |
+| Dialog | `Modal` / `ConfirmModal` (manager), `ModalShell` / `ConfirmDialog` (canvas) |
 
 Anything that floats next to a trigger follows it when the page scrolls or resizes; a menu opened at the pointer closes on scroll. Never write another Teleport with its own placement maths, scroll handling or outside-click handler.
 
@@ -110,3 +110,15 @@ kit-guard (`scripts/kit-guard.mjs`) counts hand-built controls per file: native 
 - A file's count may not go up.
 - When a file's count goes down, run `pnpm kit:baseline` and commit the new baseline.
 - A raw control needs a reason the kit can't cover. Usually the fix is to add the missing piece to the kit.
+
+## 11. One component per job
+
+Each of these jobs has exactly one component. Don't build a second one, and don't style a native element to look like it.
+
+| Job | Use | Not |
+|---|---|---|
+| Search or filter a list | `SearchInput` (with `visible` / `total` for "3 of 12"); `ListFilter` in an editor card | `Input` with a search icon, a hand-made box |
+| A number | `WpNumber` (`nullable` when empty means "default") | `<input type="number">`, `Input type="number"` (removed) |
+| A tag, status or category | `Chip` (`tone` for meaning, `color` + `icon` for a category) | `CategoryChip` (merged), a pill `span` |
+| A toast | `useToast()` (manager) or `pushToast()` (canvas); both draw `ToastCard` | a toast styled per surface |
+| Ask before acting | `ConfirmModal` (manager), `ConfirmDialog` (canvas) | `window.confirm()`, `ConfirmDialog` in the manager |

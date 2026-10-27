@@ -15,7 +15,7 @@ import Button from "../ui/Button.vue";
 import Select from "../ui/Select.vue";
 import Icon from "../ui/Icon.vue";
 import type { SelectOption } from "../ui/select-types";
-import ConfirmDialog from "../../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../ui/ConfirmModal.vue";
 import SettingGroup from "./SettingGroup.vue";
 import SettingRow from "./SettingRow.vue";
 import { api } from "../../api/client";
@@ -266,20 +266,20 @@ onMounted(() => {
       </Button>
     </SettingRow>
 
-    <ConfirmDialog
-      :visible="!!confirmRestore"
+    <ConfirmModal
+      :open="!!confirmRestore"
       title="Restore this backup?"
       :body="confirmRestore ? `Your library goes back to how it was on ${formatWhen(confirmRestore.created_at)}. This happens the next time ComfyUI starts. The current database is backed up first, so you can undo it the same way.` : ''"
       confirm-label="Stage restore"
       @confirm="doRestore"
       @cancel="confirmRestore = null"
     />
-    <ConfirmDialog
-      :visible="!!confirmDelete"
+    <ConfirmModal
+      :open="!!confirmDelete"
       title="Delete this backup?"
       :body="confirmDelete ? `The backup from ${formatWhen(confirmDelete.created_at)} is removed from disk.` : ''"
       confirm-label="Delete"
-      variant="danger"
+      tone="danger"
       @confirm="doDelete"
       @cancel="confirmDelete = null"
     />

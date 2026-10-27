@@ -21,7 +21,7 @@ vi.mock("../api/client", () => ({
 
 import { api } from "../api/client";
 import Categories from "../views/Categories.vue";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../components/ui/ConfirmModal.vue";
 
 const apiCat = api.categories as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const apiMod = api.modules as unknown as Record<string, ReturnType<typeof vi.fn>>;
@@ -163,7 +163,7 @@ describe("Categories.vue", () => {
     const wrap = mount(Categories, { global: { plugins: [] } });
     await flushPromises();
     await wrap.find('[data-test="cat-delete-c1"]').trigger("click");
-    wrap.findComponent(ConfirmDialog).vm.$emit("confirm");
+    wrap.findComponent(ConfirmModal).vm.$emit("confirm");
     await flushPromises();
     expect(cascadeApply).toHaveBeenCalledWith(expect.objectContaining({ kind: "category", id: "c1", action: "delete" }));
     expect(apiCat.delete).not.toHaveBeenCalled();

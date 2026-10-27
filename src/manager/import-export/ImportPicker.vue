@@ -39,7 +39,7 @@ import { computed, ref, watchEffect } from "vue";
 import Button from "../components/ui/Button.vue";
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
-import PickerSearch from "./PickerSearch.vue";
+import SearchInput from "@/components/shared/SearchInput.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 import { entitySubtitle } from "./picker-subtitle";
 import type { StatusBadge, DepRef } from "./PickerRow.vue";
@@ -662,8 +662,10 @@ function emitContinue(): void {
       ><i :class="kindIcon(b.kindFallback)" aria-hidden="true" /> {{ b.title }}</button>
     </div>
 
-    <PickerSearch
+    <SearchInput
       v-model="rowQuery"
+      class="wp-import-picker__search"
+      placeholder="Search by name, $variable or id…"
       aria-label="Search payload entities"
       data-test="import-picker-search"
     />
@@ -840,4 +842,5 @@ function emitContinue(): void {
   color: var(--wp-text);
   font-weight: 600;
 }
+.wp-import-picker__search { margin-bottom: 6px; }
 </style>

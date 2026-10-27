@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Input from "../../ui/Input.vue";
+import WpNumber from "@/components/shared/WpNumber.vue";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import SegControl, { type SegOption } from "../SegControl.vue";
@@ -38,10 +38,9 @@ const MODES: SegOption<"range" | "random">[] = [
       setting-key="tr-from"
       for="settings-tr-from"
     >
-      <Input
-        id="settings-tr-from"
+      <WpNumber id="settings-tr-from" size="md"
+        commit="input"
         :model-value="ui.testRunnerDefaults.from"
-        type="number"
         :min="0"
         class="wp-set-num"
         data-test="settings-tr-from"
@@ -54,10 +53,9 @@ const MODES: SegOption<"range" | "random">[] = [
       setting-key="tr-count"
       for="settings-tr-count"
     >
-      <Input
-        id="settings-tr-count"
+      <WpNumber id="settings-tr-count" size="md"
+        commit="input"
         :model-value="ui.testRunnerDefaults.count"
-        type="number"
         :min="1"
         :max="MAX_TEST_RUNNER_SEEDS"
         class="wp-set-num"

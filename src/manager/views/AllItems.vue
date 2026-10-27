@@ -38,7 +38,7 @@ import EmptyState from "../components/ui/EmptyState.vue";
 import { useToast } from "../composables/useToast";
 import { api } from "../api/client";
 import { useCategoryStore } from "../stores/categoryStore";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "../components/ui/Chip.vue";
 import { categoryAssignOptions, categoryFilterOptions } from "../utils/category-options";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
@@ -541,12 +541,12 @@ function refresh() {
         <span v-else class="wp-dim">{{ row.kind }}</span>
       </td>
       <td>
-        <CategoryChip
+        <Chip
           v-if="row.category_id && categoryById.get(row.category_id)"
-          :name="categoryById.get(row.category_id)!.name"
+         
           :color="categoryById.get(row.category_id)!.color"
           :icon="categoryById.get(row.category_id)!.icon"
-        />
+        >{{ categoryById.get(row.category_id)!.name }}</Chip>
         <span v-else class="wp-dim">—</span>
       </td>
       <td><ValidityIcon :issues="issuesFor(row)" /></td>
@@ -554,7 +554,7 @@ function refresh() {
 
     <template #actions="{ row }">
       <Button variant="ghost" size="sm" icon="pi-pencil" aria-label="Edit" @click="editRow(row)" />
-      <SendToTestRunner :kind="(row.kind as TestRunnerKind)" :id="row.id" compact />
+      <SendToTestRunner :id="row.id" :kind="(row.kind as TestRunnerKind)" compact />
       <Button variant="ghost" size="sm" icon="pi-trash" aria-label="Delete" @click="del(row)" />
     </template>
 

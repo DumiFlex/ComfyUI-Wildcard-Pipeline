@@ -53,13 +53,14 @@ useDialogFocus(dialog, () => props.open, {
         :class="modalClasses"
         role="dialog"
         aria-modal="true"
-        :aria-labelledby="title ? titleId : undefined"
+        :aria-labelledby="title || slots.header ? titleId : undefined"
         tabindex="-1"
         @mousedown.stop
       >
         <header v-if="title || slots.header" class="wp-modal__head">
           <h3 v-if="title" :id="titleId" class="wp-modal__title">{{ title }}</h3>
-          <slot name="header" />
+          <!-- A custom header puts :id="titleId" on its own heading. -->
+          <slot name="header" :title-id="titleId" />
           <span class="wp-spacer" />
           <button
             type="button"

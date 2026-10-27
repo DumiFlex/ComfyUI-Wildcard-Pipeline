@@ -50,7 +50,7 @@ describe("change card views", () => {
         to: { name: "Sky", color: "#0af", icon: "cloud", isNew: true } },
       { field: "text", label: "Description", from: "", to: "Clouds" },
     ] } } });
-    const chips = w.findAll(".wp-cat-chip");
+    const chips = w.findAll(".wp-chip");
     expect(chips.map((c) => c.text())).toEqual(["Scenes", "Sky"]);
     expect(chips[1].find(".pi-cloud").exists()).toBe(true);
     expect(w.text()).toContain("new");
@@ -63,7 +63,7 @@ describe("change card views", () => {
       rename: [{ from: { name: "Sceens", color: null, icon: null }, to: { name: "Scenes", color: null, icon: null } }],
       restyle: [] } } });
     expect(cats.text()).toContain("New");
-    expect(cats.findAll(".wp-cat-chip").map((c) => c.text())).toEqual(["Sky", "Sceens", "Scenes"]);
+    expect(cats.findAll(".wp-chip").map((c) => c.text())).toEqual(["Sky", "Sceens", "Scenes"]);
 
     const tags = mount(AiCardView, { props: { view: { kind: "tags", rows: [{ from: "charcter", to: "character", merge: true, count: 3 }] } } });
     expect(tags.text()).toMatch(/#charcter\s*→\s*#character/);
@@ -177,7 +177,7 @@ describe("value and text change views", () => {
     } } });
     const item = w.get('[data-test="ai-card-delete-item"]');
     expect(item.text()).toContain("Lorem");
-    expect(item.find(".wp-cat-chip").text()).toBe("Scenes");
+    expect(item.find(".wp-chip").text()).toBe("Scenes");
     expect(item.text()).toContain("NSFW");
     expect(w.text()).toContain("empty");
     expect(w.text()).toContain("off 3 items");

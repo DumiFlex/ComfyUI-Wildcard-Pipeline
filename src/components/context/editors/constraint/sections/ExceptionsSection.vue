@@ -13,6 +13,7 @@
  * "+ Add extra exception" button at bottom appends a blank row
  * defaulting to mode=allow factor=1.
  */
+import WpNumber from "../../../../shared/WpNumber.vue";
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { encodeKey } from "../../instance/keys";
@@ -239,13 +240,11 @@ function onLibModeCycle(exc: LibraryException): void {
   ));
 }
 
-function onLibFactorChange(exc: LibraryException, ev: Event): void {
-  const raw = Number((ev.target as HTMLInputElement).value);
-  if (!Number.isFinite(raw) || raw < 0) return;
-  // Snap to 3 decimals so float-fuzz tails (from native arrow step,
-  // autofill, etc.) never leak into stored overrides. Honours legit
-  // 2-decimal precision a user might explicitly type.
-  const value = Math.round(raw * 1000) / 1000;
+/** A typed or stepped factor for a library exception (WpNumber already
+ *  snaps float fuzz). Setting it back to the library value drops the
+ *  override. */
+function setLibFactor(exc: LibraryException, value: number): void {
+  if (!Number.isFinite(value) || value < 0) return;
   const key = libKey(exc);
   const map = { ...factorOverrides.value };
   if (value === exc.factor) {
@@ -256,30 +255,6 @@ function onLibFactorChange(exc: LibraryException, ev: Event): void {
   emit("update", patchInstance(props.module, "exception_factor_overrides",
     Object.keys(map).length > 0 ? map : null,
   ));
-}
-
-/** Arrow-key / wheel handlers for both the library and extra factor
- *  inputs — route through the rounded `bumpLibFactor` / `bumpExtraFactor`
- *  helpers so native browser float-step doesn't surface fuzz. */
-function onLibFactorKeydown(exc: LibraryException, ev: KeyboardEvent): void {
-  if (ev.key === "ArrowUp") { ev.preventDefault(); bumpLibFactor(exc, 1); }
-  else if (ev.key === "ArrowDown") { ev.preventDefault(); bumpLibFactor(exc, -1); }
-}
-function onLibFactorWheel(exc: LibraryException, ev: WheelEvent): void {
-  const target = ev.target as HTMLInputElement;
-  if (document.activeElement !== target) return;
-  ev.preventDefault();
-  bumpLibFactor(exc, ev.deltaY < 0 ? 1 : -1);
-}
-function onExtraFactorKeydown(idx: number, ev: KeyboardEvent): void {
-  if (ev.key === "ArrowUp") { ev.preventDefault(); bumpExtraFactor(idx, 1); }
-  else if (ev.key === "ArrowDown") { ev.preventDefault(); bumpExtraFactor(idx, -1); }
-}
-function onExtraFactorWheel(idx: number, ev: WheelEvent): void {
-  const target = ev.target as HTMLInputElement;
-  if (document.activeElement !== target) return;
-  ev.preventDefault();
-  bumpExtraFactor(idx, ev.deltaY < 0 ? 1 : -1);
 }
 
 // ── Extras ─────────────────────────────────────────────────────────
@@ -316,26 +291,6 @@ function onAddExtra(): void {
 // decimal so 1.0 ± 0.1 doesn't drift to floating-point noise.
 const FACTOR_STEP = 0.1;
 
-function bumpLibFactor(exc: LibraryException, dir: 1 | -1): void {
-  const next = Math.max(0, Math.round((effectiveFactor(exc) + dir * FACTOR_STEP) * 10) / 10);
-  const key = libKey(exc);
-  const map = { ...factorOverrides.value };
-  if (next === exc.factor) {
-    delete map[key];
-  } else {
-    map[key] = next;
-  }
-  emit("update", patchInstance(props.module, "exception_factor_overrides",
-    Object.keys(map).length > 0 ? map : null,
-  ));
-}
-
-function bumpExtraFactor(idx: number, dir: 1 | -1): void {
-  const exc = extras.value[idx];
-  if (!exc) return;
-  const next = Math.max(0, Math.round((exc.factor + dir * FACTOR_STEP) * 10) / 10);
-  onExtraFieldChange(idx, "factor", next);
-}
 </script>
 
 <template>
@@ -452,38 +407,17 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
         class="ex__factor-wrap"
         @wheel.stop
       >
-        <input
-          type="number"
-          step="0.1"
-          min="0"
-          class="ex__factor-input"
-          :data-test="`ex-factor-${i}`"
+        <WpNumber
+          class="ex__factor-num"
+          :model-value="effectiveFactor(exc)"
+          :min="0"
+          :step="FACTOR_STEP"
           aria-label="Exception factor"
-          :value="effectiveFactor(exc)"
-          @change="(ev) => onLibFactorChange(exc, ev)"
-          @keydown="(ev) => onLibFactorKeydown(exc, ev as KeyboardEvent)"
-          @wheel="(ev) => onLibFactorWheel(exc, ev as WheelEvent)"
+          :up-label="`Increase factor for ${excSrc(exc, props.sourceOptionsById)} → ${excTgt(exc, props.targetOptionsById)}`"
+          :down-label="`Decrease factor for ${excSrc(exc, props.sourceOptionsById)} → ${excTgt(exc, props.targetOptionsById)}`"
+          :data-test="`ex-factor-${i}`"
+          @update:model-value="(n) => n !== null && setLibFactor(exc, n)"
         />
-        <span class="ex__spin">
-          <button
-            type="button"
-            class="ex__spin-btn"
-            tabindex="-1"
-            :aria-label="`Increase factor for ${excSrc(exc, props.sourceOptionsById)} → ${excTgt(exc, props.targetOptionsById)}`"
-            @click="bumpLibFactor(exc, 1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-            <path d="M0 5 L4 0 L8 5 Z" fill="currentColor" />
-          </svg></button>
-          <button
-            type="button"
-            class="ex__spin-btn"
-            tabindex="-1"
-            :aria-label="`Decrease factor for ${excSrc(exc, props.sourceOptionsById)} → ${excTgt(exc, props.targetOptionsById)}`"
-            @click="bumpLibFactor(exc, -1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-            <path d="M0 0 L4 5 L8 0 Z" fill="currentColor" />
-          </svg></button>
-        </span>
       </span>
     </div>
 
@@ -583,37 +517,16 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
         class="ex__factor-wrap"
         @wheel.stop
       >
-        <input
-          type="number"
-          step="0.1"
-          min="0"
-          class="ex__factor-input"
+        <WpNumber
+          class="ex__factor-num"
+          :model-value="exc.factor"
+          :min="0"
+          :step="FACTOR_STEP"
           aria-label="Extra factor"
-          :value="exc.factor"
-          @change="(ev) => onExtraFieldChange(i, 'factor', Math.round((Number((ev.target as HTMLInputElement).value) || 1) * 1000) / 1000)"
-          @keydown="(ev) => onExtraFactorKeydown(i, ev as KeyboardEvent)"
-          @wheel="(ev) => onExtraFactorWheel(i, ev as WheelEvent)"
+          up-label="Increase extra factor"
+          down-label="Decrease extra factor"
+          @update:model-value="(n) => n !== null && onExtraFieldChange(i, 'factor', n)"
         />
-        <span class="ex__spin">
-          <button
-            type="button"
-            class="ex__spin-btn"
-            tabindex="-1"
-            aria-label="Increase extra factor"
-            @click="bumpExtraFactor(i, 1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-            <path d="M0 5 L4 0 L8 5 Z" fill="currentColor" />
-          </svg></button>
-          <button
-            type="button"
-            class="ex__spin-btn"
-            tabindex="-1"
-            aria-label="Decrease extra factor"
-            @click="bumpExtraFactor(i, -1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-            <path d="M0 0 L4 5 L8 0 Z" fill="currentColor" />
-          </svg></button>
-        </span>
       </span>
       <button
         type="button"
@@ -836,60 +749,8 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
 .ex__mode-chip--boost { background: color-mix(in srgb, var(--wp-success, #6bc96f) 22%, transparent); color: var(--wp-success, #6bc96f); }
 .ex__mode-chip--only { background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent); color: var(--wp-info, #3b82f6); }
 .ex__mode-chip--reduce { background: color-mix(in srgb, var(--wp-warn, #f59e0b) 22%, transparent); color: var(--wp-warn, #f59e0b); }
-.ex__factor-wrap {
-  display: inline-flex;
-  align-items: stretch;
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: 2px;
-  width: 64px;
-  height: 22px;
-  overflow: hidden;
-}
-.ex__factor-wrap:focus-within { border-color: var(--wp-accent); }
-.ex__factor-input {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  padding: 0 6px;
-  font: 10px var(--wp-font-mono);
-  color: var(--wp-text-muted, var(--wp-text2));
-  text-align: right;
-  width: 100%;
-  min-width: 0;
-  -moz-appearance: textfield;
-}
-.ex__factor-input::-webkit-outer-spin-button,
-.ex__factor-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.ex__factor-input:focus { outline: none; color: var(--wp-text); }
-.ex__spin {
-  display: flex;
-  flex-direction: column;
-  width: 14px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--wp-border);
-  background: var(--wp-bg-deep, var(--wp-bg));
-}
-.ex__spin-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  line-height: 0;
-}
-.ex__spin-btn + .ex__spin-btn {
-  border-top: 1px solid var(--wp-border);
-}
-.ex__spin-btn:hover { color: var(--wp-accent-text, var(--wp-text)); background: rgba(99, 102, 241, 0.10); }
+.ex__factor-wrap { display: inline-flex; width: 64px; }
+.ex__factor-num { width: 100%; }
 .ex__extra-badge {
   font: 600 8px var(--wp-font-sans);
   text-transform: uppercase;

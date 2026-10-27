@@ -31,7 +31,7 @@ import Checkbox from "../components/ui/Checkbox.vue";
 import ListFilter from "../components/ui/ListFilter.vue";
 import { useBulkSelection } from "../composables/useBulkSelection";
 import type { ParsedFixedValue } from "../utils/bulkParse";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { moveSelected, nudge, type MoveTarget } from "../utils/option-list-ops";
@@ -594,7 +594,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       />
     </template>
     <template v-if="isEdit" #header-extra>
-      <SendToTestRunner v-if="props.id" :kind="'fixed_values'" :id="props.id" />
+      <SendToTestRunner v-if="props.id" :id="props.id" :kind="'fixed_values'" />
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
         used by <PillCountBadge :count="cascadeRefs.length" />
       </span>
@@ -692,9 +692,9 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
         class="wpc-bulk-controls wpc-panel-controls"
       >
         <AiTextPanel
-          ref="aiPanelRef"
           v-if="ai.config.value?.enabled && (aiOpen || aiPending)"
           v-show="aiOpen"
+          ref="aiPanelRef"
           kind="fixed_values"
           :item="{ id: props.id, name, description, tags, payload: { values: aiValues } }"
           @use="useAiValues"
@@ -848,24 +848,24 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     <!-- CascadeConfirmDialog: shown when entity has downstream refs. -->
     <CascadeConfirmDialog
       v-if="isEdit && props.id"
+      :id="props.id"
       :open="cascadeDialogOpen"
       kind="fixed_values"
-      :id="props.id"
       action="delete"
       @confirmed="onCascadeDialogConfirmed"
       @cancelled="cascadeDialogOpen = false"
     />
-    <!-- ConfirmDialog inside EditorFrame to keep template single-root;
+    <!-- ConfirmModal inside EditorFrame to keep template single-root;
          see WildcardEditor for the multi-root Transition explanation. -->
-    <ConfirmDialog
-      :visible="showConfirm"
+    <ConfirmModal
+      :open="showConfirm"
       :title="bulkPending ? 'Discard un-added values?' : 'Discard unsaved changes?'"
       :body="bulkPending
         ? 'The bulk add box still holds values you have not added. Leaving discards them.'
         : 'You have unsaved edits. Leaving this page will discard them.'"
       confirm-label="Discard & leave"
       cancel-label="Stay"
-      variant="danger"
+      tone="danger"
       @confirm="onConfirmLeave"
       @cancel="onCancelLeave"
     />

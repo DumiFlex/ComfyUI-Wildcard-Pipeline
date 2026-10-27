@@ -40,8 +40,8 @@ function onLock() { set(props.locked ? null : props.derived); }
 /** Fill + lock the seed this frame used on the previous run. No-op (button is
  *  disabled) when there's no captured previous for this frame. */
 function lockPrevious() { if (props.previous != null) set(props.previous); }
-function onSeed(n: number) {
-  if (Number.isInteger(n)) set(n);
+function onSeed(n: number | null) {
+  if (n !== null && Number.isInteger(n)) set(n);
 }
 </script>
 

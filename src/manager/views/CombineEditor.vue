@@ -33,7 +33,7 @@ import AiTextPanel from "../components/ai/AiTextPanel.vue";
 import { useAiConfig } from "../composables/useAiConfig";
 import { isBlankNegative, libraryVarNegatives, type VarNegativeSource } from "../utils/negatives";
 import { tokenizeRich } from "../../widgets/richTokenize";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
@@ -639,7 +639,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       />
     </template>
     <template v-if="isEdit" #header-extra>
-      <SendToTestRunner v-if="props.id" :kind="'combine'" :id="props.id" />
+      <SendToTestRunner v-if="props.id" :id="props.id" :kind="'combine'" />
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
         used by <PillCountBadge :count="cascadeRefs.length" />
       </span>
@@ -667,10 +667,10 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       :description="description"
       :category-id="categoryId"
       :tags="tags"
+      :content-rating="contentRating"
       @update:name="(v) => (name = v)"
       @update:description="(v) => (description = v)"
       @update:category-id="(v) => (categoryId = v)"
-      :content-rating="contentRating"
       @update:tags="(v) => (tags = v)"
       @update:content-rating="(v) => (contentRating = v)"
     />
@@ -686,8 +686,8 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
         >AI</Button>
       </template>
       <AiTextPanel
-        ref="aiPanelRef"
         v-if="aiOpen && ai.config.value?.enabled"
+        ref="aiPanelRef"
         kind="combine"
         :item="{ id: props.id, name, description, tags, payload: { template, negative, output_var: outputVar || toIdentifier(name) } }"
         @use="useAiTemplate"
@@ -804,9 +804,9 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     <!-- CascadeConfirmDialog: shown when entity has downstream refs. -->
     <CascadeConfirmDialog
       v-if="isEdit && props.id"
+      :id="props.id"
       :open="cascadeDialogOpen"
       kind="combine"
-      :id="props.id"
       action="delete"
       @confirmed="onCascadeDialogConfirmed"
       @cancelled="cascadeDialogOpen = false"
@@ -815,23 +815,23 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
          an existing combine. Cascades the rename to all downstream refs. -->
     <CascadeRenameDialog
       v-if="isEdit && props.id && savedOutputVar"
+      :id="props.id"
       :open="outputVarRenameOpen"
       kind="combine_output_var"
-      :id="props.id"
       :extra="{ old_name: savedOutputVar }"
       :initial-name="outputVar"
       @confirmed="onOutputVarRenameConfirmed"
       @cancelled="onOutputVarRenameCancelled"
     />
-    <!-- ConfirmDialog inside EditorFrame to keep template single-root;
+    <!-- ConfirmModal inside EditorFrame to keep template single-root;
          see WildcardEditor for the multi-root Transition explanation. -->
-    <ConfirmDialog
-      :visible="showConfirm"
+    <ConfirmModal
+      :open="showConfirm"
       title="Discard unsaved changes?"
       body="You have unsaved edits. Leaving this page will discard them."
       confirm-label="Discard & leave"
       cancel-label="Stay"
-      variant="danger"
+      tone="danger"
       @confirm="onConfirmLeave"
       @cancel="onCancelLeave"
     />

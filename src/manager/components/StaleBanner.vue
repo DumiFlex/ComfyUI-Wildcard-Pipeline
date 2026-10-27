@@ -10,7 +10,7 @@
 import { ref } from "vue";
 import Button from "./ui/Button.vue";
 import Icon from "./ui/Icon.vue";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "./ui/ConfirmModal.vue";
 import { useStaleStore } from "../stores/staleStore";
 import { useSystemStore } from "../stores/systemStore";
 
@@ -66,12 +66,12 @@ function onRestartCancelled() {
     </div>
   </Transition>
 
-  <ConfirmDialog
-    :visible="restartConfirmOpen"
+  <ConfirmModal
+    :open="restartConfirmOpen"
     title="Restart ComfyUI?"
     body="This kicks the running ComfyUI process. Any in-flight workflows and queued prompts will be interrupted. The page will reload automatically once the server is back."
     confirm-label="Restart"
-    variant="danger"
+    tone="danger"
     @confirm="onRestartConfirmed"
     @cancel="onRestartCancelled"
   />

@@ -27,7 +27,7 @@ import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
 import AiDerivationPanel from "../components/ai/AiDerivationPanel.vue";
 import { useAiConfig } from "../composables/useAiConfig";
 import { useBulkSelection } from "../composables/useBulkSelection";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
@@ -622,7 +622,7 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
       />
     </template>
     <template v-if="isEdit" #header-extra>
-      <SendToTestRunner v-if="props.id" :kind="'derivation'" :id="props.id" />
+      <SendToTestRunner v-if="props.id" :id="props.id" :kind="'derivation'" />
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
         used by <PillCountBadge :count="cascadeRefs.length" />
       </span>
@@ -650,10 +650,10 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
       :description="description"
       :category-id="categoryId"
       :tags="tags"
+      :content-rating="contentRating"
       @update:name="(v) => (name = v)"
       @update:description="(v) => (description = v)"
       @update:category-id="(v) => (categoryId = v)"
-      :content-rating="contentRating"
       @update:tags="(v) => (tags = v)"
       @update:content-rating="(v) => (contentRating = v)"
     />
@@ -735,8 +735,8 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
         </div>
       </template>
       <AiDerivationPanel
-        ref="aiPanelRef"
         v-if="aiOpen && ai.config.value?.enabled"
+        ref="aiPanelRef"
         :name="name"
         :rules="rules"
         :description="description"
@@ -811,22 +811,22 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
     <!-- CascadeConfirmDialog: shown when entity has downstream refs. -->
     <CascadeConfirmDialog
       v-if="isEdit && props.id"
+      :id="props.id"
       :open="cascadeDialogOpen"
       kind="derivation"
-      :id="props.id"
       action="delete"
       @confirmed="onCascadeDialogConfirmed"
       @cancelled="cascadeDialogOpen = false"
     />
-    <!-- ConfirmDialog inside EditorFrame to keep template single-root;
+    <!-- ConfirmModal inside EditorFrame to keep template single-root;
          see WildcardEditor for the multi-root Transition explanation. -->
-    <ConfirmDialog
-      :visible="showConfirm"
+    <ConfirmModal
+      :open="showConfirm"
       title="Discard unsaved changes?"
       body="You have unsaved edits. Leaving this page will discard them."
       confirm-label="Discard & leave"
       cancel-label="Stay"
-      variant="danger"
+      tone="danger"
       @confirm="onConfirmLeave"
       @cancel="onCancelLeave"
     />

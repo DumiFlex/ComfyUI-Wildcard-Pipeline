@@ -8,6 +8,7 @@
  *   Warnings  — what the engine flagged, linked to the step that raised it
  *   Raw       — the snapshot JSON
  */
+import SearchInput from "../shared/SearchInput.vue";
 import { computed, nextTick, ref, watch } from "vue";
 import { highlightJson } from "./highlight";
 import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
@@ -445,26 +446,16 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
           data-test="dbg-neg-count"
           title="Variables that carry negative words"
         >{{ model.negativeCount }} negative{{ model.negativeCount === 1 ? "" : "s" }}</span>
-        <div v-if="activeTab !== 'raw'" class="wp-dbg-filter">
-          <i class="pi pi-search wp-dbg-filter__icon" aria-hidden="true" />
-          <input
-            v-model="filterQuery"
-            type="text"
-            class="wp-dbg-filter__input"
-            data-test="dbg-filter"
-            :placeholder="activeTab === 'vars' ? 'Filter variables…' : activeTab === 'trace' ? 'Filter steps…' : 'Filter warnings…'"
-            aria-label="Filter"
-            spellcheck="false"
-          />
-          <button
-            v-if="filterQuery"
-            type="button"
-            class="wp-dbg-filter__clear"
-            title="Clear filter"
-            aria-label="Clear filter"
-            @click="filterQuery = ''"
-          ><i class="pi pi-times" aria-hidden="true" /></button>
-        </div>
+        <SearchInput
+          v-if="activeTab !== 'raw'"
+          v-model="filterQuery"
+          class="wp-dbg-filter"
+          size="sm"
+          data-test="dbg-filter"
+          :placeholder="activeTab === 'vars' ? 'Filter variables…' : activeTab === 'trace' ? 'Filter steps…' : 'Filter warnings…'"
+          aria-label="Filter"
+          clear-label="Clear filter"
+        />
         <button
           v-if="activeTab === 'trace' && model.steps.length"
           type="button"
@@ -690,32 +681,9 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
 
 .wp-dbg-filter {
   margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  padding: 0 6px;
-  height: 22px;
-  box-sizing: border-box;
   width: 150px;
   margin-bottom: 3px;
 }
-.wp-dbg-filter:focus-within { border-color: var(--wp-accent); }
-.wp-dbg-filter__icon { font-size: 9px; color: var(--wp-text-dim); }
-.wp-dbg-filter__input {
-  flex: 1;
-  min-width: 0;
-  background: transparent;
-  border: 0;
-  outline: none;
-  color: var(--wp-text);
-  font: 500 11px var(--wp-font-sans);
-}
-.wp-dbg-filter__input::placeholder { color: var(--wp-text-dim); }
-.wp-dbg-filter__clear { background: transparent; border: 0; color: var(--wp-text-dim); cursor: pointer; padding: 0; }
-.wp-dbg-filter__clear .pi { font-size: 9px; }
 
 .wp-btn--icon {
   background: transparent;
