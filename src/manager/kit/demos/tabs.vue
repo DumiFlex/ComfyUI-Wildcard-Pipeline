@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import WpTabs from "@/components/shared/WpTabs.vue";
-import "@/components/shared/theme.css";
 
 const tab = ref("options");
 const TABS = [
@@ -25,7 +24,7 @@ const CANVAS_TABS = [
         <p class="wp-kit__muted wp-kit__tab-panel">The {{ id }} panel. Focus a tab and use the arrow keys, Home and End.</p>
       </template>
     </WpTabs>
-    <div class="wp-kit__canvas wp-canvas-scope">
+    <div class="wp-kit__canvas">
       <p class="wp-kit__caption">Canvas, size sm</p>
       <WpTabs v-model="canvasTab" :tabs="CANVAS_TABS" size="sm" aria-label="Debug view" />
     </div>

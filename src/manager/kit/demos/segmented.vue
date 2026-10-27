@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import WpSegmented from "@/components/shared/WpSegmented.vue";
-import "@/components/shared/theme.css";
 
 const theme = ref<"system" | "dark" | "light">("dark");
 const view = ref<"grid" | "list">("grid");
@@ -29,7 +28,7 @@ const size = ref<"sm" | "md" | "lg">("md");
       <WpSegmented v-model="size" :options="[{ value: 'sm', label: 'sm' }, { value: 'md', label: 'md' }, { value: 'lg', label: 'lg', disabled: true }]" aria-label="With a disabled option" />
       <WpSegmented v-model="size" :options="[{ value: 'sm', label: 'Off' }, { value: 'md', label: 'On' }]" disabled aria-label="Disabled" />
     </div>
-    <div class="wp-kit__canvas wp-canvas-scope">
+    <div class="wp-kit__canvas">
       <p class="wp-kit__caption">Canvas, size sm</p>
       <WpSegmented v-model="mode" :options="[{ value: 'hash', label: 'Hash' }, { value: 'seq', label: 'Sequential' }, { value: 'stride', label: 'Stride' }]" size="sm" aria-label="Strategy" />
     </div>

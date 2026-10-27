@@ -2,7 +2,6 @@
 import { ref } from "vue";
 import Disclosure from "@/components/shared/Disclosure.vue";
 import Button from "../../components/ui/Button.vue";
-import "@/components/shared/theme.css";
 
 const open = ref(true);
 </script>
@@ -19,7 +18,7 @@ const open = ref(true);
     <Disclosure label="Disabled" disabled>
       <p class="wp-kit__muted">Never shown.</p>
     </Disclosure>
-    <div class="wp-kit__canvas wp-canvas-scope">
+    <div class="wp-kit__canvas">
       <p class="wp-kit__caption">Canvas, size sm</p>
       <Disclosure label="Step 3: derivation" size="sm" :count="2">
         <p class="wp-kit__muted">$mood ← happy</p>

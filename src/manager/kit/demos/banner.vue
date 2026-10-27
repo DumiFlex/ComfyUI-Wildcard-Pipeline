@@ -2,7 +2,6 @@
 import { ref } from "vue";
 import Banner from "@/components/shared/Banner.vue";
 import Button from "../../components/ui/Button.vue";
-import "@/components/shared/theme.css";
 
 const shown = ref(true);
 </script>
@@ -22,7 +21,7 @@ const shown = ref(true);
     </Banner>
     <Banner tone="accent" icon="pi-sparkles">The assistant can draft the options for you.</Banner>
     <Banner tone="neutral" size="sm">A small neutral note.</Banner>
-    <div class="wp-kit__canvas wp-canvas-scope">
+    <div class="wp-kit__canvas">
       <p class="wp-kit__caption">Canvas, size sm</p>
       <Banner tone="warn" size="sm" dismissible>$mood is read but never written upstream.</Banner>
     </div>
