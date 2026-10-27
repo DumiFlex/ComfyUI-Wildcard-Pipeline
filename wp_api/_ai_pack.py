@@ -13,6 +13,7 @@ from engine.ai import adult as ai_adult
 from engine.ai import budget as ai_budget
 from engine.ai import bundle_split as ai_split
 from engine.ai import followup as ai_followup
+from engine.ai import lang as ai_lang
 from engine.ai import pack as ai_pack
 from engine.ai import pack_tidy
 from engine.ai import patterns as ai_patterns
@@ -28,6 +29,7 @@ from engine.db.repositories import (
 from engine.importer import commit_import
 from wp_api import (
     _ai_client,
+    _ai_lang,
     _ai_search,
     _ai_vocab,
 )
@@ -78,6 +80,26 @@ def _canvas(body: dict[str, Any]) -> list[dict[str, Any]] | None:
     sent none (a plan sent back keeps the ones it had)."""
     raw = body.get("canvas")
     return raw if isinstance(raw, list) else None
+
+
+async def _check_request(cfg: dict[str, Any], body: dict[str, Any]) -> str:
+    """The request the manager sends back with a plan, as the code checks
+    read it: a request in another language becomes its English
+    restatement (`engine/ai/lang.py`, asked once and kept) when the plan
+    itself is written in English, so its words are matched against the
+    plan's. Returns the user's own words, for what the model reads."""
+    raw = body.get("request")
+    if not isinstance(raw, str) or not raw.strip():
+        return ""
+    english = await _ai_lang.check_text(cfg, raw)
+    body["request"] = ai_lang.for_content(raw, english, body.get("plan"))
+    return raw
+
+
+async def _english_parts(cfg: dict[str, Any], *parts: str) -> str:
+    """``parts`` joined, each in its English restatement when it isn't
+    English."""
+    return " ".join([await _ai_lang.check_text(cfg, p) if p else p for p in parts])
 
 
 def _pack_body(
@@ -219,7 +241,16 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     # or "your call", and those came back as request gaps at fix level in
     # every flow of the Sonnet walkthrough (2026-10-21), costing a Fix all
     # round each. The planner reads the decisions in every request anyway.
-    asked = " ".join([first_text, ai_pack.own_request(instruction), sample])
+    raw_asked = " ".join([first_text, ai_pack.own_request(instruction), sample])
+    asked = raw_asked
+    # A request in another language: its English restatement, for a plan
+    # the planner writes in English (`_asked_for`).
+    english = await _english_parts(cfg, first_text, ai_pack.own_request(instruction))
+    english = f"{english} {sample}" if sample else english
+
+    def _asked_for(answer: Any) -> str:
+        return ai_lang.for_content(raw_asked, english, answer)
+
     for attempt in range(2):
         try:
             answer = await _ask(
@@ -232,6 +263,7 @@ async def post_pack_plan(request: web.Request) -> web.Response:
                 image_note=False,  # plan_prompt says how to use them
                 partial=True,  # a cut-off plan keeps the items it finished
             )
+            asked = _asked_for(answer)
             if graph:
                 plan = ai_pack.compile_graph_plan(answer, library=library, previous=previous,
                                                   decisions=decisions, settings=settings,
@@ -368,7 +400,8 @@ async def post_pack_search(request: web.Request) -> web.Response:
 async def post_pack_recommend(request: web.Request) -> web.Response:
     """Body: {request, suggested?}. The pack settings the request, the
     assistant's model and the chat's suggestion (``suggested``, from a plan
-    card) point to: ``{settings, reasons}``. No model call."""
+    card) point to: ``{settings, reasons}``. No model call, unless the request isn't
+    in English (`engine/ai/lang.py`)."""
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
@@ -377,6 +410,9 @@ async def post_pack_recommend(request: web.Request) -> web.Response:
         return body
     text = body.get("request")
     text = text[:ai_wildcard.MAX_INSTRUCTION_LEN] if isinstance(text, str) else ""
+    # A request in another language: read in its English restatement (one
+    # small model call, kept for the plan that follows).
+    text = await _ai_lang.check_text(cfg, text)
     return json_ok(pack_recommend.recommend(text, cfg, body.get("suggested")))
 
 
@@ -390,6 +426,7 @@ async def post_pack_change(request: web.Request) -> web.Response:
     body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
+    await _check_request(cfg, body)
     instruction = _instruction(body, "say what to change")
     if isinstance(instruction, web.Response):
         return instruction
@@ -450,6 +487,7 @@ async def post_pack_images(request: web.Request) -> web.Response:
     body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
+    await _check_request(cfg, body)
     images = await _request_images(cfg, body)
     if isinstance(images, web.Response):
         return images
@@ -495,6 +533,7 @@ async def post_pack_review(request: web.Request) -> web.Response:
     body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
+    own_words = await _check_request(cfg, body)
     library = _reusable(request)
     base = _pack_base(request, body, library)
     if isinstance(base, web.Response):
@@ -510,7 +549,7 @@ async def post_pack_review(request: web.Request) -> web.Response:
         recheck = [ai_safety.strip_invisible(t).strip()[:300] for t in raw[:ai_pack.MAX_RECHECK]
                    if isinstance(t, str) and t.strip()] if isinstance(raw, list) else None
         ask = {"system": ai_pack.review_system(plan),
-               "user": ai_pack.review_prompt(plan, findings, asked, recheck),
+               "user": ai_pack.review_prompt(plan, findings, own_words, recheck),
                "schema": ai_pack.review_schema(plan), "schema_name": "pack_review",
                "temperature": 0.3}
         try:
@@ -538,6 +577,7 @@ async def post_pack_item(request: web.Request) -> web.Response:
     body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
+    await _check_request(cfg, body)
     library = _reusable(request)
     base = _pack_base(request, body, library)
     if isinstance(base, web.Response):
@@ -643,6 +683,7 @@ async def post_pack_check(request: web.Request) -> web.Response:
     body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
+    await _check_request(cfg, body)
     library = _reusable(request)
     base = _pack_base(request, body, library)
     if isinstance(base, web.Response):
@@ -676,6 +717,7 @@ async def post_pack_install(request: web.Request) -> web.Response:
     body = await _body(request, limit=_MAX_PACK_BODY_BYTES)
     if isinstance(body, web.Response):
         return body
+    await _check_request(cfg, body)
     library = _reusable(request)
     base = _pack_base(request, body, library)
     if isinstance(base, web.Response):

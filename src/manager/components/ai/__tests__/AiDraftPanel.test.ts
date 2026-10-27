@@ -174,6 +174,27 @@ describe("AiDraftPanel", () => {
     expect(draft.mock.calls[0][0].wildcard.payload.options).toEqual([{ value: "rain", sub_categories: ["wet"] }]);
   });
 
+  it("lets the server read How many from a request in another language", async () => {
+    draft.mockResolvedValue({ options: [], new_tags: [], skipped: [], model: "m", answer: {}, count: 6 });
+    const w = mountPanel();
+    await w.get('[data-test="ai-instruction"]').setValue("Entwirf sechs Wüstenwetter-Optionen");
+    await w.get('[data-test="ai-run"]').trigger("click");
+    await flushPromises();
+    expect(draft.mock.calls[0][0].count_auto).toBe(true);
+    expect((w.get('[data-test="ai-draft-count"] input').element as HTMLInputElement).value).toBe("6");
+  });
+
+  it("keeps a count typed by hand", async () => {
+    draft.mockResolvedValue({ options: [], new_tags: [], skipped: [], model: "m", answer: {}, count: 4 });
+    const w = mountPanel();
+    await w.get('[data-test="ai-draft-count"] input').setValue("4");
+    await w.get('[data-test="ai-instruction"]').setValue("Entwirf Wüstenwetter-Optionen");
+    await w.get('[data-test="ai-run"]').trigger("click");
+    await flushPromises();
+    expect(draft.mock.calls[0][0]).not.toHaveProperty("count_auto");
+    expect(draft.mock.calls[0][0].count).toBe(4);
+  });
+
   it("lists left-off tags and negatives apart from skipped options", async () => {
     draft.mockResolvedValue({
       options: [{ value: "dust storm", weight: 1, tags: ["dry"], negative: "" }], new_tags: [],

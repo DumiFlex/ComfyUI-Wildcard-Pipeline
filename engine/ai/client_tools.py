@@ -16,6 +16,7 @@ from typing import Any
 from engine.ai import ask as ai_ask
 from engine.ai import asked as ai_asked
 from engine.ai import docs as ai_docs
+from engine.ai import lang as ai_lang
 from engine.ai import safety
 
 MAX_IDS = 200
@@ -258,7 +259,9 @@ def _draft_options(lib: Any, args: dict[str, Any],
     if isinstance(count, bool) or not isinstance(count, int):
         # Bench W18: "draft 6 desert weather options" came without a count
         # and the panel drafted 10. The request's own number, else 10.
-        count = ai_asked.option_count(instruction) or ai_asked.option_count(said) or 10
+        # A request in another language: the request frame's count.
+        count = ai_asked.option_count(instruction) or ai_asked.option_count(said) \
+            or ai_lang.count(getattr(lib, "request_frame", None)) or 10
     count = max(1, min(50, count))
     return ({"id": row["id"], "instruction": instruction, "count": count},
             f"Drafting {count} options for {row.get('name')}")

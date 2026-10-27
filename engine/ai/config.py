@@ -54,6 +54,7 @@ from pathlib import Path
 from typing import Any
 
 from engine.ai import budget
+from engine.ai.lang import LANGUAGES
 
 CONFIG_FILENAME = "ai.json"
 FALLBACK_FILENAME = "wp-ai.json"
@@ -157,6 +158,10 @@ DEFAULTS: dict[str, Any] = {
     # call, with a warning in Settings).
     "danbooru_lookup": False,
     "web_always_allow": False,
+    # The language the user writes to the assistant in (Settings › AI
+    # assistant › Chat): "auto" guesses per message, "english" never asks
+    # for a request frame, "other" always does (`engine/ai/lang.py`).
+    "request_language": "auto",
     # Small and medium models in JSON steps on a local server: name the tool
     # first, then write only its arguments (Settings › AI assistant ›
     # Advanced; an experiment, off by default).
@@ -419,6 +424,8 @@ def _normalize(raw: Any) -> dict[str, Any]:
         "reader": _normalize_reader(src.get("reader")),
         "danbooru_lookup": src.get("danbooru_lookup") is True,
         "web_always_allow": src.get("web_always_allow") is True,
+        "request_language": src.get("request_language")
+        if src.get("request_language") in LANGUAGES else "auto",
     }
 
 
@@ -487,6 +494,7 @@ def _active(cfg: dict[str, Any]) -> dict[str, Any]:
         "auto_apply": cfg["auto_apply"],
         "danbooru_lookup": cfg["danbooru_lookup"],
         "web_always_allow": cfg["web_always_allow"],
+        "request_language": cfg["request_language"],
         "choose_first": slot["choose_first"],
         "lean_prompt": slot["lean_prompt"],
         "embed_model": slot["embed_model"],
@@ -741,6 +749,10 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
                      "web_always_allow"):
             if flag in patch:
                 cfg[flag] = patch[flag]
+        if "request_language" in patch:
+            if patch["request_language"] not in LANGUAGES:
+                raise ConfigError(f"request_language must be one of {', '.join(LANGUAGES)}")
+            cfg["request_language"] = patch["request_language"]
         if "provider" in patch:
             if patch["provider"] not in PRESETS:
                 raise ConfigError(f"unknown provider {patch['provider']!r}")

@@ -11,6 +11,7 @@ from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
 from engine.ai import describe as ai_describe
 from engine.ai import followup as ai_followup
+from engine.ai import lang as ai_lang
 from engine.ai import library_vars, text_items
 from engine.ai import organize as ai_organize
 from engine.ai import refs as ai_refs
@@ -25,6 +26,7 @@ from engine.db.repositories import (
 )
 from wp_api import (
     _ai_client,
+    _ai_lang,
 )
 from wp_api._ai_common import (
     _MAX_IMAGE_BODY_BYTES,
@@ -67,13 +69,20 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     count = body.get("count", 10)
     if isinstance(count, bool) or not isinstance(count, int):
         return json_error("count must be a whole number", status=400)
-    count = max(1, min(ai_wildcard.MAX_COUNT, count))
-    # A few more than wanted: some come back as repeats of the list (or of
-    # each other) and are dropped, and "3 options" should still land 3.
-    asked = ai_wildcard.over_ask(count)
     turns = _turns(body)
     if isinstance(turns, web.Response):
         return turns
+    # A request in another language: the checks read its English
+    # restatement, and with `count_auto` (the panel's How many box is
+    # neither set by hand nor read from English words) its count.
+    frame = await _ai_lang.frame(cfg, ai_followup.first_instruction(turns, instruction))
+    if body.get("count_auto") is True and not turns and ai_lang.count(frame):
+        count = ai_lang.count(frame)
+    count = max(1, min(ai_wildcard.MAX_COUNT, count))
+    check = ai_lang.check_text(frame, ai_followup.first_instruction(turns, instruction))
+    # A few more than wanted: some come back as repeats of the list (or of
+    # each other) and are dropped, and "3 options" should still land 3.
+    asked = ai_wildcard.over_ask(count)
 
     wc = _got if isinstance(_got := body.get("wildcard"), dict) else {}
     payload = _got if isinstance(_got := wc.get("payload"), dict) else {}
@@ -128,9 +137,10 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
                 "sub_categories": tags,
             },
             limit=count, refs=refs, self_id=self_id,
-            # A refine is held to the first request too ("with negatives").
+            # A refine is held to the first request too ("with negatives"),
+            # and one in another language to its restatement as well.
             request=" ".join(dict.fromkeys(
-                (ai_followup.first_instruction(turns, instruction), instruction))),
+                (ai_followup.first_instruction(turns, instruction), instruction, check))),
             labels=labels, own_name=f"{name} {var}",
         )
 
@@ -147,12 +157,14 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
             status=502,
         )
-    asked_first = ai_followup.first_instruction(turns, instruction)
+    asked_words = " ".join(dict.fromkeys((instruction, check)))
+    asked_first = " ".join(dict.fromkeys(
+        (ai_followup.first_instruction(turns, instruction), check)))
     real_opts = [o for o in options if isinstance(o, dict)]
 
     def problems(res: dict[str, Any]) -> list[str]:
         return [x for x in (
-            ai_wildcard.bleed_note(name, var, res["options"], instruction),
+            ai_wildcard.bleed_note(name, var, res["options"], asked_words),
             ai_wildcard.untagged_note(asked_first, res["options"], real_opts)) if x]
 
     notes = problems(result)
@@ -181,6 +193,7 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
     result["model"] = cfg["model"]
     result["answer"] = answer
     result["research"] = research
+    result["count"] = count
     return json_ok(result)
 
 
@@ -213,6 +226,9 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     turns = _turns(body)
     if isinstance(turns, web.Response):
         return turns
+    # A request in another language: the checks read its restatement.
+    frame = await _ai_lang.frame(cfg, instruction)
+    check = ai_lang.check_text(frame, instruction)
 
     wc = _got if isinstance(_got := body.get("wildcard"), dict) else {}
     payload = _got if isinstance(_got := wc.get("payload"), dict) else {}
@@ -253,7 +269,7 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     description, labels = ai_about.clean(wc.get("description"), wc.get("tags"))
     self_id = _got if isinstance(_got := wc.get("id"), str) else None
     refs = _ref_index(_wildcards(request), self_id, payload, name)
-    known_tag = _known_tag() if action == "rewrite" and ai_edit.wants_booru(instruction) \
+    known_tag = _known_tag() if action == "rewrite" and ai_edit.wants_booru(check) \
         else None
     first = ai_edit.build_edit_prompt(
         action=action, instruction=ai_followup.first_instruction(turns, instruction),
@@ -273,14 +289,14 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     )
     try:
         answer = await _ask(extra=webs.note, **ask)
-        nudged = ai_edit.answered_nothing(action, answer, instruction)
+        nudged = ai_edit.answered_nothing(action, answer, check)
         if nudged:
             # The base 9B answered "tag each by …" with an empty list every
             # time (panel eval 2026-10-21): the system prompt's "only list
             # the options you change" read as "change nothing". One re-ask.
             answer = await _ask(extra="\n\n".join(x for x in (webs.note, ai_edit.EMPTY_NUDGE)
                                                   if x), **ask)
-        missing = [] if nudged else ai_edit.left_out(action, answer, instruction,
+        missing = [] if nudged else ai_edit.left_out(action, answer, check,
                                                      [r["id"] for r in rows])
         if missing:
             # One re-ask in all: the empty answer's, or this one.
@@ -288,7 +304,7 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
                 x for x in (webs.note, ai_edit.left_out_nudge(missing)) if x), **ask)
             # The second answer stands only when it covers more.
             if isinstance(again, dict) and again.get("options") and len(ai_edit.left_out(
-                    action, again, instruction, [r["id"] for r in rows])) < len(missing):
+                    action, again, check, [r["id"] for r in rows])) < len(missing):
                 answer = again
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
@@ -296,7 +312,7 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     try:
         result = ai_edit.compile_edit(action, answer, options=rows, registry=tags,
                                       refs=refs, self_id=self_id, labels=labels,
-                                      instruction=instruction, known_tag=known_tag)
+                                      instruction=check, frame=frame, known_tag=known_tag)
     except ValueError as e:
         return json_error(
             f"the model's answer couldn't be used ({e}). Try again, or a larger model.",
@@ -311,7 +327,7 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
                 x for x in (webs.note, ai_edit.ALL_REMOVED_NUDGE) if x), **ask))
             retry = ai_edit.compile_edit(action, again, options=rows, registry=tags,
                                          refs=refs, self_id=self_id, labels=labels,
-                                         instruction=instruction)
+                                         instruction=check, frame=frame)
             if 0 < len(retry["changes"]) < len(rows):
                 answer, result = again, retry
         except (_ai_client.AIError, ValueError):
@@ -417,7 +433,7 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
             status=502,
         )
     rules_out = [x["rule"] for x in result["rules"]]
-    gone = ai_derivation.missing_else(instruction, rules_out)
+    gone = ai_derivation.missing_else(await _ai_lang.check_text(cfg, instruction), rules_out)
     if gone:
         # Re-test on d6ac847 (9B): the catch-all was dropped in 2 of 3 drafts.
         # One short second ask for the ELSE alone (verify, then repair).
@@ -531,7 +547,9 @@ async def post_text_draft(request: web.Request) -> web.Response:
     description, labels = ai_about.clean(item.get("description"), item.get("tags"))
     asked = ai_followup.first_instruction(turns, instruction)
     # Both asks: a refine is held to the first request too.
-    held_to = " ".join(dict.fromkeys((asked, instruction)))
+    # A request in another language: the checks read its restatement.
+    check = await _ai_lang.check_text(cfg, instruction)
+    held_to = " ".join(dict.fromkeys((asked, instruction, check)))
     first = text_items.build_prompt(
         kind=kind, instruction=asked,
         name=name[:200], description=description,
@@ -561,7 +579,7 @@ async def post_text_draft(request: web.Request) -> web.Response:
     answer, research = webs.take(answer)
 
     def problems(raw: Any) -> list[str]:
-        unset = text_items.left_out(kind, raw, instruction)
+        unset = text_items.left_out(kind, raw, check)
         names = ", ".join(f"${v}" for v in unset)
         notes = [(f"Set {names} too: the request asks for it. Answer with the whole list again."
                   if kind == "fixed_values" else
@@ -592,10 +610,10 @@ async def post_text_draft(request: web.Request) -> web.Response:
             result = text_items.compile_template(answer, catalog=catalog, request=held_to)
         if kind != "fixed_values":
             body = result["payload"].get("template") or result["payload"].get("template_string")
-            gone = text_items.missing_asked(str(body or ""), instruction)
+            gone = text_items.missing_asked(str(body or ""), check)
             if gone:
                 result["warnings"] = [*result["warnings"], gone]
-            extra = text_items.unasked(str(body or ""), instruction,
+            extra = text_items.unasked(str(body or ""), check,
                                        text_items.reads(str(body or "")), had)
             if extra:
                 result["warnings"] = [*result["warnings"], extra]
