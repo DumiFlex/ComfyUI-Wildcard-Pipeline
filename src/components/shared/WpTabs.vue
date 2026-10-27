@@ -52,7 +52,8 @@ function select(id: T): void {
 
 function focusTab(id: string): void {
   void nextTick(() => {
-    const el = listEl.value?.querySelector<HTMLElement>(`#${CSS.escape(tabId(id))}`);
+    const i = props.tabs.findIndex((t) => t.id === id);
+    const el = listEl.value?.querySelectorAll<HTMLElement>("[role=tab]")[i];
     el?.focus();
     el?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   });
