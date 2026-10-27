@@ -177,7 +177,7 @@ const emit = defineEmits<{
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
 }
 .wc-optfilter__menuitem {
   display: flex; align-items: center; gap: var(--wp-space-3);

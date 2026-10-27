@@ -171,7 +171,7 @@ function isActivePreset(preset: string): boolean {
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border-strong);
   border-radius: var(--wp-radius);
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
   padding: var(--wp-space-5);
   width: 220px;
   display: flex;

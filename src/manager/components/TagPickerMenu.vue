@@ -181,7 +181,7 @@ const menuStyle = computed<Record<string, string>>(() => {
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
 }
 /* Flipped above the trigger. The host sets `top` to the trigger's TOP edge in
    that case, so shifting up by the menu's own height puts its bottom edge

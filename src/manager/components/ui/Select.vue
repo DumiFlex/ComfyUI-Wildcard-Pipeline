@@ -517,7 +517,7 @@ function onKeydown(e: KeyboardEvent) {
   background: var(--wp-bg-3);
   border: 1px solid var(--wp-border-strong);
   border-radius: 7px;
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
   z-index: 10020;
   padding: 4px;
   max-height: 240px;

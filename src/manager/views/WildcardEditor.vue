@@ -2323,7 +2323,7 @@ tr:hover .opt-grip:disabled { opacity: 0.2; }
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
 }
 /* The cap and the scrolling moved OFF the menu and onto the list inside it, so
    the search box stays pinned while the tags scroll under it.
