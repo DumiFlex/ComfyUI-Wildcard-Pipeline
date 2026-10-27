@@ -1433,7 +1433,7 @@ _DROP_ELSE = re.compile(r"\b(?:remove|drop|delete|no|without|get rid of)\b[^.\n]
                         r"\b(?:else|otherwise|catch-?all|default)\b", re.I)
 #: A message asking to switch something off, and one asking to take it out.
 _OFF_ASK = re.compile(r"\b(?:switch|turn|toggle|set)\w*\s+(?:\w+\s+){0,4}?off\b|"
-                      r"\b(?:disabl|deactivat|mut)\w*", re.I)
+                      r"\b(?:disabl|deactivat)\w*|\bmut(?:e|ed|ing)\b", re.I)
 _REMOVE_ASK = re.compile(r"\b(?:remove|delete|drop|take\s+out|get\s+rid)\b", re.I)
 
 
