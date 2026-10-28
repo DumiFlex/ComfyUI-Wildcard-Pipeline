@@ -88,7 +88,7 @@ function onResetName(): void {
 .id__input {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 5px 8px;
   font: 11px var(--wp-font-mono);
   color: var(--wp-text);

@@ -155,7 +155,7 @@ function close(): void {
   align-items: flex-start;
   padding: 8px 10px;
   border: 1px solid var(--wp-border);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-1);
   cursor: pointer;
 }
@@ -172,7 +172,7 @@ function close(): void {
   font: inherit;
   font-size: 12px;
   padding: 2px 9px;
-  border-radius: 12px;
+  border-radius: min(12px, var(--wp-radius-cap, 999px));
   border: 1px solid var(--wp-border);
   background: transparent;
   color: var(--wp-text-muted);

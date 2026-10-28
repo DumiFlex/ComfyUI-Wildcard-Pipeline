@@ -14,7 +14,7 @@ defineProps<{ links: CrossLink[] }>();
 </template>
 <style scoped>
 .wp-doc-xlinks { display: flex; gap: 8px; flex-wrap: wrap; }
-.wp-doc-xlink { display: inline-flex; align-items: center; gap: 8px; padding: 6px 11px; border-radius: 999px; background: var(--wp-bg-2); border: 1px solid var(--wp-border); color: var(--wp-text); font-size: 12px; text-decoration: none; cursor: pointer; }
+.wp-doc-xlink { display: inline-flex; align-items: center; gap: 8px; padding: 6px 11px; border-radius: var(--wp-radius-cap, 999px); background: var(--wp-bg-2); border: 1px solid var(--wp-border); color: var(--wp-text); font-size: 12px; text-decoration: none; cursor: pointer; }
 .wp-doc-xlink:hover { border-color: var(--wp-border-strong); background: var(--wp-bg-3); }
 .wp-doc-xlink .pi { font-size: 12px; color: var(--doc-tone); }
 </style>

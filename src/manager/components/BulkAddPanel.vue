@@ -146,7 +146,7 @@ function cancel() {
   gap: 10px;
   padding: 14px;
   border: 1px solid var(--wp-border);
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-2);
 }
 .wpc-bulk-panel__hint {
@@ -158,7 +158,7 @@ function cancel() {
   font-family: var(--wp-font-mono, monospace);
   font-size: 11px;
   padding: 1px 4px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-3);
   color: var(--wp-text);
 }

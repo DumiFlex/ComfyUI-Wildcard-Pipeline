@@ -126,8 +126,8 @@ function toggle(name: string): void {
 .wp-trv__val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wp-trv__none { margin: 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 .wp-trv__empty { color: var(--wp-text-dim); }
-.wp-trv__track { height: 8px; background: var(--wp-bg-3); border-radius: 3px; overflow: hidden; } /* audit-exempt: bar */
-.wp-trv__fill { display: block; height: 100%; background: var(--wp-accent-500); border-radius: 3px; transition: width .2s; } /* audit-exempt: bar */
+.wp-trv__track { height: 8px; background: var(--wp-bg-3); border-radius: min(3px, var(--wp-radius-cap, 999px)); overflow: hidden; } /* audit-exempt: bar */
+.wp-trv__fill { display: block; height: 100%; background: var(--wp-accent-500); border-radius: min(3px, var(--wp-radius-cap, 999px)); transition: width .2s; } /* audit-exempt: bar */
 .wp-trv__pct { text-align: right; font: var(--wp-text-xs) var(--wp-font-mono); color: var(--wp-text-muted); font-variant-numeric: tabular-nums; }
 .wp-trv__more { font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wp-trv__consts { border-top: 1px solid var(--wp-border); padding-top: var(--wp-space-5); }

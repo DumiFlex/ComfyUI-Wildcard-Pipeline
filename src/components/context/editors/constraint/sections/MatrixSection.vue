@@ -532,7 +532,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
 }
 .mx-axis--src {
   color: var(--wp-constraint-source-text);
@@ -560,7 +560,7 @@ onBeforeUnmount(() => {
   isolation: isolate;
   background: var(--wp-bg-deep, #0e1015);
   border: 1px solid var(--wp-border);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   /* No padding on the SCROLL container — see ConstraintMatrix: sticky pins
    * headers at the padding edge while overflow still renders scrolling cells
    * inside the padding, so padding leaves a scrolled-cell bleed strip on the
@@ -594,7 +594,7 @@ onBeforeUnmount(() => {
   width: 96px;
   font: 9px var(--wp-font-mono);
   color: var(--wp-text-dim, var(--wp-text3));
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   text-align: left;
   background: color-mix(in srgb, var(--wp-text) 4%, transparent);
 }
@@ -608,7 +608,7 @@ onBeforeUnmount(() => {
   font: 700 9px var(--wp-font-sans);
   letter-spacing: 0.06em; text-transform: uppercase;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  border-radius: 4px 4px 0 0;
+  border-radius: min(4px, var(--wp-radius-cap, 999px)) min(4px, var(--wp-radius-cap, 999px)) 0 0;
   color: color-mix(in srgb, var(--ax) 82%, var(--wp-text));
   background: color-mix(in srgb, var(--ax) 15%, var(--wp-bg-deep, #0e1015));
   border-bottom: 2px solid color-mix(in srgb, var(--ax) 55%, transparent);
@@ -621,7 +621,7 @@ onBeforeUnmount(() => {
   display: flex; align-items: center; justify-content: center;
   width: 64px; min-height: 28px; padding: 3px 2px;
   font: 700 10px var(--wp-font-sans);
-  border-radius: 0 0 4px 4px;
+  border-radius: 0 0 min(4px, var(--wp-radius-cap, 999px)) min(4px, var(--wp-radius-cap, 999px));
   color: color-mix(in srgb, var(--ax) 72%, var(--wp-text));
   background: color-mix(in srgb, var(--ax) 9%, var(--wp-bg-deep, #0e1015));
 }
@@ -641,7 +641,7 @@ onBeforeUnmount(() => {
   font: 700 9px var(--wp-font-sans);
   letter-spacing: 0.1em; text-transform: uppercase;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 min(4px, var(--wp-radius-cap, 999px)) min(4px, var(--wp-radius-cap, 999px)) 0;
   color: color-mix(in srgb, var(--ax) 80%, var(--wp-text));
   background: color-mix(in srgb, var(--ax) 16%, var(--wp-bg-deep, #0e1015));
   border-left: 3px solid var(--ax);
@@ -655,7 +655,7 @@ onBeforeUnmount(() => {
   width: 96px; height: 36px; padding: 0 10px;
   font: 700 10px var(--wp-font-sans);
   text-align: left;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 min(4px, var(--wp-radius-cap, 999px)) min(4px, var(--wp-radius-cap, 999px)) 0;
   color: color-mix(in srgb, var(--ax) 76%, var(--wp-text));
   background: color-mix(in srgb, var(--ax) 10%, var(--wp-bg-deep, #0e1015));
   border-left: 2px solid color-mix(in srgb, var(--ax) 48%, transparent);
@@ -683,7 +683,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: 4px;
   font: 600 12px var(--wp-font-mono);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   cursor: pointer;
   user-select: none;
   transition: transform 0.08s, box-shadow 0.1s, background 0.1s;

@@ -563,7 +563,7 @@ function isOverridden(rid: RuleId): boolean {
   padding: 6px 8px;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   font: 10px/1.5 var(--wp-font-mono, monospace);
   color: var(--wp-text-muted, var(--wp-text2));
 }
@@ -579,7 +579,7 @@ function isOverridden(rid: RuleId): boolean {
   padding: 0 4px;
   font: 10px var(--wp-font-sans, sans-serif);
   color: var(--wp-text-muted, var(--wp-text2));
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .wp-cleaner__rule:not(.wp-cleaner__rule--static):hover:not(.is-disabled) { background: var(--wp-row-hover, var(--wp-bg2)); color: var(--wp-text); }
 .wp-cleaner__rule.is-disabled { opacity: 0.4; }

@@ -45,7 +45,7 @@ const emit = defineEmits<{
   gap: 10px;
   padding: 8px 12px;
   border: 1px solid color-mix(in oklab, var(--wp-accent) 40%, transparent);
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   background: color-mix(in oklab, var(--wp-accent) 12%, var(--wp-bg-2));
   flex-wrap: wrap;
 }

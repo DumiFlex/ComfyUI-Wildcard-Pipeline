@@ -74,7 +74,7 @@ function onClickReset(): void {
   background: rgba(251, 146, 60, 0.18);
   color: var(--wp-status-modified, #fb923c);
   padding: 1px 5px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   font: 600 9px/1 var(--wp-font-sans);
   text-transform: uppercase;
 }

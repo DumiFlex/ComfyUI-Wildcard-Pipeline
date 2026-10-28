@@ -528,7 +528,7 @@ function onKeydown(e: KeyboardEvent) {
 .wp-select:focus .wp-select__clear,
 .wp-select__clear:focus-visible { opacity: 1; }
 .wp-select__clear:hover { color: var(--wp-text); }
-.wp-select__clear:focus-visible { outline: 2px solid var(--wp-accent-500); outline-offset: 1px; border-radius: 2px; }
+.wp-select__clear:focus-visible { outline: 2px solid var(--wp-accent-500); outline-offset: 1px; border-radius: min(2px, var(--wp-radius-cap, 999px)); }
 @media (hover: none) { .wp-select__clear { opacity: 1; } }
 .wp-spacer { flex: 1 1 auto; }
 
@@ -543,7 +543,7 @@ function onKeydown(e: KeyboardEvent) {
   --wp-select-line-h: 18.75px;
   background: var(--wp-bg-3);
   border: 1px solid var(--wp-border-strong);
-  border-radius: 7px;
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
   box-shadow: var(--wp-shadow-md);
   z-index: 10020;
   padding: 4px;
@@ -555,7 +555,7 @@ function onKeydown(e: KeyboardEvent) {
 .wp-select__option {
   display: flex; align-items: center; gap: 6px;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-muted);
   cursor: pointer;
   font-size: 12.5px;

@@ -123,7 +123,7 @@ function toggle(): void {
 .wp-disclosure[data-open="true"] .wp-disclosure__chev { transform: rotate(90deg); }
 .wp-disclosure__count {
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-3);
   color: var(--wp-text-muted);
   font-size: var(--wp-text-xs);

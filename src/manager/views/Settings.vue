@@ -223,7 +223,7 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
   font-size: 11px;
   line-height: 1.6;
   padding: 1px 9px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   border: 1px solid var(--wp-border-strong, var(--wp-border));
   color: var(--wp-text-muted);
   white-space: nowrap;

@@ -226,20 +226,20 @@ onBeforeUnmount(() => {
  * bypassed · Lock all · Unlock all · Copy) and each row's three toggles were
  * being squeezed into near-square boxes to fit. Widening is the cheaper fix
  * than re-organising the toolbar. */
-.sm { width: 560px; max-width: 100%; max-height: 86vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: 6px; overflow: hidden; color: var(--wp-text); font-size: 12px; box-shadow: var(--wp-shadow-lg); }
+.sm { width: 560px; max-width: 100%; max-height: 86vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: min(6px, var(--wp-radius-cap, 999px)); overflow: hidden; color: var(--wp-text); font-size: 12px; box-shadow: var(--wp-shadow-lg); }
 .sm__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); background: color-mix(in srgb, var(--wp-accent) 9%, var(--wp-bg2)); }
 .sm__head-icon { color: var(--wp-accent); width: 24px; display: flex; justify-content: center; }
 .sm__title-block { flex: 1; min-width: 0; }
 .sm__title-row { display: flex; align-items: center; gap: 8px; }
 .sm__name { font: 600 13px var(--wp-font-sans); color: var(--wp-text); }
-.sm__chip { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .06em; padding: 2px 6px; border-radius: 2px; background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent); }
+.sm__chip { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .06em; padding: 2px 6px; border-radius: min(2px, var(--wp-radius-cap, 999px)); background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent); }
 .sm__sub { font: 400 10px var(--wp-font-mono); color: var(--wp-text-dim, var(--wp-text3)); margin-top: 3px; }
 .sm__bar { display: flex; align-items: center; gap: 8px; padding: 9px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); }
 .sm__count { font: 600 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
-.sm__strat { font: 600 9px var(--wp-font-mono); text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 3px; color: var(--wp-text-muted, var(--wp-text2)); background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); }
-.sm__lockcount { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 3px; color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.12); border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent); }
+.sm__strat { font: 600 9px var(--wp-font-mono); text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: min(3px, var(--wp-radius-cap, 999px)); color: var(--wp-text-muted, var(--wp-text2)); background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); }
+.sm__lockcount { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: min(3px, var(--wp-radius-cap, 999px)); color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.12); border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent); }
 .sm__bar-spacer { flex: 1; }
-.ghost { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 3px; border: 1px solid var(--wp-border); background: transparent; color: var(--wp-text-muted, var(--wp-text2)); font: 11px var(--wp-font-sans); cursor: pointer; }
+.ghost { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: min(3px, var(--wp-radius-cap, 999px)); border: 1px solid var(--wp-border); background: transparent; color: var(--wp-text-muted, var(--wp-text2)); font: 11px var(--wp-font-sans); cursor: pointer; }
 .ghost:hover { border-color: var(--wp-border-strong, var(--wp-border2)); color: var(--wp-text); }
 .ghost--copied, .ghost--copied:hover { border-color: var(--wp-green, #6bc96f); color: var(--wp-green, #6bc96f); }
 .sm__hint { display: flex; align-items: center; gap: 7px; padding: 7px 14px; flex-shrink: 0; font: 11px var(--wp-font-sans); color: color-mix(in srgb, var(--wp-amber, #fbbf24) 75%, var(--wp-text-muted)); background: color-mix(in srgb, var(--wp-amber, #fbbf24) 9%, transparent); border-bottom: 1px solid var(--wp-border); }
@@ -248,7 +248,7 @@ onBeforeUnmount(() => {
 .sm__inactive-label { padding: 8px 8px 4px; margin-top: 4px; border-top: 1px dashed var(--wp-border); font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .08em; color: var(--wp-text-dim, var(--wp-text3)); }
 .sm__foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; flex-shrink: 0; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
 .sm__foot-hint { font: 10px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
-.sm__foot-hint kbd { font: 9px var(--wp-font-mono); background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); padding: 1px 4px; border-radius: 2px; }
+.sm__foot-hint kbd { font: 9px var(--wp-font-mono); background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); padding: 1px 4px; border-radius: min(2px, var(--wp-radius-cap, 999px)); }
 .sm__foot-spacer { flex: 1; }
-.btn { padding: 6px 14px; border: 1px solid var(--wp-accent); border-radius: 3px; background: var(--wp-accent); color: #fff; font: 11px var(--wp-font-sans); cursor: pointer; }
+.btn { padding: 6px 14px; border: 1px solid var(--wp-accent); border-radius: min(3px, var(--wp-radius-cap, 999px)); background: var(--wp-accent); color: #fff; font: 11px var(--wp-font-sans); cursor: pointer; }
 </style>

@@ -30,7 +30,7 @@ defineProps<{ items: { term: string; desc: string }[] }>();
   color: var(--wp-accent-text);
   background: color-mix(in oklab, var(--wp-accent-500) 11%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 24%, transparent);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   padding: 4px 10px;
 }
 .wp-doc-keys__desc {

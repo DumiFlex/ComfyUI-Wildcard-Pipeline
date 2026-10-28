@@ -307,7 +307,7 @@ const skippedSummary = computed(() => {
   overflow: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--wp-border);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-1);
 }
 .wp-ai-draft__row {
@@ -327,7 +327,7 @@ const skippedSummary = computed(() => {
 .wp-ai-draft__tag {
   font-size: 11px;
   padding: 0 7px;
-  border-radius: 10px;
+  border-radius: min(10px, var(--wp-radius-cap, 999px));
   border: 1px solid color-mix(in oklab, var(--wp-success) 45%, transparent);
   color: var(--wp-success);
 }
@@ -339,7 +339,7 @@ const skippedSummary = computed(() => {
 .wp-ai-draft__groups { margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--wp-text-dim); }
 .wp-ai-draft__group-kind {
   padding: 0 6px;
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   background: var(--wp-surface-2, rgba(127, 127, 127, 0.15));
   font-size: 11px;
 }

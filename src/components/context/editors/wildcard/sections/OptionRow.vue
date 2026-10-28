@@ -530,7 +530,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   width: 14px;
   height: 14px;
   border: 1.5px solid var(--wp-border-soft, var(--wp-border));
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -587,7 +587,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
 .opt__neg {
   flex: 0 0 auto;
   padding: 0 4px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -615,7 +615,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   padding: 2px 8px;
   background: color-mix(in srgb, var(--wp-text-muted, var(--wp-text2)) 12%, transparent);
   border: 1px dashed var(--wp-border-soft, var(--wp-border));
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-muted, var(--wp-text2));
   font: 10px var(--wp-font-mono);
 }
@@ -645,7 +645,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
 }
 .opt__tok--ref,
 .opt__tok--var {
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 0 5px;
   gap: 3px;
   border: 1px solid;
@@ -723,14 +723,14 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   flex: 1;
   height: 4px;
   background: var(--wp-bg);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   overflow: hidden;
 }
 .opt__prob-bar > span {
   display: block;
   height: 100%;
   background: var(--wp-accent);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   transition: width var(--wp-motion-hover) ease;
 }
 .opt__prob-pct {
@@ -759,7 +759,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   display: inline-flex;
   align-items: center;
   padding: 1px 5px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font: 8px var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -777,7 +777,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   display: inline-flex;
   align-items: center;
   padding: 1px 5px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font: 8px var(--wp-font-sans);
   letter-spacing: 0.06em;
   white-space: nowrap;

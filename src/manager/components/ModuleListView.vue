@@ -1124,7 +1124,7 @@ defineExpose({
                   aria-label="Select row"
                   tabindex="-1"
                 >
-                  <svg v-if="isSelected(row)" viewBox="0 0 12 12" fill="none" style="display:block">
+                  <svg v-if="isSelected(row)" viewBox="0 0 12 12" fill="none">
                     <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
                   </svg>
                 </button>
@@ -1352,7 +1352,7 @@ defineExpose({
   min-width: 18px;
   height: 18px;
   padding: 0 var(--wp-space-3);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: var(--wp-text-xs);
   background: var(--wp-accent-500);
   color: #fff; /* audit-exempt: white text on saturated accent-500 is theme-agnostic (≥4.5:1 both themes) */
@@ -1404,16 +1404,20 @@ defineExpose({
   margin-left: 2px;
 }
 
+/* Wraps: the actions run longer than the list in a wide look (TUI's
+   "[ Label ]", Soft's pill padding) or a narrow window, and they must stay
+   inside the bar. The count never breaks ("39 selected" on one line). */
 .wp-bulk-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--wp-space-5);
+  gap: var(--wp-space-3) var(--wp-space-5);
   padding: var(--wp-space-4) var(--wp-space-5);
   background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
   border-radius: var(--wp-radius);
 }
-.wp-bulk-bar__count { font-size: var(--wp-text-sm); }
+.wp-bulk-bar__count { font-size: var(--wp-text-sm); white-space: nowrap; flex: none; }
 
 .wp-active-filters {
   display: flex;
@@ -1540,7 +1544,7 @@ defineExpose({
   align-self: center;
   height: 18px;
   padding: 0 6px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: color-mix(in oklab, #06b6d4 12%, transparent);
   border: 1px solid color-mix(in oklab, #06b6d4 24%, transparent);
   color: #67e8f9;
@@ -1601,7 +1605,7 @@ defineExpose({
   white-space: nowrap;
   padding: 0 var(--wp-space-4);
   border: 1px solid var(--wp-border);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-2);
   color: var(--wp-text);
   font-size: var(--wp-text-xs);

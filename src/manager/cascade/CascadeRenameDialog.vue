@@ -248,7 +248,7 @@ function onOpenUpdate(v: boolean): void {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   border: 1px solid var(--wp-border, #38383f);
   background: var(--wp-bg2, var(--wp-color-surface-2, #25252a));
   font-size: 13px;
@@ -283,7 +283,7 @@ function onOpenUpdate(v: boolean): void {
   gap: 10px;
   padding: 8px 10px;
   border: 1px solid var(--wp-border, #38383f);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg2, var(--wp-color-surface-2, #25252a));
   min-width: 0;
 }
@@ -325,7 +325,7 @@ function onOpenUpdate(v: boolean): void {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 3px 7px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   flex-shrink: 0;
 }
 .wp-mod-badge--kind-wildcard {

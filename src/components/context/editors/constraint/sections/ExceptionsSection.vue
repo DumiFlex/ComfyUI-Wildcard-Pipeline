@@ -645,14 +645,14 @@ const FACTOR_STEP = 0.1;
   color: var(--wp-constraint-source-text);
   background: color-mix(in oklab, var(--wp-constraint-source) 12%, transparent);
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   border: 1px solid color-mix(in oklab, var(--wp-constraint-source) 30%, transparent);
 }
 .ex__tgt {
   color: var(--wp-constraint-target-text);
   background: color-mix(in oklab, var(--wp-constraint-target) 12%, transparent);
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   border: 1px solid color-mix(in oklab, var(--wp-constraint-target) 30%, transparent);
 }
 .ex__arrow { color: var(--wp-text-dim, var(--wp-text3)); }
@@ -672,7 +672,7 @@ const FACTOR_STEP = 0.1;
   width: 14px;
   height: 14px;
   border: 1.5px solid var(--wp-border-soft, var(--wp-border));
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -726,7 +726,7 @@ const FACTOR_STEP = 0.1;
   font: 600 9px var(--wp-font-sans);
   text-transform: uppercase;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   white-space: nowrap;
 }
 .wp-btn.ex__mode-chip { padding: 0 8px; font-size: 10px; text-transform: uppercase; border-radius: var(--wp-radius-sm); }
@@ -760,7 +760,7 @@ const FACTOR_STEP = 0.1;
   font: 600 8px var(--wp-font-sans);
   text-transform: uppercase;
   padding: 1px 5px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, var(--wp-status-modified, #fb923c) 22%, transparent);
   color: var(--wp-status-modified, #fb923c);
 }

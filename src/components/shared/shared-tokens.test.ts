@@ -27,7 +27,7 @@ const SHARED_TOKENS = [
   "--wp-kind-wildcard", "--wp-kind-fixed", "--wp-kind-combine", "--wp-kind-derivation", "--wp-kind-constraint",
   "--wp-var-1", "--wp-var-2", "--wp-var-3", "--wp-var-4", "--wp-var-5", "--wp-var-6", "--wp-var-7", "--wp-var-8",
   // Shape, depth and type
-  "--wp-radius-sm", "--wp-radius", "--wp-radius-md", "--wp-radius-lg", "--wp-radius-xl",
+  "--wp-radius-sm", "--wp-radius", "--wp-radius-md", "--wp-radius-lg", "--wp-radius-xl", "--wp-radius-cap",
   "--wp-shadow-sm", "--wp-shadow", "--wp-shadow-md", "--wp-shadow-lg", "--wp-shadow-xl",
   "--wp-font-sans", "--wp-font-mono",
   "--wp-text-xs", "--wp-text-sm", "--wp-text-base", "--wp-text-md", "--wp-text-lg", "--wp-text-xl",

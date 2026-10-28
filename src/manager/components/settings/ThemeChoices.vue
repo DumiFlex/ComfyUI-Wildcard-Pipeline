@@ -71,11 +71,11 @@ function pick(id: string): void {
     @update:model-value="pick"
   >
     <template #preview="{ option }">
-      <span v-if="kind === 'palette'" class="wp-theme-choice__swatch" aria-hidden="true">
+      <span v-if="kind === 'palette'" class="wp-theme-choice__swatch" aria-hidden="true" data-look-exempt>
         <span class="wp-theme-choice__bar" />
         <span class="wp-theme-choice__dot" />
       </span>
-      <span v-else class="wp-theme-choice__look" aria-hidden="true">
+      <span v-else class="wp-theme-choice__look" aria-hidden="true" data-look-exempt>
         <span class="wp-theme-choice__panel">{{ title(option.value) }}</span>
         <span class="wp-theme-choice__btn" />
         <span class="wp-theme-choice__chip" />
@@ -100,14 +100,14 @@ function pick(id: string): void {
   position: absolute;
   left: 8px; right: 34px; top: 9px;
   height: 8px;
-  border-radius: 4px;
+  border-radius: 4px; /* audit-exempt: a palette preview, same in every look */
   background: var(--sw-card);
 }
 .wp-theme-choice__dot {
   position: absolute;
   right: 8px; bottom: 7px;
   width: 20px; height: 11px;
-  border-radius: 4px;
+  border-radius: 4px; /* audit-exempt: a palette preview, same in every look */
   background: var(--sw-accent);
 }
 

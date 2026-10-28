@@ -53,7 +53,7 @@ defineProps<{ rows: InfoRowView[]; full?: boolean }>();
 .wp-ai-info dt { color: var(--wp-text-muted); }
 .wp-ai-info dd { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
 .wp-ai-info__was-chip { opacity: 0.6; }
-.wp-ai-info__rating { font-size: 11px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--wp-border); color: var(--wp-text-muted); }
+.wp-ai-info__rating { font-size: 11px; padding: 0 6px; border-radius: min(4px, var(--wp-radius-cap, 999px)); border: 1px solid var(--wp-border); color: var(--wp-text-muted); }
 .wp-ai-info__rating[data-rating="NSFW"] { color: var(--wp-danger, #e5484d); border-color: color-mix(in oklab, var(--wp-danger, #e5484d) 45%, transparent); }
 .wp-ai-info__clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 </style>

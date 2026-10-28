@@ -113,7 +113,7 @@ function onMatchInput(e: Event): void {
   gap: 6px;
   padding: 3px 4px 3px 10px;
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   font: 11px var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
   background: var(--wp-bg-deep, var(--wp-bg));
@@ -125,7 +125,7 @@ function onMatchInput(e: Event): void {
   width: 120px;
   padding: 2px 6px;
   border: 1px solid var(--wp-border-soft, var(--wp-border));
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg2);
   color: var(--wp-text);
   font: 11px var(--wp-font-mono, monospace);

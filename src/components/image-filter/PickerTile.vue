@@ -35,7 +35,7 @@ defineEmits<{ toggle: []; zoom: []; hover: [on: boolean] }>();
 </template>
 
 <style scoped>
-.wp-ifp-tile { position: relative; padding: 0; border: 2px solid transparent; border-radius: 5px; background: var(--wp-bg3); cursor: pointer; overflow: hidden; line-height: 0; }
+.wp-ifp-tile { position: relative; padding: 0; border: 2px solid transparent; border-radius: min(5px, var(--wp-radius-cap, 999px)); background: var(--wp-bg3); cursor: pointer; overflow: hidden; line-height: 0; }
 .wp-ifp-tile img { display: block; max-width: var(--wp-ifp-tile, 200px); max-height: var(--wp-ifp-tile, 200px); width: auto; height: auto; user-select: none; }
 .wp-ifp-tile:hover { border-color: var(--wp-border2, var(--wp-text-dim, #666)); }
 .wp-ifp-tile.is-picked { border-color: var(--wp-green, #34c47c); box-shadow: 0 0 0 2px color-mix(in srgb, var(--wp-green, #34c47c) 35%, transparent); }

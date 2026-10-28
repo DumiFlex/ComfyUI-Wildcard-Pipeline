@@ -112,7 +112,7 @@ function isPicked(q: string, c: string): boolean {
 .wp-pack-qs__text { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
 .wp-pack-qs__choices { display: flex; gap: 6px; flex-wrap: wrap; }
 .wp-pack-qs__choice {
-  padding: 5px 11px; border-radius: 7px; font-size: 13px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center;
+  padding: 5px 11px; border-radius: min(7px, var(--wp-radius-cap, 999px)); font-size: 13px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center;
   border: 1px solid var(--wp-border); background: var(--wp-bg-2); color: var(--wp-text); max-width: 100%;
   overflow-wrap: anywhere; text-align: left;
 }

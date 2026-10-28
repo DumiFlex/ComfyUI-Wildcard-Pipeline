@@ -380,7 +380,7 @@ const hint = computed<string>(() => {
   padding: 6px;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
 }
 .rh-pick__empty {
   font: 10px var(--wp-font-sans);
@@ -392,7 +392,7 @@ const hint = computed<string>(() => {
   align-items: center;
   gap: 8px;
   padding: 4px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   cursor: pointer;
   font: 11px var(--wp-font-sans);
   color: var(--wp-text);
@@ -411,7 +411,7 @@ const hint = computed<string>(() => {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
 }
 .rh-pick__tag--direct {
   color: var(--wp-constraint-target-text, var(--wp-text-muted, var(--wp-text2)));
@@ -425,7 +425,7 @@ const hint = computed<string>(() => {
   font: 600 9px var(--wp-font-mono);
   color: var(--wp-text-dim, var(--wp-text3));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 0 5px;
 }
 .rh-pick__ord {

@@ -59,7 +59,7 @@ const position = computed<{ top: number } | null>(() => {
   right: 4px;
   height: 2px;
   background: var(--wp-accent, #6366f1);
-  border-radius: 1px;
+  border-radius: min(1px, var(--wp-radius-cap, 999px));
   pointer-events: none;
   z-index: 5;
   box-shadow: 0 0 6px var(--wp-accent, #6366f1);

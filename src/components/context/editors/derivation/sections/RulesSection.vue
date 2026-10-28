@@ -899,7 +899,7 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   color: var(--wp-text-dim, var(--wp-text3));
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px dashed var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .rules__list {
   display: flex;
@@ -925,11 +925,11 @@ function condRows(cond: unknown, bi: number): CondRow[] {
 .rules__list::-webkit-scrollbar { width: 12px; }
 .rules__list::-webkit-scrollbar-track {
   background: var(--wp-bg-deep, var(--wp-bg));
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
 }
 .rules__list::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.38);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   border: 2px solid var(--wp-bg-deep, var(--wp-bg));
 }
 .rules__list::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.55); }
@@ -938,7 +938,7 @@ function condRows(cond: unknown, bi: number): CondRow[] {
 .rule-card {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   overflow: hidden;
   /* THE load-bearing fix for "rules clipped, no scrollbar": the cards are
    * flex children of the flex-column .rules__list, so by default they SHRINK
@@ -980,7 +980,7 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   color: var(--wp-accent);
   background: color-mix(in srgb, var(--wp-accent) 12%, transparent);
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   white-space: nowrap;
 }
 /* A rule head is a PREVIEW, kept to ONE line. Wrapping let a paragraph-length
@@ -1010,7 +1010,7 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
   color: var(--wp-text-muted, var(--wp-text2));
@@ -1038,7 +1038,7 @@ function condRows(cond: unknown, bi: number): CondRow[] {
 .br {
   border: 1px solid var(--wp-border-soft, var(--wp-border));
   border-left: 3px solid var(--wp-kind-derivation, #fbbf24);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg);
   padding: 8px 10px;
 }
@@ -1059,7 +1059,7 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   font: 700 9px var(--wp-font-mono);
   letter-spacing: 0.06em;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .br__tag[data-kind="if"] {
   color: var(--wp-kind-derivation, #fbbf24);
@@ -1177,7 +1177,7 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   color: var(--wp-text);
   background: color-mix(in srgb, var(--wp-text-dim, var(--wp-text3)) 12%, transparent);
   padding: 0 4px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
 }
 .rule-tok-arrow {
   color: var(--wp-text-dim, var(--wp-text3));

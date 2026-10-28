@@ -278,7 +278,7 @@ function onDelete(): void {
   width: 14px;
   height: 14px;
   border: 1.5px solid var(--wp-border-soft, var(--wp-border));
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -294,7 +294,7 @@ function onDelete(): void {
   align-items: stretch;
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   overflow: hidden;
 }
 .row__name-wrap:focus-within, .row__value-wrap:focus-within { border-color: var(--wp-accent); }
@@ -381,7 +381,7 @@ function onDelete(): void {
   color: var(--wp-text-muted, var(--wp-text2));
   border-left: 2px solid var(--wp-border-soft, var(--wp-border));
   background: var(--wp-bg-deep, var(--wp-bg));
-  border-radius: 0 2px 2px 0;
+  border-radius: 0 min(2px, var(--wp-radius-cap, 999px)) min(2px, var(--wp-radius-cap, 999px)) 0;
   white-space: pre-wrap;
   word-break: break-word;
 }

@@ -57,7 +57,7 @@ function icon(r: BundleRowView): string {
 .wp-ai-bundle { display: flex; flex-direction: column; gap: 6px; }
 .wp-ai-bundle__head { margin: 0; font-size: 11.5px; color: var(--wp-text-muted); }
 .wp-ai-bundle__rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
-.wp-ai-bundle__rows > li { display: flex; gap: 6px; align-items: baseline; padding: 2px 6px 2px 2px; border-radius: 4px; }
+.wp-ai-bundle__rows > li { display: flex; gap: 6px; align-items: baseline; padding: 2px 6px 2px 2px; border-radius: min(4px, var(--wp-radius-cap, 999px)); }
 .wp-ai-bundle__rows > li[data-change="added"] { background: color-mix(in oklab, var(--wp-success, #30a46c) 9%, transparent); }
 .wp-ai-bundle__rows > li[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger, #e5484d) 8%, transparent); }
 [data-change="moved"] > .wp-ai-diff__mark { color: var(--wp-accent-400, var(--wp-accent-500)); }

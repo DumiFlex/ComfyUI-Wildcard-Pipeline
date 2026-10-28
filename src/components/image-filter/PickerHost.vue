@@ -49,7 +49,7 @@ function onAnswer(answer: PickAnswer): void {
 </template>
 
 <style scoped>
-.wp-ifp-pill { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 9998; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--wp-accent); background: var(--wp-bg2); color: var(--wp-text); font: 12px var(--wp-font-sans); cursor: pointer; box-shadow: var(--wp-shadow-md); }
+.wp-ifp-pill { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 9998; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--wp-radius-cap, 999px); border: 1px solid var(--wp-accent); background: var(--wp-bg2); color: var(--wp-text); font: 12px var(--wp-font-sans); cursor: pointer; box-shadow: var(--wp-shadow-md); }
 .wp-ifp-pill__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--wp-amber, #fbbf24); animation: wp-ifp-pulse 1.4s ease-in-out infinite; }
 .wp-ifp-pill__open { color: var(--wp-accent-text, var(--wp-accent)); font-weight: 600; }
 @keyframes wp-ifp-pulse { 50% { opacity: .35; } }

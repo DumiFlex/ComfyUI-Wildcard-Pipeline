@@ -691,7 +691,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   background: var(--wp-bg-2, #15151f);
   color: var(--wp-text, #e7e7ee);
   border: 1px solid var(--wp-border, #2a2a3a);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   padding: 6px 8px;
   font-size: 13px;
   font-family: inherit;
@@ -703,7 +703,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   padding: 8px 10px;
   background: var(--wp-bg-2, #15151f);
   border: 1px solid var(--wp-border, #2a2a3a);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   font-family: var(--wp-font-mono, monospace);
   font-size: 11px;
   white-space: pre;
@@ -715,7 +715,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   padding: 8px 10px;
   background: color-mix(in oklab, var(--wp-warn, #facc15) 8%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-warn, #facc15) 22%, transparent);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   font-size: 12.5px;
 }
 .wp-ptl-bundles--loading { color: var(--wp-text-muted, #a1a1ad); }
@@ -732,7 +732,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 }
 .wp-ptl-note {
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   font-size: 12px;
 }
 .wp-ptl-note--warn {
@@ -755,7 +755,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 }
 .wp-ptl-relink {
   padding: 10px 12px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 8%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500, #6366f1) 30%, transparent);
   display: flex;
@@ -779,7 +779,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   align-items: baseline;
   gap: 8px;
   padding: 5px 8px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   cursor: pointer;
 }
 .wp-ptl-relink__cand:hover { background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 16%, transparent); }
@@ -794,7 +794,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
 }
 .wp-ptl-relink__tag.is-identical {
   color: var(--wp-green, #6ad28b);
@@ -807,7 +807,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 .wp-ptl-relink .wp-btn--primary { align-self: flex-start; }
 .wp-ptl-error {
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: color-mix(in oklab, var(--wp-danger, #ef4444) 14%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 32%, transparent);
   color: var(--wp-danger, #ef4444);

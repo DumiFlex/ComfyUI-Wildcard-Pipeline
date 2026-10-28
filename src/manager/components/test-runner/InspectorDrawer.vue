@@ -273,7 +273,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 /* Weight share (grey) over picked share (kind colour). */
 .wp-tri__table :deep(td.wp-tri__bars) { vertical-align: middle; }
 .wp-tri__bars .wp-tri__track + .wp-tri__track { margin-top: 2px; }
-.wp-tri__track { display: block; width: 88px; height: 4px; border-radius: 2px; background: var(--wp-bg-3); overflow: hidden; flex: none; }
+.wp-tri__track { display: block; width: 88px; height: 4px; border-radius: min(2px, var(--wp-radius-cap, 999px)); background: var(--wp-bg-3); overflow: hidden; flex: none; }
 .wp-tri__fill { display: block; height: 100%; background: var(--wp-text-dim); }
 .wp-tri__fill--pick { background: var(--kc); }
 .wp-tri__facts { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: var(--wp-space-2) var(--wp-space-5); }

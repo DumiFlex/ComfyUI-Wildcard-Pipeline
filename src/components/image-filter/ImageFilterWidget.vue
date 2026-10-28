@@ -164,7 +164,7 @@ const summary = computed(() => {
 .wp-ifw__head { display: flex; align-items: center; gap: 8px; }
 .wp-ifw__label { font: 600 9px var(--wp-font-sans, sans-serif); letter-spacing: 0.08em; text-transform: uppercase; color: var(--wp-text-dim, var(--wp-text-muted, var(--wp-text2))); }
 .wp-ifw__head-note { flex: 1; font-size: 9px; color: var(--wp-text-dim, var(--wp-text3)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wp-ifw__box { display: flex; flex-direction: column; gap: 2px; padding: 4px 6px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: 3px; }
+.wp-ifw__box { display: flex; flex-direction: column; gap: 2px; padding: 4px 6px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: min(3px, var(--wp-radius-cap, 999px)); }
 .wp-ifw__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
 .wp-ifw__row.is-off { opacity: .45; }
 .wp-ifw__row-label { font-size: 10.5px; color: var(--wp-text-muted, var(--wp-text2)); white-space: nowrap; }
@@ -172,7 +172,7 @@ const summary = computed(() => {
 .wp-ifw__timeout { display: flex; align-items: center; gap: 6px; }
 .wp-ifw__unit { font-size: 10px; color: var(--wp-text-dim, var(--wp-text3)); white-space: nowrap; }
 .wp-ifw__num-wrap { width: 64px; height: 20px; }
-.wp-ifw__thumbs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: 3px; }
-.wp-ifw__thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 3px; }
+.wp-ifw__thumbs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: min(3px, var(--wp-radius-cap, 999px)); }
+.wp-ifw__thumb { width: 40px; height: 40px; object-fit: cover; border-radius: min(3px, var(--wp-radius-cap, 999px)); }
 .wp-ifw__thumb-more { align-self: center; font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); padding: 0 4px; }
 </style>

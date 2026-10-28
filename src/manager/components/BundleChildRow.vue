@@ -283,7 +283,7 @@ const badgeAccent = computed(() => isBundleRef.value || props.edited);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 1px var(--wp-space-3);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
   color: var(--wp-text-dim);

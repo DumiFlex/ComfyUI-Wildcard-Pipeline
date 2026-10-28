@@ -88,7 +88,7 @@ function onSeed(n: number | null) {
 </template>
 
 <style scoped>
-.srow { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 5px; }
+.srow { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: min(5px, var(--wp-radius-cap, 999px)); }
 .srow--locked { background: rgba(99,102,241,0.07); box-shadow: inset 2px 0 0 var(--wp-accent, #6366f1); }
 /* out-of-range lock: dimmed ("deemed down") but still interactive — hover lifts it. */
 .srow--inactive { opacity: .5; }
@@ -104,7 +104,7 @@ function onSeed(n: number | null) {
       transparent 4px 8px
     ) left / 3px 100% no-repeat,
     color-mix(in srgb, var(--wp-accent, #6366f1) 11%, transparent);
-  border-radius: 5px;
+  border-radius: min(5px, var(--wp-radius-cap, 999px));
 }
 .srow--bypassed .derived__val { text-decoration: line-through; opacity: .65; }
 .srow--bypassed .srow__idx { color: var(--wp-accent-text, #a5b4fc); opacity: .75; }
@@ -116,7 +116,7 @@ function onSeed(n: number | null) {
 .derived { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .derived__val { font: 11px var(--wp-font-mono, monospace); color: var(--wp-text4, #888); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .derived__tag { flex-shrink: 0; }
-.derived__tag { font: 600 8px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .07em; color: var(--wp-text-dim, var(--wp-text3)); border: 1px solid var(--wp-border); border-radius: 3px; padding: 1px 5px; }
+.derived__tag { font: 600 8px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .07em; color: var(--wp-text-dim, var(--wp-text3)); border: 1px solid var(--wp-border); border-radius: min(3px, var(--wp-radius-cap, 999px)); padding: 1px 5px; }
 /* The value column has to SHRINK. A locked row carries three fixed-width
  * toggles plus a 178px input and a roll button; on the 486px modal that
  * overran the panel, clipping the input at the right edge and pushing the

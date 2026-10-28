@@ -318,7 +318,7 @@ function rowTitle(row: ChatRow): string {
   padding: 4px 0;
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border-strong, var(--wp-border));
-  border-radius: 7px;
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
   box-shadow: var(--wp-shadow-md);
   font-size: var(--wp-text-sm, 12px);
 }

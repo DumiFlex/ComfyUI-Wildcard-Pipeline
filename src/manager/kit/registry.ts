@@ -162,7 +162,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   // Choice
   {
     id: "checkbox", name: "Checkbox", group: "choice", file: "src/manager/components/ui/Checkbox.vue", surfaces: ["manager"],
-    use: "Tick one item, or one row in a list. Supports a mixed state for \"some selected\". Disabled turns grey with a dimmed label.",
+    use: "Tick one item, or one row in a list. Supports a mixed state for \"some selected\". Disabled turns grey with a dimmed label. `field` draws it as an input-height box for a yes/no filter beside dropdowns (Favorites only).",
     instead: "<input type=\"checkbox\"> drawn by the browser.",
   },
   {

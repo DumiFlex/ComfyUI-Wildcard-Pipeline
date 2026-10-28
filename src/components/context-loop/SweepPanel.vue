@@ -273,7 +273,7 @@ function moveAxis(uid: string, dir: -1 | 1): void {
 .wp-sweep--on {
   padding: 6px 7px;
   border: 1px solid color-mix(in srgb, var(--wp-accent, #6366f1) 35%, var(--wp-border, #353841));
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, var(--wp-accent, #6366f1) 5%, transparent);
 }
 .wp-sweep__row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -288,7 +288,7 @@ function moveAxis(uid: string, dir: -1 | 1): void {
 
 .wp-sweep__axis {
   border: 1px solid var(--wp-border, #353841);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
 }
 .wp-sweep__axis--missing { border-style: dashed; opacity: .75; }
@@ -308,7 +308,7 @@ function moveAxis(uid: string, dir: -1 | 1): void {
 .wp-sweep__opts-list { display: flex; flex-wrap: wrap; gap: 3px; max-height: 120px; overflow-y: auto; }
 .wp-sweep__opt {
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  padding: 2px 6px; border-radius: 3px; cursor: pointer;
+  padding: 2px 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); cursor: pointer;
   font: 10px var(--wp-font-sans, sans-serif);
   background: transparent; border: 1px solid var(--wp-border, #353841); color: var(--wp-text-dim, #7a7d88);
 }

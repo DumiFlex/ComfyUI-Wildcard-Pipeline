@@ -748,7 +748,7 @@ const branchCount = computed(() => rule.value.branches.length);
   background: transparent;
   color: var(--wp-text-muted);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
 }
 .branch-collapse:hover { background: var(--wp-bg-3); color: var(--wp-text); }
 .branch-collapse:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }

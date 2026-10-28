@@ -453,7 +453,7 @@ function handleParse(raw: string, source: "file" | "paste"): void {
   font-family: var(--wp-font-mono, monospace);
   font-size: var(--wp-text-xs);
   padding: 1px 4px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-3);
 }
 

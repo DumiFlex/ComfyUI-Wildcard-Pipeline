@@ -800,7 +800,7 @@ onBeforeUnmount(() => {
   gap: 3px;
   padding: 0 5px;
   margin: 1px 1px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   border: 1px solid;
   font: 10px/1.4 var(--wp-font-mono);
   /* Selectable, so a selection that spans the chip actually PAINTS over it.
@@ -944,7 +944,7 @@ onBeforeUnmount(() => {
   padding: 10px 12px;
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border-strong);
-  border-radius: 7px;
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
   box-shadow: var(--wp-shadow-md);
   /* Was 10px — the "unnecessarily small" the report called out. 12px reads as a
      panel, not a tooltip afterthought. */
@@ -993,7 +993,7 @@ onBeforeUnmount(() => {
   font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--wp-text-dim);
   border: 1px solid var(--wp-border);
-  border-radius: 999px; padding: 0 6px;
+  border-radius: var(--wp-radius-cap, 999px); padding: 0 6px;
 }
 .wp-refchip-pop__uuid { color: var(--wp-text-muted); }
 .wp-refchip-pop__filter { color: var(--wp-text-dim); }

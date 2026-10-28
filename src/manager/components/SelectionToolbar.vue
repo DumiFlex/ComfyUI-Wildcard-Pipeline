@@ -334,7 +334,7 @@ function applyWeight() {
   gap: 10px;
   padding: 8px 12px;
   border: 1px solid color-mix(in oklab, var(--wp-accent) 40%, transparent);
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   background: color-mix(in oklab, var(--wp-accent) 12%, var(--wp-bg-2));
   flex-wrap: wrap;
 }
@@ -358,7 +358,7 @@ function applyWeight() {
   gap: 6px;
   padding: 8px;
   border: 1px solid var(--wp-border);
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-1);
   box-shadow: var(--wp-shadow-md);
 }
@@ -382,7 +382,7 @@ function applyWeight() {
   text-align: left;
   padding: 6px 8px;
   border: none;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: transparent;
   color: var(--wp-text);
   font-size: 13px;
@@ -394,7 +394,7 @@ function applyWeight() {
   flex: 0 0 auto;
   width: 10px;
   height: 10px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   border: 1px solid color-mix(in srgb, var(--chip-hue) 55%, var(--wp-border));
   background: color-mix(in srgb, var(--chip-hue) 40%, transparent);
 }
@@ -418,7 +418,7 @@ function applyWeight() {
 .wpc-seltoolbar__negtag {
   flex: none;
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   font-family: var(--wp-font-mono, monospace);
   font-size: 10px;
   font-weight: 700;

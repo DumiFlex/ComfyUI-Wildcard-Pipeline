@@ -82,7 +82,7 @@ function actsOf(b: BranchView): Array<{ text: string; change?: string }> {
 .wp-ai-deriv__rules > li[data-change="removed"] { border-left: 2px solid var(--wp-danger, #e5484d); padding-left: 6px; }
 .wp-ai-deriv__rules > li[data-change="changed"] { border-left: 2px solid var(--wp-warn); padding-left: 6px; }
 .wp-ai-deriv__rule-n { font-size: 11px; color: var(--wp-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
-.wp-ai-card-view__branch { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; align-items: baseline; margin-top: 2px; padding: 1px 4px 1px 0; border-radius: 4px; }
+.wp-ai-card-view__branch { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; align-items: baseline; margin-top: 2px; padding: 1px 4px 1px 0; border-radius: min(4px, var(--wp-radius-cap, 999px)); }
 .wp-ai-card-view__branch[data-change="added"] { background: color-mix(in oklab, var(--wp-success, #30a46c) 9%, transparent); }
 .wp-ai-card-view__branch[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger, #e5484d) 8%, transparent); }
 .wp-ai-card-view__branch[data-change="same"] { opacity: 0.6; }
@@ -92,7 +92,7 @@ function actsOf(b: BranchView): Array<{ text: string; change?: string }> {
 .wp-ai-card-view__branch li[data-change="added"] .wp-ai-diff__mark { color: var(--wp-success, #30a46c); }
 .wp-ai-card-view__branch li[data-change="removed"] .wp-ai-diff__mark { color: var(--wp-danger, #e5484d); }
 .wp-ai-card-view__branch code { overflow-wrap: anywhere; }
-.wp-ai-card-view__kw { font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: color-mix(in oklab, var(--wp-warn) 22%, transparent); color: var(--wp-warn); white-space: nowrap; }
+.wp-ai-card-view__kw { font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: min(4px, var(--wp-radius-cap, 999px)); background: color-mix(in oklab, var(--wp-warn) 22%, transparent); color: var(--wp-warn); white-space: nowrap; }
 .wp-ai-deriv__mark { margin-right: 3px; }
 .wp-ai-card-view__branch[data-change="added"] .wp-ai-deriv__mark { color: var(--wp-success, #30a46c); }
 .wp-ai-card-view__branch[data-change="removed"] .wp-ai-deriv__mark { color: var(--wp-danger, #e5484d); }

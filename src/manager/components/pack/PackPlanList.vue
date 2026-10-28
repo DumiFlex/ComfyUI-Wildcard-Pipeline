@@ -212,12 +212,12 @@ async function addWithAi(): Promise<void> {
 .wp-pack-list { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
 .wp-pack-list__section {
   width: 100%; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; padding: 6px 4px; border: 0;
-  border-radius: 6px; background: none; color: var(--wp-text); font: inherit; cursor: pointer; text-align: left;
+  border-radius: min(6px, var(--wp-radius-cap, 999px)); background: none; color: var(--wp-text); font: inherit; cursor: pointer; text-align: left;
 }
 .wp-pack-list__section:hover { background: var(--wp-bg-2); }
 .wp-pack-list__section .pi { font-size: 11px; color: var(--wp-text-dim); }
 .wp-pack-list__section-name { font-size: 13px; font-weight: 600; }
-.wp-pack-list__count { font-size: 11px; padding: 0 6px; border-radius: 999px; background: var(--wp-bg-2); color: var(--wp-text-muted); }
+.wp-pack-list__count { font-size: 11px; padding: 0 6px; border-radius: var(--wp-radius-cap, 999px); background: var(--wp-bg-2); color: var(--wp-text-muted); }
 .wp-pack-list__section-about { flex-basis: 100%; padding-left: 36px; font-size: 12px; color: var(--wp-text-dim); }
 .wp-pack-list__items { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-direction: column; }
 .wp-pack-list__row { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; border-top: 1px solid var(--wp-border); min-width: 0; }
@@ -227,7 +227,7 @@ li[data-existing] .wp-pack-list__main { opacity: 0.7; cursor: default; }
 li[data-removed] .wp-pack-list__main { text-decoration: line-through; }
 .wp-pack-list__kind {
   flex: none; width: 84px; margin-top: 2px; text-align: center; font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
-  text-transform: uppercase; padding: 2px 0; border-radius: 4px;
+  text-transform: uppercase; padding: 2px 0; border-radius: min(4px, var(--wp-radius-cap, 999px));
   color: var(--wp-kind-wildcard); background: var(--wp-kind-wildcard-bg);
 }
 .wp-pack-list__kind[data-kind="fixed_values"] { color: var(--wp-kind-fixed); background: var(--wp-kind-fixed-bg); }
@@ -245,7 +245,7 @@ li[data-existing] .wp-pack-list__kind { color: var(--wp-text-muted); background:
 .wp-pack-list__name { font-size: 13px; overflow-wrap: anywhere; }
 .wp-pack-list__name code { color: var(--wp-kind-wildcard); font-size: 12px; }
 .wp-pack-list__change {
-  display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 0 6px; border-radius: 4px;
+  display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 0 6px; border-radius: min(4px, var(--wp-radius-cap, 999px));
   font-size: 10px; font-weight: 500; vertical-align: 1px; color: var(--wp-accent-text); border: 1px solid var(--wp-accent-400);
 }
 .wp-pack-list__change[data-change="new"] { color: var(--wp-success); border-color: color-mix(in srgb, var(--wp-success) 60%, transparent); }
@@ -257,20 +257,20 @@ li[data-existing] .wp-pack-list__kind { color: var(--wp-text-muted); background:
 }
 .wp-pack-list__main[aria-expanded="true"] .wp-pack-list__about { -webkit-line-clamp: unset; line-clamp: unset; }
 .wp-pack-list__meta { display: flex; flex-wrap: wrap; gap: 3px 8px; font-size: 11px; color: var(--wp-text-dim); overflow-wrap: anywhere; }
-.wp-pack-list__tag { padding: 0 6px; border-radius: 999px; background: var(--wp-bg-2); color: var(--wp-text-muted); }
+.wp-pack-list__tag { padding: 0 6px; border-radius: var(--wp-radius-cap, 999px); background: var(--wp-bg-2); color: var(--wp-text-muted); }
 .wp-pack-list__icon {
-  flex: none; width: 26px; height: 26px; border: 0; border-radius: 6px; background: none;
+  flex: none; width: 26px; height: 26px; border: 0; border-radius: min(6px, var(--wp-radius-cap, 999px)); background: none;
   color: var(--wp-text-dim); cursor: pointer;
 }
 .wp-pack-list__icon:hover { color: var(--wp-text); background: var(--wp-bg-2); }
 .wp-pack-list__add { margin-top: 4px; }
-.wp-pack-list__adder { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: 8px; background: var(--wp-bg-1); }
+.wp-pack-list__adder { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: min(8px, var(--wp-radius-cap, 999px)); background: var(--wp-bg-1); }
 .wp-pack-list__ask { display: flex; gap: 6px; }
 .wp-pack-list__ask input { flex: 1; min-width: 0; }
 .wp-pack-list__kinds { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .wp-pack-list__dim { font-size: 12px; color: var(--wp-text-dim); }
 .wp-pack-list__chip {
-  padding: 3px 9px; border-radius: 6px; font-size: 12px; cursor: pointer;
+  padding: 3px 9px; border-radius: min(6px, var(--wp-radius-cap, 999px)); font-size: 12px; cursor: pointer;
   border: 1px solid var(--wp-border); background: var(--wp-bg-2); color: var(--wp-text);
 }
 .wp-pack-list__cancel { border-style: dashed; color: var(--wp-text-muted); }

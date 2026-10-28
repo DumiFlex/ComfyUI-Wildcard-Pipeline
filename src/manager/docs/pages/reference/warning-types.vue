@@ -165,7 +165,7 @@ const scannerRules: WarningRow[] = [
   letter-spacing: 0.05em;
   text-transform: uppercase;
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   white-space: nowrap;
 }
 .wp-doc-warn-badge--warn {

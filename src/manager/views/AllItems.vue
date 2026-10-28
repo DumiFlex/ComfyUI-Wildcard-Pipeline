@@ -20,6 +20,7 @@
  * items array before handing it to ModuleListView gives us the OR
  * we actually want.
  */
+import Checkbox from "../components/ui/Checkbox.vue";
 import CopyButton from "@/components/shared/CopyButton.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { libraryVersion, markDeleted } from "../composables/useLibraryChanged";
@@ -446,19 +447,13 @@ function refresh() {
         </div>
         <div class="wp-field">
           <label class="wp-field__label">Favorites</label>
-          <button
-            type="button"
-            class="wp-input"
-            style="display:flex;align-items:center;gap:8px;justify-content:flex-start;"
-            @click="f.favorites = !f.favorites; emitFetch()"
-          >
-            <span class="wp-check" :data-checked="f.favorites ? 'true' : 'false'" aria-hidden="true">
-              <svg v-if="f.favorites" viewBox="0 0 12 12" fill="none" style="display:block">
-                <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </span>
-            <span>Favorites only</span>
-          </button>
+          <Checkbox
+            field
+            :model-value="!!f.favorites"
+            label="Favorites only"
+            data-test="favorites-filter"
+            @update:model-value="(v) => { f.favorites = v; emitFetch(); }"
+          />
         </div>
         <div class="wp-field wp-field--full">
           <label class="wp-field__label">
@@ -576,7 +571,7 @@ function refresh() {
 .wp-kind-cell {
   display: inline-flex; align-items: center; gap: 5px; /* audit-exempt: 5px matches icon+label optical balance */
   padding: 3px var(--wp-space-4); /* audit-exempt: 3px hairline vertical padding */
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: var(--wp-text-xs);
   font-weight: 500;
   /* Single-line — `Fixed Values` was wrapping onto a second line in

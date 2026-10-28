@@ -317,7 +317,7 @@ function close(): void {
   overflow: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--wp-border);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-1);
   box-shadow: inset 3px 0 0 var(--wp-accent-500);
 }
@@ -338,7 +338,7 @@ function close(): void {
   overflow: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--wp-border);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-1);
 }
 .wp-ai-fv__row {
@@ -361,7 +361,7 @@ function close(): void {
 .wp-ai-fv__badge {
   font-size: 10px;
   padding: 0 6px;
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   background: var(--wp-surface-2, rgba(127, 127, 127, 0.15));
   color: var(--wp-text-muted);
   text-transform: uppercase;
@@ -379,7 +379,7 @@ function close(): void {
 .wp-ai-txt { display: flex; flex-direction: column; gap: 8px; }
 .wp-ai-txt__part {
   border: 1px solid var(--wp-border);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-1);
   padding: 8px 10px;
   display: flex;
@@ -402,7 +402,7 @@ function close(): void {
   font-family: var(--wp-font-mono, monospace);
   font-size: 11px;
   padding: 0 7px;
-  border-radius: 10px;
+  border-radius: min(10px, var(--wp-radius-cap, 999px));
   border: 1px solid var(--wp-border);
   color: var(--wp-text-muted);
 }

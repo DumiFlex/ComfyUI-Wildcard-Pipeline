@@ -4,6 +4,7 @@ import Checkbox from "../../components/ui/Checkbox.vue";
 
 const picked = ref(true);
 const unpicked = ref(false);
+const favorites = ref(false);
 </script>
 
 <template>
@@ -12,4 +13,7 @@ const unpicked = ref(false);
   <Checkbox :model-value="false" indeterminate label="Some selected" />
   <Checkbox :model-value="true" disabled label="Disabled, ticked" />
   <Checkbox :model-value="false" disabled label="Disabled" />
+  <div style="width: 220px">
+    <Checkbox v-model="favorites" field label="Favorites only" />
+  </div>
 </template>

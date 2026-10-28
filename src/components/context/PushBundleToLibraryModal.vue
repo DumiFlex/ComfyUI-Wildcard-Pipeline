@@ -694,7 +694,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   background: var(--wp-bg-2, #15151f);
   color: var(--wp-text, #e7e7ee);
   border: 1px solid var(--wp-border, #2a2a3a);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   padding: 6px 8px;
   font-size: 13px;
   font-family: inherit;
@@ -707,7 +707,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   list-style: none;
   background: var(--wp-bg-2, #15151f);
   border: 1px solid var(--wp-border, #2a2a3a);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   font-size: 12px;
   max-height: 160px;
   overflow: auto;
@@ -740,7 +740,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   padding: 10px 12px;
   background: color-mix(in oklab, var(--wp-danger, #ef4444) 10%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 30%, transparent);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
 }
 .wp-ptl-cascade__toggle {
   display: flex; align-items: center; gap: 8px;
@@ -759,7 +759,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   margin: 0;
   padding: 4px 6px;
   background: var(--wp-bg-2, #15151f);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   font-size: 11.5px;
   max-height: 110px;
   overflow: auto;
@@ -784,7 +784,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 }
 .wp-ptl-note {
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   font-size: 12px;
 }
 .wp-ptl-note--danger {
@@ -800,7 +800,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 }
 .wp-ptl-relink {
   padding: 10px 12px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 8%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500, #6366f1) 30%, transparent);
   display: flex;
@@ -816,7 +816,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 }
 .wp-ptl-relink__cand {
   display: flex; align-items: baseline; gap: 8px;
-  padding: 5px 8px; border-radius: 4px; cursor: pointer;
+  padding: 5px 8px; border-radius: min(4px, var(--wp-radius-cap, 999px)); cursor: pointer;
 }
 .wp-ptl-relink__cand:hover { background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 16%, transparent); }
 .wp-ptl-relink__cand.is-picked { background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 28%, transparent); }
@@ -825,7 +825,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 .wp-ptl-relink__tag {
   margin-left: auto; flex-shrink: 0;
   font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
-  padding: 1px 6px; border-radius: 999px;
+  padding: 1px 6px; border-radius: var(--wp-radius-cap, 999px);
 }
 .wp-ptl-relink__tag.is-identical {
   color: var(--wp-green, #6ad28b);
@@ -838,7 +838,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 .wp-ptl-relink .wp-btn--primary { align-self: flex-start; }
 .wp-ptl-error {
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: color-mix(in oklab, var(--wp-danger, #ef4444) 14%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 32%, transparent);
   color: var(--wp-danger, #ef4444);

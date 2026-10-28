@@ -1127,7 +1127,7 @@ const importItemCount = computed<number>(() => {
   font-size: 9.5px;
   font-weight: 600;
   padding: 1px 6px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   letter-spacing: 0;
 }
 
@@ -1220,7 +1220,7 @@ const importItemCount = computed<number>(() => {
   font-family: var(--wp-font-mono);
   background: color-mix(in oklab, var(--wp-bg-1) 80%, transparent);
   padding: 1px 4px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   font-size: 10px;
 }
 
@@ -1272,7 +1272,7 @@ const importItemCount = computed<number>(() => {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 3px 6px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   flex-shrink: 0;
   white-space: nowrap;
 }

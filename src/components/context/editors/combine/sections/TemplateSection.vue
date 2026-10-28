@@ -475,7 +475,7 @@ function onResetNegative(): void {
   box-sizing: border-box;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 6px 8px;
   font: 11px/1.5 var(--wp-font-mono);
   color: var(--wp-text);
@@ -529,7 +529,7 @@ function onResetNegative(): void {
 .wp-tpl__preview {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px dashed var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 8px 10px;
   font: 11px/1.5 var(--wp-font-mono);
   color: var(--wp-text-muted, var(--wp-text2));
@@ -573,7 +573,7 @@ function onResetNegative(): void {
   font-weight: 600;
   background: color-mix(in srgb, currentColor 14%, transparent);
   padding: 0 3px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
 }
 .tpl-tok--var-unresolved {
   color: var(--wp-status-modified, #f59e0b);

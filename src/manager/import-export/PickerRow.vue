@@ -484,7 +484,7 @@ function onRowClick(ev: MouseEvent): void {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 3px 6px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   flex-shrink: 0;
   white-space: nowrap;
 }

@@ -37,8 +37,8 @@ defineProps<{ view: View; full?: boolean }>();
 .wp-ai-textdiff__rows { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; }
 .wp-ai-textdiff__rows dt { color: var(--wp-text-muted); }
 .wp-ai-textdiff__rows dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.wp-ai-textdiff__part[data-change="added"] { background: color-mix(in oklab, var(--wp-success, #30a46c) 22%, transparent); border-radius: 3px; }
-.wp-ai-textdiff__part[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger, #e5484d) 16%, transparent); border-radius: 3px; text-decoration: line-through; text-decoration-color: var(--wp-danger, #e5484d); opacity: 0.85; }
+.wp-ai-textdiff__part[data-change="added"] { background: color-mix(in oklab, var(--wp-success, #30a46c) 22%, transparent); border-radius: min(3px, var(--wp-radius-cap, 999px)); }
+.wp-ai-textdiff__part[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger, #e5484d) 16%, transparent); border-radius: min(3px, var(--wp-radius-cap, 999px)); text-decoration: line-through; text-decoration-color: var(--wp-danger, #e5484d); opacity: 0.85; }
 .wp-ai-textdiff__reads { margin: 0; font-size: 11.5px; color: var(--wp-text-muted); display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .wp-ai-textdiff__clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; line-clamp: 6; overflow: hidden; }
 </style>

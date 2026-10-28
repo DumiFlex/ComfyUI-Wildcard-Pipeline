@@ -250,7 +250,7 @@ async function submit(mode: "update" | "new") {
   background: var(--wp-bg-2, #15151f);
   color: var(--wp-text, #e7e7ee);
   border: 1px solid var(--wp-border, #2a2a3a);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   padding: 6px 8px;
   font-size: 13px;
   font-family: inherit;
@@ -263,7 +263,7 @@ async function submit(mode: "update" | "new") {
   padding: 8px 10px;
   background: var(--wp-bg-2, #15151f);
   border: 1px solid var(--wp-border, #2a2a3a);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   font-family: var(--wp-font-mono, monospace);
   font-size: 12px;
   white-space: pre-wrap;
@@ -283,7 +283,7 @@ async function submit(mode: "update" | "new") {
   padding: 7px 10px;
   background: color-mix(in srgb, var(--wp-accent) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--wp-accent) 35%, transparent);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   font-size: 11.5px;
   color: var(--wp-accent-text, var(--wp-text));
 }

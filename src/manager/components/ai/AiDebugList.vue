@@ -161,14 +161,14 @@ watch(() => aiDebugSent.value.length, () => {
   background: var(--wp-bg-2);
   color: var(--wp-text);
   border: 1px solid var(--wp-border);
-  border-radius: 10px;
+  border-radius: min(10px, var(--wp-radius-cap, 999px));
   box-shadow: var(--wp-shadow-md);
 }
 .wp-ai-debug__head { display: flex; align-items: center; gap: 8px; }
 .wp-ai-debug__title { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
 .wp-ai-debug__link {
   background: none; border: 0; color: var(--wp-text-muted); cursor: pointer;
-  font: inherit; font-size: 12px; padding: 2px 6px; border-radius: 4px;
+  font: inherit; font-size: 12px; padding: 2px 6px; border-radius: min(4px, var(--wp-radius-cap, 999px));
 }
 .wp-ai-debug__link:hover { color: var(--wp-text); }
 .wp-ai-debug__note, .wp-ai-debug__empty { margin: 0; font-size: 12px; color: var(--wp-text-muted); line-height: 1.45; }
@@ -176,7 +176,7 @@ watch(() => aiDebugSent.value.length, () => {
 .wp-ai-debug__error { margin: 0; font-size: 12px; color: var(--wp-danger-text); }
 .wp-ai-debug__rows { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 .wp-ai-debug__row {
-  display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 8px;
+  display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-radius: min(8px, var(--wp-radius-cap, 999px));
   border: 1px solid var(--wp-border);
   border-left-width: 3px;
 }

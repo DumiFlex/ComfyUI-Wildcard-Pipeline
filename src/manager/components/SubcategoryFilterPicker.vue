@@ -614,7 +614,7 @@ function onApply(): void {
   padding: 16px 18px;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-accent);
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   min-width: 400px;
   max-width: 540px;
 }
@@ -810,7 +810,7 @@ function onApply(): void {
 .wp-subcat-picker__bar {
   width: 52px;
   height: 3px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   background: color-mix(in oklab, var(--wp-text) 12%, transparent);
   overflow: hidden;
 }
@@ -903,7 +903,7 @@ function onApply(): void {
   align-items: center;
   gap: 3px; /* audit-exempt: glyph-to-word gap */
   padding: 0 4px; /* audit-exempt: micro tile padding */
-  border-radius: 3px; /* audit-exempt: tile below the radius scale */
+  border-radius: min(3px, var(--wp-radius-cap, 999px)); /* audit-exempt: tile below the radius scale */
   background: color-mix(in oklab, var(--wp-info) 15%, transparent);
   color: var(--wp-info);
   font-size: 10px; /* audit-exempt: micro annotation */
@@ -1025,7 +1025,7 @@ function onApply(): void {
 }
 .wp-subcat-chip {
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: min(10px, var(--wp-radius-cap, 999px));
   border: 1px solid var(--wp-border);
   background: transparent;
   color: var(--wp-text-muted, var(--wp-text2));
@@ -1064,7 +1064,7 @@ function onApply(): void {
   height: 24px;
   padding: 0 11px;
   font-size: 11px;
-  border-radius: 5px;
+  border-radius: min(5px, var(--wp-radius-cap, 999px));
 }
 /* Destructive action sits far left, separated from Skip/Apply on the right. */
 .wp-subcat-picker__delete {

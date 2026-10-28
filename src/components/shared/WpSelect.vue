@@ -76,7 +76,7 @@ function selected(o: { value: T }): boolean {
 .wp-cselect__field {
   flex: 1; min-width: 0; height: 100%; padding: 0 20px 0 7px; margin: 0;
   background: var(--wp-bg-deep, var(--wp-bg)); color: var(--wp-text);
-  border: 1px solid var(--wp-border); border-radius: 3px;
+  border: 1px solid var(--wp-border); border-radius: min(3px, var(--wp-radius-cap, 999px));
   font: inherit; cursor: pointer;
   appearance: none; -webkit-appearance: none; text-overflow: ellipsis;
 }

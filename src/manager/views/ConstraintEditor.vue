@@ -25,6 +25,7 @@ import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import Select from "../components/ui/Select.vue";
 import Checkbox from "../components/ui/Checkbox.vue";
+import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
 import ListFilter from "../components/ui/ListFilter.vue";
 import { constraintExceptionHaystack } from "../utils/listFilter";
 import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
@@ -1124,10 +1125,10 @@ function setExceptionMode(idx: number, mode: ConstraintMode) {
   ex.factor = MODE_DEFAULT_FACTOR[mode] ?? 1;
 }
 
-const REACH_MODES: Array<{ key: LibReachMode; label: string }> = [
-  { key: "first", label: "first" },
-  { key: "next", label: "next N" },
-  { key: "all", label: "all" },
+const REACH_MODES: SegmentedOption<LibReachMode>[] = [
+  { value: "first", label: "first" },
+  { value: "next", label: "next N" },
+  { value: "all", label: "all" },
 ];
 
 /** Switch reach mode. Entering `next` seeds `count` from the current
@@ -1475,18 +1476,13 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
            instance modal (TargetReachSection), not here. -->
       <div class="cn-reach">
         <div class="cn-reach-row">
-        <div class="cn-reach-seg" role="group" aria-label="Target reach mode">
-          <button
-            v-for="m in REACH_MODES"
-            :key="m.key"
-            type="button"
-            class="cn-reach-btn"
-            :class="{ active: targetSelect.mode === m.key }"
-            :aria-pressed="targetSelect.mode === m.key"
-            :data-test="`cn-reach-mode-${m.key}`"
-            @click="setReachMode(m.key)"
-          >{{ m.label }}</button>
-        </div>
+        <WpSegmented
+          :model-value="targetSelect.mode"
+          :options="REACH_MODES"
+          aria-label="Target reach mode"
+          test-prefix="cn-reach-mode"
+          @update:model-value="setReachMode"
+        />
         <WpNumber
           v-if="targetSelect.mode === 'next'"
           class="cn-reach-step"
@@ -1725,7 +1721,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
                 :data-test="`cn-ex-check-${idx}`"
                 @click="exBulkToggle(exUid(ex))"
               >
-                <svg v-if="exBulkIsSelected(exUid(ex))" viewBox="0 0 12 12" fill="none" style="display:block">
+                <svg v-if="exBulkIsSelected(exUid(ex))" viewBox="0 0 12 12" fill="none">
                   <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </button>
@@ -2083,7 +2079,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
   align-items: center;
   gap: 5px;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   font-size: var(--wp-text-xs);
   font-weight: 600;
   white-space: nowrap;
@@ -2110,32 +2106,6 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
   flex-direction: column;
   gap: var(--wp-space-3);
   align-items: flex-start;
-}
-.cn-reach-seg {
-  display: inline-flex;
-  align-items: stretch;
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius, 6px);
-  overflow: hidden;
-}
-.cn-reach-btn {
-  padding: 6px 14px;
-  border: 0;
-  border-right: 1px solid var(--wp-border);
-  background: transparent;
-  color: var(--wp-text-muted);
-  font-size: var(--wp-text-sm);
-  font-weight: 500;
-  cursor: pointer;
-}
-.cn-reach-btn:last-of-type { border-right: 0; }
-.cn-reach-btn:hover {
-  color: var(--wp-text);
-  background: color-mix(in srgb, var(--wp-text) 6%, transparent);
-}
-.cn-reach-btn.active {
-  background: var(--wp-accent);
-  color: #fff;
 }
 .cn-reach-row { display: flex; align-items: center; gap: var(--wp-space-3); }
 .cn-reach-step { width: 72px; }

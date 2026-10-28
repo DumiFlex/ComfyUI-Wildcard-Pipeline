@@ -133,7 +133,7 @@ const nameWidth = computed(() => {
 .wp-dbg-var-row__axis, .wp-dbg-var-row__tag {
   font-size: 10px;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-2, var(--wp-bg2));
   color: var(--wp-text-muted);
 }
@@ -154,5 +154,5 @@ const nameWidth = computed(() => {
 .wp-dbg-var-row__src:hover .wp-dbg-var-row__src-name { color: var(--wp-text); text-decoration: underline; }
 .wp-dbg-var-row__src-name { overflow: hidden; text-overflow: ellipsis; }
 .wp-dbg-var-row__src--upstream { cursor: default; font-style: italic; }
-.wp-dbg-kind-dot { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+.wp-dbg-kind-dot { width: 7px; height: 7px; border-radius: min(2px, var(--wp-radius-cap, 999px)); flex: none; }
 </style>

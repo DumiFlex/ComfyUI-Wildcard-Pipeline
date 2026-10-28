@@ -238,7 +238,7 @@ function onResetBinding(): void {
 .id__input {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 5px 8px;
   font: 11px var(--wp-font-mono);
   color: var(--wp-text);
@@ -280,7 +280,7 @@ function onResetBinding(): void {
   gap: 6px;
   padding: 5px 8px;
   font: 10px/1.4 var(--wp-font-sans);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .id__collision--warn {
   color: var(--wp-status-modified, #f59e0b);

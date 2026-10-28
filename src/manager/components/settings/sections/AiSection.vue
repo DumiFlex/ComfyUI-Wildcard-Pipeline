@@ -1624,7 +1624,7 @@ p.wp-ai-set__muted:has(.wp-ai-set__link) { padding: var(--wp-space-2) var(--wp-s
   flex: none; margin-left: auto; font-family: var(--wp-font-mono); font-size: 11px; color: var(--wp-text-muted); white-space: nowrap;
 }
 .wp-ai-set__tested {
-  flex: none; padding: 0 6px; font-size: 10px; font-weight: 600; line-height: 16px; border-radius: 999px;
+  flex: none; padding: 0 6px; font-size: 10px; font-weight: 600; line-height: 16px; border-radius: var(--wp-radius-cap, 999px);
   color: var(--wp-success); background: color-mix(in oklab, var(--wp-success) 14%, transparent);
 }
 </style>

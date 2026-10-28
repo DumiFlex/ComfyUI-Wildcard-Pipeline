@@ -100,7 +100,7 @@ const emit = defineEmits<{
   align-items: center;
   padding: 2px 7px;
   border: 1px dashed color-mix(in srgb, var(--wp-text-dim) 55%, transparent);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: transparent;
   color: var(--wp-text-dim);
   font-size: var(--wp-text-xs);
@@ -125,7 +125,7 @@ const emit = defineEmits<{
   gap: 4px;
   padding: 2px 4px 2px 8px;
   border: 1px solid color-mix(in srgb, var(--chip-hue) 45%, var(--wp-border));
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: color-mix(in srgb, var(--chip-hue) 12%, var(--wp-bg-1));
   color: var(--wp-text);
   font-size: var(--wp-text-xs);
@@ -141,7 +141,7 @@ const emit = defineEmits<{
   background: transparent;
   cursor: pointer;
   color: var(--wp-text-dim);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: 12px;
   line-height: 1;
 }

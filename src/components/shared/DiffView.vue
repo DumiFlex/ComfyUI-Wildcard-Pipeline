@@ -56,7 +56,7 @@ const counts = computed(() => ({
 .wp-diff[data-size="sm"] { font-size: var(--wp-text-xs); }
 .wp-diff[data-mono] { font-family: var(--wp-font-mono); }
 .wp-diff__text { white-space: pre-wrap; overflow-wrap: anywhere; }
-.wp-diff__del, .wp-diff__add { border-radius: 3px; padding: 0 1px; text-decoration-thickness: 1px; }
+.wp-diff__del, .wp-diff__add { border-radius: min(3px, var(--wp-radius-cap, 999px)); padding: 0 1px; text-decoration-thickness: 1px; }
 .wp-diff__del { background: color-mix(in srgb, var(--wp-danger) 16%, transparent); color: var(--wp-danger-text); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--wp-danger) 70%, transparent); }
 .wp-diff__add { background: color-mix(in srgb, var(--wp-success) 18%, transparent); color: var(--wp-text); text-decoration: none; box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--wp-success) 60%, transparent); }
 .wp-diff[data-by="lines"] .wp-diff__del, .wp-diff[data-by="lines"] .wp-diff__add { display: block; padding: 0 var(--wp-space-2); border-radius: 0; }

@@ -123,7 +123,7 @@ async function run(): Promise<void> {
 .wp-starter-btn__done .pi { font-size: 14px; }
 .wp-starter-btn__open {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 12px; border-radius: 999px;
+  padding: 6px 12px; border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-2); border: 1px solid var(--wp-border);
   color: var(--wp-text); font-size: 12px; text-decoration: none; cursor: pointer;
 }

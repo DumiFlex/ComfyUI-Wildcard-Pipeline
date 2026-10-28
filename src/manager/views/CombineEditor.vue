@@ -885,7 +885,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
 .cb-carries__item { display: inline-flex; align-items: baseline; gap: var(--wp-space-2); }
 .cb-carries__text {
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   color: var(--wp-danger);
   background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
 }

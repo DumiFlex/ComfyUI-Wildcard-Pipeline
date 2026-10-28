@@ -125,7 +125,7 @@ function onPaste(ev: ClipboardEvent): void {
 .wp-ai-images { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .wp-ai-images__zone {
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px; min-height: 44px;
-  border: 1px dashed var(--wp-border); border-radius: 8px; cursor: pointer; background: var(--wp-bg-1);
+  border: 1px dashed var(--wp-border); border-radius: min(8px, var(--wp-radius-cap, 999px)); cursor: pointer; background: var(--wp-bg-1);
 }
 .wp-ai-images[data-compact] .wp-ai-images__zone { padding: 5px; min-height: 34px; }
 .wp-ai-images__zone[data-over], .wp-ai-images__zone:focus-visible {
@@ -133,7 +133,7 @@ function onPaste(ev: ClipboardEvent): void {
   background: color-mix(in oklab, var(--wp-accent-500) 10%, var(--wp-bg-1));
 }
 .wp-ai-images__zone[aria-disabled="true"] { cursor: default; }
-.wp-ai-images__thumb { position: relative; width: 56px; height: 56px; border-radius: 6px; overflow: hidden; flex: none; }
+.wp-ai-images__thumb { position: relative; width: 56px; height: 56px; border-radius: min(6px, var(--wp-radius-cap, 999px)); overflow: hidden; flex: none; }
 .wp-ai-images[data-compact] .wp-ai-images__thumb { width: 40px; height: 40px; }
 .wp-ai-images__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .wp-ai-images__remove {
@@ -141,7 +141,7 @@ function onPaste(ev: ClipboardEvent): void {
   background: rgb(0 0 0 / 0.65); color: #fff; cursor: pointer; font-size: 9px; display: grid; place-items: center;
 }
 .wp-ai-images__num {
-  position: absolute; left: 2px; bottom: 2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+  position: absolute; left: 2px; bottom: 2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: min(8px, var(--wp-radius-cap, 999px));
   background: rgb(0 0 0 / 0.65); color: #fff; font-size: 10px; font-weight: 600; line-height: 16px; text-align: center;
 }
 .wp-ai-images__add { font-size: 12px; color: var(--wp-text-muted); display: inline-flex; gap: 6px; align-items: center; }

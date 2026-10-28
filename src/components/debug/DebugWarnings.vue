@@ -96,7 +96,7 @@ function ownerLabel(key: string | null): string {
 .wp-dbg-warn__detail {
   font-size: 10px;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: color-mix(in oklab, var(--wp-warn) 14%, transparent);
   color: var(--wp-warn);
 }
@@ -115,5 +115,5 @@ function ownerLabel(key: string | null): string {
 }
 .wp-dbg-warn__owner:hover { color: var(--wp-text); text-decoration: underline; }
 .wp-dbg-warn__msg { font-size: 11px; color: var(--wp-text-muted); word-break: break-word; }
-.wp-dbg-kind-dot { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+.wp-dbg-kind-dot { width: 7px; height: 7px; border-radius: min(2px, var(--wp-radius-cap, 999px)); flex: none; }
 </style>

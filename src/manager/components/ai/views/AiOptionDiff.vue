@@ -74,7 +74,7 @@ function shareMoved(r: OptionDiffRow): boolean {
 .wp-ai-optdiff { display: flex; flex-direction: column; gap: 6px; }
 .wp-ai-optdiff__head { margin: 0; font-size: 11.5px; color: var(--wp-text-muted); }
 .wp-ai-optdiff__rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.wp-ai-optdiff__rows > li { display: flex; gap: 6px; align-items: baseline; padding: 2px 6px 2px 2px; border-radius: 4px; }
+.wp-ai-optdiff__rows > li { display: flex; gap: 6px; align-items: baseline; padding: 2px 6px 2px 2px; border-radius: min(4px, var(--wp-radius-cap, 999px)); }
 .wp-ai-optdiff__rows > li[data-change="added"] { background: color-mix(in oklab, var(--wp-success, #30a46c) 9%, transparent); }
 .wp-ai-optdiff__rows > li[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger, #e5484d) 8%, transparent); }
 .wp-ai-optdiff__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }

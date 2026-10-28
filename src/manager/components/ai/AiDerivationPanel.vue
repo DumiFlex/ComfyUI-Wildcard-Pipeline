@@ -195,7 +195,7 @@ function close(): void {
 }
 .wp-ai-rules__rule {
   border: 1px solid var(--wp-border);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-1);
   padding: 8px 10px;
   box-shadow: inset 3px 0 0 var(--wp-accent-500);
@@ -209,7 +209,7 @@ function close(): void {
   margin-left: auto;
   font-size: 10px;
   padding: 0 6px;
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   background: var(--wp-surface-2, rgba(127, 127, 127, 0.15));
   color: var(--wp-text-muted);
   text-transform: uppercase;
@@ -224,7 +224,7 @@ function close(): void {
   top: 2px;
   bottom: 2px;
   width: 3px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   background: var(--wp-success);
 }
 .wp-ai-rules__lines > li[data-new="true"] .wp-ai-rules__lead { color: var(--wp-success); }

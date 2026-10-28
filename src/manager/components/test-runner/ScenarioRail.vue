@@ -221,7 +221,7 @@ function itemCount(row: ScenarioRow): string {
 .wp-trr__meta { font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wp-trr__pill {
   flex-shrink: 0; font: var(--wp-weight-medium) 10px/16px var(--wp-font-mono); /* audit-exempt: 10px pill text */
-  padding: 0 var(--wp-space-3); border-radius: 999px;
+  padding: 0 var(--wp-space-3); border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-4); color: var(--wp-text-muted);
 }
 .wp-trr__pill[data-tone="ok"] { background: color-mix(in oklab, var(--wp-success) 16%, transparent); color: var(--wp-success); }

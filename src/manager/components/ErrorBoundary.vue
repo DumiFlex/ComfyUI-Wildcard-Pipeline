@@ -97,13 +97,13 @@ watch(
   padding: 44px 32px;
   background: var(--wp-bg-2);
   border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 38%, var(--wp-border));
-  border-radius: 12px;
+  border-radius: min(12px, var(--wp-radius-cap, 999px));
 }
 .wp-error__icon {
   width: 52px;
   height: 52px;
   margin: 0 auto 16px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -130,7 +130,7 @@ watch(
   margin: 12px 0 0;
   padding: 12px 14px;
   background: var(--wp-bg-3);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: 11px;
   text-align: left;
@@ -161,6 +161,6 @@ watch(
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   background: var(--wp-bg-3);
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 </style>

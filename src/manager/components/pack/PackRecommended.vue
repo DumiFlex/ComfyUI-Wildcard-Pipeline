@@ -36,7 +36,7 @@ const emit = defineEmits<{ (e: "use"): void }>();
 .wp-pack-rec {
   display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
   margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--wp-border);
-  border-radius: 6px; background: var(--wp-bg-2);
+  border-radius: min(6px, var(--wp-radius-cap, 999px)); background: var(--wp-bg-2);
 }
 .wp-pack-rec__title { margin: 0; font-size: 12.5px; font-weight: 600; }
 .wp-pack-rec__title .pi { color: var(--wp-accent-text); margin-right: 4px; }

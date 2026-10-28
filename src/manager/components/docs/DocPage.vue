@@ -26,7 +26,7 @@ const props = defineProps<{ group: string; title: string; icon: string; tone: Do
 .wp-doc-page__crumb b { color: var(--wp-text-muted); font-weight: 500; }
 .wp-doc-page__hero { display: flex; align-items: center; gap: 16px; }
 .wp-doc-page__tile {
-  width: 52px; height: 52px; border-radius: 13px; display: grid; place-items: center; font-size: 22px;
+  width: 52px; height: 52px; border-radius: min(13px, var(--wp-radius-cap, 999px)); display: grid; place-items: center; font-size: 22px;
   color: var(--doc-tone);
   background: color-mix(in oklab, var(--doc-tone) 15%, transparent);
   border: 1px solid color-mix(in oklab, var(--doc-tone) 32%, transparent);
@@ -37,7 +37,7 @@ const props = defineProps<{ group: string; title: string; icon: string; tone: Do
   font-family: var(--wp-font-mono); font-size: 11px; color: var(--doc-tone);
   background: color-mix(in oklab, var(--doc-tone) 14%, transparent);
   border: 1px solid color-mix(in oklab, var(--doc-tone) 30%, transparent);
-  padding: 2px 8px; border-radius: 999px;
+  padding: 2px 8px; border-radius: var(--wp-radius-cap, 999px);
 }
 .wp-doc-page__blurb { color: var(--wp-text-muted); font-size: 13px; margin: 5px 0 0; max-width: 560px; }
 .wp-doc-page__body { display: flex; flex-direction: column; gap: var(--wp-space-7, 24px); }

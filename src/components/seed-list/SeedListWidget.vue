@@ -297,6 +297,6 @@ function toggleOverrideStrategy(): void {
 .wp-seedlist--bypassed { opacity: 0.65; }
 
 .wp-seedlist__seedbtn-fill { flex: 1; }
-.wp-seedlist__seedbtn-badge { font: 600 8px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: 3px; color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.14); border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent); }
+.wp-seedlist__seedbtn-badge { font: 600 8px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.14); border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent); }
 .wp-seedlist__seedbtn-chev { color: var(--wp-text-dim, var(--wp-text3)); }
 </style>

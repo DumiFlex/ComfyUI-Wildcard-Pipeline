@@ -143,7 +143,7 @@ watch(() => [ui.resolvedTheme, tweaks.accent, tweaks.customHex], () => window.se
 .wp-kit-type--mono { font-family: var(--wp-font-mono); font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 .wp-kit-space { display: flex; flex-direction: column; gap: var(--wp-space-2); }
 .wp-kit-space__row { display: flex; align-items: center; gap: var(--wp-space-4); }
-.wp-kit-space__bar { height: 12px; background: var(--wp-accent-500); border-radius: 2px; }
+.wp-kit-space__bar { height: 12px; background: var(--wp-accent-500); border-radius: min(2px, var(--wp-radius-cap, 999px)); }
 .wp-kit-radii { display: flex; gap: var(--wp-space-5); flex-wrap: wrap; margin-top: var(--wp-space-4); }
 .wp-kit-radii__box {
   width: 120px; height: 64px; display: grid; place-items: center;

@@ -184,7 +184,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: color-mix(in srgb, var(--wp-bg-1) 70%, transparent);
   color: var(--wp-text);
   border: 1px solid var(--wp-border);
@@ -258,7 +258,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   border: 1px solid var(--wp-border);
   background: var(--wp-bg-1);
   color: var(--wp-text);

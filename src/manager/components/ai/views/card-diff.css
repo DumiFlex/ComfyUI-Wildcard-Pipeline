@@ -10,7 +10,7 @@
 [data-change="changed"] > .wp-ai-diff__mark { color: var(--wp-warn); }
 [data-change="same"] { color: var(--wp-text-dim); }
 .wp-ai-diff__mark { width: 1em; flex: none; text-align: center; font-weight: 700; font-family: var(--wp-font-mono, ui-monospace, monospace); }
-.wp-ai-diff__chip { display: inline-flex; align-items: center; font-size: 11px; line-height: 1.5; padding: 0 6px; border-radius: 999px; background: var(--wp-bg-3); color: var(--wp-accent-400, var(--wp-accent-500)); }
+.wp-ai-diff__chip { display: inline-flex; align-items: center; font-size: 11px; line-height: 1.5; padding: 0 6px; border-radius: var(--wp-radius-cap, 999px); background: var(--wp-bg-3); color: var(--wp-accent-400, var(--wp-accent-500)); }
 .wp-ai-diff__chip[data-change="added"] { background: color-mix(in oklab, var(--wp-success, #30a46c) 20%, transparent); color: var(--wp-success, #30a46c); }
 .wp-ai-diff__chip[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger, #e5484d) 14%, transparent); color: var(--wp-danger, #e5484d); text-decoration: line-through; }
 .wp-ai-diff__new { font-size: 10.5px; color: var(--wp-success, #30a46c); margin-left: 4px; }

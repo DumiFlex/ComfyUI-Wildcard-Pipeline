@@ -358,7 +358,7 @@ function close(): void {
   overflow: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--wp-border);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-1);
 }
 .wp-ai-org__row {
@@ -385,7 +385,7 @@ function close(): void {
   font: inherit;
   font-size: 11px;
   padding: 1px 8px;
-  border-radius: 10px;
+  border-radius: min(10px, var(--wp-radius-cap, 999px));
   cursor: pointer;
   background: transparent;
   border: 1px solid color-mix(in oklab, var(--wp-success) 45%, transparent);

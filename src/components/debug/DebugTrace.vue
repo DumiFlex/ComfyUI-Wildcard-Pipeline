@@ -239,7 +239,7 @@ function groupTooltip(g: TraceGroup): string {
 .wp-dbg-group__title--codename {
   font: 600 10.5px/1.5 var(--wp-font-mono);
   padding: 0 7px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   border: 1px solid var(--wp-border);
 }
 .wp-dbg-group__focus {
@@ -309,7 +309,7 @@ function groupTooltip(g: TraceGroup): string {
 .wp-dbg-badge {
   font: 600 9px/1 var(--wp-font-mono);
   padding: 3px 5px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-2, var(--wp-bg2));
   color: var(--wp-text-dim);
   display: inline-flex;
@@ -323,7 +323,7 @@ function groupTooltip(g: TraceGroup): string {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 3px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-dim);
   background: var(--wp-bg-2, var(--wp-bg2));
 }

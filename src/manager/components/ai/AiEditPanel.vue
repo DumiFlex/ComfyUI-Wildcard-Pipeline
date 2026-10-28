@@ -287,7 +287,7 @@ function fmtWeight(w: number | undefined): string {
   overflow: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--wp-border);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-1);
 }
 .wp-ai-edit__row {
@@ -318,7 +318,7 @@ function fmtWeight(w: number | undefined): string {
 .wp-ai-edit__tag {
   font-size: 11px;
   padding: 0 7px;
-  border-radius: 10px;
+  border-radius: min(10px, var(--wp-radius-cap, 999px));
   border: 1px solid color-mix(in oklab, var(--wp-success) 45%, transparent);
   color: var(--wp-success);
 }

@@ -344,7 +344,7 @@ onMounted(() => {
   background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
   color: var(--wp-accent-text);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 30%, transparent);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: var(--wp-text-xs);
   font-family: var(--wp-font-mono);
 }

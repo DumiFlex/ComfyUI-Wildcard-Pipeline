@@ -38,6 +38,11 @@ import { LOOK_OPTIONS, PALETTE_OPTIONS } from "../../../stores/tweaksStore";
         Picking Compact also switches the sidebar to icons; you can switch it back with the Sidebar setting.
         Density stays its own setting and works with every look.
       </p>
+      <p>
+        A look reaches every page: in Terminal and TUI every corner is square, Crisp keeps them
+        nearly square, and lists, tabs, steps and checkboxes show what's selected the look's way
+        (TUI checkboxes read <code>[x]</code>).
+      </p>
     </DocSection>
 
     <DocSection title="Accent colour">
