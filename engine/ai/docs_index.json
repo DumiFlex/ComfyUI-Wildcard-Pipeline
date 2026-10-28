@@ -1749,6 +1749,52 @@
    ]
   },
   {
+   "id": "wp-label-grid",
+   "title": "WP Label & Grid",
+   "group": "nodes",
+   "blurb": "Put labels on images and lay them out in a labelled grid or XY plot.",
+   "keywords": [
+    "label",
+    "grid",
+    "xy",
+    "plot",
+    "compare",
+    "caption",
+    "text",
+    "contact sheet"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "Comparing runs side by side is easier when every image says what it is. WP Label & Grid writes a label on each image and, if you like, lays them all out in one grid with row and column headers. It takes whatever a workflow produces: one image, a batch, a list, or a Context Loop's frames of batches.\nGood for\n- Turning a sweep into an XY plot with headers\n- Stamping each image with its frame, seed or settings\n- One contact sheet of a whole loop\nBetter with something else\n- Picking images to keep: that is the WP Image Filter"
+    },
+    {
+     "title": "Set it up",
+     "text": "Figure: Wire the Image Filter's images and labels into the node. The labels name each frame's sweep options, so the grid can sort by them. Steps: WP Context Loop (a sweep) → frames → WP Image Filter (images + labels) → images, labels → WP Label & Grid (labelled grid). Flow diagram of three nodes left to right: WP Context Loop (a sweep), an arrow labelled frames, WP Image Filter (images + labels), an arrow labelled images, labels, and WP Label & Grid (labelled grid). Caption: wire the Image Filter's images and labels into the node; the labels name each frame's sweep options, so the grid can sort by them.\n- Wire your images into images. Labels are optional.\n- Pick where the label goes in the node's panel.\n- Run once. The panel says what came in and marks the grid preset that fits it; click Use it, or pick another preset.\nFigure: A 3 × 3 sweep with the XY plot preset: rows from label part 2, columns from label part 3, the cells keep their #N on a see-through band. Screenshot of a canvas with three nodes. On the left, Your images (a 3 × 3 sweep) sends images and labels into WP Label & Grid. Its panel reads 9 images · labelled · grid 1645×2246 at the top; under LABEL the text is {label}, placed below the image with Over image on, the default font at automatic size, white text on a see-through black band; under GRID the switch is on and the XY plot preset is picked from a row of presets (Fit the run, Sheet, Side by side, Frame rows, Frame columns, XY plot, No grid), with Rows from label part 2 (dawn, noon, night), Columns from label part 3 (pastel, vivid, ink) and the title Time of day × style. Its grid output feeds a Preview Image showing a 3 × 3 grid of mountain landscapes under that title, with column headers pastel, vivid, ink, row headers dawn, noon, night, and each cell labelled #1 to #9 on a band over its bottom edge."
+    },
+    {
+     "title": "Ports",
+     "text": "images\nOne image, a batch, a list, or a list of batches (a Context Loop's frames). Required.\nlabels\nOptional text, one entry per item and one line per image of its batch. One line covers the whole batch. The Image Filter's labels output fits straight in. One typed text with a line per image works too.\nimages (out)\nThe labelled images, in the shape they came in. A batch stays a batch.\ngrid (out)\nEvery image in one labelled grid. The node also shows it on the canvas, so it can end a branch."
+    },
+    {
+     "title": "Labels",
+     "text": "Text\nWhat each image shows. {label} is the incoming label (the default), {frame} and {image} count from 1 per input item, {index} counts across all images, {count} is how many there are. \\n breaks a line.\nPlace\nAbove, below, left or right adds a strip beside the image. Over image draws a see-through band over the top or bottom and keeps the size. The last button draws no label.\nFont and size\nYour system fonts plus any you drop into the extension's fonts folder; type to search. An empty size is automatic: a share of the image width, so labels read the same at 512 px and at 4K.\nColours\nClick a swatch for the colour square and a hex box. The strip or band also has an opacity, and None drops it.\nWithout a labels input the template still works: #{index} numbers every image."
+    },
+    {
+     "title": "Grid presets",
+     "text": "Images can come as one batch, a list, or a list of batches, and each wants a different grid. A preset sets the layout and headers in one click; change anything after.\nFit the run\nThe default. Follows what comes in: one batch fills a sheet, a few single images sit in one row, a list of batches gets one row per frame.\nSheet\nEvery image in turn, filled into a near-square sheet, or the columns you set.\nSide by side\nEvery image in one row, for comparing a few runs.\nFrame rows / Frame columns\nOne row (or column) per frame of a loop, its batch across. With the Image Filter's labels they are headed #1, #2, …\nXY plot\nRows and columns from the two label parts that vary, each part's values as headers.\nNo grid\nOnly label the images."
+    },
+    {
+     "title": "The grid",
+     "text": "Layout\nFit the run, one row or column per frame, fill rows (with a column count), all in one row, all in one column. Label-part headers set the layout themselves.\nRows, Columns\nNo headers, typed (one header per line in the box that opens), or a label part. The list shows what each part held on the last run.\nTitle, Spacing\nA line of text above the grid; the gap between cells, the edge around the grid, and the cell width (empty keeps image sizes, a number scales every cell to it).\nColours\nThe grid's background and the colour of headers and title. Reset puts spacing and these back.\nA label can hold parts joined by · . The Image Filter writes #3 · red · pencil: the frame, then the sweep options in the loop's order, then the image number when a frame has more than one. With Rows from label part 2 and Columns from label part 3 (what the XY plot preset picks here), every image lands under its options whatever order it came in, the options become the headers, and the cells keep just #3. Two images with the same options (another seed) repeat the row."
+    },
+    {
+     "title": "Good to know",
+     "text": "- Long labels wrap to the image width; past three lines they end with \"…\".\n- Images of different sizes are centred in the largest cell.\n- A font the machine doesn't have (a workflow from someone else) falls back to the default.\n- Grids are capped at 16384 px on the longest side. Use the cell width to keep them small.\n- Wire grid into a Save Image node to keep it."
+    }
+   ]
+  },
+  {
    "id": "wp-debug",
    "title": "WP Debug",
    "group": "nodes",
@@ -2294,7 +2340,7 @@
    "sections": [
     {
      "title": "What's in it",
-     "text": "- Tokens: the colours, type sizes, spacing and corners, with the value each has right now.\n- Actions (7): Things you press.\n- Inputs (17): Things you type into or pick from a list.\n- Choices (9): On or off, one of a few, which tab.\n- Display (16): Showing a thing: cards, chips, icons, empty pages.\n- Navigation (2): Moving through steps and pages.\n- Layout (5): Dividing, resizing and ordering space.\n- Feedback (8): Telling the user what happened or that something is busy.\n- Dialogs and menus (10): Anything that opens above the page.\n- Library pieces (8): Bigger parts built from the kit that several screens share. Reuse them before writing another.\n- Brand (1): The logo.\nPieces shared by the canvas and the manager (the node dialog, the right-click menu, popovers, tooltips, the search box, the number field, the toast, tabs, the segmented control, folding sections, banners, the copy and close buttons, the small row buttons, progress bars, loading shapes, badges, steps, pages, sliders, tag boxes, rename-in-place, file drop areas, reorderable lists, resizable panels, key caps, code blocks, label/value lists, type-to-filter dropdowns, date pickers, range sliders, radio choices, avatars, timelines, diffs, image grids with a full-screen viewer and long scrolling lists) are shown live too. Each of these is one component on both sides: the search box in a node picker and on a manager page is the same box, and so are the number fields, tabs and toasts. The canvas toast store is the one piece listed with how to use it instead of a live demo."
+     "text": "- Tokens: the colours, type sizes, spacing and corners, with the value each has right now.\n- Actions (7): Things you press.\n- Inputs (18): Things you type into or pick from a list.\n- Choices (9): On or off, one of a few, which tab.\n- Display (16): Showing a thing: cards, chips, icons, empty pages.\n- Navigation (2): Moving through steps and pages.\n- Layout (5): Dividing, resizing and ordering space.\n- Feedback (8): Telling the user what happened or that something is busy.\n- Dialogs and menus (10): Anything that opens above the page.\n- Library pieces (8): Bigger parts built from the kit that several screens share. Reuse them before writing another.\n- Brand (1): The logo.\nPieces shared by the canvas and the manager (the node dialog, the right-click menu, popovers, tooltips, the search box, the number field, the toast, tabs, the segmented control, folding sections, banners, the copy and close buttons, the small row buttons, progress bars, loading shapes, badges, steps, pages, sliders, tag boxes, rename-in-place, file drop areas, reorderable lists, resizable panels, key caps, code blocks, label/value lists, type-to-filter dropdowns, date pickers, range sliders, radio choices, avatars, timelines, diffs, image grids with a full-screen viewer and long scrolling lists) are shown live too. Each of these is one component on both sides: the search box in a node picker and on a manager page is the same box, and so are the number fields, tabs and toasts. The canvas toast store is the one piece listed with how to use it instead of a live demo."
     },
     {
      "title": "Reuse first",

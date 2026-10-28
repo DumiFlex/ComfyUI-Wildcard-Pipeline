@@ -15,6 +15,7 @@ const {
   cleanerMod,
   modelInfoMod,
   imageFilterWidgetMod,
+  labelGridMod,
   imageFilterMod,
   varPickerMod,
   ctxLoopMod,
@@ -123,6 +124,7 @@ type InjectorCreateNode = Parameters<typeof injMod.create>[0];
 type CleanerCreateNode = Parameters<typeof cleanerMod.create>[0];
 type ModelInfoCreateNode = Parameters<typeof modelInfoMod.create>[0];
 type ImageFilterCreateNode = Parameters<typeof imageFilterWidgetMod.create>[0];
+type LabelGridCreateNode = Parameters<typeof labelGridMod.create>[0];
 type VarPickerCreateNode = Parameters<typeof varPickerMod.create>[0];
 type CtxLoopCreateNode = Parameters<typeof ctxLoopMod.create>[0];
 type SeedListCreateNode = Parameters<typeof seedListMod.create>[0];
@@ -239,6 +241,8 @@ app.registerExtension({
         modelInfoMod.create(node, inputName),
       WP_IMAGE_FILTER: (node: ImageFilterCreateNode, inputName: string) =>
         imageFilterWidgetMod.create(node, inputName),
+      WP_LABEL_GRID: (node: LabelGridCreateNode, inputName: string) =>
+        labelGridMod.create(node, inputName),
       // The assembler's `template`. Unlike every other entry here, this key
       // is NOT the input's socket type — the socket stays STRING so links
       // still work, and the node ships `widgetType` in the input spec's

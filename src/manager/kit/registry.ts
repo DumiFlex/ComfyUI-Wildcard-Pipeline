@@ -141,6 +141,11 @@ export const KIT_ENTRIES: KitEntry[] = [
     use: "Pick a colour from presets, the HSV square or a typed hex, as categories do. The closed picker shows the swatch, the hex and a chevron (`compact`: swatch and chevron only, for a name row); the panel is a kit Popover.",
   },
   {
+    id: "color-field", name: "ColorField", group: "inputs", file: "src/components/shared/ColorField.vue", surfaces: ["canvas", "manager"],
+    use: "A small swatch with its hex that opens the colour square, a hex box and, with alpha, an opacity number; allow-none adds None. For a colour setting on a canvas widget (label text, a band behind it, a background). Writes #rrggbb, #rrggbbaa once see-through, or none.",
+    instead: "A text box for a hex code, or a native <input type=\"color\">, which has no opacity and looks different in every browser.",
+  },
+  {
     id: "hsv-picker", name: "HsvPicker", group: "inputs", file: "src/components/shared/HsvPicker.vue", surfaces: ["canvas", "manager"],
     use: "A full colour square and hue bar, for when presets are not enough.",
   },
@@ -475,6 +480,7 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "search-input": `<SearchInput v-model="query" placeholder="Search modules" :visible="shown.length" :total="rows.length" />`,
   "list-filter": `<ListFilter v-model="query" :total="rows.length" :visible="shown.length" noun="rules" test-prefix="rules" />`,
   "color-picker": `<ColorPicker v-model="color" aria-label="Category colour" />`,
+  "color-field": `<ColorField v-model="band" alpha allow-none size="sm" aria-label="Label band" />`,
   "hsv-picker": `<HsvPicker v-model="color" aria-label="Colour" />`,
   "checkbox": `<Checkbox v-model="picked" label="Include in bundle" />`,
   "wp-check": `<WpCheck v-model="on" aria-label="Hold" />`,
