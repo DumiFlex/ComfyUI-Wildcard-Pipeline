@@ -20,10 +20,22 @@ describe("MaskPainter brush ring", () => {
     // Centred on the pointer: (110 - 10) - 15, (70 - 20) - 15.
     expect(ring.attributes("style")).toContain("translate(85px, 35px)");
     expect(ring.classes()).not.toContain("is-eraser");
-    await w.setProps({ tool: "eraser", size: 50 });
+    expect(w.find('[data-test="image-filter-brush-soft"]').exists()).toBe(false);
+    await w.setProps({ erase: true, size: 50, hardness: 40 });
     expect(w.find('[data-test="image-filter-brush-ring"]').classes()).toContain("is-eraser");
     expect(w.find('[data-test="image-filter-brush-ring"]').attributes("style")).toContain("width: 50px");
+    // A soft brush shows where its solid middle ends.
+    expect(w.find('[data-test="image-filter-brush-soft"]').attributes("style")).toContain("width: 40%");
     await at(w, "pointerleave", 300, 70);
     expect(w.find('[data-test="image-filter-brush-ring"]').exists()).toBe(false);
+  });
+
+  it("the lasso and fill have a crosshair instead of the ring", async () => {
+    const w = mount(MaskPainter, { props: { src: "a.png", modelValue: "", tool: "lasso" } });
+    await at(w, "pointerenter", 60, 70);
+    expect(w.find('[data-test="image-filter-brush-ring"]').exists()).toBe(false);
+    expect(w.find("canvas").attributes("data-tool")).toBe("lasso");
+    await w.setProps({ tool: "fill" });
+    expect(w.find("canvas").classes()).toContain("is-fill");
   });
 });

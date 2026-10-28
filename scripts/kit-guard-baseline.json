@@ -3,17 +3,17 @@
     "native-select": 0,
     "native-number": 0,
     "native-checkbox": 0,
-    "native-range": 2,
+    "native-range": 1,
     "inline-svg": 25,
     "hand-dialog": 13,
     "manager-raw-button": 249,
-    "raw-hex": 840
+    "raw-hex": 839
   },
   "native-select": {},
   "native-number": {},
   "native-checkbox": {},
   "native-range": {
-    "src/components/image-filter/PickerModal.vue": 2
+    "src/components/image-filter/PickerModal.vue": 1
   },
   "inline-svg": {
     "src/components/context-loop/SweepModal.vue": 1,
@@ -175,7 +175,6 @@
     "src/components/debug/DebugVariables.vue": 1,
     "src/components/debug/DebugViewer.vue": 5,
     "src/components/debug/DebugWarnings.vue": 3,
-    "src/components/image-filter/MaskPainter.vue": 1,
     "src/components/image-filter/PickerHost.vue": 1,
     "src/components/image-filter/PickerTile.vue": 9,
     "src/components/image-filter/SweepGrid.vue": 1,

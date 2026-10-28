@@ -333,6 +333,31 @@ describe("PickerModal", () => {
     expect(w.find('[data-test="image-filter-mask-clear"]').exists()).toBe(true);
   });
 
+  it("the painter has Brush, Lasso and Fill, Paint or Erase (X), size keys, and arrows on a slider stay on it", async () => {
+    const w = mk(request([3]));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    await root.trigger("keydown", { key: "d" });
+    await root.trigger("keydown", { key: "m" });
+    for (const t of ["brush", "lasso", "fill"]) expect(w.find(`[data-test="image-filter-tool-${t}"]`).exists()).toBe(true);
+    const erase = () => w.find('[data-test="image-filter-paint-mode-erase"]').attributes("aria-checked");
+    expect(erase()).toBe("false");
+    await root.trigger("keydown", { key: "x" });
+    expect(erase()).toBe("true");
+    const size = () => w.find('[data-test="image-filter-brush-size"] [role="slider"]').attributes("aria-valuenow");
+    expect(size()).toBe("40");
+    await root.trigger("keydown", { key: "]" });
+    expect(size()).toBe("48");
+    await root.trigger("keydown", { key: "[" });
+    expect(size()).toBe("40");
+    // Arrow keys on a brush slider move the slider, not to the next image.
+    await w.find('[data-test="image-filter-brush-hardness"] [role="slider"]').trigger("keydown", { key: "ArrowLeft" });
+    expect(w.find('[data-test="image-filter-meta"]').text()).toContain("1 / 3");
+    expect(w.find('[data-test="image-filter-brush-hardness"] [role="slider"]').attributes("aria-valuenow")).toBe("95");
+    // Nothing painted yet: nothing to undo.
+    expect(w.find('[data-test="image-filter-mask-undo"]').attributes("disabled")).toBeDefined();
+  });
+
   it("the Mask tab previews a painted mask over the image or on its own", async () => {
     const mask = "data:image/png;base64,iVBORw0KGgo=";
     saveDraftEdits("tok", { "0:1": { mask } });

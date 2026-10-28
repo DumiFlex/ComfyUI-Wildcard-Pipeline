@@ -20,7 +20,8 @@ import WpSegmented, { type SegmentedOption } from "../shared/WpSegmented.vue";
 import WpImageZoom from "../shared/WpImageZoom.vue";
 import CopyButton from "../shared/CopyButton.vue";
 import InlineEdit from "../shared/InlineEdit.vue";
-import MaskPainter from "./MaskPainter.vue";
+import MaskPainter, { type MaskTool } from "./MaskPainter.vue";
+import Slider from "../shared/Slider.vue";
 import PickerTile from "./PickerTile.vue";
 import SweepGrid from "./SweepGrid.vue";
 import { pickKey, viewUrl, type Pick, type PickAnswer, type PickEdits, type ImageRef } from "./types";
@@ -253,9 +254,24 @@ function togglePin(): void {
 }
 
 const painting = ref(false);
-const tool = ref<"brush" | "eraser">("brush");
-const TOOL_OPTIONS: SegmentedOption<"brush" | "eraser">[] = [{ value: "brush", label: "Brush" }, { value: "eraser", label: "Eraser" }];
+const tool = ref<MaskTool>("brush");
+const TOOL_OPTIONS: SegmentedOption<MaskTool>[] = [
+  { value: "brush", label: "Brush", hint: "Paint with a round brush" },
+  { value: "lasso", label: "Lasso", hint: "Drag around an area to fill it" },
+  { value: "fill", label: "Fill", hint: "Click to fill the area under the pointer, up to the lines you painted" },
+];
+/** Paint or erase, for every tool (X swaps). */
+const paintMode = ref<"paint" | "erase">("paint");
+const PAINT_MODE_OPTIONS: SegmentedOption<"paint" | "erase">[] = [
+  { value: "paint", label: "Paint", hint: "Add to the mask" },
+  { value: "erase", label: "Erase", hint: "Take mask away (X swaps)" },
+];
 const brush = ref(40);
+/** Where the soft edge starts (100 = hard) and how much a stroke masks, in %. */
+const hardness = ref(100);
+const strength = ref(100);
+const pct = (v: number): string => `${v}%`;
+const px = (v: number): string => `${v} px`;
 const painter = ref<InstanceType<typeof MaskPainter> | null>(null);
 function togglePaint(): void {
   painting.value = !painting.value;
@@ -466,13 +482,16 @@ function onKey(ev: KeyboardEvent): void {
   if (target?.closest?.(".wp-inline-edit")) return;
   const plain = !ev.ctrlKey && !ev.metaKey && !ev.altKey;
   const key = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key;
-  // A focused button keeps Space, and a focused switch (mode, tile size) its arrow keys.
+  // A focused button keeps Space, and a focused switch (mode, tile size) or slider (brush) its arrow keys.
   if (key === " " && tag === "BUTTON") return;
-  if (key.startsWith("Arrow") && target?.closest?.('[role="radiogroup"]')) return;
+  if (key.startsWith("Arrow") && target?.closest?.('[role="radiogroup"], [role="slider"]')) return;
   const one = mode.value !== "grid";
   const act = ((): (() => void) | null => {
     if (key === "Enter") return keepPicked;
     if (key === "a" && (ev.ctrlKey || ev.metaKey)) return toggleAll;
+    if (painting.value && (ev.ctrlKey || ev.metaKey) && (key === "z" || key === "y")) {
+      return (key === "y" || ev.shiftKey) ? () => painter.value?.redo() : () => painter.value?.undo();
+    }
     if (!plain) return null;
     if (key === "g") return () => setMode("grid");
     if (key === "d") return () => setMode("detail");
@@ -487,6 +506,9 @@ function onKey(ev: KeyboardEvent): void {
     if (mode.value === "grid" && key === "f" && !showTable.value) return () => { tile.value = tile.value === "fit" ? "m" : "fit"; };
     if (one && key === "c") return togglePin;
     if (mode.value === "detail" && key === "m") return togglePaint;
+    if (painting.value && key === "x") return () => { paintMode.value = paintMode.value === "erase" ? "paint" : "erase"; };
+    if (painting.value && key === "[") return () => { brush.value = Math.max(4, Math.round(brush.value / 1.2)); };
+    if (painting.value && key === "]") return () => { brush.value = Math.min(240, Math.round(brush.value * 1.2)); };
     if (mode.value === "zoom" && (key === "+" || key === "=")) return () => viewer.value?.zoomIn();
     if (mode.value === "zoom" && (key === "-" || key === "_")) return () => viewer.value?.zoomOut();
     if (mode.value === "zoom" && key === "f") return () => viewer.value?.toggleFullscreen();
@@ -645,7 +667,10 @@ const subLine = computed(() => {
                 :src="viewUrl(cell.ref)"
                 :model-value="maskValue"
                 :tool="tool"
+                :erase="paintMode === 'erase'"
                 :size="brush"
+                :hardness="hardness"
+                :strength="strength"
                 @update:model-value="setMask"
               />
               <div v-else-if="compareCell" class="wp-ifp__compare" data-test="image-filter-compare">
@@ -840,12 +865,22 @@ const subLine = computed(() => {
             </div>
             <template v-if="painting">
               <WpSegmented v-model="tool" :options="TOOL_OPTIONS" size="sm" block aria-label="Tool" test-prefix="image-filter-tool" />
-              <label class="wp-ifp__size">Size <input v-model.number="brush" type="range" min="4" max="160"> <span>{{ brush }}</span></label>
+              <WpSegmented v-model="paintMode" :options="PAINT_MODE_OPTIONS" size="sm" block aria-label="Paint or erase" test-prefix="image-filter-paint-mode" />
+              <div class="wp-ifp__brush" data-test="image-filter-brush">
+                <span class="wp-ifp__brush-name">Size</span>
+                <Slider v-model="brush" :min="4" :max="240" size="sm" aria-label="Brush size" :format="px" show-value data-test="image-filter-brush-size" />
+                <span class="wp-ifp__brush-name">Hardness</span>
+                <Slider v-model="hardness" :min="0" :max="100" :step="5" size="sm" aria-label="Hardness" :format="pct" show-value data-test="image-filter-brush-hardness" />
+                <span class="wp-ifp__brush-name">Strength</span>
+                <Slider v-model="strength" :min="5" :max="100" :step="5" size="sm" aria-label="Strength" :format="pct" show-value data-test="image-filter-brush-strength" />
+              </div>
               <div class="wp-ifp__row">
+                <WpButton variant="ghost" icon="pi-undo" kbd="Ctrl Z" hint="Undo" aria-label="Undo" :disabled="!painter?.canUndo" data-test="image-filter-mask-undo" @click="painter?.undo()" />
+                <WpButton variant="ghost" icon="pi-refresh" kbd="Ctrl Shift Z" hint="Redo" aria-label="Redo" :disabled="!painter?.canRedo" data-test="image-filter-mask-redo" @click="painter?.redo()" />
                 <WpButton variant="ghost" @click="painter?.invert()">Invert</WpButton>
                 <WpButton variant="ghost" data-test="image-filter-mask-clear" @click="painter?.clear()">Clear</WpButton>
               </div>
-              <p class="wp-ifp__hint">Images you don't paint keep the incoming mask.</p>
+              <p class="wp-ifp__hint">Hardness softens the edge of the brush, lasso and fill; Strength masks part-way (inpainting changes those parts less). [ ] change the size. Images you don't paint keep the incoming mask.</p>
             </template>
             <template v-else-if="maskValue">
               <WpSegmented v-model="maskView" :options="MASK_VIEW_OPTIONS" size="sm" aria-label="Mask preview" test-prefix="image-filter-mask-view" />
@@ -1051,9 +1086,8 @@ const subLine = computed(() => {
 .wp-ifp__text:focus { outline: none; border-color: var(--wp-accent); }
 .wp-ifp__hint { margin: 0; font: 11px/1.4 var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-ifp__warn { margin: 0; font: 11px/1.4 var(--wp-font-sans); color: var(--wp-amber); }
-.wp-ifp__size { display: flex; align-items: center; gap: 6px; font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
-.wp-ifp__size input { flex: 1; accent-color: var(--wp-accent); }
-.wp-ifp__size span { width: 26px; text-align: right; font-family: var(--wp-font-mono, monospace); }
+.wp-ifp__brush { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 10px; }
+.wp-ifp__brush-name { font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-ifp__row { display: flex; gap: 6px; }
 
 /* Zoom */
