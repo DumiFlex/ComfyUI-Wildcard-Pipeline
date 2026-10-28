@@ -6,7 +6,7 @@ Every custom control in the extension follows these rules. The component kit (Se
 
 | Folder | What goes there |
 |---|---|
-| `src/components/shared/` | Pieces the canvas uses, and pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`), controls (`SearchInput`, `WpNumber`, `WpCheck`, `WpSelect`, `WpButton`, `WpSwitch`, `WpTabs`, `WpSegmented`, `Disclosure`, `Banner`, `CopyButton`, `CloseButton`, `Slider`, `TagInput`, `InlineEdit`, `DropZone`, `Toolbar`, `Combobox`, `DatePicker`, `RangeSlider`, `RadioGroup`), display and layout pieces (`Badge`, `Kbd`, `DescriptionList`, `CodeBlock`, `Separator`, `Stepper`, `Pagination`, `ResizeHandle`, `SplitPane`, `SortableList`, `Avatar`, `Timeline`, `DiffView`, `ImageGrid`, `VirtualList`, `VisuallyHidden`), the `Lightbox` overlay, feedback (`ProgressBar`, `Skeleton`) and the toast look (`ToastCard`). |
+| `src/components/shared/` | Pieces the canvas uses, and pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`), controls (`SearchInput`, `WpNumber`, `WpCheck`, `WpSelect`, `WpButton`, `WpIconButton`, `WpSwitch`, `WpTabs`, `WpSegmented`, `Disclosure`, `Banner`, `CopyButton`, `CloseButton`, `Slider`, `TagInput`, `InlineEdit`, `DropZone`, `Toolbar`, `Combobox`, `DatePicker`, `RangeSlider`, `RadioGroup`), display and layout pieces (`Badge`, `Kbd`, `DescriptionList`, `CodeBlock`, `Separator`, `Stepper`, `Pagination`, `ResizeHandle`, `SplitPane`, `SortableList`, `Avatar`, `Timeline`, `DiffView`, `ImageGrid`, `VirtualList`, `VisuallyHidden`), the `Lightbox` overlay, feedback (`ProgressBar`, `Skeleton`) and the toast look (`ToastCard`). |
 | `src/manager/components/ui/` | Manager-only controls: `Button`, `Input`, `Select`, `Modal`, `ConfirmModal`, `Drawer`, `DataTable`, `ChoiceCards` and the rest. |
 
 A component anywhere else is a part of one screen, not a control. If a second screen needs it, move it into a kit folder first.
@@ -45,6 +45,7 @@ Don't add synonyms such as `kind`, `small`, `busy` or `visible` for these meanin
 - The canvas defaults to `sm`, the manager to `md`.
 - Button, Input, Select and WpNumber are on it (`size` sm/md/lg). The manager's Density setting scales all three heights together through `--wp-density`. `SearchInput` takes `size` on the scale too (canvas `sm`, manager forms `md`).
 - Hit targets are at least 20 px on the canvas and 24 px in the manager. An icon inside a chip may draw smaller, but its click area must not be.
+- The one control below the scale is `WpIconButton`, the 20 px icon button inside a canvas row, where 24 px does not fit.
 
 ## 5. Tokens only
 
@@ -97,7 +98,13 @@ When the canvas needs its own version of a manager control (Button, Switch, Sele
 
 Better still is one component for both sides, with only `size` changing. `WpSwitch` is the on/off switch everywhere (the manager's `Toggle` is `WpSwitch` at `md`), and `WpTabs` and `WpSegmented` are the tabs and value pickers everywhere. A canvas widget never draws its own `role="switch"`, tab strip or joined-button group.
 
-`WpButton` is the canvas Button: the manager `Button`'s variants, sizes and `button.css`, pulled in scoped (so the 20 px row icon buttons, `.wp-btn--icon-sm` in `row-primitives.css`, keep their own tone classes), with a PrimeIcons `icon` and `sm` by default. Every canvas dialog footer and toolbar button is a `WpButton`; never another `__btn` class with its own colours. Every checkmark box is `WpCheck`, including the 12 px on/off box of module, bundle and injector rows (`size="sm"`). The Settings live preview (`components/settings/`) uses the same pieces as the nodes it previews.
+`WpButton` is the canvas Button: the manager `Button`'s variants, sizes and `button.css`, pulled in scoped, with a PrimeIcons `icon` and `sm` by default. Every canvas dialog footer, toolbar, reset, retry and launcher button is a `WpButton`; never another `__btn` class with its own colours. Both buttons also have:
+
+- `variant="add"`: the dashed "Add a row" button at the end of a list, with `block` for full width.
+- `pressed`: a toggle (`aria-pressed`), such as "favourites only" or a filter panel trigger.
+- `tip` (WpButton): a hint. Don't put `v-tooltip` on the component, which would fight the button's own.
+
+Inside a row (module, injector, bundle and Model Info rows, the Context toolbar), the icon actions are `WpIconButton`: 20 px, a `tone` that tints the icon on hover and the box while `pressed`, `pressed="mixed"` for a bundle's "some children" state, and `variant="bare"` for the fold caret. Every × that closes a canvas dialog is `CloseButton size="sm"`. Every checkmark box is `WpCheck`, including the 12 px on/off box of module, bundle and injector rows (`size="sm"`). The Settings live preview (`components/settings/`) uses the same pieces as the nodes it previews.
 
 ## 9. Isolation
 
