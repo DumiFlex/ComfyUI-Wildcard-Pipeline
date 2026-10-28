@@ -9,6 +9,7 @@ import {
   applyDisplayPrefs,
   watchA11ySystemPrefs,
   buildSettings,
+  buildSwitch,
   getCollapsedByDefault,
   installDebugHelpers,
   markBootCompleted,
@@ -1005,5 +1006,48 @@ describe("settings catalog matches the registered settings", () => {
       expect(reg?.tooltip).toBe(meta.tooltip);
       expect(reg?.options).toEqual(meta.options);
     }
+  });
+});
+
+// The autocomplete rows draw their own switch (they carry a count). It has to
+// look like ComfyUI's native one: same 40x24 box, 36x20 track, 16px thumb,
+// 14px travel, and the frontend's own colour tokens.
+describe("buildSwitch — native look", () => {
+  it("reads the native Switch geometry and theme tokens", () => {
+    const { root } = buildSwitch(false);
+    const track = root.firstElementChild as HTMLElement;
+    const thumb = track.firstElementChild as HTMLElement;
+    expect(root.getAttribute("role")).toBe("switch");
+    expect([root.style.width, root.style.height]).toEqual(["40px", "24px"]);
+    expect([track.style.width, track.style.height]).toEqual(["36px", "20px"]);
+    expect([thumb.style.width, thumb.style.height]).toEqual(["16px", "16px"]);
+    expect(track.style.background).toContain("--border-default");
+    expect(thumb.style.background).toContain("--base-background");
+  });
+
+  it("slides the thumb 14px and paints the primary track when on", () => {
+    const { root } = buildSwitch(false);
+    const track = root.firstElementChild as HTMLElement;
+    const thumb = track.firstElementChild as HTMLElement;
+    const seen: boolean[] = [];
+    root.addEventListener("wp-switch", (e) => seen.push((e as CustomEvent<boolean>).detail));
+    root.click();
+    expect(root.getAttribute("aria-checked")).toBe("true");
+    expect(root.dataset.state).toBe("checked");
+    expect(track.style.background).toContain("--primary-background");
+    expect(thumb.style.transform).toBe("translateX(14px)");
+    root.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
+    expect(seen).toEqual([true, false]);
+  });
+
+  it("ignores clicks while disabled and dims like the native one", () => {
+    const { root, setDisabled } = buildSwitch(true);
+    setDisabled(true);
+    const seen: boolean[] = [];
+    root.addEventListener("wp-switch", (e) => seen.push((e as CustomEvent<boolean>).detail));
+    root.click();
+    expect(seen).toEqual([]);
+    expect(root.getAttribute("aria-disabled")).toBe("true");
+    expect(root.style.opacity).toBe("0.5");
   });
 });

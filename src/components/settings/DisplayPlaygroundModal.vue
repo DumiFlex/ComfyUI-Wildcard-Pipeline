@@ -40,6 +40,8 @@ import WpCheck from "@/components/shared/WpCheck.vue";
 import WpSelect from "@/components/shared/WpSelect.vue";
 import WpButton from "@/components/shared/WpButton.vue";
 import CloseButton from "@/components/shared/CloseButton.vue";
+import { useDialogFocus } from "@/components/shared/useDialogFocus";
+import { useHostDialogGuard } from "@/components/shared/useHostDialogGuard";
 
 type Density = "comfortable" | "compact" | "minimal";
 type Decoration = "full" | "minimal" | "off";
@@ -236,13 +238,14 @@ function onClose(): void {
   closePlayground();
 }
 
-function onKeydown(ev: KeyboardEvent): void {
-  if (!playgroundOpen.value) return;
-  if (ev.key === "Escape") {
-    ev.preventDefault();
-    closePlayground();
-  }
-}
+// The playground opens from ComfyUI's Settings dialog, which stays open
+// underneath. useDialogFocus moves focus in, keeps Tab inside and closes on
+// Escape; the host guard stops the Settings dialog from swallowing clicks,
+// pulling focus back or closing along with us.
+const overlayEl = ref<HTMLElement | null>(null);
+const panelEl = ref<HTMLElement | null>(null);
+useDialogFocus(panelEl, () => playgroundOpen.value, { onEscape: closePlayground });
+useHostDialogGuard(overlayEl, () => playgroundOpen.value);
 
 function onOpenChange(open: boolean): void {
   if (open) {
@@ -252,12 +255,10 @@ function onOpenChange(open: boolean): void {
     // this, refs hold whatever they were when the modal last
     // closed and the user sees stale values.
     syncFromStore();
-    window.addEventListener("keydown", onKeydown);
     // Lock body scroll while the modal is open — same pattern as
     // ModalShell uses for ModuleEditModal / ModulePickerModal.
     document.body.style.overflow = "hidden";
   } else {
-    window.removeEventListener("keydown", onKeydown);
     document.body.style.overflow = "";
   }
 }
@@ -271,7 +272,6 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("keydown", onKeydown);
   document.body.style.overflow = "";
 });
 </script>
@@ -280,13 +280,16 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div
       v-if="playgroundOpen"
+      ref="overlayEl"
       class="wp-pg-overlay"
       data-test="playground-overlay"
       @click.self="onClose"
     >
       <section
+        ref="panelEl"
         class="wp-pg"
         role="dialog"
+        tabindex="-1"
         aria-modal="true"
         aria-labelledby="wp-pg-title"
       >
@@ -522,6 +525,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   color: var(--wp-text);
+  outline: none;
 }
 .wp-pg__head {
   display: flex;
