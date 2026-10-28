@@ -2,7 +2,7 @@ import { beforeEach, describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import PickerModal from "./PickerModal.vue";
 import { _resetImageFilterForTests, type WaitingRequest } from "../../extension/image-filter";
-import { dropDraftEdits } from "./picker-state";
+import { dropDraftEdits, saveDraftEdits } from "./picker-state";
 
 const ref = (n: string) => ({ filename: `${n}.png`, subfolder: "", type: "temp" });
 
@@ -51,7 +51,7 @@ describe("PickerModal", () => {
     await w.find('[data-test="image-filter-tile-0-1"]').trigger("click");
     expect(w.find('[data-test="image-filter-status"]').text()).toContain("2 of 4 picked");
     await keep.trigger("click");
-    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[0, 1], [0, 3]] });
+    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[0, 1], [0, 3]], labels: { "0:1": "#1 · 2", "0:3": "#1 · 4" } });
   });
 
   it("clicking a frame opens Detail on its first image; clicking an image only picks it", async () => {
@@ -99,14 +99,17 @@ describe("PickerModal", () => {
     expect(w.find('[data-test="image-filter-frame-1"]').text()).toContain("2 of 2");
     expect(w.find('[data-test="image-filter-pick-frame-1"]').text()).toBe("Clear frame");
     await w.find('[data-test="image-filter-keep-picked"]').trigger("click");
-    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[1, 0], [1, 1]] });
+    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[1, 0], [1, 1]], labels: { "1:0": "#2 · 1", "1:1": "#2 · 2" } });
   });
 
   it("keep all and stop branch answer directly", async () => {
     const w = mk(request([3]));
     await w.find('[data-test="image-filter-keep-all"]').trigger("click");
     await w.find('[data-test="image-filter-stop"]').trigger("click");
-    expect(w.emitted("answer")).toEqual([[{ action: "keep_all" }], [{ action: "stop" }]]);
+    expect(w.emitted("answer")).toEqual([
+      [{ action: "keep_all", labels: { "0:0": "#1 · 1", "0:1": "#1 · 2", "0:2": "#1 · 3" } }],
+      [{ action: "stop" }],
+    ]);
   });
 
   it("Space picks the hovered image in Grid; D opens it; arrows move, P picks; Escape steps back a mode", async () => {
@@ -132,7 +135,7 @@ describe("PickerModal", () => {
     await root.trigger("keydown", { key: "Escape" });
     expect(w.emitted("minimize")).toHaveLength(1);
     await root.trigger("keydown", { key: "Enter" });
-    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[0, 1], [0, 2]] });
+    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[0, 1], [0, 2]], labels: { "0:1": "#1 · 2", "0:2": "#1 · 3" } });
   });
 
   it("the strip in Detail jumps to an image; double-clicking it opens Zoom", async () => {
@@ -226,6 +229,7 @@ describe("PickerModal", () => {
       action: "picks",
       picks: [[0, 0]],
       edits: { "0:0": { positive: "a dog" } },
+      labels: { "0:0": "#1 · 1" },
     });
   });
 
@@ -239,7 +243,53 @@ describe("PickerModal", () => {
     await pos.setValue("a cat");
     await pos.setValue("y");
     await w.find('[data-test="image-filter-keep-all"]').trigger("click");
-    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "keep_all", edits: { "0:0": { positive: "y" } } });
+    expect(w.emitted("answer")?.[0]?.[0]).toEqual({
+      action: "keep_all",
+      edits: { "0:0": { positive: "y" } },
+      labels: { "0:0": "#1 · 1", "0:1": "#1 · 2" },
+    });
+  });
+
+  it("every image has a label under its tile and in Detail; a rename goes out, clearing it brings the default back", async () => {
+    const w = mk(request([2, 1], { labels: [{ loop_index: 4 }, { loop_index: 5 }] }));
+    expect(w.find('[data-test="image-filter-tile-label-0-1"]').text()).toBe("#5 · 2");
+    // A frame with one image carries no image number.
+    expect(w.find('[data-test="image-filter-tile-label-1-0"]').text()).toBe("#6");
+    await w.find('[data-test="image-filter-tile-label-0-1"] button').trigger("click");
+    const box = w.find('[data-test="image-filter-tile-label-0-1"] input');
+    await box.setValue("  hero   shot ");
+    await box.trigger("keydown", { key: "Enter" });
+    // The rename box keeps Enter: nothing was answered.
+    expect(w.emitted("answer")).toBeUndefined();
+    expect(w.find('[data-test="image-filter-tile-label-0-1"]').text()).toBe("hero shot");
+    // Renaming doesn't open Detail (the frame around the tile does).
+    expect(w.find('[data-test="image-filter-detail"]').exists()).toBe(false);
+    await w.find('[data-test="image-filter-tile-0-1"]').trigger("click");
+    await w.find('[data-test="image-filter-mode-detail"]').trigger("click");
+    expect(w.find('[data-test="image-filter-label"]').text()).toBe("hero shot");
+    await w.find('[data-test="image-filter-keep-picked"]').trigger("click");
+    // A label alone is not a refine: it rides `labels`, never `edits`.
+    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[0, 1]], labels: { "0:1": "hero shot" } });
+  });
+
+  it("clearing a label in Detail goes back to the default", async () => {
+    const w = mk(request([2]));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    await root.trigger("keydown", { key: "d" });
+    const label = () => w.find('[data-test="image-filter-label"]');
+    expect(label().text()).toBe("#1 · 1");
+    await label().find("button").trigger("click");
+    await label().find("input").setValue("first");
+    await label().find("input").trigger("keydown", { key: "Enter" });
+    expect(label().text()).toBe("first");
+    expect(w.text()).not.toContain("refined");
+    await label().find("button").trigger("click");
+    await label().find("input").setValue("");
+    await label().find("input").trigger("keydown", { key: "Enter" });
+    expect(label().text()).toBe("#1 · 1");
+    await w.find('[data-test="image-filter-keep-all"]').trigger("click");
+    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "keep_all", labels: { "0:0": "#1 · 1", "0:1": "#1 · 2" } });
   });
 
   it("shows only the prompt fields that are wired, and warns without a CLIP", async () => {
@@ -281,6 +331,24 @@ describe("PickerModal", () => {
     await root.trigger("keydown", { key: "m" });
     expect(w.find('[data-test="image-filter-mask"]').exists()).toBe(true);
     expect(w.find('[data-test="image-filter-mask-clear"]').exists()).toBe(true);
+  });
+
+  it("the Mask tab previews a painted mask over the image or on its own", async () => {
+    const mask = "data:image/png;base64,iVBORw0KGgo=";
+    saveDraftEdits("tok", { "0:1": { mask } });
+    const w = mk(request([2]));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    await root.trigger("keydown", { key: "d" });
+    await w.find('[data-test="image-filter-tab-mask"]').trigger("click");
+    expect(w.find('[data-test="image-filter-mask-empty"]').exists()).toBe(true);
+    expect(w.find('[data-test="image-filter-mask-preview"]').exists()).toBe(false);
+    await root.trigger("keydown", { key: "ArrowRight" });
+    const preview = w.find('[data-test="image-filter-mask-preview"]');
+    expect(preview.classes()).toContain("is-over");
+    expect(preview.find(".wp-ifp__mask-layer").attributes("style")).toContain(mask);
+    await w.find('[data-test="image-filter-mask-view-only"]').trigger("click");
+    expect(w.find('[data-test="image-filter-mask-preview"]').classes()).toContain("is-only");
   });
 
   it("Detail lists the frame's values, marks them in the prompt and picks the whole frame", async () => {

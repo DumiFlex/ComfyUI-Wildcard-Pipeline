@@ -22,7 +22,7 @@ export function dropDraftEdits(token: string): void {
 
 /** True when an edit carries anything. */
 export function hasEdit(edit: PickEdit | undefined): boolean {
-  return !!edit && (edit.positive !== undefined || edit.negative !== undefined || !!edit.mask);
+  return !!edit && (edit.positive !== undefined || edit.negative !== undefined || !!edit.mask || !!edit.label);
 }
 
 /**
@@ -58,10 +58,40 @@ export function withMask(current: PickEdits, key: string, mask: string): PickEdi
   return next;
 }
 
+/** Rename one image's label; empty or the default drops the rename. */
+export function withLabel(current: PickEdits, key: string, text: string, fallback: string): PickEdits {
+  const next: PickEdits = { ...current };
+  const edit: PickEdit = { ...(next[key] ?? {}) };
+  const clean = cleanLabel(text);
+  if (clean && clean !== fallback) edit.label = clean;
+  else delete edit.label;
+  if (hasEdit(edit)) next[key] = edit;
+  else delete next[key];
+  return next;
+}
+
+/** Labels are one line, at most `MAX_LABEL` characters (engine `clean_label`). */
+export const MAX_LABEL = 200;
+export function cleanLabel(text: string): string {
+  return text.split(/\s+/).filter(Boolean).join(" ").slice(0, MAX_LABEL);
+}
+
+/** True when an edit changes what goes on (a prompt or a mask; a label rides apart). */
+export function isRefined(edit: PickEdit | undefined): boolean {
+  return !!edit && (edit.positive !== undefined || edit.negative !== undefined || !!edit.mask);
+}
+
 /** The edits to send: only for images that go on. */
 export function editsFor(all: PickEdits, keys: readonly string[]): PickEdits | undefined {
   const out: PickEdits = {};
-  for (const k of keys) if (hasEdit(all[k])) out[k] = all[k];
+  for (const k of keys) {
+    const edit = all[k];
+    if (!edit || !isRefined(edit)) continue;
+    // Labels go on their own (`labels` on the answer).
+    const rest: PickEdit = { ...edit };
+    delete rest.label;
+    out[k] = rest;
+  }
   return Object.keys(out).length ? out : undefined;
 }
 

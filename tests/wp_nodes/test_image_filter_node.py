@@ -31,6 +31,7 @@ def cfg(**kw):
 @pytest.fixture(autouse=True)
 def _clean_state(monkeypatch):
     monkeypatch.setattr(f, "LAST_PICKS", {})
+    monkeypatch.setattr(f, "LAST_LABELS", {})
     hidden = types.SimpleNamespace(unique_id="12")
     monkeypatch.setattr(WPImageFilter, "hidden", hidden, raising=False)
 
@@ -42,9 +43,12 @@ def test_schema_is_list_in_list_out_and_counts_match():
     assert schema.is_input_list is True
     assert schema.not_idempotent is True
     assert len(schema.outputs) == node_mod._OUTPUT_COUNT
-    # Every follower output is a list; `picks` is one summary string.
-    assert all(o.is_output_list for o in schema.outputs[:-1])
-    assert schema.outputs[-1].is_output_list is False
+    # Every follower output is a list; `picks` is one summary string and
+    # `labels` (added last, so old links keep their slots) one per item.
+    assert [o.name for o in schema.outputs[-2:]] == ["picks", "labels"]
+    assert all(o.is_output_list for o in schema.outputs[:-2])
+    assert schema.outputs[-2].is_output_list is False
+    assert schema.outputs[-1].is_output_list is True
     names = [i.name for i in schema.inputs]
     assert names[:10] == [
         "images", "latent", "masks", "positive", "negative",
@@ -62,7 +66,31 @@ async def test_pass_all_keeps_everything_lined_up():
     assert out.values[0] == images
     assert out.values[5] == ["red", "blue"]
     assert out.values[10] == "1:1, 1:2, 2:1, 2:2"
+    assert out.values[11] == ["#1 · 1\n#1 · 2", "#2 · 1\n#2 · 2"]
     assert f.LAST_PICKS == {}  # pass-all doesn't overwrite the remembered picks
+
+
+async def test_labels_follow_the_picks_with_the_pickers_names(monkeypatch):
+    async def fake_ask(*_a, **_k):
+        return f.Answer("picks", ((0, 1), (1, 0)), {}, {(0, 1): "hero"})
+
+    monkeypatch.setattr(WPImageFilter, "_ask", staticmethod(fake_ask))
+    loop = [types.SimpleNamespace(internals={"__wp_loop_index__": i}) for i in (4, 5)]
+    out = await WPImageFilter.execute(
+        images=[FakeBatch("a", [0, 1]), FakeBatch("b", [0])],
+        context=loop,
+        wp_image_filter=cfg(send_as="per_image"),
+    )
+    # A frame of one image has no image number; the loop index names the frame.
+    assert out.values[11] == ["hero", "#6"]
+    assert f.LAST_LABELS["12"] == {(0, 1): "hero"}
+    # Reuse keeps the names given at the last pause.
+    again = await WPImageFilter.execute(
+        images=[FakeBatch("a", [0, 1]), FakeBatch("b", [0])],
+        context=loop,
+        wp_image_filter=cfg(mode="reuse"),
+    )
+    assert again.values[11] == ["hero", "#6"]
 
 
 async def test_reuse_uses_stored_picks_and_per_image():
