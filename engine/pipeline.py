@@ -18,6 +18,7 @@ from typing import Any, TypeAlias
 
 from engine import negatives, prefs
 from engine.context import Context
+from engine.log_once import log_once
 from engine.modules import Module
 from engine.modules._detail import DETAIL_KEY, EXPLAIN_KEY
 from engine.modules.dispatcher import UnknownModuleType, resolve_module
@@ -697,8 +698,11 @@ class PipelineEngine:
         try:
             snapshot = _coerce_snapshot(module, h.uid, ctx)
         except Exception as e:
-            logger.warning(
-                "Failed to coerce module %r at index %s: %s", module, index, e
+            # Seed cycling re-runs this on every queue; the Debug node shows
+            # it each run, the console once.
+            log_once(
+                logger, logging.WARNING, ("coerce", h.type, str(e)),
+                "Failed to coerce a %r module at index %s: %s", h.type, index, e,
             )
             self._trace(
                 ctx, h, module, warn_mark, explain,
@@ -713,7 +717,8 @@ class PipelineEngine:
         try:
             bindings = resolve_module(snapshot, ctx)
         except UnknownModuleType:
-            logger.warning(
+            log_once(
+                logger, logging.WARNING, ("unknown_type", h.type),
                 "Unknown module type %r at index %s — skipped", h.type, index,
             )
             self._trace(
@@ -722,7 +727,10 @@ class PipelineEngine:
             )
             return
         except Exception as e:
-            logger.exception("Handler %r failed at index %s", h.type, index)
+            log_once(
+                logger, logging.ERROR, ("handler", h.type, type(e).__name__, str(e)),
+                "Handler %r failed at index %s", h.type, index, exc_info=True,
+            )
             ctx["__wp_warnings__"].append(_handler_error_warning(h.id, h.type, e))
             self._trace(
                 ctx, h, module, warn_mark, explain,

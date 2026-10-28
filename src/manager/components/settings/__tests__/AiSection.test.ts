@@ -501,6 +501,20 @@ describe("Settings › AI assistant", () => {
     expect(w.get('[data-test="ai-index-status"]').text()).toBe("121 items indexed");
   });
 
+  it("says why meaning search paused", async () => {
+    vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, model: "a" }));
+    vi.mocked(api.ai.index).mockResolvedValue({
+      ...INDEX, embed_model: "nomic-embed-text:latest", vectors: 32,
+      embed_error: "couldn't connect to 127.0.0.1:1234. Is the server running?",
+    });
+    const w = mount(AiSection, { global: { plugins: [router] } });
+    await flushPromises();
+    expect(w.get('[data-test="ai-index-status"]').text()).toBe(
+      "120 items indexed · 32 searchable by meaning · paused: couldn't connect to 127.0.0.1:1234. "
+      + "Is the server running? It retries on its own, or press Rebuild.",
+    );
+  });
+
   it("says when there is no full-text search", async () => {
     vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, model: "a" }));
     vi.mocked(api.ai.index).mockResolvedValue({ ...INDEX, available: false, items: 0 });

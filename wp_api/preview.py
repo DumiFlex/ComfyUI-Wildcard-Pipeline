@@ -34,6 +34,7 @@ from engine.context import strip_internals
 from engine.db.connection import get_connection
 from engine.db.migrations import migrate
 from engine.db.repositories import ModuleNotFound, ModuleRepository
+from engine.log_once import log_once
 from engine.modules.snapshot import ref_seed_uuids, walk_transitive_refs
 from engine.pipeline import PipelineEngine
 from engine.syntax.types import ListVar
@@ -174,8 +175,10 @@ async def resolve_preview(request: web.Request) -> web.Response:
         ctx["__wp_catalog__"] = accum_catalog
         try:
             ctx = PipelineEngine().run(modules, ctx=ctx, seed=seed)
-        except Exception:
-            logger.exception("preview resolve: pipeline run failed")
+        except Exception as e:
+            # Previews run on every keystroke: one traceback per distinct error.
+            log_once(logger, logging.ERROR, ("preview", type(e).__name__, str(e)),
+                     "preview resolve: pipeline run failed", exc_info=True)
             # Don't return 500 — the user is just typing. Surface
             # whatever we resolved up to this point.
             break

@@ -598,6 +598,10 @@ const indexSummary = computed(() => {
     parts.push(i.vectors >= i.items
       ? "all searchable by meaning"
       : `${i.vectors.toLocaleString("en-US")} searchable by meaning${i.filling ? " (adding the rest…)" : ""}`);
+    if (i.embed_error && !i.filling && i.vectors < i.items) {
+      const why = /[.?!]$/.test(i.embed_error) ? i.embed_error : `${i.embed_error}.`;
+      parts.push(`paused: ${why} It retries on its own, or press Rebuild.`);
+    }
   }
   return parts.join(" · ");
 });

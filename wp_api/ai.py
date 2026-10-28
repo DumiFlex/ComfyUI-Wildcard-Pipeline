@@ -239,12 +239,14 @@ async def _prefix(request: web.Request, cfg: dict[str, Any]) -> dict[str, Any]:
 
 def _index_status(idx: ai_index.Index | None, cfg: dict[str, Any]) -> dict[str, Any]:
     model = cfg.get("embed_model") if _ai_embed.enabled(cfg) else ""
+    # Why vectors stopped coming in, until the embedding server works again.
+    error = _ai_embed.last_error(cfg) if model else None
     if idx is None:
         return {"available": False, "items": 0, "embed_model": model or None,
-                "vectors": 0, "filling": False}
+                "vectors": 0, "filling": False, "embed_error": error}
     return {"available": True, "items": idx.count(), "embed_model": model or None,
             "vectors": idx.vector_count(model) if model else 0,
-            "filling": _ai_embed.filling(idx)}
+            "filling": _ai_embed.filling(idx), "embed_error": error}
 
 
 def _index_sync(request: web.Request) -> ai_index.Index | None:
@@ -283,6 +285,7 @@ async def post_index_rebuild(request: web.Request) -> web.Response:
     idx.clear()
     idx = _index_sync(request)
     if idx is not None:
+        _ai_embed.retry_now(cfg)
         _ai_embed.fill_in_background(cfg, idx)
     return json_ok(_index_status(idx, cfg))
 

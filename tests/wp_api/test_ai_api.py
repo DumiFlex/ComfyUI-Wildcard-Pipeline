@@ -1422,7 +1422,7 @@ async def test_index_status_rebuild_and_meaning_search(wp_client, fake_llm):
                       "base_url": str(fake_llm.make_url("/v1")), "model": "m1"})
     status = await (await wp_client.get("/wp/api/ai/index")).json()
     assert status == {"available": True, "items": 2, "embed_model": None, "vectors": 0,
-                      "filling": False}
+                      "filling": False, "embed_error": None}
 
     calls: list[list[str]] = []
 
