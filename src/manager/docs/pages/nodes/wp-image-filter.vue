@@ -21,16 +21,15 @@ const ports = [
   { term: "picks (out)", desc: "What was kept, as frame:image (1-based), for example 1:2, 3:1." },
 ];
 
+const modes = [
+  { term: "Grid (G)", desc: "Pick fast. Click an image or press Space over it; Ctrl+A picks everything and a frame's all button picks the frame. Tile size S, M, L or Fit (F, as big as the picker allows). Double-click an image or click its frame to open it in Detail." },
+  { term: "Detail (D)", desc: "One image next to its size, seed, values, prompt, negative and mask. Only what is wired shows. Pick / Picked (P) picks it, ←/→ step, the strip under it jumps to any image. C compares two images with a slider, M paints a mask." },
+  { term: "Zoom (Z)", desc: "Only the picture, at Fit, 100%, 200% or any level between (− / +, keys 0 1 2). Scroll zooms toward the mouse, drag moves, double-click goes to 100% at that spot. ←/→ keep the zoom and the spot on the next image." },
+];
+
 const keys = [
-  { term: "Click", desc: "Pick or unpick an image. A frame's all button picks the whole frame; Ctrl+A picks everything." },
-  { term: "Frame", desc: "Click the frame around an image (its border or label) to zoom in, where you can compare, edit the prompt and paint a mask. The Zoom & refine button in the header does the same." },
-  { term: "Space", desc: "Zoom the image under the mouse, or leave the zoom (same as Zoom & refine). In the zoom, ←/→ move and ↑ picks. The picker remembers: leave it zoomed and the next one opens zoomed." },
-  { term: "F", desc: "Fit: make the images as big as the picker allows, so a few images fill the screen. Same as the Fit button; remembered for next time." },
-  { term: "I", desc: "In the zoom: Details. Lists the frame's variable values (Copy copies them) and seed, shows the frame's other images with Pick whole frame, and marks each value in the positive prompt (click it to edit). Remembered for next time." },
-  { term: "C", desc: "In the zoom: pin this image, then step to another to compare the two with a slider. C again stops." },
-  { term: "M", desc: "In the zoom: paint a mask on this image (brush, eraser, size, invert, clear)." },
   { term: "Enter", desc: "Keep the picks and let the run go on." },
-  { term: "Escape", desc: "Tuck the picker away. A waiting pill at the bottom of the screen opens it again, picks intact." },
+  { term: "Escape", desc: "Step back a mode: Zoom to Detail, Detail to Grid. From Grid it tucks the picker away; a waiting pill at the bottom of the screen opens it again, picks intact." },
 ];
 
 const settings = [
@@ -91,10 +90,21 @@ const settings = [
     </DocSection>
 
     <DocSection title="The picker">
+      <p>
+        The picker has three modes, switched at the top or with <b>G</b>, <b>D</b> and <b>Z</b>.
+        The window keeps its size in every mode, the pick count and the Keep buttons stay in the
+        footer, and the picker opens in the mode you left it in.
+      </p>
       <DocImage
         src="images/docs/wp-image-filter-picker.png"
-        ratio="1720 / 1088"
-        caption="The picker for a 12-frame sweep with Fit on: each frame is labelled with its number and the options it pinned. Three images are picked."
+        ratio="1720 / 860"
+        caption="Grid: six loop frames of two images each, at tile size M. Three images are picked."
+      />
+      <DocKeyList :items="modes" />
+      <DocImage
+        src="images/docs/wp-image-filter-zoom.png"
+        ratio="1720 / 860"
+        caption="Zoom on the hand in frame #5 at 164%. Step with the arrow keys and the next image opens on the same spot."
       />
       <DocKeyList :items="keys" />
       <p>
@@ -113,15 +123,15 @@ const settings = [
       <p>
         With a <b>Context Loop</b>, each frame is labelled with its number and the options its
         sweep pinned (for example <code>#3 · red · pencil</code>). Hover a label to see the
-        frame's seed and prompt. A sweep of two or more wildcards opens as a <b>grid</b>. The bar above it picks
+        frame's seed and prompt. A sweep of two or more wildcards opens in Grid as a <b>table</b>. The bar above it picks
         which wildcard goes on <b>Rows</b> and which on <b>Columns</b> (⇄ swaps them); any others
         <b>Split by</b>, one small grid per value. Click a row, column or group name to pick all of
-        it. <b>Frames</b> in the header switches back to the list.
+        it. <b>Layout › Frames</b> switches back to the list.
       </p>
       <DocImage
         src="images/docs/wp-image-filter-grid.png"
-        ratio="1720 / 676"
-        caption="A sweep of $time × $medium × $mood as a grid: rows and columns, split by $mood."
+        ratio="1720 / 644"
+        caption="A sweep of $time × $medium × $mood as a table: rows and columns, split by $mood."
       />
       <p>
         <b>Send to Loop</b> writes your picks back to the loop: the picked frames' seeds are
@@ -132,7 +142,7 @@ const settings = [
 
     <DocSection title="Refine before it goes on">
       <p>
-        In the zoom, the <b>Refine</b> panel edits the frame's positive and negative prompt and
+        In <b>Detail</b>, the side panel edits the frame's positive and negative prompt and
         paints a mask for the upscaler. Edits travel with the picks; tiles show ✎ for an edited
         prompt and ◐ for a painted mask.
       </p>
@@ -147,8 +157,8 @@ const settings = [
       </ul>
       <DocImage
         src="images/docs/wp-image-filter-refine.png"
-        ratio="1720 / 910"
-        caption="Zoom & refine on frame 5 with Details open: the frame's values, its prompt with each value marked, the negative, and Paint for a mask."
+        ratio="1720 / 860"
+        caption="Detail on frame 3: its size, seed and values, the prompt with each value marked, the negative, and Paint for a mask. The strip below jumps to any image."
       />
       <figure class="wp-doc-figure">
         <img :src="picksDiagram" alt="How the picks carry over: images, latents, masks, conditioning and prompt text of picked frames go on; an edited prompt is re-encoded and a painted mask goes to the masks output." loading="lazy">

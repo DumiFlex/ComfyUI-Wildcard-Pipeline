@@ -19,24 +19,24 @@ A Context Loop (or any list) makes one **frame** per iteration. Lists line up by
 
 ## The picker
 
-- Click an image to pick it. Ctrl+A picks everything; a frame with several images has an **all** button that picks the frame.
-- Click the frame around an image (its border or its label) to zoom in, where you can compare, edit the prompt and paint a mask. **Zoom & refine** in the header, or **Space**, opens and leaves the zoom too (Space zooms the image under the mouse). In the zoom, ←/→ move and ↑ picks. The picker remembers: leave it zoomed and the next one opens zoomed.
-- **I** or **Details** (in the zoom) adds a Details panel for power users: the frame's variable values (swept ones first, in their grid colour; **Copy** copies them), its seed, the other images of the frame with **Pick whole frame**, and the positive prompt with each value marked where it landed (click it to edit). Everything else in the zoom still works, and the picker remembers whether Details was on.
-- **C** (in the zoom) pins the image; step to another and a slider compares the two. **C** again stops.
-- **Fit** (or **F**) in the header makes the images as big as the picker allows, so a handful of images fill the screen. The picker remembers it.
+The picker has three modes, switched at the top or with **G**, **D** and **Z**. The window keeps its size in every mode, and the pick count and the Keep buttons are always in the footer. The picker opens in the mode you left it in.
+
+- **Grid** (G) is for picking fast. Click an image to pick it, or press **Space** over it. Ctrl+A picks everything; a frame with several images has an **all** button that picks the frame. **Tile size** sets S, M or L; **Fit** (or **F**) makes the images as big as the picker allows. Double-click an image, or click the frame around it, to open it in Detail.
+- **Detail** (D) shows one image next to its size and seed, its variable values (swept ones in their grid colour; the copy button copies them), the prompt with each value marked where it landed (click it to edit), the negative and the mask. Only what is wired shows: with no prompt text and no CLIP wired in, one line says how to get the prompt fields. **Pick** / **Picked** (or **P**, **Space**, ↑) picks it, ←/→ or ‹ › step, and the strip under the picture jumps to any image (double-click one to zoom it). **Pick whole frame** picks every image of a loop frame. **C** or **Compare** pins the image; step to another and a slider compares the two. **M** or **Paint** paints a mask.
+- **Zoom** (Z) shows only the picture, at real zoom levels: **Fit**, **100%**, **200%**, − and + (keys 0, 1, 2, − and +). Scroll to zoom toward the mouse, drag to move, double-click for 100% at that spot. ←/→ step to the next image and keep the zoom and the spot, so you can check the same hands or eyes in every frame. **P** picks.
+- **Escape** steps back: Zoom to Detail, Detail to Grid, and from Grid it tucks the picker away. A "waiting" pill stays at the bottom of the screen and reopens it with your picks still there. The − button in the header tucks it away from any mode.
 - **Enter** or **Keep N picked** sends the picks on. **Keep all** sends everything. **Stop branch** stops the nodes after this one; the rest of the run finishes normally.
 - A short chime plays when the picker opens, and the tab title starts with **● Pick images** while something waits. Turn the chime off under **Settings → Wildcard Pipeline → Runtime behavior → Image Filter sound**. Turn on **Image Filter desktop notification** there to also get a system notification while the tab is in the background.
-- **Escape** or the − button tucks the picker away. A "waiting" pill stays at the bottom of the screen and reopens it with your picks still there.
 
 ## Labels, sweep grid and Send to Loop
 
 - With a Context Loop, each frame is labelled with its number and the options its sweep pinned, for example `#3 · red · pencil`. Hover a label for the frame's seed and prompt.
-- A sweep of two or more wildcards opens as a **grid**. The bar above it picks which wildcard goes on **Rows** and which on **Columns** (⇄ swaps them); any others **Split by**, one small grid per value. Click a row, column or group name to pick all of it. **Frames** in the header switches back to the list.
+- A sweep of two or more wildcards opens in Grid as a **table**. The bar above it picks which wildcard goes on **Rows** and which on **Columns** (⇄ swaps them); any others **Split by**, one small grid per value. Click a row, column or group name to pick all of it. **Layout › Frames** switches back to the list.
 - **Send to Loop** writes your picks back to the loop: picked frames get their seeds locked (when the loop overrides seeds) and every other frame is bypassed, so the next run repeats only what you kept.
 
 ## Refine before it goes on
 
-In the zoom, the **Refine** panel edits the frame's prompts and paints a mask for the upscaler. Tiles show ✎ for an edited prompt and ◐ for a painted mask.
+In **Detail**, the side panel edits the frame's prompts and paints a mask for the upscaler. Tiles show ✎ for an edited prompt and ◐ for a painted mask.
 
 - An edited prompt replaces the text output. With a CLIP wired into **clip**, the conditioning is re-encoded to match; without one it stays as it was, and the panel says so.
 - With **Same shape** a frame's picks go on together, so a prompt edit covers the whole frame. With **One per image** it covers just that image.
