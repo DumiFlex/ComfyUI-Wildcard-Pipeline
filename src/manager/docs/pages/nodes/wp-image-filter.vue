@@ -8,6 +8,7 @@ import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import DocFigureText from "../../../components/docs/DocFigureText.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
+import Kbd from "@/components/shared/Kbd.vue";
 import picksDiagram from "../../images/how-picks-carry-over.webp";
 
 const ports = [
@@ -22,14 +23,14 @@ const ports = [
 ];
 
 const modes = [
-  { term: "Grid (G)", desc: "Pick fast. Click an image or press Space over it; Ctrl+A picks everything and a frame's all button picks the frame. Tile size S, M, L or Fit (F, as big as the picker allows). Double-click an image or click its frame to open it in Detail." },
-  { term: "Detail (D)", desc: "One image next to its size, seed, values, prompt, negative and mask. Only what is wired shows. Pick / Picked (P) picks it, ←/→ step, the strip under it jumps to any image. C compares two images with a slider, M paints a mask." },
-  { term: "Zoom (Z)", desc: "Only the picture, at Fit, 100%, 200% or any level between (− / +, keys 0 1 2). Scroll zooms toward the mouse, drag moves, double-click goes to 100% at that spot. F (or the fullscreen button) fills the screen. ←/→ keep the zoom and the spot on the next image." },
+  { term: "Grid", kbd: "G", desc: "Pick fast. Click an image or press Space over it; Ctrl+A picks everything and a frame's all button picks the frame. Tile size S, M, L or Fit (F, as big as the picker allows). Double-click an image or click its frame to open it in Detail." },
+  { term: "Detail", kbd: "D", desc: "One image next to its size, seed, values, prompt, negative and mask. Only what is wired shows. Pick / Picked (P) picks it, ←/→ step, the strip under it jumps to any image. C compares two images with a slider, M paints a mask." },
+  { term: "Zoom", kbd: "Z", desc: "Only the picture, at Fit, 100%, 200% or any level between (− / +, keys 0 1 2). Scroll zooms toward the mouse, drag moves, double-click goes to 100% at that spot. F (or the fullscreen button) fills the screen. ←/→ keep the zoom and the spot on the next image." },
 ];
 
 const keys = [
-  { term: "Enter", desc: "Keep the picks and let the run go on." },
-  { term: "Escape", desc: "Step back a mode: Zoom to Detail, Detail to Grid. From Grid it tucks the picker away; a waiting pill at the bottom of the screen opens it again, picks intact." },
+  { term: "Keep", kbd: "Enter", desc: "Keep the picks and let the run go on." },
+  { term: "Step back", kbd: "Esc", desc: "Step back a mode: Zoom to Detail, Detail to Grid. From Grid it tucks the picker away; a waiting pill at the bottom of the screen opens it again, picks intact." },
 ];
 
 const settings = [
@@ -91,7 +92,8 @@ const settings = [
 
     <DocSection title="The picker">
       <p>
-        The picker has three modes, switched at the top or with <b>G</b>, <b>D</b> and <b>Z</b>.
+        The picker has three modes, switched at the top or with <Kbd keys="G" size="sm" />, <Kbd keys="D" size="sm" /> and
+        <Kbd keys="Z" size="sm" />.
         The window keeps its size in every mode, the pick count and the Keep buttons stay in the
         footer, and the picker opens in the mode you left it in.
       </p>

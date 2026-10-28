@@ -39,8 +39,21 @@ export function plainText(root: Element): string {
     if (node.nodeType !== 1) return;
     const el = node as Element;
     const tag = el.tagName.toUpperCase();
-    if (SKIP.has(tag) || el.getAttribute("aria-hidden") === "true") return;
-    const block = BLOCK.has(tag) || el.classList.contains("wp-doc-callout");
+    // Kit pieces whose text the plain walk would lose: a Kbd's caps are
+    // hidden from screen readers, and a CodeBlock is a <figure>.
+    if (el.classList.contains("wp-kbd-keys")) {
+      out.push(Array.from(el.querySelectorAll(".wp-kbd-keys__cap"), (c) => c.textContent ?? "").join("+"));
+      return;
+    }
+    if (el.classList.contains("wp-code")) {
+      const title = el.querySelector(".wp-code__title")?.textContent?.trim();
+      out.push("\n", title ? `${title}:\n` : "", el.querySelector(".wp-code__pre")?.textContent ?? "", "\n");
+      return;
+    }
+    // A Disclosure's heading is a button, but its label names the folded part.
+    const heading = el.classList.contains("wp-disclosure__trigger");
+    if ((SKIP.has(tag) && !heading) || el.getAttribute("aria-hidden") === "true") return;
+    const block = BLOCK.has(tag) || heading || el.classList.contains("wp-doc-callout");
     if (block) out.push("\n");
     if (tag === "LI") out.push("- ");
     if (tag === "TD" || tag === "TH") out.push(" | ");

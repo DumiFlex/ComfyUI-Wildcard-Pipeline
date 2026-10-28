@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CodeBlock from "@/components/shared/CodeBlock.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
@@ -567,10 +568,8 @@ const antiPatterns: string[] = [
     <DocSection v-for="b in blueprints" :key="b.title" :title="b.title">
       <p>{{ b.intro }} Modules in running order:</p>
       <GuideTable :head="blueprintHead" :rows="b.rows" />
-      <p>
-        <b>Template:</b> <code class="wp-guide-code">{{ b.template }}</code>
-        <template v-if="b.negative"><br><b>Negative template:</b> <code class="wp-guide-code">{{ b.negative }}</code></template>
-      </p>
+      <CodeBlock :code="b.template" title="Template" default-wrap size="sm" />
+      <CodeBlock v-if="b.negative" :code="b.negative" title="Negative template" default-wrap size="sm" />
       <ul>
         <li v-for="n in b.notes" :key="n">{{ n }}</li>
       </ul>
@@ -598,7 +597,6 @@ const antiPatterns: string[] = [
 </template>
 
 <style scoped>
-.wp-guide-code { font-family: var(--wp-font-mono); font-size: 0.92em; color: var(--wp-text); }
 .wp-guide-h3 { margin: 6px 0 0; font-size: 14px; font-weight: 600; color: var(--wp-text); }
 .wp-guide-note { color: var(--wp-text-muted); font-size: 12.5px; }
 </style>

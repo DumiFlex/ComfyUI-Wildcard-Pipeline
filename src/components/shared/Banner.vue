@@ -10,7 +10,8 @@
  *   </Banner>
  *
  * A danger banner is announced at once (`role="alert"`); the others are
- * read politely (`role="status"`). Neither takes focus.
+ * read politely (`role="status"`). Neither takes focus. `note` is for text
+ * that is part of the page (a docs tip): `role="note"`, never announced.
  */
 import { computed, useSlots } from "vue";
 import CloseButton from "./CloseButton.vue";
@@ -36,6 +37,8 @@ const props = withDefaults(defineProps<{
   dismissible?: boolean;
   /** The close button's name. */
   dismissLabel?: string;
+  /** Part of the page, not news: `role="note"` instead of a live region. */
+  note?: boolean;
 }>(), { tone: "info", size: "md", icon: undefined, dismissLabel: "Dismiss" });
 
 const emit = defineEmits<{ (e: "dismiss"): void }>();
@@ -49,7 +52,7 @@ const iconClass = computed(() => props.icon ?? TONE_ICON[props.tone]);
     class="wp-banner"
     :data-tone="tone"
     :data-size="size"
-    :role="tone === 'danger' ? 'alert' : 'status'"
+    :role="note ? 'note' : tone === 'danger' ? 'alert' : 'status'"
   >
     <i v-if="iconClass" class="pi wp-banner__icon" :class="iconClass" aria-hidden="true" />
     <div class="wp-banner__body">
