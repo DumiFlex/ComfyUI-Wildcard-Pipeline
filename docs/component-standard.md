@@ -63,6 +63,7 @@ Don't add synonyms such as `kind`, `small`, `busy` or `visible` for these meanin
   - close on Escape;
   - give focus back to whatever opened them;
   - dialogs keep Tab inside (use `useDialogFocus`).
+  - an overlay that can open on top of a ComfyUI dialog (the Display playground opens from Settings) also uses `useHostDialogGuard`: ComfyUI's reka dialogs turn off clicks outside themselves, trap focus and close on an outside click or Escape.
 - Hints use `v-tooltip`, not `title=`.
 - Icon-only buttons have an `aria-label`. The × that closes something is `CloseButton`; a copy is `CopyButton` (or `copyText` from `components/shared/clipboard.ts` behind a menu item), never `navigator.clipboard` directly, which is missing over plain http.
 - Shared pieces style themselves in `<style scoped>`, not in `@layer wp-extension`: the manager's Tailwind reset is unlayered and would beat a layered rule on `<button>`.
