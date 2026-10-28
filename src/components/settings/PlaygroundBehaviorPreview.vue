@@ -229,7 +229,7 @@ const shownConflicts = computed(() => filterForValidation(props.validation, [...
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 2px 5px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   color: var(--sev);
   background: color-mix(in oklab, var(--sev) 18%, transparent);
 }
