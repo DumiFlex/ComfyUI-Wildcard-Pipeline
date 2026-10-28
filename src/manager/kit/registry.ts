@@ -391,7 +391,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "lightbox", name: "Lightbox", group: "overlays", file: "src/components/shared/Lightbox.vue", surfaces: ["manager", "canvas"],
-    use: "One image full screen over a dimmed page: arrows or the side buttons step through the rest, Escape or the close button shuts it and focus goes back. Built on ModalShell, so keys inside never reach ComfyUI. ImageGrid opens it for you.",
+    use: "One image full screen over a dimmed page: arrows or the side buttons step through the rest, Escape or the close button shuts it and focus goes back. Built on ModalShell, so keys inside never reach ComfyUI. zoom shows each picture in WpImageZoom, keeping the level and the spot as you step. ImageGrid opens it for you.",
     instead: "A fixed-position <img> with its own Escape listener (DocImage's zoom).",
   },
   // Library pieces
