@@ -15,6 +15,8 @@ import {
 } from "@/manager/parsing/subcatFilter";
 import OptionRow from "./OptionRow.vue";
 import WpCheck from "../../../../shared/WpCheck.vue";
+import WpButton from "../../../../shared/WpButton.vue";
+import WpIconButton from "../../../../shared/WpIconButton.vue";
 import { axisHueAt, UNGROUPED_HUE } from "../../../../shared/axis-color";
 
 interface OptionFull extends WildcardOption {
@@ -352,27 +354,25 @@ const skewedTowards = computed(() => {
 <template>
   <section class="pool">
     <div class="pool__head">
-      <button
-        type="button"
-        class="pool__collapse"
+      <WpIconButton
+        :icon="poolOpen ? 'pi-chevron-down' : 'pi-chevron-right'"
         :class="{ 'pool__collapse--nudge': !poolOpen }"
         :aria-expanded="poolOpen"
         data-test="pool-collapse"
-        :aria-label="poolOpen ? 'Collapse tag pool' : 'Expand tag pool'"
+        :label="poolOpen ? 'Collapse tag pool' : 'Expand tag pool'"
         @click="poolOpen = !poolOpen"
-      >{{ poolOpen ? "▾" : "▸" }}</button>
+      />
       <div class="pool__label">Pool · what RNG can pick from</div>
       <span v-if="!poolOpen && tickedCount > 0" class="pool__collapsed-count" data-test="pool-collapsed-count">
         {{ tickedCount }} selected
       </span>
-      <button
-        type="button"
+      <WpButton
+        variant="outline"
         class="pool__adv-toggle"
-        :class="{ 'pool__adv-toggle--on': advanced }"
         data-test="pool-advanced"
-        :aria-pressed="advanced"
+        :pressed="advanced"
         @click="toggleAdvanced"
-      >ƒ(x) Advanced</button>
+      >ƒ(x) Advanced</WpButton>
     </div>
 
     <!-- Quick mode — grouped pills. OR within an axis, AND across axes. -->
@@ -601,36 +601,13 @@ const skewedTowards = computed(() => {
 /* Pushes the Advanced toggle to the right now that the head has a leading
  * chevron + an optional collapsed-count. */
 .pool__adv-toggle { margin-left: auto; }
-/* Deliberately larger than a bare glyph: at 9px with no hit area this read as
- * decoration and nobody knew it was pressable. */
-.pool__collapse {
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  padding: 0;
-  width: 18px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  cursor: pointer;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font-size: 12px;
-  line-height: 1;
-}
-.pool__collapse:hover {
-  color: var(--wp-text);
-  border-color: var(--wp-border);
-  background: color-mix(in srgb, var(--wp-text) 6%, transparent);
-}
 /* Accented while collapsed so a first-time user reads it as "there is more
    here" rather than as dim decoration. Static tint, not an animation — this
    sits on screen for the whole editing session. */
-.pool__collapse--nudge {
-  color: var(--wp-accent-text, var(--wp-accent, #6366f1));
-  border-color: color-mix(in srgb, var(--wp-accent, #6366f1) 55%, transparent);
-  background: color-mix(in srgb, var(--wp-accent, #6366f1) 16%, transparent);
+.wp-icon-btn.pool__collapse--nudge {
+  color: var(--wp-accent-text, var(--wp-accent));
+  border-color: color-mix(in srgb, var(--wp-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--wp-accent) 16%, transparent);
 }
 .pool__collapsed-count {
   font: 600 9px var(--wp-font-sans);
@@ -673,24 +650,6 @@ const skewedTowards = computed(() => {
   color: var(--wp-text);
 }
 .pool__exclude-null--off { opacity: 0.55; }
-.pool__adv-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border: 1px solid var(--wp-border);
-  border-radius: 4px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 10px var(--wp-font-mono);
-  cursor: pointer;
-}
-.pool__adv-toggle:hover { border-color: var(--wp-border2, var(--wp-border)); }
-.pool__adv-toggle--on {
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-text));
-  background: var(--wp-accent-glow, rgba(99, 102, 241, 0.15));
-}
 .pool__groups {
   display: flex;
   flex-direction: column;

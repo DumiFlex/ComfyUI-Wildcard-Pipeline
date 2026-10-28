@@ -4,7 +4,7 @@
  * Lists each rule state with a cell sample + plain-language
  * description of its runtime effect. Collapsed by default.
  */
-import { ref } from "vue";
+import Disclosure from "../../../shared/Disclosure.vue";
 
 defineProps<{
   /** Show the accepts-axis row — only when this matrix actually has one, so the
@@ -12,26 +12,17 @@ defineProps<{
   showAccepts?: boolean;
 }>();
 
-const expanded = ref(false);
-
-function toggle(): void {
-  expanded.value = !expanded.value;
-}
 </script>
 
 <template>
-  <div class="legend">
-    <button
-      type="button"
-      class="legend-toggle"
-      :class="{ open: expanded }"
-      :aria-expanded="expanded"
-      @click="toggle"
-    >
-      <span>? Legend</span>
-      <span class="chev" aria-hidden="true">▾</span>
-    </button>
-    <div v-if="expanded" class="legend-body">
+  <Disclosure
+    class="legend"
+    label="Legend"
+    size="sm"
+    lazy
+    :trigger-attrs="{ 'data-test': 'legend-toggle' }"
+  >
+    <div class="legend-body">
       <div class="legend-row">
         <span class="legend-sample s-neutral"><span class="glyph">·</span></span>
         <span class="legend-name n-neutral">Neutral</span>
@@ -63,7 +54,7 @@ function toggle(): void {
         <span class="legend-desc">This group rolls one tag per pick and is readable as <code>$var.NAME</code>. Marked <i class="pi pi-sync" aria-hidden="true" /> on its band.</span>
       </div>
     </div>
-  </div>
+  </Disclosure>
 </template>
 
 <style scoped>
@@ -85,30 +76,8 @@ function toggle(): void {
   color: var(--wp-text-muted, #a1a1ad);
 }
 .legend-desc .pi-sync { color: var(--wp-axis, #fbbf24); font-size: 10px; }
-.legend-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border: 1px solid var(--wp-border, #2a2d35);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--wp-text) 2%, transparent);
-  color: var(--wp-text-muted, #8a8d99);
-  font: 600 10px var(--wp-font-sans, sans-serif);
-  cursor: pointer;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.legend-toggle:hover {
-  background: color-mix(in srgb, var(--wp-accent, #6366f1) 8%, transparent);
-  color: var(--wp-accent-text, #a5b4fc);
-  border-color: var(--wp-border-strong, #4a4d55);
-}
-.legend-toggle .chev { transition: transform 0.15s; display: inline-block; }
-.legend-toggle.open .chev { transform: rotate(180deg); }
 
 .legend-body {
-  margin-top: 10px;
   background: var(--wp-bg2, #1a1d24);
   border: 1px solid var(--wp-border, #2a2d35);
   border-radius: 6px;

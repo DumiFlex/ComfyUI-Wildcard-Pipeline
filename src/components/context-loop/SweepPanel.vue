@@ -20,6 +20,8 @@ import {
 import { axisStatus, type SweepCandidate } from "./sweep-candidates";
 import WpNumber from "../shared/WpNumber.vue";
 import WpSelect from "../shared/WpSelect.vue";
+import WpButton from "../shared/WpButton.vue";
+import WpIconButton from "../shared/WpIconButton.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -189,18 +191,26 @@ function moveAxis(uid: string, dir: -1 | 1): void {
             {{ row.axis.option_ids.length }}<template v-if="row.candidate">/{{ row.candidate.options.length }}</template>
             <i v-if="row.staleIds.length" class="pi pi-exclamation-triangle wp-sweep__warn-ico" aria-hidden="true" />
           </span>
-          <button v-if="modelValue.axes.length > 1" type="button" class="wp-sweep__icon" :disabled="i === 0" title="Move up (changes slower)" @click="moveAxis(row.axis.uid, -1)">
-            <i class="pi pi-arrow-up" aria-hidden="true" />
-          </button>
-          <button type="button" class="wp-sweep__icon" title="Stop sweeping this wildcard" :data-test="`sweep-remove-${row.axis.uid}`" @click="removeAxis(row.axis.uid)">
-            <i class="pi pi-times" aria-hidden="true" />
-          </button>
+          <WpIconButton
+            v-if="modelValue.axes.length > 1"
+            icon="pi-arrow-up"
+            label="Move up (changes slower)"
+            :disabled="i === 0"
+            @click="moveAxis(row.axis.uid, -1)"
+          />
+          <WpIconButton
+            icon="pi-times"
+            tone="danger"
+            label="Stop sweeping this wildcard"
+            :data-test="`sweep-remove-${row.axis.uid}`"
+            @click="removeAxis(row.axis.uid)"
+          />
         </div>
         <div v-if="openUid === row.axis.uid && row.candidate" class="wp-sweep__opts">
           <div class="wp-sweep__opts-bar">
-            <button type="button" class="wp-sweep__link" data-test="sweep-all" @click="selectAll(row.axis, row.candidate)">all</button>
-            <button type="button" class="wp-sweep__link" data-test="sweep-none" @click="selectNone(row.axis)">none</button>
-            <button type="button" class="wp-sweep__link" @click="selectDefault(row.axis, row.candidate)">enabled only</button>
+            <WpButton variant="link" data-test="sweep-all" @click="selectAll(row.axis, row.candidate)">All</WpButton>
+            <WpButton variant="link" data-test="sweep-none" @click="selectNone(row.axis)">None</WpButton>
+            <WpButton variant="link" @click="selectDefault(row.axis, row.candidate)">Enabled only</WpButton>
           </div>
           <div class="wp-sweep__opts-list">
             <button
@@ -293,23 +303,8 @@ function moveAxis(uid: string, dir: -1 | 1): void {
 .wp-sweep__axis--missing .wp-sweep__axis-node { color: var(--wp-warning, #f59e0b); }
 .wp-sweep__axis-count { font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-muted, #aeb1bb); white-space: nowrap; }
 .wp-sweep__warn-ico { font-size: 9px; color: var(--wp-warning, #f59e0b); margin-left: 2px; }
-.wp-sweep__icon {
-  width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0;
-  background: transparent; border: 1px solid transparent; border-radius: 3px; cursor: pointer;
-  color: var(--wp-text-dim, #7a7d88);
-}
-.wp-sweep__icon:hover:not(:disabled) { color: var(--wp-text); border-color: var(--wp-border, #353841); }
-.wp-sweep__icon:disabled { opacity: .35; cursor: default; }
-.wp-sweep__icon .pi { font-size: 9px; }
-
 .wp-sweep__opts { border-top: 1px solid var(--wp-border, #353841); padding: 4px 6px 6px; }
 .wp-sweep__opts-bar { display: flex; gap: 10px; margin-bottom: 4px; }
-.wp-sweep__link {
-  background: none; border: 0; padding: 0; cursor: pointer;
-  font: 600 9px var(--wp-font-sans, sans-serif); text-transform: uppercase; letter-spacing: .06em;
-  color: var(--wp-text-dim, #7a7d88);
-}
-.wp-sweep__link:hover { color: var(--wp-accent, #6366f1); }
 .wp-sweep__opts-list { display: flex; flex-wrap: wrap; gap: 3px; max-height: 120px; overflow-y: auto; }
 .wp-sweep__opt {
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

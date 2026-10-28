@@ -10,8 +10,8 @@
  * constraint `pick` + `bundle_origin` key on) rides along in the tooltip so
  * both identities are one hover away without cluttering the header.
  */
-import { ref, onBeforeUnmount } from "vue";
-import { copyText } from "../../shared/clipboard";
+import { computed } from "vue";
+import CopyButton from "../../shared/CopyButton.vue";
 
 const props = defineProps<{
   /** Library uuid — the payload row id. Matches `@{id}`, constraint
@@ -22,44 +22,26 @@ const props = defineProps<{
   uid?: string;
 }>();
 
-const copied = ref(false);
-let timer: number | undefined;
-
-async function copyId(): Promise<void> {
-  if (!props.id) return;
-  // A blocked copy is a silent no-op: the id stays visible to select.
-  if (!await copyText(props.id)) return;
-  copied.value = true;
-  if (timer !== undefined) window.clearTimeout(timer);
-  timer = window.setTimeout(() => { copied.value = false; }, 1200);
-}
-
-onBeforeUnmount(() => {
-  if (timer !== undefined) window.clearTimeout(timer);
-});
+const label = computed(() =>
+  `Copy library id ${props.id}${props.uid ? ` (instance uid ${props.uid})` : ""}`);
 </script>
 
 <template>
-  <button
+  <CopyButton
     v-if="id"
-    type="button"
+    :text="id"
+    :label="label"
     class="wp-idchip"
-    :class="{ 'wp-idchip--copied': copied }"
-    :title="`library id: ${id}${uid ? `\ninstance uid: ${uid}` : ''}\n(click to copy id)`"
     data-test="instance-id-chip"
-    @click.stop="copyId"
+    @click.stop
   >
-    <i
-      class="pi wp-idchip__icon"
-      :class="copied ? 'pi-check' : 'pi-hashtag'"
-      aria-hidden="true"
-    />
-    <span class="wp-idchip__id">{{ copied ? "copied" : id }}</span>
-  </button>
+    <i class="pi pi-hashtag wp-idchip__icon" aria-hidden="true" />
+    <span class="wp-idchip__id">{{ id }}</span>
+  </CopyButton>
 </template>
 
 <style scoped>
-.wp-idchip {
+.wp-copy-btn.wp-idchip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -85,7 +67,7 @@ onBeforeUnmount(() => {
 .wp-idchip__id {
   font-family: inherit;
 }
-.wp-idchip--copied {
+.wp-idchip[data-state="copied"] {
   color: var(--wp-green, #6ad28b);
   border-color: color-mix(in oklab, var(--wp-green, #6ad28b) 55%, transparent);
 }

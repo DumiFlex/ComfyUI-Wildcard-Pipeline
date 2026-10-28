@@ -11,6 +11,7 @@ import {
 import { setLibraryHash } from "./drift-store";
 import { pushToast } from "../shared/toast-store";
 import ConfirmDialog from "../shared/ConfirmDialog.vue";
+import WpButton from "../shared/WpButton.vue";
 import PushToLibraryModal from "./PushToLibraryModal.vue";
 import WildcardInstanceModal from "./editors/wildcard/WildcardInstanceModal.vue";
 import FixedValuesInstanceModal from "./editors/fixed-values/FixedValuesInstanceModal.vue";
@@ -440,7 +441,7 @@ function cancel() {
       data-test="modal-frame-banner"
     >
       <span>Editing frame #{{ currentFrame + 1 }} — changes affect only this frame.</span>
-      <button type="button" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</button>
+      <WpButton variant="outline" icon="pi-replay" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</WpButton>
     </div>
 
     <!-- v2 wildcard branch — single-pane tailored modal renders its
@@ -592,18 +593,10 @@ function cancel() {
   color: var(--wp-amber);
   font: 500 11px var(--wp-font-sans);
 }
-.wp-modal-frame-banner button {
+.wp-modal-frame-banner .wp-btn {
   flex-shrink: 0;
-  padding: 4px 10px;
-  border-radius: 4px;
-  border: 1px solid color-mix(in oklab, var(--wp-amber) 55%, transparent);
-  background: color-mix(in oklab, var(--wp-amber) 20%, transparent);
+  border-color: color-mix(in oklab, var(--wp-amber) 55%, transparent);
   color: var(--wp-amber);
-  font: 600 10px var(--wp-font-sans);
-  cursor: pointer;
-}
-.wp-modal-frame-banner button:hover {
-  background: color-mix(in oklab, var(--wp-amber) 32%, transparent);
 }
 </style>
 

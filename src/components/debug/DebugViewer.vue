@@ -251,14 +251,6 @@ function downloadJson(): void {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-const seedCopied = ref(false);
-async function copySeed(): Promise<void> {
-  if (!model.value?.seed) return;
-  await clipboardWrite(model.value.seed);
-  seedCopied.value = true;
-  window.setTimeout(() => { seedCopied.value = false; }, 1200);
-}
-
 const tabs = computed((): TabItem<TabId>[] => {
   const m = model.value;
   const shown = (n: number | undefined): number | undefined => (n ? n : undefined);
@@ -355,15 +347,13 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
   <div ref="root" class="wp-debug" :class="{ 'wp-debug--skipped': isSkipped }">
     <template v-if="model">
       <header class="wp-dbg-head" data-test="dbg-head">
-        <button
+        <CopyButton
           v-if="model.seed"
-          type="button"
+          :text="model.seed"
+          label="Copy the chain seed of the last Context"
           class="wp-dbg-head__seed"
-          :class="{ 'is-flashed': seedCopied }"
           data-test="dbg-seed"
-          :title="seedCopied ? 'Copied' : 'Chain seed of the last Context. Click to copy.'"
-          @click="copySeed"
-        ><span class="wp-dbg-head__seed-label">seed</span>{{ model.seed }}<i :class="['pi', seedCopied ? 'pi-check' : 'pi-copy']" aria-hidden="true" /></button>
+        ><span class="wp-dbg-head__seed-label">seed</span>{{ model.seed }}</CopyButton>
         <div v-if="iterationCount > 1" class="wp-dbg-iter" role="navigation" aria-label="loop iteration picker">
           <WpButton
             variant="ghost"
@@ -484,7 +474,6 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
             @toggle="toggleStep"
             @goto-step="gotoStep"
             @row-menu="openStepMenu"
-            @copy="(t: string) => { void clipboardWrite(t); }"
             @focus-node="focusNode"
           />
           <div v-else class="wp-dbg-empty">
@@ -560,7 +549,7 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
   font-size: 11px;
   color: var(--wp-text-dim);
 }
-.wp-dbg-head__seed {
+.wp-copy-btn.wp-dbg-head__seed {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -575,8 +564,6 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
 .wp-dbg-head__seed .pi { font-size: 9px; color: var(--wp-text-dim); }
 .wp-dbg-head__seed-label { font-family: var(--wp-font-sans); color: var(--wp-text-dim); }
 .wp-dbg-head__seed:hover { border-color: var(--wp-border-strong, var(--wp-accent)); }
-.wp-dbg-head__seed.is-flashed { border-color: var(--wp-green); }
-.wp-dbg-head__seed.is-flashed .pi { color: var(--wp-green); }
 .wp-dbg-head__stat { white-space: nowrap; }
 .wp-dbg-head__warn {
   display: inline-flex;

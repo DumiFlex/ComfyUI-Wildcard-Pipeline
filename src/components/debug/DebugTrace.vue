@@ -26,7 +26,6 @@ const emit = defineEmits<{
   (e: "toggle", key: string): void;
   (e: "goto-step", key: string): void;
   (e: "row-menu", ev: MouseEvent, step: TraceStep): void;
-  (e: "copy", text: string): void;
   (e: "focus-node", nodeId: string): void;
 }>();
 
@@ -215,7 +214,6 @@ function groupTooltip(g: TraceGroup): string {
             :uuid-to-name="uuidToName"
             :uuid-to-kind="uuidToKind"
             :can-focus="canFocus"
-            @copy="(t) => emit('copy', t)"
             @goto-step="(k) => emit('goto-step', k)"
             @focus-node="(id) => emit('focus-node', id)"
           />

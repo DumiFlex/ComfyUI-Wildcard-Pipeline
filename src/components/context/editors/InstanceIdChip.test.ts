@@ -22,9 +22,9 @@ describe("InstanceIdChip", () => {
     expect(w.find('[data-test="instance-id-chip"]').exists()).toBe(false);
   });
 
-  it("surfaces both id and _uid in the tooltip", () => {
+  it("names both id and _uid (its name is also the tooltip)", () => {
     const w = mount(InstanceIdChip, { props: { id: "ab12cd34", uid: "uid-9f9f9f" } });
-    const title = w.get('[data-test="instance-id-chip"]').attributes("title") ?? "";
+    const title = w.get('[data-test="instance-id-chip"]').attributes("aria-label") ?? "";
     expect(title).toContain("ab12cd34");
     expect(title).toContain("uid-9f9f9f");
   });
@@ -35,7 +35,6 @@ describe("InstanceIdChip", () => {
     await w.get('[data-test="instance-id-chip"]').trigger("click");
     await flushPromises();
     expect(writeText).toHaveBeenCalledWith("ab12cd34");
-    expect(w.get('[data-test="instance-id-chip"]').classes()).toContain("wp-idchip--copied");
-    expect(w.get('[data-test="instance-id-chip"]').text()).toContain("copied");
+    expect(w.get('[data-test="instance-id-chip"]').attributes("data-state")).toBe("copied");
   });
 });
