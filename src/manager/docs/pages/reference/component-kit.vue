@@ -38,7 +38,9 @@ const groups = KIT_GROUPS.map((g) => ({ ...g, count: KIT_ENTRIES.filter((e) => e
         tooltips, the search box, the number field, the toast, tabs, the segmented control, folding
         sections, banners, the copy and close buttons, progress bars, loading shapes, badges, steps, pages,
         sliders, tag boxes, rename-in-place, file drop areas, reorderable lists, resizable panels, key
-        caps, code blocks and label/value lists) are shown live too. Each of these is one component
+        caps, code blocks, label/value lists, type-to-filter dropdowns, date pickers, range sliders, radio
+        choices, avatars, timelines, diffs, image grids with a full-screen viewer and long scrolling lists)
+        are shown live too. Each of these is one component
         on both sides: the search box in a node picker and on a manager page is the same box, and so are
         the number fields, tabs and toasts. The canvas toast store is the one piece listed with how to use
         it instead of a live demo.
