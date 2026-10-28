@@ -305,6 +305,13 @@ describe("ImageGrid + Lightbox", () => {
     expect(document.activeElement).toBe(tile.element);
   });
 
+  it("Lightbox with zoom shows the picture in WpImageZoom", async () => {
+    bound(Lightbox, { open: true, images, zoom: true }, "index");
+    await nextTick();
+    expect(document.querySelector(".wp-lightbox .wp-imgzoom")).not.toBeNull();
+    expect(document.querySelector(".wp-lightbox__img")).toBeNull();
+  });
+
   it("Lightbox with loop goes round", async () => {
     const w = bound(Lightbox, { open: true, images, index: 2, loop: true }, "index");
     await nextTick();

@@ -7,9 +7,15 @@
  * a single image (a docs screenshot, a preview).
  *
  *   <Lightbox v-model:open="open" v-model:index="at" :images="shots" />
+ *   <Lightbox v-model:open="open" :images="frames" zoom />
+ *
+ * `zoom` shows each picture in WpImageZoom (Fit / 100% / 200%, wheel, drag,
+ * + − 0 1 2 keys); the level and the spot carry over as you step, so you
+ * can compare the same part of every frame.
  */
 import { computed, nextTick, ref, watch } from "vue";
 import ModalShell from "./ModalShell.vue";
+import WpImageZoom from "./WpImageZoom.vue";
 import CloseButton from "./CloseButton.vue";
 import { focusablesIn } from "./useDialogFocus";
 
@@ -21,7 +27,12 @@ const props = withDefaults(defineProps<{
   index?: number;
   /** Go round from the last image to the first. */
   loop?: boolean;
-}>(), { index: 0, loop: false });
+  /** Real zoom levels (WpImageZoom) instead of a picture fitted to the screen. */
+  zoom?: boolean;
+}>(), { index: 0, loop: false, zoom: false });
+
+/** The zoom level, kept across images while the viewer is open. */
+const level = ref<number | null>(null);
 
 const emit = defineEmits<{
   (e: "update:open", v: boolean): void;
@@ -65,6 +76,7 @@ function onKey(ev: KeyboardEvent): void {
 watch(() => props.open, async (v, was) => {
   if (typeof document === "undefined") return;
   if (v) {
+    level.value = null;
     returnTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     await nextTick();
     panelEl.value?.focus();
@@ -93,8 +105,9 @@ watch(() => props.open, async (v, was) => {
         <span v-if="count > 1" class="wp-lightbox__count" aria-hidden="true">{{ at + 1 }} / {{ count }}</span>
         <CloseButton class="wp-lightbox__close" kbd="Esc" @click="close" />
       </div>
-      <figure v-if="image" class="wp-lightbox__figure">
-        <img class="wp-lightbox__img" :src="image.src" :alt="image.alt">
+      <figure v-if="image" class="wp-lightbox__figure" :data-zoom="zoom || undefined">
+        <WpImageZoom v-if="zoom" v-model:zoom="level" class="wp-lightbox__zoom" :src="image.src" :alt="image.alt" size="md" />
+        <img v-else class="wp-lightbox__img" :src="image.src" :alt="image.alt">
         <figcaption v-if="image.caption" class="wp-lightbox__caption">{{ image.caption }}</figcaption>
       </figure>
       <button
@@ -132,6 +145,11 @@ watch(() => props.open, async (v, was) => {
 .wp-lightbox__count { color: rgb(255 255 255 / 0.75); font-size: var(--wp-text-sm); font-variant-numeric: tabular-nums; }
 .wp-lightbox .wp-lightbox__close { color: rgb(255 255 255 / 0.85); }
 .wp-lightbox__figure { display: flex; flex-direction: column; align-items: center; gap: var(--wp-space-2); min-height: 0; margin: 0; }
+.wp-lightbox__figure[data-zoom] { align-self: stretch; }
+.wp-lightbox__zoom {
+  width: 100%; height: calc(100vh - 140px);
+  border-radius: var(--wp-radius); overflow: hidden; background: var(--wp-bg-1); box-shadow: var(--wp-shadow-lg);
+}
 .wp-lightbox__img {
   display: block; max-width: 100%; max-height: calc(100vh - 140px); object-fit: contain;
   border-radius: var(--wp-radius); box-shadow: var(--wp-shadow-lg); background: var(--wp-bg-1);

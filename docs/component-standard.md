@@ -151,6 +151,6 @@ Each of these jobs has exactly one component. Don't build a second one, and don'
 | A person or bot | `Avatar` | an initials circle per screen |
 | Events in order | `Timeline` | a list with its own dots and line |
 | What changed | `DiffView` | two boxes side by side, colour alone |
-| Images in a grid, full screen | `ImageGrid`, `Lightbox` | `<img>` wraps with own zoom overlay |
+| Images in a grid, full screen | `ImageGrid`, `Lightbox` (`zoom` puts each in `WpImageZoom`) | `<img>` wraps with own zoom overlay |
 | Thousands of rows | `VirtualList` | rendering every row |
 | Text for screen readers only | `VisuallyHidden` | another 1 px clip rule |
