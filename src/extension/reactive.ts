@@ -37,25 +37,51 @@ interface ModeInterceptedNode {
 /** Install (or reuse) a property-descriptor intercept on `node.mode`
  *  so writes from ComfyUI's mute/bypass shortcuts fire `cb` SYNCHRONOUSLY
  *  instead of waiting for the next 400ms poll. Pattern lifted from
- *  ComfyUI-Lora-Manager (web/comfyui/lora_loader.js:123). */
+ *  ComfyUI-Lora-Manager (web/comfyui/lora_loader.js:123).
+ *
+ *  The intercept WRAPS whatever `mode` already is rather than replacing it.
+ *  The frontend instruments `mode` itself (`LGraphNodeProperties`, installed
+ *  in the node constructor): its setter fires `node:property:changed`, which
+ *  is the only way Nodes 2.0 learns a node was bypassed. Swapping in a plain
+ *  value slot swallowed that event, so our nodes never got the purple tint
+ *  or the "Bypassed" tag there (the legacy canvas reads `node.mode` at paint
+ *  time and never noticed). Reads and writes go through the host's accessor
+ *  when there is one; a plain data property falls back to our own slot. */
 function watchNodeMode(node: ConnectableNode, cb: () => void): () => void {
   const target = node as ConnectableNode & ModeInterceptedNode;
   let slot = target[MODE_INTERCEPT];
   if (!slot) {
-    slot = { value: typeof target.mode === "number" ? target.mode : 0, subs: new Set() };
-    target[MODE_INTERCEPT] = slot;
+    const host = findDescriptor(target, "mode");
+    const hostGet = host?.get;
+    const hostSet = host?.set;
+    const own = { value: typeof target.mode === "number" ? target.mode : 0, subs: new Set<() => void>() };
+    slot = own;
+    target[MODE_INTERCEPT] = own;
+    const read = (self: unknown): number => (hostGet ? hostGet.call(self) as number : own.value);
     Object.defineProperty(target, "mode", {
       configurable: true,
-      get() { return slot!.value; },
+      enumerable: host?.enumerable ?? true,
+      get() { return read(this); },
       set(next: number) {
-        const prev = slot!.value;
-        slot!.value = next;
-        if (prev !== next) for (const s of slot!.subs) s();
+        const prev = read(this);
+        if (hostSet) hostSet.call(this, next);
+        else own.value = next;
+        if (prev !== read(this)) for (const s of own.subs) s();
       },
     });
   }
-  slot.subs.add(cb);
-  return () => { slot!.subs.delete(cb); };
+  const subs = slot.subs;
+  subs.add(cb);
+  return () => { subs.delete(cb); };
+}
+
+/** `key`'s descriptor on `obj` or the nearest prototype that defines it. */
+function findDescriptor(obj: object, key: string): PropertyDescriptor | undefined {
+  for (let o: object | null = obj; o; o = Object.getPrototypeOf(o) as object | null) {
+    const d = Object.getOwnPropertyDescriptor(o, key);
+    if (d) return d;
+  }
+  return undefined;
 }
 
 /** One `onConnectionsChange` wrapper per node, fanning out to a subscriber

@@ -36,3 +36,46 @@ describe("dimWidgetsWhileSkipped", () => {
     expect(opacity(node, 0)).toBe(SKIPPED_OPACITY);
   });
 });
+
+describe("mode intercept keeps the host's accessor", () => {
+  /** Mirrors the frontend's `LGraphNodeProperties`: an own accessor on
+   *  `mode` whose setter emits the change Nodes 2.0 listens for. */
+  function instrumented(start = 0) {
+    const node = makeNode();
+    const events: [number, number][] = [];
+    let value = start;
+    Object.defineProperty(node, "mode", {
+      configurable: true,
+      enumerable: true,
+      get: () => value,
+      set: (next: number) => {
+        if (next !== value) events.push([value, next]);
+        value = next;
+      },
+    });
+    return { node, events };
+  }
+
+  it("still fires the host setter on bypass, so Vue nodes see it", () => {
+    const { node, events } = instrumented();
+    dimWidgetsWhileSkipped(node, ["prompt"]);
+    node.mode = 4;
+    expect(events).toEqual([[0, 4]]);
+    expect(node.mode).toBe(4);
+    expect(opacity(node, 0)).toBe(SKIPPED_OPACITY);
+    node.mode = 0;
+    expect(events).toEqual([[0, 4], [4, 0]]);
+    expect(opacity(node, 0)).toBe("");
+  });
+
+  it("chains once when several widgets watch the same node", () => {
+    const { node, events } = instrumented(2);
+    dimWidgetsWhileSkipped(node, ["prompt"]);
+    dimWidgetsWhileSkipped(node, ["negative"]);
+    expect(node.mode).toBe(2);
+    node.mode = 4;
+    expect(events).toEqual([[2, 4]]);
+    expect(opacity(node, 0)).toBe(SKIPPED_OPACITY);
+    expect(opacity(node, 1)).toBe(SKIPPED_OPACITY);
+  });
+});
