@@ -228,6 +228,11 @@ function onLibCheckboxChange(exc: LibraryException, checked: boolean): void {
   ));
 }
 
+/** The mode chip's tooltip: what a click turns it into. */
+function cycleHint(mode: Mode): string {
+  return `${MODE_META[mode].label}. Click for ${MODE_META[MODE_CYCLE[mode]].label}`;
+}
+
 function onLibModeCycle(exc: LibraryException): void {
   const key = libKey(exc);
   const next = MODE_CYCLE[effectiveMode(exc)];
@@ -378,17 +383,18 @@ const FACTOR_STEP = 0.1;
       </span>
       <!-- Editable: click-to-cycle chip with glyph + label. Read-only
            (stranded): the same colored chip as a static span — no cycle. -->
-      <button
+      <WpButton
         v-if="!stranded"
-        type="button"
+        variant="outline"
         class="ex__mode-chip"
         :class="`ex__mode-chip--${effectiveMode(exc)}`"
+        :hint="cycleHint(effectiveMode(exc))"
         :data-test="`ex-mode-${i}`"
         @click="onLibModeCycle(exc)"
       >
         <span class="ex__mode-glyph" aria-hidden="true">{{ MODE_META[effectiveMode(exc)].glyph }}</span>
         {{ MODE_META[effectiveMode(exc)].label }}
-      </button>
+      </WpButton>
       <span
         v-else
         class="ex__mode-chip ex__mode-chip--ro"
@@ -505,15 +511,16 @@ const FACTOR_STEP = 0.1;
           />
         </template>
       </Select>
-      <button
-        type="button"
+      <WpButton
+        variant="outline"
         class="ex__mode-chip"
         :class="`ex__mode-chip--${exc.mode}`"
+        :hint="cycleHint(exc.mode)"
         @click="onExtraModeCycle(i)"
       >
         <span class="ex__mode-glyph" aria-hidden="true">{{ MODE_META[exc.mode].glyph }}</span>
         {{ MODE_META[exc.mode].label }}
-      </button>
+      </WpButton>
       <span
         v-if="exc.mode === 'boost' || exc.mode === 'reduce'"
         class="ex__factor-wrap"
@@ -707,27 +714,22 @@ const FACTOR_STEP = 0.1;
 .ex__row--off .ex__arrow {
   opacity: 0.5;
 }
-.ex__row--off .ex__mode-chip {
-  opacity: 0.5;
-  text-decoration: line-through;
-}
-.ex__row--off .ex__factor-wrap {
-  opacity: 0.5;
-}
+.ex__row--off /* The read-only chip is a span; the editable one is a WpButton, whose size,
+ * focus ring and hover it keeps (the compound `.wp-btn` selectors beat its
+ * scoped rules on a tie). */
 .ex__mode-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: transparent;
   border: 1px solid var(--wp-border);
   color: var(--wp-text);
   font: 600 9px var(--wp-font-sans);
   text-transform: uppercase;
   padding: 2px 6px;
   border-radius: 3px;
-  cursor: pointer;
   white-space: nowrap;
 }
+.wp-btn.ex__mode-chip { padding: 0 8px; font-size: 10px; text-transform: uppercase; border-radius: var(--wp-radius-sm); }
 /* Glyph mirrors the matrix cell icons (↑ ↓ × ·) — mono so it lines up. */
 .ex__mode-glyph {
   font-family: var(--wp-font-mono, monospace);
@@ -747,11 +749,11 @@ const FACTOR_STEP = 0.1;
  * reduce = orange/warn, exclude = red/danger. Allow uses the accent
  * (purple-ish) because it's a "neutral pass-through" — visually distinct
  * from boost's green so users don't confuse `allow ×1` with `boost ×1.5`. */
-.ex__mode-chip--allow { background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-text)); }
-.ex__mode-chip--exclude { background: color-mix(in srgb, var(--wp-danger, #e05252) 22%, transparent); color: var(--wp-danger, #e05252); }
-.ex__mode-chip--boost { background: color-mix(in srgb, var(--wp-success, #6bc96f) 22%, transparent); color: var(--wp-success, #6bc96f); }
-.ex__mode-chip--only { background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent); color: var(--wp-info, #3b82f6); }
-.ex__mode-chip--reduce { background: color-mix(in srgb, var(--wp-warn, #f59e0b) 22%, transparent); color: var(--wp-warn, #f59e0b); }
+.ex__mode-chip.ex__mode-chip--allow { background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-text)); }
+.ex__mode-chip.ex__mode-chip--exclude { background: color-mix(in srgb, var(--wp-danger, #e05252) 22%, transparent); color: var(--wp-danger, #e05252); }
+.ex__mode-chip.ex__mode-chip--boost { background: color-mix(in srgb, var(--wp-success, #6bc96f) 22%, transparent); color: var(--wp-success, #6bc96f); }
+.ex__mode-chip.ex__mode-chip--only { background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent); color: var(--wp-info, #3b82f6); }
+.ex__mode-chip.ex__mode-chip--reduce { background: color-mix(in srgb, var(--wp-warn, #f59e0b) 22%, transparent); color: var(--wp-warn, #f59e0b); }
 .ex__factor-wrap { display: inline-flex; width: 64px; }
 .ex__factor-num { width: 100%; }
 .ex__extra-badge {

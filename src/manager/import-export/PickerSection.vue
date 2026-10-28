@@ -16,15 +16,16 @@
  * primitive PickerRow uses. Bundles + categories override the kind
  * icon (`pi pi-folder` for category vs. `pi pi-box` for bundle).
  *
- * Phase-4 redesign: the header itself is a clickable bar — anywhere
- * on the header (except the inner checkbox) collapses/expands the
- * section. The title is plain text (no parens), with the total count
+ * The header is the shared Disclosure: its button (chevron, icon, title,
+ * count, pill) folds the section, and the checkbox sits in front of it,
+ * outside the button. The title is plain text (no parens), with the total count
  * surfaced as a muted "{n} items" sibling and the selection state as
  * a tinted "n / m" pill that switches to a muted background when no
  * rows are selected.
  */
 import { ref, computed } from "vue";
 import Checkbox from "../components/ui/Checkbox.vue";
+import Disclosure from "../../components/shared/Disclosure.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 
 /** Mirror of PickerRow's KIND_CLASS — same slug rules. */
@@ -87,18 +88,6 @@ const kindClass = computed<string | null>(() => {
   return KIND_CLASS[props.kind] ?? "bundle";
 });
 
-/**
- * Header click handler — toggles open/closed when the user clicks
- * anywhere on the header bar EXCEPT the section-checkbox inside it.
- * The checkbox's own click handler has its own intent ("toggle all in
- * bucket"), so we filter it out to keep behaviors orthogonal.
- */
-function onHeaderClick(evt: MouseEvent): void {
-  const target = evt.target as HTMLElement | null;
-  if (target && target.closest('[data-test="picker-section-checkbox"]')) return;
-  toggleOpen();
-}
-
 /** Writes the remembered state. While `forceOpen` holds the section open, a
  *  click still records the user's intent so it applies once the search clears. */
 function toggleOpen(): void {
@@ -108,51 +97,44 @@ function toggleOpen(): void {
 
 <template>
   <section class="wp-picker-section" :data-open="open ? 'true' : 'false'">
-    <header
-      class="wp-picker-section__header"
-      :aria-expanded="open"
-      role="button"
-      tabindex="0"
-      @click="onHeaderClick"
-      @keydown.enter.prevent="toggleOpen"
-      @keydown.space.prevent="toggleOpen"
+    <Disclosure
+      class="wp-picker-section__disc"
+      :open="open"
+      lazy
+      :trigger-attrs="{ 'data-test': 'picker-section-toggle' }"
+      @update:open="toggleOpen"
     >
-      <button
-        type="button"
-        class="wp-picker-section__toggle"
-        :aria-label="open ? 'Collapse section' : 'Expand section'"
-        tabindex="-1"
-      >
-        <i class="pi pi-angle-right wp-picker-section__chevron" aria-hidden="true" />
-      </button>
-      <Checkbox
-        class="wp-picker-section__check"
-        data-test="picker-section-checkbox"
-        :model-value="allSelected"
-        :indeterminate="indeterminate"
-        :aria-label="`Select all ${title}`"
-        @update:model-value="(v: boolean) => emit('toggle-all', v)"
-      />
-      <span
-        v-if="iconClass && kindClass"
-        class="wp-row-type-icon"
-        :class="`wp-row-type-icon--${kindClass}`"
-        aria-hidden="true"
-        data-test="picker-section-icon"
-      >
-        <i :class="iconClass" />
-      </span>
-      <span class="wp-picker-section__title">{{ title }}</span>
-      <span class="wp-picker-section__count">{{ totalCount }} items</span>
-      <span></span>
-      <span
-        class="wp-picker-section__sel-pill"
-        :data-empty="selectedCount === 0 ? 'true' : 'false'"
-      >{{ selectedCount }} / {{ totalCount }}</span>
-    </header>
-    <div v-if="open" class="wp-picker-section__body">
-      <slot />
-    </div>
+      <template #lead>
+        <Checkbox
+          class="wp-picker-section__check"
+          data-test="picker-section-checkbox"
+          :model-value="allSelected"
+          :indeterminate="indeterminate"
+          :aria-label="`Select all ${title}`"
+          @update:model-value="(v: boolean) => emit('toggle-all', v)"
+        />
+      </template>
+      <template #summary>
+        <span
+          v-if="iconClass && kindClass"
+          class="wp-row-type-icon"
+          :class="`wp-row-type-icon--${kindClass}`"
+          aria-hidden="true"
+          data-test="picker-section-icon"
+        >
+          <i :class="iconClass" />
+        </span>
+        <span class="wp-picker-section__title">{{ title }}</span>
+        <span class="wp-picker-section__count">{{ totalCount }} items</span>
+        <span
+          class="wp-picker-section__sel-pill"
+          :data-empty="selectedCount === 0 ? 'true' : 'false'"
+        >{{ selectedCount }} / {{ totalCount }}</span>
+      </template>
+      <div class="wp-picker-section__body">
+        <slot />
+      </div>
+    </Disclosure>
   </section>
 </template>
 
@@ -170,44 +152,26 @@ function toggleOpen(): void {
   margin-bottom: 6px;
   overflow: hidden;
 }
-.wp-picker-section__header {
-  display: grid;
-  grid-template-columns: 14px 18px 26px 1fr auto auto auto;
+/* The heading is the shared Disclosure: the "select all" checkbox sits in
+ * front of its button (so ticking it never folds the section), and the
+ * button holds the icon, title, count and selection pill. */
+.wp-disclosure.wp-picker-section__disc :deep(.wp-disclosure__head) {
   gap: 10px;
-  align-items: center;
-  padding: 9px 14px;
-  cursor: pointer;
-  user-select: none;
+  padding: 0 14px;
 }
-.wp-picker-section__header:hover {
+.wp-disclosure.wp-picker-section__disc :deep(.wp-disclosure__trigger) {
+  gap: 10px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 0;
+  font-weight: inherit;
+}
+.wp-disclosure.wp-picker-section__disc :deep(.wp-disclosure__trigger:hover) { background: none; }
+.wp-disclosure.wp-picker-section__disc :deep(.wp-disclosure__head:hover) {
   background: color-mix(in oklab, var(--wp-bg-3) 60%, transparent);
 }
-.wp-picker-section__header:focus-visible {
-  outline: 2px solid var(--wp-accent-500);
-  outline-offset: -2px;
-}
-.wp-picker-section__toggle {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  color: var(--wp-text-dim);
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.wp-picker-section__toggle:hover {
-  color: var(--wp-text);
-}
-.wp-picker-section__chevron {
-  color: var(--wp-text-dim);
-  font-size: 10px;
-  transition: transform 0.15s ease;
-}
-.wp-picker-section[data-open="true"] .wp-picker-section__chevron {
-  transform: rotate(90deg);
-}
+.wp-disclosure.wp-picker-section__disc :deep(.wp-disclosure__content) { padding: 0; }
+.wp-picker-section__count { flex: 1; }
 .wp-picker-section__title {
   font-weight: 600;
   font-size: var(--wp-text-md);
@@ -237,11 +201,11 @@ function toggleOpen(): void {
  * so the icon needs to read as a more substantial anchor against the
  * title text — bump to 26x26 with a 15px inner glyph. Phase 8 QA fix:
  * the previous 22px / 12px read weak. */
-.wp-picker-section__header .wp-row-type-icon {
+.wp-picker-section .wp-row-type-icon {
   width: 26px;
   height: 26px;
 }
-.wp-picker-section__header .wp-row-type-icon .pi {
+.wp-picker-section .wp-row-type-icon .pi {
   font-size: 15px;
 }
 .wp-picker-section__body {

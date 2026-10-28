@@ -7,13 +7,14 @@
  *     axis tags above the grid.
  *   - Uniform cells (icon + factor for boost/reduce, dot for neutral,
  *     × for exclude) — no compact / wide variants.
- *   - Click cell → CellRulePopover (teleported to body) with four state
- *     buttons, stepper factor input, reset, and outside-click / Escape
- *     to close. State picks and factor edits keep the popover open.
+ *   - Click cell → CellRulePopover in the shared Popover (anchored to
+ *     the cell) with five state buttons and a factor input; a click
+ *     outside or Escape closes it. State picks and factor edits keep the
+ *     popover open.
  *   - Collapsible MatrixLegend below the grid.
  *
- * Single popover lives in a body portal so it never picks up the cell's
- * hover / clipping context — same fix the canvas grid applies.
+ * One Popover for the grid, teleported to the body, so it never picks up
+ * the cell's hover / clipping context — same as the canvas grid.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type {
@@ -23,6 +24,7 @@ import type {
 } from "../api/types";
 import CellRulePopover from "../../components/context/editors/constraint/CellRulePopover.vue";
 import MatrixLegend from "../../components/context/editors/constraint/MatrixLegend.vue";
+import Popover from "../../components/shared/Popover.vue";
 import {
   groupHue as tagHue,
   groupLabel,
@@ -211,8 +213,7 @@ function cellAriaLabel(row: string, col: string): string {
 interface PopoverPos {
   row: string;
   col: string;
-  left: number;
-  top: number;
+  el: HTMLElement;
 }
 const popover = ref<PopoverPos | null>(null);
 
@@ -220,25 +221,7 @@ function isOpenAt(row: string, col: string): boolean {
   return popover.value?.row === row && popover.value?.col === col;
 }
 
-function rectForCell(row: string, col: string): { left: number; top: number } | null {
-  const sel = `[data-test="cell-${cssEscape(row)}-${cssEscape(col)}"]`;
-  const el = document.querySelector<HTMLElement>(sel);
-  if (!el) return null;
-  const r = el.getBoundingClientRect();
-  const POP_W = 260;
-  const left = Math.min(
-    window.innerWidth - POP_W - 12,
-    Math.max(12, r.left + r.width / 2 - POP_W / 2),
-  );
-  const top = r.bottom + 8;
-  return { left, top };
-}
-function cssEscape(s: string): string {
-  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") return CSS.escape(s);
-  return s.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
-}
-
-function openPopover(row: string, col: string, ev: MouseEvent): void {
+function openPopover(row: string, col: string, ev: Event): void {
   ev.stopPropagation();
   // Read-only recovery view (deleted source/target): cells are inert.
   if (props.readonly) return;
@@ -246,23 +229,11 @@ function openPopover(row: string, col: string, ev: MouseEvent): void {
     popover.value = null;
     return;
   }
-  const pos = rectForCell(row, col) ?? { left: 12, top: 12 };
-  popover.value = { row, col, left: pos.left, top: pos.top };
+  popover.value = { row, col, el: ev.currentTarget as HTMLElement };
 }
 
 function closePopover(): void {
   popover.value = null;
-}
-
-function reanchorPopover(): void {
-  const cur = popover.value;
-  if (!cur) return;
-  const pos = rectForCell(cur.row, cur.col);
-  if (!pos) {
-    closePopover();
-    return;
-  }
-  popover.value = { ...cur, left: pos.left, top: pos.top };
 }
 
 const popoverCell = computed<ConstraintCell | null>(() => {
@@ -293,34 +264,11 @@ function onPopoverFactor(value: number): void {
   writeCell(popover.value.row, popover.value.col, { mode: cur.mode, factor: value });
 }
 
-function onDocumentMousedown(ev: MouseEvent): void {
-  if (!popover.value) return;
-  const target = ev.target as HTMLElement | null;
-  if (!target) return;
-  if (target.closest(".pop")) return;             // inside the popover
-  if (target.closest(".wp-mx-cell")) return;      // a matrix cell
-  closePopover();
-}
-function onDocumentKeydown(ev: KeyboardEvent): void {
-  if (ev.key === "Escape" && popover.value) {
-    ev.preventDefault();
-    closePopover();
-  }
-}
-
 onMounted(() => {
-  window.addEventListener("mousedown", onDocumentMousedown);
-  window.addEventListener("keydown", onDocumentKeydown);
-  window.addEventListener("scroll", reanchorPopover, true);
-  window.addEventListener("resize", reanchorPopover);
   window.addEventListener("resize", measureBands);
   void nextTick(measureBands);
 });
 onBeforeUnmount(() => {
-  window.removeEventListener("mousedown", onDocumentMousedown);
-  window.removeEventListener("keydown", onDocumentKeydown);
-  window.removeEventListener("scroll", reanchorPopover, true);
-  window.removeEventListener("resize", reanchorPopover);
   window.removeEventListener("resize", measureBands);
 });
 
@@ -450,9 +398,11 @@ defineExpose({ cellAt });
                   :aria-label="cellAriaLabel(tag, c.tag)"
                   role="button"
                   tabindex="0"
+                  :aria-expanded="isOpenAt(tag, c.tag)"
+                  aria-haspopup="dialog"
                   @click="openPopover(tag, c.tag, $event)"
-                  @keydown.enter.prevent="openPopover(tag, c.tag, $event as unknown as MouseEvent)"
-                  @keydown.space.prevent="openPopover(tag, c.tag, $event as unknown as MouseEvent)"
+                  @keydown.enter.prevent="openPopover(tag, c.tag, $event)"
+                  @keydown.space.prevent="openPopover(tag, c.tag, $event)"
                 >
                   <span class="glyph">{{ isImpliedOut(tag, c.tag) ? "×" : MODE_ICON[cellAt(tag, c.tag).mode] }}</span>
                   <span
@@ -482,22 +432,14 @@ defineExpose({ cellAt });
 
     <MatrixLegend :show-accepts="hasAcceptsAxis" />
 
-    <!-- Popover teleports to body so its hover state stays isolated
-         from the source cell + any table-level clipping. -->
-    <Teleport to="body">
-      <div
-        v-if="popover && popoverCell"
-        class="wp-mx-pop-anchor"
-        data-test="cell-rule-popover"
-        :style="{
-          position: 'fixed',
-          left: popover.left + 'px',
-          top: popover.top + 'px',
-          width: '260px',
-          zIndex: 9999,
-        }"
-        @mousedown.stop
-      >
+    <Popover
+      :open="popover !== null && popoverCell !== null"
+      :anchor="popover?.el"
+      placement="bottom"
+      :label="popover ? `Rule for ${popover.row} to ${popover.col}` : undefined"
+      @update:open="(v) => { if (!v) closePopover(); }"
+    >
+      <div v-if="popover && popoverCell" data-test="cell-rule-popover">
         <CellRulePopover
           :state="toState(popoverCell.mode)"
           :factor="popoverCell.factor"
@@ -509,7 +451,7 @@ defineExpose({ cellAt });
           @close="closePopover"
         />
       </div>
-    </Teleport>
+    </Popover>
   </section>
 </template>
 

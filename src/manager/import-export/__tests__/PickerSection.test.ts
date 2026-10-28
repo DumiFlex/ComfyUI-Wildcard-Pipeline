@@ -70,7 +70,7 @@ describe("PickerSection", () => {
       slots: { default: "<div class='row'>x</div>" },
     });
     expect(wrap.find(".row").exists()).toBe(true);
-    await wrap.get(".wp-picker-section__toggle").trigger("click");
+    await wrap.get('[data-test="picker-section-toggle"]').trigger("click");
     expect(wrap.find(".row").exists()).toBe(false);
   });
 
@@ -91,13 +91,11 @@ describe("PickerSection", () => {
       slots: { default: "<div class='row'>x</div>" },
     });
     expect(wrap.find(".row").exists()).toBe(false);
-    // Chevron is the pi-angle-right icon — CSS rotates it 90deg when
-    // the section root carries data-open="true". Collapsed → data-open
-    // is "false" so rotation is absent.
+    // The Disclosure's chevron turns when open; collapsed, the heading
+    // button says so.
     const section = wrap.get(".wp-picker-section");
     expect(section.attributes("data-open")).toBe("false");
-    const chevron = wrap.get(".wp-picker-section__chevron");
-    expect(chevron.attributes("class") ?? "").toMatch(/\bpi-angle-right\b/);
+    expect(wrap.get('[data-test="picker-section-toggle"]').attributes("aria-expanded")).toBe("false");
   });
 
   it("section root carries data-open attribute driving chevron rotation", async () => {
@@ -107,10 +105,9 @@ describe("PickerSection", () => {
     });
     const section = wrap.get(".wp-picker-section");
     expect(section.attributes("data-open")).toBe("true");
-    // Toggle button uses the chevron icon, NOT a literal ▼ / ▶ glyph.
-    const toggle = wrap.get(".wp-picker-section__toggle");
-    expect(toggle.text()).toBe("");
-    expect(toggle.find("i.pi.pi-angle-right").exists()).toBe(true);
+    // The heading button draws the chevron icon, NOT a literal ▼ / ▶ glyph.
+    const toggle = wrap.get('[data-test="picker-section-toggle"]');
+    expect(toggle.find("i.pi.wp-disclosure__chev").exists()).toBe(true);
     // Collapse and re-check the data-open flips to "false".
     await toggle.trigger("click");
     expect(wrap.get(".wp-picker-section").attributes("data-open")).toBe("false");

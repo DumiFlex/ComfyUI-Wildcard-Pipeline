@@ -354,47 +354,6 @@
   letter-spacing: 0;
 }
 
-/* Bulk collapse/expand toggle — pushed to the right of the row via
- * auto-margin. Compact text-button shape so it doesn't clash with
- * per-card chevrons + matches the section-label's mono/uppercase
- * vibe. */
-.wp-section-label__bulk {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: none;
-  border: 1px solid transparent;
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text3);
-  cursor: pointer;
-  font-family: var(--wp-font-mono, monospace);
-  font-size: 9px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 2px 6px;
-  transition: color var(--wp-motion-quick), border-color var(--wp-motion-quick), background var(--wp-motion-quick);
-}
-.wp-section-label__bulk:hover {
-  color: var(--wp-text);
-  border-color: var(--wp-border);
-  background: var(--wp-bg2);
-}
-.wp-section-label__bulk .pi { font-size: 9px; }
-.wp-section-label__bulk--drift {
-  border-color: var(--wp-warn);
-  color: var(--wp-warn);
-}
-.wp-section-label__bulk--drift:hover {
-  /* Re-assert drift colour because base `:hover` flips both `color` +
-   * `border-color` to the neutral text/border tokens; equal-specificity
-   * selectors lose the cascade race otherwise and the amber accent
-   * vanishes on hover. */
-  color: var(--wp-warn);
-  border-color: var(--wp-warn);
-  background: color-mix(in oklab, var(--wp-warn) 14%, transparent);
-}
-
 /* ── Empty-state hero (Task 10) ─────────────────────────────────────────
  * Brand-glyph hero with "No modules yet" copy + dual CTA. Replaces the
  * old .wp-emptystate layout (logo + "Wildcard Pipeline" title). */
