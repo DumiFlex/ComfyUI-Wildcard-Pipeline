@@ -11,6 +11,7 @@ import IdentitySection from "./sections/IdentitySection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
 import WpButton from "../../../shared/WpButton.vue";
+import CloseButton from "../../../shared/CloseButton.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
@@ -92,15 +93,7 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
         </div>
         <div class="wp-bdm__sub">Per-Context instance · name + color edits stay local</div>
       </div>
-      <button
-        type="button"
-        class="wp-bdm__close"
-        aria-label="Close"
-        data-test="bdm-close"
-        @click="emit('cancel')"
-      >
-        <i class="pi pi-times" aria-hidden="true" />
-      </button>
+      <CloseButton size="sm" kbd="Esc" data-test="bdm-close" @click="emit('cancel')" />
     </header>
 
     <IdentitySection
@@ -130,11 +123,22 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
         <i class="pi pi-external-link" aria-hidden="true" />
         Edit library entry in SPA
       </a>
-      <WpButton variant="ghost" icon="pi-replay" v-if="canSaveToLibrary" data-test="bdm-reset-lib" title="Replace children with the frozen library snapshot — drops local edits" @click="emit('reset-to-library')">Reset to library</WpButton>
+      <WpButton
+        v-if="canSaveToLibrary"
+        variant="ghost"
+        icon="pi-replay"
+        data-test="bdm-reset-lib"
+        title="Replace children with the frozen library snapshot — drops local edits"
+        @click="emit('reset-to-library')"
+      >Reset to library</WpButton>
       <span class="wp-bdm__hint">
         <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
-      <WpButton v-if="canSaveToLibrary" data-test="bdm-save-lib" @click="emit('save-to-library')">Save to library</WpButton>
+      <WpButton
+        v-if="canSaveToLibrary"
+        data-test="bdm-save-lib"
+        @click="emit('save-to-library')"
+      >Save to library</WpButton>
       <WpButton data-test="bdm-cancel" @click="emit('cancel')">Cancel</WpButton>
       <WpButton variant="primary" data-test="bdm-save" @click="emit('save')">Save</WpButton>
     </footer>
@@ -154,9 +158,6 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
 .wp-bdm__badge { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 2px; }
 .wp-bdm__badge--drift { background: color-mix(in srgb, var(--wp-warn, #fcd34d) 22%, transparent); color: var(--wp-warn, #fcd34d); }
 .wp-bdm__badge--mod { background: color-mix(in srgb, var(--wp-status-modified, #f59e0b) 22%, transparent); color: var(--wp-status-modified, #f59e0b); }
-.wp-bdm__close { background: transparent; border: 0; color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; padding: 4px; }
-.wp-bdm__close:hover { color: var(--wp-text); }
-.wp-bdm__close .pi { font-size: 12px; }
 .wp-bdm__dock { position: sticky; bottom: 0; z-index: 2; background: var(--wp-bg2); }
 .wp-bdm__foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
 .wp-bdm__spa-link { display: inline-flex; align-items: center; gap: 5px; font: 10px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); text-decoration: none; }

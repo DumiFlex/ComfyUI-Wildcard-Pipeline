@@ -14,6 +14,8 @@
  * whole next config (`src/widgets/model_info.ts` serializes it).
  */
 import { computed, nextTick, ref } from "vue";
+import WpButton from "../shared/WpButton.vue";
+import WpIconButton from "../shared/WpIconButton.vue";
 import {
   DEFAULT_VARIANT_RULES,
   compileVariantRules,
@@ -195,24 +197,24 @@ function resetRules(): void {
           >{{ row.value || row.hint }}</span>
           <span class="wp-mi__source" :class="{ 'is-pinned': isPinned(row.key) }">{{ row.source }}</span>
           <span class="wp-mi__actions">
-          <button
-            type="button"
-            class="wp-btn--icon-sm wp-btn--accent"
-            :class="{ 'is-active': isInternal(row.key) }"
-            :title="isInternal(row.key) ? `Internal: hidden from the Assembler. Click to show ${row.variable}` : `Shown in the Assembler. Click to hide ${row.variable}`"
-            :aria-pressed="isInternal(row.key)"
+          <WpIconButton
+            icon="pi-globe"
+            tone="accent"
+            :pressed="isInternal(row.key)"
+            :label="isInternal(row.key) ? `Show ${row.variable} in the Assembler` : `Hide ${row.variable} from the Assembler`"
+            :tip="isInternal(row.key) ? `Internal: hidden from the Assembler. Click to show ${row.variable}` : `Shown in the Assembler. Click to hide ${row.variable}`"
             :data-test="`mi-internal-${row.key}`"
             @click="toggleInternal(row.key)"
-          ><i class="pi pi-globe" aria-hidden="true" /></button>
-          <button
-            type="button"
-            class="wp-btn--icon-sm wp-btn--warn"
-            :class="{ 'is-locked': isPinned(row.key) }"
-            :title="isPinned(row.key) ? 'Unpin: detect it again' : `Pin ${row.variable} to a value of your own`"
-            :aria-pressed="isPinned(row.key)"
+          />
+          <WpIconButton
+            icon="pi-thumbtack"
+            tone="warn"
+            :pressed="isPinned(row.key)"
+            :label="isPinned(row.key) ? `Unpin ${row.variable}` : `Pin ${row.variable}`"
+            :tip="isPinned(row.key) ? 'Unpin: detect it again' : `Pin ${row.variable} to a value of your own`"
             :data-test="`mi-pin-${row.key}`"
             @click="startPin(row)"
-          ><i class="pi pi-thumbtack" aria-hidden="true" /></button>
+          />
           </span>
         </div>
       </div>
@@ -222,14 +224,15 @@ function resetRules(): void {
       <div class="wp-mi__head">
         <span class="wp-mi__label">VARIANT RULES</span>
         <span class="wp-mi__head-note">first match in the file name wins</span>
-        <button
-          v-if="!isDefaultRules"
-          type="button"
+        <WpButton v-if="!isDefaultRules"
+         
+          tip="Put the shipped rules back"
+          variant="ghost"
+          icon="pi-undo"
           class="wp-mi__reset"
-          title="Put the shipped rules back"
           data-test="mi-reset-rules"
           @click="resetRules"
-        >reset</button>
+        >Reset</WpButton>
       </div>
       <div ref="ruleList" class="wp-mi__rules">
         <div
@@ -262,29 +265,32 @@ function resetRules(): void {
             @keydown.stop
             @change="editRule(i, { pattern: ($event.target as HTMLInputElement).value })"
           >
-          <button
-            type="button"
-            class="wp-btn--icon-sm wp-btn--danger"
-            title="Remove this rule"
+          <WpIconButton
+            icon="pi-trash"
+            tone="danger"
+            label="Remove this rule"
             :data-test="`mi-rule-remove-${i}`"
             @click="removeRule(i)"
-          ><i class="pi pi-trash" aria-hidden="true" /></button>
+          />
         </div>
         <div v-if="modelValue.rules.length === 0" class="wp-mi__ghost">
           No rules, so $model_variant stays empty unless pinned.
         </div>
       </div>
-      <button type="button" class="wp-mi__add" data-test="mi-add-rule" @click="addRule">
-        <i class="pi pi-plus" aria-hidden="true" /> Add rule
-      </button>
+      <WpButton
+        variant="add"
+        icon="pi-plus"
+        block
+        class="wp-mi__add"
+        data-test="mi-add-rule"
+        @click="addRule"
+      >Add rule</WpButton>
     </section>
   </div>
 </template>
 
 <style scoped>
-/* Icon buttons come from the shared row primitives, same as the Injector
-   and module rows. Layout and tokens follow the Cleaner / Seed List. */
-@import "../shared/row-primitives.css";
+/* Layout and tokens follow the Cleaner / Seed List. */
 
 .wp-mi {
   display: flex;
@@ -310,16 +316,7 @@ function resetRules(): void {
   font-size: 9px;
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.wp-mi__reset {
-  background: transparent;
-  border: 0;
-  padding: 0 2px;
-  font: 600 9px var(--wp-font-sans, sans-serif);
-  letter-spacing: 0.04em;
-  color: var(--wp-amber, var(--wp-warn, #fbbf24));
-  cursor: pointer;
-}
-.wp-mi__reset:hover { text-decoration: underline; }
+.wp-mi__reset { margin-left: auto; }
 
 /* DETECTED rows */
 .wp-mi__vars {
@@ -420,26 +417,5 @@ function resetRules(): void {
   color: var(--wp-text-dim, var(--wp-text3));
 }
 
-/* Same dashed affordance as the Injector's "Add template row". */
-.wp-mi__add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  margin-top: 2px;
-  padding: 5px 8px;
-  background: transparent;
-  color: var(--wp-text-dim, var(--wp-text3));
-  border: 1px dashed var(--wp-border2, var(--wp-border));
-  border-radius: var(--wp-radius-sm, 4px);
-  font: 600 10px var(--wp-font-sans, sans-serif);
-  cursor: pointer;
-}
-.wp-mi__add:hover {
-  background: color-mix(in srgb, var(--wp-accent) 8%, transparent);
-  color: var(--wp-text);
-  border-color: color-mix(in srgb, var(--wp-accent) 45%, var(--wp-border2, var(--wp-border)));
-}
-.wp-mi__add .pi { font-size: 10px; }
+.wp-mi__add { margin-top: 2px; }
 </style>

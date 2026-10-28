@@ -6,6 +6,7 @@ import ConfirmDialog from "../shared/ConfirmDialog.vue";
 import { api } from "../../manager/api/client";
 import type { BundleRow } from "../../manager/api/types";
 import WpButton from "../shared/WpButton.vue";
+import CloseButton from "../shared/CloseButton.vue";
 
 const props = defineProps<{
   visible: boolean;
@@ -185,12 +186,7 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
             <span class="wp-bp__title-detail">· {{ filtered.length }} {{ filtered.length === 1 ? "bundle" : "bundles" }}</span>
           </div>
         </div>
-        <button
-          type="button"
-          class="wp-bp__close"
-          aria-label="Close"
-          @click="emit('close')"
-        ><i class="pi pi-times" /></button>
+        <CloseButton size="sm" kbd="Esc" @click="emit('close')" />
       </header>
 
       <div class="wp-bp__toolbar">
@@ -225,7 +221,7 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
         <div v-else-if="loadError" class="wp-bp__state wp-bp__state--err">
           <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>
           {{ loadError }}
-          <button type="button" class="wp-bp__retry" @click="reload">Retry</button>
+          <WpButton @click="reload">Retry</WpButton>
         </div>
         <div v-else-if="filtered.length === 0" class="wp-bp__state">
           <i class="pi pi-inbox" aria-hidden="true"></i>
@@ -283,7 +279,12 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
           <span class="wp-bp__hint-label">cancel</span>
         </div>
         <WpButton @click="emit('close')">Cancel</WpButton>
-        <WpButton variant="primary" icon="pi-plus" data-testid="bundle-picker-create" @click="emit('create')">Create Bundle</WpButton>
+        <WpButton
+          variant="primary"
+          icon="pi-plus"
+          data-testid="bundle-picker-create"
+          @click="emit('create')"
+        >Create Bundle</WpButton>
       </div>
     </div>
   </ModalShell>
@@ -381,17 +382,6 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   font-size: 13px;
   margin-left: 4px;
 }
-.wp-bp__close {
-  width: 28px;
-  height: 28px;
-  background: transparent;
-  border: 1px solid var(--wp-border);
-  color: var(--wp-text-dim, var(--wp-text3));
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-}
-.wp-bp__close:hover { background: var(--wp-bg2); color: var(--wp-text); }
 
 .wp-bp__toolbar {
   padding: 10px 14px;
@@ -418,15 +408,6 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   align-items: center;
 }
 .wp-bp__state--err { color: var(--wp-red); }
-.wp-bp__retry {
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  color: var(--wp-text);
-  padding: 5px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font: 500 11px var(--wp-font-sans);
-}
 
 .wp-bp__list {
   display: flex;

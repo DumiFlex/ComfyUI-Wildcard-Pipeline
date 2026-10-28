@@ -28,6 +28,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
 import RichTextInput from "../../manager/components/RichTextInput.vue";
 import WpButton from "../shared/WpButton.vue";
+import CloseButton from "../shared/CloseButton.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -431,13 +432,7 @@ function onKeydown(ev: KeyboardEvent): void {
           </div>
           <div class="ibm__sub">Injector binding · ctx[$<wbr>{{ draftBinding || "…" }}] ← {{ templateValue ? "template" : isGeneral ? "no template yet" : "socket value" }}</div>
         </div>
-        <button
-          type="button"
-          class="ibm__close"
-          aria-label="Close"
-          data-test="ibm-close"
-          @click="onCancel"
-        ><i class="pi pi-times" aria-hidden="true" /></button>
+        <CloseButton size="sm" kbd="Esc" data-test="ibm-close" @click="onCancel" />
       </header>
 
       <section class="ibm__section">
@@ -504,15 +499,15 @@ function onKeydown(ev: KeyboardEvent): void {
                 </div>
               </Teleport>
             </div>
-            <button
+            <WpButton
               v-if="templateValue"
-              type="button"
-              class="ibm__reset"
+              variant="outline"
+              icon="pi-replay"
               data-test="ibm-template-reset"
-              title="Clear template (revert to pass-through)"
+              tip="Clear template (revert to pass-through)"
               aria-label="Clear template"
               @click="onResetTemplate"
-            ><i class="pi pi-replay" aria-hidden="true" /></button>
+            />
           </div>
         </div>
 
@@ -719,15 +714,6 @@ function onKeydown(ev: KeyboardEvent): void {
   color: var(--wp-text-dim, var(--wp-text3));
   margin-top: 2px;
 }
-.ibm__close {
-  background: transparent;
-  border: 0;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  padding: 4px;
-}
-.ibm__close:hover { color: var(--wp-text); }
-.ibm__close .pi { font-size: 12px; }
 
 .ibm__section {
   padding: 12px 16px;

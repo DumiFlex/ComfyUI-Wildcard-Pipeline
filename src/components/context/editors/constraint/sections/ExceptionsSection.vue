@@ -20,6 +20,8 @@ import { encodeKey } from "../../instance/keys";
 import { patchInstance } from "../../instance/patch";
 import RichTextPreview from "../../../../../manager/components/RichTextPreview.vue";
 import Select, { type SelectOption } from "../../../../../manager/components/ui/Select.vue";
+import WpButton from "../../../../shared/WpButton.vue";
+import WpIconButton from "../../../../shared/WpIconButton.vue";
 
 type Mode = "allow" | "exclude" | "boost" | "reduce" | "only";
 
@@ -528,13 +530,13 @@ const FACTOR_STEP = 0.1;
           @update:model-value="(n) => n !== null && onExtraFieldChange(i, 'factor', n)"
         />
       </span>
-      <button
-        type="button"
-        class="ex__trash"
+      <WpIconButton
+        icon="pi-trash"
+        tone="danger"
         :data-test="`ex-extra-trash-${i}`"
-        aria-label="Remove extra exception"
+        label="Remove extra exception"
         @click="onExtraTrash(i)"
-      ><i class="pi pi-trash" /></button>
+      />
       </template>
     </div>
     </div>
@@ -546,13 +548,14 @@ const FACTOR_STEP = 0.1;
       {{ onlyLinkSources.length === 1 ? "it" : "them" }} can be picked.
     </p>
 
-    <button
+    <WpButton
       v-if="!stranded"
-      type="button"
-      class="ex__add-extra"
+      variant="add"
+      icon="pi-plus"
+      block
       data-test="ex-add-extra"
       @click="onAddExtra"
-    ><i class="pi pi-plus" /> Add extra exception</button>
+    >Add extra exception</WpButton>
 
     <!-- Stranded snapshot has no editable list; a hint points to the
          reattach banner above (mirrors the SPA read-only exceptions). -->
@@ -759,49 +762,6 @@ const FACTOR_STEP = 0.1;
   background: color-mix(in srgb, var(--wp-status-modified, #fb923c) 22%, transparent);
   color: var(--wp-status-modified, #fb923c);
 }
-.ex__trash {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  border-radius: 4px;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  font-size: 11px;
-  flex-shrink: 0;
-  transition: background 0.12s, color 0.12s;
-}
-.ex__trash:hover {
-  background: color-mix(in srgb, var(--wp-danger, #e05252) 18%, transparent);
-  border-color: color-mix(in srgb, var(--wp-danger, #e05252) 50%, transparent);
-  color: var(--wp-danger, #e05252);
-}
-.ex__trash:active {
-  background: color-mix(in srgb, var(--wp-danger, #e05252) 30%, transparent);
-}
-.ex__trash .pi { font-size: 11px; line-height: 1; }
-.ex__add-extra {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: transparent;
-  border: 1px dashed var(--wp-border);
-  color: var(--wp-text-muted, var(--wp-text2));
-  padding: 5px 10px;
-  font: 11px var(--wp-font-sans);
-  border-radius: 3px;
-  cursor: pointer;
-  margin-top: 8px;
-}
-.ex__add-extra:hover {
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-text));
-}
-.ex__add-extra .pi { font-size: 10px; }
 .ex__only-note {
   margin: 8px 0 0;
   font: 400 11px var(--wp-font-sans);

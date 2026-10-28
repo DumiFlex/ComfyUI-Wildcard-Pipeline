@@ -24,6 +24,7 @@
  */
 import { ref } from "vue";
 import type { WildcardRefData } from "../../../../../manager/utils/library-suggestions";
+import WpButton from "../../../../shared/WpButton.vue";
 
 const props = withDefaults(defineProps<{
   danglingSource: boolean;
@@ -148,14 +149,14 @@ function confirm(side: Side): void {
         <span v-if="sourceCachedName"> (was “{{ sourceCachedName }}”)</span>
         is not in your library.
       </span>
-      <button type="button" class="rb__btn" data-test="reattach-btn-source" @click="openDropdown('source')">Reattach</button>
-      <button
+      <WpButton data-test="reattach-btn-source" @click="openDropdown('source')">Reattach</WpButton>
+      <WpButton
         v-if="downloadableSides.source"
-        type="button"
-        class="rb__btn rb__btn--download"
+        variant="outline"
+        icon="pi-cloud-download"
         data-test="reattach-download-source"
         @click="emit('downloadreattach', { side: 'source' })"
-      ><i class="pi pi-cloud-download" aria-hidden="true" /> Download from community</button>
+      >Download from community</WpButton>
 
       <div v-if="openSide === 'source'" class="rb__picker">
         <input v-model="query" type="text" class="rb__search" placeholder="Search wildcards…" spellcheck="false" aria-label="Search wildcards to reattach source" />
@@ -184,7 +185,12 @@ function confirm(side: Side): void {
           This changes the constraint everywhere it's used.
         </p>
         <p class="rb__note">Cancel is the only undo — confirm is final.</p>
-        <button type="button" class="rb__confirm" data-test="reattach-confirm-source" :disabled="!picked || undefined" @click="confirm('source')">Confirm reattach</button>
+        <WpButton
+          variant="primary"
+          data-test="reattach-confirm-source"
+          :disabled="!picked || undefined"
+          @click="confirm('source')"
+        >Confirm reattach</WpButton>
       </div>
     </div>
 
@@ -195,14 +201,14 @@ function confirm(side: Side): void {
         <span v-if="targetCachedName"> (was “{{ targetCachedName }}”)</span>
         is not in your library.
       </span>
-      <button type="button" class="rb__btn" data-test="reattach-btn-target" @click="openDropdown('target')">Reattach</button>
-      <button
+      <WpButton data-test="reattach-btn-target" @click="openDropdown('target')">Reattach</WpButton>
+      <WpButton
         v-if="downloadableSides.target"
-        type="button"
-        class="rb__btn rb__btn--download"
+        variant="outline"
+        icon="pi-cloud-download"
         data-test="reattach-download-target"
         @click="emit('downloadreattach', { side: 'target' })"
-      ><i class="pi pi-cloud-download" aria-hidden="true" /> Download from community</button>
+      >Download from community</WpButton>
 
       <div v-if="openSide === 'target'" class="rb__picker">
         <input v-model="query" type="text" class="rb__search" placeholder="Search wildcards…" spellcheck="false" aria-label="Search wildcards to reattach target" />
@@ -231,7 +237,12 @@ function confirm(side: Side): void {
           This changes the constraint everywhere it's used.
         </p>
         <p class="rb__note">Cancel is the only undo — confirm is final.</p>
-        <button type="button" class="rb__confirm" data-test="reattach-confirm-target" :disabled="!picked || undefined" @click="confirm('target')">Confirm reattach</button>
+        <WpButton
+          variant="primary"
+          data-test="reattach-confirm-target"
+          :disabled="!picked || undefined"
+          @click="confirm('target')"
+        >Confirm reattach</WpButton>
       </div>
     </div>
   </section>
@@ -254,32 +265,6 @@ function confirm(side: Side): void {
 .rb__warn-icon { color: var(--wp-danger, #ef4444); font-size: 12px; }
 .rb__txt { flex: 1; color: var(--wp-text, #e7e7ee); }
 .rb__txt code { font-family: var(--wp-font-mono, monospace); }
-.rb__btn,
-.rb__confirm {
-  padding: 4px 12px;
-  border: 1px solid var(--wp-accent, #6366f1);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--wp-accent-text, var(--wp-text));
-  font: 11px var(--wp-font-sans);
-  cursor: pointer;
-}
-.rb__confirm { background: var(--wp-accent, #6366f1); color: #fff; margin-top: 6px; }
-/* Secondary affordance beside Reattach — pulls the missing dep from the
- * community. Quieter than the primary accent border so the manual dropdown
- * stays the obvious first action; the cloud icon signals the network pull. */
-.rb__btn--download {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border-color: var(--wp-border, rgba(255,255,255,0.12));
-  color: var(--wp-text-muted, var(--wp-text2, var(--wp-text)));
-}
-.rb__btn--download:hover {
-  border-color: var(--wp-accent, #6366f1);
-  color: var(--wp-accent-text, var(--wp-text));
-}
-.rb__btn--download .pi { font-size: 11px; }
 .rb__picker {
   flex-basis: 100%;
   margin-top: 8px;

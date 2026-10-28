@@ -12,6 +12,7 @@ import SweepPanel from "./SweepPanel.vue";
 import { liveAxes, sweepTotal, type SweepConfig } from "./types";
 import type { SweepCandidate } from "./sweep-candidates";
 import WpButton from "../shared/WpButton.vue";
+import CloseButton from "../shared/CloseButton.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -70,9 +71,7 @@ const preview = computed(() => {
           <div class="wp-swm__title-row"><span class="wp-swm__name">WP Context Loop</span><span class="wp-swm__chip">Sweep</span></div>
           <div class="wp-swm__sub">Run every combination of the wildcards you pick, one frame each.</div>
         </div>
-        <button type="button" class="wp-swm__close" data-test="sweep-modal-close" aria-label="Close" @click="emit('close')">
-          <svg width="12" height="12" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19" /></svg>
-        </button>
+        <CloseButton size="sm" kbd="Esc" data-test="sweep-modal-close" @click="emit('close')" />
       </div>
 
       <div class="wp-swm__body">
@@ -113,8 +112,6 @@ const preview = computed(() => {
 .wp-swm__name { font: 600 13px var(--wp-font-sans); }
 .wp-swm__chip { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .06em; padding: 2px 6px; border-radius: 2px; background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent); }
 .wp-swm__sub { font: 10.5px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); margin-top: 3px; }
-.wp-swm__close { background: transparent; border: 0; color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; padding: 4px; display: flex; }
-.wp-swm__close:hover { color: var(--wp-text); }
 
 .wp-swm__body { overflow-y: auto; padding: 12px 14px; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; font-size: 11px; }
 

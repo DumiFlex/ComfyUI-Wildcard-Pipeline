@@ -10,6 +10,7 @@ import {
 } from "../defaults";
 import { tokenize, type PreviewToken } from "../../_shared/preview-tokens";
 import { stripNonIdentifierChars } from "../../../../../manager/utils/slug";
+import WpButton from "../../../../shared/WpButton.vue";
 
 const props = defineProps<{
   row: DraftRow;
@@ -236,26 +237,26 @@ function onDelete(): void {
       </span>
     </span>
 
-    <button
+    <WpButton
       v-if="showReset"
-      type="button"
-      class="row__reset"
+      variant="outline"
+      icon="pi-replay"
       data-test="row-reset"
       :aria-label="`Reset row $${library?.name ?? row.id} to library default`"
-      title="Restore this row to library default"
+      tip="Restore this row to library default"
       @click="onReset"
-    ><i class="pi pi-replay" aria-hidden="true" /></button>
+    />
     <span v-else></span>
 
-    <button
+    <WpButton
       v-if="isAdded"
-      type="button"
-      class="row__delete"
+      variant="outline"
+      icon="pi-times"
       data-test="row-delete"
       :aria-label="`Remove instance-only row $${row.name}`"
-      title="Remove this instance-only row"
+      tip="Remove this instance-only row"
       @click="onDelete"
-    ><i class="pi pi-times" aria-hidden="true" /></button>
+    />
     <span v-else></span>
   </div>
 </template>
@@ -356,30 +357,6 @@ function onDelete(): void {
 .row--added .row__value,
 .row--added .row__name-prefix { color: var(--wp-green); }
 
-.row__reset, .row__delete {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  padding: 0;
-  width: 24px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 2px;
-}
-.row__reset:hover {
-  border-color: var(--wp-border);
-  color: var(--wp-accent-text, var(--wp-text));
-  background: rgba(99, 102, 241, 0.10);
-}
-.row__delete:hover {
-  border-color: var(--wp-border);
-  color: var(--wp-status-modified, var(--wp-text));
-  background: rgba(251, 146, 60, 0.10);
-}
-.row__reset .pi, .row__delete .pi { font-size: 10px; }
 
 /* Per-row preview tokens — appears below the input only when the
  * value contains non-text tokens (alt/repeat/var/ref/escape). Mirrors

@@ -14,8 +14,8 @@ describe("ContextLoopWidget", () => {
     expect(w.find('[data-test="loop-override-toggle"]').attributes("aria-checked")).toBe("false");
     expect(w.find('[data-test="loop-bypass-toggle"]').attributes("aria-checked")).toBe("false");
     // Both internal toggles default to ON.
-    expect(w.find('[data-test="loop-iteration-internal"]').classes()).toContain("wp-loop__pi-btn--on");
-    expect(w.find('[data-test="loop-total-internal"]').classes()).toContain("wp-loop__pi-btn--on");
+    expect(w.find('[data-test="loop-iteration-internal"]').attributes("aria-pressed")).toBe("true");
+    expect(w.find('[data-test="loop-total-internal"]').attributes("aria-pressed")).toBe("true");
   });
 
   it("emits new strategy on chip click", async () => {
@@ -89,7 +89,7 @@ describe("ContextLoopWidget", () => {
     const w = mount(ContextLoopWidget, {
       props: { modelValue: { ...emptyContextLoopConfig(), iteration_internal: true } },
     });
-    expect(w.find('[data-test="loop-iteration-internal"]').classes()).toContain("wp-loop__pi-btn--on");
+    expect(w.find('[data-test="loop-iteration-internal"]').attributes("aria-pressed")).toBe("true");
   });
 });
 

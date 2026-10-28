@@ -13,6 +13,7 @@ import {
   type LibraryRow,
 } from "../defaults";
 import ValueRow from "./ValueRow.vue";
+import WpButton from "../../../../shared/WpButton.vue";
 
 const props = defineProps<{ module: ModuleEntry }>();
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
@@ -150,15 +151,13 @@ const addedCount = computed(() => draftRows.value.filter((r) => r.libraryId === 
         @reset="onReset"
         @delete="onDelete"
       />
-      <button
-        type="button"
-        class="vals__add"
+      <WpButton
+        variant="add"
+        icon="pi-plus"
+        block
         data-test="vals-add"
         @click="onAddRow"
-      >
-        <i class="pi pi-plus" aria-hidden="true" />
-        Add new $var for this instance
-      </button>
+      >Add new $var for this instance</WpButton>
     </div>
 
     <div class="vals__summary" data-test="vals-summary">
@@ -213,25 +212,6 @@ const addedCount = computed(() => draftRows.value.filter((r) => r.libraryId === 
   letter-spacing: 0.1em;
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.vals__add {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 6px 10px;
-  background: transparent;
-  border: 0;
-  border-top: 1px dashed var(--wp-border);
-  color: var(--wp-text-muted, var(--wp-text2));
-  cursor: pointer;
-  font: 10px var(--wp-font-sans);
-  text-align: left;
-}
-.vals__add:hover {
-  color: var(--wp-accent-text, var(--wp-text));
-  background: rgba(99, 102, 241, 0.05);
-}
-.vals__add .pi { font-size: 9px; }
 .vals__summary {
   margin-top: 10px;
   font: 10px var(--wp-font-sans);

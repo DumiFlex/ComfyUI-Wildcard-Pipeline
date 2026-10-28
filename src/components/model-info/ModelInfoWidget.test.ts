@@ -82,7 +82,7 @@ describe("ModelInfoWidget", () => {
 
   it("rows start internal; the globe shows a variable in the Assembler", async () => {
     const w = mk({ loaderName: PONY });
-    expect(w.find('[data-test="mi-internal-variant"]').classes()).toContain("is-active");
+    expect(w.find('[data-test="mi-internal-variant"]').attributes("aria-pressed")).toBe("true");
     await w.find('[data-test="mi-internal-variant"]').trigger("click");
     expect(lastEmit(w).internal).toEqual({ family: true, variant: false, name: true });
   });

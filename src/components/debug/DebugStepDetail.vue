@@ -12,6 +12,7 @@ import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import DebugCondition from "./DebugCondition.vue";
 import { ruleActions, type RawRuleDetail, type TraceStep, type WarningRow } from "./debug-model";
 import { isNegativeMode } from "../../extension/derivation-conditions";
+import WpButton from "../shared/WpButton.vue";
 
 const props = defineProps<{
   step: TraceStep;
@@ -132,9 +133,11 @@ function modeGlyph(mode: string | undefined): string {
     <template v-if="step.kind === 'derivation' && d?.rules">
       <div v-if="d.rules.length > 1" class="wp-dbg-rules__bar">
         <span class="wp-dbg-dim">{{ d.rules.length }} rules, {{ d.rules.filter((r) => ruleOutcome(r).tone === "ok").length }} fired</span>
-        <button type="button" class="wp-dbg-linkbtn" data-test="dbg-rules-all" @click="setAllRules(!allRulesOpen)">
-          {{ allRulesOpen ? "Fold all" : "Open all" }}
-        </button>
+        <WpButton
+          variant="link"
+          data-test="dbg-rules-all"
+          @click="setAllRules(!allRulesOpen)"
+        >{{ allRulesOpen ? "Fold all" : "Open all" }}</WpButton>
       </div>
       <div
         v-for="(rule, ri) in d.rules"
@@ -359,14 +362,6 @@ function modeGlyph(mode: string | undefined): string {
   background: var(--wp-bg-deep, var(--wp-bg));
 }
 .wp-dbg-rules__bar { display: flex; align-items: center; justify-content: space-between; font-size: 10px; }
-.wp-dbg-linkbtn {
-  all: unset;
-  cursor: pointer;
-  font-size: 10px;
-  color: var(--wp-accent-text, var(--wp-accent));
-}
-.wp-dbg-linkbtn:hover { text-decoration: underline; }
-.wp-dbg-linkbtn:focus-visible { outline: 1px solid var(--wp-accent); outline-offset: 1px; }
 .wp-dbg-rule__head {
   all: unset;
   display: flex;

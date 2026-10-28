@@ -11,6 +11,7 @@ import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { patchInstance } from "../../instance/patch";
 import { stripNonIdentifierChars } from "../../../../../manager/utils/slug";
+import WpButton from "../../../../shared/WpButton.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -127,15 +128,15 @@ function onResetBinding(): void {
           aria-label="Display name"
           @input="onNameInput"
         />
-        <button
+        <WpButton
           v-if="nameOverridden"
-          type="button"
-          class="id__reset"
+          variant="outline"
+          icon="pi-replay"
           data-test="id-name-reset"
-          :title="`Restore name to library default: ${libraryName}`"
+          :tip="`Restore name to library default: ${libraryName}`"
           aria-label="Reset display name to library default"
           @click="onResetName"
-        ><i class="pi pi-replay" aria-hidden="true" /></button>
+        />
       </div>
     </div>
 
@@ -164,15 +165,15 @@ function onResetBinding(): void {
             @input="onBindingInput"
           />
         </div>
-        <button
+        <WpButton
           v-if="bindingOverridden"
-          type="button"
-          class="id__reset"
+          variant="outline"
+          icon="pi-replay"
           data-test="id-binding-reset"
-          :title="`Restore binding to library default: $${libraryBinding}`"
+          :tip="`Restore binding to library default: $${libraryBinding}`"
           aria-label="Reset variable binding to library default"
           @click="onResetBinding"
-        ><i class="pi pi-replay" aria-hidden="true" /></button>
+        />
       </div>
     </div>
     <p

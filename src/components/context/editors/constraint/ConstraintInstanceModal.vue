@@ -47,6 +47,7 @@ import { collectTransitiveDeps } from "../../../../manager/community/transitive-
 import { downloadDepsForDangling } from "../../../../manager/community/download-and-reattach";
 import { installEnvelope } from "../../../../manager/import-export/install";
 import WpButton from "../../../shared/WpButton.vue";
+import CloseButton from "../../../shared/CloseButton.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
@@ -687,13 +688,7 @@ function onSpaClick(): void {
         </div>
         <div class="wp-cnm__sub">Library entry · source pick → modifies target option weights</div>
       </div>
-      <button
-        type="button"
-        class="wp-cnm__close"
-        aria-label="Close"
-        data-test="cnm-close"
-        @click="emit('cancel')"
-      ><i class="pi pi-times" aria-hidden="true" /></button>
+      <CloseButton size="sm" kbd="Esc" data-test="cnm-close" @click="emit('cancel')" />
     </header>
 
     <ConstraintReattachSection
@@ -765,11 +760,21 @@ function onSpaClick(): void {
         <i class="pi pi-external-link" aria-hidden="true" />
         Edit library entry in SPA
       </a>
-      <WpButton variant="ghost" icon="pi-replay" data-test="cnm-clear-all" title="Clear all instance overrides on this constraint" @click="emit('clear-all-overrides')">Reset overrides</WpButton>
+      <WpButton
+        variant="ghost"
+        icon="pi-replay"
+        data-test="cnm-clear-all"
+        title="Clear all instance overrides on this constraint"
+        @click="emit('clear-all-overrides')"
+      >Reset overrides</WpButton>
       <span class="wp-cnm__hint">
         <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
-      <WpButton v-if="canSaveToLibrary" data-test="cnm-save-lib" @click="emit('save-to-library')">Save to library</WpButton>
+      <WpButton
+        v-if="canSaveToLibrary"
+        data-test="cnm-save-lib"
+        @click="emit('save-to-library')"
+      >Save to library</WpButton>
       <WpButton data-test="cnm-cancel" @click="emit('cancel')">Cancel</WpButton>
       <WpButton variant="primary" data-test="cnm-save" @click="emit('save')">Save</WpButton>
     </footer>

@@ -76,10 +76,13 @@ function onSeed(n: number | null) {
         class="seed-input-wrap" :model-value="seed" :min="0" :max="SEED_MAX" commit="input"
         aria-label="Locked seed" data-test="seedrow-input" @update:model-value="onSeed"
       />
-      <button type="button" class="seed-roll" data-test="seedrow-roll" title="Random seed"
-        aria-label="Random seed" @click="set(randomSeed())">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5" /></svg>
-      </button>
+      <WpButton
+        variant="ghost"
+        icon="pi-refresh"
+        data-test="seedrow-roll"
+        aria-label="Random seed"
+        @click="set(randomSeed())"
+      />
     </span>
   </div>
 </template>
@@ -122,6 +125,4 @@ function onSeed(n: number | null) {
  * a fixed size. */
 .seed-controls { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; }
 .seed-input-wrap { flex: 1 1 auto; min-width: 88px; max-width: 178px; }
-.seed-roll { background: transparent; border: 0; color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; padding: 2px 4px; display: flex; flex-shrink: 0; }
-.seed-roll:hover { color: var(--wp-accent-text, var(--wp-text)); }
 </style>

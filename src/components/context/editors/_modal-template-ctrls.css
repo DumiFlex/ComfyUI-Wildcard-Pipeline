@@ -1,7 +1,6 @@
 /* Shared template-section controls — insert-slot dropdown button + reset
- * button + dropdown panel + dropdown item. Used by:
- *   - InjectorBindingModal      (`.ibm__*`) — the insert-ref menu
- *   - Combine's TemplateSection (`.wp-tpl__reset` only)
+ * dropdown panel + dropdown item. Used by InjectorBindingModal
+ * (`.ibm__*`), the insert-ref menu.
  *
  * Both modals previously declared their own copies of these rules with
  * tiny differences in padding/height — visible in the UI as a slight
@@ -9,10 +8,6 @@
  * sibling reset button. Single source of truth here keeps both modals
  * locked to the same dimensions (22px tall, explicit height + box-
  * sizing).
- *
- * NB: the `.wp-tpl__menu*` half of these pairs was dropped — Combine's
- * TemplateSection no longer has an insert menu, so those selectors matched
- * nothing. `.wp-tpl__reset` below IS still live.
  *
  * Imported globally from ContextWidget's unscoped `<style>` block.
  * Class names are namespaced (`.wp-tpl__*`, `.ibm__*`) so no leakage
@@ -52,44 +47,9 @@
 }
 .wp-ibm__menu-btn .pi { font-size: 9px; }
 
-/* Reset button — used by section-level modal headers:
- *   - .wp-tpl__reset      Combine TemplateSection reset
- *   - .ibm__reset      InjectorBindingModal template reset
- *   - .id__reset       IdentitySection reset (all kinds)
- *
- * 22x22 square so it visually pairs with the 22px-tall menu-btn
- * variants above. Consumers used to declare their own copies with
- * tiny drift (`width: 24px`, `height: auto`, etc) — single source
- * keeps them locked.
- *
- * NOT included here: `.row__reset` / `.row__delete` (FixedValues
- * ValueRow inline per-row actions) and `.cfp__reset` (Constraint
- * cell popover). Those use a "stealth" style (transparent border
- * at rest, colored bg on hover) for in-row inline actions rather
- * than the section-level affordance shape. Different visual role,
- * different rule set — kept local to those SFCs. */
-.wp-tpl__reset, .ibm__reset, .id__reset {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  box-sizing: border-box;
-  background: transparent;
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  flex-shrink: 0;
-  padding: 0;
-}
-.wp-tpl__reset:hover, .ibm__reset:hover, .id__reset:hover {
-  border-color: var(--wp-accent);
-  color: var(--wp-text);
-}
-.wp-tpl__reset .pi, .ibm__reset .pi, .id__reset .pi {
-  font-size: 10px;
-}
+/* The section reset buttons (`+ $slot` row's ↺, IdentitySection's ↺)
+ * are the shared WpButton (outline, icon only), 24 px like the canvas
+ * control scale. */
 
 /* Teleported to <body>, so `fixed` viewport coords rather than `absolute`
  * inside the modal — as an absolutely-positioned child the menu was CLIPPED

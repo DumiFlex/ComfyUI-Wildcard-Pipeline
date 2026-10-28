@@ -450,21 +450,6 @@ function viewForBundle(key: string) {
 }
 .wp-pg-mockup .wp-drag-handle:active { cursor: grabbing; }
 .wp-pg-mockup .wp-drag-handle__grip { display: block; }
-.wp-pg-mockup .wp-collapse-btn {
-  background: transparent;
-  border: none;
-  color: var(--wp-text-dim, var(--wp-text3));
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.wp-pg-mockup .wp-collapse-btn .pi { font-size: 10px; }
-.wp-pg-mockup .wp-collapse-btn:hover { color: var(--wp-text); }
 .wp-pg-mockup .wp-row-type-icon {
   width: 16px;
   height: 16px;
@@ -582,9 +567,8 @@ function viewForBundle(key: string) {
   color: var(--wp-accent);
 }
 /* Action-button cluster — mirrors ContextWidget's `.wp-mod-actions`
- * row so the trio reads with the same density as canvas. Base
- * button styling comes from row-primitives.css (`.wp-btn--icon-sm`
- * and variants), already loaded globally via ContextWidget. */
+ * row so the trio reads with the same density as canvas. The buttons
+ * are the shared WpIconButton, the same as the real rows. */
 .wp-pg-mockup .wp-mod-actions {
   display: flex;
   gap: 1px;

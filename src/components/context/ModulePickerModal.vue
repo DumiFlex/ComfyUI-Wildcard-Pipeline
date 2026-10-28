@@ -15,9 +15,7 @@
             </span>
           </div>
         </div>
-        <button type="button" class="wp-picker__close" aria-label="Close" @click="$emit('close')">
-          <i class="pi pi-times" aria-hidden="true"></i>
-        </button>
+        <CloseButton size="sm" kbd="Esc" @click="$emit('close')" />
       </header>
 
       <!-- Toolbar: search + kind tabs + compact filter buttons.
@@ -43,31 +41,27 @@
           data-testid="picker-search"
         />
 
-        <!-- Inline icon-only quick toggles. Each is a thin square
-             button next to search. Active state = accent fill. -->
-        <button
+        <!-- Inline icon-only quick toggles (WpButton `pressed`), next to
+             search. On = accent tint. -->
+        <WpButton
           v-if="hasFavoritesInData"
-          type="button"
-          class="wp-picker__icon-btn"
-          :class="{ 'wp-picker__icon-btn--active': favoritesOnly }"
-          :title="favoritesOnly ? 'Showing favorites only · click to clear' : 'Show favorites only'"
+          variant="outline"
+          :icon="favoritesOnly ? 'pi-star-fill' : 'pi-star'"
+          :pressed="favoritesOnly"
+          :aria-label="favoritesOnly ? 'Showing favorites only, click to clear' : 'Show favorites only'"
           data-testid="picker-filter-favorites"
           @click="favoritesOnly = !favoritesOnly"
-        >
-          <i :class="['pi', favoritesOnly ? 'pi-star-fill' : 'pi-star']" aria-hidden="true"></i>
-        </button>
-        <button
+        />
+        <WpButton
           v-if="alreadyAddedSet.size > 0"
-          type="button"
-          class="wp-picker__icon-btn"
-          :class="{ 'wp-picker__icon-btn--active': hideAlreadyAdded }"
-          :title="hideAlreadyAdded ? `Hiding ${alreadyAddedSet.size} already-added modules · click to show` : `Hide ${alreadyAddedSet.size} already-added modules`"
+          variant="outline"
+          :icon="hideAlreadyAdded ? 'pi-eye-slash' : 'pi-eye'"
+          :pressed="hideAlreadyAdded"
+          :aria-label="hideAlreadyAdded ? `Hiding ${alreadyAddedSet.size} already-added modules, click to show` : `Hide ${alreadyAddedSet.size} already-added modules`"
           data-testid="picker-filter-hide-added"
           data-test="hide-added-toggle"
           @click="hideAlreadyAdded = !hideAlreadyAdded"
-        >
-          <i :class="['pi', hideAlreadyAdded ? 'pi-eye-slash' : 'pi-eye']" aria-hidden="true"></i>
-        </button>
+        />
 
         <!-- Filters popover trigger. Renders only when there's
              actually category or tag data to filter on. Badge shows
@@ -78,22 +72,22 @@
           v-if="usedCategories.length || availableTags.length"
           class="wp-picker__filters-pop"
         >
-          <button
-            type="button"
-            class="wp-picker__icon-btn wp-picker__filter-trigger"
-            :class="{ 'wp-picker__icon-btn--active': activePopoverCount > 0 || filtersOpen }"
-            :title="filtersOpen ? 'Close filters' : 'More filters'"
+          <WpButton
+            variant="outline"
+            class="wp-picker__filter-trigger"
+            icon="pi-filter"
+            :pressed="activePopoverCount > 0 || filtersOpen"
             :aria-expanded="filtersOpen"
+            aria-label="Filters"
+            :tip="filtersOpen ? 'Close filters' : 'More filters'"
             data-testid="picker-filter-trigger"
             @click="filtersOpen = !filtersOpen"
-          >
-            <i class="pi pi-filter" aria-hidden="true"></i>
-            <span
-              v-if="activePopoverCount > 0"
-              class="wp-picker__filter-badge"
-              aria-label="active filter count"
-            >{{ activePopoverCount }}</span>
-          </button>
+          />
+          <span
+            v-if="activePopoverCount > 0"
+            class="wp-picker__filter-badge"
+            aria-label="active filter count"
+          >{{ activePopoverCount }}</span>
 
           <!-- Popover panel. Anchored under the trigger button.
                Click-outside closes via the `wp-picker__pop-shield`
@@ -132,16 +126,13 @@
                 </div>
               </div>
 
-              <button
+              <WpButton
                 v-if="hasActiveFilter"
-                type="button"
-                class="wp-picker__pop-clear"
+                variant="ghost"
+                icon="pi-filter-slash"
                 data-testid="picker-filter-clear"
                 @click="clearAllFilters"
-              >
-                <i class="pi pi-filter-slash" aria-hidden="true"></i>
-                Clear all filters
-              </button>
+              >Clear all filters</WpButton>
             </div>
           </Transition>
         </div>
@@ -202,7 +193,7 @@
         <div v-else-if="loadError" class="wp-picker__state wp-picker__state--error">
           <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>
           {{ loadError }}
-          <button type="button" class="wp-picker__retry" @click="reload">Retry</button>
+          <WpButton @click="reload">Retry</WpButton>
         </div>
         <div v-else-if="filteredModules.length === 0" class="wp-picker__state">
           <i class="pi pi-inbox" aria-hidden="true"></i>
@@ -211,22 +202,22 @@
             All matching modules are already in this Context.
           </template>
           <template v-else>No modules in this category.</template>
-          <button
+          <WpButton
             v-if="isHideAddedSuppressing"
-            type="button"
-            class="wp-picker__create"
+            variant="outline"
+            icon="pi-eye"
             data-testid="picker-show-already-added"
-            title="Turn off the hide-already-added filter so you can re-add an existing module as a sibling."
+            tip="Turn off the hide-already-added filter so you can re-add an existing module as a sibling."
             @click="hideAlreadyAdded = false"
-          ><i class="pi pi-eye" aria-hidden="true"></i> Show already added</button>
-          <button
+          >Show already added</WpButton>
+          <WpButton
             v-else-if="!searchTerm"
-            type="button"
-            class="wp-picker__create"
+            variant="outline"
+            icon="pi-plus"
             data-testid="picker-create-module"
-            :title="`Open the library to create a new ${kindFilter === 'all' ? 'module' : (KIND_SINGULAR[kindFilter] ?? 'module')}`"
+            :tip="`Open the library to create a new ${kindFilter === 'all' ? 'module' : (KIND_SINGULAR[kindFilter] ?? 'module')}`"
             @click="createInSpa"
-          ><i class="pi pi-plus" aria-hidden="true"></i> {{ createLabel }}</button>
+          >{{ createLabel }}</WpButton>
         </div>
 
         <template v-else>
@@ -279,14 +270,7 @@
             picked
           </span>
           <span class="wp-picker__selection-spacer"></span>
-          <button
-            type="button"
-            class="wp-picker__selection-clear"
-            data-testid="picker-clear"
-            @click="selected.clear()"
-          >
-            Clear
-          </button>
+          <WpButton variant="ghost" data-testid="picker-clear" @click="selected.clear()">Clear</WpButton>
         </div>
         <div class="wp-picker__selection-chips">
           <span
@@ -326,7 +310,13 @@
         </span>
         <span class="wp-picker__footer-spacer"></span>
         <WpButton @click="$emit('close')">Cancel</WpButton>
-        <WpButton variant="primary" icon="pi-plus" data-test="picker-add-btn" :disabled="selected.size === 0" @click="commitAdd">Add {{ selected.size }} {{ selected.size === 1 ? "module" : "modules" }}</WpButton>
+        <WpButton
+          variant="primary"
+          icon="pi-plus"
+          data-test="picker-add-btn"
+          :disabled="selected.size === 0"
+          @click="commitAdd"
+        >Add {{ selected.size }} {{ selected.size === 1 ? "module" : "modules" }}</WpButton>
       </footer>
     </div>
   </ModalShell>
@@ -356,6 +346,7 @@ import WpSelect from "../shared/WpSelect.vue";
 import { kindIcon } from "../shared/kind-icons";
 import WpTabs, { type TabItem } from "../shared/WpTabs.vue";
 import WpButton from "../shared/WpButton.vue";
+import CloseButton from "../shared/CloseButton.vue";
 
 interface PickerModule {
   id: string;
@@ -1092,23 +1083,6 @@ onBeforeUnmount(detachCaptureListeners);
   margin-left: 6px;
   font-weight: 400;
 }
-.wp-picker__close {
-  width: 28px; height: 28px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  transition: background var(--wp-motion-quick) ease, color var(--wp-motion-quick) ease;
-}
-.wp-picker__close:hover { background: var(--wp-bg-3); color: var(--wp-text); }
-.wp-picker__close:focus-visible {
-  outline: none;
-  border-color: var(--wp-accent-500);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 25%, transparent);
-}
-.wp-picker__close .pi { font-size: 11px; }
 
 /* ── Toolbar ─────────────────────────────────────────────────────── */
 .wp-picker__toolbar {
@@ -1167,31 +1141,6 @@ onBeforeUnmount(detachCaptureListeners);
 }
 .wp-picker__state .pi { font-size: 18px; color: var(--wp-text-dim); }
 .wp-picker__state--error { color: var(--wp-danger, #fca5a5); }
-.wp-picker__create {
-  margin-top: 4px;
-  height: 30px;
-  padding: 0 14px;
-  display: inline-flex; align-items: center; gap: 7px;
-  background: var(--wp-accent-600); border: 1px solid var(--wp-accent-500);
-  color: #fff; border-radius: 7px;
-  font: 500 12px var(--wp-font-sans); cursor: pointer;
-  transition: background var(--wp-motion-quick) ease;
-}
-.wp-picker__create:hover { background: var(--wp-accent-500); }
-.wp-picker__create .pi { font-size: 11px; color: #fff; }
-.wp-picker__retry {
-  margin-top: 8px;
-  height: 28px;
-  padding: 0 12px;
-  background: var(--wp-bg-3);
-  border: 1px solid var(--wp-border);
-  border-radius: 6px;
-  color: var(--wp-text);
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-}
-.wp-picker__retry:hover { background: var(--wp-bg-4); }
 
 .wp-picker__section-head {
   display: flex; align-items: center; gap: 8px;
@@ -1354,17 +1303,6 @@ onBeforeUnmount(detachCaptureListeners);
   margin-right: 4px;
 }
 .wp-picker__selection-spacer { flex: 1; }
-.wp-picker__selection-clear {
-  background: transparent;
-  border: none;
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  font-size: 11.5px;
-  font-family: inherit;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-.wp-picker__selection-clear:hover { color: var(--wp-text); background: var(--wp-bg-3); }
 
 .wp-picker__selection-chips {
   display: flex; align-items: center; gap: 6px;
@@ -1447,33 +1385,6 @@ onBeforeUnmount(detachCaptureListeners);
  * Square icon buttons sitting next to the search box. Off = ghost
  * outline + muted icon; on = accent fill. Match the visual weight
  * of the kind tabs so the toolbar reads as one cohesive row. */
-.wp-picker__icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  /* Match search-box height (28px) so the toolbar row aligns. */
-  width: 28px;
-  height: 28px;
-  background: transparent;
-  border: 1px solid var(--wp-border);
-  border-radius: 6px;
-  color: var(--wp-text3);
-  cursor: pointer;
-  transition: background var(--wp-motion-quick), color var(--wp-motion-quick), border-color var(--wp-motion-quick);
-  flex-shrink: 0;
-}
-.wp-picker__icon-btn:hover {
-  color: var(--wp-text);
-  border-color: var(--wp-border2);
-}
-.wp-picker__icon-btn--active {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
-  color: #fff;
-}
-.wp-picker__icon-btn--active:hover { filter: brightness(1.1); color: #fff; }
-.wp-picker__icon-btn .pi { font-size: 12px; }
 
 /* Filter-trigger badge — small pill in the corner showing how many
  * dimensions inside the popover are active. */
@@ -1543,25 +1454,6 @@ onBeforeUnmount(detachCaptureListeners);
   font-style: italic;
   text-transform: none;
 }
-.wp-picker__pop-clear {
-  background: none;
-  border: 1px dashed var(--wp-border2);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text2);
-  cursor: pointer;
-  font-family: var(--wp-font-mono, monospace);
-  font-size: 10px;
-  padding: 5px 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-}
-.wp-picker__pop-clear:hover {
-  color: var(--wp-accent);
-  border-color: var(--wp-accent);
-}
-.wp-picker__pop-clear .pi { font-size: 10px; }
 
 /* Click-shield — covers the rest of the modal so a click outside
  * the popover closes it. Transparent. Excluded from the popover's

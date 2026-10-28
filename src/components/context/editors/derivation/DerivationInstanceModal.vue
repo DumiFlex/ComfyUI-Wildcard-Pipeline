@@ -28,6 +28,7 @@ import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
 import { CONTEXT_POOLS_KEY, overlayContextPools } from "../../../../extension/context-pools";
 import WpButton from "../../../shared/WpButton.vue";
+import CloseButton from "../../../shared/CloseButton.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
@@ -171,13 +172,7 @@ function onSpaClick(): void {
         </div>
         <div class="wp-dvm__sub">Library entry · conditional rule-based variable rewrites</div>
       </div>
-      <button
-        type="button"
-        class="wp-dvm__close"
-        aria-label="Close"
-        data-test="dvm-close"
-        @click="emit('cancel')"
-      ><i class="pi pi-times" aria-hidden="true" /></button>
+      <CloseButton size="sm" kbd="Esc" data-test="dvm-close" @click="emit('cancel')" />
     </header>
 
     <IdentitySection :module="module" @update="onUpdate" />
@@ -211,11 +206,21 @@ function onSpaClick(): void {
         <i class="pi pi-external-link" aria-hidden="true" />
         Edit library entry in SPA
       </a>
-      <WpButton variant="ghost" icon="pi-replay" data-test="dvm-clear-all" title="Clear all instance overrides on this derivation" @click="emit('clear-all-overrides')">Reset overrides</WpButton>
+      <WpButton
+        variant="ghost"
+        icon="pi-replay"
+        data-test="dvm-clear-all"
+        title="Clear all instance overrides on this derivation"
+        @click="emit('clear-all-overrides')"
+      >Reset overrides</WpButton>
       <span class="wp-dvm__hint">
         <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
-      <WpButton v-if="canSaveToLibrary" data-test="dvm-save-lib" @click="emit('save-to-library')">Save to library</WpButton>
+      <WpButton
+        v-if="canSaveToLibrary"
+        data-test="dvm-save-lib"
+        @click="emit('save-to-library')"
+      >Save to library</WpButton>
       <WpButton data-test="dvm-cancel" @click="emit('cancel')">Cancel</WpButton>
       <WpButton variant="primary" data-test="dvm-save" @click="emit('save')">Save</WpButton>
     </footer>

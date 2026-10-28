@@ -26,6 +26,7 @@ import type { ModuleEntry } from "../../../../widgets/_shared";
 import { LockSeedKey } from "../../lock-seed-ctx";
 import WpNumber from "../../../shared/WpNumber.vue";
 import WpSwitch from "../../../shared/WpSwitch.vue";
+import WpButton from "../../../shared/WpButton.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -126,16 +127,14 @@ function onRollClick(): void {
       aria-label="Locked seed" up-label="Increase seed" down-label="Decrease seed"
       data-test="runtime-seed" @update:model-value="onSeedInput"
     />
-    <button
-      type="button"
-      class="seed-roll"
+    <WpButton
+      variant="ghost"
+      icon="pi-refresh"
       data-test="runtime-roll"
-      title="Generate random seed"
+      tip="Generate random seed"
       aria-label="Generate random seed"
       @click="onRollClick"
-    >
-      <i class="pi pi-refresh" aria-hidden="true" />
-    </button>
+    />
   </div>
 </template>
 
@@ -157,13 +156,4 @@ function onRollClick(): void {
   color: var(--wp-accent-text, var(--wp-text));
 }
 .seed-input-wrap { width: 200px; }
-.seed-roll {
-  background: transparent;
-  border: 0;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  padding: 2px 4px;
-  font-size: 10px;
-}
-.seed-roll:hover { color: var(--wp-accent-text, var(--wp-text)); }
 </style>

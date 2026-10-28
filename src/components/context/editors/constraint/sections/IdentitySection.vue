@@ -8,6 +8,7 @@
  */
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
+import WpButton from "../../../../shared/WpButton.vue";
 
 const props = defineProps<{ module: ModuleEntry }>();
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
@@ -47,15 +48,15 @@ function onResetName(): void {
           aria-label="Display name"
           @input="onNameInput"
         />
-        <button
+        <WpButton
           v-if="nameOverridden"
-          type="button"
-          class="id__reset"
+          variant="outline"
+          icon="pi-replay"
           data-test="id-name-reset"
-          :title="`Restore name to library default: ${libraryName}`"
+          :tip="`Restore name to library default: ${libraryName}`"
           aria-label="Reset display name to library default"
           @click="onResetName"
-        ><i class="pi pi-replay" aria-hidden="true" /></button>
+        />
       </div>
     </div>
   </section>

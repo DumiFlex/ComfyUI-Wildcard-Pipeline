@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
 import WpCheck from "../shared/WpCheck.vue";
+import WpIconButton from "../shared/WpIconButton.vue";
 
 const props = defineProps<{
   row: InjectorRow;
@@ -191,15 +192,16 @@ function onDragEnd(): void {
           <circle cx="4.5" cy="10" r="1" />
         </svg>
       </span>
-      <button
-        type="button"
+      <WpIconButton
+        variant="bare"
         class="wp-collapse-btn"
         draggable="false"
         data-test="inj-row-collapse"
-        :title="row._collapsed ? 'Expand' : 'Collapse'"
-        :aria-label="row._collapsed ? 'Expand row preview' : 'Collapse row preview'"
+        :icon="row._collapsed ? 'pi-caret-right' : 'pi-caret-down'"
+        :label="row._collapsed ? 'Expand row preview' : 'Collapse row preview'"
+        :tip="row._collapsed ? 'Expand' : 'Collapse'"
         @click.stop="emit('update', { _collapsed: !row._collapsed })"
-      ><i :class="['pi', row._collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true" /></button>
+      />
       <WpCheck
         size="sm"
         :title="row.enabled ? 'Disable' : 'Enable'"
@@ -270,24 +272,25 @@ function onDragEnd(): void {
       >{{ conflictLabel }}</span>
 
       <div class="wp-row-actions" draggable="false">
-        <button
-          type="button"
-          class="wp-btn--icon-sm wp-btn--accent"
-          :class="{ 'is-active': row.internal }"
+        <WpIconButton
+          icon="pi-globe"
+          tone="accent"
+          :pressed="!!row.internal"
           data-test="inj-row-internal"
           draggable="false"
-          :title="row.internal ? 'Internal flag active — hidden from assembler chip strip' : 'Mark internal — hide from assembler chip strip'"
+          :label="row.internal ? 'Unmark internal' : 'Mark internal'"
+          :tip="row.internal ? 'Internal flag active — hidden from assembler chip strip' : 'Mark internal — hide from assembler chip strip'"
           @click="emit('update', { internal: !row.internal })"
-        ><i class="pi pi-globe" aria-hidden="true" /></button>
-        <button
-          type="button"
-          class="wp-btn--icon-sm wp-btn--danger"
+        />
+        <WpIconButton
+          icon="pi-trash"
+          tone="danger"
           data-test="inj-row-remove"
           draggable="false"
-          :title="isGeneral ? 'Delete this template row' : 'Disconnect this input wire'"
-          :aria-label="isGeneral ? 'delete template row' : `disconnect ${row.slot_name}`"
+          :label="isGeneral ? 'Delete this template row' : `Disconnect ${row.slot_name}`"
+          :tip="isGeneral ? 'Delete this template row' : 'Disconnect this input wire'"
           @click="emit('disconnect')"
-        ><i class="pi pi-trash" aria-hidden="true" /></button>
+        />
       </div>
     </div>
     <!-- Collapse-row holds only the shared summary line — identical
@@ -571,7 +574,7 @@ function onDragEnd(): void {
 .wp-inj-row[data-type="sampler"]      .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-2) 22%, transparent); color: var(--wp-var-2); }
 
 /* .wp-conflict-dot + .wp-conflict-badge + severity variants
- * + .wp-btn--icon-sm + variants → src/components/shared/row-primitives.css.
+ * → src/components/shared/row-primitives.css.
  * The shared file is imported at the top of this scoped block. */
 
 /* Injector-specific badge truncation. The shared .wp-conflict-badge
@@ -587,8 +590,7 @@ function onDragEnd(): void {
   flex-shrink: 1;
 }
 
-/* Row action cluster — flex row of icon buttons. Uses the shared
- * .wp-btn--icon-sm for each button's styling. */
+/* Row action cluster — flex row of WpIconButtons. */
 .wp-row-actions { display: flex; gap: 1px; flex-shrink: 0; }
 
 /* Summary line — base shape comes from shared `.wp-summary`. Override

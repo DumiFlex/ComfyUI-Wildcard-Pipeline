@@ -2249,11 +2249,10 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     await flushPromises();
     onChange.mockClear();
 
-    // Trigger removal via the header's trash button. Bundle-action
-    // migrated to shared `.wp-btn--icon-sm.wp-btn--danger` (Phase 1
-    // shared-primitive consolidation); the bundle-color-tinted bg
-    // override stays on `.wp-bundle-action`.
-    const trash = wrapper.find(".wp-bundle-action.wp-btn--danger");
+    // Trigger removal via the header's trash button (the shared
+    // WpIconButton, danger tone; the bundle tint stays on
+    // `.wp-bundle-action`).
+    const trash = wrapper.find('.wp-bundle-action[data-tone="danger"]');
     await trash.trigger("click");
     // Synchronously after the click, the TransitionGroup container
     // should carry data-suppress-move="true" before the rAF clears it.
@@ -2693,13 +2692,12 @@ describe("ContextWidget bulk toolbar — bundle-aware", () => {
     wrapper.unmount();
   });
 
-  it("the three bulk buttons use the small row-icon size class", () => {
+  it("the three bulk buttons are the shared row icon button", () => {
     const { wrapper } = mountMixed();
     for (const label of ["Collapse all modules", "Expand all modules", "Toggle all enabled"]) {
       const btn = wrapper.find(`[aria-label="${label}"]`);
       expect(btn.exists()).toBe(true);
-      expect(btn.classes()).toContain("wp-btn--icon-sm");
-      expect(btn.classes()).not.toContain("wp-btn--icon");
+      expect(btn.classes()).toContain("wp-icon-btn");
     }
     wrapper.unmount();
   });

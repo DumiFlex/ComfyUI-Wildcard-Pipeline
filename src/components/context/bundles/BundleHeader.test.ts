@@ -105,10 +105,9 @@ describe("BundleHeader", () => {
     const w = mount(BundleHeader, {
       props: { instance: instance(), name: "x", childCount: 0 },
     });
-    // Trash button now uses shared `.wp-btn--icon-sm.wp-btn--danger`
-    // base classes (Phase 1 row-primitive consolidation); the
+    // Trash is the shared WpIconButton (danger tone); the
     // bundle-color-tinted bg override stays on `.wp-bundle-action`.
-    await w.find(".wp-bundle-action.wp-btn--danger").trigger("click");
+    await w.find('.wp-bundle-action[data-tone="danger"]').trigger("click");
     expect(w.emitted("remove")).toBeTruthy();
   });
 
