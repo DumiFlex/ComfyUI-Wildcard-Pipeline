@@ -6,7 +6,7 @@ Every custom control in the extension follows these rules. The component kit (Se
 
 | Folder | What goes there |
 |---|---|
-| `src/components/shared/` | Pieces the canvas uses, and pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`), controls (`SearchInput`, `WpNumber`, `WpCheck`, `WpSelect`, `WpButton`, `WpSwitch`, `WpTabs`, `WpSegmented`, `Disclosure`, `Banner`, `CopyButton`, `CloseButton`, `Slider`, `TagInput`, `InlineEdit`, `DropZone`, `Toolbar`), display and layout pieces (`Badge`, `Kbd`, `DescriptionList`, `CodeBlock`, `Separator`, `Stepper`, `Pagination`, `ResizeHandle`, `SplitPane`, `SortableList`), feedback (`ProgressBar`, `Skeleton`) and the toast look (`ToastCard`). |
+| `src/components/shared/` | Pieces the canvas uses, and pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`), controls (`SearchInput`, `WpNumber`, `WpCheck`, `WpSelect`, `WpButton`, `WpSwitch`, `WpTabs`, `WpSegmented`, `Disclosure`, `Banner`, `CopyButton`, `CloseButton`, `Slider`, `TagInput`, `InlineEdit`, `DropZone`, `Toolbar`, `Combobox`, `DatePicker`, `RangeSlider`, `RadioGroup`), display and layout pieces (`Badge`, `Kbd`, `DescriptionList`, `CodeBlock`, `Separator`, `Stepper`, `Pagination`, `ResizeHandle`, `SplitPane`, `SortableList`, `Avatar`, `Timeline`, `DiffView`, `ImageGrid`, `VirtualList`, `VisuallyHidden`), the `Lightbox` overlay, feedback (`ProgressBar`, `Skeleton`) and the toast look (`ToastCard`). |
 | `src/manager/components/ui/` | Manager-only controls: `Button`, `Input`, `Select`, `Modal`, `ConfirmModal`, `Drawer`, `DataTable` and the rest. |
 
 A component anywhere else is a part of one screen, not a control. If a second screen needs it, move it into a kit folder first.
@@ -144,3 +144,13 @@ Each of these jobs has exactly one component. Don't build a second one, and don'
 | A shortcut | `Kbd` (`Mod+K`) | `<kbd class="wp-kbd">`, a hard-coded ⌘ |
 | A divider | `Separator` | `<hr>`, a bordered div |
 | A row of tool buttons | `Toolbar` (`attached` for a button group) | a flex row with a Tab stop per button |
+| Pick from a long list | `Combobox` (`multiple` for several) | a search box over a hand-made list |
+| A calendar day | `DatePicker` | `<input type="date">` |
+| A low and high number | `RangeSlider` | two Sliders that can cross |
+| One of a few explained options | `RadioGroup` (`cards` for big choices) | `.wp-radio` inputs with own hint text |
+| A person or bot | `Avatar` | an initials circle per screen |
+| Events in order | `Timeline` | a list with its own dots and line |
+| What changed | `DiffView` | two boxes side by side, colour alone |
+| Images in a grid, full screen | `ImageGrid`, `Lightbox` | `<img>` wraps with own zoom overlay |
+| Thousands of rows | `VirtualList` | rendering every row |
+| Text for screen readers only | `VisuallyHidden` | another 1 px clip rule |
