@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Kbd from "@/components/shared/Kbd.vue";
 import { computed, defineAsyncComponent, ref } from "vue";
 import { useRouter } from "vue-router";
 import Icon from "../components/ui/Icon.vue";
@@ -90,7 +91,6 @@ function onBack(): void {
  *  visible label adapts to mac (⌘K) / windows (Ctrl K). */
 const mac = isMac();
 const paletteShortcut = computed(() => ({
-  kbd: mac ? "⌘ K" : "Ctrl K",
   tooltip: mac ? "Search modules and commands (⌘ K)" : "Search modules and commands (Ctrl+K)",
 }));
 function openPalette(): void {
@@ -172,7 +172,7 @@ function openPalette(): void {
     >
       <Icon name="pi-search" :size="12" />
       <span class="wp-topbar__palette-label">Search</span>
-      <kbd class="wp-kbd">{{ paletteShortcut.kbd }}</kbd>
+      <Kbd keys="Mod+K" size="sm" aria-hidden="true" />
     </button>
 
     <button
@@ -433,13 +433,6 @@ button.wp-topbar__update-pill:hover {
   color: var(--wp-warn, #f59e0b);
   background: color-mix(in oklab, var(--wp-warn, #f59e0b) 18%, transparent);
   border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 40%, transparent);
-}
-.wp-topbar__palette-hint .wp-kbd {
-  /* Inherit the chip's font-size so it doesn't tower over the label. */
-  padding: 1px 6px;
-  font-size: 10.5px;
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border);
 }
 @media (max-width: 640px) {
   .wp-topbar__palette-label { display: none; }

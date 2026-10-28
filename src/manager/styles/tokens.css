@@ -897,16 +897,6 @@ input, textarea, select { font: inherit; }
 .wp-chip__close:hover { opacity: 1; background: none; }
 .wp-chip__close:focus-visible { outline: 2px solid var(--wp-accent-500); outline-offset: 1px; border-radius: min(2px, var(--wp-radius-cap, 999px)); opacity: 1; }
 
-.wp-kbd {
-  font-family: var(--wp-font-mono);
-  font-size: 11px;
-  padding: 1px 5px;
-  border: 1px solid var(--wp-border);
-  border-bottom-width: 2px;
-  border-radius: min(4px, var(--wp-radius-cap, 999px));
-  color: var(--wp-text-muted);
-  background: var(--wp-bg-2);
-}
 
 /* ---------- DataTable ---------- */
 .wp-table-wrap {

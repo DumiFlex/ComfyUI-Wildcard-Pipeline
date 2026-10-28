@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Kbd from "../shared/Kbd.vue";
 import SearchInput from "../shared/SearchInput.vue";
 import { computed, nextTick, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
@@ -265,17 +266,17 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 
       <div class="wp-bp__foot">
         <div class="wp-bp__hints">
-          <span class="wp-bp__kbd">↑</span>
-          <span class="wp-bp__kbd">↓</span>
+          <Kbd keys="↑" size="sm" />
+          <Kbd keys="↓" size="sm" />
           <span class="wp-bp__hint-label">nav</span>
           <span class="wp-bp__hint-sep">·</span>
-          <span class="wp-bp__kbd">↵</span>
+          <Kbd keys="Enter" size="sm" />
           <span class="wp-bp__hint-label">insert</span>
           <span class="wp-bp__hint-sep">·</span>
-          <span class="wp-bp__kbd">/</span>
+          <Kbd keys="/" size="sm" />
           <span class="wp-bp__hint-label">search</span>
           <span class="wp-bp__hint-sep">·</span>
-          <span class="wp-bp__kbd">esc</span>
+          <Kbd keys="Esc" size="sm" />
           <span class="wp-bp__hint-label">cancel</span>
         </div>
         <WpButton @click="emit('close')">Cancel</WpButton>
@@ -493,7 +494,7 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 }
 
 /* Footer — keyboard hints inline with Cancel + Create. Matches the
- * module picker pattern: kbd chips are neutral, not amber. */
+ * module picker pattern: the keys are the kit's Kbd. */
 .wp-bp__foot {
   border-top: 1px solid var(--wp-border);
   padding: 10px 14px;
@@ -510,15 +511,6 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   color: var(--wp-text-dim, var(--wp-text3));
   font: 500 11px/1 var(--wp-font-sans);
   flex: 1;
-}
-.wp-bp__kbd {
-  font: 600 10px/1 var(--wp-font-mono, monospace);
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  border-bottom-width: 2px;
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  padding: 2px 5px;
-  color: var(--wp-text);
 }
 .wp-bp__hint-sep { color: var(--wp-text3); margin: 0 1px; }
 .wp-bp__hint-label { color: var(--wp-text-dim, var(--wp-text3)); }

@@ -12,6 +12,7 @@
  */
 import { onErrorCaptured, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import CodeBlock from "@/components/shared/CodeBlock.vue";
 
 const error = ref<Error | null>(null);
 const showStack = ref(false);
@@ -63,8 +64,15 @@ watch(
           <i :class="`pi ${showStack ? 'pi-chevron-up' : 'pi-chevron-down'}`" />
           {{ showStack ? "Hide details" : "Show details" }}
         </button>
-        <pre v-if="showStack" class="wp-error__stack">{{ error.message }}
-{{ error.stack }}</pre>
+        <CodeBlock
+          v-if="showStack"
+          class="wp-error__stack"
+          :code="`${error.message}\n${error.stack ?? ''}`"
+          title="Error details"
+          size="sm"
+          default-wrap
+          max-height="280px"
+        />
       </div>
       <div class="wp-error__actions">
         <button type="button" class="wp-btn wp-btn--primary" @click="reload">
@@ -126,20 +134,7 @@ watch(
 .wp-error__detail {
   margin: 10px 0 18px;
 }
-.wp-error__stack {
-  margin: 12px 0 0;
-  padding: 12px 14px;
-  background: var(--wp-bg-3);
-  border-radius: min(6px, var(--wp-radius-cap, 999px));
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 11px;
-  text-align: left;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--wp-text-muted);
-  max-height: 280px;
-  overflow: auto;
-}
+.wp-error__stack { margin: 12px 0 0; text-align: left; }
 .wp-error__actions {
   display: flex;
   gap: 10px;

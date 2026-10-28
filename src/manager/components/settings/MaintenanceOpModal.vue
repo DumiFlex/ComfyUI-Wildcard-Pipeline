@@ -14,6 +14,7 @@ import Button from "../ui/Button.vue";
 import Modal from "../ui/Modal.vue";
 import type { MaintenanceOp, MaintenanceResult } from "../../api/types";
 import LoadingMark from "@/components/shared/LoadingMark.vue";
+import CodeBlock from "@/components/shared/CodeBlock.vue";
 
 type Phase = "confirm" | "loading" | "result-ok" | "result-error";
 
@@ -88,15 +89,27 @@ function onClose(): void { emit("close"); }
 
     <div v-else-if="phase === 'result-ok'" class="wp-maintop">
       <p class="wp-maintop__success">{{ successSummary }}</p>
-      <pre
+      <CodeBlock
         v-if="integrityOutput"
         class="wp-maintop__output"
-      >{{ integrityOutput }}</pre>
+        :code="integrityOutput"
+        title="Report"
+        size="sm"
+        default-wrap
+        max-height="200px"
+      />
     </div>
 
     <div v-else-if="phase === 'result-error'" class="wp-maintop wp-maintop--error">
       <p class="wp-maintop__error-label">Operation failed</p>
-      <pre class="wp-maintop__output wp-maintop__output--error">{{ errorMessage }}</pre>
+      <CodeBlock
+        class="wp-maintop__output wp-maintop__output--error"
+        :code="errorMessage"
+        title="Error"
+        size="sm"
+        default-wrap
+        max-height="200px"
+      />
     </div>
 
     <template #footer>
@@ -128,24 +141,11 @@ function onClose(): void { emit("close"); }
   padding: var(--wp-space-4) 0;
 }
 .wp-maintop__success { margin: 0; color: var(--wp-text); }
-.wp-maintop__output {
-  margin: var(--wp-space-4) 0 0; padding: var(--wp-space-4);
-  background: var(--wp-bg-2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  font-family: var(--wp-font-mono);
-  font-size: var(--wp-text-xs);
-  white-space: pre-wrap;
-  max-height: 200px;
-  overflow: auto;
-}
+.wp-maintop__output { margin: var(--wp-space-4) 0 0; }
 .wp-maintop--error .wp-maintop__error-label {
   margin: 0;
   color: var(--wp-danger-text);
   font-weight: 500;
 }
-.wp-maintop__output--error {
-  border-color: color-mix(in oklab, var(--wp-danger) 40%, transparent);
-  color: var(--wp-danger-text);
-}
+.wp-maintop__output--error { border-color: color-mix(in oklab, var(--wp-danger) 40%, transparent); }
 </style>

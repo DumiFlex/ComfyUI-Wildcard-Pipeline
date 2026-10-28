@@ -24,6 +24,7 @@
  * there is no draft buffer, mirroring the lightweight per-row UX of
  * the inline row controls. Save = close.
  */
+import Kbd from "../shared/Kbd.vue";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
 import RichTextInput from "../../manager/components/RichTextInput.vue";
@@ -624,7 +625,7 @@ function onKeydown(ev: KeyboardEvent): void {
 
       <footer class="ibm__foot">
         <span class="ibm__hint">
-          <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
+          <Kbd keys="Esc" size="sm" /> cancel · <Kbd keys="Mod+Enter" size="sm" /> save
         </span>
         <WpButton data-test="ibm-cancel" @click="onCancel">Cancel</WpButton>
         <WpButton variant="primary" :disabled="!isDirty" data-test="ibm-save" @click="onSave">Save</WpButton>
@@ -905,13 +906,5 @@ function onKeydown(ev: KeyboardEvent): void {
   margin-right: auto;
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
-}
-.ibm__hint kbd {
-  font: 9px var(--wp-font-mono);
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  padding: 1px 4px;
-  border-radius: min(2px, var(--wp-radius-cap, 999px));
-  color: var(--wp-text-muted, var(--wp-text2));
 }
 </style>

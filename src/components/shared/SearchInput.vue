@@ -19,6 +19,7 @@
  *   `testPrefix` defaults to the input's own `data-test`.
  * - `focus()` and `select()` are exposed for pickers that focus on open.
  */
+import Kbd from "./Kbd.vue";
 import { computed, ref, useAttrs } from "vue";
 
 defineOptions({ inheritAttrs: false });
@@ -109,7 +110,7 @@ defineExpose({
       <template v-if="hasQuery">{{ visible }} of {{ total }}</template>
       <template v-else>{{ total }} {{ noun }}</template>
     </span>
-    <kbd v-if="shortcut && !query" class="wp-search__kbd" aria-hidden="true">{{ shortcut }}</kbd>
+    <Kbd v-if="shortcut && !query" class="wp-search__kbd" :keys="shortcut" size="sm" aria-hidden="true" />
     <button
       v-if="query"
       type="button"
@@ -176,15 +177,7 @@ defineExpose({
 }
 .wp-search__count[data-zero] { color: var(--wp-danger); }
 
-.wp-search__kbd {
-  flex-shrink: 0;
-  padding: 0 var(--wp-space-1);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  background: var(--wp-bg-3);
-  color: var(--wp-text-dim);
-  font: 10px/16px var(--wp-font-mono);
-}
+.wp-search__kbd { flex-shrink: 0; }
 
 /* 20 px hit area even in the 24 px box; the mark draws at 9 px. */
 .wp-search__clear {

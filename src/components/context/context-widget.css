@@ -313,20 +313,7 @@
 }
 .wp-recovery__actions { display: flex; gap: 6px; }
 .wp-recovery__actions > .wp-btn { flex: 1; }
-.wp-recovery__raw {
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  padding: 6px 8px;
-  font-family: var(--wp-font-mono, monospace);
-  font-size: 10px;
-  color: var(--wp-text3);
-  max-height: 120px;
-  overflow: auto;
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
+
 
 /* ── Section label (matches assembler + picker) ──────────────────────── */
 .wp-section-label {
