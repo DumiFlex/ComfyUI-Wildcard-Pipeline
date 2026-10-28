@@ -181,8 +181,6 @@ const settings = [
           don't paint keep the incoming mask, or an empty one when nothing is wired in. Once
           painted, the Mask tab previews it: <b>Over image</b> tints the masked part, <b>Mask only</b>
           shows it white on black, as the output sends it.</li>
-        <li>While painting, a ring under the mouse is the brush at its real size (dashed for the
-          eraser).</li>
       </ul>
       <DocImage
         src="images/docs/wp-image-filter-refine.png"
@@ -193,6 +191,34 @@ const settings = [
         <img :src="picksDiagram" alt="How the picks carry over: images, latents, masks, conditioning and prompt text of picked frames go on; an edited prompt is re-encoded and a painted mask goes to the masks output." loading="lazy">
       </figure>
       <DocFigureText figure="images/how-picks-carry-over.webp" caption="How the picks carry over" />
+    </DocSection>
+
+    <DocSection title="Paint a mask">
+      <p>
+        <b>M</b> or <b>Paint</b> on the Mask tab opens the painter over the image. A mask is not just
+        on or off: each pixel can be part-way masked, and inpainting changes those parts less, so
+        soft edges blend in without a seam.
+      </p>
+      <ul>
+        <li><b>Brush</b> paints where you drag. <b>Lasso</b>: drag around an area and let go to fill
+          it. <b>Fill</b>: click to fill the area under the pointer, up to the lines you painted
+          (paint an outline, then fill its inside), or click a painted area to take all of it.</li>
+        <li><b>Paint</b> adds to the mask and <b>Erase</b> takes it away, with any tool (<b>X</b>
+          swaps).</li>
+        <li><b>Size</b> is the brush (<b>[</b> and <b>]</b> change it). <b>Hardness</b> softens the
+          edge of the brush, lasso and fill; at 0% the edge fades over half the brush size.
+          <b>Strength</b> masks part-way: one stroke at 50% stays 50% where it crosses itself, and a
+          second stroke adds on top.</li>
+        <li>A ring under the mouse is the brush at its real size (dashed when erasing, with a
+          dotted inner ring where a soft edge starts).</li>
+        <li><b>Undo</b> and <b>Redo</b> (Ctrl+Z, Ctrl+Shift+Z) step through strokes, Invert and
+          Clear while the painter is open.</li>
+      </ul>
+      <DocImage
+        src="images/docs/wp-image-filter-mask.png"
+        ratio="1720 / 860"
+        caption="The painter: a soft brush stroke at the top, an outline filled with Fill, and a soft-edged Lasso on the right. The side panel has the tools, Paint / Erase, Size, Hardness and Strength, then Undo, Redo, Invert and Clear."
+      />
     </DocSection>
 
     <DocSection title="Settings on the node">
