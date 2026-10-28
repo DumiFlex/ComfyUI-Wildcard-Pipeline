@@ -39,6 +39,7 @@ def test_entrypoint_exposes_all_node_classes():
         "WP_PromptCleaner",
         "WP_SeedList",
         "WP_VarToBool",
+        "WP_VarToChoice",
         "WP_VarToFloat",
         "WP_VarToInt",
     ]

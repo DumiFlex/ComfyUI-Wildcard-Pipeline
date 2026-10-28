@@ -1881,6 +1881,44 @@
    ]
   },
   {
+   "id": "wp-var-to-choice",
+   "title": "WP Var → Choice",
+   "group": "nodes",
+   "blurb": "Send a $variable into a dropdown: checkpoint, sampler, scheduler, VAE, LoRA.",
+   "keywords": [
+    "convert",
+    "combo",
+    "dropdown",
+    "checkpoint",
+    "sampler",
+    "scheduler",
+    "model",
+    "choice"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "WP Var → Choice sends a pick into any dropdown: the checkpoint, the sampler, the scheduler, the VAE or a LoRA name. It reads the real list of the dropdown it's wired into and finds the option your text names, so wai nsfw v14 finds illustrious/waiNSFW_v14.safetensors. A wildcard of model names can then pick the model per image, or per frame in a Context Loop.\nFigure: WP Var → Choice reads $checkpoint and sends the matching file to Load Checkpoint. Screenshot of a WP Context holding a Checkpoints wildcard wired into a WP Var → Choice set to checkpoint, match loose, fallback empty, if_no_match use fallback. Its last execute line shows the checkpoint file it sent, with 'Matched … loosely.' under it and 'into Load Checkpoint › ckpt_name' with the option count. The choice output feeds the ckpt_name input of a Load Checkpoint node. It shows a wildcard picking the checkpoint."
+    },
+    {
+     "title": "When to use it",
+     "text": "Good for\n- A pick that chooses the checkpoint, sampler, scheduler, VAE or LoRA\n- Trying several models in one loop: a wildcard of model names, one per frame\nBetter with something else\n- Text that should stay in the prompt\n- A number (steps, size): use WP Var → Int or Float\nHide the variable it reads (the globe on its row), so the model name doesn't print in the prompt. Add WP Model Info after the loader and your rules can see which model was picked."
+    },
+    {
+     "title": "Controls",
+     "text": "context (in)\nThe Context that holds the $variable.\nvar_name\nThe $variable to read. The list shows every variable the wired Context has.\nmatch\nHow close the text must be to an option: exact, loose (the default) or closest. See below.\nfallback\nA dropdown of the options of the input it's wired into, filled when you connect it. Used when nothing matches or the variable is empty. (first option) means the first option in the list.\nif_no_match\nuse fallback carries on with the fallback and warns you. stop the run stops here and lists some of the options.\nchoice (out)\nWire it into a dropdown input: ckpt_name, sampler_name, scheduler, vae_name, lora_name and so on. The line under the picker names what it feeds and how many options that has."
+    },
+    {
+     "title": "How it matches",
+     "text": "- exact: the text must be an option, letter for letter.\n- loose: capitals, folders, the file extension, spaces, _, - and . don't matter, so Euler A finds euler_ancestral. If that finds nothing, it takes the shortest option that starts with your text, then one that contains it, so dpmpp 2m finds dpmpp_2m and not dpmpp_2m_sde.\n- closest: loose, and then the most similar option, so a typo like dreamshapr still lands.\nAfter a run the picker shows what it sent and how it found it. When it used the fallback, the line turns amber and a warning pops up.\nWithout this node ComfyUI doesn't check text that comes in through a wire: a name that isn't in the list only fails inside the loader. WP Var → Choice checks it first.\nWired into a switch or another node without a list, the text passes through unchecked and the picker says so."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Model Info WP Context Loop WP Var → Int WP Var → Bool"
+    }
+   ]
+  },
+  {
    "id": "wildcard",
    "title": "Wildcard",
    "group": "modules",
