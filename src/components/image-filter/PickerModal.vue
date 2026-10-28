@@ -19,6 +19,7 @@ import ModalShell from "../shared/ModalShell.vue";
 import WpSegmented, { type SegmentedOption } from "../shared/WpSegmented.vue";
 import WpImageZoom from "../shared/WpImageZoom.vue";
 import CopyButton from "../shared/CopyButton.vue";
+import InlineEdit from "../shared/InlineEdit.vue";
 import MaskPainter from "./MaskPainter.vue";
 import PickerTile from "./PickerTile.vue";
 import SweepGrid from "./SweepGrid.vue";
@@ -30,8 +31,8 @@ import { editLoopConfig } from "../../widgets/context_loop";
 import { pushToast } from "../shared/toast-store";
 import { defaultGridLayout, findLoop, frameParts, loopEdit, sweepGrid, type GridLayout } from "./picker-loop";
 import {
-  draftEdits, dropDraftEdits, editsFor, fitTileSize, hasEdit, readModePref, readTilePref, saveDraftEdits,
-  TILE_PX, withMask, withText, writeModePref, writeTilePref, type PickerMode, type TileSize,
+  draftEdits, dropDraftEdits, editsFor, fitTileSize, isRefined, readModePref, readTilePref, saveDraftEdits,
+  MAX_LABEL, TILE_PX, withLabel, withMask, withText, writeModePref, writeTilePref, type PickerMode, type TileSize,
 } from "./picker-state";
 import { axisHueAt } from "../shared/axis-color";
 import { frameValues, promptRuns, valuesText } from "./picker-details";
@@ -344,6 +345,16 @@ function resetText(field: "positive" | "negative"): void {
   setText(field, label.value?.[field] ?? "");
 }
 const maskValue = computed(() => cellEdit.value?.mask ?? "");
+/** The Mask tab's preview: the mask over the picture, or the mask alone. */
+const maskLayerStyle = computed((): Record<string, string> => {
+  const url = `url(${maskValue.value})`;
+  return { maskImage: url, "-webkit-mask-image": url };
+});
+const maskView = ref<"over" | "only">("over");
+const MASK_VIEW_OPTIONS: SegmentedOption<"over" | "only">[] = [
+  { value: "over", label: "Over image" },
+  { value: "only", label: "Mask only" },
+];
 function setMask(url: string): void {
   if (cell.value) edits.value = withMask(edits.value, cell.value.key, url);
 }
@@ -355,7 +366,31 @@ function isEditedCell(key: string): boolean {
 function isMaskedCell(key: string): boolean {
   return !!edits.value[key]?.mask;
 }
-const editCount = computed(() => Object.values(edits.value).filter(hasEdit).length);
+const editCount = computed(() => Object.values(edits.value).filter(isRefined).length);
+
+/* ── labels (the node's `labels` output) ──────────────────────────────── */
+
+/** "#N", the sweep option names, then the image number when the frame has several. */
+function defaultLabel(frame: number, image: number): string {
+  const parts = frameParts(labels.value[frame], frame, axes.value);
+  if ((props.request.frames[frame]?.length ?? 0) > 1) parts.push(String(image + 1));
+  return parts.join(" · ");
+}
+function labelOf(frame: number, image: number): string {
+  return edits.value[pickKey(frame, image)]?.label ?? defaultLabel(frame, image);
+}
+function setLabel(frame: number, image: number, text: string): void {
+  edits.value = withLabel(edits.value, pickKey(frame, image), text, defaultLabel(frame, image));
+}
+/** Every kept image's label: the server can't name sweep options itself. */
+function labelsFor(keys: readonly string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of keys) {
+    const [f, i] = key.split(":").map(Number);
+    if (f !== undefined && i !== undefined) out[key] = labelOf(f, i);
+  }
+  return out;
+}
 
 function cellName(c: Cell): string {
   return multiFrame.value ? `Frame ${frameTitle(c.frame)} · image ${c.image + 1}` : `Image ${c.image + 1}`;
@@ -401,12 +436,16 @@ function finish(answer: PickAnswer): void {
 }
 function keepPicked(): void {
   if (pickedList.value.length === 0) return;
-  const e = editsFor(edits.value, [...picked.value]);
-  finish(e ? { action: "picks", picks: pickedList.value, edits: e } : { action: "picks", picks: pickedList.value });
+  const keys = [...picked.value];
+  const e = editsFor(edits.value, keys);
+  const answer: PickAnswer = { action: "picks", picks: pickedList.value, labels: labelsFor(keys) };
+  finish(e ? { ...answer, edits: e } : answer);
 }
 function keepAll(): void {
-  const e = editsFor(edits.value, cells.value.map((c) => c.key));
-  finish(e ? { action: "keep_all", edits: e } : { action: "keep_all" });
+  const keys = cells.value.map((c) => c.key);
+  const e = editsFor(edits.value, keys);
+  const answer: PickAnswer = { action: "keep_all", labels: labelsFor(keys) };
+  finish(e ? { ...answer, edits: e } : answer);
 }
 function stop(): void {
   finish({ action: "stop" });
@@ -423,6 +462,8 @@ function onKey(ev: KeyboardEvent): void {
   const target = ev.target as HTMLElement | null;
   const tag = target?.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA") return;
+  // A label's rename button keeps Enter (it opens the box).
+  if (target?.closest?.(".wp-inline-edit")) return;
   const plain = !ev.ctrlKey && !ev.metaKey && !ev.altKey;
   const key = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key;
   // A focused button keeps Space, and a focused switch (mode, tile size) its arrow keys.
@@ -562,19 +603,30 @@ const subLine = computed(() => {
               </template>
             </div>
             <div class="wp-ifp__tiles">
-              <PickerTile
-                v-for="(img, i) in imgs"
-                :key="i"
-                :src="viewUrl(img)"
-                :picked="picked.has(pickKey(f, i))"
-                :index="imgs.length > 1 || !multiFrame ? i + 1 : 0"
-                :edited="isEditedCell(pickKey(f, i))"
-                :masked="isMaskedCell(pickKey(f, i))"
-                :test-id="`image-filter-tile-${f}-${i}`"
-                @toggle="toggle(pickKey(f, i))"
-                @zoom="setMode('detail', indexOf(f, i))"
-                @hover="(on) => (hovered = on ? indexOf(f, i) : null)"
-              />
+              <div v-for="(img, i) in imgs" :key="i" class="wp-ifp__tile-cell">
+                <PickerTile
+                  :src="viewUrl(img)"
+                  :picked="picked.has(pickKey(f, i))"
+                  :index="imgs.length > 1 || !multiFrame ? i + 1 : 0"
+                  :edited="isEditedCell(pickKey(f, i))"
+                  :masked="isMaskedCell(pickKey(f, i))"
+                  :test-id="`image-filter-tile-${f}-${i}`"
+                  @toggle="toggle(pickKey(f, i))"
+                  @zoom="setMode('detail', indexOf(f, i))"
+                  @hover="(on) => (hovered = on ? indexOf(f, i) : null)"
+                />
+                <div class="wp-ifp__tile-label" :data-test="`image-filter-tile-label-${f}-${i}`" @click.stop>
+                  <InlineEdit
+                    :model-value="labelOf(f, i)"
+                    label="Label"
+                    size="sm"
+                    :required="false"
+                    :placeholder="defaultLabel(f, i)"
+                    :maxlength="MAX_LABEL"
+                    @update:model-value="(v) => setLabel(f, i, v)"
+                  />
+                </div>
+              </div>
             </div>
           </section>
         </div>
@@ -657,6 +709,19 @@ const subLine = computed(() => {
         <aside class="wp-ifp__side" data-test="image-filter-refine">
           <div class="wp-ifp__side-head">
             <div class="wp-ifp__side-title">{{ cellName(cell) }}</div>
+            <div class="wp-ifp__side-label" data-test="image-filter-label" :title="'The labels output carries this name. Clear it for the default.'">
+              <i class="pi pi-tag" aria-hidden="true" />
+              <InlineEdit
+                :key="cell.key"
+                :model-value="labelOf(cell.frame, cell.image)"
+                label="Label"
+                size="sm"
+                :required="false"
+                :placeholder="defaultLabel(cell.frame, cell.image)"
+                :maxlength="MAX_LABEL"
+                @update:model-value="(v) => cell && setLabel(cell.frame, cell.image, v)"
+              />
+            </div>
             <div class="wp-ifp__side-meta" data-test="image-filter-meta">
               <span v-if="sizes[cell.key]">{{ sizes[cell.key] }}</span>
               <span v-if="typeof label?.seed === 'number'">seed {{ label.seed }}</span>
@@ -782,6 +847,17 @@ const subLine = computed(() => {
               </div>
               <p class="wp-ifp__hint">Images you don't paint keep the incoming mask.</p>
             </template>
+            <template v-else-if="maskValue">
+              <WpSegmented v-model="maskView" :options="MASK_VIEW_OPTIONS" size="sm" aria-label="Mask preview" test-prefix="image-filter-mask-view" />
+              <!-- The painted PNG's alpha is the mask: a CSS mask paints it as a tint or as white on black. -->
+              <div class="wp-ifp__mask-preview" :class="`is-${maskView}`" data-test="image-filter-mask-preview">
+                <!-- Mask only: the picture drawn black keeps its size and shape under the white mask. -->
+                <img :src="viewUrl(cell.ref)" alt="" class="wp-ifp__mask-base" draggable="false">
+                <span class="wp-ifp__mask-layer" :style="maskLayerStyle" />
+              </div>
+              <p class="wp-ifp__hint">{{ maskView === "over" ? "The tinted part is what the masks output masks." : "White is masked, black is not, as the masks output sends it." }}</p>
+            </template>
+            <p v-else class="wp-ifp__hint" data-test="image-filter-mask-empty">No mask painted for this image yet. Paint (M) draws one; images you don't paint keep the incoming mask.</p>
           </section>
         </aside>
       </div>
@@ -911,6 +987,12 @@ const subLine = computed(() => {
 .wp-ifp__opt { color: var(--wp-text-muted, var(--wp-text2)); font-family: var(--wp-font-sans); }
 .wp-ifp__sep { margin: 0 4px; opacity: .6; }
 .wp-ifp__tiles { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-ifp__tile-cell { display: flex; flex-direction: column; min-width: 0; }
+.wp-ifp__tile-label { display: flex; width: 0; min-width: 100%; padding-left: 6px; font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-ifp__side-label { display: flex; align-items: center; gap: 2px; min-width: 0; font: 12px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-ifp__side-label > .pi { flex: none; font-size: 11px; color: var(--wp-text-dim, var(--wp-text3)); }
+/* The icon stands where the rename box's hover padding would. */
+.wp-ifp__side-label :deep(.wp-inline-edit) { margin-left: 0; }
 
 /* Detail */
 .wp-ifp__detail { flex: 1; min-height: 0; display: flex; }
@@ -983,6 +1065,12 @@ const subLine = computed(() => {
 .wp-ifp__full-label { color: var(--wp-text-muted); font: var(--wp-text-xs) var(--wp-font-sans); }
 .wp-ifp__full-count { color: var(--wp-text-muted); font: var(--wp-text-xs) var(--wp-font-sans); white-space: nowrap; }
 .wp-ifp__full-count strong { color: var(--wp-text); }
+.wp-ifp__mask-preview { position: relative; align-self: center; max-width: 100%; line-height: 0; border-radius: var(--wp-radius); overflow: hidden; box-shadow: 0 0 0 1px var(--wp-border); }
+.wp-ifp__mask-base { display: block; max-width: 100%; max-height: 360px; }
+.wp-ifp__mask-preview.is-only .wp-ifp__mask-base { filter: brightness(0); }
+.wp-ifp__mask-layer { position: absolute; inset: 0; mask-size: 100% 100%; -webkit-mask-size: 100% 100%; mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; pointer-events: none; }
+.wp-ifp__mask-preview.is-over .wp-ifp__mask-layer { background: color-mix(in srgb, var(--wp-accent) 55%, transparent); }
+.wp-ifp__mask-preview.is-only .wp-ifp__mask-layer { background: white; }
 .wp-ifp__full-strip { display: flex; gap: 4px; --wp-ifp-tile: 36px; }
 .wp-ifp__full-strip .is-current { border-color: var(--wp-accent); }
 .wp-ifp__full-sep { width: 1px; height: 32px; background: var(--wp-border); }

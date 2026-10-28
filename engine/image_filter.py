@@ -236,11 +236,81 @@ MASK_PREFIX = "data:image/png;base64,"
 @dataclass(frozen=True)
 class Answer:
     """What the picker sent back: ``picks``, ``keep_all`` or ``stop``, plus
-    any per-image ``edits`` made in the picker."""
+    any per-image ``edits`` made in the picker and each image's ``labels``."""
 
     action: str
     picks: tuple[Pick, ...] = ()
     edits: dict[Pick, Edit] = field(default_factory=dict)
+    labels: dict[Pick, str] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------- labels ---
+
+#: Longest label kept (characters); labels are one line.
+MAX_LABEL = 200
+#: Between a label's parts: "#3 · red · pencil · 2".
+LABEL_SEP = " · "
+
+
+def clean_label(text: Any) -> str | None:
+    """One line, trimmed, at most ``MAX_LABEL`` characters; None when not text."""
+    if not isinstance(text, str):
+        return None
+    return " ".join(text.split())[:MAX_LABEL]
+
+
+def default_label(frame: int, image: int, frame_size: int, loop_index: Any = None) -> str:
+    """``#N`` (loop index + 1, else the frame number), then ``· K`` when the
+    frame has more than one image. The picker adds the sweep option names
+    between the two; here (no picker) they aren't known."""
+    looped = isinstance(loop_index, int) and not isinstance(loop_index, bool)
+    n = loop_index + 1 if looped else frame + 1
+    parts = [f"#{n}"]
+    if frame_size > 1:
+        parts.append(str(image + 1))
+    return LABEL_SEP.join(parts)
+
+
+def parse_labels(raw: Any, batch_sizes: list[int]) -> dict[Pick, str]:
+    """Validate ``{"f:i": "label"}``; bad entries drop."""
+    out: dict[Pick, str] = {}
+    if not isinstance(raw, dict):
+        return out
+    for key, text in raw.items():
+        pick = _parse_key(key, batch_sizes)
+        label = clean_label(text)
+        if pick is not None and label is not None:
+            out[pick] = label
+    return out
+
+
+def item_labels(
+    plan: list[PlanItem],
+    labels: dict[Pick, str],
+    batch_sizes: list[int],
+    loop_indexes: list[Any] | None = None,
+) -> list[str]:
+    """The ``labels`` output: per output item one line per image (newline
+    joined), each the picker's label or the default."""
+    out: list[str] = []
+    for f, idx in plan:
+        size = batch_sizes[f] if f < len(batch_sizes) else 1
+        loop = loop_indexes[f] if loop_indexes and f < len(loop_indexes) else None
+        out.append("\n".join(labels.get((f, i)) or default_label(f, i, size, loop) for i in idx))
+    return out
+
+
+def _parse_key(key: Any, batch_sizes: list[int]) -> Pick | None:
+    """``"f:i"`` as a pick that exists in the frames, else None."""
+    if not isinstance(key, str):
+        return None
+    parts = key.split(":")
+    if len(parts) != 2 or not all(p.isdigit() for p in parts):
+        return None
+    f, i = int(parts[0]), int(parts[1])
+    if not (0 <= f < len(batch_sizes) and 0 <= i < batch_sizes[f]):
+        return None
+    return (f, i)
 
 
 def parse_edits(raw: Any, batch_sizes: list[int]) -> dict[Pick, Edit]:
@@ -249,14 +319,10 @@ def parse_edits(raw: Any, batch_sizes: list[int]) -> dict[Pick, Edit]:
     if not isinstance(raw, dict):
         return out
     for key, entry in raw.items():
-        if not isinstance(key, str) or not isinstance(entry, dict):
+        pick = _parse_key(key, batch_sizes)
+        if pick is None or not isinstance(entry, dict):
             continue
-        parts = key.split(":")
-        if len(parts) != 2 or not all(p.isdigit() for p in parts):
-            continue
-        f, i = int(parts[0]), int(parts[1])
-        if not (0 <= f < len(batch_sizes) and 0 <= i < batch_sizes[f]):
-            continue
+        f, i = pick
         edit: Edit = {}
         for name in ("positive", "negative"):
             text = entry.get(name)
@@ -276,13 +342,19 @@ def parse_answer(payload: Any, batch_sizes: list[int]) -> Answer | None:
         return None
     action = payload.get("action")
     edits = parse_edits(payload.get("edits"), batch_sizes)
+    labels = parse_labels(payload.get("labels"), batch_sizes)
     if action == "keep_all":
-        return Answer("keep_all", tuple(all_picks(batch_sizes)), edits)
+        return Answer("keep_all", tuple(all_picks(batch_sizes)), edits, labels)
     if action == "stop":
         return Answer("stop")
     if action == "picks":
         picks = tuple(normalize_picks(payload.get("picks"), batch_sizes))
-        return Answer("picks", picks, {p: e for p, e in edits.items() if p in picks})
+        kept = set(picks)
+        return Answer(
+            "picks", picks,
+            {p: e for p, e in edits.items() if p in kept},
+            {p: t for p, t in labels.items() if p in kept},
+        )
     return None
 
 
@@ -366,6 +438,8 @@ PENDING = PendingAnswers()
 #: Last picks per node (``unique_id``), for the "Reuse last picks" mode.
 #: In memory only: a restart forgets them and the node asks again.
 LAST_PICKS: dict[str, list[Pick]] = {}
+#: The labels that went with them, so "Reuse last picks" keeps the names.
+LAST_LABELS: dict[str, dict[Pick, str]] = {}
 
 
 def reusable_picks(stored: list[Pick] | None, batch_sizes: list[int]) -> list[Pick] | None:

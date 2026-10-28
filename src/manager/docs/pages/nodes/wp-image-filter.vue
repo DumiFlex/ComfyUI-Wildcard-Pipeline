@@ -20,11 +20,12 @@ const ports = [
   { term: "clip (in)", desc: "Optional. Re-encodes a prompt you edit in the picker, so the positive/negative conditioning follows the edit. Without it, an edit changes only the text outputs." },
   { term: "extra_1, extra_2", desc: "Any type. The output takes the type of what you connect. Batched values are sliced, anything else follows its frame." },
   { term: "picks (out)", desc: "What was kept, as frame:image (1-based), for example 1:2, 3:1." },
+  { term: "labels (out)", desc: "One label per item, in step with images: #3 · red · 2 by default, or the name you gave the image in the picker. An item with several images has one line per image." },
 ];
 
 const modes = [
-  { term: "Grid", kbd: "G", desc: "Pick fast. Click an image or press Space over it; Ctrl+A picks everything; a frame says how many of its images are picked, and its Pick frame button picks them all. Tile size S, M, L or Fit (F, as big as the picker allows). Double-click an image or click its frame to open it in Detail." },
-  { term: "Detail", kbd: "D", desc: "One image next to its size and seed, with Pick / Picked (P), Compare (C) and Pick frame at the top of the side panel and three tabs under them: Values, Prompt and Mask. Each value is marked in the prompt in its own colour (the same colour in Values); hover a mark to see which variable set it. Prompt and negative have copy buttons. Only what is wired shows. ←/→ step; the strip under the picture groups a loop's images by frame and jumps to any image. C compares two images with a slider, M paints a mask." },
+  { term: "Grid", kbd: "G", desc: "Pick fast. Click an image or press Space over it; Ctrl+A picks everything; a frame says how many of its images are picked, and its Pick frame button picks them all. Tile size S, M, L or Fit (F, as big as the picker allows). Double-click an image or click its frame to open it in Detail. Each image's label sits under it; click it to rename." },
+  { term: "Detail", kbd: "D", desc: "One image next to its size, seed and label (click to rename), with Pick / Picked (P), Compare (C) and Pick frame at the top of the side panel and three tabs under them: Values, Prompt and Mask. Each value is marked in the prompt in its own colour (the same colour in Values); hover a mark to see which variable set it. Prompt and negative have copy buttons. Only what is wired shows. ←/→ step; the strip under the picture groups a loop's images by frame and jumps to any image. C compares two images with a slider, M paints a mask." },
   { term: "Zoom", kbd: "Z", desc: "Only the picture, at Fit, 100%, 200% or any level between (− / +, keys 0 1 2). Scroll zooms toward the mouse, drag moves, double-click goes to 100% at that spot. Zoomed in, a mini-map shows where you are (click or drag it to move); the bar fades while the mouse is still. F (or the fullscreen button) fills the screen, with the frame's images and Keep picked along the bottom. ←/→ keep the zoom and the spot on the next image. The label says Picked once picked. C pins the image and the next one shows beside it, locked to the same zoom and spot." },
 ];
 
@@ -142,6 +143,28 @@ const settings = [
       </p>
     </DocSection>
 
+    <DocSection title="Label each image">
+      <p>
+        Every image has a label, and the <code>labels</code> output sends them in step with
+        <code>images</code>, one per item. By default a label is the frame number (the loop's
+        number with a Context Loop), the options its sweep pinned, then the image number when the
+        frame has several: <code>#3 · red · pencil · 2</code>.
+      </p>
+      <ul>
+        <li>Rename an image under its tile in <b>Grid</b>, or under its title in <b>Detail</b>.
+          Clear the name to get the default back.</li>
+        <li>With <b>Same shape</b> an item holds a frame's picks together, so its label has one
+          line per image.</li>
+        <li><b>Pass all</b> labels images <code>#3 · 2</code> (no picker, so no option names), and
+          <b>Reuse last picks</b> keeps the names from the last pause.</li>
+      </ul>
+      <DocImage
+        src="images/docs/wp-image-filter-labels.png"
+        ratio="1720 / 860"
+        caption="Grid with a label under every image: the frame number, the swept option and the image number, and one image renamed."
+      />
+    </DocSection>
+
     <DocSection title="Refine before it goes on">
       <p>
         In <b>Detail</b>, the side panel edits the frame's positive and negative prompt and
@@ -155,7 +178,9 @@ const settings = [
         <li>With <b>Same shape</b> a frame's picks go on together, so a prompt edit covers the
           whole frame. With <b>One per image</b> it covers just that image.</li>
         <li>A painted mask goes to the <code>masks</code> output, resized to the image. Images you
-          don't paint keep the incoming mask, or an empty one when nothing is wired in.</li>
+          don't paint keep the incoming mask, or an empty one when nothing is wired in. Once
+          painted, the Mask tab previews it: <b>Over image</b> tints the masked part, <b>Mask only</b>
+          shows it white on black, as the output sends it.</li>
         <li>While painting, a ring under the mouse is the brush at its real size (dashed for the
           eraser).</li>
       </ul>

@@ -213,3 +213,34 @@ def test_item_edits_follow_the_plan():
     assert f.item_mask_edits(same, edits) == [["", "m01"], None]
     per = f.plan_output([(0, 0), (0, 1)], "per_image")
     assert f.item_text_edits(per, edits, "positive") == [None, "p01"]
+
+
+def test_default_label_numbers_the_frame_then_the_image():
+    assert f.default_label(0, 0, 1) == "#1"
+    assert f.default_label(2, 1, 4) == "#3 · 2"
+    # The Context Loop's index names the frame when there is one.
+    assert f.default_label(0, 0, 2, loop_index=6) == "#7 · 1"
+    assert f.default_label(1, 0, 1, loop_index=True) == "#2"
+
+
+def test_parse_labels_cleans_and_drops_bad_entries():
+    raw = {"0:1": "  hero \n shot ", "0:9": "gone", "x": "bad", "1:0": 3, "1:1": "y" * 500}
+    labels = f.parse_labels(raw, [2, 2])
+    assert labels == {(0, 1): "hero shot", (1, 1): "y" * f.MAX_LABEL}
+    assert f.parse_labels(["0:0"], [1]) == {}
+
+
+def test_parse_answer_keeps_labels_of_kept_images_only():
+    picks = f.parse_answer(
+        {"action": "picks", "picks": [[0, 1]], "labels": {"0:0": "a", "0:1": "b"}}, [2],
+    )
+    assert picks is not None and picks.labels == {(0, 1): "b"}
+    keep = f.parse_answer({"action": "keep_all", "labels": {"0:0": "a"}}, [2])
+    assert keep is not None and keep.labels == {(0, 0): "a"}
+
+
+def test_item_labels_one_line_per_image_of_each_item():
+    plan = [(0, [0, 1]), (1, [0])]
+    labels = {(0, 1): "hero"}
+    assert f.item_labels(plan, labels, [3, 1]) == ["#1 · 1\nhero", "#2"]
+    assert f.item_labels(plan, {}, [3, 1], [7, 8]) == ["#8 · 1\n#8 · 2", "#9"]

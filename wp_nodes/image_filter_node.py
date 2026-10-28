@@ -39,7 +39,7 @@ EVENT_DONE = "wp-image-filter-done"
 POLL_SECONDS = 0.15
 
 #: Outputs in `define_schema` (blocked together on "stop this branch").
-_OUTPUT_COUNT = 11
+_OUTPUT_COUNT = 12
 
 _extra_1 = io.MatchType.Template("wp_image_filter_extra_1")
 _extra_2 = io.MatchType.Template("wp_image_filter_extra_2")
@@ -156,6 +156,14 @@ def _frame_labels(
             label["negative"] = neg[:_MAX_LABEL_TEXT]
         labels.append(label)
     return labels
+
+
+def _loop_indexes(contexts: list[Any] | None, frames: int) -> list[Any]:
+    """Each frame's Context Loop index (None without a loop), for default labels."""
+    return [
+        (getattr(ctx, "internals", None) or {}).get("__wp_loop_index__")
+        for ctx in f.align(contexts, frames)
+    ]
 
 
 def _encode(clip: Any, text: str) -> Any:
@@ -313,6 +321,10 @@ class WPImageFilter(io.ComfyNode):
                 io.MatchType.Output(_extra_1, "extra_1", is_output_list=True),
                 io.MatchType.Output(_extra_2, "extra_2", is_output_list=True),
                 io.String.Output("picks"),
+                # Last, so saved workflows keep their links to the slots above.
+                # One per item, in step with images ("#3 · red · 2", or the
+                # picker's name); an item of several images has one line each.
+                io.String.Output("labels", is_output_list=True),
             ],
             hidden=[io.Hidden.unique_id],
             is_input_list=True,
@@ -348,6 +360,7 @@ class WPImageFilter(io.ComfyNode):
 
         picks: list[f.Pick] | None = None
         edits: dict[f.Pick, f.Edit] = {}
+        names: dict[f.Pick, str] = {}
         clip_model = _first(clip)
         how = cfg["mode"]
         if cfg["mode"] == "pass_all":
@@ -356,6 +369,8 @@ class WPImageFilter(io.ComfyNode):
             picks = f.reusable_picks(f.LAST_PICKS.get(node_id), batch_sizes)
             if picks is None:
                 how = "pause"
+            else:
+                names = dict(f.LAST_LABELS.get(node_id, {}))
         if picks is None:
             labels = _frame_labels(context, positive_text, negative_text, len(batch_sizes))
             answer = await cls._ask(
@@ -365,6 +380,7 @@ class WPImageFilter(io.ComfyNode):
                 return cls._blocked()
             picks = list(answer.picks)
             edits = dict(answer.edits)
+            names = dict(answer.labels)
 
         # The picker can't send an empty pick; an API caller can. Nothing to
         # pass on, so stop the branch.
@@ -373,6 +389,7 @@ class WPImageFilter(io.ComfyNode):
 
         if how == "pause":
             f.LAST_PICKS[node_id] = list(picks)
+            f.LAST_LABELS[node_id] = dict(names)
 
         plan = f.plan_output(picks, cfg["send_as"])
 
@@ -423,6 +440,7 @@ class WPImageFilter(io.ComfyNode):
             follow(extra_1),
             follow(extra_2),
             f.format_picks(picks),
+            f.item_labels(plan, names, batch_sizes, _loop_indexes(context, len(batch_sizes))),
             ui={"wp_image_filter": [{
                 "picks": [list(p) for p in picks],
                 "frames": len(batch_sizes),
