@@ -15,7 +15,7 @@ import type { BatchConflict, PerItemIssue } from "../conflict-types";
  * Test Utils tracks emits on the wrapper regardless of where the DOM
  * actually rendered.
  *
- * Phase 3 swapped dropdowns for a `wp-action-group` segmented control.
+ * Phase 3 swapped dropdowns for a joined button group (the shared Toolbar, `attached`).
  * Engine values (`skip` / `replace` / `rename` / `accept`) stayed the
  * same; only the UI labels + click handlers shifted. Selectors below
  * target the new `data-test` hooks (`batch-action-skip` etc.) instead
@@ -556,7 +556,7 @@ describe("ConflictModal.vue", () => {
       ],
     });
     const group = $('[data-test="resolve-group-fp1"]');
-    expect(group.getAttribute("role")).toBe("radiogroup");
+    expect(group.getAttribute("role")).toBe("toolbar");
     const btns = group.querySelectorAll("button");
     expect(btns.length).toBe(3);
 

@@ -13,6 +13,8 @@ import Toggle from "../../ui/Toggle.vue";
 import Select from "../../ui/Select.vue";
 import Input from "../../ui/Input.vue";
 import Button from "../../ui/Button.vue";
+import RadioGroup, { type RadioOption } from "@/components/shared/RadioGroup.vue";
+import { vTooltip } from "@/components/shared/tooltip";
 import type { SelectOption } from "../../ui/select-types";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
@@ -42,6 +44,10 @@ const providers = computed(() => {
     keySaved: presets[id].needs_key && !!config.value?.keys_saved?.includes(id),
   }));
 });
+
+const providerOptions = computed<RadioOption<AiProviderId>[]>(() =>
+  providers.value.map((p) => ({ value: p.id, label: p.label })));
+const providerById = computed(() => Object.fromEntries(providers.value.map((p) => [p.id, p])));
 
 const preset = computed(() => (config.value ? config.value.presets[config.value.provider] : null));
 const isLocal = computed(() => config.value?.local ?? preset.value?.local ?? true);
@@ -715,23 +721,25 @@ const off = computed(() => !config.value?.enabled);
         </SettingGroup>
 
         <SettingGroup title="Provider" :note="off ? 'You can set this up before turning the assistant on. Test connection works once it is on.' : undefined">
-          <div id="ai-provider" class="wp-ai-set__providers" role="radiogroup" aria-label="AI provider" data-setting="ai-provider" data-test="ai-provider">
-            <button
-              v-for="p in providers"
-              :key="p.id"
-              type="button"
-              role="radio"
-              class="wp-ai-set__provider"
-              :aria-checked="config.provider === p.id ? 'true' : 'false'"
-              :data-test="`ai-provider-${p.id}`"
-              :title="p.local ? 'Runs on your machine' : 'A cloud service'"
-              @click="setProvider(p.id)"
-            >
-              {{ p.label }}
-              <span class="wp-ai-set__badge" :data-local="p.local ? 'true' : 'false'">{{ p.local ? "Local" : "Cloud" }}</span>
-              <i v-if="p.keySaved" class="pi pi-key wp-ai-set__key-mark" title="Key saved" aria-label="key saved" data-test="ai-provider-key-saved" />
-            </button>
-          </div>
+          <RadioGroup
+            id="ai-provider"
+            class="wp-ai-set__providers"
+            :model-value="config.provider"
+            :options="providerOptions"
+            orientation="horizontal"
+            cards
+            aria-label="AI provider"
+            data-setting="ai-provider"
+            data-test="ai-provider"
+            test-prefix="ai-provider"
+            @update:model-value="setProvider"
+          >
+            <template #label="{ option }">
+              {{ option.label }}
+              <span class="wp-ai-set__badge" :data-local="providerById[option.value]?.local ? 'true' : 'false'">{{ providerById[option.value]?.local ? "Local" : "Cloud" }}</span>
+              <i v-if="providerById[option.value]?.keySaved" v-tooltip="'Key saved'" class="pi pi-key wp-ai-set__key-mark" aria-label="key saved" data-test="ai-provider-key-saved" />
+            </template>
+          </RadioGroup>
 
           <SettingRow
             form
@@ -1523,19 +1531,9 @@ const off = computed(() => !config.value?.enabled);
 }
 
 /* Provider buttons, each with where it runs. */
-.wp-ai-set__providers { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); padding: var(--wp-space-5) var(--wp-space-6); border-bottom: 1px solid var(--wp-border); }
-.wp-ai-set__provider {
-  display: inline-flex; align-items: center; gap: var(--wp-space-3);
-  height: 32px; padding: 0 var(--wp-space-5);
-  font: inherit; font-size: var(--wp-text-sm); color: var(--wp-text);
-  background: var(--wp-bg-1, var(--wp-bg)); border: 1px solid var(--wp-border-strong, var(--wp-border));
-  border-radius: var(--wp-radius); cursor: pointer;
-}
-.wp-ai-set__provider:hover { border-color: var(--wp-accent-500); }
-.wp-ai-set__provider[aria-checked="true"] {
-  border-color: var(--wp-accent-500); color: var(--wp-accent-text);
-  background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
-}
+.wp-radio-group.wp-ai-set__providers { gap: var(--wp-space-3); padding: var(--wp-space-5) var(--wp-space-6); border-bottom: 1px solid var(--wp-border); }
+.wp-ai-set__providers[data-cards] :deep(.wp-radio-group__opt) { flex: 0 0 auto; align-items: center; padding: var(--wp-space-3) var(--wp-space-5); }
+.wp-ai-set__providers[data-cards] :deep(.wp-radio-group__label) { white-space: nowrap; }
 .wp-ai-set__badge {
   display: inline-block; padding: 1px 5px; border-radius: var(--wp-radius-sm);
   font-family: var(--wp-font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;

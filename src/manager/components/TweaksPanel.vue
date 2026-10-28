@@ -4,6 +4,7 @@ import { computed } from "vue";
 import Button from "./ui/Button.vue";
 import Toggle from "./ui/Toggle.vue";
 import Icon from "./ui/Icon.vue";
+import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
 import HsvPicker from "../../components/shared/HsvPicker.vue";
 import ThemeChoices from "./settings/ThemeChoices.vue";
 import {
@@ -35,6 +36,8 @@ const sidebarCollapsed = computed<boolean>({
 function onAccent(name: AccentName) {
   tweaks.setAccent(name);
 }
+const densityOptions: SegmentedOption<Density>[] = DENSITY_OPTIONS.map((d) => ({ value: d, label: d[0].toUpperCase() + d.slice(1) }));
+
 function onDensity(d: Density) {
   tweaks.setDensity(d);
 }
@@ -119,24 +122,15 @@ function pickCustomAccent() {
 
       <section class="wp-tweaks__section">
         <h3 class="wp-tweaks__section-title">Density</h3>
-        <div class="wp-tweaks__radio" role="radiogroup" aria-label="Density">
-          <label
-            v-for="d in DENSITY_OPTIONS"
-            :key="d"
-            class="wp-tweaks__radio-item"
-            :class="{ 'is-active': tweaks.density === d }"
-          >
-            <input
-              type="radio"
-              name="wp-tweaks-density"
-              :value="d"
-              :checked="tweaks.density === d"
-              :data-test="`tweaks-density-${d}`"
-              @change="onDensity(d)"
-            />
-            <span>{{ d }}</span>
-          </label>
-        </div>
+        <WpSegmented
+          :model-value="tweaks.density"
+          :options="densityOptions"
+          size="sm"
+          block
+          aria-label="Density"
+          test-prefix="tweaks-density"
+          @update:model-value="onDensity"
+        />
       </section>
 
       <section class="wp-tweaks__section">
@@ -261,22 +255,6 @@ function pickCustomAccent() {
   margin-top: var(--wp-space-4);
 }
 
-.wp-tweaks__radio { display: flex; gap: var(--wp-space-3); padding: 2px; background: var(--wp-bg-3); border-radius: var(--wp-radius); }
-.wp-tweaks__radio-item {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--wp-space-3) var(--wp-space-5);
-  border-radius: var(--wp-radius-sm);
-  cursor: pointer;
-  font-size: var(--wp-text-sm);
-  text-transform: capitalize;
-  color: var(--wp-text-muted);
-  user-select: none;
-}
-.wp-tweaks__radio-item input { position: absolute; opacity: 0; pointer-events: none; }
-.wp-tweaks__radio-item.is-active { background: var(--wp-bg-1); color: var(--wp-text); box-shadow: var(--wp-shadow-sm); }
 
 .wp-tweaks__footer { margin-top: auto; padding-top: var(--wp-space-5); border-top: 1px solid var(--wp-border); }
 

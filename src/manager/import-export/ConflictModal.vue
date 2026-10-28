@@ -68,6 +68,8 @@
  */
 import { computed, ref } from "vue";
 import Modal from "../components/ui/Modal.vue";
+import Button from "../components/ui/Button.vue";
+import Toolbar from "@/components/shared/Toolbar.vue";
 import Disclosure from "@/components/shared/Disclosure.vue";
 import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
 import ImportAsNewRename from "./ImportAsNewRename.vue";
@@ -914,17 +916,14 @@ const importItemCount = computed<number>(() => {
               {{ labelForKind(perItemDecisions[issue.entity.id].kind) }}
             </div>
             <!-- Tier-3 is non-overridable per spec lock #9; only the
-                 Skip path is offered. Single-button group instead of
-                 a segmented control because there's nothing to switch
-                 between. The Tier3ChainViz above shows the *why*. -->
-            <div v-else class="wp-action-group">
-              <button
-                type="button"
-                class="wp-action-group__btn"
-                :data-test="`resolve-${issue.entity.id}-skip`"
-                @click="resolveItem(issue.entity.id, 'skip')"
-              ><i class="pi pi-times" aria-hidden="true" /> Skip</button>
-            </div>
+                 Skip path is offered, so it is one button. The Tier3ChainViz above shows the *why*. -->
+            <Button
+              v-else
+              size="sm"
+              icon="pi-times"
+              :data-test="`resolve-${issue.entity.id}-skip`"
+              @click="resolveItem(issue.entity.id, 'skip')"
+            >Skip</Button>
           </template>
           <template v-else>
             <span
@@ -975,73 +974,79 @@ const importItemCount = computed<number>(() => {
             <!-- D3b: content already in the library under another uuid.
                  Leading action is the non-duplicating one (link); the
                  escape hatch imports the copy anyway. Never auto-applied. -->
-            <div
+            <Toolbar
               v-else-if="issue.kind === 'content-duplicate'"
-              class="wp-action-group"
-              role="radiogroup"
-              :aria-label="`Resolution for ${issue.entity.name ?? issue.entity.id}`"
+              attached
+              size="sm"
+              :label="`Resolution for ${issue.entity.name ?? issue.entity.id}`"
               :data-test="`resolve-group-${issue.entity.id}`"
             >
-              <button
-                type="button"
-                class="wp-action-group__btn"
+              <Button
+                size="sm"
+                variant="secondary"
+                icon="pi-link"
                 :data-test="`resolve-${issue.entity.id}-link`"
                 @click="resolveItemLink(issue.entity.id, duplicateTargetId(issue))"
-              ><i class="pi pi-link" aria-hidden="true" /> Link to existing</button>
-              <button
-                type="button"
-                class="wp-action-group__btn"
+              >Link to existing</Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon="pi-arrow-circle-down"
                 :data-test="`resolve-${issue.entity.id}-accept`"
                 @click="resolveItem(issue.entity.id, 'accept')"
-              ><i class="pi pi-arrow-circle-down" aria-hidden="true" /> Import anyway</button>
-            </div>
-            <div
+              >Import anyway</Button>
+            </Toolbar>
+            <Toolbar
               v-else-if="issue.kind === 'unselected-dep'"
-              class="wp-action-group"
-              role="radiogroup"
-              :aria-label="`Resolution for ${issue.entity.name ?? issue.entity.id}`"
+              attached
+              size="sm"
+              :label="`Resolution for ${issue.entity.name ?? issue.entity.id}`"
               :data-test="`resolve-group-${issue.entity.id}`"
             >
-              <button
-                type="button"
-                class="wp-action-group__btn"
+              <Button
+                size="sm"
+                variant="secondary"
+                icon="pi-arrow-circle-down"
                 :data-test="`resolve-${issue.entity.id}-accept`"
                 @click="resolveItem(issue.entity.id, 'accept')"
-              ><i class="pi pi-arrow-circle-down" aria-hidden="true" /> Import anyway</button>
-              <button
-                type="button"
-                class="wp-action-group__btn"
-                data-active="true"
+              >Import anyway</Button>
+              <Button
+                size="sm"
+                variant="primary"
+                icon="pi-sitemap"
                 :data-test="`resolve-${issue.entity.id}-include-deps`"
                 @click="includeDepsFor(issue)"
-              ><i class="pi pi-sitemap" aria-hidden="true" /> Include deps</button>
-            </div>
-            <div
+              >Include deps</Button>
+            </Toolbar>
+            <Toolbar
               v-else
-              class="wp-action-group"
-              role="radiogroup"
-              :aria-label="`Resolution for ${issue.entity.name ?? issue.entity.id}`"
+              attached
+              size="sm"
+              :label="`Resolution for ${issue.entity.name ?? issue.entity.id}`"
               :data-test="`resolve-group-${issue.entity.id}`"
             >
-              <button
-                type="button"
-                class="wp-action-group__btn"
+              <Button
+                size="sm"
+                variant="secondary"
+                icon="pi-times"
                 :data-test="`resolve-${issue.entity.id}-skip`"
                 @click="resolveItem(issue.entity.id, 'skip')"
-              ><i class="pi pi-times" aria-hidden="true" /> Skip</button>
-              <button
-                type="button"
-                class="wp-action-group__btn"
+              >Skip</Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon="pi-plus"
                 :data-test="`resolve-${issue.entity.id}-rename`"
                 @click="startRename(issue.entity.id)"
-              ><i class="pi pi-plus" aria-hidden="true" /> Import as new</button>
-              <button
-                type="button"
-                class="wp-action-group__btn"
+              >Import as new</Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon="pi-arrow-circle-down"
                 :data-test="`resolve-${issue.entity.id}-accept`"
                 @click="resolveItem(issue.entity.id, 'accept')"
-              ><i class="pi pi-arrow-circle-down" aria-hidden="true" /> Import anyway</button>
-            </div>
+              >Import anyway</Button>
+            </Toolbar>
           </template>
         </div>
       </template>
@@ -1126,40 +1131,6 @@ const importItemCount = computed<number>(() => {
   letter-spacing: 0;
 }
 
-/* Action group — 3-button segmented control. Prototype lines 269-280. */
-.wp-action-group {
-  display: inline-flex;
-  border: 1px solid var(--wp-border-strong);
-  border-radius: var(--wp-radius);
-  overflow: hidden;
-  background: var(--wp-bg-2);
-}
-.wp-action-group__btn {
-  background: transparent;
-  border: none;
-  color: var(--wp-text-muted);
-  font-family: var(--wp-font);
-  font-size: var(--wp-text-sm);
-  font-weight: 500;
-  padding: 5px 12px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border-right: 1px solid var(--wp-border-strong);
-}
-.wp-action-group__btn:last-child { border-right: none; }
-.wp-action-group__btn:hover {
-  background: var(--wp-bg-3);
-  color: var(--wp-text);
-}
-.wp-action-group__btn[data-active="true"] {
-  background: var(--wp-accent-600);
-  color: #fff;
-  font-weight: 600;
-}
-.wp-action-group__btn[data-active="true"]:hover { background: var(--wp-accent-500); }
-.wp-action-group__btn .pi { font-size: 10px; }
 
 
 /* Batch card — single rounded card containing the batch label + inline

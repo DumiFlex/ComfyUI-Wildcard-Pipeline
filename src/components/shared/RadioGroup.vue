@@ -9,7 +9,12 @@
  *
  * APG radio group: one Tab stop (the chosen option), the arrow keys move and
  * choose, disabled options are skipped. `orientation="horizontal"` lays the
- * options out in a row.
+ * options out in a row. The `label` slot draws an option's label itself
+ * (a name plus a badge), and `test-prefix` gives each option a `data-test`.
+ *
+ *   <RadioGroup v-model="provider" :options="opts" test-prefix="provider">
+ *     <template #label="{ option }">{{ option.label }} <Badge text="Local" /></template>
+ *   </RadioGroup>
  */
 import { nextTick, ref } from "vue";
 
@@ -30,7 +35,11 @@ const props = withDefaults(defineProps<{
   ariaLabel?: string;
   /** Draw each option as a bordered card (for a few big choices). */
   cards?: boolean;
-}>(), { orientation: "vertical", size: "md", ariaLabel: undefined });
+  /** `data-test` of each option is `<testPrefix>-<value>`. */
+  testPrefix?: string;
+}>(), { orientation: "vertical", size: "md", ariaLabel: undefined, testPrefix: undefined });
+
+defineSlots<{ label?: (p: { option: RadioOption<T> }) => unknown }>();
 
 const emit = defineEmits<{ (e: "update:modelValue", v: T): void }>();
 const rootEl = ref<HTMLElement | null>(null);
@@ -87,12 +96,13 @@ function onKeydown(ev: KeyboardEvent, at: T): void {
       :aria-disabled="disabled || o.disabled || undefined"
       :tabindex="!disabled && o.value === tabStop() ? 0 : -1"
       :data-checked="modelValue === o.value || undefined"
+      :data-test="testPrefix ? `${testPrefix}-${o.value}` : undefined"
       @click="!o.disabled && pick(o.value)"
       @keydown="onKeydown($event, o.value)"
     >
       <span class="wp-radio-group__dot" aria-hidden="true" />
       <span class="wp-radio-group__text">
-        <span class="wp-radio-group__label">{{ o.label }}</span>
+        <span class="wp-radio-group__label"><slot name="label" :option="o">{{ o.label }}</slot></span>
         <span v-if="o.hint" class="wp-radio-group__hint">{{ o.hint }}</span>
       </span>
     </div>
@@ -131,7 +141,7 @@ function onKeydown(ev: KeyboardEvent, at: T): void {
 .wp-radio-group__opt[aria-disabled="true"][data-checked] .wp-radio-group__dot::after { background: var(--wp-text-dim); }
 .wp-radio-group[aria-invalid="true"] .wp-radio-group__dot { border-color: var(--wp-error-border); }
 .wp-radio-group__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.wp-radio-group__label { font-size: var(--wp-text-sm); line-height: 18px; }
+.wp-radio-group__label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--wp-space-3); font-size: var(--wp-text-sm); line-height: 18px; }
 .wp-radio-group[data-size="sm"] .wp-radio-group__label { font-size: var(--wp-text-xs); line-height: 15px; }
 .wp-radio-group__hint { color: var(--wp-text-muted); font-size: var(--wp-text-xs); line-height: 1.4; }
 @media (prefers-reduced-motion: reduce) {

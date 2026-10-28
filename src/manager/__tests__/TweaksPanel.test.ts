@@ -50,11 +50,11 @@ describe("TweaksPanel.vue", () => {
     const wrap = mount(TweaksPanel);
     const tweaks = useTweaksStore();
     expect(tweaks.density).toBe("comfortable");
-    await wrap.find('[data-test="tweaks-density-compact"]').trigger("change");
+    await wrap.find('[data-test="tweaks-density-compact"]').trigger("click");
     expect(tweaks.density).toBe("compact");
     expect(document.documentElement.classList.contains("wp-density-compact")).toBe(true);
 
-    await wrap.find('[data-test="tweaks-density-comfortable"]').trigger("change");
+    await wrap.find('[data-test="tweaks-density-comfortable"]').trigger("click");
     expect(tweaks.density).toBe("comfortable");
     expect(document.documentElement.classList.contains("wp-density-compact")).toBe(false);
   });
