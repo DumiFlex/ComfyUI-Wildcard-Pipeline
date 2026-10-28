@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CodeBlock from "@/components/shared/CodeBlock.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
@@ -198,10 +199,14 @@ const checklist: string[] = [
     <DocSection title="Blueprint: rating-aware adult pack">
       <p>Modules in running order, for a Danbooru-tag model:</p>
       <GuideTable :head="['#', 'Module', 'Kind', 'Writes', 'Options and settings']" :rows="blueprintRows" />
-      <p>
-        <b>Template:</b> <code class="wp-guide-code">$quality, $rating_tag, $character, $count, $act, $body, $hair, $eyes, $clothing_state, $outfit, $pose, $expression, $place, $camera, $censor, $style</code><br>
-        <b>Negative template:</b> <code class="wp-guide-code">$negatives, child, loli, shota, toddler, aged down, young, bad anatomy, extra arms, extra legs, extra fingers, watermark</code>
-      </p>
+      <CodeBlock
+        code="$quality, $rating_tag, $character, $count, $act, $body, $hair, $eyes, $clothing_state, $outfit, $pose, $expression, $place, $camera, $censor, $style"
+        title="Template" default-wrap size="sm"
+      />
+      <CodeBlock
+        code="$negatives, child, loli, shota, toddler, aged down, young, bad anatomy, extra arms, extra legs, extra fingers, watermark"
+        title="Negative template" default-wrap size="sm"
+      />
       <ul>
         <li>The count tags come first: the character's own, then <code>solo</code> or the partner's from the act. Below explicit the act is empty, so the derivation writes <code>solo</code>.</li>
         <li>An Only rule pointing at a null option is how a constraint says "nothing here": for a nude state the outfit prints nothing, and below explicit the act prints nothing.</li>
@@ -314,7 +319,3 @@ const checklist: string[] = [
     </DocSection>
   </DocPage>
 </template>
-
-<style scoped>
-.wp-guide-code { font-family: var(--wp-font-mono); font-size: 0.92em; color: var(--wp-text); }
-</style>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Kbd from "@/components/shared/Kbd.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
@@ -139,7 +140,7 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
     <DocSection title="It can show you around and test its work">
       <ul>
         <li><b>Show you around.</b> It opens an editor, a docs page or a Settings section, and points
-          at the part you asked about with an outline and a caption. Esc or a click closes it. On a
+          at the part you asked about with an outline and a caption. <Kbd keys="Esc" size="sm" /> or a click closes it. On a
           list it can select rows for you.</li>
         <li><b>Use the page's AI tools.</b> It can open an item and ask its Describe or Draft with AI
           panel for you, open <b>Organize with AI</b> on the rows it means, or set up and run the
@@ -195,7 +196,7 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       </p>
       <p>
         Select text anywhere in the manager and a small bar appears: <b>Explain</b> sends it to the
-        chat, <b>Ask</b> quotes it in the message box. <code>Ctrl+Shift+X</code> explains the
+        chat, <b>Ask</b> quotes it in the message box. <Kbd keys="Mod+Shift+X" size="sm" /> explains the
         selection directly. Turn the bar off with <b>Settings › AI assistant › Show Explain on
         selected text</b>.
       </p>

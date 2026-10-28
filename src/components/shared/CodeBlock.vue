@@ -23,6 +23,8 @@ const props = withDefaults(defineProps<{
   title?: string;
   /** Wrap long lines. Bind with v-model:wrap, or leave it to the button. */
   wrap?: boolean;
+  /** Where wrap starts when nobody binds `wrap`. */
+  defaultWrap?: boolean;
   /** CSS max height; the block scrolls past it. */
   maxHeight?: string;
   lineNumbers?: boolean;
@@ -33,7 +35,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{ (e: "update:wrap", v: boolean): void }>();
 
-const own = ref(props.wrap ?? false);
+const own = ref(props.wrap ?? props.defaultWrap ?? false);
 watch(() => props.wrap, (v) => { if (v !== undefined) own.value = v; });
 const wrapped = computed(() => props.wrap ?? own.value);
 function toggleWrap(): void {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Kbd from "@/components/shared/Kbd.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
@@ -19,7 +20,7 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       <ol>
         <li>Open a wildcard and press <b>AI</b> above the options. Stay on the <b>Add</b> tab.</li>
         <li>Say what you want and how many, for example <em>8 more outfits for a rainy city at
-          night</em>. Press <b>Draft</b> (Ctrl + Enter). A number in the request sets <b>How
+          night</em>. Press <b>Draft</b> (<Kbd keys="Mod+Enter" size="sm" />). A number in the request sets <b>How
           many</b> (<em>6 more, bolder</em> is 6; <em>one option each</em> is not a total);
           without one the box decides (10 to start).</li>
         <li>Untick anything you don't want and press <b>Add</b>. The rest go in like pasted

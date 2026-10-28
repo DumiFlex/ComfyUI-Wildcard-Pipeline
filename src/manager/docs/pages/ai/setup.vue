@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CodeBlock from "@/components/shared/CodeBlock.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
@@ -7,6 +8,8 @@ import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../components/settings/ai-models";
+
+const MODELFILE = "FROM hf.co/<repo>:<quant>\nRENDERER qwen3.5\nPARSER qwen3.5\n";
 </script>
 
 <template>
@@ -181,9 +184,8 @@ import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODEL_GROUPS } from "../../../compone
         In Ollama, a Qwen 3.5 / 3.6 model pulled straight from Hugging Face
         (<code>ollama pull hf.co/…</code>) misses Ollama's tool-call reader, so tool calls can come
         back as plain text. Fix: make a file named <code>Modelfile</code> holding
-        <code>FROM hf.co/&lt;repo&gt;:&lt;quant&gt;</code>, <code>RENDERER qwen3.5</code> and
-        <code>PARSER qwen3.5</code>, run <code>ollama create my-model -f Modelfile</code> and pick
-        <code>my-model</code>. For Gemma 4 use <code>RENDERER gemma4-large</code> (or
+        <CodeBlock :code="MODELFILE" title="Modelfile" size="sm" />
+        run <code>ollama create my-model -f Modelfile</code> and pick <code>my-model</code>. For Gemma 4 use <code>RENDERER gemma4-large</code> (or
         <code>gemma4-small</code> below 12B) and <code>PARSER gemma4</code>. Ollama's own
         <code>qwen3.5</code> and <code>gemma4</code> models already have it.
       </DocCallout>

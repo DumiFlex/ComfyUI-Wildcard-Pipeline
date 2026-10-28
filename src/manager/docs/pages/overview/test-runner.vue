@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Kbd from "@/components/shared/Kbd.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
@@ -45,7 +46,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
       <p>
         A scenario is what one Context node would hold, saved so you can run it again. Press
         <b>New</b> in the rail, then <b>Add module or bundle</b>. Cards run left to right, like the
-        modules on a Context; drag them (or Alt + arrow keys) to reorder, and use a card's switch to
+        modules on a Context; drag them (or <Kbd keys="Alt" size="sm" /> + arrow keys) to reorder, and use a card's switch to
         leave it out of a run without removing it.
       </p>
       <DocKeyList
@@ -57,7 +58,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
         ]"
       />
       <p>
-        <b>Save</b> (Ctrl + S) keeps the scenario, and the pin icon keeps it at the top of the rail.
+        <b>Save</b> (<Kbd keys="Mod+S" size="sm" />) keeps the scenario, and the pin icon keeps it at the top of the rail.
         From a module or bundle editor, <b>Send to Test Runner</b> opens a quick run with just that
         item, and <b>In N scenarios</b> lists the saved scenarios that use it.
       </p>
