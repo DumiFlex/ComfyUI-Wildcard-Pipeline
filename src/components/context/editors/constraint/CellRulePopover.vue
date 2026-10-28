@@ -16,6 +16,19 @@ import WpButton from "../../../shared/WpButton.vue";
 
 type RuleState = "neutral" | "exclude" | "boost" | "reduce" | "only";
 
+const STATES: { state: RuleState; glyph: string; label: string; hint?: string }[] = [
+  { state: "neutral", glyph: "·", label: "Neutral" },
+  { state: "exclude", glyph: "×", label: "Exclude" },
+  { state: "boost", glyph: "↑", label: "Boost" },
+  { state: "reduce", glyph: "↓", label: "Reduce" },
+  {
+    state: "only",
+    glyph: "✓",
+    label: "Only",
+    hint: "Guest list: when this source tag fires, the target only picks options this row has a rule for (boost and reduce keep their odds)",
+  },
+];
+
 const props = withDefaults(
   defineProps<{
     state: RuleState;
@@ -92,55 +105,20 @@ function onReset(): void {
 </script>
 
 <template>
-  <div class="pop" role="dialog" :aria-label="`Rule for ${srcLabel} to ${tgtLabel}`">
+  <div class="pop">
     <div class="pop-title">Cell rule</div>
     <div class="pop-states">
-      <button
-        type="button"
-        class="pop-btn b-neutral"
-        :class="{ active: state === 'neutral' }"
-        :aria-pressed="state === 'neutral'"
-        @click="pickState('neutral')"
+      <WpButton
+        v-for="b in STATES"
+        :key="b.state"
+        class="pop-btn"
+        :class="[`b-${b.state}`, { active: state === b.state }]"
+        :pressed="state === b.state"
+        :hint="b.hint"
+        @click="pickState(b.state)"
       >
-        <span class="b-glyph">·</span> Neutral
-      </button>
-      <button
-        type="button"
-        class="pop-btn b-exclude"
-        :class="{ active: state === 'exclude' }"
-        :aria-pressed="state === 'exclude'"
-        @click="pickState('exclude')"
-      >
-        <span class="b-glyph">×</span> Exclude
-      </button>
-      <button
-        type="button"
-        class="pop-btn b-boost"
-        :class="{ active: state === 'boost' }"
-        :aria-pressed="state === 'boost'"
-        @click="pickState('boost')"
-      >
-        <span class="b-glyph">↑</span> Boost
-      </button>
-      <button
-        type="button"
-        class="pop-btn b-reduce"
-        :class="{ active: state === 'reduce' }"
-        :aria-pressed="state === 'reduce'"
-        @click="pickState('reduce')"
-      >
-        <span class="b-glyph">↓</span> Reduce
-      </button>
-      <button
-        type="button"
-        class="pop-btn b-only"
-        :class="{ active: state === 'only' }"
-        :aria-pressed="state === 'only'"
-        title="Guest list: when this source tag fires, the target only picks options this row has a rule for (boost and reduce keep their odds)"
-        @click="pickState('only')"
-      >
-        <span class="b-glyph">✓</span> Only
-      </button>
+        <span class="b-glyph" aria-hidden="true">{{ b.glyph }}</span> {{ b.label }}
+      </WpButton>
     </div>
     <div v-if="state === 'only'" class="pop-note">
       Every target in this row without a rule of its own is excluded when {{ srcLabel }} fires.
@@ -177,18 +155,10 @@ function onReset(): void {
 </template>
 
 <style scoped>
+/* The shared Popover draws the panel (background, border, shadow); this is
+ * only its content. */
 .pop {
-  /* Opaque background — earlier `var(--wp-bg2)` resolved to the host's
-   * variable which is sometimes transparent (e.g. canvas overlay
-   * contexts). Hard fallback chain keeps the popover legible across
-   * extension + SPA mounts. */
-  background-color: #1a1d24;
-  background-color: var(--wp-bg-1, var(--wp-bg2, #1a1d24));
-  border: 1px solid var(--wp-border-strong, var(--wp-border, #353841));
-  border-radius: 6px;
-  padding: 10px;
-  box-shadow: var(--wp-shadow-md);
-  min-width: 240px;
+  width: 236px;
   font: 11px var(--wp-font-sans, sans-serif);
   color: var(--wp-text, #e0e0e8);
 }
@@ -206,42 +176,35 @@ function onReset(): void {
   gap: 4px;
   margin-bottom: 8px;
 }
-.pop-btn {
-  display: flex;
-  align-items: center;
+/* WpButton carries the size, focus ring and hover; the compound selectors
+ * beat its scoped rules on a tie. Each state wears its matrix colour once
+ * picked. */
+.wp-btn.pop-btn {
   gap: 6px;
-  justify-content: center;
-  padding: 8px 6px;
-  border: 1px solid var(--wp-border, #2a2d35);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--wp-text) 2%, transparent);
-  cursor: pointer;
-  font: 600 10px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-muted, #8a8d99);
+  font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
-.pop-btn:hover { color: var(--wp-text); border-color: var(--wp-border-strong, #4a4d55); }
 .pop-btn .b-glyph { font: 13px var(--wp-font-mono, monospace); line-height: 1; }
-.pop-btn.b-neutral.active {
-  background: color-mix(in srgb, var(--wp-text) 10%, transparent);
-  color: var(--wp-text);
-  border-color: color-mix(in srgb, var(--wp-text) 40%, transparent);
+.wp-btn.pop-btn.b-only { grid-column: 1 / -1; } /* fifth button spans the grid so it stays even */
+.wp-btn.pop-btn.active { --pop-tone: var(--wp-text); }
+.wp-btn.pop-btn.b-exclude.active { --pop-tone: var(--wp-danger); }
+.wp-btn.pop-btn.b-boost.active { --pop-tone: var(--wp-success); }
+.wp-btn.pop-btn.b-reduce.active { --pop-tone: var(--wp-warn); }
+.wp-btn.pop-btn.b-only.active { --pop-tone: var(--wp-info); }
+.wp-btn.pop-btn.active {
+  background: color-mix(in srgb, var(--pop-tone) 20%, transparent);
+  border-color: color-mix(in srgb, var(--pop-tone) 50%, transparent);
+  color: var(--pop-tone);
 }
-.pop-btn.b-exclude.active { background: color-mix(in srgb, var(--wp-danger, #ef4444) 22%, transparent); color: var(--wp-danger); border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 50%, transparent); }
-.pop-btn.b-boost.active   { background: color-mix(in srgb, var(--wp-success, #22c55e) 22%, transparent); color: var(--wp-success); border-color: color-mix(in srgb, var(--wp-success, #22c55e) 50%, transparent); }
-.pop-btn.b-only {
-  /* Fifth button spans the grid so the 2-column layout stays even. */
-  grid-column: 1 / -1;
-}
-.pop-btn.b-only.active    { background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent); color: var(--wp-info, #3b82f6); border-color: color-mix(in srgb, var(--wp-info, #3b82f6) 50%, transparent); }
+.wp-btn.pop-btn.b-neutral.active { background: color-mix(in srgb, var(--wp-text) 10%, transparent); }
 .pop-note {
   margin: -2px 0 8px;
   font: 10px var(--wp-font-sans, sans-serif);
   color: var(--wp-text-muted, #8a8d99);
   line-height: 1.4;
 }
-.pop-btn.b-reduce.active  { background: color-mix(in srgb, var(--wp-warn, #f97316) 22%, transparent); color: var(--wp-warn); border-color: color-mix(in srgb, var(--wp-warn, #f97316) 50%, transparent); }
 
 /* ── Factor input — wrap + stacked stepper, mirrors OptionRow's
  * `opt__weight-wrap + opt__spin` pattern so users see one consistent

@@ -10,6 +10,12 @@
  *     <template #trigger="{ props }"><Button v-bind="props">Colour</Button></template>
  *     …panel content…
  *   </Popover>
+ *
+ * One panel shared by many triggers (the cells of a rule grid) passes the
+ * element it belongs to as `anchor` instead of a trigger slot; clicks on that
+ * element don't count as outside, so it can toggle the panel itself.
+ *
+ *   <Popover :open="!!cell" :anchor="cell?.el" label="Cell rule" @update:open="cell = null">…</Popover>
  */
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 import { placeFloating, viewportSize, type Placement, type Side } from "./floating";
@@ -25,7 +31,9 @@ const props = withDefaults(defineProps<{
   autofocus?: boolean;
   /** "dialog" for panels with controls, "menu"/"listbox" when the content is one. */
   role?: "dialog" | "menu" | "listbox" | "group";
-}>(), { placement: "bottom-start", autofocus: true, role: "dialog" });
+  /** Place the panel against this element instead of the trigger slot. */
+  anchor?: HTMLElement | null;
+}>(), { placement: "bottom-start", autofocus: true, role: "dialog", anchor: null });
 
 const emit = defineEmits<{ (e: "update:open", v: boolean): void }>();
 
@@ -38,6 +46,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
   + 'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function trigger(): HTMLElement | null {
+  if (props.anchor) return props.anchor;
   const el = anchorEl.value;
   return (el?.firstElementChild as HTMLElement | null) ?? el;
 }
@@ -68,6 +77,7 @@ function onPointerDown(ev: PointerEvent): void {
   const path = ev.composedPath();
   if (panelEl.value && path.includes(panelEl.value)) return;
   if (anchorEl.value && path.includes(anchorEl.value)) return;
+  if (props.anchor && path.includes(props.anchor)) return;
   setOpen(false);
 }
 
@@ -98,13 +108,16 @@ watch(() => props.open, async (v) => {
   }
 }, { immediate: true });
 
+// A shared panel moving to another trigger re-places without closing.
+watch(() => props.anchor, () => { if (props.open) void nextTick(place); });
+
 onBeforeUnmount(() => { if (typeof window !== "undefined") listen(false); });
 
 defineExpose({ place });
 </script>
 
 <template>
-  <span ref="anchorEl" class="wp-popover-anchor">
+  <span v-if="$slots.trigger" ref="anchorEl" class="wp-popover-anchor">
     <slot name="trigger" :props="triggerProps" :open="open" />
   </span>
   <Teleport to="body">

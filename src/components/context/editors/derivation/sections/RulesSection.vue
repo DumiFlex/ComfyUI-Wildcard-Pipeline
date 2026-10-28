@@ -32,6 +32,7 @@ import { patchInstance } from "../../instance/patch";
 import { varColorClass } from "../../../../shared/var-color";
 import RuleValueChips from "./RuleValueChips.vue";
 import WpSwitch from "../../../../shared/WpSwitch.vue";
+import Disclosure from "../../../../shared/Disclosure.vue";
 import { tokenizeRich } from "../../../../../widgets/richTokenize";
 import PairBadge from "../../../PairBadge.vue";
 import {
@@ -605,95 +606,91 @@ function condRows(cond: unknown, bi: number): CondRow[] {
         @drop="(ev) => onRuleDrop(rule.id, ev)"
         @dragend="onRuleDragEnd"
       >
-        <!-- Head row -->
-        <button
-          type="button"
-          class="rule-head"
-          :data-test="`rule-head-${rule.id}`"
-          :aria-expanded="isExpanded(rule.id)"
-          @click="toggleExpand(rule.id)"
+        <Disclosure
+          class="rule-disc"
+          size="sm"
+          lazy
+          :open="isExpanded(rule.id)"
+          :trigger-attrs="{ 'data-test': `rule-head-${rule.id}` }"
+          @update:open="toggleExpand(rule.id)"
         >
-          <i
-            :class="['pi', isExpanded(rule.id) ? 'pi-chevron-down' : 'pi-chevron-right']"
-            class="rule-head__caret"
-            aria-hidden="true"
-          />
-          <WpSwitch
-            :data-test="`rule-toggle-${rule.id}`"
-            :aria-label="isRuleEnabled(rule) ? `Disable rule ${rule.id}` : `Enable rule ${rule.id}`"
-            :model-value="isRuleEnabled(rule)"
-            @click.stop
-            @update:model-value="toggleRule(rule)"
-          />
+          <template #summary>
+            <span class="rule-head__num" :title="`Rule id ${rule.id}`">Rule {{ ruleIdx + 1 }}</span>
+            <i
+              v-if="ruleBrokenRefs(rule).length"
+              class="pi pi-exclamation-triangle rule-head__broken"
+              :title="`${ruleBrokenRefs(rule).join(', ')} not in the library`"
+              :data-test="`rule-broken-${rule.id}`"
+            />
 
-          <span class="rule-head__num" :title="`Rule id ${rule.id}`">Rule {{ ruleIdx + 1 }}</span>
-          <i
-            v-if="ruleBrokenRefs(rule).length"
-            class="pi pi-exclamation-triangle rule-head__broken"
-            :title="`${ruleBrokenRefs(rule).join(', ')} not in the library`"
-            :data-test="`rule-broken-${rule.id}`"
-          />
-
-          <span
-            class="rule-head__summary"
-            :title="ruleSummaryText(rule)"
-            :data-test="`rule-summary-${rule.id}`"
-          >
-            <template v-if="rule.branches && rule.branches.length > 0">
-              <template v-for="(part, pi) in condParts(rule.branches[0].condition)" :key="pi">
-                <span
-                  v-if="part.kind === 'var'"
-                  :class="['rule-tok-var', varColorClass(part.text)]"
-                >${{ part.text }}</span>
-                <span
-                  v-else-if="part.kind === 'val'"
-                  class="rule-tok-val"
-                ><RuleValueChips :value="clampPreviewValue(part.text)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
-                <span v-else-if="part.kind === 'join'" class="rule-tok-join">{{ part.text }}</span>
-                <span v-else class="rule-tok-op">{{ part.text }}</span>
+            <span
+              class="rule-head__summary"
+              :title="ruleSummaryText(rule)"
+              :data-test="`rule-summary-${rule.id}`"
+            >
+              <template v-if="rule.branches && rule.branches.length > 0">
+                <template v-for="(part, pi) in condParts(rule.branches[0].condition)" :key="pi">
+                  <span
+                    v-if="part.kind === 'var'"
+                    :class="['rule-tok-var', varColorClass(part.text)]"
+                  >${{ part.text }}</span>
+                  <span
+                    v-else-if="part.kind === 'val'"
+                    class="rule-tok-val"
+                  ><RuleValueChips :value="clampPreviewValue(part.text)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+                  <span v-else-if="part.kind === 'join'" class="rule-tok-join">{{ part.text }}</span>
+                  <span v-else class="rule-tok-op">{{ part.text }}</span>
+                </template>
+                <span class="rule-tok-arrow">→</span>
+                <template v-for="(a, ai) in acts(rule.branches[0])" :key="ai">
+                  <span v-if="ai > 0" class="rule-tok-join">AND</span>
+                  <span
+                    v-if="a.target_var"
+                    :class="['rule-tok-var', varColorClass(a.target_var)]"
+                  >${{ a.target_var }}</span>
+                  <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': isNegativeMode(a.mode) }" :title="modeTitle(a.mode)">{{ modeLabel(a.mode) }}</span>
+                  <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(a.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+                </template>
+                <!-- Inline ↪#N constraint-pair badge — rendered when this
+                     derivation is a constraint carrier through the IF branch's
+                     nested `@{uuid}` ref. Mirrors OptionRow's per-option badge
+                     so the summary reads "@{tint} ↪#1". -->
+                <PairBadge
+                  v-for="p in pairBadgesFor(rule.id, 0)"
+                  :key="`${p.number}-${p.targetUuid}`"
+                  :pair="p"
+                  variant="option"
+                />
               </template>
-              <span class="rule-tok-arrow">→</span>
-              <template v-for="(a, ai) in acts(rule.branches[0])" :key="ai">
-                <span v-if="ai > 0" class="rule-tok-join">AND</span>
-                <span
-                  v-if="a.target_var"
-                  :class="['rule-tok-var', varColorClass(a.target_var)]"
-                >${{ a.target_var }}</span>
-                <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': isNegativeMode(a.mode) }" :title="modeTitle(a.mode)">{{ modeLabel(a.mode) }}</span>
-                <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(a.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
-              </template>
-              <!-- Inline ↪#N constraint-pair badge — rendered when this
-                   derivation is a constraint carrier through the IF branch's
-                   nested `@{uuid}` ref. Mirrors OptionRow's per-option badge
-                   so the summary reads "@{tint} ↪#1". -->
-              <PairBadge
-                v-for="p in pairBadgesFor(rule.id, 0)"
-                :key="`${p.number}-${p.targetUuid}`"
-                :pair="p"
-                variant="option"
-              />
-            </template>
-          </span>
+            </span>
 
-          <span
-            v-if="modCount(rule) > 0"
-            class="rule-head__chip rule-head__chip--mod"
-            :data-test="`rule-mod-count-${rule.id}`"
-          >{{ modCount(rule) }} mod{{ modCount(rule) === 1 ? "" : "s" }}</span>
-
-          <!-- Drag handle — `draggable` lives on the handle (not the
-               whole card) so users only initiate reorder from this
-               grip. Drop targets are the entire rule cards (handled
-               via @dragover/@drop on the parent div). -->
-          <span
-            class="rule-head__drag"
-            :data-test="`rule-drag-${rule.id}`"
-            draggable="true"
-            aria-label="Drag to reorder rule"
-            @dragstart="(ev) => onRuleDragStart(rule.id, ev)"
-            @click.stop
-          >⋮⋮</span>
-        </button>
+            <span
+              v-if="modCount(rule) > 0"
+              class="rule-head__chip rule-head__chip--mod"
+              :data-test="`rule-mod-count-${rule.id}`"
+            >{{ modCount(rule) }} mod{{ modCount(rule) === 1 ? "" : "s" }}</span>
+          </template>
+          <template #actions>
+            <WpSwitch
+              :data-test="`rule-toggle-${rule.id}`"
+              :aria-label="isRuleEnabled(rule) ? `Disable rule ${rule.id}` : `Enable rule ${rule.id}`"
+              :model-value="isRuleEnabled(rule)"
+              @click.stop
+              @update:model-value="toggleRule(rule)"
+            />
+            <!-- Drag handle — `draggable` lives on the handle (not the
+                 whole card) so users only initiate reorder from this
+                 grip. Drop targets are the entire rule cards (handled
+                 via @dragover/@drop on the parent div). -->
+            <span
+              class="rule-head__drag"
+              :data-test="`rule-drag-${rule.id}`"
+              draggable="true"
+              aria-label="Drag to reorder rule"
+              @dragstart="(ev) => onRuleDragStart(rule.id, ev)"
+              @click.stop
+            >⋮⋮</span>
+          </template>
 
         <!-- Expanded body — one card per clause (IF / ELIF / ELSE), each a
              WHEN block (one row per test, AND / OR between them, nested
@@ -701,7 +698,6 @@ function condRows(cond: unknown, bi: number): CondRow[] {
              value is a full-width field: empty shows the library value as a
              ghost, typing overrides it on this node only. -->
         <div
-          v-if="isExpanded(rule.id)"
           class="rule-body"
           :data-test="`rule-body-${rule.id}`"
         >
@@ -868,6 +864,7 @@ function condRows(cond: unknown, bi: number): CondRow[] {
             </div>
           </div>
         </div>
+        </Disclosure>
       </div>
     </div>
   </section>
@@ -967,26 +964,17 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   border-top: 2px solid var(--wp-accent);
 }
 
-/* Head — single-row clickable bar */
-.rule-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 10px;
+/* Head — the shared Disclosure: its button holds the number and the
+ * summary; the switch and the drag grip sit beside it in `#actions`, so
+ * flipping a rule never folds it. */
+.wp-disclosure.rule-disc :deep(.wp-disclosure__head) {
+  padding: 0 10px 0 4px;
   background: var(--wp-bg2);
-  border: 0;
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  color: var(--wp-text);
 }
-.rule-card--open .rule-head { border-bottom: 1px solid var(--wp-border); }
-.rule-head:hover { background: var(--wp-bg3); }
-.rule-head__caret {
-  font-size: 10px;
-  color: var(--wp-text-dim, var(--wp-text3));
-}
+.wp-disclosure.rule-disc :deep(.wp-disclosure__trigger) { gap: 8px; padding: 4px 6px; }
+.wp-disclosure.rule-disc :deep(.wp-disclosure__trigger:hover) { background: var(--wp-bg3); }
+.rule-card--open .wp-disclosure.rule-disc :deep(.wp-disclosure__head) { border-bottom: 1px solid var(--wp-border); }
+.wp-disclosure.rule-disc :deep(.wp-disclosure__content) { padding: 0; }
 .rule-head__num {
   font: 600 10px var(--wp-font-sans);
   color: var(--wp-accent);

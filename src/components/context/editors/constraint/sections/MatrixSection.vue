@@ -20,6 +20,7 @@ import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { encodeKey } from "../../instance/keys";
 import { patchInstance } from "../../instance/patch";
 import CellRulePopover from "../CellRulePopover.vue";
+import Popover from "../../../../shared/Popover.vue";
 import MatrixLegend from "../MatrixLegend.vue";
 import {
   groupHue as tagHue,
@@ -216,43 +217,13 @@ function cellAriaLabel(src: string, tgt: string): string {
 
 // ── Popover ────────────────────────────────────────────────────
 //
-// The popover lives in a `<Teleport to="body">` portal so it escapes
-// the cell's hover / clipping context entirely. Without teleport the
-// popover sits inside `.mx-cell`, which causes two problems:
-//   1. Hovering the popover triggers `.mx-cell:hover` on the source
-//      cell (transform + glow), making the popover feel like it lives
-//      "inside" the cell.
-//   2. The cells in the row below (which the popover visually overlaps)
-//      receive pointer events because they share a stacking context
-//      with the popover's parent — visible to the user as "I can hover
-//      cells behind the popover".
-// Tracking the cell rect lets us position-fixed the popover at the
-// right spot without parenting it inside the table.
-const openPopover = ref<{ src: string; tgt: string; left: number; top: number } | null>(null);
+// One shared Popover, anchored to the clicked cell: it teleports to the
+// body (so hovering it never lights up the cell or the cells below it),
+// follows the cell on scroll and resize, and closes on Escape or a click
+// outside. Clicking the open cell again closes it.
+const openPopover = ref<{ src: string; tgt: string; el: HTMLElement } | null>(null);
 
-function rectForCell(src: string, tgt: string): { left: number; top: number } {
-  const el = document.querySelector<HTMLElement>(
-    `[data-test="mx-cell-${cssEscape(src)}-${cssEscape(tgt)}"]`,
-  );
-  if (!el) return { left: 0, top: 0 };
-  const r = el.getBoundingClientRect();
-  const POP_W = 260;
-  const left = Math.min(
-    window.innerWidth - POP_W - 12,
-    Math.max(12, r.left + r.width / 2 - POP_W / 2),
-  );
-  const top = r.bottom + 8;
-  return { left, top };
-}
-
-/** Minimal CSS attribute-value escape so values containing dots or
- *  quotes (sub-category names are user data) don't break the selector. */
-function cssEscape(s: string): string {
-  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") return CSS.escape(s);
-  return s.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
-}
-
-function onCellClick(src: string, tgt: string): void {
+function onCellClick(src: string, tgt: string, ev: Event): void {
   // Read-only recovery view (deleted source/target): cells are inert.
   if (props.stranded) return;
   const open = openPopover.value;
@@ -260,24 +231,10 @@ function onCellClick(src: string, tgt: string): void {
     openPopover.value = null;
     return;
   }
-  const pos = rectForCell(src, tgt);
-  openPopover.value = { src, tgt, left: pos.left, top: pos.top };
+  openPopover.value = { src, tgt, el: ev.currentTarget as HTMLElement };
 }
 
 function closePopover(): void { openPopover.value = null; }
-
-/** Re-position on scroll / resize so the teleported popover tracks its
- *  anchor cell. Closes on the same events if positioning fails. */
-function reanchorPopover(): void {
-  const cur = openPopover.value;
-  if (!cur) return;
-  const pos = rectForCell(cur.src, cur.tgt);
-  if (pos.left === 0 && pos.top === 0) {
-    closePopover();
-    return;
-  }
-  openPopover.value = { ...cur, left: pos.left, top: pos.top };
-}
 
 /** Write the override map, stripping the legacy disabled-set entry
  *  for the same cell. Mode defaults: if `next` matches the library
@@ -359,34 +316,11 @@ function resetCell(src: string, tgt: string): void {
   emit("update", { instance: inst as ModuleEntry["instance"] });
 }
 
-// ── Outside-click + Escape close ────────────────────────────────
-function onDocPointerDown(ev: MouseEvent): void {
-  if (openPopover.value === null) return;
-  const target = ev.target as HTMLElement | null;
-  if (!target) return;
-  if (target.closest(".pop")) return;
-  if (target.closest(".mx-cell")) return;
-  closePopover();
-}
-function onDocKeydown(ev: KeyboardEvent): void {
-  if (ev.key === "Escape" && openPopover.value !== null) {
-    ev.preventDefault();
-    closePopover();
-  }
-}
 onMounted(() => {
-  document.addEventListener("mousedown", onDocPointerDown, true);
-  document.addEventListener("keydown", onDocKeydown);
-  window.addEventListener("scroll", reanchorPopover, true);
-  window.addEventListener("resize", reanchorPopover);
   window.addEventListener("resize", measureBands);
   void nextTick(measureBands);
 });
 onBeforeUnmount(() => {
-  document.removeEventListener("mousedown", onDocPointerDown, true);
-  document.removeEventListener("keydown", onDocKeydown);
-  window.removeEventListener("scroll", reanchorPopover, true);
-  window.removeEventListener("resize", reanchorPopover);
   window.removeEventListener("resize", measureBands);
 });
 </script>
@@ -502,9 +436,11 @@ onBeforeUnmount(() => {
                   :aria-label="cellAriaLabel(s, t.tag)"
                   role="button"
                   tabindex="0"
-                  @click="onCellClick(s, t.tag)"
-                  @keydown.enter.prevent="onCellClick(s, t.tag)"
-                  @keydown.space.prevent="onCellClick(s, t.tag)"
+                  :aria-expanded="openPopover?.src === s && openPopover?.tgt === t.tag"
+                  aria-haspopup="dialog"
+                  @click="onCellClick(s, t.tag, $event)"
+                  @keydown.enter.prevent="onCellClick(s, t.tag, $event)"
+                  @keydown.space.prevent="onCellClick(s, t.tag, $event)"
                 >
                   <span class="glyph">{{ cellGlyph(s, t.tag) }}</span>
                   <span v-if="cellShowsFactor(s, t.tag)" class="factor">{{ cellFactorText(s, t.tag) }}</span>
@@ -522,35 +458,26 @@ onBeforeUnmount(() => {
 
     <MatrixLegend :show-accepts="hasAcceptsAxis" />
 
-    <!-- Popover lives in a body-level portal so its hover state stays
-         isolated from the source cell, the cells in the row below
-         (which it visually overlaps), and any table-level clipping. -->
-    <Teleport to="body">
-      <div
+    <Popover
+      :open="openPopover !== null"
+      :anchor="openPopover?.el"
+      placement="bottom"
+      :label="openPopover ? `Rule for ${openPopover.src} to ${openPopover.tgt}` : undefined"
+      @update:open="(v) => { if (!v) closePopover(); }"
+    >
+      <CellRulePopover
         v-if="openPopover"
-        class="mx-pop-anchor"
-        :style="{
-          position: 'fixed',
-          left: openPopover.left + 'px',
-          top: openPopover.top + 'px',
-          width: '260px',
-          zIndex: 9999,
-        }"
-        @mousedown.stop
-      >
-        <CellRulePopover
-          :state="effectiveState(openPopover.src, openPopover.tgt)"
-          :factor="effectiveFactor(openPopover.src, openPopover.tgt)"
-          :src-label="openPopover.src"
-          :tgt-label="openPopover.tgt"
-          :can-reset="isOverridden(openPopover.src, openPopover.tgt)"
-          @update:state="(next) => commitMode(openPopover!.src, openPopover!.tgt, next)"
-          @update:factor="(f) => commitFactor(openPopover!.src, openPopover!.tgt, f)"
-          @reset="resetCell(openPopover!.src, openPopover!.tgt)"
-          @close="closePopover"
-        />
-      </div>
-    </Teleport>
+        :state="effectiveState(openPopover.src, openPopover.tgt)"
+        :factor="effectiveFactor(openPopover.src, openPopover.tgt)"
+        :src-label="openPopover.src"
+        :tgt-label="openPopover.tgt"
+        :can-reset="isOverridden(openPopover.src, openPopover.tgt)"
+        @update:state="(next) => commitMode(openPopover!.src, openPopover!.tgt, next)"
+        @update:factor="(f) => commitFactor(openPopover!.src, openPopover!.tgt, f)"
+        @reset="resetCell(openPopover!.src, openPopover!.tgt)"
+        @close="closePopover"
+      />
+    </Popover>
   </section>
 </template>
 

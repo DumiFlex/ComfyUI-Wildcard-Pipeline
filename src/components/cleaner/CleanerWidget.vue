@@ -15,6 +15,7 @@
  */
 import { computed } from "vue";
 import WpButton from "../shared/WpButton.vue";
+import WpCheck from "../shared/WpCheck.vue";
 import WpSegmented, { type SegmentedOption } from "../shared/WpSegmented.vue";
 import {
   INTENSITY_TO_NEG_RULES,
@@ -362,45 +363,54 @@ function isOverridden(rid: RuleId): boolean {
       </div>
       <div class="wp-cleaner__rules">
         <div v-for="rule in ALL_RULES" :key="rule.id" class="wp-cleaner__rule-row">
-        <button
-          :data-test="`cleaner-rule-${rule.id}`"
-          :class="['wp-cleaner__rule', {
-            'is-on': effective.has(rule.id) && !isRuleDisabled(rule.id),
-            'is-overridden': isOverridden(rule.id) && !isRuleDisabled(rule.id),
-            'is-disabled': isRuleDisabled(rule.id),
-          }]"
-          :title="isRuleDisabled(rule.id) ? `${rule.tooltip} (disabled in text mode)` : rule.tooltip"
-          :disabled="isRuleDisabled(rule.id)"
-          @click="toggleRule(rule.id)"
-        >
-          <span class="wp-cleaner__rule-dot" />
-          <span class="wp-cleaner__rule-label">
-            {{ rule.label }}
-            <span
-              v-if="isOverridden(rule.id)"
-              class="wp-cleaner__rule-pip"
-              aria-label="modified"
+          <div
+            :class="['wp-cleaner__rule', {
+              'is-on': effective.has(rule.id) && !isRuleDisabled(rule.id),
+              'is-disabled': isRuleDisabled(rule.id),
+            }]"
+            :title="isRuleDisabled(rule.id) ? `${rule.tooltip} (disabled in text mode)` : rule.tooltip"
+          >
+            <WpCheck
+              size="sm"
+              :data-test="`cleaner-rule-${rule.id}`"
+              :class="{
+                'is-on': effective.has(rule.id) && !isRuleDisabled(rule.id),
+                'is-overridden': isOverridden(rule.id) && !isRuleDisabled(rule.id),
+              }"
+              :aria-label="rule.label"
+              :model-value="effective.has(rule.id)"
+              :disabled="isRuleDisabled(rule.id)"
+              @update:model-value="toggleRule(rule.id)"
             />
-          </span>
-          <span
-            v-if="effective.has(rule.id)"
-            :data-test="`cleaner-rule-${rule.id}-stat`"
-            class="wp-cleaner__rule-stat"
-          >{{ ruleStat(rule.id) }}</span>
-        </button>
-        <button
-          :data-test="`cleaner-neg-rule-${rule.id}`"
-          :class="['wp-cleaner__neg-toggle', {
-            'is-on': effectiveNeg.has(rule.id) && !isRuleDisabled(rule.id),
-            'is-overridden': isNegOverridden(rule.id) && !isRuleDisabled(rule.id),
-            'is-disabled': isRuleDisabled(rule.id),
-          }]"
-          :title="`${rule.label} on the negative${isRuleDisabled(rule.id) ? ' (disabled in text mode)' : ''}`"
-          :aria-label="`${rule.label} on the negative`"
-          :aria-pressed="effectiveNeg.has(rule.id)"
-          :disabled="isRuleDisabled(rule.id)"
-          @click="toggleNegRule(rule.id)"
-        ><span class="wp-cleaner__rule-dot" /></button>
+            <!-- The label toggles too; the checkbox is the keyboard stop. -->
+            <!-- eslint-disable-next-line vuejs-accessibility/click-events-have-key-events, vuejs-accessibility/no-static-element-interactions -->
+            <span class="wp-cleaner__rule-label" @click="!isRuleDisabled(rule.id) && toggleRule(rule.id)">
+              {{ rule.label }}
+              <span
+                v-if="isOverridden(rule.id)"
+                class="wp-cleaner__rule-pip"
+                aria-label="modified"
+              />
+            </span>
+            <span
+              v-if="effective.has(rule.id)"
+              :data-test="`cleaner-rule-${rule.id}-stat`"
+              class="wp-cleaner__rule-stat"
+            >{{ ruleStat(rule.id) }}</span>
+          </div>
+          <WpCheck
+            size="sm"
+            :data-test="`cleaner-neg-rule-${rule.id}`"
+            :class="['wp-cleaner__neg-toggle', {
+              'is-on': effectiveNeg.has(rule.id) && !isRuleDisabled(rule.id),
+              'is-overridden': isNegOverridden(rule.id) && !isRuleDisabled(rule.id),
+            }]"
+            :title="`${rule.label} on the negative${isRuleDisabled(rule.id) ? ' (disabled in text mode)' : ''}`"
+            :aria-label="`${rule.label} on the negative`"
+            :model-value="effectiveNeg.has(rule.id)"
+            :disabled="isRuleDisabled(rule.id)"
+            @update:model-value="toggleNegRule(rule.id)"
+          />
         </div>
         <div class="wp-cleaner__rule-row wp-cleaner__rule-row--overlap">
           <span
@@ -410,14 +420,15 @@ function isOverridden(rid: RuleId): boolean {
             <span class="wp-cleaner__rule-dash" aria-hidden="true">–</span>
             <span class="wp-cleaner__rule-label">drop negative tags also in prompt</span>
           </span>
-          <button
+          <WpCheck
+            size="sm"
             data-test="cleaner-drop-overlap"
             :class="['wp-cleaner__neg-toggle', { 'is-on': !!modelValue.drop_prompt_overlap }]"
             title="Drop negative tags also in the prompt"
             aria-label="drop negative tags also in the prompt"
-            :aria-pressed="!!modelValue.drop_prompt_overlap"
-            @click="toggleDropOverlap"
-          ><span class="wp-cleaner__rule-dot" /></button>
+            :model-value="!!modelValue.drop_prompt_overlap"
+            @update:model-value="toggleDropOverlap"
+          />
         </div>
       </div>
     </section>
@@ -527,31 +538,20 @@ function isOverridden(rid: RuleId): boolean {
   text-align: center;
 }
 .wp-cleaner__col-label--neg { color: var(--wp-danger, #ef4444); }
-.wp-cleaner__neg-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: 20px;
-  background: transparent;
-  border: 0;
-  border-radius: 3px;
-  cursor: pointer;
-}
-.wp-cleaner__neg-toggle:hover:not(.is-disabled) { background: var(--wp-row-hover, var(--wp-bg2)); }
-.wp-cleaner__neg-toggle.is-on .wp-cleaner__rule-dot { background: var(--wp-danger, #ef4444); }
-.wp-cleaner__neg-toggle.is-overridden .wp-cleaner__rule-dot {
+/* The on/off boxes are WpCheck (`sm`, the canvas rows' box); the negative
+ * column wears the danger colour, and an amber ring marks a rule changed
+ * from the intensity preset. */
+.wp-check.wp-cleaner__neg-toggle { justify-self: center; --check-on: var(--wp-danger, #ef4444); }
+.wp-check.is-overridden {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--wp-amber, var(--wp-warn, #fbbf24)) 70%, transparent);
 }
-.wp-cleaner__neg-toggle.is-disabled { opacity: 0.4; cursor: not-allowed; }
 .wp-cleaner__rule-row--overlap {
   border-top: 1px solid var(--wp-border-soft, var(--wp-border));
   padding-top: 2px;
   margin-top: 2px;
 }
-.wp-cleaner__rule--static { cursor: default; }
 .wp-cleaner__rule-dash {
-  width: 8px;
+  width: 12px;
   text-align: center;
   color: var(--wp-text-dim, var(--wp-text3));
 }
@@ -575,29 +575,17 @@ function isOverridden(rid: RuleId): boolean {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 8px;
-  background: transparent;
-  border: 0;
-  padding: 3px 4px;
-  cursor: pointer;
+  min-height: 20px;
+  padding: 0 4px;
   font: 10px var(--wp-font-sans, sans-serif);
   color: var(--wp-text-muted, var(--wp-text2));
-  text-align: left;
   border-radius: 3px;
 }
-.wp-cleaner__rule:hover:not(.is-disabled) { background: var(--wp-row-hover, var(--wp-bg2)); color: var(--wp-text); }
-.wp-cleaner__rule.is-disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.wp-cleaner__rule.is-disabled .wp-cleaner__rule-dot { background: var(--wp-border, #444); }
-.wp-cleaner__rule-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--wp-border2, var(--wp-border-strong));
-  flex: 0 0 auto;
-}
+.wp-cleaner__rule:not(.wp-cleaner__rule--static):hover:not(.is-disabled) { background: var(--wp-row-hover, var(--wp-bg2)); color: var(--wp-text); }
+.wp-cleaner__rule.is-disabled { opacity: 0.4; }
 .wp-cleaner__rule.is-on { color: var(--wp-text); }
-.wp-cleaner__rule.is-on .wp-cleaner__rule-dot { background: var(--wp-accent); }
+.wp-cleaner__rule:not(.wp-cleaner__rule--static) .wp-cleaner__rule-label { cursor: pointer; }
+.wp-cleaner__rule.is-disabled .wp-cleaner__rule-label { cursor: not-allowed; }
 .wp-cleaner__rule-label {
   display: inline-flex;
   align-items: center;

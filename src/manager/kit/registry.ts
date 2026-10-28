@@ -248,7 +248,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "disclosure", name: "Disclosure", group: "display", file: "src/components/shared/Disclosure.vue", surfaces: ["manager", "canvas"],
-    use: "A section that folds open under its heading (advanced options, details, a long list). The chevron turns and the body grows; boxed draws it as a card.",
+    use: "A section that folds open under its heading (advanced options, details, a long list). The chevron turns and the body grows; boxed draws it as a card. Controls that must not fold it (an on/off switch, a select-all box) go in #actions (right) or #lead (left), outside the heading button.",
     instead: "A button with its own aria-expanded, chevron and v-if.",
   },
   {
@@ -368,7 +368,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "popover", name: "Popover", group: "overlays", file: "src/components/shared/Popover.vue", surfaces: ["canvas", "manager"],
-    use: "A panel anchored to a button: a colour picker, a filter, a small form. It flips to stay on screen, follows on scroll and closes on Escape or a click outside. Every floating panel builds on it.",
+    use: "A panel anchored to a button: a colour picker, a filter, a small form. It flips to stay on screen, follows on scroll and closes on Escape or a click outside. Every floating panel builds on it. One panel shared by many triggers (the cells of a rule grid) passes the clicked element as anchor instead of a trigger slot.",
     instead: "A Teleport with its own placement maths and outside-click handler.",
   },
   {

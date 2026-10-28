@@ -11,7 +11,9 @@
  *
  * Leave out `v-model:open` and it keeps its own state (`default-open` sets
  * where it starts). `#actions` sits at the right end of the heading, outside
- * the button, for controls that should not fold the section. `lazy` builds
+ * the button, for controls that should not fold the section; `#lead` sits
+ * before the button for the same (a "select all" checkbox lined up with
+ * the rows' own). `lazy` builds
  * the body only while it is open.
  */
 import { computed, ref, useId, useSlots } from "vue";
@@ -51,6 +53,7 @@ function toggle(): void {
 <template>
   <div class="wp-disclosure" :data-size="size" :data-open="isOpen" :data-boxed="boxed || undefined">
     <div class="wp-disclosure__head">
+      <div v-if="slots.lead" class="wp-disclosure__lead"><slot name="lead" /></div>
       <button
         v-bind="triggerAttrs ?? {}"
         type="button"
@@ -127,6 +130,7 @@ function toggle(): void {
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
+.wp-disclosure__lead { display: inline-flex; align-items: center; flex: none; }
 .wp-disclosure__actions { display: inline-flex; align-items: center; gap: var(--wp-space-2); flex: none; }
 /* Grid rows animate from 0fr to 1fr, so the body grows to its own height
    without measuring it. */
