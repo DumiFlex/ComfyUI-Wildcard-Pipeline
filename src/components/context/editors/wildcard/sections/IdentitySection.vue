@@ -139,7 +139,7 @@ function onResetBinding(): void {
           variant="outline"
           icon="pi-replay"
           data-test="id-name-reset"
-          :tip="`Restore name to library default: ${libraryName}`"
+          :hint="`Restore name to library default: ${libraryName}`"
           aria-label="Reset display name to library default"
           @click="onResetName"
         />
@@ -175,7 +175,7 @@ function onResetBinding(): void {
           variant="outline"
           icon="pi-replay"
           data-test="id-binding-reset"
-          :tip="`Restore binding to library default: $${libraryBinding}`"
+          :hint="`Restore binding to library default: $${libraryBinding}`"
           aria-label="Reset variable binding to library default"
           @click="onResetBinding"
         />

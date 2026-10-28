@@ -53,7 +53,7 @@ function onResetName(): void {
           variant="outline"
           icon="pi-replay"
           data-test="id-name-reset"
-          :tip="`Restore name to library default: ${libraryName}`"
+          :hint="`Restore name to library default: ${libraryName}`"
           aria-label="Reset display name to library default"
           @click="onResetName"
         />

@@ -844,7 +844,7 @@ defineExpose({ addRow, addGeneralRow, removeRow });
         class="wp-inj-caret"
         :icon="collapsed ? 'pi-caret-right' : 'pi-caret-down'"
         :label="collapsed ? 'Expand injector rows' : 'Collapse injector rows'"
-        :tip="collapsed ? 'Expand rows' : 'Collapse rows'"
+        :hint="collapsed ? 'Expand rows' : 'Collapse rows'"
         data-test="inj-toolbar-collapse"
         @click="collapsed = !collapsed"
       />
@@ -855,7 +855,7 @@ defineExpose({ addRow, addGeneralRow, removeRow });
         class="wp-inj-collapse-conns"
         :icon="connectionsCollapsed ? 'pi-arrows-alt' : 'pi-arrows-v'"
         :pressed="connectionsCollapsed"
-        :tip="connectionsCollapsed ? 'Show all input wires individually' : 'Merge all input wires onto a single pin'"
+        :hint="connectionsCollapsed ? 'Show all input wires individually' : 'Merge all input wires onto a single pin'"
         data-test="inj-toolbar-collapse-conns"
         @click="emit('toggle-connections-collapse')"
       >{{ connectionsCollapsed ? "expand wires" : "merge wires" }}</WpButton>
@@ -903,7 +903,7 @@ defineExpose({ addRow, addGeneralRow, removeRow });
         block
         data-test="inj-add-general"
         :disabled="atGeneralRowCap"
-        :tip="atGeneralRowCap ? undefined : 'Add a template row — composes a variable from sockets and other rows, runs after them, and survives disconnects'"
+        :hint="atGeneralRowCap ? undefined : 'Add a template row — composes a variable from sockets and other rows, runs after them, and survives disconnects'"
         @click="addGeneralRow"
       >{{ atGeneralRowCap ? `Template rows full (${MAX_GENERAL_INJECTOR_ROWS} max)` : "Add template row" }}</WpButton>
     </div>

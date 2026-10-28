@@ -243,7 +243,7 @@ function onDelete(): void {
       icon="pi-replay"
       data-test="row-reset"
       :aria-label="`Reset row $${library?.name ?? row.id} to library default`"
-      tip="Restore this row to library default"
+      hint="Restore this row to library default"
       @click="onReset"
     />
     <span v-else></span>
@@ -254,7 +254,7 @@ function onDelete(): void {
       icon="pi-times"
       data-test="row-delete"
       :aria-label="`Remove instance-only row $${row.name}`"
-      tip="Remove this instance-only row"
+      hint="Remove this instance-only row"
       @click="onDelete"
     />
     <span v-else></span>

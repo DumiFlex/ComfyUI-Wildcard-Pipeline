@@ -102,7 +102,7 @@ Better still is one component for both sides, with only `size` changing. `WpSwit
 
 - `variant="add"`: the dashed "Add a row" button at the end of a list, with `block` for full width.
 - `pressed`: a toggle (`aria-pressed`), such as "favourites only" or a filter panel trigger.
-- `tip` (WpButton): a hint. Don't put `v-tooltip` on the component, which would fight the button's own.
+- `hint` (WpButton, WpIconButton): a tooltip, `kbd` (WpButton) its key chip. Don't put `v-tooltip` on the component, which would fight the button's own.
 
 Inside a row (module, injector, bundle and Model Info rows, the Context toolbar), the icon actions are `WpIconButton`: 20 px, a `tone` that tints the icon on hover and the box while `pressed`, `pressed="mixed"` for a bundle's "some children" state, and `variant="bare"` for the fold caret. Every × that closes a canvas dialog is `CloseButton size="sm"`. Every checkmark box is `WpCheck`, including the 12 px on/off box of module, bundle and injector rows (`size="sm"`). The Settings live preview (`components/settings/`) uses the same pieces as the nodes it previews.
 

@@ -167,7 +167,7 @@ function pick(row: TemplateRow) {
             :pressed="activePopoverCount > 0 || filtersOpen"
             :aria-expanded="filtersOpen"
             aria-label="Filters"
-            :tip="filtersOpen ? 'Close filters' : 'More filters'"
+            :hint="filtersOpen ? 'Close filters' : 'More filters'"
             data-test="load-tpl-filter-trigger"
             @click="filtersOpen = !filtersOpen"
           />

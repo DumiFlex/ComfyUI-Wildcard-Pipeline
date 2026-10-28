@@ -14,8 +14,8 @@
  *   master toggle's "some children" state (dashed, half tint).
  * - `variant="bare"` is the row's fold caret: no box, drawn 14 px wide but
  *   still 20 px to click.
- * - `label` names it for screen readers and is its tooltip, unless `tip`
- *   gives a longer hint.
+ * - `label` names it for screen readers and is its tooltip, unless `hint`
+ *   gives a longer one.
  */
 import { vTooltip } from "./tooltip";
 
@@ -25,19 +25,19 @@ withDefaults(defineProps<{
   icon?: string;
   label: string;
   /** A longer tooltip than the label. */
-  tip?: string;
+  hint?: string;
   tone?: "neutral" | "accent" | "warn" | "danger";
   pressed?: boolean | "mixed";
   variant?: "quiet" | "bare";
   disabled?: boolean;
-}>(), { icon: undefined, tip: undefined, tone: "neutral", pressed: undefined, variant: "quiet" });
+}>(), { icon: undefined, hint: undefined, tone: "neutral", pressed: undefined, variant: "quiet" });
 
 const emit = defineEmits<{ click: [evt: MouseEvent] }>();
 </script>
 
 <template>
   <button
-    v-tooltip="tip ?? label"
+    v-tooltip="hint ?? label"
     type="button"
     class="wp-icon-btn"
     :data-tone="tone"

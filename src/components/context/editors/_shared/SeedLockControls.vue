@@ -131,7 +131,7 @@ function onRollClick(): void {
       variant="ghost"
       icon="pi-refresh"
       data-test="runtime-roll"
-      tip="Generate random seed"
+      hint="Generate random seed"
       aria-label="Generate random seed"
       @click="onRollClick"
     />

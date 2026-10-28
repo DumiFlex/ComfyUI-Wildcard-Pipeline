@@ -504,7 +504,7 @@ function onKeydown(ev: KeyboardEvent): void {
               variant="outline"
               icon="pi-replay"
               data-test="ibm-template-reset"
-              tip="Clear template (revert to pass-through)"
+              hint="Clear template (revert to pass-through)"
               aria-label="Clear template"
               @click="onResetTemplate"
             />

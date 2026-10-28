@@ -307,7 +307,7 @@ function onResetNegative(): void {
           variant="outline"
           icon="pi-replay"
           data-test="tpl-reset"
-          tip="Restore template to library default"
+          hint="Restore template to library default"
           aria-label="Reset template to library default"
           @click="onResetTemplate"
         />
@@ -403,7 +403,7 @@ function onResetNegative(): void {
           variant="outline"
           icon="pi-replay"
           data-test="tpl-neg-reset"
-          tip="Restore negative to library default"
+          hint="Restore negative to library default"
           aria-label="Reset negative to library default"
           @click="onResetNegative"
         />

@@ -160,7 +160,7 @@ const {
         <WpIconButton v-if="isSeedLockable(module)" icon="pi-lock" tone="warn"
           :pressed="isLocked(module)" data-test="row-action-lock"
           :label="isLocked(module) ? 'Unlock seed' : 'Lock seed'"
-          :tip="isLocked(module) ? `Locked seed: ${ctx?.effectiveLockedSeed(module)}. Click to unlock.` : 'Lock seed'"
+          :hint="isLocked(module) ? `Locked seed: ${ctx?.effectiveLockedSeed(module)}. Click to unlock.` : 'Lock seed'"
           @click.stop="toggleLockOnCard(idx)" />
         <WpIconButton v-if="module.type === 'wildcard' || module.type === 'fixed_values' || module.type === 'combine' || module.type === 'derivation'"
           icon="pi-globe" tone="accent"
@@ -168,7 +168,7 @@ const {
           :label="isInternal(module) ? 'Unmark internal' : 'Mark internal'"
           @click.stop="toggleInternalOnCard(idx)" />
         <WpIconButton icon="pi-trash" tone="danger"
-          data-test="row-action-remove" label="Remove module" tip="Remove"
+          data-test="row-action-remove" label="Remove module" hint="Remove"
           @click.stop="removeModule(idx)" />
       </div>
     </div>

@@ -79,7 +79,7 @@
             :pressed="activePopoverCount > 0 || filtersOpen"
             :aria-expanded="filtersOpen"
             aria-label="Filters"
-            :tip="filtersOpen ? 'Close filters' : 'More filters'"
+            :hint="filtersOpen ? 'Close filters' : 'More filters'"
             data-testid="picker-filter-trigger"
             @click="filtersOpen = !filtersOpen"
           />
@@ -207,7 +207,7 @@
             variant="outline"
             icon="pi-eye"
             data-testid="picker-show-already-added"
-            tip="Turn off the hide-already-added filter so you can re-add an existing module as a sibling."
+            hint="Turn off the hide-already-added filter so you can re-add an existing module as a sibling."
             @click="hideAlreadyAdded = false"
           >Show already added</WpButton>
           <WpButton
@@ -215,7 +215,7 @@
             variant="outline"
             icon="pi-plus"
             data-testid="picker-create-module"
-            :tip="`Open the library to create a new ${kindFilter === 'all' ? 'module' : (KIND_SINGULAR[kindFilter] ?? 'module')}`"
+            :hint="`Open the library to create a new ${kindFilter === 'all' ? 'module' : (KIND_SINGULAR[kindFilter] ?? 'module')}`"
             @click="createInSpa"
           >{{ createLabel }}</WpButton>
         </div>

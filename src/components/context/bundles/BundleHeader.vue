@@ -146,7 +146,7 @@ const summary = computed(() => {
       class="wp-bundle-collapse"
       draggable="false"
       :label="instance.collapsed ? 'Expand bundle' : 'Collapse bundle'"
-      :tip="instance.collapsed ? 'Expand' : 'Collapse'"
+      :hint="instance.collapsed ? 'Expand' : 'Collapse'"
       @click.stop="emit('toggle-collapse')"
     />
     <WpCheck
@@ -231,7 +231,7 @@ const summary = computed(() => {
         :pressed="lockState === 'all' ? true : lockState === 'partial' ? 'mixed' : false"
         draggable="false"
         :label="`toggle seed lock on all lockable children of ${name}`"
-        :tip="lockState === 'all'
+        :hint="lockState === 'all'
           ? 'Unlock seeds on all lockable children'
           : lockState === 'partial'
             ? 'Lock seeds on all lockable children (some are already locked)'
@@ -246,7 +246,7 @@ const summary = computed(() => {
         :pressed="internalState === 'all' ? true : internalState === 'partial' ? 'mixed' : false"
         draggable="false"
         :label="`toggle internal on all children of ${name}`"
-        :tip="internalState === 'all'
+        :hint="internalState === 'all'
           ? 'Clear internal on all children'
           : internalState === 'partial'
             ? 'Mark all children internal (some are already)'
@@ -259,7 +259,7 @@ const summary = computed(() => {
         class="wp-bundle-action"
         draggable="false"
         :label="`remove bundle ${name}`"
-        tip="Remove bundle (right-click for more)"
+        hint="Remove bundle (right-click for more)"
         @click.stop="emit('remove')"
       />
     </div>
