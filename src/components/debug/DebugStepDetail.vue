@@ -13,6 +13,8 @@ import DebugCondition from "./DebugCondition.vue";
 import { ruleActions, type RawRuleDetail, type TraceStep, type WarningRow } from "./debug-model";
 import { isNegativeMode } from "../../extension/derivation-conditions";
 import WpButton from "../shared/WpButton.vue";
+import Disclosure from "../shared/Disclosure.vue";
+import CopyButton from "../shared/CopyButton.vue";
 
 const props = defineProps<{
   step: TraceStep;
@@ -24,7 +26,6 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (e: "goto-step", key: string): void;
-  (e: "copy", text: string): void;
   (e: "focus-node", nodeId: string): void;
 }>();
 
@@ -146,24 +147,23 @@ function modeGlyph(mode: string | undefined): string {
         :class="[`is-${ruleOutcome(rule).tone}`, { 'is-folded': !ruleOpen(rule, ri) }]"
         data-test="dbg-rule"
       >
-        <button
-          type="button"
-          class="wp-dbg-rule__head"
-          :aria-expanded="ruleOpen(rule, ri)"
-          data-test="dbg-rule-head"
-          @click="toggleRule(rule, ri)"
+        <Disclosure
+          size="sm"
+          lazy
+          :open="ruleOpen(rule, ri)"
+          :trigger-attrs="{ 'data-test': 'dbg-rule-head' }"
+          @update:open="toggleRule(rule, ri)"
         >
-          <i class="pi pi-chevron-right wp-dbg-rule__chev" aria-hidden="true" />
-          <span class="wp-dbg-rule__name">Rule {{ ri + 1 }}</span>
-          <span class="wp-dbg-rule__outcome" data-test="dbg-rule-outcome">{{ ruleOutcome(rule).text }}</span>
-          <span v-if="!ruleOpen(rule, ri) && rule.action" class="wp-dbg-rule__peek">
-            <code>${{ rule.action.target }}</code>
-            <span :class="{ 'wp-dbg-neg-mode': isNegativeMode(rule.action.mode) }">{{ modeGlyph(rule.action.mode) }}</span>
-            {{ actionShown(rule.action) }}
-            <span v-if="ruleActions(rule).length > 1" class="wp-dbg-dim">+{{ ruleActions(rule).length - 1 }}</span>
-          </span>
-        </button>
-        <template v-if="ruleOpen(rule, ri)">
+          <template #summary>
+            <span class="wp-dbg-rule__name">Rule {{ ri + 1 }}</span>
+            <span class="wp-dbg-rule__outcome" data-test="dbg-rule-outcome">{{ ruleOutcome(rule).text }}</span>
+            <span v-if="!ruleOpen(rule, ri) && rule.action" class="wp-dbg-rule__peek">
+              <code>${{ rule.action.target }}</code>
+              <span :class="{ 'wp-dbg-neg-mode': isNegativeMode(rule.action.mode) }">{{ modeGlyph(rule.action.mode) }}</span>
+              {{ actionShown(rule.action) }}
+              <span v-if="ruleActions(rule).length > 1" class="wp-dbg-dim">+{{ ruleActions(rule).length - 1 }}</span>
+            </span>
+          </template>
           <div
             v-for="b in rule.branches ?? []"
             :key="b.index"
@@ -212,7 +212,7 @@ function modeGlyph(mode: string | undefined): string {
             />
           </div>
           </template>
-        </template>
+        </Disclosure>
       </div>
     </template>
     <p v-else-if="step.kind === 'derivation' && step.status === 'ok'" class="wp-dbg-dim wp-dbg-detail__note">
@@ -275,28 +275,26 @@ function modeGlyph(mode: string | undefined): string {
     </div>
 
     <div class="wp-dbg-detail__meta">
-      <button
+      <CopyButton
         v-if="step.seed"
-        type="button"
+        :text="step.seed"
+        :label="step.seedLocked ? 'Copy the locked seed' : 'Copy the seed this module rolled with'"
         class="wp-dbg-meta-btn"
-        :title="step.seedLocked ? 'Locked seed. Click to copy.' : 'Seed this module rolled with. Click to copy.'"
-        @click="emit('copy', step.seed)"
-      ><i :class="['pi', step.seedLocked ? 'pi-lock' : 'pi-hashtag']" /> {{ step.seed }}</button>
-      <button
+      ><i :class="['pi', step.seedLocked ? 'pi-lock' : 'pi-hashtag']" aria-hidden="true" /> {{ step.seed }}</CopyButton>
+      <CopyButton
         v-if="step.id"
-        type="button"
+        :text="step.id"
+        label="Copy module id"
         class="wp-dbg-meta-btn"
-        title="Copy module id"
-        @click="emit('copy', step.id)"
-      ><i class="pi pi-id-card" /> {{ step.id }}</button>
-      <button
+      ><i class="pi pi-id-card" aria-hidden="true" /> {{ step.id }}</CopyButton>
+      <WpButton
         v-if="canFocus && step.nodeId"
-        type="button"
-        class="wp-dbg-meta-btn"
+        variant="outline"
+        icon="pi-arrow-up-right"
         data-test="dbg-focus-node"
-        title="Select the node this ran in"
+        hint="Select the node this ran in"
         @click="emit('focus-node', step.nodeId)"
-      ><i class="pi pi-arrow-up-right" /> show node</button>
+      >Show node</WpButton>
     </div>
   </div>
 </template>
@@ -362,17 +360,8 @@ function modeGlyph(mode: string | undefined): string {
   background: var(--wp-bg-deep, var(--wp-bg));
 }
 .wp-dbg-rules__bar { display: flex; align-items: center; justify-content: space-between; font-size: 10px; }
-.wp-dbg-rule__head {
-  all: unset;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  cursor: pointer;
-}
-.wp-dbg-rule__head:focus-visible { outline: 1px solid var(--wp-accent); outline-offset: 2px; }
-.wp-dbg-rule__chev { font-size: 7px; color: var(--wp-text-dim); transition: transform var(--wp-motion-quick, 0.12s) ease; }
-.wp-dbg-rule:not(.is-folded) .wp-dbg-rule__chev { transform: rotate(90deg); }
+.wp-dbg-rule :deep(.wp-disclosure__trigger) { gap: 8px; padding: 0 2px; }
+.wp-dbg-rule :deep(.wp-disclosure__content) { display: flex; flex-direction: column; gap: 3px; padding-left: 14px; }
 .wp-dbg-rule__result { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; color: var(--wp-text-muted); }
 .wp-dbg-rule__peek {
   flex: 1;
@@ -428,7 +417,7 @@ function modeGlyph(mode: string | undefined): string {
 .wp-dbg-detail__warn.is-error .wp-dbg-detail__warn-label { color: var(--wp-red, #e5484d); }
 .wp-dbg-detail__warn.is-info .wp-dbg-detail__warn-label { color: var(--wp-info, var(--wp-accent)); }
 .wp-dbg-detail__meta { display: flex; flex-wrap: wrap; gap: 4px; }
-.wp-dbg-meta-btn {
+.wp-copy-btn.wp-dbg-meta-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;

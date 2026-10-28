@@ -11,6 +11,7 @@ import { ref, watch, computed } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
 import type { BlocklistKind } from "./types";
 import WpButton from "../shared/WpButton.vue";
+import WpSegmented, { type SegmentedOption } from "../shared/WpSegmented.vue";
 
 const props = defineProps<{
   visible: boolean;
@@ -20,6 +21,11 @@ const emit = defineEmits<{
   "update:modelValue": [next: { kind: BlocklistKind; entries: string[] }];
   "close": [];
 }>();
+
+const MODE_OPTIONS: SegmentedOption<BlocklistKind>[] = [
+  { value: "list", label: "list (comma- or newline-separated)" },
+  { value: "regex", label: "regex (one per line)" },
+];
 
 const draftKind = ref<BlocklistKind>(props.modelValue.kind);
 const draftText = ref<string>(props.modelValue.entries.join(", "));
@@ -60,18 +66,15 @@ function onCancel(): void {
       </header>
       <div class="wp-blocklist__mode-row">
         <span class="wp-blocklist__label">MODE</span>
-        <div class="wp-blocklist__mode-group">
-          <button
-            data-test="blocklist-mode-list"
-            :class="['wp-blocklist__mode-btn', { 'is-active': draftKind === 'list' }]"
-            @click="draftKind = 'list'"
-          >list (comma- or newline-separated)</button>
-          <button
-            data-test="blocklist-mode-regex"
-            :class="['wp-blocklist__mode-btn', { 'is-active': draftKind === 'regex' }]"
-            @click="draftKind = 'regex'"
-          >regex (one per line)</button>
-        </div>
+        <WpSegmented
+          v-model="draftKind"
+          class="wp-blocklist__mode-group"
+          :options="MODE_OPTIONS"
+          size="sm"
+          block
+          aria-label="Blocklist mode"
+          test-prefix="blocklist-mode"
+        />
       </div>
       <div class="wp-blocklist__body">
         <label for="blocklist-textarea" class="wp-blocklist__textarea-label">Entries</label>
@@ -123,31 +126,7 @@ function onCancel(): void {
   text-transform: uppercase;
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.wp-blocklist__mode-group {
-  display: flex;
-  flex: 1;
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm, 4px);
-  padding: 2px;
-  gap: 2px;
-}
-.wp-blocklist__mode-btn {
-  flex: 1;
-  font-size: 11px;
-  padding: 4px 10px;
-  background: transparent;
-  color: var(--wp-text-muted, var(--wp-text2));
-  border: 0;
-  border-radius: 3px;
-  text-align: center;
-  cursor: pointer;
-}
-.wp-blocklist__mode-btn:hover { color: var(--wp-text); }
-.wp-blocklist__mode-btn.is-active {
-  background: var(--wp-accent);
-  color: #fff;
-}
+.wp-blocklist__mode-group { flex: 1; }
 .wp-blocklist__body { padding: 12px 16px; }
 .wp-blocklist__textarea-label {
   display: block;

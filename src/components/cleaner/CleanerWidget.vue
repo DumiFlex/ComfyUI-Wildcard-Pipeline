@@ -14,6 +14,7 @@
  * overrides the same names with the SPA palette).
  */
 import { computed } from "vue";
+import WpButton from "../shared/WpButton.vue";
 import WpSegmented, { type SegmentedOption } from "../shared/WpSegmented.vue";
 import {
   INTENSITY_TO_NEG_RULES,
@@ -428,19 +429,20 @@ function isOverridden(rid: RuleId): boolean {
     </div>
 
     <div class="wp-cleaner__blocklist">
-      <button
+      <WpButton
+        block
+        icon="pi-ban"
         data-test="cleaner-blocklist-btn"
-        :class="['wp-cleaner__blocklist-btn', {
-          'has-entries': modelValue.blocklist.entries.length > 0,
-        }]"
-        title="Edit the blocklist (drops tags containing these entries). Supports plain list mode (comma- or newline-separated) or regex mode (one regex per line)."
+        hint="Edit the blocklist (drops tags containing these entries). Supports plain list mode (comma- or newline-separated) or regex mode (one regex per line)."
         @click="emit('open-blocklist')"
       >
         Blocklist…
-        <span class="wp-cleaner__blocklist-meta">
+        <span class="wp-cleaner__blocklist-fill" />
+        <span class="wp-cleaner__blocklist-meta" :class="{ 'has-entries': modelValue.blocklist.entries.length > 0 }">
           {{ modelValue.blocklist.entries.length }} entries · {{ modelValue.blocklist.kind }}
         </span>
-      </button>
+        <i class="pi pi-chevron-right wp-cleaner__blocklist-chev" aria-hidden="true" />
+      </WpButton>
     </div>
   </div>
 </template>
@@ -619,31 +621,11 @@ function isOverridden(rid: RuleId): boolean {
    button's family (dashed border, accent-tinted hover). No section
    padding wrapper now that the root is a flat flex column. */
 .wp-cleaner__blocklist { display: flex; }
-.wp-cleaner__blocklist-btn {
-  width: 100%;
-  padding: 6px 8px;
-  background: transparent;
-  color: var(--wp-text-dim, var(--wp-text3));
-  border: 1px dashed var(--wp-border2, var(--wp-border));
-  border-radius: var(--wp-radius-sm, 4px);
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 8px;
-  font: 600 10px var(--wp-font-sans, sans-serif);
-  letter-spacing: 0.02em;
-  cursor: pointer;
-}
-.wp-cleaner__blocklist-btn:hover {
-  background: color-mix(in srgb, var(--wp-accent) 8%, transparent);
-  color: var(--wp-text);
-  border-color: color-mix(in srgb, var(--wp-accent) 45%, var(--wp-border2, var(--wp-border)));
-}
-.wp-cleaner__blocklist-btn.has-entries {
-  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
-  color: var(--wp-accent-text, var(--wp-accent));
-  border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent);
-}
+.wp-cleaner__blocklist-fill { flex: 1; }
+.wp-cleaner__blocklist-chev { color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-cleaner__blocklist-meta {
   font-size: 10px;
   color: var(--wp-text-dim, var(--wp-text3));
 }
+.wp-cleaner__blocklist-meta.has-entries { color: var(--wp-accent-text, var(--wp-accent)); }
 </style>

@@ -7,7 +7,7 @@
     "inline-svg": 33,
     "hand-dialog": 17,
     "manager-raw-button": 276,
-    "raw-hex": 881
+    "raw-hex": 868
   },
   "native-select": {},
   "native-number": {},
@@ -157,10 +157,9 @@
   "raw-hex": {
     "src/components/assembler/LoadTemplateModal.vue": 5,
     "src/components/assembler/SaveTemplateModal.vue": 14,
-    "src/components/cleaner/BlocklistModal.vue": 1,
     "src/components/cleaner/CleanerWidget.vue": 7,
     "src/components/context-loop/ContextLoopWidget.vue": 5,
-    "src/components/context-loop/SweepPanel.vue": 24,
+    "src/components/context-loop/SweepPanel.vue": 20,
     "src/components/context/ModulePickerModal.vue": 5,
     "src/components/context/PairBadge.vue": 14,
     "src/components/context/PushBundleToLibraryModal.vue": 40,
@@ -173,7 +172,7 @@
     "src/components/context/editors/combine/sections/TemplateSection.vue": 5,
     "src/components/context/editors/constraint/CellRulePopover.vue": 22,
     "src/components/context/editors/constraint/ConstraintInstanceModal.vue": 1,
-    "src/components/context/editors/constraint/MatrixLegend.vue": 25,
+    "src/components/context/editors/constraint/MatrixLegend.vue": 20,
     "src/components/context/editors/constraint/sections/ConstraintReattachSection.vue": 16,
     "src/components/context/editors/constraint/sections/ExceptionsSection.vue": 20,
     "src/components/context/editors/constraint/sections/MatrixSection.vue": 34,
@@ -183,7 +182,7 @@
     "src/components/context/editors/instance/sections/InternalFlagSection.vue": 1,
     "src/components/context/editors/wildcard/sections/IdentitySection.vue": 3,
     "src/components/context/editors/wildcard/sections/OptionRow.vue": 12,
-    "src/components/context/editors/wildcard/sections/PoolSection.vue": 6,
+    "src/components/context/editors/wildcard/sections/PoolSection.vue": 3,
     "src/components/debug/DebugCondition.vue": 2,
     "src/components/debug/DebugStepDetail.vue": 4,
     "src/components/debug/DebugTrace.vue": 5,
