@@ -81,7 +81,7 @@ async function renderAll(): Promise<DocPageText[]> {
     const w = mount(mod.default, { global: { plugins: [router, createPinia()] } });
     await flushPromises();
     const sections = w.findAll(".wp-doc-section").map((s) => ({
-      title: s.find(".wp-doc-section__h2").text().trim(),
+      title: s.find(".wp-doc-section__title").text().trim(),
       text: plainText(s.find(".wp-doc-section__body").element),
     }));
     pages.push({

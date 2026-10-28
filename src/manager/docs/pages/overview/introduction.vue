@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Kbd from "@/components/shared/Kbd.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
@@ -95,6 +96,14 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
         Try right-clicking. Most WP nodes, and the rows inside them, have a menu: save a row to
         the library, pull in a library change, duplicate, and more.
       </DocCallout>
+      <p>
+        Finding your way in these docs: <Kbd keys="/" size="sm" /> jumps to the search box, which
+        searches the text of every page and opens a result at its section
+        (<Kbd keys="Enter" size="sm" /> opens the first). On a wide window, <b>On this page</b> on
+        the right lists a page's sections; hover a section title for a link to it. Click a
+        screenshot to see it full size, and use <b>Previous</b> and <b>Next</b> at the foot of a
+        page to read on.
+      </p>
     </DocSection>
 
     <DocSection title="Where to next">

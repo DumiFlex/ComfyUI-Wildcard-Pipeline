@@ -24,15 +24,29 @@ const zoom = ref<number | null>(null);
 
 <template>
   <div class="wp-kit__stack wp-kit__stack--wide">
-    <p class="wp-kit__caption">Scroll to zoom toward the pointer, drag to move, double-click for 100%. Step to the next picture: the level and spot stay.</p>
+    <p class="wp-kit__caption">Scroll to zoom toward the pointer, drag to move, double-click for 100%. Step to the next picture: the level and spot stay. Zoomed in, the mini-map shows where you are; keep the mouse still and the bar fades.</p>
     <div class="wp-kit-zoom wp-kit-zoom--tall">
-      <WpImageZoom v-model:zoom="zoom" :src="pictures[at]" :alt="`Test picture ${at + 1}`" hint="Drag to move · scroll to zoom">
+      <WpImageZoom
+        v-model:zoom="zoom"
+        :src="pictures[at]"
+        :alt="`Test picture ${at + 1}`"
+        hint="Drag to move · scroll to zoom"
+        minimap
+        autohide
+      >
         <template #bar-end>
           <WpButton variant="ghost" icon="pi-chevron-right" aria-label="Next picture" @click="at = (at + 1) % pictures.length" />
         </template>
       </WpImageZoom>
     </div>
-    <p class="wp-kit__caption">Level: {{ zoom === null ? "Fit" : `${Math.round(zoom * 100)}%` }}. Without a bar (controls off), md size:</p>
+    <p class="wp-kit__caption">Level: {{ zoom === null ? "Fit" : `${Math.round(zoom * 100)}%` }}. With a second picture (synced compare): both sides move together.</p>
+    <div class="wp-kit-zoom wp-kit-zoom--tall">
+      <WpImageZoom :src="pictures[0]" :second="pictures[1]" alt="Test picture 1" second-alt="Test picture 2" minimap>
+        <template #first><span class="wp-kit-zoom__cap">1</span></template>
+        <template #second><span class="wp-kit-zoom__cap">2</span></template>
+      </WpImageZoom>
+    </div>
+    <p class="wp-kit__caption">Without a bar (controls off), md size:</p>
     <div class="wp-kit-zoom">
       <WpImageZoom :src="pictures[2]" :controls="false" size="md" alt="Test picture" />
     </div>
@@ -42,4 +56,5 @@ const zoom = ref<number | null>(null);
 <style scoped>
 .wp-kit-zoom { height: 200px; }
 .wp-kit-zoom--tall { height: 320px; }
+.wp-kit-zoom__cap { position: absolute; left: 8px; bottom: 8px; padding: 1px 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); background: rgb(0 0 0 / 0.6); color: white; font-size: 11px; }
 </style>

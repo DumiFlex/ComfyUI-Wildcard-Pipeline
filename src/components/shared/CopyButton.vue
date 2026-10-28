@@ -31,7 +31,9 @@ const props = withDefaults(defineProps<{
   /** `ghost` (default) for rows and toolbars, `secondary` for a filled button. */
   variant?: "ghost" | "secondary";
   disabled?: boolean;
-}>(), { label: "Copy", size: "md", variant: "ghost" });
+  /** The PrimeIcons class shown before a copy, e.g. "pi-link" for a link. */
+  icon?: string;
+}>(), { icon: "pi-copy", label: "Copy", size: "md", variant: "ghost" });
 
 const emit = defineEmits<{ (e: "copied", text: string): void; (e: "failed"): void }>();
 
@@ -43,7 +45,7 @@ const RESET_MS = 1600;
 const shown = computed(() =>
   state.value === "copied" ? "Copied" : state.value === "failed" ? "Couldn't copy" : props.label);
 const icon = computed(() =>
-  state.value === "copied" ? "pi-check" : state.value === "failed" ? "pi-times" : "pi-copy");
+  state.value === "copied" ? "pi-check" : state.value === "failed" ? "pi-times" : props.icon);
 
 async function onClick(): Promise<void> {
   if (props.disabled) return;

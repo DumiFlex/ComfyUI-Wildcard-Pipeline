@@ -243,7 +243,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "image-zoom", name: "WpImageZoom", group: "display", file: "src/components/shared/WpImageZoom.vue", surfaces: ["canvas", "manager"],
-    use: "Look at one picture closely: real zoom levels (Fit, 100%, 200%, − / +), scroll to zoom toward the pointer, drag to move, double-click for Fit or 100% at that spot, keys + − 0 1 2 when focused. v-model:zoom keeps the level (null = Fit), and the spot carries over when src changes, so a series is checked in one place. Slots bar-start / bar-end add buttons to its bar; `fullscreen` adds a Fullscreen button (key F) that fills the screen with the viewer, bar included.",
+    use: "Look at one picture closely: real zoom levels (Fit, 100%, 200%, − / +), scroll to zoom toward the pointer, drag to move, double-click for Fit or 100% at that spot, keys + − 0 1 2 when focused. v-model:zoom keeps the level (null = Fit), and the spot carries over when src changes, so a series is checked in one place. Slots bar-start / bar-end add buttons to its bar; `fullscreen` adds a Fullscreen button (key F) that fills the screen with the viewer, bar included, plus a #fullscreen slot along the bottom that shows only then. `minimap` adds a small copy in the corner once zoomed past the stage (its box is the part in view; click or drag it to move). `autohide` fades the bar, hint and mini-map after 2 s without a move or key. `second` shows another picture beside the first, locked to the same level and spot (synced compare); #first / #second put captions over each.",
     instead: "An <img> with max-width: 100% called a zoom, or a hand-made transform with its own wheel and drag code.",
   },
   {
@@ -482,7 +482,7 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "wp-switch": `<WpSwitch v-model="held" variant="chip" icon="pi-link" label="Hold across run" />`,
   "radio": `<label><input v-model="mode" type="radio" class="wp-radio" value="a"> Tags</label>`,
   "tabs": `<WpTabs v-model="tab" :tabs="[{ id: 'options', label: 'Options', count: 12 }, { id: 'rules', label: 'Rules' }]" aria-label="Editor sections" />`,
-  "image-zoom": `<WpImageZoom v-model:zoom="zoom" :src="url" alt="Frame 3" hint="Drag to move · scroll to zoom" />`,
+  "image-zoom": `<WpImageZoom v-model:zoom="zoom" :src="url" alt="Frame 3" hint="Drag to move · scroll to zoom" minimap autohide />`,
   "segmented": `<WpSegmented v-model="theme" :options="[{ value: 'dark', label: 'Dark', icon: 'pi-moon' }, { value: 'light', label: 'Light', icon: 'pi-sun' }]" aria-label="Theme" />`,
   "disclosure": `<Disclosure v-model:open="open" label="Advanced" :count="3">…</Disclosure>`,
   "data-table": `<DataTable v-model:sort="sort" v-model:selected="picked" :columns="columns" :rows="rows" row-key="id" selectable aria-label="Tags" />`,

@@ -23,9 +23,9 @@ const ports = [
 ];
 
 const modes = [
-  { term: "Grid", kbd: "G", desc: "Pick fast. Click an image or press Space over it; Ctrl+A picks everything and a frame's all button picks the frame. Tile size S, M, L or Fit (F, as big as the picker allows). Double-click an image or click its frame to open it in Detail." },
-  { term: "Detail", kbd: "D", desc: "One image next to its size, seed, values, prompt, negative and mask. Only what is wired shows. Pick / Picked (P) picks it, ←/→ step, the strip under it jumps to any image. C compares two images with a slider, M paints a mask." },
-  { term: "Zoom", kbd: "Z", desc: "Only the picture, at Fit, 100%, 200% or any level between (− / +, keys 0 1 2). Scroll zooms toward the mouse, drag moves, double-click goes to 100% at that spot. F (or the fullscreen button) fills the screen. ←/→ keep the zoom and the spot on the next image." },
+  { term: "Grid", kbd: "G", desc: "Pick fast. Click an image or press Space over it; Ctrl+A picks everything; a frame says how many of its images are picked, and its Pick frame button picks them all. Tile size S, M, L or Fit (F, as big as the picker allows). Double-click an image or click its frame to open it in Detail." },
+  { term: "Detail", kbd: "D", desc: "One image next to its size and seed, with Pick / Picked (P), Compare (C) and Pick frame at the top of the side panel and three tabs under them: Values, Prompt and Mask. Each value is marked in the prompt in its own colour (the same colour in Values); hover a mark to see which variable set it. Prompt and negative have copy buttons. Only what is wired shows. ←/→ step; the strip under the picture groups a loop's images by frame and jumps to any image. C compares two images with a slider, M paints a mask." },
+  { term: "Zoom", kbd: "Z", desc: "Only the picture, at Fit, 100%, 200% or any level between (− / +, keys 0 1 2). Scroll zooms toward the mouse, drag moves, double-click goes to 100% at that spot. Zoomed in, a mini-map shows where you are (click or drag it to move); the bar fades while the mouse is still. F (or the fullscreen button) fills the screen, with the frame's images and Keep picked along the bottom. ←/→ keep the zoom and the spot on the next image. The label says Picked once picked. C pins the image and the next one shows beside it, locked to the same zoom and spot." },
 ];
 
 const keys = [
@@ -106,7 +106,7 @@ const settings = [
       <DocImage
         src="images/docs/wp-image-filter-zoom.png"
         ratio="1720 / 860"
-        caption="Zoom on the hand in frame #5 at 164%. Step with the arrow keys and the next image opens on the same spot."
+        caption="Zoom on the hand in frame #5 at 200%. The mini-map shows where you are and the label says the image is picked. Step with the arrow keys and the next image opens on the same spot."
       />
       <DocKeyList :items="keys" />
       <p>
@@ -162,7 +162,7 @@ const settings = [
       <DocImage
         src="images/docs/wp-image-filter-refine.png"
         ratio="1720 / 860"
-        caption="Detail on frame 3: its size, seed and values, the prompt with each value marked, the negative, and Paint for a mask. The strip below jumps to any image."
+        caption="Detail on frame 3: Pick, Compare and Pick frame at the top, then the Prompt tab with each value marked in its own colour (hovering one says which variable set it) and the negative. The strip below groups the images by frame."
       />
       <figure class="wp-doc-figure">
         <img :src="picksDiagram" alt="How the picks carry over: images, latents, masks, conditioning and prompt text of picked frames go on; an edited prompt is re-encoded and a painted mask goes to the masks output." loading="lazy">

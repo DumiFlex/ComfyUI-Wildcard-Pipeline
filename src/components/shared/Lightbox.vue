@@ -106,7 +106,7 @@ watch(() => props.open, async (v, was) => {
         <CloseButton class="wp-lightbox__close" kbd="Esc" @click="close" />
       </div>
       <figure v-if="image" class="wp-lightbox__figure" :data-zoom="zoom || undefined">
-        <WpImageZoom v-if="zoom" v-model:zoom="level" class="wp-lightbox__zoom" :src="image.src" :alt="image.alt" size="md" />
+        <WpImageZoom v-if="zoom" v-model:zoom="level" class="wp-lightbox__zoom" :src="image.src" :alt="image.alt" size="md" minimap />
         <img v-else class="wp-lightbox__img" :src="image.src" :alt="image.alt">
         <figcaption v-if="image.caption" class="wp-lightbox__caption">{{ image.caption }}</figcaption>
       </figure>
