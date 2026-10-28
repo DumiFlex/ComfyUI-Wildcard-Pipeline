@@ -1051,3 +1051,17 @@ describe("buildSwitch — native look", () => {
     expect(root.style.opacity).toBe("0.5");
   });
 });
+
+describe("canvas settings announce their changes", () => {
+  it("wraps every setting's onChange to announce a real change, keeping the original", async () => {
+    const posted: unknown[] = [];
+    class Spy { constructor(readonly name: string) {} postMessage(d: unknown) { posted.push(d); } close() {} }
+    vi.stubGlobal("BroadcastChannel", Spy);
+    const { buildSettings } = await import("./settings");
+    const sep = buildSettings({}).find((s) => s.id === "wildcardPipeline.behavior.autocompleteSeparator");
+    sep?.onChange?.(true, false);
+    sep?.onChange?.(true, true);
+    expect(posted).toEqual([{ id: "wildcardPipeline.behavior.autocompleteSeparator", value: true, source: "canvas" }]);
+    vi.unstubAllGlobals();
+  });
+});

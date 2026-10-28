@@ -5,9 +5,9 @@
     "native-checkbox": 0,
     "native-range": 2,
     "inline-svg": 25,
-    "hand-dialog": 16,
-    "manager-raw-button": 252,
-    "raw-hex": 850
+    "hand-dialog": 15,
+    "manager-raw-button": 251,
+    "raw-hex": 848
   },
   "native-select": {},
   "native-number": {},
@@ -52,7 +52,6 @@
     "src/manager/components/TweaksPanel.vue": 1,
     "src/manager/components/ai/AiChatDrawer.vue": 1,
     "src/manager/components/ai/AiDebugList.vue": 1,
-    "src/manager/components/docs/DocImage.vue": 1,
     "src/manager/components/test-runner/ModulePicker.vue": 1
   },
   "manager-raw-button": {
@@ -89,7 +88,7 @@
     "src/manager/components/ai/AiSearchFound.vue": 1,
     "src/manager/components/ai/AiSelectionChip.vue": 2,
     "src/manager/components/ai/AiTestCard.vue": 2,
-    "src/manager/components/docs/DocImage.vue": 2,
+    "src/manager/components/docs/DocImage.vue": 1,
     "src/manager/components/pack/PackGraphItem.vue": 5,
     "src/manager/components/pack/PackItemEditor.vue": 1,
     "src/manager/components/pack/PackPlanList.vue": 6,
@@ -233,7 +232,6 @@
     "src/manager/components/ai/views/AiOptionDiff.vue": 3,
     "src/manager/components/ai/views/AiTextDiff.vue": 3,
     "src/manager/components/ai/views/AiValuesTable.vue": 2,
-    "src/manager/components/docs/DocImage.vue": 2,
     "src/manager/components/docs/PipelineDiagram.vue": 4,
     "src/manager/components/settings/sections/AppearanceSection.vue": 8,
     "src/manager/components/ui/Select.vue": 1,

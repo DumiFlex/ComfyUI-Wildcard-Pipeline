@@ -4,13 +4,18 @@
  * Each row is a highlighted term chip + a plain description, so a page
  * reads as scannable key→meaning pairs instead of a wall of bold bullets.
  */
-defineProps<{ items: { term: string; desc: string }[] }>();
+import Kbd from "@/components/shared/Kbd.vue";
+
+/** `kbd`: the row's key or chord (Kbd's grammar, "Mod+Enter"), drawn after the term. */
+defineProps<{ items: { term: string; desc: string; kbd?: string }[] }>();
 </script>
 
 <template>
   <dl class="wp-doc-keys">
     <div v-for="it in items" :key="it.term" class="wp-doc-keys__row">
-      <dt class="wp-doc-keys__term">{{ it.term }}</dt>
+      <dt class="wp-doc-keys__head">
+        <span class="wp-doc-keys__term">{{ it.term }}</span>{{ it.kbd ? " " : "" }}<Kbd v-if="it.kbd" :keys="it.kbd" size="sm" />
+      </dt>
       <dd class="wp-doc-keys__desc">{{ it.desc }}</dd>
     </div>
   </dl>
@@ -24,8 +29,8 @@ defineProps<{ items: { term: string; desc: string }[] }>();
   gap: 16px;
   align-items: start;
 }
+.wp-doc-keys__head { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .wp-doc-keys__term {
-  justify-self: start;
   font: 600 12px var(--wp-font-sans);
   color: var(--wp-accent-text);
   background: color-mix(in oklab, var(--wp-accent-500) 11%, transparent);

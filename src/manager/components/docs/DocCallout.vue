@@ -1,20 +1,14 @@
 <script setup lang="ts">
+/** A tip or warning on a docs page: the kit's Banner, as page text (`note`). */
+import Banner, { type BannerTone } from "@/components/shared/Banner.vue";
+
 withDefaults(defineProps<{ variant?: "tip" | "warn" | "danger" }>(), { variant: "tip" });
-const ICON = { tip: "pi pi-info-circle", warn: "pi pi-exclamation-triangle", danger: "pi pi-times-circle" };
+const TONE: Record<"tip" | "warn" | "danger", BannerTone> = { tip: "info", warn: "warn", danger: "danger" };
 </script>
 <template>
-  <div class="wp-doc-callout" :class="`wp-doc-callout--${variant}`">
-    <i :class="ICON[variant]" aria-hidden="true" />
-    <div class="wp-doc-callout__body"><slot /></div>
-  </div>
+  <Banner class="wp-doc-callout" :tone="TONE[variant]" note><slot /></Banner>
 </template>
 <style scoped>
-.wp-doc-callout { display: flex; gap: 11px; padding: 12px 14px; border-radius: var(--wp-radius); font-size: 12.5px; line-height: 1.55; }
-.wp-doc-callout .pi { font-size: 15px; margin-top: 1px; }
-.wp-doc-callout--tip { background: color-mix(in oklab, var(--wp-info) 9%, transparent); border: 1px solid color-mix(in oklab, var(--wp-info) 28%, transparent); }
-.wp-doc-callout--tip .pi { color: var(--wp-info); }
-.wp-doc-callout--warn { background: color-mix(in oklab, var(--wp-warn) 10%, transparent); border: 1px solid color-mix(in oklab, var(--wp-warn) 30%, transparent); }
-.wp-doc-callout--warn .pi { color: var(--wp-warn); }
-.wp-doc-callout--danger { background: color-mix(in oklab, var(--wp-danger) 10%, transparent); border: 1px solid color-mix(in oklab, var(--wp-danger) 30%, transparent); }
-.wp-doc-callout--danger .pi { color: var(--wp-danger); }
+/* A Modelfile or a command shown inside the tip gets room above and below. */
+.wp-doc-callout :deep(.wp-code) { margin: 6px 0; }
 </style>

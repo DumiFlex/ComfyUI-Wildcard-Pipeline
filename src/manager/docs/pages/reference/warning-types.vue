@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Badge from "@/components/shared/Badge.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
@@ -6,7 +7,9 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
 // Human-readable labels — what the hover message / Warnings-tab line actually
 // conveys — NOT the internal rule names. Severity drives the dot colour.
-interface WarningRow { label: string; severity: string; desc: string }
+type Severity = "warn" | "info";
+interface WarningRow { label: string; severity: Severity; desc: string }
+const SEVERITY: Record<Severity, string> = { warn: "Warning", info: "Info" };
 
 const runtimeWarnings: WarningRow[] = [
   { label: "Unknown variable", severity: "warn", desc: "A template or combine used a $variable nothing set, so it printed nothing." },
@@ -78,7 +81,7 @@ const scannerRules: WarningRow[] = [
             <tr v-for="row in scannerRules" :key="row.label">
               <td class="wp-doc-warn-table__label">{{ row.label }}</td>
               <td>
-                <span class="wp-doc-warn-badge" :class="`wp-doc-warn-badge--${row.severity}`">{{ row.severity }}</span>
+                <Badge dot :tone="row.severity" :text="SEVERITY[row.severity]" />
               </td>
               <td class="wp-doc-warn-table__desc">{{ row.desc }}</td>
             </tr>
@@ -102,7 +105,7 @@ const scannerRules: WarningRow[] = [
             <tr v-for="row in runtimeWarnings" :key="row.label">
               <td class="wp-doc-warn-table__label">{{ row.label }}</td>
               <td>
-                <span class="wp-doc-warn-badge" :class="`wp-doc-warn-badge--${row.severity}`">{{ row.severity }}</span>
+                <Badge dot :tone="row.severity" :text="SEVERITY[row.severity]" />
               </td>
               <td class="wp-doc-warn-table__desc">{{ row.desc }}</td>
             </tr>
@@ -158,29 +161,4 @@ const scannerRules: WarningRow[] = [
   white-space: nowrap;
 }
 .wp-doc-warn-table__desc { color: var(--wp-text-muted); line-height: 1.5; }
-.wp-doc-warn-badge {
-  display: inline-block;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  padding: 2px 7px;
-  border-radius: var(--wp-radius-cap, 999px);
-  white-space: nowrap;
-}
-.wp-doc-warn-badge--warn {
-  color: var(--wp-warn);
-  background: color-mix(in oklab, var(--wp-warn) 12%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-warn) 30%, transparent);
-}
-.wp-doc-warn-badge--info {
-  color: var(--wp-info);
-  background: color-mix(in oklab, var(--wp-info) 10%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-info) 28%, transparent);
-}
-.wp-doc-warn-badge--danger {
-  color: var(--wp-danger);
-  background: color-mix(in oklab, var(--wp-danger) 10%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-danger) 28%, transparent);
-}
 </style>

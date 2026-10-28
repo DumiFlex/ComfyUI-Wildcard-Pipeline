@@ -1,6 +1,28 @@
 <script setup lang="ts">
+import { provide, ref, shallowRef } from "vue";
+import Lightbox, { type LightboxImage } from "@/components/shared/Lightbox.vue";
 import { toneVar, type DocTone } from "../../docs/registry";
+import { DOC_GALLERY, inPageOrder, type DocShot } from "../../docs/gallery";
 const props = defineProps<{ group: string; title: string; icon: string; tone: DocTone; blurb: string; nodeId?: string }>();
+
+// One viewer for the whole page: a screenshot opens it at itself, and the
+// arrows step through the page's other screenshots.
+const shots: DocShot[] = [];
+const viewing = shallowRef<LightboxImage[]>([]);
+const at = ref(0);
+const open = ref(false);
+provide(DOC_GALLERY, {
+  add(shot) {
+    shots.push(shot);
+    return () => { const i = shots.indexOf(shot); if (i >= 0) shots.splice(i, 1); };
+  },
+  open(shot) {
+    const list = inPageOrder(shots);
+    viewing.value = list.map((s) => s.image);
+    at.value = Math.max(list.indexOf(shot), 0);
+    open.value = true;
+  },
+});
 </script>
 
 <template>
@@ -17,9 +39,9 @@ const props = defineProps<{ group: string; title: string; icon: string; tone: Do
       </div>
     </header>
     <div class="wp-doc-page__body"><slot /></div>
+    <Lightbox v-model:open="open" v-model:index="at" :images="viewing" zoom />
   </article>
 </template>
-
 <style scoped>
 .wp-doc-page { display: flex; flex-direction: column; gap: var(--wp-space-7, 24px); max-width: 860px; }
 .wp-doc-page__crumb { display: flex; align-items: center; gap: 7px; color: var(--wp-text-dim); font-size: 11.5px; }
