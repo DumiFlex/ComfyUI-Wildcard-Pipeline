@@ -39,7 +39,7 @@ describe("Checkbox.vue", () => {
   // The TUI look hides the drawn tick (`.wp-check svg { display: none }`) and
   // writes [x]; an inline display on the tick beat that rule and drew both.
   it("puts no inline style on the tick or the dash", () => {
-    for (const props of [{ modelValue: true }, { modelValue: false, indeterminate: true }]) {
+    for (const props of [{ modelValue: true, indeterminate: false }, { modelValue: false, indeterminate: true }]) {
       const wrap = mount(Checkbox, { props });
       expect(wrap.get("svg").attributes("style")).toBeUndefined();
     }
