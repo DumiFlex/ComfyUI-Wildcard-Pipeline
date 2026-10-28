@@ -7,6 +7,16 @@
  * also gets a Fullscreen button (key F) that fills the screen with the
  * viewer, bar and slots included; Esc leaves it.
  *
+ * `minimap` adds a small copy of the picture in the corner once it is bigger
+ * than the stage; its box shows the part in view and a click or drag there
+ * moves the view. `autohide` fades the bar, hint and mini-map after
+ * `IDLE_MS` without a pointer move or key (hovering the bar keeps them).
+ * `second` shows another picture beside the first, both locked to the same
+ * level and spot (a synced compare; the first picture's size drives the
+ * maths). Slots: `bar-start` / `bar-end` in the bar, `first` / `second` over
+ * each picture, `fullscreen` along the bottom only while fullscreen (it fades
+ * with the bar), default over the whole stage.
+ *
  * `v-model:zoom` is the level (`null` = Fit). The viewer also keeps the spot
  * it shows when `src` changes, so stepping through a series stays on the same
  * part of each picture (the hands in every frame). Works on the canvas and
@@ -17,8 +27,11 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import WpButton from "./WpButton.vue";
 import {
-  centreOf, clampView, fitScale, percent, stepScale, viewAround, zoomAt, type Size, type View,
+  centreOf, clampView, fitScale, percent, stepScale, viewAround, visibleRect, zoomAt, IDLE_MS, type Size, type View,
 } from "./image-zoom";
+
+/** The gap between the two pictures of a synced compare. */
+const PANE_GAP = 8;
 
 const props = withDefaults(defineProps<{
   src: string;
@@ -31,8 +44,18 @@ const props = withDefaults(defineProps<{
   hint?: string;
   /** Offer a Fullscreen button (and key F). */
   fullscreen?: boolean;
+  /** Show a mini-map once the picture is bigger than the stage. */
+  minimap?: boolean;
+  /** Fade the bar, hint and mini-map while the pointer and keys are still. */
+  autohide?: boolean;
+  /** A second picture beside the first, locked to the same level and spot. */
+  second?: string | null;
+  secondAlt?: string;
   size?: "sm" | "md";
-}>(), { alt: "", zoom: null, controls: true, hint: undefined, fullscreen: false, size: "sm" });
+}>(), {
+  alt: "", zoom: null, controls: true, hint: undefined, fullscreen: false,
+  minimap: false, autohide: false, second: null, secondAlt: "", size: "sm",
+});
 
 const emit = defineEmits<{ "update:zoom": [zoom: number | null] }>();
 
@@ -119,13 +142,18 @@ function onLoad(ev: Event): void {
 }
 
 let observer: ResizeObserver | null = null;
+let measureStage: (() => void) | null = null;
+watch(() => !!props.second, () => measureStage?.());
 watch(stage, (el) => {
   observer?.disconnect();
   if (!el) return;
   const measure = (): void => {
-    stageSize.value = { width: el.clientWidth, height: el.clientHeight };
+    // A synced compare splits the stage into two panes that share one view.
+    const width = props.second ? Math.max(0, (el.clientWidth - PANE_GAP) / 2) : el.clientWidth;
+    stageSize.value = { width, height: el.clientHeight };
     relayout();
   };
+  measureStage = measure;
   measure();
   if (typeof ResizeObserver === "undefined") return;
   observer = new ResizeObserver(measure);
@@ -133,9 +161,14 @@ watch(stage, (el) => {
 });
 onBeforeUnmount(() => observer?.disconnect());
 
+/** A pointer position in pane px; in a synced compare, in whichever pane it is over. */
 function local(ev: { clientX: number; clientY: number }): { x: number; y: number } {
   const r = stage.value?.getBoundingClientRect();
-  return r ? { x: ev.clientX - r.left, y: ev.clientY - r.top } : { x: 0, y: 0 };
+  if (!r) return { x: 0, y: 0 };
+  let x = ev.clientX - r.left;
+  const pane = stageSize.value.width;
+  if (props.second && x > pane + PANE_GAP / 2) x -= pane + PANE_GAP;
+  return { x, y: ev.clientY - r.top };
 }
 
 function onWheel(ev: WheelEvent): void {
@@ -190,12 +223,80 @@ const imgStyle = computed(() => ({
   visibility: ready.value ? ("visible" as const) : ("hidden" as const),
 }));
 const level = computed(() => percent(view.value.scale));
+
+/* Mini-map: the box is the part in view; a click or drag centres the view there. */
+const showMap = computed(() => props.minimap && ready.value && canPan.value);
+const mapBox = computed(() => {
+  const r = visibleRect(view.value, image.value, stageSize.value);
+  return { left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%` };
+});
+const mapStyle = computed(() => ({ aspectRatio: `${image.value.width} / ${image.value.height}` }));
+let mapId: number | null = null;
+function mapTo(ev: PointerEvent): void {
+  const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+  if (r.width <= 0 || r.height <= 0) return;
+  const at = { x: Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height)) };
+  place(viewAround(view.value.scale, at, image.value, stageSize.value));
+}
+function onMapDown(ev: PointerEvent): void {
+  if (ev.button !== 0) return;
+  ev.stopPropagation();
+  mapId = ev.pointerId;
+  (ev.currentTarget as HTMLElement).setPointerCapture?.(ev.pointerId);
+  mapTo(ev);
+}
+function onMapMove(ev: PointerEvent): void {
+  if (mapId === ev.pointerId) mapTo(ev);
+}
+function onMapUp(ev: PointerEvent): void {
+  if (mapId === ev.pointerId) mapId = null;
+}
+
+/* Autohide: the chrome fades after IDLE_MS without a move or key, and stays while hovered. */
+const idle = ref(false);
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+let onChrome = false;
+function wake(): void {
+  idle.value = false;
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = null;
+  if (!props.autohide || onChrome) return;
+  idleTimer = setTimeout(() => { idle.value = true; }, IDLE_MS);
+}
+function chromeEnter(): void { onChrome = true; wake(); }
+function chromeLeave(): void { onChrome = false; wake(); }
+watch(() => props.autohide, wake, { immediate: true });
+// Stepping to another picture or changing the level (keys from the parent too) counts as activity.
+watch(() => [props.src, props.second, current.value], wake);
+// Any move or key anywhere in the viewer (slots included) brings the chrome back.
+watch(root, (el, old) => {
+  old?.removeEventListener("pointermove", wake);
+  old?.removeEventListener("keydown", wake, true);
+  el?.addEventListener("pointermove", wake);
+  el?.addEventListener("keydown", wake, true);
+});
+onBeforeUnmount(() => { if (idleTimer) clearTimeout(idleTimer); });
 const at = (s: number): boolean => !isFit.value && Math.abs(view.value.scale - s) < 1e-3;
 </script>
 
 <template>
-  <div ref="root" class="wp-imgzoom" :class="{ 'is-full': isFull }" :data-size="size">
-    <div v-if="controls" class="wp-imgzoom__bar" role="toolbar" aria-label="Zoom">
+  <div
+    ref="root"
+    class="wp-imgzoom"
+    :class="{ 'is-full': isFull, 'is-idle': idle, 'is-pair': !!second }"
+    :data-size="size"
+  >
+    <!-- eslint-disable-next-line vuejs-accessibility/mouse-events-have-key-events -->
+    <div
+      v-if="controls"
+      class="wp-imgzoom__bar wp-imgzoom__chrome"
+      role="toolbar"
+      aria-label="Zoom"
+      @pointerenter="chromeEnter"
+      @pointerleave="chromeLeave"
+      @focusin="chromeEnter"
+      @focusout="chromeLeave"
+    >
       <slot name="bar-start" />
       <WpButton variant="ghost" :size="size" icon="pi-minus" aria-label="Zoom out" kbd="−" data-test="imgzoom-out" @click="zoomOut" />
       <WpButton :variant="isFit ? 'secondary' : 'ghost'" :size="size" kbd="0" hint="Show the whole picture" :aria-pressed="isFit" data-test="imgzoom-fit" @click="setZoom(null)">Fit</WpButton>
@@ -235,18 +336,64 @@ const at = (s: number): boolean => !isFit.value && Math.abs(view.value.scale - s
       @dblclick="onDouble"
       @keydown="onKey"
     >
-      <img
-        :src="src"
-        alt=""
-        class="wp-imgzoom__img"
-        :class="{ 'is-pixels': view.scale >= 4 }"
-        :style="imgStyle"
-        draggable="false"
-        @load="onLoad"
-      >
+      <div class="wp-imgzoom__pane">
+        <img
+          :src="src"
+          alt=""
+          class="wp-imgzoom__img"
+          :class="{ 'is-pixels': view.scale >= 4 }"
+          :style="imgStyle"
+          draggable="false"
+          @load="onLoad"
+        >
+        <slot name="first" />
+      </div>
+      <div v-if="second" class="wp-imgzoom__pane" data-test="imgzoom-second">
+        <img
+          :src="second"
+          :alt="secondAlt"
+          class="wp-imgzoom__img"
+          :class="{ 'is-pixels': view.scale >= 4 }"
+          :style="imgStyle"
+          draggable="false"
+        >
+        <slot name="second" />
+      </div>
       <slot />
+      <!-- The mini-map takes its own pointer drags, so the stage behind it never pans. -->
+      <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
+      <div
+        v-if="showMap"
+        class="wp-imgzoom__map wp-imgzoom__chrome"
+        :style="mapStyle"
+        aria-hidden="true"
+        data-test="imgzoom-map"
+        @pointerdown="onMapDown"
+        @pointermove="onMapMove"
+        @pointerup="onMapUp"
+        @pointercancel="onMapUp"
+        @pointerenter="chromeEnter"
+        @pointerleave="chromeLeave"
+      >
+        <img :src="src" alt="" draggable="false">
+        <span class="wp-imgzoom__map-box" :style="mapBox" data-test="imgzoom-map-box" />
+      </div>
     </div>
-    <p v-if="hint" class="wp-imgzoom__hint">{{ hint }}</p>
+    <div v-if="hint || (isFull && $slots.fullscreen)" class="wp-imgzoom__bottom">
+      <p v-if="hint" class="wp-imgzoom__hint wp-imgzoom__chrome">{{ hint }}</p>
+      <!-- eslint-disable-next-line vuejs-accessibility/mouse-events-have-key-events -->
+      <div
+        v-if="isFull && $slots.fullscreen"
+        class="wp-imgzoom__full-foot wp-imgzoom__chrome"
+        data-test="imgzoom-full-foot"
+        @pointerenter="chromeEnter"
+        @pointerleave="chromeLeave"
+        @focusin="chromeEnter"
+        @focusout="chromeLeave"
+      >
+        <slot name="fullscreen" />
+      </div>
+    </div>
   </div>
 </template>
 
@@ -290,13 +437,85 @@ const at = (s: number): boolean => !isFit.value && Math.abs(view.value.scale - s
 }
 .wp-imgzoom__stage {
   position: relative;
+  display: flex;
+  gap: 8px; /* PANE_GAP */
   flex: 1;
   min-height: 0;
   overflow: hidden;
   border-radius: var(--wp-radius);
-  background: var(--wp-bg);
   touch-action: none;
   outline: none;
+}
+.wp-imgzoom__pane {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--wp-radius);
+  background: var(--wp-bg);
+}
+.wp-imgzoom__chrome { transition: opacity 0.25s ease; }
+.wp-imgzoom.is-idle .wp-imgzoom__chrome { opacity: 0; pointer-events: none; }
+.wp-imgzoom.is-idle .wp-imgzoom__stage.can-pan { cursor: none; }
+@media (prefers-reduced-motion: reduce) {
+  .wp-imgzoom__chrome { transition: none; }
+}
+.wp-imgzoom__map {
+  position: absolute;
+  /* Top right: the bottom holds the hint, the slots' captions and the fullscreen strip. */
+  top: var(--wp-space-3);
+  right: var(--wp-space-3);
+  z-index: 2;
+  width: 96px;
+  max-height: 128px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.35);
+  border-radius: var(--wp-radius-sm);
+  background: black;
+  box-shadow: var(--wp-shadow-md);
+  cursor: pointer;
+  touch-action: none;
+}
+.wp-imgzoom__map img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  opacity: 0.6;
+  pointer-events: none;
+  user-select: none;
+}
+.wp-imgzoom__map-box {
+  position: absolute;
+  border: 1.5px solid white;
+  /* Darken what is out of view; the map clips the spread. */
+  box-shadow: 0 0 0 999px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+}
+.wp-imgzoom__bottom {
+  position: absolute;
+  bottom: var(--wp-space-3);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--wp-space-2);
+  max-width: calc(100% - 2 * var(--wp-space-3));
+  pointer-events: none;
+}
+.wp-imgzoom.is-full .wp-imgzoom__bottom { bottom: calc(var(--wp-space-3) * 2); }
+.wp-imgzoom__full-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  padding: var(--wp-space-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-md);
+  background: var(--wp-bg-2);
+  box-shadow: var(--wp-shadow-md);
+  pointer-events: auto;
 }
 .wp-imgzoom__stage:focus-visible { box-shadow: inset 0 0 0 2px var(--wp-border-focus); }
 .wp-imgzoom__stage.can-pan { cursor: grab; }
@@ -312,10 +531,6 @@ const at = (s: number): boolean => !isFit.value && Math.abs(view.value.scale - s
 }
 .wp-imgzoom__img.is-pixels { image-rendering: pixelated; }
 .wp-imgzoom__hint {
-  position: absolute;
-  bottom: var(--wp-space-3);
-  left: 50%;
-  transform: translateX(-50%);
   margin: 0;
   padding: var(--wp-space-1) var(--wp-space-3);
   border-radius: var(--wp-radius-sm);

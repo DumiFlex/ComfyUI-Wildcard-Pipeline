@@ -11,6 +11,8 @@ export interface View { scale: number; x: number; y: number }
 export const MAX_SCALE = 8;
 /** The steps the − / + buttons jump through, as real-size factors. */
 export const ZOOM_STEPS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8] as const;
+/** How long `WpImageZoom`'s bar stays after the last pointer move or key, with `autohide`. */
+export const IDLE_MS = 2000;
 /** One wheel notch. */
 export const WHEEL_FACTOR = 1.2;
 
@@ -74,4 +76,18 @@ export function stepScale(scale: number, dir: 1 | -1, fit: number): number {
 /** "100%", "35%", "250%". */
 export function percent(scale: number): string {
   return `${Math.round(scale * 100)}%`;
+}
+
+/** The part of the image the stage shows, as fractions 0..1 of the image (for a mini-map). */
+export function visibleRect(view: View, image: Size, stage: Size): { x: number; y: number; w: number; h: number } {
+  if (image.width <= 0 || image.height <= 0) return { x: 0, y: 0, w: 1, h: 1 };
+  const axis = (pos: number, img: number, room: number): [number, number] => {
+    const size = img * view.scale;
+    const a = Math.min(1, Math.max(0, -pos / size));
+    const b = Math.min(1, Math.max(0, (room - pos) / size));
+    return [a, b - a];
+  };
+  const [x, w] = axis(view.x, image.width, stage.width);
+  const [y, h] = axis(view.y, image.height, stage.height);
+  return { x, y, w, h };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { centreOf, clampView, fitScale, minScale, percent, stepScale, viewAround, zoomAt } from "./image-zoom";
+import { centreOf, clampView, fitScale, minScale, percent, stepScale, viewAround, visibleRect, zoomAt } from "./image-zoom";
 
 const img = { width: 1000, height: 500 };
 const stage = { width: 500, height: 500 };
@@ -45,5 +45,13 @@ describe("image zoom maths", () => {
     expect(stepScale(8, 1, 0.6)).toBe(8);
     expect(stepScale(0.1, -1, 0.6)).toBe(0.1);
     expect(percent(0.756)).toBe("76%");
+  });
+
+  it("visibleRect is the part in view as fractions of the image", () => {
+    // 1000 x 500 at 100% in 500 x 500, scrolled to the right half.
+    expect(visibleRect({ scale: 1, x: -500, y: 0 }, img, stage)).toEqual({ x: 0.5, y: 0, w: 0.5, h: 1 });
+    // Smaller than the stage: all of it.
+    expect(visibleRect({ scale: 0.25, x: 125, y: 187.5 }, img, stage)).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+    expect(visibleRect({ scale: 1, x: 0, y: 0 }, { width: 0, height: 0 }, stage)).toEqual({ x: 0, y: 0, w: 1, h: 1 });
   });
 });
