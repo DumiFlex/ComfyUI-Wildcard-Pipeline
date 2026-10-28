@@ -242,7 +242,7 @@ function toggleTotalInternal(): void {
       icon="pi-th-large"
       class="wp-loop__seedbtn"
       data-test="loop-sweep-btn"
-      tip="Run every combination of the wildcards you pick, one frame each."
+      hint="Run every combination of the wildcards you pick, one frame each."
       @click="sweepOpen = true"
     >
       Sweep combinations
@@ -302,7 +302,7 @@ function toggleTotalInternal(): void {
           :pressed="modelValue.iteration_internal"
           data-test="loop-iteration-internal"
           :label="modelValue.iteration_internal ? `Make $${modelValue.iteration_var_name} public` : `Make $${modelValue.iteration_var_name} internal`"
-          :tip="modelValue.iteration_internal
+          :hint="modelValue.iteration_internal
             ? `Mark $${modelValue.iteration_var_name} as PUBLIC (renders in prompts)`
             : `Mark $${modelValue.iteration_var_name} as INTERNAL (engine-only — strips from prompts)`"
           @click="toggleIterationInternal"
@@ -313,7 +313,7 @@ function toggleTotalInternal(): void {
           :pressed="modelValue.total_internal"
           data-test="loop-total-internal"
           :label="modelValue.total_internal ? `Make $${modelValue.iteration_var_name}_total public` : `Make $${modelValue.iteration_var_name}_total internal`"
-          :tip="modelValue.total_internal
+          :hint="modelValue.total_internal
             ? `Mark $${modelValue.iteration_var_name}_total as PUBLIC`
             : `Mark $${modelValue.iteration_var_name}_total as INTERNAL`"
           @click="toggleTotalInternal"

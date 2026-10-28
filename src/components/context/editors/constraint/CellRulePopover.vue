@@ -167,7 +167,7 @@ function onReset(): void {
         variant="ghost"
         icon="pi-replay"
         class="pop-reset"
-        tip="Reset cell to library default"
+        hint="Reset cell to library default"
         @click="onReset"
       >Reset to library</WpButton>
     </div>

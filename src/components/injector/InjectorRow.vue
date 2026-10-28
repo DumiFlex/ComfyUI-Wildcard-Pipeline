@@ -199,7 +199,7 @@ function onDragEnd(): void {
         data-test="inj-row-collapse"
         :icon="row._collapsed ? 'pi-caret-right' : 'pi-caret-down'"
         :label="row._collapsed ? 'Expand row preview' : 'Collapse row preview'"
-        :tip="row._collapsed ? 'Expand' : 'Collapse'"
+        :hint="row._collapsed ? 'Expand' : 'Collapse'"
         @click.stop="emit('update', { _collapsed: !row._collapsed })"
       />
       <WpCheck
@@ -279,7 +279,7 @@ function onDragEnd(): void {
           data-test="inj-row-internal"
           draggable="false"
           :label="row.internal ? 'Unmark internal' : 'Mark internal'"
-          :tip="row.internal ? 'Internal flag active — hidden from assembler chip strip' : 'Mark internal — hide from assembler chip strip'"
+          :hint="row.internal ? 'Internal flag active — hidden from assembler chip strip' : 'Mark internal — hide from assembler chip strip'"
           @click="emit('update', { internal: !row.internal })"
         />
         <WpIconButton
@@ -288,7 +288,7 @@ function onDragEnd(): void {
           data-test="inj-row-remove"
           draggable="false"
           :label="isGeneral ? 'Delete this template row' : `Disconnect ${row.slot_name}`"
-          :tip="isGeneral ? 'Delete this template row' : 'Disconnect this input wire'"
+          :hint="isGeneral ? 'Delete this template row' : 'Disconnect this input wire'"
           @click="emit('disconnect')"
         />
       </div>

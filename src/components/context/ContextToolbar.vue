@@ -31,13 +31,13 @@ defineEmits<{ refresh: []; collapse: []; expand: []; toggleAll: [] }>();
     <WpIconButton
       icon="pi-chevron-up"
       label="Collapse all modules"
-      tip="Collapse all"
+      hint="Collapse all"
       @click="$emit('collapse')"
     />
     <WpIconButton
       icon="pi-chevron-down"
       label="Expand all modules"
-      tip="Expand all"
+      hint="Expand all"
       @click="$emit('expand')"
     />
     <WpIconButton icon="pi-eye" label="Toggle all enabled" @click="$emit('toggleAll')" />

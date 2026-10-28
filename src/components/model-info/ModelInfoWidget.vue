@@ -202,7 +202,7 @@ function resetRules(): void {
             tone="accent"
             :pressed="isInternal(row.key)"
             :label="isInternal(row.key) ? `Show ${row.variable} in the Assembler` : `Hide ${row.variable} from the Assembler`"
-            :tip="isInternal(row.key) ? `Internal: hidden from the Assembler. Click to show ${row.variable}` : `Shown in the Assembler. Click to hide ${row.variable}`"
+            :hint="isInternal(row.key) ? `Internal: hidden from the Assembler. Click to show ${row.variable}` : `Shown in the Assembler. Click to hide ${row.variable}`"
             :data-test="`mi-internal-${row.key}`"
             @click="toggleInternal(row.key)"
           />
@@ -211,7 +211,7 @@ function resetRules(): void {
             tone="warn"
             :pressed="isPinned(row.key)"
             :label="isPinned(row.key) ? `Unpin ${row.variable}` : `Pin ${row.variable}`"
-            :tip="isPinned(row.key) ? 'Unpin: detect it again' : `Pin ${row.variable} to a value of your own`"
+            :hint="isPinned(row.key) ? 'Unpin: detect it again' : `Pin ${row.variable} to a value of your own`"
             :data-test="`mi-pin-${row.key}`"
             @click="startPin(row)"
           />
@@ -226,7 +226,7 @@ function resetRules(): void {
         <span class="wp-mi__head-note">first match in the file name wins</span>
         <WpButton v-if="!isDefaultRules"
          
-          tip="Put the shipped rules back"
+          hint="Put the shipped rules back"
           variant="ghost"
           icon="pi-undo"
           class="wp-mi__reset"

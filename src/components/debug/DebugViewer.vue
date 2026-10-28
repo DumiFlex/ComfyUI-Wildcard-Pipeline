@@ -370,7 +370,7 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
             icon="pi-chevron-left"
             :disabled="iterationIndex <= 0"
             data-test="dbg-iter-prev"
-            tip="Previous iteration"
+            hint="Previous iteration"
             @click="gotoIteration(iterationIndex - 1)"
           />
           <span class="wp-dbg-iter__label" data-test="dbg-iter-label">frame {{ iterationIndex + 1 }} / {{ iterationCount }}</span>

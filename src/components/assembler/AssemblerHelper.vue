@@ -469,7 +469,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             variant="outline"
             icon="pi-folder-open"
             data-test="asm-load-template"
-            tip="Load a saved template from the library"
+            hint="Load a saved template from the library"
             aria-label="Load template"
             @click="onLoadTemplate"
           />
@@ -479,7 +479,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             icon="pi-save"
             :disabled="!props.template"
             data-test="asm-save-template"
-            :tip="props.template ? 'Save this template to the library' : 'Template is empty'"
+            :hint="props.template ? 'Save this template to the library' : 'Template is empty'"
             aria-label="Save template"
             @click="onSaveTemplate"
           />
@@ -489,7 +489,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             icon="pi-trash"
             :disabled="!props.template && !props.negativeTemplate"
             data-test="asm-clear-template-icon"
-            :tip="props.template || props.negativeTemplate ? 'Clear the template and the negative template' : 'Template already empty'"
+            :hint="props.template || props.negativeTemplate ? 'Clear the template and the negative template' : 'Template already empty'"
             aria-label="Clear template"
             @click="onClearTemplate"
           />

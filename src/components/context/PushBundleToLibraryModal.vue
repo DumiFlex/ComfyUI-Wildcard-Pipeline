@@ -642,7 +642,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
               variant="primary"
               data-test="pbtl-update"
               :disabled="busy || !canUpdateExisting"
-              :tip="!isLibraryTracked ? 'No existing library entry to update' : isLibraryMissing ? 'Library entry has been deleted — save as new entry instead' : undefined"
+              :hint="!isLibraryTracked ? 'No existing library entry to update' : isLibraryMissing ? 'Library entry has been deleted — save as new entry instead' : undefined"
               @click="doUpdate"
             >Update existing</WpButton>
           </footer>
