@@ -17,7 +17,7 @@ const SHARED_TOKENS = [
   "--wp-overlay-bg", "--wp-row-hover", "--wp-input-shade", "--wp-scrollbar-thumb",
   // Accent and states
   "--wp-accent", "--wp-accent-glow", "--wp-accent-text", "--wp-accent-text-strong",
-  "--wp-accent-300", "--wp-accent-400", "--wp-accent-500", "--wp-accent-600",
+  "--wp-accent-300", "--wp-accent-400", "--wp-accent-500", "--wp-accent-600", "--wp-accent-700", "--wp-accent-800",
   "--wp-focus-ring",
   "--wp-success", "--wp-warn", "--wp-danger", "--wp-info", "--wp-danger-text",
   "--wp-error-border", "--wp-error-text",

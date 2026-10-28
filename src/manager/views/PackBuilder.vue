@@ -1128,7 +1128,7 @@ function stopExtending(): void {
 /* The web search ask: answered before anything else moves on. */
 .wp-pack__ask-web {
   display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: 10px;
-  border: 1px solid var(--wp-accent-400); background: linear-gradient(135deg, var(--wp-accent-glow), transparent 70%);
+  border: 1px solid var(--wp-accent-400); background: color-mix(in oklab, var(--wp-accent-500) 6%, var(--wp-bg-1));
   box-shadow: 0 0 0 3px var(--wp-accent-glow);
   animation: wp-pack-ask-in 0.5s ease-out, wp-pack-ask-pulse 2.4s ease-in-out 0.5s 3;
 }

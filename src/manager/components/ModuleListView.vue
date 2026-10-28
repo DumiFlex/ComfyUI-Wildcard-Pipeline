@@ -1613,9 +1613,9 @@ defineExpose({
   color: var(--wp-text);
 }
 .wp-row-tag-btn[data-active] {
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 45%, transparent);
-  color: var(--wp-accent-text, #c4b5fd);
+  background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 22%, transparent);
+  border-color: color-mix(in oklab, var(--wp-accent-500, #6366f1) 45%, transparent);
+  color: var(--wp-accent-text, #a5b4fc);
 }
 
 .wp-row-actions {

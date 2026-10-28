@@ -685,7 +685,7 @@ const fitStyle = computed(() => {
 
 <style scoped>
 .wp-ifp { width: min(1280px, 95vw); max-height: 90vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: 6px; overflow: hidden; color: var(--wp-text); font-size: 12px; box-shadow: var(--wp-shadow-lg); outline: none; }
-.wp-ifp__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); background: linear-gradient(180deg, color-mix(in srgb, var(--wp-accent) 18%, var(--wp-bg2)) 0%, var(--wp-bg2) 100%); }
+.wp-ifp__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); background: color-mix(in srgb, var(--wp-accent) 9%, var(--wp-bg2)); }
 .wp-ifp__head-icon { color: var(--wp-accent); width: 24px; display: flex; justify-content: center; }
 .wp-ifp__title-block { flex: 1; min-width: 0; }
 .wp-ifp__title-row { display: flex; align-items: center; gap: 8px; }

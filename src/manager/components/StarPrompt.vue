@@ -94,13 +94,7 @@ function star(): void {
   align-items: center;
   gap: var(--wp-space-4);
   padding: var(--wp-space-4) var(--wp-space-5);
-  background:
-    linear-gradient(
-      90deg,
-      color-mix(in oklab, var(--wp-accent-500) 7%, transparent),
-      transparent 60%
-    ),
-    var(--wp-bg-1);
+  background: color-mix(in oklab, var(--wp-accent-500) 5%, var(--wp-bg-1));
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius-lg);
 }

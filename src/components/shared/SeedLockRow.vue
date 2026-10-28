@@ -97,16 +97,16 @@ function onSeed(n: number | null) {
   background:
     repeating-linear-gradient(
       to bottom,
-      var(--wp-accent, #c4b5fd) 0 4px,
+      var(--wp-accent, #6366f1) 0 4px,
       transparent 4px 8px
     ) left / 3px 100% no-repeat,
-    color-mix(in srgb, var(--wp-accent, #c4b5fd) 11%, transparent);
+    color-mix(in srgb, var(--wp-accent, #6366f1) 11%, transparent);
   border-radius: 5px;
 }
 .srow--bypassed .derived__val { text-decoration: line-through; opacity: .65; }
-.srow--bypassed .srow__idx { color: var(--wp-accent-text, #c4b5fd); opacity: .75; }
+.srow--bypassed .srow__idx { color: var(--wp-accent-text, #a5b4fc); opacity: .75; }
 .srow__idx { flex-shrink: 0; width: 30px; text-align: right; font: 600 11px var(--wp-font-mono, monospace); color: var(--wp-text-dim, #7a7d88); }
-.srow--locked .srow__idx { color: var(--wp-accent-text, #c4b5fd); }
+.srow--locked .srow__idx { color: var(--wp-accent-text, #a5b4fc); }
 .srow__fill { flex: 1; }
 /* Same shrink rule as the locked column, so a 15-digit derived seed clips
  * instead of shoving the DERIVED tag past the panel edge. */

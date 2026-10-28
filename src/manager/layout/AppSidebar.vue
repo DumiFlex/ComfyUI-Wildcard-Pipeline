@@ -358,7 +358,7 @@ const countByKey = computed<Record<string, number>>(() => {
 /* Active-nav indicator — brand identity anchor #2.
  * The ::before strip overrides the global tokens.css accent-colored strip
  * (which also uses the wrong [data-active="true"] selector and never matches).
- * 3 px gradient bar on the left edge; top/bottom inset keeps it from touching
+ * 3 px accent bar on the left edge; top/bottom inset keeps it from touching
  * the row corners. Works in both collapsed (icon-only) and expanded modes. */
 .wp-nav[data-active]::before {
   content: "";
@@ -367,7 +367,7 @@ const countByKey = computed<Record<string, number>>(() => {
   top: 6px;
   bottom: 6px;
   width: 3px;
-  background: var(--wp-brand-gradient);
+  background: var(--wp-accent-500);
   border-radius: var(--wp-radius-sm, 2px);
 }
 

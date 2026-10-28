@@ -35,7 +35,7 @@
    RefChip's `--wp-refchip-var-tone` (previews); this is the fallback. */
 .wp-rt .wp-rt-var,
 .wp-rt-preview .wp-rt-var {
-  color: var(--wp-accent-text-strong, var(--wp-accent-text, #c4b5fd));
+  color: var(--wp-accent-text-strong, var(--wp-accent-text, #a5b4fc));
   font-weight: 600;
 }
 

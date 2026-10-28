@@ -281,7 +281,7 @@ const hint = computed(() => {
   border-radius: 3px;
   color: var(--wp-accent-text, var(--wp-text, #e6e7ea));
   background: rgba(99, 102, 241, 0.14);
-  border: 1px solid color-mix(in srgb, var(--wp-accent, #c4b5fd) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-accent, #6366f1) 40%, transparent);
 }
 
 /* auto-fill keeps a uniform cell width so 15+ chips WRAP instead of
@@ -321,9 +321,9 @@ const hint = computed(() => {
 }
 .wp-fchips__chip:hover { color: var(--wp-text, #e6e7ea); border-color: var(--wp-border-strong, #4a4d55); }
 .wp-fchips__chip--active {
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 18%, transparent);
-  border-color: var(--wp-accent, #c4b5fd);
-  color: var(--wp-accent, #c4b5fd);
+  background: color-mix(in srgb, var(--wp-accent, #6366f1) 18%, transparent);
+  border-color: var(--wp-accent, #6366f1);
+  color: var(--wp-accent, #6366f1);
 }
 /* Bypassed — interrupted (dashed) border + dimmed, so it reads at a glance.
  * Composes with --active (dashed overrides the solid). */
@@ -344,7 +344,7 @@ const hint = computed(() => {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: var(--wp-accent, #c4b5fd);
+  background: var(--wp-accent, #6366f1);
 }
 /* A bypassed frame keeps its lock, and the dot must survive the dim — else
  * unlocking it later looks like it did nothing. */

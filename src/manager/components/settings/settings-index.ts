@@ -42,7 +42,7 @@ const STATIC_ENTRIES: SettingEntry[] = [
   { key: "usage-stats", section: "general", label: "Share anonymous usage stats", hint: "Let the Community tab count page views, installs and publishes on the community site.", keywords: "privacy telemetry analytics tracking community" },
 
   { key: "theme", section: "appearance", label: "Theme", hint: "Dark, light, or follow the system.", keywords: "dark light mode color scheme" },
-  { key: "accent", section: "appearance", label: "Accent color", hint: "The highlight color used for buttons, links and selection.", keywords: "colour palette purple custom hex" },
+  { key: "accent", section: "appearance", label: "Accent color", hint: "The highlight color used for buttons, links and selection.", keywords: "colour palette indigo violet purple custom hex" },
   { key: "density", section: "appearance", label: "Density", hint: "Spacing and control height across the manager.", keywords: "compact cozy comfortable spacing size" },
   { key: "sidebar", section: "appearance", label: "Sidebar", hint: "Show the navigation with labels, or as icons only.", keywords: "collapse navigation" },
   { key: "start-page", section: "appearance", label: "Start page", hint: "What the manager opens to.", keywords: "home dashboard landing last page" },

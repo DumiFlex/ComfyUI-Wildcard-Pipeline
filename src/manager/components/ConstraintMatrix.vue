@@ -763,7 +763,7 @@ defineExpose({ cellAt });
               0 2px 6px color-mix(in srgb, var(--wp-text) 20%, transparent);
 }
 .wp-mx-cell.open {
-  box-shadow: 0 0 0 2px var(--wp-accent, #c4b5fd), var(--wp-shadow-md);
+  box-shadow: 0 0 0 2px var(--wp-accent, #6366f1), var(--wp-shadow-md);
 }
 .wp-mx-cell.s-neutral {
   background: color-mix(in srgb, var(--wp-text) 5%, transparent);

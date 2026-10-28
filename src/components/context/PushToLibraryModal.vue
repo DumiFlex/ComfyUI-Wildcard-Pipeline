@@ -719,7 +719,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   font-size: 13px;
   font-family: inherit;
 }
-.wp-ptl-input:focus { outline: 1px solid var(--wp-accent-500, #8b5cf6); }
+.wp-ptl-input:focus { outline: 1px solid var(--wp-accent-500, #6366f1); }
 .wp-ptl-input--multi { resize: vertical; overscroll-behavior: contain; min-height: 48px; }
 .wp-ptl-payload {
   margin: 0;
@@ -772,15 +772,15 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
    routine state, not an error, and painting it red pushed users toward the
    duplicate-creating escape hatch. */
 .wp-ptl-note--info {
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 10%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 30%, transparent);
+  background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-accent-500, #6366f1) 30%, transparent);
   color: var(--wp-text, #e7e7ee);
 }
 .wp-ptl-relink {
   padding: 10px 12px;
   border-radius: 6px;
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 8%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 30%, transparent);
+  background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-accent-500, #6366f1) 30%, transparent);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -805,8 +805,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   border-radius: 4px;
   cursor: pointer;
 }
-.wp-ptl-relink__cand:hover { background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 16%, transparent); }
-.wp-ptl-relink__cand.is-picked { background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 28%, transparent); }
+.wp-ptl-relink__cand:hover { background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 16%, transparent); }
+.wp-ptl-relink__cand.is-picked { background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 28%, transparent); }
 .wp-ptl-relink__name { font-size: 12px; color: var(--wp-text, #e7e7ee); }
 .wp-ptl-relink__uuid { font-family: var(--wp-font-mono, monospace); font-size: 10px; color: var(--wp-text-dim, #6e6e7c); }
 .wp-ptl-relink__tag {
@@ -855,11 +855,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 .wp-ptl-btn:hover:not(:disabled) { background: color-mix(in oklab, var(--wp-bg-3, #1c1c28) 80%, var(--wp-text, #fff)); }
 .wp-ptl-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .wp-ptl-btn--primary {
-  background: var(--wp-accent-500, #8b5cf6);
-  border-color: var(--wp-accent-500, #8b5cf6);
+  background: var(--wp-accent-500, #6366f1);
+  border-color: var(--wp-accent-500, #6366f1);
   color: #fff;
 }
 .wp-ptl-btn--primary:hover:not(:disabled) {
-  background: var(--wp-accent-600, #7c3aed);
+  background: var(--wp-accent-600, #4f46e5);
 }
 </style>

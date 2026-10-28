@@ -923,7 +923,7 @@ function onApply(): void {
                and guaranteed to match nothing. Dashed rather than disabled,
                because inserting it is legal and sometimes deliberate. */
 .wp-subcat-chip[data-state="in"] {
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 28%, transparent);
+  background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 28%, transparent);
   border-color: var(--wp-accent);
   color: var(--wp-text);
 }

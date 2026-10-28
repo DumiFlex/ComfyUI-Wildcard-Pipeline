@@ -207,7 +207,7 @@ function doConfirm(): void {
   max-height: calc(100vh - 16px);
   overflow-y: auto;
   background: var(--wp-bg-2, #15151f);
-  border: 1px solid var(--wp-accent, #8b5cf6);
+  border: 1px solid var(--wp-accent, #6366f1);
   border-radius: 8px;
   padding: 12px 14px;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));
@@ -232,7 +232,7 @@ function doConfirm(): void {
   font: 13px var(--wp-font-mono, monospace);
   outline: none;
 }
-.wpc-remap__search:focus { border-color: var(--wp-accent, #8b5cf6); }
+.wpc-remap__search:focus { border-color: var(--wp-accent, #6366f1); }
 .wpc-remap__list {
   list-style: none;
   margin: 8px 0;
@@ -248,8 +248,8 @@ function doConfirm(): void {
   border-radius: 4px;
   cursor: pointer;
 }
-.wpc-remap__candidate:hover { background: color-mix(in oklab, var(--wp-accent, #8b5cf6) 18%, transparent); }
-.wpc-remap__candidate--picked { background: color-mix(in oklab, var(--wp-accent, #8b5cf6) 28%, transparent); }
+.wpc-remap__candidate:hover { background: color-mix(in oklab, var(--wp-accent, #6366f1) 18%, transparent); }
+.wpc-remap__candidate--picked { background: color-mix(in oklab, var(--wp-accent, #6366f1) 28%, transparent); }
 .wpc-remap__cand-meta { font: 10px var(--wp-font-mono); color: var(--wp-text-dim, #8a8a93); }
 .wpc-remap__cand-uuid { font: inherit; color: var(--wp-text-muted, var(--wp-text-dim, #8a8a93)); }
 .wpc-remap__reconcile {

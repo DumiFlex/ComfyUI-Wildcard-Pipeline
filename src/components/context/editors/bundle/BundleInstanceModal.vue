@@ -144,7 +144,7 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
 
 <style scoped>
 .wp-bdm { background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: var(--wp-radius); width: 720px; max-width: 100%; max-height: 80vh; display: flex; flex-direction: column; overflow-y: auto; font-family: var(--wp-font-sans, sans-serif); font-size: 12px; color: var(--wp-text); }
-.wp-bdm__head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: linear-gradient(180deg, color-mix(in srgb, var(--modal-accent, var(--wp-accent)) 18%, var(--wp-bg2)) 0%, var(--wp-bg2) 100%); border-bottom: 1px solid var(--wp-border); }
+.wp-bdm__head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: color-mix(in srgb, var(--modal-accent, var(--wp-accent)) 9%, var(--wp-bg2)); border-bottom: 1px solid var(--wp-border); }
 .wp-bdm__head-icon { color: var(--modal-accent, var(--wp-accent)); font-size: 18px; width: 24px; text-align: center; }
 .wp-bdm__title-block { flex: 1; min-width: 0; }
 .wp-bdm__title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

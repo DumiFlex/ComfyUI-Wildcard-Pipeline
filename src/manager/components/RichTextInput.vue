@@ -3078,9 +3078,9 @@ function onHostKeydown(ev: KeyboardEvent): void {
   background: linear-gradient(
     to bottom,
     transparent,
-    color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 26%, transparent)
+    color-mix(in oklab, var(--wp-accent-500, #6366f1) 26%, transparent)
   );
-  box-shadow: inset 0 -1px 0 color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 60%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in oklab, var(--wp-accent-500, #6366f1) 60%, transparent);
 }
 
 /* Sits in the bottom-right corner the overflow fade leaves clear. Drawn like
@@ -3107,8 +3107,8 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt__grip:hover { opacity: 0.9; }
 
 .wp-rt--focused {
-  border-color: var(--wp-accent-500, #8b5cf6);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 25%, transparent);
+  border-color: var(--wp-accent-500, #6366f1);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500, #6366f1) 25%, transparent);
   background: var(--wp-bg-1, #11111b);
 }
 .wp-rt--broken:not(.wp-rt--focused) {
@@ -3319,7 +3319,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
 }
 .wp-rt-suggestions__query {
   font-family: var(--wp-font-mono, ui-monospace, monospace);
-  color: var(--wp-accent-text, #c4b5fd);
+  color: var(--wp-accent-text, #a5b4fc);
 }
 .wp-rt-suggestions__hint {
   margin-left: auto;
@@ -3423,7 +3423,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt-suggestions__stale {
   font-size: 10px;
   letter-spacing: 0.04em;
-  color: var(--wp-accent-text, #c4b5fd);
+  color: var(--wp-accent-text, #a5b4fc);
   opacity: 0.85;
 }
 .wp-rt-suggestions[data-stale] .wp-rt-suggestions__item {
@@ -3534,7 +3534,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   cursor: pointer;
 }
 .wp-rt-suggestions__item[data-active] {
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 22%, transparent);
+  background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 22%, transparent);
 }
 /* A rounded, tinted tile rather than a bare glyph: it gives the kind colour
    enough area to actually register, and keeps the label column aligned whether
@@ -3577,7 +3577,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   white-space: nowrap;
 }
 .wp-rt-suggestions__trigger {
-  color: var(--wp-accent-text, #c4b5fd);
+  color: var(--wp-accent-text, #a5b4fc);
 }
 /* On a `$` row the label carries a `var-N` colour, and the sigil is part of
    the token — `$quality` is one word in the strip below, so splitting its
@@ -3614,7 +3614,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
 }
 /* The writer's name — the identifying half of the producer line. */
 .wp-rt-suggestions__by {
-  color: var(--wp-accent-text, #c4b5fd);
+  color: var(--wp-accent-text, #a5b4fc);
   font-family: var(--wp-font-mono, ui-monospace, monospace);
 }
 .wp-rt-suggestions__node {
@@ -3653,7 +3653,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   flex-shrink: 0;
   margin-top: 2px; /* audit-exempt: matches the leading icon's optical offset */
   font-size: 11px;
-  color: var(--wp-accent-text, #c4b5fd);
+  color: var(--wp-accent-text, #a5b4fc);
 }
 .wp-rt-suggestions__item[data-active] .wp-rt-suggestions__sub {
   color: var(--wp-text, #e7e7ee);

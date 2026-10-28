@@ -100,7 +100,7 @@ export function placeholderNameFor(
  */
 export function kindTint(kind: string): Record<string, string> {
   const token = `--wp-kind-${kind === "fixed_values" ? "fixed" : kind}`;
-  const colour = `var(${token}, var(--wp-accent-text, #c4b5fd))`;
+  const colour = `var(${token}, var(--wp-accent-text, #a5b4fc))`;
   return {
     color: colour,
     background: `color-mix(in oklab, ${colour} 16%, transparent)`,

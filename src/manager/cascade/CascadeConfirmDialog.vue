@@ -385,7 +385,7 @@ function onOpenUpdate(v: boolean): void {
   gap: 8px;
   margin-top: 4px;
   padding: 6px 8px;
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 8%, transparent);
+  background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 8%, transparent);
   border-radius: 6px;
   font-size: 13px;
   color: var(--wp-text);

@@ -274,9 +274,9 @@ watch(
   background: var(--wp-bg-3);
 }
 .wp-history-item[data-active="true"] {
-  background: rgba(124, 58, 237, 0.20);
+  background: rgba(79, 70, 229, 0.20);
   background: color-mix(in oklab, var(--wp-accent-600) 20%, transparent);
-  border-color: rgba(139, 92, 246, 0.50);
+  border-color: rgba(99, 102, 241, 0.50);
   border-color: color-mix(in oklab, var(--wp-accent-500) 50%, transparent);
 }
 .wp-history-item__top {

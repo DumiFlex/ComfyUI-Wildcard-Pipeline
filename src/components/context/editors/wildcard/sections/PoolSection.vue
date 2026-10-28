@@ -628,14 +628,14 @@ const skewedTowards = computed(() => {
    here" rather than as dim decoration. Static tint, not an animation — this
    sits on screen for the whole editing session. */
 .pool__collapse--nudge {
-  color: var(--wp-accent-text, var(--wp-accent, #c4b5fd));
+  color: var(--wp-accent-text, var(--wp-accent, #6366f1));
   border-color: color-mix(in srgb, var(--wp-accent, #6366f1) 55%, transparent);
   background: color-mix(in srgb, var(--wp-accent, #6366f1) 16%, transparent);
 }
 .pool__collapsed-count {
   font: 600 9px var(--wp-font-sans);
   letter-spacing: 0.06em;
-  color: var(--wp-accent, #c4b5fd);
+  color: var(--wp-accent, #6366f1);
 }
 .pool__label {
   font: 600 9px var(--wp-font-sans);

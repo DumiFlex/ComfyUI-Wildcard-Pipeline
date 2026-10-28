@@ -100,7 +100,7 @@ const s = props.state;
 <style scoped>
 .wp-ai-found {
   display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 10px;
-  border: 1px solid var(--wp-accent-400); background: linear-gradient(135deg, var(--wp-accent-glow), transparent 70%);
+  border: 1px solid var(--wp-accent-400); background: color-mix(in oklab, var(--wp-accent-500) 6%, var(--wp-bg-1));
 }
 .wp-ai-found[data-compact] { padding: 10px 12px; gap: 8px; border-radius: 8px; }
 .wp-ai-found__head { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--wp-text); }

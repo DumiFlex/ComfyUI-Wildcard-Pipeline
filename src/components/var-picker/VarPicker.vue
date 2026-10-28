@@ -195,9 +195,9 @@ function onSearchKeydown(ev: KeyboardEvent): void {
   font-size: 11px;
 }
 .wp-var-picker__trigger--open {
-  border-color: var(--wp-accent, #c4b5fd);
+  border-color: var(--wp-accent, #6366f1);
 }
-.wp-var-picker__value { color: var(--wp-accent, #c4b5fd); }
+.wp-var-picker__value { color: var(--wp-accent, #6366f1); }
 .wp-var-picker__caret { color: var(--wp-text-dim, #7a7d88); }
 
 .wp-var-picker__menu {
@@ -216,7 +216,7 @@ function onSearchKeydown(ev: KeyboardEvent): void {
   color: var(--wp-text-muted, #aeb1bb);
 }
 .wp-var-picker__opt:hover { background: rgba(196, 181, 253, 0.1); color: var(--wp-text); }
-.wp-var-picker__opt--active { background: rgba(196, 181, 253, 0.18); color: var(--wp-accent, #c4b5fd); }
+.wp-var-picker__opt--active { background: color-mix(in srgb, var(--wp-accent) 18%, transparent); color: var(--wp-accent-text, #a5b4fc); }
 .wp-var-picker__empty {
   padding: 6px 8px;
   font-style: italic;
@@ -246,7 +246,7 @@ function onSearchKeydown(ev: KeyboardEvent): void {
 }
 .wp-var-picker__search-field:focus {
   outline: none;
-  border-color: var(--wp-accent, #c4b5fd);
+  border-color: var(--wp-accent, #6366f1);
 }
 
 .wp-var-picker__preview {
