@@ -62,4 +62,25 @@ describe("DataTable", () => {
     });
     expect(w.find("[data-test=row-pose] b").text()).toBe("POSE");
   });
+
+  it("opens a row on click or Enter with row-clickable and marks the active one", async () => {
+    const w = mount(DataTable<Row>, { props: { columns: COLS, rows: ROWS, rowKey: "id", rowClickable: true, activeKey: "3", selectable: true } });
+    const rows = w.findAll("tbody tr");
+    expect(rows[0].attributes("tabindex")).toBe("0");
+    expect(rows[2].attributes("data-active")).toBe("true");
+    expect(rows[0].attributes("data-active")).toBeUndefined();
+    await rows[0].trigger("click");
+    await rows[1].trigger("keydown", { key: "Enter" });
+    // Ticking a row's box selects it without opening it.
+    await rows[2].find("td.wp-data-table__check").trigger("click");
+    expect(w.emitted("row-click")?.map((e) => (e[0] as Row).id)).toEqual(["1", "2"]);
+  });
+
+  it("leaves rows inert without row-clickable", async () => {
+    const w = mount(DataTable<Row>, { props: { columns: COLS, rows: ROWS, rowKey: "id" } });
+    const row = w.find("tbody tr");
+    expect(row.attributes("tabindex")).toBeUndefined();
+    await row.trigger("click");
+    expect(w.emitted("row-click")).toBeUndefined();
+  });
 });
