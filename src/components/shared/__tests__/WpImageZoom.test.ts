@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import WpImageZoom from "../WpImageZoom.vue";
+import { IDLE_MS } from "../image-zoom";
 
 /** jsdom has no layout: give the stage a size and the image a natural size. */
 async function ready(w: ReturnType<typeof mount>, size = { w: 400, h: 200 }, natural = { w: 800, h: 800 }) {
@@ -84,6 +85,81 @@ describe("WpImageZoom", () => {
     document.dispatchEvent(new Event("fullscreenchange"));
     await w.vm.$nextTick();
     expect(root.classList.contains("is-full")).toBe(false);
+    w.unmount();
+  });
+
+  it("shows a mini-map once zoomed past the stage, and a click there moves the view", async () => {
+    const w = mount(WpImageZoom, { props: { src: "a.png", minimap: true }, attachTo: document.body });
+    await ready(w);
+    expect(w.find('[data-test="imgzoom-map"]').exists()).toBe(false);
+    await w.find('[data-test="imgzoom-100"]').trigger("click");
+    const map = w.find('[data-test="imgzoom-map"]');
+    expect(map.exists()).toBe(true);
+    // 400 x 200 of an 800 x 800 picture at 100%: the box is half wide, a quarter high, centred.
+    const box = map.find('[data-test="imgzoom-map-box"]').attributes("style");
+    expect(box).toContain("width: 50%");
+    expect(box).toContain("height: 25%");
+    const el = map.element as HTMLElement;
+    el.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}) });
+    el.dispatchEvent(new PointerEvent("pointerdown", { button: 0, clientX: 0, clientY: 0, pointerId: 1 }));
+    await w.vm.$nextTick();
+    const moved = map.find('[data-test="imgzoom-map-box"]').attributes("style");
+    expect(moved).toContain("left: 0%");
+    expect(moved).toContain("top: 0%");
+    w.unmount();
+  });
+
+  it("autohide fades the bar after a still spell and a move brings it back", async () => {
+    vi.useFakeTimers();
+    try {
+      const w = mount(WpImageZoom, { props: { src: "a.png", autohide: true, hint: "Drag" }, attachTo: document.body });
+      await ready(w);
+      expect(w.classes()).not.toContain("is-idle");
+      vi.advanceTimersByTime(IDLE_MS + 10);
+      await w.vm.$nextTick();
+      expect(w.classes()).toContain("is-idle");
+      w.element.dispatchEvent(new PointerEvent("pointermove"));
+      await w.vm.$nextTick();
+      expect(w.classes()).not.toContain("is-idle");
+      // Hovering the bar keeps it up.
+      await w.find('[role="toolbar"]').trigger("pointerenter");
+      vi.advanceTimersByTime(IDLE_MS * 2);
+      await w.vm.$nextTick();
+      expect(w.classes()).not.toContain("is-idle");
+      w.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a second picture shares the first one's view, in two half-width panes", async () => {
+    const w = mount(WpImageZoom, { props: { src: "a.png", second: "b.png" }, attachTo: document.body });
+    await ready(w, { w: 408, h: 200 });
+    expect(w.classes()).toContain("is-pair");
+    const imgs = w.findAll(".wp-imgzoom__img");
+    expect(imgs).toHaveLength(2);
+    // Each pane is (408 - 8) / 2 = 200 wide: Fit of 800 x 800 is 25%.
+    expect(w.find('[data-test="imgzoom-level"]').text()).toBe("25%");
+    await w.find('[data-test="imgzoom-200"]').trigger("click");
+    expect(imgs[0].attributes("style")).toEqual(imgs[1].attributes("style"));
+    w.unmount();
+  });
+
+  it("the fullscreen slot shows only while fullscreen", async () => {
+    const w = mount(WpImageZoom, {
+      props: { src: "a.png", fullscreen: true },
+      slots: { fullscreen: '<span data-test="foot">Keep</span>' },
+      attachTo: document.body,
+    });
+    await ready(w);
+    expect(w.find('[data-test="foot"]').exists()).toBe(false);
+    const root = w.element as HTMLElement;
+    Object.defineProperty(document, "fullscreenElement", { value: root, configurable: true });
+    document.dispatchEvent(new Event("fullscreenchange"));
+    await w.vm.$nextTick();
+    expect(w.find('[data-test="foot"]').exists()).toBe(true);
+    Object.defineProperty(document, "fullscreenElement", { value: null, configurable: true });
+    document.dispatchEvent(new Event("fullscreenchange"));
     w.unmount();
   });
 });

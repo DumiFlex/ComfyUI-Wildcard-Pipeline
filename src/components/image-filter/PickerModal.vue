@@ -36,6 +36,7 @@ import {
 import { axisHueAt } from "../shared/axis-color";
 import { frameValues, promptRuns, valuesText } from "./picker-details";
 import WpButton from "../shared/WpButton.vue";
+import WpTabs, { type TabItem } from "../shared/WpTabs.vue";
 import { vTooltip } from "../shared/tooltip";
 
 const props = withDefaults(
@@ -182,10 +183,9 @@ function setMode(next: PickerMode, at: number | null = null): void {
     // The tiles go away without a mouseleave.
     hovered.value = null;
   }
-  if (next !== "detail") {
-    comparePin.value = null;
-    painting.value = false;
-  }
+  // Detail and Zoom share the compare pin; Grid drops it.
+  if (next === "grid") comparePin.value = null;
+  if (next !== "detail") painting.value = false;
   mode.value = next;
 }
 function step(delta: number): void {
@@ -275,9 +275,44 @@ const editingPositive = ref(false);
 watch(current, () => { editingPositive.value = false; });
 const positiveRuns = computed(() => promptRuns(textValue("positive"), values.value));
 const frameSize = computed(() => (cell.value ? frames.value[cell.value.frame]?.length ?? 0 : 0));
-function valueHue(axis: number): Record<string, string> {
-  return axis >= 0 ? { "--wp-ifp-hue": axisHueAt(axis) } : {};
+/** A value's colour: its sweep axis hue, else one of the eight variable
+ *  colours, handed out in the order the values show up in the prompt so
+ *  neighbours differ; a mark and its Values row share it. Values the prompt
+ *  doesn't show get none. */
+const HUE_ORDER = [1, 5, 3, 6, 7, 4, 2, 8];
+const hueSlots = computed(() => {
+  const slots = new Map<string, number>();
+  for (const run of positiveRuns.value) {
+    if (run.name && (run.axis ?? -1) < 0 && !slots.has(run.name)) slots.set(run.name, HUE_ORDER[slots.size % HUE_ORDER.length]);
+  }
+  return slots;
+});
+function valueHue(axis: number, name?: string): Record<string, string> {
+  if (axis >= 0) return { "--wp-ifp-hue": axisHueAt(axis) };
+  const slot = name ? hueSlots.value.get(name) : undefined;
+  return slot ? { "--wp-ifp-hue": `var(--wp-var-${slot})` } : {};
 }
+
+type SideTab = "values" | "prompt" | "mask";
+const sideTabs = computed<TabItem<SideTab>[]>(() => [
+  ...(values.value.length ? [{ id: "values" as const, label: "Values", count: values.value.length }] : []),
+  { id: "prompt", label: "Prompt", count: isEdited("positive") || isEdited("negative") ? "edited" : undefined },
+  { id: "mask", label: "Mask", count: maskValue.value ? "painted" : undefined },
+]);
+const sideTab = ref<SideTab>("prompt");
+watch(painting, (on) => { if (on) sideTab.value = "mask"; });
+
+/** The strip's images by frame, so one frame's images sit together. */
+const stripGroups = computed(() => {
+  const groups: { frame: number; items: { c: Cell; ci: number }[] }[] = [];
+  cells.value.forEach((c, ci) => {
+    const last = groups[groups.length - 1];
+    if (last && last.frame === c.frame) last.items.push({ c, ci });
+    else groups.push({ frame: c.frame, items: [{ c, ci }] });
+  });
+  return groups;
+});
+const pickedIn = (frame: number): number => cells.value.filter((c) => c.frame === frame && picked.value.has(c.key)).length;
 function editPositive(ev: Event): void {
   const side = (ev.currentTarget as HTMLElement).parentElement;
   editingPositive.value = true;
@@ -334,6 +369,11 @@ function pickCurrent(): void {
 
 const zoom = ref<number | null>(null);
 const viewer = ref<InstanceType<typeof WpImageZoom> | null>(null);
+/** The images of the shown frame, for the fullscreen strip. */
+const frameCells = computed(() => (cell.value ? cells.value.filter((c) => c.frame === cell.value?.frame) : []));
+function cellIndex(c: Cell): number {
+  return indexOf(c.frame, c.image);
+}
 
 /* ── countdown ────────────────────────────────────────────────────────── */
 
@@ -404,7 +444,7 @@ function onKey(ev: KeyboardEvent): void {
     if (one && key === "ArrowLeft") return () => step(-1);
     if (one && key === "ArrowRight") return () => step(1);
     if (mode.value === "grid" && key === "f" && !showTable.value) return () => { tile.value = tile.value === "fit" ? "m" : "fit"; };
-    if (mode.value === "detail" && key === "c") return togglePin;
+    if (one && key === "c") return togglePin;
     if (mode.value === "detail" && key === "m") return togglePaint;
     if (mode.value === "zoom" && (key === "+" || key === "=")) return () => viewer.value?.zoomIn();
     if (mode.value === "zoom" && (key === "-" || key === "_")) return () => viewer.value?.zoomOut();
@@ -510,13 +550,16 @@ const subLine = computed(() => {
                   <span v-if="pi > 0" class="wp-ifp__sep">·</span><span :class="{ 'wp-ifp__opt': pi > 0 }">{{ part }}</span>
                 </template>
               </span>
-              <button
-                v-if="imgs.length > 1"
-                v-tooltip="'Pick or clear every image of this frame'"
-                type="button"
-                class="wp-ifp__frame-all"
-                @click.stop="toggleFrames([f])"
-              >all</button>
+              <template v-if="imgs.length > 1">
+                <span v-if="pickedIn(f)" class="wp-ifp__frame-count">{{ pickedIn(f) }} of {{ imgs.length }}</span>
+                <WpButton
+                  variant="ghost"
+                  size="sm"
+                  :hint="pickedIn(f) === imgs.length ? 'Leave out every image of this frame' : 'Pick every image of this frame'"
+                  :data-test="`image-filter-pick-frame-${f}`"
+                  @click.stop="toggleFrames([f])"
+                >{{ pickedIn(f) === imgs.length ? "Clear frame" : "Pick frame" }}</WpButton>
+              </template>
             </div>
             <div class="wp-ifp__tiles">
               <PickerTile
@@ -580,9 +623,19 @@ const subLine = computed(() => {
             </figure>
             <WpButton variant="ghost" icon="pi-chevron-right" aria-label="Next image" kbd="→" data-test="image-filter-next" @click="step(1)" />
           </div>
-          <div v-if="total > 1" class="wp-ifp__strip" role="list" aria-label="All images" data-test="image-filter-strip">
+          <div v-if="total > 1" class="wp-ifp__strip" :class="{ 'is-grouped': multiFrame }" role="list" aria-label="All images" data-test="image-filter-strip">
+            <div
+              v-for="g in stripGroups"
+              :key="g.frame"
+              class="wp-ifp__strip-frame"
+              :class="{ 'is-current': cell && g.frame === cell.frame }"
+              role="group"
+              :aria-label="`Frame #${g.frame + 1}`"
+            >
+            <span v-if="multiFrame" class="wp-ifp__strip-label">#{{ g.frame + 1 }}<template v-if="pickedIn(g.frame)"> · {{ pickedIn(g.frame) }} picked</template></span>
+            <div class="wp-ifp__strip-row">
             <PickerTile
-              v-for="(c, ci) in cells"
+              v-for="{ c, ci } in g.items"
               :key="c.key"
               role="listitem"
               :src="viewUrl(c.ref)"
@@ -596,6 +649,8 @@ const subLine = computed(() => {
               @toggle="current = ci"
               @zoom="setMode('zoom', ci)"
             />
+            </div>
+            </div>
           </div>
         </div>
 
@@ -628,28 +683,29 @@ const subLine = computed(() => {
               data-test="image-filter-compare-pin"
               @click="togglePin"
             >{{ comparePin === null ? "Compare" : compareCell ? "Stop comparing" : "Pinned, pick another" }}</WpButton>
-            <WpButton variant="ghost" icon="pi-search-plus" kbd="Z" hint="Check small details at real size" data-test="image-filter-to-zoom" @click="setMode('zoom')">Zoom</WpButton>
+            <WpButton v-if="multiFrame && frameSize > 1" variant="ghost" icon="pi-th-large" hint="Pick or leave out every image of this frame" data-test="image-filter-details-frame" @click="toggleFrames([cell.frame])">Pick frame ({{ frameSize }})</WpButton>
           </div>
+          <WpTabs v-model="sideTab" :tabs="sideTabs" size="sm" aria-label="Image details" test-prefix="image-filter-tab" />
 
-          <section v-if="values.length || (multiFrame && frameSize > 1)" class="wp-ifp__section" data-test="image-filter-details">
+          <section v-if="sideTab === 'values' && values.length" class="wp-ifp__section" data-test="image-filter-details">
             <div v-if="values.length" class="wp-ifp__field-head">
-              <span>Values</span>
+              <span class="wp-ifp__hint">Each colour is the one its words have in the prompt.</span>
               <span class="wp-ifp__spacer" />
               <CopyButton :text="valuesCopy" label="Copy values" size="sm" />
             </div>
             <div v-if="values.length" class="wp-ifp__values" data-test="image-filter-values">
               <div v-for="r in values" :key="r.name" class="wp-ifp__value">
-                <span v-tooltip="`$${r.name}`" class="wp-ifp__value-name" :class="{ 'is-swept': r.axis >= 0 }" :style="valueHue(r.axis)">${{ r.name }}</span>
+                <span v-tooltip="`$${r.name}`" class="wp-ifp__value-name" :class="{ 'is-swept': r.axis >= 0 }" :style="valueHue(r.axis, r.name)"><i class="wp-ifp__swatch" aria-hidden="true" />${{ r.name }}</span>
                 <span v-tooltip="r.value" class="wp-ifp__value-text">{{ r.value }}</span>
               </div>
               <div v-if="typeof label?.seed === 'number'" class="wp-ifp__value">
                 <span class="wp-ifp__value-name">seed</span><span class="wp-ifp__value-text">{{ label.seed }}</span>
               </div>
             </div>
-            <WpButton v-if="multiFrame && frameSize > 1" variant="link" data-test="image-filter-details-frame" @click="toggleFrames([cell.frame])">Pick whole frame ({{ frameSize }})</WpButton>
           </section>
 
-          <section v-if="editFields.length" class="wp-ifp__section">
+          <template v-if="sideTab === 'prompt'">
+          <section v-if="editFields.length" class="wp-ifp__section is-fill">
             <p v-if="request.send_as === 'same_shape' && frameSize > 1" class="wp-ifp__hint">
               Same shape: a prompt edit covers every image of this frame.
             </p>
@@ -658,7 +714,20 @@ const subLine = computed(() => {
                 <span>{{ field === "positive" ? "Prompt" : "Negative" }}</span>
                 <span v-if="isEdited(field)" class="wp-ifp__badge">edited</span>
                 <span class="wp-ifp__spacer" />
+                <span
+                  v-if="field === 'positive' && !request.has_clip"
+                  v-tooltip="'No CLIP wired: an edit changes the text outputs only, the conditioning stays as it was.'"
+                  class="wp-ifp__tag"
+                  tabindex="0"
+                  data-test="image-filter-no-clip"
+                >text only</span>
                 <WpButton v-if="isEdited(field)" variant="link" @click="resetText(field)">Reset</WpButton>
+                <CopyButton
+                  :text="textValue(field)"
+                  :label="field === 'positive' ? 'Copy prompt' : 'Copy negative'"
+                  size="sm"
+                  :data-test="`image-filter-copy-${field}`"
+                />
               </div>
               <div
                 v-if="values.length && field === 'positive' && !editingPositive && textValue(field)"
@@ -670,9 +739,8 @@ const subLine = computed(() => {
                 @keydown.enter.prevent.stop="editPositive"
               ><template v-for="(run, ri) in positiveRuns" :key="ri"><mark
                 v-if="run.name"
-                v-tooltip="`$${run.name}`"
-                :class="{ 'is-swept': (run.axis ?? -1) >= 0 }"
-                :style="valueHue(run.axis ?? -1)"
+                v-tooltip="`Set by $${run.name}`"
+                :style="valueHue(run.axis ?? -1, run.name)"
               >{{ run.text }}</mark><template v-else>{{ run.text }}</template></template></div>
               <textarea
                 v-else
@@ -686,13 +754,11 @@ const subLine = computed(() => {
                 @input="setText(field, ($event.target as HTMLTextAreaElement).value)"
               />
             </template>
-            <p v-if="!request.has_clip" class="wp-ifp__warn" data-test="image-filter-no-clip">
-              No CLIP wired: an edit changes the text outputs only, the conditioning stays as it was.
-            </p>
           </section>
           <p v-else class="wp-ifp__hint" data-test="image-filter-no-prompt">Wire positive_text, negative_text or a CLIP to edit the prompt here.</p>
+          </template>
 
-          <section class="wp-ifp__section">
+          <section v-if="sideTab === 'mask'" class="wp-ifp__section">
             <div class="wp-ifp__field-head">
               <span>Mask</span>
               <span v-if="maskValue" class="wp-ifp__badge">painted</span>
@@ -722,18 +788,32 @@ const subLine = computed(() => {
 
       <!-- Zoom -->
       <div v-else-if="mode === 'zoom' && cell" class="wp-ifp__zoom" data-test="image-filter-zoom">
+        <!-- Comparing: the pinned image stays on the left (and keeps the view), ←/→ change the right one. -->
         <WpImageZoom
           ref="viewer"
           v-model:zoom="zoom"
-          :src="viewUrl(cell.ref)"
-          :alt="cellName(cell)"
-          hint="Drag to move · scroll to zoom · F fullscreen · Esc back"
+          :src="viewUrl((compareCell ?? cell).ref)"
+          :alt="cellName(compareCell ?? cell)"
+          :second="compareCell ? viewUrl(cell.ref) : null"
+          :second-alt="cellName(cell)"
+          :hint="compareCell ? 'Both sides move together · ←/→ changes the right one · C stops comparing' : 'Drag to move · scroll to zoom · C compares · F fullscreen · Esc back'"
           fullscreen
+          minimap
+          autohide
         >
           <template #bar-start>
             <WpButton variant="ghost" icon="pi-chevron-left" aria-label="Previous image" kbd="←" data-test="image-filter-prev" @click="step(-1)" />
           </template>
           <template #bar-end>
+            <WpButton
+              :variant="comparePin !== null ? 'secondary' : 'ghost'"
+              icon="pi-clone"
+              kbd="C"
+              :hint="comparePin === null ? 'Pin this image, then step to another to see both side by side' : 'Stop comparing'"
+              :aria-pressed="comparePin !== null"
+              data-test="image-filter-zoom-compare"
+              @click="togglePin"
+            >{{ comparePin === null ? "Compare" : compareCell ? "Comparing" : "Pinned" }}</WpButton>
             <WpButton
               :variant="isPicked ? 'primary' : 'secondary'"
               :icon="isPicked ? 'pi-check' : 'pi-circle'"
@@ -744,7 +824,43 @@ const subLine = computed(() => {
             >{{ isPicked ? "Picked" : "Pick" }}</WpButton>
             <WpButton variant="ghost" icon="pi-chevron-right" aria-label="Next image" kbd="→" data-test="image-filter-next" @click="step(1)" />
           </template>
-          <span class="wp-ifp__zoom-cap" data-test="image-filter-zoom-cap">{{ cellName(cell) }} · {{ current + 1 }} / {{ total }}</span>
+          <template #first>
+            <span class="wp-ifp__zoom-cap" data-test="image-filter-zoom-cap">
+              <template v-if="compareCell">{{ cellName(compareCell) }} · pinned</template>
+              <template v-else>{{ cellName(cell) }} · {{ current + 1 }} / {{ total }}</template>
+              <span v-if="picked.has((compareCell ?? cell).key)" class="wp-ifp__zoom-picked" data-test="image-filter-zoom-picked"><i class="pi pi-check" aria-hidden="true" /> Picked</span>
+            </span>
+          </template>
+          <template #second>
+            <span class="wp-ifp__zoom-cap is-right" data-test="image-filter-zoom-cap-second">
+              {{ cellName(cell) }} · {{ current + 1 }} / {{ total }}
+              <span v-if="isPicked" class="wp-ifp__zoom-picked"><i class="pi pi-check" aria-hidden="true" /> Picked</span>
+            </span>
+          </template>
+          <template #fullscreen>
+            <span v-if="multiFrame" class="wp-ifp__full-label">Frame {{ frameTitle(cell.frame) }}</span>
+            <template v-if="frameCells.length > 1">
+              <div class="wp-ifp__full-strip" role="list" aria-label="This frame's images">
+                <PickerTile
+                  v-for="c in frameCells"
+                  :key="c.key"
+                  role="listitem"
+                  :src="viewUrl(c.ref)"
+                  :picked="picked.has(c.key)"
+                  :index="0"
+                  :edited="isEditedCell(c.key)"
+                  :masked="isMaskedCell(c.key)"
+                  :class="{ 'is-current': c.key === cell.key }"
+                  :aria-current="c.key === cell.key || undefined"
+                  :test-id="`image-filter-full-thumb-${c.image}`"
+                  @toggle="current = cellIndex(c)"
+                />
+              </div>
+              <span class="wp-ifp__full-sep" aria-hidden="true" />
+            </template>
+            <span class="wp-ifp__full-count"><strong>{{ pickedList.length }}</strong> of {{ total }} picked</span>
+            <WpButton variant="primary" kbd="Enter" :disabled="pickedList.length === 0" data-test="image-filter-full-keep" @click="keepPicked">{{ pickedList.length ? `Keep ${pickedList.length} picked` : "Keep picked" }}</WpButton>
+          </template>
         </WpImageZoom>
       </div>
 
@@ -791,8 +907,7 @@ const subLine = computed(() => {
 .wp-ifp__frame:not(.is-flat):hover .wp-ifp__frame-label { color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-ifp__frame-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .wp-ifp__frame-label { flex: 1; min-width: 0; padding: 0 2px; font: 11px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wp-ifp__frame-all { background: transparent; border: 0; padding: 0 2px; font: 11px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; }
-.wp-ifp__frame-all:hover { color: var(--wp-accent-text, var(--wp-accent)); }
+.wp-ifp__frame-count { font: 11px var(--wp-font-sans); color: var(--wp-resolved, var(--wp-text-dim)); white-space: nowrap; }
 .wp-ifp__opt { color: var(--wp-text-muted, var(--wp-text2)); font-family: var(--wp-font-sans); }
 .wp-ifp__sep { margin: 0 4px; opacity: .6; }
 .wp-ifp__tiles { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -808,6 +923,15 @@ const subLine = computed(() => {
 .wp-ifp__strip { flex-shrink: 0; display: flex; gap: 4px; overflow-x: auto; padding: 2px 2px 4px; --wp-ifp-tile: 56px; }
 .wp-ifp__strip > * { flex-shrink: 0; }
 .wp-ifp__strip .is-current { border-color: var(--wp-accent); }
+.wp-ifp__strip-frame, .wp-ifp__strip-row { display: flex; gap: 4px; }
+.wp-ifp__strip.is-grouped { gap: 12px; align-items: flex-end; }
+.wp-ifp__strip.is-grouped .wp-ifp__strip-frame { flex-direction: column; gap: 3px; }
+.wp-ifp__strip.is-grouped .wp-ifp__strip-row { padding: 3px; border: 1px solid var(--wp-border); border-radius: var(--wp-radius-md, 8px); }
+.wp-ifp__strip.is-grouped .wp-ifp__strip-frame.is-current .wp-ifp__strip-row { border-color: var(--wp-accent); background: color-mix(in srgb, var(--wp-accent) 8%, transparent); }
+.wp-ifp__strip-label { font: 11px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); white-space: nowrap; }
+.wp-ifp__strip-frame.is-current .wp-ifp__strip-label { color: var(--wp-accent-text, var(--wp-accent)); font-weight: 600; }
+.wp-ifp__swatch { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; background: var(--wp-ifp-hue, var(--wp-text-dim)); vertical-align: baseline; }
+.wp-ifp__tag { padding: 0 6px; border: 1px solid color-mix(in srgb, var(--wp-warn) 45%, transparent); border-radius: 999px; font: 11px/16px var(--wp-font-sans); color: var(--wp-warn); cursor: help; }
 
 .wp-ifp__compare { position: relative; line-height: 0; }
 .wp-ifp__compare .wp-ifp__img { cursor: ew-resize; }
@@ -831,14 +955,15 @@ const subLine = computed(() => {
 /* Many variables scroll inside the list so the prompt stays in view; long names
  * and values are cut (full text on hover). Plain block rows, not a grid: a
  * grid row with overflow:hidden items may shrink to nothing in a capped box. */
-.wp-ifp__values { flex-shrink: 0; max-height: 180px; overflow-y: auto; font: 11px/1.45 var(--wp-font-mono, monospace); }
+.wp-ifp__values { flex-shrink: 0; overflow-y: auto; font: 11px/1.45 var(--wp-font-mono, monospace); }
 .wp-ifp__value { display: flex; gap: 12px; padding: 1px 0; }
 .wp-ifp__value-name { flex: 0 0 38%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-ifp__value-name[style] { color: color-mix(in srgb, var(--wp-ifp-hue) 85%, var(--wp-text)); }
 .wp-ifp__value-name.is-swept { color: color-mix(in srgb, var(--wp-ifp-hue) 85%, var(--wp-text)); font-weight: 600; }
 .wp-ifp__value-text { flex: 1; min-width: 0; color: var(--wp-text); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .wp-ifp__marked { white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; min-height: 60px; }
-.wp-ifp__marked mark { padding: 0 2px; border-radius: 3px; color: var(--wp-text); background: color-mix(in srgb, var(--wp-accent) 22%, transparent); }
-.wp-ifp__marked mark.is-swept { background: color-mix(in srgb, var(--wp-ifp-hue) 28%, transparent); }
+.wp-ifp__marked mark { padding: 0 2px; border-radius: 3px; color: var(--wp-text); background: color-mix(in srgb, var(--wp-ifp-hue, var(--wp-accent)) 20%, transparent); box-shadow: inset 0 -1.5px 0 var(--wp-ifp-hue, var(--wp-accent)); }
+.wp-ifp__marked mark:hover { background: color-mix(in srgb, var(--wp-ifp-hue, var(--wp-accent)) 38%, transparent); }
 .wp-ifp__badge { font: 600 10px var(--wp-font-sans); padding: 1px 5px; border-radius: 3px; background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-ifp__text { width: 100%; box-sizing: border-box; resize: vertical; min-height: 64px; padding: 6px; border: 1px solid var(--wp-border); border-radius: 4px; background: var(--wp-bg2); color: var(--wp-text); font: 11px/1.45 var(--wp-font-mono, monospace); }
 .wp-ifp__text:focus { outline: none; border-color: var(--wp-accent); }
@@ -851,7 +976,16 @@ const subLine = computed(() => {
 
 /* Zoom */
 .wp-ifp__zoom { flex: 1; min-height: 0; padding: 8px; }
-.wp-ifp__zoom-cap { position: absolute; left: 10px; bottom: 10px; padding: 2px 8px; border-radius: 3px; background: rgb(0 0 0 / 0.6); color: white; font: 11px/1.5 var(--wp-font-sans); pointer-events: none; }
+.wp-ifp__zoom-cap { position: absolute; left: 10px; bottom: 10px; display: flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 3px; background: rgb(0 0 0 / 0.6); color: white; font: 11px/1.5 var(--wp-font-sans); pointer-events: none; }
+.wp-ifp__zoom-cap.is-right { left: auto; right: 10px; }
+.wp-ifp__zoom-picked { display: inline-flex; align-items: center; gap: 3px; margin: 0 -6px 0 2px; padding: 0 6px; border-radius: 3px; background: var(--wp-green); color: white; font-weight: 600; }
+.wp-ifp__zoom-picked .pi { font-size: 9px; }
+.wp-ifp__full-label { color: var(--wp-text-muted); font: var(--wp-text-xs) var(--wp-font-sans); }
+.wp-ifp__full-count { color: var(--wp-text-muted); font: var(--wp-text-xs) var(--wp-font-sans); white-space: nowrap; }
+.wp-ifp__full-count strong { color: var(--wp-text); }
+.wp-ifp__full-strip { display: flex; gap: 4px; --wp-ifp-tile: 36px; }
+.wp-ifp__full-strip .is-current { border-color: var(--wp-accent); }
+.wp-ifp__full-sep { width: 1px; height: 32px; background: var(--wp-border); }
 
 .wp-ifp__foot { display: flex; align-items: center; gap: 8px; padding: 10px 14px; flex-shrink: 0; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
 .wp-ifp__status { display: flex; gap: 12px; font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
