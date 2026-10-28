@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import Button from "../../components/ui/Button.vue";
+
+const favs = ref(true);
 </script>
 
 <template>
@@ -35,5 +38,11 @@ import Button from "../../components/ui/Button.vue";
       <Button variant="ghost" disabled>Refresh</Button>
       <Button variant="danger" disabled>Delete</Button>
     </div>
+    <p class="wp-kit__muted">Toggle (pressed) and the dashed add button.</p>
+    <div class="wp-kit__row">
+      <Button variant="outline" :icon="favs ? 'pi-star-fill' : 'pi-star'" :pressed="favs" aria-label="Favourites only" @click="favs = !favs" />
+      <Button variant="ghost" icon="pi-filter" :pressed="favs" @click="favs = !favs">Filters</Button>
+    </div>
+    <Button variant="add" icon="pi-plus" block>Add rule</Button>
   </div>
 </template>

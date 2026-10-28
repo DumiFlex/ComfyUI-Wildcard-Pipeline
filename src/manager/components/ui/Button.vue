@@ -10,6 +10,10 @@
  *   link      — text-only; inline CTAs
  *   outline   — neutral bordered ghost (not accent: an accent outline read as
  *               a second primary)
+ *   add       — dashed, quiet: the "Add a row" button at the end of a list
+ *
+ * `block` stretches it to the full width of its container. `pressed` makes
+ * it a toggle (aria-pressed, accent tint while on).
  *
  * Sizes follow the control scale: sm 24 / md 32 (default) / lg 40.
  *
@@ -28,7 +32,7 @@ import { computed, useSlots } from "vue";
 import Icon from "./Icon.vue";
 import LoadingMark from "@/components/shared/LoadingMark.vue";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger" | "link" | "outline";
+type Variant = "primary" | "secondary" | "ghost" | "danger" | "link" | "outline" | "add";
 type Size = "sm" | "md" | "lg";
 
 interface Props {
@@ -38,6 +42,9 @@ interface Props {
   iconRight?: string;
   loading?: boolean;
   disabled?: boolean;
+  block?: boolean;
+  /** Makes it a toggle (`aria-pressed`): on, it wears the accent tint. */
+  pressed?: boolean;
   type?: "button" | "submit" | "reset";
   ariaLabel?: string;
 }
@@ -45,6 +52,7 @@ const props = withDefaults(defineProps<Props>(), {
   variant: "secondary",
   size: "md",
   type: "button",
+  pressed: undefined,
 });
 
 const emit = defineEmits<{
@@ -67,6 +75,7 @@ const classes = computed(() => [
   `wp-btn--${props.variant}`,
   `wp-btn--${props.size}`,
   !hasContent.value && "wp-btn--icon",
+  props.block && "wp-btn--block",
 ]);
 
 function onClick(e: MouseEvent) {
@@ -83,6 +92,7 @@ function onClick(e: MouseEvent) {
     :aria-label="ariaLabel"
     :title="titleAttr"
     :aria-busy="loading || undefined"
+    :aria-pressed="pressed === undefined ? undefined : pressed"
     @click="onClick"
   >
     <LoadingMark v-if="loading" variant="sparkle" mono :size="size === 'lg' ? 16 : 14" decorative />

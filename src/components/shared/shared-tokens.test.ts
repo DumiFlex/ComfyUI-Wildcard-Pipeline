@@ -61,7 +61,7 @@ describe("shared token names", () => {
       "./Popover.vue", "./ContextMenu.vue", "./tooltip.css", "./DropdownMenu.vue", "./ModalShell.vue",
       "./_modal-motion.css", "./ConfirmDialog.vue", "./SearchInput.vue", "./ToastCard.vue", "./WpNumber.vue",
       "./WpTabs.vue", "./WpSegmented.vue", "./Disclosure.vue", "./Banner.vue", "./CopyButton.vue", "./CloseButton.vue",
-      "./WpSwitch.vue", "./WpCheck.vue", "./WpButton.vue",
+      "./WpSwitch.vue", "./WpCheck.vue", "./WpButton.vue", "./WpIconButton.vue",
       "./ProgressBar.vue", "./Skeleton.vue", "./Badge.vue", "./Stepper.vue", "./DropZone.vue", "./SortableList.vue",
       "./InlineEdit.vue", "./TagInput.vue", "./Slider.vue", "./ResizeHandle.vue", "./SplitPane.vue",
       "./DescriptionList.vue", "./CodeBlock.vue", "./Pagination.vue", "./Kbd.vue", "./Separator.vue", "./Toolbar.vue",

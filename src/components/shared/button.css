@@ -7,8 +7,8 @@
  *
  * Unlayered on purpose: the manager loads it beside tokens.css, where an
  * unlayered reset would otherwise beat it. The canvas never loads it
- * globally: WpButton's scoped copy keeps its tone classes off the row icon
- * buttons (`.wp-btn--icon-sm.wp-btn--danger` in row-primitives.css).
+ * globally: WpButton pulls in a scoped copy, so its classes never meet
+ * another extension's `.wp-btn`.
  *
  * Heights follow the control scale: sm 24 / md 32 / lg 40.
  *
@@ -25,7 +25,7 @@
   padding: 0 12px;
   border-radius: 7px;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  font-family: inherit;
+  font-family: var(--wp-font-sans);
   font-size: 12.5px;
   font-weight: 500;
   /* Normal, not 1: a line box shorter than the font's ascent + descent
@@ -111,6 +111,35 @@
 .wp-btn--danger:active { background: color-mix(in oklab, var(--wp-danger) 22%, transparent); }
 .wp-btn--danger:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-danger) 35%, transparent); /* danger uses its own ring color */
+}
+
+/* Add: the quiet dashed "Add a row" button at the end of a list (Injector
+ * template rows, Model Info rules, fixed values, constraint exceptions). */
+.wp-btn--add {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--wp-border-strong);
+  color: var(--wp-text-dim);
+  font-weight: 600;
+}
+.wp-btn--add:hover {
+  background: color-mix(in srgb, var(--wp-accent) 8%, transparent);
+  border-color: color-mix(in srgb, var(--wp-accent) 45%, var(--wp-border-strong));
+  color: var(--wp-text);
+}
+.wp-btn--add:is(:disabled:not([aria-busy="true"]), [aria-disabled="true"]):hover { background: transparent; border-color: var(--wp-border-strong); color: var(--wp-text-dim); }
+
+.wp-btn--block { display: flex; width: 100%; }
+
+/* Pressed: a toggle that is on (favourites only, filters open). */
+.wp-btn[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--wp-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--wp-accent) 55%, var(--wp-border));
+  color: var(--wp-accent-text);
+}
+.wp-btn[aria-pressed="true"]:hover {
+  background: color-mix(in srgb, var(--wp-accent) 22%, transparent);
+  border-color: var(--wp-accent);
 }
 
 /* Disabled (not loading): faded, flat, and hover does nothing. */
