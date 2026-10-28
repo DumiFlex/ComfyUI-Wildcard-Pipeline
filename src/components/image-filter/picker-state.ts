@@ -65,36 +65,60 @@ export function editsFor(all: PickEdits, keys: readonly string[]): PickEdits | u
   return Object.keys(out).length ? out : undefined;
 }
 
-const ZOOM_KEY = "wp-image-filter-zoom";
-const DETAILS_KEY = "wp-image-filter-details";
-const FIT_KEY = "wp-image-filter-fit";
+const MODE_KEY = "wp-image-filter-mode";
+const TILE_KEY = "wp-image-filter-tile";
+/** Before the three modes: "opens zoomed" and "Fit" flags. Read once as the defaults. */
+const OLD_ZOOM_KEY = "wp-image-filter-zoom";
+const OLD_FIT_KEY = "wp-image-filter-fit";
 
-function readFlag(key: string): boolean {
+export type PickerMode = "grid" | "detail" | "zoom";
+export type TileSize = "s" | "m" | "l" | "fit";
+
+function read(key: string): string | null {
   try {
-    return localStorage.getItem(key) === "1";
+    return localStorage.getItem(key);
   } catch {
-    return false;
+    return null;
   }
 }
 
-function writeFlag(key: string, on: boolean): void {
+function write(key: string, value: string | null): void {
   try {
-    if (on) localStorage.setItem(key, "1");
-    else localStorage.removeItem(key);
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
   } catch {
     // Storage blocked: the picker just opens with the defaults.
   }
 }
 
-/** Whether the picker opens zoomed in (remembered from last time). */
-export const readZoomPref = (): boolean => readFlag(ZOOM_KEY);
-export const writeZoomPref = (on: boolean): void => writeFlag(ZOOM_KEY, on);
-/** Whether the zoom shows the Details panel (values, frame images). */
-export const readDetailsPref = (): boolean => readFlag(DETAILS_KEY);
-export const writeDetailsPref = (on: boolean): void => writeFlag(DETAILS_KEY, on);
-/** Whether the overview scales the images up to fill the picker. */
-export const readFitPref = (): boolean => readFlag(FIT_KEY);
-export const writeFitPref = (on: boolean): void => writeFlag(FIT_KEY, on);
+/** The mode the picker opens in (the one it was left in last time). */
+export function readModePref(): PickerMode {
+  const v = read(MODE_KEY);
+  if (v === "grid" || v === "detail" || v === "zoom") return v;
+  return read(OLD_ZOOM_KEY) === "1" ? "detail" : "grid";
+}
+export function writeModePref(mode: PickerMode): void {
+  write(MODE_KEY, mode);
+  write(OLD_ZOOM_KEY, null);
+}
+
+/** The Grid mode's tile size; Fit makes the images as big as the picker allows. */
+export function readTilePref(): TileSize {
+  const v = read(TILE_KEY);
+  if (v === "s" || v === "m" || v === "l" || v === "fit") return v;
+  return read(OLD_FIT_KEY) === "1" ? "fit" : "m";
+}
+export function writeTilePref(size: TileSize): void {
+  write(TILE_KEY, size);
+  write(OLD_FIT_KEY, null);
+}
+
+/** The largest side of a tile at each size: a lone batch, a frame card, a sweep table cell. */
+export const TILE_PX: Record<Exclude<TileSize, "fit">, { flat: number; frame: number; table: number }> = {
+  s: { flat: 120, frame: 96, table: 80 },
+  m: { flat: 200, frame: 150, table: 120 },
+  l: { flat: 320, frame: 240, table: 200 },
+};
 
 export interface FitBox {
   /** Space for the images (px). */

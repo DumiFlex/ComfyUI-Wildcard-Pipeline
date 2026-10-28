@@ -9,8 +9,9 @@
  *   <WpButton variant="ghost" icon="pi-download" aria-label="Download snapshot" />
  *
  * With no slot content it is an icon button (`.wp-btn--icon`); its
- * `aria-label` is also its tooltip. Loading swaps the icon for the sparkle,
- * sets aria-busy and ignores clicks.
+ * `aria-label` is also its tooltip (`hint` sets another, `kbd` adds a key
+ * chip). Loading swaps the icon for the sparkle, sets aria-busy and ignores
+ * clicks.
  *
  * The stylesheet is pulled in scoped: loading button.css globally on the
  * canvas would also restyle the row icon buttons that share its tone class
@@ -29,7 +30,11 @@ const props = withDefaults(defineProps<{
   disabled?: boolean;
   type?: "button" | "submit" | "reset";
   ariaLabel?: string;
-}>(), { variant: "secondary", size: "sm", icon: undefined, type: "button", ariaLabel: undefined });
+  /** Tooltip text; an icon button shows its aria-label when this is unset. */
+  hint?: string;
+  /** A shortcut shown in the tooltip's key chip, e.g. "P". */
+  kbd?: string;
+}>(), { variant: "secondary", size: "sm", icon: undefined, type: "button", ariaLabel: undefined, hint: undefined, kbd: undefined });
 
 const emit = defineEmits<{ click: [evt: MouseEvent] }>();
 
@@ -44,7 +49,7 @@ function onClick(e: MouseEvent): void {
 
 <template>
   <button
-    v-tooltip="iconOnly ? ariaLabel : undefined"
+    v-tooltip="{ text: hint ?? (iconOnly ? ariaLabel : undefined), kbd }"
     :type="type"
     class="wp-btn"
     :class="[`wp-btn--${variant}`, `wp-btn--${size}`, { 'wp-btn--icon': iconOnly }]"

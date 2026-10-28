@@ -20,6 +20,8 @@ const props = defineProps<{
   picked: ReadonlySet<string>;
   edits: PickEdits;
   tooltip: (frame: number) => string;
+  /** The tile size the picker's S / M / L asks for (px); unset picks one from the grid's size. */
+  tile?: number;
 }>();
 const emit = defineEmits<{
   "update:layout": [layout: GridLayout];
@@ -30,7 +32,7 @@ const emit = defineEmits<{
 }>();
 
 const split = computed(() => props.grid.groups.length > 1);
-const tileSize = computed(() => (split.value || props.grid.cols.length > 4 ? "108px" : "150px"));
+const tileSize = computed(() => (props.tile ? `${props.tile}px` : split.value || props.grid.cols.length > 4 ? "108px" : "150px"));
 
 function hue(axis: number): Record<string, string> {
   return { "--wp-ifg-hue": axisHueAt(axis) };
@@ -60,6 +62,7 @@ function isEdited(key: string): boolean {
 <template>
   <div class="wp-ifg" :style="{ '--wp-ifp-tile': tileSize }">
     <div class="wp-ifg__bar">
+      <template v-if="$slots.tools"><slot name="tools" /><span class="wp-ifg__divider" aria-hidden="true" /></template>
       <label class="wp-ifg__slot">Rows
         <WpSelect class="wp-ifg__select" :model-value="layout.rows" :options="axisOptions" data-test="image-filter-grid-rows" @update:model-value="(v) => setSlot('rows', v)" />
       </label>
@@ -71,7 +74,7 @@ function isEdited(key: string): boolean {
         <span v-for="a in grid.splitAxes" :key="a.axis" class="wp-ifg__name" :style="hue(a.axis)">{{ a.name }}</span>
       </span>
       <span class="wp-ifg__spacer" />
-      <span class="wp-ifg__hint">Click a row, column or group name to pick all of it, a frame&apos;s border to zoom in.</span>
+      <span class="wp-ifg__hint">Click a row, column or group name to pick all of it.</span>
     </div>
 
     <div class="wp-ifg__groups" :class="{ 'is-split': split }">
@@ -121,7 +124,7 @@ function isEdited(key: string): boolean {
                 v-if="f >= 0"
                 class="wp-ifg__tiles"
                 :data-test="`image-filter-frame-${f}`"
-                :title="`${tooltip(f)}\nClick the image to pick it, the frame around it to zoom in.`"
+                :title="`${tooltip(f)}\nClick the image to pick it, the frame around it for Detail.`"
                 @click="emit('zoom', f, 0)"
               >
                 <PickerTile
@@ -154,6 +157,7 @@ function isEdited(key: string): boolean {
 .wp-ifg__select { font-family: var(--wp-font-mono, monospace); }
 .wp-ifg__swap { background: transparent; border: 0; padding: 2px 4px; color: var(--wp-accent-text, var(--wp-accent)); font-size: 14px; cursor: pointer; }
 .wp-ifg__spacer { flex: 1; }
+.wp-ifg__divider { width: 1px; align-self: stretch; background: var(--wp-border); }
 .wp-ifg__hint { font-size: 10.5px; }
 .wp-ifg__name { font: 10.5px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-ifg__bar .wp-ifg__name { color: color-mix(in srgb, var(--wp-ifg-hue) 80%, var(--wp-text)); }

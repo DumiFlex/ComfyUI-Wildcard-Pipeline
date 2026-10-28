@@ -22,6 +22,8 @@ export interface SegmentedOption<V extends string = string> {
   disabled?: boolean;
   /** A tooltip saying what the option does. */
   hint?: string;
+  /** A shortcut shown in the tooltip's key chip, e.g. "G". */
+  kbd?: string;
   /** This option's `data-test`, when `testPrefix` doesn't fit. */
   testId?: string;
 }
@@ -91,7 +93,7 @@ function onKeydown(ev: KeyboardEvent): void {
     <button
       v-for="o in options"
       :key="o.value"
-      v-tooltip="o.hint ?? (iconOnly ? o.label : null)"
+      v-tooltip="{ text: o.hint ?? (iconOnly || o.kbd ? o.label : null), kbd: o.kbd }"
       type="button"
       role="radio"
       class="wp-segmented__opt"
