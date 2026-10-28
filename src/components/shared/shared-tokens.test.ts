@@ -35,7 +35,7 @@ const SHARED_TOKENS = [
   "--wp-space-5", "--wp-space-6", "--wp-space-7", "--wp-space-8",
   "--wp-control-h-sm", "--wp-control-h-md", "--wp-control-h-lg",
   // Motion
-  "--wp-motion-quick", "--wp-motion-hover", "--wp-motion-fade", "--wp-motion-swap", "--wp-motion-flip",
+  "--wp-motion-quick", "--wp-motion-hover", "--wp-motion-shimmer", "--wp-motion-fade", "--wp-motion-swap", "--wp-motion-flip",
   "--wp-motion-curve-collapse", "--wp-motion-curve-flip", "--wp-motion-curve-linear",
 ] as const;
 
@@ -62,6 +62,9 @@ describe("shared token names", () => {
       "./_modal-motion.css", "./ConfirmDialog.vue", "./SearchInput.vue", "./ToastCard.vue", "./WpNumber.vue",
       "./WpTabs.vue", "./WpSegmented.vue", "./Disclosure.vue", "./Banner.vue", "./CopyButton.vue", "./CloseButton.vue",
       "./WpSwitch.vue", "./WpCheck.vue", "./WpButton.vue",
+      "./ProgressBar.vue", "./Skeleton.vue", "./Badge.vue", "./Stepper.vue", "./DropZone.vue", "./SortableList.vue",
+      "./InlineEdit.vue", "./TagInput.vue", "./Slider.vue", "./ResizeHandle.vue", "./SplitPane.vue",
+      "./DescriptionList.vue", "./CodeBlock.vue", "./Pagination.vue", "./Kbd.vue", "./Separator.vue", "./Toolbar.vue",
     ];
     const stray = files.flatMap((f) =>
       [...read(f).matchAll(/var\((--wp-[a-z0-9-]+)/g)].map((m) => m[1]).filter((n) => !shared.has(n)).map((n) => `${f}: ${n}`),
