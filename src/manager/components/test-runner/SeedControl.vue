@@ -5,10 +5,16 @@
  * it is the default; random is for a quick look at variety.
  */
 import WpNumber from "@/components/shared/WpNumber.vue";
+import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
 import { computed } from "vue";
 import type { ScenarioSeedSpec } from "../../api/types";
 
 const MAX = 10_000;
+
+const MODE_OPTIONS: SegmentedOption<"range" | "random">[] = [
+  { value: "range", label: "Range", hint: "Consecutive seeds: seed N here is seed N on the canvas" },
+  { value: "random", label: "Random", hint: "A fresh random set of seeds on every run" },
+];
 
 const props = defineProps<{ modelValue: ScenarioSeedSpec }>();
 const emit = defineEmits<{ (e: "update:modelValue", v: ScenarioSeedSpec): void }>();
@@ -39,24 +45,15 @@ function setCount(v: number | null): void {
 
 <template>
   <div class="wp-trsd" role="group" aria-label="Seeds" data-test="seed-control">
-    <div class="wp-trsd__mode" role="radiogroup" aria-label="Seed mode">
-      <button
-        type="button"
-        role="radio"
-        :aria-checked="mode === 'range'"
-        title="Consecutive seeds: seed N here is seed N on the canvas"
-        data-test="seed-mode-range"
-        @click="setMode('range')"
-      >Range</button>
-      <button
-        type="button"
-        role="radio"
-        :aria-checked="mode === 'random'"
-        title="A fresh random set of seeds on every run"
-        data-test="seed-mode-random"
-        @click="setMode('random')"
-      >Random</button>
-    </div>
+    <WpSegmented
+      class="wp-trsd__mode"
+      :model-value="mode"
+      :options="MODE_OPTIONS"
+      size="sm"
+      aria-label="Seed mode"
+      test-prefix="seed-mode"
+      @update:model-value="setMode"
+    />
     <div v-if="mode === 'range'" class="wp-trsd__field">
       <span aria-hidden="true">from</span>
       <WpNumber commit="input" size="sm" :min="0" :model-value="from"
@@ -78,18 +75,13 @@ function setCount(v: number | null): void {
   border: 1px solid var(--wp-border-strong); border-radius: var(--wp-radius-sm);
   background: var(--wp-bg-1); font-size: var(--wp-text-sm);
 }
-.wp-trsd__mode { display: inline-flex; padding: var(--wp-space-1); gap: var(--wp-space-1); border-right: 1px solid var(--wp-border); }
-.wp-trsd__mode button {
-  background: none; border: 0; color: var(--wp-text-muted); cursor: pointer;
-  padding: 0 var(--wp-space-4); border-radius: var(--wp-radius-sm); font-size: var(--wp-text-sm);
-}
-.wp-trsd__mode button:hover { color: var(--wp-text); }
-.wp-trsd__mode button[aria-checked="true"] { background: var(--wp-bg-4); color: var(--wp-text); }
-.wp-trsd__mode button:focus-visible { outline: 2px solid var(--wp-border-focus); outline-offset: -2px; }
+/* The segmented control sits flush inside the pill: the pill draws the frame. */
+.wp-segmented.wp-trsd__mode { align-self: center; margin: 0 var(--wp-space-1); border: 0; background: none; }
 .wp-trsd__field {
   display: inline-flex; align-items: center; gap: var(--wp-space-2);
   padding: 0 var(--wp-space-4); color: var(--wp-text-dim);
 }
+.wp-trsd__mode + .wp-trsd__field,
 .wp-trsd__field + .wp-trsd__field { border-left: 1px solid var(--wp-border); }
 /* The shared number Input sits flush inside the pill: no own border or fill. */
 .wp-trsd__field :deep(.wp-input-group) { width: 88px; border: 0; background: none; box-shadow: none; }

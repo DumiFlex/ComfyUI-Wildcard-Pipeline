@@ -194,7 +194,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "radio-group", name: "RadioGroup", group: "choice", file: "src/components/shared/RadioGroup.vue", surfaces: ["manager", "canvas"],
-    use: "One of a few options that each need a line of explanation (prompt style, install mode). One Tab stop, the arrows move and choose; cards draws each option as a bordered card. For two to five short words on one row use Segmented.",
+    use: "One of a few options that each need a line of explanation (prompt style, install mode). One Tab stop, the arrows move and choose; cards draws each option as a bordered card, and the label slot adds a badge after an option's name (the AI provider list). For two to five short words on one row use Segmented.",
     instead: "A column of .wp-radio inputs with their own labels and hint text.",
   },
   {
