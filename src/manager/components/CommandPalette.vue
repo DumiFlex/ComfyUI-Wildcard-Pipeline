@@ -13,10 +13,38 @@ import { rankCommands } from "../utils/commandRank";
 // path:
 export type { CommandItem };
 
+const MAX_ROWS = 50;
+const MAX_RECENT = 5;
+const RAN_KEY = "wp-palette-recent";
+
+/** Group headings on an empty search, in this order. */
+const GROUPS = ["Go to", "Create", "Actions", "Library", "Categories"] as const;
+
+function groupOf(item: CommandItem): (typeof GROUPS)[number] {
+  if (item.kind === "route") return "Go to";
+  if (item.kind === "action") return item.id.startsWith("action:new-") ? "Create" : "Actions";
+  if (item.kind === "category") return "Categories";
+  return "Library";
+}
+
+function readRan(): string[] {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(RAN_KEY) ?? "[]");
+    return Array.isArray(raw) ? raw.filter((v): v is string => typeof v === "string").slice(0, MAX_RECENT) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeRan(ids: string[]): void {
+  try { localStorage.setItem(RAN_KEY, JSON.stringify(ids)); } catch { /* storage off */ }
+}
+
 interface Props {
   open: boolean;
   items: CommandItem[];
-  /** Bonus score added to items whose id is in this list. */
+  /** Ids opened lately elsewhere (newest first): shown under Recent and
+   *  given a bonus score when searching. */
   recentIds?: string[];
 }
 
@@ -29,28 +57,76 @@ const emit = defineEmits<{
 const query = ref("");
 const selectedIndex = ref(0);
 const inputRef = ref<HTMLInputElement | null>(null);
+const listRef = ref<HTMLElement | null>(null);
 
-const ranked = computed(() => {
-  if (!query.value.trim()) {
-    // Show top recents first, then everything else (capped for perf).
-    const recentSet = new Set(props.recentIds);
-    const recents = props.items.filter((i) => recentSet.has(i.id));
-    const rest = props.items.filter((i) => !recentSet.has(i.id));
-    return [...recents, ...rest].slice(0, 50);
+/** What was run from the palette lately, newest first. */
+const ran = ref<string[]>(readRan());
+
+/** Recent first (what the palette ran, then what was opened elsewhere). */
+const recentOrder = computed(() => [...new Set([...ran.value, ...props.recentIds])]);
+
+interface Section { title: string; items: CommandItem[] }
+
+/** Empty search: short groups, Recent on top. A search: one ranked list. */
+const sections = computed<Section[]>(() => {
+  if (query.value.trim()) {
+    const hits = rankCommands(props.items, query.value, recentOrder.value).slice(0, MAX_ROWS);
+    return hits.length ? [{ title: "", items: hits }] : [];
   }
-  return rankCommands(props.items, query.value, props.recentIds).slice(0, 50);
+  const byId = new Map(props.items.map((i) => [i.id, i]));
+  const recent = recentOrder.value
+    .map((id) => byId.get(id))
+    .filter((i): i is CommandItem => !!i)
+    .slice(0, MAX_RECENT);
+  const shown = new Set(recent.map((i) => i.id));
+  const groups = new Map<string, CommandItem[]>(GROUPS.map((g) => [g, []]));
+  for (const item of props.items) {
+    if (shown.has(item.id)) continue;
+    groups.get(groupOf(item))?.push(item);
+  }
+  let room = MAX_ROWS - recent.length;
+  const out: Section[] = recent.length ? [{ title: "Recent", items: recent }] : [];
+  for (const [title, items] of groups) {
+    const cut = items.slice(0, Math.max(0, room));
+    room -= cut.length;
+    if (cut.length) out.push({ title, items: cut });
+  }
+  return out;
+});
+
+/** Every row in display order, for the arrow keys. */
+const ranked = computed(() => sections.value.flatMap((sec) => sec.items));
+/** Where each section starts in `ranked`. */
+const starts = computed(() => {
+  let n = 0;
+  return sections.value.map((sec) => { const at = n; n += sec.items.length; return at; });
 });
 
 watch(() => props.open, async (open) => {
   if (open) {
     query.value = "";
     selectedIndex.value = 0;
+    ran.value = readRan();
     await nextTick();
     inputRef.value?.focus();
   }
 });
 
 watch(ranked, () => { selectedIndex.value = 0; });
+
+// Keep the row the arrow keys land on in view.
+watch(selectedIndex, async (idx) => {
+  await nextTick();
+  const row = listRef.value?.querySelectorAll<HTMLElement>('[data-test="cp-result"]')[idx];
+  row?.scrollIntoView?.({ block: "nearest" });
+});
+
+function run(item: CommandItem) {
+  ran.value = [item.id, ...ran.value.filter((id) => id !== item.id)].slice(0, MAX_RECENT);
+  writeRan(ran.value);
+  item.run();
+  emit("update:open", false);
+}
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") {
@@ -71,16 +147,12 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === "Enter") {
     e.preventDefault();
     const item = ranked.value[selectedIndex.value];
-    if (item) {
-      item.run();
-      emit("update:open", false);
-    }
+    if (item) run(item);
   }
 }
 
 function onClickItem(item: CommandItem) {
-  item.run();
-  emit("update:open", false);
+  run(item);
 }
 
 function onBackdropClick() {
@@ -109,25 +181,35 @@ function onBackdropClick() {
             placeholder="Search modules, routes, or run a command…"
             @keydown="onKeydown"
           />
-          <ul class="wp-cp__results" role="listbox" aria-label="Commands">
-            <li
-              v-for="(item, idx) in ranked"
-              :key="item.id"
-              data-test="cp-result"
-              role="option"
-              :class="['wp-cp__row', { 'wp-cp__row--active': idx === selectedIndex }]"
-              :aria-selected="idx === selectedIndex"
-              @click="onClickItem(item)"
-              @keydown.enter="onClickItem(item)"
-              @mouseenter="selectedIndex = idx"
-              @focusin="selectedIndex = idx"
+          <div ref="listRef" class="wp-cp__results" role="listbox" aria-label="Commands">
+            <div
+              v-for="(sec, si) in sections"
+              :key="sec.title || 'results'"
+              role="group"
+              :aria-labelledby="sec.title ? `wp-cp-group-${si}` : undefined"
+              :aria-label="sec.title ? undefined : 'Results'"
             >
-              <Icon :name="item.icon" :size="14" class="wp-cp__row-icon" />
-              <span class="wp-cp__row-label">{{ item.label }}</span>
-              <span v-if="item.subtitle" class="wp-cp__row-subtitle">{{ item.subtitle }}</span>
-            </li>
-            <li v-if="!ranked.length" class="wp-cp__empty">No matches.</li>
-          </ul>
+              <div v-if="sec.title" :id="`wp-cp-group-${si}`" class="wp-cp__group" data-test="cp-group">{{ sec.title }}</div>
+              <div
+                v-for="(item, i) in sec.items"
+                :key="item.id"
+                data-test="cp-result"
+                role="option"
+                tabindex="-1"
+                :class="['wp-cp__row', { 'wp-cp__row--active': starts[si] + i === selectedIndex }]"
+                :aria-selected="starts[si] + i === selectedIndex"
+                @click="onClickItem(item)"
+                @keydown.enter="onClickItem(item)"
+                @mouseenter="selectedIndex = starts[si] + i"
+                @focusin="selectedIndex = starts[si] + i"
+              >
+                <Icon :name="item.icon" :size="14" class="wp-cp__row-icon" />
+                <span class="wp-cp__row-label">{{ item.label }}</span>
+                <span v-if="item.subtitle" class="wp-cp__row-subtitle">{{ item.subtitle }}</span>
+              </div>
+            </div>
+            <div v-if="!ranked.length" class="wp-cp__empty">No matches.</div>
+          </div>
           <div class="wp-cp__hint">
             <Kbd keys="↑" size="sm" /><Kbd keys="↓" size="sm" /> navigate · <Kbd keys="Enter" size="sm" /> open · <Kbd keys="Esc" size="sm" /> close
           </div>
@@ -181,8 +263,17 @@ function onBackdropClick() {
   border-bottom-color: var(--wp-accent-500);
 }
 .wp-cp__results {
-  list-style: none; margin: 0; padding: var(--wp-space-2) 0;
+  margin: 0; padding: var(--wp-space-2) 0;
   overflow-y: auto; flex: 1;
+}
+/* Short group heading on an empty search (Recent, Go to, Create, …). */
+.wp-cp__group {
+  padding: var(--wp-space-4) var(--wp-space-5) var(--wp-space-2);
+  font-size: var(--wp-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--wp-text-dim);
 }
 .wp-cp__row {
   display: flex; align-items: center; gap: var(--wp-space-4);

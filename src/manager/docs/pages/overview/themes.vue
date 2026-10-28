@@ -47,7 +47,8 @@ import { LOOK_OPTIONS, PALETTE_OPTIONS } from "../../../stores/tweaksStore";
 
     <DocSection title="Accent colour">
       <p>
-        <b>Accent color</b> starts on <b>Theme's own</b>, which follows the colour theme. A preset or
+        <b>Accent color</b> starts on <b>Theme's own</b>, which follows the colour theme. The presets are
+        Indigo, Violet, Teal, Rose and Amber, and <b>Custom</b> opens a picker for any colour. A preset or
         custom accent you pick is kept when you change the colour theme. High contrast keeps its own
         accent so its text stays readable; your pick comes back when you leave it.
       </p>

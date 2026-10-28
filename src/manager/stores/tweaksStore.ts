@@ -114,6 +114,17 @@ export const DEFAULT_CUSTOM_HEX = ACCENT_PALETTES.indigo["--wp-accent-500"];
 
 export const ACCENT_OPTIONS: PresetAccent[] = ["indigo", "violet", "teal", "rose", "amber"];
 
+/** The name shown under each accent swatch (Tweaks + Settings › Appearance). */
+export const ACCENT_LABELS: Record<AccentName, string> = {
+  theme: "Theme's own",
+  indigo: "Indigo",
+  violet: "Violet",
+  teal: "Teal",
+  rose: "Rose",
+  amber: "Amber",
+  custom: "Custom",
+};
+
 export interface PaletteOption {
   id: PaletteName;
   label: string;

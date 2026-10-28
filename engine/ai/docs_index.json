@@ -140,7 +140,7 @@
     },
     {
      "title": "Accent colour",
-     "text": "Accent color starts on Theme's own, which follows the colour theme. A preset or custom accent you pick is kept when you change the colour theme. High contrast keeps its own accent so its text stays readable; your pick comes back when you leave it.\nThemes change the manager only. The canvas nodes keep ComfyUI's colours, so they sit well next to other nodes."
+     "text": "Accent color starts on Theme's own, which follows the colour theme. The presets are Indigo, Violet, Teal, Rose and Amber, and Custom opens a picker for any colour. A preset or custom accent you pick is kept when you change the colour theme. High contrast keeps its own accent so its text stays readable; your pick comes back when you leave it.\nThemes change the manager only. The canvas nodes keep ComfyUI's colours, so they sit well next to other nodes."
     }
    ]
   },

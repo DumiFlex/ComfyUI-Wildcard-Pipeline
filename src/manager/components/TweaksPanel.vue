@@ -3,11 +3,11 @@ import { computed } from "vue";
 import Button from "./ui/Button.vue";
 import Drawer from "./ui/Drawer.vue";
 import Toggle from "./ui/Toggle.vue";
-import Icon from "./ui/Icon.vue";
 import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
 import HsvPicker from "../../components/shared/HsvPicker.vue";
 import ThemeChoices from "./settings/ThemeChoices.vue";
 import {
+  ACCENT_LABELS,
   ACCENT_OPTIONS,
   DENSITY_OPTIONS,
   PALETTE_OPTIONS,
@@ -20,9 +20,9 @@ import { useUiStore } from "../stores/uiStore";
 
 const tweaks = useTweaksStore();
 const ui = useUiStore();
+/** "Theme's own" first, then the presets, then Custom. */
+const SWATCHES: AccentName[] = ["theme", ...ACCENT_OPTIONS, "custom"];
 /** The colour theme's own accent, for the "Theme's own" swatch. */
-/** "Theme's own" first, then the presets. */
-const SWATCHES = ["theme", ...ACCENT_OPTIONS] as const;
 const ownAccent = computed(() => PALETTE_OPTIONS.find((p) => p.id === tweaks.palette)?.swatch[ui.resolvedTheme][2]);
 
 const sidebarCollapsed = computed<boolean>({
@@ -36,6 +36,15 @@ const sidebarCollapsed = computed<boolean>({
 function onAccent(name: AccentName) {
   tweaks.setAccent(name);
 }
+/** The presets round a colour wheel, for Custom before a colour is picked. */
+const WHEEL = `conic-gradient(${[...ACCENT_OPTIONS, ACCENT_OPTIONS[0]].map((n) => SWATCH_PREVIEW[n]).join(", ")}) border-box`;
+/** Theme's own: half its accent; Custom: the picked colour once chosen
+ *  (a colour wheel until then); presets: their 500 stop. */
+function swatchStyle(name: AccentName): Record<string, string | undefined> {
+  if (name === "theme") return { "--own-accent": ownAccent.value };
+  if (name === "custom") return { background: tweaks.accent === "custom" ? tweaks.customHex : WHEEL };
+  return { background: SWATCH_PREVIEW[name] };
+}
 const densityOptions: SegmentedOption<Density>[] = DENSITY_OPTIONS.map((d) => ({ value: d, label: d[0].toUpperCase() + d.slice(1) }));
 
 function onDensity(d: Density) {
@@ -43,9 +52,6 @@ function onDensity(d: Density) {
 }
 function onCustomHex(hex: string) {
   tweaks.setCustomHex(hex);
-}
-function pickCustomAccent() {
-  tweaks.setAccent("custom");
 }
 </script>
 
@@ -77,27 +83,18 @@ function pickCustomAccent() {
             type="button"
             role="radio"
             :aria-checked="tweaks.accent === name"
-            class="wp-tweaks__swatch"
-            :class="{ 'is-active': tweaks.accent === name, 'wp-tweaks__swatch--theme': name === 'theme' }"
-            :style="name === 'theme' ? { '--own-accent': ownAccent } : { background: SWATCH_PREVIEW[name] }"
-            :aria-label="name === 'theme' ? 'Accent: the colour theme\'s own' : `Accent: ${name}`"
-            :title="name === 'theme' ? 'Theme\'s own' : name"
+            class="wp-tweaks__accent"
+            :class="{ 'is-active': tweaks.accent === name }"
             :data-test="`tweaks-accent-${name}`"
             @click="onAccent(name)"
-          />
-          <button
-            type="button"
-            role="radio"
-            :aria-checked="tweaks.accent === 'custom'"
-            class="wp-tweaks__swatch wp-tweaks__swatch--custom"
-            :class="{ 'is-active': tweaks.accent === 'custom' }"
-            :style="{ background: tweaks.customHex }"
-            aria-label="Accent: custom"
-            title="Custom"
-            data-test="tweaks-accent-custom"
-            @click="pickCustomAccent"
           >
-            <Icon name="pi-palette" />
+            <span
+              class="wp-tweaks__swatch"
+              :class="{ 'wp-tweaks__swatch--theme': name === 'theme' }"
+              :style="swatchStyle(name)"
+              aria-hidden="true"
+            />
+            <span class="wp-tweaks__accent-name">{{ ACCENT_LABELS[name] }}</span>
           </button>
         </div>
         <div v-if="tweaks.accent === 'custom' && !tweaks.accentLocked" class="wp-tweaks__custom-picker">
@@ -163,19 +160,36 @@ function pickCustomAccent() {
   color: var(--wp-text-dim);
 }
 
-.wp-tweaks__swatches { display: flex; gap: var(--wp-space-4); flex-wrap: wrap; }
-.wp-tweaks__swatch {
+/* Each accent is a swatch with its name under it, four to a row. */
+.wp-tweaks__swatches { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--wp-space-4) var(--wp-space-2); }
+.wp-tweaks__accent {
   appearance: none;
-  width: 32px;
-  height: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--wp-text-muted);
+  font: inherit;
+  font-size: var(--wp-text-xs);
+  cursor: pointer;
+}
+.wp-tweaks__accent:hover,
+.wp-tweaks__accent.is-active { color: var(--wp-text); }
+.wp-tweaks__accent:focus-visible { outline: none; }
+.wp-tweaks__accent:focus-visible .wp-tweaks__swatch { box-shadow: var(--wp-focus-ring); }
+.wp-tweaks__accent-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-tweaks__swatch {
+  width: 28px;
+  height: 28px;
   border-radius: var(--wp-radius-cap, 999px);
   border: 2px solid var(--wp-border);
-  cursor: pointer;
-  padding: 0;
   transition: border-color 120ms ease, transform 120ms ease;
 }
-.wp-tweaks__swatch:hover { transform: scale(1.05); }
-.wp-tweaks__swatch.is-active {
+.wp-tweaks__accent:hover .wp-tweaks__swatch { transform: scale(1.05); }
+.wp-tweaks__accent.is-active .wp-tweaks__swatch {
   border-color: var(--wp-text);
   box-shadow: 0 0 0 2px var(--wp-bg-1), 0 0 0 4px var(--wp-accent-500);
 }
@@ -184,12 +198,6 @@ function pickCustomAccent() {
   background: linear-gradient(135deg, var(--own-accent) 50%, var(--wp-bg-3) 50%) border-box;
 }
 .wp-tweaks__note { margin: 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
-.wp-tweaks__swatch--custom {
-  display: grid;
-  place-items: center;
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 12px;
-}
 .wp-tweaks__custom-picker {
   margin-top: var(--wp-space-4);
 }

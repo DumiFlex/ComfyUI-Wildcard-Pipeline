@@ -33,6 +33,12 @@ describe("TweaksPanel.vue", () => {
     expect(wrap.find('[data-test="tweaks-accent-custom"]').exists()).toBe(true);
   });
 
+  it("names every accent colour", () => {
+    const wrap = mountOpen();
+    const names = wrap.findAll('[data-test^="tweaks-accent-"]').map((b) => b.text());
+    expect(names).toEqual(["Theme's own", "Indigo", "Violet", "Teal", "Rose", "Amber", "Custom"]);
+  });
+
   it("clicking the violet swatch calls setAccent('violet') and writes the palette", async () => {
     const wrap = mountOpen();
     const tweaks = useTweaksStore();
