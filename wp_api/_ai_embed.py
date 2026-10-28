@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import urllib.parse
 from collections import OrderedDict
 from typing import Any
@@ -35,6 +36,70 @@ _QUERY_CACHE: OrderedDict[tuple[str, str], list[float]] = OrderedDict()
 _QUERY_CACHE_SIZE = 256
 #: Index ids with a fill running, so only one runs per index.
 _filling: set[int] = set()
+#: First and longest wait before the background fill tries a failing
+#: embedding server again. Opening the settings polls the index and every
+#: chat turn starts a fill, so without a wait a stopped server meant a failed
+#: request (and a console line) every few seconds.
+RETRY_FIRST_S = 30.0
+RETRY_MAX_S = 600.0
+_now = time.monotonic
+
+
+class _Failing:
+    """An embedding server+model that failed: what it said and when to try
+    again. Gone once a request to it works."""
+
+    def __init__(self) -> None:
+        self.message = ""
+        self.fails = 0
+        self.retry_at = 0.0
+
+
+#: Keyed by (embedding address, model), so changing either starts fresh.
+_failing: dict[tuple[str, str], _Failing] = {}
+
+
+def _key(cfg: dict[str, Any]) -> tuple[str, str]:
+    return (str(_cfg(cfg).get("base_url") or ""), str(cfg.get("embed_model") or ""))
+
+
+def _failed(cfg: dict[str, Any], message: str) -> None:
+    """Remember a failure and wait longer before the next try. Logs once
+    per new message, not on every retry."""
+    st = _failing.setdefault(_key(cfg), _Failing())
+    st.fails += 1
+    st.retry_at = _now() + min(RETRY_FIRST_S * 2 ** (st.fails - 1), RETRY_MAX_S)
+    if message != st.message:
+        st.message = message
+        log.warning("wildcard-pipeline: meaning search paused: %s "
+                    "(keyword search still works; retrying in the background)", message)
+    else:
+        log.debug("wildcard-pipeline: embedding still failing (%d tries): %s",
+                  st.fails, message)
+
+
+def _worked(cfg: dict[str, Any]) -> None:
+    if _failing.pop(_key(cfg), None) is not None:
+        log.info("wildcard-pipeline: meaning search works again")
+
+
+def waiting(cfg: dict[str, Any]) -> bool:
+    """Whether the embedding server failed and its next try is still due."""
+    st = _failing.get(_key(cfg))
+    return st is not None and _now() < st.retry_at
+
+
+def last_error(cfg: dict[str, Any]) -> str | None:
+    """What the embedding server said when it last failed, until it works."""
+    st = _failing.get(_key(cfg))
+    return st.message if st is not None else None
+
+
+def retry_now(cfg: dict[str, Any]) -> None:
+    """Let the next fill try at once (Rebuild).
+    A still-failing server logs again then, so a retry the user asked for
+    shows its outcome."""
+    _failing.pop(_key(cfg), None)
 
 
 def enabled(cfg: dict[str, Any]) -> bool:
@@ -128,11 +193,16 @@ async def query_vector(cfg: dict[str, Any], text: str) -> list[float] | None:
     if key in _QUERY_CACHE:
         _QUERY_CACHE.move_to_end(key)
         return _QUERY_CACHE[key]
+    # A server that just failed isn't asked again on every search: each try
+    # would cost the chat a connect timeout.
+    if waiting(cfg):
+        return None
     try:
         vec = (await embed(cfg, [key[1]]))[0]
     except client.AIError as e:
-        log.info("wildcard-pipeline: query embedding failed: %s", e.message)
+        _failed(cfg, e.message)
         return None
+    _worked(cfg)
     _QUERY_CACHE[key] = vec
     while len(_QUERY_CACHE) > _QUERY_CACHE_SIZE:
         _QUERY_CACHE.popitem(last=False)
@@ -141,7 +211,8 @@ async def query_vector(cfg: dict[str, Any], text: str) -> list[float] | None:
 
 async def fill(cfg: dict[str, Any], idx: ai_index.Index, *, max_batches: int = 1000) -> int:
     """Embed the items that have no current vector, a batch at a time.
-    Returns how many were embedded; stops at the first error."""
+    Returns how many were embedded; stops at the first error, which is
+    logged once and makes the next background fill wait (`_failed`)."""
     model = cfg["embed_model"]
     done = 0
     for _ in range(max_batches):
@@ -151,8 +222,9 @@ async def fill(cfg: dict[str, Any], idx: ai_index.Index, *, max_batches: int = 1
         try:
             vecs = await embed(cfg, [t for _i, _s, t in todo])
         except client.AIError as e:
-            log.info("wildcard-pipeline: embedding the library stopped: %s", e.message)
+            _failed(cfg, e.message)
             break
+        _worked(cfg)
         idx.put_vectors(model, [(i, s, v) for (i, s, _t), v in zip(todo, vecs, strict=True)])
         done += len(todo)
     return done
@@ -160,8 +232,10 @@ async def fill(cfg: dict[str, Any], idx: ai_index.Index, *, max_batches: int = 1
 
 def fill_in_background(cfg: dict[str, Any], idx: ai_index.Index) -> bool:
     """Start filling vectors unless a fill already runs for this index.
-    Detached from the request: Stop or a closed tab doesn't cut it short."""
-    if not enabled(cfg) or id(idx) in _filling or not idx.embed_todo(cfg["embed_model"], 1):
+    Detached from the request: Stop or a closed tab doesn't cut it short.
+    Skipped while a failed embedding server's retry wait runs."""
+    if not enabled(cfg) or id(idx) in _filling or waiting(cfg) \
+            or not idx.embed_todo(cfg["embed_model"], 1):
         return False
     _filling.add(id(idx))
 
@@ -203,6 +277,8 @@ async def check(cfg: dict[str, Any]) -> dict[str, Any] | None:
     except client.AIError as e:
         out["error"] = e.message
         return out
+    # It answers now, so the background fill needn't sit out its wait.
+    _worked(cfg)
     out["ok"] = True
     out["dims"] = len(vec)
     if cfg["api"] == "ollama" and _cfg(cfg)["base_url"] == cfg["base_url"]:

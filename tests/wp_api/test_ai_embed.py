@@ -1,10 +1,20 @@
 """Embedding requests per wire format, and Test connection's swap check."""
 from __future__ import annotations
 
+import asyncio
+import logging
+
 import pytest
 from aiohttp import web
 
 from wp_api import _ai_client, _ai_embed
+
+
+@pytest.fixture(autouse=True)
+def _no_failures():
+    _ai_embed._failing.clear()
+    yield
+    _ai_embed._failing.clear()
 
 
 @pytest.fixture
@@ -81,3 +91,89 @@ async def test_check_spots_ollama_unloading_the_chat_model(embed_server):
     embed_server.state["loaded"] = ["nomic-embed-text:latest"]
     assert (await _ai_embed.check(cfg))["swapped"] is True
     assert await _ai_embed.check({**cfg, "embed_model": ""}) is None
+
+
+class _Idx:
+    """Just what the background fill touches of an index."""
+
+    def __init__(self, n: int) -> None:
+        self.todo = [(i, "s", f"text {i}") for i in range(n)]
+        self.vectors: list = []
+
+    def embed_todo(self, _model, limit):
+        return self.todo[:limit]
+
+    def put_vectors(self, _model, rows):
+        self.vectors += rows
+        done = {i for i, _s, _v in rows}
+        self.todo = [t for t in self.todo if t[0] not in done]
+
+
+async def _settle():
+    while _ai_embed._filling:
+        await asyncio.sleep(0.01)
+
+
+async def test_a_stopped_server_logs_once_and_backs_off(embed_server, caplog, monkeypatch):
+    caplog.set_level(logging.DEBUG, logger=_ai_embed.__name__)
+    now = [1000.0]
+    monkeypatch.setattr(_ai_embed, "_now", lambda: now[0])
+    cfg = _cfg(embed_server, "openai", embed_base_url="http://127.0.0.1:9/v1")
+    idx = _Idx(3)
+
+    assert _ai_embed.fill_in_background(cfg, idx)
+    await _settle()
+    assert _ai_embed.waiting(cfg)
+    assert "couldn't connect" in (_ai_embed.last_error(cfg) or "").lower()
+    # Polling the index (the settings page, every chat turn) doesn't retry.
+    for _ in range(5):
+        assert not _ai_embed.fill_in_background(cfg, idx)
+    assert await _ai_embed.query_vector(cfg, "warm") is None
+
+    now[0] += _ai_embed.RETRY_FIRST_S + 1
+    assert _ai_embed.fill_in_background(cfg, idx)
+    await _settle()
+    # Waits twice as long after the second failure.
+    now[0] += _ai_embed.RETRY_FIRST_S + 1
+    assert _ai_embed.waiting(cfg)
+    now[0] += _ai_embed.RETRY_FIRST_S
+    assert not _ai_embed.waiting(cfg)
+
+    warnings = [r for r in caplog.records if r.levelno >= logging.INFO]
+    assert len(warnings) == 1
+    assert "meaning search paused" in warnings[0].getMessage()
+
+
+async def test_the_wait_is_capped(embed_server, monkeypatch):
+    now = [0.0]
+    monkeypatch.setattr(_ai_embed, "_now", lambda: now[0])
+    cfg = _cfg(embed_server, "openai")
+    for _ in range(20):
+        _ai_embed._failed(cfg, "down")
+    assert _ai_embed._failing[_ai_embed._key(cfg)].retry_at == _ai_embed.RETRY_MAX_S
+
+
+async def test_recovery_logs_once_and_clears_the_error(embed_server, caplog):
+    caplog.set_level(logging.INFO, logger=_ai_embed.__name__)
+    cfg = _cfg(embed_server, "openai")
+    _ai_embed._failed(cfg, "down")
+    _ai_embed.retry_now(cfg)
+    assert not _ai_embed.waiting(cfg)
+    _ai_embed._failed(cfg, "down")
+    _ai_embed._failing[_ai_embed._key(cfg)].retry_at = 0
+    idx = _Idx(2)
+    assert await _ai_embed.fill(cfg, idx) == 2
+    assert _ai_embed.last_error(cfg) is None
+    msgs = [r.getMessage() for r in caplog.records]
+    # retry_now forgot the first failure, so the retry's failure printed again.
+    assert sum("paused" in m for m in msgs) == 2
+    assert sum("works again" in m for m in msgs) == 1
+
+
+async def test_a_new_message_logs_again(embed_server, caplog):
+    caplog.set_level(logging.INFO, logger=_ai_embed.__name__)
+    cfg = _cfg(embed_server, "openai")
+    _ai_embed._failed(cfg, "down")
+    _ai_embed._failed(cfg, "down")
+    _ai_embed._failed(cfg, "model not loaded")
+    assert [r.levelno for r in caplog.records] == [logging.WARNING, logging.WARNING]

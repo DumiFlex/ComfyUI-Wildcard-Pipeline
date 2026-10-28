@@ -1022,6 +1022,9 @@ export interface AiIndexStatus {
   vectors: number;
   /** Vectors are being made right now. */
   filling: boolean;
+  /** Why vectors stopped coming in (the embedding server failed); null once
+   *  it works again. The server retries on its own, waiting longer each time. */
+  embed_error?: string | null;
 }
 
 /** One earlier turn of an AI conversation, sent back with a follow-up so the
