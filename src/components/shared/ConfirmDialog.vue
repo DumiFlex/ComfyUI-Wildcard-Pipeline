@@ -12,6 +12,7 @@
  *              reset overrides)
  */
 import { onBeforeUnmount, watch } from "vue";
+import WpButton from "./WpButton.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -87,19 +88,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
         </div>
         <p v-if="body" class="wp-confirm__body" data-test="confirm-body">{{ body }}</p>
         <div class="wp-confirm__foot">
-          <button
-            type="button"
-            class="wp-confirm__btn"
-            data-test="confirm-cancel"
-            @click="onCancel"
-          >{{ cancelLabel }}</button>
-          <button
-            type="button"
-            class="wp-confirm__btn wp-confirm__btn--primary"
-            :class="{ 'wp-confirm__btn--danger': variant === 'danger' }"
-            data-test="confirm-confirm"
-            @click="onConfirm"
-          >{{ confirmLabel }}</button>
+          <WpButton data-test="confirm-cancel" @click="onCancel">{{ cancelLabel }}</WpButton>
+          <WpButton :variant="variant === 'danger' ? 'danger' : 'primary'" data-test="confirm-confirm" @click="onConfirm">{{ confirmLabel }}</WpButton>
         </div>
       </div>
     </div>
@@ -129,7 +119,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   font-family: var(--wp-font-sans, sans-serif);
 }
 .wp-confirm {
-  background: var(--wp-bg2);
+  background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
   width: 380px;
@@ -158,7 +148,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 }
 .wp-confirm__body {
   font: 12px/1.5 var(--wp-font-sans);
-  color: var(--wp-text-muted, var(--wp-text2));
+  color: var(--wp-text-muted);
   margin: 0;
   padding: 0 16px 14px;
 }
@@ -167,39 +157,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   justify-content: flex-end;
   gap: 8px;
   padding: 10px 14px;
-  background: var(--wp-bg3);
+  background: var(--wp-bg-3);
   border-top: 1px solid var(--wp-border);
-}
-.wp-confirm__btn {
-  padding: 6px 14px;
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  background: transparent;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 11px var(--wp-font-sans);
-  cursor: pointer;
-}
-.wp-confirm__btn:hover {
-  border-color: var(--wp-border-soft, var(--wp-border));
-  color: var(--wp-text);
-}
-.wp-confirm__btn--primary {
-  border-color: var(--wp-accent);
-  background: var(--wp-accent);
-  color: white;
-}
-.wp-confirm__btn--primary:hover {
-  background: var(--wp-accent2, var(--wp-accent));
-  border-color: var(--wp-accent2, var(--wp-accent));
-  color: white;
-}
-.wp-confirm__btn--danger {
-  border-color: var(--wp-danger, var(--wp-red));
-  background: var(--wp-danger, var(--wp-red));
-  color: white;
-}
-.wp-confirm__btn--danger:hover {
-  background: var(--wp-red);
-  border-color: var(--wp-red);
 }
 </style>

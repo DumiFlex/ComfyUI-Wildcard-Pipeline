@@ -112,7 +112,7 @@
   .wp-fvm,
   .wp-pg
 ) {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+  box-shadow: var(--wp-shadow-sm) !important;
   backdrop-filter: blur(2px) !important;
 }
 

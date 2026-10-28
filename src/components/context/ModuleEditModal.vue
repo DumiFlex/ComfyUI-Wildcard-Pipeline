@@ -563,10 +563,6 @@ function cancel() {
   />
 </template>
 
-<style>
-@import "../shared/theme.css";
-</style>
-
 <style scoped>
 /* All styling now lives in the per-kind v2 modal components
  * (WildcardInstanceModal, FixedValuesInstanceModal, etc.). The

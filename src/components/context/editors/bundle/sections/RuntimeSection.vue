@@ -4,6 +4,9 @@
  *  the BundleHeader button visual. Stateless: parent calls the same
  *  `toggleBundleLock` / `toggleBundleInternal` handlers the header
  *  buttons use. `null` state hides the button entirely. */
+import WpSwitch from "../../../../shared/WpSwitch.vue";
+import { vTooltip } from "../../../../shared/tooltip";
+
 const props = withDefaults(
   defineProps<{
     lockState?: "all" | "none" | "partial" | null;
@@ -20,42 +23,36 @@ const emit = defineEmits<{
 <template>
   <section class="runtime">
     <span class="runtime__label">Runtime</span>
-    <button
+    <WpSwitch
       v-if="props.lockState !== null"
-      type="button"
-      class="toggle"
-      :class="{ 'toggle--on': props.lockState === 'all', 'toggle--partial': props.lockState === 'partial' }"
-      data-test="bdm-toggle-lock"
-      role="switch"
-      :aria-checked="props.lockState === 'all'"
-      :title="props.lockState === 'all'
+      v-tooltip="props.lockState === 'all'
         ? 'Unlock seeds on all lockable children'
         : props.lockState === 'partial'
           ? 'Lock seeds on all lockable children (some already locked)'
           : 'Lock seeds on all lockable children — freezes each at its current roll'"
-      @click="emit('toggle-lock')"
-    >
-      <i class="pi pi-lock" aria-hidden="true" />
-      Lock all picks
-    </button>
-    <button
+      variant="chip"
+      icon="pi-lock"
+      label="Lock all picks"
+      data-test="bdm-toggle-lock"
+      :model-value="props.lockState === 'all'"
+      :mixed="props.lockState === 'partial'"
+      @update:model-value="emit('toggle-lock')"
+    />
+    <WpSwitch
       v-if="props.internalState !== null"
-      type="button"
-      class="toggle"
-      :class="{ 'toggle--on': props.internalState === 'all', 'toggle--partial': props.internalState === 'partial' }"
-      data-test="bdm-toggle-internal"
-      role="switch"
-      :aria-checked="props.internalState === 'all'"
-      :title="props.internalState === 'all'
+      v-tooltip="props.internalState === 'all'
         ? 'Clear internal on all children'
         : props.internalState === 'partial'
           ? 'Mark all children internal (some already)'
           : 'Mark all children internal — hides them from PromptAssembler'"
-      @click="emit('toggle-internal')"
-    >
-      <i class="pi pi-eye-slash" aria-hidden="true" />
-      Hide all from prompt
-    </button>
+      variant="chip"
+      icon="pi-eye-slash"
+      label="Hide all from prompt"
+      data-test="bdm-toggle-internal"
+      :model-value="props.internalState === 'all'"
+      :mixed="props.internalState === 'partial'"
+      @update:model-value="emit('toggle-internal')"
+    />
     <span v-if="props.lockState === null && props.internalState === null" class="runtime__empty">
       No runtime-applicable children
     </span>
@@ -66,11 +63,4 @@ const emit = defineEmits<{
 .runtime { padding: 10px 16px; background: var(--wp-bg2); border-bottom: 1px solid var(--wp-border-soft, var(--wp-border)); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .runtime__label { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: 0.14em; color: var(--wp-text-dim, var(--wp-text3)); }
 .runtime__empty { font: 10px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); font-style: italic; }
-.toggle { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border: 1px solid var(--wp-border); border-radius: 3px; font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); cursor: pointer; background: var(--wp-bg-deep, var(--wp-bg)); }
-.toggle:hover { border-color: var(--wp-border-soft, var(--wp-border)); }
-.toggle .pi { font-size: 11px; color: var(--wp-text-dim, var(--wp-text3)); }
-.toggle--on { border-color: var(--wp-accent); color: var(--wp-accent-text, var(--wp-text)); background: rgba(99, 102, 241, 0.10); }
-.toggle--on .pi { color: var(--wp-accent-text, var(--wp-text)); }
-.toggle--partial { border-style: dashed; border-color: var(--wp-accent); color: var(--wp-accent); background: color-mix(in srgb, var(--wp-accent) 6%, transparent); }
-.toggle--partial .pi { color: var(--wp-accent); }
 </style>

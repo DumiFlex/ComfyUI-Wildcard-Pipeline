@@ -6,6 +6,7 @@
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import SeedLockControls from "../../_shared/SeedLockControls.vue";
+import WpSwitch from "../../../../shared/WpSwitch.vue";
 
 const props = defineProps<{ module: ModuleEntry; frameActive?: boolean }>();
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
@@ -27,32 +28,24 @@ function onHoldClick(): void {
   <section class="runtime">
     <span class="runtime__label">Runtime</span>
     <SeedLockControls :module="module" @update="emit('update', $event)" />
-    <button
-      type="button"
-      class="toggle"
-      :class="{ 'toggle--on': internal }"
+    <WpSwitch
+      variant="chip"
+      icon="pi-eye-slash"
+      label="Hide from prompt"
       data-test="runtime-hide"
-      role="switch"
-      :aria-checked="internal"
-      :disabled="frameActive || undefined"
-      @click="onHideClick"
-    >
-      <i class="pi pi-eye-slash" aria-hidden="true" />
-      Hide from prompt
-    </button>
-    <button
-      type="button"
-      class="toggle"
-      :class="{ 'toggle--on': held }"
+      :model-value="internal"
+      :disabled="frameActive"
+      @update:model-value="onHideClick"
+    />
+    <WpSwitch
+      variant="chip"
+      icon="pi-link"
+      label="Hold across run"
       data-test="runtime-hold"
-      role="switch"
-      :aria-checked="held"
-      :disabled="frameActive || undefined"
-      @click="onHoldClick"
-    >
-      <i class="pi pi-link" aria-hidden="true" />
-      Hold across run
-    </button>
+      :model-value="held"
+      :disabled="frameActive"
+      @update:model-value="onHoldClick"
+    />
     <p
       v-if="frameActive"
       class="runtime__frame-hint"
@@ -76,30 +69,6 @@ function onHoldClick(): void {
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: var(--wp-text-dim, var(--wp-text3));
-}
-.toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 10px;
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  font: 11px var(--wp-font-sans);
-  color: var(--wp-text-muted, var(--wp-text2));
-  cursor: pointer;
-  background: var(--wp-bg-deep, var(--wp-bg));
-}
-.toggle:hover { border-color: var(--wp-border-soft, var(--wp-border)); }
-.toggle .pi { font-size: 11px; color: var(--wp-text-dim, var(--wp-text3)); }
-.toggle--on {
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-text));
-  background: rgba(99, 102, 241, 0.10);
-}
-.toggle--on .pi { color: var(--wp-accent-text, var(--wp-text)); }
-.toggle:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 .runtime__frame-hint {
   margin: 4px 0 0;

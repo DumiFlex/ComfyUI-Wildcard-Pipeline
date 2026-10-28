@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SearchInput from "@/components/shared/SearchInput.vue";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Icon, { ICON_SM } from "../components/ui/Icon.vue";
@@ -187,10 +188,6 @@ const filteredSections = computed(() => {
   })).filter((s) => s.items.length > 0);
 });
 
-function onSearchKey(e: KeyboardEvent): void {
-  if (e.key === "Escape") searchQuery.value = "";
-}
-
 // ── Task 10: Per-kind count badges ────────────────────────────────────────
 const countByKey = computed<Record<string, number>>(() => {
   const all = moduleStore.catalog;
@@ -213,17 +210,15 @@ const countByKey = computed<Record<string, number>>(() => {
 <template>
   <nav class="wp-sidebar" :data-collapsed="ui.sidebarCollapsed || undefined">
     <!-- Task 9: Search input — hidden in collapsed mode -->
-    <div v-if="!ui.sidebarCollapsed" class="wp-sidebar__search">
-      <Icon name="pi-search" :size="12" />
-      <input
-        v-model="searchQuery"
-        type="text"
-        placeholder="Filter nav…"
-        class="wp-sidebar__search-input"
-        aria-label="Filter sidebar nav"
-        @keydown="onSearchKey"
-      />
-    </div>
+    <SearchInput
+      v-if="!ui.sidebarCollapsed"
+      v-model="searchQuery"
+      class="wp-sidebar__search"
+      size="sm"
+      placeholder="Filter nav…"
+      aria-label="Filter sidebar nav"
+      clear-label="Clear filter"
+    />
 
     <template v-for="section in filteredSections" :key="section.label">
       <div v-if="!ui.sidebarCollapsed" class="wp-sidebar__section">
@@ -377,25 +372,7 @@ const countByKey = computed<Record<string, number>>(() => {
 }
 
 /* ── Task 9: Search input ──────────────────────────────────────────────── */
-.wp-sidebar__search {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-2);
-  padding: var(--wp-space-3) var(--wp-space-4);
-  margin: var(--wp-space-3) 0;
-  background: var(--wp-bg-2);
-  border-radius: var(--wp-radius-sm);
-  border: 1px solid var(--wp-border);
-}
-.wp-sidebar__search-input {
-  border: none;
-  outline: none;
-  background: transparent;
-  color: var(--wp-text);
-  font-size: var(--wp-text-sm);
-  width: 100%;
-  font-family: var(--wp-font);
-}
+.wp-sidebar__search { margin: var(--wp-space-3) 0; }
 
 /* ── Task 10: Count badge ──────────────────────────────────────────────── */
 .wp-nav__count {

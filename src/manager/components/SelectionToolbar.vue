@@ -8,9 +8,9 @@
  * `tags` is a new sub-category — emitted via apply-tag too; the host decides to
  * auto-create it (in Ungrouped).
  */
+import WpNumber from "@/components/shared/WpNumber.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "./ui/Button.vue";
-import Input from "./ui/Input.vue";
 import { UNGROUPED_HUE } from "../../components/shared/axis-color";
 
 interface Props {
@@ -221,9 +221,8 @@ function applyWeight() {
           Set weight
         </Button>
         <div v-if="openMenu === 'weight'" class="wpc-seltoolbar__menu wpc-seltoolbar__menu--weight" role="menu">
-          <Input
-            v-model="weight"
-            type="number"
+          <WpNumber v-model="weight"
+            commit="input"
             size="sm"
             :min="0"
             :step="0.1"
@@ -361,7 +360,7 @@ function applyWeight() {
   border: 1px solid var(--wp-border);
   border-radius: 8px;
   background: var(--wp-bg-1);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--wp-shadow-md);
 }
 .wpc-seltoolbar__menu--weight { flex-direction: row; align-items: center; min-width: 0; }
 .wpc-seltoolbar__menu--weight :deep(.wp-input-group) { width: 96px; }

@@ -245,7 +245,7 @@ describe("useUnsavedGuard", () => {
 // Integration test: WildcardEditor snapshot-baseline detection
 // ---------------------------------------------------------------------------
 // This test verifies that typing into the name field makes the editor
-// dirty and the guard shows the ConfirmDialog on navigation.
+// dirty and the guard shows the ConfirmModal on navigation.
 vi.mock("../../api/client", () => ({
   api: {
     modules: {
@@ -299,9 +299,9 @@ describe("WildcardEditor + useUnsavedGuard integration", () => {
     router.push("/wildcards").catch(() => { /* may abort */ });
     await waitForGuard();
 
-    // ConfirmDialog uses <Teleport to="body"> so it renders into document.body,
+    // ConfirmModal (via Modal) uses <Teleport to="body"> so it renders into document.body,
     // not inside the wrap. Check document.body directly.
-    const overlay = document.body.querySelector('[data-test="confirm-overlay"]');
+    const overlay = document.body.querySelector('[data-test="modal-backdrop"]');
     expect(overlay).not.toBeNull();
 
     // Clean up: dismiss the dialog so the guard resolves

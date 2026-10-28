@@ -20,6 +20,7 @@
  * items array before handing it to ModuleListView gives us the OR
  * we actually want.
  */
+import CopyButton from "@/components/shared/CopyButton.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { libraryVersion, markDeleted } from "../composables/useLibraryChanged";
 import { useRoute, useRouter } from "vue-router";
@@ -38,7 +39,7 @@ import EmptyState from "../components/ui/EmptyState.vue";
 import { useToast } from "../composables/useToast";
 import { api } from "../api/client";
 import { useCategoryStore } from "../stores/categoryStore";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "../components/ui/Chip.vue";
 import { categoryAssignOptions, categoryFilterOptions } from "../utils/category-options";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
@@ -280,15 +281,6 @@ function editRow(row: LibraryRow) {
   router.push({ path: `/${meta.slug}/${row.id}/edit`, query: { returnTo } });
 }
 
-async function copyId(id: string) {
-  try {
-    await navigator.clipboard.writeText(id);
-    toast.push({ severity: "info", summary: "ID copied", detail: id, life: 1500 });
-  } catch {
-    toast.push({ severity: "error", summary: "Copy failed", life: 2000 });
-  }
-}
-
 async function fav(row: LibraryRow) {
   try {
     // Server toggles the flag itself — no boolean argument needed.
@@ -404,6 +396,7 @@ function refresh() {
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-objects-column"
         headline="Library is empty"
         body="Create a module from any kind to populate your library."
@@ -510,11 +503,12 @@ function refresh() {
     <template #name="{ row }">
       <div class="wp-row-name">
         <span class="wp-row-name__text" @click="editRow(row)">{{ row.name }}</span>
-        <span
+        <CopyButton
           class="wp-id"
-          :title="`Click to copy ${row.id}`"
-          @click.stop="copyId(row.id)"
-        >{{ row.id }}</span>
+          :text="row.id"
+          :label="`Copy ID ${row.id}`"
+          @click.stop
+        >{{ row.id }}</CopyButton>
       </div>
     </template>
 
@@ -540,12 +534,12 @@ function refresh() {
         <span v-else class="wp-dim">{{ row.kind }}</span>
       </td>
       <td>
-        <CategoryChip
+        <Chip
           v-if="row.category_id && categoryById.get(row.category_id)"
-          :name="categoryById.get(row.category_id)!.name"
+         
           :color="categoryById.get(row.category_id)!.color"
           :icon="categoryById.get(row.category_id)!.icon"
-        />
+        >{{ categoryById.get(row.category_id)!.name }}</Chip>
         <span v-else class="wp-dim">—</span>
       </td>
       <td><ValidityIcon :issues="issuesFor(row)" /></td>
@@ -553,7 +547,7 @@ function refresh() {
 
     <template #actions="{ row }">
       <Button variant="ghost" size="sm" icon="pi-pencil" aria-label="Edit" @click="editRow(row)" />
-      <SendToTestRunner :kind="(row.kind as TestRunnerKind)" :id="row.id" compact />
+      <SendToTestRunner :id="row.id" :kind="(row.kind as TestRunnerKind)" compact />
       <Button variant="ghost" size="sm" icon="pi-trash" aria-label="Delete" @click="del(row)" />
     </template>
 

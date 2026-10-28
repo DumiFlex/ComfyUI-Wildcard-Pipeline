@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CloseButton from "@/components/shared/CloseButton.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { libraryVersion } from "../composables/useLibraryChanged";
 import { useRouter } from "vue-router";
@@ -9,7 +10,7 @@ import RelativeDate from "../components/RelativeDate.vue";
 import { api } from "../api/client";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType } from "../api/types";
 import { useCategoryStore } from "../stores/categoryStore";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "../components/ui/Chip.vue";
 import { useRecentStore } from "../stores/recentStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useEngagementStore, measureSubstance } from "../stores/engagementStore";
@@ -552,12 +553,12 @@ onMounted(async () => {
             v-for="issue in healthIssues"
             :key="issue.id"
             class="dashboard__health-row"
-            @click="router.push(issue.route)"
-            @keydown.enter.prevent="router.push(issue.route)"
-            @keydown.space.prevent="router.push(issue.route)"
             tabindex="0"
             role="button"
             :aria-label="`${issue.label}. Open ${issue.route}`"
+            @click="router.push(issue.route)"
+            @keydown.enter.prevent="router.push(issue.route)"
+            @keydown.space.prevent="router.push(issue.route)"
           >
             <strong>{{ issue.label }}</strong>
             <span class="dashboard__health-detail">{{ issue.detail }}</span>
@@ -579,12 +580,9 @@ onMounted(async () => {
             <h3 class="dashboard__start-title">New here?</h3>
             <p class="dashboard__start-sub">Start with the introduction — it shows how the pieces fit together. From there, the Quick start gets you a runnable graph in a couple of minutes.</p>
           </div>
-          <Button
+          <CloseButton
             class="dashboard__start-dismiss"
-            variant="ghost"
-            icon="pi-times"
-            aria-label="Dismiss intro"
-            title="Dismiss — the docs stay in the sidebar"
+            label="Dismiss: the docs stay in the sidebar"
             data-test="dashboard-getting-started-dismiss"
             @click="dismissOnboarding"
           />
@@ -664,12 +662,12 @@ onMounted(async () => {
             <Icon :name="row.icon" />
           </span>
           <span class="dashboard__row-name">{{ row.name }}</span>
-          <CategoryChip
+          <Chip
             v-if="categoryFor(row)"
-            :name="categoryFor(row)!.name"
+           
             :color="categoryFor(row)!.color"
             :icon="categoryFor(row)!.icon"
-          />
+          >{{ categoryFor(row)!.name }}</Chip>
           <span class="wp-id">{{ row.id }}</span>
           <RelativeDate :value="row.updated_at" />
         </div>

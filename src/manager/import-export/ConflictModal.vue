@@ -68,6 +68,8 @@
  */
 import { computed, ref } from "vue";
 import Modal from "../components/ui/Modal.vue";
+import Disclosure from "@/components/shared/Disclosure.vue";
+import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
 import ImportAsNewRename from "./ImportAsNewRename.vue";
 import Tier3ChainViz from "./conflict-rows/Tier3ChainViz.vue";
 import type { ChainStep } from "./conflict-rows/chain-types";
@@ -152,6 +154,17 @@ const emit = defineEmits<{
 }>();
 
 const batchDefault = ref<"skip" | "replace" | "rename">("skip");
+const BATCH_DEFAULT_OPTIONS: SegmentedOption<"skip" | "replace" | "rename">[] = [
+  { value: "skip", label: "Skip", icon: "pi-times" },
+  { value: "replace", label: "Replace", icon: "pi-arrow-circle-down" },
+  { value: "rename", label: "Import as new", icon: "pi-plus" },
+];
+const BATCH_OVERRIDE_OPTIONS: SegmentedOption<"default" | "skip" | "replace" | "rename">[] = [
+  { value: "default", label: "Default" },
+  { value: "skip", label: "Skip" },
+  { value: "replace", label: "Replace" },
+  { value: "rename", label: "Import as new" },
+];
 
 const perItemDecisions = ref<Record<string, PerItemDecision>>({});
 
@@ -799,142 +812,69 @@ const importItemCount = computed<number>(() => {
               Apply to all <strong>{{ props.batchConflicts.length }}</strong>
               {{ batchRowNoun }} rows:
             </span>
-            <div
-              class="wp-action-group"
-              role="radiogroup"
+            <WpSegmented
+              :model-value="batchDefault"
+              :options="BATCH_DEFAULT_OPTIONS"
               aria-label="Default action for batch conflicts"
+              test-prefix="batch-action"
               data-test="batch-action-group"
-            >
-              <button
-                type="button"
-                class="wp-action-group__btn"
-                role="radio"
-                :aria-checked="batchDefault === 'skip' ? 'true' : 'false'"
-                :data-active="batchDefault === 'skip' ? 'true' : 'false'"
-                data-test="batch-action-skip"
-                @click="setBatchDefault('skip')"
-              >
-                <i class="pi pi-times" aria-hidden="true" /> Skip
-              </button>
-              <button
-                type="button"
-                class="wp-action-group__btn"
-                role="radio"
-                :aria-checked="batchDefault === 'replace' ? 'true' : 'false'"
-                :data-active="batchDefault === 'replace' ? 'true' : 'false'"
-                data-test="batch-action-replace"
-                @click="setBatchDefault('replace')"
-              >
-                <i class="pi pi-arrow-circle-down" aria-hidden="true" /> Replace
-              </button>
-              <button
-                type="button"
-                class="wp-action-group__btn"
-                role="radio"
-                :aria-checked="batchDefault === 'rename' ? 'true' : 'false'"
-                :data-active="batchDefault === 'rename' ? 'true' : 'false'"
-                data-test="batch-action-rename"
-                @click="setBatchDefault('rename')"
-              >
-                <i class="pi pi-plus" aria-hidden="true" /> Import as new
-              </button>
-            </div>
-          </div>
-          <button
-            type="button"
-            class="wp-conflict-modal__override-toggle"
-            :aria-expanded="batchExpanded ? 'true' : 'false'"
-            aria-controls="wp-conflict-modal-batch-overrides"
-            data-test="batch-override-toggle"
-            @click="batchExpanded = !batchExpanded"
-          >
-            <i
-              :class="batchExpanded ? 'pi pi-angle-down' : 'pi pi-angle-right'"
-              aria-hidden="true"
+              @update:model-value="setBatchDefault"
             />
-            {{ batchExpanded ? "Hide per-conflict overrides" : "Show per-conflict overrides" }}
-          </button>
-          <div
-            v-if="batchExpanded"
-            id="wp-conflict-modal-batch-overrides"
-            class="wp-conflict-modal__override-list"
-            data-test="batch-override-list"
+          </div>
+          <Disclosure
+            v-model:open="batchExpanded"
+            class="wp-conflict-modal__overrides"
+            size="sm"
+            lazy
+            :label="batchExpanded ? 'Hide per-conflict overrides' : 'Show per-conflict overrides'"
+            :trigger-attrs="{ 'data-test': 'batch-override-toggle' }"
           >
             <div
-              v-for="conflict in props.batchConflicts"
-              :key="conflict.id"
-              class="wp-conflict-modal__override-row"
-              :data-test="`batch-override-row-${conflict.id}`"
+              class="wp-conflict-modal__override-list"
+              data-test="batch-override-list"
             >
-              <span
-                class="wp-row-type-icon"
-                :class="`wp-row-type-icon--${overrideRowKindClass(conflict)}`"
-                aria-hidden="true"
-              >
-                <i :class="overrideRowIconClass(conflict)" />
-              </span>
-              <div class="wp-row-name">
-                <span class="wp-picker-row__name">{{ batchRowName(conflict) }}</span>
-                <span class="wp-id">{{ conflict.id.slice(0, 8) }}</span>
-                <span
-                  class="wp-mod-badge"
-                  :class="`wp-mod-badge--${batchOverrideBadge(conflict).variant}`"
-                  :data-test="`batch-override-badge-${conflict.id}`"
-                  style="margin-left: auto"
-                >{{ batchOverrideBadge(conflict).label }}</span>
-              </div>
-              <span
-                class="wp-override-tag"
-                :class="batchOverrideFor(conflict.id) !== 'default'
-                  ? 'wp-override-tag--set' : ''"
-              >{{ batchOverrideFor(conflict.id) === 'default'
-                ? 'Use batch default'
-                : 'Override' }}</span>
               <div
-                class="wp-action-group wp-action-group--sm"
-                role="radiogroup"
-                :aria-label="`Override action for ${batchRowName(conflict)}`"
-                :data-test="`batch-override-group-${conflict.id}`"
+                v-for="conflict in props.batchConflicts"
+                :key="conflict.id"
+                class="wp-conflict-modal__override-row"
+                :data-test="`batch-override-row-${conflict.id}`"
               >
-                <button
-                  type="button"
-                  class="wp-action-group__btn"
-                  role="radio"
-                  :aria-checked="batchOverrideFor(conflict.id) === 'default' ? 'true' : 'false'"
-                  :data-active="batchOverrideFor(conflict.id) === 'default' ? 'true' : 'false'"
-                  :data-test="`batch-override-${conflict.id}-default`"
-                  @click="setBatchOverride(conflict.id, 'default')"
-                >Default</button>
-                <button
-                  type="button"
-                  class="wp-action-group__btn"
-                  role="radio"
-                  :aria-checked="batchOverrideFor(conflict.id) === 'skip' ? 'true' : 'false'"
-                  :data-active="batchOverrideFor(conflict.id) === 'skip' ? 'true' : 'false'"
-                  :data-test="`batch-override-${conflict.id}-skip`"
-                  @click="setBatchOverride(conflict.id, 'skip')"
-                >Skip</button>
-                <button
-                  type="button"
-                  class="wp-action-group__btn"
-                  role="radio"
-                  :aria-checked="batchOverrideFor(conflict.id) === 'replace' ? 'true' : 'false'"
-                  :data-active="batchOverrideFor(conflict.id) === 'replace' ? 'true' : 'false'"
-                  :data-test="`batch-override-${conflict.id}-replace`"
-                  @click="setBatchOverride(conflict.id, 'replace')"
-                >Replace</button>
-                <button
-                  type="button"
-                  class="wp-action-group__btn"
-                  role="radio"
-                  :aria-checked="batchOverrideFor(conflict.id) === 'rename' ? 'true' : 'false'"
-                  :data-active="batchOverrideFor(conflict.id) === 'rename' ? 'true' : 'false'"
-                  :data-test="`batch-override-${conflict.id}-rename`"
-                  @click="setBatchOverride(conflict.id, 'rename')"
-                >Import as new</button>
+                <span
+                  class="wp-row-type-icon"
+                  :class="`wp-row-type-icon--${overrideRowKindClass(conflict)}`"
+                  aria-hidden="true"
+                >
+                  <i :class="overrideRowIconClass(conflict)" />
+                </span>
+                <div class="wp-row-name">
+                  <span class="wp-picker-row__name">{{ batchRowName(conflict) }}</span>
+                  <span class="wp-id">{{ conflict.id.slice(0, 8) }}</span>
+                  <span
+                    class="wp-mod-badge"
+                    :class="`wp-mod-badge--${batchOverrideBadge(conflict).variant}`"
+                    :data-test="`batch-override-badge-${conflict.id}`"
+                    style="margin-left: auto"
+                  >{{ batchOverrideBadge(conflict).label }}</span>
+                </div>
+                <span
+                  class="wp-override-tag"
+                  :class="batchOverrideFor(conflict.id) !== 'default'
+                    ? 'wp-override-tag--set' : ''"
+                >{{ batchOverrideFor(conflict.id) === 'default'
+                  ? 'Use batch default'
+                  : 'Override' }}</span>
+                <WpSegmented
+                  size="sm"
+                  :model-value="batchOverrideFor(conflict.id)"
+                  :options="BATCH_OVERRIDE_OPTIONS"
+                  :aria-label="`Override action for ${batchRowName(conflict)}`"
+                  :test-prefix="`batch-override-${conflict.id}`"
+                  :data-test="`batch-override-group-${conflict.id}`"
+                  @update:model-value="(v) => setBatchOverride(conflict.id, v)"
+                />
               </div>
             </div>
-          </div>
+          </Disclosure>
         </div>
       </template>
 
@@ -1221,13 +1161,6 @@ const importItemCount = computed<number>(() => {
 .wp-action-group__btn[data-active="true"]:hover { background: var(--wp-accent-500); }
 .wp-action-group__btn .pi { font-size: 10px; }
 
-/* Per-row override list scales the segmented control down to fit
- * inside the row. Prototype lines 940/954/968 use
- * `transform: scale(0.92); transform-origin: right center` inline. */
-.wp-action-group--sm {
-  transform: scale(0.92);
-  transform-origin: right center;
-}
 
 /* Batch card — single rounded card containing the batch label + inline
  * segmented control on one row, the override-toggle below, and the
@@ -1253,25 +1186,7 @@ const importItemCount = computed<number>(() => {
   color: var(--wp-text);
   font-weight: 600;
 }
-.wp-conflict-modal__override-toggle {
-  background: transparent;
-  border: 1px solid var(--wp-border-strong);
-  color: var(--wp-text-muted);
-  font-family: var(--wp-font);
-  font-size: var(--wp-text-xs);
-  padding: 4px 9px;
-  border-radius: var(--wp-radius-sm);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 4px;
-}
-.wp-conflict-modal__override-toggle:hover {
-  color: var(--wp-text);
-  background: var(--wp-bg-4);
-}
-.wp-conflict-modal__override-toggle .pi { font-size: 9px; }
+.wp-conflict-modal__overrides { margin-top: 4px; }
 
 /* Override list — one row per batch conflict. Prototype lines 294-304. */
 .wp-conflict-modal__override-list {

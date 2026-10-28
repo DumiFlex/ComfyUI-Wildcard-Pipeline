@@ -11,6 +11,7 @@
  * scrollers that would otherwise clip it. The host owns the anchor: it knows
  * which element the menu belongs to and when that element has moved.
  */
+import SearchInput from "@/components/shared/SearchInput.vue";
 import { computed, ref, watch } from "vue";
 
 export interface TagGroup {
@@ -115,19 +116,17 @@ const menuStyle = computed<Record<string, string>>(() => {
 
       <!-- Pinned above the scroller, so it stays visible while the list it
            filters scrolls under it. -->
-      <label v-if="allTags.length > 8" class="opt-tags__search">
-        <i class="pi pi-search" aria-hidden="true" />
-        <input
-          v-model="query"
-          type="text"
-          :placeholder="`Filter ${allTags.length} tags…`"
-          :aria-label="`Filter ${allTags.length} tags`"
-          spellcheck="false"
-          autocomplete="off"
-          :data-test="`${testPrefix}-search`"
-          @click.stop
-        />
-      </label>
+      <SearchInput
+        v-if="allTags.length > 8"
+        v-model="query"
+        class="opt-tags__search"
+        size="sm"
+        :placeholder="`Filter ${allTags.length} tags…`"
+        :aria-label="`Filter ${allTags.length} tags`"
+        clear-label="Clear filter"
+        :data-test="`${testPrefix}-search`"
+        @click.stop
+      />
 
       <div class="opt-tags__scroll">
         <div v-for="grp in visibleGroups" :key="grp.axis" class="opt-tags__section">
@@ -181,7 +180,7 @@ const menuStyle = computed<Record<string, string>>(() => {
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
 }
 /* Flipped above the trigger. The host sets `top` to the trigger's TOP edge in
    that case, so shifting up by the menu's own height puts its bottom edge
@@ -207,26 +206,7 @@ const menuStyle = computed<Record<string, string>>(() => {
   flex-direction: column;
   gap: var(--wp-space-3);
 }
-.opt-tags__search {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-2);
-  padding: 3px var(--wp-space-3); /* audit-exempt: compact inline search */
-  background: var(--wp-bg-2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-dim);
-}
-.opt-tags__search .pi { font-size: 10px; }
-.opt-tags__search input {
-  flex: 1;
-  min-width: 0;
-  background: none;
-  border: none;
-  outline: none;
-  color: var(--wp-text);
-  font: 11px var(--wp-font-sans);
-}
+.opt-tags__search { flex-shrink: 0; }
 .opt-tags__section { display: flex; flex-direction: column; gap: 2px; }
 .opt-tags__section-name {
   font: 500 9px var(--wp-font-sans);

@@ -14,6 +14,7 @@
  * Task 3 ships wildcard support. Combine / fixed_values / derivation /
  * constraint land in Task 4a–d.
  */
+import CloseButton from "@/components/shared/CloseButton.vue";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import WildcardIdentitySection from "../../components/context/editors/wildcard/sections/IdentitySection.vue";
@@ -198,16 +199,13 @@ const constraintTargetValues = computed<string[]>(() => {
         </span>
         <span class="wp-bpane__name">{{ displayName }}</span>
         <span class="wp-bpane__kind">{{ KIND_LABEL[kind] ?? kind }}</span>
-        <button
-          type="button"
+        <CloseButton
           class="wp-bpane__close"
-          aria-label="Close child editor"
-          title="Close"
+          size="sm"
+          label="Close child editor"
           data-test="bundle-pane-close"
           @click="emit('close')"
-        >
-          <i class="pi pi-times" aria-hidden="true" />
-        </button>
+        />
       </header>
 
       <div
@@ -421,14 +419,7 @@ const constraintTargetValues = computed<string[]>(() => {
   border-radius: var(--wp-radius-sm);
   background: color-mix(in oklab, var(--pane-kind, var(--wp-accent-500)) 14%, transparent);
 }
-.wp-bpane__close {
-  margin-left: auto;
-  width: 24px; height: 24px;
-  background: transparent; border: 1px solid transparent;
-  border-radius: var(--wp-radius-sm); color: var(--wp-text-dim); cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-}
-.wp-bpane__close:hover { background: var(--wp-bg-3); color: var(--wp-text); }
+.wp-bpane__close { margin-left: auto; }
 
 .wp-bpane__banner {
   display: flex; align-items: flex-start; gap: var(--wp-space-3);

@@ -8,6 +8,7 @@
  */
 import { computed } from "vue";
 import WpNumber from "../shared/WpNumber.vue";
+import WpSegmented, { type SegmentedOption } from "../shared/WpSegmented.vue";
 import WpSelect from "../shared/WpSelect.vue";
 import {
   clampTimeout,
@@ -35,10 +36,10 @@ const emit = defineEmits<{ "update:modelValue": [next: ImageFilterConfig] }>();
 
 const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 
-const MODES: { value: FilterMode; label: string; title: string }[] = [
-  { value: "pause", label: "Pause & pick", title: "Stop at this node every run and let you pick" },
-  { value: "reuse", label: "Reuse last picks", title: "Keep the same picks as last time without asking (asks again when they no longer fit)" },
-  { value: "pass_all", label: "Pass all", title: "Let everything through, as if the node weren't there" },
+const MODE_OPTIONS: SegmentedOption<FilterMode>[] = [
+  { value: "pause", label: "Pause & pick", hint: "Stop at this node every run and let you pick" },
+  { value: "reuse", label: "Reuse last picks", hint: "Keep the same picks as last time without asking (asks again when they no longer fit)" },
+  { value: "pass_all", label: "Pass all", hint: "Let everything through, as if the node weren't there" },
 ];
 
 function patch(p: Partial<ImageFilterConfig>): void {
@@ -46,7 +47,8 @@ function patch(p: Partial<ImageFilterConfig>): void {
 }
 
 const TIMEOUT_STEP = 30;
-function setTimeoutSecs(n: number): void {
+function setTimeoutSecs(n: number | null): void {
+  if (n === null) return;
   patch({ timeout: clampTimeout(n) });
 }
 const SEND_AS: { value: SendAs; label: string }[] = [
@@ -93,20 +95,14 @@ const summary = computed(() => {
       <div class="wp-ifw__box">
         <div class="wp-ifw__row">
           <span class="wp-ifw__row-label">Mode</span>
-          <div class="wp-ifw__seg" role="radiogroup" aria-label="Mode">
-            <button
-              v-for="m in MODES"
-              :key="m.value"
-              type="button"
-              role="radio"
-              class="wp-ifw__seg-btn"
-              :class="{ 'is-on': modelValue.mode === m.value }"
-              :aria-checked="modelValue.mode === m.value"
-              :title="m.title"
-              :data-test="`if-mode-${m.value}`"
-              @click="patch({ mode: m.value })"
-            >{{ m.label }}</button>
-          </div>
+          <WpSegmented
+            :model-value="modelValue.mode"
+            :options="MODE_OPTIONS"
+            size="sm"
+            aria-label="Mode"
+            test-prefix="if-mode"
+            @update:model-value="patch({ mode: $event })"
+          />
         </div>
         <div class="wp-ifw__row">
           <span class="wp-ifw__row-label" title="One per image: every picked image becomes its own item, with its own copy of its frame's prompt and conditioning">Send picks as</span>
@@ -172,10 +168,6 @@ const summary = computed(() => {
 .wp-ifw__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
 .wp-ifw__row.is-off { opacity: .45; }
 .wp-ifw__row-label { font-size: 10.5px; color: var(--wp-text-muted, var(--wp-text2)); white-space: nowrap; }
-.wp-ifw__seg { display: flex; padding: 1px; border: 1px solid var(--wp-border); border-radius: 3px; background: var(--wp-bg2); }
-.wp-ifw__seg-btn { padding: 2px 7px; border: 0; border-radius: 2px; background: transparent; color: var(--wp-text-dim, var(--wp-text3)); font: 10.5px var(--wp-font-sans, sans-serif); cursor: pointer; white-space: nowrap; }
-.wp-ifw__seg-btn:hover { color: var(--wp-text); }
-.wp-ifw__seg-btn.is-on { background: var(--wp-accent); color: #fff; }
 .wp-ifw__select { height: 20px; }
 .wp-ifw__timeout { display: flex; align-items: center; gap: 6px; }
 .wp-ifw__unit { font-size: 10px; color: var(--wp-text-dim, var(--wp-text3)); white-space: nowrap; }

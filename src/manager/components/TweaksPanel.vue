@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CloseButton from "@/components/shared/CloseButton.vue";
 import { computed } from "vue";
 import Button from "./ui/Button.vue";
 import Toggle from "./ui/Toggle.vue";
@@ -50,15 +51,11 @@ function pickCustomAccent() {
   >
     <header class="wp-tweaks__header">
       <h2>Tweaks</h2>
-      <button
-        type="button"
-        class="wp-tweaks__close"
-        aria-label="Close tweaks"
+      <CloseButton
+        label="Close tweaks"
         data-test="tweaks-close"
         @click="tweaks.closePanel"
-      >
-        <Icon name="pi-times" />
-      </button>
+      />
     </header>
 
     <div class="wp-tweaks__body">
@@ -194,23 +191,6 @@ function pickCustomAccent() {
   font-size: var(--wp-text-md);
   font-weight: 600;
   letter-spacing: 0.01em;
-  color: var(--wp-text);
-}
-.wp-tweaks__close {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--wp-text-muted);
-  width: 28px;
-  height: 28px;
-  border-radius: var(--wp-radius-sm);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.wp-tweaks__close:hover {
-  background: var(--wp-bg-3);
   color: var(--wp-text);
 }
 

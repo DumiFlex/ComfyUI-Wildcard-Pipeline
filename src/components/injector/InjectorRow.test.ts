@@ -51,17 +51,17 @@ describe("InjectorRow — binding + type chip", () => {
 describe("InjectorRow — enabled checkbox", () => {
   it("renders checked when row.enabled is true", () => {
     const w = mount(InjectorRow, { props: { row: makeRow({ enabled: true }) } });
-    expect(w.find<HTMLInputElement>('[data-test="inj-row-enabled"]').element.checked).toBe(true);
+    expect(w.get('[data-test="inj-row-enabled"]').attributes("aria-checked")).toBe("true");
   });
 
   it("renders unchecked when row.enabled is false", () => {
     const w = mount(InjectorRow, { props: { row: makeRow({ enabled: false }) } });
-    expect(w.find<HTMLInputElement>('[data-test="inj-row-enabled"]').element.checked).toBe(false);
+    expect(w.get('[data-test="inj-row-enabled"]').attributes("aria-checked")).toBe("false");
   });
 
-  it("emits update with toggled enabled flag on change", async () => {
+  it("emits update with toggled enabled flag on click", async () => {
     const w = mount(InjectorRow, { props: { row: makeRow({ enabled: true }) } });
-    await w.find<HTMLInputElement>('[data-test="inj-row-enabled"]').setValue(false);
+    await w.get('[data-test="inj-row-enabled"]').trigger("click");
     const last = w.emitted("update")![0][0] as Partial<RowType>;
     expect(last.enabled).toBe(false);
   });

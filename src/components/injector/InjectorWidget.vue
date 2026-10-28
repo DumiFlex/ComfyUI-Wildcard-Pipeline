@@ -186,7 +186,7 @@ const conflictByUid = computed<Record<string, RowConflict>>(() => {
 // via host.requestRelayout when this value changes.
 //
 // CSS source-of-truth dependencies (keep in lockstep):
-//   .wp-inj-toggle, .wp-inj-toggle-mark
+//   WpCheck size sm         width 12 (the on/off box)
 //   .wp-inj-type-icon       width 16
 //   .wp-inj-slot            max-width 96
 //   .wp-inj-type-chip       ~50 (font 9px × ~7 chars for "boolean")
@@ -939,8 +939,6 @@ defineExpose({ addRow, addGeneralRow, removeRow });
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .wp-inj-widget {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border-soft, var(--wp-border));

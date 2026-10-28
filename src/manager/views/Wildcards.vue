@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CopyButton from "@/components/shared/CopyButton.vue";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast";
@@ -14,14 +15,14 @@ import Button from "../components/ui/Button.vue";
 import Select from "../components/ui/Select.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 import ValidityIcon from "../components/ValidityIcon.vue";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "../components/ui/Chip.vue";
 import { categoryAssignOptions, categoryFilterOptions } from "../utils/category-options";
 import { validateModule } from "../utils/validateModule";
 import type { ModuleRow, CategoryRow } from "../api/types";
@@ -173,15 +174,6 @@ function edit(row: ModuleRow) {
   });
 }
 
-async function copyId(id: string) {
-  try {
-    await navigator.clipboard.writeText(id);
-    toast.push({ severity: "info", summary: "ID copied", detail: id, life: 1500 });
-  } catch {
-    toast.push({ severity: "error", summary: "Copy failed", life: 2000 });
-  }
-}
-
 async function dup(row: ModuleRow) {
   try {
     await store.duplicate(row.id);
@@ -326,6 +318,7 @@ function issuesFor(row: ModuleRow) {
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-sparkles"
         headline="No wildcards yet"
         body="Wildcards let you sample one option from a pool. Create your first to start composing prompts."
@@ -402,11 +395,12 @@ function issuesFor(row: ModuleRow) {
     <template #name="{ row }">
       <div class="wp-row-name">
         <span class="wp-row-name__text" @click="edit(row)">{{ row.name }}</span>
-        <span
+        <CopyButton
           class="wp-id"
-          :title="`Click to copy ${row.id}`"
-          @click.stop="copyId(row.id)"
-        >{{ row.id }}</span>
+          :text="row.id"
+          :label="`Copy ID ${row.id}`"
+          @click.stop
+        >{{ row.id }}</CopyButton>
       </div>
     </template>
 
@@ -419,12 +413,12 @@ function issuesFor(row: ModuleRow) {
 
     <template #columns="{ row }">
       <td>
-        <CategoryChip
+        <Chip
           v-if="row.category_id && categoryById.get(row.category_id)"
-          :name="categoryById.get(row.category_id)!.name"
+         
           :color="categoryById.get(row.category_id)!.color"
           :icon="categoryById.get(row.category_id)!.icon"
-        />
+        >{{ categoryById.get(row.category_id)!.name }}</Chip>
         <span v-else class="wp-dim">—</span>
       </td>
       <td><span class="wp-mono">{{ optionCount(row) }}</span></td>
@@ -464,7 +458,7 @@ function issuesFor(row: ModuleRow) {
 
     <template #actions="{ row }">
       <Button variant="ghost" size="sm" icon="pi-pencil" aria-label="Edit" @click="edit(row)" />
-      <SendToTestRunner :kind="'wildcard'" :id="row.id" compact />
+      <SendToTestRunner :id="row.id" :kind="'wildcard'" compact />
       <Button variant="ghost" size="sm" icon="pi-clone" aria-label="Duplicate" @click="dup(row)" />
       <CommunityRowActions :row="row" kind="module" />
       <Button variant="ghost" size="sm" icon="pi-trash" aria-label="Delete" @click="del(row)" />
@@ -506,12 +500,12 @@ function issuesFor(row: ModuleRow) {
     @confirmed="onCascadeDialogConfirmed"
     @cancelled="onCascadeDialogCancelled"
   />
-  <ConfirmDialog
-    :visible="delConfirm.visible.value"
+  <ConfirmModal
+    :open="delConfirm.visible.value"
     :title="`Delete \&quot;${delConfirm.pending.value?.name ?? ''}\&quot;?`"
     body="This permanently removes the library entry."
     confirm-label="Delete"
-    variant="danger"
+    tone="danger"
     @confirm="delConfirm.confirm(performDelete)"
     @cancel="delConfirm.cancel"
   />

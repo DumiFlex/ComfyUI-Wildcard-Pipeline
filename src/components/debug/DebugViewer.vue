@@ -8,9 +8,14 @@
  *   Warnings  — what the engine flagged, linked to the step that raised it
  *   Raw       — the snapshot JSON
  */
+import SearchInput from "../shared/SearchInput.vue";
 import { computed, nextTick, ref, watch } from "vue";
 import { highlightJson } from "./highlight";
 import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
+import WpTabs, { type TabItem } from "../shared/WpTabs.vue";
+import WpButton from "../shared/WpButton.vue";
+import CopyButton from "../shared/CopyButton.vue";
+import { copyText } from "../shared/clipboard";
 import DebugVariables from "./DebugVariables.vue";
 import DebugTrace from "./DebugTrace.vue";
 import DebugWarnings from "./DebugWarnings.vue";
@@ -233,15 +238,8 @@ const tabText = computed(() => {
   }
 });
 const rawHtml = computed(() => (activeTab.value === "raw" && raw.value ? highlightJson(JSON.stringify(raw.value, null, 2)) : ""));
-const copyFlash = ref(false);
 async function clipboardWrite(text: string): Promise<void> {
-  if (!text) return;
-  try { await navigator.clipboard.writeText(text); } catch { /* permission denied */ }
-}
-async function copyTab(): Promise<void> {
-  await clipboardWrite(tabText.value);
-  copyFlash.value = true;
-  window.setTimeout(() => { copyFlash.value = false; }, 1200);
+  if (text) await copyText(text);
 }
 function downloadJson(): void {
   if (!raw.value) return;
@@ -261,13 +259,15 @@ async function copySeed(): Promise<void> {
   window.setTimeout(() => { seedCopied.value = false; }, 1200);
 }
 
-const tabs = computed(() => {
+const tabs = computed((): TabItem<TabId>[] => {
   const m = model.value;
+  const shown = (n: number | undefined): number | undefined => (n ? n : undefined);
+  const tone = warnTone.value === "error" ? "danger" : warnTone.value === "warning" ? "warn" : undefined;
   return [
-    { id: "vars" as const, label: "Variables", count: m?.variables.length ?? 0 },
-    { id: "trace" as const, label: "Trace", count: m?.steps.length ?? 0 },
-    { id: "warnings" as const, label: "Warnings", count: m?.warnings.length ?? 0 },
-    { id: "raw" as const, label: "Raw", count: 0 },
+    { id: "vars", label: "Variables", count: shown(m?.variables.length) },
+    { id: "trace", label: "Trace", count: shown(m?.steps.length) },
+    { id: "warnings", label: "Warnings", count: shown(m?.warnings.length), tone },
+    { id: "raw", label: "Raw" },
   ];
 });
 const warnTone = computed(() => {
@@ -401,78 +401,51 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
         </button>
         <span v-else class="wp-dbg-head__ok" data-test="dbg-head-ok"><i class="pi pi-check-circle" aria-hidden="true" /> clean run</span>
         <div class="wp-dbg-head__actions">
-          <button
-            type="button"
-            class="wp-btn wp-btn--icon"
-            :class="{ 'is-flashed': copyFlash }"
-            data-test="dbg-copy"
-            :title="copyFlash ? 'Copied' : 'Copy this tab as JSON'"
-            aria-label="Copy JSON"
-            @click="copyTab"
-          ><i :class="['pi', copyFlash ? 'pi-check' : 'pi-copy']" /></button>
-          <button
-            type="button"
-            class="wp-btn wp-btn--icon"
+          <CopyButton :text="() => tabText" label="Copy this tab as JSON" size="sm" data-test="dbg-copy" />
+          <WpButton
+            variant="ghost"
+            icon="pi-download"
             data-test="dbg-download"
-            title="Download the full snapshot as JSON"
-            aria-label="Download snapshot JSON"
+            aria-label="Download the full snapshot as JSON"
             @click="downloadJson"
-          ><i class="pi pi-download" /></button>
+          />
         </div>
       </header>
 
-      <nav class="wp-dbg-tabs" role="tablist">
-        <button
-          v-for="t in tabs"
-          :key="t.id"
-          type="button"
-          role="tab"
-          :class="['wp-dbg-tab', { 'is-active': activeTab === t.id }]"
-          :aria-selected="activeTab === t.id"
-          :data-test="`dbg-tab-${t.id}`"
-          @click="activeTab = t.id"
-        >
-          {{ t.label }}
-          <span
-            v-if="t.count"
-            class="wp-dbg-tab__badge"
-            :class="{ [`is-${warnTone}`]: t.id === 'warnings' && warnTone }"
-          >{{ t.count }}</span>
-        </button>
+      <nav class="wp-dbg-tabs">
+        <WpTabs
+          class="wp-dbg-tabs__list"
+          :model-value="activeTab"
+          :tabs="tabs"
+          size="sm"
+          aria-label="Debug views"
+          test-prefix="dbg-tab"
+          @update:model-value="activeTab = $event"
+        />
         <span
           v-if="activeTab === 'vars' && model.negativeCount"
           class="wp-dbg-tabs__neg"
           data-test="dbg-neg-count"
           title="Variables that carry negative words"
         >{{ model.negativeCount }} negative{{ model.negativeCount === 1 ? "" : "s" }}</span>
-        <div v-if="activeTab !== 'raw'" class="wp-dbg-filter">
-          <i class="pi pi-search wp-dbg-filter__icon" aria-hidden="true" />
-          <input
-            v-model="filterQuery"
-            type="text"
-            class="wp-dbg-filter__input"
-            data-test="dbg-filter"
-            :placeholder="activeTab === 'vars' ? 'Filter variables…' : activeTab === 'trace' ? 'Filter steps…' : 'Filter warnings…'"
-            aria-label="Filter"
-            spellcheck="false"
-          />
-          <button
-            v-if="filterQuery"
-            type="button"
-            class="wp-dbg-filter__clear"
-            title="Clear filter"
-            aria-label="Clear filter"
-            @click="filterQuery = ''"
-          ><i class="pi pi-times" aria-hidden="true" /></button>
-        </div>
-        <button
+        <SearchInput
+          v-if="activeTab !== 'raw'"
+          v-model="filterQuery"
+          class="wp-dbg-filter"
+          size="sm"
+          data-test="dbg-filter"
+          :placeholder="activeTab === 'vars' ? 'Filter variables…' : activeTab === 'trace' ? 'Filter steps…' : 'Filter warnings…'"
+          aria-label="Filter"
+          clear-label="Clear filter"
+        />
+        <WpButton
           v-if="activeTab === 'trace' && model.steps.length"
-          type="button"
-          class="wp-btn wp-btn--icon"
+          variant="ghost"
+          :icon="allOpen ? 'pi-angle-double-up' : 'pi-angle-double-down'"
           data-test="dbg-expand-all"
-          :title="allOpen ? 'Collapse every step' : 'Expand every step'"
+          :aria-label="allOpen ? 'Collapse every step' : 'Expand every step'"
           @click="toggleAll"
-        ><i :class="['pi', allOpen ? 'pi-angle-double-up' : 'pi-angle-double-down']" /></button>
+        />
       </nav>
 
       <div class="wp-dbg-body">
@@ -562,7 +535,6 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
 </template>
 
 <style>
-@import "../shared/theme.css";
 /* `wp-row-flash` keyframes, shared with the Context / Injector widgets. */
 @import "../shared/row-primitives.css";
 </style>
@@ -653,30 +625,10 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
   gap: 2px;
   border-bottom: 1px solid var(--wp-border);
 }
-.wp-dbg-tab {
-  background: transparent;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  font: 500 11px/1 var(--wp-font-sans);
-  color: var(--wp-text-muted);
-  padding: 7px 9px 6px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.wp-dbg-tab:hover { color: var(--wp-text); }
-.wp-dbg-tab.is-active { color: var(--wp-text); border-bottom-color: var(--wp-accent); }
-.wp-dbg-tab__badge {
-  font: 600 9px/1 var(--wp-font-mono);
-  padding: 2px 4px;
-  border-radius: 6px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  color: var(--wp-text-dim);
-}
-.wp-dbg-tab__badge.is-warning { background: color-mix(in oklab, var(--wp-warn) 22%, transparent); color: var(--wp-warn); }
-.wp-dbg-tab__badge.is-error { background: color-mix(in oklab, var(--wp-red, #e5484d) 22%, transparent); color: var(--wp-red, #e5484d); }
+/* The tabs are the shared WpTabs; the nav draws the one underline under
+ * them and the filter beside them. */
+.wp-dbg-tabs__list { flex: 0 1 auto; min-width: 0; }
+.wp-dbg-tabs__list :deep(.wp-tabset__list) { border-bottom: 0; }
 .wp-dbg-tabs__neg {
   margin-left: auto;
   font: 600 9.5px/1 var(--wp-font-mono);
@@ -687,54 +639,13 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
   color: var(--wp-red, #e5484d);
 }
 .wp-dbg-tabs__neg + .wp-dbg-filter { margin-left: 6px; }
-.wp-dbg-tab__badge.is-info { background: color-mix(in oklab, var(--wp-info, var(--wp-accent)) 22%, transparent); color: var(--wp-info, var(--wp-accent)); }
 
 .wp-dbg-filter {
   margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  padding: 0 6px;
-  height: 22px;
-  box-sizing: border-box;
   width: 150px;
   margin-bottom: 3px;
 }
-.wp-dbg-filter:focus-within { border-color: var(--wp-accent); }
-.wp-dbg-filter__icon { font-size: 9px; color: var(--wp-text-dim); }
-.wp-dbg-filter__input {
-  flex: 1;
-  min-width: 0;
-  background: transparent;
-  border: 0;
-  outline: none;
-  color: var(--wp-text);
-  font: 500 11px var(--wp-font-sans);
-}
-.wp-dbg-filter__input::placeholder { color: var(--wp-text-dim); }
-.wp-dbg-filter__clear { background: transparent; border: 0; color: var(--wp-text-dim); cursor: pointer; padding: 0; }
-.wp-dbg-filter__clear .pi { font-size: 9px; }
 
-.wp-btn--icon {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--wp-text-dim);
-  padding: 4px;
-  border-radius: var(--wp-radius, 4px);
-  cursor: pointer;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 2px;
-}
-.wp-btn--icon:hover { background: var(--wp-bg2); border-color: var(--wp-border-soft, var(--wp-border2)); color: var(--wp-text); }
-.wp-btn--icon.is-flashed { border-color: var(--wp-green); color: var(--wp-green); }
-.wp-btn--icon .pi { font-size: 11px; }
 
 .wp-dbg-body {
   flex: 1;

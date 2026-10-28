@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import Input from "../../ui/Input.vue";
+import WpNumber from "@/components/shared/WpNumber.vue";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
-import SegControl, { type SegOption } from "../SegControl.vue";
+import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
 import { MAX_TEST_RUNNER_SEEDS, useUiStore } from "../../../stores/uiStore";
 
 const ui = useUiStore();
 
-const MODES: SegOption<"range" | "random">[] = [
+const MODES: SegmentedOption<"range" | "random">[] = [
   { value: "range", label: "Range" },
   { value: "random", label: "Random" },
 ];
@@ -23,7 +23,7 @@ const MODES: SegOption<"range" | "random">[] = [
       hint="Range uses consecutive seeds, so seed N here is seed N on the canvas and results compare run to run. Random picks a fresh set every run."
       setting-key="tr-mode"
     >
-      <SegControl
+      <WpSegmented
         :model-value="ui.testRunnerDefaults.mode"
         :options="MODES"
         aria-label="Seed mode"
@@ -38,10 +38,9 @@ const MODES: SegOption<"range" | "random">[] = [
       setting-key="tr-from"
       for="settings-tr-from"
     >
-      <Input
-        id="settings-tr-from"
+      <WpNumber id="settings-tr-from" size="md"
+        commit="input"
         :model-value="ui.testRunnerDefaults.from"
-        type="number"
         :min="0"
         class="wp-set-num"
         data-test="settings-tr-from"
@@ -54,10 +53,9 @@ const MODES: SegOption<"range" | "random">[] = [
       setting-key="tr-count"
       for="settings-tr-count"
     >
-      <Input
-        id="settings-tr-count"
+      <WpNumber id="settings-tr-count" size="md"
+        commit="input"
         :model-value="ui.testRunnerDefaults.count"
-        type="number"
         :min="1"
         :max="MAX_TEST_RUNNER_SEEDS"
         class="wp-set-num"

@@ -7,8 +7,10 @@
  * Parent (BundleEditor) takes the emitted ModuleRow, builds a snapshot,
  * and appends to `children[]`.
  */
+import SearchInput from "@/components/shared/SearchInput.vue";
+import CloseButton from "@/components/shared/CloseButton.vue";
 import { computed, ref, watch } from "vue";
-import Input from "./ui/Input.vue";
+import WpTabs, { type TabItem } from "@/components/shared/WpTabs.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 import type { BundleRow, ModuleRow, ModuleType } from "../api/types";
 
@@ -40,13 +42,13 @@ interface KindTab {
 }
 
 const KIND_TABS: KindTab[] = [
-  { type: "all",          label: "All",           icon: "pi pi-objects-column" },
-  { type: "wildcard",     label: "Wildcards",     icon: "pi pi-sparkles" },
-  { type: "fixed_values", label: "Fixed Values",  icon: "pi pi-tag" },
-  { type: "combine",      label: "Combines",      icon: "pi pi-link" },
-  { type: "derivation",   label: "Derivations",   icon: "pi pi-arrow-right-arrow-left" },
-  { type: "constraint",   label: "Constraints",   icon: "pi pi-filter" },
-  { type: "bundle",       label: "Bundles",       icon: "pi pi-box" },
+  { type: "all",          label: "All",           icon: "pi-objects-column" },
+  { type: "wildcard",     label: "Wildcards",     icon: "pi-sparkles" },
+  { type: "fixed_values", label: "Fixed Values",  icon: "pi-tag" },
+  { type: "combine",      label: "Combines",      icon: "pi-link" },
+  { type: "derivation",   label: "Derivations",   icon: "pi-arrow-right-arrow-left" },
+  { type: "constraint",   label: "Constraints",   icon: "pi-filter" },
+  { type: "bundle",       label: "Bundles",       icon: "pi-box" },
 ];
 
 const KIND_LABEL: Record<ModuleType, string> = {
@@ -102,6 +104,9 @@ const counts = computed<Record<string, number>>(() => {
   return c;
 });
 
+const kindTabs = computed<TabItem<PickerTab>[]>(() =>
+  KIND_TABS.map((t) => ({ id: t.type, label: t.label, icon: t.icon, count: counts.value[t.type] ?? 0 })));
+
 function close() { emit("close"); }
 function pickModule(row: ModuleRow) {
   emit("pick", row);
@@ -124,46 +129,30 @@ function pickBundle(row: BundleRow) {
         <div class="wp-bundle-add__head">
           <i class="pi pi-plus" aria-hidden="true" />
           <span class="wp-bundle-add__title">Add child to bundle</span>
-          <button
-            type="button"
+          <CloseButton
             class="wp-bundle-add__close"
-            aria-label="Close picker"
-            title="Close"
+            label="Close picker"
+            kbd="Esc"
             data-test="bundle-add-close"
             @click="close"
-          ><i class="pi pi-times" /></button>
+          />
         </div>
 
         <div class="wp-bundle-add__body">
-          <div class="wp-bundle-add__tabs" role="tablist" aria-label="Module kind">
-            <button
-              v-for="tab in KIND_TABS"
-              :key="tab.type"
-              type="button"
-              role="tab"
-              class="wp-bundle-add__tab"
-              :data-kind="tab.type"
-              :data-active="activeTab === tab.type ? '' : null"
-              :aria-selected="activeTab === tab.type"
-              :data-test="`bundle-add-tab-${tab.type}`"
-              @click="activeTab = tab.type"
-            >
-              <i :class="tab.icon" />
-              <span class="wp-bundle-add__tab-label">{{ tab.label }}</span>
-              <span class="wp-bundle-add__tab-count">{{ counts[tab.type] ?? 0 }}</span>
-            </button>
-          </div>
+          <WpTabs
+            v-model="activeTab"
+            :tabs="kindTabs"
+            size="sm"
+            aria-label="Module kind"
+            test-prefix="bundle-add-tab"
+          />
 
-          <div class="wp-bundle-add__search">
-            <span class="wp-bundle-add__searchicon"><i class="pi pi-search" /></span>
-            <Input
-              v-model="search"
-              placeholder="Search modules…"
-              class="wp-bundle-add__searchinput"
-              aria-label="Search modules"
-              data-test="bundle-add-search"
-            />
-          </div>
+          <SearchInput
+            v-model="search"
+            placeholder="Search modules…"
+            aria-label="Search modules"
+            data-test="bundle-add-search"
+          />
 
           <div class="wp-bundle-add__list" data-test="bundle-add-list">
             <div
@@ -255,17 +244,7 @@ function pickBundle(row: BundleRow) {
   font-weight: 600;
   font-size: var(--wp-text-base);
 }
-.wp-bundle-add__close {
-  margin-left: auto;
-  width: 26px; height: 26px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-dim);
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-}
-.wp-bundle-add__close:hover { background: var(--wp-bg); color: var(--wp-text); }
+.wp-bundle-add__close { margin-left: auto; }
 
 .wp-bundle-add__body {
   display: flex;
@@ -276,54 +255,6 @@ function pickBundle(row: BundleRow) {
   flex: 1;
 }
 
-.wp-bundle-add__tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--wp-space-2);
-}
-.wp-bundle-add__tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px; /* audit-exempt: 5px optical gap between icon and text inside pill */
-  padding: var(--wp-space-2) 9px; /* audit-exempt: 9px horiz matches pill chrome */
-  border: 1px solid var(--wp-border);
-  border-radius: 999px;
-  background: var(--wp-bg);
-  color: var(--wp-text-dim);
-  font-size: var(--wp-text-xs);
-  cursor: pointer;
-}
-.wp-bundle-add__tab[data-active] {
-  background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500) 42%, transparent);
-  color: var(--wp-accent-500);
-}
-.wp-bundle-add__tab-count {
-  font-size: 9.5px; /* audit-exempt: micro count badge inside pill — below scale floor */
-  padding: 0 var(--wp-space-3);
-  border-radius: 999px;
-  background: color-mix(in oklab, currentColor 16%, transparent);
-}
-
-.wp-bundle-add__search {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-.wp-bundle-add__searchicon {
-  position: absolute;
-  left: 8px;
-  color: var(--wp-text-dim);
-  pointer-events: none;
-  font-size: var(--wp-text-sm);
-}
-/* `Input` renders bare here (no icon prop), so the parent-passed
- * `wp-bundle-add__searchinput` class lands directly on the
- * `<input class="wp-input">` element. `:deep(.wp-input)` looked for
- * a DESCENDANT that doesn't exist → padding-left never applied →
- * absolute-positioned search icon overlapped the placeholder text.
- * Apply padding-left to the input itself. */
-.wp-bundle-add__searchinput { flex: 1; padding-left: 26px; } /* audit-exempt: 26px = icon left(8) + glyph(~13) + gap(5) */
 
 .wp-bundle-add__list {
   display: flex;

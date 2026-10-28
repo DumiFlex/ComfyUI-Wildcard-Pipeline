@@ -24,11 +24,11 @@ import { computed, h, ref, watch, type VNode } from "vue";
 import { useRouter } from "vue-router";
 import { deletedIds } from "../../composables/useLibraryChanged";
 import { useCardViewContext } from "../../composables/card-views/context";
-import CategoryChip from "../CategoryChip.vue";
+import Chip from "../ui/Chip.vue";
 import { KIND_ICON_MAP } from "../../../components/shared/kind-icons";
 import type { AiChatRef } from "../../api/types";
 import { closeOpen, parseMarkdown, type Block, type Inline, type ListItem, type Tone } from "../../utils/chat-markdown";
-import { copyText } from "../../utils/clipboard";
+import { copyText } from "@/components/shared/clipboard";
 import { syntaxNodes } from "../../utils/chat-syntax";
 import { stripStepFields } from "../../utils/chat-step-fields";
 
@@ -241,7 +241,7 @@ function categoryChip(id: string | undefined): VNode | null {
   if (!id) return null;
   let c: ReturnType<NonNullable<typeof lookups.category>> = null;
   try { c = lookups.category?.(id) ?? null; } catch { c = null; }
-  return c ? h(CategoryChip, { name: c.name, color: c.color, icon: c.icon, class: "wp-ai-msg__item-cat" }) : null;
+  return c ? h(Chip, { color: c.color, icon: c.icon, class: "wp-ai-msg__item-cat" }, () => c.name) : null;
 }
 
 /** Each item of a list as its mention and the words after it, when every

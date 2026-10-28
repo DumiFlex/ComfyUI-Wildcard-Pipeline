@@ -11,6 +11,7 @@ import ModalShell from "../shared/ModalShell.vue";
 import SweepPanel from "./SweepPanel.vue";
 import { liveAxes, sweepTotal, type SweepConfig } from "./types";
 import type { SweepCandidate } from "./sweep-candidates";
+import WpButton from "../shared/WpButton.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -97,17 +98,15 @@ const preview = computed(() => {
       <div class="wp-swm__foot">
         <span class="wp-swm__foot-hint">Changes save as you make them.</span>
         <span class="wp-swm__spacer" />
-        <button type="button" class="wp-swm__btn" data-test="sweep-modal-done" @click="emit('close')">Done</button>
+        <WpButton variant="primary" data-test="sweep-modal-done" @click="emit('close')">Done</WpButton>
       </div>
     </div>
   </ModalShell>
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
-.wp-swm { width: 520px; max-width: 100%; max-height: 86vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: 6px; overflow: hidden; color: var(--wp-text); font-size: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.55); }
-.wp-swm__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); background: linear-gradient(180deg, color-mix(in srgb, var(--wp-accent) 18%, var(--wp-bg2)) 0%, var(--wp-bg2) 100%); }
+.wp-swm { width: 520px; max-width: 100%; max-height: 86vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: 6px; overflow: hidden; color: var(--wp-text); font-size: 12px; box-shadow: var(--wp-shadow-lg); }
+.wp-swm__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); background: color-mix(in srgb, var(--wp-accent) 9%, var(--wp-bg2)); }
 .wp-swm__head-icon { color: var(--wp-accent); width: 24px; display: flex; justify-content: center; }
 .wp-swm__title-block { flex: 1; min-width: 0; }
 .wp-swm__title-row { display: flex; align-items: center; gap: 8px; }
@@ -129,5 +128,4 @@ const preview = computed(() => {
 .wp-swm__foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; flex-shrink: 0; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
 .wp-swm__foot-hint { font: 10px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-swm__spacer { flex: 1; }
-.wp-swm__btn { padding: 6px 14px; border: 1px solid var(--wp-accent); border-radius: 3px; background: var(--wp-accent); color: #fff; font: 11px var(--wp-font-sans); cursor: pointer; }
 </style>

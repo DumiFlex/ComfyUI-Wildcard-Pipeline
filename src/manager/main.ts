@@ -2,6 +2,7 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import "primeicons/primeicons.css";
 import "./styles/tokens.css";
+import "@/components/shared/button.css";
 import "./styles/rich-text.css";
 import "./styles/tailwind.css";
 import App from "./App.vue";
@@ -9,6 +10,10 @@ import router from "./router";
 import { installStartPage } from "./router/start-page";
 import { useUiStore } from "./stores/uiStore";
 import { useTweaksStore } from "./stores/tweaksStore";
+
+// Marks the manager page so the canvas colour tokens (components/shared/theme.css)
+// stay off it; the manager's own tokens use the same names.
+document.documentElement.classList.add("wp-manager");
 
 const app = createApp(App);
 const pinia = createPinia();

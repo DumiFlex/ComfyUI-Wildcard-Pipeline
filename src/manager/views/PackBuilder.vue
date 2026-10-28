@@ -13,11 +13,11 @@
  * before offering Install. "Extend with AI" on a bundle opens this page
  * aimed at that bundle (`pb.target`).
  */
+import WpNumber from "@/components/shared/WpNumber.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
-import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import AiImagePicker from "../components/ai/AiImagePicker.vue";
 import AiSearchFound from "../components/ai/AiSearchFound.vue";
@@ -204,9 +204,13 @@ const moduleCount = computed(
 const hasTemplate = computed(
   () => builtItems.value.some((i) => i.kind === "template" && pb.states.value[i.key]?.result),
 );
+/** Matches the server's install check: a new item other than the template
+ *  must have built (an extended bundle's own items don't count). */
 const installable = computed(() => builtItems.value.some(
-  (i) => i.kind !== "template" && pb.states.value[i.key]?.result,
+  (i) => i.kind !== "template" && !i.existing && pb.states.value[i.key]?.result,
 ));
+/** Extending a bundle where only the template built. */
+const onlyTemplate = computed(() => !!pb.target.value && hasTemplate.value && !installable.value);
 const steps = computed(() => [
   { label: "Describe", done: !!result.value || settingUp.value, on: !result.value && !settingUp.value },
   { label: "Settings", done: !!result.value, on: !result.value && settingUp.value },
@@ -329,7 +333,7 @@ const run = computed<AiPackRun>(() => draft.value?.run ?? { mode: "single", fram
 function setRunMode(mode: AiPackRun["mode"]): void {
   pb.editPlan({ run: { mode, frames: mode === "story" ? run.value.frames || 4 : 0 } });
 }
-function setRunFrames(v: string | number): void {
+function setRunFrames(v: number | null): void {
   const n = Math.round(Number(v));
   // The server keeps it within 2–12.
   pb.editPlan({ run: { mode: "story", frames: Number.isFinite(n) && n > 0 ? Math.max(2, Math.min(12, n)) : 4 } });
@@ -700,8 +704,7 @@ function stopExtending(): void {
             @update:model-value="(v) => setRunMode(v as AiPackRun['mode'])"
           />
           <template v-if="run.mode === 'story'">
-            <Input
-              type="number"
+            <WpNumber commit="input"
               size="sm"
               class="wp-pack__run-frames"
               :model-value="run.frames"
@@ -896,6 +899,11 @@ function stopExtending(): void {
               <button type="button" class="wp-pack__mini" :disabled="chat.loading.value" data-test="pack-note-explain" @click="explain(n)">Explain</button>
             </li>
           </ul>
+          <div v-if="pb.fixAllCount.value && !pb.working.value && pb.phase.value === 'build'" class="wp-pack__row" data-test="pack-problems-actions">
+            <span class="wp-pack__dim">Rebuilds {{ pb.fixAllCount.value === 1 ? 'the item' : `the ${pb.fixAllCount.value} items` }} with a problem, each with its problems as the note, then tests again.</span>
+            <span class="wp-pack__spacer" />
+            <Button size="sm" icon="pi-wrench" data-test="pack-problems-fix-all" @click="pb.fixAll">Fix all with AI</Button>
+          </div>
           <p v-if="rulesChecked.length" class="wp-pack__dim" data-test="pack-rules">
             Rules checked on the runs: {{ rulesChecked.filter((r) => r.holds).length }} of {{ rulesChecked.length }} held<template v-if="rulesChecked.some((r) => !r.holds)">; the broken ones are listed above</template>.
           </p>
@@ -952,6 +960,7 @@ function stopExtending(): void {
             One undo removes all of it.
             <template v-if="pb.summary.value.failed + pb.summary.value.skipped"> {{ pb.summary.value.failed + pb.summary.value.skipped }} item{{ pb.summary.value.failed + pb.summary.value.skipped === 1 ? '' : 's' }} that didn't build stay out.</template>
           </p>
+          <p v-else-if="onlyTemplate" class="wp-pack__dim" data-test="pack-nothing">Only the template built, so there is nothing new to add to the bundle yet. Retry a failed item, or go back to the plan to add something new.</p>
           <p v-else class="wp-pack__dim" data-test="pack-nothing">Nothing is built yet, so there is nothing to install. Retry the failed items or go back to the plan.</p>
           <div class="wp-pack__row">
             <Button

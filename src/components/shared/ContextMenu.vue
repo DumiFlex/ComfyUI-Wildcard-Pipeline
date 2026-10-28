@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch, nextTick } from "vue";
+import { placeFloating, viewportSize, type Placement } from "./floating";
 
 export interface ContextMenuItem {
   label: string;
@@ -54,11 +55,26 @@ const props = defineProps<{
   y: number;
   items: ContextMenuEntry[];
   header?: ContextMenuHeader;
+  /** Open next to this element instead of at x/y (DropdownMenu's trigger).
+   *  A click on it doesn't count as "outside", so the trigger can toggle. */
+  anchor?: HTMLElement | null;
+  placement?: Placement;
 }>();
 
 const emit = defineEmits<{ (e: "close"): void }>();
 
 const activeIndex = ref(-1);
+const menuEl = ref<HTMLElement | null>(null);
+/** Where the menu sits: x/y (or the anchor), moved to stay on screen. */
+const pos = ref({ x: 0, y: 0 });
+
+function place(): void {
+  const el = menuEl.value;
+  const size = el ? { width: el.offsetWidth, height: el.offsetHeight } : { width: 0, height: 0 };
+  const from = props.anchor?.getBoundingClientRect() ?? { left: props.x, top: props.y, width: 0, height: 0 };
+  const at = placeFloating(from, size, viewportSize(), { placement: props.placement ?? "bottom-start", gap: props.anchor ? 4 : 0 });
+  pos.value = { x: at.x, y: at.y };
+}
 
 function pickableIndices(): number[] {
   const out: number[] = [];
@@ -98,8 +114,17 @@ function onWindowPointerDown(ev: PointerEvent) {
     if (el instanceof HTMLElement && el.classList?.contains("wp-ctxmenu")) {
       return;
     }
+    if (props.anchor && el === props.anchor) return;
   }
   emit("close");
+}
+
+// A menu opened from a trigger follows it as the page scrolls; one opened
+// at the pointer closes instead, since the spot it was opened on has moved.
+function onScroll(ev: Event): void {
+  if (ev.target instanceof Node && menuEl.value?.contains(ev.target)) return;
+  if (props.anchor) place();
+  else emit("close");
 }
 
 function onKey(ev: KeyboardEvent) {
@@ -122,24 +147,32 @@ function onKey(ev: KeyboardEvent) {
 watch(() => props.visible, async (v) => {
   if (v) {
     activeIndex.value = -1;
+    pos.value = { x: props.x, y: props.y };
     // Capture phase so descendant `@click.stop` handlers (trace
     // value cells, seed buttons, etc) can't prevent the close.
     window.addEventListener("pointerdown", onWindowPointerDown, true);
     window.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", place);
     // Defer one tick so the right-click that opened the menu doesn't
     // immediately close it (the synthetic mousedown that preceded the
     // contextmenu happens BEFORE the listener is wired, so this is
     // mostly belt-and-braces).
     await nextTick();
+    place();
   } else {
     window.removeEventListener("pointerdown", onWindowPointerDown, true);
     window.removeEventListener("keydown", onKey);
+    window.removeEventListener("scroll", onScroll, true);
+    window.removeEventListener("resize", place);
   }
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("pointerdown", onWindowPointerDown, true);
   window.removeEventListener("keydown", onKey);
+  window.removeEventListener("scroll", onScroll, true);
+  window.removeEventListener("resize", place);
 });
 
 function pick(item: ContextMenuItem) {
@@ -157,8 +190,9 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
   <Teleport to="body">
     <ul
       v-if="visible"
+      ref="menuEl"
       class="wp-ctxmenu"
-      :style="{ left: `${x}px`, top: `${y}px` }"
+      :style="{ left: `${pos.x}px`, top: `${pos.y}px` }"
       role="menu"
       @click.stop
       @contextmenu.prevent
@@ -211,18 +245,14 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
   </Teleport>
 </template>
 
-<style>
-@import "./theme.css";
-</style>
-
 <style scoped>
 .wp-ctxmenu {
   position: fixed;
   z-index: 10000;
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border-strong);
   border-radius: var(--wp-radius-sm);
-  box-shadow: var(--wp-shadow-sm, 0 4px 16px rgba(0, 0, 0, 0.5));
+  box-shadow: var(--wp-shadow-md);
   /* Tighter padding than the old 4px-0 to match the v2 mockup. Items
    * carry their own 6px padding + rounded corners so the menu reads
    * as a stack of pills, not a flat list. */
@@ -245,7 +275,7 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
   gap: 6px;
   padding: 6px 8px 4px 8px;
   font: 600 10px/1 var(--wp-font-sans);
-  color: var(--wp-text-dim, var(--wp-text3));
+  color: var(--wp-text-dim);
   border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
   margin-bottom: 4px;
 }
@@ -262,7 +292,7 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
   font: 600 9px/1 var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--wp-text3);
+  color: var(--wp-text-dim);
   padding: 6px 8px 4px 8px;
 }
 .wp-ctxmenu__item {
@@ -292,10 +322,10 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
   color: var(--wp-accent);
 }
 .wp-ctxmenu__item--disabled {
-  color: var(--wp-text3);
+  color: var(--wp-text-dim);
   cursor: not-allowed;
 }
-.wp-ctxmenu__item--disabled:hover { background: transparent; color: var(--wp-text3); }
+.wp-ctxmenu__item--disabled:hover { background: transparent; color: var(--wp-text-dim); }
 .wp-ctxmenu__icon,
 .wp-ctxmenu__icon-spacer {
   width: 14px;
@@ -318,7 +348,7 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
   color: inherit;
 }
 .wp-ctxmenu__sub {
-  color: var(--wp-text-dim, var(--wp-text3));
+  color: var(--wp-text-dim);
   font: 400 10px/1.3 var(--wp-font-sans);
   white-space: normal;
 }

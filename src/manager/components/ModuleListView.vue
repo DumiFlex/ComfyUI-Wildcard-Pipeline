@@ -16,6 +16,8 @@
  *   - `actions`               — trailing per-row action buttons
  *   - `expansion`             — body of the expanded-row drawer
  */
+import SearchInput from "@/components/shared/SearchInput.vue";
+import Banner from "@/components/shared/Banner.vue";
 import { computed, defineAsyncComponent, nextTick, ref, watch, useSlots } from "vue";
 import { useRouter } from "vue-router";
 import Button from "./ui/Button.vue";
@@ -748,16 +750,15 @@ defineExpose({
 
     <!-- Toolbar -->
     <div class="wp-page-toolbar">
-      <div class="wp-page-toolbar__search wp-input-group" data-ai-anchor="search" data-ai-label="Search the list">
-        <span class="wp-input-group__addon"><i class="pi pi-search" aria-hidden="true" /></span>
-        <input
-          class="wp-input"
-          placeholder="Search by name, id, tag…"
-          :value="filter.q ?? ''"
-          aria-label="Search"
-          @input="(e) => { filter.q = (e.target as HTMLInputElement).value; emitFetch(); }"
-        />
-      </div>
+      <SearchInput
+        class="wp-page-toolbar__search"
+        :model-value="filter.q ?? ''"
+        placeholder="Search by name, id, tag…"
+        aria-label="Search"
+        data-ai-anchor="search"
+        data-ai-label="Search the list"
+        @update:model-value="(v) => { filter.q = v; emitFetch(); }"
+      />
       <Button
         :variant="filtersOpen ? 'outline' : 'secondary'"
         :icon="filtersOpen ? 'pi pi-filter-fill' : 'pi pi-filter'"
@@ -1044,25 +1045,23 @@ defineExpose({
          `fetch` event the toolbar's Refresh control uses. Wrapped in a
          Transition so retry-success doesn't snap the banner away. -->
     <Transition name="wp-banner">
-      <div
+      <Banner
         v-if="loadError"
-        class="wp-load-error"
-        role="alert"
+        tone="danger"
+        title="Couldn't load items"
         data-test="load-error-banner"
       >
-        <i class="pi pi-exclamation-triangle wp-load-error__icon" aria-hidden="true" />
-        <div class="wp-load-error__body">
-          <strong class="wp-load-error__title">Couldn't load items</strong>
-          <span class="wp-load-error__detail">{{ loadError }}</span>
-        </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          icon="pi-refresh"
-          data-test="load-error-retry"
-          @click="emitFetch"
-        >Retry</Button>
-      </div>
+        {{ loadError }}
+        <template #actions>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="pi-refresh"
+            data-test="load-error-retry"
+            @click="emitFetch"
+          >Retry</Button>
+        </template>
+      </Banner>
     </Transition>
 
     <!-- Table. Keyboard nav lives on the SCROLL WRAPPER, not the <tbody>:
@@ -1244,6 +1243,7 @@ defineExpose({
             <td :colspan="totalCols" class="wp-table__empty-cell">
               <slot v-if="!hasActiveFilters" name="empty">
                 <EmptyState
+                  size="page"
                   icon="pi-inbox"
                   :headline="emptyMessage"
                   variant="library"
@@ -1255,6 +1255,7 @@ defineExpose({
               </slot>
               <EmptyState
                 v-else
+                size="page"
                 icon="pi-search"
                 headline="No matches"
                 body="Try a different search term or clear the filter."

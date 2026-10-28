@@ -10,6 +10,7 @@ import type { BundleInstance } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
+import WpButton from "../../../shared/WpButton.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
@@ -129,40 +130,13 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
         <i class="pi pi-external-link" aria-hidden="true" />
         Edit library entry in SPA
       </a>
-      <button
-        v-if="canSaveToLibrary"
-        type="button"
-        class="wp-bdm__btn wp-bdm__btn--quiet"
-        data-test="bdm-reset-lib"
-        title="Replace children with the frozen library snapshot — drops local edits"
-        @click="emit('reset-to-library')"
-      >
-        <i class="pi pi-replay" aria-hidden="true" />
-        Reset to library
-      </button>
+      <WpButton variant="ghost" icon="pi-replay" v-if="canSaveToLibrary" data-test="bdm-reset-lib" title="Replace children with the frozen library snapshot — drops local edits" @click="emit('reset-to-library')">Reset to library</WpButton>
       <span class="wp-bdm__hint">
         <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
-      <button
-        v-if="canSaveToLibrary"
-        type="button"
-        class="wp-bdm__btn"
-        data-test="bdm-save-lib"
-        @click="emit('save-to-library')"
-      >
-        Save to library
-      </button>
-      <button type="button" class="wp-bdm__btn" data-test="bdm-cancel" @click="emit('cancel')">
-        Cancel
-      </button>
-      <button
-        type="button"
-        class="wp-bdm__btn wp-bdm__btn--primary"
-        data-test="bdm-save"
-        @click="emit('save')"
-      >
-        Save
-      </button>
+      <WpButton v-if="canSaveToLibrary" data-test="bdm-save-lib" @click="emit('save-to-library')">Save to library</WpButton>
+      <WpButton data-test="bdm-cancel" @click="emit('cancel')">Cancel</WpButton>
+      <WpButton variant="primary" data-test="bdm-save" @click="emit('save')">Save</WpButton>
     </footer>
     </div>
   </div>
@@ -170,7 +144,7 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
 
 <style scoped>
 .wp-bdm { background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: var(--wp-radius); width: 720px; max-width: 100%; max-height: 80vh; display: flex; flex-direction: column; overflow-y: auto; font-family: var(--wp-font-sans, sans-serif); font-size: 12px; color: var(--wp-text); }
-.wp-bdm__head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: linear-gradient(180deg, color-mix(in srgb, var(--modal-accent, var(--wp-accent)) 18%, var(--wp-bg2)) 0%, var(--wp-bg2) 100%); border-bottom: 1px solid var(--wp-border); }
+.wp-bdm__head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: color-mix(in srgb, var(--modal-accent, var(--wp-accent)) 9%, var(--wp-bg2)); border-bottom: 1px solid var(--wp-border); }
 .wp-bdm__head-icon { color: var(--modal-accent, var(--wp-accent)); font-size: 18px; width: 24px; text-align: center; }
 .wp-bdm__title-block { flex: 1; min-width: 0; }
 .wp-bdm__title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -190,11 +164,4 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
 .wp-bdm__spa-link .pi { font-size: 10px; }
 .wp-bdm__hint { margin-left: auto; font: 10px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-bdm__hint kbd { font: 9px var(--wp-font-mono); background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); padding: 1px 4px; border-radius: 2px; color: var(--wp-text-muted, var(--wp-text2)); }
-.wp-bdm__btn { padding: 5px 12px; border: 1px solid var(--wp-border); border-radius: 3px; background: transparent; color: var(--wp-text-muted, var(--wp-text2)); font: 11px var(--wp-font-sans); cursor: pointer; }
-.wp-bdm__btn--primary { border-color: var(--wp-accent); background: var(--wp-accent); color: white; }
-.wp-bdm__btn:hover { border-color: var(--wp-border-strong, var(--wp-border2)); color: var(--wp-text); }
-.wp-bdm__btn--primary:hover { border-color: var(--wp-accent2, var(--wp-accent)); background: var(--wp-accent2, var(--wp-accent)); color: white; }
-.wp-bdm__btn--quiet { border-color: transparent; color: var(--wp-text-dim, var(--wp-text3)); display: inline-flex; align-items: center; gap: 5px; font-size: 10px; }
-.wp-bdm__btn--quiet:hover { border-color: var(--wp-border); color: var(--wp-text-muted, var(--wp-text2)); }
-.wp-bdm__btn--quiet .pi { font-size: 10px; }
 </style>

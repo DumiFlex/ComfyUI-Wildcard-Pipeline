@@ -38,6 +38,8 @@ import {
 import PlaygroundMockup from "./PlaygroundMockup.vue";
 import WpCheck from "@/components/shared/WpCheck.vue";
 import WpSelect from "@/components/shared/WpSelect.vue";
+import WpButton from "@/components/shared/WpButton.vue";
+import CloseButton from "@/components/shared/CloseButton.vue";
 
 type Density = "comfortable" | "compact" | "minimal";
 type Decoration = "full" | "minimal" | "off";
@@ -298,14 +300,7 @@ onBeforeUnmount(() => {
               </p>
             </div>
           </div>
-          <button
-            class="wp-pg__close"
-            type="button"
-            aria-label="Close playground"
-            @click="onClose"
-          >
-            <i class="pi pi-times" />
-          </button>
+          <CloseButton label="Close playground" size="sm" kbd="Esc" @click="onClose" />
         </header>
 
         <div class="wp-pg__body">
@@ -492,20 +487,8 @@ onBeforeUnmount(() => {
         </div>
 
         <footer class="wp-pg__foot">
-          <button
-            class="wp-pg__btn wp-pg__btn--secondary"
-            type="button"
-            @click="onResetAll"
-          >
-            Reset all to defaults
-          </button>
-          <button
-            class="wp-pg__btn wp-pg__btn--primary"
-            type="button"
-            @click="onClose"
-          >
-            Done
-          </button>
+          <WpButton size="md" @click="onResetAll">Reset all to defaults</WpButton>
+          <WpButton variant="primary" size="md" @click="onClose">Done</WpButton>
         </footer>
       </section>
     </div>
@@ -585,24 +568,6 @@ onBeforeUnmount(() => {
   font: 11px/1.3 var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.wp-pg__close {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--wp-text2);
-  border-radius: var(--wp-radius-sm);
-  width: 26px;
-  height: 26px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.wp-pg__close:hover {
-  border-color: var(--wp-border2);
-  color: var(--wp-text);
-}
-.wp-pg__close .pi { font-size: 12px; }
-
 .wp-pg__body {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) minmax(300px, 1.2fr);
@@ -661,29 +626,6 @@ onBeforeUnmount(() => {
   border-top: 1px solid var(--wp-border);
   background: var(--wp-bg2);
 }
-.wp-pg__btn {
-  background: transparent;
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text);
-  font: 600 12px var(--wp-font-sans);
-  padding: 6px 14px;
-  cursor: pointer;
-  transition: background-color var(--wp-motion-hover), border-color var(--wp-motion-hover), color var(--wp-motion-hover);
-}
-.wp-pg__btn:hover {
-  border-color: var(--wp-border2);
-}
-.wp-pg__btn--primary {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
-  color: #fff;
-}
-.wp-pg__btn--primary:hover {
-  background: var(--wp-accent2);
-  border-color: var(--wp-accent2);
-}
-
 /* Narrow viewport — stack panes */
 @media (max-width: 720px) {
   .wp-pg__body {

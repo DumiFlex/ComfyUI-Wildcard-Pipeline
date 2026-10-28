@@ -14,7 +14,7 @@ import { onBeforeRouteLeave } from "vue-router";
  *     any non-undefined returnValue to trigger the prompt.
  *
  * The composable does NOT mount its own dialog. Consumers render
- * `<ConfirmDialog>` (or any modal) bound to the returned
+ * `<ConfirmModal>` (or any modal) bound to the returned
  * `showConfirm` ref and call `onConfirmLeave` / `onCancelLeave` from
  * its emits.
  *

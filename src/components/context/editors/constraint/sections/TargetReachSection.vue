@@ -28,6 +28,8 @@ import {
   type TargetSelect,
 } from "../../../../../extension/constraint-pairs";
 import WpCheck from "../../../../shared/WpCheck.vue";
+import WpNumber from "../../../../shared/WpNumber.vue";
+import WpSegmented, { type SegmentedOption } from "../../../../shared/WpSegmented.vue";
 import { clauseActions } from "../../../../../extension/derivation-conditions";
 
 type PickEntry = NonNullable<TargetSelect["picks"]>[number];
@@ -85,11 +87,11 @@ const picks = computed<PickEntry[]>(() => {
  *  modal didn't supply one (headless / legacy mounts). */
 const targetLabel = computed<string>(() => props.targetName?.trim() || "target");
 
-const MODES: Array<{ key: TargetSelect["mode"]; label: string }> = [
-  { key: "first", label: "first" },
-  { key: "next", label: "next N" },
-  { key: "all", label: "all" },
-  { key: "pick", label: "pick" },
+const MODE_OPTIONS: SegmentedOption<TargetSelect["mode"]>[] = [
+  { value: "first", label: "first" },
+  { value: "next", label: "next N" },
+  { value: "all", label: "all" },
+  { value: "pick", label: "pick" },
 ];
 
 /** Switch reach mode. Entering `next` defaults `count:1`; entering `pick`
@@ -110,20 +112,10 @@ function setMode(next: TargetSelect["mode"]): void {
   }
 }
 
-function onCountInput(ev: Event): void {
-  const raw = Number((ev.target as HTMLInputElement).value);
-  const n = Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
+/** Typed or stepped next-N count: whole numbers, at least 1. */
+function setCount(v: number | null): void {
+  const n = v !== null && Number.isFinite(v) && v >= 1 ? Math.floor(v) : 1;
   emit("update:modelValue", { mode: "next", count: n });
-}
-
-/** Custom stepper ▲/▼. The native number-input spinners are suppressed
- *  (they only show on hover and render inconsistently inside ComfyUI's
- *  embedded DOM), so explicit buttons give the always-visible arrows the
- *  user asked for. Clamped at the engine minimum of 1 (a `next 0` reach
- *  covers nothing). */
-function bumpCount(delta: number): void {
-  const next = Math.max(1, count.value + delta);
-  emit("update:modelValue", { mode: "next", count: next });
 }
 
 // ── Pick checklist ──────────────────────────────────────────────
@@ -298,48 +290,27 @@ const hint = computed<string>(() => {
   <section class="rh" data-test="reach-section">
     <div class="rh__label">Target reach</div>
 
-    <div class="rh-seg" role="group" aria-label="Target reach mode">
-      <button
-        v-for="m in MODES"
-        :key="m.key"
-        type="button"
-        class="rh-btn"
-        :class="{ active: mode === m.key }"
-        :aria-pressed="mode === m.key"
-        :data-test="`reach-mode-${m.key}`"
-        @click="setMode(m.key)"
-      >{{ m.label }}</button>
-
-      <span v-if="mode === 'next'" class="rh-step">
-        <input
-          class="rh-step__field"
-          type="number"
-          min="1"
-          step="1"
-          inputmode="numeric"
-          :value="count"
-          aria-label="Number of downstream targets"
-          data-test="reach-count"
-          @input="onCountInput"
-        />
-        <span class="rh-step__arrows">
-          <button
-            type="button"
-            class="rh-step__arrow"
-            aria-label="Increase count"
-            data-test="reach-count-up"
-            @click="bumpCount(1)"
-          >▲</button>
-          <button
-            type="button"
-            class="rh-step__arrow"
-            aria-label="Decrease count"
-            :disabled="count <= 1"
-            data-test="reach-count-down"
-            @click="bumpCount(-1)"
-          >▼</button>
-        </span>
-      </span>
+    <div class="rh-row">
+      <WpSegmented
+        :model-value="mode"
+        :options="MODE_OPTIONS"
+        size="sm"
+        aria-label="Target reach mode"
+        test-prefix="reach-mode"
+        @update:model-value="setMode"
+      />
+      <WpNumber
+        v-if="mode === 'next'"
+        class="rh-count"
+        :model-value="count"
+        :min="1"
+        commit="input"
+        aria-label="Number of downstream targets"
+        up-label="Increase count"
+        down-label="Decrease count"
+        data-test="reach-count"
+        @update:model-value="setCount"
+      />
     </div>
 
     <div v-if="mode === 'pick'" class="rh-pick" data-test="reach-picklist">
@@ -381,9 +352,8 @@ const hint = computed<string>(() => {
 .rh {
   padding: 12px 16px;
   /* Subtle neutral demarcation. The earlier accent wash + inset rail read
-     as too loud; a faint text-tinted panel (same idiom as `.rh-seg` /
-     row hover below) sets the section apart on both light + dark without
-     shouting. */
+     as too loud; a faint text-tinted panel (same idiom as the row hover
+     below) sets the section apart on both light + dark without shouting. */
   background: color-mix(in srgb, var(--wp-text) 3%, transparent);
   border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
 }
@@ -395,87 +365,9 @@ const hint = computed<string>(() => {
   margin-bottom: 8px;
 }
 
-/* ── Segmented control — mirrors CellRulePopover `.pop-btn` group. ── */
-.rh-seg {
-  display: inline-flex;
-  align-items: stretch;
-  gap: 0;
-  border: 1px solid var(--wp-border);
-  border-radius: 4px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--wp-text) 2%, transparent);
-}
-.rh-btn {
-  padding: 6px 12px;
-  border: 0;
-  border-right: 1px solid var(--wp-border);
-  background: transparent;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 600 10px var(--wp-font-sans);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-}
-.rh-btn:last-of-type { border-right: 0; }
-.rh-btn:hover { color: var(--wp-text); background: color-mix(in srgb, var(--wp-text) 6%, transparent); }
-.rh-btn.active {
-  /* White-on-accent, matching the modal footer's `.wp-cnm__btn--primary`
-   * (the accent is a saturated purple in both light + dark themes, so a
-   * hard white reads on both — `--wp-accent-on` isn't reliably defined). */
-  background: var(--wp-accent);
-  color: #fff;
-}
-
-/* Stepper sits flush after the segmented group: number field + a stacked
-   ▲/▼ arrow column. */
-.rh-step {
-  display: inline-flex;
-  align-items: stretch;
-  border-left: 1px solid var(--wp-border);
-  background: var(--wp-bg-deep, var(--wp-bg));
-}
-.rh-step__field {
-  width: 38px;
-  background: transparent;
-  border: 0;
-  padding: 0 6px;
-  font: 600 12px var(--wp-font-mono);
-  color: var(--wp-text);
-  text-align: center;
-  -moz-appearance: textfield;
-}
-/* Native spinners are suppressed in favour of the custom always-visible
-   ▲/▼ buttons (native arrows only appear on hover + render inconsistently
-   in ComfyUI's embedded DOM). */
-.rh-step__field::-webkit-outer-spin-button,
-.rh-step__field::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.rh-step__field:focus { outline: none; }
-
-.rh-step__arrows {
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid var(--wp-border);
-}
-.rh-step__arrow {
-  flex: 1 1 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font-size: 7px;
-  line-height: 1;
-  cursor: pointer;
-}
-.rh-step__arrow + .rh-step__arrow { border-top: 1px solid var(--wp-border); }
-.rh-step__arrow:hover:not(:disabled) {
-  color: var(--wp-text);
-  background: color-mix(in srgb, var(--wp-text) 8%, transparent);
-}
-.rh-step__arrow:disabled { opacity: 0.3; cursor: default; }
+/* Reach mode + the `next N` count, side by side. */
+.rh-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rh-count { width: 64px; }
 
 /* ── Pick checklist ─────────────────────────────────────────────── */
 .rh-pick {

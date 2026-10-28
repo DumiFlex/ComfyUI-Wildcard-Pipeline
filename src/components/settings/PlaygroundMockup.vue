@@ -465,29 +465,6 @@ function viewForBundle(key: string) {
 }
 .wp-pg-mockup .wp-collapse-btn .pi { font-size: 10px; }
 .wp-pg-mockup .wp-collapse-btn:hover { color: var(--wp-text); }
-.wp-pg-mockup .wp-toggle {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  cursor: pointer;
-}
-.wp-pg-mockup .wp-toggle input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-.wp-pg-mockup .wp-toggle-mark {
-  display: block;
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  border: 1px solid var(--wp-border2);
-  background: var(--wp-bg2);
-}
-.wp-pg-mockup .wp-toggle input:checked + .wp-toggle-mark {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
-}
 .wp-pg-mockup .wp-row-type-icon {
   width: 16px;
   height: 16px;

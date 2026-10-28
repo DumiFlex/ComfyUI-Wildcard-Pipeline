@@ -552,11 +552,11 @@
     },
     {
      "title": "Plan review and fixes",
-     "text": "The plan is checked as you edit it: a variable nothing sets, a rule on a tag that doesn't exist, two constraints that loop, a story without beats, a LoRA input nothing reads. Each finding has Apply (when there's a ready fix) and Dismiss. Tick findings and press Fix with AI, or Fix all with AI. Review with AI asks the model for a second opinion on the design.\nAfter the build, each problem on an item has Fix with AI (rebuild it with the problem as a note), Explain and Dismiss. The test run also shows each variable's most common values, options that never came up, and a few sample prompts. A story pack plays every frame of its Loop. An item the code wrote from the plan (a constraint, derivation or template on a graph plan) has Change the plan instead of Fix with AI, since a rebuild would write the same thing. A problem marked still after a fix says why under it.\nThe quick checks under the plan only look at names: an empty list means every rule names slots and values the plan has, not that the rules do what you meant. The test run is what checks them on real prompts."
+     "text": "The plan is checked as you edit it: a variable nothing sets, a rule on a tag that doesn't exist, two constraints that loop, a story without beats, a LoRA input nothing reads. Each finding has Apply (when there's a ready fix) and Dismiss. Tick findings and press Fix with AI, or Fix all with AI. Review with AI asks the model for a second opinion on the design.\nAfter the build, each problem on an item has Fix with AI (rebuild it with the problem as a note), Explain and Dismiss. The test run also shows each variable's most common values, options that never came up, and a few sample prompts. A story pack plays every frame of its Loop. An item the code wrote from the plan (a constraint, derivation or template on a graph plan) has Change the plan instead of Fix with AI, since a rebuild would write the same thing. A problem marked still after a fix says why under it. Fix all with AI under the test run rebuilds every item with a problem at once, each with its problems as the note (wildcards first, then the rules on them), and tests again.\nThe quick checks under the plan only look at names: an empty list means every rule names slots and values the plan has, not that the rules do what you meant. The test run is what checks them on real prompts."
     },
     {
      "title": "More ways to start",
-     "text": "- Start from a prompt you like. Paste a prompt and the planner splits it into parts, one wildcard each, to make more like it.\n- Extend with AI in a bundle's editor opens the Pack builder on that bundle: describe what to add (\"a weather wildcard the outfits follow\"). New items are installed where they belong, and Undo puts the bundle back.\n- Make sub-bundles in a bundle's editor groups its children by a name you type, pick or let Suggest with AI choose. The AI only groups children that sit next to each other, so the run order stays the same.\n- Open in Pack builder on a chat card hands a pack the chat suggested to the Pack builder, with the settings the chat recommends. It doesn't plan yet, so you can add reference images and check the settings first.\nThe planner first reads your library's style (tags or sentences, your tags, variables and standing negatives) so the pack matches what you have."
+     "text": "- Start from a prompt you like. Paste a prompt and the planner splits it into parts, one wildcard each, to make more like it.\n- Extend with AI in a bundle's editor opens the Pack builder on that bundle: describe what to add (\"a weather wildcard the outfits follow\"). New items are installed where they belong, and Undo puts the bundle back. Add to the bundle waits until at least one new item (not just the template) has built.\n- Make sub-bundles in a bundle's editor groups its children by a name you type, pick or let Suggest with AI choose. The AI only groups children that sit next to each other, so the run order stays the same.\n- Open in Pack builder on a chat card hands a pack the chat suggested to the Pack builder, with the settings the chat recommends. It doesn't plan yet, so you can add reference images and check the settings first.\nThe planner first reads your library's style (tags or sentences, your tags, variables and standing negatives) so the pack matches what you have."
     },
     {
      "title": "Good to know",
@@ -2199,6 +2199,31 @@
    ]
   },
   {
+   "id": "component-kit",
+   "title": "Component kit",
+   "group": "reference",
+   "blurb": "Every shared control, colour and size, shown live.",
+   "keywords": [
+    "kit",
+    "components",
+    "design",
+    "buttons",
+    "tokens",
+    "colours",
+    "contributors"
+   ],
+   "sections": [
+    {
+     "title": "What's in it",
+     "text": "- Tokens: the colours, type sizes, spacing and corners, with the value each has right now.\n- Actions (5): Things you press.\n- Inputs (10): Things you type into or pick from a list.\n- Choices (7): On or off, one of a few, which tab.\n- Display (7): Showing a thing: cards, chips, icons, empty pages.\n- Feedback (6): Telling the user what happened or that something is busy.\n- Dialogs and menus (9): Anything that opens above the page.\n- Library pieces (8): Bigger parts built from the kit that several screens share. Reuse them before writing another.\n- Brand (1): The logo.\nPieces shared by the canvas and the manager (the node dialog, the right-click menu, popovers, tooltips, the search box, the number field, the toast, tabs, the segmented control, folding sections, banners, the copy and close buttons) are shown live too. Each of these is one component on both sides: the search box in a node picker and on a manager page is the same box, and so are the number fields, tabs and toasts. The canvas toast store is the one piece listed with how to use it instead of a live demo."
+    },
+    {
+     "title": "Reuse first",
+     "text": "New screens are built from kit entries. A new control is made only when nothing in the kit fits, and it goes into the kit in the same change, with a demo. Two checks keep this honest: one fails when a shared control has no kit entry, the other fails when a file adds a hand-made button, select, number box, dialog or colour.\nEvery control follows one standard: the same prop names (size, variant, tone), one height scale, colour tokens only, full keyboard use, Escape to close anything that floats, and focus back where it was. Anything that floats (a panel, a menu, a hint, a side panel) uses the kit's overlays. The full rules are in docs/component-standard.md in the repository.\nYou can also open the kit from Settings › Advanced › Component kit."
+    }
+   ]
+  },
+  {
    "id": "settings",
    "title": "Settings",
    "group": "settings",
@@ -2239,7 +2264,7 @@
     },
     {
      "title": "Advanced",
-     "text": "Move settings between machines, or start over.\n- Export settings: Save every preference to a JSON file.\n- Import settings: Load a settings file from another machine.\n- Reset browser preferences: Clear this device's preferences. Your library is untouched."
+     "text": "Move settings between machines, start over, or open the component kit.\n- Export settings: Save every preference to a JSON file.\n- Import settings: Load a settings file from another machine.\n- Component kit: Every shared control with when to use it, for people building the extension.\n- Reset browser preferences: Clear this device's preferences. Your library is untouched."
     }
    ]
   }

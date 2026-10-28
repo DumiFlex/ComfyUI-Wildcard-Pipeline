@@ -24,7 +24,7 @@ import Field from "../components/ui/Field.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import type { SelectOption } from "../components/ui/select-types";
-import PickerSearch from "./PickerSearch.vue";
+import SearchInput from "@/components/shared/SearchInput.vue";
 import { type IntegrityWarning } from "./parse";
 import { parseCheckedPayload } from "./shape-check";
 import type { RawPayload } from "./migrations";
@@ -624,7 +624,7 @@ const PAGE = 150;
 
         <section class="wp-pack__list" aria-label="Plan">
           <div class="wp-pack__toolbar">
-            <PickerSearch
+            <SearchInput
               v-model="query" class="wp-pack__search"
               placeholder="Search wildcards" aria-label="Search wildcards" data-test="pack-search"
             />
@@ -1023,7 +1023,7 @@ const PAGE = 150;
 
 .wp-pack__list { display: flex; flex-direction: column; gap: var(--wp-space-3); min-width: 0; }
 .wp-pack__toolbar { display: flex; align-items: center; gap: var(--wp-space-4); }
-.wp-pack__search { flex: 1; margin-bottom: 0; }
+.wp-pack__search { flex: 1; }
 .wp-pack__count { color: var(--wp-text-muted); font-size: var(--wp-text-xs); white-space: nowrap; }
 .wp-pack__table { border: 1px solid var(--wp-border); border-radius: var(--wp-radius-md); background: var(--wp-bg-1); overflow: hidden; }
 .wp-pack__tr {
@@ -1105,7 +1105,7 @@ const PAGE = 150;
   display: flex; align-items: center; justify-content: space-between; gap: var(--wp-space-5);
   padding: var(--wp-space-4) var(--wp-space-5); border: 1px solid var(--wp-border); border-radius: var(--wp-radius-md); background: var(--wp-bg-2);
 }
-.wp-pack__footer { position: sticky; bottom: var(--wp-space-4); box-shadow: 0 6px 24px rgb(0 0 0 / 0.25); }
+.wp-pack__footer { position: sticky; bottom: var(--wp-space-4); box-shadow: var(--wp-shadow-md); }
 .wp-pack__footer-text, .wp-pack__bar-text { color: var(--wp-text-muted); flex: 1; }
 .wp-pack__bar-text strong { color: var(--wp-text); }
 .wp-pack__bar-icon { color: var(--wp-accent-500); }

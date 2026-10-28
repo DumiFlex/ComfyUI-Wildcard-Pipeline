@@ -25,6 +25,7 @@ import { computed, inject } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import { LockSeedKey } from "../../lock-seed-ctx";
 import WpNumber from "../../../shared/WpNumber.vue";
+import WpSwitch from "../../../shared/WpSwitch.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -89,8 +90,8 @@ function onLockClick(): void {
   }
 }
 
-function onSeedInput(n: number): void {
-  if (!Number.isInteger(n)) return;
+function onSeedInput(n: number | null): void {
+  if (n === null || !Number.isInteger(n)) return;
   const ui = instance.value._ui ?? {};
   emitInstance({
     locked_seed: n,
@@ -109,18 +110,14 @@ function onRollClick(): void {
 </script>
 
 <template>
-  <button
-    type="button"
-    class="toggle"
-    :class="{ 'toggle--on': locked }"
+  <WpSwitch
+    variant="chip"
+    icon="pi-lock"
+    :label="label"
     data-test="runtime-lock"
-    role="switch"
-    :aria-checked="locked"
-    @click="onLockClick"
-  >
-    <i class="pi pi-lock" aria-hidden="true" />
-    {{ label }}
-  </button>
+    :model-value="locked"
+    @update:model-value="onLockClick"
+  />
 
   <div v-if="locked" class="seed-block">
     <span class="seed-block__label">Seed</span>
@@ -143,26 +140,6 @@ function onRollClick(): void {
 </template>
 
 <style scoped>
-.toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 10px;
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  font: 11px var(--wp-font-sans);
-  color: var(--wp-text-muted, var(--wp-text2));
-  cursor: pointer;
-  background: var(--wp-bg-deep, var(--wp-bg));
-}
-.toggle:hover { border-color: var(--wp-border-soft, var(--wp-border)); }
-.toggle .pi { font-size: 11px; color: var(--wp-text-dim, var(--wp-text3)); }
-.toggle--on {
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-text));
-  background: rgba(99, 102, 241, 0.10);
-}
-.toggle--on .pi { color: var(--wp-accent-text, var(--wp-text)); }
 .seed-block {
   margin-left: auto;
   display: inline-flex;

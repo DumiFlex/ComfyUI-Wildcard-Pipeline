@@ -4,6 +4,7 @@
  * and the "N of M" count. The editor owns the filter state (it also drives
  * the option table and the no-results row); this renders it.
  */
+import SearchInput from "@/components/shared/SearchInput.vue";
 import TagPickerMenu, { type TagGroup } from "../TagPickerMenu.vue";
 
 const query = defineModel<string>("query", { required: true });
@@ -34,25 +35,15 @@ const emit = defineEmits<{
 
 <template>
   <div class="wc-optfilter">
-    <label class="wc-optfilter__search" :class="{ 'wc-optfilter__search--on': query.length > 0 }">
-      <i class="pi pi-search" aria-hidden="true" />
-      <input
-        v-model="query"
-        type="text"
-        :placeholder="`Filter ${total} options…`"
-        aria-label="Filter options"
-        spellcheck="false"
-        autocomplete="off"
-        data-test="wc-opt-search" data-ai-anchor="opt-search" data-ai-label="Search the options"
-      />
-      <button
-        v-if="query"
-        type="button"
-        class="wc-optfilter__clearx"
-        aria-label="Clear text filter"
-        @click="query = ''"
-      ><i class="pi pi-times" aria-hidden="true" /></button>
-    </label>
+    <SearchInput
+      v-model="query"
+      class="wc-optfilter__search"
+      size="sm"
+      :placeholder="`Filter ${total} options…`"
+      aria-label="Filter options"
+      clear-label="Clear text filter"
+      data-test="wc-opt-search" data-ai-anchor="opt-search" data-ai-label="Search the options"
+    />
 
     <div v-if="allTags.length > 0" class="wc-optfilter__tagwrap">
       <button
@@ -120,37 +111,7 @@ const emit = defineEmits<{
    is deliberately no spacer in this block: one used to right-align the count,
    and it competed with the search for the same free space and took half of
    it. */
-.wc-optfilter__search { min-width: 90px; }
-.wc-optfilter__search {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-  flex: 1;
-  min-width: 0;
-  padding: 3px var(--wp-space-4); /* audit-exempt: compact inline search */
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-dim);
-}
-.wc-optfilter__search--on {
-  border-color: var(--wp-accent-500);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 20%, transparent);
-}
-.wc-optfilter__search .pi { font-size: 11px; }
-.wc-optfilter__search input {
-  flex: 1;
-  min-width: 0;
-  background: none;
-  border: none;
-  outline: none;
-  color: var(--wp-text);
-  font: 12px var(--wp-font-mono);
-}
-.wc-optfilter__clearx {
-  background: none; border: none; padding: 0; cursor: pointer;
-  color: var(--wp-text-dim); font-size: 10px;
-}
+.wc-optfilter__search { flex: 1; min-width: 90px; }
 .wc-optfilter__tagwrap { position: relative; }
 .wc-optfilter__tagbtn {
   display: inline-flex; align-items: center; gap: 5px; /* audit-exempt: icon gap */
@@ -177,7 +138,7 @@ const emit = defineEmits<{
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
 }
 .wc-optfilter__menuitem {
   display: flex; align-items: center; gap: var(--wp-space-3);

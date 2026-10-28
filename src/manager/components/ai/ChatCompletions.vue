@@ -319,7 +319,7 @@ function rowTitle(row: ChatRow): string {
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border-strong, var(--wp-border));
   border-radius: 7px;
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
   font-size: var(--wp-text-sm, 12px);
 }
 .wp-ai-ac--up { transform: translateY(-100%); }

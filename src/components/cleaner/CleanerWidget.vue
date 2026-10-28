@@ -14,6 +14,7 @@
  * overrides the same names with the SPA palette).
  */
 import { computed } from "vue";
+import WpSegmented, { type SegmentedOption } from "../shared/WpSegmented.vue";
 import {
   INTENSITY_TO_NEG_RULES,
   INTENSITY_TO_RULES,
@@ -125,7 +126,10 @@ const INTENSITY_TOOLTIPS = {
   aggressive: "Aggressive: balanced plus merge weights and fuzzy dedupe.",
 };
 
-const INTENSITIES: Intensity[] = ["gentle", "balanced", "aggressive"];
+const INTENSITY_OPTIONS: SegmentedOption<Intensity>[] = (["gentle", "balanced", "aggressive"] as const)
+  .map((lvl) => ({ value: lvl, label: lvl, hint: INTENSITY_TOOLTIPS[lvl] }));
+const MODE_OPTIONS: SegmentedOption<Mode>[] = (["tags", "text"] as const)
+  .map((m) => ({ value: m, label: m, hint: MODE_TOOLTIPS[m] }));
 
 const effective = computed(() => new Set(computeEffectiveRules(props.modelValue)));
 const effectiveNeg = computed(() => new Set(computeEffectiveNegativeRules(props.modelValue)));
@@ -311,20 +315,14 @@ function isOverridden(rid: RuleId): boolean {
 <template>
   <div :class="['wp-cleaner', { 'wp-cleaner--skipped': isSkipped }]">
     <header class="wp-cleaner__head">
-      <div class="wp-cleaner__mode" role="tablist">
-        <button
-          data-test="cleaner-mode-tags"
-          :class="['wp-cleaner__mode-btn', { 'is-active': modelValue.mode === 'tags' }]"
-          :title="MODE_TOOLTIPS.tags"
-          @click="setMode('tags')"
-        >tags</button>
-        <button
-          data-test="cleaner-mode-text"
-          :class="['wp-cleaner__mode-btn', { 'is-active': modelValue.mode === 'text' }]"
-          :title="MODE_TOOLTIPS.text"
-          @click="setMode('text')"
-        >text</button>
-      </div>
+      <WpSegmented
+        :model-value="modelValue.mode"
+        :options="MODE_OPTIONS"
+        size="sm"
+        aria-label="Cleaning mode"
+        test-prefix="cleaner-mode"
+        @update:model-value="setMode"
+      />
       <span
         class="wp-cleaner__counter"
         :title="`${wordCount} words · ${charCount} characters in the cleaned output`"
@@ -341,19 +339,18 @@ function isOverridden(rid: RuleId): boolean {
         <span
           :class="['wp-cleaner__badge', { 'is-hidden': pristine }]"
           data-test="cleaner-custom-badge"
-          title="One or more rules diverge from the selected intensity's defaults. Click an intensity again to reset."
+          title="One or more rules differ from the selected intensity's defaults. Pick an intensity to drop the changes that match it."
         >CUSTOM</span>
       </div>
-      <div class="wp-cleaner__seg">
-        <button
-          v-for="lvl in INTENSITIES"
-          :key="lvl"
-          :data-test="`cleaner-intensity-${lvl}`"
-          :class="['wp-cleaner__seg-btn', { 'is-active': modelValue.intensity === lvl }]"
-          :title="INTENSITY_TOOLTIPS[lvl]"
-          @click="setIntensity(lvl)"
-        >{{ lvl }}</button>
-      </div>
+      <WpSegmented
+        block
+        :model-value="modelValue.intensity"
+        :options="INTENSITY_OPTIONS"
+        size="sm"
+        aria-label="Intensity"
+        test-prefix="cleaner-intensity"
+        @update:model-value="setIntensity"
+      />
     </section>
 
     <section class="wp-cleaner__section">
@@ -450,8 +447,8 @@ function isOverridden(rid: RuleId): boolean {
 
 <style scoped>
 /* Tokens (`--wp-*`) resolve from the globally-loaded theme.css `:root`
-   (plus the SPA's tokens.css) — deliberately NOT @imported here so the
-   cleaner CSS chunk stays out of the bundle-size gate. Every var below
+   (plus the SPA's tokens.css); SFCs never @import it (see its header).
+   Every var below
    carries a fallback chain for the cleaner-loaded-first edge case. */
 
 /* Flat layout — sits directly against the litegraph node body like
@@ -472,22 +469,6 @@ function isOverridden(rid: RuleId): boolean {
 
 .wp-cleaner__head {
   display: flex; justify-content: space-between; align-items: center;
-}
-.wp-cleaner__mode { display: flex; gap: 4px; }
-.wp-cleaner__mode-btn {
-  padding: 4px 10px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  color: var(--wp-text-muted, var(--wp-text2));
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  font: 600 10px var(--wp-font-sans, sans-serif);
-  cursor: pointer;
-}
-.wp-cleaner__mode-btn:hover { color: var(--wp-text); border-color: var(--wp-border-strong, var(--wp-border2)); }
-.wp-cleaner__mode-btn.is-active {
-  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-accent));
 }
 .wp-cleaner__counter {
   font: 10px var(--wp-font-sans, sans-serif);
@@ -525,23 +506,6 @@ function isOverridden(rid: RuleId): boolean {
    .wp-loop__chips) — no wrapping bordered box. Each chip carries its
    own border so the group reads as three buttons against the node
    body rather than a nested panel. */
-.wp-cleaner__seg { display: flex; gap: 4px; }
-.wp-cleaner__seg-btn {
-  flex: 1;
-  padding: 4px 6px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  color: var(--wp-text-muted, var(--wp-text2));
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  font: 600 10px var(--wp-font-sans, sans-serif);
-  cursor: pointer;
-}
-.wp-cleaner__seg-btn:hover { color: var(--wp-text); border-color: var(--wp-border-strong, var(--wp-border2)); }
-.wp-cleaner__seg-btn.is-active {
-  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-accent));
-}
 
 .wp-cleaner__rules { display: grid; gap: 2px; }
 /* Two columns: the prompt rule button, then the neg-column toggle. */

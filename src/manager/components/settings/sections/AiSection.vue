@@ -6,6 +6,7 @@
  * (`/wp/api/ai/config`), and the API key is write-only: the page can set or
  * remove it, never read it back.
  */
+import WpNumber from "@/components/shared/WpNumber.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { aiDebugEnabled, setAiDebug } from "../../../api/ai-debug";
 import Toggle from "../../ui/Toggle.vue";
@@ -268,11 +269,11 @@ const SAMPLERS: ReadonlyArray<{ id: AiSamplerId; label: string; min: number; max
   { id: "repeat_penalty", label: "Repeat penalty", min: 0.5, max: 2, step: 0.05 },
   { id: "presence_penalty", label: "Presence penalty", min: -2, max: 2, step: 0.1 },
 ];
-const samplingDraft = ref<Record<AiSamplerId, number | string>>({
-  top_k: "", top_p: "", min_p: "", repeat_penalty: "", presence_penalty: "",
+const samplingDraft = ref<Record<AiSamplerId, number | null>>({
+  top_k: null, top_p: null, min_p: null, repeat_penalty: null, presence_penalty: null,
 });
 watch(() => config.value?.sampling, (v) => {
-  for (const { id } of SAMPLERS) samplingDraft.value[id] = v?.[id] ?? "";
+  for (const { id } of SAMPLERS) samplingDraft.value[id] = v?.[id] ?? null;
 }, { immediate: true });
 const samplingSends = computed(() => {
   const c = config.value;
@@ -283,12 +284,12 @@ async function commitSampler(id: AiSamplerId): Promise<void> {
   const raw = samplingDraft.value[id];
   const saved = config.value?.sampling?.[id];
   if (!spec) return;
-  if (raw === "" || raw === null) {
+  if (raw === null) {
     if (saved !== undefined) await patch({ sampling: { [id]: null } });
     return;
   }
   let n = Number(raw);
-  if (!Number.isFinite(n)) { samplingDraft.value[id] = saved ?? ""; return; }
+  if (!Number.isFinite(n)) { samplingDraft.value[id] = saved ?? null; return; }
   n = Math.min(spec.max, Math.max(spec.min, spec.step === 1 ? Math.round(n) : n));
   samplingDraft.value[id] = n;
   if (n !== saved) await patch({ sampling: { [id]: n } });
@@ -884,11 +885,10 @@ const off = computed(() => !config.value?.enabled);
               data-test="ai-context-preset"
               @update:model-value="pickContext"
             />
-            <Input
-              v-if="contextChoice === CUSTOM"
-              id="ai-context"
+            <WpNumber v-if="contextChoice === CUSTOM" id="ai-context"
               v-model.number="contextDraft"
-              type="number"
+              size="md"
+              commit="input"
               :min="4096"
               :max="131072"
               :step="4096"
@@ -938,11 +938,10 @@ const off = computed(() => !config.value?.enabled);
               data-test="ai-unload-preset"
               @update:model-value="pickUnload"
             />
-            <Input
-              v-if="unloadChoice === CUSTOM"
-              id="ai-unload"
+            <WpNumber v-if="unloadChoice === CUSTOM" id="ai-unload"
               v-model.number="unloadDraft"
-              type="number"
+              size="md"
+              commit="input"
               :min="0"
               :max="3600"
               :step="10"
@@ -1389,9 +1388,9 @@ const off = computed(() => !config.value?.enabled);
             <div class="wp-ai-set__samplers" data-test="ai-sampling">
               <label v-for="sp in SAMPLERS" :key="sp.id" class="wp-ai-set__sampler">
                 <span>{{ sp.label }}</span>
-                <Input
-                  v-model.number="samplingDraft[sp.id]"
-                  type="number"
+                <WpNumber v-model="samplingDraft[sp.id]" size="md"
+                  commit="input"
+                  nullable
                   :min="sp.min"
                   :max="sp.max"
                   :step="sp.step"

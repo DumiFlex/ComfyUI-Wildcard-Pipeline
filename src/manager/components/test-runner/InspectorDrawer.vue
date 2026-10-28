@@ -5,6 +5,7 @@
  * own view (wildcard options vs. how often each came up, a constraint's
  * reach and hits, a combine's template and outputs, …).
  */
+import CloseButton from "@/components/shared/CloseButton.vue";
 import { computed, onBeforeUnmount, onMounted } from "vue";
 import Button from "../ui/Button.vue";
 import { KIND_META } from "./kinds";
@@ -75,7 +76,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
           <h3>{{ view.name }}</h3>
         </div>
         <Button v-if="!view.missing" variant="ghost" size="sm" icon="pi-pencil" data-test="inspector-edit" @click="emit('edit')">Edit</Button>
-        <Button variant="ghost" size="sm" icon="pi-times" aria-label="Close inspector" data-test="inspector-close" @click="emit('close')" />
+        <CloseButton size="sm" label="Close inspector" data-test="inspector-close" @click="emit('close')" />
       </header>
 
       <p v-if="view.missing" class="wp-tri__note">This item was deleted from the library, so the run skips it.</p>

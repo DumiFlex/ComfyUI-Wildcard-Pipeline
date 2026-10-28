@@ -184,8 +184,8 @@ describe("Settings › AI assistant", () => {
     vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg(p as Partial<AiConfig>));
     const w = mount(AiSection, { global: { plugins: [router] } });
     await flushPromises();
-    expect(w.get('[data-test="ai-allow-delete"] [aria-checked]').attributes("aria-checked")).toBe("false");
-    expect(w.get('[data-test="ai-auto-apply"] [aria-checked]').attributes("aria-checked")).toBe("false");
+    expect(w.get('[data-test="ai-allow-delete"]').attributes("aria-checked")).toBe("false");
+    expect(w.get('[data-test="ai-auto-apply"]').attributes("aria-checked")).toBe("false");
     await w.get('[data-test="ai-allow-delete"]').trigger("click");
     await flushPromises();
     expect(api.ai.saveConfig).toHaveBeenCalledWith({ allow_delete: true });
@@ -290,7 +290,7 @@ describe("Settings › AI assistant", () => {
       cfg({ enabled: true, provider: "lmstudio", model: "m", ...p }));
     const w = mount(AiSection, { global: { plugins: [router] } });
     await flushPromises();
-    const topK = w.find('[data-test="ai-sampler-top_k"] input');
+    const topK = w.find('[data-test="ai-sampler-top_k"]');
     await topK.setValue("20.4");
     await topK.trigger("blur");
     await flushPromises();

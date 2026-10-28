@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CopyButton from "@/components/shared/CopyButton.vue";
 import { computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast";
@@ -15,7 +16,7 @@ import Select from "../components/ui/Select.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "../components/ui/Chip.vue";
 import { categoryAssignOptions, categoryFilterOptions } from "../utils/category-options";
 import { validateModule } from "../utils/validateModule";
 import type {
@@ -25,7 +26,7 @@ import type {
   ConstraintPayload,
   ModuleRow,
 } from "../api/types";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 
 const route = useRoute();
@@ -100,15 +101,6 @@ function edit(row: ModuleRow) {
     params: { id: row.id },
     query: { returnTo: encodeURIComponent(route.fullPath) },
   });
-}
-
-async function copyId(id: string) {
-  try {
-    await navigator.clipboard.writeText(id);
-    toast.push({ severity: "info", summary: "ID copied", detail: id, life: 1500 });
-  } catch {
-    toast.push({ severity: "error", summary: "Copy failed", life: 2000 });
-  }
 }
 
 async function dup(row: ModuleRow) {
@@ -230,6 +222,7 @@ function formatFactor(f: number): string {
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-filter"
         headline="No constraints yet"
         body="Constraints limit which combinations of values can co-occur. Create one to prune combinations."
@@ -306,11 +299,12 @@ function formatFactor(f: number): string {
     <template #name="{ row }">
       <div class="wp-row-name">
         <span class="wp-row-name__text" @click="edit(row)">{{ row.name }}</span>
-        <span
+        <CopyButton
           class="wp-id"
-          :title="`Click to copy ${row.id}`"
-          @click.stop="copyId(row.id)"
-        >{{ row.id }}</span>
+          :text="row.id"
+          :label="`Copy ID ${row.id}`"
+          @click.stop
+        >{{ row.id }}</CopyButton>
       </div>
     </template>
 
@@ -324,12 +318,12 @@ function formatFactor(f: number): string {
 
     <template #columns="{ row }">
       <td>
-        <CategoryChip
+        <Chip
           v-if="row.category_id && categoryById.get(row.category_id)"
-          :name="categoryById.get(row.category_id)!.name"
+         
           :color="categoryById.get(row.category_id)!.color"
           :icon="categoryById.get(row.category_id)!.icon"
-        />
+        >{{ categoryById.get(row.category_id)!.name }}</Chip>
         <span v-else class="wp-dim">—</span>
       </td>
       <td><span class="wp-cn-name">{{ lookupName(payloadOf(row).source_wildcard_id) }}</span></td>
@@ -340,7 +334,7 @@ function formatFactor(f: number): string {
 
     <template #actions="{ row }">
       <Button variant="ghost" size="sm" icon="pi-pencil" aria-label="Edit" @click="edit(row)" />
-      <SendToTestRunner :kind="'constraint'" :id="row.id" compact />
+      <SendToTestRunner :id="row.id" :kind="'constraint'" compact />
       <Button variant="ghost" size="sm" icon="pi-clone" aria-label="Duplicate" @click="dup(row)" />
       <CommunityRowActions :row="row" kind="module" />
       <Button variant="ghost" size="sm" icon="pi-trash" aria-label="Delete" @click="del(row)" />
@@ -372,12 +366,12 @@ function formatFactor(f: number): string {
     </template>
   </ModuleListView>
 
-  <ConfirmDialog
-    :visible="delConfirm.visible.value"
+  <ConfirmModal
+    :open="delConfirm.visible.value"
     :title="`Delete \&quot;${delConfirm.pending.value?.name ?? ''}\&quot;?`"
     body="This permanently removes the library entry."
     confirm-label="Delete"
-    variant="danger"
+    tone="danger"
     @confirm="delConfirm.confirm(performDelete)"
     @cancel="delConfirm.cancel"
   />

@@ -19,6 +19,7 @@
  */
 import { computed } from "vue";
 import { kindIcon } from "../shared/kind-icons";
+import WpCheck from "../shared/WpCheck.vue";
 
 export interface SummaryToken { isVar: boolean; text: string; }
 
@@ -105,10 +106,13 @@ const states = computed(() => props.module.states ?? {});
         :title="state.collapsed ? 'Expand' : 'Collapse'"
         @click="emit('toggle-collapse')"
       ><i :class="['pi', state.collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
-      <label class="wp-toggle" :title="state.enabled ? 'Disable' : 'Enable'">
-        <input type="checkbox" :checked="state.enabled" @change="emit('toggle-enabled')" />
-        <span class="wp-toggle-mark"></span>
-      </label>
+      <WpCheck
+        size="sm"
+        :title="state.enabled ? 'Disable' : 'Enable'"
+        :aria-label="`enable ${module.name}`"
+        :model-value="state.enabled"
+        @update:model-value="emit('toggle-enabled')"
+      />
       <span class="wp-row-type-icon" aria-hidden="true">
         <i :class="kindIcon(module.kind)"></i>
       </span>

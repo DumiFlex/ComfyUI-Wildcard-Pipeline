@@ -61,18 +61,21 @@ describe("tweaksStore — accent palette", () => {
 });
 
 describe("tweaksStore — density", () => {
-  it("setDensity('compact') sets --wp-input-h to 32px", () => {
+  it("setDensity('compact') sets the compact class and no inline heights", () => {
     const tweaks = useTweaksStore();
     tweaks.setDensity("compact");
     expect(tweaks.density).toBe("compact");
-    expect(document.documentElement.style.getPropertyValue("--wp-input-h")).toBe("32px");
-    expect(document.documentElement.style.getPropertyValue("--wp-btn-h")).toBe("32px");
+    expect(document.documentElement.classList.contains("wp-density-compact")).toBe(true);
+    expect(document.documentElement.style.getPropertyValue("--wp-input-h")).toBe("");
+    expect(document.documentElement.style.getPropertyValue("--wp-btn-h")).toBe("");
   });
 
-  it("setDensity('comfortable') sets --wp-input-h to 38px", () => {
+  it("setDensity('comfortable') clears the density classes", () => {
     const tweaks = useTweaksStore();
+    tweaks.setDensity("compact");
     tweaks.setDensity("comfortable");
-    expect(document.documentElement.style.getPropertyValue("--wp-input-h")).toBe("38px");
+    expect(document.documentElement.classList.contains("wp-density-compact")).toBe(false);
+    expect(document.documentElement.classList.contains("wp-density-cozy")).toBe(false);
   });
 });
 
@@ -111,7 +114,7 @@ describe("tweaksStore — reset", () => {
     expect(tweaks.density).toBe("comfortable");
     expect(document.documentElement.style.getPropertyValue("--wp-accent-500")).toBe("");
     // Density is the ui store's now; reset puts it back to comfortable.
-    expect(document.documentElement.style.getPropertyValue("--wp-input-h")).toBe("38px");
+    expect(document.documentElement.classList.contains("wp-density-compact")).toBe(false);
     // Watcher writes the post-reset state, so the key may exist with the
     // default snapshot; only assert it doesn't carry the prior amber accent.
     const raw = localStorage.getItem("wp-tweaks-v1");
@@ -160,6 +163,6 @@ describe("tweaksStore — persistence", () => {
     expect(root.style.getPropertyValue("--wp-accent-500")).toBe(
       ACCENT_PALETTES.amber["--wp-accent-500"],
     );
-    expect(root.style.getPropertyValue("--wp-input-h")).toBe("32px");
+    expect(root.classList.contains("wp-density-compact")).toBe(true);
   });
 });

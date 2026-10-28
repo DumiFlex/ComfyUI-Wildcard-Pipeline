@@ -12,10 +12,10 @@
  * The editor's current draft is sent, unsaved rows included, so the model
  * sees what is really in the list.
  */
+import WpNumber from "@/components/shared/WpNumber.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
 import Checkbox from "../ui/Checkbox.vue";
-import Input from "../ui/Input.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
 import AiSyntax from "./AiSyntax.vue";
 import { useAiImages } from "../../composables/useAiImages";
@@ -218,6 +218,9 @@ const skippedSummary = computed(() => {
     :answered="!!result"
     :error="error"
     :steps="convo.steps.value"
+    :research="convo.research.value"
+    :searching="convo.searching.value"
+    :found="convo.web"
     @run="convo.ask"
     @refine="convo.refine"
     @retry="convo.retry"
@@ -226,9 +229,6 @@ const skippedSummary = computed(() => {
     @flip="convo.flip"
     @stop="convo.stop"
     @close="cancel"
-    :research="convo.research.value"
-    :searching="convo.searching.value"
-    :found="convo.web"
     @allow-research="convo.allowResearch"
     @skip-research="convo.skipResearch"
     @use-found="convo.useFound"
@@ -237,10 +237,9 @@ const skippedSummary = computed(() => {
     <template #controls>
       <label class="wp-ai-draft__count" for="wp-ai-draft-count">
         How many
-        <Input
-          id="wp-ai-draft-count"
+        <WpNumber id="wp-ai-draft-count"
           v-model.number="count"
-          type="number"
+          commit="input"
           :min="1"
           :max="100"
           :step="1"

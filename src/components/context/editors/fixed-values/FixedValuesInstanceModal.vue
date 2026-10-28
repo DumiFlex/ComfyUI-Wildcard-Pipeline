@@ -6,6 +6,7 @@ import IdentitySection from "./sections/IdentitySection.vue";
 import ValuesSection from "./sections/ValuesSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
+import WpButton from "../../../shared/WpButton.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
@@ -91,29 +92,13 @@ function onSpaClick(): void {
         <i class="pi pi-external-link" aria-hidden="true" />
         Edit library entry in SPA
       </a>
-      <button
-        v-if="isLibraryTracked"
-        type="button"
-        class="wp-fvm__btn wp-fvm__btn--quiet"
-        data-test="fvm-clear-all"
-        title="Clear all instance overrides"
-        @click="emit('clear-all-overrides')"
-      >
-        <i class="pi pi-replay" aria-hidden="true" />
-        Reset overrides
-      </button>
+      <WpButton variant="ghost" icon="pi-replay" v-if="isLibraryTracked" data-test="fvm-clear-all" title="Clear all instance overrides" @click="emit('clear-all-overrides')">Reset overrides</WpButton>
       <span class="wp-fvm__hint">
         <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
-      <button
-        v-if="canSaveToLibrary"
-        type="button"
-        class="wp-fvm__btn"
-        data-test="fvm-save-lib"
-        @click="emit('save-to-library')"
-      >Save to library</button>
-      <button type="button" class="wp-fvm__btn" data-test="fvm-cancel" @click="emit('cancel')">Cancel</button>
-      <button type="button" class="wp-fvm__btn wp-fvm__btn--primary" data-test="fvm-save" @click="emit('save')">Save</button>
+      <WpButton v-if="canSaveToLibrary" data-test="fvm-save-lib" @click="emit('save-to-library')">Save to library</WpButton>
+      <WpButton data-test="fvm-cancel" @click="emit('cancel')">Cancel</WpButton>
+      <WpButton variant="primary" data-test="fvm-save" @click="emit('save')">Save</WpButton>
     </footer>
     </div>
   </div>
@@ -172,40 +157,4 @@ function onSpaClick(): void {
   border-radius: 2px;
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.wp-fvm__btn {
-  padding: 5px 12px;
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  background: transparent;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 11px var(--wp-font-sans);
-  cursor: pointer;
-}
-.wp-fvm__btn--primary {
-  border-color: var(--wp-accent);
-  background: var(--wp-accent);
-  color: white;
-}
-.wp-fvm__btn:hover {
-  border-color: var(--wp-border-strong, var(--wp-border2));
-  color: var(--wp-text);
-}
-.wp-fvm__btn--primary:hover {
-  border-color: var(--wp-accent2, var(--wp-accent));
-  background: var(--wp-accent2, var(--wp-accent));
-  color: white;
-}
-.wp-fvm__btn--quiet {
-  border-color: transparent;
-  color: var(--wp-text-dim, var(--wp-text3));
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-}
-.wp-fvm__btn--quiet:hover {
-  border-color: var(--wp-border);
-  color: var(--wp-text-muted, var(--wp-text2));
-}
-.wp-fvm__btn--quiet .pi { font-size: 10px; }
 </style>

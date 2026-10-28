@@ -894,7 +894,7 @@ function onGroupDrop(axis: string): void {
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
 }
 /* Flip the kebab menu above its trigger near the page bottom (bug #1). */
 .subcat-menu--up {

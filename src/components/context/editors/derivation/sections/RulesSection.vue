@@ -31,6 +31,7 @@ import type { VarProducerLike } from "../../../../../manager/components/RefChip.
 import { patchInstance } from "../../instance/patch";
 import { varColorClass } from "../../../../shared/var-color";
 import RuleValueChips from "./RuleValueChips.vue";
+import WpSwitch from "../../../../shared/WpSwitch.vue";
 import { tokenizeRich } from "../../../../../widgets/richTokenize";
 import PairBadge from "../../../PairBadge.vue";
 import {
@@ -616,17 +617,13 @@ function condRows(cond: unknown, bi: number): CondRow[] {
             class="rule-head__caret"
             aria-hidden="true"
           />
-          <span
-            class="rule-head__toggle"
-            :class="{ 'rule-head__toggle--on': isRuleEnabled(rule) }"
+          <WpSwitch
             :data-test="`rule-toggle-${rule.id}`"
-            role="switch"
-            :aria-checked="isRuleEnabled(rule)"
             :aria-label="isRuleEnabled(rule) ? `Disable rule ${rule.id}` : `Enable rule ${rule.id}`"
-            @click.stop="toggleRule(rule)"
-          >
-            <i :class="['pi', isRuleEnabled(rule) ? 'pi-check' : 'pi-times']" aria-hidden="true" />
-          </span>
+            :model-value="isRuleEnabled(rule)"
+            @click.stop
+            @update:model-value="toggleRule(rule)"
+          />
 
           <span class="rule-head__num" :title="`Rule id ${rule.id}`">Rule {{ ruleIdx + 1 }}</span>
           <i
@@ -717,18 +714,13 @@ function condRows(cond: unknown, bi: number): CondRow[] {
           >
             <div class="br__head">
               <!-- IF gets no toggle: disabling it is the rule toggle. -->
-              <span
+              <WpSwitch
                 v-if="bi !== 0"
-                class="branch-toggle"
-                :class="{ 'branch-toggle--on': isBranchEnabled(rule.id, bi) }"
                 :data-test="`branch-toggle-${rule.id}-${bi}`"
-                role="switch"
-                :aria-checked="isBranchEnabled(rule.id, bi)"
                 :aria-label="`${isBranchEnabled(rule.id, bi) ? 'Disable' : 'Enable'} ${clauseTag(bi)} branch${bi === 'else' ? '' : ' ' + bi}`"
-                @click="toggleBranch(rule.id, bi)"
-              >
-                <i :class="['pi', isBranchEnabled(rule.id, bi) ? 'pi-check' : 'pi-times']" aria-hidden="true" />
-              </span>
+                :model-value="isBranchEnabled(rule.id, bi)"
+                @update:model-value="toggleBranch(rule.id, bi)"
+              />
               <span class="br__tag" :data-kind="clauseTag(bi).toLowerCase()">{{ clauseTag(bi) }}</span>
               <span v-if="bi === 0 && clausesOf(rule).length > 1" class="br__hint">first match wins</span>
               <span v-else-if="bi === 'else'" class="br__hint">when nothing above matched</span>
@@ -994,25 +986,6 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   font-size: 10px;
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.rule-head__toggle {
-  width: 18px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  background: var(--wp-bg);
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.rule-head__toggle--on {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
-  color: white;
-}
-.rule-head__toggle .pi { font-size: 9px; }
 .rule-head__num {
   font: 600 10px var(--wp-font-sans);
   color: var(--wp-accent);
@@ -1161,25 +1134,6 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   letter-spacing: 0.06em;
   color: var(--wp-info, #60a5fa);
 }
-.branch-toggle {
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--wp-border);
-  border-radius: 2px;
-  background: var(--wp-bg);
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.branch-toggle--on {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
-  color: white;
-}
-.branch-toggle .pi { font-size: 8px; }
 
 /* A value field: the RichTextInput, with the library value laid over it as a
  * ghost while the field is empty (chips and all, where a plain placeholder

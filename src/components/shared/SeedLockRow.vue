@@ -3,6 +3,9 @@
  *  module SeedLockControls. Unlocked shows the derived seed; locking
  *  captures it; locked exposes a seed input + ±spinners + roll. */
 import WpNumber from "./WpNumber.vue";
+import WpSwitch from "./WpSwitch.vue";
+import WpButton from "./WpButton.vue";
+import { vTooltip } from "./tooltip";
 
 const props = defineProps<{
   index: number;       // 0-based
@@ -40,40 +43,29 @@ function onLock() { set(props.locked ? null : props.derived); }
 /** Fill + lock the seed this frame used on the previous run. No-op (button is
  *  disabled) when there's no captured previous for this frame. */
 function lockPrevious() { if (props.previous != null) set(props.previous); }
-function onSeed(n: number) {
-  if (Number.isInteger(n)) set(n);
+function onSeed(n: number | null) {
+  if (n !== null && Number.isInteger(n)) set(n);
 }
 </script>
 
 <template>
   <div class="srow" :class="{ 'srow--locked': locked, 'srow--inactive': inactive, 'srow--bypassed': bypassed }">
     <span class="srow__idx" data-test="seedrow-idx">#{{ index + 1 }}</span>
-    <button v-if="bypassable" type="button" class="toggle toggle--bypass"
-      :class="{ 'toggle--on': bypassed }" :disabled="bypassDisabled || undefined"
-      data-test="seedrow-bypass" role="switch" :aria-checked="bypassed"
-      :title="bypassed ? 'Frame bypassed — click to re-enable' : 'Bypass this frame (skip its generation)'"
-      @click="emit('bypass', { index, bypassed: !bypassed })">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9" /><path d="M5.6 5.6l12.8 12.8" stroke-linecap="round" /></svg>
-      {{ bypassed ? "Bypassed" : "Bypass" }}
-    </button>
-    <button type="button" class="toggle" :class="{ 'toggle--on': locked }"
-      data-test="seedrow-lock" role="switch" :aria-checked="locked" @click="onLock">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="5" y="11" width="14" height="9" rx="1.5" /><path :d="locked ? 'M8 11V8a4 4 0 0 1 8 0v3' : 'M8 11V8a4 4 0 0 1 8 0'" />
-      </svg>
-      {{ locked ? "Locked" : "Lock" }}
-    </button>
-    <button type="button" class="toggle toggle--prev" data-test="seedrow-lockprev"
-      :disabled="previous == null || undefined"
-      :title="previous == null
+    <WpSwitch v-if="bypassable" v-tooltip="bypassed ? 'Frame bypassed — click to re-enable' : 'Bypass this frame (skip its generation)'"
+      variant="chip" icon="pi-ban" :label="bypassed ? 'Bypassed' : 'Bypass'" data-test="seedrow-bypass"
+      :model-value="bypassed" :disabled="bypassDisabled"
+      @update:model-value="emit('bypass', { index, bypassed: !bypassed })" />
+    <WpSwitch variant="chip" :icon="locked ? 'pi-lock' : 'pi-lock-open'" :label="locked ? 'Locked' : 'Lock'"
+      data-test="seedrow-lock" :model-value="locked" @update:model-value="onLock" />
+    <WpButton
+      v-tooltip="previous == null
         ? 'No previous run captured for this frame'
         : `Lock the seed this frame used last run (${previous})`"
+      variant="outline" icon="pi-history" data-test="seedrow-lockprev"
+      :disabled="previous == null"
       @click="lockPrevious">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 3v5h5" /><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" /><path d="M12 7v5l3 2" />
-      </svg>
       Prev
-    </button>
+    </WpButton>
     <span class="srow__fill" />
     <span v-if="!locked" class="derived">
       <span class="derived__val" data-test="seedrow-derived">{{ derived }}</span>
@@ -113,21 +105,9 @@ function onSeed(n: number) {
 }
 .srow--bypassed .derived__val { text-decoration: line-through; opacity: .65; }
 .srow--bypassed .srow__idx { color: var(--wp-accent-text, #a5b4fc); opacity: .75; }
-.toggle--bypass { color: var(--wp-text-dim, var(--wp-text3)); }
-.toggle--bypass.toggle--on { border-color: var(--wp-accent); color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.10); }
 .srow__idx { flex-shrink: 0; width: 30px; text-align: right; font: 600 11px var(--wp-font-mono, monospace); color: var(--wp-text-dim, #7a7d88); }
 .srow--locked .srow__idx { color: var(--wp-accent-text, #a5b4fc); }
 .srow__fill { flex: 1; }
-.toggle { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid var(--wp-border); border-radius: 3px; font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); cursor: pointer; background: var(--wp-bg-deep, var(--wp-bg)); flex-shrink: 0; }
-.toggle:hover { border-color: var(--wp-border-strong, var(--wp-border2)); }
-.toggle svg { color: var(--wp-text-dim, var(--wp-text3)); }
-.toggle--on { border-color: var(--wp-accent); color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.10); }
-.toggle--on svg { color: var(--wp-accent-text, var(--wp-text)); }
-/* "Lock previous run's seed" — secondary action; greys out when the frame has
-   no captured previous (no prior run). */
-.toggle--prev { color: var(--wp-text-dim, var(--wp-text3)); }
-.toggle:disabled { opacity: .4; cursor: not-allowed; }
-.toggle:disabled:hover { border-color: var(--wp-border); color: var(--wp-text-dim, var(--wp-text3)); }
 /* Same shrink rule as the locked column, so a 15-digit derived seed clips
  * instead of shoving the DERIVED tag past the panel edge. */
 .derived { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }

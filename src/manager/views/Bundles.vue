@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CopyButton from "@/components/shared/CopyButton.vue";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast";
@@ -16,11 +17,11 @@ import EmptyState from "../components/ui/EmptyState.vue";
 import { useBundleStore } from "../stores/bundleStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "../components/ui/Chip.vue";
 import { categoryFilterOptions } from "../utils/category-options";
 import { validateBundle } from "../utils/validateModule";
 import type { BundleRow, CategoryRow } from "../api/types";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 import { useCascadeStore } from "../cascade/cascade-store";
@@ -40,7 +41,7 @@ const cascade = useCascadeStore();
 // Cascade-confirm state for bundle-with-refs delete. Mirrors the
 // Wildcards.vue grammar — when a bundle has tier-2 parents the
 // CascadeConfirmDialog shows the impact list; no-refs path still
-// goes through the plain ConfirmDialog.
+// goes through the plain ConfirmModal.
 const cascadeDialogOpen = ref(false);
 const cascadeDialogTarget = ref<BundleRow | null>(null);
 
@@ -91,15 +92,6 @@ function edit(row: BundleRow) {
     params: { id: row.id },
     query: { returnTo: encodeURIComponent(route.fullPath) },
   });
-}
-
-async function copyId(id: string) {
-  try {
-    await navigator.clipboard.writeText(id);
-    toast.push({ severity: "info", summary: "ID copied", detail: id, life: 1500 });
-  } catch {
-    toast.push({ severity: "error", summary: "Copy failed", life: 2000 });
-  }
 }
 
 async function fav(row: BundleRow) {
@@ -277,6 +269,7 @@ function frameColor(row: BundleRow): string {
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-box"
         headline="No bundles yet"
         body="Bundles group modules together for reuse. Create your first to package modules into a unit."
@@ -353,11 +346,12 @@ function frameColor(row: BundleRow): string {
     <template #name="{ row }">
       <div class="wp-row-name">
         <span class="wp-row-name__text" @click="edit(row)">{{ row.name }}</span>
-        <span
+        <CopyButton
           class="wp-id"
-          :title="`Click to copy ${row.id}`"
-          @click.stop="copyId(row.id)"
-        >{{ row.id }}</span>
+          :text="row.id"
+          :label="`Copy ID ${row.id}`"
+          @click.stop
+        >{{ row.id }}</CopyButton>
       </div>
     </template>
 
@@ -370,12 +364,12 @@ function frameColor(row: BundleRow): string {
 
     <template #columns="{ row }">
       <td>
-        <CategoryChip
+        <Chip
           v-if="row.category_id && categoryById.get(row.category_id)"
-          :name="categoryById.get(row.category_id)!.name"
+         
           :color="categoryById.get(row.category_id)!.color"
           :icon="categoryById.get(row.category_id)!.icon"
-        />
+        >{{ categoryById.get(row.category_id)!.name }}</Chip>
         <span v-else class="wp-dim">—</span>
       </td>
       <td>
@@ -392,7 +386,7 @@ function frameColor(row: BundleRow): string {
 
     <template #actions="{ row }">
       <Button variant="ghost" size="sm" icon="pi-pencil" aria-label="Edit" @click="edit(row)" />
-      <SendToTestRunner :kind="'bundle'" :id="row.id" compact />
+      <SendToTestRunner :id="row.id" :kind="'bundle'" compact />
       <CommunityRowActions :row="row" kind="bundle" />
       <Button variant="ghost" size="sm" icon="pi-trash" aria-label="Delete" @click="del(row)" />
     </template>
@@ -434,20 +428,20 @@ function frameColor(row: BundleRow): string {
     </template>
   </ModuleListView>
 
-  <ConfirmDialog
-    :visible="delConfirm.visible.value"
+  <ConfirmModal
+    :open="delConfirm.visible.value"
     :title="`Delete \&quot;${delConfirm.pending.value?.name ?? ''}\&quot;?`"
     body="This permanently removes the bundle library entry."
     confirm-label="Delete"
-    variant="danger"
+    tone="danger"
     @confirm="delConfirm.confirm(performDelete)"
     @cancel="delConfirm.cancel"
   />
   <CascadeConfirmDialog
     v-if="cascadeDialogTarget"
+    :id="cascadeDialogTarget.id"
     :open="cascadeDialogOpen"
     kind="bundle"
-    :id="cascadeDialogTarget.id"
     action="delete"
     @confirmed="onBundleCascadeConfirmed"
     @cancelled="onBundleCascadeCancelled"

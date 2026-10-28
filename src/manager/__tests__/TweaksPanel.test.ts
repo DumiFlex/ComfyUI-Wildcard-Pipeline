@@ -49,11 +49,11 @@ describe("TweaksPanel.vue", () => {
     expect(tweaks.density).toBe("comfortable");
     await wrap.find('[data-test="tweaks-density-compact"]').trigger("change");
     expect(tweaks.density).toBe("compact");
-    expect(document.documentElement.style.getPropertyValue("--wp-input-h")).toBe("32px");
+    expect(document.documentElement.classList.contains("wp-density-compact")).toBe(true);
 
     await wrap.find('[data-test="tweaks-density-comfortable"]').trigger("change");
     expect(tweaks.density).toBe("comfortable");
-    expect(document.documentElement.style.getPropertyValue("--wp-input-h")).toBe("38px");
+    expect(document.documentElement.classList.contains("wp-density-compact")).toBe(false);
   });
 
   it("close button calls closePanel", async () => {
@@ -81,7 +81,7 @@ describe("TweaksPanel.vue", () => {
     const tweaks = useTweaksStore();
     expect(ui.sidebarCollapsed).toBe(false);
     // Click the underlying switch button rendered by Toggle.
-    const switchBtn = wrap.find('[data-test="tweaks-sidebar-toggle"] .wp-toggle');
+    const switchBtn = wrap.find('[data-test="tweaks-sidebar-toggle"]');
     await switchBtn.trigger("click");
     expect(ui.sidebarCollapsed).toBe(true);
     expect(tweaks.sidebarMode).toBe("collapsed");

@@ -244,16 +244,9 @@ const hint = computed(() => {
 </template>
 
 <style scoped>
-/* No `@import "./theme.css"` here on purpose.
- *
- * theme.css declares its tokens on `:root`, so one copy anywhere in the
- * document serves everything — and this component only ever renders inside
- * ContextLoopWidget or SeedListWidget, both of which already import it.
- * Importing it again inlines the whole 521-line sheet into this shared chunk:
- * a third copy of the same tokens, and 10.7 KB gzipped for a grid of buttons.
- *
- * Every declaration below carries a literal fallback anyway, so the component
- * still renders standalone if it is ever used somewhere unthemed. */
+/* Tokens come from theme.css, loaded once from the boot chunk (see its
+ * header). Every declaration below carries a literal fallback anyway, so the
+ * component still renders standalone if it is ever used somewhere unthemed. */
 
 .wp-fchips { display: flex; flex-direction: column; gap: 4px; }
 

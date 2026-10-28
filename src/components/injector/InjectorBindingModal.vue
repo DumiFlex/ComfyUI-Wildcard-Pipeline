@@ -27,6 +27,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
 import RichTextInput from "../../manager/components/RichTextInput.vue";
+import WpButton from "../shared/WpButton.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -630,19 +631,8 @@ function onKeydown(ev: KeyboardEvent): void {
         <span class="ibm__hint">
           <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
         </span>
-        <button
-          type="button"
-          class="ibm__btn"
-          data-test="ibm-cancel"
-          @click="onCancel"
-        >Cancel</button>
-        <button
-          type="button"
-          class="ibm__btn ibm__btn--primary"
-          :disabled="!isDirty"
-          data-test="ibm-save"
-          @click="onSave"
-        >Save</button>
+        <WpButton data-test="ibm-cancel" @click="onCancel">Cancel</WpButton>
+        <WpButton variant="primary" :disabled="!isDirty" data-test="ibm-save" @click="onSave">Save</WpButton>
       </footer>
     </div>
   </div>
@@ -663,8 +653,6 @@ function onKeydown(ev: KeyboardEvent): void {
 </style>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .ibm__overlay {
   position: fixed;
   inset: 0;
@@ -682,7 +670,7 @@ function onKeydown(ev: KeyboardEvent): void {
   background: var(--wp-bg2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius, 6px);
-  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--wp-shadow-lg);
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 48px);
@@ -939,31 +927,5 @@ function onKeydown(ev: KeyboardEvent): void {
   padding: 1px 4px;
   border-radius: 2px;
   color: var(--wp-text-muted, var(--wp-text2));
-}
-.ibm__btn {
-  padding: 5px 12px;
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  background: transparent;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 11px var(--wp-font-sans);
-  cursor: pointer;
-}
-.ibm__btn:hover:not(:disabled) {
-  border-color: var(--wp-accent);
-  color: var(--wp-text);
-}
-.ibm__btn--primary {
-  border-color: var(--wp-accent);
-  background: var(--wp-accent);
-  color: white;
-}
-.ibm__btn--primary:hover:not(:disabled) {
-  filter: brightness(1.1);
-  color: white;
-}
-.ibm__btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 </style>

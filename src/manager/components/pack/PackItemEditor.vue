@@ -4,9 +4,9 @@
  * by the model from a one-line ask. Fields commit on change (blur or
  * Enter) so the server's check never rewrites a field mid-typing.
  */
+import WpNumber from "@/components/shared/WpNumber.vue";
 import { computed, ref } from "vue";
 import Button from "../ui/Button.vue";
-import Input from "../ui/Input.vue";
 import Select from "../ui/Select.vue";
 import type { SelectOption } from "../ui/select-types";
 import type { AiPackItem } from "../../api/types";
@@ -53,7 +53,7 @@ function setTags(raw: string): void {
   set("tags", tags);
 }
 
-function setCount(v: string | number): void {
+function setCount(v: number | null): void {
   const n = Math.round(Number(v));
   if (Number.isFinite(n) && n > 0) set("count", Math.min(60, n));
 }
@@ -88,7 +88,7 @@ async function send(): Promise<void> {
       </label>
       <label v-if="wild" class="wp-pack-edit__field">
         <span>Options</span>
-        <Input type="number" size="sm" :model-value="i.count" :min="4" :max="60" :disabled="busy" aria-label="Options" @update:model-value="setCount" />
+        <WpNumber commit="input" size="sm" :model-value="i.count" :min="4" :max="60" :disabled="busy" aria-label="Options" @update:model-value="setCount" />
       </label>
       <template v-if="i.kind === 'constraint' && !graphed">
         <label class="wp-pack-edit__field">

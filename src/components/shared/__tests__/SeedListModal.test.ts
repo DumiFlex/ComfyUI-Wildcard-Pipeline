@@ -141,8 +141,8 @@ describe("SeedListModal bypass column (#13)", () => {
   it("disables the last active frame's bypass toggle", () => {
     const w = modal({ seedLocks: {}, bypassFrames: [0, 1, 2] });
     const toggles = w.findAll('[data-test="seedrow-bypass"]');
-    expect(toggles[3].attributes("disabled")).toBeDefined();
-    expect(toggles[0].attributes("disabled")).toBeUndefined();
+    expect(toggles[3].attributes("aria-disabled")).toBe("true");
+    expect(toggles[0].attributes("aria-disabled")).toBeUndefined();
   });
   it("renders out-of-range bypassed frames as inactive rows", () => {
     const w = modal({ seedLocks: {}, bypassFrames: [9] });

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SearchInput from "@/components/shared/SearchInput.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import {
   parse,
@@ -507,19 +508,15 @@ function onApply(): void {
 
     <!-- Insert-at-cursor palettes: grouped sub-categories + operators. -->
     <div v-if="subCategories.length > 0" class="wp-subcat-picker__palette">
-      <label class="wp-subcat-picker__search">
-        <i class="pi pi-search" aria-hidden="true" />
-        <input
-          v-model="tagQuery"
-          type="text"
-          class="wp-subcat-picker__search-input"
-          data-test="tag-search"
-          :placeholder="`Filter ${tagTotal} tags…`"
-          :aria-label="`Filter ${tagTotal} tags`"
-          spellcheck="false"
-          autocomplete="off"
-        />
-      </label>
+      <SearchInput
+        v-model="tagQuery"
+        class="wp-subcat-picker__search"
+        size="sm"
+        data-test="tag-search"
+        :placeholder="`Filter ${tagTotal} tags…`"
+        :aria-label="`Filter ${tagTotal} tags`"
+        clear-label="Clear filter"
+      />
       <!-- Only the GROUPS scroll. Putting the scrollbar on the whole popover
            would push the expression, the live count and the Apply button out
            of view exactly when a big tag list makes them most useful, and the
@@ -853,26 +850,7 @@ function onApply(): void {
   /* Room for the scrollbar so it never lands on top of a chip. */
   padding-right: 2px; /* audit-exempt: gutter for the scrollbar */
 }
-.wp-subcat-picker__search {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px; /* audit-exempt: compact inline search affordance */
-  margin-bottom: 6px;
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-dim, var(--wp-text3));
-}
-.wp-subcat-picker__search .pi { font-size: 11px; }
-.wp-subcat-picker__search-input {
-  flex: 1;
-  min-width: 0;
-  background: none;
-  border: none;
-  outline: none;
-  color: var(--wp-text);
-  font: 11px var(--wp-font-sans);
-}
+.wp-subcat-picker__search { margin-bottom: 6px; }
 
 /* Axis header — a fold control, so it is a full-width button row. */
 .wp-subcat-picker__group-head {

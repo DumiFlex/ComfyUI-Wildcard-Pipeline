@@ -7,7 +7,7 @@
  * over a Loop) the planner reads from the request or asks. Sent with every
  * plan request; no model involved.
  */
-import Input from "../ui/Input.vue";
+import WpNumber from "@/components/shared/WpNumber.vue";
 import Select from "../ui/Select.vue";
 import type { SelectOption } from "../ui/select-types";
 import type { AiPackSettings } from "../../api/types";
@@ -35,7 +35,7 @@ function set<K extends keyof AiPackSettings>(key: K, value: AiPackSettings[K]): 
   emit("update:modelValue", { ...props.modelValue, [key]: value });
 }
 
-function setCount(v: string | number): void {
+function setCount(v: number | null): void {
   const n = Math.round(Number(v));
   // 0 (or empty) is "Auto"; the server keeps a set number within 4–60.
   set("count", Number.isFinite(n) && n > 0 ? Math.min(60, n) : 0);
@@ -61,10 +61,10 @@ function setCount(v: string | number): void {
     </label>
     <label class="wp-pack-settings__field">
       <span class="wp-pack-settings__label">Options per wildcard</span>
-      <Input
-        type="number"
+      <WpNumber commit="input"
         size="sm"
-        :model-value="modelValue.count || ''"
+        :model-value="modelValue.count || null"
+        nullable
         :min="0"
         :max="60"
         placeholder="Auto"

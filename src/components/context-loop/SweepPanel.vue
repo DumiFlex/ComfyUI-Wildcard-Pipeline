@@ -8,6 +8,8 @@
  * parent: `modelValue` is the `SweepConfig`, every change emits a new one.
  */
 import { computed, ref } from "vue";
+import WpSwitch from "../shared/WpSwitch.vue";
+import { vTooltip } from "../shared/tooltip";
 import {
   SWEEP_MAX_LIMIT,
   liveAxes,
@@ -137,18 +139,13 @@ function moveAxis(uid: string, dir: -1 | 1): void {
   <div class="wp-sweep" :class="{ 'wp-sweep--on': modelValue.enabled }">
     <div class="wp-sweep__row">
       <span class="wp-sweep__row-label">Sweep combinations</span>
-      <button
-        type="button"
-        class="wp-sweep__switch"
-        :class="{ 'wp-sweep__switch--on': modelValue.enabled }"
+      <WpSwitch
+        v-tooltip="'Run every combination of the wildcards you pick, one frame each.'"
         data-test="sweep-toggle"
-        :aria-pressed="modelValue.enabled"
-        :aria-label="`Sweep combinations: ${modelValue.enabled ? 'on' : 'off'}`"
-        title="Run every combination of the wildcards you pick, one frame each."
-        @click="toggleEnabled"
-      >
-        <span class="wp-sweep__switch-thumb" />
-      </button>
+        :model-value="modelValue.enabled"
+        aria-label="Sweep combinations"
+        @update:model-value="toggleEnabled"
+      />
     </div>
 
     <template v-if="modelValue.enabled">
@@ -245,30 +242,23 @@ function moveAxis(uid: string, dir: -1 | 1): void {
           up-label="Increase limit"
           down-label="Decrease limit"
           data-test="sweep-limit"
-          @update:model-value="(n) => setLimit(Math.round(n))"
+          @update:model-value="(n) => n !== null && setLimit(Math.round(n))"
         />
       </div>
-      <div class="wp-sweep__row" :title="HOLD_TOOLTIP">
+      <div class="wp-sweep__row" v-tooltip="HOLD_TOOLTIP">
         <span class="wp-sweep__row-label">Hold other picks</span>
-        <button
-          type="button"
-          class="wp-sweep__switch"
-          :class="{ 'wp-sweep__switch--on': modelValue.hold_others }"
+        <WpSwitch
           data-test="sweep-hold-toggle"
-          :aria-pressed="modelValue.hold_others"
-          :aria-label="`Hold other picks: ${modelValue.hold_others ? 'on' : 'off'}`"
-          @click="toggleHold"
-        >
-          <span class="wp-sweep__switch-thumb" />
-        </button>
+          :model-value="modelValue.hold_others"
+          aria-label="Hold other picks"
+          @update:model-value="toggleHold"
+        />
       </div>
     </template>
   </div>
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .wp-sweep { display: flex; flex-direction: column; gap: 6px; }
 .wp-sweep--on {
   padding: 6px 7px;
@@ -279,21 +269,6 @@ function moveAxis(uid: string, dir: -1 | 1): void {
 .wp-sweep__row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .wp-sweep__row-label { font: 10px var(--wp-font-sans, sans-serif); color: var(--wp-text-muted, #aeb1bb); }
 
-.wp-sweep__switch {
-  width: 32px; height: 18px; border-radius: 9px; position: relative; padding: 0; cursor: pointer; flex-shrink: 0;
-  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
-  border: 1px solid var(--wp-border, #353841);
-}
-.wp-sweep__switch-thumb {
-  position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; border-radius: 50%;
-  background: var(--wp-text-dim, #7a7d88);
-  transition: left var(--wp-motion-hover, 120ms) ease;
-}
-.wp-sweep__switch--on {
-  background: color-mix(in srgb, var(--wp-accent, #6366f1) 22%, transparent);
-  border-color: var(--wp-accent, #6366f1);
-}
-.wp-sweep__switch--on .wp-sweep__switch-thumb { left: 15px; background: var(--wp-accent, #6366f1); }
 
 .wp-sweep__total { font: 10.5px var(--wp-font-sans, sans-serif); color: var(--wp-text); }
 .wp-sweep__total strong { color: var(--wp-accent, #6366f1); }

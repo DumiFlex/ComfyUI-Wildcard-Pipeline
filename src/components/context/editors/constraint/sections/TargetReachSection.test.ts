@@ -104,11 +104,10 @@ describe("TargetReachSection — segmented control", () => {
     expect(last(updates)).toEqual({ mode: "next", count: 2 });
   });
 
-  it("stepper ▼ button is disabled at the minimum (count 1)", () => {
-    const { w } = mountSection({ mode: "next", count: 1 });
-    const down = w.find('[data-test="reach-count-down"]');
-    expect(down.exists()).toBe(true);
-    expect(down.attributes("disabled")).toBeDefined();
+  it("stepper ▼ button stays at the minimum (count 1)", async () => {
+    const { w, updates } = mountSection({ mode: "next", count: 1 });
+    await w.find('[data-test="reach-count-down"]').trigger("click");
+    expect(last(updates)).toEqual({ mode: "next", count: 1 });
   });
 
   it("emits {mode:'all'} when 'all' clicked", async () => {

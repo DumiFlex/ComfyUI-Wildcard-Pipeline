@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { copyText } from "../shared/clipboard";
 import { computed, ref, watch } from "vue";
 import { varColorClass } from "../shared/var-color";
 import { modelSyntaxHtml } from "../../widgets/richTokenize";
@@ -354,7 +355,7 @@ function rippleStyle(v: string): Record<string, string> {
 // injector / debug rows. Items adapt per chip state (missing chips
 // are already in the template; upstream chips may or may not be).
 async function clipboardWrite(text: string): Promise<void> {
-  try { await navigator.clipboard.writeText(text); } catch { /* permission denied */ }
+  await copyText(text);
 }
 
 interface AsmCtxMenuState {
@@ -617,10 +618,6 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
     />
   </div>
 </template>
-
-<style>
-@import "../shared/theme.css";
-</style>
 
 <style scoped>
 /* ======================================================

@@ -4,9 +4,9 @@
  * seeds. A range is reproducible — seed S here is seed S on the canvas — so
  * it is the default; random is for a quick look at variety.
  */
+import WpNumber from "@/components/shared/WpNumber.vue";
 import { computed } from "vue";
 import type { ScenarioSeedSpec } from "../../api/types";
-import Input from "../ui/Input.vue";
 
 const MAX = 10_000;
 
@@ -24,14 +24,14 @@ function clampCount(v: number): number {
 function setMode(m: "range" | "random"): void {
   emit("update:modelValue", m === "random" ? { random: true, count: count.value } : { from: from.value, count: count.value });
 }
-// The shared number Input emits on every keystroke and from its arrows; an
-// empty field ("") is mid-edit, so it changes nothing until a number lands.
-function setFrom(v: string | number): void {
-  if (v === "") return;
+// WpNumber (commit="input") emits on every keystroke and from its arrows; an
+// empty field (null) is mid-edit, so it changes nothing until a number lands.
+function setFrom(v: number | null): void {
+  if (v === null) return;
   emit("update:modelValue", { from: Math.max(0, Math.round(Number(v)) || 0), count: count.value });
 }
-function setCount(v: string | number): void {
-  if (v === "") return;
+function setCount(v: number | null): void {
+  if (v === null) return;
   const n = clampCount(Number(v));
   emit("update:modelValue", mode.value === "random" ? { random: true, count: n } : { from: from.value, count: n });
 }
@@ -59,14 +59,12 @@ function setCount(v: string | number): void {
     </div>
     <div v-if="mode === 'range'" class="wp-trsd__field">
       <span aria-hidden="true">from</span>
-      <Input
-        type="number" size="sm" :min="0" :model-value="from"
+      <WpNumber commit="input" size="sm" :min="0" :model-value="from"
         aria-label="First seed" data-test="seed-from" @update:model-value="setFrom"
       />
     </div>
     <div class="wp-trsd__field">
-      <Input
-        type="number" size="sm" :min="1" :max="MAX" :model-value="count"
+      <WpNumber commit="input" size="sm" :min="1" :max="MAX" :model-value="count"
         aria-label="Number of seeds" data-test="seed-count" @update:model-value="setCount"
       />
       <span aria-hidden="true">seeds</span>

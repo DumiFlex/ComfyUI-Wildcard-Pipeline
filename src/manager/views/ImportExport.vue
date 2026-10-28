@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import CloseButton from "@/components/shared/CloseButton.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
-import Icon from "../components/ui/Icon.vue";
+import WpTabs, { type TabItem } from "@/components/shared/WpTabs.vue";
 import { useToast } from "../composables/useToast";
 import { useAiChat } from "../composables/useAiChat";
 import { useAiConfig } from "../composables/useAiConfig";
@@ -80,6 +81,11 @@ function modeFromQuery(): Mode {
 
 // `?tab=packs` deep-links the Wildcard packs tab (docs + sidebar link).
 const mode = ref<Mode>(modeFromQuery());
+const IO_TABS: TabItem<Mode>[] = [
+  { id: "export", label: "Export", icon: "pi-download" },
+  { id: "import", label: "Import", icon: "pi-upload" },
+  { id: "packs", label: "Wildcard packs", icon: "pi-sitemap" },
+];
 watch(() => route?.query.tab, () => { mode.value = modeFromQuery(); });
 
 /** A pack dropped on the Import tab, handed to the Wildcard packs tab. */
@@ -944,35 +950,16 @@ function clearImport() {
       </div>
     </div>
 
-    <div class="wp-tabs wp-io-tabs" role="tablist" aria-label="Import / Export mode" data-ai-anchor="tabs" data-ai-label="Export, Import and Wildcard packs tabs">
-      <button
-        type="button" role="tab" class="wp-tab"
-        :data-active="mode === 'export' ? 'true' : 'false'"
-        :aria-selected="mode === 'export'"
-        data-test="io-tab-export"
-        @click="setMode('export')"
-      >
-        <Icon name="pi-download" /> Export
-      </button>
-      <button
-        type="button" role="tab" class="wp-tab"
-        :data-active="mode === 'import' ? 'true' : 'false'"
-        :aria-selected="mode === 'import'"
-        data-test="io-tab-import"
-        @click="setMode('import')"
-      >
-        <Icon name="pi-upload" /> Import
-      </button>
-      <button
-        type="button" role="tab" class="wp-tab"
-        :data-active="mode === 'packs' ? 'true' : 'false'"
-        :aria-selected="mode === 'packs'"
-        data-test="io-tab-packs"
-        @click="setMode('packs')"
-      >
-        <Icon name="pi-sitemap" /> Wildcard packs
-      </button>
-    </div>
+    <WpTabs
+      class="wp-io-tabs"
+      :model-value="mode"
+      :tabs="IO_TABS"
+      aria-label="Import / Export mode"
+      test-prefix="io-tab"
+      data-ai-anchor="tabs"
+      data-ai-label="Export, Import and Wildcard packs tabs"
+      @update:model-value="setMode"
+    />
 
     <!-- Export tab — 7-bucket picker, POST /wp/api/export/build -->
     <div
@@ -1010,8 +997,8 @@ function clearImport() {
           :disabled="aiChat.loading.value"
           @click="upgradeWithAi"
         >Tag and connect with AI</Button>
-        <Button
-          variant="ghost" size="sm" icon="pi-times" aria-label="Dismiss"
+        <CloseButton
+          size="sm" label="Dismiss"
           data-test="io-ai-upgrade-dismiss"
           @click="upgradeNames = []"
         />
@@ -1088,7 +1075,7 @@ function clearImport() {
   margin: 0 auto;
 }
 
-.wp-io-tabs { gap: var(--wp-space-2); margin-bottom: var(--wp-space-2); }
+.wp-io-tabs { margin-bottom: var(--wp-space-2); }
 
 .wp-io-import-pane {
   display: flex;

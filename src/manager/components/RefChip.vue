@@ -1,5 +1,6 @@
 <!-- src/manager/components/RefChip.vue -->
 <script setup lang="ts">
+import { copyText } from "@/components/shared/clipboard";
 import { computed, inject, ref, onBeforeUnmount, watch } from "vue";
 import { varColorIndex } from "../../components/shared/var-color";
 import { KIND_ICON_MAP } from "../../components/shared/kind-icons";
@@ -453,7 +454,11 @@ const foreignPoolNote = computed<string | null>(() => {
   return `also in ${where} — other nodes don't share pools`;
 });
 
+/** The chip the open card belongs to, so the card can follow it on scroll. */
+let popAnchor: HTMLElement | null = null;
+
 function positionPop(el: HTMLElement): void {
+  popAnchor = el;
   const r = el.getBoundingClientRect();
   const POP_H = 120;
   const gap = 6;
@@ -529,7 +534,7 @@ const copied = ref(false);
 let copiedTimer: number | undefined;
 function copyId(): void {
   if (!props.uuid) return;
-  void navigator.clipboard?.writeText(props.uuid);
+  void copyText(props.uuid);
   copied.value = true;
   if (copiedTimer !== undefined) window.clearTimeout(copiedTimer);
   copiedTimer = window.setTimeout(() => { copied.value = false; }, 1200);
@@ -538,7 +543,39 @@ function openInNewWindow(): void {
   if (editHref.value) window.open(editHref.value, "_blank", "noopener");
 }
 
-onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverTimer); });
+/** Any scroll under the open card moves it with its chip, like every kit
+ *  overlay; once the chip has scrolled out of view the card closes. A
+ *  scroll inside the card itself changes nothing. */
+function followPop(ev: Event): void {
+  const from = ev.target as Element | null;
+  if (from?.closest?.(".wp-refchip-pop")) return;
+  if (!popAnchor || !popAnchor.isConnected) { hoverOpen.value = false; return; }
+  const r = popAnchor.getBoundingClientRect();
+  if (r.bottom < 0 || r.top > window.innerHeight || r.right < 0 || r.left > window.innerWidth) {
+    hoverOpen.value = false;
+    return;
+  }
+  positionPop(popAnchor);
+}
+watch(hoverOpen, (open) => {
+  if (typeof window === "undefined") return;
+  if (open) {
+    window.addEventListener("scroll", followPop, true);
+    window.addEventListener("resize", followPop);
+  } else {
+    window.removeEventListener("scroll", followPop, true);
+    window.removeEventListener("resize", followPop);
+    popAnchor = null;
+  }
+});
+
+onBeforeUnmount(() => {
+  if (hoverTimer !== undefined) window.clearTimeout(hoverTimer);
+  if (typeof window !== "undefined") {
+    window.removeEventListener("scroll", followPop, true);
+    window.removeEventListener("resize", followPop);
+  }
+});
 </script>
 
 <template>
@@ -908,7 +945,7 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border-strong);
   border-radius: 7px;
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
   /* Was 10px — the "unnecessarily small" the report called out. 12px reads as a
      panel, not a tooltip afterthought. */
   font: 12px/1.55 var(--wp-font-mono, monospace);

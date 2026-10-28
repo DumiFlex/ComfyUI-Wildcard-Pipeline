@@ -376,7 +376,7 @@ function mountPickerSync(opts: {
 describe("ModulePickerModal kind tabs", () => {
   it("renders 6 kind tabs (All + 5 kinds)", () => {
     const wrapper = mountPickerSync({ modules: [] });
-    expect(wrapper.findAll(".wp-picker-tab")).toHaveLength(6);
+    expect(wrapper.findAll('[role="tab"]')).toHaveLength(6);
   });
 
   it("each kind tab uses the canonical PrimeIcons class", () => {

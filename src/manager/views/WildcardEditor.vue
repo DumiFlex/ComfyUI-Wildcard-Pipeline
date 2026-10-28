@@ -13,6 +13,7 @@
  * Save flow appends a snapshot to `payload.history` (utils/history.ts) so
  * the EditorFrame's history button works on the next mount.
  */
+import WpNumber from "@/components/shared/WpNumber.vue";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
@@ -24,7 +25,6 @@ import { usePanelAction } from "../composables/usePanelAction";
 import Card from "../components/ui/Card.vue";
 import Button from "../components/ui/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
-import Input from "../components/ui/Input.vue";
 import RichTextInput from "../components/RichTextInput.vue";
 import NegativeField from "../components/NegativeField.vue";
 import { appendNegative, pruneBlankNegatives, setNegative } from "../utils/negatives";
@@ -32,7 +32,7 @@ import BulkAddPanel from "../components/BulkAddPanel.vue";
 import SelectionToolbar from "../components/SelectionToolbar.vue";
 import Checkbox from "../components/ui/Checkbox.vue";
 import type { ParsedBulkOption } from "../utils/bulkParse";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import { axisHueAt } from "../../components/shared/axis-color";
 import { useToast } from "../composables/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
@@ -1711,7 +1711,7 @@ defineExpose({
     @restore="applyRestore"
   >
     <template v-if="isEdit && currentRow" #header-extra>
-      <SendToTestRunner v-if="props.id" :kind="'wildcard'" :id="props.id" />
+      <SendToTestRunner v-if="props.id" :id="props.id" :kind="'wildcard'" />
       <CommunityRowActions :row="currentRow" kind="module" labeled />
     </template>
     <template v-if="isEdit" #footer-left>
@@ -1742,10 +1742,10 @@ defineExpose({
         :tags="tags"
         :var-binding="varBinding"
         :var-binding-error="varBindingError"
+        :content-rating="contentRating"
         @update:name="(v) => (name = v)"
         @update:description="(v) => (description = v)"
         @update:category-id="(v) => (categoryId = v)"
-        :content-rating="contentRating"
         @update:tags="(v) => (tags = v)"
         @update:content-rating="(v) => (contentRating = v)"
         @update:var-binding="(v) => (varBinding = v)"
@@ -1983,12 +1983,11 @@ defineExpose({
               ><i class="pi pi-bars" aria-hidden="true" /></button>
             </td>
             <td>
-              <Input
+              <WpNumber commit="input"
                 :model-value="o.weight"
-                type="number"
                 size="sm"
-                min="0.01"
-                step="0.1"
+                :min="0.01"
+                :step="0.1"
                 aria-label="Option weight"
                 @update:model-value="(v) => {
                   // Clamp to >0 — weight 0 or negative never picks
@@ -2126,23 +2125,23 @@ defineExpose({
          chip. Cascades the rename to any modules referencing this subcat. -->
     <CascadeRenameDialog
       v-if="props.id && subcatRenameTarget"
+      :id="props.id"
       :open="subcatRenameOpen"
       kind="subcategory"
-      :id="props.id"
       :extra="{ subcat_name: subcatRenameTarget }"
       :initial-name="subcatRenameTarget"
       @confirmed="onSubcatRenameConfirmed"
       @cancelled="onSubcatRenameCancelled"
     />
 
-    <!-- ConfirmDialog lives INSIDE EditorFrame so the template has a single
+    <!-- ConfirmModal lives INSIDE EditorFrame so the template has a single
          root vnode. Multi-root templates break the parent RouterView's
          <Transition mode="out-in"> after this component unmounts — the
          transition tracker desyncs and the destination view never paints.
          Dialog still Teleports to body via its internal <Teleport>; the
          source placement here only affects vnode tracking. -->
-    <ConfirmDialog
-      :visible="showConfirm"
+    <ConfirmModal
+      :open="showConfirm"
       :title="bulkPending || aiPending ? 'Discard un-added options?' : 'Discard unsaved changes?'"
       :body="aiPending
         ? 'The AI draft holds options you have not added. Leaving discards them.'
@@ -2151,7 +2150,7 @@ defineExpose({
           : 'You have unsaved edits. Leaving this page will discard them.'"
       confirm-label="Discard & leave"
       cancel-label="Stay"
-      variant="danger"
+      tone="danger"
       @confirm="onConfirmLeave"
       @cancel="onCancelLeave"
     />
@@ -2323,7 +2322,7 @@ tr:hover .opt-grip:disabled { opacity: 0.2; }
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
 }
 /* The cap and the scrolling moved OFF the menu and onto the list inside it, so
    the search box stays pinned while the tags scroll under it.

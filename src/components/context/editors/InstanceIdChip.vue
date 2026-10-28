@@ -11,6 +11,7 @@
  * both identities are one hover away without cluttering the header.
  */
 import { ref, onBeforeUnmount } from "vue";
+import { copyText } from "../../shared/clipboard";
 
 const props = defineProps<{
   /** Library uuid — the payload row id. Matches `@{id}`, constraint
@@ -26,15 +27,11 @@ let timer: number | undefined;
 
 async function copyId(): Promise<void> {
   if (!props.id) return;
-  try {
-    await navigator.clipboard.writeText(props.id);
-    copied.value = true;
-    if (timer !== undefined) window.clearTimeout(timer);
-    timer = window.setTimeout(() => { copied.value = false; }, 1200);
-  } catch {
-    // Clipboard blocked (insecure context / denied) — the id stays visible
-    // for manual selection, so a failed copy is a silent no-op.
-  }
+  // A blocked copy is a silent no-op: the id stays visible to select.
+  if (!await copyText(props.id)) return;
+  copied.value = true;
+  if (timer !== undefined) window.clearTimeout(timer);
+  timer = window.setTimeout(() => { copied.value = false; }, 1200);
 }
 
 onBeforeUnmount(() => {

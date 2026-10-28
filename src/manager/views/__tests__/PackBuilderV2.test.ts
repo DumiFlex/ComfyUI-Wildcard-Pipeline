@@ -477,6 +477,55 @@ describe("PackBuilder v2", () => {
     expect(first.get('[data-test="pack-item-open"]').attributes("disabled")).toBeDefined();
   });
 
+  it("fixes every flagged item at once after the build, leaving wired items to the plan", async () => {
+    vi.mocked(api.ai.packItem).mockImplementation(({ key }) => Promise.resolve({
+      key, id: key === "i1" ? "00000001" : "00000002", kind: "wildcard",
+      payload: { options: [{ value: "x" }] }, preview: [], warnings: [], repair: "", model: "m",
+      ...(key === "i2" ? { wired: true } : {}),
+    }));
+    const flagged = {
+      runs: 200, failed: 0, notes: [], variables: [], prompts: [], quality: [],
+      problems: { i1: ["$hair is empty in 4% of runs"], i2: ["$outfit never shows"] },
+    };
+    vi.mocked(api.ai.packCheck).mockResolvedValueOnce(flagged).mockResolvedValueOnce(flagged);
+    const w = await mountIt();
+    await w.get('[data-test="pack-build"]').trigger("click");
+    await flushPromises();
+    const before = vi.mocked(api.ai.packItem).mock.calls.length;
+    const fix = w.get('[data-test="pack-problems-fix-all"]');
+    expect(w.get('[data-test="pack-problems-actions"]').text()).toContain("Rebuilds the item with a problem");
+    await fix.trigger("click");
+    await flushPromises();
+    const sent = vi.mocked(api.ai.packItem).mock.calls.slice(before).map((c) => [c[0].key, c[0].note]);
+    expect(sent).toEqual([["i1", "$hair is empty in 4% of runs"]]);
+    expect(w.find('[data-test="pack-ok"]').exists()).toBe(true);
+    expect(w.find('[data-test="pack-problems-fix-all"]').exists()).toBe(false);
+  });
+
+  it("can't add to a bundle when only the template and the bundle's own items built", async () => {
+    usePackBuilder().extendBundle({ id: "bb000001", name: "Hero" });
+    vi.mocked(api.ai.packPlan).mockImplementation(async () => {
+      const p = plan(++round);
+      p.plan.base = { id: "bb000001", name: "Hero", nested: false, sets: ["class"] };
+      p.plan.items.unshift(item("e1", "library", "Class", {
+        var: "class", existing: true, library_id: "aaaa0001", library_type: "wildcard" }));
+      p.plan.items.push(item("i3", "template", "Look prompt"));
+      return p;
+    });
+    vi.mocked(api.ai.packItem).mockImplementation(({ key }) => (key === "i1" || key === "i2"
+      ? Promise.reject(new Error("the model's answer wasn't valid JSON"))
+      : Promise.resolve({
+        key, id: "0000000a", kind: key === "e1" ? "library" : "template",
+        payload: {}, preview: [], warnings: [], repair: "", model: "m",
+      })));
+    const w = await mountIt();
+    await w.get('[data-test="pack-build"]').trigger("click");
+    await flushPromises();
+    expect(w.get('[data-test="pack-install"]').text()).toBe("Add to the bundle");
+    expect(w.get('[data-test="pack-install"]').attributes("disabled")).toBeDefined();
+    expect(w.get('[data-test="pack-nothing"]').text()).toContain("Only the template built");
+  });
+
   it("sends the settings with the plan", async () => {
     const pb = usePackBuilder();
     pb.settings.value = { ...pb.settings.value, negatives: "none", structure: "flat", count: 20 };

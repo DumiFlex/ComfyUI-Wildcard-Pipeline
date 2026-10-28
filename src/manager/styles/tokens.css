@@ -102,6 +102,23 @@
   --wp-space-7-base: 24px;
   --wp-space-8-base: 32px;
 
+  /* Shared names (2026-10-27): the canvas's motion and soft-border names,
+   * so a shared component (components/shared/) reads the same names here.
+   * SHARED_TOKENS in components/shared/shared-tokens.test.ts lists them. */
+  --wp-motion-quick:    120ms;
+  --wp-motion-hover:    150ms;
+  --wp-motion-fade:     180ms;
+  --wp-motion-swap:     200ms;
+  --wp-motion-flip:     280ms;
+  --wp-motion-pulse:    420ms;
+  --wp-motion-collapse: 450ms;
+  --wp-motion-stagger:   60ms;
+  --wp-motion-shimmer: 1400ms;
+  --wp-motion-curve-collapse: cubic-bezier(0.4, 0, 0.2, 1);
+  --wp-motion-curve-flip:     cubic-bezier(0.22, 1, 0.36, 1);
+  --wp-motion-curve-linear:   linear;
+  --wp-border-soft: var(--wp-border);
+
   /* Density multiplier — comfortable=1, compact=0.85. Set on <html>
    * via uiStore.setDensity. Defaults to 1 here so a fresh boot before
    * the store applies its class reads as comfortable. */
@@ -151,14 +168,15 @@
   /* Form-control sizing — single canonical scale. */
 
   /* Base control heights (pre-density). */
-  --wp-control-h-sm-base: 28px;
+  --wp-control-h-sm-base: 24px;
   --wp-control-h-md-base: 32px;
   --wp-control-h-lg-base: 40px;
 
-  /* Applied — multiplied by density. */
-  --wp-control-h-sm: calc(var(--wp-control-h-sm-base) * var(--wp-density));
-  --wp-control-h-md: calc(var(--wp-control-h-md-base) * var(--wp-density));
-  --wp-control-h-lg: calc(var(--wp-control-h-lg-base) * var(--wp-density));
+  /* Applied — multiplied by density, rounded to whole pixels. sm never
+     drops under the 24px manager hit target, so Compact keeps it at 24. */
+  --wp-control-h-sm: max(24px, round(calc(var(--wp-control-h-sm-base) * var(--wp-density)), 1px));
+  --wp-control-h-md: round(calc(var(--wp-control-h-md-base) * var(--wp-density)), 1px);
+  --wp-control-h-lg: round(calc(var(--wp-control-h-lg-base) * var(--wp-density)), 1px);
 
   --wp-input-h:    var(--wp-control-h-md);  /* unified input height */
   --wp-input-h-sm: var(--wp-control-h-sm);
@@ -175,11 +193,11 @@
   --wp-sidebar-w: 232px;
   --wp-topbar-h:  48px;
 
-  --wp-shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
-  --wp-shadow:    0 4px 16px rgba(0,0,0,0.35);
-  --wp-shadow-md: 0 12px 28px rgba(0,0,0,0.35);
-  --wp-shadow-lg: 0 12px 40px rgba(0,0,0,0.5);
-  --wp-shadow-xl: 0 20px 60px rgba(0,0,0,0.5);
+  --wp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --wp-shadow:    0 2px 8px rgba(0, 0, 0, 0.3);
+  --wp-shadow-md: 0 1px 2px rgba(0, 0, 0, 0.24), 0 4px 12px rgba(0, 0, 0, 0.28);
+  --wp-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --wp-shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.45);
 
   /* Elevation — semantic aliases over the shadow scale. Pick by
    * purpose (resting, popover, modal) rather than visual weight.
@@ -191,7 +209,7 @@
    */
   --wp-elev-0: none;
   --wp-elev-1: var(--wp-shadow-sm);
-  --wp-elev-2: var(--wp-shadow);
+  --wp-elev-2: var(--wp-shadow-md);
   --wp-elev-3: var(--wp-shadow-lg);
   --wp-elev-4: var(--wp-shadow-xl);
 
@@ -269,11 +287,11 @@
    * for WCAG AA on the darkest light-mode surface. */
   --wp-text-dim:    #6e6e7e;
 
-  --wp-shadow-sm: 0 1px 2px rgba(15,15,30,0.06);
-  --wp-shadow:    0 4px 16px rgba(15,15,30,0.08);
-  --wp-shadow-md: 0 8px 22px rgba(15,15,30,0.10);
-  --wp-shadow-lg: 0 12px 40px rgba(15,15,30,0.12);
-  --wp-shadow-xl: 0 20px 50px rgba(15,15,30,0.16);
+  --wp-shadow-sm: 0 1px 2px rgba(15, 15, 30, 0.06);
+  --wp-shadow:    0 2px 8px rgba(15, 15, 30, 0.08);
+  --wp-shadow-md: 0 1px 2px rgba(15, 15, 30, 0.06), 0 4px 12px rgba(15, 15, 30, 0.10);
+  --wp-shadow-lg: 0 8px 24px rgba(15, 15, 30, 0.12);
+  --wp-shadow-xl: 0 16px 40px rgba(15, 15, 30, 0.16);
 
   /* Phase 4 — flip the dark-theme white tints to dark tints so subtle
    * surfaces remain visible on light bg. */
@@ -602,7 +620,9 @@ input, textarea, select { font: inherit; }
   flex-wrap: wrap;
 }
 .wp-card__title-wrap { display: flex; flex-direction: column; gap: 1px; }
-.wp-card__title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--wp-text-muted); margin: 0; font-weight: 600; }
+/* A card's name reads as its title: normal case, 14px semibold, full text
+ * colour. Uppercase stays for small group labels (Field, table heads). */
+.wp-card__title { font-size: 14px; line-height: 1.35; color: var(--wp-text); margin: 0; font-weight: 600; letter-spacing: -0.005em; }
 .wp-card__subtitle {
   font-size: 11.5px;
   color: var(--wp-text-dim);
@@ -679,82 +699,10 @@ input, textarea, select { font: inherit; }
   outline-offset: 2px;
 }
 
-/* ---------- Buttons ---------- */
-.wp-btn {
-  height: var(--wp-btn-h);
-  padding: 0 12px;
-  border-radius: 7px;
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  font-size: 12.5px;
-  font-weight: 500;
-  cursor: pointer;
-  background: var(--wp-bg-3);
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  transition: background .12s, border-color .12s, color .12s, transform .04s;
-  white-space: nowrap;
-  user-select: none;
-}
-.wp-btn:hover { background: var(--wp-bg-4); border-color: var(--wp-border-strong); }
-.wp-btn:active { transform: translateY(0.5px); }
-.wp-btn:disabled,
-.wp-btn[aria-busy="true"] { opacity: 0.45; cursor: not-allowed; }
-.wp-btn:focus-visible {
-  outline: none;
-  box-shadow: var(--wp-focus-ring);
-}
-.wp-btn .pi, .wp-btn svg { font-size: 13px; }
-
-.wp-btn--sm { height: var(--wp-btn-h-sm); padding: 0 10px; font-size: 12px; border-radius: 6px; }
-.wp-btn--icon { width: var(--wp-btn-h); padding: 0; }
-.wp-btn--icon.wp-btn--sm { width: var(--wp-btn-h-sm); }
-
-.wp-btn--primary {
-  background: var(--wp-accent-600);
-  border-color: var(--wp-accent-600);
-  color: #fff; /* audit-exempt: white on accent-600 is 6.3:1 */
-}
-.wp-btn--primary:hover {
-  background: var(--wp-accent-700);
-  border-color: var(--wp-accent-700);
-}
-.wp-btn--primary:active { background: var(--wp-accent-800); border-color: var(--wp-accent-800); }
-.wp-btn--primary:focus-visible { box-shadow: var(--wp-focus-ring); }
-.wp-btn--ghost { background: transparent; border-color: transparent; color: var(--wp-text-muted); }
-.wp-btn--ghost:hover { background: var(--wp-bg-3); color: var(--wp-text); }
-.wp-btn--ghost:active { background: var(--wp-bg-4); }
-.wp-btn--outline {
-  background: transparent;
-  border: 1px solid color-mix(in oklab, var(--wp-accent-500) 40%, transparent);
-  color: var(--wp-accent-text);
-}
-.wp-btn--outline:hover {
-  background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent);
-  color: var(--wp-accent-text-strong);
-}
-.wp-btn--outline:active { background: color-mix(in oklab, var(--wp-accent-500) 20%, transparent); }
-.wp-btn--secondary { /* alias of default — explicit for the Vue port */ }
-.wp-btn--link {
-  background: transparent;
-  border-color: transparent;
-  color: var(--wp-accent-text);
-  height: auto;
-  padding: 0;
-}
-.wp-btn--link:hover {
-  background: transparent;
-  color: var(--wp-accent-text-strong);
-  text-decoration: underline;
-}
-.wp-btn--link:focus-visible { box-shadow: none; text-decoration: underline; }
-.wp-btn--lg { height: var(--wp-control-h-lg); padding: 0 var(--wp-space-6); font-size: 13.5px; border-radius: var(--wp-radius); }
-.wp-btn--md { /* alias of default size */ }
-.wp-btn--danger { color: var(--wp-danger); }
-.wp-btn--danger:hover { background: color-mix(in oklab, var(--wp-danger) 14%, transparent); border-color: color-mix(in oklab, var(--wp-danger) 40%, transparent); color: #fff; /* audit-exempt: white on dark-tinted hover bg (17:1 dark); light override at line 942 uses var(--wp-danger) */ }
-.wp-btn--danger:active { background: color-mix(in oklab, var(--wp-danger) 22%, transparent); }
-.wp-btn--danger:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-danger) 35%, transparent); /* danger uses its own ring color */
-}
+/* ---------- Buttons ----------
+ * The .wp-btn rules live in components/shared/button.css, shared with the
+ * canvas Button (component standard, rule 8). main.ts loads it right after
+ * this file. */
 
 /* ---------- Inputs ---------- */
 .wp-input,
@@ -801,6 +749,21 @@ input, textarea, select { font: inherit; }
 }
 .wp-input::placeholder, .wp-textarea::placeholder { color: var(--wp-text-dim); }
 .wp-input--sm, .wp-select--sm { height: var(--wp-input-h-sm); font-size: 12px; padding: 0 8px; }
+.wp-input--lg { height: var(--wp-control-h-lg); font-size: 13.5px; padding: 0 12px; }
+/* Readonly: shown, not editable. Dimmer fill, no focus ring (Input adds a lock). */
+.wp-input[readonly],
+.wp-textarea[readonly] {
+  background: var(--wp-bg-1);
+  color: var(--wp-text-muted);
+  border-style: dashed;
+  cursor: default;
+}
+.wp-input[readonly]:focus,
+.wp-input[readonly]:focus-visible,
+.wp-textarea[readonly]:focus,
+.wp-textarea[readonly]:focus-visible { box-shadow: none; border-color: var(--wp-border-strong); background: var(--wp-bg-1); }
+.wp-input:disabled,
+.wp-textarea:disabled { opacity: 0.45; cursor: not-allowed; }
 /* Custom select trigger button — flex layout so label + spacer + chevron align. */
 .wp-select {
   display: flex;
@@ -844,19 +807,34 @@ input, textarea, select { font: inherit; }
   border-color: var(--wp-accent-500);
   box-shadow: var(--wp-focus-ring);
 }
-.wp-input-group__addon {
-  display: inline-flex; align-items: center; justify-content: center;
-  padding: 0 9px;
+/* Inline icon and prefix/suffix text: no box, no divider, sitting in the
+ * field's own padding so "$" reads as part of "$hair". */
+.wp-input-group__icon,
+.wp-input-group__affix,
+.wp-input-group__lock {
+  display: inline-flex; align-items: center; flex-shrink: 0;
   color: var(--wp-text-dim);
-  background: var(--wp-bg-3);
-  border-right: 1px solid var(--wp-border);
-  font-family: var(--wp-font-mono);
-  font-size: 12.5px;
+  user-select: none;
 }
-.wp-input-group__addon--right {
-  border-right: none;
-  border-left: 1px solid var(--wp-border);
-}
+.wp-input-group__icon { padding-left: 10px; }
+.wp-input-group__icon .pi { font-size: 13px; line-height: 1; }
+.wp-input-group__affix { font-family: var(--wp-font-mono); font-size: 12.5px; }
+.wp-input-group__affix--prefix { padding-left: 10px; }
+.wp-input-group__affix--suffix { padding-right: 10px; }
+.wp-input-group__lock { padding-right: 10px; }
+.wp-input-group__icon + .wp-input,
+.wp-input-group__icon + .wp-input-group__affix--prefix { padding-left: 7px; }
+.wp-input-group__affix--prefix + .wp-input { padding-left: 2px; }
+.wp-input-group .wp-input:has(+ .wp-input-group__affix--suffix),
+.wp-input-group .wp-input:has(+ .wp-input-group__lock) { padding-right: 4px; }
+.wp-input-group--sm { height: var(--wp-control-h-sm); min-height: var(--wp-control-h-sm); }
+.wp-input-group--lg { height: var(--wp-control-h-lg); min-height: var(--wp-control-h-lg); }
+.wp-input-group--readonly { background: var(--wp-bg-1); border-style: dashed; }
+.wp-input-group--readonly:focus-within { box-shadow: none; border-color: var(--wp-border-strong); }
+.wp-input-group--readonly .wp-input[readonly] { border: none; }
+.wp-input-group--disabled { opacity: 0.45; cursor: not-allowed; }
+.wp-input-group--disabled .wp-input:disabled { opacity: 1; }
+.wp-input-group[aria-invalid="true"] { border-color: var(--wp-error-border); }
 .wp-input-group .wp-input {
   border: none !important;
   background: transparent !important;
@@ -899,16 +877,21 @@ input, textarea, select { font: inherit; }
 .wp-chip--info    { color: var(--wp-info);    background: color-mix(in oklab, var(--wp-info)    14%, transparent); border-color: color-mix(in oklab, var(--wp-info)    36%, transparent); }
 .wp-chip__dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
 .wp-chip__close {
-  /* 20×20 hit area — slimmer than 24×24 (WCAG 2.5.8 enhanced) so the
-   * chip body doesn't get inflated by the close button, but still
-   * comfortably meets WCAG 2.5.5 AA target-size baseline. Visible glyph
-   * stays small via the inner Icon component; the surrounding padding
-   * provides the rest of the click target. */
-  background: none; border: none; padding: 2px; margin-left: 1px;
-  min-width: 20px; min-height: 20px;
-  color: inherit; cursor: pointer; line-height: 0;
+  /* A plain ✕: no background zone and no box that makes a removable chip
+   * taller than a bare one. The glyph box is 12px, inside the chip's own
+   * line; the ::after reaches 4px past it on every side for a 20px click
+   * target without changing the layout. Hover only darkens the glyph. */
+  position: relative;
+  background: none; border: none; padding: 0; margin: 0 -2px 0 1px;
+  width: 12px; height: 12px;
+  color: inherit; opacity: 0.65; cursor: pointer; line-height: 0;
   display: inline-grid; place-items: center;
+  border-radius: 0;
+  transition: opacity .12s, color .12s;
 }
+.wp-chip__close::after { content: ""; position: absolute; inset: -4px; }
+.wp-chip__close:hover { opacity: 1; background: none; }
+.wp-chip__close:focus-visible { outline: 2px solid var(--wp-accent-500); outline-offset: 1px; border-radius: 2px; opacity: 1; }
 
 .wp-kbd {
   font-family: var(--wp-font-mono);
@@ -959,10 +942,6 @@ input, textarea, select { font: inherit; }
  * rather than competing for attention. `prefers-reduced-motion` users
  * still get the bar — sans pulse — so absence of motion does not
  * collapse the loading affordance to nothing. */
-/* Load-error banner rendered above list tables when fetch fails. The
- * danger-tinted block sits between the filter chips and the (probably
- * stale or empty) table, so the user sees the failure without losing
- * whatever was last rendered. */
 /* Skip-to-content link — hidden off-screen until keyboard focus, then
  * pops into the top-left so users can jump past the topbar + sidebar.
  * Standard a11y pattern; matches WCAG 2.4.1 bypass-blocks. */
@@ -1012,29 +991,6 @@ input, textarea, select { font: inherit; }
   .wp-banner-enter-active,
   .wp-banner-leave-active { transition: none; }
   .wp-banner-enter-from { transform: none; }
-}
-
-.wp-load-error {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  margin: 6px 0;
-  background: color-mix(in oklab, var(--wp-danger) 10%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-danger) 32%, transparent);
-  border-radius: var(--wp-radius, 8px);
-  font-size: 12.5px;
-  color: var(--wp-text);
-}
-.wp-load-error__icon { color: var(--wp-danger); font-size: 16px; flex: 0 0 auto; }
-.wp-load-error__body { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-.wp-load-error__title { font-weight: 600; }
-.wp-load-error__detail {
-  color: var(--wp-text-muted);
-  font-size: 11.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .wp-row-skel:hover td { background: transparent; }
@@ -1144,21 +1100,9 @@ input, textarea, select { font: inherit; }
   font-weight: 500;
 }
 
-/* Category chip — tinted pill matching prototype `<Chip color>` (ui.jsx:323).
-   Inherits .wp-chip pill geometry; the color triple comes from inline style
-   set at the call site (color = raw color, bg = color@14%, border = color@35%). */
-.wp-cat-chip {
-  /* Mirrors `.wp-chip` density pass — same padding/font/gap so the
-   * category pills don't look chunkier than neighbouring `.wp-chip`
-   * instances on category pages. */
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 500;
-  border: 1px solid transparent;
-  white-space: nowrap;
-}
+/* A colour-tinted chip (a category, a kind): the colour triple is inline,
+   set by Chip's `color` prop; the label reads a touch heavier. */
+.wp-chip--color { font-weight: 500; }
 
 /* ---------- Wildcard syntax indicators ---------- */
 .wp-syntax-cell {
@@ -1258,7 +1202,6 @@ input, textarea, select { font: inherit; }
 
 /* ── Light-mode overrides: buttons, chips, tags, links ── */
 /* Danger button hover: white text fails on light tint; swap to dark-red label */
-.wp-theme-light .wp-btn--danger:hover { color: var(--wp-danger); }
 
 /* Tone chips: swap light text for dark text, slightly stronger tint.
  * Colors route through status tokens which flip to -700/-800 shades in light mode. */
@@ -1650,24 +1593,9 @@ input, textarea, select { font: inherit; }
   display: contents;
 }
 
-/* ---------- Toggle ---------- */
-.wp-toggle { width: 32px; height: 18px; background: var(--wp-bg-3); border-radius: 999px; border: 1px solid var(--wp-border); position: relative; cursor: pointer; transition: background .15s; flex-shrink: 0; padding: 0; }
-.wp-toggle::after { content: ""; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; background: #fff; /* audit-exempt: white knob on colored toggle track */ border-radius: 50%; transition: transform .15s; }
-.wp-toggle[data-on="true"] { background: var(--wp-accent-600); border-color: var(--wp-accent-500); }
-.wp-toggle[data-on="true"]::after { transform: translateX(14px); }
-.wp-toggle:disabled { opacity: 0.45; cursor: not-allowed; }
-.wp-toggle:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
-
-/* Inline toggle wrapper (label + switch) — min-height fills canonical hit-target. */
-.wp-toggle-row {
-  display: inline-flex; align-items: center; gap: 8px;
-  min-height: var(--wp-input-h);
-  cursor: pointer;
-  user-select: none;
-  font-size: 12.5px;
-  color: var(--wp-text);
-}
-.wp-toggle-row__label { color: var(--wp-text-muted); }
+/* ---------- Toggle ----------
+   Toggle.vue wraps the shared WpSwitch; its look lives in
+   components/shared/WpSwitch.vue (one sheet for canvas + manager). */
 
 /* ---------- Checkbox ----------
    Canonical geometry matches the wildcard pool's per-option box
@@ -1711,8 +1639,24 @@ input, textarea, select { font: inherit; }
   color: #fff; /* audit-exempt: white dash on accent-600 background ≥4.5:1 both themes */
 }
 .wp-check svg { width: 9px; height: 9px; display: block; }
+/* Disabled: grey, not dim purple, so a ticked disabled box no longer reads
+ * as a live one in dark mode. */
 .wp-check:disabled,
-.wp-check[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+.wp-check[aria-disabled="true"] {
+  cursor: not-allowed;
+  background: var(--wp-bg-3);
+  border-color: var(--wp-border);
+  opacity: 0.6;
+}
+.wp-check:disabled[data-checked="true"],
+.wp-check:disabled[data-indeterminate="true"],
+.wp-check[aria-disabled="true"][aria-checked="true"] {
+  background: var(--wp-text-dim);
+  border-color: var(--wp-text-dim);
+  color: var(--wp-bg-1);
+}
+.wp-checkbox.is-disabled { cursor: not-allowed; }
+.wp-checkbox.is-disabled .wp-checkbox__label { opacity: 0.5; }
 .wp-check:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
 
 /* Inline checkbox wrapper (label + box) — min-height fills canonical hit-target. */
@@ -1736,7 +1680,7 @@ input, textarea, select { font: inherit; }
 .wp-radio {
   appearance: none; -webkit-appearance: none;
   width: 14px; height: 14px; margin: 0; flex-shrink: 0;
-  border: 1.5px solid var(--wp-border-soft, var(--wp-border));
+  border: 1.5px solid var(--wp-border-strong);
   border-radius: 50%;
   background: var(--wp-bg);
   display: inline-grid; place-items: center;
@@ -1750,7 +1694,10 @@ input, textarea, select { font: inherit; }
 }
 .wp-radio:checked { background: var(--wp-accent-600); border-color: var(--wp-accent-500); }
 .wp-radio:checked::before { transform: scale(1); }
-.wp-radio:disabled { opacity: 0.45; cursor: not-allowed; }
+.wp-radio:disabled { opacity: 0.6; cursor: not-allowed; background: var(--wp-bg-3); border-color: var(--wp-border); }
+.wp-radio:disabled:checked { background: var(--wp-text-dim); border-color: var(--wp-text-dim); }
+.wp-radio:disabled:checked::before { background: var(--wp-bg-1); }
+label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim); }
 .wp-radio:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
 .wp-checkbox__label { color: var(--wp-text); }
 
@@ -1798,37 +1745,8 @@ input, textarea, select { font: inherit; }
   z-index: 100;
   pointer-events: none;
 }
-.wp-toast {
-  /* Slight transparency + backdrop-blur so the toast reads as a
-   * floating overlay against whatever's underneath. Replaces the old
-   * heavy 40px black shadow that looked off against dark surfaces. */
-  background: color-mix(in oklab, var(--wp-bg-3) 94%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid var(--wp-border-strong);
-  border-left: 3px solid var(--wp-accent-500);
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-size: 12.5px;
-  display: flex; align-items: center; gap: 10px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.4);
-  pointer-events: auto;
-  animation: wp-slide-in .18s ease-out;
-  min-width: 220px;
-}
-.wp-toast--success { border-left-color: var(--wp-success); }
-.wp-toast--warn    { border-left-color: var(--wp-warn); }
-.wp-toast--error   { border-left-color: var(--wp-danger); }
-.wp-toast--info    { border-left-color: var(--wp-info); }
-.wp-toast__summary { font-weight: 600; }
-.wp-toast__detail  { color: var(--wp-text-muted); font-size: 11.5px; }
-.wp-toast__close {
-  margin-left: auto;
-  background: none; border: none; padding: 0;
-  color: var(--wp-text-dim); cursor: pointer;
-  line-height: 0;
-}
-.wp-toast__close:hover { color: var(--wp-text); }
+/* The toast itself is components/shared/ToastCard.vue (shared with the canvas). */
+.wp-toast-stack > * { animation: wp-slide-in .18s ease-out; }
 @keyframes wp-slide-in { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
 /* ---------- Misc utility ---------- */
@@ -1926,7 +1844,7 @@ input, textarea, select { font: inherit; }
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border-strong);
   border-radius: 8px;
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
   overflow: hidden;
   max-height: 280px;
   display: flex; flex-direction: column;
@@ -1969,7 +1887,7 @@ input, textarea, select { font: inherit; }
   background: var(--wp-bg-3);
   border: 1px solid var(--wp-border-strong);
   border-radius: 7px;
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
   z-index: 9999;
   padding: 4px;
   max-height: 240px;
@@ -2505,7 +2423,7 @@ input, textarea, select { font: inherit; }
    Earlier the pipeline ref-select was a native <select> styled here
    to look like inline text. We now route through the shared `Select`
    component (see `components/ui/Select.vue`), which already brings
-   its own height (28px via `--wp-input-h-sm`) + chevron + focus ring.
+   its own height (`--wp-input-h-sm`, 24px at Comfortable) + chevron + focus ring.
    The leftover `height: 26px; overflow: hidden` rule was clipping the
    new trigger by ~2px at the bottom, which read as a "cut" border on
    the pipeline row. The scoped block in PipelineSteps.vue keeps the
@@ -2853,12 +2771,6 @@ input, textarea, select { font: inherit; }
 }
 
 
-/* Make input-group addon icons render at proper size (PrimeIcons default 14px) instead of inheriting the 12.5px monospace size used for text addons. */
-.wp-input-group__addon .pi {
-  font-size: 14px;
-  line-height: 1;
-}
-
 /* In picker modal, give the search bar a bit more breathing room. */
 .wp-pl-picker__body .wp-input-group {
   flex-shrink: 0;
@@ -2866,12 +2778,6 @@ input, textarea, select { font: inherit; }
   min-height: 38px;
 }
 .wp-pl-picker__body .wp-pl-picker__tabs { flex-shrink: 0; }
-.wp-pl-picker__body .wp-input-group__addon {
-  padding: 0 12px;
-}
-.wp-pl-picker__body .wp-input-group__addon .pi {
-  font-size: 15px;
-}
 
 /* ---------- Module-kind palette (icon + bg pairs) ----------
    Source: docs/design-handoff/wildcard-pipeline/project/data.jsx KIND_META.
@@ -2942,7 +2848,8 @@ input, textarea, select { font: inherit; }
 }
 
 /* Density — applied to <html> by uiStore.setDensity(). Comfortable is the
- * default (--wp-density: 1 in :root). The store also sets control heights. */
+ * default (--wp-density: 1 in :root). Control heights and spacing scale
+ * through it; the store writes no heights inline. */
 html.wp-density-compact {
   --wp-density: 0.85;
 }

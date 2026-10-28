@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CopyButton from "@/components/shared/CopyButton.vue";
 import { computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast";
@@ -16,7 +17,7 @@ import Select from "../components/ui/Select.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "../components/ui/Chip.vue";
 import { categoryAssignOptions, categoryFilterOptions } from "../utils/category-options";
 import type {
   CategoryRow,
@@ -28,7 +29,7 @@ import type {
   DerivationRule,
   ModuleRow,
 } from "../api/types";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 import { clauseActions, isConditionGroup, matchWord } from "../../extension/derivation-conditions";
 import { VALUE_DISABLED_OPS } from "../../components/context/editors/_shared/derivation-ops";
@@ -95,15 +96,6 @@ function edit(row: ModuleRow) {
     params: { id: row.id },
     query: { returnTo: encodeURIComponent(route.fullPath) },
   });
-}
-
-async function copyId(id: string) {
-  try {
-    await navigator.clipboard.writeText(id);
-    toast.push({ severity: "info", summary: "ID copied", detail: id, life: 1500 });
-  } catch {
-    toast.push({ severity: "error", summary: "Copy failed", life: 2000 });
-  }
 }
 
 async function dup(row: ModuleRow) {
@@ -221,6 +213,7 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-arrow-right-arrow-left"
         headline="No derivations yet"
         body="Derivations branch logic on conditions to produce values. Create one to add conditional flow."
@@ -297,11 +290,12 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
     <template #name="{ row }">
       <div class="wp-row-name">
         <span class="wp-row-name__text" @click="edit(row)">{{ row.name }}</span>
-        <span
+        <CopyButton
           class="wp-id"
-          :title="`Click to copy ${row.id}`"
-          @click.stop="copyId(row.id)"
-        >{{ row.id }}</span>
+          :text="row.id"
+          :label="`Copy ID ${row.id}`"
+          @click.stop
+        >{{ row.id }}</CopyButton>
       </div>
     </template>
 
@@ -313,12 +307,12 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
 
     <template #columns="{ row }">
       <td>
-        <CategoryChip
+        <Chip
           v-if="row.category_id && categoryById.get(row.category_id)"
-          :name="categoryById.get(row.category_id)!.name"
+         
           :color="categoryById.get(row.category_id)!.color"
           :icon="categoryById.get(row.category_id)!.icon"
-        />
+        >{{ categoryById.get(row.category_id)!.name }}</Chip>
         <span v-else class="wp-dim">—</span>
       </td>
       <td><span class="wp-mono">{{ ruleCount(row) }}</span></td>
@@ -327,7 +321,7 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
 
     <template #actions="{ row }">
       <Button variant="ghost" size="sm" icon="pi-pencil" aria-label="Edit" @click="edit(row)" />
-      <SendToTestRunner :kind="'derivation'" :id="row.id" compact />
+      <SendToTestRunner :id="row.id" :kind="'derivation'" compact />
       <Button variant="ghost" size="sm" icon="pi-clone" aria-label="Duplicate" @click="dup(row)" />
       <CommunityRowActions :row="row" kind="module" />
       <Button variant="ghost" size="sm" icon="pi-trash" aria-label="Delete" @click="del(row)" />
@@ -374,12 +368,12 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
     </template>
   </ModuleListView>
 
-  <ConfirmDialog
-    :visible="delConfirm.visible.value"
+  <ConfirmModal
+    :open="delConfirm.visible.value"
     :title="`Delete \&quot;${delConfirm.pending.value?.name ?? ''}\&quot;?`"
     body="This permanently removes the library entry."
     confirm-label="Delete"
-    variant="danger"
+    tone="danger"
     @confirm="delConfirm.confirm(performDelete)"
     @cancel="delConfirm.cancel"
   />

@@ -5,7 +5,7 @@
  * icons as old chip → new chip.
  */
 import type { CardView } from "../../../composables/card-views/types";
-import CategoryChip from "../../CategoryChip.vue";
+import Chip from "../../ui/Chip.vue";
 
 type View = Extract<CardView, { kind: "categories" }>;
 defineProps<{ view: View }>();
@@ -18,7 +18,7 @@ defineProps<{ view: View }>();
       <span class="wp-ai-cats__chips">
         <span v-for="c in view.create" :key="c.name" data-change="added" class="wp-ai-cats__item">
           <span class="wp-ai-diff__mark" aria-hidden="true">+</span>
-          <CategoryChip :name="c.name" :color="c.color" :icon="c.icon" />
+          <Chip :color="c.color" :icon="c.icon">{{ c.name }}</Chip>
         </span>
       </span>
     </div>
@@ -26,9 +26,9 @@ defineProps<{ view: View }>();
       <span class="wp-ai-cats__label">Rename</span>
       <ul class="wp-ai-cats__rows">
         <li v-for="r in view.rename" :key="r.from.name">
-          <CategoryChip :name="r.from.name" :color="r.from.color" :icon="r.from.icon" class="wp-ai-cats__was" />
+          <Chip :color="r.from.color" :icon="r.from.icon" class="wp-ai-cats__was">{{ r.from.name }}</Chip>
           <span class="wp-ai-diff__arrow" aria-label="becomes">→</span>
-          <CategoryChip :name="r.to.name" :color="r.to.color" :icon="r.to.icon" />
+          <Chip :color="r.to.color" :icon="r.to.icon">{{ r.to.name }}</Chip>
         </li>
       </ul>
     </div>
@@ -36,9 +36,9 @@ defineProps<{ view: View }>();
       <span class="wp-ai-cats__label">Colour and icon</span>
       <ul class="wp-ai-cats__rows">
         <li v-for="r in view.restyle" :key="r.from.name">
-          <CategoryChip :name="r.from.name" :color="r.from.color" :icon="r.from.icon" class="wp-ai-cats__was" />
+          <Chip :color="r.from.color" :icon="r.from.icon" class="wp-ai-cats__was">{{ r.from.name }}</Chip>
           <span class="wp-ai-diff__arrow" aria-label="becomes">→</span>
-          <CategoryChip :name="r.to.name" :color="r.to.color" :icon="r.to.icon" />
+          <Chip :color="r.to.color" :icon="r.to.icon">{{ r.to.name }}</Chip>
         </li>
       </ul>
     </div>

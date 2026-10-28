@@ -1,0 +1,372 @@
+/**
+ * The component kit: every shared control, with where it lives and when to
+ * use it. The kit page (`views/Kit.vue`, route `/kit`) draws one entry per
+ * row here, and `__tests__/kit-coverage.test.ts` fails when a component in a
+ * kit folder is neither listed here nor in `KIT_EXEMPT`.
+ *
+ * Reuse first: before writing a new control, find the entry that fits. Make a
+ * new component only when none does, put it in a kit folder and add it here.
+ *
+ * Every user-facing string is in this file so the page is easy to translate.
+ */
+
+export type KitGroup = "actions" | "inputs" | "choice" | "display" | "feedback" | "overlays" | "pieces" | "brand";
+export type KitSurface = "manager" | "canvas";
+
+export interface KitEntry {
+  /** Stable id: the `data-kit-entry` on the kit page. */
+  id: string;
+  name: string;
+  group: KitGroup;
+  /** Repo path of the component, or of the stylesheet for a CSS-only piece. */
+  file: string;
+  /** Where it works. A canvas piece can't use the manager's stylesheet. */
+  surfaces: KitSurface[];
+  /** When to reach for it. */
+  use: string;
+  /** What it replaces, so nobody builds that by hand again. */
+  instead?: string;
+}
+
+export const KIT_GROUPS: { id: KitGroup; label: string; blurb: string }[] = [
+  { id: "actions", label: "Actions", blurb: "Things you press." },
+  { id: "inputs", label: "Inputs", blurb: "Things you type into or pick from a list." },
+  { id: "choice", label: "Choices", blurb: "On or off, one of a few, which tab." },
+  { id: "display", label: "Display", blurb: "Showing a thing: cards, chips, icons, empty pages." },
+  { id: "feedback", label: "Feedback", blurb: "Telling the user what happened or that something is busy." },
+  { id: "overlays", label: "Dialogs and menus", blurb: "Anything that opens above the page." },
+  { id: "pieces", label: "Library pieces", blurb: "Bigger parts built from the kit that several screens share. Reuse them before writing another." },
+  { id: "brand", label: "Brand", blurb: "The logo." },
+];
+
+export const KIT_ENTRIES: KitEntry[] = [
+  // Actions
+  {
+    id: "button", name: "Button", group: "actions", file: "src/manager/components/ui/Button.vue", surfaces: ["manager"],
+    use: "Every button in the manager. Primary for the one main action on a surface, secondary by default, ghost for quiet toolbar actions, danger for deletes, link for inline actions. Leave out the text for an icon button and give it an aria-label. Sizes sm 24 / md 32 / lg 40; outline is a neutral bordered ghost; loading keeps its colours with the sparkle in the label colour; disabled fades.",
+    instead: "A <button> with its own class and colours.",
+  },
+  {
+    id: "btn-css", name: "Button classes (.wp-btn)", group: "actions", file: "src/components/shared/button.css", surfaces: ["manager"],
+    use: "The same look on a plain element where the Button component can't go, like a router-link that must stay an <a>. On the canvas use WpButton: the canvas never loads these classes globally.",
+  },
+  {
+    id: "wp-button", name: "WpButton", group: "actions", file: "src/components/shared/WpButton.vue", surfaces: ["canvas", "manager"],
+    use: "Every button inside a canvas widget or canvas dialog: the canvas twin of Button, with the same variants, sizes and stylesheet (button.css), a PrimeIcons icon and the canvas size sm by default. Leave out the text for an icon button; its aria-label is also its tooltip. A shared piece that shows on both sides uses it too; manager screens use Button.",
+    instead: "A <button> with its own __btn class and colours.",
+  },
+  {
+    id: "copy-button", name: "CopyButton", group: "actions", file: "src/components/shared/CopyButton.vue", surfaces: ["manager", "canvas"],
+    use: "Copy text to the clipboard. The icon turns into a check (or a cross when the copy fails) and says so to screen readers, so no toast is needed. Works on plain-http pages too.",
+    instead: "A button that calls navigator.clipboard and shows its own message.",
+  },
+  {
+    id: "close-button", name: "CloseButton", group: "actions", file: "src/components/shared/CloseButton.vue", surfaces: ["manager", "canvas"],
+    use: "The × that closes a dialog, drawer, panel or banner. Other icon actions in the manager use Button with an icon and no text.",
+    instead: "A hand-made × button (or one that borrows .wp-topbar__icon-btn).",
+  },
+  // Inputs
+  {
+    id: "input", name: "Input", group: "inputs", file: "src/manager/components/ui/Input.vue", surfaces: ["manager"],
+    use: "One-line text in the manager, on the 24/32/40 scale (size sm/md/lg). Optional inline icon, a prefix like $ for variable names, a suffix like a unit, and a readonly look (dashed, dimmer, lock). Numbers use WpNumber, searches SearchInput.",
+    instead: "A bare <input> with its own border and focus ring.",
+  },
+  {
+    id: "textarea", name: "Textarea", group: "inputs", file: "src/manager/components/ui/Textarea.vue", surfaces: ["manager"],
+    use: "Several lines of plain text. Turn on autoResize when the box should grow with its text. Prompt text with $variables uses RichTextInput instead.",
+  },
+  {
+    id: "field", name: "Field", group: "inputs", file: "src/manager/components/ui/Field.vue", surfaces: ["manager"],
+    use: "A label, a hint and an error around any control, so they line up the same everywhere.",
+    instead: "A <label> and a <p class=\"hint\"> written per form.",
+  },
+  {
+    id: "select", name: "Select", group: "inputs", file: "src/manager/components/ui/Select.vue", surfaces: ["manager"],
+    use: "Pick one value from a list in the manager. It filters as you type and can be cleared (the ✕ shows on hover or focus, set apart from the chevron). The list follows the field when the page scrolls.",
+    instead: "A native <select>, which can't be themed in the dark.",
+  },
+  {
+    id: "wp-select", name: "WpSelect", group: "inputs", file: "src/components/shared/WpSelect.vue", surfaces: ["canvas", "manager"],
+    use: "A small dropdown for canvas widgets and dense rows, where the manager's Select is too big.",
+  },
+  {
+    id: "wp-number", name: "WpNumber", group: "inputs", file: "src/components/shared/WpNumber.vue", surfaces: ["canvas", "manager"],
+    use: "Every number field, canvas and manager. Our up and down arrows, keys and the wheel step it and clamp to min and max; typed values snap float fuzz. size sm (24, canvas default) / md (32, manager) / lg (40); suffix shows a unit; nullable when an empty box means \"use the default\".",
+    instead: "<input type=\"number\"> with the browser's spinner, or Input type=\"number\" (removed).",
+  },
+  {
+    id: "search-input", name: "SearchInput", group: "inputs", file: "src/components/shared/SearchInput.vue", surfaces: ["canvas", "manager"],
+    use: "Every search or filter box: magnifier, text, an optional \"3 of 12\" count or key hint, and a ✕ that clears it. Escape clears it first. size sm on the canvas and in tight rows.",
+    instead: "PickerSearch, Input with a search icon, or a hand-made box with its own icon and clear button.",
+  },
+  {
+    id: "list-filter", name: "ListFilter", group: "inputs", file: "src/manager/components/ui/ListFilter.vue", surfaces: ["manager"],
+    use: "SearchInput for a long list inside an editor card: the count sits in the box, and it hides itself while the list is short.",
+    instead: "Another search box with its own icon and count.",
+  },
+  {
+    id: "color-picker", name: "ColorPicker", group: "inputs", file: "src/manager/components/ColorPicker.vue", surfaces: ["manager"],
+    use: "Pick a colour from presets, the HSV square or a typed hex, as categories do. The closed picker shows the swatch, the hex and a chevron (`compact`: swatch and chevron only, for a name row); the panel is a kit Popover.",
+  },
+  {
+    id: "hsv-picker", name: "HsvPicker", group: "inputs", file: "src/components/shared/HsvPicker.vue", surfaces: ["canvas", "manager"],
+    use: "A full colour square and hue bar, for when presets are not enough.",
+  },
+  // Choice
+  {
+    id: "checkbox", name: "Checkbox", group: "choice", file: "src/manager/components/ui/Checkbox.vue", surfaces: ["manager"],
+    use: "Tick one item, or one row in a list. Supports a mixed state for \"some selected\". Disabled turns grey with a dimmed label.",
+    instead: "<input type=\"checkbox\"> drawn by the browser.",
+  },
+  {
+    id: "wp-check", name: "WpCheck", group: "choice", file: "src/components/shared/WpCheck.vue", surfaces: ["canvas", "manager"],
+    use: "The checkbox for canvas widgets.",
+  },
+  {
+    id: "toggle", name: "Toggle", group: "choice", file: "src/manager/components/ui/Toggle.vue", surfaces: ["manager"],
+    use: "A setting that takes effect at once (on or off). Use a Checkbox when the choice is saved later with a button. It is WpSwitch at the manager size.",
+  },
+  {
+    id: "wp-switch", name: "WpSwitch", group: "choice", file: "src/components/shared/WpSwitch.vue", surfaces: ["canvas", "manager"],
+    use: "On or off, taking effect at once, on the canvas or in the manager (one component, so one stylesheet). The track look is a sliding knob; the chip look is a labelled chip that lights up, for a row of runtime switches (Hide from prompt, Lock pick). mixed draws a bulk switch where only some children are on.",
+    instead: "A button with role=\"switch\" and its own toggle--on class.",
+  },
+  {
+    id: "radio", name: "Radio (.wp-radio)", group: "choice", file: "src/manager/styles/tokens.css", surfaces: ["manager"],
+    use: "One of a few options that all need to be visible. A real radio input with the class wp-radio, so arrow keys work. Disabled turns grey.",
+  },
+  {
+    id: "tabs", name: "Tabs", group: "choice", file: "src/components/shared/WpTabs.vue", surfaces: ["manager", "canvas"],
+    use: "Switch between views of the same thing. The arrow keys move between tabs, a long row scrolls, and an optional count follows each label. size=\"sm\" on the canvas.",
+    instead: "A tab strip of buttons with role=\"tab\" and its own underline and key handling (the old .wp-tabs class).",
+  },
+  {
+    id: "segmented", name: "Segmented control", group: "choice", file: "src/components/shared/WpSegmented.vue", surfaces: ["manager", "canvas"],
+    use: "Pick one of two to five short options that all stay visible (theme, mode, view). The arrow keys move the choice. icon-only for a row of icons with tooltips.",
+    instead: "A row of joined buttons with its own active colour, or a select with three options.",
+  },
+  // Display
+  {
+    id: "card", name: "Card", group: "display", file: "src/manager/components/ui/Card.vue", surfaces: ["manager"],
+    use: "A panel with an optional title row (the card's name, 14px semibold). Editors and settings are made of these.",
+  },
+  {
+    id: "chip", name: "Chip", group: "display", file: "src/manager/components/ui/Chip.vue", surfaces: ["manager"],
+    use: "A short label: a tag, a status, a count, a category. Tones carry meaning (success, warn, danger, info); color tints it for a category or kind (the text blends toward the theme's text so any pick stays readable), and icon puts the category's icon in front. removable adds a plain ✕ that keeps the chip's height.",
+    instead: "CategoryChip (merged into Chip: <Chip :color :icon>{{ name }}</Chip>) or a hand-made pill span.",
+  },
+  {
+    id: "kbd", name: "Key (.wp-kbd)", group: "display", file: "src/manager/styles/tokens.css", surfaces: ["manager"],
+    use: "A keyboard key in help text, like Ctrl K.",
+  },
+  {
+    id: "icon", name: "Icon", group: "display", file: "src/manager/components/ui/Icon.vue", surfaces: ["manager"],
+    use: "Every icon. Use the ICON_SM, ICON_MD and ICON_LG sizes. Icons are decoration: the button or text next to them carries the meaning.",
+    instead: "An inline <svg> pasted into a component.",
+  },
+  {
+    id: "empty-state", name: "EmptyState", group: "display", file: "src/manager/components/ui/EmptyState.vue", surfaces: ["manager"],
+    use: "A page or list with nothing in it yet: say what goes here and offer the one action that fills it. size page (an empty list page), panel (the default, in a card or panel) or inline (one row).",
+  },
+  {
+    id: "disclosure", name: "Disclosure", group: "display", file: "src/components/shared/Disclosure.vue", surfaces: ["manager", "canvas"],
+    use: "A section that folds open under its heading (advanced options, details, a long list). The chevron turns and the body grows; boxed draws it as a card.",
+    instead: "A button with its own aria-expanded, chevron and v-if.",
+  },
+  {
+    id: "data-table", name: "DataTable", group: "display", file: "src/manager/components/ui/DataTable.vue", surfaces: ["manager"],
+    use: "Rows and columns: sticky header, sort by a column, tick rows, loading and empty rows. Put custom cells in #cell-<key>.",
+    instead: "A <table class=\"wp-table\"> with its own sort state and select-all.",
+  },
+  // Feedback
+  {
+    id: "toast", name: "Toast (manager)", group: "feedback", file: "src/manager/composables/useToast.ts", surfaces: ["manager"],
+    use: "A short note after an action, with an optional Undo. Call useToast().push(); the app shows it.",
+  },
+  {
+    id: "toast-card", name: "ToastCard", group: "feedback", file: "src/components/shared/ToastCard.vue", surfaces: ["canvas", "manager"],
+    use: "The one toast look both stacks draw (manager bottom right, canvas under the menu bar). You push to a store, never mount it yourself.",
+    instead: "A toast styled per surface.",
+  },
+  {
+    id: "canvas-toast", name: "Toast (canvas)", group: "feedback", file: "src/components/shared/toast-store.ts", surfaces: ["canvas"],
+    use: "The same note from a canvas widget. Push to the shared toast store; never console.log a warning.",
+  },
+  {
+    id: "banner", name: "Banner", group: "feedback", file: "src/components/shared/Banner.vue", surfaces: ["manager", "canvas"],
+    use: "A message that stays on the page until it no longer applies: a draft to restore, a failed load, out-of-date items. Tone sets the colour and icon; add actions and a close button when they help.",
+    instead: "A tinted <div> with its own icon, colours and Dismiss button.",
+  },
+  {
+    id: "loading-mark", name: "LoadingMark", group: "feedback", file: "src/components/shared/LoadingMark.vue", surfaces: ["manager", "canvas"],
+    use: "Anything busy. Inline (a text row, a button, a list item) it draws the AI sparkle; a block (a page or panel that is loading) draws the full logo animation. Give it a label, or slot text for a \"Loading bundle…\" row; mono draws it in the text colour.",
+    instead: "A spinner or plain \"Loading…\" text.",
+  },
+  {
+    id: "ai-working", name: "AiWorking", group: "feedback", file: "src/manager/components/ai/AiWorking.vue", surfaces: ["manager"],
+    use: "The \"the AI is working\" line: one of four animated sparkle marks (typing, shuffle, orbit, burst), a changing word and the time so far. Pass text for your own status, or leave it out to follow the AI request in flight.",
+  },
+  // Overlays
+  {
+    id: "modal", name: "Modal", group: "overlays", file: "src/manager/components/ui/Modal.vue", surfaces: ["manager"],
+    use: "A dialog in the manager with a title, body and footer buttons.",
+    instead: "A div with role=\"dialog\" and its own backdrop.",
+  },
+  {
+    id: "drawer", name: "Drawer", group: "overlays", file: "src/manager/components/ui/Drawer.vue", surfaces: ["manager"],
+    use: "A panel that slides in from the side: an inspector, history, settings beside the work. Escape closes it and focus goes back. Turn modal off to keep the page usable behind it.",
+    instead: "Another fixed side panel with its own width, header and close button.",
+  },
+  {
+    id: "popover", name: "Popover", group: "overlays", file: "src/components/shared/Popover.vue", surfaces: ["canvas", "manager"],
+    use: "A panel anchored to a button: a colour picker, a filter, a small form. It flips to stay on screen, follows on scroll and closes on Escape or a click outside. Every floating panel builds on it.",
+    instead: "A Teleport with its own placement maths and outside-click handler.",
+  },
+  {
+    id: "dropdown-menu", name: "DropdownMenu", group: "overlays", file: "src/components/shared/DropdownMenu.vue", surfaces: ["canvas", "manager"],
+    use: "A list of actions behind a button (the ⋯ menu, More, Add…). Arrows, Home/End and Enter work. Takes the same items as ContextMenu, so a row's right-click and ⋯ menus can share one list.",
+    instead: "A hand-built menu of buttons under a ⋯ button.",
+  },
+  {
+    id: "tooltip", name: "Tooltip (v-tooltip)", group: "overlays", file: "src/components/shared/tooltip.ts", surfaces: ["canvas", "manager"],
+    use: "A short hint on hover and on keyboard focus. One attribute: v-tooltip=\"'Copy the prompt'\", or an object with a shortcut (kbd: 'Ctrl C'). Icon-only buttons still need an aria-label; the tooltip is for sighted mouse and keyboard users.",
+    instead: "title=\"…\", which is slow, can't be styled, never shows from the keyboard and is cut off on the canvas.",
+  },
+  {
+    id: "modal-shell", name: "ModalShell", group: "overlays", file: "src/components/shared/ModalShell.vue", surfaces: ["canvas", "manager"],
+    use: "The backdrop, focus trap and Escape handling for a canvas dialog. Put the dialog's own frame inside.",
+  },
+  {
+    id: "confirm-modal", name: "ConfirmModal", group: "overlays", file: "src/manager/components/ui/ConfirmModal.vue", surfaces: ["manager"],
+    use: "Ask before something that can't be undone, in the manager. Built on Modal, so Escape, Tab and focus return work like every other dialog. Name the action on the confirm button (Delete, not OK); tone=\"danger\" for deletes and discards.",
+    instead: "ConfirmDialog in a manager screen, or window.confirm().",
+  },
+  {
+    id: "confirm-dialog", name: "ConfirmDialog", group: "overlays", file: "src/components/shared/ConfirmDialog.vue", surfaces: ["canvas"],
+    use: "The same question from a canvas widget, in the node colours. In the manager use ConfirmModal.",
+  },
+  {
+    id: "context-menu", name: "ContextMenu", group: "overlays", file: "src/components/shared/ContextMenu.vue", surfaces: ["canvas", "manager"],
+    use: "A right-click menu at the pointer: sections, icons, dividers, a danger item. It stays on screen near the edges. For a menu behind a button use DropdownMenu.",
+    instead: "Another absolutely positioned list of buttons.",
+  },
+  // Library pieces
+  {
+    id: "rich-text", name: "RichTextInput", group: "pieces", file: "src/manager/components/RichTextInput.vue", surfaces: ["manager"],
+    use: "Prompt text: colours $variables, @{references}, {a|b} picks, LoRAs and #tags, and completes them as you type. Every template, combine and option text box uses it.",
+    instead: "A Textarea for text that holds prompt syntax.",
+  },
+  {
+    id: "negative-field", name: "NegativeField", group: "pieces", file: "src/manager/components/NegativeField.vue", surfaces: ["manager"],
+    use: "The folded \"Negative\" box under an option, value or template. Opens when clicked or when it has text.",
+  },
+  {
+    id: "breadcrumb", name: "Breadcrumb", group: "pieces", file: "src/manager/components/Breadcrumb.vue", surfaces: ["manager"],
+    use: "The Library › Wildcards › Hair colour trail at the top of an editor.",
+  },
+  {
+    id: "draft-banner", name: "DraftBanner", group: "pieces", file: "src/manager/components/DraftBanner.vue", surfaces: ["manager"],
+    use: "Offer to restore unsaved changes found when an editor opens.",
+  },
+  {
+    id: "selection-toolbar", name: "SelectionToolbar", group: "pieces", file: "src/manager/components/SelectionToolbar.vue", surfaces: ["manager"],
+    use: "The bar that appears when rows are selected: tag, weight, negative, move and delete them together.",
+  },
+  {
+    id: "validity-icon", name: "ValidityIcon", group: "pieces", file: "src/manager/components/ValidityIcon.vue", surfaces: ["manager"],
+    use: "The check, warning or error mark in a list's Valid column, with the problems in its tooltip.",
+  },
+  {
+    id: "relative-date", name: "RelativeDate", group: "pieces", file: "src/manager/components/RelativeDate.vue", surfaces: ["manager"],
+    use: "\"5 min ago\" for a timestamp, with the full date on hover.",
+  },
+  {
+    id: "icon-picker", name: "IconPicker", group: "pieces", file: "src/manager/components/IconPicker.vue", surfaces: ["manager"],
+    use: "Pick an icon for a category or bundle from the curated set. The closed picker names the icon (or says Choose icon); compact drops the name for a table cell. The panel is a kit Popover.",
+  },
+  // Brand
+  {
+    id: "logo", name: "Logo", group: "brand", file: "src/components/shared/Logo.vue", surfaces: ["manager", "canvas"],
+    use: "The Wildcard Pipeline mark. Draw it at 16, 20, 28 or 40 px.",
+  },
+];
+
+/**
+ * Components in a kit folder that are not kit entries, and why. The coverage
+ * test accepts these; everything else in a kit folder must be in KIT_ENTRIES.
+ */
+export const KIT_EXEMPT: Record<string, string> = {
+  "src/manager/components/ui/ToastHost.vue": "Mounted once by the app; use useToast().",
+  "src/components/shared/Toast.vue": "Mounted once by the canvas toast store; push to toast-store.",
+  "src/components/shared/SeedListModal.vue": "The seed list dialog itself, not a building block.",
+  "src/components/shared/SeedLockRow.vue": "One row of the seed list; only the seed widgets use it.",
+  "src/components/shared/FrameChips.vue": "Loop frame chips; only the loop and seed widgets use them.",
+};
+
+/** The folders whose components must each be a kit entry or exempt. */
+export const KIT_FOLDERS = ["src/manager/components/ui", "src/components/shared"];
+
+/**
+ * How to use each entry, shown under its demo. Code, so not translated.
+ */
+export const KIT_EXAMPLES: Record<string, string> = {
+  "button": `<Button variant="primary" icon="pi-plus" @click="add">New module</Button>`,
+  "btn-css": `<button class="wp-btn wp-btn--primary wp-btn--sm">Run</button>`,
+  "input": `<Input v-model="name" prefix="$" aria-label="Variable name" />`,
+  "textarea": `<Textarea v-model="notes" :rows="3" auto-resize />`,
+  "field": `<Field label="Name" hint="Shown in the library." for="name"><Input id="name" v-model="name" /></Field>`,
+  "select": `<Select v-model="category" :options="options" clearable />`,
+  "wp-select": `<WpSelect v-model="mode" :options="[{ value: 'hash', label: 'Hash' }]" aria-label="Strategy" />`,
+  "wp-number": `<WpNumber v-model="count" :min="1" :max="64" aria-label="Count" />`,
+  "search-input": `<SearchInput v-model="query" placeholder="Search modules" :visible="shown.length" :total="rows.length" />`,
+  "list-filter": `<ListFilter v-model="query" :total="rows.length" :visible="shown.length" noun="rules" test-prefix="rules" />`,
+  "color-picker": `<ColorPicker v-model="color" aria-label="Category colour" />`,
+  "hsv-picker": `<HsvPicker v-model="color" aria-label="Colour" />`,
+  "checkbox": `<Checkbox v-model="picked" label="Include in bundle" />`,
+  "wp-check": `<WpCheck v-model="on" aria-label="Hold" />`,
+  "toggle": `<Toggle v-model="enabled" label="Show tooltips" />`,
+  "wp-switch": `<WpSwitch v-model="held" variant="chip" icon="pi-link" label="Hold across run" />`,
+  "radio": `<label><input v-model="mode" type="radio" class="wp-radio" value="a"> Tags</label>`,
+  "tabs": `<WpTabs v-model="tab" :tabs="[{ id: 'options', label: 'Options', count: 12 }, { id: 'rules', label: 'Rules' }]" aria-label="Editor sections" />`,
+  "segmented": `<WpSegmented v-model="theme" :options="[{ value: 'dark', label: 'Dark', icon: 'pi-moon' }, { value: 'light', label: 'Light', icon: 'pi-sun' }]" aria-label="Theme" />`,
+  "disclosure": `<Disclosure v-model:open="open" label="Advanced" :count="3">…</Disclosure>`,
+  "data-table": `<DataTable v-model:sort="sort" v-model:selected="picked" :columns="columns" :rows="rows" row-key="id" selectable aria-label="Tags" />`,
+  "banner": `<Banner tone="warn" title="2 modules are out of date" dismissible @dismiss="hide">Update them before you publish.</Banner>`,
+  "wp-button": `<WpButton variant="primary" icon="pi-plus" @click="add">Add module</WpButton>`,
+  "copy-button": `<CopyButton :text="prompt" label="Copy prompt" />`,
+  "close-button": `<CloseButton kbd="Esc" @click="close" />`,
+  "card": `<Card title="Options" subtitle="12 options">…</Card>`,
+  "chip": `<Chip tone="warn" icon="pi-exclamation-triangle">2 conflicts</Chip>  <Chip :color="cat.color" :icon="cat.icon">{{ cat.name }}</Chip>`,
+  "kbd": `<kbd class="wp-kbd">Ctrl</kbd> <kbd class="wp-kbd">K</kbd>`,
+  "icon": `<Icon name="pi-bolt" :size="ICON_MD" />`,
+  "empty-state": `<EmptyState icon="pi-inbox" headline="No bundles yet" body="…"><template #cta>…</template></EmptyState>`,
+  "toast": `useToast().push({ severity: "success", summary: "Saved", action: { label: "Undo", run: undo } })`,
+  "toast-card": `<ToastCard tone="success" summary="Saved Hair colour" action-label="Undo" @action="undo" @dismiss="close" />`,
+  "canvas-toast": `pushToast("Copied to the library", { severity: "success" })`,
+  "loading-mark": `<LoadingMark block>Loading bundle…</LoadingMark>`,
+  "ai-working": `<AiWorking text="Planning the pack" variant="orbit" />`,
+  "modal": `<Modal v-model:open="open" title="Rename"><template #footer>…</template></Modal>`,
+  "modal-shell": `<ModalShell :visible="open" @close="open = false"><div class="my-dialog">…</div></ModalShell>`,
+  "confirm-modal": `<ConfirmModal :open="ask" title="Delete Hair colour?" confirm-label="Delete" tone="danger" @confirm="del" @cancel="ask = false" />`,
+  "confirm-dialog": `<ConfirmDialog :visible="ask" title="Delete Hair colour?" confirm-label="Delete" variant="danger" @confirm="del" @cancel="ask = false" />`,
+  "context-menu": `<ContextMenu :visible="open" :x="ev.clientX" :y="ev.clientY" :items="items" @close="open = false" />`,
+  "drawer": `<Drawer v-model:open="open" title="History" width="380px">…<template #footer>…</template></Drawer>`,
+  "popover": `<Popover v-model:open="open" label="Colour"><template #trigger="{ props }"><Button v-bind="props">Colour</Button></template>…</Popover>`,
+  "dropdown-menu": `<DropdownMenu :items="actions" label="Hair colour actions"><template #trigger="{ props }"><Button v-bind="props" variant="ghost" icon="pi-ellipsis-h" /></template></DropdownMenu>`,
+  "tooltip": `<Button v-tooltip="{ text: 'Copy to clipboard', kbd: 'Ctrl C' }" variant="ghost" icon="pi-copy" aria-label="Copy" />`,
+  "logo": `<Logo :size="28" />`,
+  "rich-text": `<RichTextInput v-model="template" surface="assembler" multiline :var-suggestions="vars" />`,
+  "negative-field": `<NegativeField v-model="option.negative" label="option" />`,
+  "breadcrumb": `<Breadcrumb :items="[{ to: '/wildcards', label: 'Wildcards' }, { label: name }]" />`,
+  "draft-banner": `<DraftBanner :has-draft="hasDraft" :age-ms="age" @restore="restore" @discard="discard" />`,
+  "selection-toolbar": `<SelectionToolbar :count="selected.length" :tags="tags" @apply-tag="tag" @delete-selected="del" />`,
+  "validity-icon": `<ValidityIcon :issues="validate(row)" />`,
+  "relative-date": `<RelativeDate :value="row.updated_at" />`,
+  "icon-picker": `<IconPicker v-model="icon" aria-label="Category icon" />`,
+};
+
+export function kitEntry(id: string): KitEntry {
+  const e = KIT_ENTRIES.find((x) => x.id === id);
+  if (!e) throw new Error(`No kit entry "${id}"`);
+  return e;
+}

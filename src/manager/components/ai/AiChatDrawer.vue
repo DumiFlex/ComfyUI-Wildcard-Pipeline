@@ -23,6 +23,7 @@
  * Images can be attached (button, paste or drop) when the model sees them;
  * they are shrunk in the browser first (`utils/chat-image.ts`).
  */
+import CloseButton from "@/components/shared/CloseButton.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { isNavigationFailure, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import Button from "../ui/Button.vue";
@@ -31,7 +32,7 @@ import Select, { type SelectOption } from "../ui/Select.vue";
 import { api } from "../../api/client";
 import AiMessage from "./AiMessage.vue";
 import AiAsk from "./AiAsk.vue";
-import { copyText } from "../../utils/clipboard";
+import { copyText } from "@/components/shared/clipboard";
 import { plainText } from "../../utils/chat-markdown";
 import AiCardView from "./AiCardView.vue";
 import AiSyntax from "./AiSyntax.vue";
@@ -864,13 +865,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         title="Start a new chat"
         @click="newChat"
       ><span class="wp-ai-chat__btn-label">New chat</span></Button>
-      <button
-        type="button"
+      <CloseButton
         class="wp-ai-chat__close"
-        aria-label="Close the assistant"
+        label="Close the assistant"
         data-test="ai-chat-close"
         @click="chat.open.value = false"
-      ><i class="pi pi-times" aria-hidden="true" /></button>
+      />
     </header>
     <p v-if="modelNote" class="wp-ai-chat__model-note" role="status" data-test="ai-chat-model-note">{{ modelNote }}</p>
 
@@ -1393,7 +1393,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   container: wp-ai-chat / inline-size;
   background: var(--wp-bg-1);
   border-left: 1px solid var(--wp-border);
-  box-shadow: -8px 0 24px rgb(0 0 0 / 0.25);
+  box-shadow: var(--wp-shadow-xl);
 }
 /* The left edge: a splitter the user drags or moves with the arrow keys. */
 .wp-ai-chat__grip {
@@ -1475,11 +1475,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   font-family: var(--wp-font-mono, monospace); font-size: 11px; color: var(--wp-text-dim);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.wp-ai-chat__close {
-  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
-  border: 0; border-radius: 6px; background: none; color: var(--wp-text-muted); cursor: pointer;
-}
-.wp-ai-chat__close:hover { color: var(--wp-text); background: var(--wp-bg-2); }
 .wp-ai-chat__body {
   flex: 1; overflow-y: auto; overscroll-behavior: contain;
   padding: 14px 12px; display: flex; flex-direction: column; gap: 12px;
@@ -1501,7 +1496,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   position: absolute; left: -8px; bottom: -12px; min-width: 24px; height: 22px; padding: 0 5px;
   display: inline-flex; align-items: center; justify-content: center; border-radius: 11px;
   font-size: 13px; line-height: 1; background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border); box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+  border: 1px solid var(--wp-border); box-shadow: var(--wp-shadow-sm);
   animation: wp-ai-chat-react 0.32s cubic-bezier(0.3, 1.6, 0.5, 1) both;
 }
 @keyframes wp-ai-chat-react {

@@ -13,6 +13,9 @@
  * pushes via `host.setValue` so ComfyUI's widget value matches.
  */
 import { computed, ref, watch } from "vue";
+import WpSwitch from "../shared/WpSwitch.vue";
+import WpSegmented, { type SegmentedOption } from "../shared/WpSegmented.vue";
+import { vTooltip } from "../shared/tooltip";
 import { remapSweepFrames, sweepFrameCount, type ContextLoopConfig, type LoopStrategy, type SweepConfig } from "./types";
 import { collectSweepCandidates, sweepSourcesFromRaw, type SweepSourceRaw } from "./sweep-candidates";
 import SweepModal from "./SweepModal.vue";
@@ -49,10 +52,10 @@ const emit = defineEmits<{ "update:modelValue": [next: ContextLoopConfig] }>();
  *  `node.properties` and survive a workflow save. */
 const chipsCollapsed = defineModel<boolean>("chipsCollapsed", { default: false });
 
-const STRATEGIES: { id: LoopStrategy; label: string; hint: string }[] = [
-  { id: "hash_index", label: "hash", hint: "Independent per-iteration; recommended for varied results." },
-  { id: "sequential", label: "sequential", hint: "base, base+1, base+2, … Predictable diffs." },
-  { id: "prime_stride", label: "stride", hint: "base + i × 1,000,003. Wide spread, deterministic." },
+const STRATEGY_OPTIONS: SegmentedOption<LoopStrategy>[] = [
+  { value: "hash_index", label: "hash", hint: "Independent per-iteration; recommended for varied results." },
+  { value: "sequential", label: "sequential", hint: "base, base+1, base+2, … Predictable diffs." },
+  { value: "prime_stride", label: "stride", hint: "base + i × 1,000,003. Wide spread, deterministic." },
 ];
 
 /** Same wording as the WP_ContextLoop schema-level tooltip for the
@@ -207,22 +210,15 @@ function toggleTotalInternal(): void {
   >
     <div class="wp-loop__section">
       <div class="wp-loop__label">strategy</div>
-      <div class="wp-loop__chips" role="radiogroup" aria-label="seed strategy">
-        <button
-          v-for="s in STRATEGIES"
-          :key="s.id"
-          type="button"
-          class="wp-loop__chip"
-          :class="{ 'wp-loop__chip--active': modelValue.strategy === s.id }"
-          :data-test="`loop-strategy-${s.id}`"
-          :title="s.hint"
-          role="radio"
-          :aria-checked="modelValue.strategy === s.id"
-          @click="pickStrategy(s.id)"
-        >
-          {{ s.label }}
-        </button>
-      </div>
+      <WpSegmented
+        :model-value="modelValue.strategy"
+        :options="STRATEGY_OPTIONS"
+        size="sm"
+        block
+        aria-label="Seed strategy"
+        test-prefix="loop-strategy"
+        @update:model-value="pickStrategy"
+      />
     </div>
 
     <button type="button" class="wp-loop__seedbtn" data-test="loop-seeds-btn" @click="seedsOpen = true">
@@ -269,21 +265,15 @@ function toggleTotalInternal(): void {
 
     <div
       class="wp-loop__row"
-      :title="OVERRIDE_SEED_TOOLTIP"
+      v-tooltip="OVERRIDE_SEED_TOOLTIP"
     >
       <span class="wp-loop__row-label">Override Context seed</span>
-      <button
-        type="button"
-        class="wp-loop__switch"
-        :class="{ 'wp-loop__switch--on': modelValue.override_seed }"
+      <WpSwitch
         data-test="loop-override-toggle"
-        :aria-pressed="modelValue.override_seed"
-        :aria-label="`Override Context seed: ${modelValue.override_seed ? 'on' : 'off'}`"
-        :title="OVERRIDE_SEED_TOOLTIP"
-        @click="toggleOverride"
-      >
-        <span class="wp-loop__switch-thumb" />
-      </button>
+        :model-value="modelValue.override_seed"
+        aria-label="Override Context seed"
+        @update:model-value="toggleOverride"
+      />
     </div>
 
     <div class="wp-loop__section">
@@ -329,16 +319,12 @@ function toggleTotalInternal(): void {
 
     <div class="wp-loop__row">
       <span class="wp-loop__row-label">Bypass loop</span>
-      <button
-        type="button"
-        class="wp-loop__switch"
-        :class="{ 'wp-loop__switch--on': modelValue.bypass }"
+      <WpSwitch
         data-test="loop-bypass-toggle"
-        :aria-pressed="modelValue.bypass"
-        @click="toggleBypass"
-      >
-        <span class="wp-loop__switch-thumb" />
-      </button>
+        aria-label="Bypass loop"
+        :model-value="modelValue.bypass"
+        @update:model-value="toggleBypass"
+      />
     </div>
 
     <SweepModal
@@ -360,8 +346,6 @@ function toggleTotalInternal(): void {
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .wp-loop {
   display: flex;
   flex-direction: column;
@@ -378,25 +362,6 @@ function toggleTotalInternal(): void {
   color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
 }
 
-.wp-loop__chips { display: flex; gap: 4px; }
-/* Strategy chips only — the per-frame grid now lives in FrameChips.vue. */
-.wp-loop__chip {
-  flex: 1;
-  padding: 4px 6px;
-  text-align: center;
-  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
-  border: 1px solid var(--wp-border, #353841);
-  border-radius: 3px;
-  color: var(--wp-text-muted, #aeb1bb);
-  font: 600 10px var(--wp-font-sans, sans-serif);
-  cursor: pointer;
-}
-.wp-loop__chip:hover { color: var(--wp-text); border-color: var(--wp-border-strong, #4a4d55); }
-.wp-loop__chip--active {
-  background: color-mix(in srgb, var(--wp-accent, #6366f1) 18%, transparent);
-  border-color: var(--wp-accent, #6366f1);
-  color: var(--wp-accent, #6366f1);
-}
 
 .wp-loop__row {
   display: flex;
@@ -408,35 +373,6 @@ function toggleTotalInternal(): void {
   color: var(--wp-text-muted, #aeb1bb);
 }
 
-.wp-loop__switch {
-  width: 32px;
-  height: 18px;
-  border-radius: 9px;
-  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
-  border: 1px solid var(--wp-border, #353841);
-  position: relative;
-  padding: 0;
-  cursor: pointer;
-  transition: background var(--wp-motion-hover, 120ms) ease, border-color var(--wp-motion-hover, 120ms) ease;
-}
-.wp-loop__switch-thumb {
-  position: absolute;
-  top: 1px;
-  left: 1px;
-  width: 14px;
-  height: 14px;
-  background: var(--wp-text-dim, #7a7d88);
-  border-radius: 50%;
-  transition: left var(--wp-motion-hover, 120ms) ease, background var(--wp-motion-hover, 120ms) ease;
-}
-.wp-loop__switch--on {
-  background: color-mix(in srgb, var(--wp-accent, #6366f1) 22%, transparent);
-  border-color: var(--wp-accent, #6366f1);
-}
-.wp-loop__switch--on .wp-loop__switch-thumb {
-  left: 15px;
-  background: var(--wp-accent, #6366f1);
-}
 
 .wp-loop__var-input {
   display: flex;

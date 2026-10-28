@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CopyButton from "@/components/shared/CopyButton.vue";
 import { computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast";
@@ -12,10 +13,10 @@ import Select from "../components/ui/Select.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "../components/ui/Chip.vue";
 import { categoryFilterOptions } from "../utils/category-options";
 import type { CategoryRow, TemplateRow } from "../api/types";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "../components/ui/ConfirmModal.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 
 const route = useRoute();
@@ -90,15 +91,6 @@ function templateMeta(row: TemplateRow): string {
   return vars.size > 0 ? `${chars} · ${vars.size} $var` : chars;
 }
 
-async function copyId(id: string) {
-  try {
-    await navigator.clipboard.writeText(id);
-    toast.push({ severity: "info", summary: "ID copied", detail: id, life: 1500 });
-  } catch {
-    toast.push({ severity: "error", summary: "Copy failed", life: 2000 });
-  }
-}
-
 async function fav(row: TemplateRow) {
   try { await store.toggleFavorite(row.id); }
   catch (e) { toast.push({ severity: "error", summary: "Favorite failed", detail: String(e), life: 4000 }); }
@@ -156,6 +148,7 @@ function toggleTag(t: string, currentTags: string[] | undefined): string[] {
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-file-edit"
         headline="No templates yet"
         body="Templates are reusable prompt skeletons. Save one from an assembler's Save button to start your library."
@@ -232,11 +225,12 @@ function toggleTag(t: string, currentTags: string[] | undefined): string[] {
     <template #name="{ row }">
       <div class="wp-row-name">
         <span class="wp-row-name__text" @click="edit(row)">{{ row.name }}</span>
-        <span
+        <CopyButton
           class="wp-id"
-          :title="`Click to copy ${row.id}`"
-          @click.stop="copyId(row.id)"
-        >{{ row.id }}</span>
+          :text="row.id"
+          :label="`Copy ID ${row.id}`"
+          @click.stop
+        >{{ row.id }}</CopyButton>
       </div>
     </template>
 
@@ -252,12 +246,12 @@ function toggleTag(t: string, currentTags: string[] | undefined): string[] {
 
     <template #columns="{ row }">
       <td>
-        <CategoryChip
+        <Chip
           v-if="row.category_id && categoryById.get(row.category_id)"
-          :name="categoryById.get(row.category_id)!.name"
+         
           :color="categoryById.get(row.category_id)!.color"
           :icon="categoryById.get(row.category_id)!.icon"
-        />
+        >{{ categoryById.get(row.category_id)!.name }}</Chip>
         <span v-else class="wp-dim">—</span>
       </td>
       <!-- Something scannable in the freed column: how big the template is,
@@ -280,12 +274,12 @@ function toggleTag(t: string, currentTags: string[] | undefined): string[] {
     </template>
   </ModuleListView>
 
-  <ConfirmDialog
-    :visible="delConfirm.visible.value"
+  <ConfirmModal
+    :open="delConfirm.visible.value"
     :title="`Delete \&quot;${delConfirm.pending.value?.name ?? ''}\&quot;?`"
     body="This permanently removes the template library entry."
     confirm-label="Delete"
-    variant="danger"
+    tone="danger"
     @confirm="delConfirm.confirm(performDelete)"
     @cancel="delConfirm.cancel"
   />

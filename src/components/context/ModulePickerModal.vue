@@ -1,6 +1,6 @@
 <template>
   <ModalShell :visible="visible" @close="$emit('close')">
-    <div class="wp-picker" ref="rootEl" tabindex="-1">
+    <div ref="rootEl" class="wp-picker" tabindex="-1">
 
       <!-- Header -->
       <header class="wp-picker__head">
@@ -33,22 +33,15 @@
              flex-row so the toolbar's outer column layout doesn't
              stack each icon onto its own line. -->
         <div class="wp-picker__toolbar-top">
-        <div class="wp-picker__search" :class="{ 'is-focused': searchFocused }">
-          <i class="pi pi-search wp-picker__search-icon" aria-hidden="true"></i>
-          <input
-            ref="searchInput"
-            v-model="searchTerm"
-            type="text"
-            placeholder="Search modules by name or var…"
-            aria-label="Search modules"
-            data-testid="picker-search"
-            @focus="searchFocused = true"
-            @blur="searchFocused = false"
-          />
-          <span v-if="searchTerm" class="wp-picker__search-clear" @click="searchTerm = ''">
-            <i class="pi pi-times" aria-hidden="true"></i>
-          </span>
-        </div>
+        <SearchInput
+          ref="searchInput"
+          v-model="searchTerm"
+          class="wp-picker__search"
+          size="sm"
+          placeholder="Search modules by name or var…"
+          aria-label="Search modules"
+          data-testid="picker-search"
+        />
 
         <!-- Inline icon-only quick toggles. Each is a thin square
              button next to search. Active state = accent fill. -->
@@ -154,31 +147,20 @@
         </div>
         </div><!-- /wp-picker__toolbar-top -->
 
-        <div class="wp-picker-tabs" role="tablist">
-          <button
-            type="button"
-            data-test="picker-tab-all"
-            data-testid="picker-tab-all"
-            :class="['wp-picker-tab', { active: kindFilter === 'all' }]"
-            role="tab"
-            :aria-selected="kindFilter === 'all'"
-            @click="kindFilter = 'all'"
-          ><i class="pi pi-th-large" />All <span class="wp-pill-count">{{ totalCount }}</span></button>
-
-          <button
-            v-for="(label, kind) in KIND_LABELS"
-            :key="kind"
-            type="button"
-            :data-test="`picker-tab-${kind}`"
-            :data-k="kind"
-            :class="['wp-picker-tab', { active: kindFilter === kind }]"
-            role="tab"
-            :aria-selected="kindFilter === kind"
-            @click="kindFilter = kind as KindFilter"
-          ><i :class="kindIcon(kind)" />{{ label }}
-            <span class="wp-pill-count">{{ countByKind(kind) }}</span>
-          </button>
-        </div>
+        <WpTabs
+          v-model="kindFilter"
+          class="wp-picker-tabs"
+          :tabs="kindTabs"
+          size="sm"
+          aria-label="Module kinds"
+          test-prefix="picker-tab"
+        >
+          <template #tab="{ tab }">
+            <i class="pi wp-picker-tab__icon" :class="tab.icon" :data-k="tab.id" aria-hidden="true" />
+            <span>{{ tab.label }}</span>
+            <span class="wp-pill-count">{{ tab.count }}</span>
+          </template>
+        </WpTabs>
       </div>
 
       <!-- Click-shield: when popover is open, a transparent layer
@@ -300,8 +282,8 @@
           <button
             type="button"
             class="wp-picker__selection-clear"
-            @click="selected.clear()"
             data-testid="picker-clear"
+            @click="selected.clear()"
           >
             Clear
           </button>
@@ -343,14 +325,8 @@
           · <kbd>esc</kbd> cancel
         </span>
         <span class="wp-picker__footer-spacer"></span>
-        <button type="button" class="wp-picker__btn" @click="$emit('close')">Cancel</button>
-        <button
-          type="button"
-          class="wp-picker__btn wp-picker__btn--primary"
-          data-test="picker-add-btn"
-          :disabled="selected.size === 0"
-          @click="commitAdd"
-        ><i class="pi pi-plus" aria-hidden="true"></i> Add {{ selected.size }} {{ selected.size === 1 ? "module" : "modules" }}</button>
+        <WpButton @click="$emit('close')">Cancel</WpButton>
+        <WpButton variant="primary" icon="pi-plus" data-test="picker-add-btn" :disabled="selected.size === 0" @click="commitAdd">Add {{ selected.size }} {{ selected.size === 1 ? "module" : "modules" }}</WpButton>
       </footer>
     </div>
   </ModalShell>
@@ -373,10 +349,13 @@
  * Every embeddable kind with a payload is pickable. Rows render
  * disabled only when their payload is missing (broken library entry).
  */
+import SearchInput from "../shared/SearchInput.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
 import WpSelect from "../shared/WpSelect.vue";
 import { kindIcon } from "../shared/kind-icons";
+import WpTabs, { type TabItem } from "../shared/WpTabs.vue";
+import WpButton from "../shared/WpButton.vue";
 
 interface PickerModule {
   id: string;
@@ -422,8 +401,7 @@ const loading = ref(false);
 const loadError = ref<string | null>(null);
 
 const searchTerm = ref("");
-const searchFocused = ref(false);
-const searchInput = ref<HTMLInputElement | null>(null);
+const searchInput = ref<InstanceType<typeof SearchInput> | null>(null);
 const rootEl = ref<HTMLDivElement | null>(null);
 
 // Use reactive() so Vue can track .has()/.size/.add()/.delete()/.clear() individually
@@ -595,6 +573,16 @@ const KIND_LABELS: Record<string, string> = {
   derivation:   "Derivations",
   constraint:   "Constraints",
 };
+
+const kindTabs = computed((): TabItem<KindFilter>[] => [
+  { id: "all", label: "All", icon: "pi-th-large", count: totalCount.value },
+  ...Object.entries(KIND_LABELS).map(([kind, label]) => ({
+    id: kind as KindFilter,
+    label,
+    icon: kindIcon(kind).replace(/^pi\s+/, ""),
+    count: countByKind(kind),
+  })),
+]);
 
 // Empty-state "create" deep-links into the manager SPA's new-module editor
 // for the active kind (the picker runs on the canvas; the SPA is the
@@ -811,7 +799,7 @@ function getRowButtons(): HTMLButtonElement[] {
 
 function getKindTabs(): HTMLButtonElement[] {
   if (!rootEl.value) return [];
-  return Array.from(rootEl.value.querySelectorAll<HTMLButtonElement>(".wp-picker-tab"));
+  return Array.from(rootEl.value.querySelectorAll<HTMLButtonElement>('.wp-picker-tabs [role="tab"]'));
 }
 
 // ── Capture-phase key isolation ───────────────────────────────────
@@ -891,7 +879,7 @@ function captureKeyDown(e: KeyboardEvent) {
   }
 
   const target = e.target as HTMLElement | null;
-  const inSearch = target === searchInput.value;
+  const inSearch = target === searchInput.value?.el;
 
   if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
 
@@ -1138,70 +1126,15 @@ onBeforeUnmount(detachCaptureListeners);
   gap: 6px;
 }
 .wp-picker__toolbar-top > .wp-picker__search { flex: 1; min-width: 0; }
-.wp-picker__search {
-  position: relative;
-  height: 28px;
-  background: var(--wp-bg-3);
-  border: 1px solid var(--wp-border);
-  border-radius: 6px;
-  display: flex; align-items: center;
-  padding: 0 8px;
-  gap: 6px;
-  transition: border-color var(--wp-motion-quick) ease, background var(--wp-motion-quick) ease;
-}
-.wp-picker__search.is-focused,
-.wp-picker__search:focus-within {
-  border-color: var(--wp-accent-500);
-  background: var(--wp-bg-2);
-}
-.wp-picker__search-icon { font-size: 11px; color: var(--wp-text-dim); flex-shrink: 0; }
-.wp-picker__search input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--wp-text);
-  font-size: 12px;
-  font-family: var(--wp-font);
-}
-.wp-picker__search input::placeholder { color: var(--wp-text-dim); }
-.wp-picker__search-clear {
-  cursor: pointer;
-  color: var(--wp-text-dim);
-  font-size: 10px;
-  padding: 2px;
-  border-radius: 999px;
-  transition: color var(--wp-motion-quick) ease;
-}
-.wp-picker__search-clear:hover { color: var(--wp-text); }
 
-.wp-picker-tabs {
-  display: flex;
-  gap: 2px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--wp-border);
-  align-items: center;
-}
-.wp-picker-tab {
-  background: transparent;
-  border: none;
-  padding: 9px 12px;
-  font: 500 11px/1 var(--wp-font-sans);
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border-bottom: 2px solid transparent;
-}
-.wp-picker-tab:hover { color: var(--wp-text); }
-.wp-picker-tab.active { color: var(--wp-text); border-bottom-color: var(--wp-accent); }
-.wp-picker-tab .pi { font-size: 13px; }
-.wp-picker-tab[data-k="wildcard"]    .pi { color: var(--wp-kind-wildcard); }
-.wp-picker-tab[data-k="fixed_values"] .pi { color: var(--wp-kind-fixed); }
-.wp-picker-tab[data-k="combine"]     .pi { color: var(--wp-kind-combine); }
-.wp-picker-tab[data-k="derivation"]  .pi { color: var(--wp-kind-derivation); }
-.wp-picker-tab[data-k="constraint"]  .pi { color: var(--wp-kind-constraint); }
+/* The kind tabs are the shared WpTabs; the icons wear their kind colour. */
+.wp-picker-tabs { padding: 0 12px; }
+.wp-picker-tab__icon { font-size: 13px; }
+.wp-picker-tab__icon[data-k="wildcard"]     { color: var(--wp-kind-wildcard); }
+.wp-picker-tab__icon[data-k="fixed_values"] { color: var(--wp-kind-fixed); }
+.wp-picker-tab__icon[data-k="combine"]      { color: var(--wp-kind-combine); }
+.wp-picker-tab__icon[data-k="derivation"]   { color: var(--wp-kind-derivation); }
+.wp-picker-tab__icon[data-k="constraint"]   { color: var(--wp-kind-constraint); }
 .wp-pill-count {
   font-family: var(--wp-font-mono);
   font-size: 10px;
@@ -1509,42 +1442,6 @@ onBeforeUnmount(detachCaptureListeners);
   margin: 0 1px;
 }
 .wp-picker__footer-spacer { flex: 1; }
-.wp-picker__btn {
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 6px;
-  border: 1px solid var(--wp-border);
-  background: var(--wp-bg-3);
-  color: var(--wp-text);
-  font-size: 12px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  display: inline-flex; align-items: center; gap: 6px;
-  transition: background var(--wp-motion-quick) ease, border-color var(--wp-motion-quick) ease;
-}
-.wp-picker__btn:hover:not(:disabled) {
-  background: var(--wp-bg-4);
-  border-color: var(--wp-border-strong);
-}
-.wp-picker__btn:focus-visible {
-  outline: none;
-  border-color: var(--wp-accent-500);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 25%, transparent);
-}
-.wp-picker__btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.wp-picker__btn--primary {
-  background: var(--wp-accent-600);
-  border-color: var(--wp-accent-500);
-  color: #fff;
-}
-.wp-picker__btn--primary:hover:not(:disabled) { background: var(--wp-accent-500); }
-.wp-picker__btn--primary:focus-visible {
-  /* Already on-accent; brighten the halo a notch so the ring is
-   * visible against the violet body. */
-  border-color: var(--wp-accent-300);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-300) 35%, transparent);
-}
 
 /* ── Inline filter buttons (toolbar) ────────────────────────────
  * Square icon buttons sitting next to the search box. Off = ghost
