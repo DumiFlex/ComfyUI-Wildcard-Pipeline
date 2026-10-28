@@ -1,5 +1,12 @@
 <script setup lang="ts">
-withDefaults(defineProps<{ size?: number }>(), { size: 28 });
+/**
+ * The Wildcard Pipeline logo, drawn inline so it needs no file. It names
+ * itself to screen readers; `decorative` hides it when the name is written
+ * beside it (the top bar's brand).
+ *
+ *   <Logo :size="22" decorative />
+ */
+withDefaults(defineProps<{ size?: number; decorative?: boolean }>(), { size: 28 });
 </script>
 
 <template>
@@ -8,8 +15,9 @@ withDefaults(defineProps<{ size?: number }>(), { size: 28 });
     viewBox="0 0 1024 1024"
     :width="size"
     :height="size"
-    role="img"
-    aria-label="Wildcard Pipeline"
+    :role="decorative ? undefined : 'img'"
+    :aria-label="decorative ? undefined : 'Wildcard Pipeline'"
+    :aria-hidden="decorative || undefined"
     class="wp-logo"
   >
     <defs>

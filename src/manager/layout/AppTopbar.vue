@@ -16,6 +16,7 @@ import { useAiConfig } from "../composables/useAiConfig";
 import { useTweaksStore } from "../stores/tweaksStore";
 import { useEngagementStore } from "../stores/engagementStore";
 import { isMac } from "../utils/platform";
+import Logo from "@/components/shared/Logo.vue";
 
 const ui = useUiStore();
 const tweaks = useTweaksStore();
@@ -61,7 +62,6 @@ const versionTooltip = computed(() =>
     : `v${version} — open repository on GitHub`,
 );
 const repoUrl = GITHUB_REPO;
-const logoSrc = `${import.meta.env.BASE_URL}images/favicon.svg`;
 
 // The update pill opens the in-app Update dialog (changelog + one-click
 // update via ComfyUI Manager) rather than linking straight to GitHub.
@@ -116,7 +116,7 @@ function openPalette(): void {
     </button>
 
     <RouterLink to="/dashboard" class="wp-topbar__brand" data-test="topbar-brand">
-      <img :src="logoSrc" alt="" />
+      <Logo :size="28" decorative />
       <span class="wp-topbar__brand-text">Wildcard Pipeline</span>
       <!-- Version chip + optional update dot. Anchor (NOT a nested
            RouterLink) so clicking it opens GitHub in a new tab instead

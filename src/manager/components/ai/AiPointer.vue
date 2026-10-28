@@ -14,6 +14,7 @@
  */
 import { onBeforeUnmount, ref, watch } from "vue";
 import { clearPointer, pointers, type AiPointer } from "../../composables/useAiActions";
+import VisuallyHidden from "@/components/shared/VisuallyHidden.vue";
 
 interface Box { top: number; left: number; width: number; height: number }
 interface Drawn {
@@ -204,7 +205,7 @@ function announce(list: AiPointer[]): string {
         </div>
       </template>
     </div>
-    <p class="wp-sr-only" aria-live="polite" data-test="ai-pointer-live">{{ announce(pointers) }}</p>
+    <VisuallyHidden as="p" aria-live="polite" data-test="ai-pointer-live">{{ announce(pointers) }}</VisuallyHidden>
   </Teleport>
 </template>
 
@@ -250,14 +251,6 @@ function announce(list: AiPointer[]): string {
 .wp-ai-pointer__caption { display: flex; align-items: flex-start; gap: 6px; }
 .wp-ai-pointer__icon { flex: none; width: 14px; font-size: 13px; line-height: 1.3; text-align: center; }
 .wp-ai-pointer__text { min-width: 0; }
-.wp-sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
 @keyframes wp-ai-pointer-pulse {
   50% { box-shadow: 0 0 0 9px color-mix(in oklab, var(--wp-accent-500) 10%, transparent); }
 }

@@ -19,6 +19,7 @@ import { useReleaseCheck } from "../composables/useReleaseCheck";
 import StarPrompt from "../components/StarPrompt.vue";
 import { useBundleStore } from "../stores/bundleStore";
 import { registerPageNote } from "../composables/useOpenEditor";
+import Logo from "@/components/shared/Logo.vue";
 
 /** Stat-tile + recent-row metadata. `type` is the ModuleType for module
  *  kinds; bundles get `key: "bundle"` with no `type` since they live in
@@ -107,7 +108,6 @@ const RECENT_TABS: SegmentedOption<"recent" | "opened" | "favorites">[] = [
   { value: "favorites", label: "Favorites", icon: "pi-star-fill" },
 ];
 
-const logoUrl = `${import.meta.env.BASE_URL}images/favicon.svg`;
 function openDocs() {
   router.push("/docs");
 }
@@ -469,7 +469,7 @@ onMounted(async () => {
   <div class="wp-page">
     <!-- Hero -->
     <div class="wp-hero">
-      <div class="wp-hero__icon"><img :src="logoUrl" alt="" /></div>
+      <div class="wp-hero__icon"><Logo :size="40" decorative /></div>
       <div class="dashboard__hero-text">
         <h2 class="wp-hero__title">Welcome to Wildcard Pipeline</h2>
         <p class="wp-hero__sub">
