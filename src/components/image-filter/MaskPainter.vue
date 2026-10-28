@@ -6,9 +6,10 @@
  * land where they look. Strokes are drawn in a tint for display; what goes
  * out (`update:modelValue`) is a PNG whose alpha is the mask (painted =
  * masked), or "" when nothing is painted. The node reads that alpha and
- * resizes it to the image.
+ * resizes it to the image. A ring under the pointer shows the brush size
+ * (dashed for the eraser).
  */
-import { onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 
 const props = withDefaults(
   defineProps<{
@@ -29,6 +30,18 @@ const img = ref<HTMLImageElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 let drawing = false;
 let last: { x: number; y: number } | null = null;
+/** Where the brush ring sits, in px from the painter's top-left; null hides it. */
+const ring = ref<{ x: number; y: number } | null>(null);
+const ringStyle = computed(() => ring.value && ({
+  width: `${props.size}px`,
+  height: `${props.size}px`,
+  transform: `translate(${ring.value.x - props.size / 2}px, ${ring.value.y - props.size / 2}px)`,
+}));
+
+function placeRing(ev: PointerEvent): void {
+  const r = canvas.value?.getBoundingClientRect();
+  ring.value = r ? { x: ev.clientX - r.left, y: ev.clientY - r.top } : null;
+}
 
 function ctx(): CanvasRenderingContext2D | null {
   return canvas.value?.getContext("2d") ?? null;
@@ -122,9 +135,15 @@ function onDown(ev: PointerEvent): void {
 }
 
 function onMove(ev: PointerEvent): void {
+  placeRing(ev);
   if (!drawing) return;
   const p = point(ev);
   if (p) stroke(p);
+}
+
+function onLeave(): void {
+  ring.value = null;
+  onUp();
 }
 
 function onUp(): void {
@@ -202,7 +221,16 @@ defineExpose({ clear, invert });
       @pointermove="onMove"
       @pointerup="onUp"
       @pointercancel="onUp"
-      @pointerleave="onUp"
+      @pointerenter="placeRing"
+      @pointerleave="onLeave"
+    />
+    <span
+      v-if="ringStyle"
+      class="wp-ifm__ring"
+      :class="{ 'is-eraser': tool === 'eraser' }"
+      :style="ringStyle"
+      aria-hidden="true"
+      data-test="image-filter-brush-ring"
     />
   </div>
 </template>
@@ -210,6 +238,17 @@ defineExpose({ clear, invert });
 <style scoped>
 .wp-ifm { position: relative; display: inline-block; line-height: 0; max-width: 100%; }
 .wp-ifm__img { display: block; max-width: 100%; max-height: var(--wp-ifp-stage-h, calc(90vh - 200px)); border-radius: 6px; user-select: none; }
-.wp-ifm__canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .55; cursor: crosshair; touch-action: none; border-radius: 6px; }
-.wp-ifm__canvas.is-eraser { cursor: cell; }
+.wp-ifm__canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .55; cursor: none; touch-action: none; border-radius: 6px; }
+/* The brush ring: white with a dark edge so it reads on any picture. */
+.wp-ifm__ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border: 1.5px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6), inset 0 0 0 1px rgb(0 0 0 / 0.6);
+  pointer-events: none;
+}
+.wp-ifm__ring.is-eraser { border-style: dashed; }
 </style>

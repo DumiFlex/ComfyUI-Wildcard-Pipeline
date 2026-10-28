@@ -408,6 +408,7 @@ function onKey(ev: KeyboardEvent): void {
     if (mode.value === "detail" && key === "m") return togglePaint;
     if (mode.value === "zoom" && (key === "+" || key === "=")) return () => viewer.value?.zoomIn();
     if (mode.value === "zoom" && (key === "-" || key === "_")) return () => viewer.value?.zoomOut();
+    if (mode.value === "zoom" && key === "f") return () => viewer.value?.toggleFullscreen();
     if (mode.value === "zoom" && key === "0") return () => viewer.value?.setZoom(null);
     if (mode.value === "zoom" && (key === "1" || key === "2")) return () => viewer.value?.setZoom(Number(key));
     return null;
@@ -726,7 +727,8 @@ const subLine = computed(() => {
           v-model:zoom="zoom"
           :src="viewUrl(cell.ref)"
           :alt="cellName(cell)"
-          hint="Drag to move · scroll to zoom · Esc back"
+          hint="Drag to move · scroll to zoom · F fullscreen · Esc back"
+          fullscreen
         >
           <template #bar-start>
             <WpButton variant="ghost" icon="pi-chevron-left" aria-label="Previous image" kbd="←" data-test="image-filter-prev" @click="step(-1)" />
