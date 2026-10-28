@@ -19,6 +19,7 @@ from wp_api import categories as _categories
 from wp_api import database as _database
 from wp_api import image_filter as _image_filter
 from wp_api import import_export as _import_export
+from wp_api import label_grid as _label_grid
 from wp_api import library_tags as _library_tags
 from wp_api import models as _models
 from wp_api import modules as _modules
@@ -157,6 +158,7 @@ def register_routes(app: web.Application) -> None:
     _library_tags.register(app.router)
     _models.register(app.router)
     _image_filter.register(app.router)
+    _label_grid.register(app.router)
     _ai.register(app.router)
     # SPA fallback last — broad catch-all `/wp/{path:.*}` must not shadow
     # specific `/wp/api/...` routes. aiohttp resolves more-specific routes

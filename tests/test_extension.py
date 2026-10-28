@@ -34,6 +34,7 @@ def test_entrypoint_exposes_all_node_classes():
         "WP_ContextLoop",
         "WP_Debug",
         "WP_ImageFilter",
+        "WP_LabelGrid",
         "WP_ModelInfo",
         "WP_PromptAssembler",
         "WP_PromptCleaner",

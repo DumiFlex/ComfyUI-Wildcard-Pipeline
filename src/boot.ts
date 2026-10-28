@@ -39,6 +39,7 @@ export * as ctxLoopMod from "./widgets/context_loop";
 export * as seedListMod from "./widgets/seed_list";
 export * as modelInfoMod from "./widgets/model_info";
 export * as imageFilterWidgetMod from "./widgets/image_filter";
+export * as labelGridMod from "./widgets/label_grid";
 export * as imageFilterMod from "./extension/image-filter";
 export * as graphEventsMod from "./extension/graph-events";
 export * as graphMod from "./extension/graph";
