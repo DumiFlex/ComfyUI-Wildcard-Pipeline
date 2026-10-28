@@ -333,7 +333,7 @@ export const useTweaksStore = defineStore("tweaks", () => {
     look.value = name;
     applyThemeAttrs();
     // Compact is drawn around the icon sidebar; picking it switches the
-    // sidebar once (Settings › Layout switches it back).
+    // sidebar once (the Sidebar setting switches it back).
     if (changed && name === "compact" && !ui.sidebarCollapsed) {
       ui.setSidebarCollapsed(true);
       sidebarMode.value = "collapsed";
