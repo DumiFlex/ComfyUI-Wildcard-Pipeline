@@ -45,7 +45,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   // Actions
   {
     id: "button", name: "Button", group: "actions", file: "src/manager/components/ui/Button.vue", surfaces: ["manager"],
-    use: "Every button in the manager. Primary for the one main action on a surface, secondary by default, ghost for quiet toolbar actions, danger for deletes, link for inline actions. Leave out the text for an icon button and give it an aria-label. Sizes sm 24 / md 32 / lg 40; outline is a neutral bordered ghost; loading keeps its colours with the sparkle in the label colour; disabled fades.",
+    use: "Every button in the manager. Primary for the one main action on a surface, secondary by default, ghost for quiet toolbar actions, danger for deletes, link for inline actions, add for the dashed \"Add a row\" button at the end of a list (with block for full width). Leave out the text for an icon button and give it an aria-label. pressed makes it a toggle. Sizes sm 24 / md 32 / lg 40; outline is a neutral bordered ghost; loading keeps its colours with the sparkle in the label colour; disabled fades.",
     instead: "A <button> with its own class and colours.",
   },
   {
@@ -54,8 +54,13 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "wp-button", name: "WpButton", group: "actions", file: "src/components/shared/WpButton.vue", surfaces: ["canvas", "manager"],
-    use: "Every button inside a canvas widget or canvas dialog: the canvas twin of Button, with the same variants, sizes and stylesheet (button.css), a PrimeIcons icon and the canvas size sm by default. Leave out the text for an icon button; its aria-label is also its tooltip. hint sets a tooltip on a labelled button and kbd adds its key chip (P, Enter). A shared piece that shows on both sides uses it too; manager screens use Button.",
+    use: "Every button inside a canvas widget or canvas dialog: the canvas twin of Button, with the same variants (add included), sizes and stylesheet (button.css), a PrimeIcons icon and the canvas size sm by default. Leave out the text for an icon button; its aria-label is also its tooltip. hint sets a tooltip on a labelled button and kbd adds its key chip (P, Enter). pressed makes it a toggle (favourites only, filters open). A shared piece that shows on both sides uses it too; manager screens use Button. Inside a row, use WpIconButton.",
     instead: "A <button> with its own __btn class and colours.",
+  },
+  {
+    id: "wp-icon-button", name: "WpIconButton", group: "actions", file: "src/components/shared/WpIconButton.vue", surfaces: ["canvas", "manager"],
+    use: "The 20 px icon button inside a canvas row (module, injector, bundle and Model Info rows, the Context toolbar, and the Settings live preview of those rows): lock, internal, remove. tone tints the icon on hover and the whole box while pressed; pressed \"mixed\" is a bundle's \"some children\" state; variant bare is the row's fold caret. Rows are too tight for WpButton's 24 px.",
+    instead: "A <button class=\"wp-btn--icon-sm\"> or a hand-made caret button.",
   },
   {
     id: "copy-button", name: "CopyButton", group: "actions", file: "src/components/shared/CopyButton.vue", surfaces: ["manager", "canvas"],
@@ -485,6 +490,7 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "wp-button": `<WpButton variant="primary" icon="pi-plus" @click="add">Add module</WpButton>`,
   "copy-button": `<CopyButton :text="prompt" label="Copy prompt" />`,
   "close-button": `<CloseButton kbd="Esc" @click="close" />`,
+  "wp-icon-button": `<WpIconButton icon="pi-lock" tone="warn" :pressed="locked" label="Lock seed" @click="toggle" />`,
   "card": `<Card title="Options" subtitle="12 options">…</Card>`,
   "chip": `<Chip tone="warn" icon="pi-exclamation-triangle">2 conflicts</Chip>  <Chip :color="cat.color" :icon="cat.icon">{{ cat.name }}</Chip>`,
   "kbd": `<Kbd keys="Mod+K" />`,

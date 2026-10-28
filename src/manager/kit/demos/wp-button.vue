@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import WpButton from "@/components/shared/WpButton.vue";
 import KitLooks from "../KitLooks.vue";
+
+const favs = ref(true);
 </script>
 
 <template>
@@ -14,5 +17,14 @@ import KitLooks from "../KitLooks.vue";
     <WpButton variant="ghost" icon="pi-download" aria-label="Download snapshot" :size="size" />
     <WpButton variant="primary" loading :size="size">Saving</WpButton>
     <WpButton disabled :size="size">Disabled</WpButton>
+    <WpButton
+      variant="outline"
+      :icon="favs ? 'pi-star-fill' : 'pi-star'"
+      :pressed="favs"
+      aria-label="Favourites only"
+      :size="size"
+      @click="favs = !favs"
+    />
+    <WpButton variant="add" icon="pi-plus" block :size="size">Add template row</WpButton>
   </KitLooks>
 </template>
