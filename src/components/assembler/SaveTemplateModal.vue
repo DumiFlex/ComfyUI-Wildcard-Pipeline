@@ -5,6 +5,7 @@ import ModalShell from "../shared/ModalShell.vue";
 import WpSelect from "../shared/WpSelect.vue";
 import { pushToast } from "../shared/toast-store";
 import WpButton from "../shared/WpButton.vue";
+import CloseButton from "../shared/CloseButton.vue";
 
 const props = defineProps<{
   open: boolean;
@@ -101,9 +102,7 @@ async function submit(mode: "update" | "new") {
     <div class="wp-stm" role="dialog" aria-modal="true" aria-labelledby="wp-stm-title" @click.stop>
       <header class="wp-stm__head">
         <h3 id="wp-stm-title" class="wp-stm__title">Save template</h3>
-        <button type="button" class="wp-stm__close" aria-label="Close" data-test="save-tpl-close" @click="emit('close')">
-          <i class="pi pi-times" aria-hidden="true" />
-        </button>
+        <CloseButton size="sm" kbd="Esc" data-test="save-tpl-close" @click="emit('close')" />
       </header>
 
       <div class="wp-stm__body">
@@ -177,8 +176,18 @@ async function submit(mode: "update" | "new") {
       <footer class="wp-stm__foot">
         <WpButton data-test="save-tpl-cancel" @click="emit('close')">Cancel</WpButton>
         <span class="wp-stm-spacer" />
-        <WpButton v-if="updateTargetId" :disabled="!canSubmit" data-test="save-tpl-save-new" @click="submit('new')">Save as new entry</WpButton>
-        <WpButton variant="primary" :disabled="!canSubmit" data-test="save-tpl-submit" @click="submit(updateTargetId ? 'update' : 'new')">{{ updateTargetId ? "Update existing" : "Save" }}</WpButton>
+        <WpButton
+          v-if="updateTargetId"
+          :disabled="!canSubmit"
+          data-test="save-tpl-save-new"
+          @click="submit('new')"
+        >Save as new entry</WpButton>
+        <WpButton
+          variant="primary"
+          :disabled="!canSubmit"
+          data-test="save-tpl-submit"
+          @click="submit(updateTargetId ? 'update' : 'new')"
+        >{{ updateTargetId ? "Update existing" : "Save" }}</WpButton>
       </footer>
     </div>
   </ModalShell>
@@ -216,18 +225,6 @@ async function submit(mode: "update" | "new") {
 }
 .wp-stm__head > * { position: relative; z-index: 1; }
 .wp-stm__title { margin: 0; font-size: 14px; font-weight: 600; }
-.wp-stm__close {
-  width: 28px; height: 28px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  transition: background var(--wp-motion-quick) ease, color var(--wp-motion-quick) ease;
-}
-.wp-stm__close:hover { background: var(--wp-bg-3); color: var(--wp-text); }
-.wp-stm__close .pi { font-size: 11px; }
 
 .wp-stm__body {
   flex: 1;

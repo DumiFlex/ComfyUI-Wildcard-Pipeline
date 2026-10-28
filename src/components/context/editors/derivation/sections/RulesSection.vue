@@ -42,6 +42,7 @@ import {
   isConditionGroup,
   matchWord,
 } from "../../../../../extension/derivation-conditions";
+import WpButton from "../../../../shared/WpButton.vue";
 
 // Async-import the rich-text editor so its chunk stays split + is only
 // pulled in when a derivation instance modal expands a rule. RichTextInput
@@ -776,12 +777,12 @@ function condRows(cond: unknown, bi: number): CondRow[] {
                       >
                         <span class="fld__lib-label">library</span>
                         <RuleValueChips :value="row.test.value ?? ''" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware />
-                        <button
-                          type="button"
-                          class="fld__reset"
+                        <WpButton
+                          variant="link"
+                          icon="pi-replay"
                           :data-test="`cond-reset-${rule.id}-${row.key}`"
                           @click="onCondOverrideInput(rule.id, String(row.key), '')"
-                        >↺ Use library</button>
+                        >Use library</WpButton>
                       </div>
                     </div>
                   </div>
@@ -853,12 +854,12 @@ function condRows(cond: unknown, bi: number): CondRow[] {
                       <div v-if="getOverride('action_value_overrides', rule.id, key) !== ''" class="fld__lib">
                         <span class="fld__lib-label">library</span>
                         <RuleValueChips :value="action.value ?? ''" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware />
-                        <button
-                          type="button"
-                          class="fld__reset"
+                        <WpButton
+                          variant="link"
+                          icon="pi-replay"
                           :data-test="`action-reset-${rule.id}-${key}`"
                           @click="onActionOverrideInput(rule.id, key, '')"
-                        >↺ Use library</button>
+                        >Use library</WpButton>
                       </div>
                     </div>
                   </div>
@@ -1175,16 +1176,6 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-.fld__reset {
-  margin-left: auto;
-  border: 0;
-  background: none;
-  padding: 0;
-  font: 10px var(--wp-font-sans);
-  color: var(--wp-accent);
-  cursor: pointer;
-}
-.fld__reset:hover { text-decoration: underline; }
 
 /* Token coloring (re-used from prior list rendering) */
 .rule-tok-var { font-weight: 600; }

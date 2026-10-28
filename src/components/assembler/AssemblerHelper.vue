@@ -13,6 +13,7 @@ import {
   type ResolvedValue,
   type RolledAxes,
 } from "../../widgets/richTokenize";
+import WpButton from "../shared/WpButton.vue";
 
 const props = defineProps<{
   /** Flat array of upstream variable names. Primary prop shape. */
@@ -463,41 +464,35 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
       <div class="wp-asm-section wp-asm-section--vars">
         <span>variables</span>
         <div class="wp-asm-toolbtns">
-          <button
+          <WpButton
             v-if="onLoadTemplate"
-            type="button"
-            class="wp-asm-toolbtn"
+            variant="outline"
+            icon="pi-folder-open"
             data-test="asm-load-template"
-            title="Load a saved template from the library"
+            tip="Load a saved template from the library"
             aria-label="Load template"
             @click="onLoadTemplate"
-          >
-            <i class="pi pi-folder-open" aria-hidden="true" />
-          </button>
-          <button
+          />
+          <WpButton
             v-if="onSaveTemplate"
-            type="button"
-            class="wp-asm-toolbtn"
+            variant="outline"
+            icon="pi-save"
             :disabled="!props.template"
             data-test="asm-save-template"
-            :title="props.template ? 'Save this template to the library' : 'Template is empty'"
+            :tip="props.template ? 'Save this template to the library' : 'Template is empty'"
             aria-label="Save template"
             @click="onSaveTemplate"
-          >
-            <i class="pi pi-save" aria-hidden="true" />
-          </button>
-          <button
+          />
+          <WpButton
             v-if="onClearTemplate"
-            type="button"
-            class="wp-asm-toolbtn wp-asm-toolbtn--danger"
+            variant="danger"
+            icon="pi-trash"
             :disabled="!props.template && !props.negativeTemplate"
             data-test="asm-clear-template-icon"
-            :title="props.template || props.negativeTemplate ? 'Clear the template and the negative template' : 'Template already empty'"
+            :tip="props.template || props.negativeTemplate ? 'Clear the template and the negative template' : 'Template already empty'"
             aria-label="Clear template"
             @click="onClearTemplate"
-          >
-            <i class="pi pi-trash" aria-hidden="true" />
-          </button>
+          />
         </div>
         <span class="wp-asm-section-stat">
           {{ upstreamNames.length }} upstream
@@ -696,38 +691,8 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 /* Icon-only. Each button already carried a `title` and an `aria-label`, so the
    visible word was the only thing dropped — and three words across the row
    were most of its width. Square-ish padding keeps the tap target honest. */
-.wp-asm-toolbtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 4px 7px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 500 10px var(--wp-font-sans);
-  cursor: pointer;
-  transition: color var(--wp-motion-quick), border-color var(--wp-motion-quick), background var(--wp-motion-quick);
-  white-space: nowrap;
-}
 /* Neutral accent hover — Load / Save are non-destructive. */
-.wp-asm-toolbtn:hover:not(:disabled) {
-  color: var(--wp-text);
-  border-color: var(--wp-accent);
-  background: color-mix(in srgb, var(--wp-accent) 10%, transparent);
-}
 /* Destructive hover — Clear only. */
-.wp-asm-toolbtn--danger:hover:not(:disabled) {
-  color: var(--wp-danger);
-  border-color: color-mix(in srgb, var(--wp-danger) 45%, transparent);
-  background: color-mix(in srgb, var(--wp-danger) 10%, transparent);
-}
-.wp-asm-toolbtn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.wp-asm-toolbtn .pi { font-size: 10px; }
 
 /* Empty-state ghost — mirrors injector + debug ghosts. Stacked
  * icon + line + hint, dim color, centered. */

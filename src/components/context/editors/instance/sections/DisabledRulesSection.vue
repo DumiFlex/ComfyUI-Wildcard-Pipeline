@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import WpCheck from "../../../../shared/WpCheck.vue";
+import WpButton from "../../../../shared/WpButton.vue";
 
 interface Rule {
   id: string;
@@ -60,15 +61,13 @@ function onClickReset(): void {
     <div class="wp-instance-section-head">
       <span class="wp-instance-section-title">Disabled rules</span>
       <span v-if="hasOverride" class="wp-instance-section-modified">modified</span>
-      <button
+      <WpButton
         v-if="hasOverride"
-        type="button"
-        class="wp-instance-section-reset"
+        variant="ghost"
+        icon="pi-replay"
         data-test="dr-reset"
         @click="onClickReset"
-      >
-        <i class="pi pi-replay" /> reset
-      </button>
+      >Reset</WpButton>
     </div>
     <div class="wp-instance-section-body wp-instance-section-body-col">
       <div
@@ -114,16 +113,6 @@ function onClickReset(): void {
   border-radius: 2px;
   font: 600 9px/1 var(--wp-font-sans);
   text-transform: uppercase;
-}
-.wp-instance-section-reset {
-  margin-left: auto;
-  background: transparent;
-  border: 1px solid var(--wp-border);
-  color: var(--wp-text-muted);
-  padding: 2px 6px;
-  font: 9px/1 var(--wp-font-sans);
-  cursor: pointer;
-  border-radius: 3px;
 }
 .wp-instance-section-body {
   display: flex;

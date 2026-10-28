@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import type { BundleInstance } from "../../../widgets/_shared";
 import WpCheck from "../../shared/WpCheck.vue";
+import WpIconButton from "../../shared/WpIconButton.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -137,21 +138,17 @@ const summary = computed(() => {
         <circle cx="4.5" cy="10" r="1" />
       </svg>
     </span>
-    <button
-      type="button"
+    <!-- Caret stays pi-caret-down — parent .wp-bundle--collapsed
+         rotates -90deg via CSS for the transition (Phase B.1). -->
+    <WpIconButton
+      variant="bare"
+      icon="pi-caret-down"
       class="wp-bundle-collapse"
       draggable="false"
-      :aria-label="instance.collapsed ? 'Expand bundle' : 'Collapse bundle'"
-      :title="instance.collapsed ? 'Expand' : 'Collapse'"
+      :label="instance.collapsed ? 'Expand bundle' : 'Collapse bundle'"
+      :tip="instance.collapsed ? 'Expand' : 'Collapse'"
       @click.stop="emit('toggle-collapse')"
-    >
-      <!-- Caret stays pi-caret-down — parent .wp-bundle--collapsed
-           rotates -90deg via CSS for the transition (Phase B.1). -->
-      <i
-        class="pi pi-caret-down"
-        aria-hidden="true"
-      ></i>
-    </button>
+    />
     <WpCheck
       class="wp-bundle-enabled"
       size="sm"
@@ -226,48 +223,45 @@ const summary = computed(() => {
          (1px), breaking the "bundle = row at larger scope" mental
          model. -->
     <div class="wp-mod-actions" draggable="false">
-      <button
-        v-if="lockState !== null"
-        type="button"
-        class="wp-btn--icon-sm wp-btn--warn wp-bundle-action"
-        :class="{
-          'is-locked': lockState === 'all',
-          'is-partial': lockState === 'partial',
-        }"
+      <WpIconButton v-if="lockState !== null"
+       
+        icon="pi-lock"
+        tone="warn"
+        class="wp-bundle-action"
+        :pressed="lockState === 'all' ? true : lockState === 'partial' ? 'mixed' : false"
         draggable="false"
-        :title="lockState === 'all'
+        :label="`toggle seed lock on all lockable children of ${name}`"
+        :tip="lockState === 'all'
           ? 'Unlock seeds on all lockable children'
           : lockState === 'partial'
             ? 'Lock seeds on all lockable children (some are already locked)'
             : 'Lock seeds on all lockable children — freezes each at its current roll'"
-        :aria-label="`toggle seed lock on all lockable children of ${name}`"
         @click.stop="emit('toggle-lock')"
-      ><i class="pi pi-lock" aria-hidden="true" /></button>
-      <button
-        v-if="internalState !== null"
-        type="button"
-        class="wp-btn--icon-sm wp-btn--accent wp-bundle-action"
-        :class="{
-          'is-active': internalState === 'all',
-          'is-partial': internalState === 'partial',
-        }"
+      />
+      <WpIconButton v-if="internalState !== null"
+       
+        icon="pi-globe"
+        tone="accent"
+        class="wp-bundle-action"
+        :pressed="internalState === 'all' ? true : internalState === 'partial' ? 'mixed' : false"
         draggable="false"
-        :title="internalState === 'all'
+        :label="`toggle internal on all children of ${name}`"
+        :tip="internalState === 'all'
           ? 'Clear internal on all children'
           : internalState === 'partial'
             ? 'Mark all children internal (some are already)'
             : 'Mark all children internal — hides them from PromptAssembler'"
-        :aria-label="`toggle internal on all children of ${name}`"
         @click.stop="emit('toggle-internal')"
-      ><i class="pi pi-globe" aria-hidden="true" /></button>
-      <button
-        type="button"
-        class="wp-btn--icon-sm wp-btn--danger wp-bundle-action"
+      />
+      <WpIconButton
+        icon="pi-trash"
+        tone="danger"
+        class="wp-bundle-action"
         draggable="false"
-        title="Remove bundle (right-click for more)"
-        :aria-label="`remove bundle ${name}`"
+        :label="`remove bundle ${name}`"
+        tip="Remove bundle (right-click for more)"
         @click.stop="emit('remove')"
-      ><i class="pi pi-trash" aria-hidden="true" /></button>
+      />
     </div>
   </div>
 </template>
@@ -327,23 +321,6 @@ const summary = computed(() => {
   color: var(--wp-text2);
 }
 
-/* Collapse caret — mirror `.wp-collapse-btn` from ContextWidget
- * exactly. 14px-wide button, 10px caret glyph. */
-.wp-bundle-collapse {
-  background: none;
-  border: none;
-  color: var(--wp-text3);
-  cursor: pointer;
-  padding: 0;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  flex-shrink: 0;
-}
-.wp-bundle-collapse .pi { font-size: 10px; }
-.wp-bundle-collapse:hover { color: var(--wp-text); }
 /* The on/off box is WpCheck; checked, it takes the bundle colour. */
 .wp-bundle-enabled { --check-on: var(--b); }
 /* Bundle icon base from shared .wp-row-type-icon (16×16 inline-flex).
@@ -378,22 +355,6 @@ const summary = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Master-toggle partial state: bundle has SOME but not all children
- * with the flag on. Reads as "in between" — half-strength accent/warn
- * tint + dashed border. Click resolves the partial state by lighting
- * everyone up; second click clears all. */
-.wp-btn--icon-sm.is-partial {
-  border-style: dashed !important;
-  opacity: 0.75;
-}
-.wp-btn--icon-sm.wp-btn--accent.is-partial {
-  color: var(--wp-accent);
-  background: color-mix(in srgb, var(--wp-accent) 7%, transparent);
-}
-.wp-btn--icon-sm.wp-btn--warn.is-partial {
-  color: var(--wp-warn);
-  background: color-mix(in srgb, var(--wp-warn) 7%, transparent);
-}
 /* Child-count / drift summary. Was 10px in --wp-text-dim (#666 on the dark
  * theme), which sat right at the edge of legibility against the bundle frame
  * tint — the one piece of information telling you how big a collapsed bundle
@@ -408,25 +369,16 @@ const summary = computed(() => {
   background: color-mix(in oklab, var(--wp-text-muted, var(--wp-text2)) 12%, transparent);
   white-space: nowrap;
 }
-/* Bundle action button — base size + shape from shared
- * .wp-btn--icon-sm. Bundle-specific tweak: bg + border tinted with
- * the bundle frame color so the action reads as belonging to THIS
- * bundle (instead of looking like a generic row-level icon button).
- * Hover bumps the bundle-color tint; shared `.wp-btn--danger:hover`
- * adds the red icon + red-tinted border without overriding the
- * bundle's bg — same hover behavior every other danger button gets.
- *
- * Selector chains `.wp-btn--icon-sm.wp-bundle-action` (instead of bare
- * `.wp-bundle-action`) so override specificity beats the shared
- * `.wp-btn--icon-sm:hover` base rule. Without the chain, both rules
- * tie at 0,0,2,0 and source order decides — fine when this block was
- * `<style scoped>` (scoper attribute bumped us to 0,0,3,0) but the
- * scope flip for PlaygroundMockup parity collapsed that margin. */
-.wp-btn--icon-sm.wp-bundle-action {
+/* Bundle action button: WpIconButton tinted with the bundle frame colour
+ * so the action reads as belonging to THIS bundle. The attribute chain
+ * outranks the button's own scoped rest + pressed rules (a pressed bundle
+ * action keeps the bundle tint and only its icon turns the tone); the
+ * "some children" (mixed) state keeps its own dashed half tint. */
+.wp-icon-btn.wp-bundle-action[data-tone][data-variant]:not([aria-pressed="mixed"]) {
   background: color-mix(in srgb, var(--b) 18%, transparent);
   border-color: var(--b);
 }
-.wp-btn--icon-sm.wp-bundle-action:hover {
+.wp-icon-btn.wp-bundle-action[data-tone][data-variant]:not([aria-pressed="mixed"]):hover:not(:disabled) {
   background: color-mix(in srgb, var(--b) 32%, transparent);
 }
 </style>

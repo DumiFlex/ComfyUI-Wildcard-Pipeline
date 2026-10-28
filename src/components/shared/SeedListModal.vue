@@ -5,6 +5,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { deriveLoopSeeds, parseSeedLocks, type SeedStrategy } from "./seed-derive";
 import SeedLockRow from "./SeedLockRow.vue";
+import CloseButton from "./CloseButton.vue";
 
 const props = defineProps<{
   nodeName: string;
@@ -152,9 +153,7 @@ onBeforeUnmount(() => {
             <div class="sm__title-row"><span class="sm__name">{{ nodeName }}</span><span class="sm__chip">Iteration Seeds</span></div>
             <div class="sm__sub">base {{ baseSeed }} · {{ strategy }} · {{ Math.max(1, count) }} iterations</div>
           </div>
-          <button class="sm__close" data-test="seed-modal-close" aria-label="Close" @click="emit('close')">
-            <svg width="12" height="12" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19" /></svg>
-          </button>
+          <CloseButton size="sm" kbd="Esc" data-test="seed-modal-close" @click="emit('close')" />
         </div>
 
         <div class="sm__bar">
@@ -235,8 +234,6 @@ onBeforeUnmount(() => {
 .sm__name { font: 600 13px var(--wp-font-sans); color: var(--wp-text); }
 .sm__chip { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .06em; padding: 2px 6px; border-radius: 2px; background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent); }
 .sm__sub { font: 400 10px var(--wp-font-mono); color: var(--wp-text-dim, var(--wp-text3)); margin-top: 3px; }
-.sm__close { background: transparent; border: 0; color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; padding: 4px; display: flex; }
-.sm__close:hover { color: var(--wp-text); }
 .sm__bar { display: flex; align-items: center; gap: 8px; padding: 9px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); }
 .sm__count { font: 600 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
 .sm__strat { font: 600 9px var(--wp-font-mono); text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 3px; color: var(--wp-text-muted, var(--wp-text2)); background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); }

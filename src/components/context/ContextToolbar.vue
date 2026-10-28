@@ -1,6 +1,8 @@
 <script setup lang="ts">
 /** Context list toolbar: module count, bulk drift refresh and
  *  collapse / expand / toggle-all. Styles live in `context-widget.css`. */
+import WpIconButton from "../shared/WpIconButton.vue";
+
 defineProps<{ enabledCount: number; totalCount: number; driftedCount: number }>();
 defineEmits<{ refresh: []; collapse: []; expand: []; toggleAll: [] }>();
 </script>
@@ -26,26 +28,18 @@ defineEmits<{ refresh: []; collapse: []; expand: []; toggleAll: [] }>();
     </button>
 
     <span class="wp-w-toolbar-spacer" />
-    <button
-      type="button"
-      class="wp-btn--icon-sm"
-      title="Collapse all"
-      aria-label="Collapse all modules"
+    <WpIconButton
+      icon="pi-chevron-up"
+      label="Collapse all modules"
+      tip="Collapse all"
       @click="$emit('collapse')"
-    ><i class="pi pi-chevron-up" /></button>
-    <button
-      type="button"
-      class="wp-btn--icon-sm"
-      title="Expand all"
-      aria-label="Expand all modules"
+    />
+    <WpIconButton
+      icon="pi-chevron-down"
+      label="Expand all modules"
+      tip="Expand all"
       @click="$emit('expand')"
-    ><i class="pi pi-chevron-down" /></button>
-    <button
-      type="button"
-      class="wp-btn--icon-sm"
-      title="Toggle all enabled"
-      aria-label="Toggle all enabled"
-      @click="$emit('toggleAll')"
-    ><i class="pi pi-eye" /></button>
+    />
+    <WpIconButton icon="pi-eye" label="Toggle all enabled" @click="$emit('toggleAll')" />
   </div>
 </template>

@@ -14,6 +14,8 @@
  */
 import { computed, ref, watch } from "vue";
 import WpSwitch from "../shared/WpSwitch.vue";
+import WpButton from "../shared/WpButton.vue";
+import WpIconButton from "../shared/WpIconButton.vue";
 import WpSegmented, { type SegmentedOption } from "../shared/WpSegmented.vue";
 import { vTooltip } from "../shared/tooltip";
 import { remapSweepFrames, sweepFrameCount, type ContextLoopConfig, type LoopStrategy, type SweepConfig } from "./types";
@@ -221,29 +223,34 @@ function toggleTotalInternal(): void {
       />
     </div>
 
-    <button type="button" class="wp-loop__seedbtn" data-test="loop-seeds-btn" @click="seedsOpen = true">
-      <span class="wp-loop__seedbtn-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10" /><circle cx="20" cy="18" r="1.4" fill="currentColor" stroke="none" /></svg></span>
+    <WpButton
+      block
+      icon="pi-list"
+      class="wp-loop__seedbtn"
+      data-test="loop-seeds-btn"
+      @click="seedsOpen = true"
+    >
       Per-iteration seeds
       <span class="wp-loop__seedbtn-fill" />
       <span v-if="lockedCount" class="wp-loop__seedbtn-badge" data-test="loop-seeds-badge">{{ lockedCount }} locked</span>
       <span v-if="bypassedCount" class="wp-loop__seedbtn-badge" data-test="loop-seeds-bypass-badge">{{ bypassedCount }} bypassed</span>
-      <svg class="wp-loop__seedbtn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6" /></svg>
-    </button>
+      <i class="pi pi-chevron-right wp-loop__seedbtn-chev" aria-hidden="true" />
+    </WpButton>
 
-    <button
-      type="button"
-      class="wp-loop__seedbtn wp-loop__sweepbtn"
+    <WpButton
+      block
+      icon="pi-th-large"
+      class="wp-loop__seedbtn"
       data-test="loop-sweep-btn"
-      title="Run every combination of the wildcards you pick, one frame each."
+      tip="Run every combination of the wildcards you pick, one frame each."
       @click="sweepOpen = true"
     >
-      <span class="wp-loop__seedbtn-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></svg></span>
       Sweep combinations
       <span class="wp-loop__seedbtn-fill" />
       <span v-if="sweepFrames != null" class="wp-loop__seedbtn-badge" data-test="loop-sweep-badge">{{ sweepFrames }} {{ sweepFrames === 1 ? "frame" : "frames" }}</span>
       <span v-else-if="modelValue.sweep.enabled" class="wp-loop__seedbtn-badge wp-loop__seedbtn-badge--dim" data-test="loop-sweep-badge">on</span>
-      <svg class="wp-loop__seedbtn-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6" /></svg>
-    </button>
+      <i class="pi pi-chevron-right wp-loop__seedbtn-chev" aria-hidden="true" />
+    </WpButton>
 
     <!-- `base` is not a frame: it has no seed to lock and nothing to bypass,
          so it takes no modifiers. -->
@@ -288,32 +295,29 @@ function toggleTotalInternal(): void {
           aria-label="iteration variable name"
           @input="onIterationVarInput"
         />
-        <button
-          type="button"
+        <WpIconButton
+          icon="pi-globe"
+          tone="accent"
           class="wp-loop__pi-btn"
-          :class="{ 'wp-loop__pi-btn--on': modelValue.iteration_internal }"
+          :pressed="modelValue.iteration_internal"
           data-test="loop-iteration-internal"
-          :aria-pressed="modelValue.iteration_internal"
-          :title="modelValue.iteration_internal
+          :label="modelValue.iteration_internal ? `Make $${modelValue.iteration_var_name} public` : `Make $${modelValue.iteration_var_name} internal`"
+          :tip="modelValue.iteration_internal
             ? `Mark $${modelValue.iteration_var_name} as PUBLIC (renders in prompts)`
             : `Mark $${modelValue.iteration_var_name} as INTERNAL (engine-only — strips from prompts)`"
           @click="toggleIterationInternal"
-        >
-          <i class="pi pi-globe" aria-hidden="true"></i>
-        </button>
-        <button
-          type="button"
+        />
+        <WpIconButton
+          tone="accent"
           class="wp-loop__pi-btn"
-          :class="{ 'wp-loop__pi-btn--on': modelValue.total_internal }"
+          :pressed="modelValue.total_internal"
           data-test="loop-total-internal"
-          :aria-pressed="modelValue.total_internal"
-          :title="modelValue.total_internal
+          :label="modelValue.total_internal ? `Make $${modelValue.iteration_var_name}_total public` : `Make $${modelValue.iteration_var_name}_total internal`"
+          :tip="modelValue.total_internal
             ? `Mark $${modelValue.iteration_var_name}_total as PUBLIC`
             : `Mark $${modelValue.iteration_var_name}_total as INTERNAL`"
           @click="toggleTotalInternal"
-        >
-          <span class="wp-loop__pi-btn-label">Σ</span>
-        </button>
+        >Σ</WpIconButton>
       </div>
     </div>
 
@@ -398,33 +402,7 @@ function toggleTotalInternal(): void {
 }
 .wp-loop__var-text:focus { color: var(--wp-text); }
 
-.wp-loop__pi-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-left: 2px;
-  padding: 0;
-  background: transparent;
-  border: 1px solid var(--wp-border, #353841);
-  border-radius: 3px;
-  color: var(--wp-text-dim, #7a7d88);
-  cursor: pointer;
-  font: 600 11px var(--wp-font-mono, monospace);
-}
-.wp-loop__pi-btn:hover { color: var(--wp-text); border-color: var(--wp-border-strong, #4a4d55); }
-.wp-loop__pi-btn--on {
-  background: color-mix(in srgb, var(--wp-accent, #6366f1) 18%, transparent);
-  border-color: var(--wp-accent, #6366f1);
-  color: var(--wp-accent, #6366f1);
-}
-.wp-loop__pi-btn .pi { font-size: 9px; }
-.wp-loop__pi-btn-label { font: 600 10px var(--wp-font-mono, monospace); line-height: 1; }
 
-.wp-loop__seedbtn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 9px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: 3px; color: var(--wp-text-muted, var(--wp-text2)); font: 600 10.5px var(--wp-font-sans); cursor: pointer; }
-.wp-loop__seedbtn:hover { border-color: var(--wp-accent); color: var(--wp-accent-text, var(--wp-text)); }
-.wp-loop__seedbtn-ico { color: var(--wp-accent); display: flex; }
 .wp-loop__seedbtn-fill { flex: 1; }
 .wp-loop__seedbtn-badge { font: 600 8px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: 3px; color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.14); border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent); }
 .wp-loop__seedbtn-chev { color: var(--wp-text-dim, var(--wp-text3)); }

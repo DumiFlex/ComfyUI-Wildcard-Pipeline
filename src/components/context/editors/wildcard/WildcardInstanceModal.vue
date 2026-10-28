@@ -9,6 +9,7 @@ import PoolSection from "./sections/PoolSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
 import WpButton from "../../../shared/WpButton.vue";
+import CloseButton from "../../../shared/CloseButton.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
@@ -105,15 +106,7 @@ function onSpaClick(): void {
             : "Library entry · weighted options resolved per pick" }}
         </div>
       </div>
-      <button
-        type="button"
-        class="wp-wcm__close"
-        aria-label="Close"
-        data-test="wcm-close"
-        @click="emit('cancel')"
-      >
-        <i class="pi pi-times" aria-hidden="true" />
-      </button>
+      <CloseButton size="sm" kbd="Esc" data-test="wcm-close" @click="emit('cancel')" />
     </header>
 
     <IdentitySection
@@ -145,11 +138,21 @@ function onSpaClick(): void {
         <i class="pi pi-external-link" aria-hidden="true" />
         Edit library entry in SPA
       </a>
-      <WpButton variant="ghost" icon="pi-replay" data-test="wcm-clear-all" title="Clear all instance overrides on this wildcard" @click="emit('clear-all-overrides')">Reset overrides</WpButton>
+      <WpButton
+        variant="ghost"
+        icon="pi-replay"
+        data-test="wcm-clear-all"
+        title="Clear all instance overrides on this wildcard"
+        @click="emit('clear-all-overrides')"
+      >Reset overrides</WpButton>
       <span class="wp-wcm__hint">
         <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
-      <WpButton v-if="canSaveToLibrary" data-test="wcm-save-lib" @click="emit('save-to-library')">Save to library</WpButton>
+      <WpButton
+        v-if="canSaveToLibrary"
+        data-test="wcm-save-lib"
+        @click="emit('save-to-library')"
+      >Save to library</WpButton>
       <WpButton data-test="wcm-cancel" @click="emit('cancel')">Cancel</WpButton>
       <WpButton variant="primary" data-test="wcm-save" @click="emit('save')">Save</WpButton>
     </footer>

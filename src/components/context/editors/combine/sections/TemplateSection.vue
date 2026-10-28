@@ -21,6 +21,7 @@ import { applyVarAccessor, type ResolvedValue } from "../../../../../widgets/ric
 // asset and only pulled in when the combine instance modal opens. Bundle
 // budget is tight — eager import pushes total over.
 import type { VarProducerLike } from "../../../../../manager/components/RefChip.vue";
+import WpButton from "../../../../shared/WpButton.vue";
 const RichTextInput = defineAsyncComponent(
   () => import("../../../../../manager/components/RichTextInput.vue"),
 );
@@ -301,15 +302,15 @@ function onResetNegative(): void {
       <span class="wp-tpl__label">Template</span>
       <span class="wp-tpl__hint">$name refs · $$ for literal $ · {a|b|c} inline choice</span>
       <div class="wp-tpl__head-actions">
-        <button
+        <WpButton
           v-if="templateOverridden"
-          type="button"
-          class="wp-tpl__reset"
+          variant="outline"
+          icon="pi-replay"
           data-test="tpl-reset"
-          title="Restore template to library default"
+          tip="Restore template to library default"
           aria-label="Reset template to library default"
           @click="onResetTemplate"
-        ><i class="pi pi-replay" aria-hidden="true" /></button>
+        />
       </div>
     </div>
 
@@ -397,15 +398,15 @@ function onResetNegative(): void {
       <span class="wp-tpl__label">Negative</span>
       <span class="wp-tpl__hint">goes to the Assembler's negative when its template uses ${{ outputVar || "output" }}</span>
       <div class="wp-tpl__head-actions">
-        <button
+        <WpButton
           v-if="negativeOverridden"
-          type="button"
-          class="wp-tpl__reset"
+          variant="outline"
+          icon="pi-replay"
           data-test="tpl-neg-reset"
-          title="Restore negative to library default"
+          tip="Restore negative to library default"
           aria-label="Reset negative to library default"
           @click="onResetNegative"
-        ><i class="pi pi-replay" aria-hidden="true" /></button>
+        />
       </div>
     </div>
     <NegativeField

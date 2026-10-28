@@ -37,6 +37,8 @@ import { app } from "#comfyui/app";
 import type { ModuleEntry } from "../../widgets/_shared";
 import WpCheck from "@/components/shared/WpCheck.vue";
 import LoadingMark from "../shared/LoadingMark.vue";
+import CloseButton from "../shared/CloseButton.vue";
+import WpButton from "../shared/WpButton.vue";
 
 interface Bundle {
   id: string;
@@ -470,13 +472,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
         >
           <header class="wp-ptl__head">
             <h3 id="wp-ptl-title" class="wp-ptl__title">Push to library</h3>
-            <button
-              type="button"
-              class="wp-ptl__close"
-              aria-label="Close"
-              data-test="ptl-close"
-              @click="close"
-            >×</button>
+            <CloseButton size="sm" kbd="Esc" data-test="ptl-close" @click="close" />
           </header>
 
           <div class="wp-ptl__body">
@@ -597,13 +593,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
                     : "content differs" }}</span>
                 </li>
               </ul>
-              <button
-                type="button"
-                class="wp-ptl-btn wp-ptl-btn--primary"
+              <WpButton
+                variant="primary"
                 data-test="ptl-relink-confirm"
                 :disabled="!relinkTarget || undefined"
                 @click="doRelink"
-              >Re-link<template v-if="relinkTarget"> to “{{ relinkTarget.name || relinkTarget.uuid }}”</template></button>
+              >Re-link<template v-if="relinkTarget"> to “{{ relinkTarget.name || relinkTarget.uuid }}”</template></WpButton>
             </div>
 
             <!-- States the OBSERVABLE fact and points at Re-link first when a
@@ -633,33 +628,20 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
           </div>
 
           <footer class="wp-ptl__foot">
-            <button
-              type="button"
-              class="wp-ptl-btn"
-              data-test="ptl-cancel"
-              :disabled="busy"
-              @click="close"
-            >Cancel</button>
+            <WpButton data-test="ptl-cancel" :disabled="busy" @click="close">Cancel</WpButton>
             <span class="wp-ptl-spacer" />
-            <button
-              type="button"
-              class="wp-ptl-btn"
+            <WpButton
               data-test="ptl-save-new"
               :disabled="busy"
               @click="doSaveAsNew"
-            >Save as new entry</button>
-            <button
-              type="button"
-              class="wp-ptl-btn wp-ptl-btn--primary"
+            >Save as new entry</WpButton>
+            <WpButton
+              variant="primary"
               data-test="ptl-update"
               :disabled="busy || !canUpdateExisting"
-              :title="!isLibraryTracked
-                ? 'No existing library entry to update'
-                : isLibraryMissing
-                  ? 'Library entry has been deleted — save as new entry instead'
-                  : undefined"
+              :tip="!isLibraryTracked ? 'No existing library entry to update' : isLibraryMissing ? 'Library entry has been deleted — save as new entry instead' : undefined"
               @click="doUpdate"
-            >Update existing</button>
+            >Update existing</WpButton>
           </footer>
         </div>
       </div>
@@ -694,11 +676,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   border-bottom: 1px solid var(--wp-border, #2a2a3a);
 }
 .wp-ptl__title { margin: 0; font-size: 14px; font-weight: 600; }
-.wp-ptl__close {
-  background: transparent; border: none; color: var(--wp-text-muted);
-  font-size: 18px; cursor: pointer; line-height: 1; padding: 0 6px;
-}
-.wp-ptl__close:hover { color: var(--wp-text); }
 .wp-ptl__body {
   flex: 1; min-height: 0; overflow-y: auto;
   padding: 14px;
@@ -827,7 +804,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   color: var(--wp-warn, #facc15);
   background: color-mix(in oklab, var(--wp-warn, #facc15) 16%, transparent);
 }
-.wp-ptl-relink .wp-ptl-btn--primary { align-self: flex-start; }
+.wp-ptl-relink .wp-btn--primary { align-self: flex-start; }
 .wp-ptl-error {
   padding: 8px 10px;
   border-radius: 6px;
@@ -843,23 +820,4 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   background: var(--wp-bg-1, #0b0b12);
 }
 .wp-ptl-spacer { flex: 1; }
-.wp-ptl-btn {
-  background: var(--wp-bg-3, #1c1c28);
-  color: var(--wp-text, #e7e7ee);
-  border: 1px solid var(--wp-border-strong, var(--wp-border, #2a2a3a));
-  border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.wp-ptl-btn:hover:not(:disabled) { background: color-mix(in oklab, var(--wp-bg-3, #1c1c28) 80%, var(--wp-text, #fff)); }
-.wp-ptl-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.wp-ptl-btn--primary {
-  background: var(--wp-accent-500, #6366f1);
-  border-color: var(--wp-accent-500, #6366f1);
-  color: #fff;
-}
-.wp-ptl-btn--primary:hover:not(:disabled) {
-  background: var(--wp-accent-600, #4f46e5);
-}
 </style>

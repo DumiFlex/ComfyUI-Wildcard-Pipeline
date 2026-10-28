@@ -365,23 +365,20 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
           @click="copySeed"
         ><span class="wp-dbg-head__seed-label">seed</span>{{ model.seed }}<i :class="['pi', seedCopied ? 'pi-check' : 'pi-copy']" aria-hidden="true" /></button>
         <div v-if="iterationCount > 1" class="wp-dbg-iter" role="navigation" aria-label="loop iteration picker">
-          <button
-            type="button"
-            class="wp-dbg-iter__btn"
+          <WpButton
+            variant="ghost"
+            icon="pi-chevron-left"
             :disabled="iterationIndex <= 0"
             data-test="dbg-iter-prev"
-            title="Previous iteration"
+            tip="Previous iteration"
             @click="gotoIteration(iterationIndex - 1)"
-          ><i class="pi pi-chevron-left" aria-hidden="true" /></button>
+          />
           <span class="wp-dbg-iter__label" data-test="dbg-iter-label">frame {{ iterationIndex + 1 }} / {{ iterationCount }}</span>
-          <button
-            type="button"
-            class="wp-dbg-iter__btn"
-            :disabled="iterationIndex >= iterationCount - 1"
+          <WpButton variant="ghost" :disabled="iterationIndex>= iterationCount - 1"
             data-test="dbg-iter-next"
             title="Next iteration"
             @click="gotoIteration(iterationIndex + 1)"
-          ><i class="pi pi-chevron-right" aria-hidden="true" /></button>
+          ><i class="pi pi-chevron-right" aria-hidden="true" /></WpButton>
         </div>
         <span class="wp-dbg-head__stat">{{ model.steps.length }} step{{ model.steps.length === 1 ? "" : "s" }}</span>
         <span v-if="model.groups.length > 1" class="wp-dbg-head__stat">{{ model.groups.length }} nodes</span>
@@ -601,22 +598,6 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
 .wp-dbg-head__actions { margin-left: auto; display: flex; gap: 2px; }
 
 .wp-dbg-iter { display: inline-flex; align-items: center; gap: 2px; }
-.wp-dbg-iter__btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  padding: 0;
-}
-.wp-dbg-iter__btn .pi { font-size: 9px; }
-.wp-dbg-iter__btn:hover:not(:disabled) { color: var(--wp-text); border-color: var(--wp-border); }
-.wp-dbg-iter__btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .wp-dbg-iter__label { font: 500 10.5px/1 var(--wp-font-mono); color: var(--wp-text-muted); min-width: 64px; text-align: center; }
 
 .wp-dbg-tabs {

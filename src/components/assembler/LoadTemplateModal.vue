@@ -15,6 +15,8 @@ import { api } from "../../manager/api/client";
 import type { TemplateRow } from "../../manager/api/types";
 import ModalShell from "../shared/ModalShell.vue";
 import LoadingMark from "../shared/LoadingMark.vue";
+import CloseButton from "../shared/CloseButton.vue";
+import WpButton from "../shared/WpButton.vue";
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: []; pick: [TemplateRow] }>();
@@ -135,9 +137,7 @@ function pick(row: TemplateRow) {
             <span class="wp-ltm__title-detail">· {{ rows.length }} {{ rows.length === 1 ? "template" : "templates" }}</span>
           </div>
         </div>
-        <button type="button" class="wp-ltm__close" aria-label="Close" data-test="load-tpl-close" @click="emit('close')">
-          <i class="pi pi-times" aria-hidden="true" />
-        </button>
+        <CloseButton size="sm" kbd="Esc" data-test="load-tpl-close" @click="emit('close')" />
       </header>
 
       <div class="wp-ltm__toolbar">
@@ -151,30 +151,27 @@ function pick(row: TemplateRow) {
           data-test="load-tpl-search"
         />
 
-        <button
-          type="button"
-          class="wp-ltm__icon-btn"
-          :class="{ 'wp-ltm__icon-btn--active': favoritesOnly }"
-          :title="favoritesOnly ? 'Showing favorites only · click to clear' : 'Show favorites only'"
+        <WpButton
+          variant="outline"
+          :icon="favoritesOnly ? 'pi-star-fill' : 'pi-star'"
+          :pressed="favoritesOnly"
+          :aria-label="favoritesOnly ? 'Showing favorites only, click to clear' : 'Show favorites only'"
           data-test="load-tpl-favorites"
           @click="favoritesOnly = !favoritesOnly"
-        >
-          <i :class="['pi', favoritesOnly ? 'pi-star-fill' : 'pi-star']" aria-hidden="true" />
-        </button>
+        />
 
         <div class="wp-ltm__filters-pop">
-          <button
-            type="button"
-            class="wp-ltm__icon-btn"
-            :class="{ 'wp-ltm__icon-btn--active': activePopoverCount > 0 || filtersOpen }"
-            :title="filtersOpen ? 'Close filters' : 'More filters'"
+          <WpButton
+            variant="outline"
+            icon="pi-filter"
+            :pressed="activePopoverCount > 0 || filtersOpen"
             :aria-expanded="filtersOpen"
+            aria-label="Filters"
+            :tip="filtersOpen ? 'Close filters' : 'More filters'"
             data-test="load-tpl-filter-trigger"
             @click="filtersOpen = !filtersOpen"
-          >
-            <i class="pi pi-filter" aria-hidden="true" />
-            <span v-if="activePopoverCount > 0" class="wp-ltm__filter-badge">{{ activePopoverCount }}</span>
-          </button>
+          />
+          <span v-if="activePopoverCount > 0" class="wp-ltm__filter-badge">{{ activePopoverCount }}</span>
 
           <Transition name="wp-pop">
             <div v-if="filtersOpen" class="wp-ltm__pop">
@@ -205,9 +202,12 @@ function pick(row: TemplateRow) {
                   >{{ tag }}</button>
                 </div>
               </div>
-              <button v-if="hasActiveFilter" type="button" class="wp-ltm__pop-clear" @click="clearAllFilters">
-                <i class="pi pi-filter-slash" aria-hidden="true" /> Clear all filters
-              </button>
+              <WpButton
+                v-if="hasActiveFilter"
+                variant="ghost"
+                icon="pi-filter-slash"
+                @click="clearAllFilters"
+              >Clear all filters</WpButton>
             </div>
           </Transition>
         </div>
@@ -222,7 +222,7 @@ function pick(row: TemplateRow) {
         <div v-else-if="loadError" class="wp-ltm__state wp-ltm__state--error">
           <i class="pi pi-exclamation-triangle" aria-hidden="true" />
           {{ loadError }}
-          <button type="button" class="wp-ltm__retry" @click="reload">Retry</button>
+          <WpButton @click="reload">Retry</WpButton>
         </div>
         <div v-else-if="filtered.length === 0" class="wp-ltm__state">
           <i class="pi pi-inbox" aria-hidden="true" />
@@ -263,7 +263,7 @@ function pick(row: TemplateRow) {
       <footer class="wp-ltm__foot">
         <span class="wp-ltm__hint">Click a template to load it into the assembler.</span>
         <span class="wp-ltm__foot-spacer" />
-        <button type="button" class="wp-ltm__btn" data-test="load-tpl-cancel" @click="emit('close')">Cancel</button>
+        <WpButton data-test="load-tpl-cancel" @click="emit('close')">Cancel</WpButton>
       </footer>
     </div>
   </ModalShell>
@@ -312,15 +312,6 @@ function pick(row: TemplateRow) {
 }
 .wp-ltm__title { font-size: 14px; font-weight: 600; color: var(--wp-text); margin-top: 1px; }
 .wp-ltm__title-detail { font-size: 11.5px; color: var(--wp-text-dim); margin-left: 6px; font-weight: 400; }
-.wp-ltm__close {
-  width: 28px; height: 28px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: transparent; border: 1px solid transparent; border-radius: 6px;
-  color: var(--wp-text-muted); cursor: pointer;
-  transition: background var(--wp-motion-quick) ease, color var(--wp-motion-quick) ease;
-}
-.wp-ltm__close:hover { background: var(--wp-bg-3); color: var(--wp-text); }
-.wp-ltm__close .pi { font-size: 11px; }
 
 /* Toolbar */
 .wp-ltm__toolbar {
@@ -332,21 +323,6 @@ function pick(row: TemplateRow) {
 }
 .wp-ltm__search { flex: 1; }
 
-.wp-ltm__icon-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  position: relative;
-  width: 28px; height: 28px;
-  background: transparent;
-  border: 1px solid var(--wp-border);
-  border-radius: 6px;
-  color: var(--wp-text3, var(--wp-text-dim));
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background var(--wp-motion-quick), color var(--wp-motion-quick), border-color var(--wp-motion-quick);
-}
-.wp-ltm__icon-btn:hover { color: var(--wp-text); border-color: var(--wp-border-strong); }
-.wp-ltm__icon-btn--active { background: var(--wp-accent); border-color: var(--wp-accent); color: #fff; }
-.wp-ltm__icon-btn .pi { font-size: 12px; }
 .wp-ltm__filter-badge {
   position: absolute; top: -4px; right: -4px;
   min-width: 14px; height: 14px; padding: 0 3px;
@@ -394,16 +370,6 @@ function pick(row: TemplateRow) {
   background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
   border-color: var(--wp-accent); color: var(--wp-accent);
 }
-.wp-ltm__pop-clear {
-  background: none;
-  border: 1px dashed var(--wp-border-strong, var(--wp-border));
-  border-radius: var(--wp-radius-sm, 6px);
-  color: var(--wp-text2, var(--wp-text-muted));
-  cursor: pointer; font-family: var(--wp-font-mono, monospace); font-size: 10px;
-  padding: 5px 8px;
-  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-}
-.wp-ltm__pop-clear:hover { color: var(--wp-accent); border-color: var(--wp-accent); }
 .wp-ltm__pop-shield { position: absolute; inset: 0; z-index: 5; }
 .wp-pop-enter-active, .wp-pop-leave-active {
   transition: opacity var(--wp-motion-quick), transform var(--wp-motion-quick);
@@ -420,12 +386,6 @@ function pick(row: TemplateRow) {
 }
 .wp-ltm__state .pi { font-size: 18px; color: var(--wp-text-dim); }
 .wp-ltm__state--error { color: var(--wp-danger, #fca5a5); }
-.wp-ltm__retry {
-  margin-top: 4px; height: 28px; padding: 0 12px;
-  background: var(--wp-bg-3); border: 1px solid var(--wp-border); border-radius: 6px;
-  color: var(--wp-text); font-size: 12px; font-family: inherit; cursor: pointer;
-}
-.wp-ltm__retry:hover { background: var(--wp-bg-4); }
 
 .wp-ltm__row {
   display: grid;
@@ -491,12 +451,4 @@ function pick(row: TemplateRow) {
   color: var(--wp-text-dim); font-size: 11px;
 }
 .wp-ltm__foot-spacer { flex: 1; }
-.wp-ltm__btn {
-  height: 30px; padding: 0 13px;
-  border-radius: 6px; border: 1px solid var(--wp-border);
-  background: var(--wp-bg-3); color: var(--wp-text);
-  font-size: 12px; font-weight: 500; font-family: inherit; cursor: pointer;
-  transition: background var(--wp-motion-quick) ease, border-color var(--wp-motion-quick) ease;
-}
-.wp-ltm__btn:hover { background: var(--wp-bg-4); border-color: var(--wp-border-strong); }
 </style>

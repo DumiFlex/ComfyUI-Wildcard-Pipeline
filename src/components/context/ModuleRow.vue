@@ -4,6 +4,7 @@ import type { ModuleEntry } from "../../widgets/_shared";
 import { ModuleRowCtxKey } from "./module-row-ctx";
 import PairBadge from "./PairBadge.vue";
 import WpCheck from "../shared/WpCheck.vue";
+import WpIconButton from "../shared/WpIconButton.vue";
 
 defineProps<{ module: ModuleEntry; idx: number }>();
 
@@ -71,10 +72,9 @@ const {
           <circle cx="4.5" cy="10" r="1" />
         </svg>
       </span>
-      <button type="button" class="wp-collapse-btn" draggable="false"
-        :title="isCollapsed(module) ? 'Expand' : 'Collapse'" @click="toggleCollapsed(idx)">
-        <i :class="['pi', isCollapsed(module) ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i>
-      </button>
+      <WpIconButton variant="bare" class="wp-collapse-btn" draggable="false"
+        :icon="isCollapsed(module) ? 'pi-caret-right' : 'pi-caret-down'"
+        :label="isCollapsed(module) ? 'Expand' : 'Collapse'" @click="toggleCollapsed(idx)" />
       <WpCheck size="sm" draggable="false" data-test="module-enabled"
         :title="ctx && ctx.currentFrame.value != null ? (ctx.effectiveEnabled(module) ? 'Disable on this frame' : 'Enable on this frame') : (module.enabled ? 'Disable' : 'Enable')"
         :model-value="ctx ? ctx.effectiveEnabled(module) : module.enabled"
@@ -157,20 +157,19 @@ const {
         <span v-else-if="ctx?.frameEnableOverride(module) === 'on'" class="wp-mod-badge wp-mod-badge--on" data-test="mod-frame-enabled" title="Enabled on this frame">on #{{ (ctx.currentFrame.value ?? 0) + 1 }}</span>
       </span>
       <div class="wp-mod-actions" draggable="false">
-        <button v-if="isSeedLockable(module)" type="button" class="wp-btn--icon-sm wp-btn--warn"
-          :class="{ 'is-locked': isLocked(module) }" data-test="row-action-lock"
-          :title="isLocked(module) ? `Locked seed: ${ctx?.effectiveLockedSeed(module)}. Click to unlock.` : 'Lock seed'"
-          :aria-label="isLocked(module) ? 'Unlock seed' : 'Lock seed'"
-          @click.stop="toggleLockOnCard(idx)"><i class="pi pi-lock" /></button>
-        <button v-if="module.type === 'wildcard' || module.type === 'fixed_values' || module.type === 'combine' || module.type === 'derivation'"
-          type="button" class="wp-btn--icon-sm wp-btn--accent"
-          :class="{ 'is-active': isInternal(module) }" data-test="row-action-internal"
-          :title="isInternal(module) ? 'Unmark internal' : 'Mark internal'"
-          :aria-label="isInternal(module) ? 'Unmark internal' : 'Mark internal'"
-          @click.stop="toggleInternalOnCard(idx)"><i class="pi pi-globe" /></button>
-        <button type="button" class="wp-btn--icon-sm wp-btn--danger"
-          data-test="row-action-remove" title="Remove" aria-label="Remove module"
-          @click.stop="removeModule(idx)"><i class="pi pi-trash" /></button>
+        <WpIconButton v-if="isSeedLockable(module)" icon="pi-lock" tone="warn"
+          :pressed="isLocked(module)" data-test="row-action-lock"
+          :label="isLocked(module) ? 'Unlock seed' : 'Lock seed'"
+          :tip="isLocked(module) ? `Locked seed: ${ctx?.effectiveLockedSeed(module)}. Click to unlock.` : 'Lock seed'"
+          @click.stop="toggleLockOnCard(idx)" />
+        <WpIconButton v-if="module.type === 'wildcard' || module.type === 'fixed_values' || module.type === 'combine' || module.type === 'derivation'"
+          icon="pi-globe" tone="accent"
+          :pressed="isInternal(module)" data-test="row-action-internal"
+          :label="isInternal(module) ? 'Unmark internal' : 'Mark internal'"
+          @click.stop="toggleInternalOnCard(idx)" />
+        <WpIconButton icon="pi-trash" tone="danger"
+          data-test="row-action-remove" label="Remove module" tip="Remove"
+          @click.stop="removeModule(idx)" />
       </div>
     </div>
     <div class="wp-collapse-row" :data-collapsed="isCollapsed(module) ? 'true' : 'false'">

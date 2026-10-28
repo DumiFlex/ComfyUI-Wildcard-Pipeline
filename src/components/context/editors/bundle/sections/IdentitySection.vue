@@ -11,6 +11,7 @@
 import { computed, onBeforeUnmount, ref, nextTick } from "vue";
 import type { BundleInstance } from "../../../../../widgets/_shared";
 import HsvPicker from "../../../../shared/HsvPicker.vue";
+import WpButton from "../../../../shared/WpButton.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -151,15 +152,15 @@ function onResetColor(): void {
           aria-label="Display name"
           @input="onNameInput"
         />
-        <button
+        <WpButton
           v-if="nameOverridden"
-          type="button"
-          class="id__reset"
+          variant="outline"
+          icon="pi-replay"
           data-test="bdm-name-reset"
-          :title="`Restore name to library default: ${libraryName}`"
+          :tip="`Restore name to library default: ${libraryName}`"
           aria-label="Reset display name to library default"
           @click="onResetName"
-        ><i class="pi pi-replay" aria-hidden="true" /></button>
+        />
       </div>
     </div>
 

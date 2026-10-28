@@ -21,6 +21,7 @@ import type { VarProducerLike } from "../../../../manager/components/RefChip.vue
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
 import WpButton from "../../../shared/WpButton.vue";
+import CloseButton from "../../../shared/CloseButton.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
@@ -102,13 +103,7 @@ function onSpaClick(): void {
         </div>
         <div class="wp-cbm__sub">Library entry · template interpolates $vars into output binding</div>
       </div>
-      <button
-        type="button"
-        class="wp-cbm__close"
-        aria-label="Close"
-        data-test="cbm-close"
-        @click="emit('cancel')"
-      ><i class="pi pi-times" aria-hidden="true" /></button>
+      <CloseButton size="sm" kbd="Esc" data-test="cbm-close" @click="emit('cancel')" />
     </header>
 
     <IdentitySection
@@ -142,11 +137,21 @@ function onSpaClick(): void {
         <i class="pi pi-external-link" aria-hidden="true" />
         Edit library entry in SPA
       </a>
-      <WpButton variant="ghost" icon="pi-replay" data-test="cbm-clear-all" title="Clear all instance overrides on this combine" @click="emit('clear-all-overrides')">Reset overrides</WpButton>
+      <WpButton
+        variant="ghost"
+        icon="pi-replay"
+        data-test="cbm-clear-all"
+        title="Clear all instance overrides on this combine"
+        @click="emit('clear-all-overrides')"
+      >Reset overrides</WpButton>
       <span class="wp-cbm__hint">
         <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
-      <WpButton v-if="canSaveToLibrary" data-test="cbm-save-lib" @click="emit('save-to-library')">Save to library</WpButton>
+      <WpButton
+        v-if="canSaveToLibrary"
+        data-test="cbm-save-lib"
+        @click="emit('save-to-library')"
+      >Save to library</WpButton>
       <WpButton data-test="cbm-cancel" @click="emit('cancel')">Cancel</WpButton>
       <WpButton variant="primary" data-test="cbm-save" @click="emit('save')">Save</WpButton>
     </footer>

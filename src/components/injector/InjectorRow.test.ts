@@ -68,14 +68,14 @@ describe("InjectorRow — enabled checkbox", () => {
 });
 
 describe("InjectorRow — internal flag", () => {
-  it("internal-flag button inactive class when row.internal is false", () => {
+  it("internal-flag button is not pressed when row.internal is false", () => {
     const w = mount(InjectorRow, { props: { row: makeRow({ internal: false }) } });
-    expect(w.find('[data-test="inj-row-internal"]').classes()).not.toContain("is-active");
+    expect(w.find('[data-test="inj-row-internal"]').attributes("aria-pressed")).toBe("false");
   });
 
-  it("internal-flag button active class when row.internal is true", () => {
+  it("internal-flag button is pressed when row.internal is true", () => {
     const w = mount(InjectorRow, { props: { row: makeRow({ internal: true }) } });
-    expect(w.find('[data-test="inj-row-internal"]').classes()).toContain("is-active");
+    expect(w.find('[data-test="inj-row-internal"]').attributes("aria-pressed")).toBe("true");
   });
 
   it("clicking internal-flag emits update with toggled internal", async () => {
@@ -351,7 +351,7 @@ describe("InjectorRow — general (template) row", () => {
 
   it("trash button reads as Delete (not Disconnect) for a general row", () => {
     const w = mount(InjectorRow, { props: { row: generalRow() } });
-    expect(w.find('[data-test="inj-row-remove"]').attributes("title")).toBe(
+    expect(w.find('[data-test="inj-row-remove"]').attributes("aria-label")).toBe(
       "Delete this template row",
     );
   });

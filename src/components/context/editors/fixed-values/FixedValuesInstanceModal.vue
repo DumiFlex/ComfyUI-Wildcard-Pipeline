@@ -7,6 +7,7 @@ import ValuesSection from "./sections/ValuesSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
 import WpButton from "../../../shared/WpButton.vue";
+import CloseButton from "../../../shared/CloseButton.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
@@ -65,13 +66,7 @@ function onSpaClick(): void {
         </div>
         <div class="wp-fvm__sub">Library entry · static $var → value pairs</div>
       </div>
-      <button
-        type="button"
-        class="wp-fvm__close"
-        aria-label="Close"
-        data-test="fvm-close"
-        @click="emit('cancel')"
-      ><i class="pi pi-times" aria-hidden="true" /></button>
+      <CloseButton size="sm" kbd="Esc" data-test="fvm-close" @click="emit('cancel')" />
     </header>
 
     <IdentitySection :module="module" @update="onUpdate" />
@@ -92,11 +87,22 @@ function onSpaClick(): void {
         <i class="pi pi-external-link" aria-hidden="true" />
         Edit library entry in SPA
       </a>
-      <WpButton variant="ghost" icon="pi-replay" v-if="isLibraryTracked" data-test="fvm-clear-all" title="Clear all instance overrides" @click="emit('clear-all-overrides')">Reset overrides</WpButton>
+      <WpButton
+        v-if="isLibraryTracked"
+        variant="ghost"
+        icon="pi-replay"
+        data-test="fvm-clear-all"
+        title="Clear all instance overrides"
+        @click="emit('clear-all-overrides')"
+      >Reset overrides</WpButton>
       <span class="wp-fvm__hint">
         <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
       </span>
-      <WpButton v-if="canSaveToLibrary" data-test="fvm-save-lib" @click="emit('save-to-library')">Save to library</WpButton>
+      <WpButton
+        v-if="canSaveToLibrary"
+        data-test="fvm-save-lib"
+        @click="emit('save-to-library')"
+      >Save to library</WpButton>
       <WpButton data-test="fvm-cancel" @click="emit('cancel')">Cancel</WpButton>
       <WpButton variant="primary" data-test="fvm-save" @click="emit('save')">Save</WpButton>
     </footer>

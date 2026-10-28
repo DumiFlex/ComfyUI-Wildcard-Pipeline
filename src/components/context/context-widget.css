@@ -124,12 +124,6 @@
 .wp-module--in-bundle .wp-drag-handle {
   width: 6px !important;
 }
-.wp-module--in-bundle .wp-collapse-btn {
-  width: 14px !important;
-}
-.wp-module--in-bundle .wp-collapse-btn .pi {
-  font-size: 10px !important;
-}
 .wp-module--in-bundle .wp-row-type-icon {
   width: 16px !important;
   height: 16px !important;
@@ -269,10 +263,10 @@
  * icon-class swap (pi-caret-down ↔ pi-caret-right). The BundleHeader
  * template now always renders pi-caret-down so the CSS rotation owns
  * the transition. */
-.wp-bundle .wp-bundle-collapse {
+.wp-bundle .wp-icon-btn.wp-bundle-collapse {
   transition: transform var(--wp-motion-collapse) var(--wp-motion-curve-collapse);
 }
-.wp-bundle--collapsed .wp-bundle-collapse {
+.wp-bundle--collapsed .wp-icon-btn.wp-bundle-collapse {
   transform: rotate(-90deg);
 }
 
@@ -602,9 +596,7 @@
 .wp-module:hover .wp-drag-handle,
 .wp-module:focus-within .wp-drag-handle { opacity: 1; color: var(--wp-text2); }
 
-/* .wp-collapse-btn base → src/components/shared/row-primitives.css.
- * Module-specific: PrimeIcons sets 16px on `.pi` itself; our shared
- * rule sets 10px which matches what Context wanted. */
+/* The fold caret is WpIconButton variant="bare" (components/shared). */
 
 /* Type icon — colored per type so users scan-recognize the module type */
 .wp-type-icon {
@@ -751,10 +743,7 @@
   gap: 1px;
   flex-shrink: 0;
 }
-/* .wp-btn--icon-sm + variants (.is-active, .is-locked, .wp-btn--danger)
- * → src/components/shared/row-primitives.css. Used by ModuleRow,
- * BundleHeader, InjectorRow, and any future row surface that needs
- * a small icon button. */
+/* Row icon buttons are the shared WpIconButton (components/shared). */
 
 /* .wp-summary + .wp-summary__main base styles → row-primitives.css.
  * Default padding-left:36px aligns under the module header's icon

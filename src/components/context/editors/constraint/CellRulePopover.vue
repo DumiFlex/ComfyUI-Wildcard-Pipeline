@@ -12,6 +12,7 @@
  */
 import WpNumber from "../../../shared/WpNumber.vue";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
+import WpButton from "../../../shared/WpButton.vue";
 
 type RuleState = "neutral" | "exclude" | "boost" | "reduce" | "only";
 
@@ -162,14 +163,13 @@ function onReset(): void {
     </div>
 
     <div v-if="canReset" class="pop-foot">
-      <button
-        type="button"
+      <WpButton
+        variant="ghost"
+        icon="pi-replay"
         class="pop-reset"
-        aria-label="Reset cell to library default"
+        tip="Reset cell to library default"
         @click="onReset"
-      >
-        <span class="pop-reset__glyph" aria-hidden="true">↺</span> Reset to library
-      </button>
+      >Reset to library</WpButton>
     </div>
 
     <div class="pop-hint">Click outside or press Esc to close</div>
@@ -270,26 +270,6 @@ function onReset(): void {
   display: flex;
   justify-content: flex-end;
 }
-.pop-reset {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  background: transparent;
-  border: 1px solid var(--wp-border, #353841);
-  border-radius: 4px;
-  color: var(--wp-text-muted, #8a8d99);
-  font: 600 10px var(--wp-font-sans, sans-serif);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-}
-.pop-reset:hover {
-  color: var(--wp-accent-text, var(--wp-accent, #6366f1));
-  border-color: var(--wp-accent, #6366f1);
-  background: color-mix(in srgb, var(--wp-accent, #6366f1) 10%, transparent);
-}
-.pop-reset__glyph { font: 12px var(--wp-font-mono, monospace); line-height: 1; }
 
 .pop-hint {
   margin-top: 6px;
