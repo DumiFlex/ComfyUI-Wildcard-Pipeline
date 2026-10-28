@@ -75,4 +75,51 @@ describe("CommandPalette", () => {
     const results = document.body.querySelectorAll('[data-test="cp-result"]');
     expect(results[1].getAttribute("aria-selected")).toBe("true");
   });
+
+  it("groups an empty search under short headings, Recent first", () => {
+    localStorage.removeItem("wp-palette-recent");
+    const items = [
+      { id: "route:a", label: "Dashboard", kind: "route" as const, icon: "pi-home", run: vi.fn() },
+      { id: "action:new-wildcard", label: "New wildcard", kind: "action" as const, icon: "pi-plus", run: vi.fn() },
+      { id: "action:toggle-theme", label: "Toggle theme", kind: "action" as const, icon: "pi-sun", run: vi.fn() },
+      { id: "module:m1", label: "Hair", kind: "module" as const, icon: "pi-sparkles", run: vi.fn() },
+      { id: "module:m2", label: "Eyes", kind: "module" as const, icon: "pi-sparkles", run: vi.fn() },
+    ];
+    wrap = mount(CommandPalette, { props: { open: true, items, recentIds: ["module:m2"] }, attachTo: document.body });
+    const heads = [...document.body.querySelectorAll('[data-test="cp-group"]')].map((h) => h.textContent);
+    expect(heads).toEqual(["Recent", "Go to", "Create", "Actions", "Library"]);
+    const rows = [...document.body.querySelectorAll('[data-test="cp-result"]')].map((r) => r.textContent?.trim());
+    expect(rows[0]).toContain("Eyes");
+    expect(rows.filter((r) => r?.includes("Eyes"))).toHaveLength(1);
+  });
+
+  it("remembers what it ran and lists it under Recent next time", async () => {
+    localStorage.removeItem("wp-palette-recent");
+    const items = [
+      { id: "route:a", label: "Dashboard", kind: "route" as const, icon: "pi-home", run: vi.fn() },
+      { id: "route:b", label: "Settings", kind: "route" as const, icon: "pi-cog", run: vi.fn() },
+    ];
+    wrap = mount(CommandPalette, { props: { open: true, items }, attachTo: document.body });
+    (document.body.querySelectorAll('[data-test="cp-result"]')[1] as HTMLElement).click();
+    expect(items[1].run).toHaveBeenCalled();
+    await wrap.setProps({ open: false });
+    await wrap.setProps({ open: true });
+    const first = document.body.querySelector('[data-test="cp-group"]');
+    expect(first?.textContent).toBe("Recent");
+    expect(document.body.querySelector('[data-test="cp-result"]')?.textContent).toContain("Settings");
+  });
+
+  it("shows one ranked list without headings while searching", async () => {
+    const items = [
+      { id: "route:a", label: "Alpha page", kind: "route" as const, icon: "pi-home", run: vi.fn() },
+      { id: "module:a", label: "Alpha", kind: "module" as const, icon: "pi-sparkles", run: vi.fn() },
+    ];
+    wrap = mount(CommandPalette, { props: { open: true, items }, attachTo: document.body });
+    const input = document.body.querySelector('[data-test="cp-input"]') as HTMLInputElement;
+    input.value = "alpha";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await wrap.vm.$nextTick();
+    expect(document.body.querySelectorAll('[data-test="cp-group"]')).toHaveLength(0);
+    expect(document.body.querySelectorAll('[data-test="cp-result"]')).toHaveLength(2);
+  });
 });

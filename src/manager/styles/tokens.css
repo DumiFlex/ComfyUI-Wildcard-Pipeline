@@ -1602,7 +1602,9 @@ input, textarea, select { font: inherit; }
    accent-600 for the white-tick contrast audit. */
 .wp-check {
   width: 14px; height: 14px;
-  border: 1.5px solid var(--wp-border-soft, var(--wp-border));
+  /* A visible edge on the empty box: the hairline border tokens vanished on
+   * a dark row, so nobody saw that list rows can be selected. */
+  border: 1.5px solid color-mix(in srgb, var(--wp-text-dim) 70%, transparent);
   border-radius: min(3px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg);
   display: inline-flex; align-items: center; justify-content: center;
@@ -1631,6 +1633,9 @@ input, textarea, select { font: inherit; }
   color: #fff; /* audit-exempt: white dash on accent-600 background ≥4.5:1 both themes */
 }
 .wp-check svg { width: 9px; height: 9px; display: block; pointer-events: none; }
+.wp-check:not(:disabled, [aria-disabled="true"], [data-checked="true"], [aria-checked="true"], [data-indeterminate="true"]):hover {
+  border-color: var(--wp-accent-500);
+}
 /* Disabled: grey, not dim purple, so a ticked disabled box no longer reads
  * as a live one in dark mode. */
 .wp-check:disabled,

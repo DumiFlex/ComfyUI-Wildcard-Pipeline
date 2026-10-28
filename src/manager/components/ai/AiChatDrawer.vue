@@ -846,6 +846,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         />
       </span>
       <span class="wp-ai-chat__spacer" />
+      <span class="wp-ai-chat__break" aria-hidden="true" />
       <Button
         variant="ghost"
         size="sm"
@@ -1413,9 +1414,13 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   .wp-ai-chat__grip { display: none; }
 }
 .wp-ai-chat__head {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap;
   padding: 10px 12px; border-bottom: 1px solid var(--wp-border);
 }
+/* One row when it all fits. Narrower, two planned rows instead of a loose
+   wrap: the title and the buttons on top, the model and thinking pickers
+   sharing the second row (the model takes what is left). */
+.wp-ai-chat__break { display: none; }
 .wp-ai-chat__title { font-weight: 600; color: var(--wp-accent-text); display: inline-flex; gap: 6px; align-items: center; }
 /* The picker keeps room to read and click; on a narrow drawer the buttons
    drop their words first. */
@@ -1428,6 +1433,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__think { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; color: var(--wp-text-muted); }
 .wp-ai-chat__think :deep(.wp-select) { width: 92px; }
 .wp-ai-chat__think :deep(button) { font-size: 11px; }
+@container wp-ai-chat (max-width: 599px) {
+  .wp-ai-chat__break { display: block; order: 9; flex: 0 0 100%; height: 0; }
+  .wp-ai-chat__model { order: 10; flex: 1 1 0; max-width: none; min-width: 0; }
+  .wp-ai-chat__think { order: 11; }
+}
 .wp-ai-chat__model-note {
   margin: 0; padding: 6px 12px; font-size: 12px; color: var(--wp-text-muted);
   border-bottom: 1px solid var(--wp-border); background: var(--wp-bg-2);
