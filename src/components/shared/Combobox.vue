@@ -129,13 +129,6 @@ function onKeydown(ev: KeyboardEvent): void {
       if (!wanted.value) { wanted.value = true; if (ev.altKey) return; }
       step(ev.key === "ArrowDown" ? 1 : -1);
       return;
-    case "Home":
-    case "End":
-      if (!open.value) return;
-      ev.preventDefault();
-      active.value = -1;
-      step(ev.key === "Home" ? 1 : -1);
-      return;
     case "Enter": {
       const o = open.value && active.value >= 0 ? matches.value[active.value] : undefined;
       if (!o) return;
