@@ -581,7 +581,8 @@ describe("Settings › AI assistant suggested models per provider", () => {
     expect(t).toContain("deepseek/deepseek-v4-flash");
     expect(t).toContain("moderated");
     expect(r.findAll('[data-test="ai-model-row"]').length).toBe(SUGGESTED_MODELS.openrouter[0].models.length);
-  });
+    // Two full mounts of the section: about 4.5 s on dev already, over the 5 s default on CI.
+  }, 15_000);
 
   it("hides the card for Other set to an internet address", async () => {
     const w = await card("custom", { local: false });
