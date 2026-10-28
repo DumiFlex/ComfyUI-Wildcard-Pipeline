@@ -101,6 +101,10 @@ export const BUNDLE_MASTER_OFF_OPTIONS = [
   { text: "Cascade — clear everyone", value: "cascade-all" },
 ];
 
+export const SETTING_ID_AC_TAGS = "wildcardPipeline.behavior.tagAutocomplete";
+export const SETTING_ID_AC_LORA = "wildcardPipeline.behavior.loraAutocomplete";
+export const SETTING_ID_AC_EMBEDDING = "wildcardPipeline.behavior.embeddingAutocomplete";
+export const SETTING_ID_AC_SEPARATOR = "wildcardPipeline.behavior.autocompleteSeparator";
 export const SETTING_ID_AC_MAX_SUGGESTIONS = "wildcardPipeline.behavior.autocompleteMaxSuggestions";
 export const SETTING_ID_AC_MIN_CHARS = "wildcardPipeline.behavior.autocompleteMinChars";
 
@@ -116,6 +120,20 @@ export const AC_MIN_CHARS_OPTIONS = [
   { text: "2", value: "2" },
   { text: "3 (default)", value: "3" },
   { text: "4", value: "4" },
+];
+
+/**
+ * The canvas copies of the autocomplete settings. The manager keeps its own
+ * copies (Settings › Autocomplete) and shows these beside them in a Canvas
+ * column, kept in step with ComfyUI's panel like `CANVAS_SETTINGS`.
+ */
+export const CANVAS_AUTOCOMPLETE_SETTINGS: Array<{ id: string; type: "combo" | "boolean"; defaultValue: string | boolean }> = [
+  { id: SETTING_ID_AC_TAGS, type: "boolean", defaultValue: false },
+  { id: SETTING_ID_AC_LORA, type: "boolean", defaultValue: false },
+  { id: SETTING_ID_AC_EMBEDDING, type: "boolean", defaultValue: false },
+  { id: SETTING_ID_AC_SEPARATOR, type: "boolean", defaultValue: false },
+  { id: SETTING_ID_AC_MAX_SUGGESTIONS, type: "combo", defaultValue: "20" },
+  { id: SETTING_ID_AC_MIN_CHARS, type: "combo", defaultValue: "3" },
 ];
 
 /** Where a setting sits on the manager's Canvas section. */
@@ -179,8 +197,13 @@ export const CANVAS_SETTINGS: CanvasSettingMeta[] = [
     tooltip: "Bumps borders + text contrast. Match system honors prefers-contrast.", group: "accessibility" },
 ];
 
-/** Same-origin channel the manager uses to hand a changed canvas setting to
- *  any open canvas tab, which applies it live through ComfyUI's own store. */
+/** Same-origin channel that keeps canvas settings in step both ways: the
+ *  manager hands a change to every open canvas tab (applied through ComfyUI's
+ *  own store), and a canvas tab announces a change made in ComfyUI's panel or
+ *  the playground so an open manager page shows it at once. */
 export const CANVAS_SETTINGS_CHANNEL = "wp-canvas-settings";
 
-export interface CanvasSettingMessage { id: string; value: unknown }
+/** `source` says who sent it; a canvas ignores canvas messages, so two
+ *  canvas tabs never echo a change back and forth. Absent means the manager
+ *  (older managers sent no source). */
+export interface CanvasSettingMessage { id: string; value: unknown; source?: "manager" | "canvas" }
