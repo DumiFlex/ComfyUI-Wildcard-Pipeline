@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import CloseButton from "@/components/shared/CloseButton.vue";
 import { computed } from "vue";
 import Button from "./ui/Button.vue";
+import Drawer from "./ui/Drawer.vue";
 import Toggle from "./ui/Toggle.vue";
 import Icon from "./ui/Icon.vue";
 import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
@@ -50,24 +50,13 @@ function pickCustomAccent() {
 </script>
 
 <template>
-  <aside
-    class="wp-tweaks"
-    :class="{ 'wp-tweaks--open': tweaks.panelOpen }"
-    :inert="!tweaks.panelOpen || undefined"
-    role="dialog"
-    aria-label="Tweaks"
-    data-test="tweaks-panel"
+  <Drawer
+    :open="tweaks.panelOpen"
+    title="Tweaks"
+    width="320px"
+    @update:open="(v) => { if (!v) tweaks.closePanel(); }"
   >
-    <header class="wp-tweaks__header">
-      <h2>Tweaks</h2>
-      <CloseButton
-        label="Close tweaks"
-        data-test="tweaks-close"
-        @click="tweaks.closePanel"
-      />
-    </header>
-
-    <div class="wp-tweaks__body">
+    <div class="wp-tweaks" data-test="tweaks-panel">
       <section class="wp-tweaks__section">
         <h3 class="wp-tweaks__section-title">Colours</h3>
         <ThemeChoices kind="palette" compact test-prefix="tweaks-palette" />
@@ -143,73 +132,22 @@ function pickCustomAccent() {
         />
       </section>
 
-      <footer class="wp-tweaks__footer">
-        <Button
-          variant="ghost"
-          icon="pi-refresh"
-          data-test="tweaks-reset"
-          @click="tweaks.reset"
-        >
-          Reset to defaults
-        </Button>
-      </footer>
     </div>
-  </aside>
-
-  <div
-    v-if="tweaks.panelOpen"
-    class="wp-tweaks__backdrop"
-    data-test="tweaks-backdrop"
-    @click="tweaks.closePanel"
-  />
+    <template #footer>
+      <Button
+        variant="ghost"
+        icon="pi-refresh"
+        data-test="tweaks-reset"
+        @click="tweaks.reset"
+      >
+        Reset to defaults
+      </Button>
+    </template>
+  </Drawer>
 </template>
 
 <style scoped>
-/* Slide-in panel anchored to the right edge of the viewport. The shell mirrors
-   the prototype's floating glass card but lives full-height for predictable
-   focus management; nothing in tokens.css owns these classes. */
 .wp-tweaks {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 320px;
-  max-width: 90vw;
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  background: var(--wp-bg-1);
-  border-left: 1px solid var(--wp-border);
-  box-shadow: var(--wp-shadow-lg);
-  transform: translateX(100%);
-  transition: transform 220ms cubic-bezier(0.3, 0.7, 0.4, 1);
-  pointer-events: none;
-}
-.wp-tweaks--open {
-  transform: translateX(0);
-  pointer-events: auto;
-}
-
-.wp-tweaks__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--wp-space-6) var(--wp-space-6);
-  border-bottom: 1px solid var(--wp-border);
-}
-.wp-tweaks__header h2 {
-  margin: 0;
-  font-size: var(--wp-text-md);
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: var(--wp-text);
-}
-
-.wp-tweaks__body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--wp-space-6);
   display: flex;
   flex-direction: column;
   gap: var(--wp-space-6);
@@ -254,16 +192,5 @@ function pickCustomAccent() {
 }
 .wp-tweaks__custom-picker {
   margin-top: var(--wp-space-4);
-}
-
-
-.wp-tweaks__footer { margin-top: auto; padding-top: var(--wp-space-5); border-top: 1px solid var(--wp-border); }
-
-.wp-tweaks__backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 55;
-  background: var(--wp-overlay-bg, rgba(0, 0, 0, 0.32));
-  /* Backdrop only renders when panel is open; no transition needed. */
 }
 </style>

@@ -7,11 +7,13 @@
  *   Right (1fr)    — preview of the selected snapshot: date, name, raw JSON
  *                    and a "Restore this version" primary action.
  *
- * Click outside / Esc closes. Body scroll is locked while open.
+ * A kit Modal: click outside or Esc closes, Tab stays inside, focus goes
+ * back to the History button. The snapshot is a CodeBlock with copy.
  */
-import CloseButton from "@/components/shared/CloseButton.vue";
-import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import Button from "./ui/Button.vue";
+import Modal from "./ui/Modal.vue";
+import CodeBlock from "@/components/shared/CodeBlock.vue";
 import RelativeDate from "./RelativeDate.vue";
 import type { ModuleHistoryEntry } from "../api/types";
 
@@ -40,10 +42,6 @@ watch(ordered, () => {
 const currentEntry = computed(() =>
   ordered.value[selected.value] ?? null,
 );
-
-function close(): void {
-  emit("update:open", false);
-}
 
 function restore(entry: ModuleHistoryEntry): void {
   emit("restore", entry);
@@ -75,57 +73,26 @@ function snapshotDate(entry: ModuleHistoryEntry): string {
   }
 }
 
-function onKey(e: KeyboardEvent): void {
-  if (e.key === "Escape" && props.open) close();
-}
-
-onMounted(() => {
-  window.addEventListener("keydown", onKey);
-});
-onBeforeUnmount(() => {
-  window.removeEventListener("keydown", onKey);
-});
-
 watch(
   () => props.open,
   (next) => {
-    if (typeof document === "undefined") return;
-    document.body.style.overflow = next ? "hidden" : "";
     if (next) selected.value = 0;
   },
 );
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="wp-history-overlay"
-      data-test="history-overlay"
-      @mousedown.self="close"
-    >
-      <div
-        class="wp-history-panel"
-        role="dialog"
-        aria-label="Version history"
-        data-test="history-panel"
-      >
-        <!-- Header -->
-        <div class="wp-history-panel__header">
-          <div>
-            <h3 class="wp-history-panel__title">Version history</h3>
-            <p class="wp-history-panel__sub">
-              Last {{ entries.length }} save{{ entries.length === 1 ? "" : "s" }} ·
-              oldest is overwritten on save
-            </p>
-          </div>
-          <CloseButton
-            label="Close history"
-            data-test="history-close"
-            @click="close"
-          />
-        </div>
-
+  <Modal :open="open" size="lg" @update:open="emit('update:open', $event)">
+    <template #header="{ titleId }">
+      <div>
+        <h3 :id="titleId" class="wp-modal__title">Version history</h3>
+        <p class="wp-history-panel__sub">
+          Last {{ entries.length }} save{{ entries.length === 1 ? "" : "s" }} ·
+          oldest is overwritten on save
+        </p>
+      </div>
+    </template>
+      <div class="wp-history-panel" data-test="history-panel">
         <!-- Empty state -->
         <div
           v-if="!ordered.length"
@@ -179,7 +146,14 @@ watch(
                   @click="restore(currentEntry)"
                 >Restore this version</Button>
               </div>
-              <pre class="wp-history-preview__json">{{ previewJson(currentEntry) }}</pre>
+              <CodeBlock
+                class="wp-history-preview__json"
+                :code="previewJson(currentEntry)"
+                title="Saved data"
+                language="JSON"
+                size="sm"
+                default-wrap
+              />
             </template>
             <div v-else class="wp-dim wp-history-preview__placeholder">
               Select a snapshot to preview.
@@ -187,53 +161,16 @@ watch(
           </div>
         </div>
       </div>
-    </div>
-  </Teleport>
+  </Modal>
 </template>
 
 <style scoped>
-.wp-history-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
-  background: var(--wp-overlay-bg, rgba(0, 0, 0, 0.55));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--wp-space-7);
-  animation: wp-history-fade-in 0.15s ease-out;
-}
-@keyframes wp-history-fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
 .wp-history-panel {
-  width: min(880px, 100%);
-  max-height: min(640px, calc(100vh - 48px));
-  background: var(--wp-bg-2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-lg, 10px);
+  /* The two panes run to the dialog's edges. */
+  margin: -12px -14px;
+  height: min(560px, calc(100vh - 140px));
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  box-shadow: var(--wp-shadow-lg);
-}
-
-.wp-history-panel__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--wp-space-5);
-  padding: var(--wp-space-6) var(--wp-space-6);
-  border-bottom: 1px solid var(--wp-border);
-  flex-shrink: 0;
-}
-.wp-history-panel__title {
-  margin: 0;
-  font-size: var(--wp-text-md);
-  font-weight: 600;
-  color: var(--wp-text);
 }
 .wp-history-panel__sub {
   margin: 2px 0 0;
@@ -333,16 +270,10 @@ watch(
 }
 .wp-history-preview__json {
   flex: 1;
-  margin: 0;
-  padding: var(--wp-space-6) var(--wp-space-6);
-  overflow: auto;
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: var(--wp-text-xs);
-  color: var(--wp-text-muted);
-  background: var(--wp-bg);
-  white-space: pre-wrap;
-  word-break: break-word;
+  min-height: 0;
+  margin: var(--wp-space-5) var(--wp-space-6) var(--wp-space-6);
 }
+.wp-history-preview__json :deep(.wp-code__pre) { flex: 1; min-height: 0; }
 .wp-history-preview__placeholder {
   padding: var(--wp-space-7);
   font-size: var(--wp-text-base);

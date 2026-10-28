@@ -5,7 +5,7 @@
     "native-checkbox": 0,
     "native-range": 2,
     "inline-svg": 25,
-    "hand-dialog": 15,
+    "hand-dialog": 13,
     "manager-raw-button": 251,
     "raw-hex": 841
   },
@@ -48,8 +48,6 @@
     "src/components/settings/DisplayPlaygroundModal.vue": 1,
     "src/components/shared/SeedListModal.vue": 1,
     "src/manager/components/CommandPalette.vue": 1,
-    "src/manager/components/HistoryPanel.vue": 1,
-    "src/manager/components/TweaksPanel.vue": 1,
     "src/manager/components/ai/AiChatDrawer.vue": 1,
     "src/manager/components/ai/AiDebugList.vue": 1,
     "src/manager/components/test-runner/ModulePicker.vue": 1

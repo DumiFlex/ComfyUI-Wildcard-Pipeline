@@ -55,7 +55,7 @@ describe("AppTopbar.vue", () => {
     expect(brand.exists()).toBe(true);
     expect(brand.text()).toContain("Wildcard Pipeline");
     expect(brand.text()).toMatch(/v\d/);
-    expect(brand.find("img").exists()).toBe(true);
+    expect(brand.find("svg.wp-logo").exists()).toBe(true);
   });
 
   it("calls ui.toggleSidebar when the bars button is clicked", async () => {
