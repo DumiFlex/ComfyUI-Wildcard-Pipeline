@@ -123,4 +123,28 @@ describe("VarPicker", () => {
     await w.find('[data-test="var-picker-trigger"]').trigger("click");
     expect(w.find('[data-test="var-picker-menu"]').text()).toContain("No upstream variables");
   });
+  it("shows what a Var → Choice output feeds and how the run matched", () => {
+    const w = mount(VarPicker, {
+      props: {
+        modelValue: "$checkpoint", upstreamVars: ["$checkpoint"],
+        previewSource: "wai nsfw v14", previewParsed: "waiNSFW_v140.safetensors", previewDefault: "waiNSFW_v140.safetensors",
+        wiredTo: "Load Checkpoint › ckpt_name · 24 options", choiceNote: "Matched “wai nsfw v14” loosely.",
+      },
+    });
+    expect(w.find('[data-test="var-picker-wired"]').text()).toContain("Load Checkpoint › ckpt_name · 24 options");
+    expect(w.find('[data-test="var-picker-choice-note"]').text()).toBe("Matched “wai nsfw v14” loosely.");
+    expect(w.find('[data-test="var-picker-source"]').exists()).toBe(false);
+    expect(w.find('[data-test="var-picker-preview"]').text()).toContain("waiNSFW_v140.safetensors");
+  });
+
+  it("labels a Var → Choice miss as the fallback", () => {
+    const w = mount(VarPicker, {
+      props: {
+        modelValue: "$checkpoint", upstreamVars: [], previewSource: "juggernaut", previewParsed: null,
+        previewDefault: "pony.safetensors", choiceNote: "No match for “juggernaut”. Used pony.safetensors.",
+      },
+    });
+    expect(w.find('[data-test="var-picker-preview"]').text()).toContain("fallback (pony.safetensors)");
+    expect(w.find('[data-test="var-picker-wired"]').exists()).toBe(false);
+  });
 });

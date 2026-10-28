@@ -83,6 +83,8 @@ export const FIGURE_TEXT: Record<string, string> = {
     "Screenshot of a WP Context holding a Render settings fixed value wired into a WP Var → Bool set to hires. Its last execute line shows True, parsed from 'yes', with index 0 and default false. A Preview as Text node prints True. It shows a word such as yes being read as a true / false value for another node.",
   "images/docs/wp-var-to-float.png":
     "Screenshot of a WP Context holding a Render settings fixed value wired into a WP Var → Float set to cfg. Its last execute line shows 7.5, parsed from '7.5', with index 0 and default 0.00. The value output feeds a Preview as Text that prints 7.5 and the cfg input of a KSampler. It shows a variable driving a sampler setting.",
+  "images/docs/wp-var-to-choice.png":
+    "Screenshot of a WP Context holding a Checkpoints wildcard wired into a WP Var → Choice set to checkpoint, match loose, fallback empty, if_no_match use fallback. Its last execute line shows the checkpoint file it sent, with 'Matched … loosely.' under it and 'into Load Checkpoint › ckpt_name' with the option count. The choice output feeds the ckpt_name input of a Load Checkpoint node. It shows a wildcard picking the checkpoint.",
   "images/docs/wp-var-to-int.png":
     "Screenshot of a WP Context holding a Render settings fixed value ($resolution, $cfg and one more) wired into a WP Var → Int set to resolution. Its last execute line shows 1024, parsed from '1024', with index 0 and default 0. The value output feeds a Preview as Text that prints 1024 and the width input of an Empty Latent Image. It shows a text variable driving a number input.",
   "images/docs/introduction-graph.png":

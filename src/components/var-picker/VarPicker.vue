@@ -18,6 +18,11 @@
  *    renders the amber default state with the default literal from
  *    `previewDefault`.
  *  - `previewDefault: string` — formatted default value (e.g. `"0"`).
+ *  - `wiredTo: string` — WP_VarToChoice only: the dropdown input its output
+ *    feeds (`Load Checkpoint › ckpt_name · 24 options`), read off the canvas.
+ *  - `choiceNote: string` — WP_VarToChoice only: how the last run found its
+ *    value (`Matched “x” loosely.`, `No match for “x”. Used y.`). Replaces the
+ *    `parsed from` line, and the amber state reads "fallback".
  *
  * Emits:
  *  - `update:modelValue(next: string)` — fires when user picks a new var.
@@ -34,8 +39,10 @@ const props = withDefaults(
     /** Litegraph mode: 0 = ALWAYS (live), 2 = NEVER (muted), 4 = BYPASS.
      *  Drives the dim overlay so canvas-side mute/bypass reads visually. */
     nodeMode?: number;
+    wiredTo?: string;
+    choiceNote?: string;
   }>(),
-  { previewSource: "", previewParsed: null, previewDefault: "", nodeMode: 0 },
+  { previewSource: "", previewParsed: null, previewDefault: "", nodeMode: 0, wiredTo: "", choiceNote: "" },
 );
 
 const emit = defineEmits<{ "update:modelValue": [next: string] }>();
@@ -60,7 +67,7 @@ const displayValue = computed<string>(() => {
   return v && v.length > 0 ? v : "(no var selected)";
 });
 
-const hasExecuted = computed<boolean>(() => Boolean(props.previewSource));
+const hasExecuted = computed<boolean>(() => Boolean(props.previewSource || props.choiceNote));
 const usedDefault = computed<boolean>(() => props.previewParsed === null);
 const isMuted = computed<boolean>(() => props.nodeMode === 2);
 const isBypassed = computed<boolean>(() => props.nodeMode === 4);
@@ -163,12 +170,19 @@ function onSearchKeydown(ev: KeyboardEvent): void {
       <span class="wp-var-picker__preview-label">last execute</span>
       <span class="wp-var-picker__preview-value">
         <template v-if="!hasExecuted">→ <em>run workflow to see result</em></template>
-        <template v-else-if="usedDefault">→ default ({{ previewDefault }})</template>
+        <template v-else-if="usedDefault">→ {{ choiceNote ? "fallback" : "default" }} ({{ previewDefault }})</template>
         <template v-else>→ {{ previewParsed }}</template>
       </span>
     </div>
-    <div v-if="hasExecuted && previewSource" class="wp-var-picker__preview-src" data-test="var-picker-source">
+    <div v-if="hasExecuted && choiceNote" class="wp-var-picker__preview-src" data-test="var-picker-choice-note">
+      {{ choiceNote }}
+    </div>
+    <div v-else-if="hasExecuted && previewSource" class="wp-var-picker__preview-src" data-test="var-picker-source">
       parsed from "{{ previewSource }}"
+    </div>
+    <div v-if="wiredTo" class="wp-var-picker__wired" data-test="var-picker-wired">
+      <span class="wp-var-picker__preview-label">into</span>
+      <span class="wp-var-picker__wired-value">{{ wiredTo }}</span>
     </div>
   </div>
 </template>
@@ -252,6 +266,7 @@ function onSearchKeydown(ev: KeyboardEvent): void {
 .wp-var-picker__preview {
   display: flex;
   justify-content: space-between;
+  gap: 8px;
   padding: 6px 8px;
   background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
   border-left: 2px solid var(--wp-rt-token-good, #4ad4c4);
@@ -261,8 +276,11 @@ function onSearchKeydown(ev: KeyboardEvent): void {
 .wp-var-picker__preview--default { border-left-color: var(--wp-status-modified, #fbbf24); }
 .wp-var-picker__preview--idle { border-left-color: var(--wp-text-dim, #595c66); }
 .wp-var-picker__preview--idle .wp-var-picker__preview-value { color: var(--wp-text-dim, #7a7d88); font-weight: 400; font-style: italic; }
-.wp-var-picker__preview-label { color: var(--wp-text-dim, #7a7d88); }
+.wp-var-picker__preview-label { color: var(--wp-text-dim, #7a7d88); flex: none; }
 .wp-var-picker__preview-value {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
   font-weight: 600;
   color: var(--wp-rt-token-good, #4ad4c4);
 }
@@ -273,6 +291,19 @@ function onSearchKeydown(ev: KeyboardEvent): void {
   font-size: 9px;
   color: var(--wp-text-dim, #7a7d88);
   text-align: right;
+  overflow-wrap: anywhere;
+}
+.wp-var-picker__wired {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+}
+.wp-var-picker__wired-value {
+  min-width: 0;
+  text-align: right;
+  color: var(--wp-text-muted);
+  overflow-wrap: anywhere;
 }
 
 /* Mute / bypass dim — mirrors how cleaner / context / debug widgets

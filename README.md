@@ -97,6 +97,7 @@ doesn't exist yet, pick **Placeholder** from the `@` list and connect it later.
 | **WP Prompt Cleaner** | Tidies the final prompt: spacing, stray commas, empty `()`, nested weights, LoRA tags, duplicates, a blocklist. |
 | **WP Debug** | Shows what happened during a run (see below). |
 | **WP Var → Int / Float / Bool** | Use a variable to drive a number or switch, like image size or steps. |
+| **WP Var → Choice** | Use a variable to pick from a dropdown, like the checkpoint or sampler. Matches it against the real list. |
 
 Most nodes have a help page in ComfyUI's node info panel, and the
 [wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) covers
