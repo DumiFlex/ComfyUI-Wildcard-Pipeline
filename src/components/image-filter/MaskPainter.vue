@@ -209,7 +209,7 @@ defineExpose({ clear, invert });
 
 <style scoped>
 .wp-ifm { position: relative; display: inline-block; line-height: 0; max-width: 100%; }
-.wp-ifm__img { display: block; max-width: 100%; max-height: calc(90vh - 200px); border-radius: 6px; user-select: none; }
+.wp-ifm__img { display: block; max-width: 100%; max-height: var(--wp-ifp-stage-h, calc(90vh - 200px)); border-radius: 6px; user-select: none; }
 .wp-ifm__canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .55; cursor: crosshair; touch-action: none; border-radius: 6px; }
 .wp-ifm__canvas.is-eraser { cursor: cell; }
 </style>
