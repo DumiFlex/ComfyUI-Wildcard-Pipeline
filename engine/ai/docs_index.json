@@ -136,7 +136,7 @@
     },
     {
      "title": "Look",
-     "text": "- Orbit: Soft corners, hairline borders. The default.\n- Crisp: Square corners, firm outlines, ruled lists.\n- Soft: Round pills, no outlines, cards lifted by shadow.\n- Terminal: Mono everywhere, sharp corners, dashed rules.\n- Editorial: Serif headings, open layout, underlined tabs.\n- Compact: Icon sidebar, tight rows, the most on screen.\n- TUI: Boxed panels, inverse selection and [x] checks.\nPicking Compact also switches the sidebar to icons; you can switch it back with the Sidebar setting. Density stays its own setting and works with every look."
+     "text": "- Orbit: Soft corners, hairline borders. The default.\n- Crisp: Square corners, firm outlines, ruled lists.\n- Soft: Round pills, no outlines, cards lifted by shadow.\n- Terminal: Mono everywhere, sharp corners, dashed rules.\n- Editorial: Serif headings, open layout, underlined tabs.\n- Compact: Icon sidebar, tight rows, the most on screen.\n- TUI: Boxed panels, inverse selection and [x] checks.\nPicking Compact also switches the sidebar to icons; you can switch it back with the Sidebar setting. Density stays its own setting and works with every look.\nA look reaches every page: in Terminal and TUI every corner is square, Crisp keeps them nearly square, and lists, tabs, steps and checkboxes show what's selected the look's way (TUI checkboxes read [x])."
     },
     {
      "title": "Accent colour",

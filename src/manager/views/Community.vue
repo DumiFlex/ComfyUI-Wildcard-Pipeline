@@ -247,7 +247,7 @@ onBeforeUnmount(() => {
   font-size: var(--wp-text-xs);
   color: var(--wp-text-dim);
   background: var(--wp-bg-elevated);
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   white-space: pre-wrap;
   word-break: break-word;
 }

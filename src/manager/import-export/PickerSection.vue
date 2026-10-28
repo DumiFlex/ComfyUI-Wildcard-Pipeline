@@ -186,7 +186,7 @@ function toggleOpen(): void {
   font-size: var(--wp-text-xs);
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
   color: var(--wp-accent-text);
   font-feature-settings: "tnum";
@@ -223,7 +223,7 @@ function toggleOpen(): void {
 .wp-picker-section__body::-webkit-scrollbar-track { background: transparent; }
 .wp-picker-section__body::-webkit-scrollbar-thumb {
   background: var(--wp-scrollbar-thumb, rgba(255, 255, 255, 0.08));
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
 }
 .wp-picker-section__body::-webkit-scrollbar-thumb:hover {
   background: var(--wp-scrollbar-thumb-hover, rgba(255, 255, 255, 0.16));

@@ -284,7 +284,7 @@ watch(
   background: color-mix(in oklab, var(--wp-accent-500) 18%, var(--wp-bg-1));
   box-shadow: var(--wp-shadow-md);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, var(--wp-border));
-  border-radius: 7px;
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
   color: var(--wp-text);
   font: inherit;
   font-size: 12px;
@@ -305,7 +305,7 @@ watch(
   align-items: center;
   gap: 9px;
   padding: 5px 9px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-muted);
   text-decoration: none;
   font-size: 12.5px;

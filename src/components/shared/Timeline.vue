@@ -67,7 +67,7 @@ withDefaults(defineProps<{
 .wp-timeline__item[data-tone="accent"] { --_tone: var(--wp-accent); }
 .wp-timeline__item:not(:last-child)::before {
   content: ""; position: absolute; top: calc(var(--_dot) + 2px); bottom: 2px; left: calc(var(--_dot) / 2 - 1px);
-  width: 2px; border-radius: 1px; background: var(--wp-border);
+  width: 2px; border-radius: min(1px, var(--wp-radius-cap, 999px)); background: var(--wp-border);
 }
 .wp-timeline__dot {
   position: relative; display: grid; place-items: center; flex: none; box-sizing: border-box;

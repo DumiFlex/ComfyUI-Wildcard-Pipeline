@@ -23,7 +23,7 @@
   align-items: stretch;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   overflow: hidden;
   flex: 1;
   /* Floor at 80px so flex layout doesn't squash the input to zero

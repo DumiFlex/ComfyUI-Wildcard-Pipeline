@@ -242,7 +242,7 @@ const menuStyle = computed<Record<string, string>>(() => {
   align-items: center;
   justify-content: center;
   border: 1.5px solid color-mix(in srgb, var(--chip-hue) 55%, var(--wp-border-strong));
-  border-radius: 4px; /* audit-exempt: below the radius scale */
+  border-radius: min(4px, var(--wp-radius-cap, 999px)); /* audit-exempt: below the radius scale */
   color: var(--chip-hue);
 }
 /* Selected: tint the whole row and fill the box, so the "on" state reads

@@ -165,7 +165,7 @@ const STATE: Record<string, string> = {
 <style scoped>
 .wp-ai-group {
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, var(--wp-border));
-  border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px)); padding: 10px; display: flex; flex-direction: column; gap: 6px;
   background: color-mix(in oklab, var(--wp-accent-500) 4%, var(--wp-bg-2));
 }
 .wp-ai-group__head { display: flex; flex-direction: column; gap: 1px; }

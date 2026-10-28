@@ -162,6 +162,10 @@
   --wp-radius:    8px;
   --wp-radius-lg: 12px;
   --wp-radius-xl: 16px;
+  /* The roundest a corner may get: fixed corners are written
+   * min(Npx, var(--wp-radius-cap, 999px)), so a look (styles/looks.css)
+   * squares them by lowering this one name. */
+  --wp-radius-cap: 999px;
   /* Alias used by some prototype rules */
   --wp-radius-md: var(--wp-radius);
 
@@ -427,7 +431,7 @@ input, textarea, select { font: inherit; }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--wp-scrollbar-thumb, rgba(255,255,255,0.08)); border-radius: 999px; }
+::-webkit-scrollbar-thumb { background: var(--wp-scrollbar-thumb, rgba(255,255,255,0.08)); border-radius: var(--wp-radius-cap, 999px); }
 ::-webkit-scrollbar-thumb:hover { background: var(--wp-scrollbar-thumb-hover, rgba(255,255,255,0.16)); }
 
 /* ---------- App shell ---------- */
@@ -466,14 +470,14 @@ input, textarea, select { font: inherit; }
   color: var(--wp-text-dim);
   padding: 2px 6px;
   border: 1px solid var(--wp-border);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   letter-spacing: 0.02em;
 }
 .wp-topbar__spacer { flex: 1; }
 
 .wp-topbar__icon-btn {
   width: 30px; height: 30px;
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   display: inline-grid; place-items: center;
   background: transparent; border: 1px solid transparent;
   color: var(--wp-text-muted);
@@ -517,7 +521,7 @@ input, textarea, select { font: inherit; }
 .wp-nav {
   display: flex; align-items: center; gap: 10px;
   padding: 7px 10px;
-  border-radius: 7px;
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-muted);
   cursor: pointer;
   font-size: 13px;
@@ -543,7 +547,7 @@ input, textarea, select { font: inherit; }
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 1.5px 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-3);
   color: var(--wp-text-dim);
   border: 1px solid var(--wp-border);
@@ -852,7 +856,7 @@ input, textarea, select { font: inherit; }
    * forced taller than its bare counterpart. */
   display: inline-flex; align-items: center; gap: 4px;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: 10.5px;
   background: var(--wp-bg-3);
   color: var(--wp-text-muted);
@@ -875,7 +879,7 @@ input, textarea, select { font: inherit; }
 .wp-chip--warn    { color: var(--wp-warn);    background: color-mix(in oklab, var(--wp-warn)    14%, transparent); border-color: color-mix(in oklab, var(--wp-warn)    36%, transparent); }
 .wp-chip--danger  { color: var(--wp-danger);  background: color-mix(in oklab, var(--wp-danger)  14%, transparent); border-color: color-mix(in oklab, var(--wp-danger)  36%, transparent); }
 .wp-chip--info    { color: var(--wp-info);    background: color-mix(in oklab, var(--wp-info)    14%, transparent); border-color: color-mix(in oklab, var(--wp-info)    36%, transparent); }
-.wp-chip__dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
+.wp-chip__dot { width: 7px; height: 7px; border-radius: var(--wp-radius-cap, 999px); background: currentColor; }
 .wp-chip__close {
   /* A plain ✕: no background zone and no box that makes a removable chip
    * taller than a bare one. The glyph box is 12px, inside the chip's own
@@ -891,7 +895,7 @@ input, textarea, select { font: inherit; }
 }
 .wp-chip__close::after { content: ""; position: absolute; inset: -4px; }
 .wp-chip__close:hover { opacity: 1; background: none; }
-.wp-chip__close:focus-visible { outline: 2px solid var(--wp-accent-500); outline-offset: 1px; border-radius: 2px; opacity: 1; }
+.wp-chip__close:focus-visible { outline: 2px solid var(--wp-accent-500); outline-offset: 1px; border-radius: min(2px, var(--wp-radius-cap, 999px)); opacity: 1; }
 
 .wp-kbd {
   font-family: var(--wp-font-mono);
@@ -899,7 +903,7 @@ input, textarea, select { font: inherit; }
   padding: 1px 5px;
   border: 1px solid var(--wp-border);
   border-bottom-width: 2px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-muted);
   background: var(--wp-bg-2);
 }
@@ -955,7 +959,7 @@ input, textarea, select { font: inherit; }
   color: #fff;
   font-size: 13px;
   font-weight: 600;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   text-decoration: none;
   transition: top 120ms ease;
 }
@@ -998,7 +1002,7 @@ input, textarea, select { font: inherit; }
 .wp-skel-bar {
   display: block;
   height: 10px;
-  border-radius: 5px;
+  border-radius: min(5px, var(--wp-radius-cap, 999px));
   background: linear-gradient(
     90deg,
     var(--wp-bg-3) 0%,
@@ -1036,7 +1040,7 @@ input, textarea, select { font: inherit; }
   padding: 2px 8px;
   background: var(--wp-bg-3);
   color: var(--wp-text-muted);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   letter-spacing: 0.02em;
   transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
@@ -1117,7 +1121,7 @@ input, textarea, select { font: inherit; }
   gap: 3px;
   height: 20px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: 10.5px;
   font-weight: 600;
   font-family: var(--wp-font-mono);
@@ -1251,7 +1255,7 @@ input, textarea, select { font: inherit; }
   color: var(--wp-text-dim);
   font: inherit;
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   cursor: pointer;
   transition: color 120ms, background 120ms, border-color 120ms;
 }
@@ -1304,7 +1308,7 @@ input, textarea, select { font: inherit; }
   display: inline-flex; align-items: center; gap: 2px;
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
-  border-radius: 7px;
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
   padding: 2px;
 }
 .wp-pager__label {
@@ -1333,7 +1337,7 @@ input, textarea, select { font: inherit; }
   font-weight: 600;
   letter-spacing: 0.05em;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
   color: var(--wp-accent-text);
 }
@@ -1391,7 +1395,7 @@ input, textarea, select { font: inherit; }
 .wp-branch {
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   padding: 10px 12px;
   display: flex; flex-direction: column; gap: 8px;
 }
@@ -1404,7 +1408,7 @@ input, textarea, select { font: inherit; }
   font-weight: 700;
   letter-spacing: 0.06em;
   padding: 2px 7px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   text-transform: uppercase;
 }
 .wp-branch__tag[data-kind="if"] {
@@ -1441,7 +1445,7 @@ input, textarea, select { font: inherit; }
 }
 .wp-hero__icon {
   width: 48px; height: 48px;
-  border-radius: 12px;
+  border-radius: min(12px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-3);
   display: grid; place-items: center;
   flex-shrink: 0;
@@ -1484,7 +1488,7 @@ input, textarea, select { font: inherit; }
 .wp-stat__icon {
   position: absolute; top: 10px; right: 10px;
   width: 26px; height: 26px;
-  border-radius: 7px;
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
   display: grid; place-items: center;
   background: color-mix(in oklab, var(--wp-accent-500) 14%, transparent);
   color: var(--wp-accent-text);
@@ -1496,7 +1500,7 @@ input, textarea, select { font: inherit; }
 .wp-list__row {
   display: flex; align-items: center; gap: 10px;
   padding: 9px 12px;
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   cursor: pointer;
   transition: background .12s;
 }
@@ -1513,7 +1517,7 @@ input, textarea, select { font: inherit; }
 }
 .wp-empty__icon {
   width: 56px; height: 56px;
-  border-radius: 14px;
+  border-radius: min(14px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   display: grid; place-items: center;
@@ -1611,7 +1615,7 @@ input, textarea, select { font: inherit; }
 .wp-check {
   width: 14px; height: 14px;
   border: 1.5px solid var(--wp-border-soft, var(--wp-border));
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg);
   display: inline-flex; align-items: center; justify-content: center;
   padding: 0; margin: 0;
@@ -1638,7 +1642,7 @@ input, textarea, select { font: inherit; }
   border-color: var(--wp-accent-500);
   color: #fff; /* audit-exempt: white dash on accent-600 background ≥4.5:1 both themes */
 }
-.wp-check svg { width: 9px; height: 9px; display: block; }
+.wp-check svg { width: 9px; height: 9px; display: block; pointer-events: none; }
 /* Disabled: grey, not dim purple, so a ticked disabled box no longer reads
  * as a live one in dark mode. */
 .wp-check:disabled,
@@ -1672,6 +1676,32 @@ input, textarea, select { font: inherit; }
    target (AI result lists, file lists): no 32px min-height, so it sits on
    the row's text line. */
 .wp-checkbox--inline { min-height: 0; flex: none; }
+/* Field checkbox (`<Checkbox field>`): an input-height box in a form grid.
+   The label fills the box so a click anywhere toggles once (the label
+   toggles, the box toggles, nothing else does). */
+.wp-checkbox--field {
+  display: flex;
+  width: 100%;
+  height: var(--wp-input-h);
+  gap: 0;
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-radius-sm);
+  transition: border-color .12s;
+}
+.wp-checkbox--field:hover { border-color: var(--wp-border-strong); }
+.wp-checkbox--field:focus-within { border-color: var(--wp-accent-500); }
+.wp-checkbox--field .wp-check { margin-left: 10px; }
+.wp-checkbox--field .wp-checkbox__label {
+  flex: 1;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding: 0 10px 0 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ---------- Radio ----------
    Native <input type="radio" class="wp-radio"> drawn to match .wp-check:
@@ -1728,7 +1758,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   font-size: 12px;
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
-  border-radius: 7px;
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
   padding: 8px 10px;
   color: var(--wp-text);
   line-height: 1.6;
@@ -1772,7 +1802,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   max-height: min(640px, calc(100vh - 48px));
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
-  border-radius: 12px;
+  border-radius: min(12px, var(--wp-radius-cap, 999px));
   box-shadow: var(--wp-shadow-xl, 0 24px 48px rgba(0,0,0,0.5));
   display: flex; flex-direction: column;
   overflow: hidden;
@@ -1796,7 +1826,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   text-align: left;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   padding: 10px 12px;
   color: var(--wp-text);
   cursor: pointer;
@@ -1843,7 +1873,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   z-index: 50;
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border-strong);
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   box-shadow: var(--wp-shadow-md);
   overflow: hidden;
   max-height: 280px;
@@ -1886,7 +1916,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
 .wp-select__menu {
   background: var(--wp-bg-3);
   border: 1px solid var(--wp-border-strong);
-  border-radius: 7px;
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
   box-shadow: var(--wp-shadow-md);
   z-index: 9999;
   padding: 4px;
@@ -1898,7 +1928,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
 .wp-select__option {
   display: flex; align-items: center; gap: 6px;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-muted);
   cursor: pointer;
   font-size: 12.5px;
@@ -1951,7 +1981,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
 .wp-color-picker__swatch {
   position: relative;
   width: var(--wp-input-h); height: var(--wp-input-h);
-  border-radius: 7px;
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
   border: 1px solid var(--wp-border);
   cursor: pointer;
   flex-shrink: 0;
@@ -1969,7 +1999,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
 }
 .wp-color-picker__chip {
   width: 22px; height: 22px;
-  border-radius: 5px;
+  border-radius: min(5px, var(--wp-radius-cap, 999px));
   border: 1px solid var(--wp-border);
   cursor: pointer; padding: 0;
   transition: transform .08s, box-shadow .12s;
@@ -2002,7 +2032,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
 .wp-matrix-cell {
   display: inline-flex; align-items: center; justify-content: center; gap: 3px;
   min-width: 56px; height: 30px; padding: 0 8px;
-  border-radius: 6px; cursor: pointer;
+  border-radius: min(6px, var(--wp-radius-cap, 999px)); cursor: pointer;
   border: 1px solid var(--wp-border);
   font-family: var(--wp-font);
   transition: background .12s, border-color .12s, transform .04s;
@@ -2040,7 +2070,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   z-index: 200;
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border-strong);
-  border-radius: 10px;
+  border-radius: min(10px, var(--wp-radius-cap, 999px));
   padding: 10px 12px;
   box-shadow: var(--wp-shadow-md, 0 12px 28px rgba(0,0,0,.35));
   display: flex; flex-direction: column; gap: 8px;
@@ -2060,7 +2090,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
 }
 .wp-chip-btn {
   padding: 3px 7px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   border: 1px solid var(--wp-border);
   background: var(--wp-bg-2);
   color: var(--wp-text-muted);
@@ -2082,7 +2112,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   -webkit-appearance: none; appearance: none;
   height: 4px;
   background: var(--wp-bg-3);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   outline: none;
   cursor: pointer;
   margin: 6px 0;
@@ -2111,7 +2141,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   width: 100%;
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
-  border-radius: 7px;
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
   transition: border-color .12s, background .12s, box-shadow .12s;
   overflow: hidden;
 }
@@ -2199,7 +2229,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   color: var(--wp-kind-ref);
   background: var(--wp-kind-ref-bg);
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-kind-ref) 28%, transparent);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   font-weight: 500;
 }
 /* dp = inline {a|b|c} derivation — matches --wp-kind-derivation (amber) */
@@ -2217,7 +2247,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   /* weight factor — uses --wp-rt-token-mut (orange); light override below */
   color: var(--wp-rt-token-mut);
   background: var(--wp-rt-token-mut-bg);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   font-weight: 500;
 }
 .wp-rt-quantifier {
@@ -2225,7 +2255,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   color: var(--wp-info);
   background: color-mix(in oklab, var(--wp-info) 14%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-info) 28%, transparent);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   font-weight: 500;
 }
 
@@ -2254,7 +2284,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   width: 320px;
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border-strong);
-  border-radius: 10px;
+  border-radius: min(10px, var(--wp-radius-cap, 999px));
   box-shadow: var(--wp-shadow-md, 0 12px 28px rgba(0,0,0,.4));
   padding: 12px;
   display: flex;
@@ -2294,7 +2324,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   font-size: 11.5px;
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   padding: 6px 8px;
   color: var(--wp-text);
   word-break: break-all;
@@ -2351,7 +2381,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   width: 22px; height: 22px;
   color: var(--wp-text-dim);
   cursor: grab;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   user-select: none;
 }
 .wp-pl-row__handle:hover { color: var(--wp-text); background: var(--wp-bg-hover); }
@@ -2363,7 +2393,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   display: flex; align-items: center; justify-content: center;
   border: 1px solid var(--wp-border);
   background: var(--wp-bg);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-muted);
   cursor: pointer;
   padding: 0;
@@ -2403,7 +2433,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   font-size: 10.5px;
   letter-spacing: 0;
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
   color: var(--wp-text-dim);
@@ -2440,7 +2470,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   display: flex; align-items: center; justify-content: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-muted);
   cursor: pointer;
   font-size: 12px;
@@ -2515,7 +2545,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   font-family: var(--wp-font-mono);
   font-size: 10.5px;
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
   color: var(--wp-text-dim);
@@ -2582,7 +2612,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   font-family: var(--wp-font-mono);
   font-size: 10.5px;
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg2);
   border: 1px solid var(--wp-border);
   color: var(--wp-text-dim);
@@ -2705,7 +2735,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   overflow-y: auto;
   overflow-x: hidden;
   border: 1px solid var(--wp-border);
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg);
   flex: 1;
   min-height: 200px;

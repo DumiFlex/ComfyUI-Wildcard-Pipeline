@@ -441,7 +441,7 @@ const multiEntryTitle = computed<string>(() =>
   padding: 8px 10px;
   background: var(--wp-bg-1, var(--wp-bg2, #1a1d24));
   border: 1px solid var(--wp-border-strong, var(--wp-border, #353841));
-  border-radius: 5px;
+  border-radius: min(5px, var(--wp-radius-cap, 999px));
   box-shadow: var(--wp-shadow-md);
   font: 11px var(--wp-font-sans, sans-serif);
   color: var(--wp-text, #e0e0e8);
@@ -458,7 +458,7 @@ const multiEntryTitle = computed<string>(() =>
 .wp-pair-pop__num {
   font: 600 11px var(--wp-font-mono, monospace);
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, currentColor 14%, transparent);
   border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
 }
@@ -479,7 +479,7 @@ const multiEntryTitle = computed<string>(() =>
 .wp-pair-pop__entry-num {
   font: 600 10px var(--wp-font-mono, monospace);
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, currentColor 14%, transparent);
   border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
   color: currentColor;
@@ -523,7 +523,7 @@ const multiEntryTitle = computed<string>(() =>
   padding: 1px 5px;
   background: color-mix(in srgb, currentColor 10%, transparent);
   border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-muted, #aeb1bb);
 }
 .wp-pair-pop__hint {

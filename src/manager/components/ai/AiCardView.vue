@@ -53,7 +53,7 @@ defineProps<{ view: CardView; full?: boolean }>();
 </template>
 
 <style scoped>
-.wp-ai-card-view { font-size: 12.5px; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 6px; background: var(--wp-bg-sunken, var(--wp-bg)); }
+.wp-ai-card-view { font-size: 12.5px; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: min(6px, var(--wp-radius-cap, 999px)); background: var(--wp-bg-sunken, var(--wp-bg)); }
 .wp-ai-card-view__text { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; }
 .wp-ai-card-view__text dt { color: var(--wp-text-muted); }
 .wp-ai-card-view__text dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }

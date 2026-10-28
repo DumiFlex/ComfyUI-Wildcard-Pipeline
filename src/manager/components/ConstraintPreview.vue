@@ -115,7 +115,7 @@ function cellTitle(ri: number, ci: number): string {
   max-height: 420px;
   overscroll-behavior: contain;
   border: 1px solid var(--wp-border);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-1);
 }
 .wp-cn-preview__table { border-collapse: separate; border-spacing: 0; font-size: 12px; }
@@ -169,7 +169,7 @@ function cellTitle(ri: number, ci: number): string {
   font-size: 10px;
   font-weight: 500;
   padding: 0 5px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-muted);
   border: 1px solid var(--wp-border);
 }

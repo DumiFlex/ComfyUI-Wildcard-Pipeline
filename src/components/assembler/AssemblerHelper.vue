@@ -646,7 +646,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 .wp-asm-section-stat.is-ok { color: var(--wp-green); }
 .wp-asm-section-stat--neg {
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   color: var(--wp-danger);
   background: color-mix(in srgb, var(--wp-danger) 14%, transparent);
 }
@@ -754,7 +754,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   gap: 4px;
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border-soft);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 3px 7px;
   font: 11px/1 var(--wp-font-mono);
   cursor: pointer;

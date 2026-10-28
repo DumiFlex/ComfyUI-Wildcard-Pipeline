@@ -214,7 +214,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: var(--wp-chip-pad);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   flex-shrink: 0;
   cursor: help;
 }
@@ -245,7 +245,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: var(--wp-chip-pad);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
 }
 .wp-mod-badge--mod,
 .wp-mod-badge--drift,

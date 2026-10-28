@@ -14,7 +14,7 @@
  */
 .wp-skel {
   background: var(--wp-bg2);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   position: relative;
   overflow: hidden;
 }
@@ -38,7 +38,7 @@
   border-radius: 50%;
 }
 .wp-skel--pill {
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
 }
 
 @keyframes wp-skel-shimmer {

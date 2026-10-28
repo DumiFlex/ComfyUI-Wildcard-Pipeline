@@ -782,7 +782,7 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
             :data-test="`drv-check-${idx}`"
             @click="ruleBulkToggle(rule.id)"
           >
-            <svg v-if="ruleBulkIsSelected(rule.id)" viewBox="0 0 12 12" fill="none" style="display:block">
+            <svg v-if="ruleBulkIsSelected(rule.id)" viewBox="0 0 12 12" fill="none">
               <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </button>

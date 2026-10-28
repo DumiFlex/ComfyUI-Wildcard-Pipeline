@@ -159,13 +159,13 @@ const available = computed(() => props.result.samples.filter((s) => !s.error).le
 .wp-tro__row:focus-visible { outline: 2px solid var(--wp-border-focus); }
 .wp-tro__seed { font: var(--wp-text-xs) var(--wp-font-mono); color: var(--wp-text-dim); padding-top: 2px; }
 .wp-tro__text { font-size: var(--wp-text-base); line-height: var(--wp-line-base); word-break: break-word; }
-.wp-tro__tok { border-radius: 3px; padding: 0 2px; background: color-mix(in oklab, currentColor 12%, transparent); } /* audit-exempt: inline token */
+.wp-tro__tok { border-radius: min(3px, var(--wp-radius-cap, 999px)); padding: 0 2px; background: color-mix(in oklab, currentColor 12%, transparent); } /* audit-exempt: inline token */
 .wp-tro__empty { color: var(--wp-text-dim); }
 .wp-tro__neg { display: block; margin-top: var(--wp-space-2); font: var(--wp-text-sm)/var(--wp-line-base) var(--wp-font-mono); color: var(--wp-text-muted); }
 .wp-tro__neg-tag {
   display: inline-block; margin-right: var(--wp-space-3); padding: 0 var(--wp-space-2);
   font: var(--wp-weight-semibold) var(--wp-text-xs) var(--wp-font-mono); letter-spacing: .04em;
-  border-radius: 3px; /* audit-exempt: inline token */
+  border-radius: min(3px, var(--wp-radius-cap, 999px)); /* audit-exempt: inline token */
   background: color-mix(in oklab, var(--wp-danger) 18%, transparent); color: var(--wp-danger-text);
 }
 .wp-tro__neg-own { color: var(--wp-danger-text); }

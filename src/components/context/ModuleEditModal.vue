@@ -585,7 +585,7 @@ function cancel() {
   align-items: center;
   justify-content: space-between;
   padding: 7px 11px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   /* solid surface (amber mixed into the modal bg, not over the canvas) so the
    * text stays readable; amber = the override/warning accent used elsewhere. */
   background: color-mix(in oklab, var(--wp-amber) 14%, var(--wp-bg2));

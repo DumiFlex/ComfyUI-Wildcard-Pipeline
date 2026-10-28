@@ -229,7 +229,7 @@ button.wp-trc__row:hover { border-color: var(--wp-border-strong); }
 .wp-trc__row:focus-visible { outline: 2px solid var(--wp-border-focus); }
 .wp-trc__seed { font: var(--wp-text-xs) var(--wp-font-mono); color: var(--wp-text-dim); padding-top: 2px; }
 .wp-trc__text { font-size: var(--wp-text-base); line-height: var(--wp-line-base); word-break: break-word; }
-.wp-trc del, .wp-trc ins { text-decoration: none; border-radius: 3px; padding: 0 2px; } /* audit-exempt: inline diff token */
+.wp-trc del, .wp-trc ins { text-decoration: none; border-radius: min(3px, var(--wp-radius-cap, 999px)); padding: 0 2px; } /* audit-exempt: inline diff token */
 .wp-trc del { margin-right: .25em; background: color-mix(in oklab, var(--wp-danger) 18%, transparent); color: var(--wp-danger-text); text-decoration: line-through; }
 .wp-trc ins { background: color-mix(in oklab, var(--wp-success) 18%, transparent); color: var(--wp-success); }
 .wp-trc__dim { color: var(--wp-text-dim); font-style: normal; }
@@ -237,7 +237,7 @@ button.wp-trc__row:hover { border-color: var(--wp-border-strong); }
 .wp-trc__neg-tag {
   display: inline-block; margin-right: var(--wp-space-3); padding: 0 var(--wp-space-2);
   font: var(--wp-weight-semibold) var(--wp-text-xs) var(--wp-font-mono); letter-spacing: .04em;
-  border-radius: 3px; /* audit-exempt: inline token */
+  border-radius: min(3px, var(--wp-radius-cap, 999px)); /* audit-exempt: inline token */
   background: color-mix(in oklab, var(--wp-danger) 18%, transparent); color: var(--wp-danger-text);
 }
 .wp-trc__more {
@@ -250,7 +250,7 @@ button.wp-trc__row:hover { border-color: var(--wp-border-strong); }
 .wp-trc__val { color: var(--wp-text); }
 .wp-trc__tag {
   font: var(--wp-weight-medium) var(--wp-text-xs) var(--wp-font-mono);
-  padding: 0 var(--wp-space-3); border-radius: 999px; /* audit-exempt: pill */
+  padding: 0 var(--wp-space-3); border-radius: var(--wp-radius-cap, 999px); /* audit-exempt: pill */
   background: var(--wp-bg-4); color: var(--wp-text-muted);
 }
 .wp-trc__tag[data-kind="add"] { background: color-mix(in oklab, var(--wp-warn) 16%, transparent); color: var(--wp-warn); }

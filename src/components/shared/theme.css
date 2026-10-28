@@ -67,6 +67,9 @@
   /* Geometry */
   --wp-radius: 6px;
   --wp-radius-sm: 4px;
+  /* The roundest a corner may get. The manager's square looks lower it
+   * (manager/styles/looks.css); the canvas never does. */
+  --wp-radius-cap: 999px;
 
   /* Typography — bundled webfonts (Inter + JetBrains Mono) loaded via
    * src/extension/fonts.ts. System stacks remain as fallback so the UI

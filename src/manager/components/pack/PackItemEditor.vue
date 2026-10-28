@@ -133,7 +133,7 @@ async function send(): Promise<void> {
 </template>
 
 <style scoped>
-.wp-pack-edit { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px 10px; margin: 0 0 6px; border-radius: 8px; background: var(--wp-bg-1); }
+.wp-pack-edit { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px 10px; margin: 0 0 6px; border-radius: min(8px, var(--wp-radius-cap, 999px)); background: var(--wp-bg-1); }
 .wp-pack-edit__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
 .wp-pack-edit__field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .wp-pack-edit__field > span { font-size: 11px; color: var(--wp-text-dim); }

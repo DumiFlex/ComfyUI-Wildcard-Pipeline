@@ -230,7 +230,7 @@ function pickCustomAccent() {
   appearance: none;
   width: 32px;
   height: 32px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   border: 2px solid var(--wp-border);
   cursor: pointer;
   padding: 0;
@@ -241,8 +241,9 @@ function pickCustomAccent() {
   border-color: var(--wp-text);
   box-shadow: 0 0 0 2px var(--wp-bg-1), 0 0 0 4px var(--wp-accent-500);
 }
+/* `border-box`: see AppearanceSection's .wp-set-swatch--theme. */
 .wp-tweaks__swatch--theme {
-  background: linear-gradient(135deg, var(--own-accent) 50%, var(--wp-bg-3) 50%);
+  background: linear-gradient(135deg, var(--own-accent) 50%, var(--wp-bg-3) 50%) border-box;
 }
 .wp-tweaks__note { margin: 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 .wp-tweaks__swatch--custom {

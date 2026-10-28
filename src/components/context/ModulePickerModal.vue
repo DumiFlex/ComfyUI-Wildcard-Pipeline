@@ -1003,12 +1003,12 @@ onBeforeUnmount(detachCaptureListeners);
   gap: 10px;
   height: 40px;
   padding: 0 10px;
-  border-radius: 5px;
+  border-radius: min(5px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, var(--wp-text) 3%, transparent);
   margin-bottom: 2px;
 }
-.wp-picker__skel-check { width: 16px; height: 16px; border-radius: 4px; }
-.wp-picker__skel-icon { width: 22px; height: 22px; border-radius: 4px; }
+.wp-picker__skel-check { width: 16px; height: 16px; border-radius: min(4px, var(--wp-radius-cap, 999px)); }
+.wp-picker__skel-icon { width: 22px; height: 22px; border-radius: min(4px, var(--wp-radius-cap, 999px)); }
 .wp-picker__skel-main {
   display: flex;
   align-items: baseline;
@@ -1115,7 +1115,7 @@ onBeforeUnmount(detachCaptureListeners);
   color: var(--wp-text-dim);
   background: var(--wp-bg-3);
   padding: 1px 5px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   border: 1px solid var(--wp-border);
 }
 
@@ -1127,7 +1127,7 @@ onBeforeUnmount(detachCaptureListeners);
   padding: 4px 8px 8px;
 }
 .wp-picker__body::-webkit-scrollbar { width: 8px; }
-.wp-picker__body::-webkit-scrollbar-thumb { background: var(--wp-scrollbar-thumb, rgba(255, 255, 255, 0.08)); border-radius: 999px; }
+.wp-picker__body::-webkit-scrollbar-thumb { background: var(--wp-scrollbar-thumb, rgba(255, 255, 255, 0.08)); border-radius: var(--wp-radius-cap, 999px); }
 
 .wp-picker__state {
   padding: 32px 16px;
@@ -1172,7 +1172,7 @@ onBeforeUnmount(detachCaptureListeners);
   padding: 0 8px;
   background: transparent;
   border: none;
-  border-radius: 5px;
+  border-radius: min(5px, var(--wp-radius-cap, 999px));
   color: var(--wp-text);
   cursor: pointer;
   font-family: inherit;
@@ -1217,7 +1217,7 @@ onBeforeUnmount(detachCaptureListeners);
 .wp-picker__check {
   width: 16px; height: 16px;
   border: 1.4px solid var(--wp-border-strong);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-3);
   display: inline-flex; align-items: center; justify-content: center;
   flex-shrink: 0;
@@ -1235,7 +1235,7 @@ onBeforeUnmount(detachCaptureListeners);
 
 .wp-picker__row-icon {
   width: 22px; height: 22px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   display: inline-flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
@@ -1298,7 +1298,7 @@ onBeforeUnmount(detachCaptureListeners);
   color: #fff;
   background: var(--wp-accent-600);
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: 11px;
   margin-right: 4px;
 }
@@ -1314,7 +1314,7 @@ onBeforeUnmount(detachCaptureListeners);
   padding: 0 4px 0 8px;
   background: var(--wp-bg-3);
   border: 1px solid var(--wp-border-strong);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: 11.5px;
   color: var(--wp-text);
   font-weight: 500;
@@ -1328,7 +1328,7 @@ onBeforeUnmount(detachCaptureListeners);
 }
 .wp-picker__sel-dot {
   width: 7px; height: 7px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   flex-shrink: 0;
 }
 .wp-picker__sel-chip[data-kind="wildcard"]    .wp-picker__sel-dot { background: var(--wp-kind-wildcard); }
@@ -1343,7 +1343,7 @@ onBeforeUnmount(detachCaptureListeners);
   background: transparent;
   color: var(--wp-text-dim);
   cursor: pointer;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
 }
 .wp-picker__sel-close:hover { background: var(--wp-bg-4); color: var(--wp-text); }
 .wp-picker__sel-close .pi { font-size: 8px; }
@@ -1375,7 +1375,7 @@ onBeforeUnmount(detachCaptureListeners);
   border: 1px solid var(--wp-border);
   border-bottom-width: 2px;
   color: var(--wp-text);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 2px 5px;
   margin: 0 1px;
 }
@@ -1395,7 +1395,7 @@ onBeforeUnmount(detachCaptureListeners);
   min-width: 14px;
   height: 14px;
   padding: 0 3px;
-  border-radius: 7px;
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
   background: var(--wp-amber, #ffd400);
   color: #000;
   font-family: var(--wp-font-mono, monospace);
@@ -1486,7 +1486,7 @@ onBeforeUnmount(detachCaptureListeners);
   gap: 4px;
   background: transparent;
   border: 1px solid var(--wp-border);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   color: var(--wp-text3);
   font-family: var(--wp-font-mono, monospace);
   font-size: 10px;

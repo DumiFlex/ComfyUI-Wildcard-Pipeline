@@ -67,7 +67,7 @@ const countText = computed(() =>
   --_tone: var(--wp-accent);
   display: inline-grid; place-items: center; flex: none; box-sizing: border-box;
   min-width: 18px; height: 18px; padding: 0 5px;
-  border-radius: 999px; background: var(--_tone); color: var(--wp-bg);
+  border-radius: var(--wp-radius-cap, 999px); background: var(--_tone); color: var(--wp-bg);
   font: 600 10.5px/1 var(--wp-font-sans); font-variant-numeric: tabular-nums;
 }
 .wp-badge[data-tone="neutral"] { --_tone: var(--wp-text-dim); }

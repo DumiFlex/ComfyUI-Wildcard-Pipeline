@@ -28,7 +28,7 @@ defineProps<Props>();
     min-width: 16px;
     height: 16px;
     padding: 0 5px;
-    border-radius: 999px;
+    border-radius: var(--wp-radius-cap, 999px);
     font-size: 10px;
     font-weight: 600;
     line-height: 1;

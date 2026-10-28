@@ -86,7 +86,7 @@
   gap: 6px;
   font-size: 10.5px;
   padding: 3px 9px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   color: var(--wp-text-muted);
@@ -120,7 +120,7 @@
 .wp-doc-diagram__node-box {
   min-width: 120px;
   padding: 11px 13px;
-  border-radius: 10px;
+  border-radius: min(10px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border-strong);
   display: flex;
@@ -182,7 +182,7 @@
   font-family: var(--wp-font-mono);
   font-size: 10.5px;
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   border: 1px solid;
   background: var(--wp-bg-2);
 }

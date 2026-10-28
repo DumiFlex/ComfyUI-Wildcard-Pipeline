@@ -210,7 +210,7 @@ function onExportAnyway(): void {
 .wp-export-dep-modal__list::-webkit-scrollbar-track { background: transparent; }
 .wp-export-dep-modal__list::-webkit-scrollbar-thumb {
   background: var(--wp-scrollbar-thumb, rgba(255, 255, 255, 0.08));
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
 }
 
 .wp-export-dep-modal__row {
@@ -261,7 +261,7 @@ function onExportAnyway(): void {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 3px 6px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   margin-left: auto;
   flex-shrink: 0;
 }

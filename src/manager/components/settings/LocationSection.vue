@@ -378,7 +378,7 @@ function fmtBytes(n: number | null): string {
 .wp-loc__option-path--missing { font-style: italic; }
 .wp-loc__chip {
   display: inline-block; padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: var(--wp-text-xs);
   font-family: var(--wp-font);
   font-weight: 500;

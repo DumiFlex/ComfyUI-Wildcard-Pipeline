@@ -54,11 +54,11 @@ const icon = (type: string) => (type === "bundle" ? "pi pi-box" : kindIcon(type)
 <style scoped>
 .wp-ai-delete { display: flex; flex-direction: column; gap: 6px; }
 .wp-ai-delete__rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
-.wp-ai-delete__rows li { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 2px 6px 2px 2px; border-radius: 4px; background: color-mix(in oklab, var(--wp-danger, #e5484d) 7%, transparent); }
+.wp-ai-delete__rows li { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 2px 6px 2px 2px; border-radius: min(4px, var(--wp-radius-cap, 999px)); background: color-mix(in oklab, var(--wp-danger, #e5484d) 7%, transparent); }
 .wp-ai-delete__icon { font-size: 11px; color: var(--wp-text-muted); }
 .wp-ai-delete__name { font-weight: 500; text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--wp-danger, #e5484d) 70%, transparent); }
 .wp-ai-delete__type { font-size: 11px; color: var(--wp-text-muted); }
-.wp-ai-delete__rating { font-size: 11px; padding: 0 6px; border-radius: 4px; color: var(--wp-danger, #e5484d); border: 1px solid color-mix(in oklab, var(--wp-danger, #e5484d) 45%, transparent); }
+.wp-ai-delete__rating { font-size: 11px; padding: 0 6px; border-radius: min(4px, var(--wp-radius-cap, 999px)); color: var(--wp-danger, #e5484d); border: 1px solid color-mix(in oklab, var(--wp-danger, #e5484d) 45%, transparent); }
 .wp-ai-delete__group { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
 .wp-ai-delete__label { color: var(--wp-text-muted); font-size: 12px; min-width: 6.5em; }
 .wp-ai-delete__cat { display: inline-flex; gap: 4px; align-items: center; }

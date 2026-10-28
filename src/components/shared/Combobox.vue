@@ -283,7 +283,7 @@ function setOpen(v: boolean): void {
 .wp-combo__chip {
   display: inline-flex; align-items: center; gap: 2px; max-width: 100%; box-sizing: border-box;
   height: 20px; padding: 0 2px 0 7px;
-  border: 1px solid var(--wp-border-strong); border-radius: 999px; background: var(--wp-bg-3);
+  border: 1px solid var(--wp-border-strong); border-radius: var(--wp-radius-cap, 999px); background: var(--wp-bg-3);
   color: var(--wp-text); font-size: var(--wp-text-xs); line-height: 1;
 }
 .wp-combo[data-size="sm"] .wp-combo__chip { height: 16px; padding-left: 5px; font-size: 10.5px; }

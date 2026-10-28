@@ -318,7 +318,7 @@ function openPalette(): void {
   right: 4px;
   width: 7px;
   height: 7px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-accent-500);
   box-shadow: 0 0 0 2px var(--wp-bg-1);
   pointer-events: none;
@@ -333,7 +333,7 @@ function openPalette(): void {
   min-width: 14px;
   height: 14px;
   padding: 0 3px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-accent-500);
   color: #fff;
   font-size: 9px;
@@ -362,7 +362,7 @@ function openPalette(): void {
   margin-right: 4px;
   background: color-mix(in oklab, var(--wp-bg-3) 80%, transparent);
   border: 1px solid var(--wp-border);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   color: var(--wp-text-dim);
   font-size: 12px;
   cursor: pointer;

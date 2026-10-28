@@ -6,7 +6,7 @@
 /* Set by the run, read-only: a dotted rule and a help cursor for its tooltip. */
 .wp-ai-syn__var--run { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
 .wp-ai-syn__ref {
-  display: inline-flex; align-items: baseline; gap: 4px; max-width: 100%; padding: 0 6px; border-radius: 6px;
+  display: inline-flex; align-items: baseline; gap: 4px; max-width: 100%; padding: 0 6px; border-radius: min(6px, var(--wp-radius-cap, 999px));
   border: 1px solid color-mix(in srgb, var(--wp-accent-500) 45%, transparent);
   background: color-mix(in srgb, var(--wp-accent-500) 14%, transparent);
   color: var(--wp-accent-text); font-size: 0.95em; line-height: 1.45; vertical-align: baseline;

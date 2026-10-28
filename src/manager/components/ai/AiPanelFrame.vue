@@ -263,13 +263,13 @@ function onKeydown(ev: KeyboardEvent): void {
   padding: 14px;
   margin-bottom: 12px;
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 40%, var(--wp-border));
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   background: color-mix(in oklab, var(--wp-accent-500) 5%, var(--wp-bg-2));
 }
 .wp-ai-frame[data-bare="true"] { padding: 0; margin: 0; border: 0; background: none; }
 .wp-ai-frame__research {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px;
-  border: 1px solid var(--wp-border); border-radius: 6px; background: var(--wp-bg-1); font-size: 12px;
+  border: 1px solid var(--wp-border); border-radius: min(6px, var(--wp-radius-cap, 999px)); background: var(--wp-bg-1); font-size: 12px;
 }
 .wp-ai-frame__research > .pi { color: var(--wp-accent-text); }
 .wp-ai-frame__research-text { flex: 1 1 240px; min-width: 0; color: var(--wp-text-muted); overflow-wrap: anywhere; }
@@ -282,13 +282,13 @@ function onKeydown(ev: KeyboardEvent): void {
   font-family: var(--wp-font-mono, monospace);
   font-size: 11px;
   padding: 1px 7px;
-  border-radius: 5px;
+  border-radius: min(5px, var(--wp-radius-cap, 999px));
   color: var(--wp-warn);
   border: 1px solid color-mix(in oklab, var(--wp-warn) 45%, transparent);
 }
 .wp-ai-frame__model[data-local="true"] { color: var(--wp-success); border-color: color-mix(in oklab, var(--wp-success) 45%, transparent); }
 .wp-ai-frame__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.wp-ai-frame__step { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; padding: 2px 4px; border-radius: 5px; }
+.wp-ai-frame__step { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; padding: 2px 4px; border-radius: min(5px, var(--wp-radius-cap, 999px)); }
 .wp-ai-frame__step[data-shown="true"] { background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent); }
 .wp-ai-frame__step[data-after="true"] { opacity: 0.6; }
 .wp-ai-frame__step-text {
@@ -306,7 +306,7 @@ function onKeydown(ev: KeyboardEvent): void {
 .wp-ai-frame__nav-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; padding: 0;
-  border: 1px solid var(--wp-border); border-radius: 5px;
+  border: 1px solid var(--wp-border); border-radius: min(5px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-1); color: var(--wp-text-muted); cursor: pointer;
 }
 .wp-ai-frame__nav-btn:hover:not(:disabled) { color: var(--wp-text); border-color: var(--wp-accent-400); }

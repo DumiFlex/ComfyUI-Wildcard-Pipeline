@@ -161,7 +161,7 @@ function onTyped(end: 0 | 1, v: number | null): void {
 .wp-range-slider[data-size="sm"] { --_h: var(--wp-control-h-sm); --_thumb: 12px; gap: var(--wp-space-3); }
 .wp-range-slider[data-size="lg"] { --_h: var(--wp-control-h-lg); --_thumb: 18px; }
 .wp-range-slider__track { position: relative; flex: 1; min-width: 80px; height: var(--_h); margin: 0 calc(var(--_thumb) / 2); cursor: pointer; touch-action: none; }
-.wp-range-slider__rail, .wp-range-slider__fill { position: absolute; top: 50%; height: 4px; margin-top: -2px; border-radius: 999px; }
+.wp-range-slider__rail, .wp-range-slider__fill { position: absolute; top: 50%; height: 4px; margin-top: -2px; border-radius: var(--wp-radius-cap, 999px); }
 .wp-range-slider__rail { left: calc(var(--_thumb) / -2); right: calc(var(--_thumb) / -2); background: var(--wp-bg-3); box-shadow: inset 0 0 0 1px var(--wp-border-soft); }
 .wp-range-slider__fill { background: var(--wp-accent); }
 .wp-range-slider[data-size="sm"] .wp-range-slider__rail, .wp-range-slider[data-size="sm"] .wp-range-slider__fill { height: 3px; margin-top: -1.5px; }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Checkbox from "../components/ui/Checkbox.vue";
 import CopyButton from "@/components/shared/CopyButton.vue";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -346,19 +347,13 @@ function issuesFor(row: ModuleRow) {
         </div>
         <div class="wp-field">
           <label class="wp-field__label">Favorites</label>
-          <button
-            type="button"
-            class="wp-input"
-            style="display:flex;align-items:center;gap:8px;justify-content:flex-start;"
-            @click="filter.favorites = !filter.favorites; emitFetch()"
-          >
-            <span class="wp-check" :data-checked="filter.favorites ? 'true' : 'false'" aria-hidden="true">
-              <svg v-if="filter.favorites" viewBox="0 0 12 12" fill="none" style="display:block">
-                <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </span>
-            <span>Favorites only</span>
-          </button>
+          <Checkbox
+            field
+            :model-value="!!filter.favorites"
+            label="Favorites only"
+            data-test="favorites-filter"
+            @update:model-value="(v) => { filter.favorites = v; emitFetch(); }"
+          />
         </div>
         <div class="wp-field wp-field--full">
           <label class="wp-field__label">
@@ -545,7 +540,7 @@ function issuesFor(row: ModuleRow) {
   gap: 3px; /* audit-exempt: 3px optical gap between icon and text inside pill */
   height: 20px;
   padding: 0 var(--wp-space-3);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: var(--wp-text-xs);
   font-weight: 600;
   font-family: var(--wp-font-mono, ui-monospace, monospace);
@@ -611,7 +606,7 @@ function issuesFor(row: ModuleRow) {
 .wp-opts-grid__bar {
   background: var(--wp-bg-3);
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   overflow: hidden;
 }
 .wp-opts-grid__bar-fill {

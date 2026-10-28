@@ -323,9 +323,9 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
   border-left: 3px solid var(--wp-bundle-default);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
 }
-.wp-bp__skel-icon { width: 22px; height: 22px; border-radius: 4px; flex-shrink: 0; }
+.wp-bp__skel-icon { width: 22px; height: 22px; border-radius: min(4px, var(--wp-radius-cap, 999px)); flex-shrink: 0; }
 .wp-bp__skel-name { flex: 1; max-width: 200px; height: 13px; }
 .wp-bp__skel-count { width: 48px; height: 10px; flex-shrink: 0; }
 .wp-bp__skel-pill { width: 28px; height: 14px; flex-shrink: 0; }
@@ -339,7 +339,7 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 .wp-bp {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   width: 720px;
   max-width: 92vw;
   overflow: hidden;
@@ -423,7 +423,7 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
   border-left: 3px solid var(--c, var(--wp-bundle-default));
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   cursor: pointer;
   color: var(--wp-text);
   text-align: left;
@@ -442,7 +442,7 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 .wp-bp__row-icon {
   width: 22px;
   height: 22px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, var(--c, var(--wp-bundle-default)) 16%, transparent);
   color: var(--c, var(--wp-bundle-default));
   display: inline-flex;
@@ -474,7 +474,7 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 2px 5px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .comp-w { background: color-mix(in srgb, var(--wp-kind-wildcard) 22%, transparent); color: var(--wp-kind-wildcard); }
 .comp-c { background: color-mix(in srgb, var(--wp-kind-combine) 22%, transparent); color: var(--wp-kind-combine); }
@@ -516,7 +516,7 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   background: var(--wp-bg2);
   border: 1px solid var(--wp-border);
   border-bottom-width: 2px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 2px 5px;
   color: var(--wp-text);
 }

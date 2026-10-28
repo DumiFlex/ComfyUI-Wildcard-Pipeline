@@ -570,7 +570,7 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
   align-items: center;
   gap: 5px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   padding: 2px 8px;
   font: 600 10.5px/1.5 var(--wp-font-sans);
   cursor: pointer;
@@ -601,7 +601,7 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
   margin-left: auto;
   font: 600 9.5px/1 var(--wp-font-mono);
   padding: 3px 6px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   white-space: nowrap;
   background: var(--wp-red-bg, color-mix(in oklab, var(--wp-red, #e5484d) 15%, transparent));
   color: var(--wp-red, #e5484d);

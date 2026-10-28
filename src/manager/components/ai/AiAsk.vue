@@ -220,7 +220,7 @@ function setRef(i: number, el: unknown): void {
 .wp-ai-ask {
   container-type: inline-size;
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, var(--wp-border));
-  border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 10px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px)); padding: 10px; display: flex; flex-direction: column; gap: 10px;
   background: color-mix(in oklab, var(--wp-accent-500) 4%, var(--wp-bg-2));
 }
 .wp-ai-ask[aria-busy="true"] { opacity: 0.7; }
@@ -233,7 +233,7 @@ function setRef(i: number, el: unknown): void {
 .wp-ai-ask__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .wp-ai-ask__chip {
   display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px;
-  max-width: 100%; padding: 4px 10px; border-radius: 14px; cursor: pointer; text-align: left;
+  max-width: 100%; padding: 4px 10px; border-radius: min(14px, var(--wp-radius-cap, 999px)); cursor: pointer; text-align: left;
   font: inherit; font-size: 12.5px; line-height: 18px;
   border: 1px solid var(--wp-border); background: var(--wp-bg-1); color: var(--wp-text);
 }
@@ -259,7 +259,7 @@ function setRef(i: number, el: unknown): void {
   .wp-ai-ask__hint { display: none; }
 }
 .wp-ai-ask__other {
-  margin-top: 2px; padding: 5px 8px; border-radius: 6px; font: inherit; font-size: 12.5px;
+  margin-top: 2px; padding: 5px 8px; border-radius: min(6px, var(--wp-radius-cap, 999px)); font: inherit; font-size: 12.5px;
   border: 1px solid var(--wp-border); background: var(--wp-bg-1); color: var(--wp-text);
 }
 .wp-ai-ask__other:focus { outline: none; border-color: var(--wp-accent-500); }

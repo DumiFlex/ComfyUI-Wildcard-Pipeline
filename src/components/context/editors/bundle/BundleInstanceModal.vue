@@ -153,9 +153,9 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
 .wp-bdm__title-block { flex: 1; min-width: 0; }
 .wp-bdm__title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .wp-bdm__name { font: 600 13px var(--wp-font-sans); color: var(--wp-text); }
-.wp-bdm__chip { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 2px; background: color-mix(in srgb, var(--modal-accent, var(--wp-accent)) 22%, transparent); color: var(--modal-accent, var(--wp-accent)); }
+.wp-bdm__chip { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: min(2px, var(--wp-radius-cap, 999px)); background: color-mix(in srgb, var(--modal-accent, var(--wp-accent)) 22%, transparent); color: var(--modal-accent, var(--wp-accent)); }
 .wp-bdm__sub { font: 400 10px var(--wp-font-mono); color: var(--wp-text-dim, var(--wp-text3)); margin-top: 2px; }
-.wp-bdm__badge { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 2px; }
+.wp-bdm__badge { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: min(2px, var(--wp-radius-cap, 999px)); }
 .wp-bdm__badge--drift { background: color-mix(in srgb, var(--wp-warn, #fcd34d) 22%, transparent); color: var(--wp-warn, #fcd34d); }
 .wp-bdm__badge--mod { background: color-mix(in srgb, var(--wp-status-modified, #f59e0b) 22%, transparent); color: var(--wp-status-modified, #f59e0b); }
 .wp-bdm__dock { position: sticky; bottom: 0; z-index: 2; background: var(--wp-bg2); }
@@ -164,5 +164,5 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
 .wp-bdm__spa-link:hover { color: var(--wp-accent-text, var(--wp-text)); }
 .wp-bdm__spa-link .pi { font-size: 10px; }
 .wp-bdm__hint { margin-left: auto; font: 10px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
-.wp-bdm__hint kbd { font: 9px var(--wp-font-mono); background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); padding: 1px 4px; border-radius: 2px; color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-bdm__hint kbd { font: 9px var(--wp-font-mono); background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); padding: 1px 4px; border-radius: min(2px, var(--wp-radius-cap, 999px)); color: var(--wp-text-muted, var(--wp-text2)); }
 </style>

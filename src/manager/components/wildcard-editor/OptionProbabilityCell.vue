@@ -60,7 +60,7 @@ const emit = defineEmits<{ "toggle-fallback": [] }>();
   flex: 1;
   height: 6px;
   background: var(--wp-bg-3);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   overflow: hidden;
 }
 .opt-prob__fill {
@@ -88,7 +88,7 @@ const emit = defineEmits<{ "toggle-fallback": [] }>();
   gap: 4px;
   padding: 1px 6px;
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent);
   color: var(--wp-accent-400, var(--wp-accent-500));
   font-family: var(--wp-font-mono, monospace);

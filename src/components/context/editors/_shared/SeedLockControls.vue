@@ -147,7 +147,7 @@ function onRollClick(): void {
   padding: 4px 10px;
   background: rgba(99, 102, 241, 0.06);
   border-left: 2px solid var(--wp-accent);
-  border-radius: 0 3px 3px 0;
+  border-radius: 0 min(3px, var(--wp-radius-cap, 999px)) min(3px, var(--wp-radius-cap, 999px)) 0;
 }
 .seed-block__label {
   font: 600 9px var(--wp-font-sans);

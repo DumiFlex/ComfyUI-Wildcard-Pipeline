@@ -211,7 +211,7 @@ function onSpaClick(): void {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
   padding: 1px 4px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-muted, var(--wp-text2));
 }
 </style>

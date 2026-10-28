@@ -74,6 +74,41 @@ jobs:
           path: coverage/
           retention-days: 14
 
+  # Every manager screen in every look (and each palette in dark + light) in
+  # a real browser, against the real /wp/api on a seeded throwaway library:
+  # boxes that spill, the page scrolling sideways, one-line controls that
+  # wrap, checkboxes drawing their state twice or wrongly, corners or fonts
+  # a look doesn't allow, text under 3:1. See scripts/theme-audit/audit.mjs.
+  theme-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build:manager
+      - name: Theme audit
+        run: |
+          python scripts/theme-audit/serve.py --port 8199 > theme-audit-server.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:8199/wp/ > /dev/null && break; sleep 1; done
+          node scripts/theme-audit/audit.mjs --out theme-audit-out --shots
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: theme-audit
+          path: |
+            theme-audit-out/
+            theme-audit-server.log
+          retention-days: 14
+
   # Perf regression — single-CPU pin for variance reduction
   # Non-blocking until budgets are recalibrated against real-world Linux runner
   # numbers. Pure-Python single-pass tokenize/resolve is ~1-3M chars/sec; the

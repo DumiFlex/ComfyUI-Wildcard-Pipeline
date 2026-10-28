@@ -78,3 +78,4 @@ wp-settings.json
 
 # Playwright MCP session artifacts (page snapshots, console logs).
 .playwright-mcp/
+theme-audit-out/

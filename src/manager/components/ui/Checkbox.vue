@@ -17,6 +17,12 @@ interface Props {
    * renders as indeterminate even if the prop is set.
    */
   indeterminate?: boolean;
+  /**
+   * Draw the whole row as an input-height field (border, fill, full width)
+   * whose label fills it, for a yes/no filter that sits in a form grid
+   * beside Selects (the list pages' "Favorites only").
+   */
+  field?: boolean;
 }
 const props = defineProps<Props>();
 
@@ -41,13 +47,13 @@ function toggle() {
 </script>
 
 <template>
-  <!-- Wrapper is a <span> rather than a <label> on purpose. Native <label>
-       re-dispatches click on its associated form control in some pointer
-       paths (notably when the click target is the SVG inside the button),
-       firing the button's @click twice — which double-toggled and left
-       the underlying model unchanged when a parent also wired a click
-       handler. The span wrapper has no synthetic-dispatch behavior. -->
-  <span class="wp-checkbox" :class="{ 'is-disabled': disabled }">
+  <span class="wp-checkbox" :class="{ 'is-disabled': disabled, 'wp-checkbox--field': field }">
+    <!-- Wrapper is a <span> rather than a <label> on purpose. Native <label>
+         re-dispatches click on its associated form control in some pointer
+         paths (notably when the click target is the SVG inside the button),
+         firing the button's @click twice — which double-toggled and left
+         the underlying model unchanged when a parent also wired a click
+         handler. The span wrapper has no synthetic-dispatch behavior. -->
     <button
       type="button"
       class="wp-check"
@@ -60,17 +66,18 @@ function toggle() {
       role="checkbox"
       @click="toggle"
     >
-      <!-- pointer-events: none on the visual SVG so the entire button area
-           (including the check mark) is a single click target — clicks land
-           on the button itself, not the SVG child. Without this, a click
-           on the SVG centerpoint could route through wrapper-bubble paths
-           in some browsers/automation drivers and double-fire toggle. -->
+      <!-- tokens.css gives `.wp-check svg` pointer-events: none so the entire
+           button area (including the check mark) is a single click target —
+           clicks land on the button itself, not the SVG child. Without this,
+           a click on the SVG centerpoint could route through wrapper-bubble
+           paths in some browsers/automation drivers and double-fire toggle.
+           No inline style here: the TUI look hides the drawn mark (it reads
+           [x] instead), and an inline display would beat it. -->
       <svg
         v-if="modelValue"
         viewBox="0 0 12 12"
         fill="none"
         aria-hidden="true"
-        style="display: block; pointer-events: none"
       >
         <path
           d="M3 6.2l2.2 2.2L9 4.4"
@@ -80,14 +87,12 @@ function toggle() {
           stroke-linejoin="round"
         />
       </svg>
-      <!-- Indeterminate dash. Same pointer-events override as the
-           checkmark above so the box stays a single click target. -->
+      <!-- Indeterminate dash. Same pointer-events rule as the checkmark. -->
       <svg
         v-else-if="showIndeterminate"
         viewBox="0 0 12 12"
         fill="none"
         aria-hidden="true"
-        style="display: block; pointer-events: none"
       >
         <path
           d="M3 6h6"

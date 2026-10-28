@@ -314,7 +314,7 @@ function modeGlyph(mode: string | undefined): string {
   align-items: center;
   gap: 4px;
   padding: 2px 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-2, var(--wp-bg2));
   color: var(--wp-text-muted);
   font-size: 10px;
@@ -347,7 +347,7 @@ function modeGlyph(mode: string | undefined): string {
 .wp-dbg-link:hover { text-decoration: underline; }
 .wp-dbg-link--static { cursor: default; }
 .wp-dbg-link--static:hover { text-decoration: none; }
-.wp-dbg-kind-dot { width: 7px; height: 7px; border-radius: 2px; flex: none; background: var(--wp-kind-constraint); }
+.wp-dbg-kind-dot { width: 7px; height: 7px; border-radius: min(2px, var(--wp-radius-cap, 999px)); flex: none; background: var(--wp-kind-constraint); }
 .wp-dbg-dim code { font-family: var(--wp-font-mono); color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-dbg-detail__note { margin: 0; font-style: italic; }
 .wp-dbg-rule {

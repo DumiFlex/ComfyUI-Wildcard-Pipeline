@@ -383,7 +383,7 @@ function toggleTotalInternal(): void {
   align-items: center;
   background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
   border: 1px solid var(--wp-border, #353841);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 0 6px;
 }
 .wp-loop__var-prefix {
@@ -404,7 +404,7 @@ function toggleTotalInternal(): void {
 
 
 .wp-loop__seedbtn-fill { flex: 1; }
-.wp-loop__seedbtn-badge { font: 600 8px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: 3px; color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.14); border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent); }
+.wp-loop__seedbtn-badge { font: 600 8px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.14); border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent); }
 .wp-loop__seedbtn-chev { color: var(--wp-text-dim, var(--wp-text3)); }
 
 /* Bypass-on visually dims the strategy/override/var rows since the loop

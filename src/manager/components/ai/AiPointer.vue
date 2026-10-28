@@ -213,11 +213,11 @@ function announce(list: AiPointer[]): string {
 .wp-ai-pointer__ring {
   position: fixed;
   border: 2px solid var(--wp-accent-500);
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   box-shadow: 0 0 0 4px color-mix(in oklab, var(--wp-accent-500) 25%, transparent);
   animation: wp-ai-pointer-pulse 1.4s ease-in-out 3;
 }
-.wp-ai-pointer__ring[data-text="true"] { border-radius: 4px; }
+.wp-ai-pointer__ring[data-text="true"] { border-radius: min(4px, var(--wp-radius-cap, 999px)); }
 .wp-ai-pointer__num {
   position: absolute;
   top: -11px;
@@ -236,7 +236,7 @@ function announce(list: AiPointer[]): string {
   position: fixed;
   max-width: min(360px, calc(100vw - 16px));
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-accent-500);
   color: #fff;
   font-size: 12.5px;

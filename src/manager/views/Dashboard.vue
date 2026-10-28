@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
 import CloseButton from "@/components/shared/CloseButton.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { libraryVersion } from "../composables/useLibraryChanged";
@@ -100,6 +101,11 @@ interface DashboardRow {
 const recentItems = ref<DashboardRow[]>([]);
 const favoriteItems = ref<DashboardRow[]>([]);
 const tab = ref<"recent" | "opened" | "favorites">("opened");
+const RECENT_TABS: SegmentedOption<"recent" | "opened" | "favorites">[] = [
+  { value: "opened", label: "Recently opened", icon: "pi-history" },
+  { value: "recent", label: "Recent edits", icon: "pi-clock" },
+  { value: "favorites", label: "Favorites", icon: "pi-star-fill" },
+];
 
 const logoUrl = `${import.meta.env.BASE_URL}images/favicon.svg`;
 function openDocs() {
@@ -604,35 +610,12 @@ onMounted(async () => {
            layout pushed both to the right which left the entire
            left half empty. -->
       <div class="wp-recent__head">
-        <div class="wp-tabs wp-recent__tabs">
-          <button
-            type="button"
-            class="wp-tabs__btn wp-tab"
-            :data-active="tab === 'opened' ? 'true' : 'false'"
-            data-test="dashboard-tab-opened"
-            @click="tab = 'opened'"
-          >
-            <Icon name="pi-history" /> Recently opened
-          </button>
-          <button
-            type="button"
-            class="wp-tabs__btn wp-tab"
-            :data-active="tab === 'recent' ? 'true' : 'false'"
-            data-test="dashboard-tab-recent"
-            @click="tab = 'recent'"
-          >
-            <Icon name="pi-clock" /> Recent edits
-          </button>
-          <button
-            type="button"
-            class="wp-tabs__btn wp-tab"
-            :data-active="tab === 'favorites' ? 'true' : 'false'"
-            data-test="dashboard-tab-favorites"
-            @click="tab = 'favorites'"
-          >
-            <Icon name="pi-star-fill" /> Favorites
-          </button>
-        </div>
+        <WpSegmented
+          v-model="tab"
+          :options="RECENT_TABS"
+          aria-label="Which items to list"
+          test-prefix="dashboard-tab"
+        />
         <span class="wp-spacer" />
         <a
           class="dashboard__view-all"
@@ -816,7 +799,7 @@ onMounted(async () => {
   height: 28px;
   display: grid;
   place-items: center;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-3);
   color: var(--wp-text-muted);
   font-weight: 600;
@@ -838,31 +821,6 @@ onMounted(async () => {
   margin-bottom: var(--wp-space-4);
 }
 .wp-recent__head .wp-spacer { flex: 1; }
-.wp-recent__tabs {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-2);
-  border-bottom: none;
-}
-.wp-tabs__btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-  padding: var(--wp-space-3) var(--wp-space-5);
-  background: none;
-  border: 1px solid transparent;
-  color: var(--wp-text-muted);
-  font-size: var(--wp-text-sm);
-  font-weight: 500;
-  cursor: pointer;
-  border-radius: var(--wp-radius-sm);
-}
-.wp-tabs__btn:hover { color: var(--wp-text); }
-.wp-tabs__btn[data-active="true"] {
-  color: var(--wp-text);
-  background: var(--wp-bg-2);
-  border-color: var(--wp-border);
-}
 .dashboard__view-all {
   margin-left: auto;
   font-size: var(--wp-text-sm);

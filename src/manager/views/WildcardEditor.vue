@@ -1953,7 +1953,7 @@ defineExpose({
                 :data-test="`wc-opt-check-${i}`"
                 @click="toggleSelect(o.id)"
               >
-                <svg v-if="isSelected(o.id)" viewBox="0 0 12 12" fill="none" style="display:block">
+                <svg v-if="isSelected(o.id)" viewBox="0 0 12 12" fill="none">
                   <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </button>
@@ -2221,7 +2221,7 @@ defineExpose({
   padding: 4px 10px;
   background: color-mix(in srgb, var(--wp-text-muted) 12%, transparent);
   border: 1px dashed var(--wp-border);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-muted);
   font-family: var(--wp-font-mono, monospace);
   font-size: var(--wp-text-sm);
@@ -2408,7 +2408,7 @@ tr:hover .opt-grip:disabled { opacity: 0.2; }
   height: 15px;
   flex: none;
   border: 1.5px solid color-mix(in srgb, var(--chip-hue) 55%, var(--wp-border-strong));
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   color: var(--chip-hue);
 }
 /* Selected row: tint the whole toggle + bold it + fill the check box so

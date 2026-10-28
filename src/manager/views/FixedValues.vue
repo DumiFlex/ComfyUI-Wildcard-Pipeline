@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Checkbox from "../components/ui/Checkbox.vue";
 import CopyButton from "@/components/shared/CopyButton.vue";
 import { computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -188,19 +189,13 @@ function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 4
         </div>
         <div class="wp-field">
           <label class="wp-field__label">Favorites</label>
-          <button
-            type="button"
-            class="wp-input"
-            style="display:flex;align-items:center;gap:8px;justify-content:flex-start;"
-            @click="filter.favorites = !filter.favorites; emitFetch()"
-          >
-            <span class="wp-check" :data-checked="filter.favorites ? 'true' : 'false'" aria-hidden="true">
-              <svg v-if="filter.favorites" viewBox="0 0 12 12" fill="none" style="display:block">
-                <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </span>
-            <span>Favorites only</span>
-          </button>
+          <Checkbox
+            field
+            :model-value="!!filter.favorites"
+            label="Favorites only"
+            data-test="favorites-filter"
+            @update:model-value="(v) => { filter.favorites = v; emitFetch(); }"
+          />
         </div>
         <div class="wp-field wp-field--full">
           <label class="wp-field__label">

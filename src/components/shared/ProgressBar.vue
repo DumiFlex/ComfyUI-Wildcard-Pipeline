@@ -68,7 +68,7 @@ const pctText = computed(() => `${Math.round(pct.value)}%`);
 .wp-progress__value { flex: none; font-variant-numeric: tabular-nums; color: var(--wp-text); }
 .wp-progress__track {
   position: relative; overflow: hidden; height: 6px;
-  border-radius: 999px; background: var(--wp-bg-3);
+  border-radius: var(--wp-radius-cap, 999px); background: var(--wp-bg-3);
 }
 .wp-progress[data-size="sm"] .wp-progress__track { height: 4px; }
 .wp-progress__fill {

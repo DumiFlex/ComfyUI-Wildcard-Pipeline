@@ -203,14 +203,16 @@ function setSidebar(v: SidebarChoice): void {
 .wp-set-swatch[aria-checked="true"] { outline: 2px solid var(--wp-text); outline-offset: 2px; }
 .wp-set-swatch:focus-visible { outline: 2px solid var(--wp-accent-500); outline-offset: 2px; }
 .wp-set-swatch--custom {
-  background: conic-gradient(#f43f5e, #f59e0b, #22c55e, #14b8a6, #6366f1, #a855f7, #f43f5e);
+  background: conic-gradient(#f43f5e, #f59e0b, #22c55e, #14b8a6, #6366f1, #a855f7, #f43f5e) border-box;
   color: #fff;
   font-size: 11px;
 }
 /* "Theme's own": half the live accent, half the page, so it reads as
- * "whatever the colour theme brings". */
+ * "whatever the colour theme brings". `border-box` sizes the gradient to the
+ * whole circle: sized to the padding box it tiles again under the 2px
+ * border, and the tile corners showed as a square inside the circle. */
 .wp-set-swatch--theme {
-  background: linear-gradient(135deg, var(--own-accent) 50%, var(--wp-bg-3) 50%);
+  background: linear-gradient(135deg, var(--own-accent) 50%, var(--wp-bg-3) 50%) border-box;
   border-color: var(--wp-border-strong);
 }
 .wp-set-swatches.is-locked .wp-set-swatch:not(.wp-set-swatch--theme) { opacity: 0.35; cursor: not-allowed; }

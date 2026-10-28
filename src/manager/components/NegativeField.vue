@@ -149,7 +149,7 @@ function clear(): void {
   flex: none;
   margin-top: 7px;
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   font-family: var(--wp-font-mono, monospace);
   font-size: 10px;
   font-weight: 700;
@@ -173,7 +173,7 @@ function clear(): void {
   background: transparent;
   color: var(--wp-text-muted);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
 }
 .wp-negfield__clear:hover { color: var(--wp-danger, #ef4444); }
 .wp-negfield__broken {

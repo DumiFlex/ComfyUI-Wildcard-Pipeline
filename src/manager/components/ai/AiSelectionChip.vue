@@ -155,14 +155,14 @@ onBeforeUnmount(() => {
 .wp-ai-sel {
   position: fixed; z-index: 9000; transform: translateX(-50%);
   display: inline-flex; align-items: center; height: 30px; padding: 0 3px;
-  border-radius: 8px; background: var(--wp-bg-1);
+  border-radius: min(8px, var(--wp-radius-cap, 999px)); background: var(--wp-bg-1);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 45%, var(--wp-border));
   box-shadow: var(--wp-shadow-md);
   animation: wp-ai-sel-in 0.14s ease-out both;
 }
 .wp-ai-sel__btn {
   display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px;
-  border: 0; border-radius: 6px; background: transparent; color: var(--wp-text);
+  border: 0; border-radius: min(6px, var(--wp-radius-cap, 999px)); background: transparent; color: var(--wp-text);
   font: inherit; font-size: 12px; cursor: pointer;
 }
 .wp-ai-sel__btn:hover:not(:disabled), .wp-ai-sel__btn:focus-visible {

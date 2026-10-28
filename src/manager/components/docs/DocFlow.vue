@@ -101,7 +101,7 @@ function arrowLabel(index: number): string {
 .wp-doc-flow__box {
   min-width: 120px;
   padding: 11px 13px;
-  border-radius: 10px;
+  border-radius: min(10px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-2);
   /* `--wp-doc-flow-tone` is set per-box from the stage tone; fall back to the
    * standard strong border when (somehow) unset. */

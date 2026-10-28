@@ -188,7 +188,7 @@ function onSearchKeydown(ev: KeyboardEvent): void {
   padding: 4px 8px;
   background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
   border: 1px solid var(--wp-border, #353841);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   color: var(--wp-text);
   cursor: pointer;
   font-family: inherit;
@@ -206,7 +206,7 @@ function onSearchKeydown(ev: KeyboardEvent): void {
   padding: 4px 0;
   background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
   border: 1px solid var(--wp-border, #353841);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   max-height: 180px;
   overflow-y: auto;
 }
@@ -238,7 +238,7 @@ function onSearchKeydown(ev: KeyboardEvent): void {
   box-sizing: border-box;
   background: var(--wp-bg, #0e1015);
   border: 1px solid var(--wp-border, #353841);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 3px 6px;
   color: var(--wp-text);
   font-family: var(--wp-font-mono, ui-monospace, monospace);
@@ -255,7 +255,7 @@ function onSearchKeydown(ev: KeyboardEvent): void {
   padding: 6px 8px;
   background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
   border-left: 2px solid var(--wp-rt-token-good, #4ad4c4);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   font-size: 10px;
 }
 .wp-var-picker__preview--default { border-left-color: var(--wp-status-modified, #fbbf24); }

@@ -3387,7 +3387,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   letter-spacing: 0.08em;
   color: var(--wp-text-dim);
   border: 1px solid var(--wp-border);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   padding: 1px 5px;
 }
 
@@ -3608,7 +3608,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
    it wants. */
 .wp-rt-suggestions__fact {
   padding: 1px 4px; /* audit-exempt: micro tile padding */
-  border-radius: 3px; /* audit-exempt: tile smaller than the radius scale */
+  border-radius: min(3px, var(--wp-radius-cap, 999px)); /* audit-exempt: tile smaller than the radius scale */
   background: var(--wp-bg-4);
   color: var(--wp-text-muted, #8a8a93);
   font-family: var(--wp-font, system-ui, sans-serif);
@@ -3630,7 +3630,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   padding: 0 4px; /* audit-exempt: badge inline padding */
   border-radius: var(--wp-radius-sm);
   padding: 1px 4px; /* audit-exempt: micro tile padding, matches __fact */
-  border-radius: 3px; /* audit-exempt: tile smaller than the radius scale */
+  border-radius: min(3px, var(--wp-radius-cap, 999px)); /* audit-exempt: tile smaller than the radius scale */
   background: color-mix(in oklab, var(--wp-warn) 20%, transparent);
   color: var(--wp-warn);
 }
@@ -3639,7 +3639,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   align-items: center;
   gap: 3px; /* audit-exempt: glyph-to-word gap */
   padding: 0 4px; /* audit-exempt: micro tile padding, matches __fact */
-  border-radius: 3px; /* audit-exempt: tile below the radius scale */
+  border-radius: min(3px, var(--wp-radius-cap, 999px)); /* audit-exempt: tile below the radius scale */
   background: color-mix(in oklab, var(--wp-info) 15%, transparent);
   color: var(--wp-info);
   font-family: var(--wp-font, system-ui, sans-serif);

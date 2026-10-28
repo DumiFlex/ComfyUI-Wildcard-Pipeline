@@ -57,6 +57,9 @@ const ALLOWED_RAW = /^\s*(0|50\.?0?%|9999px|999px)\s*$/;
 // skipping here avoids the split + loop overhead for most declarations.
 const HAS_RAW_PX_RE = /\d+px/;
 
+// min(Npx, var(--wp-radius-cap, 999px)) — see the per-piece check.
+const CAPPED_RE = /min\(\s*\d+(?:\.\d+)?px\s*,\s*var\(--wp-radius-cap(?:\s*,\s*\d+px)?\)\s*\)/g;
+
 // Inline audit-exempt comment.
 const AUDIT_EXEMPT_RE = /\/\*\s*audit-exempt/;
 
@@ -87,7 +90,9 @@ for await (const file of glob(SCAN_GLOBS, { cwd: ROOT })) {
       // NOTE: no early TOKEN_RE.test(declValue) short-circuit before per-piece check —
       // a mixed value like `var(--wp-radius-sm) 14px` would pass a full-value test
       // but the `14px` piece would be missed.
-      const pieces = declValue.trim().split(/\s+/);
+      // A fixed corner the looks can square: min(Npx, var(--wp-radius-cap, …))
+      // (looks.css sets the cap per look). Counts as a token piece.
+      const pieces = declValue.replace(CAPPED_RE, "var(--wp-radius-cap)").trim().split(/\s+/);
       const allOk = pieces.every(p => TOKEN_RE.test(p) || ALLOWED_RAW.test(p));
       if (allOk) continue;
 

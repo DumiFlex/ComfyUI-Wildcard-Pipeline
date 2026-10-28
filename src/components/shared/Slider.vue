@@ -159,7 +159,7 @@ function onTyped(v: number | null): void {
   margin: 0 calc(var(--_thumb) / 2); cursor: pointer; touch-action: none;
 }
 .wp-slider__rail, .wp-slider__fill {
-  position: absolute; top: 50%; left: 0; height: 4px; margin-top: -2px; border-radius: 999px;
+  position: absolute; top: 50%; left: 0; height: 4px; margin-top: -2px; border-radius: var(--wp-radius-cap, 999px);
 }
 .wp-slider__rail { right: 0; left: calc(var(--_thumb) / -2); right: calc(var(--_thumb) / -2); background: var(--wp-bg-3); box-shadow: inset 0 0 0 1px var(--wp-border-soft); }
 .wp-slider__fill { left: calc(var(--_thumb) / -2); background: var(--wp-accent); }
@@ -174,7 +174,7 @@ function onTyped(v: number | null): void {
 .wp-slider__track:hover .wp-slider__thumb, .wp-slider[data-dragging] .wp-slider__thumb { transform: scale(1.12); }
 .wp-slider__thumb:focus-visible { box-shadow: 0 0 0 3px var(--wp-focus-ring); }
 .wp-slider__mark {
-  position: absolute; top: 50%; width: 2px; height: 8px; margin: -4px 0 0 -1px; border-radius: 1px;
+  position: absolute; top: 50%; width: 2px; height: 8px; margin: -4px 0 0 -1px; border-radius: min(1px, var(--wp-radius-cap, 999px));
   background: var(--wp-border-strong); pointer-events: none;
 }
 .wp-slider__mark[data-passed] { background: color-mix(in srgb, var(--wp-accent) 60%, var(--wp-bg)); }

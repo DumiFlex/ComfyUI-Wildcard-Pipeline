@@ -254,7 +254,7 @@ watch(
   padding: 2px var(--wp-space-3);
   background: color-mix(in oklab, var(--wp-warn, #facc15) 14%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-warn, #facc15) 32%, transparent);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: var(--wp-text-xs);
   font-weight: 500;
   color: var(--wp-warn, #facc15);
@@ -264,7 +264,7 @@ watch(
 }
 .wp-editor__dirty-dot {
   width: 6px; height: 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: currentColor;
 }
 /* Footer-bar backdrop polish: solid colors don't read well when long-form

@@ -739,7 +739,7 @@ function onGroupDrop(axis: string): void {
   height: 20px;
   padding: 0 var(--wp-space-4);
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: transparent;
   color: var(--wp-text-dim);
   font-size: var(--wp-text-xs);
@@ -829,7 +829,7 @@ function onGroupDrop(axis: string): void {
   gap: 6px;
   padding: 3px 4px 3px 8px;
   border: 1px solid color-mix(in srgb, var(--chip-hue) 55%, var(--wp-border));
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: color-mix(in srgb, var(--chip-hue) 17%, var(--wp-bg-1));
   font-size: var(--wp-text-sm);
   line-height: 1;
@@ -856,7 +856,7 @@ function onGroupDrop(axis: string): void {
   min-width: 18px;
   height: 17px;
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: color-mix(in srgb, var(--chip-hue) 22%, var(--wp-bg-3));
   color: var(--wp-text-muted);
   font-size: var(--wp-text-xs);
@@ -872,7 +872,7 @@ function onGroupDrop(axis: string): void {
   background: transparent;
   cursor: pointer;
   color: var(--wp-text-dim);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: 14px;
   line-height: 1;
 }
@@ -946,7 +946,7 @@ function onGroupDrop(axis: string): void {
   gap: 4px;
   padding: 3px 10px;
   border: 1px dashed var(--wp-border-strong);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: transparent;
   cursor: pointer;
   color: var(--wp-text-dim);
@@ -965,7 +965,7 @@ function onGroupDrop(axis: string): void {
   padding: 3px 10px;
   width: 130px;
   border: 1px solid var(--wp-accent-500);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-1);
   color: var(--wp-text);
   font-size: var(--wp-text-sm);

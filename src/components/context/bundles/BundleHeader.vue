@@ -342,7 +342,7 @@ const summary = computed(() => {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 3px 5px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, var(--b) 28%, transparent);
   color: var(--b);
   flex-shrink: 0;
@@ -365,7 +365,7 @@ const summary = computed(() => {
   color: var(--wp-text-muted, var(--wp-text2));
   flex-shrink: 0;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: color-mix(in oklab, var(--wp-text-muted, var(--wp-text2)) 12%, transparent);
   white-space: nowrap;
 }

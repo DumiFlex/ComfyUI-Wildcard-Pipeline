@@ -145,7 +145,7 @@ function isActivePreset(preset: string): boolean {
   width: 20px;
   height: 20px;
   flex-shrink: 0;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   /* An inner ring keeps a dark swatch visible on a dark field. */
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-text) 22%, transparent);
 }

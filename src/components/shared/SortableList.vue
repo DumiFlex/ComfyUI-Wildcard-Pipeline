@@ -250,7 +250,7 @@ function onGripBlur(i: number): void {
 .wp-sortable[data-dragging] .wp-sortable__grip { cursor: grabbing; }
 .wp-sortable__body { flex: 1; min-width: 0; }
 .wp-sortable__line {
-  position: absolute; left: 0; right: 0; height: 2px; margin-top: -1px; border-radius: 1px;
+  position: absolute; left: 0; right: 0; height: 2px; margin-top: -1px; border-radius: min(1px, var(--wp-radius-cap, 999px));
   background: var(--wp-accent); box-shadow: 0 0 0 2px var(--wp-accent-glow); pointer-events: none;
 }
 .wp-sortable__sr {

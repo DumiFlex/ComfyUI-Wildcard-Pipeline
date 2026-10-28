@@ -278,7 +278,7 @@ const hint = computed(() => {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   color: var(--wp-accent-text, var(--wp-text, #e6e7ea));
   background: rgba(99, 102, 241, 0.14);
   border: 1px solid color-mix(in srgb, var(--wp-accent, #6366f1) 40%, transparent);
@@ -303,7 +303,7 @@ const hint = computed(() => {
 .wp-fchips__grid::-webkit-scrollbar-track { background: transparent; }
 .wp-fchips__grid::-webkit-scrollbar-thumb {
   background: var(--wp-scrollbar-thumb, rgba(255, 255, 255, 0.28));
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
 }
 
 .wp-fchips__chip {
@@ -314,7 +314,7 @@ const hint = computed(() => {
   text-align: center;
   background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
   border: 1px solid var(--wp-border, #353841);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-muted, #aeb1bb);
   font: 600 10px var(--wp-font-sans, sans-serif);
   cursor: pointer;

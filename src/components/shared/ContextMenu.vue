@@ -297,7 +297,7 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
 }
 .wp-ctxmenu__item {
   padding: 6px 8px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   cursor: pointer;
   white-space: nowrap;
   display: flex;

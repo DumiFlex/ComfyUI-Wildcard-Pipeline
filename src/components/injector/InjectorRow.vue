@@ -411,7 +411,7 @@ function onDragEnd(): void {
   right: 0;
   height: 3px;
   background: var(--wp-accent);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   box-shadow: 0 0 8px var(--wp-accent);
   pointer-events: none;
   animation: wp-inj-drop-bar-in var(--wp-motion-quick) ease-out;
@@ -531,7 +531,7 @@ function onDragEnd(): void {
   text-transform: lowercase;
   letter-spacing: 0.04em;
   padding: 3px 5px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   background: color-mix(in oklab, var(--wp-text3) 18%, transparent);
   color: var(--wp-text2);
   flex-shrink: 0;
@@ -629,7 +629,7 @@ function onDragEnd(): void {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 1px 5px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
   color: var(--wp-accent);
 }

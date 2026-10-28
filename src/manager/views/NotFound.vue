@@ -45,7 +45,7 @@ const route = useRoute();
   padding: 48px 36px;
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
-  border-radius: 12px;
+  border-radius: min(12px, var(--wp-radius-cap, 999px));
 }
 .wp-not-found__code {
   font-family: var(--wp-font-mono, ui-monospace, monospace);
@@ -73,7 +73,7 @@ const route = useRoute();
   font-size: 12.5px;
   background: var(--wp-bg-3);
   padding: 2px 7px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   color: var(--wp-text);
   word-break: break-all;
 }

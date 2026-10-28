@@ -128,7 +128,7 @@ function onKeydown(ev: KeyboardEvent): void {
 .wp-resize[data-axis="x"] { width: 8px; margin: 0 -4px; cursor: col-resize; align-self: stretch; }
 .wp-resize[data-axis="y"] { height: 8px; margin: -4px 0; cursor: row-resize; width: 100%; }
 .wp-resize::after {
-  content: ""; position: absolute; border-radius: 1px; background: transparent;
+  content: ""; position: absolute; border-radius: min(1px, var(--wp-radius-cap, 999px)); background: transparent;
   transition: background var(--wp-motion-hover);
 }
 .wp-resize[data-axis="x"]::after { top: 0; bottom: 0; left: 3px; width: 2px; }

@@ -107,7 +107,7 @@ defineExpose({ sync });
   color: transparent; background: transparent;
 }
 .wp-ai-marks__chip {
-  color: transparent; border-radius: 4px;
+  color: transparent; border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: color-mix(in oklab, var(--wp-accent-500) 24%, transparent);
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--wp-accent-500) 55%, transparent);
   -webkit-box-decoration-break: clone; box-decoration-break: clone;

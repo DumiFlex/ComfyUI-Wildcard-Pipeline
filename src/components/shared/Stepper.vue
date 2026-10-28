@@ -128,7 +128,7 @@ button.wp-stepper__body:focus-visible { outline: none; box-shadow: 0 0 0 2px var
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
-.wp-stepper__line { flex: 1; min-width: 12px; height: 1.5px; border-radius: 1px; background: var(--wp-border); }
+.wp-stepper__line { flex: 1; min-width: 12px; height: 1.5px; border-radius: min(1px, var(--wp-radius-cap, 999px)); background: var(--wp-border); }
 .wp-stepper[data-orientation="vertical"] .wp-stepper__line { flex: none; width: 1.5px; min-width: 0; height: 16px; margin: 2px 0 2px 13px; }
 .wp-stepper[data-orientation="vertical"][data-size="sm"] .wp-stepper__line { margin-left: 11px; }
 .wp-stepper__step[data-state="done"] .wp-stepper__mark { border-color: var(--wp-accent); background: var(--wp-accent); color: var(--wp-bg); }

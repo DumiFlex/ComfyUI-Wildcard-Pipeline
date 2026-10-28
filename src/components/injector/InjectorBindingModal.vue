@@ -705,7 +705,7 @@ function onKeydown(ev: KeyboardEvent): void {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 2px 6px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, var(--ibm-accent, var(--wp-accent)) 22%, transparent);
   color: var(--ibm-accent, var(--wp-accent));
 }
@@ -748,7 +748,7 @@ function onKeydown(ev: KeyboardEvent): void {
   align-items: center;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   overflow: hidden;
 }
 .ibm__binding-wrap:focus-within { border-color: var(--wp-accent); }
@@ -789,7 +789,7 @@ function onKeydown(ev: KeyboardEvent): void {
   text-transform: lowercase;
   letter-spacing: 0.04em;
   padding: 1px 4px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, var(--wp-text3) 18%, transparent);
   color: var(--wp-text2);
   flex-shrink: 0;
@@ -808,7 +808,7 @@ function onKeydown(ev: KeyboardEvent): void {
   box-sizing: border-box;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 6px 8px;
   font: 11px/1.5 var(--wp-font-mono);
   color: var(--wp-text);
@@ -853,7 +853,7 @@ function onKeydown(ev: KeyboardEvent): void {
 .ibm__preview {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px dashed var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 8px 10px;
   font: 11px/1.5 var(--wp-font-mono);
   color: var(--wp-text-muted, var(--wp-text2));
@@ -885,7 +885,7 @@ function onKeydown(ev: KeyboardEvent): void {
   font-weight: 600;
   background: color-mix(in srgb, var(--wp-accent) 12%, transparent);
   padding: 0 3px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
 }
 .ibm-tok--ref-unknown {
   color: var(--wp-status-modified, #f59e0b);
@@ -911,7 +911,7 @@ function onKeydown(ev: KeyboardEvent): void {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
   padding: 1px 4px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-muted, var(--wp-text2));
 }
 </style>

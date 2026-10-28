@@ -646,7 +646,7 @@ const skewedTowards = computed(() => {
   font: 11px var(--wp-font-mono);
   background: var(--wp-bg-soft, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   color: var(--wp-text);
 }
 .pool__exclude-null--off { opacity: 0.55; }
@@ -683,7 +683,7 @@ const skewedTowards = computed(() => {
   /* Faint axis-hue border so a group's chips read as a coloured cluster
    * even when unselected (#9). */
   border: 1px solid color-mix(in srgb, var(--chip-hue, var(--wp-border)) 30%, var(--wp-border));
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
   cursor: pointer;
@@ -733,7 +733,7 @@ const skewedTowards = computed(() => {
   padding: 6px 9px;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   color: var(--wp-text);
   font: 11px var(--wp-font-mono);
 }
@@ -809,7 +809,7 @@ const skewedTowards = computed(() => {
 .pool__ins-chip {
   padding: 2px 8px;
   border: 1px solid color-mix(in srgb, var(--chip-hue, var(--wp-border)) 35%, var(--wp-border));
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: transparent;
   color: var(--wp-text-muted, var(--wp-text2));
   font: 10px var(--wp-font-sans);
@@ -843,7 +843,7 @@ const skewedTowards = computed(() => {
   flex-direction: column;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   /* Long option lists scroll in place so the axes / pick / footer stay
    * visible; the column-header row below stays pinned via sticky. */
   max-height: 40vh;

@@ -93,7 +93,7 @@ defineExpose({ first: () => (hits.value[0] ? target(hits.value[0]) : null) });
 .wp-doc-hits { display: flex; flex-direction: column; gap: var(--wp-space-5); max-width: 860px; }
 .wp-doc-hits__title { margin: 0; display: flex; align-items: center; gap: var(--wp-space-3); font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
 .wp-doc-hits__count {
-  padding: 1px 8px; border-radius: 999px; background: var(--wp-bg-3); color: var(--wp-text-muted);
+  padding: 1px 8px; border-radius: var(--wp-radius-cap, 999px); background: var(--wp-bg-3); color: var(--wp-text-muted);
   font-size: var(--wp-text-xs); font-weight: 500; font-variant-numeric: tabular-nums;
 }
 .wp-doc-hits__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wp-space-2); }
@@ -107,5 +107,5 @@ defineExpose({ first: () => (hits.value[0] ? target(hits.value[0]) : null) });
 .wp-doc-hit__where { color: var(--wp-text); font-size: 12.5px; }
 .wp-doc-hit__where b { font-weight: 600; }
 .wp-doc-hit__sep { margin: 0 6px; color: var(--wp-text-dim); }
-.wp-doc-hit__mark { background: color-mix(in oklab, var(--wp-accent-500) 26%, transparent); color: var(--wp-text); border-radius: 2px; padding: 0 1px; }
+.wp-doc-hit__mark { background: color-mix(in oklab, var(--wp-accent-500) 26%, transparent); color: var(--wp-text); border-radius: min(2px, var(--wp-radius-cap, 999px)); padding: 0 1px; }
 </style>

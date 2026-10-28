@@ -151,7 +151,7 @@ defineExpose({ draft, edit });
   gap: 10px;
   padding: 14px;
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 40%, var(--wp-border));
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   background: color-mix(in oklab, var(--wp-accent-500) 5%, var(--wp-bg-2));
 }
 .wp-ai-panel__head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -161,7 +161,7 @@ defineExpose({ draft, edit });
   font-family: var(--wp-font-mono, monospace);
   font-size: 11px;
   padding: 1px 7px;
-  border-radius: 5px;
+  border-radius: min(5px, var(--wp-radius-cap, 999px));
   color: var(--wp-warn);
   border: 1px solid color-mix(in oklab, var(--wp-warn) 45%, transparent);
 }

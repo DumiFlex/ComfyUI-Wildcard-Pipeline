@@ -754,7 +754,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
                 :data-test="`fv-check-${idx}`"
                 @click="bulkToggle(v.id)"
               >
-                <svg v-if="bulkIsSelected(v.id)" viewBox="0 0 12 12" fill="none" style="display:block">
+                <svg v-if="bulkIsSelected(v.id)" viewBox="0 0 12 12" fill="none">
                   <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </button>

@@ -169,7 +169,7 @@ function onKeydown(ev: KeyboardEvent): void {
 .wp-tabset__count {
   min-width: 16px;
   padding: 1px 5px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-3);
   color: var(--wp-text-muted);
   font-size: var(--wp-text-xs);

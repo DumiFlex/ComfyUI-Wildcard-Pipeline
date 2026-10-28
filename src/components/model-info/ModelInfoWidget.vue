@@ -326,7 +326,7 @@ function resetRules(): void {
   padding: 4px;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .wp-mi__var {
   display: grid;
@@ -335,7 +335,7 @@ function resetRules(): void {
   gap: 8px;
   min-height: 22px;
   padding: 0 4px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .wp-mi__var:hover { background: var(--wp-row-hover, var(--wp-bg2)); }
 /* Same 1px spacing as the Injector's row actions. */
@@ -365,7 +365,7 @@ function resetRules(): void {
   background: var(--wp-bg, #111);
   color: var(--wp-text);
   border: 1px solid var(--wp-amber, var(--wp-warn, #fbbf24));
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   font: 11px var(--wp-font-mono, monospace);
   outline: none;
 }
@@ -383,7 +383,7 @@ function resetRules(): void {
   align-items: center;
   gap: 6px;
   padding: 1px 2px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .wp-mi__rule-dot {
   width: 8px;
@@ -401,7 +401,7 @@ function resetRules(): void {
   background: var(--wp-bg-deep, var(--wp-bg));
   color: var(--wp-text);
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   font: 11px var(--wp-font-mono, monospace);
   outline: none;
 }

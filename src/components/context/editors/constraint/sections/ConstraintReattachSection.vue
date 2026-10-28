@@ -270,14 +270,14 @@ function confirm(side: Side): void {
   margin-top: 8px;
   padding: 10px;
   border: 1px solid var(--wp-border, rgba(255,255,255,0.12));
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg, #11111b);
 }
 .rb__search {
   width: 100%;
   box-sizing: border-box;
   padding: 6px 9px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   border: 1px solid var(--wp-border, rgba(255,255,255,0.12));
   background: var(--wp-bg-2, #15151f);
   color: var(--wp-text, #e7e7ee);
@@ -285,7 +285,7 @@ function confirm(side: Side): void {
   outline: none;
 }
 .rb__list { list-style: none; margin: 6px 0; padding: 0; max-height: 150px; overflow-y: auto; }
-.rb__cand { display: flex; flex-direction: column; gap: 2px; padding: 5px 8px; border-radius: 4px; cursor: pointer; color: var(--wp-text, #e7e7ee); }
+.rb__cand { display: flex; flex-direction: column; gap: 2px; padding: 5px 8px; border-radius: min(4px, var(--wp-radius-cap, 999px)); cursor: pointer; color: var(--wp-text, #e7e7ee); }
 .rb__cand:hover { background: color-mix(in oklab, var(--wp-accent, #6366f1) 18%, transparent); }
 .rb__cand--picked { background: color-mix(in oklab, var(--wp-accent, #6366f1) 28%, transparent); }
 .rb__cand-main { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }

@@ -326,7 +326,7 @@ function pick(row: TemplateRow) {
 .wp-ltm__filter-badge {
   position: absolute; top: -4px; right: -4px;
   min-width: 14px; height: 14px; padding: 0 3px;
-  border-radius: 7px;
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
   background: var(--wp-amber, #ffd400); color: #000;
   font-family: var(--wp-font-mono, monospace);
   font-size: 9px; font-weight: 700; line-height: 14px; text-align: center;
@@ -358,7 +358,7 @@ function pick(row: TemplateRow) {
   display: inline-flex; align-items: center;
   background: transparent;
   border: 1px solid var(--wp-border);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   color: var(--wp-text3, var(--wp-text-dim));
   font-family: var(--wp-font-mono, monospace);
   font-size: 10px; font-weight: 600;
@@ -396,7 +396,7 @@ function pick(row: TemplateRow) {
   padding: 8px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   color: var(--wp-text);
   cursor: pointer;
   text-align: left;
@@ -411,7 +411,7 @@ function pick(row: TemplateRow) {
 .wp-ltm__row-icon {
   width: 24px; height: 24px;
   display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, var(--wp-accent) 14%, transparent);
   color: var(--wp-accent);
   flex-shrink: 0;
@@ -436,7 +436,7 @@ function pick(row: TemplateRow) {
   color: var(--wp-text-dim);
   background: var(--wp-bg-2, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   padding: 1px 8px;
   white-space: nowrap;
   flex-shrink: 0;

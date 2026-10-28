@@ -386,7 +386,7 @@ function onOpenUpdate(v: boolean): void {
   margin-top: 4px;
   padding: 6px 8px;
   background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 8%, transparent);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   font-size: 13px;
   color: var(--wp-text);
 }
@@ -428,7 +428,7 @@ function onOpenUpdate(v: boolean): void {
   gap: 10px;
   padding: 8px 10px;
   border: 1px solid var(--wp-border, #38383f);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg2, var(--wp-color-surface-2, #25252a));
   min-width: 0;
 }
@@ -470,7 +470,7 @@ function onOpenUpdate(v: boolean): void {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 3px 7px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   flex-shrink: 0;
 }
 /* Kind-tinted badges — same color family as the icon tile so badge +

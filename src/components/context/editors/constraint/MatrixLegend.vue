@@ -80,7 +80,7 @@ defineProps<{
 .legend-body {
   background: var(--wp-bg2, #1a1d24);
   border: 1px solid var(--wp-border, #2a2d35);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   padding: 12px 14px;
 }
 .legend-row {
@@ -99,7 +99,7 @@ defineProps<{
   gap: 4px;
   width: 64px;
   height: 32px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   font: 600 12px var(--wp-font-mono, monospace);
 }
 .legend-sample.s-neutral {

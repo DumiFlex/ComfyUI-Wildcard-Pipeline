@@ -194,5 +194,5 @@ const settings = [
 
 <style scoped>
 .wp-doc-figure { margin: 12px 0 0; }
-.wp-doc-figure img { display: block; max-width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--wp-border, #34343a); }
+.wp-doc-figure img { display: block; max-width: 100%; height: auto; border-radius: min(8px, var(--wp-radius-cap, 999px)); border: 1px solid var(--wp-border, #34343a); }
 </style>

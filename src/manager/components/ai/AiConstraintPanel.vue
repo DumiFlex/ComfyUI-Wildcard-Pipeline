@@ -246,7 +246,7 @@ function shown(v: string): string {
   overflow: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--wp-border);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-1);
 }
 .wp-ai-cn__group {
@@ -267,7 +267,7 @@ function shown(v: string): string {
 .wp-ai-cn__tag {
   font-size: 11px;
   padding: 0 7px;
-  border-radius: 10px;
+  border-radius: min(10px, var(--wp-radius-cap, 999px));
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
   color: var(--wp-accent-text);
 }
@@ -277,7 +277,7 @@ function shown(v: string): string {
 .wp-ai-cn__replaces {
   font-size: 10px;
   padding: 0 6px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   color: var(--wp-warn);
   border: 1px solid color-mix(in oklab, var(--wp-warn) 45%, transparent);
 }

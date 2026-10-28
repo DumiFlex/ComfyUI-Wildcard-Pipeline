@@ -190,7 +190,7 @@ const addedCount = computed(() => draftRows.value.filter((r) => r.libraryId === 
 .vals {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   /* Long value lists scroll in place; the header row stays pinned. */
   max-height: 42vh;
   overflow-y: auto;

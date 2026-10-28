@@ -154,7 +154,7 @@ const emit = defineEmits<{
   width: 12px; height: 12px; flex-shrink: 0;
   display: grid; place-items: center;
   border: 1px solid var(--wp-border-strong);
-  border-radius: 3px; /* audit-exempt: below the radius scale */
+  border-radius: min(3px, var(--wp-radius-cap, 999px)); /* audit-exempt: below the radius scale */
   font-size: 7px;
 }
 .wc-optfilter__menuitem[data-on] .wc-optfilter__box {
@@ -165,7 +165,7 @@ const emit = defineEmits<{
   font-size: 11px; white-space: nowrap;
 }
 .wc-optfilter__bar {
-  width: 44px; height: 3px; border-radius: 2px; /* audit-exempt: hairline meter */
+  width: 44px; height: 3px; border-radius: min(2px, var(--wp-radius-cap, 999px)); /* audit-exempt: hairline meter */
   background: var(--wp-bg-4); overflow: hidden;
 }
 .wc-optfilter__bar i { display: block; height: 100%; background: var(--wp-success); }

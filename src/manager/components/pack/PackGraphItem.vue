@@ -248,7 +248,7 @@ function move(v: string, by: number): void {
 .wp-pack-graph__rel-kind { min-width: 130px; }
 .wp-pack-graph__rel-factor { max-width: 70px; min-width: 60px; }
 .wp-pack-graph__rel-var { max-width: 110px; }
-.wp-pack-graph__icon { flex: none; width: 24px; height: 24px; min-width: 24px; border: 0; border-radius: 6px; background: none; color: var(--wp-text-dim); cursor: pointer; }
+.wp-pack-graph__icon { flex: none; width: 24px; height: 24px; min-width: 24px; border: 0; border-radius: min(6px, var(--wp-radius-cap, 999px)); background: none; color: var(--wp-text-dim); cursor: pointer; }
 .wp-pack-graph__icon:hover:not(:disabled) { color: var(--wp-text); background: var(--wp-bg-2); }
 .wp-pack-graph__icon:disabled { opacity: 0.4; cursor: default; }
 .wp-pack-graph__link { align-self: flex-start; border: 0; background: none; padding: 0; color: var(--wp-accent-text); cursor: pointer; font: inherit; font-size: 12px; text-decoration: underline; }

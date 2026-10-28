@@ -208,7 +208,7 @@ function doConfirm(): void {
   overflow-y: auto;
   background: var(--wp-bg-2, #15151f);
   border: 1px solid var(--wp-accent, #6366f1);
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   padding: 12px 14px;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));
   font: 12px var(--wp-font-sans, sans-serif);
@@ -225,7 +225,7 @@ function doConfirm(): void {
   width: 100%;
   box-sizing: border-box;
   padding: 7px 10px;
-  border-radius: 5px;
+  border-radius: min(5px, var(--wp-radius-cap, 999px));
   border: 1px solid var(--wp-border, rgba(255,255,255,0.12));
   background: var(--wp-bg, #11111b);
   color: var(--wp-text, #e7e7ee);
@@ -245,7 +245,7 @@ function doConfirm(): void {
   justify-content: space-between;
   align-items: center;
   padding: 6px 8px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   cursor: pointer;
 }
 .wpc-remap__candidate:hover { background: color-mix(in oklab, var(--wp-accent, #6366f1) 18%, transparent); }

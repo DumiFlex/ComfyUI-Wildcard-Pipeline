@@ -101,7 +101,7 @@ function delta(top: { pct: number; was?: number }): string {
 </template>
 
 <style scoped>
-.wp-ai-test { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--wp-border); border-radius: 8px; background: var(--wp-bg-sunken, rgb(0 0 0 / 15%)); font-size: 12px; }
+.wp-ai-test { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--wp-border); border-radius: min(8px, var(--wp-radius-cap, 999px)); background: var(--wp-bg-sunken, rgb(0 0 0 / 15%)); font-size: 12px; }
 .wp-ai-test__head { display: flex; align-items: center; gap: 6px; font-weight: 600; }
 .wp-ai-test__title { flex: 1; }
 .wp-ai-test__bad { color: var(--wp-danger, #e5484d); font-weight: 500; }
@@ -110,7 +110,7 @@ function delta(top: { pct: number; was?: number }): string {
 .wp-ai-test__dim { color: var(--wp-text-dim); font-weight: 400; }
 .wp-ai-test__bar-row { display: grid; grid-template-columns: minmax(0, 1fr) 72px auto; align-items: center; gap: 6px; }
 .wp-ai-test__value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wp-ai-test__bar { position: relative; height: 6px; border-radius: 3px; background: var(--wp-border); overflow: hidden; }
+.wp-ai-test__bar { position: relative; height: 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); background: var(--wp-border); overflow: hidden; }
 .wp-ai-test__bar-was { position: absolute; inset: 0 auto 0 0; background: var(--wp-text-dim); opacity: 0.45; }
 .wp-ai-test__bar-now { position: absolute; inset: 0 auto 0 0; background: var(--wp-accent-500); }
 .wp-ai-test__pct { font-variant-numeric: tabular-nums; color: var(--wp-text-muted); white-space: nowrap; }

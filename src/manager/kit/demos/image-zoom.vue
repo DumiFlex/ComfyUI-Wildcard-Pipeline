@@ -56,5 +56,5 @@ const zoom = ref<number | null>(null);
 <style scoped>
 .wp-kit-zoom { height: 200px; }
 .wp-kit-zoom--tall { height: 320px; }
-.wp-kit-zoom__cap { position: absolute; left: 8px; bottom: 8px; padding: 1px 6px; border-radius: 3px; background: rgb(0 0 0 / 0.6); color: white; font-size: 11px; }
+.wp-kit-zoom__cap { position: absolute; left: 8px; bottom: 8px; padding: 1px 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); background: rgb(0 0 0 / 0.6); color: white; font-size: 11px; }
 </style>

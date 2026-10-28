@@ -207,7 +207,7 @@ function turnsLabel(n: number): string {
 .wp-ai-chats__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .wp-ai-chats__row {
   display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 2px 4px 2px 0;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
 }
 .wp-ai-chats__row:hover, .wp-ai-chats__row:focus-within { background: var(--wp-bg-2); }
 .wp-ai-chats__row[data-current] { background: color-mix(in oklab, var(--wp-accent-500) 14%, var(--wp-bg-2)); }
@@ -224,7 +224,7 @@ function turnsLabel(n: number): string {
 @media (hover: none) { .wp-ai-chats__tools { opacity: 1; } }
 .wp-ai-chats__icon {
   display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
-  border: 0; border-radius: 6px; background: none; color: var(--wp-text-muted); cursor: pointer;
+  border: 0; border-radius: min(6px, var(--wp-radius-cap, 999px)); background: none; color: var(--wp-text-muted); cursor: pointer;
 }
 .wp-ai-chats__icon:hover { color: var(--wp-text); background: var(--wp-bg-3, var(--wp-bg-1)); }
 .wp-ai-chats__icon[data-on] { color: var(--wp-accent-text); }

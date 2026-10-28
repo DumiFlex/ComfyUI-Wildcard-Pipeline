@@ -92,7 +92,7 @@ function flip(): void {
   height: var(--switch-h);
   box-sizing: border-box;
   border: 1px solid var(--wp-border-strong);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-3);
   transition: background var(--wp-motion-quick), border-color var(--wp-motion-quick);
 }
@@ -152,8 +152,10 @@ function flip(): void {
   border-color: var(--wp-accent);
   background: color-mix(in srgb, var(--wp-accent) 6%, transparent);
 }
+/* accent-text, not the raw accent: the raw ramp sits near 3:1 on light
+   Tide / Ember pages. */
 .wp-switch--chip.wp-switch--mixed .wp-switch__label,
-.wp-switch--chip.wp-switch--mixed .wp-switch__icon { color: var(--wp-accent); }
+.wp-switch--chip.wp-switch--mixed .wp-switch__icon { color: var(--wp-accent-text); }
 
 @media (prefers-reduced-motion: reduce) {
   .wp-switch__track, .wp-switch__knob, .wp-switch--chip { transition: none; }

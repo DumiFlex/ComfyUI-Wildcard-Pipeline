@@ -473,7 +473,7 @@ function viewForBundle(key: string) {
   text-transform: lowercase;
   letter-spacing: 0.04em;
   padding: var(--wp-chip-pad);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   flex-shrink: 0;
 }
 .wp-pg-mockup .wp-kind-chip--wildcard {
@@ -543,7 +543,7 @@ function viewForBundle(key: string) {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: var(--wp-chip-pad);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
 }
 .wp-pg-mockup .wp-mod-badge--mod {
   background: color-mix(in oklab, var(--wp-status-modified) 18%, transparent);
@@ -565,7 +565,7 @@ function viewForBundle(key: string) {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: var(--wp-chip-pad);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   flex-shrink: 0;
 }
 .wp-pg-mockup .wp-conflict-badge--info {

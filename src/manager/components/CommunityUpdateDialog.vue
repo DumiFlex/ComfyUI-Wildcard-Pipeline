@@ -395,7 +395,7 @@ function onDismiss() {
 <style scoped>
 .wpc-update-action {
   border: 1px solid var(--wp-border);
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   padding: 12px 14px;
   background: var(--wp-bg-2);
 }
@@ -419,7 +419,7 @@ function onDismiss() {
   font-size: 11.5px;
   background: var(--wp-bg-3);
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .wpc-update-hint {
   margin-top: 8px !important;
@@ -432,7 +432,7 @@ function onDismiss() {
   gap: 8px;
   margin: 0;
   padding: 10px 12px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: color-mix(in oklab, var(--wp-danger, #ef4444) 14%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 36%, transparent);
   color: var(--wp-danger-text, #ef4444);

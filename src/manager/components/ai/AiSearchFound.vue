@@ -99,10 +99,10 @@ const s = props.state;
 
 <style scoped>
 .wp-ai-found {
-  display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 10px;
+  display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: min(10px, var(--wp-radius-cap, 999px));
   border: 1px solid var(--wp-accent-400); background: color-mix(in oklab, var(--wp-accent-500) 6%, var(--wp-bg-1));
 }
-.wp-ai-found[data-compact] { padding: 10px 12px; gap: 8px; border-radius: 8px; }
+.wp-ai-found[data-compact] { padding: 10px 12px; gap: 8px; border-radius: min(8px, var(--wp-radius-cap, 999px)); }
 .wp-ai-found__head { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--wp-text); }
 .wp-ai-found[data-compact] .wp-ai-found__head { font-size: 13px; }
 .wp-ai-found__head .pi { color: var(--wp-accent-text); font-size: 16px; }
@@ -113,7 +113,7 @@ const s = props.state;
 .wp-ai-found__q .pi { font-size: 11px; color: var(--wp-text-dim); }
 .wp-ai-found__none { margin: 0 0 0 18px; font-size: 12px; color: var(--wp-text-dim); }
 .wp-ai-found__rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.wp-ai-found__rows label { display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+.wp-ai-found__rows label { display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; border-radius: min(6px, var(--wp-radius-cap, 999px)); cursor: pointer; }
 .wp-ai-found__rows li:hover label { background: var(--wp-bg-3); }
 .wp-ai-found__rows li[data-picked] label { background: color-mix(in oklab, var(--wp-accent-500) 10%, transparent); }
 .wp-ai-found__rows .wp-checkbox { margin-top: 3px; }

@@ -250,21 +250,21 @@ function onResetColor(): void {
 .id__row { display: grid; grid-template-columns: 100px 1fr; gap: 10px; align-items: center; margin-bottom: 6px; }
 .id__row:last-child { margin-bottom: 0; }
 .id__key { font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
-.id__input { background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: 3px; padding: 5px 8px; font: 11px var(--wp-font-mono); color: var(--wp-text); }
+.id__input { background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: min(3px, var(--wp-radius-cap, 999px)); padding: 5px 8px; font: 11px var(--wp-font-mono); color: var(--wp-text); }
 .id__input:focus { border-color: var(--wp-accent); outline: none; }
 .id__input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
 .id__input--mod { border-color: var(--wp-accent); color: var(--wp-accent-text, var(--wp-text)); }
 .id__input-row { display: flex; align-items: stretch; gap: 6px; }
 .id__input-row .id__input { flex: 1; min-width: 0; }
-.bdm-color-wrap { flex: 1; display: flex; align-items: center; gap: 8px; padding: 4px 6px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: 3px; min-width: 0; }
+.bdm-color-wrap { flex: 1; display: flex; align-items: center; gap: 8px; padding: 4px 6px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: min(3px, var(--wp-radius-cap, 999px)); min-width: 0; }
 .bdm-color-wrap--mod { border-color: var(--wp-accent); }
-.bdm-color-swatch { width: 18px; height: 18px; border-radius: 3px; border: 1px solid var(--wp-border); flex-shrink: 0; cursor: pointer; padding: 0; transition: outline-offset 0.08s, outline-color 0.08s; }
+.bdm-color-swatch { width: 18px; height: 18px; border-radius: min(3px, var(--wp-radius-cap, 999px)); border: 1px solid var(--wp-border); flex-shrink: 0; cursor: pointer; padding: 0; transition: outline-offset 0.08s, outline-color 0.08s; }
 .bdm-color-swatch:hover { outline: 1px solid var(--wp-accent); outline-offset: 1px; }
 .bdm-color-swatch--open { outline: 2px solid var(--wp-accent); outline-offset: 2px; }
 .bdm-color-input { flex: 0 0 80px; background: transparent; border: 0; outline: none; padding: 2px 0; font: 11px var(--wp-font-mono); color: var(--wp-text); }
 .bdm-color-input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
 .bdm-color-presets { display: flex; gap: 4px; flex-wrap: wrap; }
-.bdm-color-preset { width: 16px; height: 16px; border-radius: 3px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); cursor: pointer; padding: 0; transition: transform 0.08s; }
+.bdm-color-preset { width: 16px; height: 16px; border-radius: min(3px, var(--wp-radius-cap, 999px)); border: 1px solid color-mix(in srgb, currentColor 22%, transparent); cursor: pointer; padding: 0; transition: transform 0.08s; }
 .bdm-color-preset:hover { transform: scale(1.12); }
 .bdm-color-preset--on { outline: 2px solid var(--wp-text); outline-offset: 1px; }
 </style>
@@ -280,7 +280,7 @@ function onResetColor(): void {
   padding: 10px;
   background: var(--wp-bg2);
   border: 1px solid var(--wp-border);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   box-shadow: var(--wp-shadow-md);
 }
 </style>

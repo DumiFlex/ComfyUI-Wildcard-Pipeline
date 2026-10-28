@@ -44,6 +44,16 @@
        url("../../assets/fonts/jetbrains-mono-latin.woff2") format("woff2");
 }
 
+/* --wp-radius-cap: the roundest a corner may get in this look. Fixed radii
+   in components are written min(Npx, var(--wp-radius-cap, 999px)) and
+   pills var(--wp-radius-cap, 999px), so Orbit draws them as authored and a
+   square look squares them without a rule per component. Circles (50%)
+   stay circles. The theme audit (scripts/theme-audit) fails on a corner
+   rounder than the cap. */
+html[data-wp-look="crisp"] { --wp-radius-cap: 4px; }
+html[data-wp-look="terminal"],
+html[data-wp-look="tui"] { --wp-radius-cap: 0px; }
+
 /* Heading face; a look may swap it without touching body text. */
 html.wp-manager { --wp-font-head: var(--wp-font); }
 .wp-page__title, .wp-card__title { font-family: var(--wp-font-head); }
@@ -67,6 +77,10 @@ html[data-wp-look="crisp"] .wp-nav[data-active] {
   font-weight: 600;
 }
 html[data-wp-look="crisp"] .wp-nav[data-active]::before { display: none; }
+html[data-wp-look="crisp"] .wp-settings__section-link[data-active="true"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--wp-accent-500);
+}
 html[data-wp-look="crisp"] .wp-segmented { border-color: var(--wp-border-strong); background: transparent; }
 html[data-wp-look="crisp"] .wp-segmented__opt { border-radius: 1px; }
 html[data-wp-look="crisp"] .wp-segmented__opt[data-active="true"] {
@@ -112,6 +126,11 @@ html[data-wp-look="soft"] .wp-nav[data-active] {
   color: #fff; /* audit-exempt: white on accent-600, 4.5:1+ in every theme */
 }
 html[data-wp-look="soft"] .wp-nav[data-active]::before { display: none; }
+html[data-wp-look="soft"] .wp-settings__section-link { border-radius: 999px; padding-inline: 14px; }
+html[data-wp-look="soft"] .wp-settings__section-link[data-active="true"] {
+  background: var(--wp-accent-600);
+  color: #fff; /* audit-exempt: white on accent-600 */
+}
 html[data-wp-look="soft"] .wp-segmented { border-color: transparent; border-radius: 999px; background: var(--wp-bg-3); }
 html[data-wp-look="soft"] .wp-segmented__opt { border-radius: 999px; }
 html[data-wp-look="soft"] .wp-segmented__opt[data-active="true"] {
@@ -168,6 +187,8 @@ html[data-wp-look="terminal"] .wp-nav[data-active]::before {
 }
 html[data-wp-look="terminal"] .wp-sidebar__section { text-transform: none; letter-spacing: 0; }
 html[data-wp-look="terminal"] .wp-sidebar__section::before { content: "# "; }
+html[data-wp-look="terminal"] .wp-settings__section-link[data-active="true"] { background: transparent; }
+html[data-wp-look="terminal"] .wp-settings__section-link[data-active="true"]::before { content: ">"; margin-right: -4px; font-weight: 700; }
 html[data-wp-look="terminal"] .wp-segmented { border-color: transparent; background: transparent; gap: 4px; }
 html[data-wp-look="terminal"] .wp-segmented__opt[data-active="true"] {
   background: transparent;
@@ -206,6 +227,14 @@ html[data-wp-look="editorial"] .wp-table thead th {
 }
 html[data-wp-look="editorial"] .wp-nav[data-active] { background: transparent; border-color: transparent; font-weight: 600; }
 html[data-wp-look="editorial"] .wp-nav[data-active]::before { display: none; }
+html[data-wp-look="editorial"] .wp-settings__section-link[data-active="true"] {
+  background: transparent;
+  color: var(--wp-text);
+  text-decoration: underline;
+  text-decoration-color: var(--wp-accent-500);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
+}
 html[data-wp-look="editorial"] .wp-nav[data-active] .wp-nav__label {
   text-decoration: underline;
   text-decoration-color: var(--wp-accent-500);
@@ -273,14 +302,23 @@ html[data-wp-look="tui"] .wp-table tbody tr:hover td { background: var(--wp-bg-3
 html[data-wp-look="tui"] .wp-nav { padding-block: 4px; }
 html[data-wp-look="tui"] .wp-nav[data-active],
 html[data-wp-look="tui"] .wp-segmented__opt[data-active="true"],
-html[data-wp-look="tui"] .wp-tabset__tab[data-active="true"] {
+html[data-wp-look="tui"] .wp-tabset__tab[data-active="true"],
+html[data-wp-look="tui"] .wp-settings__section-link[data-active="true"],
+html[data-wp-look="tui"] .wp-trr__row[data-active="true"],
+html[data-wp-look="tui"] .wp-pack__steps li[data-on] {
   background: var(--wp-accent-600);
   border-color: transparent;
   box-shadow: none;
   color: #fff; /* audit-exempt: white on accent-600, 4.5:1+ in every theme */
 }
-html[data-wp-look="tui"] :is(.wp-nav[data-active], .wp-segmented__opt[data-active="true"], .wp-tabset__tab[data-active="true"]) .pi { color: inherit; }
+html[data-wp-look="tui"] :is(.wp-nav[data-active], .wp-segmented__opt[data-active="true"], .wp-tabset__tab[data-active="true"], .wp-settings__section-link[data-active="true"], .wp-trr__row[data-active="true"], .wp-pack__steps li[data-on]) :is(.pi, *) { color: inherit; }
 html[data-wp-look="tui"] .wp-nav[data-active]::before { display: none; }
+/* A count on an inverse tab or nav row reads on the accent fill, not as an
+   accent chip on it (3:1 before). */
+html[data-wp-look="tui"] :is(.wp-tabset__tab[data-active="true"] .wp-tabset__count, .wp-nav[data-active] .wp-nav__count) {
+  background: color-mix(in oklab, #fff 18%, transparent); /* audit-exempt: lightens the accent fill under white text */
+  color: inherit;
+}
 html[data-wp-look="tui"] .wp-sidebar__section { text-transform: none; letter-spacing: 0; color: var(--wp-accent-text); }
 html[data-wp-look="tui"] .wp-segmented { border-color: transparent; background: transparent; gap: 6px; }
 html[data-wp-look="tui"] .wp-tabset__tab { padding-inline: 8px; }
@@ -307,8 +345,25 @@ html[data-wp-look="tui"] .wp-check {
   font-size: 12px;
   line-height: 1;
 }
+/* State comes from aria-checked or, on a decorative box (aria-hidden, no
+   role), data-checked / data-indeterminate. Nothing may set an inline
+   display on the tick: it would beat this rule and draw both marks. */
 html[data-wp-look="tui"] .wp-check svg { display: none; }
 html[data-wp-look="tui"] .wp-check::before { content: "[ ]"; }
-html[data-wp-look="tui"] .wp-check[aria-checked="true"]::before { content: "[x]"; color: var(--wp-accent-text); }
-html[data-wp-look="tui"] .wp-check[aria-checked="mixed"]::before { content: "[-]"; }
+html[data-wp-look="tui"] .wp-check:is([aria-checked="true"], [data-checked="true"])::before { content: "[x]"; color: var(--wp-accent-text); }
+html[data-wp-look="tui"] .wp-check:is([aria-checked="mixed"], [data-indeterminate="true"]):not([data-checked="true"])::before { content: "[-]"; color: var(--wp-accent-text); }
 html[data-wp-look="tui"] .wp-page__title { font-size: 16px; font-weight: 700; letter-spacing: 0; }
+
+/* ================= Canvas previews ignore the look =================
+   The canvas keeps ComfyUI's ground in every look (only the accent follows
+   the manager), so the Settings › Canvas live preview draws canvas pieces
+   with the canvas's own corners and type, not the manager look's. */
+html.wp-manager .wp-pg-mockup {
+  --wp-radius-cap: 999px;
+  --wp-radius-sm: 6px;
+  --wp-radius:    8px;
+  --wp-radius-lg: 12px;
+  --wp-radius-xl: 16px;
+  --wp-font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--wp-font);
+}

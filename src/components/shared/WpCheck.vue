@@ -78,7 +78,7 @@ function toggle(): void {
   width: 14px;
   height: 14px;
   border: 1.5px solid var(--wp-border-soft, var(--wp-border));
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -88,7 +88,7 @@ function toggle(): void {
   cursor: pointer;
 }
 .wp-check svg { display: block; }
-.wp-check--sm { width: 12px; height: 12px; border-width: 1px; border-radius: 2px; }
+.wp-check--sm { width: 12px; height: 12px; border-width: 1px; border-radius: min(2px, var(--wp-radius-cap, 999px)); }
 .wp-check--sm svg { width: 7px; height: 7px; }
 .wp-check:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
 .wp-check[aria-checked="true"] {
