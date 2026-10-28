@@ -10,7 +10,7 @@
  * Every user-facing string is in this file so the page is easy to translate.
  */
 
-export type KitGroup = "actions" | "inputs" | "choice" | "display" | "feedback" | "overlays" | "pieces" | "brand";
+export type KitGroup = "actions" | "inputs" | "choice" | "display" | "navigation" | "layout" | "feedback" | "overlays" | "pieces" | "brand";
 export type KitSurface = "manager" | "canvas";
 
 export interface KitEntry {
@@ -33,6 +33,8 @@ export const KIT_GROUPS: { id: KitGroup; label: string; blurb: string }[] = [
   { id: "inputs", label: "Inputs", blurb: "Things you type into or pick from a list." },
   { id: "choice", label: "Choices", blurb: "On or off, one of a few, which tab." },
   { id: "display", label: "Display", blurb: "Showing a thing: cards, chips, icons, empty pages." },
+  { id: "navigation", label: "Navigation", blurb: "Moving through steps and pages." },
+  { id: "layout", label: "Layout", blurb: "Dividing, resizing and ordering space." },
   { id: "feedback", label: "Feedback", blurb: "Telling the user what happened or that something is busy." },
   { id: "overlays", label: "Dialogs and menus", blurb: "Anything that opens above the page." },
   { id: "pieces", label: "Library pieces", blurb: "Bigger parts built from the kit that several screens share. Reuse them before writing another." },
@@ -64,6 +66,11 @@ export const KIT_ENTRIES: KitEntry[] = [
     id: "close-button", name: "CloseButton", group: "actions", file: "src/components/shared/CloseButton.vue", surfaces: ["manager", "canvas"],
     use: "The × that closes a dialog, drawer, panel or banner. Other icon actions in the manager use Button with an icon and no text.",
     instead: "A hand-made × button (or one that borrows .wp-topbar__icon-btn).",
+  },
+  {
+    id: "toolbar", name: "Toolbar", group: "actions", file: "src/components/shared/Toolbar.vue", surfaces: ["manager", "canvas"],
+    use: "A row of buttons that is one Tab stop: the arrow keys move between them and Home/End jump to the ends. attached joins the buttons into one button group. Put a vertical Separator between groups of actions.",
+    instead: "A flex row of buttons where Tab stops on every one, or joined buttons with their own corner rules.",
   },
   // Inputs
   {
@@ -103,6 +110,26 @@ export const KIT_ENTRIES: KitEntry[] = [
     id: "list-filter", name: "ListFilter", group: "inputs", file: "src/manager/components/ui/ListFilter.vue", surfaces: ["manager"],
     use: "SearchInput for a long list inside an editor card: the count sits in the box, and it hides itself while the list is short.",
     instead: "Another search box with its own icon and count.",
+  },
+  {
+    id: "slider", name: "Slider", group: "inputs", file: "src/components/shared/Slider.vue", surfaces: ["manager", "canvas"],
+    use: "A number you set by feel along a range: a weight, a threshold, a brush size. Arrows step, PageUp/PageDown take ten steps, Home/End jump to the ends; marks label key values and format says the value in words. with-input adds a WpNumber for the exact number.",
+    instead: "<input type=\"range\"> with the browser's track and thumb.",
+  },
+  {
+    id: "tag-input", name: "TagInput", group: "inputs", file: "src/components/shared/TagInput.vue", surfaces: ["manager", "canvas"],
+    use: "A list of short words as chips: tags, accepts axes, #tags. Enter or a comma adds, Backspace in the empty box removes the last, pasting \"a, b, c\" adds three; suggestions open under the box and follow it. allow-new=false keeps it to the suggestions.",
+    instead: "A text box split on commas, or chips plus a separate Add box.",
+  },
+  {
+    id: "inline-edit", name: "InlineEdit", group: "inputs", file: "src/components/shared/InlineEdit.vue", surfaces: ["manager", "canvas"],
+    use: "Rename in place: the name is a button, a click (or Enter or F2) makes it a text box, Enter or a click away saves and Escape puts the old name back. validate refuses a value with a message.",
+    instead: "A pencil button that swaps in an <input> with its own Enter, Escape and blur handling.",
+  },
+  {
+    id: "drop-zone", name: "DropZone", group: "inputs", file: "src/components/shared/DropZone.vue", surfaces: ["manager", "canvas"],
+    use: "Where files go: drag them in or Browse. It lights up for a file it takes and turns red with the reason for one it won't (type, size, one at a time). overlay wraps a panel (the chat) and shows only while a file is over it.",
+    instead: "dragover and drop handlers on a div, with a hidden file input and its own highlight.",
   },
   {
     id: "color-picker", name: "ColorPicker", group: "inputs", file: "src/manager/components/ColorPicker.vue", surfaces: ["manager"],
@@ -156,8 +183,24 @@ export const KIT_ENTRIES: KitEntry[] = [
     instead: "CategoryChip (merged into Chip: <Chip :color :icon>{{ name }}</Chip>) or a hand-made pill span.",
   },
   {
-    id: "kbd", name: "Key (.wp-kbd)", group: "display", file: "src/manager/styles/tokens.css", surfaces: ["manager"],
-    use: "A keyboard key in help text, like Ctrl K.",
+    id: "kbd", name: "Kbd", group: "display", file: "src/components/shared/Kbd.vue", surfaces: ["manager", "canvas"],
+    use: "A keyboard shortcut in help text or a menu, drawn as keys. Write Mod for the main modifier: it shows ⌘ on a Mac and Ctrl elsewhere. Screen readers hear the whole chord once.",
+    instead: "<kbd class=\"wp-kbd\"> written key by key, or a hard-coded ⌘.",
+  },
+  {
+    id: "badge", name: "Badge", group: "display", file: "src/components/shared/Badge.vue", surfaces: ["manager", "canvas"],
+    use: "A count bubble or a status dot. Wrapped around a button or icon it sits on the corner (3 problems); alone it sits in the line, with text for a status (● Running). A dot without text needs a label; pulse for something running.",
+    instead: "A coloured span dot or a count pill drawn per screen.",
+  },
+  {
+    id: "description-list", name: "DescriptionList", group: "display", file: "src/components/shared/DescriptionList.vue", surfaces: ["manager", "canvas"],
+    use: "Label and value rows: an item's details, a trace step, model info. Labels line up in one column; stacked puts each label above its value in a narrow panel. mono for ids and seeds, copy adds a copy button, an empty value draws a dash.",
+    instead: "A two-column grid or table of labels and values written per panel.",
+  },
+  {
+    id: "code-block", name: "CodeBlock", group: "display", file: "src/components/shared/CodeBlock.vue", surfaces: ["manager", "canvas"],
+    use: "Text that must stay as written (JSON, a prompt as sent, a log): mono font, a copy button and a wrap switch, scrolling past max-height. line-numbers for logs; bare drops the head.",
+    instead: "A <pre> with its own copy button, or none.",
   },
   {
     id: "icon", name: "Icon", group: "display", file: "src/manager/components/ui/Icon.vue", surfaces: ["manager"],
@@ -183,7 +226,49 @@ export const KIT_ENTRIES: KitEntry[] = [
     use: "Rows and columns: sticky header, sort by a column, tick rows, loading and empty rows. Put custom cells in #cell-<key>.",
     instead: "A <table class=\"wp-table\"> with its own sort state and select-all.",
   },
+  // Navigation
+  {
+    id: "stepper", name: "Stepper", group: "navigation", file: "src/components/shared/Stepper.vue", surfaces: ["manager", "canvas"],
+    use: "The 1 · 2 · 3 header of a job done in steps (pack builder, import, setup). Done steps show a check, a step with a problem a mark; clickable makes the steps buttons and linear stops jumping past the next one. vertical for a side rail.",
+    instead: "A row of numbered circles and lines drawn per wizard.",
+  },
+  {
+    id: "pagination", name: "Pagination", group: "navigation", file: "src/components/shared/Pagination.vue", surfaces: ["manager", "canvas"],
+    use: "Move through a long list a page at a time (first, last and the pages around the current one), or mode=\"more\" for a Load more button under \"Showing 50 of 230\". Draws nothing when everything fits on one page.",
+    instead: "Prev / Next buttons and a page count written per list.",
+  },
+  // Layout
+  {
+    id: "separator", name: "Separator", group: "layout", file: "src/components/shared/Separator.vue", surfaces: ["manager", "canvas"],
+    use: "A thin line between groups, across or upright, with optional text in the middle (or). Decorative by default; decorative=false when it really divides the content.",
+    instead: "An <hr>, a bordered div, or a menu divider styled per menu.",
+  },
+  {
+    id: "resize-handle", name: "ResizeHandle", group: "layout", file: "src/components/shared/ResizeHandle.vue", surfaces: ["manager", "canvas"],
+    use: "The grip on a panel's edge that drags it wider or taller (the chat drawer, a column, a box). v-model is the size in px; the arrow keys move it, Home/End jump to min/max, Enter or a double click puts back the default. reverse for a left or top edge.",
+    instead: "mousedown, mousemove and mouseup handlers on a hand-made edge, with no keyboard.",
+  },
+  {
+    id: "split-pane", name: "SplitPane", group: "layout", file: "src/components/shared/SplitPane.vue", surfaces: ["manager", "canvas"],
+    use: "Two panels side by side, or one above the other, with a ResizeHandle between them. v-model is the first panel's size in px.",
+    instead: "A grid with a dragged column width kept by hand.",
+  },
+  {
+    id: "sortable-list", name: "SortableList", group: "layout", file: "src/components/shared/SortableList.vue", surfaces: ["manager", "canvas"],
+    use: "Rows you put in order: drag the grip (a line shows where it lands, Escape cancels), or from the keyboard Space picks up, the arrows move, Space drops; Alt+↑/↓ moves one step. Each move is said to screen readers.",
+    instead: "HTML drag and drop with its own handle, drop line and no keyboard.",
+  },
   // Feedback
+  {
+    id: "progress", name: "ProgressBar", group: "feedback", file: "src/components/shared/ProgressBar.vue", surfaces: ["manager", "canvas"],
+    use: "How far a job is: give value and max for a bar that fills, leave value out while nobody knows and it sweeps. show-value puts the label and the percent above it. For a whole page that is loading use LoadingMark.",
+    instead: "A div whose width is set by hand, or a counter in text.",
+  },
+  {
+    id: "skeleton", name: "Skeleton", group: "feedback", file: "src/components/shared/Skeleton.vue", surfaces: ["manager", "canvas"],
+    use: "Grey shapes where content is about to land (rows, lines, a card), so nothing jumps. label says Loading… to screen readers. A whole page or panel uses LoadingMark block instead.",
+    instead: "The wp-skel classes from _skeleton.css, or a Loading… flash.",
+  },
   {
     id: "toast", name: "Toast (manager)", group: "feedback", file: "src/manager/composables/useToast.ts", surfaces: ["manager"],
     use: "A short note after an action, with an optional Undo. Call useToast().push(); the app shows it.",
@@ -343,7 +428,7 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "close-button": `<CloseButton kbd="Esc" @click="close" />`,
   "card": `<Card title="Options" subtitle="12 options">…</Card>`,
   "chip": `<Chip tone="warn" icon="pi-exclamation-triangle">2 conflicts</Chip>  <Chip :color="cat.color" :icon="cat.icon">{{ cat.name }}</Chip>`,
-  "kbd": `<kbd class="wp-kbd">Ctrl</kbd> <kbd class="wp-kbd">K</kbd>`,
+  "kbd": `<Kbd keys="Mod+K" />`,
   "icon": `<Icon name="pi-bolt" :size="ICON_MD" />`,
   "empty-state": `<EmptyState icon="pi-inbox" headline="No bundles yet" body="…"><template #cta>…</template></EmptyState>`,
   "toast": `useToast().push({ severity: "success", summary: "Saved", action: { label: "Undo", run: undo } })`,
@@ -368,6 +453,22 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "selection-toolbar": `<SelectionToolbar :count="selected.length" :tags="tags" @apply-tag="tag" @delete-selected="del" />`,
   "validity-icon": `<ValidityIcon :issues="validate(row)" />`,
   "relative-date": `<RelativeDate :value="row.updated_at" />`,
+  "toolbar": `<Toolbar label="Text tools" attached><WpButton icon="pi-bold" aria-label="Bold" /><WpButton icon="pi-italic" aria-label="Italic" /></Toolbar>`,
+  "slider": `<Slider v-model="weight" :min="0" :max="2" :step="0.05" aria-label="Weight" with-input />`,
+  "tag-input": `<TagInput v-model="tags" :suggestions="libraryTags" aria-label="Tags" />`,
+  "inline-edit": `<InlineEdit v-model="mod.name" label="Wildcard name" :validate="(v) => taken(v) ? 'That name is taken' : null" />`,
+  "drop-zone": `<DropZone accept=".txt,.yaml,.yml,.zip" multiple hint="Wildcard files or a zip" @files="load" @reject="explain" />`,
+  "badge": `<Badge :count="3" tone="danger" label="3 problems"><Button variant="ghost" icon="pi-bell" aria-label="Problems" /></Badge>  <Badge dot tone="success" text="Running" pulse />`,
+  "description-list": `<DescriptionList :items="[{ label: 'Family', value: 'SDXL' }, { label: 'ID', value: id, mono: true, copy: true }]" />`,
+  "code-block": `<CodeBlock :code="json" language="JSON" max-height="240px" />`,
+  "stepper": `<Stepper v-model="step" :steps="[{ id: 'describe', label: 'Describe' }, { id: 'plan', label: 'Plan' }, { id: 'build', label: 'Build' }]" clickable linear />`,
+  "pagination": `<Pagination v-model:page="page" :total="rows.length" :page-size="50" />`,
+  "separator": `<Separator label="or" />`,
+  "resize-handle": `<ResizeHandle v-model="width" axis="x" reverse :min="280" :max="720" :default-size="380" label="Chat width" />`,
+  "split-pane": `<SplitPane v-model="listWidth" :min="200" :max="520" label="List width"><template #start>…</template><template #end>…</template></SplitPane>`,
+  "sortable-list": `<SortableList v-model="rules" :item-key="(r) => r.id" :item-label="(r) => r.name" label="Rules"><template #item="{ item }">{{ item.name }}</template></SortableList>`,
+  "progress": `<ProgressBar :value="done" :max="total" label="Testing seeds" show-value />`,
+  "skeleton": `<Skeleton shape="row" :lines="4" label="Loading modules" />`,
   "icon-picker": `<IconPicker v-model="icon" aria-label="Category icon" />`,
 };
 

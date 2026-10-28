@@ -1,3 +1,12 @@
+<script setup lang="ts">
+import Kbd from "@/components/shared/Kbd.vue";
+</script>
+
 <template>
-  <span class="wp-kit__inline"><kbd class="wp-kbd">Ctrl</kbd> <kbd class="wp-kbd">K</kbd> opens search</span>
+  <div class="wp-kit__stack">
+    <span class="wp-kit__inline"><Kbd keys="Mod+K" /> opens search</span>
+    <span class="wp-kit__inline"><Kbd keys="Mod+Shift+P" /> runs a command</span>
+    <span class="wp-kit__inline"><Kbd :keys="['Shift', 'Enter']" /> adds a new line</span>
+    <span class="wp-kit__inline"><Kbd keys="Esc" size="sm" /> closes (size sm)</span>
+  </div>
 </template>

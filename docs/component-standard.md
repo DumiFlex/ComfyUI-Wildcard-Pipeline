@@ -6,7 +6,7 @@ Every custom control in the extension follows these rules. The component kit (Se
 
 | Folder | What goes there |
 |---|---|
-| `src/components/shared/` | Pieces the canvas uses, and pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`), controls (`SearchInput`, `WpNumber`, `WpCheck`, `WpSelect`, `WpButton`, `WpSwitch`, `WpTabs`, `WpSegmented`, `Disclosure`, `Banner`, `CopyButton`, `CloseButton`) and the toast look (`ToastCard`). |
+| `src/components/shared/` | Pieces the canvas uses, and pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`), controls (`SearchInput`, `WpNumber`, `WpCheck`, `WpSelect`, `WpButton`, `WpSwitch`, `WpTabs`, `WpSegmented`, `Disclosure`, `Banner`, `CopyButton`, `CloseButton`, `Slider`, `TagInput`, `InlineEdit`, `DropZone`, `Toolbar`), display and layout pieces (`Badge`, `Kbd`, `DescriptionList`, `CodeBlock`, `Separator`, `Stepper`, `Pagination`, `ResizeHandle`, `SplitPane`, `SortableList`), feedback (`ProgressBar`, `Skeleton`) and the toast look (`ToastCard`). |
 | `src/manager/components/ui/` | Manager-only controls: `Button`, `Input`, `Select`, `Modal`, `ConfirmModal`, `Drawer`, `DataTable` and the rest. |
 
 A component anywhere else is a part of one screen, not a control. If a second screen needs it, move it into a kit folder first.
@@ -128,3 +128,19 @@ Each of these jobs has exactly one component. Don't build a second one, and don'
 | A toast | `useToast()` (manager) or `pushToast()` (canvas); both draw `ToastCard` | a toast styled per surface |
 | Look at a picture closely | `WpImageZoom` (`v-model:zoom`, Fit / 100% / 200%, wheel, drag) | an `<img>` with `max-width: 100%` called a zoom, a hand-made transform with its own wheel and drag code |
 | Ask before acting | `ConfirmModal` (manager), `ConfirmDialog` (canvas) | `window.confirm()`, `ConfirmDialog` in the manager |
+| How far a job is | `ProgressBar` (no `value` while unknown) | a div with a width set by hand |
+| Content about to land | `Skeleton`; a whole page or panel: `LoadingMark block` | `wp-skel` classes, a "Loading…" flash |
+| A count or a status dot | `Badge` (`dot` + `text` or `label`) | a coloured span, a count pill |
+| A number on a range | `Slider` (`with-input` for the exact value) | `<input type="range">` |
+| A list of words | `TagInput` | a comma-split text box |
+| Rename in place | `InlineEdit` | a pencil that swaps in an `<input>` |
+| Take files | `DropZone` (`overlay` over a panel) | own `dragover` / `drop` handlers |
+| Put rows in order | `SortableList` | HTML drag and drop with its own handle |
+| Drag a panel's size | `ResizeHandle`, or `SplitPane` for two panels | own mousemove maths |
+| Steps of a job | `Stepper` | numbered circles per wizard |
+| A long list in pages | `Pagination` (`mode="more"` for Load more) | own Prev / Next |
+| Label and value rows | `DescriptionList` | a grid per panel |
+| Text kept as written | `CodeBlock` | a bare `<pre>` |
+| A shortcut | `Kbd` (`Mod+K`) | `<kbd class="wp-kbd">`, a hard-coded ⌘ |
+| A divider | `Separator` | `<hr>`, a bordered div |
+| A row of tool buttons | `Toolbar` (`attached` for a button group) | a flex row with a Tab stop per button |

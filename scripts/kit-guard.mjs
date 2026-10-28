@@ -38,7 +38,7 @@ export const RULES = [
     id: "native-range",
     pattern: /type="range"/g,
     allow: [],
-    fix: "Use WpNumber, or add a slider to the kit first.",
+    fix: "Use Slider (or WpNumber for an exact number).",
   },
   {
     id: "inline-svg",
