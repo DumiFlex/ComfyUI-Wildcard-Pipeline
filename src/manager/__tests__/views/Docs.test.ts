@@ -53,8 +53,43 @@ describe("Docs.vue", () => {
     const input = w.get('[data-test="doc-search"]');
     (input.element as HTMLInputElement).value = "constraint";
     await input.trigger("input");
-    expect(w.text()).toContain("Constraint");
-    expect(w.text()).not.toContain("WP Prompt Cleaner");
+    const nav = w.get(".wp-doc__nav").text();
+    expect(nav).toContain("Constraint");
+    expect(nav).not.toContain("WP Prompt Cleaner");
+  });
+
+  it("searches the docs text and opens a hit at its section", async () => {
+    const w = await mountAt("wp-context");
+    const input = w.get('[data-test="doc-search"]');
+    (input.element as HTMLInputElement).value = "fallback";
+    await input.trigger("input");
+    await flushPromises();
+    await vi.dynamicImportSettled();
+    await flushPromises();
+    const hits = w.findAll('[data-test="doc-search-hit"]');
+    expect(hits.length).toBeGreaterThan(1);
+    expect(w.find(".wp-doc-page").isVisible()).toBe(false);
+    expect(hits[0].find("mark").text().toLowerCase()).toBe("fallback");
+    await input.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(router.currentRoute.value.hash).toMatch(/^#s-/);
+    expect((input.element as HTMLInputElement).value).toBe("");
+  });
+
+  it("links the previous and next page in nav order", async () => {
+    const w = await mountAt("quick-start");
+    expect(w.get('[data-test="doc-prev"]').attributes("href")).toBe("/docs/introduction");
+    expect(w.get('[data-test="doc-next"]').attributes("href")).toBe("/docs/test-runner");
+    const first = await mountAt("introduction");
+    expect(first.find('[data-test="doc-prev"]').exists()).toBe(false);
+  });
+
+  it("gives every section an anchor id", async () => {
+    const w = await mountAt("wp-context");
+    const ids = w.findAll(".wp-doc-section").map((s) => s.attributes("id"));
+    expect(ids.length).toBeGreaterThan(2);
+    expect(ids.every((id) => id?.startsWith("s-"))).toBe(true);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("opens the assistant about this page, or the selected text, once it's on", async () => {
