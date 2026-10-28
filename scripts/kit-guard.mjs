@@ -61,8 +61,9 @@ export const RULES = [
     id: "manager-raw-button",
     pattern: /<button\b/g,
     only: "src/manager/",
-    // DataTable's sort control is the header text itself, not a Button.
-    allow: ["src/manager/components/ui/DataTable.vue"],
+    // DataTable's sort control is the header text itself, not a Button;
+    // ChoiceCards' cards are radios holding a picture, not Buttons.
+    allow: ["src/manager/components/ui/DataTable.vue", "src/manager/components/ui/ChoiceCards.vue"],
     fix: "Use Button. A raw <button> needs a reason the kit can't cover.",
   },
   {

@@ -3,7 +3,7 @@ import { computed, ref, watch } from "vue";
 import { useUiStore, type DensityMode } from "./uiStore";
 
 /**
- * Runtime tweaks store — accent palette and sidebar mode. Density is a
+ * Runtime tweaks store — colour theme, look, accent palette and sidebar mode. Density is a
  * pass-through to the ui store so the panel and Settings share one value.
  *
  * Lets the user A/B different look-and-feel options without rebuilding.
@@ -14,7 +14,16 @@ import { useUiStore, type DensityMode } from "./uiStore";
  * postMessage iframe dance, since we own the document directly.
  */
 
-export type AccentName  = "violet" | "indigo" | "teal" | "rose" | "amber" | "custom";
+/** A preset accent ramp. */
+export type PresetAccent = "violet" | "indigo" | "teal" | "rose" | "amber";
+/** `"theme"` = the colour theme's own accent (no inline override). */
+export type AccentName  = PresetAccent | "theme" | "custom";
+/** Colour theme: surfaces, borders, text and a default accent. `data-wp-palette`
+ *  on <html>; the rules live in styles/themes.css. */
+export type PaletteName = "orbit" | "native" | "nebula" | "tide" | "ember" | "contrast";
+/** Look: everything that is not colour (shape, type, borders, depth).
+ *  `data-wp-look` on <html>; the rules live in styles/looks.css. */
+export type LookName    = "orbit" | "crisp" | "soft" | "terminal" | "editorial" | "compact" | "tui";
 export type Density     = DensityMode;
 export type SidebarMode = "expanded" | "collapsed";
 
@@ -27,7 +36,7 @@ const STORAGE_KEY = "wp-tweaks-v1";
  *
  *  The "custom" key intentionally points at a placeholder palette; the actual
  *  palette is generated from the user's hex via `paletteFromHex()` below. */
-export const ACCENT_PALETTES: Record<Exclude<AccentName, "custom">, Record<string, string>> = {
+export const ACCENT_PALETTES: Record<PresetAccent, Record<string, string>> = {
   violet: {
     "--wp-accent-50":  "#f5f3ff",
     "--wp-accent-100": "#ede9fe",
@@ -91,7 +100,7 @@ export const ACCENT_PALETTES: Record<Exclude<AccentName, "custom">, Record<strin
 };
 
 /** 500-stop hex used as the visible swatch color on the accent picker buttons. */
-export const SWATCH_PREVIEW: Record<Exclude<AccentName, "custom">, string> = {
+export const SWATCH_PREVIEW: Record<PresetAccent, string> = {
   violet: ACCENT_PALETTES.violet["--wp-accent-500"],
   indigo: ACCENT_PALETTES.indigo["--wp-accent-500"],
   teal:   ACCENT_PALETTES.teal["--wp-accent-500"],
@@ -99,11 +108,52 @@ export const SWATCH_PREVIEW: Record<Exclude<AccentName, "custom">, string> = {
   amber:  ACCENT_PALETTES.amber["--wp-accent-500"],
 };
 
-/** Orbit's accent: the logo indigo. */
-export const DEFAULT_ACCENT: Exclude<AccentName, "custom"> = "indigo";
-export const DEFAULT_CUSTOM_HEX = ACCENT_PALETTES[DEFAULT_ACCENT]["--wp-accent-500"];
+/** The colour theme's own accent (Orbit's is the logo indigo). */
+export const DEFAULT_ACCENT: AccentName = "theme";
+export const DEFAULT_CUSTOM_HEX = ACCENT_PALETTES.indigo["--wp-accent-500"];
 
-export const ACCENT_OPTIONS: Array<Exclude<AccentName, "custom">> = ["indigo", "violet", "teal", "rose", "amber"];
+export const ACCENT_OPTIONS: PresetAccent[] = ["indigo", "violet", "teal", "rose", "amber"];
+
+export interface PaletteOption {
+  id: PaletteName;
+  label: string;
+  hint: string;
+  /** [page, card, accent] per mode, for the picker's swatch. */
+  swatch: { dark: [string, string, string]; light: [string, string, string] };
+  /** Keeps its own accent; the accent picker is off. */
+  locksAccent?: boolean;
+}
+
+/** Values mirror styles/themes.css. */
+export const PALETTE_OPTIONS: PaletteOption[] = [
+  { id: "orbit",    label: "Orbit",         hint: "Logo indigo on cool ink. The default.",
+    swatch: { dark: ["#0b0b12", "#1c1c28", "#4f46e5"], light: ["#f7f7fb", "#e6e6ee", "#4f46e5"] } },
+  { id: "native",   label: "Native",        hint: "ComfyUI's own greys.",
+    swatch: { dark: ["#18181a", "#313235", "#4f46e5"], light: ["#f3f3f3", "#d9d9d9", "#4f46e5"] } },
+  { id: "nebula",   label: "Nebula",        hint: "Violet-tinted night with a violet accent.",
+    swatch: { dark: ["#0d0a16", "#211a33", "#7c3aed"], light: ["#f8f6fd", "#e6e0f4", "#7c3aed"] } },
+  { id: "tide",     label: "Tide",          hint: "Deep slate blue with a sky accent.",
+    swatch: { dark: ["#0a1018", "#1a2534", "#0369a1"], light: ["#f4f7fa", "#dde5ee", "#0369a1"] } },
+  { id: "ember",    label: "Ember",         hint: "Warm charcoal and paper with a copper accent.",
+    swatch: { dark: ["#110d0b", "#251d19", "#c2410c"], light: ["#faf7f4", "#e9e0d7", "#c2410c"] } },
+  { id: "contrast", label: "High contrast", hint: "Black and white, solid borders, a yellow focus ring.",
+    swatch: { dark: ["#000000", "#262626", "#3730a3"], light: ["#ffffff", "#dedede", "#3730a3"] }, locksAccent: true },
+];
+
+export interface LookOption { id: LookName; label: string; hint: string }
+
+export const LOOK_OPTIONS: LookOption[] = [
+  { id: "orbit",     label: "Orbit",     hint: "Soft corners, hairline borders. The default." },
+  { id: "crisp",     label: "Crisp",     hint: "Square corners, firm outlines, ruled lists." },
+  { id: "soft",      label: "Soft",      hint: "Round pills, no outlines, cards lifted by shadow." },
+  { id: "terminal",  label: "Terminal",  hint: "Mono everywhere, sharp corners, dashed rules." },
+  { id: "editorial", label: "Editorial", hint: "Serif headings, open layout, underlined tabs." },
+  { id: "compact",   label: "Compact",   hint: "Icon sidebar, tight rows, the most on screen." },
+  { id: "tui",       label: "TUI",       hint: "Boxed panels, inverse selection and [x] checks." },
+];
+
+const PALETTE_IDS = new Set<string>(PALETTE_OPTIONS.map((p) => p.id));
+const LOOK_IDS = new Set<string>(LOOK_OPTIONS.map((l) => l.id));
 export const DENSITY_OPTIONS: Density[]   = ["compact", "comfortable", "cozy"];
 
 function hexToHsl(hex: string): { h: number; s: number; l: number } | null {
@@ -175,13 +225,15 @@ export function paletteFromHex(hex: string): Record<string, string> {
 
 interface PersistedShape {
   accent?: AccentName;
+  palette?: PaletteName;
+  look?: LookName;
   customHex?: string;
   /** Legacy — density now lives in the ui store, which reads this once. */
   density?: Density;
   sidebarMode?: SidebarMode;
   /** True once the user picked an accent. Before Orbit, "violet" was the
-   *  default and got saved with any other tweak, so an unpicked "violet"
-   *  is read as the new default. */
+   *  default and got saved with any other tweak, and before colour themes
+   *  "indigo" was, so an unpicked violet or indigo reads as the theme's own. */
   accentPicked?: boolean;
 }
 
@@ -213,8 +265,14 @@ export const useTweaksStore = defineStore("tweaks", () => {
 
   const accentPicked = ref<boolean>(stored.accentPicked === true);
   const accent      = ref<AccentName>(
-    stored.accent && (stored.accent !== "violet" || accentPicked.value) ? stored.accent : DEFAULT_ACCENT,
+    stored.accent && (accentPicked.value || (stored.accent !== "violet" && stored.accent !== "indigo"))
+      ? stored.accent
+      : DEFAULT_ACCENT,
   );
+  const palette     = ref<PaletteName>(stored.palette && PALETTE_IDS.has(stored.palette) ? stored.palette : "orbit");
+  const look        = ref<LookName>(stored.look && LOOK_IDS.has(stored.look) ? stored.look : "orbit");
+  /** High contrast keeps its own accent. */
+  const accentLocked = computed<boolean>(() => PALETTE_OPTIONS.some((p) => p.id === palette.value && p.locksAccent));
   const customHex   = ref<string>(stored.customHex ?? DEFAULT_CUSTOM_HEX);
   // Density moved to the ui store (one setting, shown on the Settings page
   // and here). This panel still offers it as a quick control.
@@ -225,14 +283,14 @@ export const useTweaksStore = defineStore("tweaks", () => {
 
   function applyAccent(name: AccentName) {
     if (!hasDocument()) return;
-    let palette: Record<string, string>;
-    if (name === "custom") {
-      palette = paletteFromHex(customHex.value);
-    } else {
-      palette = ACCENT_PALETTES[name];
+    // The theme's own ramp comes from styles/themes.css, so drop the inline one.
+    if (name === "theme" || accentLocked.value) {
+      clearAccent();
+      return;
     }
+    const ramp = name === "custom" ? paletteFromHex(customHex.value) : ACCENT_PALETTES[name];
     const root = document.documentElement;
-    for (const [key, value] of Object.entries(palette)) {
+    for (const [key, value] of Object.entries(ramp)) {
       root.style.setProperty(key, value);
     }
     // Mirror the prototype's `data-accent="<name>"` attribute so any rules in
@@ -253,6 +311,33 @@ export const useTweaksStore = defineStore("tweaks", () => {
     accentPicked.value = true;
     accent.value = name;
     applyAccent(name);
+  }
+
+  function applyThemeAttrs() {
+    if (!hasDocument()) return;
+    const root = document.documentElement;
+    if (palette.value === "orbit") root.removeAttribute("data-wp-palette");
+    else root.setAttribute("data-wp-palette", palette.value);
+    if (look.value === "orbit") root.removeAttribute("data-wp-look");
+    else root.setAttribute("data-wp-look", look.value);
+  }
+
+  function setPalette(name: PaletteName) {
+    palette.value = name;
+    applyThemeAttrs();
+    applyAccent(accent.value);
+  }
+
+  function setLook(name: LookName) {
+    const changed = look.value !== name;
+    look.value = name;
+    applyThemeAttrs();
+    // Compact is drawn around the icon sidebar; picking it switches the
+    // sidebar once (the Sidebar setting switches it back).
+    if (changed && name === "compact" && !ui.sidebarCollapsed) {
+      ui.setSidebarCollapsed(true);
+      sidebarMode.value = "collapsed";
+    }
   }
 
   function setCustomHex(hex: string) {
@@ -277,6 +362,9 @@ export const useTweaksStore = defineStore("tweaks", () => {
   }
 
   function reset() {
+    palette.value = "orbit";
+    look.value = "orbit";
+    applyThemeAttrs();
     accent.value = DEFAULT_ACCENT;
     accentPicked.value = false;
     customHex.value = DEFAULT_CUSTOM_HEX;
@@ -292,6 +380,7 @@ export const useTweaksStore = defineStore("tweaks", () => {
 
   /** Apply persisted overrides on app boot. Idempotent. */
   function initialize() {
+    applyThemeAttrs();
     applyAccent(accent.value);
     // Re-applies (and, for a value still only in the legacy tweaks blob,
     // persists under the ui store's own key).
@@ -300,14 +389,22 @@ export const useTweaksStore = defineStore("tweaks", () => {
 
   // Persist on every change to a tracked field.
   watch(
-    [accent, customHex, sidebarMode, accentPicked],
-    ([a, c, s, p]) => {
-      writeStored({ accent: a, customHex: c, sidebarMode: s, accentPicked: p || undefined });
+    [accent, customHex, sidebarMode, accentPicked, palette, look],
+    ([a, c, s, p, pal, lk]) => {
+      writeStored({
+        accent: a, customHex: c, sidebarMode: s, accentPicked: p || undefined,
+        palette: pal === "orbit" ? undefined : pal, look: lk === "orbit" ? undefined : lk,
+      });
     },
   );
 
   return {
     accent,
+    palette,
+    look,
+    accentLocked,
+    setPalette,
+    setLook,
     customHex,
     setCustomHex,
     density,

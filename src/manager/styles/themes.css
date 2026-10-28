@@ -1,0 +1,224 @@
+/* =========================================================
+   Colour themes — `data-wp-palette` on <html> (tweaksStore.setPalette).
+
+   A theme sets surfaces, borders, the three text tiers and its own accent
+   ramp. It never changes kind colours, variable colours or teal-for-picked:
+   those mean the same thing in every theme. Orbit is tokens.css itself, so it
+   has no block here.
+
+   Dark rules are `html[data-wp-palette=x]:not(.wp-theme-light)` and light
+   rules `html.wp-theme-light[data-wp-palette=x]`, so each beats tokens.css's
+   `:root` / `.wp-theme-light` blocks without depending on load order.
+
+   A preset or custom accent from the Accent setting is written inline on
+   <html>, so it wins over a theme's ramp; "Theme's own" removes it.
+   Ramps are shifted where a theme needs it so `--wp-accent-600` (the primary
+   fill, white text) stays at 4.5:1 or better.
+
+   Contrast: every text tier passes 4.5:1 on bg … bg-3 in both modes, and
+   the focus colour 3:1 (checked 2026-10-28, values in
+   pr-drafts/themes/theme-palettes-2026-10-28.json in the project files).
+   ========================================================= */
+
+/* Accent-derived tints follow whichever ramp is live (theme or picked). */
+html.wp-manager {
+  --wp-focus-ring: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
+  --wp-row-active: color-mix(in oklab, var(--wp-accent-600) 6%, transparent);
+}
+html.wp-manager.wp-theme-light {
+  --wp-focus-ring: 0 0 0 3px color-mix(in oklab, var(--wp-accent-600) 35%, transparent);
+  --wp-row-active: color-mix(in oklab, var(--wp-accent-600) 9%, transparent);
+}
+
+/* ---------- Native: ComfyUI's own greys, indigo accent ---------- */
+html[data-wp-palette="native"]:not(.wp-theme-light) {
+  --wp-bg:   #18181a;
+  --wp-bg-1: #202123;
+  --wp-bg-2: #262729;
+  --wp-bg-3: #313235;
+  --wp-bg-4: #3b3c40;
+  --wp-border:        rgba(255, 255, 255, 0.07);
+  --wp-border-strong: rgba(255, 255, 255, 0.14);
+  --wp-text:       #ececed;
+  --wp-text-muted: #a8a9ad;
+  --wp-text-dim:   #9c9da3;
+}
+html.wp-theme-light[data-wp-palette="native"] {
+  --wp-bg:   #f3f3f3;
+  --wp-bg-1: #ffffff;
+  --wp-bg-2: #ffffff;
+  --wp-bg-3: #e9e9e9;
+  --wp-bg-4: #d9d9d9;
+  --wp-border:        rgba(0, 0, 0, 0.10);
+  --wp-border-strong: rgba(0, 0, 0, 0.19);
+  --wp-text:       #171718;
+  --wp-text-muted: #494a50;
+  --wp-text-dim:   #5c5d63;
+}
+
+/* ---------- Nebula: violet night, violet accent ---------- */
+html[data-wp-palette="nebula"] {
+  --wp-accent-50:  #f5f3ff;
+  --wp-accent-100: #ede9fe;
+  --wp-accent-200: #ddd6fe;
+  --wp-accent-300: #c4b5fd;
+  --wp-accent-400: #a78bfa;
+  --wp-accent-500: #8b5cf6;
+  --wp-accent-600: #7c3aed;
+  --wp-accent-700: #6d28d9;
+  --wp-accent-800: #5b21b6;
+  --wp-accent-900: #4c1d95;
+}
+html[data-wp-palette="nebula"]:not(.wp-theme-light) {
+  --wp-bg:   #0d0a16;
+  --wp-bg-1: #130f1f;
+  --wp-bg-2: #181327;
+  --wp-bg-3: #211a33;
+  --wp-bg-4: #2a2140;
+  --wp-border:        rgba(255, 255, 255, 0.08);
+  --wp-border-strong: rgba(255, 255, 255, 0.15);
+  --wp-text:       #ece8f6;
+  --wp-text-muted: #aba4c0;
+  --wp-text-dim:   #958dac;
+}
+html.wp-theme-light[data-wp-palette="nebula"] {
+  --wp-bg:   #f8f6fd;
+  --wp-bg-1: #ffffff;
+  --wp-bg-2: #ffffff;
+  --wp-bg-3: #f1edfa;
+  --wp-bg-4: #e6e0f4;
+  --wp-border:        rgba(29, 23, 41, 0.10);
+  --wp-border-strong: rgba(29, 23, 41, 0.18);
+  --wp-text:       #1d1729;
+  --wp-text-muted: #5d5470;
+  --wp-text-dim:   #665d7a;
+}
+
+/* ---------- Tide: slate blue, sky accent (ramp shifted one step) ---------- */
+html[data-wp-palette="tide"] {
+  --wp-accent-50:  #f0f9ff;
+  --wp-accent-100: #e0f2fe;
+  --wp-accent-200: #bae6fd;
+  --wp-accent-300: #7dd3fc;
+  --wp-accent-400: #38bdf8;
+  --wp-accent-500: #0ea5e9;
+  --wp-accent-600: #0369a1; /* sky-700: white 5.9:1 */
+  --wp-accent-700: #075985;
+  --wp-accent-800: #0c4a6e;
+  --wp-accent-900: #082f49;
+}
+html[data-wp-palette="tide"]:not(.wp-theme-light) {
+  --wp-bg:   #0a1018;
+  --wp-bg-1: #0f1722;
+  --wp-bg-2: #131c29;
+  --wp-bg-3: #1a2534;
+  --wp-bg-4: #223042;
+  --wp-border:        rgba(255, 255, 255, 0.08);
+  --wp-border-strong: rgba(255, 255, 255, 0.15);
+  --wp-text:       #e4ebf3;
+  --wp-text-muted: #a0aebe;
+  --wp-text-dim:   #8898aa;
+}
+html.wp-theme-light[data-wp-palette="tide"] {
+  --wp-bg:   #f4f7fa;
+  --wp-bg-1: #ffffff;
+  --wp-bg-2: #ffffff;
+  --wp-bg-3: #eaf0f5;
+  --wp-bg-4: #dde5ee;
+  --wp-border:        rgba(15, 26, 38, 0.10);
+  --wp-border-strong: rgba(15, 26, 38, 0.19);
+  --wp-text:       #0f1a26;
+  --wp-text-muted: #4d5b6b;
+  --wp-text-dim:   #58677a;
+}
+
+/* ---------- Ember: warm charcoal, copper accent (ramp shifted one step) ---------- */
+html[data-wp-palette="ember"] {
+  --wp-accent-50:  #fff7ed;
+  --wp-accent-100: #ffedd5;
+  --wp-accent-200: #fed7aa;
+  --wp-accent-300: #fdba74;
+  --wp-accent-400: #fb923c;
+  --wp-accent-500: #f97316;
+  --wp-accent-600: #c2410c; /* orange-700: white 5.2:1 */
+  --wp-accent-700: #9a3412;
+  --wp-accent-800: #7c2d12;
+  --wp-accent-900: #431407;
+}
+html[data-wp-palette="ember"]:not(.wp-theme-light) {
+  --wp-bg:   #110d0b;
+  --wp-bg-1: #17120f;
+  --wp-bg-2: #1c1613;
+  --wp-bg-3: #251d19;
+  --wp-bg-4: #2f2520;
+  --wp-border:        rgba(255, 255, 255, 0.08);
+  --wp-border-strong: rgba(255, 255, 255, 0.15);
+  --wp-text:       #f1e9e4;
+  --wp-text-muted: #b5a89f;
+  --wp-text-dim:   #9e9188;
+}
+html.wp-theme-light[data-wp-palette="ember"] {
+  --wp-bg:   #faf7f4;
+  --wp-bg-1: #ffffff;
+  --wp-bg-2: #ffffff;
+  --wp-bg-3: #f3ede7;
+  --wp-bg-4: #e9e0d7;
+  --wp-border:        rgba(35, 26, 20, 0.10);
+  --wp-border-strong: rgba(35, 26, 20, 0.19);
+  --wp-text:       #231a14;
+  --wp-text-muted: #62554b;
+  --wp-text-dim:   #6c5f55;
+}
+
+/* ---------- High contrast: black / white, solid borders, yellow focus ----------
+ * Keeps its own accent (the Accent setting is off). The fill is a deep
+ * indigo so white text on it reads at 10:1; light accent text carries links
+ * and selection on black. */
+html[data-wp-palette="contrast"] {
+  --wp-accent-50:  #eef2ff;
+  --wp-accent-100: #e0e7ff;
+  --wp-accent-200: #e0e7ff;
+  --wp-accent-300: #c7d2fe;
+  --wp-accent-400: #a5b4fc;
+  --wp-accent-500: #818cf8;
+  --wp-accent-600: #3730a3;
+  --wp-accent-700: #312e81;
+  --wp-accent-800: #1e1b4b;
+  --wp-accent-900: #1e1b4b;
+}
+html[data-wp-palette="contrast"]:not(.wp-theme-light) {
+  --wp-bg:   #000000;
+  --wp-bg-1: #0a0a0a;
+  --wp-bg-2: #111111;
+  --wp-bg-3: #1a1a1a;
+  --wp-bg-4: #262626;
+  --wp-border:        rgba(255, 255, 255, 0.40);
+  --wp-border-strong: rgba(255, 255, 255, 0.70);
+  --wp-text:       #ffffff;
+  --wp-text-muted: #d6d6d6;
+  --wp-text-dim:   #bcbcbc;
+  --wp-accent-text:        #c7d2fe;
+  --wp-accent-text-strong: #e0e7ff;
+  --wp-border-focus: #facc15;
+  --wp-focus-ring: 0 0 0 3px #facc15;
+  --wp-row-hover: rgba(255, 255, 255, 0.08);
+  --wp-row-active: rgba(165, 180, 252, 0.16);
+}
+html.wp-theme-light[data-wp-palette="contrast"] {
+  --wp-bg:   #ffffff;
+  --wp-bg-1: #ffffff;
+  --wp-bg-2: #ffffff;
+  --wp-bg-3: #f0f0f0;
+  --wp-bg-4: #dedede;
+  --wp-border:        rgba(0, 0, 0, 0.40);
+  --wp-border-strong: rgba(0, 0, 0, 0.70);
+  --wp-text:       #000000;
+  --wp-text-muted: #2e2e2e;
+  --wp-text-dim:   #454545;
+  --wp-accent-text:        #3730a3;
+  --wp-accent-text-strong: #1e1b4b;
+  --wp-border-focus: #000000;
+  --wp-focus-ring: 0 0 0 3px #000000;
+  --wp-row-hover: rgba(0, 0, 0, 0.06);
+  --wp-row-active: rgba(55, 48, 163, 0.12);
+}

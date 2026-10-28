@@ -192,6 +192,11 @@ export const KIT_ENTRIES: KitEntry[] = [
     use: "One of a few options that each need a line of explanation (prompt style, install mode). One Tab stop, the arrows move and choose; cards draws each option as a bordered card. For two to five short words on one row use Segmented.",
     instead: "A column of .wp-radio inputs with their own labels and hint text.",
   },
+  {
+    id: "choice-cards", name: "ChoiceCards", group: "choice", file: "src/manager/components/ui/ChoiceCards.vue", surfaces: ["manager"],
+    use: "Pick one of a handful of options that each need a picture (a colour theme, a look, a layout). Each card shows a preview slot, a name and a hint; compact puts three to a row and the hint in a tooltip. The arrow keys move the choice. For options a line of text explains, use RadioGroup.",
+    instead: "A grid of hand-made buttons with role=\"radio\" and their own selected border.",
+  },
   // Display
   {
     id: "card", name: "Card", group: "display", file: "src/manager/components/ui/Card.vue", surfaces: ["manager"],
@@ -527,6 +532,7 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "combobox": `<Combobox v-model="cats" multiple :options="categories" aria-label="Categories" />`,
   "date-picker": `<DatePicker v-model="since" :max="today" clearable aria-label="Changed since" />`,
   "range-slider": `<RangeSlider v-model="range" :min="0" :max="2" :step="0.1" aria-label="Weight" with-input />`,
+  "choice-cards": `<ChoiceCards v-model="look" :options="LOOKS" aria-label="Look"><template #preview="{ option }"><LookDrawing :id="option.value" /></template></ChoiceCards>`,
   "radio-group": `<RadioGroup v-model="style" :options="[{ value: 'tags', label: 'Tags', hint: 'Comma separated' }]" aria-label="Prompt style" />`,
   "avatar": `<Avatar :name="post.author" :src="post.avatar_url" size="sm" />`,
   "timeline": `<Timeline :items="history"><template #time="{ item }"><RelativeDate :value="item.at" /></template></Timeline>`,

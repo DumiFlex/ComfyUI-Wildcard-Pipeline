@@ -5,9 +5,11 @@ import Button from "./ui/Button.vue";
 import Toggle from "./ui/Toggle.vue";
 import Icon from "./ui/Icon.vue";
 import HsvPicker from "../../components/shared/HsvPicker.vue";
+import ThemeChoices from "./settings/ThemeChoices.vue";
 import {
   ACCENT_OPTIONS,
   DENSITY_OPTIONS,
+  PALETTE_OPTIONS,
   SWATCH_PREVIEW,
   useTweaksStore,
   type AccentName,
@@ -17,6 +19,10 @@ import { useUiStore } from "../stores/uiStore";
 
 const tweaks = useTweaksStore();
 const ui = useUiStore();
+/** The colour theme's own accent, for the "Theme's own" swatch. */
+/** "Theme's own" first, then the presets. */
+const SWATCHES = ["theme", ...ACCENT_OPTIONS] as const;
+const ownAccent = computed(() => PALETTE_OPTIONS.find((p) => p.id === tweaks.palette)?.swatch[ui.resolvedTheme][2]);
 
 const sidebarCollapsed = computed<boolean>({
   get: () => ui.sidebarCollapsed,
@@ -60,19 +66,30 @@ function pickCustomAccent() {
 
     <div class="wp-tweaks__body">
       <section class="wp-tweaks__section">
+        <h3 class="wp-tweaks__section-title">Colours</h3>
+        <ThemeChoices kind="palette" compact test-prefix="tweaks-palette" />
+      </section>
+
+      <section class="wp-tweaks__section">
+        <h3 class="wp-tweaks__section-title">Look</h3>
+        <ThemeChoices kind="look" compact test-prefix="tweaks-look" />
+      </section>
+
+      <section class="wp-tweaks__section">
         <h3 class="wp-tweaks__section-title">Accent</h3>
-        <div class="wp-tweaks__swatches" role="radiogroup" aria-label="Accent palette">
+        <p v-if="tweaks.accentLocked" class="wp-tweaks__note">High contrast keeps its own accent.</p>
+        <div v-else class="wp-tweaks__swatches" role="radiogroup" aria-label="Accent palette">
           <button
-            v-for="name in ACCENT_OPTIONS"
+            v-for="name in SWATCHES"
             :key="name"
             type="button"
             role="radio"
             :aria-checked="tweaks.accent === name"
             class="wp-tweaks__swatch"
-            :class="{ 'is-active': tweaks.accent === name }"
-            :style="{ background: SWATCH_PREVIEW[name] }"
-            :aria-label="`Accent: ${name}`"
-            :title="name"
+            :class="{ 'is-active': tweaks.accent === name, 'wp-tweaks__swatch--theme': name === 'theme' }"
+            :style="name === 'theme' ? { '--own-accent': ownAccent } : { background: SWATCH_PREVIEW[name] }"
+            :aria-label="name === 'theme' ? 'Accent: the colour theme\'s own' : `Accent: ${name}`"
+            :title="name === 'theme' ? 'Theme\'s own' : name"
             :data-test="`tweaks-accent-${name}`"
             @click="onAccent(name)"
           />
@@ -91,7 +108,7 @@ function pickCustomAccent() {
             <Icon name="pi-palette" />
           </button>
         </div>
-        <div v-if="tweaks.accent === 'custom'" class="wp-tweaks__custom-picker">
+        <div v-if="tweaks.accent === 'custom' && !tweaks.accentLocked" class="wp-tweaks__custom-picker">
           <HsvPicker
             :model-value="tweaks.customHex"
             aria-label="Custom accent color"
@@ -230,6 +247,10 @@ function pickCustomAccent() {
   border-color: var(--wp-text);
   box-shadow: 0 0 0 2px var(--wp-bg-1), 0 0 0 4px var(--wp-accent-500);
 }
+.wp-tweaks__swatch--theme {
+  background: linear-gradient(135deg, var(--own-accent) 50%, var(--wp-bg-3) 50%);
+}
+.wp-tweaks__note { margin: 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 .wp-tweaks__swatch--custom {
   display: grid;
   place-items: center;

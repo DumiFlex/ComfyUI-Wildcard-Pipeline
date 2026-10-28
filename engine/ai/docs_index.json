@@ -112,6 +112,39 @@
    ]
   },
   {
+   "id": "themes",
+   "title": "Themes and looks",
+   "group": "overview",
+   "blurb": "Pick the manager's colours and its look separately, and mix any of them.",
+   "keywords": [
+    "theme",
+    "colours",
+    "colors",
+    "look",
+    "dark",
+    "light",
+    "high contrast",
+    "accent",
+    "tui",
+    "terminal",
+    "font"
+   ],
+   "sections": [
+    {
+     "title": "Colours",
+     "text": "- Orbit: Logo indigo on cool ink. The default.\n- Native: ComfyUI's own greys.\n- Nebula: Violet-tinted night with a violet accent.\n- Tide: Deep slate blue with a sky accent.\n- Ember: Warm charcoal and paper with a copper accent.\n- High contrast: Black and white, solid borders, a yellow focus ring.\nModule kind colours (wildcard, fixed value, combine and the rest), variable colours and the teal of a picked option stay the same in every theme, so they always mean the same thing."
+    },
+    {
+     "title": "Look",
+     "text": "- Orbit: Soft corners, hairline borders. The default.\n- Crisp: Square corners, firm outlines, ruled lists.\n- Soft: Round pills, no outlines, cards lifted by shadow.\n- Terminal: Mono everywhere, sharp corners, dashed rules.\n- Editorial: Serif headings, open layout, underlined tabs.\n- Compact: Icon sidebar, tight rows, the most on screen.\n- TUI: Boxed panels, inverse selection and [x] checks.\nPicking Compact also switches the sidebar to icons; you can switch it back with the Sidebar setting. Density stays its own setting and works with every look."
+    },
+    {
+     "title": "Accent colour",
+     "text": "Accent color starts on Theme's own, which follows the colour theme. A preset or custom accent you pick is kept when you change the colour theme. High contrast keeps its own accent so its text stays readable; your pick comes back when you leave it.\nThemes change the manager only. The canvas nodes keep ComfyUI's colours, so they sit well next to other nodes."
+    }
+   ]
+  },
+  {
    "id": "glossary",
    "title": "Glossary",
    "group": "overview",
@@ -2215,7 +2248,7 @@
    "sections": [
     {
      "title": "What's in it",
-     "text": "- Tokens: the colours, type sizes, spacing and corners, with the value each has right now.\n- Actions (6): Things you press.\n- Inputs (17): Things you type into or pick from a list.\n- Choices (8): On or off, one of a few, which tab.\n- Display (16): Showing a thing: cards, chips, icons, empty pages.\n- Navigation (2): Moving through steps and pages.\n- Layout (5): Dividing, resizing and ordering space.\n- Feedback (8): Telling the user what happened or that something is busy.\n- Dialogs and menus (10): Anything that opens above the page.\n- Library pieces (8): Bigger parts built from the kit that several screens share. Reuse them before writing another.\n- Brand (1): The logo.\nPieces shared by the canvas and the manager (the node dialog, the right-click menu, popovers, tooltips, the search box, the number field, the toast, tabs, the segmented control, folding sections, banners, the copy and close buttons, progress bars, loading shapes, badges, steps, pages, sliders, tag boxes, rename-in-place, file drop areas, reorderable lists, resizable panels, key caps, code blocks, label/value lists, type-to-filter dropdowns, date pickers, range sliders, radio choices, avatars, timelines, diffs, image grids with a full-screen viewer and long scrolling lists) are shown live too. Each of these is one component on both sides: the search box in a node picker and on a manager page is the same box, and so are the number fields, tabs and toasts. The canvas toast store is the one piece listed with how to use it instead of a live demo."
+     "text": "- Tokens: the colours, type sizes, spacing and corners, with the value each has right now.\n- Actions (6): Things you press.\n- Inputs (17): Things you type into or pick from a list.\n- Choices (9): On or off, one of a few, which tab.\n- Display (16): Showing a thing: cards, chips, icons, empty pages.\n- Navigation (2): Moving through steps and pages.\n- Layout (5): Dividing, resizing and ordering space.\n- Feedback (8): Telling the user what happened or that something is busy.\n- Dialogs and menus (10): Anything that opens above the page.\n- Library pieces (8): Bigger parts built from the kit that several screens share. Reuse them before writing another.\n- Brand (1): The logo.\nPieces shared by the canvas and the manager (the node dialog, the right-click menu, popovers, tooltips, the search box, the number field, the toast, tabs, the segmented control, folding sections, banners, the copy and close buttons, progress bars, loading shapes, badges, steps, pages, sliders, tag boxes, rename-in-place, file drop areas, reorderable lists, resizable panels, key caps, code blocks, label/value lists, type-to-filter dropdowns, date pickers, range sliders, radio choices, avatars, timelines, diffs, image grids with a full-screen viewer and long scrolling lists) are shown live too. Each of these is one component on both sides: the search box in a node picker and on a manager page is the same box, and so are the number fields, tabs and toasts. The canvas toast store is the one piece listed with how to use it instead of a live demo."
     },
     {
      "title": "Reuse first",
@@ -2236,7 +2269,7 @@
     },
     {
      "title": "Appearance",
-     "text": "How the manager looks on this device.\n- Theme: Dark, light, or follow the system.\n- Accent color: The highlight color used for buttons, links and selection.\n- Density: Spacing and control height across the manager.\n- Sidebar: Show the navigation with labels, or as icons only.\n- Start page: What the manager opens to.\n- Reduce motion: Turn animations and transitions off in the manager."
+     "text": "How the manager looks on this device.\n- Colours: The colour theme: Orbit, Native, Nebula, Tide, Ember or High contrast.\n- Look: Corners, type, borders and selection: Orbit, Crisp, Soft, Terminal, Editorial, Compact or TUI.\n- Mode: Dark, light, or follow the system.\n- Accent color: The highlight color used for buttons, links and selection. Theme's own follows the colour theme.\n- Density: Spacing and control height across the manager.\n- Sidebar: Show the navigation with labels, or as icons only.\n- Start page: What the manager opens to.\n- Reduce motion: Turn animations and transitions off in the manager."
     },
     {
      "title": "Editing",
