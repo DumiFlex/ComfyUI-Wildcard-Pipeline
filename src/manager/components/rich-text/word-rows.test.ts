@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ModelSuggestion, TagSuggestion } from "../../api/types";
 import {
   buildWordRows, committedSuffixFor, formatTagCount, groupWordSections, SOURCE_ICON,
-  tagLegendFor, TAGS_WHEN_MODELS_MATCH, wordRowTextFor,
+  tagInsertText, tagLegendFor, TAGS_WHEN_MODELS_MATCH, wordRowTextFor,
 } from "./word-rows";
 
 const tag = (name: string, category_name: TagSuggestion["category_name"] = "general"): TagSuggestion => ({
@@ -57,6 +57,29 @@ describe("committedSuffixFor / wordRowTextFor", () => {
     expect(wordRowTextFor({ source: "lora", model: model("x/y") }, false)).toBe("<lora:x/y:1.0>");
     expect(wordRowTextFor({ source: "embedding", model: model("z") }, false)).toBe("embedding:z");
     expect(wordRowTextFor({ source: "lora", model: model("x/y") }, true)).toBe("x/y");
+  });
+
+  it("writes a tag in the chosen style and leaves model paths alone", () => {
+    const both = { spaces: true, escape: true };
+    expect(wordRowTextFor({ source: "tag", tag: tag("fate_(series)") }, false, both)).toBe("fate \\(series\\)");
+    expect(wordRowTextFor({ source: "lora", model: model("my_lora_(v2)") }, false, both)).toBe("<lora:my_lora_(v2):1.0>");
+    expect(wordRowTextFor({ source: "embedding", model: model("bad_hands") }, false, both)).toBe("embedding:bad_hands");
+  });
+});
+
+describe("tagInsertText", () => {
+  const off = { spaces: false, escape: false };
+  it("keeps the tag as listed when both are off", () => {
+    expect(tagInsertText("fate_(series)", off)).toBe("fate_(series)");
+  });
+  it("swaps underscores for spaces, except on short emoticon tags", () => {
+    expect(tagInsertText("blue_hair", { ...off, spaces: true })).toBe("blue hair");
+    expect(tagInsertText("^_^", { ...off, spaces: true })).toBe("^_^");
+    expect(tagInsertText("o_o", { ...off, spaces: true })).toBe("o_o");
+  });
+  it("escapes brackets once", () => {
+    expect(tagInsertText("fate_(series)", { ...off, escape: true })).toBe("fate_\\(series\\)");
+    expect(tagInsertText("a_\\(b\\)", { ...off, escape: true })).toBe("a_\\(b\\)");
   });
 });
 

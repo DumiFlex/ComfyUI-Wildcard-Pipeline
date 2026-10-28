@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { autocompleteSeparatorEnabled, completionSourceEnabled } from "../tagSetting";
+import { autocompleteSeparatorEnabled, completionSourceEnabled, tagInsertStyle } from "../tagSetting";
 
 /**
  * Three independently switchable sources, answered per host.
@@ -21,6 +21,11 @@ describe("completion sources", () => {
 
     it("is off when nothing is stored", () => {
       expect(completionSourceEnabled("lora")).toBe(false);
+    });
+
+    it("reads the tag style from its own keys", () => {
+      localStorage.setItem("wp-autocomplete-spaces", "1");
+      expect(tagInsertStyle()).toEqual({ spaces: true, escape: false });
     });
 
     it("reads each source from its own key", () => {
@@ -56,6 +61,14 @@ describe("completion sources", () => {
     it("reads the separator preference from the same host", () => {
       withCanvas({ "wildcardPipeline.behavior.autocompleteSeparator": true });
       expect(autocompleteSeparatorEnabled()).toBe(true);
+    });
+
+    it("reads the tag style from the canvas, both off by default", () => {
+      withCanvas({});
+      expect(tagInsertStyle()).toEqual({ spaces: false, escape: false });
+      localStorage.setItem("wp-autocomplete-spaces", "1");
+      withCanvas({ "wildcardPipeline.behavior.autocompleteEscapeBrackets": true });
+      expect(tagInsertStyle()).toEqual({ spaces: false, escape: true });
     });
 
     it("defaults the separator off", () => {

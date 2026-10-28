@@ -2,7 +2,7 @@ import { computed } from "vue";
 import { scanConflicts, labelFor as conflictLabelFor, shortConflictLabel, type Conflict } from "../../extension/conflicts";
 import { computeConstraintDeadEnds } from "../../extension/constraint-dead-ends";
 import type { ChainModule, PairingBadge, RowPairings } from "../../extension/constraint-pairs";
-import { getValidationMode } from "../../extension/settings";
+import { filterByValidation } from "../../extension/settings";
 import { hashes as libraryHashes } from "./drift-store";
 import { lookupSiblingName } from "./module-summary";
 import type { ModuleRowCtx } from "./module-row-ctx";
@@ -79,10 +79,7 @@ export function useContextConflicts(state: WidgetState, props: ContextConflictPr
     // value, props — change; the validation read is captured fresh
     // each evaluation, which is fine here because state changes
     // always coincide with a reactive trigger upstream).
-    const mode = getValidationMode();
-    if (mode === "permissive") return [];
-    if (mode === "relaxed") return all.filter((c) => c.severity !== "info");
-    return all;
+    return filterByValidation(all);
   });
   const conflictsByModule = computed(() => {
     const out: Record<string, Conflict[]> = {};

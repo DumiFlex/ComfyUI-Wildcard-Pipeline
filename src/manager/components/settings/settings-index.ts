@@ -56,6 +56,8 @@ const STATIC_ENTRIES: SettingEntry[] = [
   { key: "ac-tags", section: "autocomplete", label: "Booru tags", hint: "Danbooru tag names while you type option values.", keywords: "danbooru tag list csv download canvas comfyui manager" },
   { key: "ac-lora", section: "autocomplete", label: "LoRAs", hint: "Installed LoRA names, inserted as <lora:name:1.0>.", keywords: "lora model canvas comfyui manager" },
   { key: "ac-embedding", section: "autocomplete", label: "Embeddings", hint: "Installed embedding names.", keywords: "embedding textual inversion canvas comfyui manager" },
+  { key: "ac-spaces", section: "autocomplete", label: "Write tags with spaces", hint: "Picked tags use spaces instead of underscores.", keywords: "underscore space canvas comfyui manager" },
+  { key: "ac-escape", section: "autocomplete", label: "Escape brackets in tags", hint: "Picked tags write ( and ) as \\( and \\).", keywords: "bracket parenthesis escape weight canvas comfyui manager" },
   { key: "ac-separator", section: "autocomplete", label: "Append \", \" after a pick", hint: "Follow each completion with a comma and a space.", keywords: "comma separator" },
   { key: "ac-max", section: "autocomplete", label: "Max suggestions", hint: "How many tag suggestions the popup lists.", keywords: "limit rows popup" },
   { key: "ac-min", section: "autocomplete", label: "Minimum characters", hint: "Letters typed before tag suggestions appear.", keywords: "threshold popup" },

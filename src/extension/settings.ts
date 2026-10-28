@@ -34,6 +34,7 @@ import {
   SETTING_ID_BORDER,
   SETTING_ID_COLLAPSED,
   SETTING_ID_FOCUS,
+  SETTING_ID_ROW_ACTIONS,
   SETTING_ID_KIND_STYLE,
   SETTING_ID_COLLAPSE_MODE,
   SETTING_ID_COLOR_INTENSITY,
@@ -55,6 +56,7 @@ import {
   VALIDATION_OPTIONS,
   TOAST_LIFETIME_OPTIONS,
   COLLAPSE_MODE_OPTIONS,
+  ROW_ACTIONS_OPTIONS,
   COLOR_INTENSITY_OPTIONS,
   BUNDLE_MASTER_OFF_OPTIONS,
   SETTING_ID_AC_TAGS,
@@ -63,6 +65,8 @@ import {
   SETTING_ID_AC_SEPARATOR,
   SETTING_ID_AC_MAX_SUGGESTIONS,
   SETTING_ID_AC_MIN_CHARS,
+  SETTING_ID_AC_SPACES,
+  SETTING_ID_AC_ESCAPE,
   AC_MAX_SUGGESTIONS_OPTIONS,
   AC_MIN_CHARS_OPTIONS,
   CANVAS_SETTINGS_CHANNEL,
@@ -78,6 +82,7 @@ export type KindStyle = "both" | "icon" | "chip";
 export type ValidationMode = "strict" | "relaxed" | "permissive";
 export type ToastLifetime = "short" | "default" | "long" | "sticky";
 export type CollapseMode = "independent" | "accordion";
+export type RowActions = "always" | "hover";
 export type ColorIntensity = "muted" | "standard" | "vivid";
 export type BundleMasterOffBehavior = "preserve-manual" | "cascade-all";
 
@@ -272,6 +277,8 @@ const state = reactive<{
   borderHighlight: boolean;
   collapsedByDefault: boolean;
   focusMode: boolean;
+  /** When a module row shows its lock / internal / remove buttons. */
+  rowActions: RowActions;
   kindStyle: KindStyle;
   validation: ValidationMode;
   toastLifetime: ToastLifetime;
@@ -313,6 +320,7 @@ const state = reactive<{
   borderHighlight: true,
   collapsedByDefault: false,
   focusMode: false,
+  rowActions: "always",
   kindStyle: "chip",
   validation: "strict",
   toastLifetime: "default",
@@ -359,6 +367,10 @@ function asCollapseMode(v: unknown, fallback: CollapseMode): CollapseMode {
   return v === "independent" || v === "accordion" ? v : fallback;
 }
 
+function asRowActions(v: unknown, fallback: RowActions): RowActions {
+  return v === "always" || v === "hover" ? v : fallback;
+}
+
 function asColorIntensity(v: unknown, fallback: ColorIntensity): ColorIntensity {
   return v === "muted" || v === "standard" || v === "vivid" ? v : fallback;
 }
@@ -378,6 +390,7 @@ export function _resetDisplayStateForTesting(): void {
   state.borderHighlight = true;
   state.collapsedByDefault = false;
   state.focusMode = false;
+  state.rowActions = "always";
   state.kindStyle = "chip";
   state.validation = "strict";
   state.toastLifetime = "default";
@@ -417,6 +430,20 @@ export function getCollapsedByDefault(): boolean {
  */
 export function getValidationMode(): ValidationMode {
   return state.validation;
+}
+
+/** The conflicts the Validation strictness setting lets through: all of them
+ *  (strict), all but info (relaxed), none (permissive). Every place that
+ *  shows conflicts (node rows, subgraph badges) filters through this. */
+export function filterByValidation<T extends { severity: string }>(conflicts: T[]): T[] {
+  return filterForValidation(state.validation, conflicts);
+}
+
+/** `filterByValidation` for a given mode (the playground previews a mode). */
+export function filterForValidation<T extends { severity: string }>(mode: ValidationMode, conflicts: T[]): T[] {
+  if (mode === "permissive") return [];
+  if (mode === "relaxed") return conflicts.filter((c) => c.severity !== "info");
+  return conflicts;
 }
 
 /**
@@ -629,6 +656,9 @@ function syncMarkers(): void {
   // Display — focus mode (hovering one module dims siblings)
   document.body.classList.toggle("wp-focus-mode", state.focusMode === true);
 
+  // Display — row buttons only on hover (pressed ones stay; display-prefs.css)
+  document.body.classList.toggle("wp-row-actions-hover", state.rowActions === "hover");
+
   // Display — kind style (module type icon vs chip vs both)
   document.body.classList.toggle("wp-kind-style-icon", state.kindStyle === "icon");
   document.body.classList.toggle("wp-kind-style-chip", state.kindStyle === "chip");
@@ -668,6 +698,7 @@ export function applyDisplayPrefs(app: AppLike): void {
   // No body class for this setting; ContextWidget reads via getCollapsedByDefault().
   state.collapsedByDefault = app.extensionManager?.setting?.get(SETTING_ID_COLLAPSED) === true;
   state.focusMode = app.extensionManager?.setting?.get(SETTING_ID_FOCUS) === true;
+  state.rowActions = asRowActions(app.extensionManager?.setting?.get(SETTING_ID_ROW_ACTIONS), "always");
   state.kindStyle = asKindStyle(app.extensionManager?.setting?.get(SETTING_ID_KIND_STYLE), "chip");
   // Phase 2 — behavior axes. None of these flip body classes (they
   // gate consumer logic in conflicts.ts / toast-store / ContextWidget
@@ -799,6 +830,7 @@ export function installDebugHelpers(): void {
     // no body class. ContextWidget reads via getCollapsedByDefault().
     collapsedByDefault: (on: boolean) => { state.collapsedByDefault = on; },
     focusMode: (on: boolean) => { state.focusMode = on; syncMarkers(); },
+    rowActions: (mode: RowActions) => { state.rowActions = mode; syncMarkers(); },
     kindStyle: (mode: KindStyle) => { state.kindStyle = mode; syncMarkers(); },
     // collapseMode is pure Vue state — no syncMarkers since it has
     // no body class. ContextWidget reads via getCollapseMode().
@@ -811,6 +843,7 @@ export function installDebugHelpers(): void {
       borderHighlight: state.borderHighlight,
       collapsedByDefault: state.collapsedByDefault,
       focusMode: state.focusMode,
+      rowActions: state.rowActions,
       kindStyle: state.kindStyle,
       collapseMode: state.collapseMode,
       colorIntensity: state.colorIntensity,
@@ -1023,6 +1056,28 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
         + "can be typed straight away. Never applied inside a <lora:…> or "
         + "embedding:… reference, where a comma would end the reference.",
       category: ["Wildcard Pipeline", "7. Runtime behavior", "Autocomplete separator"],
+      onChange: () => notifyCompletionSettingsChanged(),
+    },
+    {
+      id: SETTING_ID_AC_SPACES,
+      name: "Autocomplete: write tags with spaces",
+      type: "boolean",
+      defaultValue: false,
+      tooltip:
+        "Write a picked tag with spaces instead of underscores (blue_hair → "
+        + "blue hair). Short emoticon tags like ^_^ keep theirs.",
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Autocomplete spaces"],
+      onChange: () => notifyCompletionSettingsChanged(),
+    },
+    {
+      id: SETTING_ID_AC_ESCAPE,
+      name: "Autocomplete: escape brackets in tags",
+      type: "boolean",
+      defaultValue: false,
+      tooltip:
+        "Write the brackets in a picked tag as \\( and \\) (fate_(series) → "
+        + "fate_\\(series\\)), so they are not read as a weight.",
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Autocomplete escape brackets"],
       onChange: () => notifyCompletionSettingsChanged(),
     },
     {
@@ -1257,6 +1312,21 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
             singletonKey: "wp-focus-mode",
           });
         }
+      },
+    },
+    {
+      id: SETTING_ID_ROW_ACTIONS,
+      name: "Row buttons",
+      type: "combo",
+      options: ROW_ACTIONS_OPTIONS,
+      defaultValue: "always",
+      tooltip:
+        "When a module row shows its lock, internal and remove buttons. On hover "
+        + "keeps rows calmer; a pressed lock or internal button always shows.",
+      category: ["Wildcard Pipeline", "5. Collapse & focus", "Row buttons"],
+      onChange: (newVal) => {
+        state.rowActions = asRowActions(newVal, "always");
+        syncMarkers();
       },
     },
     // Accessibility — motion + contrast. Lives under Display section

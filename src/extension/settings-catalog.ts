@@ -21,6 +21,7 @@ export const SETTING_ID_INDICATOR = "wildcardPipeline.display.indicatorStyle";
 export const SETTING_ID_BORDER = "wildcardPipeline.display.borderHighlight";
 export const SETTING_ID_COLLAPSED = "wildcardPipeline.display.collapsedByDefault";
 export const SETTING_ID_FOCUS = "wildcardPipeline.display.focusMode";
+export const SETTING_ID_ROW_ACTIONS = "wildcardPipeline.display.rowActions";
 export const SETTING_ID_KIND_STYLE = "wildcardPipeline.display.kindStyle";
 export const SETTING_ID_COLLAPSE_MODE = "wildcardPipeline.display.collapseMode";
 export const SETTING_ID_COLOR_INTENSITY = "wildcardPipeline.display.colorIntensity";
@@ -84,6 +85,11 @@ export const TOAST_LIFETIME_OPTIONS = [
   { text: "Sticky (no auto-dismiss)", value: "sticky" },
 ];
 
+export const ROW_ACTIONS_OPTIONS = [
+  { text: "Always (default)", value: "always" },
+  { text: "On hover", value: "hover" },
+];
+
 export const COLLAPSE_MODE_OPTIONS = [
   { text: "Independent (default)", value: "independent" },
   { text: "Accordion (expanding one collapses siblings)", value: "accordion" },
@@ -107,6 +113,8 @@ export const SETTING_ID_AC_EMBEDDING = "wildcardPipeline.behavior.embeddingAutoc
 export const SETTING_ID_AC_SEPARATOR = "wildcardPipeline.behavior.autocompleteSeparator";
 export const SETTING_ID_AC_MAX_SUGGESTIONS = "wildcardPipeline.behavior.autocompleteMaxSuggestions";
 export const SETTING_ID_AC_MIN_CHARS = "wildcardPipeline.behavior.autocompleteMinChars";
+export const SETTING_ID_AC_SPACES = "wildcardPipeline.behavior.autocompleteSpaces";
+export const SETTING_ID_AC_ESCAPE = "wildcardPipeline.behavior.autocompleteEscapeBrackets";
 
 export const AC_MAX_SUGGESTIONS_OPTIONS = [
   { text: "5", value: "5" },
@@ -132,6 +140,8 @@ export const CANVAS_AUTOCOMPLETE_SETTINGS: Array<{ id: string; type: "combo" | "
   { id: SETTING_ID_AC_LORA, type: "boolean", defaultValue: false },
   { id: SETTING_ID_AC_EMBEDDING, type: "boolean", defaultValue: false },
   { id: SETTING_ID_AC_SEPARATOR, type: "boolean", defaultValue: false },
+  { id: SETTING_ID_AC_SPACES, type: "boolean", defaultValue: false },
+  { id: SETTING_ID_AC_ESCAPE, type: "boolean", defaultValue: false },
   { id: SETTING_ID_AC_MAX_SUGGESTIONS, type: "combo", defaultValue: "20" },
   { id: SETTING_ID_AC_MIN_CHARS, type: "combo", defaultValue: "3" },
 ];
@@ -175,6 +185,8 @@ export const CANVAS_SETTINGS: CanvasSettingMeta[] = [
     tooltip: "Independent: each module collapses on its own. Accordion: expanding a module collapses all others.", group: "behavior" },
   { id: SETTING_ID_FOCUS, name: "Focus mode", type: "boolean", defaultValue: false,
     tooltip: "Hover a module to dim the others.", group: "behavior" },
+  { id: SETTING_ID_ROW_ACTIONS, name: "Row buttons", type: "combo", options: ROW_ACTIONS_OPTIONS, defaultValue: "always",
+    tooltip: "When a module row shows its lock, internal and remove buttons. On hover keeps rows calmer; a pressed lock or internal button always shows.", group: "look" },
   { id: SETTING_ID_NEW_DISABLED, name: "New modules start disabled", type: "boolean", defaultValue: false,
     tooltip: "When on, modules added from the picker start with their toggle off. Useful when configuring before letting them run.", group: "behavior" },
   { id: SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE, name: "Confirm destructive bundle actions", type: "boolean", defaultValue: true,

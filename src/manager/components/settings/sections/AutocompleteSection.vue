@@ -45,6 +45,8 @@ import {
   SETTING_ID_AC_MAX_SUGGESTIONS,
   SETTING_ID_AC_MIN_CHARS,
   SETTING_ID_AC_SEPARATOR,
+  SETTING_ID_AC_SPACES,
+  SETTING_ID_AC_ESCAPE,
   SETTING_ID_AC_TAGS,
 } from "../../../../extension/settings-catalog";
 import { useCanvasSettings } from "../../../composables/useCanvasSettings";
@@ -358,6 +360,54 @@ onMounted(() => {
           aria-label="Append a separator after a pick on the canvas"
           data-test="canvas-ac-separator"
           @update:model-value="canvas.set(SETTING_ID_AC_SEPARATOR, $event)"
+        />
+      </span>
+    </SettingRow>
+    <SettingRow
+      label="Write tags with spaces"
+      hint="blue_hair goes in as blue hair. Short emoticon tags like ^_^ keep their underscores."
+      setting-key="ac-spaces"
+    >
+      <span class="wp-set-ac__pair">
+        <span class="wp-set-ac__cap">Manager</span>
+        <Toggle
+          :model-value="ui.autocompleteSpaces"
+          aria-label="Write tags with spaces"
+          data-test="settings-autocomplete-spaces"
+          @update:model-value="ui.setAutocompleteSpaces($event)"
+        />
+      </span>
+      <span class="wp-set-ac__pair">
+        <span class="wp-set-ac__cap">Canvas</span>
+        <Toggle
+          :model-value="canvasOn(SETTING_ID_AC_SPACES)"
+          aria-label="Write tags with spaces on the canvas"
+          data-test="canvas-ac-spaces"
+          @update:model-value="canvas.set(SETTING_ID_AC_SPACES, $event)"
+        />
+      </span>
+    </SettingRow>
+    <SettingRow
+      label="Escape brackets in tags"
+      hint="fate_(series) goes in as fate_\(series\), so the brackets are not read as a weight."
+      setting-key="ac-escape"
+    >
+      <span class="wp-set-ac__pair">
+        <span class="wp-set-ac__cap">Manager</span>
+        <Toggle
+          :model-value="ui.autocompleteEscapeBrackets"
+          aria-label="Escape brackets in tags"
+          data-test="settings-autocomplete-escape"
+          @update:model-value="ui.setAutocompleteEscapeBrackets($event)"
+        />
+      </span>
+      <span class="wp-set-ac__pair">
+        <span class="wp-set-ac__cap">Canvas</span>
+        <Toggle
+          :model-value="canvasOn(SETTING_ID_AC_ESCAPE)"
+          aria-label="Escape brackets in tags on the canvas"
+          data-test="canvas-ac-escape"
+          @update:model-value="canvas.set(SETTING_ID_AC_ESCAPE, $event)"
         />
       </span>
     </SettingRow>

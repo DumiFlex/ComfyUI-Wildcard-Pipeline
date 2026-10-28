@@ -31,7 +31,9 @@ import {
   completionLimit,
   completionSettingsVersion,
   completionSourceEnabled as sourceOn,
+  tagInsertStyle,
 } from "../../utils/tagSetting";
+import { tagInsertText } from "../rich-text/word-rows";
 import { varColorClass } from "../../../components/shared/var-color";
 import { KIND_ICON_MAP } from "../../../components/shared/kind-icons";
 
@@ -154,7 +156,10 @@ function pick(row: ChatRow): void {
   const p = probe.value;
   if (!el || !p) return;
   const suffix = row.source === "tag" && autocompleteSeparatorEnabled() ? ", " : "";
-  const next = applyRow(el.value, el.selectionStart, p, row, suffix);
+  const written: ChatRow = row.source === "tag"
+    ? { ...row, tag: { ...row.tag, name: tagInsertText(row.tag.name, tagInsertStyle()) } }
+    : row;
+  const next = applyRow(el.value, el.selectionStart, p, written, suffix);
   // The box shows `@Name`; the id goes with the message (`withMentionIds`).
   if (row.source === "item") rememberMention(row.item);
   el.focus();
