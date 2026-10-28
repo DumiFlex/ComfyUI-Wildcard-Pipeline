@@ -4,10 +4,10 @@
     "native-number": 0,
     "native-checkbox": 0,
     "native-range": 2,
-    "inline-svg": 46,
+    "inline-svg": 42,
     "hand-dialog": 17,
     "manager-raw-button": 276,
-    "raw-hex": 935
+    "raw-hex": 924
   },
   "native-select": {},
   "native-number": {},
@@ -23,7 +23,6 @@
     "src/components/context/editors/constraint/sections/ExceptionsSection.vue": 1,
     "src/components/context/editors/fixed-values/sections/ValueRow.vue": 1,
     "src/components/context/editors/wildcard/sections/OptionRow.vue": 1,
-    "src/components/image-filter/PickerModal.vue": 4,
     "src/components/injector/InjectorRow.vue": 1,
     "src/components/seed-list/SeedListWidget.vue": 2,
     "src/components/settings/MockModuleCard.vue": 1,
@@ -196,7 +195,6 @@
     "src/components/debug/DebugWarnings.vue": 3,
     "src/components/image-filter/MaskPainter.vue": 1,
     "src/components/image-filter/PickerHost.vue": 1,
-    "src/components/image-filter/PickerModal.vue": 11,
     "src/components/image-filter/PickerTile.vue": 9,
     "src/components/image-filter/SweepGrid.vue": 1,
     "src/components/injector/InjectorBindingModal.vue": 1,
