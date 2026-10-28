@@ -10,14 +10,17 @@ beforeEach(() => {
   setActivePinia(createPinia());
   document.documentElement.style.cssText = "";
   document.documentElement.removeAttribute("data-accent");
+  document.documentElement.removeAttribute("data-wp-palette");
+  document.documentElement.removeAttribute("data-wp-look");
   localStorage.clear();
 });
 
 describe("TweaksPanel.vue", () => {
-  it("renders 5 preset swatches plus the custom swatch", () => {
+  it("renders the theme's own swatch, 5 presets and the custom swatch", () => {
     const wrap = mount(TweaksPanel);
     const swatches = wrap.findAll('[data-test^="tweaks-accent-"]');
-    expect(swatches).toHaveLength(6);
+    expect(swatches).toHaveLength(7);
+    expect(wrap.find('[data-test="tweaks-accent-theme"]').exists()).toBe(true);
     // Custom swatch sits at the end of the row.
     expect(wrap.find('[data-test="tweaks-accent-custom"]').exists()).toBe(true);
   });
@@ -71,7 +74,7 @@ describe("TweaksPanel.vue", () => {
     tweaks.setAccent("rose");
     tweaks.setDensity("compact");
     await wrap.find('[data-test="tweaks-reset"]').trigger("click");
-    expect(tweaks.accent).toBe("indigo");
+    expect(tweaks.accent).toBe("theme");
     expect(tweaks.density).toBe("comfortable");
   });
 
@@ -94,5 +97,25 @@ describe("TweaksPanel.vue", () => {
     tweaks.togglePanel();
     await wrap.vm.$nextTick();
     expect(wrap.find('[data-test="tweaks-backdrop"]').exists()).toBe(true);
+  });
+});
+
+describe("TweaksPanel.vue — colours and look", () => {
+  it("shows 6 colour themes and 7 looks, and picking one applies it", async () => {
+    const wrap = mount(TweaksPanel);
+    expect(wrap.findAll('[data-test^="tweaks-palette-"]')).toHaveLength(6);
+    expect(wrap.findAll('[data-test^="tweaks-look-"]')).toHaveLength(7);
+    await wrap.find('[data-test="tweaks-palette-nebula"]').trigger("click");
+    await wrap.find('[data-test="tweaks-look-soft"]').trigger("click");
+    expect(document.documentElement.getAttribute("data-wp-palette")).toBe("nebula");
+    expect(document.documentElement.getAttribute("data-wp-look")).toBe("soft");
+    expect(wrap.find('[data-test="tweaks-palette-nebula"]').attributes("aria-checked")).toBe("true");
+  });
+
+  it("hides the accent swatches under High contrast", async () => {
+    const wrap = mount(TweaksPanel);
+    await wrap.find('[data-test="tweaks-palette-contrast"]').trigger("click");
+    expect(wrap.find('[data-test="tweaks-accent-violet"]').exists()).toBe(false);
+    expect(wrap.text()).toContain("High contrast keeps its own accent");
   });
 });

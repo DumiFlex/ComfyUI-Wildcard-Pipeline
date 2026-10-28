@@ -134,6 +134,9 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   until you apply it.
 - **Constraint preview:** a table of each target option's chance for every
   source option, so you can see what a constraint does before running it.
+- **Themes:** six colour themes (Orbit, Native, Nebula, Tide, Ember, High
+  contrast) and seven looks (Orbit, Crisp, Soft, Terminal, Editorial, Compact,
+  TUI) in **Settings › Appearance**. Mix any colours with any look, in dark or light.
 - **Documentation:** the full guide, built into the app.
 
 ## Checking a run

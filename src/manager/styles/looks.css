@@ -1,0 +1,314 @@
+/* =========================================================
+   Looks — `data-wp-look` on <html> (tweaksStore.setLook).
+
+   A look is everything that is not colour: corner radius, type, borders vs
+   shadows, density and how a selected state is drawn. Any look works with
+   any colour theme (styles/themes.css), because these rules only read
+   colour tokens and never set one. Orbit is tokens.css itself.
+
+   Most of a look is the radius / font / height tokens. The rest is a few rules
+   per look on the shared pieces (buttons, inputs, cards, chips, nav,
+   segmented, tabs, checkboxes, tables). `html[data-wp-look=x] .wp-btn` (0,2,1)
+   beats a scoped `.wp-btn[data-v-…]` (0,2,0), so no component has to know
+   about looks. A new shared piece that should follow the looks gets its
+   rule here.
+
+   Fonts: Manrope (Soft) and Fraunces (Editorial headings) are OFL variable
+   latin subsets from Fontsource (licences beside them in fonts/). A browser
+   only downloads an @font-face when a rendered element uses its family, so a
+   look's font costs nothing until that look is picked.
+   ========================================================= */
+
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("./fonts/manrope-latin-wght-normal.woff2") format("woff2-variations"),
+       url("./fonts/manrope-latin-wght-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./fonts/fraunces-latin-wght-normal.woff2") format("woff2-variations"),
+       url("./fonts/fraunces-latin-wght-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../../assets/fonts/jetbrains-mono-latin.woff2") format("woff2-variations"),
+       url("../../assets/fonts/jetbrains-mono-latin.woff2") format("woff2");
+}
+
+/* Heading face; a look may swap it without touching body text. */
+html.wp-manager { --wp-font-head: var(--wp-font); }
+.wp-page__title, .wp-card__title { font-family: var(--wp-font-head); }
+
+/* ================= Crisp: square, outlined, ruled ================= */
+html[data-wp-look="crisp"] {
+  --wp-radius-sm: 2px;
+  --wp-radius:    3px;
+  --wp-radius-lg: 4px;
+  --wp-radius-xl: 4px;
+}
+html[data-wp-look="crisp"] :is(.wp-btn, .wp-btn--sm, .wp-btn--lg, .wp-nav, .wp-chip, .wp-check, .wp-topbar__icon-btn) { border-radius: 2px; }
+html[data-wp-look="crisp"] .wp-btn--secondary { background: transparent; border-color: var(--wp-border-strong); }
+html[data-wp-look="crisp"] .wp-btn--secondary:hover { background: var(--wp-bg-3); }
+html[data-wp-look="crisp"] :is(.wp-input, .wp-select, .wp-textarea, .wp-input-group, .wp-cselect__field) { border-color: var(--wp-border-strong); }
+html[data-wp-look="crisp"] :is(.wp-card, .wp-table-wrap) { border-color: var(--wp-border-strong); }
+html[data-wp-look="crisp"] .wp-chip { background: transparent; }
+html[data-wp-look="crisp"] .wp-nav[data-active] {
+  background: transparent;
+  border-color: var(--wp-accent-500);
+  font-weight: 600;
+}
+html[data-wp-look="crisp"] .wp-nav[data-active]::before { display: none; }
+html[data-wp-look="crisp"] .wp-segmented { border-color: var(--wp-border-strong); background: transparent; }
+html[data-wp-look="crisp"] .wp-segmented__opt { border-radius: 1px; }
+html[data-wp-look="crisp"] .wp-segmented__opt[data-active="true"] {
+  background: color-mix(in oklab, var(--wp-accent-500) 16%, transparent);
+  box-shadow: inset 0 0 0 1px var(--wp-accent-500);
+  color: var(--wp-accent-text);
+}
+html[data-wp-look="crisp"] :is(.wp-table thead th, .wp-sidebar__section, .wp-field__label) {
+  font-family: var(--wp-font-mono);
+  letter-spacing: 0;
+}
+html[data-wp-look="crisp"] .wp-page__title { font-size: 18px; font-weight: 700; letter-spacing: 0; }
+
+/* ================= Soft: pills, no outlines, lifted cards ================= */
+html[data-wp-look="soft"] {
+  --wp-font: "Manrope", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --wp-radius-sm: 10px;
+  --wp-radius:    14px;
+  --wp-radius-lg: 18px;
+  --wp-radius-xl: 22px;
+}
+html[data-wp-look="soft"] :is(.wp-btn, .wp-btn--sm, .wp-btn--lg) { border-radius: 999px; padding-inline: 16px; }
+html[data-wp-look="soft"] .wp-btn--icon { padding-inline: 0; }
+html[data-wp-look="soft"] .wp-btn--secondary { border-color: transparent; }
+html[data-wp-look="soft"] .wp-btn--primary {
+  box-shadow: 0 4px 14px color-mix(in oklab, var(--wp-accent-600) 35%, transparent);
+}
+html[data-wp-look="soft"] :is(.wp-input, .wp-select, .wp-textarea, .wp-input-group, .wp-cselect__field) {
+  border-color: transparent;
+  background: var(--wp-bg-3);
+}
+html[data-wp-look="soft"] .wp-input-group .wp-input { background: transparent; }
+html[data-wp-look="soft"] :is(.wp-card, .wp-table-wrap) {
+  border-color: transparent;
+  box-shadow: var(--wp-shadow-md);
+}
+html[data-wp-look="soft"] :is(.wp-topbar, .wp-sidebar) { border-color: transparent; background: var(--wp-bg); }
+html[data-wp-look="soft"] .wp-chip { border-color: transparent; }
+html[data-wp-look="soft"] .wp-nav { border-radius: 999px; padding-inline: 14px; }
+html[data-wp-look="soft"] .wp-nav[data-active] {
+  background: var(--wp-accent-600);
+  border-color: transparent;
+  color: #fff; /* audit-exempt: white on accent-600, 4.5:1+ in every theme */
+}
+html[data-wp-look="soft"] .wp-nav[data-active]::before { display: none; }
+html[data-wp-look="soft"] .wp-segmented { border-color: transparent; border-radius: 999px; background: var(--wp-bg-3); }
+html[data-wp-look="soft"] .wp-segmented__opt { border-radius: 999px; }
+html[data-wp-look="soft"] .wp-segmented__opt[data-active="true"] {
+  background: var(--wp-accent-600);
+  box-shadow: none;
+  color: #fff; /* audit-exempt: white on accent-600 */
+}
+html[data-wp-look="soft"] .wp-segmented__opt[data-active="true"] .pi { color: inherit; }
+html[data-wp-look="soft"] .wp-check { border-radius: 6px; }
+html[data-wp-look="soft"] .wp-page__title { font-size: 22px; font-weight: 700; }
+
+/* ================= Terminal: mono, zero radius, dashed ================= */
+html[data-wp-look="terminal"] {
+  --wp-font: var(--wp-font-mono);
+  --wp-radius-sm: 0px;
+  --wp-radius:    0px;
+  --wp-radius-lg: 0px;
+  --wp-radius-xl: 0px;
+}
+html[data-wp-look="terminal"] body { font-size: 12.5px; }
+html[data-wp-look="terminal"] :is(.wp-btn, .wp-btn--sm, .wp-btn--lg, .wp-nav, .wp-chip, .wp-check, .wp-segmented, .wp-segmented__opt, .wp-topbar__icon-btn, .wp-nav__count) { border-radius: 0; }
+html[data-wp-look="terminal"] :is(.wp-card, .wp-table-wrap, .wp-input-group--readonly) { border-style: dashed; border-color: var(--wp-border-strong); }
+html[data-wp-look="terminal"] .wp-card__header { border-bottom-style: dashed; }
+html[data-wp-look="terminal"] .wp-table tbody tr:not(:last-child) td { border-bottom-style: dashed; }
+html[data-wp-look="terminal"] .wp-topbar { border-bottom-style: dashed; }
+html[data-wp-look="terminal"] .wp-sidebar { border-right-style: dashed; }
+html[data-wp-look="terminal"] .wp-btn--primary {
+  background: color-mix(in oklab, var(--wp-accent-500) 14%, transparent);
+  border-color: var(--wp-accent-text);
+  color: var(--wp-accent-text);
+}
+html[data-wp-look="terminal"] .wp-btn--primary:hover {
+  background: color-mix(in oklab, var(--wp-accent-500) 24%, transparent);
+  border-color: var(--wp-accent-text-strong);
+}
+html[data-wp-look="terminal"] .wp-btn--secondary { background: transparent; border-color: var(--wp-border-strong); }
+html[data-wp-look="terminal"] .wp-chip { background: transparent; }
+html[data-wp-look="terminal"] .wp-nav[data-active] {
+  background: transparent;
+  border-color: transparent;
+  color: var(--wp-accent-text);
+  font-weight: 600;
+}
+html[data-wp-look="terminal"] .wp-nav[data-active]::before {
+  content: ">";
+  width: auto;
+  top: 50%;
+  bottom: auto;
+  left: 0;
+  transform: translateY(-50%);
+  background: none;
+  color: var(--wp-accent-text);
+  font-weight: 700;
+}
+html[data-wp-look="terminal"] .wp-sidebar__section { text-transform: none; letter-spacing: 0; }
+html[data-wp-look="terminal"] .wp-sidebar__section::before { content: "# "; }
+html[data-wp-look="terminal"] .wp-segmented { border-color: transparent; background: transparent; gap: 4px; }
+html[data-wp-look="terminal"] .wp-segmented__opt[data-active="true"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--wp-accent-text);
+  color: var(--wp-accent-text);
+}
+html[data-wp-look="terminal"] .wp-tabset__tab[data-active="true"] { border-bottom-style: dashed; }
+html[data-wp-look="terminal"] .wp-page__title { font-size: 17px; font-weight: 600; letter-spacing: 0; }
+
+/* ================= Editorial: serif headings, open, underlined ================= */
+html[data-wp-look="editorial"] {
+  --wp-font-head: "Fraunces", Georgia, "Times New Roman", serif;
+  --wp-radius-sm: 4px;
+  --wp-radius:    4px;
+  --wp-radius-lg: 6px;
+}
+html[data-wp-look="editorial"] .wp-page__title { font-size: 28px; line-height: 1.2; font-weight: 500; letter-spacing: -0.01em; }
+html[data-wp-look="editorial"] .wp-card__title { font-size: 16px; font-weight: 500; letter-spacing: 0; }
+html[data-wp-look="editorial"] .wp-content { padding-inline: 36px; --wp-content-px: 36px; }
+html[data-wp-look="editorial"] :is(.wp-topbar, .wp-sidebar) { background: var(--wp-bg); }
+html[data-wp-look="editorial"] .wp-card {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--wp-text);
+  border-radius: 0;
+}
+html[data-wp-look="editorial"] .wp-card__header { padding-inline: 0; }
+html[data-wp-look="editorial"] .wp-card__body { padding-inline: 0; }
+html[data-wp-look="editorial"] .wp-table-wrap { background: transparent; border: 0; border-radius: 0; }
+html[data-wp-look="editorial"] .wp-table thead th {
+  background: transparent;
+  border-bottom-color: var(--wp-text);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+}
+html[data-wp-look="editorial"] .wp-nav[data-active] { background: transparent; border-color: transparent; font-weight: 600; }
+html[data-wp-look="editorial"] .wp-nav[data-active]::before { display: none; }
+html[data-wp-look="editorial"] .wp-nav[data-active] .wp-nav__label {
+  text-decoration: underline;
+  text-decoration-color: var(--wp-accent-500);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
+}
+html[data-wp-look="editorial"] .wp-btn--secondary { background: transparent; border-color: transparent; text-decoration: underline; text-underline-offset: 3px; }
+html[data-wp-look="editorial"] .wp-btn--secondary:hover { background: var(--wp-bg-3); }
+html[data-wp-look="editorial"] .wp-segmented { background: transparent; border: 0; border-radius: 0; gap: 14px; padding-inline: 0; box-shadow: inset 0 -1px 0 var(--wp-border); }
+html[data-wp-look="editorial"] .wp-segmented__opt { padding-inline: 0; border-radius: 0; }
+html[data-wp-look="editorial"] .wp-segmented__opt:hover:not(:disabled) { background: transparent; }
+html[data-wp-look="editorial"] .wp-segmented__opt[data-active="true"] {
+  background: transparent;
+  box-shadow: inset 0 -2px 0 var(--wp-accent-500);
+}
+html[data-wp-look="editorial"] .wp-sidebar__section { text-transform: none; letter-spacing: 0; font-size: 11px; font-style: italic; }
+
+/* ================= Compact: tight rows, small type ================= */
+html[data-wp-look="compact"] {
+  --wp-radius-sm: 3px;
+  --wp-radius:    4px;
+  --wp-radius-lg: 5px;
+  --wp-radius-xl: 6px;
+  --wp-control-h-md-base: 28px;
+  --wp-control-h-lg-base: 32px;
+  --wp-topbar-h: 40px;
+}
+html[data-wp-look="compact"] body { font-size: 12.5px; }
+html[data-wp-look="compact"] :is(.wp-btn, .wp-nav, .wp-topbar__icon-btn) { border-radius: 4px; }
+html[data-wp-look="compact"] .wp-btn { font-size: 12px; padding-inline: 10px; }
+html[data-wp-look="compact"] .wp-btn--icon { padding-inline: 0; }
+html[data-wp-look="compact"] .wp-nav { padding: 5px 8px; font-size: 12.5px; }
+html[data-wp-look="compact"] .wp-content { padding: 12px 16px 28px; --wp-content-px: 16px; }
+html[data-wp-look="compact"] .wp-page__title { font-size: 16px; }
+html[data-wp-look="compact"] .wp-card__header { padding: 8px 10px; }
+html[data-wp-look="compact"] .wp-card__body { padding: 10px; }
+html[data-wp-look="compact"] .wp-table thead th { padding: 6px 10px; }
+html[data-wp-look="compact"] .wp-table tbody td { padding: 5px 10px; font-size: 12px; }
+html[data-wp-look="compact"] .wp-table tbody tr:nth-child(even) td { background: var(--wp-bg-2); }
+html[data-wp-look="compact"] .wp-table tbody tr:hover td { background: var(--wp-bg-3); }
+
+/* ================= TUI: boxed panels, inverse selection, [x] ================= */
+html[data-wp-look="tui"] {
+  --wp-font: var(--wp-font-mono);
+  --wp-radius-sm: 0px;
+  --wp-radius:    0px;
+  --wp-radius-lg: 0px;
+  --wp-radius-xl: 0px;
+  --wp-topbar-h: 40px;
+}
+html[data-wp-look="tui"] body { font-size: 12.5px; }
+html[data-wp-look="tui"] :is(.wp-btn, .wp-btn--sm, .wp-btn--lg, .wp-nav, .wp-chip, .wp-segmented, .wp-segmented__opt, .wp-topbar__icon-btn, .wp-nav__count, .wp-tabset__tab) { border-radius: 0; }
+html[data-wp-look="tui"] .wp-topbar { background: var(--wp-bg-3); border-bottom-color: var(--wp-border-strong); }
+html[data-wp-look="tui"] .wp-sidebar {
+  margin: 8px 0 8px 8px;
+  border: 1px solid var(--wp-border-strong);
+  background: transparent;
+}
+html[data-wp-look="tui"] :is(.wp-card, .wp-table-wrap) { border-color: var(--wp-border-strong); background: transparent; }
+html[data-wp-look="tui"] .wp-card__header { background: var(--wp-bg-3); border-bottom-color: var(--wp-border-strong); padding-block: 6px; }
+html[data-wp-look="tui"] .wp-card__title { color: var(--wp-accent-text); font-weight: 700; }
+html[data-wp-look="tui"] .wp-table thead th { background: var(--wp-bg-3); border-bottom-color: var(--wp-border-strong); text-transform: none; letter-spacing: 0; }
+html[data-wp-look="tui"] .wp-table tbody td { border-bottom: 0; padding-block: 5px; }
+html[data-wp-look="tui"] .wp-table tbody tr:hover td { background: var(--wp-bg-3); }
+html[data-wp-look="tui"] .wp-nav { padding-block: 4px; }
+html[data-wp-look="tui"] .wp-nav[data-active],
+html[data-wp-look="tui"] .wp-segmented__opt[data-active="true"],
+html[data-wp-look="tui"] .wp-tabset__tab[data-active="true"] {
+  background: var(--wp-accent-600);
+  border-color: transparent;
+  box-shadow: none;
+  color: #fff; /* audit-exempt: white on accent-600, 4.5:1+ in every theme */
+}
+html[data-wp-look="tui"] :is(.wp-nav[data-active], .wp-segmented__opt[data-active="true"], .wp-tabset__tab[data-active="true"]) .pi { color: inherit; }
+html[data-wp-look="tui"] .wp-nav[data-active]::before { display: none; }
+html[data-wp-look="tui"] .wp-sidebar__section { text-transform: none; letter-spacing: 0; color: var(--wp-accent-text); }
+html[data-wp-look="tui"] .wp-segmented { border-color: transparent; background: transparent; gap: 6px; }
+html[data-wp-look="tui"] .wp-tabset__tab { padding-inline: 8px; }
+/* Buttons read [ Save ]; an icon-only or link button stays as it is. */
+html[data-wp-look="tui"] .wp-btn { border-color: transparent; }
+html[data-wp-look="tui"] .wp-btn--secondary { background: transparent; }
+html[data-wp-look="tui"] .wp-btn--secondary:hover { background: var(--wp-bg-3); }
+html[data-wp-look="tui"] .wp-btn:not(.wp-btn--icon, .wp-btn--link) .wp-btn__label::before { content: "[ "; }
+html[data-wp-look="tui"] .wp-btn:not(.wp-btn--icon, .wp-btn--link) .wp-btn__label::after { content: " ]"; }
+html[data-wp-look="tui"] :is(.wp-input, .wp-select, .wp-textarea, .wp-input-group, .wp-cselect__field) {
+  border-color: var(--wp-border-strong);
+  background: var(--wp-bg);
+}
+html[data-wp-look="tui"] .wp-input-group .wp-input { background: transparent; }
+/* Checkboxes read [ ] / [x]; the drawn tick hides. */
+html[data-wp-look="tui"] .wp-check {
+  width: auto;
+  min-width: 3ch;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--wp-text-muted);
+  font-family: var(--wp-font-mono);
+  font-size: 12px;
+  line-height: 1;
+}
+html[data-wp-look="tui"] .wp-check svg { display: none; }
+html[data-wp-look="tui"] .wp-check::before { content: "[ ]"; }
+html[data-wp-look="tui"] .wp-check[aria-checked="true"]::before { content: "[x]"; color: var(--wp-accent-text); }
+html[data-wp-look="tui"] .wp-check[aria-checked="mixed"]::before { content: "[-]"; }
+html[data-wp-look="tui"] .wp-page__title { font-size: 16px; font-weight: 700; letter-spacing: 0; }

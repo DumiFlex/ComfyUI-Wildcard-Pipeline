@@ -13,19 +13,21 @@ beforeEach(() => {
   const root = document.documentElement;
   root.style.cssText = "";
   root.removeAttribute("data-accent");
+  root.removeAttribute("data-wp-palette");
+  root.removeAttribute("data-wp-look");
   localStorage.clear();
 });
 
 describe("tweaksStore — accent palette", () => {
-  it("defaults to indigo when no preference is stored", () => {
+  it("defaults to the colour theme's own accent when no preference is stored", () => {
     const tweaks = useTweaksStore();
-    expect(tweaks.accent).toBe("indigo");
+    expect(tweaks.accent).toBe("theme");
   });
 
-  it("reads a saved violet that nobody picked as the indigo default", () => {
+  it("reads a saved violet that nobody picked as the theme's own accent", () => {
     localStorage.setItem("wp-tweaks-v1", JSON.stringify({ accent: "violet", sidebarMode: "collapsed" }));
     const tweaks = useTweaksStore();
-    expect(tweaks.accent).toBe("indigo");
+    expect(tweaks.accent).toBe("theme");
     expect(tweaks.sidebarMode).toBe("collapsed");
   });
 
@@ -110,7 +112,7 @@ describe("tweaksStore — reset", () => {
     tweaks.reset();
     await Promise.resolve();
 
-    expect(tweaks.accent).toBe("indigo");
+    expect(tweaks.accent).toBe("theme");
     expect(tweaks.density).toBe("comfortable");
     expect(document.documentElement.style.getPropertyValue("--wp-accent-500")).toBe("");
     // Density is the ui store's now; reset puts it back to comfortable.
@@ -120,7 +122,7 @@ describe("tweaksStore — reset", () => {
     const raw = localStorage.getItem("wp-tweaks-v1");
     if (raw) {
       const parsed = JSON.parse(raw);
-      expect(parsed.accent).toBe("indigo");
+      expect(parsed.accent).toBe("theme");
       expect(parsed.accentPicked).toBeUndefined();
     }
     expect(localStorage.getItem("wp-density-mode")).toBe("comfortable");
@@ -164,5 +166,81 @@ describe("tweaksStore — persistence", () => {
       ACCENT_PALETTES.amber["--wp-accent-500"],
     );
     expect(root.classList.contains("wp-density-compact")).toBe(true);
+  });
+});
+
+describe("tweaksStore — colour themes and looks", () => {
+  it("starts on Orbit for both, with no attributes on <html>", () => {
+    const tweaks = useTweaksStore();
+    tweaks.initialize();
+    expect(tweaks.palette).toBe("orbit");
+    expect(tweaks.look).toBe("orbit");
+    expect(document.documentElement.hasAttribute("data-wp-palette")).toBe(false);
+    expect(document.documentElement.hasAttribute("data-wp-look")).toBe(false);
+  });
+
+  it("setPalette and setLook write the attributes and persist", async () => {
+    const tweaks = useTweaksStore();
+    tweaks.setPalette("ember");
+    tweaks.setLook("terminal");
+    await Promise.resolve();
+    const root = document.documentElement;
+    expect(root.getAttribute("data-wp-palette")).toBe("ember");
+    expect(root.getAttribute("data-wp-look")).toBe("terminal");
+    const parsed = JSON.parse(localStorage.getItem("wp-tweaks-v1") ?? "{}");
+    expect(parsed.palette).toBe("ember");
+    expect(parsed.look).toBe("terminal");
+
+    setActivePinia(createPinia());
+    const again = useTweaksStore();
+    expect(again.palette).toBe("ember");
+    expect(again.look).toBe("terminal");
+  });
+
+  it("'theme' accent leaves the theme's ramp alone; a preset still overrides it", () => {
+    const tweaks = useTweaksStore();
+    tweaks.setPalette("tide");
+    tweaks.setAccent("rose");
+    const root = document.documentElement;
+    expect(root.style.getPropertyValue("--wp-accent-500")).toBe(ACCENT_PALETTES.rose["--wp-accent-500"]);
+    tweaks.setAccent("theme");
+    expect(root.style.getPropertyValue("--wp-accent-500")).toBe("");
+    expect(root.hasAttribute("data-accent")).toBe(false);
+  });
+
+  it("High contrast locks the accent and drops a picked one", () => {
+    const tweaks = useTweaksStore();
+    tweaks.setAccent("amber");
+    tweaks.setPalette("contrast");
+    expect(tweaks.accentLocked).toBe(true);
+    expect(document.documentElement.style.getPropertyValue("--wp-accent-500")).toBe("");
+    // The pick is remembered and comes back with another theme.
+    tweaks.setPalette("orbit");
+    expect(tweaks.accentLocked).toBe(false);
+    expect(document.documentElement.style.getPropertyValue("--wp-accent-500")).toBe(ACCENT_PALETTES.amber["--wp-accent-500"]);
+  });
+
+  it("picking Compact switches the sidebar to icons once", () => {
+    const tweaks = useTweaksStore();
+    tweaks.setLook("compact");
+    expect(tweaks.sidebarMode).toBe("collapsed");
+  });
+
+  it("ignores an unknown stored palette or look", () => {
+    localStorage.setItem("wp-tweaks-v1", JSON.stringify({ palette: "neon", look: "brutal" }));
+    const tweaks = useTweaksStore();
+    expect(tweaks.palette).toBe("orbit");
+    expect(tweaks.look).toBe("orbit");
+  });
+
+  it("reset puts both back on Orbit", () => {
+    const tweaks = useTweaksStore();
+    tweaks.setPalette("nebula");
+    tweaks.setLook("tui");
+    tweaks.reset();
+    expect(tweaks.palette).toBe("orbit");
+    expect(tweaks.look).toBe("orbit");
+    expect(document.documentElement.hasAttribute("data-wp-palette")).toBe(false);
+    expect(document.documentElement.hasAttribute("data-wp-look")).toBe(false);
   });
 });

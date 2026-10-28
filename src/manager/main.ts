@@ -3,6 +3,8 @@ import { createPinia } from "pinia";
 import "primeicons/primeicons.css";
 import "./styles/tokens.css";
 import "@/components/shared/button.css";
+import "./styles/themes.css";
+import "./styles/looks.css";
 import "./styles/rich-text.css";
 import "./styles/tailwind.css";
 import App from "./App.vue";

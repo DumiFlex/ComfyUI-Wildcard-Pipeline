@@ -6,12 +6,18 @@ import type { SelectOption } from "../../ui/select-types";
 import HsvPicker from "../../../../components/shared/HsvPicker.vue";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
+import ThemeChoices from "../ThemeChoices.vue";
 import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
 import { useUiStore, type DensityMode, type MotionMode, type StartPage, type ThemeMode } from "../../../stores/uiStore";
-import { ACCENT_OPTIONS, SWATCH_PREVIEW, useTweaksStore } from "../../../stores/tweaksStore";
+import { computed } from "vue";
+import { ACCENT_OPTIONS, PALETTE_OPTIONS, SWATCH_PREVIEW, useTweaksStore } from "../../../stores/tweaksStore";
 
 const ui = useUiStore();
 const tweaks = useTweaksStore();
+/** The colour theme's own accent, for the "Theme's own" swatch. */
+/** "Theme's own" first, then the presets. */
+const SWATCHES = ["theme", ...ACCENT_OPTIONS] as const;
+const ownAccent = computed(() => PALETTE_OPTIONS.find((p) => p.id === tweaks.palette)?.swatch[ui.resolvedTheme][2]);
 
 const THEMES: SegmentedOption<ThemeMode>[] = [
   { value: "dark", label: "Dark", icon: "pi-moon" },
@@ -47,8 +53,24 @@ function setSidebar(v: SidebarChoice): void {
 </script>
 
 <template>
-  <SettingGroup title="Look">
-    <SettingRow label="Theme" hint="Dark, light, or follow the system." setting-key="theme">
+  <SettingGroup title="Theme">
+    <SettingRow
+      label="Colours"
+      hint="The colour theme for the manager: surfaces, text and its own accent. Module kind colours stay the same in every theme."
+      setting-key="colours"
+      stacked
+    >
+      <ThemeChoices kind="palette" />
+    </SettingRow>
+    <SettingRow
+      label="Look"
+      hint="Everything that is not colour: corners, type, borders and how a selected item is drawn. Works with any colour theme."
+      setting-key="look"
+      stacked
+    >
+      <ThemeChoices kind="look" />
+    </SettingRow>
+    <SettingRow label="Mode" hint="Dark, light, or follow the system." setting-key="theme">
       <WpSegmented
         :model-value="ui.themeMode"
         :options="THEMES"
@@ -59,22 +81,32 @@ function setSidebar(v: SidebarChoice): void {
     </SettingRow>
     <SettingRow
       label="Accent color"
-      hint="The highlight color for buttons, links and selection. Pick a preset or your own."
+      :hint="tweaks.accentLocked
+        ? 'High contrast keeps its own accent, so this is off while it is the colour theme.'
+        : 'The highlight color for buttons, links and selection. Keep the colour theme\'s own, pick a preset, or your own.'"
       setting-key="accent"
-      :stacked="tweaks.accent === 'custom'"
+      :stacked="tweaks.accent === 'custom' && !tweaks.accentLocked"
     >
-      <div class="wp-set-swatches" role="radiogroup" aria-label="Accent color">
+      <div
+        class="wp-set-swatches"
+        role="radiogroup"
+        aria-label="Accent color"
+        :aria-disabled="tweaks.accentLocked || undefined"
+        :class="{ 'is-locked': tweaks.accentLocked }"
+      >
         <button
-          v-for="name in ACCENT_OPTIONS"
+          v-for="name in SWATCHES"
           :key="name"
           type="button"
           role="radio"
           class="wp-set-swatch"
-          :aria-checked="tweaks.accent === name"
-          :aria-label="`Accent: ${name}`"
-          :title="name"
-          :style="{ background: SWATCH_PREVIEW[name] }"
+          :class="{ 'wp-set-swatch--theme': name === 'theme' }"
+          :aria-checked="name === 'theme' ? tweaks.accent === 'theme' || tweaks.accentLocked : tweaks.accent === name"
+          :aria-label="name === 'theme' ? 'Accent: the colour theme\'s own' : `Accent: ${name}`"
+          :title="name === 'theme' ? 'Theme\'s own' : name"
+          :style="name === 'theme' ? { '--own-accent': ownAccent } : { background: SWATCH_PREVIEW[name] }"
           :data-test="`settings-accent-${name}`"
+          :disabled="tweaks.accentLocked"
           @click="tweaks.setAccent(name)"
         />
         <button
@@ -86,10 +118,11 @@ function setSidebar(v: SidebarChoice): void {
           title="Custom"
           :style="tweaks.accent === 'custom' ? { background: tweaks.customHex } : undefined"
           data-test="settings-accent-custom"
+          :disabled="tweaks.accentLocked"
           @click="tweaks.setAccent('custom')"
         ><Icon name="pi-palette" /></button>
       </div>
-      <div v-if="tweaks.accent === 'custom'" class="wp-set-picker">
+      <div v-if="tweaks.accent === 'custom' && !tweaks.accentLocked" class="wp-set-picker">
         <HsvPicker
           :model-value="tweaks.customHex"
           aria-label="Custom accent color"
@@ -174,6 +207,14 @@ function setSidebar(v: SidebarChoice): void {
   color: #fff;
   font-size: 11px;
 }
+/* "Theme's own": half the live accent, half the page, so it reads as
+ * "whatever the colour theme brings". */
+.wp-set-swatch--theme {
+  background: linear-gradient(135deg, var(--own-accent) 50%, var(--wp-bg-3) 50%);
+  border-color: var(--wp-border-strong);
+}
+.wp-set-swatches.is-locked .wp-set-swatch:not(.wp-set-swatch--theme) { opacity: 0.35; cursor: not-allowed; }
+.wp-set-swatch:disabled { cursor: not-allowed; }
 .wp-set-picker { width: 100%; max-width: 360px; }
 .wp-set-link { text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
 </style>
