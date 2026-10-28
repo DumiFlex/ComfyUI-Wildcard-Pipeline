@@ -126,4 +126,5 @@ Each of these jobs has exactly one component. Don't build a second one, and don'
 | A number | `WpNumber` (`nullable` when empty means "default") | `<input type="number">`, `Input type="number"` (removed) |
 | A tag, status or category | `Chip` (`tone` for meaning, `color` + `icon` for a category) | `CategoryChip` (merged), a pill `span` |
 | A toast | `useToast()` (manager) or `pushToast()` (canvas); both draw `ToastCard` | a toast styled per surface |
+| Look at a picture closely | `WpImageZoom` (`v-model:zoom`, Fit / 100% / 200%, wheel, drag) | an `<img>` with `max-width: 100%` called a zoom, a hand-made transform with its own wheel and drag code |
 | Ask before acting | `ConfirmModal` (manager), `ConfirmDialog` (canvas) | `window.confirm()`, `ConfirmDialog` in the manager |

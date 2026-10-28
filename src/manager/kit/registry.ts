@@ -52,7 +52,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "wp-button", name: "WpButton", group: "actions", file: "src/components/shared/WpButton.vue", surfaces: ["canvas", "manager"],
-    use: "Every button inside a canvas widget or canvas dialog: the canvas twin of Button, with the same variants, sizes and stylesheet (button.css), a PrimeIcons icon and the canvas size sm by default. Leave out the text for an icon button; its aria-label is also its tooltip. A shared piece that shows on both sides uses it too; manager screens use Button.",
+    use: "Every button inside a canvas widget or canvas dialog: the canvas twin of Button, with the same variants, sizes and stylesheet (button.css), a PrimeIcons icon and the canvas size sm by default. Leave out the text for an icon button; its aria-label is also its tooltip. hint sets a tooltip on a labelled button and kbd adds its key chip (P, Enter). A shared piece that shows on both sides uses it too; manager screens use Button.",
     instead: "A <button> with its own __btn class and colours.",
   },
   {
@@ -142,7 +142,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "segmented", name: "Segmented control", group: "choice", file: "src/components/shared/WpSegmented.vue", surfaces: ["manager", "canvas"],
-    use: "Pick one of two to five short options that all stay visible (theme, mode, view). The arrow keys move the choice. icon-only for a row of icons with tooltips.",
+    use: "Pick one of two to five short options that all stay visible (theme, mode, view). The arrow keys move the choice. icon-only for a row of icons with tooltips; an option's hint and kbd show in its tooltip (\"Grid\" with the key G).",
     instead: "A row of joined buttons with its own active colour, or a select with three options.",
   },
   // Display
@@ -167,6 +167,11 @@ export const KIT_ENTRIES: KitEntry[] = [
   {
     id: "empty-state", name: "EmptyState", group: "display", file: "src/manager/components/ui/EmptyState.vue", surfaces: ["manager"],
     use: "A page or list with nothing in it yet: say what goes here and offer the one action that fills it. size page (an empty list page), panel (the default, in a card or panel) or inline (one row).",
+  },
+  {
+    id: "image-zoom", name: "WpImageZoom", group: "display", file: "src/components/shared/WpImageZoom.vue", surfaces: ["canvas", "manager"],
+    use: "Look at one picture closely: real zoom levels (Fit, 100%, 200%, − / +), scroll to zoom toward the pointer, drag to move, double-click for Fit or 100% at that spot, keys + − 0 1 2 when focused. v-model:zoom keeps the level (null = Fit), and the spot carries over when src changes, so a series is checked in one place. Slots bar-start / bar-end add buttons to its bar.",
+    instead: "An <img> with max-width: 100% called a zoom, or a hand-made transform with its own wheel and drag code.",
   },
   {
     id: "disclosure", name: "Disclosure", group: "display", file: "src/components/shared/Disclosure.vue", surfaces: ["manager", "canvas"],
@@ -328,6 +333,7 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "wp-switch": `<WpSwitch v-model="held" variant="chip" icon="pi-link" label="Hold across run" />`,
   "radio": `<label><input v-model="mode" type="radio" class="wp-radio" value="a"> Tags</label>`,
   "tabs": `<WpTabs v-model="tab" :tabs="[{ id: 'options', label: 'Options', count: 12 }, { id: 'rules', label: 'Rules' }]" aria-label="Editor sections" />`,
+  "image-zoom": `<WpImageZoom v-model:zoom="zoom" :src="url" alt="Frame 3" hint="Drag to move · scroll to zoom" />`,
   "segmented": `<WpSegmented v-model="theme" :options="[{ value: 'dark', label: 'Dark', icon: 'pi-moon' }, { value: 'light', label: 'Light', icon: 'pi-sun' }]" aria-label="Theme" />`,
   "disclosure": `<Disclosure v-model:open="open" label="Advanced" :count="3">…</Disclosure>`,
   "data-table": `<DataTable v-model:sort="sort" v-model:selected="picked" :columns="columns" :rows="rows" row-key="id" selectable aria-label="Tags" />`,
