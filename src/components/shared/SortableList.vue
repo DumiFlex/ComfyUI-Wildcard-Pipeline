@@ -14,7 +14,7 @@
  * polite live line ("Hair moved to 2 of 5"). Only the grip starts a drag,
  * so text and controls in the row work as usual.
  */
-import { computed, nextTick, ref, shallowRef, useId } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, useId } from "vue";
 import { dropIndex, moveItem } from "./sortable";
 
 const props = withDefaults(defineProps<{
@@ -114,6 +114,9 @@ function endDrag(ev: PointerEvent | null, keep: boolean): void {
     announce(`${nameOf(item, d.from)} moved to ${d.to + 1} of ${total.value}`);
   }
 }
+
+// A list removed mid-drag must not leave its Escape listener on the window.
+onBeforeUnmount(() => window.removeEventListener("keydown", onDragKey, true));
 
 function onDragKey(ev: KeyboardEvent): void {
   if (ev.key !== "Escape") return;
