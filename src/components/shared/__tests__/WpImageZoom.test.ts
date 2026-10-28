@@ -59,4 +59,31 @@ describe("WpImageZoom", () => {
     expect(z).toBeGreaterThan(0.25);
     w.unmount();
   });
+
+  it("offers Fullscreen only when asked, and F fills the screen with the viewer", async () => {
+    const plain = mount(WpImageZoom, { props: { src: "a.png" } });
+    expect(plain.find('[data-test="imgzoom-full"]').exists()).toBe(false);
+    plain.unmount();
+
+    const w = mount(WpImageZoom, { props: { src: "a.png", fullscreen: true }, attachTo: document.body });
+    await ready(w);
+    const root = w.element as HTMLElement;
+    let asked = 0;
+    root.requestFullscreen = () => {
+      asked++;
+      Object.defineProperty(document, "fullscreenElement", { value: root, configurable: true });
+      document.dispatchEvent(new Event("fullscreenchange"));
+      return Promise.resolve();
+    };
+    await w.find('[data-test="imgzoom-stage"]').trigger("keydown", { key: "f" });
+    await w.vm.$nextTick();
+    expect(asked).toBe(1);
+    expect(root.classList.contains("is-full")).toBe(true);
+    expect(w.find('[data-test="imgzoom-full"]').attributes("aria-label")).toBe("Leave fullscreen");
+    Object.defineProperty(document, "fullscreenElement", { value: null, configurable: true });
+    document.dispatchEvent(new Event("fullscreenchange"));
+    await w.vm.$nextTick();
+    expect(root.classList.contains("is-full")).toBe(false);
+    w.unmount();
+  });
 });

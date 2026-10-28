@@ -24,7 +24,7 @@ const ports = [
 const modes = [
   { term: "Grid (G)", desc: "Pick fast. Click an image or press Space over it; Ctrl+A picks everything and a frame's all button picks the frame. Tile size S, M, L or Fit (F, as big as the picker allows). Double-click an image or click its frame to open it in Detail." },
   { term: "Detail (D)", desc: "One image next to its size, seed, values, prompt, negative and mask. Only what is wired shows. Pick / Picked (P) picks it, ←/→ step, the strip under it jumps to any image. C compares two images with a slider, M paints a mask." },
-  { term: "Zoom (Z)", desc: "Only the picture, at Fit, 100%, 200% or any level between (− / +, keys 0 1 2). Scroll zooms toward the mouse, drag moves, double-click goes to 100% at that spot. ←/→ keep the zoom and the spot on the next image." },
+  { term: "Zoom (Z)", desc: "Only the picture, at Fit, 100%, 200% or any level between (− / +, keys 0 1 2). Scroll zooms toward the mouse, drag moves, double-click goes to 100% at that spot. F (or the fullscreen button) fills the screen. ←/→ keep the zoom and the spot on the next image." },
 ];
 
 const keys = [
@@ -154,6 +154,8 @@ const settings = [
           whole frame. With <b>One per image</b> it covers just that image.</li>
         <li>A painted mask goes to the <code>masks</code> output, resized to the image. Images you
           don't paint keep the incoming mask, or an empty one when nothing is wired in.</li>
+        <li>While painting, a ring under the mouse is the brush at its real size (dashed for the
+          eraser).</li>
       </ul>
       <DocImage
         src="images/docs/wp-image-filter-refine.png"

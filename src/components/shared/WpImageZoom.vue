@@ -3,7 +3,9 @@
  * Image zoom: one picture with real zoom levels. Scroll zooms toward the
  * pointer, drag moves, double-click switches between Fit and 100% at that
  * spot. The bar on top has − / Fit / 100% / 200% / + and the level; when
- * the viewer has focus, + − 0 1 2 do the same.
+ * the viewer has focus, + − 0 1 2 do the same. With `fullscreen` the bar
+ * also gets a Fullscreen button (key F) that fills the screen with the
+ * viewer, bar and slots included; Esc leaves it.
  *
  * `v-model:zoom` is the level (`null` = Fit). The viewer also keeps the spot
  * it shows when `src` changes, so stepping through a series stays on the same
@@ -27,11 +29,14 @@ const props = withDefaults(defineProps<{
   controls?: boolean;
   /** Hint shown under the bar's buttons, e.g. "Drag to move · scroll to zoom". */
   hint?: string;
+  /** Offer a Fullscreen button (and key F). */
+  fullscreen?: boolean;
   size?: "sm" | "md";
-}>(), { alt: "", zoom: null, controls: true, hint: undefined, size: "sm" });
+}>(), { alt: "", zoom: null, controls: true, hint: undefined, fullscreen: false, size: "sm" });
 
 const emit = defineEmits<{ "update:zoom": [zoom: number | null] }>();
 
+const root = ref<HTMLElement | null>(null);
 const stage = ref<HTMLElement | null>(null);
 const stageSize = ref<Size>({ width: 0, height: 0 });
 const image = ref<Size>({ width: 0, height: 0 });
@@ -82,7 +87,23 @@ function setZoom(scale: number | null, at?: { x: number; y: number }): void {
 function zoomIn(): void { setZoom(stepScale(view.value.scale, 1, fit.value)); }
 function zoomOut(): void { setZoom(stepScale(view.value.scale, -1, fit.value)); }
 
-defineExpose({ zoomIn, zoomOut, setZoom });
+const isFull = ref(false);
+const canFull = computed(() => props.fullscreen && typeof document !== "undefined" && document.fullscreenEnabled !== false);
+function onFullChange(): void {
+  isFull.value = !!root.value && document.fullscreenElement === root.value;
+}
+function toggleFullscreen(): void {
+  if (!canFull.value || !root.value) return;
+  if (document.fullscreenElement === root.value) void document.exitFullscreen?.();
+  else void root.value.requestFullscreen?.().then(() => stage.value?.focus()).catch(() => undefined);
+}
+if (typeof document !== "undefined") document.addEventListener("fullscreenchange", onFullChange);
+onBeforeUnmount(() => {
+  document.removeEventListener("fullscreenchange", onFullChange);
+  if (root.value && document.fullscreenElement === root.value) void document.exitFullscreen?.();
+});
+
+defineExpose({ zoomIn, zoomOut, setZoom, toggleFullscreen });
 
 watch(() => props.zoom, (z) => {
   // A level set from outside (the parent, a key): keep the middle spot.
@@ -154,6 +175,7 @@ function onKey(ev: KeyboardEvent): void {
     "+": zoomIn, "=": zoomIn, "-": zoomOut, "_": zoomOut,
     "0": () => setZoom(null), "1": () => setZoom(1), "2": () => setZoom(2),
   };
+  if (canFull.value) { act.f = toggleFullscreen; act.F = toggleFullscreen; }
   const fn = act[ev.key];
   if (!fn) return;
   ev.preventDefault();
@@ -172,7 +194,7 @@ const at = (s: number): boolean => !isFit.value && Math.abs(view.value.scale - s
 </script>
 
 <template>
-  <div class="wp-imgzoom" :data-size="size">
+  <div ref="root" class="wp-imgzoom" :class="{ 'is-full': isFull }" :data-size="size">
     <div v-if="controls" class="wp-imgzoom__bar" role="toolbar" aria-label="Zoom">
       <slot name="bar-start" />
       <WpButton variant="ghost" :size="size" icon="pi-minus" aria-label="Zoom out" kbd="−" data-test="imgzoom-out" @click="zoomOut" />
@@ -181,6 +203,17 @@ const at = (s: number): boolean => !isFit.value && Math.abs(view.value.scale - s
       <WpButton :variant="at(2) ? 'secondary' : 'ghost'" :size="size" kbd="2" hint="Twice the real size" :aria-pressed="at(2)" data-test="imgzoom-200" @click="setZoom(2)">200%</WpButton>
       <WpButton variant="ghost" :size="size" icon="pi-plus" aria-label="Zoom in" kbd="+" data-test="imgzoom-in" @click="zoomIn" />
       <span class="wp-imgzoom__level" aria-live="polite" data-test="imgzoom-level">{{ level }}</span>
+      <WpButton
+        v-if="canFull"
+        variant="ghost"
+        :size="size"
+        :icon="isFull ? 'pi-window-minimize' : 'pi-window-maximize'"
+        :aria-label="isFull ? 'Leave fullscreen' : 'Fullscreen'"
+        :aria-pressed="isFull"
+        kbd="F"
+        data-test="imgzoom-full"
+        @click="toggleFullscreen"
+      />
       <slot name="bar-end" />
     </div>
     <!-- The stage is a focusable viewport: its keys (+ − 0 1 2) and the bar do everything the pointer does. -->
@@ -225,6 +258,13 @@ const at = (s: number): boolean => !isFit.value && Math.abs(view.value.scale - s
   min-width: 0;
   min-height: 0;
   height: 100%;
+}
+.wp-imgzoom.is-full {
+  width: 100vw;
+  height: 100vh;
+  padding: var(--wp-space-3);
+  box-sizing: border-box;
+  background: var(--wp-bg);
 }
 .wp-imgzoom__bar {
   position: absolute;

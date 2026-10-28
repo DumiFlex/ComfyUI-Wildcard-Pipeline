@@ -243,7 +243,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "image-zoom", name: "WpImageZoom", group: "display", file: "src/components/shared/WpImageZoom.vue", surfaces: ["canvas", "manager"],
-    use: "Look at one picture closely: real zoom levels (Fit, 100%, 200%, − / +), scroll to zoom toward the pointer, drag to move, double-click for Fit or 100% at that spot, keys + − 0 1 2 when focused. v-model:zoom keeps the level (null = Fit), and the spot carries over when src changes, so a series is checked in one place. Slots bar-start / bar-end add buttons to its bar.",
+    use: "Look at one picture closely: real zoom levels (Fit, 100%, 200%, − / +), scroll to zoom toward the pointer, drag to move, double-click for Fit or 100% at that spot, keys + − 0 1 2 when focused. v-model:zoom keeps the level (null = Fit), and the spot carries over when src changes, so a series is checked in one place. Slots bar-start / bar-end add buttons to its bar; `fullscreen` adds a Fullscreen button (key F) that fills the screen with the viewer, bar included.",
     instead: "An <img> with max-width: 100% called a zoom, or a hand-made transform with its own wheel and drag code.",
   },
   {
