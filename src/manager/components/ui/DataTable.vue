@@ -17,6 +17,10 @@
  * the sorted column carries `aria-sort`. The table sorts its rows itself
  * (by `sortValue`, else the cell value); with `manual-sort` it only reports
  * the sort and the parent passes rows in order.
+ *
+ * `row-clickable` makes each row open something (a trace, a detail panel):
+ * rows take focus, and a click or Enter emits `row-click`. `active-key`
+ * marks the row that is open.
  */
 import { computed } from "vue";
 import Checkbox from "./Checkbox.vue";
@@ -64,6 +68,10 @@ const props = withDefaults(defineProps<{
   /** Extra attributes per row, e.g. `data-test`. */
   rowAttrs?: (row: T) => Record<string, string | undefined>;
   size?: "sm" | "md";
+  /** Rows are focusable and emit `row-click` on click or Enter. */
+  rowClickable?: boolean;
+  /** The key of the row that is open, drawn highlighted. */
+  activeKey?: string | null;
 }>(), {
   sort: null,
   selected: () => [],
@@ -72,11 +80,13 @@ const props = withDefaults(defineProps<{
   emptyText: "Nothing here yet.",
   rowAttrs: undefined,
   size: "md",
+  activeKey: null,
 });
 
 const emit = defineEmits<{
   (e: "update:sort", s: DataSort | null): void;
   (e: "update:selected", keys: string[]): void;
+  (e: "row-click", row: T): void;
 }>();
 
 const keyOf = (row: T): string =>
@@ -208,8 +218,13 @@ const span = computed(() => props.columns.length + (props.selectable ? 1 : 0));
             v-bind="rowAttrs ? rowAttrs(row) : {}"
             :aria-selected="selectable ? picked.has(keyOf(row)) : undefined"
             :data-selected="selectable && picked.has(keyOf(row)) ? 'true' : undefined"
+            :data-active="activeKey !== null && keyOf(row) === activeKey ? 'true' : undefined"
+            :data-clickable="rowClickable || undefined"
+            :tabindex="rowClickable ? 0 : undefined"
+            @click="rowClickable && emit('row-click', row)"
+            @keydown.enter="rowClickable && emit('row-click', row)"
           >
-            <td v-if="selectable" class="wp-data-table__check">
+            <td v-if="selectable" class="wp-data-table__check" @click.stop>
               <Checkbox
                 class="wp-checkbox--inline"
                 :model-value="picked.has(keyOf(row))"
@@ -262,6 +277,9 @@ const span = computed(() => props.columns.length + (props.selectable ? 1 : 0));
 .wp-data-table__sort-icon { font-size: 10px; opacity: 0.5; }
 .wp-data-table__sort[data-sorted] .wp-data-table__sort-icon { opacity: 1; color: var(--wp-accent-text); }
 .wp-data-table tbody tr[data-selected="true"] td { background: var(--wp-row-active, var(--wp-row-hover)); }
+.wp-data-table tbody tr[data-clickable] { cursor: pointer; }
+.wp-data-table tbody tr[data-clickable]:focus-visible { outline: 2px solid var(--wp-border-focus); outline-offset: -2px; }
+.wp-data-table tbody tr[data-active="true"] td { background: color-mix(in oklab, var(--wp-accent-500) 16%, transparent); }
 .wp-data-table__empty td { padding: 20px 12px; text-align: center; }
 .wp-data-table__sr {
   position: absolute;

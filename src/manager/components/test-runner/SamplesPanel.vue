@@ -5,6 +5,7 @@
  */
 import SearchInput from "@/components/shared/SearchInput.vue";
 import { computed, ref } from "vue";
+import DataTable, { type DataColumn, type DataSort } from "../ui/DataTable.vue";
 import type { ScenarioRunResponse } from "../../api/types";
 import { negativeText, orderByStack, renderValue, type StackItemView } from "../../utils/scenario";
 
@@ -39,21 +40,52 @@ const negColumn = computed(() => {
   return !!out && props.result.samples.some((s) => (s.negatives?.[out]?.length ?? 0) > 0);
 });
 
-const rows = computed(() => {
+interface SampleRow {
+  seed: number;
+  error: string | null | undefined;
+  warnings: number;
+  cells: string[];
+  negative: string;
+  [key: `v${number}`]: string;
+}
+
+const rows = computed<SampleRow[]>(() => {
   const q = filter.value.trim().toLowerCase();
   const out = props.outputVar;
   return props.result.samples
-    .map((s) => ({
-      seed: s.seed,
-      error: s.error,
-      warnings: s.warnings.length,
-      cells: columns.value.map((c) => renderValue(s.vars[c])),
-      negative: negColumn.value && out ? negativeText(s, out) : "",
-    }))
+    .map((s) => {
+      const cells = columns.value.map((c) => renderValue(s.vars[c]));
+      const row: SampleRow = {
+        seed: s.seed,
+        error: s.error,
+        warnings: s.warnings.length,
+        cells,
+        negative: negColumn.value && out ? negativeText(s, out) : "",
+      };
+      cells.forEach((c, i) => { row[`v${i}`] = c; });
+      return row;
+    })
     .filter((r) => !q || String(r.seed).includes(q)
       || r.cells.some((c) => c.toLowerCase().includes(q))
       || r.negative.toLowerCase().includes(q));
 });
+
+/** One column per variable (`v0`, `v1`…, sortable by its text), then the
+ *  output's negatives and the warning count. */
+const tableColumns = computed<DataColumn<SampleRow>[]>(() => [
+  { key: "seed", label: "Seed", sortable: true, mono: true, class: "wp-trsm__seed" },
+  ...columns.value.map((c, i): DataColumn<SampleRow> => ({
+    key: `v${i}`,
+    label: `$${c}`,
+    sortable: true,
+    class: c === props.outputVar ? "wp-trsm__out" : "wp-trsm__var",
+  })),
+  ...(negColumn.value ? [{ key: "negative", label: "Negative", class: "wp-trsm__neg" }] : []),
+  { key: "warnings", label: "Warnings", sortable: true, align: "right" as const, firstDir: "desc" as const },
+]);
+
+const sort = ref<DataSort | null>(null);
+const varCols = computed(() => columns.value.map((c, i) => ({ name: c, key: `v${i}`, index: i })));
 </script>
 
 <template>
@@ -72,42 +104,38 @@ const rows = computed(() => {
     <p v-if="!columns.length" class="wp-trsm__none" data-test="samples-empty">
       This stack writes no variables, so there is nothing to tabulate. A constraint on its own only re-weights a later wildcard: add its source and target wildcards to see its effect.
     </p>
-    <div v-else class="wp-trsm__scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>Seed</th>
-            <th v-for="c in columns" :key="c" :data-output="c === outputVar ? 'true' : 'false'"><code>${{ c }}</code></th>
-            <th v-if="negColumn" class="wp-trsm__neg-head" data-test="samples-neg-head" :title="`Negative words $${outputVar} carries`">Negative</th>
-            <th>Warnings</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="r in rows"
-            :key="r.seed"
-            :data-selected="r.seed === selectedSeed ? 'true' : 'false'"
-            tabindex="0"
-            data-test="sample-row"
-            @click="emit('open', r.seed)"
-            @keydown.enter="emit('open', r.seed)"
-          >
-            <td class="wp-trsm__seed">{{ r.seed }}</td>
-            <td v-if="r.error" :colspan="Math.max(1, columns.length + (negColumn ? 1 : 0))" class="wp-trsm__err">{{ r.error }}</td>
-            <template v-else>
-              <td
-                v-for="(cell, i) in r.cells"
-                :key="i"
-                :title="cell"
-                :data-output="columns[i] === outputVar ? 'true' : 'false'"
-              >{{ cell }}</td>
-              <td v-if="negColumn" class="wp-trsm__neg" :title="r.negative" data-test="sample-neg">{{ r.negative }}</td>
-            </template>
-            <td :class="{ 'wp-trsm__warn': r.warnings }">{{ r.warnings }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      v-else
+      v-model:sort="sort"
+      class="wp-trsm__table"
+      :columns="tableColumns"
+      :rows="rows"
+      :row-key="(r: SampleRow) => String(r.seed)"
+      :active-key="selectedSeed === null ? null : String(selectedSeed)"
+      :row-attrs="() => ({ 'data-test': 'sample-row' })"
+      row-clickable
+      size="sm"
+      aria-label="Samples"
+      empty-text="No seed matches the filter."
+      @row-click="(r: SampleRow) => emit('open', r.seed)"
+    >
+      <template v-for="c in varCols" :key="`h-${c.key}`" #[`head-${c.key}`]>
+        <code>${{ c.name }}</code>
+      </template>
+      <template v-for="c in varCols" :key="`c-${c.key}`" #[`cell-${c.key}`]="{ row }">
+        <span v-if="row.error" :class="{ 'wp-trsm__err': c.index === 0 }" :title="c.index === 0 ? row.error : undefined">{{ c.index === 0 ? row.error : "" }}</span>
+        <span v-else :title="row.cells[c.index]">{{ row.cells[c.index] }}</span>
+      </template>
+      <template #head-negative>
+        <span data-test="samples-neg-head" :title="`Negative words $${outputVar} carries`">Negative</span>
+      </template>
+      <template #cell-negative="{ row }">
+        <span data-test="sample-neg" :title="row.negative">{{ row.error ? "" : row.negative }}</span>
+      </template>
+      <template #cell-warnings="{ row }">
+        <span :class="{ 'wp-trsm__warn': row.warnings }">{{ row.warnings }}</span>
+      </template>
+    </DataTable>
   </div>
 </template>
 
@@ -115,28 +143,17 @@ const rows = computed(() => {
 .wp-trsm { display: flex; flex-direction: column; gap: var(--wp-space-5); }
 .wp-trsm__bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--wp-space-5); font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wp-trsm__filter { width: min(320px, 100%); }
-.wp-trsm__scroll { overflow: auto; max-height: 560px; border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm); }
-table { border-collapse: collapse; width: 100%; font-size: var(--wp-text-sm); }
-th {
-  position: sticky; top: 0; background: var(--wp-bg-2); text-align: left; white-space: nowrap;
-  padding: var(--wp-space-3) var(--wp-space-4); border-bottom: 1px solid var(--wp-border);
-  font-size: var(--wp-text-xs); font-weight: var(--wp-weight-medium); color: var(--wp-text-muted);
-}
-th code { color: var(--wp-accent-text); }
-td {
-  padding: var(--wp-space-3) var(--wp-space-4); border-bottom: 1px solid var(--wp-border);
-  max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-td[data-output="true"] { max-width: 520px; }
-th[data-output="true"] code { color: var(--wp-text); }
-tbody tr { cursor: pointer; }
-tbody tr:hover td { background: var(--wp-bg-3); }
-tbody tr[data-selected="true"] td { background: color-mix(in oklab, var(--wp-accent-500) 16%, transparent); }
-tbody tr:focus-visible { outline: 2px solid var(--wp-border-focus); outline-offset: -2px; }
-.wp-trsm__seed { font-family: var(--wp-font-mono); color: var(--wp-text-muted); }
+/* DataTable draws the rows, sticky header, sort buttons and the open row;
+ * this caps its height and keeps long values to one line. */
+.wp-trsm__table { max-height: 560px; border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm); }
+.wp-trsm__table :deep(td) { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-trsm__table :deep(td.wp-trsm__out) { max-width: 520px; }
+.wp-trsm__table :deep(th code) { color: var(--wp-accent-text); text-transform: none; }
+.wp-trsm__table :deep(th.wp-trsm__out code) { color: var(--wp-text); }
+.wp-trsm__table :deep(.wp-trsm__seed) { color: var(--wp-text-muted); }
 .wp-trsm__none { margin: 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 .wp-trsm__warn { color: var(--wp-warn); }
 .wp-trsm__err { color: var(--wp-danger-text); }
-.wp-trsm__neg { color: var(--wp-danger-text); max-width: 320px; }
-th.wp-trsm__neg-head { color: var(--wp-danger-text); }
+.wp-trsm__table :deep(td.wp-trsm__neg) { color: var(--wp-danger-text); max-width: 320px; }
+.wp-trsm__table :deep(th.wp-trsm__neg) { color: var(--wp-danger-text); }
 </style>
