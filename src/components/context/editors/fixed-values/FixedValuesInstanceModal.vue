@@ -1,6 +1,6 @@
 <script setup lang="ts">
+import Kbd from "../../../shared/Kbd.vue";
 import { computed } from "vue";
-import { saveChordLabel } from "../../../shared/platform-keys";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
 import ValuesSection from "./sections/ValuesSection.vue";
@@ -11,7 +11,6 @@ import CloseButton from "../../../shared/CloseButton.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
-const saveChord = saveChordLabel();
 const props = withDefaults(
   defineProps<{
     module: ModuleEntry;
@@ -96,7 +95,7 @@ function onSpaClick(): void {
         @click="emit('clear-all-overrides')"
       >Reset overrides</WpButton>
       <span class="wp-fvm__hint">
-        <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
+        <Kbd keys="Esc" size="sm" /> cancel · <Kbd keys="Mod+Enter" size="sm" /> save
       </span>
       <WpButton
         v-if="canSaveToLibrary"
@@ -154,13 +153,5 @@ function onSpaClick(): void {
   margin-left: auto;
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
-}
-.wp-fvm__hint kbd {
-  font: 9px var(--wp-font-mono);
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  padding: 1px 4px;
-  border-radius: min(2px, var(--wp-radius-cap, 999px));
-  color: var(--wp-text-muted, var(--wp-text2));
 }
 </style>

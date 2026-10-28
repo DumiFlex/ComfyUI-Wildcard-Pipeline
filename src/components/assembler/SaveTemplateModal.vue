@@ -5,6 +5,7 @@ import ModalShell from "../shared/ModalShell.vue";
 import WpSelect from "../shared/WpSelect.vue";
 import { pushToast } from "../shared/toast-store";
 import WpButton from "../shared/WpButton.vue";
+import CodeBlock from "../shared/CodeBlock.vue";
 import CloseButton from "../shared/CloseButton.vue";
 
 const props = defineProps<{
@@ -159,15 +160,20 @@ async function submit(mode: "update" | "new") {
 
         <div class="wp-stm-field">
           <label class="wp-stm-field__label">Template preview</label>
-          <pre class="wp-stm-preview" data-test="save-tpl-preview">{{ templateString || "(empty)" }}</pre>
+          <CodeBlock class="wp-stm-preview" :code="templateString || '(empty)'" bare default-wrap size="sm" max-height="110px" data-test="save-tpl-preview" />
         </div>
 
         <div v-if="negativeTemplate" class="wp-stm-field">
           <label class="wp-stm-field__label wp-stm-field__label--neg">Negative template</label>
-          <pre
+          <CodeBlock
             class="wp-stm-preview wp-stm-preview--neg"
+            :code="negativeTemplate"
+            bare
+            default-wrap
+            size="sm"
+            max-height="110px"
             data-test="save-tpl-neg-preview"
-          >{{ negativeTemplate }}</pre>
+          />
         </div>
 
         <p v-if="errorMsg" class="wp-stm-error" data-test="save-tpl-error">{{ errorMsg }}</p>
@@ -258,23 +264,8 @@ async function submit(mode: "update" | "new") {
 .wp-stm-input:focus { outline: 1px solid var(--wp-accent-500, var(--wp-accent)); }
 .wp-stm-input--multi { resize: vertical; overscroll-behavior: contain; min-height: 46px; }
 .wp-stm-select { width: 100%; height: 32px; font-size: 13px; }
-.wp-stm-preview {
-  margin: 0;
-  padding: 8px 10px;
-  background: var(--wp-bg-2, #15151f);
-  border: 1px solid var(--wp-border, #2a2a3a);
-  border-radius: min(6px, var(--wp-radius-cap, 999px));
-  font-family: var(--wp-font-mono, monospace);
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-y: auto;
-  max-height: 110px;
-  color: var(--wp-text-muted, #a1a1ad);
-}
-.wp-stm-preview--neg {
-  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border, #2a2a3a));
-}
+
+.wp-stm-preview--neg { border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border)); }
 .wp-stm-field__label--neg { color: var(--wp-danger); }
 .wp-stm-note {
   display: flex;

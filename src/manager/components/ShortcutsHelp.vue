@@ -8,9 +8,10 @@
  * backdrop-click semantics.
  *
  * Each group is just a static array of `{label, keys[]}` rows. Keys
- * render as `<kbd>` chips. Platform-aware: shows ⌘ on macOS, Ctrl
- * elsewhere, since the global shortcut handlers honor either modifier.
+ * render with Kbd: "Mod" shows ⌘ on macOS and Ctrl elsewhere, since the
+ * global shortcut handlers honor either modifier.
  */
+import Kbd from "@/components/shared/Kbd.vue";
 import { computed } from "vue";
 import Modal from "./ui/Modal.vue";
 
@@ -22,42 +23,42 @@ const emit = defineEmits<{
   (e: "update:open", v: boolean): void;
 }>();
 
-const isMac = typeof navigator !== "undefined" && /Mac|iP(hone|ad|od)/i.test(navigator.platform);
-const mod = computed(() => (isMac ? "⌘" : "Ctrl"));
 
 interface Shortcut {
   label: string;
   keys: string[];
+  /** Another key that does the same, shown after "or" (↑ or ↓). */
+  or?: string[];
 }
 
 const groups = computed<Array<{ label: string; rows: Shortcut[] }>>(() => [
   {
     label: "Global",
     rows: [
-      { label: "Open command palette", keys: [mod.value, "K"] },
-      { label: "Show this shortcut sheet", keys: [mod.value, "/"] },
-      { label: "Toggle sidebar", keys: [mod.value, "B"] },
-      { label: "Explain the selected text (AI assistant)", keys: [mod.value, "Shift", "X"] },
+      { label: "Open command palette", keys: ["Mod", "K"] },
+      { label: "Show this shortcut sheet", keys: ["Mod", "/"] },
+      { label: "Toggle sidebar", keys: ["Mod", "B"] },
+      { label: "Explain the selected text (AI assistant)", keys: ["Mod", "Shift", "X"] },
       { label: "Skip to main content (focused)", keys: ["Tab"] },
     ],
   },
   {
     label: "Editors",
     rows: [
-      { label: "Save", keys: [mod.value, "S"] },
+      { label: "Save", keys: ["Mod", "S"] },
       { label: "Cancel / back to list", keys: ["Esc"] },
     ],
   },
   {
     label: "Test Runner",
     rows: [
-      { label: "Run module", keys: [mod.value, "Enter"] },
+      { label: "Run module", keys: ["Mod", "Enter"] },
     ],
   },
   {
     label: "Lists",
     rows: [
-      { label: "Focus row above / below", keys: ["↑", "↓"] },
+      { label: "Focus row above / below", keys: ["↑"], or: ["↓"] },
       { label: "Open focused row", keys: ["Enter"] },
       { label: "Toggle row selection", keys: ["Space"] },
     ],
@@ -84,7 +85,11 @@ const groups = computed<Array<{ label: string; rows: Shortcut[] }>>(() => [
           <template v-for="row in group.rows" :key="row.label">
             <dt>{{ row.label }}</dt>
             <dd>
-              <kbd v-for="(k, i) in row.keys" :key="i" class="wp-kbd">{{ k }}</kbd>
+              <Kbd :keys="row.keys" />
+              <template v-if="row.or">
+                <span class="wp-shortcuts__or">or</span>
+                <Kbd :keys="row.or" />
+              </template>
             </dd>
           </template>
         </dl>
@@ -123,5 +128,9 @@ const groups = computed<Array<{ label: string; rows: Shortcut[] }>>(() => [
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+.wp-shortcuts__or {
+  font-size: var(--wp-text-xs);
+  color: var(--wp-text-dim);
 }
 </style>

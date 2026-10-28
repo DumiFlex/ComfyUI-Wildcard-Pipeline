@@ -6,6 +6,7 @@
  * reach and hits, a combine's template and outputs, …).
  */
 import CloseButton from "@/components/shared/CloseButton.vue";
+import CodeBlock from "@/components/shared/CodeBlock.vue";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import Button from "../ui/Button.vue";
 import DataTable, { type DataColumn, type DataSort } from "../ui/DataTable.vue";
@@ -162,7 +163,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
       <!-- Combine: the template, what it reads, the outputs it produced. -->
       <section v-else-if="data?.kind === 'combine'" class="wp-tri__sec" data-test="inspect-combine">
         <h4>Template <span v-if="data.output" class="wp-tri__var">→ ${{ data.output }}</span></h4>
-        <pre class="wp-tri__tpl">{{ data.template || "(empty)" }}</pre>
+        <CodeBlock class="wp-tri__tpl" :code="data.template || '(empty)'" title="Template" default-wrap />
         <p v-if="data.fixed" class="wp-tri__warn">Plain text with no <code>$variables</code>, <code>@{}</code> references or choices, so it's the same on every run.</p>
         <p v-else-if="data.reads.length" class="wp-tri__reads">
           Reads <code v-for="r in data.reads" :key="r">${{ r }}</code>
@@ -279,11 +280,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 .wp-tri__facts { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: var(--wp-space-2) var(--wp-space-5); }
 .wp-tri__facts dt { color: var(--wp-text-dim); font-size: var(--wp-text-xs); padding-top: 1px; }
 .wp-tri__facts dd { margin: 0; word-break: break-word; }
-.wp-tri__tpl {
-  margin: 0; padding: var(--wp-space-4) var(--wp-space-5); white-space: pre-wrap; word-break: break-word;
-  background: var(--wp-bg-2); border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm);
-  font: var(--wp-text-sm)/1.5 var(--wp-font-mono); color: var(--wp-text);
-}
+
 .wp-tri__reads { margin: 0; display: flex; flex-wrap: wrap; gap: var(--wp-space-3); align-items: baseline; font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wp-tri__rules, .wp-tri__children { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wp-space-2); }
 .wp-tri__rules li { display: flex; flex-direction: column; gap: var(--wp-space-1); padding: var(--wp-space-3) var(--wp-space-4); background: var(--wp-bg-2); border-radius: var(--wp-radius-sm); }

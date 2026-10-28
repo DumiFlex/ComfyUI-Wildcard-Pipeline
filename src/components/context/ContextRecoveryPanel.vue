@@ -4,6 +4,7 @@
 /** `showRaw` ("View raw") is owned by the widget so it survives the panel
  *  unmounting and coming back. */
 import WpButton from "../shared/WpButton.vue";
+import CodeBlock from "../shared/CodeBlock.vue";
 
 defineProps<{ error: string; raw: string; showRaw: boolean }>();
 defineEmits<{ reset: []; toggleRaw: [] }>();
@@ -24,6 +25,6 @@ defineEmits<{ reset: []; toggleRaw: [] }>();
       <WpButton :icon="showRaw ? 'pi-eye-slash' : 'pi-eye'" @click="$emit('toggleRaw')">{{ showRaw ? "Hide raw" : "View raw" }}</WpButton>
       <WpButton variant="danger" icon="pi-refresh" @click="$emit('reset')">Reset to empty</WpButton>
     </div>
-    <pre v-if="showRaw" class="wp-recovery__raw">{{ raw }}</pre>
+    <CodeBlock v-if="showRaw" class="wp-recovery__raw" :code="raw" title="Saved data" size="sm" default-wrap max-height="160px" />
   </div>
 </template>

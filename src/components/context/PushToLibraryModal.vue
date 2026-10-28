@@ -39,6 +39,7 @@ import WpCheck from "@/components/shared/WpCheck.vue";
 import LoadingMark from "../shared/LoadingMark.vue";
 import CloseButton from "../shared/CloseButton.vue";
 import WpButton from "../shared/WpButton.vue";
+import CodeBlock from "../shared/CodeBlock.vue";
 
 interface Bundle {
   id: string;
@@ -513,7 +514,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 
             <div class="wp-ptl-field">
               <label class="wp-ptl-field__label">Payload preview</label>
-              <pre class="wp-ptl-payload" data-test="ptl-payload-preview">{{ payloadPreview }}</pre>
+              <CodeBlock class="wp-ptl-payload" :code="payloadPreview" language="JSON" size="sm" max-height="140px" data-test="ptl-payload-preview" />
             </div>
 
             <div v-if="bundlesLoading" class="wp-ptl-bundles wp-ptl-bundles--loading">
@@ -698,19 +699,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 }
 .wp-ptl-input:focus { outline: 1px solid var(--wp-accent-500, #6366f1); }
 .wp-ptl-input--multi { resize: vertical; overscroll-behavior: contain; min-height: 48px; }
-.wp-ptl-payload {
-  margin: 0;
-  padding: 8px 10px;
-  background: var(--wp-bg-2, #15151f);
-  border: 1px solid var(--wp-border, #2a2a3a);
-  border-radius: min(6px, var(--wp-radius-cap, 999px));
-  font-family: var(--wp-font-mono, monospace);
-  font-size: 11px;
-  white-space: pre;
-  overflow: auto;
-  max-height: 140px;
-  color: var(--wp-text-muted, #a1a1ad);
-}
+
 .wp-ptl-bundles {
   padding: 8px 10px;
   background: color-mix(in oklab, var(--wp-warn, #facc15) 8%, transparent);

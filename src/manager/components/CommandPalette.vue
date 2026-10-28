@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Kbd from "@/components/shared/Kbd.vue";
 import { computed, nextTick, ref, watch } from "vue";
 import Icon from "./ui/Icon.vue";
 import type { CommandItem } from "./CommandPalette.types";
@@ -128,7 +129,7 @@ function onBackdropClick() {
             <li v-if="!ranked.length" class="wp-cp__empty">No matches.</li>
           </ul>
           <div class="wp-cp__hint">
-            <kbd>↑↓</kbd> navigate · <kbd>↵</kbd> open · <kbd>Esc</kbd> close
+            <Kbd keys="↑" size="sm" /><Kbd keys="↓" size="sm" /> navigate · <Kbd keys="Enter" size="sm" /> open · <Kbd keys="Esc" size="sm" /> close
           </div>
         </div>
       </div>
@@ -214,11 +215,5 @@ function onBackdropClick() {
   border-top: 1px solid var(--wp-border);
   font-size: var(--wp-text-xs);
   color: var(--wp-text-muted);
-}
-.wp-cp__hint kbd {
-  font-family: var(--wp-font-mono);
-  background: var(--wp-bg-3);
-  padding: 1px var(--wp-space-2);
-  border-radius: var(--wp-radius-sm);
 }
 </style>

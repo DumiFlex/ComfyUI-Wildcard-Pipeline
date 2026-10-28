@@ -303,10 +303,10 @@
       <!-- Footer -->
       <footer class="wp-picker__footer">
         <span class="wp-picker__hint">
-          <kbd>↑</kbd><kbd>↓</kbd> nav
-          · <kbd>tab</kbd> kind
-          · <kbd>space</kbd> toggle · <kbd>⌘↵</kbd> add
-          · <kbd>esc</kbd> cancel
+          <Kbd keys="↑" size="sm" /><Kbd keys="↓" size="sm" /> nav
+          · <Kbd keys="Tab" size="sm" /> kind
+          · <Kbd keys="Space" size="sm" /> toggle · <Kbd keys="Mod+Enter" size="sm" /> add
+          · <Kbd keys="Esc" size="sm" /> cancel
         </span>
         <span class="wp-picker__footer-spacer"></span>
         <WpButton @click="$emit('close')">Cancel</WpButton>
@@ -339,6 +339,7 @@
  * Every embeddable kind with a payload is pickable. Rows render
  * disabled only when their payload is missing (broken library entry).
  */
+import Kbd from "../shared/Kbd.vue";
 import SearchInput from "../shared/SearchInput.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import ModalShell from "../shared/ModalShell.vue";
@@ -1358,9 +1359,7 @@ onBeforeUnmount(detachCaptureListeners);
   color: var(--wp-text-dim);
   font-size: 11px;
 }
-/* Hint strip — keycap-style kbd chips matching BundlePicker so both
- * pickers feel like the same family. Raised look via 2px bottom
- * border, monospaced label, neutral chip color. */
+/* Hint strip: the keys are the kit's Kbd. */
 .wp-picker__hint {
   display: inline-flex;
   align-items: center;
@@ -1368,16 +1367,6 @@ onBeforeUnmount(detachCaptureListeners);
   flex-wrap: wrap;
   color: var(--wp-text-dim, var(--wp-text-muted));
   font: 500 11px/1 var(--wp-font-sans);
-}
-.wp-picker__hint kbd {
-  font: 600 10px/1 var(--wp-font-mono, monospace);
-  background: var(--wp-bg2, var(--wp-bg-3));
-  border: 1px solid var(--wp-border);
-  border-bottom-width: 2px;
-  color: var(--wp-text);
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  padding: 2px 5px;
-  margin: 0 1px;
 }
 .wp-picker__footer-spacer { flex: 1; }
 

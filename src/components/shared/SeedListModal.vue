@@ -2,6 +2,7 @@
 /** Per-iteration seed modal — shared by the Context Loop + Seed List
  *  node widgets. Computes the derived list locally (seed-derive mirror)
  *  and overlays seed_locks; edits re-emit the full merged lock map. */
+import Kbd from "./Kbd.vue";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { deriveLoopSeeds, parseSeedLocks, type SeedStrategy } from "./seed-derive";
 import SeedLockRow from "./SeedLockRow.vue";
@@ -205,7 +206,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="sm__foot">
-          <span class="sm__foot-hint"><kbd>Esc</kbd> to close · locks save with the node</span>
+          <span class="sm__foot-hint"><Kbd keys="Esc" size="sm" /> to close · locks save with the node</span>
           <span class="sm__foot-spacer" />
           <button class="ghost" :class="{ 'ghost--copied': pasted }" data-test="mx-seed-paste"
             title="Replace all locks from copied text" @click="pasteAll">
@@ -248,7 +249,6 @@ onBeforeUnmount(() => {
 .sm__inactive-label { padding: 8px 8px 4px; margin-top: 4px; border-top: 1px dashed var(--wp-border); font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .08em; color: var(--wp-text-dim, var(--wp-text3)); }
 .sm__foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; flex-shrink: 0; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
 .sm__foot-hint { font: 10px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
-.sm__foot-hint kbd { font: 9px var(--wp-font-mono); background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); padding: 1px 4px; border-radius: min(2px, var(--wp-radius-cap, 999px)); }
 .sm__foot-spacer { flex: 1; }
 .btn { padding: 6px 14px; border: 1px solid var(--wp-accent); border-radius: min(3px, var(--wp-radius-cap, 999px)); background: var(--wp-accent); color: #fff; font: 11px var(--wp-font-sans); cursor: pointer; }
 </style>

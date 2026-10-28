@@ -7,7 +7,7 @@
     "inline-svg": 25,
     "hand-dialog": 15,
     "manager-raw-button": 251,
-    "raw-hex": 848
+    "raw-hex": 841
   },
   "native-select": {},
   "native-number": {},
@@ -144,14 +144,14 @@
   },
   "raw-hex": {
     "src/components/assembler/LoadTemplateModal.vue": 5,
-    "src/components/assembler/SaveTemplateModal.vue": 14,
+    "src/components/assembler/SaveTemplateModal.vue": 10,
     "src/components/cleaner/CleanerWidget.vue": 6,
     "src/components/context-loop/ContextLoopWidget.vue": 5,
     "src/components/context-loop/SweepPanel.vue": 20,
     "src/components/context/ModulePickerModal.vue": 5,
     "src/components/context/PairBadge.vue": 14,
     "src/components/context/PushBundleToLibraryModal.vue": 40,
-    "src/components/context/PushToLibraryModal.vue": 40,
+    "src/components/context/PushToLibraryModal.vue": 37,
     "src/components/context/bundles/BundleDropBar.vue": 2,
     "src/components/context/editors/InstanceIdChip.vue": 8,
     "src/components/context/editors/bundle/BundleInstanceModal.vue": 5,
