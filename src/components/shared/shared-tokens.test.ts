@@ -65,6 +65,8 @@ describe("shared token names", () => {
       "./ProgressBar.vue", "./Skeleton.vue", "./Badge.vue", "./Stepper.vue", "./DropZone.vue", "./SortableList.vue",
       "./InlineEdit.vue", "./TagInput.vue", "./Slider.vue", "./ResizeHandle.vue", "./SplitPane.vue",
       "./DescriptionList.vue", "./CodeBlock.vue", "./Pagination.vue", "./Kbd.vue", "./Separator.vue", "./Toolbar.vue",
+      "./Combobox.vue", "./DatePicker.vue", "./RangeSlider.vue", "./RadioGroup.vue", "./Avatar.vue", "./Timeline.vue",
+      "./DiffView.vue", "./ImageGrid.vue", "./Lightbox.vue", "./VirtualList.vue", "./VisuallyHidden.vue",
     ];
     const stray = files.flatMap((f) =>
       [...read(f).matchAll(/var\((--wp-[a-z0-9-]+)/g)].map((m) => m[1]).filter((n) => !shared.has(n)).map((n) => `${f}: ${n}`),

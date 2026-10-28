@@ -139,6 +139,21 @@ export const KIT_ENTRIES: KitEntry[] = [
     id: "hsv-picker", name: "HsvPicker", group: "inputs", file: "src/components/shared/HsvPicker.vue", surfaces: ["canvas", "manager"],
     use: "A full colour square and hue bar, for when presets are not enough.",
   },
+  {
+    id: "combobox", name: "Combobox", group: "inputs", file: "src/components/shared/Combobox.vue", surfaces: ["manager", "canvas"],
+    use: "A select you can type in, for long lists: models, LoRAs, categories, variables. Typing filters, the arrows light an option, Enter takes it. multiple keeps the picks as chips and the list open, with a tick on each pick. Use WpSelect for a few fixed choices and TagInput when people may type their own words.",
+    instead: "A search box over a hand-made list, or a native <select> nobody can type in.",
+  },
+  {
+    id: "date-picker", name: "DatePicker", group: "inputs", file: "src/components/shared/DatePicker.vue", surfaces: ["manager", "canvas"],
+    use: "Pick a calendar day (a \"changed since\" filter, a history range). The value is a YYYY-MM-DD string; the month grid opens in a Popover. Arrows move a day or a week, PageUp/PageDown a month (Shift a year), Enter picks; min and max fence it.",
+    instead: "<input type=\"date\">, which looks different in every browser and ignores the theme.",
+  },
+  {
+    id: "range-slider", name: "RangeSlider", group: "inputs", file: "src/components/shared/RangeSlider.vue", surfaces: ["manager", "canvas"],
+    use: "A low and a high number on one track: a weight range, a token budget, a sweep's from and to. The thumbs can't cross and keep min-gap apart; with-input adds a WpNumber for each end.",
+    instead: "Two Sliders or two number boxes that can end up the wrong way round.",
+  },
   // Choice
   {
     id: "checkbox", name: "Checkbox", group: "choice", file: "src/manager/components/ui/Checkbox.vue", surfaces: ["manager"],
@@ -171,6 +186,11 @@ export const KIT_ENTRIES: KitEntry[] = [
     id: "segmented", name: "Segmented control", group: "choice", file: "src/components/shared/WpSegmented.vue", surfaces: ["manager", "canvas"],
     use: "Pick one of two to five short options that all stay visible (theme, mode, view). The arrow keys move the choice. icon-only for a row of icons with tooltips; an option's hint and kbd show in its tooltip (\"Grid\" with the key G).",
     instead: "A row of joined buttons with its own active colour, or a select with three options.",
+  },
+  {
+    id: "radio-group", name: "RadioGroup", group: "choice", file: "src/components/shared/RadioGroup.vue", surfaces: ["manager", "canvas"],
+    use: "One of a few options that each need a line of explanation (prompt style, install mode). One Tab stop, the arrows move and choose; cards draws each option as a bordered card. For two to five short words on one row use Segmented.",
+    instead: "A column of .wp-radio inputs with their own labels and hint text.",
   },
   // Display
   {
@@ -226,6 +246,30 @@ export const KIT_ENTRIES: KitEntry[] = [
     use: "Rows and columns: sticky header, sort by a column, tick rows, loading and empty rows. Put custom cells in #cell-<key>.",
     instead: "A <table class=\"wp-table\"> with its own sort state and select-all.",
   },
+  {
+    id: "avatar", name: "Avatar", group: "display", file: "src/components/shared/Avatar.vue", surfaces: ["manager", "canvas"],
+    use: "A person or bot: community authors, chat participants, history entries. Shows the picture, or initials on a colour picked from the name when there is none or it fails to load. decorative when the name is written beside it.",
+  },
+  {
+    id: "timeline", name: "Timeline", group: "display", file: "src/components/shared/Timeline.vue", surfaces: ["manager", "canvas"],
+    use: "Events in order on one line: history, an AI trace, a pack build log. Each has a title, a time, an optional body and a tone; the last can be pending (a pulsing dot). #body and #time slots take a diff, a code block or a RelativeDate.",
+    instead: "A list with its own dots and connecting line.",
+  },
+  {
+    id: "diff-view", name: "DiffView", group: "display", file: "src/components/shared/DiffView.vue", surfaces: ["manager", "canvas"],
+    use: "What changed between two texts, by words (an option, a template) or by lines (a pack, JSON). Removed is struck through on red, added is on green, and screen readers hear \"removed\"/\"added\". layout=\"split\" puts Before and After side by side.",
+    instead: "Two text boxes next to each other, or colour alone marking the change.",
+  },
+  {
+    id: "image-grid", name: "ImageGrid", group: "display", file: "src/components/shared/ImageGrid.vue", surfaces: ["manager", "canvas"],
+    use: "A grid of image tiles that fills its width: run outputs, frames, community previews. A click opens the Lightbox; selectable puts a check box on each tile with v-model:selected holding the ids. A tile without a src shimmers while it loads.",
+    instead: "A flex wrap of <img> tags with its own zoom overlay.",
+  },
+  {
+    id: "visually-hidden", name: "VisuallyHidden", group: "display", file: "src/components/shared/VisuallyHidden.vue", surfaces: ["manager", "canvas"],
+    use: "Text only screen readers hear: a label for an icon-only area, a live status line. focusable shows it again when it gets focus (a \"Skip to\" link).",
+    instead: "Another copy of the 1 px clip rule (.wp-sr-only, __sr spans).",
+  },
   // Navigation
   {
     id: "stepper", name: "Stepper", group: "navigation", file: "src/components/shared/Stepper.vue", surfaces: ["manager", "canvas"],
@@ -257,6 +301,11 @@ export const KIT_ENTRIES: KitEntry[] = [
     id: "sortable-list", name: "SortableList", group: "layout", file: "src/components/shared/SortableList.vue", surfaces: ["manager", "canvas"],
     use: "Rows you put in order: drag the grip (a line shows where it lands, Escape cancels), or from the keyboard Space picks up, the arrows move, Space drops; Alt+↑/↓ moves one step. Each move is said to screen readers.",
     instead: "HTML drag and drop with its own handle, drop line and no keyboard.",
+  },
+  {
+    id: "virtual-list", name: "VirtualList", group: "layout", file: "src/components/shared/VirtualList.vue", surfaces: ["manager", "canvas"],
+    use: "A long list of same-height rows (thousands of options, every library item): only the rows in view are built, so it scrolls smoothly. Rows keep their place for screen readers; scrollToIndex brings one into view.",
+    instead: "Rendering every row, or a hand-made windowing loop.",
   },
   // Feedback
   {
@@ -339,6 +388,11 @@ export const KIT_ENTRIES: KitEntry[] = [
     id: "context-menu", name: "ContextMenu", group: "overlays", file: "src/components/shared/ContextMenu.vue", surfaces: ["canvas", "manager"],
     use: "A right-click menu at the pointer: sections, icons, dividers, a danger item. It stays on screen near the edges. For a menu behind a button use DropdownMenu.",
     instead: "Another absolutely positioned list of buttons.",
+  },
+  {
+    id: "lightbox", name: "Lightbox", group: "overlays", file: "src/components/shared/Lightbox.vue", surfaces: ["manager", "canvas"],
+    use: "One image full screen over a dimmed page: arrows or the side buttons step through the rest, Escape or the close button shuts it and focus goes back. Built on ModalShell, so keys inside never reach ComfyUI. ImageGrid opens it for you.",
+    instead: "A fixed-position <img> with its own Escape listener (DocImage's zoom).",
   },
   // Library pieces
   {
@@ -470,6 +524,17 @@ export const KIT_EXAMPLES: Record<string, string> = {
   "progress": `<ProgressBar :value="done" :max="total" label="Testing seeds" show-value />`,
   "skeleton": `<Skeleton shape="row" :lines="4" label="Loading modules" />`,
   "icon-picker": `<IconPicker v-model="icon" aria-label="Category icon" />`,
+  "combobox": `<Combobox v-model="cats" multiple :options="categories" aria-label="Categories" />`,
+  "date-picker": `<DatePicker v-model="since" :max="today" clearable aria-label="Changed since" />`,
+  "range-slider": `<RangeSlider v-model="range" :min="0" :max="2" :step="0.1" aria-label="Weight" with-input />`,
+  "radio-group": `<RadioGroup v-model="style" :options="[{ value: 'tags', label: 'Tags', hint: 'Comma separated' }]" aria-label="Prompt style" />`,
+  "avatar": `<Avatar :name="post.author" :src="post.avatar_url" size="sm" />`,
+  "timeline": `<Timeline :items="history"><template #time="{ item }"><RelativeDate :value="item.at" /></template></Timeline>`,
+  "diff-view": `<DiffView :before="old.text" :after="draft.text" />`,
+  "image-grid": `<ImageGrid v-model:selected="keep" :images="outputs" selectable />`,
+  "visually-hidden": `<VisuallyHidden aria-live="polite">{{ status }}</VisuallyHidden>`,
+  "virtual-list": `<VirtualList :items="options" :item-height="32" :item-key="(o) => o.id" label="Options"><template #item="{ item }">{{ item.text }}</template></VirtualList>`,
+  "lightbox": `<Lightbox v-model:open="open" v-model:index="at" :images="shots" />`,
 };
 
 export function kitEntry(id: string): KitEntry {
