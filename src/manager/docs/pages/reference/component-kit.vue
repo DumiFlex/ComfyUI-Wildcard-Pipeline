@@ -36,7 +36,7 @@ const groups = KIT_GROUPS.map((g) => ({ ...g, count: KIT_ENTRIES.filter((e) => e
       <p>
         Pieces shared by the canvas and the manager (the node dialog, the right-click menu, popovers,
         tooltips, the search box, the number field, the toast, tabs, the segmented control, folding
-        sections, banners, the copy and close buttons, progress bars, loading shapes, badges, steps, pages,
+        sections, banners, the copy and close buttons, the small row buttons, progress bars, loading shapes, badges, steps, pages,
         sliders, tag boxes, rename-in-place, file drop areas, reorderable lists, resizable panels, key
         caps, code blocks, label/value lists, type-to-filter dropdowns, date pickers, range sliders, radio
         choices, avatars, timelines, diffs, image grids with a full-screen viewer and long scrolling lists)
