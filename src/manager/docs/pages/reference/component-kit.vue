@@ -36,7 +36,9 @@ const groups = KIT_GROUPS.map((g) => ({ ...g, count: KIT_ENTRIES.filter((e) => e
       <p>
         Pieces shared by the canvas and the manager (the node dialog, the right-click menu, popovers,
         tooltips, the search box, the number field, the toast, tabs, the segmented control, folding
-        sections, banners, the copy and close buttons) are shown live too. Each of these is one component
+        sections, banners, the copy and close buttons, progress bars, loading shapes, badges, steps, pages,
+        sliders, tag boxes, rename-in-place, file drop areas, reorderable lists, resizable panels, key
+        caps, code blocks and label/value lists) are shown live too. Each of these is one component
         on both sides: the search box in a node picker and on a manager page is the same box, and so are
         the number fields, tabs and toasts. The canvas toast store is the one piece listed with how to use
         it instead of a live demo.
