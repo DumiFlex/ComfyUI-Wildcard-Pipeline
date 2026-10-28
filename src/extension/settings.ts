@@ -57,6 +57,10 @@ import {
   COLLAPSE_MODE_OPTIONS,
   COLOR_INTENSITY_OPTIONS,
   BUNDLE_MASTER_OFF_OPTIONS,
+  SETTING_ID_AC_TAGS,
+  SETTING_ID_AC_LORA,
+  SETTING_ID_AC_EMBEDDING,
+  SETTING_ID_AC_SEPARATOR,
   SETTING_ID_AC_MAX_SUGGESTIONS,
   SETTING_ID_AC_MIN_CHARS,
   AC_MAX_SUGGESTIONS_OPTIONS,
@@ -715,6 +719,7 @@ export function listenForManagerSettings(app: SettingWriter): () => void {
   channel.onmessage = (event: MessageEvent<CanvasSettingMessage>) => {
     const msg = event.data;
     if (!msg || typeof msg.id !== "string" || !msg.id.startsWith("wildcardPipeline.")) return;
+    if (msg.source === "canvas") return;
     const set = app.extensionManager?.setting?.set;
     if (typeof set !== "function") return;
     try {
@@ -724,6 +729,19 @@ export function listenForManagerSettings(app: SettingWriter): () => void {
     }
   };
   return () => channel.close();
+}
+
+/**
+ * Tell an open manager page that a canvas setting changed here (the other
+ * half of `listenForManagerSettings`). Fire and forget: no manager open means
+ * nobody listens, and the value is already saved by ComfyUI.
+ */
+export function announceCanvasSetting(id: string, value: unknown): void {
+  if (typeof BroadcastChannel === "undefined") return;
+  const channel = new BroadcastChannel(CANVAS_SETTINGS_CHANNEL);
+  const msg: CanvasSettingMessage = { id, value, source: "canvas" };
+  channel.postMessage(msg);
+  channel.close();
 }
 
 export function watchA11ySystemPrefs(): () => void {
@@ -883,7 +901,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
     // failure this whole feature keeps having to design around: a control that
     // implies a capability it does not have.
     {
-      id: "wildcardPipeline.behavior.tagAutocomplete",
+      id: SETTING_ID_AC_TAGS,
       name: "Booru tag autocomplete",
       type: (_name, setter, value, _attrs) => {
         const wrap = document.createElement("label");
@@ -934,6 +952,9 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
         + "editors. Requires a tag list, installed from the manager's Settings. "
         + "Only affects this extension's own inputs.",
       category: ["Wildcard Pipeline", "7. Runtime behavior", "Tag autocomplete"],
+      // The switch's own handler nudges editors too; this covers a change
+      // that arrives from the manager or the playground instead.
+      onChange: () => notifyCompletionSettingsChanged(),
     },
     // The other two completion sources. Same hand-built control as the tag
     // setting above, for the same reason it exists: a count beside the switch.
@@ -942,13 +963,13 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
     // manager to check.
     ...(
       [
-        { id: "wildcardPipeline.behavior.loraAutocomplete", name: "LoRA autocomplete",
+        { id: SETTING_ID_AC_LORA, name: "LoRA autocomplete",
           kind: "lora", noun: "LoRAs",
           tooltip:
             "Suggest installed LoRA names while typing in Wildcard Pipeline node "
             + "editors, inserting the full <lora:name:1.0> syntax. Reads the models "
             + "ComfyUI already knows about. Only affects this extension's own inputs." },
-        { id: "wildcardPipeline.behavior.embeddingAutocomplete", name: "Embedding autocomplete",
+        { id: SETTING_ID_AC_EMBEDDING, name: "Embedding autocomplete",
           kind: "embedding", noun: "embeddings",
           tooltip:
             "Suggest installed embedding names while typing in Wildcard Pipeline "
@@ -990,9 +1011,10 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       defaultValue: false,
       tooltip: src.tooltip,
       category: ["Wildcard Pipeline", "7. Runtime behavior", src.name],
+      onChange: () => notifyCompletionSettingsChanged(),
     })),
     {
-      id: "wildcardPipeline.behavior.autocompleteSeparator",
+      id: SETTING_ID_AC_SEPARATOR,
       name: "Append \", \" after a completion",
       type: "boolean",
       defaultValue: false,
@@ -1470,6 +1492,16 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       },
     },
   ];
+  // Every change, from the panel, the playground or the manager, is
+  // announced so an open manager page shows it without a refocus.
+  for (const entry of entries) {
+    if (entry.id === "wildcardPipeline.display._playground") continue;
+    const inner = entry.onChange;
+    entry.onChange = (newVal, oldVal) => {
+      inner?.(newVal, oldVal);
+      if (newVal !== oldVal) announceCanvasSetting(entry.id, newVal);
+    };
+  }
   // ComfyUI's settings panel renders entries in reverse array order
   // within a section. Reverse so what we wrote in logical top-to-bottom
   // order matches what the user sees in the panel.

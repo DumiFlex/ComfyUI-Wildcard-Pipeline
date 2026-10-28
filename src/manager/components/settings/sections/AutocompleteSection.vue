@@ -11,8 +11,13 @@
  * Refresh exists because ComfyUI caches its own file lists.
  *
  * The limits are read on the editor's hot path from localStorage by
- * `utils/tagSetting.ts` (the canvas has its own copies in ComfyUI's settings
- * panel), so they are written there directly.
+ * `utils/tagSetting.ts`, so they are written there directly.
+ *
+ * Every row has two values: the manager's own, and the canvas copy that
+ * ComfyUI › Settings › Wildcard Pipeline edits. They may differ on purpose
+ * (suggestions here, none on nodes), so both show side by side; the canvas
+ * column goes through `useCanvasSettings`, which keeps it in step with
+ * ComfyUI's panel both ways.
  */
 import { computed, onMounted, ref } from "vue";
 import Toggle from "../../ui/Toggle.vue";
@@ -32,10 +37,28 @@ import {
   notifyCompletionSettingsChanged,
   type CompletionLimit,
 } from "../../../utils/tagSetting";
-import { AC_MAX_SUGGESTIONS_OPTIONS, AC_MIN_CHARS_OPTIONS } from "../../../../extension/settings-catalog";
+import {
+  AC_MAX_SUGGESTIONS_OPTIONS,
+  AC_MIN_CHARS_OPTIONS,
+  SETTING_ID_AC_EMBEDDING,
+  SETTING_ID_AC_LORA,
+  SETTING_ID_AC_MAX_SUGGESTIONS,
+  SETTING_ID_AC_MIN_CHARS,
+  SETTING_ID_AC_SEPARATOR,
+  SETTING_ID_AC_TAGS,
+} from "../../../../extension/settings-catalog";
+import { useCanvasSettings } from "../../../composables/useCanvasSettings";
 
 const ui = useUiStore();
 const toast = useToast();
+const canvas = useCanvasSettings();
+
+function canvasOn(id: string): boolean {
+  return canvas.values.value[id] === true;
+}
+function canvasPick(id: string): string {
+  return String(canvas.values.value[id] ?? "");
+}
 
 /* ── Tag list ─────────────────────────────────────────────────────────── */
 
@@ -194,6 +217,14 @@ onMounted(() => {
 </script>
 
 <template>
+  <p class="wp-set-callout">
+    Each setting has two values. <b>Manager</b> is for the editors on these pages; <b>Canvas</b> is for the
+    node editors in ComfyUI and is the same setting as ComfyUI › Settings › Wildcard Pipeline, kept in step
+    both ways while both are open.
+  </p>
+  <p v-if="canvas.error.value" class="wp-set-error" role="alert" data-test="canvas-ac-error">
+    Couldn't reach ComfyUI's settings: {{ canvas.error.value }}
+  </p>
   <SettingGroup title="Sources">
     <SettingRow
       label="Booru tags"
@@ -234,30 +265,66 @@ onMounted(() => {
         </p>
       </template>
       <span class="wp-set-pill" :data-tone="tagPill.tone" data-test="tagac-status">{{ tagPill.text }}</span>
-      <Toggle
-        :model-value="ui.tagAutocomplete"
-        aria-label="Suggest booru tags"
-        data-test="settings-tag-autocomplete"
-        @update:model-value="ui.setTagAutocomplete($event)"
-      />
+      <span class="wp-set-ac__pair">
+        <span class="wp-set-ac__cap">Manager</span>
+        <Toggle
+          :model-value="ui.tagAutocomplete"
+          aria-label="Suggest booru tags"
+          data-test="settings-tag-autocomplete"
+          @update:model-value="ui.setTagAutocomplete($event)"
+        />
+      </span>
+      <span class="wp-set-ac__pair">
+        <span class="wp-set-ac__cap">Canvas</span>
+        <Toggle
+          :model-value="canvasOn(SETTING_ID_AC_TAGS)"
+          aria-label="Suggest booru tags on the canvas"
+          data-test="canvas-ac-tags"
+          @update:model-value="canvas.set(SETTING_ID_AC_TAGS, $event)"
+        />
+      </span>
     </SettingRow>
     <SettingRow label="LoRAs" hint="Installed LoRA names, inserted as <lora:name:1.0>." setting-key="ac-lora">
       <span class="wp-set-pill" :data-tone="modelPill('lora').tone" data-test="lora-count">{{ modelPill("lora").text }}</span>
-      <Toggle
-        :model-value="ui.loraAutocomplete"
-        aria-label="Suggest LoRAs"
-        data-test="settings-lora-autocomplete"
-        @update:model-value="ui.setLoraAutocomplete($event)"
-      />
+      <span class="wp-set-ac__pair">
+        <span class="wp-set-ac__cap">Manager</span>
+        <Toggle
+          :model-value="ui.loraAutocomplete"
+          aria-label="Suggest LoRAs"
+          data-test="settings-lora-autocomplete"
+          @update:model-value="ui.setLoraAutocomplete($event)"
+        />
+      </span>
+      <span class="wp-set-ac__pair">
+        <span class="wp-set-ac__cap">Canvas</span>
+        <Toggle
+          :model-value="canvasOn(SETTING_ID_AC_LORA)"
+          aria-label="Suggest LoRAs on the canvas"
+          data-test="canvas-ac-lora"
+          @update:model-value="canvas.set(SETTING_ID_AC_LORA, $event)"
+        />
+      </span>
     </SettingRow>
     <SettingRow label="Embeddings" hint="Installed embedding names, inserted as embedding:name." setting-key="ac-embedding">
       <span class="wp-set-pill" :data-tone="modelPill('embedding').tone" data-test="embedding-count">{{ modelPill("embedding").text }}</span>
-      <Toggle
-        :model-value="ui.embeddingAutocomplete"
-        aria-label="Suggest embeddings"
-        data-test="settings-embedding-autocomplete"
-        @update:model-value="ui.setEmbeddingAutocomplete($event)"
-      />
+      <span class="wp-set-ac__pair">
+        <span class="wp-set-ac__cap">Manager</span>
+        <Toggle
+          :model-value="ui.embeddingAutocomplete"
+          aria-label="Suggest embeddings"
+          data-test="settings-embedding-autocomplete"
+          @update:model-value="ui.setEmbeddingAutocomplete($event)"
+        />
+      </span>
+      <span class="wp-set-ac__pair">
+        <span class="wp-set-ac__cap">Canvas</span>
+        <Toggle
+          :model-value="canvasOn(SETTING_ID_AC_EMBEDDING)"
+          aria-label="Suggest embeddings on the canvas"
+          data-test="canvas-ac-embedding"
+          @update:model-value="canvas.set(SETTING_ID_AC_EMBEDDING, $event)"
+        />
+      </span>
     </SettingRow>
     <SettingRow
       label="Model folders"
@@ -269,42 +336,82 @@ onMounted(() => {
     </SettingRow>
   </SettingGroup>
 
-  <SettingGroup title="Behavior" note="These apply in the manager. The canvas has its own copies in ComfyUI's settings panel.">
+  <SettingGroup title="Behavior">
     <SettingRow
       label="Append &quot;, &quot; after a pick"
       hint="Follow each completion with a comma and a space. Never applied inside a <lora:…> or embedding:… reference."
       setting-key="ac-separator"
     >
-      <Toggle
-        :model-value="ui.autocompleteSeparator"
-        aria-label="Append a separator after a pick"
-        data-test="settings-autocomplete-separator"
-        @update:model-value="ui.setAutocompleteSeparator($event)"
-      />
+      <span class="wp-set-ac__pair">
+        <span class="wp-set-ac__cap">Manager</span>
+        <Toggle
+          :model-value="ui.autocompleteSeparator"
+          aria-label="Append a separator after a pick"
+          data-test="settings-autocomplete-separator"
+          @update:model-value="ui.setAutocompleteSeparator($event)"
+        />
+      </span>
+      <span class="wp-set-ac__pair">
+        <span class="wp-set-ac__cap">Canvas</span>
+        <Toggle
+          :model-value="canvasOn(SETTING_ID_AC_SEPARATOR)"
+          aria-label="Append a separator after a pick on the canvas"
+          data-test="canvas-ac-separator"
+          @update:model-value="canvas.set(SETTING_ID_AC_SEPARATOR, $event)"
+        />
+      </span>
     </SettingRow>
     <SettingRow label="Max suggestions" hint="How many tag suggestions the popup lists at most." setting-key="ac-max">
-      <Select
-        :model-value="String(limits.maxSuggestions)"
-        :options="MAX_OPTIONS"
-        :filterable="false"
-        aria-label="Max suggestions"
-        data-test="settings-ac-max"
-        @update:model-value="(v) => setLimit('maxSuggestions', v)"
-      />
+      <span class="wp-set-ac__pair">
+        <span class="wp-set-ac__cap">Manager</span>
+        <Select
+          :model-value="String(limits.maxSuggestions)"
+          :options="MAX_OPTIONS"
+          :filterable="false"
+          aria-label="Max suggestions"
+          data-test="settings-ac-max"
+          @update:model-value="(v) => setLimit('maxSuggestions', v)"
+        />
+      </span>
+      <span class="wp-set-ac__pair">
+        <span class="wp-set-ac__cap">Canvas</span>
+        <Select
+          :model-value="canvasPick(SETTING_ID_AC_MAX_SUGGESTIONS)"
+          :options="MAX_OPTIONS"
+          :filterable="false"
+          aria-label="Max suggestions on the canvas"
+          data-test="canvas-ac-max-suggestions"
+          @update:model-value="(v) => canvas.set(SETTING_ID_AC_MAX_SUGGESTIONS, String(v))"
+        />
+      </span>
     </SettingRow>
     <SettingRow
       label="Minimum characters"
       hint="Letters typed before tag suggestions appear. Lower shows them sooner, with a popup on almost every keystroke."
       setting-key="ac-min"
     >
-      <Select
-        :model-value="String(limits.minChars)"
-        :options="MIN_OPTIONS"
-        :filterable="false"
-        aria-label="Minimum characters"
-        data-test="settings-ac-min"
-        @update:model-value="(v) => setLimit('minChars', v)"
-      />
+      <span class="wp-set-ac__pair">
+        <span class="wp-set-ac__cap">Manager</span>
+        <Select
+          :model-value="String(limits.minChars)"
+          :options="MIN_OPTIONS"
+          :filterable="false"
+          aria-label="Minimum characters"
+          data-test="settings-ac-min"
+          @update:model-value="(v) => setLimit('minChars', v)"
+        />
+      </span>
+      <span class="wp-set-ac__pair">
+        <span class="wp-set-ac__cap">Canvas</span>
+        <Select
+          :model-value="canvasPick(SETTING_ID_AC_MIN_CHARS)"
+          :options="MIN_OPTIONS"
+          :filterable="false"
+          aria-label="Minimum characters on the canvas"
+          data-test="canvas-ac-min-chars"
+          @update:model-value="(v) => canvas.set(SETTING_ID_AC_MIN_CHARS, String(v))"
+        />
+      </span>
     </SettingRow>
   </SettingGroup>
 </template>
@@ -317,5 +424,7 @@ onMounted(() => {
   overflow-wrap: anywhere;
 }
 .wp-set-ac__actions { display: flex; gap: var(--wp-space-3); flex-wrap: wrap; margin-top: var(--wp-space-4); }
+.wp-set-ac__pair { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; }
+.wp-set-ac__cap { font-size: 10.5px; color: var(--wp-text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
 .wp-set-ac__note { margin: var(--wp-space-4) 0 0; font-size: 11.5px; text-wrap: pretty; }
 </style>
