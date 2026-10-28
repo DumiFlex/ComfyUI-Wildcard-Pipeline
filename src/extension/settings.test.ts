@@ -10,6 +10,7 @@ import {
   watchA11ySystemPrefs,
   buildSettings,
   buildSwitch,
+  filterByValidation,
   getCollapsedByDefault,
   installDebugHelpers,
   markBootCompleted,
@@ -582,6 +583,22 @@ describe("a11y settings", () => {
     expect(document.body.classList.contains("wp-focus-mode")).toBe(true);
   });
 
+  it("rowActions — hover sets the body class, always clears it, boot reads it", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+    expect(document.body.classList.contains("wp-row-actions-hover")).toBe(false);
+
+    const settings = buildSettings(makeApp());
+    const entry = settings.find((s) => s.id === "wildcardPipeline.display.rowActions");
+    entry?.onChange?.("hover", "always");
+    expect(document.body.classList.contains("wp-row-actions-hover")).toBe(true);
+    entry?.onChange?.("always", "hover");
+    expect(document.body.classList.contains("wp-row-actions-hover")).toBe(false);
+    entry?.onChange?.("nonsense", "always");
+    expect(document.body.classList.contains("wp-row-actions-hover")).toBe(false);
+  });
+
   it("focusMode onChange — flips class + emits toast", () => {
     const fixture = makeMatchMedia({ motion: false, contrast: false });
     window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
@@ -669,6 +686,18 @@ describe("a11y settings", () => {
       const settings = buildSettings(makeApp());
       settings.find((s) => s.id === SETTING_VALIDATION)?.onChange?.("permissive", "permissive");
       expect(toasts.value).toHaveLength(0);
+    });
+
+    it("filterByValidation keeps all, drops info, or drops everything", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      const list = [{ severity: "info" }, { severity: "warning" }, { severity: "error" }];
+      applyDisplayPrefs(makeAppWithDisplay());
+      expect(filterByValidation(list)).toHaveLength(3);
+      applyDisplayPrefs(makeAppWithDisplay({ validation: "relaxed" }));
+      expect(filterByValidation(list).map((c) => c.severity)).toEqual(["warning", "error"]);
+      applyDisplayPrefs(makeAppWithDisplay({ validation: "permissive" }));
+      expect(filterByValidation(list)).toEqual([]);
     });
 
     it("onChange fires warning-severity toast when going permissive", () => {

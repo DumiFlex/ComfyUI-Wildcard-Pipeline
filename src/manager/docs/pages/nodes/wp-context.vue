@@ -22,7 +22,7 @@ const markers = [
   { term: "missing", desc: "The entry isn't in your library (deleted, or the workflow came from someone else). The row still works from its own copy; right-click → Save to library to add it." },
   { term: "mod", desc: "You changed this row on the node, so it differs from the library." },
   { term: "held", desc: "Hold across run is on." },
-  { term: "Lock / globe / bin", desc: "The row buttons: lock the pick, hide the variable from the prompt, remove the row." },
+  { term: "Lock / globe / bin", desc: "The row buttons: lock the pick, hide the variable from the prompt, remove the row. Set Row buttons to On hover (ComfyUI Settings or the Display Playground) to show them only when the pointer is on the row; a pressed lock or globe always shows." },
 ];
 </script>
 

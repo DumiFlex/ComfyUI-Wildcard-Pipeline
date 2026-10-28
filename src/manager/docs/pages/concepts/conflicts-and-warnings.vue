@@ -29,7 +29,9 @@ const commonFlags = [
       <ul>
         <li><b>On the node, while you build.</b> A WP Context shows a small coloured dot and a short
           label on the row, such as MISSING VAR. Hover it for the message. A subgraph with WP nodes
-          inside gets one badge with the worst issue, so you don't have to open it.</li>
+          inside gets one badge with the worst issue, so you don't have to open it. The
+          <b>Validation strictness</b> setting decides what both show: everything (Strict), no
+          blue info notes (Relaxed), or nothing (Permissive).</li>
         <li><b>In WP Debug, after a run.</b> The <b>Warnings</b> tab lists what came up during the
           run, one line each.</li>
       </ul>

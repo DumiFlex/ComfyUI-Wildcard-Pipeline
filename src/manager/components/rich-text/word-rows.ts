@@ -112,12 +112,40 @@ export function committedSuffixFor(insideModelRef: boolean, separatorEnabled: bo
   return separatorEnabled ? ", " : "";
 }
 
+/** How a picked tag is written (Settings › Autocomplete). */
+export interface TagInsertStyle {
+  /** `blue_hair` → `blue hair`. */
+  spaces: boolean;
+  /** `(` → `\(`, `)` → `\)`, so the brackets are not read as a weight. */
+  escape: boolean;
+}
+
+const NO_TAG_STYLE: TagInsertStyle = { spaces: false, escape: false };
+
+/**
+ * A tag name as a pick writes it.
+ *
+ * Tags of three characters or fewer keep their underscores: those are the
+ * emoticon tags (`^_^`, `o_o`, `>_<`) where the underscore IS the face.
+ * Brackets already escaped are left alone, so `\(` never becomes `\\(`.
+ */
+export function tagInsertText(name: string, style: TagInsertStyle): string {
+  let out = name;
+  if (style.spaces && out.length > 3) out = out.replace(/_/g, " ");
+  if (style.escape) out = out.replace(/(?<!\\)([()])/g, "\\$1");
+  return out;
+}
+
 /** What a committed row puts in the document. A model inserts its FULL PATH,
  *  not its display name: two folders can hold the same filename and ComfyUI
  *  resolves by path, so inserting the short name would silently pick a
  *  different file from the one shown. */
-export function wordRowTextFor(row: WordRow, insideModelRef: boolean): string {
-  if (row.source === "tag") return row.tag.name;
+export function wordRowTextFor(
+  row: WordRow,
+  insideModelRef: boolean,
+  style: TagInsertStyle = NO_TAG_STYLE,
+): string {
+  if (row.source === "tag") return tagInsertText(row.tag.name, style);
   // Inside an existing reference the caller already typed the marker, and
   // `acStart` points at the path — so emitting the whole syntax again would
   // produce `<lora:<lora:name:1.0>:1.0>`.

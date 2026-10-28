@@ -36,6 +36,7 @@ import {
   type SettingKey,
 } from "./playground-store";
 import PlaygroundMockup from "./PlaygroundMockup.vue";
+import PlaygroundBehaviorPreview from "./PlaygroundBehaviorPreview.vue";
 import WpCheck from "@/components/shared/WpCheck.vue";
 import WpSelect from "@/components/shared/WpSelect.vue";
 import WpButton from "@/components/shared/WpButton.vue";
@@ -51,6 +52,7 @@ type A11yMode = "auto" | "on" | "off";
 type ValidationMode = "strict" | "relaxed" | "permissive";
 type ToastLifetime = "short" | "default" | "long" | "sticky";
 type CollapseMode = "independent" | "accordion";
+type RowActions = "always" | "hover";
 type ColorIntensity = "muted" | "standard" | "vivid";
 type BundleMasterOffBehavior = "preserve-manual" | "cascade-all";
 
@@ -79,6 +81,7 @@ const bundleCollapsedByDefault = ref<boolean>(false);
 const collapseMode = ref<CollapseMode>("independent");
 const colorIntensity = ref<ColorIntensity>("standard");
 const focusMode = ref<boolean>(false);
+const rowActions = ref<RowActions>("always");
 const reduceMotion = ref<A11yMode>("auto");
 const contrast = ref<A11yMode>("auto");
 // Phase 2 — behavior axes
@@ -87,6 +90,8 @@ const tagAutocomplete = ref<boolean>(false);
 const loraAutocomplete = ref<boolean>(false);
 const embeddingAutocomplete = ref<boolean>(false);
 const autocompleteSeparator = ref<boolean>(false);
+const autocompleteSpaces = ref<boolean>(false);
+const autocompleteEscapeBrackets = ref<boolean>(false);
 const autocompleteMaxSuggestions = ref<string>("20");
 const autocompleteMinChars = ref<string>("3");
 const toastLifetime = ref<ToastLifetime>("default");
@@ -113,6 +118,7 @@ function syncFromStore(): void {
   collapseMode.value = asString(getSettingValue("collapseMode"), "independent") as CollapseMode;
   colorIntensity.value = asString(getSettingValue("colorIntensity"), "standard") as ColorIntensity;
   focusMode.value = asBool(getSettingValue("focusMode"), false);
+  rowActions.value = asString(getSettingValue("rowActions"), "always") as RowActions;
   reduceMotion.value = asString(getSettingValue("reduceMotion"), "auto") as A11yMode;
   contrast.value = asString(getSettingValue("contrast"), "auto") as A11yMode;
   validation.value = asString(getSettingValue("validation"), "strict") as ValidationMode;
@@ -120,6 +126,8 @@ function syncFromStore(): void {
   loraAutocomplete.value = getSettingValue("loraAutocomplete") === true;
   embeddingAutocomplete.value = getSettingValue("embeddingAutocomplete") === true;
   autocompleteSeparator.value = getSettingValue("autocompleteSeparator") === true;
+  autocompleteSpaces.value = getSettingValue("autocompleteSpaces") === true;
+  autocompleteEscapeBrackets.value = getSettingValue("autocompleteEscapeBrackets") === true;
   autocompleteMaxSuggestions.value = asString(getSettingValue("autocompleteMaxSuggestions"), "20");
   autocompleteMinChars.value = asString(getSettingValue("autocompleteMinChars"), "3");
   toastLifetime.value = asString(getSettingValue("toastLifetime"), "default") as ToastLifetime;
@@ -150,6 +158,7 @@ watch(bundleCollapsedByDefault, (v) => applySetting("bundleCollapsedByDefault", 
 watch(collapseMode, (v) => applySetting("collapseMode", v));
 watch(colorIntensity, (v) => applySetting("colorIntensity", v));
 watch(focusMode, (v) => applySetting("focusMode", v));
+watch(rowActions, (v) => applySetting("rowActions", v));
 watch(reduceMotion, (v) => applySetting("reduceMotion", v));
 watch(contrast, (v) => applySetting("contrast", v));
 watch(validation, (v) => applySetting("validation", v));
@@ -157,6 +166,8 @@ watch(tagAutocomplete, (v) => applySetting("tagAutocomplete", v));
 watch(loraAutocomplete, (v) => applySetting("loraAutocomplete", v));
 watch(embeddingAutocomplete, (v) => applySetting("embeddingAutocomplete", v));
 watch(autocompleteSeparator, (v) => applySetting("autocompleteSeparator", v));
+watch(autocompleteSpaces, (v) => applySetting("autocompleteSpaces", v));
+watch(autocompleteEscapeBrackets, (v) => applySetting("autocompleteEscapeBrackets", v));
 watch(autocompleteMaxSuggestions, (v) => applySetting("autocompleteMaxSuggestions", v));
 watch(autocompleteMinChars, (v) => applySetting("autocompleteMinChars", v));
 watch(toastLifetime, (v) => applySetting("toastLifetime", v));
@@ -178,6 +189,7 @@ interface Defaults {
   collapseMode: CollapseMode;
   colorIntensity: ColorIntensity;
   focusMode: boolean;
+  rowActions: RowActions;
   reduceMotion: A11yMode;
   contrast: A11yMode;
   validation: ValidationMode;
@@ -185,6 +197,8 @@ interface Defaults {
   loraAutocomplete: boolean;
   embeddingAutocomplete: boolean;
   autocompleteSeparator: boolean;
+  autocompleteSpaces: boolean;
+  autocompleteEscapeBrackets: boolean;
   autocompleteMaxSuggestions: string;
   autocompleteMinChars: string;
   toastLifetime: ToastLifetime;
@@ -207,6 +221,7 @@ const defaults: Defaults = {
   collapseMode: "independent",
   colorIntensity: "standard",
   focusMode: false,
+  rowActions: "always",
   reduceMotion: "auto",
   contrast: "auto",
   validation: "strict",
@@ -214,6 +229,8 @@ const defaults: Defaults = {
   loraAutocomplete: false,
   embeddingAutocomplete: false,
   autocompleteSeparator: false,
+  autocompleteSpaces: false,
+  autocompleteEscapeBrackets: false,
   autocompleteMaxSuggestions: "20",
   autocompleteMinChars: "3",
   toastLifetime: "default",
@@ -380,6 +397,13 @@ onBeforeUnmount(() => {
                 <span class="wp-pg__row-label">Focus mode (dim non-hovered)</span>
                 <WpCheck v-model="focusMode" aria-label="Focus mode (dim non-hovered)" />
               </div>
+              <label class="wp-pg__row">
+                <span class="wp-pg__row-label">Row buttons</span>
+                <WpSelect
+                  v-model="rowActions" class="wp-pg__select"
+                  :options="[{ value: 'always', label: 'Always (default)' }, { value: 'hover', label: 'On hover' }]"
+                />
+              </label>
             </fieldset>
 
             <fieldset class="wp-pg__group">
@@ -402,11 +426,9 @@ onBeforeUnmount(() => {
 
             <fieldset class="wp-pg__group">
               <legend class="wp-pg__group-title">Runtime behavior</legend>
-              <!-- Behaviour, not visuals, so there is nothing to preview on
-                   the right. It lives here anyway because the playground is
-                   where the settings are expected to be mirrored, and a
-                   setting that exists in the panel but not here is exactly the
-                   divergence this modal keeps growing. -->
+              <!-- Previewed under the module mockup on the right
+                   (PlaygroundBehaviorPreview): toasts, autocomplete and
+                   validation. -->
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Booru tag autocomplete</span>
                 <WpCheck v-model="tagAutocomplete" aria-label="Booru tag autocomplete" />
@@ -425,6 +447,14 @@ onBeforeUnmount(() => {
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Append ", " after a completion</span>
                 <WpCheck v-model="autocompleteSeparator" aria-label="Append a comma and space after a completion" />
+              </div>
+              <div class="wp-pg__row wp-pg__row--switch">
+                <span class="wp-pg__row-label">Write tags with spaces</span>
+                <WpCheck v-model="autocompleteSpaces" aria-label="Write tags with spaces" />
+              </div>
+              <div class="wp-pg__row wp-pg__row--switch">
+                <span class="wp-pg__row-label">Escape brackets in tags</span>
+                <WpCheck v-model="autocompleteEscapeBrackets" aria-label="Escape brackets in tags" />
               </div>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Autocomplete: max suggestions</span>
@@ -486,6 +516,14 @@ onBeforeUnmount(() => {
 
           <aside class="wp-pg__preview" data-test="playground-preview">
             <PlaygroundMockup />
+            <PlaygroundBehaviorPreview
+              :validation="validation"
+              :max-suggestions="autocompleteMaxSuggestions"
+              :min-chars="autocompleteMinChars"
+              :separator="autocompleteSeparator"
+              :spaces="autocompleteSpaces"
+              :escape="autocompleteEscapeBrackets"
+            />
           </aside>
         </div>
 

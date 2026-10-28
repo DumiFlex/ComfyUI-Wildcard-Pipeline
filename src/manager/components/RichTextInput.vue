@@ -48,6 +48,7 @@ import {
   completionLimit,
   completionSettingsVersion,
   completionSourceEnabled as sourceOn,
+  tagInsertStyle,
 } from "../utils/tagSetting";
 import { refRows, varRows, type SuggestionRow } from "../utils/suggestion-rows";
 import { varColorClass } from "../../components/shared/var-color";
@@ -357,7 +358,7 @@ function committedSuffix(): string {
 
 /** What a committed row puts in the document (see `wordRowTextFor`). */
 function wordRowText(row: WordRow): string {
-  return wordRowTextFor(row, refKind.value !== null);
+  return wordRowTextFor(row, refKind.value !== null, tagInsertStyle());
 }
 
 /** Categories present in the CURRENT results, in Danbooru's own order —

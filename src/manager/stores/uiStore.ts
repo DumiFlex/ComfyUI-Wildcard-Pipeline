@@ -66,6 +66,8 @@ const STORAGE_KEY_TAG_AUTOCOMPLETE = "wp-tag-autocomplete";
 const STORAGE_KEY_LORA_AUTOCOMPLETE = "wp-lora-autocomplete";
 const STORAGE_KEY_EMBEDDING_AUTOCOMPLETE = "wp-embedding-autocomplete";
 const STORAGE_KEY_AUTOCOMPLETE_SEPARATOR = "wp-autocomplete-separator";
+const STORAGE_KEY_AUTOCOMPLETE_SPACES = "wp-autocomplete-spaces";
+const STORAGE_KEY_AUTOCOMPLETE_ESCAPE = "wp-autocomplete-escape-brackets";
 
 function readStoredFlag(key: string): boolean {
   try {
@@ -262,6 +264,8 @@ export const useUiStore = defineStore("ui", () => {
   const loraAutocomplete = ref<boolean>(readStoredFlag(STORAGE_KEY_LORA_AUTOCOMPLETE));
   const embeddingAutocomplete = ref<boolean>(readStoredFlag(STORAGE_KEY_EMBEDDING_AUTOCOMPLETE));
   const autocompleteSeparator = ref<boolean>(readStoredFlag(STORAGE_KEY_AUTOCOMPLETE_SEPARATOR));
+  const autocompleteSpaces = ref<boolean>(readStoredFlag(STORAGE_KEY_AUTOCOMPLETE_SPACES));
+  const autocompleteEscapeBrackets = ref<boolean>(readStoredFlag(STORAGE_KEY_AUTOCOMPLETE_ESCAPE));
 
   /** One writer for the three flags that share a shape. */
   function writeFlag(target: { value: boolean }, key: string, v: boolean): void {
@@ -284,6 +288,12 @@ export const useUiStore = defineStore("ui", () => {
   }
   function setAutocompleteSeparator(v: boolean): void {
     writeFlag(autocompleteSeparator, STORAGE_KEY_AUTOCOMPLETE_SEPARATOR, v);
+  }
+  function setAutocompleteSpaces(v: boolean): void {
+    writeFlag(autocompleteSpaces, STORAGE_KEY_AUTOCOMPLETE_SPACES, v);
+  }
+  function setAutocompleteEscapeBrackets(v: boolean): void {
+    writeFlag(autocompleteEscapeBrackets, STORAGE_KEY_AUTOCOMPLETE_ESCAPE, v);
   }
 
   function setTagAutocomplete(v: boolean): void {
@@ -482,6 +492,10 @@ export const useUiStore = defineStore("ui", () => {
     setEmbeddingAutocomplete,
     autocompleteSeparator,
     setAutocompleteSeparator,
+    autocompleteSpaces,
+    setAutocompleteSpaces,
+    autocompleteEscapeBrackets,
+    setAutocompleteEscapeBrackets,
     cycleTheme,
     setThemeMode,
     setDensity,

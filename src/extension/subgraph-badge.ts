@@ -1,6 +1,7 @@
 import { walkAllNodes, collectUpstreamVariables, type LiteGraphLike, type LiteNodeLike } from "./graph";
 import { startAdaptivePoll } from "./reactive";
 import { scanConflicts, scanTemplateConflicts, labelFor, type Conflict, type Severity } from "./conflicts";
+import { filterByValidation } from "./settings";
 import { parseWidgetJson, type ContextWidgetValue } from "../widgets/_shared";
 import { onGraphLoaded } from "./graph-events";
 import { nodeBadge, nodeBadgeCleanup, nodeBadgePulseToken, nodeBadgeSeverity } from "./_stashes";
@@ -215,7 +216,9 @@ function collectInnerConflicts(rootGraph: LiteGraphLike, subgraph: LiteGraphLike
  * there's nothing to surface.
  */
 function computeBadgeState(rootGraph: LiteGraphLike, subgraph: LiteGraphLike): BadgeState | null {
-  const conflicts = collectInnerConflicts(rootGraph, subgraph);
+  // Same Validation strictness filter as the Context node rows: "Permissive"
+  // used to hide conflicts on the node while the subgraph badge still drew.
+  const conflicts = filterByValidation(collectInnerConflicts(rootGraph, subgraph));
   if (!conflicts.length) return null;
   let worst = conflicts[0];
   for (const c of conflicts) {
