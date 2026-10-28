@@ -31,6 +31,12 @@ import MockModuleCard, { type MockModule, type ModRuntimeState } from "./MockMod
 import type { BundleInstance } from "../../widgets/_shared";
 import { getCollapseMode } from "../../extension/settings";
 
+// The row and bundle frame styles (context-widget.css) ship in the
+// ContextWidget chunk, which loads only once a WP Context node exists. On an
+// empty canvas the mockup had no bundle frame or child indent. Loading that
+// chunk here injects the same sheet, once, exactly as a real node would.
+void import("../context/ContextWidget.vue");
+
 interface MockBundle {
   key: string;
   name: string;
