@@ -5,6 +5,8 @@
  *   [text](docs:page#s-section)    a link to the built-in docs (section optional)
  *   [text](target){button}         the link drawn as a button
  *   [text](target){button pi-book} … with an icon
+ *   [text](target){button pi-book #e11d48}  … in its own colour
+ *   [text](target){#e11d48}        a text link in its own colour
  *   :pi-cog:  :pi-cog:{#e11d48}    a PrimeIcons glyph, optionally coloured
  *
  * The `{…}` blocks follow the attribute lists of MkDocs Material and Pandoc.
@@ -35,17 +37,19 @@ export function targetUrl(t: LinkTarget, origin: string): string | null {
   return null;
 }
 
-export interface LinkAttrs { button: boolean; icon: string }
+export interface LinkAttrs { button: boolean; icon: string; color: string }
 
 /**
- * A `{button}` / `{button pi-book}` block at the start of the text after a
- * link. Returns the attributes and how many characters it took, or null.
+ * A `{button}` / `{button pi-book #e11d48}` / `{#e11d48}` block at the start
+ * of the text after a link. Returns the attributes and how many characters
+ * it took, or null. A colour alone keeps the link a text link.
  */
 export function readLinkAttrs(after: string): { attrs: LinkAttrs; length: number } | null {
-  const m = /^\{\s*button(?:\s+pi-([a-z0-9-]+))?\s*\}/.exec(after);
-  if (!m) return null;
-  const icon = m[1] && PI_ICON_SET.has(m[1]) ? m[1] : "";
-  return { attrs: { button: true, icon }, length: m[0].length };
+  const m = /^\{\s*(button)?(?:\s*pi-([a-z0-9-]+))?(?:\s*(#[0-9a-f]{6}|#[0-9a-f]{3}))?\s*\}/i.exec(after);
+  if (!m || (!m[1] && !m[3]) || (!m[1] && m[2])) return null;
+  const name = m[2]?.toLowerCase() ?? "";
+  const icon = name && PI_ICON_SET.has(name) ? name : "";
+  return { attrs: { button: !!m[1], icon, color: m[3]?.toLowerCase() ?? "" }, length: m[0].length };
 }
 
 export type IconPiece = string | { icon: string; color: string };
@@ -72,10 +76,15 @@ export function splitIcons(text: string): IconPiece[] {
 
 /** The Markdown for a link. The parser ends link text at the first `]`, so
  *  brackets in the text become parentheses. */
-export function linkMarkdown(text: string, target: string, opts: { button?: boolean; icon?: string } = {}): string {
+export function linkMarkdown(
+  text: string,
+  target: string,
+  opts: { button?: boolean; icon?: string; color?: string } = {},
+): string {
   const label = (text.trim() || target).replace(/\[/g, "(").replace(/\]/g, ")").replace(/\n+/g, " ");
-  const attrs = opts.button ? `{button${opts.icon ? ` pi-${opts.icon}` : ""}}` : "";
-  return `[${label}](${target.trim()})${attrs}`;
+  const color = opts.color && HEX.test(opts.color) ? opts.color.toLowerCase() : "";
+  const parts = [opts.button ? "button" : "", opts.button && opts.icon ? `pi-${opts.icon}` : "", color].filter(Boolean);
+  return `[${label}](${target.trim()})${parts.length ? `{${parts.join(" ")}}` : ""}`;
 }
 
 export function iconMarkdown(icon: string, color = ""): string {

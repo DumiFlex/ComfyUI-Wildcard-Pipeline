@@ -18,12 +18,14 @@ function text(v: string): (VNode | string)[] {
     : h("i", { class: ["pi", `pi-${p.icon}`, "wp-note-md__icon"], style: p.color ? { color: p.color } : undefined, "aria-hidden": "true" })));
 }
 
-function link(n: Extract<Inline, { t: "link" }>, button: boolean, icon: string): VNode {
+function link(n: Extract<Inline, { t: "link" }>, button: boolean, icon: string, color: string): VNode {
   const target = parseTarget(n.href);
   const url = targetUrl(target, origin());
   if (!url) return h("span", { class: "wp-note-md__plain" }, inline(n.c));
-  const external = { href: url, target: "_blank", rel: "noopener noreferrer", title: url, draggable: "false" };
-  if (!button) return h("a", { class: "wp-note-md__link", ...external }, inline(n.c));
+  // Its own colour, or the note's tone (the CSS falls back to it).
+  const style = color ? { "--wp-note-link": color } : undefined;
+  const external = { href: url, target: "_blank", rel: "noopener noreferrer", title: url, draggable: "false", style };
+  if (!button) return h("a", { class: ["wp-note-md__link", { "wp-note-md__link--color": !!color }], ...external }, inline(n.c));
   return h("a", { class: "wp-note-md__btn", ...external }, [
     icon ? h("i", { class: ["pi", `pi-${icon}`], "aria-hidden": "true" }) : null,
     h("span", inline(n.c)),
@@ -44,10 +46,10 @@ function inline(nodes: Inline[]): (VNode | string)[] {
       case "code": out.push(h("code", { class: "wp-note-md__code" }, n.v)); break;
       case "ref": out.push(h("span", n.v)); break;
       case "link": {
-        // A `{button …}` right after the link is its attribute block.
+        // A `{button …}` / `{#hex}` right after the link is its attribute block.
         const next = nodes[i + 1];
         const attrs = next?.t === "text" ? readLinkAttrs(next.v) : null;
-        out.push(link(n, !!attrs, attrs?.attrs.icon ?? ""));
+        out.push(link(n, !!attrs?.attrs.button, attrs?.attrs.icon ?? "", attrs?.attrs.color ?? ""));
         if (attrs && next?.t === "text") {
           const rest = next.v.slice(attrs.length);
           if (rest) out.push(...text(rest));
