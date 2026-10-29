@@ -8,12 +8,14 @@ import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
 const controls = [
-  { term: "Icon, colour, name", desc: "How the bookmark shows in the dock. The colour also tints the node's title bar." },
-  { term: "Go", desc: "Jump now." },
-  { term: "Lands at", desc: "A 3×3 grid: the corner, edge or centre of the screen the bookmark goes to, 24 px in from the edge (beside the dock while it's open)." },
+  { term: "Icon, colour, name", desc: "The icon opens the full icon list. The colour marks the pill and its dock row." },
+  { term: "Lands at", desc: "A 3×3 grid: the corner, edge or centre of the free part of the screen (what ComfyUI's sidebar, breadcrumb, toolbar and zoom controls leave), 24 px in. A jump that would land under the dock moves just enough to clear it." },
+  { term: "Use this view", desc: "Lands on the view on screen now, at its zoom, instead of a grid spot." },
   { term: "Zoom", desc: "Set jumps to that zoom (0.1–10×; the magnifier takes the zoom you're at). Keep current leaves it alone." },
-  { term: "Shortcut", desc: "Record, then press the keys (Esc cancels, Backspace clears). The bolt picks a free one." },
-  { term: "Show on canvas", desc: "Off hides the node: not drawn, not clickable, not selectable. The dock's eye shows it again." },
+  { term: "Shortcut", desc: "Record, then press the keys (Esc cancels, Backspace clears). The bolt picks a free one, a new one on each press." },
+  { term: "Show on canvas", desc: "Off hides the node when you press Done: not drawn, not clickable, not selectable. The dock's eye shows it again." },
+  { term: "Pinned", desc: "ComfyUI's own pin: a pinned bookmark can't be moved by accident." },
+  { term: "Go", desc: "Tries the jump." },
 ];
 
 const clashes = [
@@ -23,10 +25,10 @@ const clashes = [
 ];
 
 const dock = [
-  { term: "Row", desc: "Click to jump. Number, icon, name and shortcut; a mark for one hidden on the canvas or inside a subgraph, OFF for a muted one." },
+  { term: "Row", desc: "Click to jump. Number (a Step note's in its circle), icon, name and shortcut; a mark for one hidden on the canvas or inside a subgraph, OFF for a muted one." },
   { term: "Back", desc: "Return to where you were before the last jump." },
   { term: "↑ / ↓", desc: "Step through the bookmarks that are on, in dock order." },
-  { term: "Pencil", desc: "Edit mode: drag the grips to reorder, the eye shows or hides a bookmark on the canvas, the arrow moves the dock to the other side, and Bookmark this view adds one at the top-left of the screen with the zoom you're at. Done goes back." },
+  { term: "Pencil", desc: "Edit mode: drag the dock by its header to put it anywhere (it stays there), drag the grips to reorder, the eye shows or hides a bookmark on the canvas, the arrow puts the dock back on the other side, and Bookmark this view adds one. Done goes back." },
 ];
 </script>
 
@@ -49,7 +51,7 @@ const dock = [
       <DocImage
         src="images/docs/wp-bookmark.png"
         ratio="1720 / 752"
-        caption="Sampler in its one-line read view; Prompts open in the editor, where the clash check flags Ctrl+S."
+        caption="Sampler as a pill on the canvas; Prompts open in its editor, where the clash check flags Ctrl+S."
       />
     </DocSection>
 
@@ -61,12 +63,12 @@ const dock = [
       </p>
     </DocSection>
 
-    <DocSection title="Read view and editor">
+    <DocSection title="On the canvas">
       <p>
-        A saved bookmark shows one line: its icon, where it lands and its zoom, its shortcut (with a
-        warning mark when something else uses it), <b>Go</b> and a pencil. The pencil, or a
-        double-click on the node, opens the editor; <b>Done</b> closes it. A new bookmark opens in the
-        editor.
+        A bookmark has no node frame: it is a small pill with its icon, name and shortcut (a warning
+        mark when something else uses the key, a pin when it is pinned). Hover it for where it lands.
+        Select it to show its pencil; the pencil or a double-click opens the editor, and <b>Done</b>
+        closes it. A new bookmark opens in the editor.
       </p>
     </DocSection>
 
@@ -95,14 +97,16 @@ const dock = [
       <DocKeyList :items="clashes" />
       <DocCallout variant="warn">
         Extensions that read keys themselves can't be seen in advance. If one takes the key first,
-        the bookmark doesn't jump and a toast names the combo once, so you can pick another.
+        the bookmark doesn't jump and a toast names the combo once, so you can pick another. The key
+        is remembered: the clash check marks it from then on and the bolt never suggests it.
       </DocCallout>
     </DocSection>
 
     <DocSection title="The Bookmarks dock">
       <p>
         The bookmark button in the top bar shows or hides the dock. It also opens by itself in a
-        workflow with bookmarks, unless you closed it.
+        workflow with bookmarks, unless you closed it. It sits inside ComfyUI's bars and is
+        see-through until you point at it, so what is under it still shows.
       </p>
       <DocImage
         src="images/docs/wp-bookmark-dock.png"
