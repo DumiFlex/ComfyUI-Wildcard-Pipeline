@@ -137,7 +137,7 @@ function onPaste(ev: ClipboardEvent): void {
 .wp-ai-images[data-compact] .wp-ai-images__thumb { width: 40px; height: 40px; }
 .wp-ai-images__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .wp-ai-images__remove {
-  position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%;
+  position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: min(50%, var(--wp-radius-cap, 999px));
   background: rgb(0 0 0 / 0.65); color: #fff; cursor: pointer; font-size: 9px; display: grid; place-items: center;
 }
 .wp-ai-images__num {

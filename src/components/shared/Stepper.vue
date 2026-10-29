@@ -114,7 +114,7 @@ button.wp-stepper__body:disabled { cursor: default; }
 button.wp-stepper__body:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--wp-border-focus); }
 .wp-stepper__mark {
   display: inline-grid; place-items: center; flex: none; box-sizing: border-box;
-  width: 24px; height: 24px; border-radius: 50%;
+  width: 24px; height: 24px; border-radius: min(50%, var(--wp-radius-cap, 999px));
   border: 1.5px solid var(--wp-border-strong); background: var(--wp-bg-1);
   color: var(--wp-text-muted); font: 600 var(--wp-text-xs)/1 var(--wp-font-sans); font-variant-numeric: tabular-nums;
 }

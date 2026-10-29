@@ -212,7 +212,7 @@ function setSidebar(v: SidebarChoice): void {
 .wp-set-swatch {
   width: 24px;
   height: 24px;
-  border-radius: 50%;
+  border-radius: 50%; /* round: colour swatch */
   border: 2px solid transparent;
 }
 .wp-set-accent[aria-checked="true"] .wp-set-swatch { outline: 2px solid var(--wp-text); outline-offset: 2px; }

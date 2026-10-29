@@ -71,13 +71,13 @@ withDefaults(defineProps<{
 }
 .wp-timeline__dot {
   position: relative; display: grid; place-items: center; flex: none; box-sizing: border-box;
-  width: var(--_dot); height: var(--_dot); margin-top: 1px; border-radius: 50%;
+  width: var(--_dot); height: var(--_dot); margin-top: 1px; border-radius: 50%; /* round: timeline dot */
   border: 2px solid var(--_tone); background: var(--wp-bg-1); color: var(--_tone);
 }
 .wp-timeline__item:not([data-icon]) .wp-timeline__dot { transform: scale(0.6); background: var(--_tone); }
 .wp-timeline__dot .pi { font-size: calc(var(--_dot) * 0.45); }
 .wp-timeline__item[data-pending] .wp-timeline__dot::after {
-  content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--_tone);
+  content: ""; position: absolute; inset: -4px; border-radius: 50%; /* round: timeline dot ring */ border: 2px solid var(--_tone);
   animation: wp-timeline-pulse 1.6s ease-out infinite;
 }
 @keyframes wp-timeline-pulse { from { opacity: 0.7; transform: scale(0.8); } to { opacity: 0; transform: scale(1.4); } }

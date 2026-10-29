@@ -158,7 +158,7 @@ watch(() => props.open, async (v, was) => {
 .wp-lightbox__step {
   position: absolute; top: 50%; transform: translateY(-50%);
   display: grid; place-items: center; width: var(--wp-control-h-lg); height: var(--wp-control-h-lg);
-  border: 1px solid var(--wp-border-strong); border-radius: 50%;
+  border: 1px solid var(--wp-border-strong); border-radius: min(50%, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-2); color: var(--wp-text); cursor: pointer; box-shadow: var(--wp-shadow-md);
   transition: background var(--wp-motion-hover);
 }

@@ -68,7 +68,7 @@ const hue = computed(() => {
 .wp-avatar {
   --_s: var(--wp-control-h-md);
   position: relative; display: inline-grid; place-items: center; flex: none; overflow: hidden;
-  width: var(--_s); height: var(--_s); border-radius: 50%;
+  width: var(--_s); height: var(--_s); border-radius: 50%; /* round: avatar */
   background: color-mix(in srgb, var(--_hue) 22%, var(--wp-bg-2));
   color: color-mix(in srgb, var(--_hue) 70%, var(--wp-text));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--_hue) 30%, transparent);

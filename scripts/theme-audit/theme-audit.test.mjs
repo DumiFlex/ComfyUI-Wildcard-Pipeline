@@ -44,4 +44,26 @@ describe("theme audit", () => {
     }
     expect(bad, "Write min(Npx, var(--wp-radius-cap, 999px)) or a --wp-radius-* token so the square looks square it").toEqual([]);
   });
+
+  it("decides every circle: squares with the look, or round on purpose", () => {
+    // A 50% corner inside a control (switch knob, slider thumb, step mark,
+    // round icon button) must square with the look:
+    // min(50%, var(--wp-radius-cap, 999px)). A dot, avatar, swatch or radio
+    // that stays round in every look says so on the same line:
+    // /* round: <why> */.
+    const files = [
+      ...globSync("src/manager/**/*.{vue,css}", { cwd: ROOT }),
+      ...globSync("src/components/shared/**/*.{vue,css}", { cwd: ROOT }),
+    ].filter((f) => !f.split("\\").join("/").endsWith("styles/looks.css"));
+    const bad = [];
+    for (const f of files) {
+      const lines = readFileSync(join(ROOT, f), "utf8").split("\n");
+      lines.forEach((line, i) => {
+        if (!/border-(?:[a-z-]+-)?radius\s*:\s*50%/.test(line)) return;
+        if (/\/\*\s*round:/.test(line)) return;
+        bad.push(`${f}:${i + 1}: ${line.trim()}`);
+      });
+    }
+    expect(bad, "Write min(50%, var(--wp-radius-cap, 999px)) or add /* round: <why> */").toEqual([]);
+  });
 });

@@ -1704,14 +1704,14 @@ input, textarea, select { font: inherit; }
   appearance: none; -webkit-appearance: none;
   width: 14px; height: 14px; margin: 0; flex-shrink: 0;
   border: 1.5px solid var(--wp-border-strong);
-  border-radius: 50%;
+  border-radius: 50%; /* round: a radio is round in every look */
   background: var(--wp-bg);
   display: inline-grid; place-items: center;
   cursor: pointer;
   transition: background .12s, border-color .12s;
 }
 .wp-radio::before {
-  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  content: ""; width: 6px; height: 6px; border-radius: 50%; /* round: radio dot */
   background: #fff; /* audit-exempt: white dot on accent-600 fill ≥4.5:1 both themes */
   transform: scale(0); transition: transform .12s;
 }
@@ -1871,7 +1871,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
 /* Color dot — rendered in both trigger and option list */
 .wp-select__dot {
   width: 8px; height: 8px;
-  border-radius: 50%;
+  border-radius: 50%; /* round: colour dot */
   flex-shrink: 0;
   display: inline-block;
 }
@@ -1964,7 +1964,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
 .wp-matrix-cell__tune {
   position: absolute; top: -6px; right: -6px;
   width: 18px; height: 18px;
-  border-radius: 50%;
+  border-radius: min(50%, var(--wp-radius-cap, 999px));
   display: grid; place-items: center;
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border-strong);
@@ -2035,7 +2035,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
 .wp-range::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 14px; height: 14px;
-  border-radius: 50%;
+  border-radius: min(50%, var(--wp-radius-cap, 999px));
   background: var(--wp-accent-500);
   border: 2px solid var(--wp-bg-1);
   cursor: pointer;
@@ -2043,7 +2043,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
 }
 .wp-range::-moz-range-thumb {
   width: 14px; height: 14px;
-  border-radius: 50%;
+  border-radius: min(50%, var(--wp-radius-cap, 999px));
   background: var(--wp-accent-500);
   border: 2px solid var(--wp-bg-1);
   cursor: pointer;

@@ -8,6 +8,8 @@
  *   - one-line controls (buttons, chips, nav, counts) never wrap,
  *   - a checkbox draws its state once: the tick in boxed looks, only the
  *     "[x]" text in TUI, and the text matches the box's real state,
+ *   - a radio in TUI reads ( ) / (*) for its real state,
+ *   - a circle never sits inside a squared control (switch knob, thumb),
  *   - text keeps 3:1 contrast against what it sits on.
  *
  * Needs a built manager (`pnpm build:manager`) and serve.py's API:
@@ -210,6 +212,18 @@ function pageChecks({ look }) {
     }
   }
 
+  // 4b. Radios in TUI read ( ) / (*) like the [ ] / [x] checkboxes, and the
+  //     text matches the real state.
+  if (look === "tui") {
+    for (const el of document.querySelectorAll(".wp-radio-group__dot, input.wp-radio")) {
+      if (!visible(el)) continue;
+      const on = el.matches("input") ? el.checked : el.closest("[data-checked]") !== null;
+      const before = getComputedStyle(el, "::before").content.replace(/^"|"$/g, "");
+      const want = on ? "(*)" : "( )";
+      if (before !== want) issues.push({ check: "radio-state", detail: `${label(el.closest(".wp-radio-group__opt, label") ?? el)} reads ${before && before !== "none" ? before : "nothing"}, should read ${want}` });
+    }
+  }
+
   // 5. Pieces that ignore the look: corners rounder than the look allows
   //    (circles and dots excepted) and, in the all-mono looks, text that is
   //    not mono. A hit means a component hard-codes a radius or a font
@@ -239,6 +253,36 @@ function pageChecks({ look }) {
         if (!seenRule.has(key)) {
           seenRule.add(key);
           issues.push({ check: "look-radius", detail: `${label(el)} has ${Math.round(rad)}px corners, ${look} allows ${maxR}px` });
+        }
+      }
+    }
+    // A circle drawn inside a squared box (a switch knob, a slider thumb, a
+    // step mark on a square rail) reads as the old look: the shape inside a
+    // control follows the control. Small dots and radios stay round because
+    // they are small against the box around them; [data-round-ok] opts out.
+    if (maxR !== undefined && !el.closest("[data-round-ok]")) {
+      const r = el.getBoundingClientRect();
+      const side = Math.min(r.width, r.height);
+      const tl = cs.borderTopLeftRadius;
+      const rad = tl.endsWith("%") ? (parseFloat(tl) / 100) * side : parseFloat(tl) || 0;
+      const drawn = cs.backgroundColor !== "rgba(0, 0, 0, 0)" || parseFloat(cs.borderTopWidth) > 0;
+      if (drawn && side >= 6 && Math.abs(r.width - r.height) <= 2 && rad >= side / 2 - 1) {
+        let box = el.parentElement;
+        for (let i = 0; box && i < 3; i++, box = box.parentElement) {
+          const bcs = getComputedStyle(box);
+          if (bcs.backgroundColor !== "rgba(0, 0, 0, 0)" || parseFloat(bcs.borderTopWidth) > 0) break;
+        }
+        if (box && box !== document.body) {
+          const br = box.getBoundingClientRect();
+          const bRad = parseFloat(getComputedStyle(box).borderTopLeftRadius) || 0;
+          const boxRound = Math.abs(br.width - br.height) <= 2 && bRad >= Math.min(br.width, br.height) / 2 - 1;
+          if (!boxRound && bRad <= maxR + 0.5 && side >= Math.min(br.width, br.height) * 0.5) {
+            const key = `round-in-square|${label(el).split(" ")[0]}`;
+            if (!seenRule.has(key)) {
+              seenRule.add(key);
+              issues.push({ check: "round-in-square", detail: `${label(el)} is a circle inside the square ${label(box).split(" ")[0]}; ${look} squares it` });
+            }
+          }
         }
       }
     }

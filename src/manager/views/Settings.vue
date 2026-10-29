@@ -232,7 +232,7 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
   content: "";
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: 50%; /* round: status dot */
   background: currentColor;
   opacity: 0.8;
 }

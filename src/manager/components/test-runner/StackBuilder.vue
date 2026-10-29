@@ -278,7 +278,7 @@ function removePin(name: string): void {
 }
 .wp-trs__remove {
   position: absolute; top: calc(-1 * var(--wp-space-4)); right: calc(-1 * var(--wp-space-4));
-  width: 22px; height: 22px; border-radius: 50%; /* audit-exempt: round close badge */
+  width: 22px; height: 22px; border-radius: min(50%, var(--wp-radius-cap, 999px));
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
   background: var(--wp-bg-4); color: var(--wp-text-muted); border: 1px solid var(--wp-border-strong);
   opacity: 0; transition: opacity .12s;

@@ -40,8 +40,9 @@ import { LOOK_OPTIONS, PALETTE_OPTIONS } from "../../../stores/tweaksStore";
       </p>
       <p>
         A look reaches every page: in Terminal and TUI every corner is square, Crisp keeps them
-        nearly square, and lists, tabs, steps and checkboxes show what's selected the look's way
-        (TUI checkboxes read <code>[x]</code>).
+        nearly square, and the shapes inside controls follow (a switch's knob and a slider's handle
+        turn square with them). Lists, tabs, steps, checkboxes and radios show what's selected the
+        look's way (in TUI a checkbox reads <code>[x]</code> and a radio <code>(*)</code>).
       </p>
     </DocSection>
 
