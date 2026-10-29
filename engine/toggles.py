@@ -113,6 +113,7 @@ def parse_config(raw: Any) -> Config:
         if not tid:
             continue
         out = row.get("out")
+        value = row.get("value")
         toggles.append(Toggle(
             id=tid,
             name=_str(row.get("name")) or tid,
@@ -122,7 +123,7 @@ def parse_config(raw: Any) -> Config:
             out=out if isinstance(out, int) and not isinstance(out, bool) else 0,
             needs=_str(row.get("needs")),
             upstream=row.get("upstream") is True,
-            value=row.get("value") if isinstance(row.get("value"), str) else "",
+            value=value if isinstance(value, str) else "",
         ))
     return Config(
         mode=mode,
