@@ -53,6 +53,14 @@ const dock = [
       />
     </DocSection>
 
+    <DocSection title="Notes as bookmarks">
+      <p>
+        A <b>WP Note</b> can be a bookmark too: turn on <b>Also a bookmark</b> in its editor. It gets the
+        same Lands at, Zoom and Shortcut settings and shows in the dock in the note's colour, but it never
+        hides on the canvas, and muting it turns its shortcut off without fading it.
+      </p>
+    </DocSection>
+
     <DocSection title="Read view and editor">
       <p>
         A saved bookmark shows one line: its icon, where it lands and its zoom, its shortcut (with a
@@ -111,6 +119,7 @@ const dock = [
     <DocSection title="Works with">
       <CrossLinks
         :links="[
+          { id: 'wp-note', label: 'WP Note', icon: 'pi pi-bookmark', tone: 'node' },
           { id: 'wp-node-group', label: 'WP Node Group', icon: 'pi pi-sitemap', tone: 'node' },
           { id: 'wp-toggles', label: 'WP Toggles', icon: 'pi pi-check-square', tone: 'node' },
         ]"

@@ -110,11 +110,31 @@ const syntax = [
       <DocKeyList :items="syntax" />
     </DocSection>
 
+    <DocSection title="A note that is also a bookmark">
+      <p>
+        Turn on <b>Also a bookmark</b> at the bottom of the editor and the note joins the
+        Bookmarks dock: pick where it lands on screen, its zoom and a
+        shortcut, the same settings as a WP Bookmark, with the same clash check. A new one gets the next
+        free shortcut. The dock shows it with the note's colour and icon, and a small bookmark mark on
+        the note (its tooltip names the key) says it is one.
+      </p>
+      <DocImage
+        src="images/docs/wp-note-bookmark.png"
+        ratio="1720 / 860"
+        caption="A note open in its editor with Also a bookmark on, a note card with its bookmark mark, and the dock listing both next to a WP Bookmark."
+      />
+      <DocCallout variant="tip">
+        Unlike a WP Bookmark, a note can't be hidden on the canvas (it is there to be read), and muting
+        it turns its shortcut off without fading it.
+      </DocCallout>
+    </DocSection>
+
     <DocSection title="Works with">
       <CrossLinks
         :links="[
           { id: 'quick-start', label: 'Quick start', icon: 'pi pi-play', tone: 'neutral' },
           { id: 'wp-label-grid', label: 'WP Label & Grid', icon: 'pi pi-th-large', tone: 'node' },
+          { id: 'wp-bookmark', label: 'WP Bookmark', icon: 'pi pi-bookmark', tone: 'node' },
         ]"
       />
     </DocSection>

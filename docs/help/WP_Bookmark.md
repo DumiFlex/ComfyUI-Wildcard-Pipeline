@@ -8,6 +8,8 @@ Marks a spot on the canvas so you can jump back to it with a shortcut or from th
 - **Bookmark this view** (in the dock's edit mode, or as a command) adds one at the top-left of the screen with the zoom you're at, so jumping to it brings back this exact view.
 - A new bookmark gets the first free shortcut (Alt+1, Alt+2…).
 
+A **WP Note** can be a bookmark too: turn on **Also a bookmark** in its editor (see WP Note). It gets the same settings and shows in the dock, but never hides.
+
 ## Read view and editor
 
 A saved bookmark shows one line: its icon, where it lands and its zoom, its shortcut (with a warning mark when something else uses it), **Go** and a pencil. The pencil, or a double-click on the node, opens the editor; **Done** closes it. A new bookmark opens in the editor.
