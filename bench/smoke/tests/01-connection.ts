@@ -4,7 +4,7 @@ smoke(
   "A1",
   { title: "Test connection answers", section: "Connection", description: "Settings › AI assistant › Test connection says Connected, with JSON answers working." },
   async ({ h }) => {
-    const text = await h.step("test connection", async () => {
+    const text = await h.step("Settings › AI assistant › Test connection", async () => {
       await h.visit("settings/ai");
       await h.tap("ai-test");
       await h.aiIdle({ quiet: 1500, expect: true });

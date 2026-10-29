@@ -1,5 +1,6 @@
 // P: the pack builder.
 import { StepError } from "watchwright";
+import { said } from "../bench.js";
 import { prompt } from "../meta.js";
 import { bench, fixFindings, pack, sfw, skipResearch, type BenchContext } from "../shapes.js";
 
@@ -24,7 +25,7 @@ bench(
 bench(
   "P3",
   async ({ h, P }) => {
-    await h.step("change one item", async () => {
+    await h.step(`Change one item: ${said(P)}`, async () => {
       const items = h.page.locator('[data-test="pack-item"]');
       // The shoes item, else the last one.
       const shoes = items.filter({ hasText: /shoe|footwear/i }).first();
@@ -35,7 +36,7 @@ bench(
       await h.tap("pack-item-change");
       h.metric("Change s", Math.round(await h.aiIdle({ expect: true })), "s");
     });
-    await h.step("keep the plan", async () => {
+    await h.step("Keep the plan", async () => {
       await h.keep("plan", '[data-test="pack-plan-list"]');
       await h.shot("changed");
     });
@@ -45,13 +46,13 @@ bench(
 bench(
   "P4",
   async ({ h, P }) => {
-    await h.step("add an item", async () => {
+    await h.step(`Add an item with AI: ${said(P)}`, async () => {
       await h.tap("pack-add");
       await h.type(ask("pack-add-ask"), P);
       await h.tap("pack-add-ai");
       h.metric("Change s", Math.round(await h.aiIdle({ expect: true })), "s");
     });
-    await h.step("keep the plan", async () => {
+    await h.step("Keep the plan", async () => {
       await h.keep("plan", '[data-test="pack-plan-list"]');
       await h.shot("added");
     });
@@ -61,7 +62,7 @@ bench(
 bench(
   "P5",
   async ({ h, P }) => {
-    await h.step("update the plan", async () => {
+    await h.step(`Update the plan: ${said(P)}`, async () => {
       await skipResearch(h);
       await h.type("pack-edit", P);
       // Update plan stays grey until the typed text lands (and while a search offer waits).
@@ -76,7 +77,7 @@ bench(
       await h.tap("pack-refine");
       h.metric("Plan s", Math.round(await h.aiIdle({ expect: true, timeout: 40 * 60_000 })), "s");
     });
-    await h.step("keep the plan", async () => {
+    await h.step("Keep the plan", async () => {
       await h.keep("plan", '[data-test="pack-plan-list"]');
       await h.shot("updated");
     });

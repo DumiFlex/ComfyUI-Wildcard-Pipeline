@@ -4,7 +4,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { test, StepError, type Helpers, type TestContext, type TestMeta } from "watchwright";
-import { ModelLoop, PANEL, nothingFlag, sel, type ItemKind } from "./bench.js";
+import { ModelLoop, PANEL, nothingFlag, panelName, said, sel, type ItemKind } from "./bench.js";
 import { prompt, testMeta } from "./meta.js";
 
 /** What a bench test body gets: Watchwright's context plus its id and its prompt. */
@@ -58,19 +58,19 @@ export interface MakeOptions {
 export function make(route: string, button: string, { mode, name, varName, setup, apply = "ai-apply", nsfw = false }: MakeOptions): BenchBody {
   return async (t) => {
     const { h } = t;
-    await h.step("open the editor", async () => {
+    await h.step(`Open a new ${route.replace(/-/g, " ").replace(/s$/, "")}`, async () => {
       await h.visit(`${route}/new`);
       if (nsfw) await h.nsfw();
       if (setup) await setup(h);
     });
-    await h.step("ask", () => h.panel(button, { ...(mode ? { mode } : {}), prompt: t.P }));
-    await h.step("keep the answer", async () => {
+    await h.step(`Ask ${panelName(button, mode)}: ${said(t.P)}`, () => h.panel(button, { ...(mode ? { mode } : {}), prompt: t.P }));
+    await h.step("Keep the answer", async () => {
       await h.keep("answer", PANEL);
       await h.panelShot("answer");
     });
-    if (button === "cn-ai") await h.step("show the constraint", () => constraintShots(h));
+    if (button === "cn-ai") await h.step("Show the constraint's grid, tabs and preview", () => constraintShots(h));
     if (!t.last) return;
-    await h.step("save", async () => {
+    await h.step(`Apply and save as ${name}`, async () => {
       if (button !== "cn-ai") {
         if (!(await h.shows(apply, 5000))) {
           h.flag(nothingFlag("not-saved"), `Nothing to apply, so ${name} wasn't saved (later tests that use it will fail).`);
@@ -120,14 +120,14 @@ export async function constraintShots(h: Helpers): Promise<void> {
 export function describe(kind: ItemKind, name: string, { apply = true }: { apply?: boolean } = {}): BenchBody {
   return async (t) => {
     const { h } = t;
-    await h.step("open", () => h.open(kind, name));
-    await h.step("describe", () => h.panel("identity-ai"));
-    await h.step("keep the answer", async () => {
+    await h.step(`Open ${name}`, () => h.open(kind, name));
+    await h.step(`Describe ${name} with AI`, () => h.panel("identity-ai"));
+    await h.step("Keep the answer", async () => {
       await h.keep("answer", PANEL);
       await h.panelShot("answer");
     });
     if (apply && t.last) {
-      await h.step("apply and save", async () => {
+      await h.step(`Apply and save the description of ${name}`, async () => {
         await h.tap("ai-apply");
         await h.saveItem();
         h.log("Applied and saved.");
@@ -146,16 +146,16 @@ export function edit(
   return async (t) => {
     const { h } = t;
     const files = images ? images(t) : [];
-    await h.step("open", async () => {
+    await h.step(`Open ${name}`, async () => {
       await h.open(kind, name);
       if (prepare) await prepare(h);
     });
-    await h.step("ask", () => h.panel(button, { ...(mode ? { mode } : {}), prompt: t.P, images: files }));
-    await h.step("keep the answer", async () => {
+    await h.step(`Ask ${panelName(button, mode)}${files.length ? " with an image" : ""}: ${said(t.P)}`, () => h.panel(button, { ...(mode ? { mode } : {}), prompt: t.P, images: files }));
+    await h.step("Keep the answer", async () => {
       await h.keep("answer", PANEL);
       await h.panelShot("answer");
     });
-    if (button === "cn-ai") await h.step("show the constraint", () => constraintShots(h));
+    if (button === "cn-ai") await h.step("Show the constraint's grid, tabs and preview", () => constraintShots(h));
   };
 }
 
@@ -181,27 +181,28 @@ export function chat({ after, from = "wildcards", page = false, decide = false, 
   return async (t) => {
     const { h } = t;
     const files = images ? images(t) : [];
-    await h.step("open the page", async () => h.visit(typeof from === "function" ? await from(h) : from));
-    await h.step("send", () => h.chat(t.P, { images: files }));
+    const route = typeof from === "function" ? await from(h) : from;
+    await h.step(`Open ${route}`, () => h.visit(route));
+    await h.step(`Send in the chat${files.length ? " with an image" : ""}: ${said(t.P)}`, () => h.chat(t.P, { images: files }));
     if (decide) {
-      await h.step("answer the questions", async () => {
+      await h.step("Answer the questions with Decide for me", async () => {
         await h.chatShot("questions");
         await h.answerAsk();
       });
     }
-    await h.step("keep the answer", async () => {
+    await h.step("Keep the reply", async () => {
       await h.chatShot("answer");
       if (page) await h.pageShots();
     });
     if (after === "apply-undo") {
-      await h.step("apply and undo", async () => {
+      await h.step("Apply the card, then Undo", async () => {
         if (await h.applyCard()) {
           await h.chatShot("applied");
           await h.undoCard();
         }
       });
     } else if (after === "apply" || after === "delete" || (after === "apply-last" && t.last)) {
-      await h.step(after === "delete" ? "delete" : "apply", async () => {
+      await h.step(after === "delete" ? "Confirm the Delete card" : "Apply the card", async () => {
         if (await h.applyCard()) await h.chatShot("applied");
       });
     }
@@ -234,20 +235,20 @@ export async function tickOptions(h: Helpers, values: string[]): Promise<void> {
 export function organize({ names, after = "apply-undo" }: { names?: (h: Helpers) => Promise<string[]>; after?: "apply-undo" | "look" } = {}): BenchBody {
   return async (t) => {
     const { h } = t;
-    await h.step("select", async () => {
+    await h.step(names ? "Select the wildcards and open Organize with AI" : "Select all wildcards and open Organize with AI", async () => {
       await h.visit("wildcards");
       if (names) {
         for (const n of await names(h)) await h.tap(`row-select-${await h.idOf("wildcards", n)}`);
       } else await h.tap('[aria-label="Select all"]');
       await h.tap("bulk-ai-organize");
     });
-    await h.step("ask", () => h.panel("bulk-ai-organize", { prompt: t.P }));
-    await h.step("keep the answer", async () => {
+    await h.step(`Ask Organize: ${said(t.P)}`, () => h.panel("bulk-ai-organize", { prompt: t.P }));
+    await h.step("Keep the answer", async () => {
       await h.keep("answer", PANEL);
       await h.panelShot("answer");
     });
     if (after === "apply-undo") {
-      await h.step("apply and undo", async () => {
+      await h.step("Apply the changes, then Undo", async () => {
         await h.tap("ai-apply");
         await h.wait(1500);
         await h.shot("applied");
@@ -367,7 +368,7 @@ export function pack({ sample = false, nsfw = false, images, install = false, ex
     const { h } = t;
     const ask = request ?? t.P;
     const files = images ? images(t) : [];
-    await h.step("start", async () => {
+    await h.step(extend ? "Open Extend with AI and describe the pack" : `Describe the pack: ${said(ask)}`, async () => {
       if (extend) {
         await h.open("bundles", await extend(h));
         await h.tap("bd-extend-ai");
@@ -395,7 +396,7 @@ export function pack({ sample = false, nsfw = false, images, install = false, ex
       if (nsfw) await h.choose("pack-setting-rating", "NSFW");
       await h.shot("settings");
     });
-    await h.step("plan", async () => {
+    await h.step("Plan it (Decide all on any questions)", async () => {
       await h.tap("pack-plan");
       let plan = await h.aiIdle({ expect: true, timeout: 40 * 60_000 });
       for (let i = 0; i < 4 && (await h.shows("pack-decide-all")); i++) {
@@ -409,7 +410,7 @@ export function pack({ sample = false, nsfw = false, images, install = false, ex
       await h.pageScrollShots("plan");
     });
     if (await h.shows("pack-review-ai")) {
-      await h.step("review the plan", async () => {
+      await h.step("Review the plan with AI", async () => {
         await h.tap("pack-review-ai");
         h.metric("Review s", Math.round(await h.aiIdle({ expect: true, timeout: 30 * 60_000 })), "s");
         await h.keep("review", '[data-test="pack-builder"]');
@@ -427,7 +428,7 @@ export function pack({ sample = false, nsfw = false, images, install = false, ex
       await t.child("P12");
       if (!fixRound.ran) fixSecs += await fixAll(h, label, research);
     };
-    if (!(await buildReady(h, research))) await h.step("fix the findings", () => fixHere("before-build"));
+    if (!(await buildReady(h, research))) await h.step("Fix all with AI before the build", () => fixHere("before-build"));
     if (!(await buildReady(h, research))) {
       // Still blocked: dismiss what's left so the build can still be tested, and say so.
       const dismiss = h.page.locator('[data-test="pack-finding-dismiss"]:visible, [data-test="pack-problem-dismiss"]:visible');
@@ -448,7 +449,7 @@ export function pack({ sample = false, nsfw = false, images, install = false, ex
       if (fixSecs) h.metric("Fix s", Math.round(fixSecs), "s");
       return;
     }
-    await h.step("build", async () => {
+    await h.step("Build the pack", async () => {
       await h.tap("pack-build");
       h.metric("Build s", Math.round(await h.aiIdle({ expect: true, timeout: 90 * 60_000, quiet: 5000 })), "s");
       await h.keep("check", '[data-test="pack-builder"]');
@@ -460,7 +461,7 @@ export function pack({ sample = false, nsfw = false, images, install = false, ex
     for (let i = 0; i < 3; i++) {
       const fix = h.page.locator('[data-test="pack-problem-fix"]:visible').first();
       if (!(await fix.isVisible().catch(() => false))) break;
-      await h.step(`fix problem ${i + 1}`, async () => {
+      await h.step(`Fix problem ${i + 1} of the build`, async () => {
         const before = await h.page.locator('[data-test="pack-problems"] li').allInnerTexts().catch(() => [] as string[]);
         const which = await fix.locator("xpath=ancestor::li[1]").innerText().catch(() => "");
         await h.snap(`problem-${i + 1}`, fix.locator("xpath=ancestor::*[@data-test='pack-item' or @data-test='pack-problems'][1]"));
@@ -483,10 +484,10 @@ export function pack({ sample = false, nsfw = false, images, install = false, ex
     const findings = await packFindings(h);
     if (findings.length) await h.keepText("findings", { text: findings.join("\n") });
     // Findings after the build: Fix all again (P12 if no pack needed it before).
-    if (await h.shows("pack-fix")) await h.step("fix the findings after the build", () => fixHere("after-build"));
+    if (await h.shows("pack-fix")) await h.step("Fix all with AI after the build", () => fixHere("after-build"));
     if (fixSecs) h.metric("Fix s", Math.round(fixSecs), "s");
     if (install && t.last && (await h.shows("pack-install"))) {
-      await h.step("install", async () => {
+      await h.step(extend ? "Install into the bundle, then Undo" : "Install the pack", async () => {
         // Install stays greyed out when the build left nothing new to add (its note says why).
         if (!(await h.page.locator(sel("pack-install")).first().isEnabled().catch(() => false))) {
           h.flag("not-installed", "Install is greyed out after the build: nothing new to install.");
@@ -515,7 +516,7 @@ export function pack({ sample = false, nsfw = false, images, install = false, ex
 /** P12's body: Fix all with AI on the pack its parent is building. */
 export const fixFindings: BenchBody = async (t) => {
   fixRound.ran = true;
-  const secs = await t.h.step("fix all with AI", () => fixAll(t.h, fixRound.label));
+  const secs = await t.h.step("Fix all with AI", () => fixAll(t.h, fixRound.label));
   t.h.metric("Fix s", Math.round(secs), "s");
 };
 

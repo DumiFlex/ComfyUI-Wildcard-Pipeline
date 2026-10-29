@@ -17,6 +17,28 @@ export function sel(test: string): string {
   return test.startsWith("[") || test.startsWith(".") || test.includes(" ") ? test : `[data-test="${test}"]`;
 }
 
+const PANEL_NAMES: Record<string, string> = {
+  "wc-ai-draft": "wildcard",
+  "fv-ai": "fixed values",
+  "cb-ai": "combine",
+  "drv-ai": "derivation",
+  "cn-ai": "constraint",
+  "tpl-ai": "template",
+  "identity-ai": "Describe",
+  "bulk-ai-organize": "Organize",
+};
+
+/** An AI panel's name for a step title: "the wildcard panel (add)". */
+export function panelName(button: string, mode?: string): string {
+  return `the ${PANEL_NAMES[button] ?? button} panel${mode ? ` (${mode})` : ""}`;
+}
+
+/** A request quoted for a step title, cut to `max` characters. */
+export function said(text: string, max = 60): string {
+  const one = text.replace(/\s+/g, " ").trim();
+  return `"${one.length > max ? `${one.slice(0, max - 1)}…` : one}"`;
+}
+
 /** How long the AI may write nothing new before the wait gives up with a `model-loop` finding. */
 export const STALL_MS = 10 * 60_000;
 
@@ -25,7 +47,16 @@ export const STALL_MS = 10 * 60_000;
  * with nothing to apply is the fake's, not a broken click, so it flags `fake-answer` (info)
  * instead of `no-card` / `not-saved`. The pack's setup sets it.
  */
-export const fakeModel = { on: false };
+export const fakeModel = {
+  // Kept in the environment, not in this module: Watchwright reloads the pack's code when a file
+  // changes mid-run, which would reset a module variable after setup set it.
+  get on(): boolean {
+    return process.env.WP_BENCH_FAKE_MODEL === "1";
+  },
+  set on(v: boolean) {
+    process.env.WP_BENCH_FAKE_MODEL = v ? "1" : "0";
+  },
+};
 
 /** The flag for "nothing to apply": `robot` on a real model, `fake-answer` on the fake. */
 export function nothingFlag(robot: "no-card" | "not-saved"): string {

@@ -3,7 +3,7 @@
 // sample answer); on a real model it answers for itself. Each test checks that the panel answers,
 // offers the answer to apply, and puts it into the editor. Nothing is saved except in E1, which
 // deletes what it made.
-import { PANEL, type ItemKind } from "../../bench.js";
+import { PANEL, panelName, said, type ItemKind } from "../../bench.js";
 import { check, noAiError, script, smoke } from "../smoke.js";
 import type { Helpers } from "watchwright";
 
@@ -22,7 +22,7 @@ async function applyButton(h: Helpers): Promise<string | null> {
 
 /** Asks an item's AI panel, checks it answered, then applies the answer to the editor (unsaved). */
 async function ask(h: Helpers, kind: ItemKind, name: string, button: string, prompt: string, mode?: string): Promise<void> {
-  await h.step("ask", async () => {
+  await h.step(`Open ${name} and ask ${panelName(button, mode)}${prompt ? `: ${said(prompt)}` : ""}`, async () => {
     await h.open(kind, name);
     await h.panel(button, { mode, prompt });
     await h.keep("answer", PANEL);
@@ -32,7 +32,7 @@ async function ask(h: Helpers, kind: ItemKind, name: string, button: string, pro
   check(h, !!apply, "no-answer", `the ${mode ?? button} panel shows an answer to apply`);
   await noAiError(h);
   if (apply) {
-    await h.step("apply", async () => {
+    await h.step("Apply the answer to the editor (not saved)", async () => {
       await h.tap(apply);
       await h.wait(800);
       await h.snap("applied");
@@ -50,13 +50,13 @@ smoke(
     description: "Wildcards › New › AI › Add: the drafted options go into a new wildcard that saves. The test deletes it again.",
   },
   async ({ h }) => {
-    await h.step("ask", async () => {
+    await h.step('New wildcard › ask the wildcard panel (add): "6 hairstyles for fantasy characters"', async () => {
       await h.visit("wildcards/new");
       await h.panel("wc-ai-draft", { mode: "add", prompt: "6 hairstyles for fantasy characters" });
       await h.panelShot("answer");
     });
     check(h, await h.shows("ai-draft-add", 5000), "no-answer", "the draft shows options to add");
-    await h.step("add and save", async () => {
+    await h.step("Add the options and save as Smoke hairstyles", async () => {
       await h.tap("ai-draft-add");
       await h.setVar("smoke_hair");
       await h.setName("Smoke hairstyles");
@@ -114,7 +114,7 @@ smoke(
   "E13",
   { title: "Bundle split suggestion", section: SECTION, description: "Bench character › Split › Suggest: the dialog shows a suggestion and no error." },
   async ({ h }) => {
-    const text = await h.step("suggest", async () => {
+    const text = await h.step("Bench character › Split › Suggest", async () => {
       await h.open("bundles", "Bench character");
       await h.tap("bd-split-btn", { done: () => h.shows("split-suggest") });
       await h.tap("split-suggest", { done: () => h.busy() });
@@ -133,7 +133,7 @@ smoke(
   "E14",
   { title: "Organize with AI", section: SECTION, description: "Wildcards › select all › Organize with AI: the panel answers with changes to apply. Nothing is applied." },
   async ({ h }) => {
-    await h.step("organize", async () => {
+    await h.step('Select all wildcards › Organize with AI: "file each into the right category"', async () => {
       await h.visit("wildcards");
       await h.tap('[aria-label="Select all"]');
       await h.tap("bulk-ai-organize");

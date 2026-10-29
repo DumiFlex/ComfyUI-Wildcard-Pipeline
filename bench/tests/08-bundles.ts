@@ -3,13 +3,13 @@ import { bench, chat, describe } from "../shapes.js";
 
 bench("B1", describe("bundles", "Bench character", { apply: false }));
 bench("B2", async ({ h }) => {
-  await h.step("open", () => h.open("bundles", "Bench character"));
-  await h.step("ask for a split", async () => {
+  await h.step("Open Bench character", () => h.open("bundles", "Bench character"));
+  await h.step("Split › Suggest a split with AI", async () => {
     await h.tap("bd-split-btn", { done: () => h.shows("split-suggest", 0) });
     await h.tap("split-suggest", { done: () => h.busy() });
     h.metric("seconds", Math.round(await h.aiIdle()), "s");
   });
-  await h.step("keep the answer", async () => {
+  await h.step("Keep the suggestion", async () => {
     await h.keep("answer", '[role="dialog"]');
     await h.snap("answer", '[role="dialog"]');
     await h.press("Escape");
