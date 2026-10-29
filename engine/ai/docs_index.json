@@ -332,7 +332,7 @@
     },
     {
      "title": "Library and packs",
-     "text": "A row says missing\nThe module isn't in your library, often because the workflow came from someone else. It still works; right-click → Save to library to keep it.\nA row says drift (library updated on a bundle)\nYou changed the library entry after adding it. Right-click → Refresh from library (Reset to library snapshot on a bundle) to take the change.\nA pack won't install and asks for an update\nIt uses a feature from a newer version. Update Wildcard Pipeline and try again.\nA constraint shows a missing wildcard\nOpen it and use Reattach to point it at a wildcard you have, or Download from community."
+     "text": "A row says missing\nThe module isn't in your library, often because the workflow came from someone else. It still works; right-click → Save to library to keep it.\nA row says drift (library updated on a bundle)\nYou changed the library entry after adding it. Right-click → Refresh from library (Reset to library snapshot on a bundle) to take the change.\nA pack won't install and asks for an update\nIt uses a feature from a newer version. Update Wildcard Pipeline and try again.\nA constraint shows a missing wildcard\nOpen it and use Reattach to point it at a wildcard you have, or Download from community.\nUndo a change to the library\nSettings › Library & data › Backups lists every backup; Restore puts one back the next time ComfyUI starts, after backing up the current library. Backups to keep keeps the newest ones, the ones you make yourself too. Pin a backup (the bookmark button) to keep it for good: pinned ones are never deleted for you and don't count toward the limit. A row marked Removed at next backup goes the next time a backup is made. Type a short note next to Back up now to tell your own backups apart."
     },
     {
      "title": "Still stuck?",
@@ -2385,7 +2385,7 @@
     },
     {
      "title": "Library & data",
-     "text": "Your module database, backups and maintenance.\n- Database: File, size and what is in it.\n- Automatic backups: Copy the database before every migration and once a day.\n- Backups to keep: Older automatic backups are deleted.\n- Backups: Back up now, restore, or delete a backup.\n- Database location: Where the database file lives.\n- Maintenance: Vacuum, integrity check, analyze, re-run migrations."
+     "text": "Your module database, backups and maintenance.\n- Database: File, size and what is in it.\n- Automatic backups: Copy the database before every migration and once a day.\n- Backups to keep: The newest backups are kept, manual ones too; pinned ones are never deleted.\n- Backups: Back up now, pin, restore, or delete a backup.\n- Database location: Where the database file lives.\n- Maintenance: Vacuum, integrity check, analyze, re-run migrations."
     },
     {
      "title": "Advanced",

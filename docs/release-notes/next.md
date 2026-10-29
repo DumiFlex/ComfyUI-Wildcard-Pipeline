@@ -75,6 +75,7 @@ The assistant is new and **off by default**. Turn it on in **Settings › AI ass
 
 ### Fixes
 
+- **Pin the backups you want to keep.** Backups you made with **Back up now** were never deleted, so **Settings › Library & data › Backups** filled up. **Backups to keep** now covers them too, and the bookmark button on any backup pins it: a pinned backup is never deleted for you and doesn't count toward the limit. A backup past the limit is marked **Removed at next backup**. The backups you made before updating are pinned once, so none of them vanish; unpin the ones you don't need. Type a short note next to **Back up now** ("before the outfit rework") and the list shows it instead of **Manual**.
 - **Search (Ctrl K) is grouped.** With nothing typed it lists **Recent** first (what you ran from it and what you opened lately), then short groups: Go to, Create, Actions, Library and Categories. Typing still gives one ranked list, and the arrow keys keep the row they land on in view.
 - **Row checkboxes are easy to see.** The empty box you tick to select rows on Wildcards, Fixed values and the other lists has a visible edge (it was a dark square on a dark row) and lights up on hover.
 - **Accent colours have names.** Tweaks and **Settings › Appearance** name each accent under its swatch (Theme's own, Indigo, Violet, Teal, Rose, Amber, Custom), and Custom shows a colour wheel until you pick one instead of an icon.

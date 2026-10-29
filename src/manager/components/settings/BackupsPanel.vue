@@ -8,12 +8,18 @@
  * the next start, before anything opens it — the same path a location move
  * takes. The current database is backed up first, so a restore can itself be
  * undone.
+ *
+ * "Backups to keep" keeps the newest unpinned backups of every kind, manual
+ * included; a pinned one (bookmark button) is never pruned and doesn't count.
+ * Pruning runs when a backup is made, so an unpinned row past the limit is
+ * marked and goes at the next backup rather than the moment it's unpinned.
  */
 import { computed, onMounted, ref } from "vue";
 import Toggle from "../../../kit/Toggle.vue";
 import Button from "../../../kit/Button.vue";
 import Select from "../../../kit/Select.vue";
-import Icon from "../../../kit/Icon.vue";
+import Icon, { ICON_SM } from "../../../kit/Icon.vue";
+import Input from "../../../kit/Input.vue";
 import type { SelectOption } from "../../../kit/select-types";
 import ConfirmModal from "../../../kit/ConfirmModal.vue";
 import SettingGroup from "./SettingGroup.vue";
@@ -31,7 +37,11 @@ const toast = useToast();
 const list = ref<BackupList | null>(null);
 const loadError = ref<string | null>(null);
 const creating = ref(false);
+/** Optional short label for the next "Back up now", shown instead of "Manual". */
+const note = ref("");
+const NOTE_MAX = 80;
 const busyName = ref<string | null>(null);
+const pinning = ref<string | null>(null);
 const confirmRestore = ref<BackupEntry | null>(null);
 const confirmDelete = ref<BackupEntry | null>(null);
 const showAll = ref(false);
@@ -46,6 +56,19 @@ const REASON_LABEL: Record<BackupReason, string> = {
 };
 
 const backups = computed(() => list.value?.backups ?? []);
+const keep = computed(() => server.settings.value?.backups.keep ?? 7);
+const pinnedCount = computed(() => backups.value.filter((b) => b.pinned).length);
+/** Unpinned backups past the keep limit: the next backup prunes them. */
+const leaving = computed(() => {
+  const out = new Set<string>();
+  let kept = 0;
+  for (const b of backups.value) {
+    if (b.pinned || b.name === list.value?.pending_restore) continue;
+    kept += 1;
+    if (kept > keep.value) out.add(b.name);
+  }
+  return out;
+});
 const shown = computed(() => (showAll.value ? backups.value : backups.value.slice(0, 5)));
 const enabled = computed(() => server.settings.value?.backups.enabled ?? true);
 
@@ -70,11 +93,20 @@ async function load(): Promise<void> {
 }
 
 async function backupNow(): Promise<void> {
+  if (creating.value) return;
   creating.value = true;
   try {
-    const entry = await api.database.createBackup();
+    const entry = await api.database.createBackup(note.value);
+    note.value = "";
     await load();
-    toast.push({ severity: "success", summary: "Backup saved", detail: entry.name, life: 3000 });
+    const removed = entry.pruned.length;
+    toast.push({
+      severity: "success",
+      summary: "Backup saved",
+      detail: [entry.note ?? entry.name, removed ? `${removed} older ${removed === 1 ? "backup" : "backups"} removed.` : ""]
+        .filter(Boolean).join(". "),
+      life: 3000,
+    });
   } catch (err) {
     toast.push({
       severity: "error",
@@ -126,6 +158,28 @@ async function cancelRestore(): Promise<void> {
       life: 5000,
     });
   }
+}
+
+async function togglePin(b: BackupEntry): Promise<void> {
+  pinning.value = b.name;
+  try {
+    await api.database.pinBackup(b.name, !b.pinned);
+    await load();
+  } catch (err) {
+    toast.push({
+      severity: "error",
+      summary: b.pinned ? "Could not unpin the backup" : "Could not pin the backup",
+      detail: err instanceof Error ? err.message : undefined,
+      life: 5000,
+    });
+  } finally {
+    pinning.value = null;
+  }
+}
+
+function deleteBody(b: BackupEntry): string {
+  const base = `The backup from ${formatWhen(b.created_at)} is removed from disk.`;
+  return b.pinned ? `${base} It is pinned, so it would never have been removed for you.` : base;
 }
 
 async function doDelete(): Promise<void> {
@@ -207,9 +261,8 @@ onMounted(() => {
       />
     </SettingRow>
     <SettingRow
-      v-if="enabled"
       label="Backups to keep"
-      hint="Older automatic backups are deleted. Backups you make yourself are never deleted for you."
+      hint="The newest backups are kept and older ones are deleted, the ones you make yourself included. Pin a backup to keep it for good; pinned ones don't count."
       setting-key="backups-keep"
     >
       <Select
@@ -226,9 +279,21 @@ onMounted(() => {
         <p class="wp-bk__dir wp-mono">{{ list?.dir ?? "…" }}</p>
       </template>
       <div class="wp-bk__toolbar">
+        <Input
+          v-model="note"
+          class="wp-bk__note"
+          placeholder="Note (optional), e.g. before the outfit rework"
+          aria-label="Note for this backup"
+          :maxlength="NOTE_MAX"
+          data-test="backup-note"
+          @keydown.enter="backupNow"
+        />
         <Button variant="secondary" icon="pi-save" :loading="creating" data-test="backup-now" @click="backupNow">
           Back up now
         </Button>
+        <span v-if="pinnedCount" class="wp-bk__count" data-test="backup-pinned-count">
+          <Icon name="pi-bookmark-fill" :size="ICON_SM" /> {{ pinnedCount }} pinned
+        </span>
       </div>
       <p v-if="loadError" class="wp-set-error" role="alert">{{ loadError }}</p>
       <p v-else-if="list && backups.length === 0" class="wp-bk__empty" data-test="backup-empty">
@@ -238,10 +303,33 @@ onMounted(() => {
         <li v-for="b in shown" :key="b.name" class="wp-bk__item" :data-pending="list?.pending_restore === b.name || undefined">
           <div class="wp-bk__meta">
             <span class="wp-bk__when">{{ formatWhen(b.created_at) }}</span>
-            <span class="wp-set-pill">{{ REASON_LABEL[b.reason] ?? b.reason }}</span>
+            <span
+              class="wp-set-pill"
+              :data-note="b.note ? true : undefined"
+              :title="b.note ? `${REASON_LABEL[b.reason] ?? b.reason} backup: ${b.note}` : undefined"
+              :data-test="`backup-label-${b.name}`"
+            >{{ b.note ?? REASON_LABEL[b.reason] ?? b.reason }}</span>
             <span class="wp-bk__size">{{ formatBytes(b.size) }}</span>
+            <span
+              v-if="leaving.has(b.name)"
+              class="wp-set-pill"
+              data-tone="warn"
+              title="Past the number of backups to keep. Pin it to keep it."
+              :data-test="`backup-leaving-${b.name}`"
+            >Removed at next backup</span>
           </div>
           <div class="wp-bk__actions">
+            <Button
+              variant="ghost"
+              size="sm"
+              :icon="b.pinned ? 'pi-bookmark-fill' : 'pi-bookmark'"
+              :pressed="b.pinned"
+              :disabled="pinning === b.name"
+              :aria-label="`${b.pinned ? 'Unpin' : 'Pin'} backup from ${formatWhen(b.created_at)}`"
+              :title="b.pinned ? 'Pinned: never removed for you. Click to unpin.' : 'Pin: keep this backup for good'"
+              :data-test="`backup-pin-${b.name}`"
+              @click="togglePin(b)"
+            />
             <Button
               variant="ghost"
               size="sm"
@@ -277,7 +365,7 @@ onMounted(() => {
     <ConfirmModal
       :open="!!confirmDelete"
       title="Delete this backup?"
-      :body="confirmDelete ? `The backup from ${formatWhen(confirmDelete.created_at)} is removed from disk.` : ''"
+      :body="confirmDelete ? deleteBody(confirmDelete) : ''"
       confirm-label="Delete"
       tone="danger"
       @confirm="doDelete"
@@ -298,7 +386,10 @@ onMounted(() => {
 }
 .wp-bk__pending span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .wp-bk__dir { margin: 3px 0 0; font-size: 11px; color: var(--wp-text-dim); overflow-wrap: anywhere; }
-.wp-bk__toolbar { display: flex; gap: var(--wp-space-3); }
+.wp-bk__toolbar { display: flex; align-items: center; gap: var(--wp-space-4); }
+.wp-bk__note { width: 320px; max-width: 100%; }
+.wp-bk__meta .wp-set-pill[data-note] { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wp-text); }
+.wp-bk__count { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--wp-text-dim); }
 .wp-bk__empty { margin: 0; font-size: 12px; color: var(--wp-text-dim); }
 .wp-bk__list { list-style: none; margin: 0; padding: 0; width: 100%; border: 1px solid var(--wp-border); border-radius: var(--wp-radius); }
 .wp-bk__item {

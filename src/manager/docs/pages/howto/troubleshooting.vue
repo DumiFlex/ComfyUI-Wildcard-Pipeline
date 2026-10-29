@@ -28,6 +28,7 @@ const library = [
   { term: "A row says drift (library updated on a bundle)", desc: "You changed the library entry after adding it. Right-click → Refresh from library (Reset to library snapshot on a bundle) to take the change." },
   { term: "A pack won't install and asks for an update", desc: "It uses a feature from a newer version. Update Wildcard Pipeline and try again." },
   { term: "A constraint shows a missing wildcard", desc: "Open it and use Reattach to point it at a wildcard you have, or Download from community." },
+  { term: "Undo a change to the library", desc: "Settings › Library & data › Backups lists every backup; Restore puts one back the next time ComfyUI starts, after backing up the current library. Backups to keep keeps the newest ones, the ones you make yourself too. Pin a backup (the bookmark button) to keep it for good: pinned ones are never deleted for you and don't count toward the limit. A row marked Removed at next backup goes the next time a backup is made. Type a short note next to Back up now to tell your own backups apart." },
 ];
 </script>
 

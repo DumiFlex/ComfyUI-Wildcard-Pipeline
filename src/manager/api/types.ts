@@ -779,6 +779,15 @@ export interface BackupEntry {
   /** ISO timestamp (UTC). */
   created_at: string;
   reason: BackupReason;
+  /** Pinned backups are never pruned and don't count toward `keep`. */
+  pinned: boolean;
+  /** The short note typed for a manual backup, shown instead of "Manual". */
+  note: string | null;
+}
+
+export interface BackupCreated extends BackupEntry {
+  /** Backups the keep limit removed right after this one was made. */
+  pruned: string[];
 }
 
 export interface BackupList {
@@ -793,7 +802,7 @@ export interface ServerSettings {
   max_ref_depth: number;
   backups: {
     enabled: boolean;
-    /** Automatic backups kept; manual ones are never pruned. */
+    /** Unpinned backups kept, manual or automatic; pinned ones are never pruned. */
     keep: number;
     daily: boolean;
   };

@@ -7,7 +7,7 @@ import type {
   BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
   CategoryCreateInput, CategoryRow,
   DatabaseConfig, DatabaseConfigUpdate,
-  BackupEntry, BackupList, ServerSettings, ServerSettingsPatch,
+  BackupCreated, BackupEntry, BackupList, ServerSettings, ServerSettingsPatch,
   AiConfig, AiConfigPatch, AiTestResult, AiThinkingInfo, AiIndexStatus, AiWildcardDraftRequest, AiWildcardDraftResult,
   AiWildcardEditRequest,
   AiWildcardEditResult,
@@ -446,8 +446,18 @@ export const api = {
     backups() {
       return request<BackupList>("/wp/api/database/backups", { method: "GET" });
     },
-    createBackup() {
-      return request<BackupEntry>("/wp/api/database/backups", { method: "POST" });
+    createBackup(note?: string) {
+      const text = note?.trim();
+      return request<BackupCreated>("/wp/api/database/backups", {
+        method: "POST",
+        ...(text ? { body: JSON.stringify({ note: text }) } : {}),
+      });
+    },
+    pinBackup(name: string, pinned: boolean) {
+      return request<BackupEntry>(`/wp/api/database/backups/${encodeURIComponent(name)}/pin`, {
+        method: "PUT",
+        body: JSON.stringify({ pinned }),
+      });
     },
     deleteBackup(name: string) {
       return request<void>(`/wp/api/database/backups/${encodeURIComponent(name)}`, { method: "DELETE" });
