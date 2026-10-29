@@ -309,13 +309,16 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // RAISED 512 -> 536 KB on 2026-10-29 for WP Toggles (#200) landing on top of
 // WP Note (#199): the toggles widget, its row outputs and the merge command
 // are lazy widget chunks (boot unchanged); the merge sat at 545,077 bytes.
-// RAISED 536 -> 560 KB on 2026-10-29 for the WP Note editor: a formatting
+// RAISED 536 -> 552 KB on 2026-10-29 for WP Toggles' mute / bypass control
+// and WP Node Group (a new frontend-only node + panel), the clean/edit views
+// and the richer Pick one: lazy widget chunks plus a few KB of boot glue
+// (registration, the prompt strip); the branch sat at 552,937 bytes.
+// RAISED 552 -> 576 KB on 2026-10-29 for the WP Note editor: a formatting
 // bar, links to any docs page and section (the page/section catalog, ~5 KB
 // gzip) and icons from the full PrimeIcons list. All of it is in the note's
 // lazy chunks (NoteWidget, NotePeek, note-markdown), loaded only when a
-// note is on the canvas; boot unchanged. dev sat at ~545,000 bytes (already
-// over after #200), the branch at 564,535.
-const TOTAL_LIMIT = 560 * 1024;     // 560 KB
+// note is on the canvas; boot unchanged. dev sat at ~556,000 bytes after #201, the merge at 575,436.
+const TOTAL_LIMIT = 576 * 1024;     // 576 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

@@ -1674,7 +1674,7 @@
    "id": "wp-toggles",
    "title": "WP Toggles",
    "group": "nodes",
-   "blurb": "Several on/off switches in one node, as $variables and BOOLEAN outputs.",
+   "blurb": "Several on/off switches in one node, as $variables and BOOLEAN outputs, that can also mute or bypass nodes.",
    "keywords": [
     "toggle",
     "boolean",
@@ -1682,12 +1682,15 @@
     "on",
     "off",
     "lora",
-    "merge"
+    "merge",
+    "mute",
+    "bypass",
+    "pick one"
    ],
    "sections": [
     {
      "title": "What it's for",
-     "text": "WP Toggles replaces a stack of Boolean nodes. Each toggle writes $its_variable as true or false, so a derivation can branch on it without a Context Injector, and can show a BOOLEAN output at the right of its row for a switch node.\nFigure: Three toggles and a Scene label. Use its own clothes needs LoRA character; Anime look has no output, only its variable. A WP Toggles node with an Any on / Pick one switch at the top. Rows: LoRA character (a switch, on, $use_lora_character), Use its own clothes (a checkbox, indented, 'needs LoRA character'), Anime look (a chip with no output), then a Scene label with Time of day (Day / Night buttons, $is_day). Each row with an output has its BOOLEAN dot at the node's right edge, level with the row; Time of day is wired to a Preview as Text node."
+     "text": "WP Toggles replaces a stack of Boolean nodes. Each toggle writes $its_variable as true or false, so a derivation can branch on it without a Context Injector, and can show a BOOLEAN output at the right of its row for a switch node.\nFigure: LoRA character is off, so the LoRA wired into its dot is bypassed and Use its own clothes (which needs it) is off too. A WP Toggles node in its clean view (a pencil at the top opens the edit view). Rows: LoRA character (a switch, off, $use_lora_character, with a violet bypass icon by its name), whose dot on the left is wired from a Load LoRA node shown bypassed in purple; Use its own clothes (indented, striped, 'Off: needs LoRA character'); Anime look (a chip); then a Scene label with Time of day (Day / Night buttons, $is_day), whose BOOLEAN dot at the right edge is wired to a Preview as Text node."
     },
     {
      "title": "When to use it",
@@ -1695,11 +1698,19 @@
     },
     {
      "title": "Controls",
-     "text": "upstream (in)\nOptional Context to extend. Only nodes after this one see the toggle variables.\nAny on / Pick one\nAny on: every toggle is on or off by itself. Pick one: exactly one is on, like radio buttons.\nwrites (Pick one)\nOptional variable that also gets the picked toggle's name, so one rule can branch on it.\nPencil\nOpens the toggle's edit panel: name, variable, style, needs, group and its output.\nAdd toggle / Add label\nA new toggle, or a label that groups the toggles under it. Click a label's arrow to fold it.\ncontext (out)\nThe Context with every toggle variable added, all internal.\ntoggle outputs\nOne BOOLEAN per toggle that has an output, at the right of its row. Up to 16."
+     "text": "upstream (in)\nOptional Context to extend. Only nodes after this one see the toggle variables. It can also set toggles (see below).\nPencil (top)\nOpens the edit view: the mode, the grips to reorder, a pencil per row, Add toggle and Add label. Done goes back to the clean view, which shows only the switches.\nAny on / Pick one\nAny on: every toggle is on or off by itself. Pick one: exactly one is on, like radio buttons.\nwrites (Pick one)\nOptional variable that also gets the picked toggle's value (or its name), so one rule can branch on it.\nPencil (row)\nOpens the toggle's edit panel: name, variable, style, needs, what off mutes or bypasses, group and its output.\nAdd toggle / Add label\nA new toggle, or a label that groups the toggles under it. Click a label's arrow to fold it.\ncontrol dots (in)\nA toggle that mutes or bypasses has a dot at the left of its row: wire the nodes it drives into it.\ncontext (out)\nThe Context with every toggle variable added, all internal.\ntoggle outputs\nOne BOOLEAN per toggle that has an output, at the right of its row. Up to 16."
     },
     {
      "title": "Editing a toggle",
-     "text": "Name\nShown on the row and on its output.\nVariable\nGets true or false. It follows the name until you change it. Always internal, so it never prints in the prompt.\nStyle\nSwitch, Check, Buttons (two words of your own, like Day / Night) or Chip (a small chip with the name).\nNeeds\nAnother toggle this one needs. While that one is off, this one is off too; it keeps your choice for when it comes back on.\nGroup\nWhich label it sits under.\nBOOLEAN output\nShow an output for switch nodes. Off for a toggle only rules read.\nDrag the grip to reorder. A label moves with its toggles. Moving a row never re-points a wire: each output stays with its toggle."
+     "text": "Name\nShown on the row and on its output.\nVariable\nGets true or false. It follows the name until you change it. Always internal, so it never prints in the prompt. Show puts it under the name in the clean view.\nStyle\nSwitch, Check, Buttons (two words of your own, like Day / Night) or Chip (a small chip with the name).\nValue (Pick one)\nWhat the picked variable gets when this toggle is picked, instead of its name. It can read $variables from upstream.\nNeeds\nAnother toggle this one needs. While that one is off, this one is off too; it keeps your choice for when it comes back on.\nWhen off\nNothing, Mute or Bypass: what happens to the nodes wired into the row's dot (and to the canvas groups you pick) while the toggle is off. On, they run.\nInvert\nMute or bypass while the toggle is ON instead, for a node used only as a switchboard.\nCanvas groups\nGroups on the canvas whose nodes When off also covers, by title. No wires needed.\nUpstream can set it\nWhen the upstream Context holds this toggle's variable as a yes/no word (true, yes, on, 1, false, no, off, 0), that value sets the switch for the run.\nGroup\nWhich label it sits under.\nBOOLEAN output\nShow an output for switch nodes. Off for a toggle only rules read.\nDrag the grip to reorder. A label moves with its toggles. Moving a row never re-points a wire: each output stays with its toggle."
+    },
+    {
+     "title": "Mute or bypass nodes",
+     "text": "Set a toggle's When off to Mute or Bypass and its row gets a dot on the left. Wire any node's output into it, or a WP Node Group to drive several. Turning the toggle off mutes or bypasses them; turning it on lets them run. Needs and Pick one count: a toggle that is off because of them drives its nodes off too. A toggle can do all of it at once: write $its_variable, send its BOOLEAN and mute or bypass. Once something is wired, an icon next to the name shows it: coloured while it is muting or bypassing, dim while not; hover it for the nodes.\nFigure: Detailer is off, so the two nodes in its WP Node Group are muted. Two nodes, Detailer decode and Detail upscale, are wired into a WP Node Group, which lists them as muted rows with Run / Mute / Bypass buttons at the top. Its nodes output is wired into the dot at the left of the Detailer row of a WP Toggles node; Detailer is set to Off and shows a mute icon by its name.\nThis happens on the canvas, the moment the toggle flips, so the saved workflow keeps the modes. The wires to the dots never reach the run. An upstream value that sets a toggle changes its variable and output, not the modes."
+    },
+    {
+     "title": "Pick one",
+     "text": "One toggle is on. Which one, first match wins: the toggle the upstream picked variable names (with Upstream can pick), then the first toggle upstream set to a yes word, then the first one you switched on. The picked variable gets the toggle's Value, or its name; it is internal unless Show in prompt is on."
     },
     {
      "title": "Merge the Boolean nodes you have",
@@ -1707,7 +1718,72 @@
     },
     {
      "title": "Works with",
-     "text": "WP Context Injector WP Var → Bool WP Model Info"
+     "text": "WP Context Injector WP Var → Bool WP Node Group WP Mode Relay WP Model Info"
+    }
+   ]
+  },
+  {
+   "id": "wp-node-group",
+   "title": "WP Node Group",
+   "group": "nodes",
+   "blurb": "Gather nodes so one WP Toggles switch mutes or bypasses them all.",
+   "keywords": [
+    "mute",
+    "bypass",
+    "group",
+    "collector",
+    "repeater",
+    "toggle",
+    "rgthree"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "WP Node Group collects nodes for a WP Toggles control. Wire the nodes in on the left and its output into a toggle's dot: when the toggle is off, every node in the group is muted or bypassed. Groups can go into groups. It never runs and is left out of the prompt.\nFigure: Two nodes in a group, wired into Detailer's dot. Detailer is off, so both are muted. Two nodes, Detailer decode and Detail upscale, are wired into a WP Node Group, which lists them as muted rows with Run / Mute / Bypass buttons at the top. Its nodes output is wired into the dot at the left of the Detailer row of a WP Toggles node; Detailer is set to Off and shows a mute icon by its name."
+    },
+    {
+     "title": "When to use it",
+     "text": "Good for\n- One switch for a whole branch: a detailer, an upscale pass, a LoRA stack\n- Muting or bypassing by hand from one place\nBetter with something else\n- Nodes that already sit in one canvas group: pick the group in the toggle instead"
+    },
+    {
+     "title": "Controls",
+     "text": "node dots (in)\nWire any node's output in. A new free dot appears as you wire; a freed one goes. Each shows its node's title.\nnodes (out)\nWire it into a WP Toggles control dot: that toggle then mutes or bypasses every node here.\nRun / Mute / Bypass\nSet every node in the group at once.\nMode chip\nEach row's chip shows its node's mode. Click it to go Runs → Muted → Bypassed.\nMuting or bypassing the group node itself does the same to its nodes, and setting it back lets them run."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Toggles WP Mode Relay"
+    }
+   ]
+  },
+  {
+   "id": "wp-mode-relay",
+   "title": "WP Mode Relay",
+   "group": "nodes",
+   "blurb": "When the nodes it watches get muted or bypassed, mute, bypass or run a WP Node Group.",
+   "keywords": [
+    "mute",
+    "bypass",
+    "relay",
+    "chain",
+    "rgthree",
+    "group"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "WP Mode Relay chains mutes and bypasses. It watches the nodes wired into it and, when what they do changes, sets the nodes of the WP Node Group its output goes into. So muting a sampler can bypass its whole save branch, or bypassing one LoRA can let a different one run. It never runs and is left out of the prompt.\nFigure: The watched node is muted, so the relay mutes the node in its WP Node Group. A node titled Watched is muted and wired into a WP Mode Relay, whose table maps All muted to Mute (highlighted as the current case), All bypassed to Bypass and Any runs to Run, with the line 'Watching 1 node: muted · drives 1 node'. The relay's drives output goes into a WP Node Group whose one member, Follower, is shown muted."
+    },
+    {
+     "title": "When to use it",
+     "text": "Good for\n- Turning one branch off when another is off\n- Swapping: bypass A when B runs\nBetter with something else\n- One switch for several nodes: a WP Toggles row with a WP Node Group"
+    },
+    {
+     "title": "Controls",
+     "text": "watch dots (in)\nWire the nodes to watch. A new free dot appears as you wire.\ndrives (out)\nWire it into a WP Node Group: the relay sets that group's nodes.\nAll muted\nWhat to send when every watched node is muted: Run, Mute, Bypass or nothing (—).\nAll bypassed\nWhat to send when every watched node is bypassed.\nAny runs\nWhat to send when at least one watched node runs.\nA mix of muted and bypassed sends nothing. The relay acts only when the watched nodes change, never when a workflow loads."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Node Group WP Toggles"
     }
    ]
   },

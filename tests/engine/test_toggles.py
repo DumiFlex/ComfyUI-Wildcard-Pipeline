@@ -13,7 +13,8 @@ CORPUS = json.loads(
 
 @pytest.mark.parametrize("case", CORPUS, ids=[c["name"] for c in CORPUS])
 def test_corpus(case):
-    cfg = toggles.parse_config(json.dumps(case["config"]))
+    parsed = toggles.parse_config(json.dumps(case["config"]))
+    cfg, _ = toggles.with_upstream(parsed, case.get("upstream"))
     assert toggles.resolve(cfg) == case["values"]
     n = len(case["outputs"])
     vals = toggles.output_values(cfg)
