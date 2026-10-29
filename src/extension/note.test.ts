@@ -12,9 +12,17 @@ describe("WP Note config", () => {
     expect(parseNoteConfig("")).toEqual(defaultNoteConfig());
     expect(parseNoteConfig("{oops")).toEqual(defaultNoteConfig());
     expect(parseNoteConfig({ tone: "loud", look: "label", step: 250, text: 3, doc: "nope" }))
-      .toEqual({ version: 1, tone: "step", look: "label", step: 99, text: "", doc: "" });
+      .toEqual({ version: 1, tone: "step", look: "label", step: 99, text: "", doc: "", color: "" });
     expect(parseNoteConfig(JSON.stringify({ tone: "tip", step: 0.4, text: "hi", doc: "bundles" })))
-      .toEqual({ version: 1, tone: "tip", look: "card", step: 1, text: "hi", doc: "bundles" });
+      .toEqual({ version: 1, tone: "tip", look: "card", step: 1, text: "hi", doc: "bundles", color: "" });
+  });
+
+  it("keeps a hex colour and drops anything else", () => {
+    expect(parseNoteConfig({ color: "#A1B2C3" }).color).toBe("#a1b2c3");
+    expect(parseNoteConfig({ color: " #abc " }).color).toBe("#abc");
+    expect(parseNoteConfig({ color: "red" }).color).toBe("");
+    expect(parseNoteConfig({ color: "#12345678" }).color).toBe("");
+    expect(parseNoteConfig({ color: "url(x)" }).color).toBe("");
   });
 
   it("builds the docs URL on the given origin", () => {

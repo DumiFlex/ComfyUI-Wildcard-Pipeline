@@ -2,6 +2,7 @@ import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
 import { reactiveFromGraph } from "../extension/reactive";
 import { defaultNoteConfig, docUrl, parseNoteConfig, type NoteConfig } from "../extension/note";
+import { trackPeek } from "./note-peek";
 
 const NoteWidget = defineAsyncComponent(() => import("../components/note/NoteWidget.vue"));
 
@@ -18,6 +19,8 @@ interface NoteNode extends MountTargetNode {
   computeSize?: () => [number, number];
   setSize?: (size: [number, number]) => void;
   setDirtyCanvas?: (fg: boolean, bg: boolean) => void;
+  resizable?: boolean;
+  graph?: unknown;
 }
 
 type NodeBase = new (title?: string) => NoteNode;
@@ -57,12 +60,19 @@ function passPointerThrough(el: HTMLElement): (() => void) | null {
   return () => obs.disconnect();
 }
 
+/** The narrowest a card note gets, and the width a label opens its editor at. */
+const CARD_MIN_WIDTH = 160;
+const FORM_WIDTH = 340;
+
 /** Mounts the note's one widget. Its value is the JSON NoteConfig. */
 export function mountNote(node: NoteNode) {
   const config = ref<NoteConfig>(defaultNoteConfig());
   // A saved note reads; a brand-new one opens in the editor (below).
   const editing = ref(false);
   let restored = false;
+  const isLabel = (): boolean => config.value.look === "label" && !editing.value;
+  // A label sizes itself to its text; a card's width is the user's.
+  const syncResizable = (): void => { node.resizable = !isLabel(); };
 
   const wrapper: Component = {
     setup() {
@@ -72,12 +82,13 @@ export function mountNote(node: NoteNode) {
       function onConfig(next: NoteConfig): void {
         config.value = next;
         host.setValue(serializeWidgetJson(next));
-        node.setDirtyCanvas?.(true, true);
+        syncResizable();
+        fitSize();
       }
       function onTitle(next: string): void {
         node.title = next;
         title.value = next;
-        node.setDirtyCanvas?.(true, true);
+        fitSize();
       }
       function onPinned(next: boolean): void {
         setPinned(node, next);
@@ -100,36 +111,68 @@ export function mountNote(node: NoteNode) {
     },
   };
 
+  // The panel's own width, which is the label's width.
+  const panel = (): HTMLElement | null =>
+    host.element.querySelector<HTMLElement>(".wp-note__panel");
+  const labelWidth = (): number => Math.ceil(panel()?.scrollWidth ?? 0);
+
   const host = createDomWidgetHost(node, "wp_note", wrapper, {
     initialValue: serializeWidgetJson(config.value),
     minHeight: 30,
-    minWidth: 120,
+    minWidth: () => (isLabel() ? Math.max(labelWidth(), 40) : editing.value ? FORM_WIDTH : CARD_MIN_WIDTH),
     autoHeight: true,
     onValueRestored: (raw: string) => {
       restored = true;
       config.value = parseNoteConfig(raw);
       editing.value = false;
-      fitHeight();
+      syncResizable();
+      fitSize();
     },
   });
 
-  // Shrink the node to the panel once its height settles (the widget only
-  // ever grows it), so the selection outline hugs the note.
-  function fitHeight(): void {
+  // Make the node exactly the panel once the layout settles, so the
+  // selection outline hugs the note: a label's width is its text, a card's
+  // height is its text (the widget only ever grows the node). node.size is
+  // written directly: setSize clamps the width to 225 px in Nodes 2.0.
+  function fitSize(): void {
+    node.setDirtyCanvas?.(true, true);
     let frames = 3;
     const step = (): void => {
       if (--frames > 0) { requestAnimationFrame(step); return; }
-      const min = node.computeSize?.();
-      if (min && node.setSize && Math.abs(min[1] - node.size[1]) > 1) node.setSize([node.size[0], min[1]]);
+      const el = host.element.querySelector<HTMLElement>(".wp-note");
+      if (!el?.isConnected) return;
+      const size = node.size;
+      let w = size[0];
+      if (isLabel()) w = Math.max(labelWidth(), 40);
+      else if (editing.value) w = Math.max(w, FORM_WIDTH);
+      else w = Math.max(w, CARD_MIN_WIDTH);
+      const h = Math.ceil(el.offsetHeight);
+      if (h > 0 && (Math.abs(w - size[0]) > 1 || Math.abs(h - size[1]) > 1)) {
+        size[0] = w;
+        size[1] = h;
+        node.setDirtyCanvas?.(true, true);
+      }
     };
     requestAnimationFrame(step);
   }
   function setEditing(v: boolean): void {
     editing.value = v;
-    fitHeight();
+    syncResizable();
+    fitSize();
   }
   // Nothing restored by the next tick: the user just added this note.
   setTimeout(() => { if (!restored) setEditing(true); }, 0);
+
+  // A label keeps its text for a hover card (see note-peek.ts).
+  const stopPeek = trackPeek({
+    panel: () => (config.value.look === "label" && !editing.value ? panel() : null),
+    config: () => config.value,
+    title: () => node.title,
+    active: () => config.value.look === "label" && !editing.value && !!node.graph,
+    openDoc: (id) => window.open(docUrl(id, window.location.origin), "_blank", "noopener"),
+    edit: () => setEditing(true),
+  });
+  host.onCleanup(stopPeek);
 
   // Keep ComfyUI's wrapper letting clicks through. It is created after the
   // node, and again when the graph is re-shown, so check on each draw.

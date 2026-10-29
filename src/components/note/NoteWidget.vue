@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
+import ColorField from "../../kit/ColorField.vue";
 import WpButton from "../../kit/WpButton.vue";
 import WpIconButton from "../../kit/WpIconButton.vue";
 import WpNumber from "../../kit/WpNumber.vue";
@@ -13,6 +14,7 @@ import {
   NOTE_STEP_MAX,
   NOTE_TONES,
   docTitle,
+  noteColor,
   type NoteConfig,
   type NoteLook,
   type NoteTone,
@@ -45,6 +47,20 @@ const docOptions = computed(() => [
   ...NOTE_DOC_PAGES.map((p) => ({ value: p.id, label: p.title })),
 ]);
 const hasTitle = computed(() => props.title.trim() !== "" && props.title !== "WP Note");
+const toneStyle = computed(() => (props.config.color ? { "--wp-note-tone": props.config.color } : undefined));
+
+// The colour the picker starts from when the note has none of its own: the
+// tone's, read off the theme (it is a CSS variable, not a hex in our data).
+const root = ref<HTMLElement | null>(null);
+const toneHex = ref("#6366f1");
+function readToneHex(): void {
+  const el = root.value;
+  if (!el || props.config.color) return;
+  const v = getComputedStyle(el).getPropertyValue("--wp-note-tone").trim();
+  if (/^#[0-9a-f]{3,8}$/i.test(v)) toneHex.value = v;
+}
+onMounted(readToneHex);
+watch(() => [props.config.tone, props.editing], () => requestAnimationFrame(readToneHex));
 
 function patch(part: Partial<NoteConfig>): void {
   emit("update:config", { ...props.config, ...part });
@@ -59,21 +75,25 @@ function onText(ev: Event): void {
 
 <template>
   <div
+    ref="root"
     class="wp-note"
     :class="[`wp-note--${config.tone}`, `wp-note--${config.look}`, { 'wp-note--editing': editing }]"
+    :style="toneStyle"
     data-test="wp-note"
   >
     <!-- Read view. The panel lets clicks through to the canvas (drag,
          select, double-click to edit); only its buttons take them. -->
-    <div
-      v-if="!editing"
-      class="wp-note__panel"
-      :title="config.look === 'label' ? config.text : undefined"
-    >
+    <div v-if="!editing" class="wp-note__panel" data-test="note-panel">
       <div class="wp-note__head">
         <span v-if="config.tone === 'step'" class="wp-note__step" data-test="note-step">{{ config.step }}</span>
         <span v-else class="wp-note__badge" aria-hidden="true"><i class="pi" :class="icon"></i></span>
         <span v-if="hasTitle || config.look === 'label'" class="wp-note__title" data-test="note-title-text">{{ title }}</span>
+        <!-- A label keeps its text and docs link for the hover card; these
+             marks say there is something to see. -->
+        <span v-if="config.look === 'label' && (config.text.trim() || config.doc)" class="wp-note__marks" aria-hidden="true">
+          <i v-if="config.text.trim()" class="pi pi-align-left" data-test="note-has-text"></i>
+          <i v-if="config.doc" class="pi pi-book" data-test="note-has-doc"></i>
+        </span>
         <WpIconButton
           class="wp-note__edit"
           icon="pi-pencil"
@@ -129,6 +149,23 @@ function onText(ev: Event): void {
           test-prefix="note-look"
           @update:model-value="(v: NoteLook) => patch({ look: v })"
         />
+      </div>
+      <div class="wp-note__row">
+        <span class="wp-note__label">Colour</span>
+        <ColorField
+          :model-value="config.color || toneHex"
+          size="sm"
+          aria-label="Note colour"
+          data-test="note-color"
+          @update:model-value="(v: string) => patch({ color: noteColor(v) })"
+        />
+        <WpIconButton
+          v-if="config.color"
+          icon="pi-undo"
+          label="Use the tone's colour"
+          data-test="note-color-reset"
+          @click="patch({ color: '' })"
+        />
         <WpSwitch
           class="wp-note__pin"
           :model-value="pinned"
@@ -143,7 +180,7 @@ function onText(ev: Event): void {
         <input class="wp-note__input" :value="title" data-test="note-title" @input="onTitle" />
       </label>
       <label class="wp-note__field">
-        <span class="wp-note__label">Text <span class="wp-note__hint">{{ config.look === "label" ? "shows on hover" : "Markdown: **bold**, lists, `$var`" }}</span></span>
+        <span class="wp-note__label">Text <span class="wp-note__hint">{{ config.look === "label" ? "shows when you hover the label" : "Markdown: **bold**, lists, `$var`" }}</span></span>
         <textarea
           class="wp-note__input wp-note__textarea"
           rows="4"
@@ -177,9 +214,9 @@ function onText(ev: Event): void {
   font-size: 13px;
   line-height: 20px;
   color: var(--wp-text, inherit);
-  /* Clicks go through to the canvas; buttons and the form take them back. */
+  /* Clicks go through to the canvas; buttons and the form take them back.
+     No padding: the node is exactly the panel, so its selection outline hugs it. */
   pointer-events: none;
-  padding: 2px;
 }
 .wp-note--tip { --wp-note-tone: var(--wp-success); }
 .wp-note--info { --wp-note-tone: var(--wp-info); }
@@ -212,10 +249,12 @@ function onText(ev: Event): void {
   outline: 1px dashed color-mix(in srgb, var(--wp-note-tone) 45%, transparent);
   outline-offset: -6px;
 }
-/* Label: a small solid tag, title only. */
+/* Label: a small solid tag, title only. Sized to its text (the node follows
+   it, see widgets/note.ts), up to a cap where the title ellipsizes. */
 .wp-note--label .wp-note__panel {
   display: inline-flex;
-  max-width: 100%;
+  width: max-content;
+  max-width: 480px;
   padding: 6px 12px 6px 8px;
   border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-note-tone);
@@ -263,6 +302,8 @@ function onText(ev: Event): void {
   white-space: nowrap;
 }
 .wp-note--label .wp-note__title { font-size: 14px; flex: 0 1 auto; }
+.wp-note__marks { display: inline-flex; gap: 4px; flex: none; opacity: 0.8; }
+.wp-note__marks .pi { font-size: 11px; }
 .wp-note__edit {
   flex: none;
   margin-left: auto;
@@ -330,6 +371,53 @@ function onText(ev: Event): void {
 
 <style>
 @layer wp-extension {
+  /* Nodes 2.0 draws every node as a card (background, border, padding, a
+     225 px floor, the source badge row and an outline 7 px outside). A note
+     is its own panel, so drop all of that for nodes holding one. The rules
+     are !important because they override the frontend's utility classes. */
+  .lg-node:has(.wp-note) {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  .lg-node:has(.wp-note) > div { background: transparent !important; }
+  .lg-node:has(.wp-note),
+  .lg-node:has(.wp-note) > div,
+  .lg-node:has(.wp-note) > div > div { min-width: 0 !important; min-height: 0 !important; }
+  .lg-node:has(.wp-note) .lg-node-header { display: none !important; }
+  .lg-node:has(.wp-note) .lg-node-content { padding: 0 !important; }
+  .lg-node:has(.wp-note) .lg-node-widgets {
+    grid-template-columns: minmax(0, 1fr) !important;
+    padding: 0 !important;
+    gap: 0 !important;
+  }
+  .lg-node:has(.wp-note) .lg-node-widget { gap: 0 !important; width: 100% !important; padding: 0 !important; }
+  /* The widget row's reorder handle column. */
+  .lg-node:has(.wp-note) .lg-node-widget > *:first-child:not(:last-child) { display: none !important; }
+  .lg-node:has(.wp-note) [class*="component-node-background"] {
+    padding: 0 !important;
+    gap: 0 !important;
+    background: transparent !important;
+  }
+  /* The footer row with the source badge. */
+  .lg-node:has(.wp-note) [class*="component-node-background"] > div.text-muted-foreground,
+  .lg-node:has(.wp-note) .bg-node-component-surface { display: none !important; }
+  .lg-node:has(.wp-note) > div.absolute.border:not([data-testid]) { display: none !important; }
+  /* The selection outline hugs the panel. */
+  .lg-node:has(.wp-note) [data-testid="node-state-outline-overlay"],
+  .lg-node:has(.wp-note) > div.absolute.outline-none { inset: -2px !important; }
+  /* A label sizes itself: no resize grips. */
+  .lg-node:has(.wp-note--label:not(.wp-note--editing)) [class*="resize"] { display: none !important; }
+  /* The widget wrappers take pointer events and would eat the press that
+     drags the node; the canvas handles it instead. The note's own buttons
+     and its edit form take events back. */
+  .lg-node:has(.wp-note) .lg-node-widgets,
+  .lg-node:has(.wp-note) .lg-node-widgets * { pointer-events: none !important; }
+  .lg-node:has(.wp-note) .wp-note__form,
+  .lg-node:has(.wp-note) .wp-note__form *,
+  .lg-node:has(.wp-note) .wp-note__edit,
+  .lg-node:has(.wp-note) .wp-note__doc { pointer-events: auto !important; }
+
   .wp-note-md p { margin: 0 0 6px; }
   .wp-note-md p:last-child { margin-bottom: 0; }
   .wp-note-md strong { color: var(--wp-text); }

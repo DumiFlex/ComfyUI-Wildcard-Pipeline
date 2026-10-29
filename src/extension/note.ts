@@ -11,7 +11,8 @@ export interface NoteConfig {
   version: 1;
   tone: NoteTone;
   /** Card: a panel with a coloured edge. Sticky: a tinted panel. Label: a
-   *  small coloured tag with the title only (the text shows on hover). */
+   *  small coloured tag with the title only (hovering it shows the text and
+   *  the docs link). */
   look: NoteLook;
   /** The number on a Step note. */
   step: number;
@@ -19,6 +20,8 @@ export interface NoteConfig {
   text: string;
   /** A built-in docs page id (see NOTE_DOC_PAGES), or "" for none. */
   doc: string;
+  /** A hex colour that replaces the tone's, or "" for the tone's own. */
+  color: string;
 }
 
 export const NOTE_TONES: { id: NoteTone; label: string }[] = [
@@ -48,8 +51,11 @@ export const NOTE_DOC_PAGES: { id: string; title: string }[] = [
   { id: "wp-prompt-cleaner", title: "WP Prompt Cleaner" },
   { id: "wp-image-filter", title: "WP Image Filter" },
   { id: "wp-label-grid", title: "WP Label & Grid" },
+  { id: "wp-toggles", title: "WP Toggles" },
   { id: "wp-debug", title: "WP Debug" },
   { id: "wp-var-to-int", title: "WP Var → Int" },
+  { id: "wp-var-to-float", title: "WP Var → Float" },
+  { id: "wp-var-to-bool", title: "WP Var → Bool" },
   { id: "wp-var-to-choice", title: "WP Var → Choice" },
   { id: "wildcard", title: "Wildcards" },
   { id: "fixed-values", title: "Fixed values" },
@@ -65,7 +71,14 @@ export const NOTE_DOC_PAGES: { id: string; title: string }[] = [
 export const NOTE_STEP_MAX = 99;
 
 export function defaultNoteConfig(): NoteConfig {
-  return { version: 1, tone: "step", look: "card", step: 1, text: "", doc: "" };
+  return { version: 1, tone: "step", look: "card", step: 1, text: "", doc: "", color: "" };
+}
+
+const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+/** Only a plain `#rgb` / `#rrggbb` hex: the note mixes it with the theme. */
+export function noteColor(v: unknown): string {
+  return typeof v === "string" && HEX_COLOR.test(v.trim()) ? v.trim().toLowerCase() : "";
 }
 
 function pick<T extends string>(v: unknown, allowed: readonly { id: T }[], fallback: T): T {
@@ -97,6 +110,7 @@ export function parseNoteConfig(raw: unknown): NoteConfig {
     step,
     text: typeof d.text === "string" ? d.text : base.text,
     doc: typeof d.doc === "string" && NOTE_DOC_PAGES.some((p) => p.id === d.doc) ? d.doc : "",
+    color: noteColor(d.color),
   };
 }
 
