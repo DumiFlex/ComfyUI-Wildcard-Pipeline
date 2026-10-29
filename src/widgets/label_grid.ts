@@ -17,7 +17,11 @@ const LabelGridWidget = defineAsyncComponent(
 interface LabelGridHostNode extends MountTargetNode {
   id?: string | number;
   mode?: number;
+  inputs?: { name: string; link: number | null }[];
 }
+
+/** Text inputs that, once wired, replace what the panel holds. */
+const WIRABLE = ["label_text", "title", "row_headers", "column_headers"] as const;
 
 /** The last run per node, so a widget re-created (a graph reload) keeps it. */
 const lastRuns = new WeakMap<object, LabelGridRun>();
@@ -60,6 +64,12 @@ export function create(node: LabelGridHostNode, inputName: string) {
         () => node.mode ?? 0,
         Object.is,
       );
+      // "title,row_headers" — a string, so the poll compares by value.
+      const wiredKey = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => WIRABLE.filter((n) => node.inputs?.find((i) => i.name === n)?.link != null).join(","),
+        Object.is,
+      );
       function onUpdate(next: LabelGridConfig): void {
         config.value = next;
         host.setValue(serializeWidgetJson(next));
@@ -69,6 +79,7 @@ export function create(node: LabelGridHostNode, inputName: string) {
         lastRun: lastRun.value,
         fonts: fonts.value,
         nodeMode: nodeMode.value,
+        wired: wiredKey.value ? wiredKey.value.split(",") : [],
         "onUpdate:modelValue": onUpdate,
       });
     },

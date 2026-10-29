@@ -61,7 +61,8 @@ def item_labels(labels: list[Any] | None, batch_sizes: list[int]) -> list[list[s
     ``labels[item]`` splits on newlines for the item's batch. One line covers
     every image of the item; with fewer lines than images the rest get none.
     A single entry for several items whose lines match the total image count
-    is spread over all of them (typed text, one line per image).
+    is spread over all of them (typed text, one line per image), and a single
+    one-line entry labels every image of every item.
     """
     out: list[list[str]] = []
     if labels is not None and len(labels) == 1 and len(batch_sizes) > 1:
@@ -69,6 +70,8 @@ def item_labels(labels: list[Any] | None, batch_sizes: list[int]) -> list[list[s
         # its lines match the image count, spread them over every image.
         only = labels[0] if isinstance(labels[0], str) else ""
         lines = [ln.strip() for ln in only.splitlines()]
+        if len(lines) == 1 and lines[0]:
+            return [[lines[0]] * size for size in batch_sizes]
         if len(lines) == sum(batch_sizes):
             for size in batch_sizes:
                 out.append(lines[:size])
