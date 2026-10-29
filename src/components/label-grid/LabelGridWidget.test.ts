@@ -103,6 +103,21 @@ describe("LabelGridWidget", () => {
     expect(mk().find('[data-test="lg-reset-style"]').exists()).toBe(false);
   });
 
+  it("a wired text input replaces the panel's field", () => {
+    const w = mk({ wired: ["title", "row_headers"], modelValue: { ...defaultLabelGridConfig(), rows_from: "part:2" } });
+    expect(w.find('[data-test="lg-title"]').exists()).toBe(false);
+    expect(w.find('[data-test="lg-title-wired"]').text()).toContain("title input");
+    expect(w.find('[data-test="lg-rows-from"]').exists()).toBe(false);
+    expect(w.find('[data-test="lg-rows-wired"]').exists()).toBe(true);
+    expect(w.find('[data-test="lg-columns-from"]').exists()).toBe(true);
+    // the wired rows win over the label part, so the layout is free again
+    expect(w.find('[data-test="lg-arrange"]').attributes("disabled")).toBeUndefined();
+    expect(w.find('[data-test="lg-template"]').exists()).toBe(true);
+    const t = mk({ wired: ["label_text"] });
+    expect(t.find('[data-test="lg-template"]').exists()).toBe(false);
+    expect(t.find('[data-test="lg-template-wired"]').text()).toContain("label_text");
+  });
+
   it("dims when muted or bypassed", () => {
     expect(mk({ nodeMode: 4 }).classes()).toContain("wp-lg--skipped");
   });

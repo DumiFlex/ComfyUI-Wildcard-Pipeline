@@ -25,9 +25,14 @@ def test_item_labels_one_text_spread_over_items():
     assert g.item_labels(["a\nb"], [1, 2]) == [["a"], ["", ""]]
 
 
+def test_item_labels_one_line_labels_every_item():
+    assert g.item_labels(["same"], [2, 1, 3]) == [["same"] * 2, ["same"], ["same"] * 3]
+    assert g.item_labels([""], [1, 2]) == [[""], ["", ""]]
+
+
 def test_item_labels_without_input_or_with_fewer_entries():
     assert g.item_labels(None, [2]) == [["", ""]]
-    assert g.item_labels(["a"], [1, 1]) == [["a"], [""]]
+    assert g.item_labels(["a", "b"], [1, 1, 1]) == [["a"], ["b"], [""]]
 
 
 def test_template_tokens_and_empty_template():

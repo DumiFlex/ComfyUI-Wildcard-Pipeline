@@ -1774,7 +1774,7 @@
     },
     {
      "title": "Ports",
-     "text": "images\nOne image, a batch, a list, or a list of batches (a Context Loop's frames). Required.\nlabels\nOptional text, one entry per item and one line per image of its batch. One line covers the whole batch. The Image Filter's labels output fits straight in. One typed text with a line per image works too.\nimages (out)\nThe labelled images, in the shape they came in. A batch stays a batch.\ngrid (out)\nEvery image in one labelled grid. The node also shows it on the canvas, so it can end a branch."
+     "text": "images\nOne image, a batch, a list, or a list of batches (a Context Loop's frames). Required.\nlabels\nOptional text, one entry per item and one line per image of its batch. One line covers the whole batch, and a single one-line label covers every image of every item. The Image Filter's labels output fits straight in. One typed text with a line per image works too.\nlabel_text\nOptional text from another node for what each image shows; {label}, {index} and the other tokens still work. A list gives one text per item, the last one covering any item past it.\ntitle\nOptional text from another node for the grid title. Once wired, the panel's Title box shows that it comes from the wire.\nrow_headers, column_headers\nOptional text from another node, one header per line (a list gives one header per entry). Wiring one sets that side to typed headers and replaces its dropdown on the panel.\nimages (out)\nThe labelled images, in the shape they came in. A batch stays a batch.\ngrid (out)\nEvery image in one labelled grid. The node also shows it on the canvas, so it can end a branch."
     },
     {
      "title": "Labels",

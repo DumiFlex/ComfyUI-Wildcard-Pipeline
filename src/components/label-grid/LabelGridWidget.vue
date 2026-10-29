@@ -49,8 +49,11 @@ const props = withDefaults(
     fonts?: string[];
     /** Litegraph mode: 2 = muted, 4 = bypassed (dims the widget). */
     nodeMode?: number;
+    /** Text inputs wired from other nodes (`title`, `row_headers`,
+     *  `column_headers`); a wired one replaces the panel's value. */
+    wired?: string[];
   }>(),
-  { lastRun: null, fonts: () => ["default"], nodeMode: 0 },
+  { lastRun: null, fonts: () => ["default"], nodeMode: 0, wired: () => [] },
 );
 const emit = defineEmits<{ "update:modelValue": [next: LabelGridConfig] }>();
 
@@ -155,8 +158,15 @@ const autoNote = computed(() => {
   return `last run: ${ARRANGE_OPTIONS.find((o) => o.value === a)?.label.toLowerCase() ?? a}`;
 });
 
+const textWired = computed(() => props.wired.includes("label_text"));
+const titleWired = computed(() => props.wired.includes("title"));
+const rowsWired = computed(() => props.wired.includes("row_headers"));
+const colsWired = computed(() => props.wired.includes("column_headers"));
+
 const headerOptions = computed(() => headerSourceOptions(props.lastRun));
-const headersLift = computed(() => cfg.value.rows_from.startsWith("part:") || cfg.value.columns_from.startsWith("part:"));
+const headersLift = computed(() =>
+  (!rowsWired.value && cfg.value.rows_from.startsWith("part:"))
+  || (!colsWired.value && cfg.value.columns_from.startsWith("part:")));
 
 function setCellWidth(v: number | null): void {
   set("cell_width", v ?? 0);
@@ -216,7 +226,11 @@ function text(ev: Event): string {
           >{{ t.token }}</span>
         </span>
       </div>
+      <span v-if="textWired" class="wp-lg__wired" data-test="lg-template-wired">
+        <i class="pi pi-link" aria-hidden="true" />from the label_text input (tokens still work)
+      </span>
       <input
+        v-else
         class="wp-lg__input wp-lg__template"
         :value="cfg.label"
         :placeholder="labelPlaceholder"
@@ -364,7 +378,11 @@ function text(ev: Event): string {
         </div>
         <div class="wp-lg__row">
           <span class="wp-lg__key">Rows</span>
+          <span v-if="rowsWired" class="wp-lg__wired" data-test="lg-rows-wired">
+            <i class="pi pi-link" aria-hidden="true" />from the row_headers input
+          </span>
           <WpSelect
+            v-else
             class="wp-lg__select"
             :model-value="cfg.rows_from"
             :options="headerOptions"
@@ -374,7 +392,7 @@ function text(ev: Event): string {
           />
         </div>
         <textarea
-          v-if="cfg.rows_from === 'typed'"
+          v-if="cfg.rows_from === 'typed' && !rowsWired"
           class="wp-lg__input wp-lg__area"
           :value="cfg.row_headers"
           rows="2"
@@ -387,7 +405,11 @@ function text(ev: Event): string {
         />
         <div class="wp-lg__row">
           <span class="wp-lg__key">Columns</span>
+          <span v-if="colsWired" class="wp-lg__wired" data-test="lg-columns-wired">
+            <i class="pi pi-link" aria-hidden="true" />from the column_headers input
+          </span>
           <WpSelect
+            v-else
             class="wp-lg__select"
             :model-value="cfg.columns_from"
             :options="headerOptions"
@@ -397,7 +419,7 @@ function text(ev: Event): string {
           />
         </div>
         <textarea
-          v-if="cfg.columns_from === 'typed'"
+          v-if="cfg.columns_from === 'typed' && !colsWired"
           class="wp-lg__input wp-lg__area"
           :value="cfg.column_headers"
           rows="2"
@@ -410,7 +432,11 @@ function text(ev: Event): string {
         />
         <div class="wp-lg__row">
           <span class="wp-lg__key">Title</span>
+          <span v-if="titleWired" class="wp-lg__wired" data-test="lg-title-wired">
+            <i class="pi pi-link" aria-hidden="true" />from the title input
+          </span>
           <input
+            v-else
             class="wp-lg__input wp-lg__grow"
             :value="cfg.title"
             placeholder="Drawn above the grid"
@@ -534,6 +560,20 @@ function text(ev: Event): string {
   color: var(--wp-text-dim);
 }
 
+.wp-lg__wired {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: var(--wp-control-h-sm, 24px);
+  padding: 0 8px;
+  border: 1px dashed var(--wp-border);
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
+  font-size: 10px;
+  color: var(--wp-text-muted);
+}
+.wp-lg__wired .pi { font-size: 10px; color: var(--wp-accent-text); }
 .wp-lg__tokens { display: flex; gap: 6px; }
 .wp-lg__token { cursor: help; border-bottom: 1px dotted var(--wp-border-strong); }
 .wp-lg__token:hover, .wp-lg__token:focus-visible { color: var(--wp-text-muted); outline: none; }

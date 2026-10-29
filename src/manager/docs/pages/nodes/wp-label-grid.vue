@@ -10,7 +10,10 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
 const ports = [
   { term: "images", desc: "One image, a batch, a list, or a list of batches (a Context Loop's frames). Required." },
-  { term: "labels", desc: "Optional text, one entry per item and one line per image of its batch. One line covers the whole batch. The Image Filter's labels output fits straight in. One typed text with a line per image works too." },
+  { term: "labels", desc: "Optional text, one entry per item and one line per image of its batch. One line covers the whole batch, and a single one-line label covers every image of every item. The Image Filter's labels output fits straight in. One typed text with a line per image works too." },
+  { term: "label_text", desc: "Optional text from another node for what each image shows; {label}, {index} and the other tokens still work. A list gives one text per item, the last one covering any item past it." },
+  { term: "title", desc: "Optional text from another node for the grid title. Once wired, the panel's Title box shows that it comes from the wire." },
+  { term: "row_headers, column_headers", desc: "Optional text from another node, one header per line (a list gives one header per entry). Wiring one sets that side to typed headers and replaces its dropdown on the panel." },
   { term: "images (out)", desc: "The labelled images, in the shape they came in. A batch stays a batch." },
   { term: "grid (out)", desc: "Every image in one labelled grid. The node also shows it on the canvas, so it can end a branch." },
 ];

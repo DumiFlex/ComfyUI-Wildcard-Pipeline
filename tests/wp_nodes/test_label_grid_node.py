@@ -19,7 +19,21 @@ def test_schema():
     assert schema.is_input_list is True
     assert schema.is_output_node is True
     assert [o.is_output_list for o in schema.outputs] == [True, False]
-    assert [i.name for i in schema.inputs] == ["images", "labels", "wp_label_grid"]
+    assert [i.name for i in schema.inputs] == [
+        "images",
+        "labels",
+        "label_text",
+        "title",
+        "row_headers",
+        "column_headers",
+        "wp_label_grid",
+    ]
+
+
+def test_wired_text():
+    assert node_mod._wired_text(None, "\n") is None
+    assert node_mod._wired_text(["a", "b"], "\n") == "a\nb"
+    assert node_mod._wired_text("x", " ") == "x"
 
 
 def test_first():
@@ -113,3 +127,48 @@ def test_run_template_without_labels_input_or_config(fake_torch):
     # no config at all (a node added before the widget loaded): defaults
     out = WPLabelGrid.execute(images=frames)
     assert out.values[0][0].shape == (3, 40, 40, 3)
+
+
+def test_wired_title_and_headers_beat_the_panel(fake_torch, monkeypatch):
+    import numpy as np
+
+    seen = {}
+    real = node_mod.g.build_grid
+
+    def spy(cells, style, spec):
+        seen["spec"] = spec
+        return real(cells, style, spec)
+
+    monkeypatch.setattr(node_mod.g, "build_grid", spy)
+    frames = [fake_torch(np.zeros((2, 32, 32, 3), dtype=np.float32)) for _ in range(2)]
+    WPLabelGrid.execute(
+        images=frames,
+        title=["From a node"],
+        row_headers=["first", "second"],
+        wp_label_grid=cfg(title="typed", arrange="rows", rows_from="none"),
+    )
+    spec = seen["spec"]
+    assert spec.title == "From a node"
+    assert spec.row_headers == ["first", "second"]
+    assert spec.column_headers == []
+
+
+def test_wired_label_text_per_item_last_repeats(fake_torch, monkeypatch):
+    import numpy as np
+
+    drawn = []
+    real = node_mod.g.label_batch
+
+    def spy(images, texts, style):
+        drawn.append(list(texts))
+        return real(images, texts, style)
+
+    monkeypatch.setattr(node_mod.g, "label_batch", spy)
+    frames = [fake_torch(np.zeros((2, 32, 32, 3), dtype=np.float32)) for _ in range(3)]
+    WPLabelGrid.execute(
+        images=frames,
+        labels=["red"],
+        label_text=["A {label} {image}", "B"],
+        wp_label_grid=cfg(label="typed", grid=False),
+    )
+    assert drawn == [["A red 1", "A red 2"], ["B", "B"], ["B", "B"]]

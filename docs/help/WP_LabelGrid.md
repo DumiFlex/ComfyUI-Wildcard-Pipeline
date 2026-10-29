@@ -7,7 +7,10 @@ Draws labels on images and lays them out in one labelled grid: compare runs, sho
 | Name | Type | Notes |
 |---|---|---|
 | `images` | `IMAGE` | One image, a batch, a list, or a list of batches. |
-| `labels` | `STRING` (list) | Optional. One entry per item, one line per image of its batch; one line covers the whole batch. The WP Image Filter's `labels` output fits here. One typed text whose lines match the image count is spread over all images. |
+| `labels` | `STRING` (list) | Optional. One entry per item, one line per image of its batch; one line covers the whole batch, and a single one-line label covers every image of every item. The WP Image Filter's `labels` output fits here. One typed text whose lines match the image count is spread over all images. |
+| `label_text` | `STRING` | Optional. Sets the label Text from another node; the tokens still work. A list gives one text per item, the last covering any item past it. |
+| `title` | `STRING` | Optional. Text from another node for the grid title; beats the panel's Title. |
+| `row_headers`, `column_headers` | `STRING` | Optional. One header per line (a list gives one per entry). Wiring one sets that side to typed headers and replaces its dropdown on the panel. |
 
 Everything else is set in the node's panel.
 
@@ -15,7 +18,7 @@ Everything else is set in the node's panel.
 
 | Setting | Notes |
 |---|---|
-| Text | What each image shows. `{label}` = the incoming label (default), `{frame}` and `{image}` count from 1 per input item, `{index}` counts across all images, `{count}` = number of images. `\n` breaks a line. Empty = the incoming label. |
+| Text | What each image shows (hover a token above the box for what it gives). `{label}` = the incoming label (default), `{frame}` and `{image}` count from 1 per input item, `{index}` counts across all images, `{count}` = number of images. `\n` breaks a line. Empty = the incoming label. |
 | Place | Above, below, left or right adds a strip beside the image (the image grows). **Over image** draws a see-through band over the top or bottom instead (same size). The last button draws no label. |
 | Font | The default (Segoe UI / Arial / DejaVu Sans when found, else Pillow's built-in), fonts in the extension's `fonts/` folder, and your system fonts. Type to search. A font this machine lacks falls back to the default. |
 | Size | Pixels. Empty = automatic (4.5% of the image width), so text stays readable at 512 px and at 4K. |

@@ -27,6 +27,15 @@ def _first(values: Any, default: Any = None) -> Any:
     return default if values is None else values
 
 
+def _wired_text(values: Any, sep: str) -> str | None:
+    """A wired text input under ``is_input_list``: None when unwired, else
+    every entry joined (a list output's entries become header lines)."""
+    if values is None:
+        return None
+    items = values if isinstance(values, list) else [values]
+    return sep.join(str(v) for v in items if v is not None)
+
+
 def _to_pil(batch: Any) -> list[Any]:
     import numpy as np
     from PIL import Image
@@ -98,6 +107,40 @@ class WPLabelGrid(io.ComfyNode):
                         "output fits here."
                     ),
                 ),
+                io.String.Input(
+                    "label_text",
+                    optional=True,
+                    force_input=True,
+                    tooltip=(
+                        "Wire text here to set what each image shows from another node "
+                        "(the tokens {label}, {index}, … still work). A list gives one "
+                        "text per item; the last one covers any item past it."
+                    ),
+                ),
+                io.String.Input(
+                    "title",
+                    optional=True,
+                    force_input=True,
+                    tooltip="Wire text here to set the grid title from another node.",
+                ),
+                io.String.Input(
+                    "row_headers",
+                    optional=True,
+                    force_input=True,
+                    tooltip=(
+                        "Row headers from another node, one per line (or one per list "
+                        "entry). Wiring it sets Rows to typed headers."
+                    ),
+                ),
+                io.String.Input(
+                    "column_headers",
+                    optional=True,
+                    force_input=True,
+                    tooltip=(
+                        "Column headers from another node, one per line (or one per list "
+                        "entry). Wiring it sets Columns to typed headers."
+                    ),
+                ),
                 # Label text, style and grid settings all live in one DOM widget
                 # (src/components/label-grid/LabelGridWidget.vue).
                 LabelGridWidgetInput.Input(
@@ -116,8 +159,26 @@ class WPLabelGrid(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, images, labels=None, wp_label_grid=None):
+    def execute(
+        cls,
+        images,
+        labels=None,
+        label_text=None,
+        title=None,
+        row_headers=None,
+        column_headers=None,
+        wp_label_grid=None,
+    ):
         cfg = g.parse_config(_first(wp_label_grid, ""))
+        # A wired text input beats what is typed in the panel.
+        wired_title = _wired_text(title, " ")
+        if wired_title is not None:
+            cfg["title"] = wired_title
+        for key, values in (("row_headers", row_headers), ("column_headers", column_headers)):
+            wired = _wired_text(values, "\n")
+            if wired is not None:
+                cfg[key] = wired
+                cfg["rows_from" if key == "row_headers" else "columns_from"] = "typed"
         style = g.Style(
             position=cfg["position"],
             align=cfg["align"],
@@ -137,12 +198,19 @@ class WPLabelGrid(io.ComfyNode):
         incoming = g.item_labels(labels, sizes)
         count = sum(sizes)
 
+        # A wired label text beats the panel's: one per item, the last repeats.
+        wired_text = [
+            "" if v is None else str(v)
+            for v in (label_text if isinstance(label_text, list) else [label_text])
+        ] if label_text is not None else []
+
         texts: list[list[str]] = []
         index = 0
         for fi, item in enumerate(incoming):
+            template = wired_text[min(fi, len(wired_text) - 1)] if wired_text else cfg["label"]
             row = []
             for ii, raw in enumerate(item):
-                row.append(g.apply_template(cfg["label"], raw, fi, ii, index, count))
+                row.append(g.apply_template(template, raw, fi, ii, index, count))
                 index += 1
             texts.append(row)
 
