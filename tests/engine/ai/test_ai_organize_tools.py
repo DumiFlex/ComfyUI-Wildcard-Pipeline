@@ -83,7 +83,7 @@ def test_categories_take_a_color_and_icon():
 
 
 def test_category_icons_match_the_editor_icon_catalog():
-    src = (ROOT / "src/manager/components/icon-catalog.ts").read_text(encoding="utf-8")
+    src = (ROOT / "src/kit/icon-catalog.ts").read_text(encoding="utf-8")
     lists = re.findall(r"icons:\s*\[([^\]]*)\]", src)
     icons = [i for chunk in lists for i in re.findall(r'"([a-z0-9-]+)"', chunk)]
     assert icons == list(chat_manage.CATEGORY_ICONS)
