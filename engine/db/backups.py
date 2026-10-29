@@ -14,13 +14,21 @@ index file to drift out of sync with the directory::
 
 Reasons:
 
-- ``manual``        — the user pressed "Back up now". Never pruned: the user
-  made it deliberately, so only the user deletes it.
+- ``manual``        — the user pressed "Back up now".
 - ``daily``         — the background scheduler (``maybe_daily_backup``).
 - ``pre-migration`` — taken by ``engine/db/migrations.py:migrate`` right
   before it applies schema changes to an existing library.
 - ``pre-restore``   — the live DB, saved right before a restore overwrote it,
   so a restore is itself undoable.
+
+Pruning keeps the newest ``keep`` backups of any reason. A backup the user
+pins is never pruned and doesn't count toward ``keep``; the pin is a
+``<backup name>.pin`` marker file beside it (so the folder stays the only
+index, the way Proxmox marks a protected backup). Libraries from before pins
+existed kept every manual backup forever, so the first run pins those once
+(``_pin_legacy_manual``) rather than pruning them away on update. A manual
+backup can carry a short note ("before the outfit rework"), kept the same
+way in ``<backup name>.note``.
 
 Copies go through SQLite's online backup API rather than a file copy: the
 library runs in WAL mode, where committed data can sit in ``-wal`` rather
@@ -53,8 +61,13 @@ logger = logging.getLogger(__name__)
 
 BACKUPS_DIRNAME = "backups"
 REASONS = ("manual", "daily", "pre-migration", "pre-restore")
-#: Reasons `prune` may delete. Manual backups are the user's, not ours.
-AUTOMATIC_REASONS = frozenset({"daily", "pre-migration", "pre-restore"})
+PIN_SUFFIX = ".pin"
+NOTE_SUFFIX = ".note"
+NOTE_MAX_LEN = 80
+#: Sidecar files that belong to one backup and go when it goes.
+SIDECAR_SUFFIXES = (PIN_SUFFIX, NOTE_SUFFIX)
+#: Written to the backups dir once existing manual backups have been pinned.
+LEGACY_PINS_MARKER = ".pins-v1"
 DAILY_INTERVAL = timedelta(hours=24)
 SCHEDULER_PERIOD_S = 3600.0
 
@@ -96,6 +109,58 @@ def _new_backup_path(directory: Path, reason: str, now: datetime | None = None) 
     return candidate
 
 
+def _pin_path(path: Path) -> Path:
+    return path.with_name(path.name + PIN_SUFFIX)
+
+
+def _is_pinned(path: Path) -> bool:
+    return _pin_path(path).is_file()
+
+
+def _note_path(path: Path) -> Path:
+    return path.with_name(path.name + NOTE_SUFFIX)
+
+
+def clean_note(note: str | None) -> str | None:
+    """One line, trimmed, at most NOTE_MAX_LEN characters; None when empty."""
+    if not isinstance(note, str):
+        return None
+    text = " ".join(note.split())[:NOTE_MAX_LEN].strip()
+    return text or None
+
+
+def _read_note(path: Path) -> str | None:
+    try:
+        return clean_note(_note_path(path).read_text("utf-8"))
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _pin_legacy_manual(directory: Path) -> None:
+    """Pin every manual backup once, the first time pins exist here.
+
+    Manual backups used to be kept forever; pruning them on the first run
+    after an update would delete backups the user made on purpose.
+    """
+    if not directory.is_dir():
+        return
+    marker = directory / LEGACY_PINS_MARKER
+    if marker.exists():
+        return
+    for p in directory.iterdir():
+        parsed = _parse_name(p.name)
+        if parsed is not None and parsed[1] == "manual" and p.is_file():
+            try:
+                _pin_path(p).touch()
+            except OSError:
+                logger.exception("wp_db_backup: could not pin %s", p)
+                return
+    try:
+        marker.touch()
+    except OSError:
+        logger.exception("wp_db_backup: could not write %s", marker)
+
+
 def _entry(path: Path) -> dict[str, Any] | None:
     parsed = _parse_name(path.name)
     if parsed is None or not path.is_file():
@@ -110,6 +175,8 @@ def _entry(path: Path) -> dict[str, Any] | None:
         "size": size,
         "created_at": ts.isoformat().replace("+00:00", "Z"),
         "reason": reason,
+        "pinned": _is_pinned(path),
+        "note": _read_note(path),
     }
 
 
@@ -129,13 +196,15 @@ def create_backup(
     reason: str,
     *,
     conn: sqlite3.Connection | None = None,
+    note: str | None = None,
 ) -> dict[str, Any]:
     """Write a consistent snapshot of ``db_path`` and return its list entry.
 
     ``conn`` lets a caller that already holds a connection (the migration
     runner) back up through it instead of opening a second one. The snapshot
     is written to a temp file and renamed into place, so a half-written
-    backup never shows up in the list.
+    backup never shows up in the list. ``note`` is the user's short label
+    for it, cleaned by ``clean_note``.
     """
     _check_reason(reason)
     db_path = Path(db_path)
@@ -143,6 +212,7 @@ def create_backup(
         raise FileNotFoundError(f"database {db_path} does not exist")
     directory = backups_dir(db_path)
     directory.mkdir(parents=True, exist_ok=True)
+    _pin_legacy_manual(directory)
     target = _new_backup_path(directory, reason)
     fd, tmp_str = tempfile.mkstemp(prefix=".backup-", suffix=".db", dir=str(directory))
     os.close(fd)
@@ -162,6 +232,12 @@ def create_backup(
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
+    text = clean_note(note)
+    if text is not None:
+        try:
+            _note_path(target).write_text(text, "utf-8")
+        except OSError:
+            logger.exception("wp_db_backup: could not save the note for %s", target)
     entry = _entry(target)
     assert entry is not None
     logger.info("wp_db_backup: wrote %s", target)
@@ -180,6 +256,7 @@ def _backup_paths(db_path: Path) -> list[Path]:
 
 def list_backups(db_path: Path) -> list[dict[str, Any]]:
     """Every backup of ``db_path``, newest first."""
+    _pin_legacy_manual(backups_dir(db_path))
     out = []
     for p in _backup_paths(db_path):
         e = _entry(p)
@@ -189,20 +266,30 @@ def list_backups(db_path: Path) -> list[dict[str, Any]]:
 
 
 def prune(db_path: Path, keep: int) -> list[str]:
-    """Delete the oldest AUTOMATIC backups beyond ``keep``; return their names.
+    """Delete the oldest unpinned backups beyond ``keep``; return their names.
 
-    Manual backups neither count toward ``keep`` nor get deleted.
+    Every reason counts, manual included. Pinned backups neither count toward
+    ``keep`` nor get deleted, and neither does the one staged for restore.
+    Pin and note files whose backup is gone are cleaned up on the way.
     """
     keep = max(0, int(keep))
-    automatic = [p for p in _backup_paths(db_path)
-                 if _parse_name(p.name)[1] in AUTOMATIC_REASONS]  # type: ignore[index]
+    directory = backups_dir(db_path)
+    _pin_legacy_manual(directory)
+    staged = pending_restore_name(db_path)
+    candidates = [p for p in _backup_paths(db_path)
+                  if not _is_pinned(p) and p.name != staged]
     removed: list[str] = []
-    for p in automatic[keep:]:
+    for p in candidates[keep:]:
         try:
             p.unlink()
             removed.append(p.name)
         except OSError:
             logger.exception("wp_db_backup: could not prune %s", p)
+    if directory.is_dir():
+        for suffix in SIDECAR_SUFFIXES:
+            for side in directory.glob("*" + suffix):
+                if not side.with_name(side.name[: -len(suffix)]).exists():
+                    side.unlink(missing_ok=True)
     return removed
 
 
@@ -225,7 +312,28 @@ def resolve_backup(db_path: Path, name: str) -> Path:
 
 def delete_backup(db_path: Path, name: str) -> None:
     """Delete one backup by name; raises BackupNotFound for anything else."""
-    resolve_backup(db_path, name).unlink()
+    path = resolve_backup(db_path, name)
+    path.unlink()
+    _pin_path(path).unlink(missing_ok=True)
+    _note_path(path).unlink(missing_ok=True)
+
+
+def set_pinned(db_path: Path, name: str, pinned: bool) -> dict[str, Any]:
+    """Pin or unpin one backup and return its list entry.
+
+    Unpinning doesn't prune: a backup past the limit goes at the next
+    backup, so a slip of the mouse can be undone.
+    """
+    path = resolve_backup(db_path, name)
+    marker = _pin_path(path)
+    if pinned:
+        marker.touch()
+    else:
+        marker.unlink(missing_ok=True)
+    entry = _entry(path)
+    if entry is None:
+        raise BackupNotFound(name)
+    return entry
 
 
 def _newest_age(db_path: Path, now: datetime) -> timedelta | None:

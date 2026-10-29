@@ -107,8 +107,8 @@ const STATIC_ENTRIES: SettingEntry[] = [
   { key: "ai-test", section: "ai", label: "Test connection", hint: "Check the server answers and the model returns JSON, and see how much context a chat takes before you type.", keywords: "check ping prefix tokens context" },
   { key: "db-summary", section: "library", label: "Database", hint: "File, size and what is in it.", keywords: "sqlite file size rows" },
   { key: "backups-auto", section: "library", label: "Automatic backups", hint: "Copy the database before every migration and once a day.", keywords: "backup restore snapshot" },
-  { key: "backups-keep", section: "library", label: "Backups to keep", hint: "Older automatic backups are deleted.", keywords: "backup retention" },
-  { key: "backups-list", section: "library", label: "Backups", hint: "Back up now, restore, or delete a backup.", keywords: "backup restore" },
+  { key: "backups-keep", section: "library", label: "Backups to keep", hint: "The newest backups are kept, manual ones too; pinned ones are never deleted.", keywords: "backup retention pin bookmark prune" },
+  { key: "backups-list", section: "library", label: "Backups", hint: "Back up now, pin, restore, or delete a backup.", keywords: "backup restore pin bookmark keep" },
   { key: "db-location", section: "library", label: "Database location", hint: "Where the database file lives.", keywords: "path move copy user global root" },
   { key: "db-maintenance", section: "library", label: "Maintenance", hint: "Vacuum, integrity check, analyze, re-run migrations.", keywords: "vacuum integrity analyze migrations schema" },
 

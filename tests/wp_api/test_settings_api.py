@@ -60,8 +60,10 @@ async def test_create_list_delete_backup(wp_client):
     resp = await wp_client.post("/wp/api/database/backups")
     assert resp.status == 201
     entry = await resp.json()
+    assert entry.pop("pruned") == []
     assert entry["reason"] == "manual"
-    assert set(entry) == {"name", "size", "created_at", "reason"}
+    assert set(entry) == {"name", "size", "created_at", "reason", "pinned", "note"}
+    assert entry["note"] is None
 
     body = await (await wp_client.get("/wp/api/database/backups")).json()
     assert body["backups"] == [entry]
@@ -70,6 +72,40 @@ async def test_create_list_delete_backup(wp_client):
     assert resp.status == 204
     resp = await wp_client.delete(f"/wp/api/database/backups/{entry['name']}")
     assert resp.status == 404
+
+
+async def test_manual_backup_prunes_to_keep(wp_client):
+    await wp_client.put("/wp/api/settings", json={"backups": {"keep": 2}})
+    names = [(await (await wp_client.post("/wp/api/database/backups")).json())["name"]
+             for _ in range(2)]
+    resp = await wp_client.put(f"/wp/api/database/backups/{names[0]}/pin", json={"pinned": True})
+    assert resp.status == 200
+    assert (await resp.json())["pinned"] is True
+    third = await (await wp_client.post("/wp/api/database/backups")).json()
+    assert third["pruned"] == []
+    fourth = await (await wp_client.post("/wp/api/database/backups")).json()
+    assert fourth["pruned"] == [names[1]]
+    listed = (await (await wp_client.get("/wp/api/database/backups")).json())["backups"]
+    assert [b["name"] for b in listed] == [fourth["name"], third["name"], names[0]]
+
+
+async def test_manual_backup_takes_a_note(wp_client):
+    resp = await wp_client.post("/wp/api/database/backups", json={"note": " before the rework "})
+    assert resp.status == 201
+    assert (await resp.json())["note"] == "before the rework"
+    assert (await wp_client.post("/wp/api/database/backups", json={"note": 3})).status == 400
+    assert (await wp_client.post("/wp/api/database/backups", data="nope")).status == 400
+
+
+async def test_pin_backup_validates(wp_client):
+    entry = await (await wp_client.post("/wp/api/database/backups")).json()
+    url = f"/wp/api/database/backups/{entry['name']}/pin"
+    assert (await wp_client.put(url, json={"pinned": "yes"})).status == 400
+    assert (await wp_client.put(url, data="nope")).status == 400
+    missing = "/wp/api/database/backups/wildcard-pipeline-20200101-000000-manual.db/pin"
+    assert (await wp_client.put(missing, json={"pinned": True})).status == 404
+    resp = await wp_client.put(url, json={"pinned": False})
+    assert (await resp.json())["pinned"] is False
 
 
 async def test_delete_backup_traversal_is_404(wp_client):
