@@ -24,6 +24,8 @@ import {
   setHidden,
   setOrder,
   writeDockPrefs,
+  canvasElement,
+  freeInsets,
   type BookmarkEntry,
   type DockPrefs,
 } from "../../widgets/bookmark";
@@ -70,8 +72,8 @@ onMounted(() => {
   stop = onBookmarksChanged(refresh);
   timer = window.setInterval(refresh, 500);
   window.addEventListener("resize", place);
-  place();
-  const el = document.querySelector(".graph-canvas-container");
+  requestAnimationFrame(place);
+  const el = canvasElement() ?? document.querySelector(".graph-canvas-container");
   if (el && typeof ResizeObserver !== "undefined") {
     observer = new ResizeObserver(place);
     observer.observe(el);
@@ -84,23 +86,65 @@ onBeforeUnmount(() => {
   observer?.disconnect();
 });
 
-// ── placement: inside the canvas, under its top bar ──────────────────
-const box = ref({ top: 64, left: 16, right: 16 });
+// ── placement: inside the free part of the canvas ─────────────────────
+// By default the dock sits just inside ComfyUI's own bars (sidebar,
+// breadcrumb, toolbar) on its side; in edit mode it can be dragged anywhere
+// and stays where it was dropped.
+const root = ref<HTMLElement | null>(null);
+const box = ref({ x: 16, y: 64 });
 let observer: ResizeObserver | null = null;
-function place(): void {
-  const el = document.querySelector<HTMLElement>(".graph-canvas-container");
-  if (!el) return;
-  const r = el.getBoundingClientRect();
-  box.value = {
-    top: r.top + 56,
-    left: r.left + 12,
-    right: Math.max(8, window.innerWidth - r.right + 12),
+const GAP = 12;
+
+function clamp(x: number, y: number): { x: number; y: number } {
+  const w = root.value?.offsetWidth ?? 300;
+  const h = root.value?.offsetHeight ?? 40;
+  return {
+    x: Math.min(Math.max(4, x), Math.max(4, window.innerWidth - w - 4)),
+    y: Math.min(Math.max(4, y), Math.max(4, window.innerHeight - Math.min(h, 80) - 4)),
   };
 }
-const style = computed(() => ({
-  top: `${box.value.top}px`,
-  ...(prefs.value.side === "left" ? { left: `${box.value.left}px` } : { right: `${box.value.right}px` }),
-}));
+
+function place(): void {
+  if (dragging) return;
+  const p = prefs.value.pos;
+  if (p) {
+    box.value = clamp(p.x, p.y);
+    return;
+  }
+  const el = canvasElement() ?? document.querySelector<HTMLElement>(".graph-canvas-container");
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  const [il, it, ir] = freeInsets(el);
+  const w = root.value?.offsetWidth ?? 300;
+  const x = prefs.value.side === "left" ? r.left + il + GAP : r.right - ir - GAP - w;
+  box.value = clamp(x, r.top + it + GAP);
+}
+const style = computed(() => ({ left: `${box.value.x}px`, top: `${box.value.y}px` }));
+
+// Drag by the header in edit mode (not from its buttons).
+let dragging = false;
+let grab = { dx: 0, dy: 0 };
+function onHeadDown(e: PointerEvent): void {
+  if (!editing.value || e.button !== 0) return;
+  if ((e.target as HTMLElement).closest("button, input, a")) return;
+  dragging = true;
+  grab = { dx: e.clientX - box.value.x, dy: e.clientY - box.value.y };
+  (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  e.preventDefault();
+}
+function onHeadMove(e: PointerEvent): void {
+  if (!dragging) return;
+  box.value = clamp(e.clientX - grab.dx, e.clientY - grab.dy);
+}
+function onHeadUp(): void {
+  if (!dragging) return;
+  dragging = false;
+  savePrefs({ pos: { ...box.value } });
+}
+function toSide(side: "left" | "right"): void {
+  savePrefs({ side, pos: null });
+  place();
+}
 
 const shown = computed(() => entries.value.length);
 const hiddenCount = computed(() => entries.value.filter((b) => b.config.hidden).length);
@@ -124,13 +168,22 @@ function close(): void {
 
 <template>
   <section
+    ref="root"
     class="wp-bmdock"
-    :class="{ 'wp-bmdock--collapsed': prefs.collapsed }"
+    :class="{ 'wp-bmdock--collapsed': prefs.collapsed, 'wp-bmdock--editing': editing }"
     :style="style"
     aria-label="Bookmarks"
     data-test="bm-dock"
   >
-    <header class="wp-bmdock__head">
+    <header
+      class="wp-bmdock__head"
+      :title="editing ? 'Drag to move the dock' : undefined"
+      data-test="bm-dock-head"
+      @pointerdown="onHeadDown"
+      @pointermove="onHeadMove"
+      @pointerup="onHeadUp"
+      @pointercancel="onHeadUp"
+    >
       <WpIconButton
         variant="bare"
         :icon="prefs.collapsed ? 'pi-chevron-right' : 'pi-chevron-down'"
@@ -138,7 +191,7 @@ function close(): void {
         data-test="bm-dock-collapse"
         @click="savePrefs({ collapsed: !prefs.collapsed })"
       />
-      <i class="pi pi-bookmark wp-bmdock__mark" aria-hidden="true" />
+      <i :class="['pi', editing ? 'pi-arrows-alt' : 'pi-bookmark', 'wp-bmdock__mark']" aria-hidden="true" />
       <span class="wp-bmdock__title">Bookmarks</span>
       <span class="wp-bmdock__count">{{ shown }}<template v-if="hiddenCount"> · {{ hiddenCount }} hidden</template></span>
       <span class="wp-bmdock__spacer" />
@@ -151,9 +204,9 @@ function close(): void {
       <template v-else>
         <WpIconButton
           :icon="prefs.side === 'left' ? 'pi-arrow-right' : 'pi-arrow-left'"
-          :label="prefs.side === 'left' ? 'Move the dock to the right' : 'Move the dock to the left'"
+          :label="prefs.side === 'left' ? 'Put the dock back at the right' : 'Put the dock back at the left'"
           data-test="bm-dock-side"
-          @click="savePrefs({ side: prefs.side === 'left' ? 'right' : 'left' })"
+          @click="toSide(prefs.side === 'left' ? 'right' : 'left')"
         />
         <WpButton variant="primary" size="sm" data-test="bm-dock-done" @click="editing = false">Done</WpButton>
       </template>
@@ -215,12 +268,19 @@ function close(): void {
   box-sizing: border-box;
   color: var(--wp-text);
   font: 12px var(--wp-font-sans, sans-serif);
-  background: var(--wp-bg-2);
+  /* See-through, so a bookmark or note under it still shows; solid while
+     the pointer is on it. */
+  background: color-mix(in srgb, var(--wp-bg-2) 78%, transparent);
+  backdrop-filter: blur(2px);
+  transition: background-color 120ms;
   border: 1px solid var(--wp-border);
   border-radius: min(8px, var(--wp-radius-cap, 999px));
   box-shadow: var(--wp-shadow-md, 0 4px 14px rgb(0 0 0 / 0.35));
 }
+.wp-bmdock:hover,
+.wp-bmdock:focus-within { background: var(--wp-bg-2); }
 .wp-bmdock--collapsed { width: auto; }
+.wp-bmdock--editing .wp-bmdock__head { cursor: move; touch-action: none; }
 .wp-bmdock__head {
   display: flex;
   align-items: center;

@@ -33,6 +33,9 @@ const props = defineProps<{
   getKeymap: () => KeyOwner[];
   /** The canvas zoom right now. */
   getZoom: () => number;
+  /** The view on screen now: the canvas point in the middle of the free
+   *  screen, for "Use this view". */
+  getView: () => { x: number; y: number };
 }>();
 
 const emit = defineEmits<{
@@ -45,7 +48,14 @@ const ZOOM_MODES: { value: BookmarkZoomMode; label: string }[] = [
   { value: "keep", label: "Keep current" },
 ];
 
-const anchorLabel = computed(() => BOOKMARK_ANCHORS.find((a) => a.id === props.value.anchor)?.label ?? "");
+const anchorLabel = computed(() => props.value.anchor === "custom"
+  ? "Your view"
+  : BOOKMARK_ANCHORS.find((a) => a.id === props.value.anchor)?.label ?? "");
+
+/** Land on the view on screen now, at the zoom it has. */
+function useThisView(): void {
+  emit("update", { anchor: "custom", view: props.getView(), zoomMode: "fixed", zoom: Math.round(props.getZoom() * 100) / 100 });
+}
 
 const recording = ref(false);
 const refused = ref("");
@@ -102,7 +112,9 @@ defineExpose({ stopRecording });
 
 function suggest(): void {
   refreshKeymap();
-  const combo = suggestFreeCombo(keymap.value);
+  // Never offer the key it already has: each press moves on to the next.
+  const own = props.value.shortcut ? [{ combo: props.value.shortcut, label: "", source: "" }] : [];
+  const combo = suggestFreeCombo([...keymap.value, ...own]);
   if (combo) emit("update", { shortcut: combo });
   else pushToast("No free shortcut left to suggest. Record one instead.", { severity: "info" });
 }
@@ -125,8 +137,16 @@ function suggest(): void {
         />
       </div>
       <div class="wp-bmf__anchor-note">
-        <span class="wp-bmf__anchor-name">{{ anchorLabel }}</span>
-        <span class="wp-bmf__hint">of the screen, {{ BOOKMARK_MARGIN }} px in</span>
+        <span class="wp-bmf__anchor-name" data-test="bm-anchor-name">{{ anchorLabel }}</span>
+        <span class="wp-bmf__hint">{{ value.anchor === "custom" ? "the view you set, at its zoom" : `of the screen, ${BOOKMARK_MARGIN} px in` }}</span>
+        <WpButton
+          size="sm"
+          icon="pi-camera"
+          :pressed="value.anchor === 'custom'"
+          hint="Land on the view on screen now, at this zoom"
+          data-test="bm-use-view"
+          @click="useThisView"
+        >Use this view</WpButton>
       </div>
     </div>
 
@@ -233,7 +253,7 @@ function suggest(): void {
   border-radius: min(4px, var(--wp-radius-cap, 999px));
 }
 .wp-bmf__grid :deep(.pi) { font-size: 8px; }
-.wp-bmf__anchor-note { display: flex; flex-direction: column; min-width: 0; }
+.wp-bmf__anchor-note { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
 .wp-bmf__anchor-name { font-weight: 600; }
 .wp-bmf__zoom { width: 84px; }
 .wp-bmf__record { min-width: 86px; }

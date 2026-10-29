@@ -6,7 +6,9 @@
  */
 
 /** Where the bookmark node lands on screen after a jump: a 3×3 grid. */
-export type BookmarkAnchor = "tl" | "tc" | "tr" | "ml" | "c" | "mr" | "bl" | "bc" | "br";
+/** Where the bookmark lands on screen: a 3×3 grid, or "custom", a view the
+ *  user set (`view`). */
+export type BookmarkAnchor = "tl" | "tc" | "tr" | "ml" | "c" | "mr" | "bl" | "bc" | "br" | "custom";
 export type BookmarkZoomMode = "fixed" | "keep";
 
 export interface BookmarkConfig {
@@ -26,16 +28,22 @@ export interface BookmarkConfig {
   hidden: boolean;
   /** Position in the dock; ties fall back to the title. */
   order: number;
+  /** With anchor "custom": the canvas point that goes to the middle of the
+   *  free screen (the view the user set), else null. */
+  view: { x: number; y: number } | null;
+  /** A Step note's number, shown in the dock instead of the icon. Never
+   *  stored on a WP Bookmark. */
+  step?: number;
 }
 
 /** The jump settings a WP Note keeps when it is also a bookmark. */
-export type BookmarkJump = Pick<BookmarkConfig, "anchor" | "zoomMode" | "zoom" | "shortcut" | "order">;
+export type BookmarkJump = Pick<BookmarkConfig, "anchor" | "zoomMode" | "zoom" | "shortcut" | "order" | "view">;
 
 export function jumpFields(c: BookmarkConfig): BookmarkJump {
-  return { anchor: c.anchor, zoomMode: c.zoomMode, zoom: c.zoom, shortcut: c.shortcut, order: c.order };
+  return { anchor: c.anchor, zoomMode: c.zoomMode, zoom: c.zoom, shortcut: c.shortcut, order: c.order, view: c.view };
 }
 
-export const BOOKMARK_ANCHORS: { id: BookmarkAnchor; label: string; fx: number; fy: number }[] = [
+export const BOOKMARK_ANCHORS: { id: Exclude<BookmarkAnchor, "custom">; label: string; fx: number; fy: number }[] = [
   { id: "tl", label: "Top left", fx: 0, fy: 0 },
   { id: "tc", label: "Top", fx: 0.5, fy: 0 },
   { id: "tr", label: "Top right", fx: 1, fy: 0 },
@@ -65,6 +73,7 @@ export function defaultBookmarkConfig(): BookmarkConfig {
     icon: "bookmark",
     hidden: false,
     order: 0,
+    view: null,
   };
 }
 
@@ -87,7 +96,12 @@ export function parseBookmarkConfig(raw: unknown): BookmarkConfig {
   }
   if (!data || typeof data !== "object") return base;
   const d = data as Record<string, unknown>;
-  const anchor = BOOKMARK_ANCHORS.find((a) => a.id === d.anchor)?.id ?? base.anchor;
+  const v = d.view as { x?: unknown; y?: unknown } | null | undefined;
+  const view = v && typeof v === "object" && typeof v.x === "number" && typeof v.y === "number"
+    && Number.isFinite(v.x) && Number.isFinite(v.y) ? { x: v.x, y: v.y } : null;
+  // "custom" needs its view; without one it falls back to the default.
+  const anchor = d.anchor === "custom" && view ? "custom"
+    : BOOKMARK_ANCHORS.find((a) => a.id === d.anchor)?.id ?? base.anchor;
   return {
     version: 1,
     anchor,
@@ -98,10 +112,15 @@ export function parseBookmarkConfig(raw: unknown): BookmarkConfig {
     icon: typeof d.icon === "string" && /^[a-z0-9-]{1,40}$/.test(d.icon) ? d.icon : base.icon,
     hidden: d.hidden === true,
     order: typeof d.order === "number" && Number.isFinite(d.order) ? Math.round(d.order) : 0,
+    view: anchor === "custom" ? view : null,
   };
 }
 
 // ── jump maths ────────────────────────────────────────────────────────
+
+/** A box on screen: `[left, top, right, bottom]` in CSS pixels, relative to
+ *  the canvas element. */
+export type ScreenBox = readonly [number, number, number, number];
 
 export interface JumpInput {
   /** The bookmark's box in canvas units, title bar included:
@@ -112,9 +131,48 @@ export interface JumpInput {
   anchor: BookmarkAnchor;
   scale: number;
   margin?: number;
-  /** Screen pixels covered on the left and right (the open dock), so the
-   *  bookmark lands beside it rather than under it. */
-  inset?: readonly [number, number];
+  /** Screen pixels the host's own bars cover at each edge of the canvas
+   *  (`[left, top, right, bottom]`): the sidebar, the breadcrumb and the
+   *  floating toolbar. The anchors measure from what is left. */
+  inset?: readonly [number, number, number, number];
+  /** Boxes the bookmark should not land under (the open dock). */
+  avoid?: readonly ScreenBox[];
+  /** With anchor "custom": the canvas point to put in the middle of the
+   *  free screen. */
+  view?: { x: number; y: number } | null;
+}
+
+function overlaps(a: ScreenBox, b: ScreenBox): boolean {
+  return a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
+}
+
+/**
+ * The smallest move `[dx, dy]` (screen px) that takes `box` off every box in
+ * `avoid`, preferring moves that keep it inside `free`. `[0, 0]` when it
+ * covers nothing. Each obstacle is cleared in turn, so two docks side by side
+ * still work out.
+ */
+export function clearOf(box: ScreenBox, avoid: readonly ScreenBox[], free: ScreenBox, margin: number): [number, number] {
+  let [l, t, r, b] = box;
+  let dx = 0;
+  let dy = 0;
+  for (const o of avoid) {
+    if (!overlaps([l, t, r, b], o)) continue;
+    const moves: [number, number][] = [
+      [o[2] + margin - l, 0],
+      [o[0] - margin - r, 0],
+      [0, o[3] + margin - t],
+      [0, o[1] - margin - b],
+    ];
+    const inside = (m: [number, number]): boolean =>
+      l + m[0] >= free[0] && r + m[0] <= free[2] && t + m[1] >= free[1] && b + m[1] <= free[3];
+    const size = (m: [number, number]): number => Math.abs(m[0]) + Math.abs(m[1]);
+    const ok = moves.filter(inside);
+    const pick = (ok.length ? ok : moves).reduce((best, m) => (size(m) < size(best) ? m : best));
+    l += pick[0]; r += pick[0]; t += pick[1]; b += pick[1];
+    dx += pick[0]; dy += pick[1];
+  }
+  return [dx, dy];
 }
 
 /**
@@ -122,19 +180,35 @@ export interface JumpInput {
  * canvas point at `(p + offset) * scale`, so the offset that lands canvas
  * point `p` on screen point `s` is `s / scale - p`. The anchor picks both
  * points: the matching corner, edge middle or centre of the bookmark goes to
- * the same spot of the screen, kept `margin` px from the edges.
+ * the same spot of the free part of the screen (inside the host's bars),
+ * kept `margin` px from its edges. Then, if the bookmark would sit under the
+ * dock, it moves the least it can to clear it.
  */
 export function jumpOffset(input: JumpInput): [number, number] {
   const a = BOOKMARK_ANCHORS.find((x) => x.id === input.anchor) ?? { fx: 0, fy: 0 };
   const m = input.margin ?? BOOKMARK_MARGIN;
+  const s = input.scale;
   const [x, y, w, h] = input.rect;
   const [vw, vh] = input.viewport;
-  const [il, ir] = input.inset ?? [0, 0];
+  const [il, it, ir, ib] = input.inset ?? [0, 0, 0, 0];
+  if (input.anchor === "custom" && input.view) {
+    // The user's own view: its point goes to the middle of the free screen.
+    const cx = il + (vw - il - ir) / 2;
+    const cy = it + (vh - it - ib) / 2;
+    return [cx / s - input.view.x, cy / s - input.view.y];
+  }
   const sx = il + m + a.fx * Math.max(0, vw - il - ir - 2 * m);
-  const sy = m + a.fy * Math.max(0, vh - 2 * m);
-  const px = x + a.fx * w;
-  const py = y + a.fy * h;
-  return [sx / input.scale - px, sy / input.scale - py];
+  const sy = it + m + a.fy * Math.max(0, vh - it - ib - 2 * m);
+  let ox = sx / s - (x + a.fx * w);
+  let oy = sy / s - (y + a.fy * h);
+  if (input.avoid?.length) {
+    const box: ScreenBox = [(x + ox) * s, (y + oy) * s, (x + w + ox) * s, (y + h + oy) * s];
+    const free: ScreenBox = [il, it, vw - ir, vh - ib];
+    const [dx, dy] = clearOf(box, input.avoid, free, m);
+    ox += dx / s;
+    oy += dy / s;
+  }
+  return [ox, oy];
 }
 
 /** The zoom a jump ends at. */

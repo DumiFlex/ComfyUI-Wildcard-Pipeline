@@ -55,6 +55,6 @@ describe("WP Note as a bookmark", () => {
     expect(parseNoteConfig({}).bookmark).toBeNull();
     expect(parseNoteConfig({ bookmark: "yes" }).bookmark).toBeNull();
     expect(parseNoteConfig({ bookmark: { anchor: "c", zoom: 40, shortcut: "alt + 3", hidden: true, color: "#ffffff" } }).bookmark)
-      .toEqual({ anchor: "c", zoomMode: "fixed", zoom: 10, shortcut: "Alt+3", order: 0 });
+      .toEqual({ anchor: "c", zoomMode: "fixed", zoom: 10, shortcut: "Alt+3", order: 0, view: null });
   });
 });

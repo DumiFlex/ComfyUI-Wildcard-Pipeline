@@ -1,6 +1,9 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { app } from "#comfyui/app";
 import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
+import { keepPassThrough, publishTitleHeight, setPinned, sizeToPanel, type FramelessNode } from "./_frameless";
+import { panelAt } from "./note-peek";
+import { isVueNodes } from "../extension/renderer";
 import { reactiveFromGraph } from "../extension/reactive";
 import { walkAllNodes, type LiteGraphLike } from "../extension/graph";
 import { bookmarkCells } from "../extension/_stashes";
@@ -21,6 +24,7 @@ import {
   type BookmarkConfig,
   type BookmarkJump,
   type KeyOwner,
+  type ScreenBox,
 } from "../extension/bookmarks";
 
 const BookmarkWidget = defineAsyncComponent(() => import("../components/bookmark/BookmarkWidget.vue"));
@@ -59,6 +63,11 @@ interface CanvasLike {
 
 function canvasOf(): CanvasLike | undefined {
   return (app as unknown as { canvas?: CanvasLike }).canvas;
+}
+
+/** The canvas element, for measuring the free part of it. */
+export function canvasElement(): HTMLCanvasElement | undefined {
+  return canvasOf()?.canvas;
 }
 
 /** The canvas zoom right now ("use the zoom you're at"). */
@@ -154,9 +163,36 @@ function bookmarkOwners(except?: BookmarkNode): KeyOwner[] {
     .map((b) => ({ combo: b.config.shortcut, label: `jump to ${b.title}`, source: b.kind === "note" ? "WP Note bookmark" : "WP Bookmark" }));
 }
 
+// Keys another extension took when a bookmark's key was pressed. That kind
+// of clash can't be seen ahead (the extension reads keydown itself), so it is
+// remembered once seen: the clash check flags it and Suggest skips it.
+const TAKEN_KEY = "wp.bookmarkTakenKeys";
+export function takenKeys(): string[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(TAKEN_KEY) ?? "[]") as unknown;
+    return Array.isArray(raw) ? raw.filter((k): k is string => typeof k === "string").slice(0, 50) : [];
+  } catch {
+    return [];
+  }
+}
+function rememberTaken(combo: string): void {
+  const list = takenKeys();
+  if (list.includes(combo)) return;
+  try {
+    localStorage.setItem(TAKEN_KEY, JSON.stringify([...list, combo].slice(-50)));
+  } catch {
+    // Storage blocked: the toast still said so this time.
+  }
+}
+
 /** Everyone else holding a key, for `node`'s conflict check. */
 export function keymapFor(node?: BookmarkNode): KeyOwner[] {
-  return liveKeymap(app as unknown as KeymapAppLike, bookmarkOwners(node));
+  const learned = takenKeys().map((combo) => ({
+    combo,
+    label: "a key another extension took when you pressed it",
+    source: "seen on this page",
+  }));
+  return [...liveKeymap(app as unknown as KeymapAppLike, bookmarkOwners(node)), ...learned];
 }
 
 // ── jumping ───────────────────────────────────────────────────────────
@@ -214,17 +250,68 @@ function animateView(c: CanvasLike, offset: [number, number], scale: number): vo
   animFrame = requestAnimationFrame(step);
 }
 
-/** The screen strip the open dock covers on the canvas's left or right. */
-function dockInset(c: CanvasLike): [number, number] {
+// ── the free part of the canvas ───────────────────────────────────────
+
+/** Part of the graph, not the host's chrome: nodes' DOM widgets, the Vue
+ *  renderer's nodes, and our own dock and toasts. */
+const GRAPH_CONTENT = ".dom-widget, [data-node-id], .lg-node, .wp-widget, #wp-bookmark-dock-root, .wp-toast-stack";
+
+/** True when nothing but the graph covers this screen point. */
+function isFreeAt(canvasEl: Element, x: number, y: number): boolean {
+  if (typeof document.elementsFromPoint !== "function") return true;
+  for (const el of document.elementsFromPoint(x, y)) {
+    if (el === canvasEl) return true;
+    if (el.closest(GRAPH_CONTENT)) continue;
+    return false;
+  }
+  return true;
+}
+
+/**
+ * How far the host's own bars reach into the canvas from each edge, in
+ * screen px: `[left, top, right, bottom]`. ComfyUI lays its sidebar, its
+ * breadcrumb, the floating toolbar and the zoom controls over the canvas,
+ * and their layout changes between versions and with the user's settings,
+ * so this walks in from each edge with `elementsFromPoint` until it meets
+ * bare canvas, at a few spots along it, rather than naming any of them.
+ */
+export function freeInsets(canvasEl: Element | undefined): [number, number, number, number] {
+  if (!canvasEl) return [0, 0, 0, 0];
+  const r = canvasEl.getBoundingClientRect();
+  if (r.width <= 0 || r.height <= 0) return [0, 0, 0, 0];
+  const STEP = 6;
+  // Walk in from the edge along `dir` across a band (25 % of the side) and
+  // return how far the deepest covered point reaches. Not the first free
+  // point: bars stack with gaps of bare canvas between them (the tab strip,
+  // then a floating toolbar a few px below it). A band with nothing free at
+  // all is something filling the canvas, not a bar: count it as 0.
+  const walk = (x0: number, y0: number, dx: number, dy: number, limit: number): number => {
+    let deepest = 0;
+    let free = false;
+    for (let d = 0; d <= limit; d += STEP) {
+      if (isFreeAt(canvasEl, x0 + dx * d, y0 + dy * d)) free = true;
+      else deepest = d + STEP;
+    }
+    return free ? deepest : 0;
+  };
+  const along = (fracs: number[], len: number, start: number): number[] => fracs.map((f) => start + f * len);
+  const left = Math.max(...along([0.3, 0.5, 0.7], r.height, r.top).map((y) => walk(r.left + 1, y, 1, 0, r.width * 0.25)));
+  const right = Math.max(...along([0.3, 0.5, 0.7], r.height, r.top).map((y) => walk(r.right - 1, y, -1, 0, r.width * 0.25)));
+  const top = Math.max(...along([0.06, 0.3, 0.5, 0.7, 0.94], r.width, r.left).map((x) => walk(x, r.top + 1, 0, 1, r.height * 0.25)));
+  const bottom = Math.max(...along([0.06, 0.3, 0.5, 0.7, 0.94], r.width, r.left).map((x) => walk(x, r.bottom - 1, 0, -1, r.height * 0.25)));
+  return [left, top, right, bottom];
+}
+
+/** The open dock as a box to keep bookmarks out from under, relative to the
+ *  canvas element. */
+function dockBoxes(c: CanvasLike): ScreenBox[] {
   const dock = document.querySelector<HTMLElement>('[data-test="bm-dock"]');
   const el = c.canvas;
-  if (!dock || !el) return [0, 0];
+  if (!dock || !el) return [];
   const d = dock.getBoundingClientRect();
   const r = el.getBoundingClientRect();
-  if (d.width <= 0 || d.right <= r.left || d.left >= r.right) return [0, 0];
-  return d.left + d.width / 2 < r.left + r.width / 2
-    ? [Math.max(0, d.right - r.left), 0]
-    : [0, Math.max(0, r.right - d.left)];
+  if (d.width <= 0 || d.height <= 0) return [];
+  return [[d.left - r.left, d.top - r.top, d.right - r.left, d.bottom - r.top]];
 }
 
 function currentView(c: CanvasLike): View {
@@ -269,7 +356,9 @@ export function jumpTo(node: BookmarkNode): void {
       anchor: config.anchor,
       scale,
       margin: BOOKMARK_MARGIN,
-      inset: dockInset(c),
+      inset: freeInsets(c.canvas),
+      avoid: dockBoxes(c),
+      view: config.view,
     });
     animateView(c, offset, scale);
   });
@@ -405,6 +494,7 @@ function onKeyDown(e: KeyboardEvent): void {
   const hit = listBookmarks().find((b) => !b.disabled && b.config.shortcut === combo);
   if (!hit) return;
   if (e.defaultPrevented) {
+    rememberTaken(combo);
     if (!warnedCombos.has(combo)) {
       warnedCombos.add(combo);
       pushToast(`${combo} is also used by another shortcut, so "${hit.title}" didn't jump. Give the bookmark another key.`, {
@@ -428,6 +518,7 @@ export function installBookmarkKeys(): void {
 // ── creating ──────────────────────────────────────────────────────────
 
 interface LiteGraphStatic {
+  NO_TITLE?: number;
   LGraphNode?: new (title?: string) => BookmarkNode;
   registerNodeType?: (type: string, ctor: unknown) => void;
   createNode?: (type: string) => BookmarkNode | null;
@@ -491,17 +582,41 @@ export function onBookmarkAdded(fn: () => void): void {
   bookmarkAdded = fn;
 }
 
-/** The title-bar colour for a bookmark colour: a dark tint of it, so the
- *  title text stays readable on any colour. */
-export function titleTint(hex: string): string | undefined {
-  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
-  if (!m) return undefined;
-  const mix = (c: string): string => Math.round(parseInt(c, 16) * 0.45 + 0x2a * 0.55).toString(16).padStart(2, "0");
-  return `#${mix(m[1] ?? "0")}${mix(m[2] ?? "0")}${mix(m[3] ?? "0")}`;
+/** The canvas point in the middle of the free screen now: what "Use this
+ *  view" stores and a jump to it centres again. */
+export function currentViewPoint(): { x: number; y: number } {
+  const c = canvasOf();
+  if (!c?.ds) return { x: 0, y: 0 };
+  const [vw, vh] = viewportSize(c);
+  const [il, it, ir, ib] = freeInsets(c.canvas);
+  const s = c.ds.scale;
+  const cx = il + (vw - il - ir) / 2;
+  const cy = it + (vh - it - ib) / 2;
+  return { x: Math.round(cx / s - (c.ds.offset[0] ?? 0)), y: Math.round(cy / s - (c.ds.offset[1] ?? 0)) };
+}
+
+/** The narrowest the editor card gets. */
+const FORM_WIDTH = 340;
+
+// Double-click in Nodes 2.0: the pill lets the pointer through, so the node
+// never gets LiteGraph's onDblClick there; hit-test the pills instead.
+interface EditTarget { panel(): HTMLElement | null; edit(): void }
+const editTargets = new Set<EditTarget>();
+let dblWired = false;
+function wireDblClick(): void {
+  if (dblWired || typeof document === "undefined") return;
+  dblWired = true;
+  document.addEventListener("dblclick", (e) => {
+    if (!isVueNodes()) return;
+    const hit = panelAt(editTargets, e.clientX, e.clientY);
+    if (!hit) return;
+    e.stopPropagation();
+    hit.edit();
+  }, true);
 }
 
 /** Mounts the bookmark's one widget. Its value is the JSON BookmarkConfig. */
-export function mountBookmark(node: BookmarkNode) {
+export function mountBookmark(node: BookmarkNode & FramelessNode) {
   const config = ref<BookmarkConfig>(defaultBookmarkConfig());
   // A saved bookmark shows its read view; a brand-new one opens the form.
   const editing = ref(false);
@@ -511,8 +626,8 @@ export function mountBookmark(node: BookmarkNode) {
   function apply(next: BookmarkConfig): void {
     config.value = next;
     host.setValue(serializeWidgetJson(next));
-    node.color = titleTint(next.color);
     node.setDirtyCanvas?.(true, true);
+    fit();
     notify();
   }
   bookmarkCells.set(node, { get: () => config.value, set: (next) => apply(next as BookmarkConfig) });
@@ -522,23 +637,34 @@ export function mountBookmark(node: BookmarkNode) {
       const graphNode = node as unknown as Parameters<typeof reactiveFromGraph>[0];
       const title = reactiveFromGraph(graphNode, () => node.title, Object.is);
       const disabled = reactiveFromGraph(graphNode, () => isDisabled(node), Object.is);
+      const pinned = reactiveFromGraph(graphNode, () => node.flags?.pinned === true, Object.is);
+      const selected = reactiveFromGraph(graphNode, () => (node as { selected?: boolean }).selected === true, Object.is, 150);
       function onTitle(next: string): void {
         node.title = next;
         title.value = next;
         node.setDirtyCanvas?.(true, true);
+        fit();
         notify();
+      }
+      function onPinned(next: boolean): void {
+        setPinned(node, next);
+        pinned.value = next;
       }
       return () => h(BookmarkWidget, {
         config: config.value,
         title: title.value,
         disabled: disabled.value,
         nested: !!node.graph && node.graph !== rootGraph(),
+        pinned: pinned.value,
+        selected: selected.value,
         getKeymap: () => keymapFor(node),
         getZoom: currentZoom,
+        getView: currentViewPoint,
         editing: editing.value,
         "onUpdate:editing": setEditing,
         "onUpdate:config": apply,
         "onUpdate:title": onTitle,
+        "onUpdate:pinned": onPinned,
         onRecording: setRecording,
         onJump: () => jumpTo(node),
       });
@@ -548,32 +674,37 @@ export function mountBookmark(node: BookmarkNode) {
   const host = createDomWidgetHost(node, WIDGET_NAME, wrapper, {
     initialValue: serializeWidgetJson(config.value),
     minHeight: 30,
-    minWidth: 300,
-    autoHeight: true,
+    minWidth: () => (editing.value ? FORM_WIDTH : 60),
+    ownSize: true,
+    margin: 0,
     onValueRestored: (raw: string) => {
       restored = true;
-      setEditing(false);
       config.value = parseBookmarkConfig(raw);
-      node.color = titleTint(config.value.color);
+      setEditing(false);
       notify();
     },
   });
-  // The widget only ever grows the node; after the view changes, shrink it
-  // back to the content once the height settles (as WP Note does).
-  function fitHeight(): void {
-    let frames = 3;
-    const step = (): void => {
-      if (--frames > 0) { requestAnimationFrame(step); return; }
-      const min = (node as { computeSize?: () => number[] }).computeSize?.();
-      const setSize = (node as { setSize?: (s: number[]) => void }).setSize;
-      const h = min?.[1];
-      if (h != null && setSize && Math.abs(h - (node.size[1] ?? 0)) > 1) setSize.call(node, [node.size[0] ?? 340, h]);
-    };
-    requestAnimationFrame(step);
-  }
+  // The node is exactly its panel: the pill's own width, or the card at the
+  // user's width (never under the form's).
+  const fit = sizeToPanel(
+    node,
+    host,
+    () => host.element.querySelector<HTMLElement>(editing.value ? ".wp-bm__form" : ".wp-bm__pill"),
+    () => (editing.value ? FORM_WIDTH : 60),
+    () => !editing.value,
+  );
+  keepPassThrough(node, host);
+  wireDblClick();
+  const editTarget: EditTarget = {
+    panel: () => (editing.value ? null : host.element.querySelector<HTMLElement>(".wp-bm__pill")),
+    edit: () => setEditing(true),
+  };
+  editTargets.add(editTarget);
+  host.onCleanup(() => editTargets.delete(editTarget));
+
   function setEditing(on: boolean): void {
     editing.value = on;
-    fitHeight();
+    fit();
   }
 
   // Nothing restored by the next tick: the user just added this bookmark.
@@ -590,9 +721,11 @@ export function mountBookmark(node: BookmarkNode) {
 /**
  * Registers WP Bookmark: a frontend-only node like ComfyUI's Note. Virtual,
  * so it never runs and is left out of the prompt; its settings are saved
- * with the workflow.
+ * with the workflow. Frameless like WP Note: no title bar or node box, the
+ * node is its pill (or, while editing, its editor card).
  */
 export function registerBookmarkNode(): void {
+  publishTitleHeight();
   const lg = liteGraph();
   const Base = lg?.LGraphNode;
   if (!lg?.registerNodeType || !Base) return;
@@ -600,15 +733,31 @@ export function registerBookmarkNode(): void {
   class WPBookmarkNode extends Base {
     static title = "WP Bookmark";
     static category = "wildcard-pipeline";
+    // No title bar and no node box: the bookmark draws its own panel.
+    static title_mode = lg?.NO_TITLE ?? 1;
+    // The widget starts at the node's top edge, not 2 px under it.
+    widgets_start_y = 0;
     isVirtualNode = true;
     serialize_widgets = true;
-    collapsable = true;
+    collapsable = false;
+
+    get renderingBgColor(): string {
+      return "transparent";
+    }
+
+    // ComfyUI's source badge would float over the panel.
+    drawBadges(): void {}
+
+    // The panel is the whole node: a press on it drags, selects or
+    // double-clicks the node rather than going to the widget.
+    getWidgetOnPos(): undefined {
+      return undefined;
+    }
 
     constructor(title?: string) {
       super(title ?? DEFAULT_TITLE);
-      mountBookmark(this);
-      // Grows to fit the widget on the first layout.
-      this.size = [340, 80];
+      mountBookmark(this as unknown as BookmarkNode & FramelessNode);
+      this.size = [FORM_WIDTH, 40];
     }
 
     // A hidden bookmark can still get caught by Select all or a box
@@ -617,7 +766,8 @@ export function registerBookmarkNode(): void {
       if (readConfig(this).hidden) canvasOf()?.deselect?.(this);
     }
 
-    // Double-click anywhere on the node opens its form.
+    // Double-click anywhere on the node opens its form (Classic; Nodes 2.0
+    // goes through wireDblClick).
     onDblClick(): void {
       bookmarkEditors.get(this)?.(true);
     }
@@ -637,20 +787,26 @@ export interface DockPrefs {
   open: boolean | null;
   collapsed: boolean;
   side: "left" | "right";
+  /** Where the user dragged it (screen px, top-left), or null for the
+   *  default spot on `side`. */
+  pos: { x: number; y: number } | null;
 }
 
 const DOCK_KEY = "wp.bookmarkDock";
 
 /** Per-viewer convenience, so browser storage (and fine when it's gone). */
 export function readDockPrefs(): DockPrefs {
-  const base: DockPrefs = { open: null, collapsed: false, side: "left" };
+  const base: DockPrefs = { open: null, collapsed: false, side: "left", pos: null };
   try {
     const raw = JSON.parse(localStorage.getItem(DOCK_KEY) ?? "null") as Partial<DockPrefs> | null;
     if (!raw || typeof raw !== "object") return base;
+    const p = raw.pos;
+    const pos = p && typeof p === "object" && Number.isFinite(p.x) && Number.isFinite(p.y) ? { x: p.x, y: p.y } : null;
     return {
       open: typeof raw.open === "boolean" ? raw.open : null,
       collapsed: raw.collapsed === true,
       side: raw.side === "right" ? "right" : "left",
+      pos,
     };
   } catch {
     return base;

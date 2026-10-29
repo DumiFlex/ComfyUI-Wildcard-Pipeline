@@ -1,0 +1,46 @@
+/* Frameless nodes (WP Note, WP Bookmark) in Nodes 2.0. The frontend draws
+   every node as a card (background, border, padding, a 225 px floor, the
+   title row, the source badge row and an outline 7 px outside). These nodes
+   are their own panel, so drop all of that for a node whose widget root has
+   `wp-frameless`. The rules are !important because they override the
+   frontend's utility classes. Classic needs none of this: the node classes
+   set NO_TITLE and a transparent background. Imported from the unscoped
+   style block of each frameless widget. */
+@layer wp-extension {
+  .lg-node:has(.wp-frameless) {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    /* The card starts a title bar above the node's position and the header
+       is hidden: move it back down so the panel sits where Classic draws it
+       (`translate` composes with the frontend's inline transform and leaves
+       the layout alone). */
+    translate: 0 var(--wp-node-title-h, 30px);
+  }
+  .lg-node:has(.wp-frameless) > div { background: transparent !important; }
+  .lg-node:has(.wp-frameless),
+  .lg-node:has(.wp-frameless) > div,
+  .lg-node:has(.wp-frameless) > div > div { min-width: 0 !important; min-height: 0 !important; }
+  .lg-node:has(.wp-frameless) .lg-node-header { display: none !important; }
+  .lg-node:has(.wp-frameless) .lg-node-content { padding: 0 !important; }
+  .lg-node:has(.wp-frameless) .lg-node-widgets {
+    grid-template-columns: minmax(0, 1fr) !important;
+    padding: 0 !important;
+    gap: 0 !important;
+  }
+  .lg-node:has(.wp-frameless) .lg-node-widget { gap: 0 !important; width: 100% !important; padding: 0 !important; }
+  /* The widget row's reorder handle column. */
+  .lg-node:has(.wp-frameless) .lg-node-widget > *:first-child:not(:last-child) { display: none !important; }
+  .lg-node:has(.wp-frameless) [class*="component-node-background"] {
+    padding: 0 !important;
+    gap: 0 !important;
+    background: transparent !important;
+  }
+  /* The footer row with the source badge. */
+  .lg-node:has(.wp-frameless) [class*="component-node-background"] > div.text-muted-foreground,
+  .lg-node:has(.wp-frameless) .bg-node-component-surface { display: none !important; }
+  .lg-node:has(.wp-frameless) > div.absolute.border:not([data-testid]) { display: none !important; }
+  /* The selection outline hugs the panel. */
+  .lg-node:has(.wp-frameless) [data-testid="node-state-outline-overlay"],
+  .lg-node:has(.wp-frameless) > div.absolute.outline-none { inset: -2px !important; }
+}
