@@ -1,5 +1,5 @@
 // W: wildcards, from the editor's AI panel and from the chat.
-import { PANEL } from "../bench.js";
+import { PANEL, said } from "../bench.js";
 import { bench, chat, describe, edit, make, sfw, tickOptions } from "../shapes.js";
 
 bench("W1", make("wildcards", "wc-ai-draft", { mode: "add", name: "Hairstyle", varName: "hairstyle", apply: "ai-draft-add" }));
@@ -12,12 +12,12 @@ bench("W3", async (t) => {
 bench(
   "W4",
   async ({ h, P }) => {
-    await h.step("refine", async () => {
+    await h.step(`Refine the answer: ${said(P)}`, async () => {
       await h.type('[data-test="ai-instruction"]:visible', P);
       await h.tap('[data-test="ai-refine"]:visible');
       await h.aiIdle();
     });
-    await h.step("keep the answer", async () => {
+    await h.step("Keep the refined answer", async () => {
       await h.keep("answer", PANEL);
       await h.panelShot("answer");
     });
@@ -47,9 +47,9 @@ bench("W20", async (t) => {
 bench(
   "W21",
   async ({ h, P }) => {
-    await h.step("send", () => h.chat(P, { fresh: false }));
-    await h.step("keep the answer", () => h.chatShot("answer"));
-    await h.step("apply", async () => {
+    await h.step(`Send in the same chat: ${said(P)}`, () => h.chat(P, { fresh: false }));
+    await h.step("Keep the reply", () => h.chatShot("answer"));
+    await h.step("Apply the card", async () => {
       if (await h.applyCard()) await h.chatShot("applied");
     });
   },
@@ -76,7 +76,7 @@ bench(
     await h.setAiConfig({ allow_delete: true });
     try {
       await chat()(t);
-      await h.step("delete, then undo", async () => {
+      await h.step("Confirm the Delete card, then Undo", async () => {
         if (!(await h.applyCard())) return;
         await h.chatShot("deleted");
         await h.undoCard();
