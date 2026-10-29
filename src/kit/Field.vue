@@ -2,11 +2,11 @@
 import { computed } from "vue";
 
 interface Props {
-  label?: string;
-  hint?: string;
-  error?: string;
-  for?: string;
-  required?: boolean;
+  label?: string | undefined;
+  hint?: string | undefined;
+  error?: string | undefined;
+  for?: string | undefined;
+  required?: boolean | undefined;
 }
 const props = defineProps<Props>();
 

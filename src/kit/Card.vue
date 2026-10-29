@@ -2,9 +2,9 @@
 import { useSlots, ref, onMounted, onBeforeUnmount } from "vue";
 
 interface Props {
-  title?: string;
-  subtitle?: string;
-  padding?: boolean;
+  title?: string | undefined;
+  subtitle?: string | undefined;
+  padding?: boolean | undefined;
   /** Stick the card header (and its `subheader` slot, e.g. a bulk-edit
    *  toolbar) to the top of the nearest scroll container so its actions stay
    *  reachable when scrolling a long list — new rows always land at the
@@ -12,7 +12,7 @@ interface Props {
    *  whole stuck region as `--wp-card-header-h` so a sticky `<thead>` inside
    *  the body can offset itself right below it (updates as the subheader
    *  toolbar appears/disappears or density changes). */
-  stickyHeader?: boolean;
+  stickyHeader?: boolean | undefined;
 }
 const props = withDefaults(defineProps<Props>(), { padding: true, stickyHeader: false });
 

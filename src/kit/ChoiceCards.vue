@@ -18,19 +18,19 @@ import { nextTick, ref } from "vue";
 export interface ChoiceCardOption<V extends string = string> {
   value: V;
   label: string;
-  hint?: string;
+  hint?: string | undefined;
   /** Inline style for the card, e.g. CSS variables its preview reads. */
-  style?: Record<string, string>;
+  style?: Record<string, string> | undefined;
 }
 
 const props = defineProps<{
   modelValue: T;
   options: ChoiceCardOption<T>[];
   /** Three to a row, smaller, hint as tooltip: for narrow panels. */
-  compact?: boolean;
-  ariaLabel?: string;
+  compact?: boolean | undefined;
+  ariaLabel?: string | undefined;
   /** `data-test` of each card is `<testPrefix>-<value>`. */
-  testPrefix?: string;
+  testPrefix?: string | undefined;
 }>();
 
 const emit = defineEmits<{ (e: "update:modelValue", v: T): void }>();

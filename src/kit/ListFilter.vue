@@ -17,7 +17,7 @@ import SearchInput from "./SearchInput.vue";
  * match differs per surface — an exception matches on resolved source/target
  * labels, a rule matches on every variable name and value across its branches.
  */
-withDefaults(
+const props = withDefaults(
   defineProps<{
     /** Unfiltered row count. Drives the "n of N" readout and the show/hide gate. */
     total: number;
@@ -42,7 +42,7 @@ withDefaults(
      * Gated on `total`, never on `visible`, so the box cannot disappear
      * underneath a query that filtered the list down past the threshold.
      */
-    minRows?: number;
+    minRows?: number | undefined;
   }>(),
   { minRows: 8 },
 );
@@ -52,7 +52,7 @@ const query = defineModel<string>({ required: true });
 
 <template>
   <SearchInput
-    v-if="total > minRows"
+    v-if="total > props.minRows"
     v-model="query"
     class="wp-lfilter"
     size="sm"

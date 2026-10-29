@@ -18,28 +18,28 @@ export interface SegmentedOption<V extends string = string> {
   value: V;
   label: string;
   /** A PrimeIcons class, e.g. `pi-moon`. */
-  icon?: string;
-  disabled?: boolean;
+  icon?: string | undefined;
+  disabled?: boolean | undefined;
   /** A tooltip saying what the option does. */
-  hint?: string;
+  hint?: string | undefined;
   /** A shortcut shown in the tooltip's key chip, e.g. "G". */
-  kbd?: string;
+  kbd?: string | undefined;
   /** This option's `data-test`, when `testPrefix` doesn't fit. */
-  testId?: string;
+  testId?: string | undefined;
 }
 
 const props = withDefaults(defineProps<{
   modelValue: T;
   options: SegmentedOption<T>[];
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | undefined;
   /** Show only the icons; each label names its button and is its tooltip. */
-  iconOnly?: boolean;
-  disabled?: boolean;
+  iconOnly?: boolean | undefined;
+  disabled?: boolean | undefined;
   /** Fill the row: options share the width and long labels end in "…". */
-  block?: boolean;
-  ariaLabel?: string;
+  block?: boolean | undefined;
+  ariaLabel?: string | undefined;
   /** `data-test` of each option is `<testPrefix>-<value>`. */
-  testPrefix?: string;
+  testPrefix?: string | undefined;
 }>(), { size: "md" });
 
 const emit = defineEmits<{ (e: "update:modelValue", v: T): void }>();

@@ -11,12 +11,12 @@ import { useDialogFocus } from "./useDialogFocus";
 
 interface Props {
   open: boolean;
-  title?: string;
-  side?: "right" | "left";
+  title?: string | undefined;
+  side?: "right" | "left" | undefined;
   /** Any CSS width; capped at the viewport. */
-  width?: string;
+  width?: string | undefined;
   /** Dim the page and close on a click outside. */
-  modal?: boolean;
+  modal?: boolean | undefined;
 }
 const props = withDefaults(defineProps<Props>(), { side: "right", width: "420px", modal: true });
 const emit = defineEmits<{ (e: "update:open", v: boolean): void }>();

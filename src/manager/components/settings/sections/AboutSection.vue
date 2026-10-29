@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Icon from "../../../../kit/Icon.vue";
+import SupportLinks from "../../../../kit/SupportLinks.vue";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { DISCORD_INVITE, GITHUB_REPO, KIT_SITE, SUPPORT_LINKS, WPC_API_URL, kitVersion } from "../../../config/links";
@@ -40,25 +41,7 @@ const kit = kitVersion(__KIT_VERSION__);
       setting-key="support"
       stacked
     >
-      <ul class="wp-support" data-test="settings-support">
-        <li v-for="link in SUPPORT_LINKS" :key="link.id">
-          <a
-            class="wp-support__link"
-            :data-kind="link.id"
-            :href="link.href"
-            target="_blank"
-            rel="noopener"
-            :data-test="`settings-support-${link.id}`"
-          >
-            <span class="wp-support__icon"><Icon :name="link.icon" :size="16" /></span>
-            <span class="wp-support__text">
-              <span class="wp-support__label">{{ link.label }}</span>
-              <span class="wp-support__detail">{{ link.detail }}</span>
-            </span>
-            <Icon name="pi-external-link" class="wp-support__out" :size="12" />
-          </a>
-        </li>
-      </ul>
+      <SupportLinks :links="SUPPORT_LINKS" class="wp-set-support" data-test="settings-support" />
     </SettingRow>
     <SettingRow
       label="Other ways to help"
@@ -106,51 +89,7 @@ const kit = kitVersion(__KIT_VERSION__);
 .wp-set-about__link:hover { color: var(--wp-text); }
 .wp-set-about__kit { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--wp-space-2) var(--wp-space-5); min-width: 0; }
 
-.wp-support {
-  flex: 1 1 100%;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
-  gap: var(--wp-space-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.wp-support__link {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-4);
-  height: 100%;
-  box-sizing: border-box;
-  padding: var(--wp-space-4) var(--wp-space-5);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-md, 8px);
-  background: var(--wp-bg-1);
-  color: var(--wp-text);
-  text-decoration: none;
-  transition: border-color 120ms ease-out, background-color 120ms ease-out;
-}
-.wp-support__link:hover {
-  border-color: var(--wp-accent-500);
-  background: color-mix(in oklab, var(--wp-accent-500) 8%, var(--wp-bg-1));
-}
-.wp-support__link:focus-visible {
-  outline: 2px solid var(--wp-accent-500);
-  outline-offset: 2px;
-}
-.wp-support__icon {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--wp-radius-md, 8px);
-  background: var(--wp-bg-2);
-  color: var(--wp-accent-text);
-}
-.wp-support__text { display: grid; gap: 2px; min-width: 0; flex: 1; }
-.wp-support__label { font-weight: 600; font-size: var(--wp-text-sm); }
-.wp-support__detail { font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
-.wp-support__out { color: var(--wp-text-dim); flex: none; }
+.wp-set-support { flex: 1 1 100%; }
 
 .wp-set-help {
   display: grid;

@@ -18,11 +18,11 @@ import { diffText } from "./diff";
 const props = withDefaults(defineProps<{
   before: string;
   after: string;
-  by?: "words" | "lines";
-  layout?: "inline" | "split";
-  size?: "sm" | "md";
+  by?: "words" | "lines" | undefined;
+  layout?: "inline" | "split" | undefined;
+  size?: "sm" | "md" | undefined;
   /** Mono font, for code and JSON. */
-  mono?: boolean;
+  mono?: boolean | undefined;
 }>(), { by: "words", layout: "inline", size: "md" });
 
 const parts = computed(() => diffText(props.before, props.after, props.by));

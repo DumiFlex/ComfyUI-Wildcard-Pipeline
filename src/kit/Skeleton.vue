@@ -16,15 +16,15 @@ import { computed } from "vue";
 
 const props = withDefaults(defineProps<{
   /** line: text lines (the last one shorter). block: a box. circle: an avatar or icon. row: an icon, a title and a hint line, like a list row. */
-  shape?: "line" | "block" | "circle" | "row";
+  shape?: "line" | "block" | "circle" | "row" | undefined;
   /** How many lines or rows. */
-  lines?: number;
+  lines?: number | undefined;
   /** CSS width of a line, block or circle. */
-  width?: string;
+  width?: string | undefined;
   /** CSS height of a block or circle. */
-  height?: string;
+  height?: string | undefined;
   /** Say "Loading…" to screen readers with this text. */
-  label?: string;
+  label?: string | undefined;
 }>(), { shape: "line", lines: 1, width: undefined, height: undefined, label: undefined });
 
 const count = computed(() => Math.max(1, Math.floor(props.lines)));

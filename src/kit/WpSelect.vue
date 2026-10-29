@@ -19,12 +19,12 @@ import { nextTick } from "vue";
 const props = defineProps<{
   modelValue: T | null;
   options: readonly { value: T; label: string; disabled?: boolean }[];
-  placeholder?: string;
-  ariaLabel?: string;
-  dataTest?: string;
-  disabled?: boolean;
+  placeholder?: string | undefined;
+  ariaLabel?: string | undefined;
+  dataTest?: string | undefined;
+  disabled?: boolean | undefined;
   /** Lands on the <select>, for a `<label for>`. */
-  id?: string;
+  id?: string | undefined;
 }>();
 
 const emit = defineEmits<{ "update:modelValue": [value: T] }>();

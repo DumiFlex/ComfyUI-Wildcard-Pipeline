@@ -6,10 +6,10 @@ import HsvPicker from "./HsvPicker.vue";
 
 interface Props {
   modelValue: string;
-  presets?: string[];
-  ariaLabel?: string;
+  presets?: string[] | undefined;
+  ariaLabel?: string | undefined;
   /** Swatch and chevron only, for a tight spot such as a name row. */
-  compact?: boolean;
+  compact?: boolean | undefined;
 }
 
 const props = withDefaults(defineProps<Props>(), {

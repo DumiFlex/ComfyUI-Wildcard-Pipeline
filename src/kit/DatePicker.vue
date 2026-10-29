@@ -20,18 +20,18 @@ import {
 
 const props = withDefaults(defineProps<{
   modelValue: string | null;
-  min?: string;
-  max?: string;
-  placeholder?: string;
-  size?: "sm" | "md" | "lg";
-  disabled?: boolean;
-  invalid?: boolean;
-  ariaLabel?: string;
-  clearable?: boolean;
+  min?: string | undefined;
+  max?: string | undefined;
+  placeholder?: string | undefined;
+  size?: "sm" | "md" | "lg" | undefined;
+  disabled?: boolean | undefined;
+  invalid?: boolean | undefined;
+  ariaLabel?: string | undefined;
+  clearable?: boolean | undefined;
   /** 0 = Sunday, 1 = Monday. */
-  weekStart?: 0 | 1;
+  weekStart?: 0 | 1 | undefined;
   /** Language for month and day names; the browser's by default. */
-  locale?: string;
+  locale?: string | undefined;
 }>(), {
   min: undefined, max: undefined, placeholder: "Pick a date", size: "md",
   ariaLabel: "Date", weekStart: 1, locale: undefined,

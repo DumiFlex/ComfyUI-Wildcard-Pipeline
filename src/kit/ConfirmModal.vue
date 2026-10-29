@@ -21,12 +21,12 @@ const props = withDefaults(
   defineProps<{
     open: boolean;
     title: string;
-    body?: string;
-    confirmLabel?: string;
-    cancelLabel?: string;
+    body?: string | undefined;
+    confirmLabel?: string | undefined;
+    cancelLabel?: string | undefined;
     /** `danger` for something that can't be undone: red button, warning mark. */
-    tone?: "accent" | "danger";
-    loading?: boolean;
+    tone?: "accent" | "danger" | undefined;
+    loading?: boolean | undefined;
   }>(),
   { body: "", confirmLabel: "Confirm", cancelLabel: "Cancel", tone: "accent", loading: false },
 );

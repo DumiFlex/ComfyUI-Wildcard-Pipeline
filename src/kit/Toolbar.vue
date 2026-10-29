@@ -19,11 +19,11 @@ import { onMounted, onUpdated, ref } from "vue";
 const props = withDefaults(defineProps<{
   /** The toolbar's name for screen readers. */
   label: string;
-  orientation?: "horizontal" | "vertical";
+  orientation?: "horizontal" | "vertical" | undefined;
   /** Join the buttons into one group with shared borders. */
-  attached?: boolean;
+  attached?: boolean | undefined;
   /** Gap between controls. */
-  size?: "sm" | "md";
+  size?: "sm" | "md" | undefined;
 }>(), { orientation: "horizontal", size: "md" });
 
 const rootEl = ref<HTMLElement | null>(null);

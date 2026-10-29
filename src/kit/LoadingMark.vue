@@ -26,18 +26,18 @@ import { RING_A, RING_B, STAR_A, STAR_B, STAR_BIG } from "./logo-paths";
 
 const props = withDefaults(defineProps<{
   /** Width and height in px. Default 14, or 40 with `block`. */
-  size?: number;
+  size?: number | undefined;
   /** Accessible name when there is no slot text. */
-  label?: string;
+  label?: string | undefined;
   /** Centre it (and its text, below) in the space it is given. */
-  block?: boolean;
+  block?: boolean | undefined;
   /** Which drawing; default `logo` for a block or a 24 px+ mark, else `sparkle`. */
-  variant?: "logo" | "sparkle";
+  variant?: "logo" | "sparkle" | undefined;
   /** Draw in the current text colour instead of the logo colours. */
-  mono?: boolean;
+  mono?: boolean | undefined;
   /** Hidden from screen readers, for a host that says it is busy itself
    *  (a button with `aria-busy`). */
-  decorative?: boolean;
+  decorative?: boolean | undefined;
 }>(), { size: undefined, label: "Loading", block: false, variant: undefined, mono: false, decorative: false });
 
 const slots = useSlots();

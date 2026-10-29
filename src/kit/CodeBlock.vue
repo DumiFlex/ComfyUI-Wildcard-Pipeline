@@ -18,19 +18,19 @@ import { vTooltip } from "./tooltip";
 const props = withDefaults(defineProps<{
   code: string;
   /** A small tag in the head, e.g. "JSON". */
-  language?: string;
+  language?: string | undefined;
   /** A name in the head, e.g. "Prompt as sent". */
-  title?: string;
+  title?: string | undefined;
   /** Wrap long lines. Bind with v-model:wrap, or leave it to the button. */
-  wrap?: boolean;
+  wrap?: boolean | undefined;
   /** Where wrap starts when nobody binds `wrap`. */
-  defaultWrap?: boolean;
+  defaultWrap?: boolean | undefined;
   /** CSS max height; the block scrolls past it. */
-  maxHeight?: string;
-  lineNumbers?: boolean;
+  maxHeight?: string | undefined;
+  lineNumbers?: boolean | undefined;
   /** Leave out the head (copy and wrap). */
-  bare?: boolean;
-  size?: "sm" | "md";
+  bare?: boolean | undefined;
+  size?: "sm" | "md" | undefined;
 }>(), { language: undefined, title: undefined, wrap: undefined, maxHeight: undefined, size: "md" });
 
 const emit = defineEmits<{ (e: "update:wrap", v: boolean): void }>();

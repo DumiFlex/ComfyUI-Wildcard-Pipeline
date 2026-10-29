@@ -15,20 +15,20 @@ export interface TimelineItem {
   id: string | number;
   title: string;
   /** Shown after the title, e.g. "5 min ago". */
-  time?: string;
+  time?: string | undefined;
   /** A line or two of text under the title. */
-  body?: string;
-  tone?: "neutral" | "info" | "success" | "warn" | "danger" | "accent";
+  body?: string | undefined;
+  tone?: "neutral" | "info" | "success" | "warn" | "danger" | "accent" | undefined;
   /** A PrimeIcons class inside the dot. */
-  icon?: string;
+  icon?: string | undefined;
   /** Still running: the dot pulses. */
-  pending?: boolean;
+  pending?: boolean | undefined;
 }
 
 withDefaults(defineProps<{
   items: TimelineItem[];
-  size?: "sm" | "md";
-  ariaLabel?: string;
+  size?: "sm" | "md" | undefined;
+  ariaLabel?: string | undefined;
 }>(), { size: "md", ariaLabel: undefined });
 </script>
 

@@ -3,13 +3,13 @@ import { nextTick, ref, watch } from "vue";
 
 interface Props {
   modelValue: string;
-  rows?: number;
-  placeholder?: string;
-  autoResize?: boolean;
-  disabled?: boolean;
-  error?: boolean;
-  id?: string;
-  ariaLabel?: string;
+  rows?: number | undefined;
+  placeholder?: string | undefined;
+  autoResize?: boolean | undefined;
+  disabled?: boolean | undefined;
+  error?: boolean | undefined;
+  id?: string | undefined;
+  ariaLabel?: string | undefined;
 }
 const props = withDefaults(defineProps<Props>(), { rows: 3 });
 

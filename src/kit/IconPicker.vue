@@ -21,10 +21,10 @@ const props = withDefaults(
   defineProps<{
     /** Current glyph name, unprefixed (`"user"`). Empty / null = none. */
     modelValue: string | null;
-    ariaLabel?: string;
-    dataTest?: string;
+    ariaLabel?: string | undefined;
+    dataTest?: string | undefined;
     /** Icon only, no name beside it, for a tight table cell. */
-    compact?: boolean;
+    compact?: boolean | undefined;
   }>(),
   { ariaLabel: "Pick an icon", dataTest: undefined, compact: false },
 );

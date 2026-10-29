@@ -21,22 +21,22 @@ import { nextTick, ref } from "vue";
 export interface RadioOption<V extends string = string> {
   value: V;
   label: string;
-  hint?: string;
-  disabled?: boolean;
+  hint?: string | undefined;
+  disabled?: boolean | undefined;
 }
 
 const props = withDefaults(defineProps<{
   modelValue: T | null;
   options: RadioOption<T>[];
-  orientation?: "vertical" | "horizontal";
-  size?: "sm" | "md";
-  disabled?: boolean;
-  invalid?: boolean;
-  ariaLabel?: string;
+  orientation?: "vertical" | "horizontal" | undefined;
+  size?: "sm" | "md" | undefined;
+  disabled?: boolean | undefined;
+  invalid?: boolean | undefined;
+  ariaLabel?: string | undefined;
   /** Draw each option as a bordered card (for a few big choices). */
-  cards?: boolean;
+  cards?: boolean | undefined;
   /** `data-test` of each option is `<testPrefix>-<value>`. */
-  testPrefix?: string;
+  testPrefix?: string | undefined;
 }>(), { orientation: "vertical", size: "md", ariaLabel: undefined, testPrefix: undefined });
 
 defineSlots<{ label?: (p: { option: RadioOption<T> }) => unknown }>();

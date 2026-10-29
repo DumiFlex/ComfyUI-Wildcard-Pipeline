@@ -16,21 +16,21 @@ export interface StepperStep<V extends string = string> {
   id: V;
   label: string;
   /** A short line under the label. */
-  hint?: string;
+  hint?: string | undefined;
   /** done shows a check, error a mark. Steps before the current one count as done unless set. */
-  state?: "todo" | "done" | "error";
-  disabled?: boolean;
+  state?: "todo" | "done" | "error" | undefined;
+  disabled?: boolean | undefined;
 }
 
 const props = withDefaults(defineProps<{
   modelValue: T;
   steps: StepperStep<T>[];
-  clickable?: boolean;
+  clickable?: boolean | undefined;
   /** Only done steps and the one after the last done step can be picked. */
-  linear?: boolean;
-  orientation?: "horizontal" | "vertical";
-  size?: "sm" | "md";
-  ariaLabel?: string;
+  linear?: boolean | undefined;
+  orientation?: "horizontal" | "vertical" | undefined;
+  size?: "sm" | "md" | undefined;
+  ariaLabel?: string | undefined;
 }>(), { orientation: "horizontal", size: "md", ariaLabel: "Steps" });
 
 const emit = defineEmits<{ (e: "update:modelValue", v: T): void }>();

@@ -18,16 +18,16 @@ const props = withDefaults(defineProps<{
   modelValue: string;
   /** What is being renamed, e.g. "Wildcard name". */
   label: string;
-  placeholder?: string;
+  placeholder?: string | undefined;
   /** Return a message to refuse the value, or null to take it. */
-  validate?: (v: string) => string | null;
+  validate?: ((v: string) => string | null) | undefined;
   /** Refuse an empty value. On by default. */
-  required?: boolean;
-  disabled?: boolean;
-  size?: "sm" | "md" | "lg";
+  required?: boolean | undefined;
+  disabled?: boolean | undefined;
+  size?: "sm" | "md" | "lg" | undefined;
   /** Trim spaces from both ends before saving. */
-  trim?: boolean;
-  maxlength?: number;
+  trim?: boolean | undefined;
+  maxlength?: number | undefined;
 }>(), { placeholder: "Untitled", required: true, size: "md", trim: true, maxlength: undefined });
 
 const emit = defineEmits<{

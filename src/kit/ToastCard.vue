@@ -14,9 +14,9 @@
 const props = defineProps<{
   tone: "info" | "success" | "warn" | "error";
   summary: string;
-  detail?: string;
+  detail?: string | undefined;
   /** Label of the inline action (Undo, Open…); emits `action`. */
-  actionLabel?: string;
+  actionLabel?: string | undefined;
 }>();
 
 const emit = defineEmits<{ action: []; dismiss: [] }>();

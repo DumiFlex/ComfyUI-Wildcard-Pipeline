@@ -19,20 +19,20 @@ import Popover from "./Popover.vue";
 
 const props = withDefaults(defineProps<{
   modelValue: string[];
-  suggestions?: string[];
+  suggestions?: string[] | undefined;
   /** Take words that aren't in `suggestions`. */
-  allowNew?: boolean;
+  allowNew?: boolean | undefined;
   /** At most this many tags. */
-  max?: number;
+  max?: number | undefined;
   /** Clean a tag before it is added (trim by default). Return "" to refuse it. */
-  normalize?: (t: string) => string;
-  placeholder?: string;
-  size?: "sm" | "md" | "lg";
-  disabled?: boolean;
-  invalid?: boolean;
-  ariaLabel?: string;
+  normalize?: ((t: string) => string) | undefined;
+  placeholder?: string | undefined;
+  size?: "sm" | "md" | "lg" | undefined;
+  disabled?: boolean | undefined;
+  invalid?: boolean | undefined;
+  ariaLabel?: string | undefined;
   /** How many suggestions to show at once. */
-  limit?: number;
+  limit?: number | undefined;
 }>(), {
   suggestions: () => [], allowNew: true, max: undefined,
   placeholder: "Add a tag", size: "md", ariaLabel: "Tags", limit: 8,

@@ -22,14 +22,14 @@ import { vTooltip } from "./tooltip";
 withDefaults(defineProps<{
   /** PrimeIcons class, e.g. `pi-trash`. Leave it out to draw a short
    *  glyph from the slot instead (the loop's Σ toggle). */
-  icon?: string;
+  icon?: string | undefined;
   label: string;
   /** A longer tooltip than the label. */
-  hint?: string;
-  tone?: "neutral" | "accent" | "warn" | "danger";
-  pressed?: boolean | "mixed";
-  variant?: "quiet" | "bare";
-  disabled?: boolean;
+  hint?: string | undefined;
+  tone?: "neutral" | "accent" | "warn" | "danger" | undefined;
+  pressed?: boolean | "mixed" | undefined;
+  variant?: "quiet" | "bare" | undefined;
+  disabled?: boolean | undefined;
 }>(), { icon: undefined, hint: undefined, tone: "neutral", pressed: undefined, variant: "quiet" });
 
 const emit = defineEmits<{ click: [evt: MouseEvent] }>();

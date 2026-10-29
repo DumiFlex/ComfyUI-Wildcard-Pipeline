@@ -5,23 +5,23 @@ import { placeFloating, viewportSize, type Placement } from "./floating";
 export interface ContextMenuItem {
   label: string;
   /** PrimeIcons class (e.g. "pi-trash"). ComfyUI loads PrimeIcons globally. */
-  icon?: string;
+  icon?: string | undefined;
   /** Optional separator above the item. */
-  divider?: boolean;
+  divider?: boolean | undefined;
   /** Render the label in red (destructive action). */
-  danger?: boolean;
+  danger?: boolean | undefined;
   /** Render the label in accent color to draw attention. Used for
    *  recommended next actions in a contextual state (e.g. "Push to
    *  library" when the row's library entry has been deleted upstream).
    *  Lower-key than `danger`; signals "this is what you probably want"
    *  not "be careful with this". */
-  accent?: boolean;
-  disabled?: boolean;
+  accent?: boolean | undefined;
+  disabled?: boolean | undefined;
   /** Optional dim secondary line under the label. Useful for
    *  explaining non-obvious actions like "Pull current library
    *  version" or "Restore frozen state from bundle". When provided,
    *  the row becomes two-line and uses more vertical space. */
-  subtitle?: string;
+  subtitle?: string | undefined;
   onSelect: () => void;
 }
 
@@ -38,9 +38,9 @@ export interface ContextMenuSection {
  *  entity the menu is for. Color of the icon can be overridden per
  *  invocation (e.g. bundle's user-picked color, or a kind token). */
 export interface ContextMenuHeader {
-  icon?: string;
+  icon?: string | undefined;
   label: string;
-  iconColor?: string;
+  iconColor?: string | undefined;
 }
 
 export type ContextMenuEntry = ContextMenuItem | ContextMenuSection;
@@ -54,11 +54,11 @@ const props = defineProps<{
   x: number;
   y: number;
   items: ContextMenuEntry[];
-  header?: ContextMenuHeader;
+  header?: ContextMenuHeader | undefined;
   /** Open next to this element instead of at x/y (DropdownMenu's trigger).
    *  A click on it doesn't count as "outside", so the trigger can toggle. */
-  anchor?: HTMLElement | null;
-  placement?: Placement;
+  anchor?: HTMLElement | null | undefined;
+  placement?: Placement | undefined;
 }>();
 
 const emit = defineEmits<{ (e: "close"): void }>();

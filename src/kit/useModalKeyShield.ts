@@ -39,12 +39,12 @@ import { onBeforeUnmount, watch, type Ref } from "vue";
  */
 export interface ModalKeyShieldOptions {
   /** Runs for every keydown inside the modal, before the event is stopped. */
-  onKey?: (event: KeyboardEvent) => void;
+  onKey?: ((event: KeyboardEvent) => void) | undefined;
   /**
    * Let a key through to the rest of the page. Use sparingly — the point of
    * the shield is that a modal owns the keyboard while it is open.
    */
-  passThrough?: (event: KeyboardEvent) => boolean;
+  passThrough?: ((event: KeyboardEvent) => boolean) | undefined;
 }
 
 /** Wire the shield to a root element that exists only while the modal is open. */

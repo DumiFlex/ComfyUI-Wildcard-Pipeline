@@ -26,19 +26,19 @@ defineOptions({ inheritAttrs: false });
 
 const props = withDefaults(
   defineProps<{
-    placeholder?: string;
-    ariaLabel?: string;
-    size?: "sm" | "md" | "lg";
+    placeholder?: string | undefined;
+    ariaLabel?: string | undefined;
+    size?: "sm" | "md" | "lg" | undefined;
     /** Rows after filtering. With `total`, shows "visible of total". */
-    visible?: number;
-    total?: number;
+    visible?: number | undefined;
+    total?: number | undefined;
     /** Plural noun for the idle count ("12 rules"). */
-    noun?: string;
+    noun?: string | undefined;
     /** A key hint shown while the box is empty, e.g. "/" or "Ctrl K". */
-    shortcut?: string;
-    clearLabel?: string;
-    disabled?: boolean;
-    testPrefix?: string;
+    shortcut?: string | undefined;
+    clearLabel?: string | undefined;
+    disabled?: boolean | undefined;
+    testPrefix?: string | undefined;
   }>(),
   { placeholder: "Search…", size: "md", clearLabel: "Clear search" },
 );
