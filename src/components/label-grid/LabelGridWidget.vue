@@ -476,7 +476,8 @@ function text(ev: Event): string {
   gap: 10px;
   color: var(--wp-text);
   font: 12px var(--wp-font-sans, sans-serif);
-  padding: 4px 0;
+  /* ComfyUI draws the result preview right under the widget: leave it room. */
+  padding: 4px 0 14px;
   min-width: 0;
 }
 .wp-lg--skipped { opacity: 0.45; }
