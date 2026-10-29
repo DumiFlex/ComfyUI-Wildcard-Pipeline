@@ -236,7 +236,7 @@ export const DOC_PAGES: DocPageMeta[] = [
     blurb: "Every warning, what it means and what to do.", keywords: ["warning", "error", "conflict", "reference"],
     ...page(() => import("./pages/reference/warning-types.vue")) },
   { id: "component-kit", title: "Component kit", group: "reference", icon: "pi pi-th-large", tone: "neutral",
-    blurb: "Every shared control, colour and size, shown live.", keywords: ["kit", "components", "design", "buttons", "tokens", "colours", "contributors"],
+    blurb: "Every shared control, colour and size, shown live.", keywords: ["kit", "wp-kit", "kit site", "kit version", "components", "design", "buttons", "tokens", "colours", "contributors"],
     ...page(() => import("./pages/reference/component-kit.vue")) },
 ];
 

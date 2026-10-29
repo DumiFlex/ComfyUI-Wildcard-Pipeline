@@ -20,6 +20,21 @@
  */
 export const GITHUB_REPO = "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline";
 
+/** The shared component kit's repo and its showcase site (every piece, live). */
+export const KIT_REPO = "https://github.com/DumiFlex/wp-kit";
+export const KIT_SITE = "https://dumiflex.github.io/wp-kit/";
+
+/**
+ * How the About card names the kit version: a release tag with its commit
+ * ("v0.1.0 · f3841a3"), or the commit alone when src/kit/ was pulled from a
+ * branch or a commit. The link opens that commit's files.
+ */
+export function kitVersion(v: { ref: string; sha: string }): { label: string; href: string } {
+  const short = v.sha.slice(0, 7);
+  const tagged = /^v\d+\.\d+\.\d+/.test(v.ref);
+  return { label: tagged ? `${v.ref} · ${short}` : short, href: tagged ? `${KIT_REPO}/releases/tag/${v.ref}` : `${KIT_REPO}/tree/${v.sha}` };
+}
+
 /**
  * ComfyUI Registry node id for this pack — the `id` passed to ComfyUI
  * Manager's `/manager/queue/install` to update-in-place. Must match

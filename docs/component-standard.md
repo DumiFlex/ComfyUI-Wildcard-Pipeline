@@ -1,26 +1,26 @@
 # Component standard
 
-Every custom control in the extension follows these rules. The component kit (Settings › Advanced › Component kit, route `/wp/kit`) shows each one live. Build screens from the kit. When nothing fits, make a new kit component that follows this page, in the same PR as the screen that needs it.
+Every custom control in the extension follows these rules. The [wp-kit site](https://dumiflex.github.io/wp-kit/) shows each one live; the App pieces page (Settings › Advanced › Component kit, route `/wp/kit`) shows the few that only the extension has. Build screens from the kit. When nothing fits, make a new kit component that follows this page, in the same PR as the screen that needs it.
 
 ## 1. Where it lives
 
 | Folder | What goes there |
 |---|---|
 | `src/kit/` | The shared kit, a copy of [DumiFlex/wp-kit](https://github.com/DumiFlex/wp-kit) (the community site uses it too). Never edit it here: change a piece in wp-kit, release it, then `pnpm kit:pull <tag>`; `pnpm kit:check` fails in CI on a hand edit. It holds the pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`), controls (`SearchInput`, `WpNumber`, `WpCheck`, `WpSelect`, `WpButton`, `WpIconButton`, `WpSwitch`, `WpTabs`, `WpSegmented`, `Disclosure`, `Banner`, `CopyButton`, `CloseButton`, `Slider`, `TagInput`, `InlineEdit`, `DropZone`, `Toolbar`, `Combobox`, `DatePicker`, `RangeSlider`, `RadioGroup`), display and layout pieces (`Badge`, `Kbd`, `DescriptionList`, `CodeBlock`, `Separator`, `Stepper`, `Pagination`, `ResizeHandle`, `SplitPane`, `SortableList`, `Avatar`, `Timeline`, `DiffView`, `ImageGrid`, `VirtualList`, `VisuallyHidden`), the `Lightbox` overlay, feedback (`ProgressBar`, `Skeleton`) and the toast look (`ToastCard`). It also holds the manager controls (`Button`, `Input`, `Select`, `Modal`, `ConfirmModal`, `Drawer`, `DataTable`, `ChoiceCards`, `Toggle`, `useToast` + `ToastHost` and the rest) and the theme sheets in `src/kit/theme/`. Kit pieces style themselves with scoped `wp-*` CSS, never Tailwind classes. |
-| `src/components/shared/` | Canvas pieces that are not shared with other apps: `ConfirmDialog`, the seed list, frame chips, the toast stack, `useHostDialogGuard`, and the canvas colour sheet `theme.css`. |
+| `src/components/shared/` | Canvas pieces that are not shared with other apps: the seed list, frame chips, the toast stack, `useHostDialogGuard`, and the canvas colour sheet `theme.css`. |
 
 A component anywhere else is a part of one screen, not a control. If a second screen needs it, move it into wp-kit first. Only a piece that calls the app's API, store or router stays in the app, built from kit pieces.
 
 ## 2. Kit entry and demo
 
-- Add an entry to `src/manager/kit/registry.ts` with:
+- A kit piece gets its entry and demo on the wp-kit site, in the same wp-kit PR: an entry in `site/src/registry.ts` and the demo in `site/src/demos/<id>.vue`. The entry has:
   - `id`, `name`, `group`, `file` and `surfaces`;
   - a `use` line saying when to reach for it;
   - an `instead` line naming what it replaces;
   - a `KIT_EXAMPLES` line.
-- The demo goes in `src/manager/kit/demos/<id>.vue`, one file per entry, so PRs don't collide.
-  - Show every variant and every state that applies: default, disabled, invalid, loading, empty.
-- `kit-coverage.test.ts` fails when a kit-folder component has no entry, or when a demo file has no matching entry.
+- The demo shows every variant and every state that applies: default, disabled, invalid, loading, empty.
+- wp-kit's `site/src/coverage.test.ts` fails when a piece has no entry, or a demo has no entry.
+- An app piece (built from the kit but wired to the extension's stores, like `RichTextInput` or `SelectionToolbar`) gets the same entry in `src/manager/kit/registry.ts` and its demo in `src/manager/kit/demos/<id>.vue`. They show on the App pieces page (`/wp/kit`). `kit-coverage.test.ts` fails when a component in `src/components/shared/` has no entry.
 
 ## 3. Prop names
 

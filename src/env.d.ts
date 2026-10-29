@@ -27,3 +27,5 @@ declare module "/scripts/ui/components/buttonGroup.js";
 // the bundle).
 declare const __APP_VERSION__: string;
 declare const __APP_LICENSE__: string;
+/** The wp-kit ref and commit src/kit/ was pulled at (from src/kit/kit.lock.json). */
+declare const __KIT_VERSION__: { ref: string; sha: string };
