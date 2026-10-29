@@ -49,9 +49,9 @@ pnpm-workspace.yaml
 .npmrc
 .nvmrc
 
-# --- semantic-release + commitlint plumbing ---
-.releaserc.*
-release.config.*
+# --- release-please + commitlint plumbing ---
+release-please-config.json
+.release-please-manifest.json
 commitlint.config.*
 config/
 

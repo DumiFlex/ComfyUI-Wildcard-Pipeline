@@ -56,12 +56,10 @@ Thumbs.db
 !/docs/network-access.md
 # Rules every custom control follows, linked from CLAUDE.md
 !/docs/component-standard.md
-# Curated release highlights — read by .releaserc.js at release time, so it
-# must be tracked (the release step commits the cleared file back).
+# Curated release highlights — the release body, read by
+# scripts/release/release-notes.mjs at release time, so it must be tracked.
 !/docs/release-notes/
 
-# Semantic release
-.releaserc.local.js
 
 # Throwaway design / scratch artifacts (mockups, screenshots, demos)
 /_temp/

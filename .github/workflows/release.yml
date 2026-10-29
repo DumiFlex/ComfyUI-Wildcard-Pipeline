@@ -1,33 +1,47 @@
 name: Release
 
+# Merging dev into main is how updates ship (the same flow as Watchwright).
+#
+#   1. Every push to main runs release-please. It opens or updates a release PR
+#      ("chore(main): release x.y.z") that bumps package.json, pyproject.toml
+#      and .release-please-manifest.json. The bump comes from the Conventional
+#      Commits since the last tag: feat → minor, fix/perf/refactor/revert →
+#      patch, `!` → major. Commits touching only `.github/` or `scripts/` never
+#      count (exclude-paths), so tooling work can't cut an empty release (2.13.0).
+#   2. The release PR merges itself once CI passes, but only when
+#      docs/release-notes/next.md has notes. An empty next.md shipped 2.17.0
+#      with a blank body, so instead the PR waits with a comment.
+#   3. When it merges, release-please tags vX.Y.Z and makes a DRAFT release. The
+#      publish job builds, checks the bundle size, packs the zip, swaps the
+#      draft's commit list for the curated body (header + next.md + compare
+#      link) and publishes it. Publishing fires `release: published`, which runs
+#      publish.yml (Comfy Registry) and discord-announce.yml (staff post).
+#   4. Then two PRs into dev: main → dev (versions), merged by itself, and one
+#      that drops the shipped notes from next.md and puts them on top of
+#      CHANGELOG.md. That one merges itself when next.md had nothing new on
+#      dev; otherwise it waits for a look.
+#
+# Pushing to `beta` cuts a GitHub prerelease x.y.z-beta.N with the same zip and
+# notes, and leaves next.md alone. publish.yml skips prereleases.
+#
+# GH_TOKEN is a personal access token (contents and pull requests: read and
+# write). The built-in GITHUB_TOKEN can't be used: PRs, tags and releases it
+# makes don't start other workflows, so CI would never run on the release PR
+# and publishing would not reach the Registry. GitHub reserves the GITHUB_
+# prefix for its own tokens, hence the name. A failed publish can be retried
+# with "Re-run failed jobs"; the draft release waits until then.
+
 on:
   push:
-    # `beta` cuts prereleases (see .releaserc.js).
     branches: [main, beta]
-    # Tooling-only pushes must not be able to cut a release, whatever their
-    # commit type says.
-    #
-    # 2.13.0 shipped as an empty release because three commits touching only
-    # `scripts/` and `.github/` were typed `feat(announce)` / `fix(announce)`.
-    # Both are release-triggering, so semantic-release did exactly what it was
-    # told — every user on 2.12.0 was offered an update with a blank changelog.
-    # Relying on remembering to type those `ci:` had already failed once.
-    #
-    # Neither path is part of what a user installs: `scripts/` is dev tooling
-    # and `.github/` is CI. GitHub skips the run only when EVERY changed file
-    # matches, so a push that touches shipped code alongside a workflow still
-    # releases correctly.
-    #
-    # `docs/**` is deliberately NOT here — `docs(readme)` is configured to bump
-    # a patch, and `docs/release-notes/next.md` is the release body itself.
-    paths-ignore:
-      - 'scripts/**'
-      - '.github/**'
+  workflow_dispatch:
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 # Opt every JS-based action into the Node 24 runner. Removes deprecation
 # warnings for actions still packaged against Node 20 (e.g. pnpm/action-setup@v4).
@@ -36,6 +50,170 @@ env:
 
 jobs:
   release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - uses: actions/checkout@v5
+        if: steps.release.outputs.prs_created == 'true'
+
+      - name: Auto-merge the release PR once it has notes
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          # Parsed in the shell, not with fromJSON(): `pr` can be empty even
+          # when prs_created is true, and fromJSON('') fails the whole job.
+          PR_JSON: ${{ steps.release.outputs.pr }}
+        run: |
+          number=$(printf '%s' "$PR_JSON" | jq -r '.number // empty' 2>/dev/null || true)
+          if [ -z "$number" ]; then
+            echo "No release PR to auto-merge."
+            exit 0
+          fi
+          if [ -z "$(tr -d '[:space:]' < docs/release-notes/next.md 2>/dev/null)" ]; then
+            gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --disable-auto 2>/dev/null || true
+            marker="<!-- wp-release-needs-notes -->"
+            if ! gh pr view "$number" --repo "$GITHUB_REPOSITORY" --json comments --jq '.comments[].body' | grep -qF "$marker"; then
+              gh pr comment "$number" --repo "$GITHUB_REPOSITORY" --body "$marker
+          This release is waiting for notes: \`docs/release-notes/next.md\` on main is empty, and its text is the release body users see in What's new. Add the notes on dev and merge dev into main again; this PR then updates and merges itself."
+            fi
+            echo "::warning::docs/release-notes/next.md is empty; release PR #$number waits for notes."
+            exit 0
+          fi
+          gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --auto --merge
+
+  publish:
+    needs: release
+    if: needs.release.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ needs.release.outputs.tag_name }}
+      VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      # The release PR's merge commit, which is what the tag points at.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The version is already stamped in package.json + pyproject.toml by the
+      # release PR, so the bundle bakes in the right one.
+      - run: pnpm build
+      - run: pnpm size
+      - run: node scripts/pack-release.mjs "$VERSION"
+      - name: Render the release body
+        run: |
+          if [ -z "$(tr -d '[:space:]' < docs/release-notes/next.md 2>/dev/null)" ]; then
+            echo "::error::docs/release-notes/next.md is empty, so $TAG would ship a blank release. Add notes, then re-run this job (the draft waits)."
+            exit 1
+          fi
+          node scripts/release/release-notes.mjs body "$VERSION" "$TAG" > dist/release-body.md
+          cp docs/release-notes/next.md dist/shipped-notes.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: |
+            dist/release-body.md
+            dist/shipped-notes.md
+      - name: Attach the zip and publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          zip="dist/ComfyUI-Wildcard-Pipeline-v$VERSION.zip"
+          gh release upload "$TAG" "$zip#ComfyUI-Wildcard-Pipeline-v$VERSION.zip" --clobber --repo "$GITHUB_REPOSITORY"
+          gh release edit "$TAG" --notes-file dist/release-body.md --draft=false --latest --repo "$GITHUB_REPOSITORY"
+
+  sync-dev:
+    needs: [release, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync main back into dev
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag_name }}
+        run: |
+          # Merging the dev→main PR can auto-delete dev (it was that PR's head
+          # branch). Put it back at the release commit; nothing is lost, since
+          # main holds all of dev's history.
+          if ! gh api "repos/$GITHUB_REPOSITORY/branches/dev" --silent 2>/dev/null; then
+            echo "dev is missing; recreating it from main."
+            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref=refs/heads/dev -f sha="$GITHUB_SHA" --silent
+            exit 0
+          fi
+          ahead=$(gh api "repos/$GITHUB_REPOSITORY/compare/dev...main" --jq '.ahead_by')
+          if [ "$ahead" = "0" ]; then
+            echo "dev already has everything on main."
+            exit 0
+          fi
+          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --base dev --head main --state open --json number --jq '.[0].number')
+          if [ -z "$existing" ]; then
+            existing=$(gh pr create --repo "$GITHUB_REPOSITORY" --base dev --head main \
+              --title "chore: sync $TAG into dev" \
+              --body "Brings the $TAG release commit (versions) back into dev. Merges itself once CI passes; keep it a merge commit, never a squash." \
+              | sed 's#.*/##')
+          fi
+          gh pr merge "$existing" --repo "$GITHUB_REPOSITORY" --auto --merge
+
+  clear-notes:
+    needs: [release, publish, sync-dev]
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.release.outputs.tag_name }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: dev
+          token: ${{ secrets.GH_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes
+      - name: Open the PR that clears the shipped notes on dev
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          NOTES: ${{ runner.temp }}/release-notes
+        run: |
+          kept=$(node scripts/release/release-notes.mjs after-release "$NOTES/shipped-notes.md" "$NOTES/release-body.md")
+          if git diff --quiet; then
+            echo "Nothing to clear."
+            exit 0
+          fi
+          branch="chore/release-notes-$TAG"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "chore: clear the release notes shipped in $TAG"
+          git push -u origin "$branch"
+          if [ "$kept" = "0" ]; then
+            body="Removes the notes that shipped in $TAG from \`docs/release-notes/next.md\` and adds that release to the top of \`CHANGELOG.md\`. Nothing was added to next.md since the release was cut, so this merges itself once CI passes."
+          else
+            body="Removes the notes that shipped in $TAG from \`docs/release-notes/next.md\` and adds that release to the top of \`CHANGELOG.md\`. $kept line(s) of next.md were not in the release and were kept (new notes, or shipped lines reworded on dev). Check them, then merge."
+          fi
+          number=$(gh pr create --repo "$GITHUB_REPOSITORY" --base dev --head "$branch" \
+            --title "chore: clear the release notes shipped in $TAG" --body "$body" | sed 's#.*/##')
+          if [ "$kept" = "0" ]; then
+            gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --auto --squash --delete-branch
+          fi
+
+  beta:
+    if: github.ref == 'refs/heads/beta'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -47,14 +225,20 @@ jobs:
         with:
           node-version: "22"
           cache: pnpm
+      - id: version
+        run: echo "version=$(node scripts/release/release-notes.mjs beta-version)" >> "$GITHUB_OUTPUT"
       - run: pnpm install --frozen-lockfile
+      # Stamped in the runner only: a beta commits nothing back.
+      - run: node scripts/release/release-notes.mjs stamp "${{ steps.version.outputs.version }}"
       - run: pnpm build
       - run: pnpm size
-      - env:
-          # Uses a user-provided PAT stored as the repo secret `GH_TOKEN`.
-          # Required because the auto-provided `GITHUB_TOKEN` can't push
-          # release commits/tags that trigger downstream workflows, and
-          # GitHub reserves the `GITHUB_` prefix for built-in tokens —
-          # user secrets can't be named `GITHUB_TOKEN`.
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: pnpm exec semantic-release
+      - name: Pack, render the notes and publish the prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          node scripts/pack-release.mjs "$VERSION"
+          node scripts/release/release-notes.mjs body "$VERSION" "v$VERSION" > dist/release-body.md
+          gh release create "v$VERSION" "dist/ComfyUI-Wildcard-Pipeline-v$VERSION.zip#ComfyUI-Wildcard-Pipeline-v$VERSION.zip" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title "v$VERSION" --notes-file dist/release-body.md
