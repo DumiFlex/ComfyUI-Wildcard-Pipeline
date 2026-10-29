@@ -42,6 +42,8 @@ const props = defineProps<{
   groupId: string;
   /** All 16 outputs are taken (an unpinned toggle can't get one). */
   outputsFull: boolean;
+  /** Edit view: show the pencil and the edit panel. */
+  editable: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -116,6 +118,7 @@ function flip(): void {
         :aria-label="problem"
       />
       <WpIconButton
+        v-if="editable"
         icon="pi-pencil"
         :pressed="editing"
         :label="`Edit ${t.name}`"
@@ -169,7 +172,7 @@ function flip(): void {
       </span>
     </div>
 
-    <div v-if="editing" class="wp-tgr__edit" :data-test="`tg-editor-${t.id}`">
+    <div v-if="editable && editing" class="wp-tgr__edit" :data-test="`tg-editor-${t.id}`">
       <div class="wp-tgr__edit-head">
         <span class="wp-tgr__cap">EDIT TOGGLE</span>
         <CloseButton size="sm" label="Done" @click="emit('edit')" />
@@ -246,7 +249,10 @@ function flip(): void {
           />
           <span aria-hidden="true">BOOLEAN output</span>
         </span>
-        <WpButton variant="ghost" size="sm" icon="pi-trash" data-test="tg-delete" @click="emit('remove')">Remove</WpButton>
+        <span class="wp-tgr__foot-btns">
+          <WpButton variant="ghost" size="sm" icon="pi-trash" data-test="tg-delete" @click="emit('remove')">Remove</WpButton>
+          <WpButton variant="primary" size="sm" icon="pi-check" data-test="tg-done" @click="emit('edit')">Done</WpButton>
+        </span>
       </div>
     </div>
   </div>
@@ -266,7 +272,20 @@ function flip(): void {
   min-width: 0;
 }
 .wp-tgr__row.is-chip { min-height: 26px; padding-left: 4px; }
-.wp-tgr__row.is-blocked { background: transparent; box-shadow: inset 0 0 0 1px var(--wp-border); }
+/* Off because the toggle it needs is off: the Context node's disabled-module
+ * stripes. The background stays opaque (only the content dims), so nothing
+ * behind the row shows through. */
+.wp-tgr__row.is-blocked {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--wp-bg3),
+    var(--wp-bg3) 6px,
+    var(--wp-bg2) 6px,
+    var(--wp-bg2) 8px
+  );
+  box-shadow: inset 0 0 0 1px var(--wp-border);
+}
+.wp-tgr__row.is-blocked > * { opacity: 0.55; }
 .wp-tgr__row.is-editing { box-shadow: inset 0 0 0 1px var(--wp-accent); }
 .wp-tgr__name { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .wp-tgr__name b {
@@ -355,5 +374,6 @@ function flip(): void {
 .wp-tgr__field input.is-problem { border-color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .wp-tgr__edit-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wp-tgr__foot-btns { display: inline-flex; align-items: center; gap: 6px; }
 .wp-tgr__check { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
 </style>

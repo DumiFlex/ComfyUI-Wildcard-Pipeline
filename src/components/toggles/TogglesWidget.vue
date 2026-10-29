@@ -7,6 +7,11 @@
  * `data-wp-out="toggle_<out>"` so `extension/row-outputs.ts` puts that dot
  * at the row's right edge. A folded label gathers its toggles' dots.
  *
+ * Two views: the clean view shows only the rows and their controls; the
+ * pencil at the top opens the edit view (mode, grips, row editors, add
+ * buttons) and Done closes it. A node with no toggles opens in the edit view.
+ * The view is per session, never saved.
+ *
  * Toggles belong to the label above them. Labels move with their toggles
  * (outer list), toggles move inside their group (inner lists); the edit
  * panel's Group field moves one to another label.
@@ -121,6 +126,16 @@ function shownOn(t: ToggleRow): boolean {
 
 const editing = ref<string | null>(null);
 const root = ref<HTMLElement | null>(null);
+/** Edit view (see the header comment). */
+const editMode = ref(!toggleRows(props.modelValue).length);
+
+function openEdit(): void {
+  editMode.value = true;
+}
+function closeEdit(): void {
+  editMode.value = false;
+  editing.value = null;
+}
 
 async function focusEditor(): Promise<void> {
   await nextTick();
@@ -185,6 +200,7 @@ function rowProps(t: ToggleRow) {
     groupOptions: labelled.value.length ? groupOptions() : [],
     groupId: groupIdOf(t),
     outputsFull: pinCount.value >= MAX_OUTPUTS,
+    editable: editMode.value,
   };
 }
 
@@ -245,8 +261,8 @@ function foldedOuts(g: ToggleGroup): string | undefined {
 </script>
 
 <template>
-  <div ref="root" class="wp-tg" :class="{ 'wp-tg--skipped': isSkipped }">
-    <div class="wp-tg__bar">
+  <div ref="root" class="wp-tg" :class="{ 'wp-tg--skipped': isSkipped, 'wp-tg--edit': editMode }">
+    <div v-if="editMode" class="wp-tg__bar">
       <WpSegmented
         :model-value="cfg.mode"
         :options="MODES"
@@ -270,118 +286,165 @@ function foldedOuts(g: ToggleGroup): string | undefined {
           @change="setGroupVar"
         >
       </label>
+      <span v-else class="wp-tg__spacer" />
+      <WpButton variant="primary" size="sm" icon="pi-check" data-test="tg-edit-done" @click="closeEdit">Done</WpButton>
+    </div>
+    <div v-else class="wp-tg__bar wp-tg__bar--clean">
+      <span class="wp-tg__mode-cap">{{ isOne ? "Pick one" : "" }}</span>
+      <WpIconButton
+        icon="pi-pencil"
+        label="Edit toggles"
+        hint="Edit toggles: add, rename, reorder, outputs"
+        data-test="tg-edit-open"
+        @click="openEdit"
+      />
     </div>
 
-    <SortableList
-      v-if="top.toggles.length"
-      :model-value="top.toggles"
-      :item-key="(t: ToggleRow) => t.id"
-      :item-label="(t: ToggleRow) => t.name"
-      label="Toggles"
-      size="sm"
-      class="wp-tg__list"
-      @update:model-value="(v: ToggleRow[]) => reorderToggles(top, v)"
-    >
-      <template #item="{ item }">
-        <ToggleRowView
-          v-bind="rowProps(item)"
-          @set-on="(v: boolean) => setOn(item, v)"
-          @patch="(p: Partial<ToggleRow>) => patchToggle(item.id, p)"
-          @rename="(n: string) => rename(item, n)"
-          @set-var="(v: string) => setVar(item, v)"
-          @edit="toggleEdit(item)"
-          @move-group="(id: string) => moveToGroup(item, id)"
-          @remove="removeToggle(item)"
-        />
-      </template>
-    </SortableList>
-
-    <SortableList
-      v-if="labelled.length"
-      :model-value="labelled"
-      :item-key="(g: LabelledGroup) => g.label.id"
-      :item-label="(g: LabelledGroup) => g.label.name || 'Group'"
-      label="Groups"
-      size="sm"
-      class="wp-tg__groups"
-      @update:model-value="reorderGroups"
-    >
-      <template #item="{ item: g }">
-        <div class="wp-tg__group-box">
-          <div
-            class="wp-tg__label"
-            :class="`var-${g.label.color}`"
-            :data-wp-out="foldedOuts(g)"
-            :data-test="`tg-label-${g.label.id}`"
-          >
-            <WpIconButton
-              variant="bare"
-              :icon="g.label.collapsed ? 'pi-caret-right' : 'pi-caret-down'"
-              :label="g.label.collapsed ? 'Unfold' : 'Fold'"
-              :data-test="`tg-fold-${g.label.id}`"
-              @click="patchLabel(g.label.id, { collapsed: !g.label.collapsed })"
-            />
-            <input
-              class="wp-tg__label-name"
-              :value="g.label.name"
-              placeholder="Group name"
-              spellcheck="false"
-              aria-label="Group name"
-              @keydown.stop
-              @change="patchLabel(g.label.id, { name: ($event.target as HTMLInputElement).value.trim() })"
-            >
-            <span class="wp-tg__rule" />
-            <span class="wp-tg__count">{{ g.toggles.length }}<template v-if="g.label.collapsed"> · {{ onCount(g) }} on</template></span>
-            <WpIconButton
-              icon="pi-palette"
-              :label="`Colour ${g.label.color} of 8`"
-              hint="Next colour"
-              :data-test="`tg-color-${g.label.id}`"
-              @click="nextColor(g.label)"
-            />
-            <WpIconButton
-              icon="pi-times"
-              tone="danger"
-              label="Remove label"
-              hint="Remove the label; its toggles join the group above"
-              :data-test="`tg-label-remove-${g.label.id}`"
-              @click="removeLabel(g.label)"
-            />
-          </div>
-          <SortableList
-            v-if="!g.label.collapsed && g.toggles.length"
-            :model-value="g.toggles"
-            :item-key="(t: ToggleRow) => t.id"
-            :item-label="(t: ToggleRow) => t.name"
-            :label="g.label.name || 'Group'"
-            size="sm"
-            class="wp-tg__list"
-            @update:model-value="(v: ToggleRow[]) => reorderToggles(g, v)"
-          >
-            <template #item="{ item }">
-              <ToggleRowView
-                v-bind="rowProps(item)"
-                @set-on="(v: boolean) => setOn(item, v)"
-                @patch="(p: Partial<ToggleRow>) => patchToggle(item.id, p)"
-                @rename="(n: string) => rename(item, n)"
-                @set-var="(v: string) => setVar(item, v)"
-                @edit="toggleEdit(item)"
-                @move-group="(id: string) => moveToGroup(item, id)"
-                @remove="removeToggle(item)"
-              />
-            </template>
-          </SortableList>
-          <div v-else-if="!g.label.collapsed" class="wp-tg__ghost">Empty group: pick it in a toggle's Group field.</div>
+    <template v-for="g in groups" :key="g.label?.id ?? '__top'">
+      <!-- Clean view: plain rows, no grips. -->
+      <div v-if="!editMode" class="wp-tg__group-box">
+        <div
+          v-if="g.label"
+          class="wp-tg__label"
+          :class="`var-${g.label.color}`"
+          :data-wp-out="foldedOuts(g)"
+          :data-test="`tg-label-${g.label.id}`"
+        >
+          <WpIconButton
+            variant="bare"
+            :icon="g.label.collapsed ? 'pi-caret-right' : 'pi-caret-down'"
+            :label="g.label.collapsed ? 'Unfold' : 'Fold'"
+            :data-test="`tg-fold-${g.label.id}`"
+            @click="patchLabel(g.label.id, { collapsed: !g.label.collapsed })"
+          />
+          <span class="wp-tg__label-text">{{ g.label.name || "Group" }}</span>
+          <span class="wp-tg__rule" />
+          <span class="wp-tg__count">{{ onCount(g) }}/{{ g.toggles.length }} on</span>
         </div>
-      </template>
-    </SortableList>
+        <template v-if="!g.label?.collapsed">
+          <ToggleRowView
+            v-for="item in g.toggles"
+            :key="item.id"
+            v-bind="rowProps(item)"
+            @set-on="(v: boolean) => setOn(item, v)"
+          />
+        </template>
+      </div>
+    </template>
 
-    <div v-if="!toggles.length" class="wp-tg__ghost">No toggles yet.</div>
+    <template v-if="editMode">
+      <SortableList
+        v-if="top.toggles.length"
+        :model-value="top.toggles"
+        :item-key="(t: ToggleRow) => t.id"
+        :item-label="(t: ToggleRow) => t.name"
+        label="Toggles"
+        size="sm"
+        class="wp-tg__list"
+        @update:model-value="(v: ToggleRow[]) => reorderToggles(top, v)"
+      >
+        <template #item="{ item }">
+          <ToggleRowView
+            v-bind="rowProps(item)"
+            @set-on="(v: boolean) => setOn(item, v)"
+            @patch="(p: Partial<ToggleRow>) => patchToggle(item.id, p)"
+            @rename="(n: string) => rename(item, n)"
+            @set-var="(v: string) => setVar(item, v)"
+            @edit="toggleEdit(item)"
+            @move-group="(id: string) => moveToGroup(item, id)"
+            @remove="removeToggle(item)"
+          />
+        </template>
+      </SortableList>
 
-    <div class="wp-tg__adds">
-      <WpButton variant="add" icon="pi-plus" block data-test="tg-add" @click="addToggle">Add toggle</WpButton>
-      <WpButton variant="add" icon="pi-tag" data-test="tg-add-label" @click="addLabel">Add label</WpButton>
-    </div>
+      <SortableList
+        v-if="labelled.length"
+        :model-value="labelled"
+        :item-key="(g: LabelledGroup) => g.label.id"
+        :item-label="(g: LabelledGroup) => g.label.name || 'Group'"
+        label="Groups"
+        size="sm"
+        class="wp-tg__groups"
+        @update:model-value="reorderGroups"
+      >
+        <template #item="{ item: g }">
+          <div class="wp-tg__group-box">
+            <div
+              class="wp-tg__label"
+              :class="`var-${g.label.color}`"
+              :data-wp-out="foldedOuts(g)"
+              :data-test="`tg-label-${g.label.id}`"
+            >
+              <WpIconButton
+                variant="bare"
+                :icon="g.label.collapsed ? 'pi-caret-right' : 'pi-caret-down'"
+                :label="g.label.collapsed ? 'Unfold' : 'Fold'"
+                :data-test="`tg-fold-${g.label.id}`"
+                @click="patchLabel(g.label.id, { collapsed: !g.label.collapsed })"
+              />
+              <input
+                class="wp-tg__label-name"
+                :value="g.label.name"
+                placeholder="Group name"
+                spellcheck="false"
+                aria-label="Group name"
+                @keydown.stop
+                @change="patchLabel(g.label.id, { name: ($event.target as HTMLInputElement).value.trim() })"
+              >
+              <span class="wp-tg__rule" />
+              <span class="wp-tg__count">{{ g.toggles.length }}<template v-if="g.label.collapsed"> · {{ onCount(g) }} on</template></span>
+              <WpIconButton
+                icon="pi-palette"
+                :label="`Colour ${g.label.color} of 8`"
+                hint="Next colour"
+                :data-test="`tg-color-${g.label.id}`"
+                @click="nextColor(g.label)"
+              />
+              <WpIconButton
+                icon="pi-times"
+                tone="danger"
+                label="Remove label"
+                hint="Remove the label; its toggles join the group above"
+                :data-test="`tg-label-remove-${g.label.id}`"
+                @click="removeLabel(g.label)"
+              />
+            </div>
+            <SortableList
+              v-if="!g.label.collapsed && g.toggles.length"
+              :model-value="g.toggles"
+              :item-key="(t: ToggleRow) => t.id"
+              :item-label="(t: ToggleRow) => t.name"
+              :label="g.label.name || 'Group'"
+              size="sm"
+              class="wp-tg__list"
+              @update:model-value="(v: ToggleRow[]) => reorderToggles(g, v)"
+            >
+              <template #item="{ item }">
+                <ToggleRowView
+                  v-bind="rowProps(item)"
+                  @set-on="(v: boolean) => setOn(item, v)"
+                  @patch="(p: Partial<ToggleRow>) => patchToggle(item.id, p)"
+                  @rename="(n: string) => rename(item, n)"
+                  @set-var="(v: string) => setVar(item, v)"
+                  @edit="toggleEdit(item)"
+                  @move-group="(id: string) => moveToGroup(item, id)"
+                  @remove="removeToggle(item)"
+                />
+              </template>
+            </SortableList>
+            <div v-else-if="!g.label.collapsed" class="wp-tg__ghost">Empty group: pick it in a toggle's Group field.</div>
+          </div>
+        </template>
+      </SortableList>
+
+      <div v-if="!toggles.length" class="wp-tg__ghost">No toggles yet.</div>
+
+      <div class="wp-tg__adds">
+        <WpButton variant="add" icon="pi-plus" block data-test="tg-add" @click="addToggle">Add toggle</WpButton>
+        <WpButton variant="add" icon="pi-tag" data-test="tg-add-label" @click="addLabel">Add label</WpButton>
+      </div>
+    </template>
+    <div v-else-if="!toggles.length" class="wp-tg__ghost">No toggles yet: click the pencil to add some.</div>
   </div>
 </template>
 
@@ -397,6 +460,16 @@ function foldedOuts(g: ToggleGroup): string | undefined {
 }
 .wp-tg--skipped { opacity: 0.45; }
 .wp-tg__bar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wp-tg__bar--clean { justify-content: space-between; min-height: 20px; margin-bottom: -2px; }
+.wp-tg__spacer { flex: 1; }
+.wp-tg__mode-cap { font-size: 10.5px; color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-tg__label-text {
+  font: 600 11px var(--wp-font-sans, sans-serif);
+  padding: 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .wp-tg__group { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
 .wp-tg__group-cap { font-size: 10.5px; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-tg__group-var {
