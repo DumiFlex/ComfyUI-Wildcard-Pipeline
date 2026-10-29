@@ -318,7 +318,13 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // gzip) and icons from the full PrimeIcons list. All of it is in the note's
 // lazy chunks (NoteWidget, NotePeek, note-markdown), loaded only when a
 // note is on the canvas; boot unchanged. dev sat at ~556,000 bytes after #201, the merge at 575,436.
-const TOTAL_LIMIT = 576 * 1024;     // 576 KB
+// RAISED 576 -> 584 KB on 2026-10-29 for WP Bookmark (a frontend-only node
+// that jumps the canvas to a saved spot): its widget and the Bookmarks dock
+// are lazy chunks (~11 KB, plus the kit pieces they share), with ~5 KB of
+// boot glue for the node, the jump, the hidden filter and the one shortcut
+// listener, plus a WP Note that can be a bookmark (the shared jump fields);
+// the branch sat at 595,973 bytes after merging the WP Note editor.
+const TOTAL_LIMIT = 584 * 1024;     // 584 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

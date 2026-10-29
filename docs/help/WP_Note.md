@@ -24,6 +24,10 @@ A note that explains a workflow. It looks like a panel, not a node: no title bar
 
 Keys you type in the editor stay in the editor: Delete, Ctrl+Z and the other ComfyUI shortcuts don't reach the canvas.
 
+## Also a bookmark
+
+Turn on **Also a bookmark** at the bottom of the editor and the note joins the **Bookmarks** dock: pick where it lands on screen, its zoom and a shortcut, the same settings and clash check as a WP Bookmark. A new one gets the next free shortcut. The dock shows it in the note's colour and icon, and a small bookmark mark on the note (its tooltip names the key) says it is one. A note can't be hidden on the canvas, and muting it turns its shortcut off without fading it.
+
 ## The formatting bar
 
 | Button | Writes |

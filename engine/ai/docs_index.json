@@ -1788,6 +1788,56 @@
    ]
   },
   {
+   "id": "wp-bookmark",
+   "title": "WP Bookmark",
+   "group": "nodes",
+   "blurb": "Mark a spot on the canvas and jump back to it with a shortcut or from the Bookmarks dock.",
+   "keywords": [
+    "bookmark",
+    "jump",
+    "navigate",
+    "shortcut",
+    "zoom",
+    "dock",
+    "rgthree",
+    "hotkey"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "WP Bookmark marks a place in a big workflow. Press its shortcut, or click it in the Bookmarks dock, and the canvas glides there: the bookmark lands at the corner, edge or centre of the screen you picked, at the zoom you picked. It never runs and is left out of the prompt; its settings are saved with the workflow.\nFigure: Sampler in its one-line read view; Prompts open in the editor, where the clash check flags Ctrl+S. Screenshot of a small text-to-image graph (Positive prompt, Negative prompt and Empty Latent Image into a KSampler, then VAE Decode) with two WP Bookmark nodes. On the right, Sampler (amber title bar) shows its read view: one line with a lightning icon, Centre · 1.25×, the shortcut Alt + 1, a Go button and a pencil to edit. On the left, Prompts (green title bar) is open in its editor: a pencil icon, colour #22c55e, the name and Go; Lands at shows a 3 × 3 grid with the top-left dot picked (Top left of the screen, 24 px in); Zoom is set to Keep current; the shortcut is Ctrl + S with a lightning (suggest) and × (clear) button, under which an amber warning reads Also Save Workflow (ComfyUI); Show on canvas is on, and Done closes the editor."
+    },
+    {
+     "title": "Notes as bookmarks",
+     "text": "A WP Note can be a bookmark too: turn on Also a bookmark in its editor. It gets the same Lands at, Zoom and Shortcut settings and shows in the dock in the note's colour, but it never hides on the canvas, and muting it turns its shortcut off without fading it."
+    },
+    {
+     "title": "Read view and editor",
+     "text": "A saved bookmark shows one line: its icon, where it lands and its zoom, its shortcut (with a warning mark when something else uses it), Go and a pencil. The pencil, or a double-click on the node, opens the editor; Done closes it. A new bookmark opens in the editor."
+    },
+    {
+     "title": "When to use it",
+     "text": "Good for\n- Jumping between the prompt, the sampler and the outputs of a large graph\n- A tour of a shared workflow: step through it with Next\n- Getting back to the same view and zoom every time\nBetter with something else\n- Explaining a step to someone: a WP Note"
+    },
+    {
+     "title": "Settings",
+     "text": "Icon, colour, name\nHow the bookmark shows in the dock. The colour also tints the node's title bar.\nGo\nJump now.\nLands at\nA 3×3 grid: the corner, edge or centre of the screen the bookmark goes to, 24 px in from the edge (beside the dock while it's open).\nZoom\nSet jumps to that zoom (0.1–10×; the magnifier takes the zoom you're at). Keep current leaves it alone.\nShortcut\nRecord, then press the keys (Esc cancels, Backspace clears). The bolt picks a free one.\nShow on canvas\nOff hides the node: not drawn, not clickable, not selectable. The dock's eye shows it again.\nMuting or bypassing a bookmark turns it off: its shortcut does nothing and the dock greys it."
+    },
+    {
+     "title": "Shortcut clashes",
+     "text": "While you set a shortcut, the node lists who else uses it.\nRefused\nKeys the browser keeps: Ctrl+T, Ctrl+W, Ctrl+1–9, F5, F11 and the like.\nWarning\nA ComfyUI shortcut (yours from Settings › Keybinding included), another extension's, another WP Bookmark's, or an rgthree bookmark's in the same workflow.\nNote\nNo Ctrl or Alt: it fires whenever the canvas has focus, never while you type.\nExtensions that read keys themselves can't be seen in advance. If one takes the key first, the bookmark doesn't jump and a toast names the combo once, so you can pick another."
+    },
+    {
+     "title": "The Bookmarks dock",
+     "text": "The bookmark button in the top bar shows or hides the dock. It also opens by itself in a workflow with bookmarks, unless you closed it.\nFigure: The dock in view mode: click a row to jump. Its pencil opens edit mode, where the eye brings back a hidden bookmark. Screenshot of the Bookmarks dock, in view mode, at the top left of the canvas. Its header reads Bookmarks, 4 · 1 hidden, with Back, Previous, Next, a pencil to edit and Close. The rows show a number, a coloured icon, a name and a shortcut: 1 Prompts (Alt + 1), 2 Sampler (Alt + 2, highlighted as the bookmark just jumped to), 3 Upscale in grey italics with a small crossed-out eye because it is hidden on the canvas (Alt + 3), and 4 Save and share marked OFF because the node is muted. To the right of the dock the canvas shows the Sampler bookmark in its one-line read view (Top left · 1×, Alt + 2, Go, pencil), landed at the top left beside the dock, then the KSampler, VAE Decode and the muted Save and share bookmark (greyed, marked OFF), with the prompt and latent nodes below; the hidden Upscale bookmark is not drawn.\nRow\nClick to jump. Number, icon, name and shortcut; a mark for one hidden on the canvas or inside a subgraph, OFF for a muted one.\nBack\nReturn to where you were before the last jump.\n↑ / ↓\nStep through the bookmarks that are on, in dock order.\nPencil\nEdit mode: drag the grips to reorder, the eye shows or hides a bookmark on the canvas, the arrow moves the dock to the other side, and Bookmark this view adds one at the top-left of the screen with the zoom you're at. Done goes back.\nNext, Previous, Back, Bookmark this view and the dock toggle are commands without keys: bind them in Settings › Keybinding."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Note WP Node Group WP Toggles"
+    }
+   ]
+  },
+  {
    "id": "wp-prompt-assembler",
    "title": "WP Prompt Assembler",
    "group": "nodes",
@@ -2178,8 +2228,12 @@
      "text": "The bar writes these for you; you can also type them. A note can hold any number of links, anywhere in the text. Any other kind of link shows as plain text.\n[Read more](https://example.com)\nA link that opens in a new tab.\n[Seeds](docs:seeds-and-loops)\nA link to that page of these docs.\n[The grid](docs:wp-label-grid#s-the-grid)\nA link to one section of it.\n[Start here](docs:quick-start){button pi-play}\nThe link drawn as a button with an icon. {button} alone has no icon.\n{button pi-play #rrggbb} [Read more](https://example.com){#rrggbb}\nA button or a text link in its own colour, a hex code like the colour field shows. Without one it takes the note's.\n:pi-heart: :pi-heart:{#rrggbb}\nAn icon, optionally in a colour: a hex code like the custom colour field shows."
     },
     {
+     "title": "A note that is also a bookmark",
+     "text": "Turn on Also a bookmark at the bottom of the editor and the note joins the Bookmarks dock: pick where it lands on screen, its zoom and a shortcut, the same settings as a WP Bookmark, with the same clash check. A new one gets the next free shortcut. The dock shows it with the note's colour and icon, and a small bookmark mark on the note (its tooltip names the key) says it is one.\nFigure: A note open in its editor with Also a bookmark on, a note card with its bookmark mark, and the dock listing both next to a WP Bookmark. Screenshot of WP Notes used as bookmarks. On the left, the Bookmarks dock lists three rows: 1 Load your model (a blue bookmark icon, Alt + 1, highlighted after a jump), 2 Sampler (an amber lightning icon, Alt + 3) and 3 Label each frame (a red bookmark icon, Alt + 2). In the middle, the note Label each frame is open in its editor (Step 2, Card, colour #ef4444, its title and Markdown text); at the bottom the Also a bookmark switch is on, with the hint Jump here from the Bookmarks dock or a shortcut, and under it Lands at with the centre of a 3 × 3 grid picked (Centre of the screen, 24 px in), Zoom set to 1 ×, and the shortcut Alt + 2, then Done. On the right, the note card Load your model (step 1, blue) shows a small bookmark mark in its head next to the pencil, and below it a WP Bookmark node, Sampler, in its one-line read view: Centre · 1.25×, Alt + 3, Go and a pencil.\nUnlike a WP Bookmark, a note can't be hidden on the canvas (it is there to be read), and muting it turns its shortcut off without fading it."
+    },
+    {
      "title": "Works with",
-     "text": "Quick start WP Label & Grid"
+     "text": "Quick start WP Label & Grid WP Bookmark"
     }
    ]
   },
