@@ -9,9 +9,9 @@
  * focused one) opens its inspector.
  */
 import { computed, ref } from "vue";
-import Button from "../ui/Button.vue";
-import Icon, { ICON_SM } from "../ui/Icon.vue";
-import Toggle from "../ui/Toggle.vue";
+import Button from "../../../kit/Button.vue";
+import Icon, { ICON_SM } from "../../../kit/Icon.vue";
+import Toggle from "../../../kit/Toggle.vue";
 import ModulePicker from "./ModulePicker.vue";
 import { KIND_META } from "./kinds";
 import type { BundleRow, ModuleRow, ScenarioStackItem } from "../../api/types";

@@ -11,7 +11,7 @@
  *     `shared/kind-icons`) + the matching `.wp-row-type-icon--{slug}`
  *     tint variant in `shared/row-primitives.css`.
  *   - `showId` opt-in renders the short 8-hex id via the global `.wp-id`
- *     primitive (`manager/styles/tokens.css`).
+ *     primitive (`kit/theme/tokens.css`).
  *   - `categoryName` + `categoryColor` render the kit Chip with its
  *     `color` tint (the same pill every list view uses for a category).
  *   - `statusBadges` render through the shared `.wp-mod-badge` family
@@ -26,9 +26,9 @@
  * bundle row gets `indent=1`); each level adds 16px of left padding.
  */
 import { computed, ref, useId } from "vue";
-import Checkbox from "../components/ui/Checkbox.vue";
+import Checkbox from "../../kit/Checkbox.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
-import Chip from "../components/ui/Chip.vue";
+import Chip from "../../kit/Chip.vue";
 
 /**
  * Status-badge taxonomy — six variants paired 1:1 with
@@ -424,7 +424,7 @@ function onRowClick(ev: MouseEvent): void {
 .wp-row-name {
   /* Explicit flex-direction: row to override the global
    * `.wp-row-name { flex-direction: column }` from
-   * manager/styles/tokens.css:1002. The picker row's name + id pair
+   * kit/theme/tokens.css:1002. The picker row's name + id pair
    * sits horizontally on a shared baseline. */
   display: flex;
   flex-direction: row;

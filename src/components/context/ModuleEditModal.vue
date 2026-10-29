@@ -10,7 +10,7 @@ import {
 } from "./editors/_shell";
 import { setLibraryHash } from "./drift-store";
 import { pushToast } from "../shared/toast-store";
-import ConfirmDialog from "../shared/ConfirmDialog.vue";
+import ConfirmDialog from "../../kit/ConfirmDialog.vue";
 import WpButton from "../../kit/WpButton.vue";
 import PushToLibraryModal from "./PushToLibraryModal.vue";
 import WildcardInstanceModal from "./editors/wildcard/WildcardInstanceModal.vue";

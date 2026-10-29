@@ -5,8 +5,8 @@
  * with "Fix with AI".
  */
 import { computed } from "vue";
-import Button from "../ui/Button.vue";
-import Checkbox from "../ui/Checkbox.vue";
+import Button from "../../../kit/Button.vue";
+import Checkbox from "../../../kit/Checkbox.vue";
 import type { AiPackFinding } from "../../api/types";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 

@@ -6,7 +6,7 @@
  * item; remove and restore stay one click.
  */
 import { computed, ref } from "vue";
-import Button from "../ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 import PackItemEditor from "./PackItemEditor.vue";
 import type { AiPackItem, AiPackKind } from "../../api/types";
 import { usePackBuilder } from "../../composables/usePackBuilder";

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import CloseButton from "@/kit/CloseButton.vue";
+import CloseButton from "./CloseButton.vue";
 import { computed, ref, useId, useSlots } from "vue";
-import { useDialogFocus } from "@/kit/useDialogFocus";
+import { useDialogFocus } from "./useDialogFocus";
 
 interface Props {
   open: boolean;

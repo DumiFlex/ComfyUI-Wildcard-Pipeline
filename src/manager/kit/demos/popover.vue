@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Button from "../../components/ui/Button.vue";
-import Checkbox from "../../components/ui/Checkbox.vue";
+import Button from "../../../kit/Button.vue";
+import Checkbox from "../../../kit/Checkbox.vue";
 import Popover from "@/kit/Popover.vue";
 
 const open = ref(false);

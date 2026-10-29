@@ -10,15 +10,15 @@
  */
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import Button from "../components/ui/Button.vue";
-import Chip from "../components/ui/Chip.vue";
-import DataTable, { type DataColumn, type DataSort } from "../components/ui/DataTable.vue";
-import EmptyState from "../components/ui/EmptyState.vue";
-import Input from "../components/ui/Input.vue";
-import ConfirmModal from "../components/ui/ConfirmModal.vue";
+import Button from "../../kit/Button.vue";
+import Chip from "../../kit/Chip.vue";
+import DataTable, { type DataColumn, type DataSort } from "../../kit/DataTable.vue";
+import EmptyState from "../../kit/EmptyState.vue";
+import Input from "../../kit/Input.vue";
+import ConfirmModal from "../../kit/ConfirmModal.vue";
 import { api, ApiError } from "../api/client";
 import type { LibraryTagUpdateCounts } from "../api/types";
-import { useToast } from "../composables/useToast";
+import { useToast } from "../../kit/useToast";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";

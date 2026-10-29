@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import Field from "../../components/ui/Field.vue";
+import Field from "../Field.vue";
 
 describe("Field.vue", () => {
   it("renders label and forwards default slot", () => {

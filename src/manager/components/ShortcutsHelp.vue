@@ -13,7 +13,7 @@
  */
 import Kbd from "@/kit/Kbd.vue";
 import { computed } from "vue";
-import Modal from "./ui/Modal.vue";
+import Modal from "../../kit/Modal.vue";
 
 interface Props {
   open: boolean;

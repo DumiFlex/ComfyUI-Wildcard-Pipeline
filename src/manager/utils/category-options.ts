@@ -12,7 +12,7 @@
  * the category). That is the only parameter.
  */
 import type { CategoryRow } from "../api/types";
-import type { SelectOption } from "../components/ui/select-types";
+import type { SelectOption } from "../../kit/select-types";
 
 /** Category rows as the store holds them. Typed loosely so callers can pass
  *  the store's items without a cast, and so a caller holding a lighter row

@@ -21,7 +21,7 @@ vi.mock("../api/client", () => ({
 
 import { api } from "../api/client";
 import Categories from "../views/Categories.vue";
-import ConfirmModal from "../components/ui/ConfirmModal.vue";
+import ConfirmModal from "../../kit/ConfirmModal.vue";
 
 const apiCat = api.categories as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const apiMod = api.modules as unknown as Record<string, ReturnType<typeof vi.fn>>;

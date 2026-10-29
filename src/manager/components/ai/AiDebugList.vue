@@ -7,7 +7,7 @@
  */
 import CloseButton from "@/kit/CloseButton.vue";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
-import Button from "../ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 import {
   aiDebugSent, aiDebugUnseen, clearAiDebug, fetchAiDebug, listAiDebug, type AiDebugRow,
 } from "../../api/ai-debug";

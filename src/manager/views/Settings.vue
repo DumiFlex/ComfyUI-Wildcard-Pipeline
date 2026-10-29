@@ -12,7 +12,7 @@
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, ref, watch, type Component } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import Icon from "../components/ui/Icon.vue";
+import Icon from "../../kit/Icon.vue";
 import GeneralSection from "../components/settings/sections/GeneralSection.vue";
 import AppearanceSection from "../components/settings/sections/AppearanceSection.vue";
 import EditingSection from "../components/settings/sections/EditingSection.vue";

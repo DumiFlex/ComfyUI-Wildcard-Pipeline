@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import ChoiceCards, { type ChoiceCardOption } from "../../components/ui/ChoiceCards.vue";
+import ChoiceCards, { type ChoiceCardOption } from "../../../kit/ChoiceCards.vue";
 
 type Layout = "list" | "grid" | "board";
 const layout = ref<Layout>("grid");

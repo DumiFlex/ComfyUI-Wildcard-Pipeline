@@ -18,12 +18,12 @@
  */
 import { computed, onMounted, ref, watch } from "vue";
 import { api } from "../api/client";
-import Button from "../components/ui/Button.vue";
-import Checkbox from "../components/ui/Checkbox.vue";
-import Field from "../components/ui/Field.vue";
-import Input from "../components/ui/Input.vue";
-import Select from "../components/ui/Select.vue";
-import type { SelectOption } from "../components/ui/select-types";
+import Button from "../../kit/Button.vue";
+import Checkbox from "../../kit/Checkbox.vue";
+import Field from "../../kit/Field.vue";
+import Input from "../../kit/Input.vue";
+import Select from "../../kit/Select.vue";
+import type { SelectOption } from "../../kit/select-types";
 import SearchInput from "@/kit/SearchInput.vue";
 import { type IntegrityWarning } from "./parse";
 import { parseCheckedPayload } from "./shape-check";

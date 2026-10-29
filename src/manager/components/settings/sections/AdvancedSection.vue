@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
-import Button from "../../ui/Button.vue";
+import Button from "../../../../kit/Button.vue";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import BrowserPrefsCard from "../BrowserPrefsCard.vue";
-import { useToast } from "../../../composables/useToast";
+import { useToast } from "../../../../kit/useToast";
 import {
   SettingsFileError,
   applySettingsFile,

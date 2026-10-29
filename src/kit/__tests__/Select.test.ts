@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import { afterEach, describe, expect, it } from "vitest";
-import Select from "../../components/ui/Select.vue";
+import Select from "../Select.vue";
 
 const opts = [
   { value: "a", label: "Alpha" },

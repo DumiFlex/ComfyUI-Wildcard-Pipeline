@@ -6,7 +6,7 @@ import AppSidebar from "./AppSidebar.vue";
 import StaleBanner from "../components/StaleBanner.vue";
 import { usePageWidth } from "../composables/usePageWidth";
 import ErrorBoundary from "../components/ErrorBoundary.vue";
-import ToastHost from "../components/ui/ToastHost.vue";
+import ToastHost from "../../kit/ToastHost.vue";
 import TweaksPanel from "../components/TweaksPanel.vue";
 import FeedbackModal from "../components/FeedbackModal.vue";
 import CommandPalette from "../components/CommandPalette.vue";

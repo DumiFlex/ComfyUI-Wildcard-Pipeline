@@ -2,9 +2,9 @@
 import CloseButton from "@/kit/CloseButton.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import Button from "../components/ui/Button.vue";
+import Button from "../../kit/Button.vue";
 import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
-import { useToast } from "../composables/useToast";
+import { useToast } from "../../kit/useToast";
 import { useAiChat } from "../composables/useAiChat";
 import { useAiConfig } from "../composables/useAiConfig";
 import { committedWildcardNames, upgradeAsk } from "../import-export/ai-upgrade";

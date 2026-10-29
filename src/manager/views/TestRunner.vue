@@ -12,8 +12,8 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import Button from "../components/ui/Button.vue";
-import Icon, { ICON_SM } from "../components/ui/Icon.vue";
+import Button from "../../kit/Button.vue";
+import Icon, { ICON_SM } from "../../kit/Icon.vue";
 import ScenarioRail from "../components/test-runner/ScenarioRail.vue";
 import StackBuilder from "../components/test-runner/StackBuilder.vue";
 import SeedControl from "../components/test-runner/SeedControl.vue";
@@ -31,7 +31,7 @@ import { useScenarioWorkbench } from "../composables/useScenarioWorkbench";
 import { currentPageNote, registerPageNote } from "../composables/useOpenEditor";
 import { registerAiAction } from "../composables/useAiActions";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
-import ConfirmModal from "../components/ui/ConfirmModal.vue";
+import ConfirmModal from "../../kit/ConfirmModal.vue";
 import { buildUuidToName } from "../utils/wildcardSyntax";
 import { seedLabel } from "../utils/scenario";
 import { inspectItem } from "../utils/inspect";

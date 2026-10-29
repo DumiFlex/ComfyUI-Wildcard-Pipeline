@@ -21,7 +21,7 @@ describe("theme audit", () => {
     // Files whose corners are not the manager look's on purpose: the look
     // sheet itself, the look/palette previews, and the canvas colour sheet.
     const EXEMPT = new Set([
-      "src/manager/styles/looks.css",
+      "src/kit/theme/looks.css",
       "src/manager/components/settings/ThemeChoices.vue",
       "src/components/shared/theme.css",
     ]);
@@ -56,7 +56,7 @@ describe("theme audit", () => {
       ...globSync("src/manager/**/*.{vue,css}", { cwd: ROOT }),
       ...globSync("src/components/shared/**/*.{vue,css}", { cwd: ROOT }),
       ...globSync("src/kit/**/*.{vue,css}", { cwd: ROOT }),
-    ].filter((f) => !f.split("\\").join("/").endsWith("styles/looks.css"));
+    ].filter((f) => !f.split("\\").join("/").endsWith("theme/looks.css"));
     const bad = [];
     for (const f of files) {
       const lines = readFileSync(join(ROOT, f), "utf8").split("\n");

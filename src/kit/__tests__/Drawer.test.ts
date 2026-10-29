@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import { defineComponent, h, nextTick, ref } from "vue";
-import Drawer from "../../components/ui/Drawer.vue";
+import Drawer from "../Drawer.vue";
 
 function host(modal = true) {
   return defineComponent({

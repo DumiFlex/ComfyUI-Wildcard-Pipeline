@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useToast } from "../../composables/useToast";
+import { useToast } from "../useToast";
 
 describe("useToast", () => {
   beforeEach(() => {

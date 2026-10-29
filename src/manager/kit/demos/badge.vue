@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Badge from "@/kit/Badge.vue";
-import Button from "../../components/ui/Button.vue";
-import Icon from "../../components/ui/Icon.vue";
+import Button from "../../../kit/Button.vue";
+import Icon from "../../../kit/Icon.vue";
 </script>
 
 <template>

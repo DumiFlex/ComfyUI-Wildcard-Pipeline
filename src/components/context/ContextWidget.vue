@@ -82,7 +82,7 @@ import {
   isMissingFromLibrary,
   isTypeConflict,
 } from "./library-status";
-import ConfirmDialog from "../shared/ConfirmDialog.vue";
+import ConfirmDialog from "../../kit/ConfirmDialog.vue";
 import ContextRecoveryPanel from "./ContextRecoveryPanel.vue";
 import ContextToolbar from "./ContextToolbar.vue";
 import ContextAddActions from "./ContextAddActions.vue";

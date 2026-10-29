@@ -6,7 +6,7 @@
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import ExceptionsSection from "./ExceptionsSection.vue";
-import Select from "../../../../../manager/components/ui/Select.vue";
+import Select from "../../../../../kit/Select.vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 
 function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {

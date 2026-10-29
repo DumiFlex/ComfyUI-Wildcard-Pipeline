@@ -8,8 +8,8 @@
 import CloseButton from "@/kit/CloseButton.vue";
 import CodeBlock from "@/kit/CodeBlock.vue";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import Button from "../ui/Button.vue";
-import DataTable, { type DataColumn, type DataSort } from "../ui/DataTable.vue";
+import Button from "../../../kit/Button.vue";
+import DataTable, { type DataColumn, type DataSort } from "../../../kit/DataTable.vue";
 import { KIND_META } from "./kinds";
 import type { Distribution, Inspect, WildcardOptionRow } from "../../utils/inspect";
 import type { StackItemView, StackKind } from "../../utils/scenario";

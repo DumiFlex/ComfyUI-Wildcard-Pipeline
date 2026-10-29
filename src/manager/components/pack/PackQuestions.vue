@@ -6,7 +6,7 @@
  * never asks about again, and it comes back with the next round (or none).
  */
 import { computed } from "vue";
-import Button from "../ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 import { pickAnswer, usePackBuilder } from "../../composables/usePackBuilder";
 import { autogrow } from "../../utils/autogrow";
 import type { AiPackQuestion } from "../../api/types";

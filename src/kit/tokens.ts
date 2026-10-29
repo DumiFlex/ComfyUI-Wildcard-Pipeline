@@ -1,9 +1,14 @@
-// The CSS custom properties a kit piece may read. Every app that uses the kit
-// (the extension's canvas theme and manager, the community site) defines all
-// of SHARED_TOKENS, so a piece wears whichever side's colours it sits on.
-// tokens.test.ts fails when a piece reads a name that is not listed here.
+// The CSS custom properties a kit piece may read.
 //
-// Add a name only once every host defines it (docs/tokens.md).
+// Most pieces also run on the ComfyUI canvas, whose colour sheet is the
+// extension's own (components/shared/theme.css), not src/theme/. Those pieces
+// read only SHARED_TOKENS, which every host defines, so a piece wears
+// whichever side's colours it sits on. The pieces in PAGE_PIECES only run on
+// pages that load src/theme/tokens.css (the manager, the community site, the
+// kit site), so they may read any name that sheet defines.
+// tokens.test.ts holds both rules.
+//
+// Add a shared name only once every host defines it (docs/tokens.md).
 
 export const SHARED_TOKENS = [
   // Surfaces and text
@@ -40,4 +45,11 @@ export const SHARED_TOKENS = [
 export const OPTIONAL_TOKENS = ["--wp-bg-deep", "--wp-bg2"] as const;
 
 /** Set by the piece itself, on its own root, not by the host. */
-export const LOCAL_TOKENS = ["--wp-hsv-hue", "--wp-lm-t"] as const;
+export const LOCAL_TOKENS = ["--wp-hsv-hue", "--wp-lm-t", "--wp-select-line-h"] as const;
+
+/** Pieces that need a page with src/theme/ loaded (not the canvas). */
+export const PAGE_PIECES = [
+  "Button.vue", "Card.vue", "Checkbox.vue", "Chip.vue", "ChoiceCards.vue", "ColorPicker.vue", "ConfirmModal.vue",
+  "DataTable.vue", "Drawer.vue", "EmptyState.vue", "Field.vue", "Icon.vue", "IconPicker.vue", "Input.vue",
+  "ListFilter.vue", "Modal.vue", "RelativeDate.vue", "Select.vue", "Textarea.vue", "ToastHost.vue", "Toggle.vue",
+] as const;

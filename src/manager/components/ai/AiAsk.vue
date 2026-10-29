@@ -12,7 +12,7 @@
  * reads the labels from the call it stored.
  */
 import { computed, nextTick, ref } from "vue";
-import Button from "../ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 import type { AiAskAnswer, AiAskAnswered, AiAskQuestion } from "../../api/types";
 
 const props = defineProps<{

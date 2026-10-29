@@ -10,8 +10,8 @@
  * the transitions and the API call. This component is presentation-only.
  */
 import { computed } from "vue";
-import Button from "../ui/Button.vue";
-import Modal from "../ui/Modal.vue";
+import Button from "../../../kit/Button.vue";
+import Modal from "../../../kit/Modal.vue";
 import type { MaintenanceOp, MaintenanceResult } from "../../api/types";
 import LoadingMark from "@/kit/LoadingMark.vue";
 import CodeBlock from "@/kit/CodeBlock.vue";

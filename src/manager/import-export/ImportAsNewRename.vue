@@ -36,7 +36,7 @@
  * accepts.
  */
 import { ref } from "vue";
-import Button from "../components/ui/Button.vue";
+import Button from "../../kit/Button.vue";
 import { newShortId } from "../utils/ids";
 
 interface Props {

@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import Chip from "../../components/ui/Chip.vue";
+import Chip from "../Chip.vue";
 
 describe("Chip.vue", () => {
   it("emits remove when close button clicked", async () => {

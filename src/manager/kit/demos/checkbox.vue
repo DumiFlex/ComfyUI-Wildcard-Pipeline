@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Checkbox from "../../components/ui/Checkbox.vue";
+import Checkbox from "../../../kit/Checkbox.vue";
 
 const picked = ref(true);
 const unpicked = ref(false);

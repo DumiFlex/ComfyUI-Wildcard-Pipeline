@@ -12,7 +12,7 @@
  */
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import Button from "./ui/Button.vue";
+import Button from "../../kit/Button.vue";
 import { api } from "../api/client";
 
 /** The Test Runner's selectable kinds — module types plus the bundle pseudo-kind. */

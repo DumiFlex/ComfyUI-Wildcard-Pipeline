@@ -8,8 +8,8 @@
  * plan request; no model involved.
  */
 import WpNumber from "@/kit/WpNumber.vue";
-import Select from "../ui/Select.vue";
-import type { SelectOption } from "../ui/select-types";
+import Select from "../../../kit/Select.vue";
+import type { SelectOption } from "../../../kit/select-types";
 import type { AiPackSettings } from "../../api/types";
 import { FIELDS, type Field } from "./pack-settings-fields";
 

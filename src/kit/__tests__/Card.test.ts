@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import Card from "../../components/ui/Card.vue";
+import Card from "../Card.vue";
 
 describe("Card.vue", () => {
   it("renders title and actions slot", () => {

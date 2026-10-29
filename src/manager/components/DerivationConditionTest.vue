@@ -14,7 +14,7 @@
  */
 import { computed } from "vue";
 import RichTextInput from "./RichTextInput.vue";
-import Select from "./ui/Select.vue";
+import Select from "../../kit/Select.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import VarAutocompleteInput from "./VarAutocompleteInput.vue";
 import type { VarProducerLike } from "./RefChip.vue";

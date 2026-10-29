@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import Textarea from "../../components/ui/Textarea.vue";
+import Textarea from "../Textarea.vue";
 
 describe("Textarea.vue", () => {
   it("two-way binds via v-model", async () => {

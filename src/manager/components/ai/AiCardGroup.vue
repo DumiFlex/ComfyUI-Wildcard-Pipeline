@@ -13,8 +13,8 @@
  * exactly what pressing each Apply in turn would.
  */
 import { computed, ref } from "vue";
-import Button from "../ui/Button.vue";
-import Checkbox from "../ui/Checkbox.vue";
+import Button from "../../../kit/Button.vue";
+import Checkbox from "../../../kit/Checkbox.vue";
 import type { AiChatProposal } from "../../api/types";
 import { useAiChat, type ChatAssistantEntry } from "../../composables/useAiChat";
 import { groupTitle, type CardGroup } from "../../utils/card-groups";

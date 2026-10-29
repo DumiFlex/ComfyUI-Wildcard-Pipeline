@@ -28,7 +28,7 @@
  * query it (`wrap.find("textarea")`).
  */
 import { computed, ref } from "vue";
-import Button from "../components/ui/Button.vue";
+import Button from "../../kit/Button.vue";
 import { type IntegrityWarning } from "./parse";
 import { parseCheckedPayload } from "./shape-check";
 import type { RawPayload } from "./migrations";

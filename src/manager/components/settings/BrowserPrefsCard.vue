@@ -5,9 +5,9 @@
  * fixes the dot-prefix bug (wp.releaseCheck used to survive).
  */
 import { ref } from "vue";
-import Button from "../ui/Button.vue";
-import Card from "../ui/Card.vue";
-import ConfirmModal from "../ui/ConfirmModal.vue";
+import Button from "../../../kit/Button.vue";
+import Card from "../../../kit/Card.vue";
+import ConfirmModal from "../../../kit/ConfirmModal.vue";
 
 interface ResetItem {
   label: string;

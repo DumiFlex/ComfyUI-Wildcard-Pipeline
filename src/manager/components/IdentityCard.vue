@@ -11,14 +11,14 @@
  * The parent owns the values; this component is dumb and emits patches.
  */
 import { computed, nextTick, ref, watch } from "vue";
-import Card from "./ui/Card.vue";
-import Field from "./ui/Field.vue";
-import Input from "./ui/Input.vue";
-import Textarea from "./ui/Textarea.vue";
-import Select, { type SelectOption } from "./ui/Select.vue";
-import Chip from "./ui/Chip.vue";
-import Button from "./ui/Button.vue";
-import Toggle from "./ui/Toggle.vue";
+import Card from "../../kit/Card.vue";
+import Field from "../../kit/Field.vue";
+import Input from "../../kit/Input.vue";
+import Textarea from "../../kit/Textarea.vue";
+import Select, { type SelectOption } from "../../kit/Select.vue";
+import Chip from "../../kit/Chip.vue";
+import Button from "../../kit/Button.vue";
+import Toggle from "../../kit/Toggle.vue";
 import { useCategoryStore } from "../stores/categoryStore";
 import { categorySelectOptions } from "../utils/category-options";
 import { toIdentifier } from "../utils/slug";

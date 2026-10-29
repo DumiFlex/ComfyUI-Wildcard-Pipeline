@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import Checkbox from "../../components/ui/Checkbox.vue";
+import Checkbox from "../Checkbox.vue";
 
 describe("Checkbox.vue", () => {
   it("toggles modelValue when clicked", async () => {

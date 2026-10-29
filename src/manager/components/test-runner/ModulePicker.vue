@@ -9,7 +9,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import type { BundleRow, ModuleRow, ScenarioStackItem } from "../../api/types";
 import { moduleBinding, searchText, type StackKind } from "../../utils/scenario";
 import { KIND_META } from "./kinds";
-import Select from "../ui/Select.vue";
+import Select from "../../../kit/Select.vue";
 
 const props = defineProps<{
   modules: ModuleRow[];

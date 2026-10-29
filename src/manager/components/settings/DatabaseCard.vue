@@ -8,11 +8,11 @@
  * lives beside this card on the Library & data section.
  */
 import { computed, onMounted, ref } from "vue";
-import Button from "../ui/Button.vue";
-import Card from "../ui/Card.vue";
-import Icon from "../ui/Icon.vue";
+import Button from "../../../kit/Button.vue";
+import Card from "../../../kit/Card.vue";
+import Icon from "../../../kit/Icon.vue";
 import MaintenanceOpModal from "./MaintenanceOpModal.vue";
-import ConfirmModal from "../ui/ConfirmModal.vue";
+import ConfirmModal from "../../../kit/ConfirmModal.vue";
 import { useDatabaseStore } from "../../stores/databaseStore";
 import { useSystemStore } from "../../stores/systemStore";
 import type { MaintenanceOp, MaintenanceResult } from "../../api/types";

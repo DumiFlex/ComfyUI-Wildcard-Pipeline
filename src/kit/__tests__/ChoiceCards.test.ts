@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import ChoiceCards from "../components/ui/ChoiceCards.vue";
+import ChoiceCards from "../ChoiceCards.vue";
 
 const OPTIONS = [
   { value: "a", label: "Alpha", hint: "First." },

@@ -22,12 +22,12 @@
  *   5. Show success toast: "Restart ComfyUI to apply changes."
  */
 import { computed, ref, watch } from "vue";
-import Button from "../ui/Button.vue";
-import Icon from "../ui/Icon.vue";
-import Modal from "../ui/Modal.vue";
+import Button from "../../../kit/Button.vue";
+import Icon from "../../../kit/Icon.vue";
+import Modal from "../../../kit/Modal.vue";
 import { useDatabaseStore } from "../../stores/databaseStore";
 import { useSystemStore } from "../../stores/systemStore";
-import { useToast } from "../../composables/useToast";
+import { useToast } from "../../../kit/useToast";
 import type { DatabasePreference, MoveMode } from "../../api/types";
 
 const store = useDatabaseStore();

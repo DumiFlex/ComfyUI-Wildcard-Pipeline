@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Button from "../../components/ui/Button.vue";
-import Field from "../../components/ui/Field.vue";
-import Input from "../../components/ui/Input.vue";
-import Modal from "../../components/ui/Modal.vue";
+import Button from "../../../kit/Button.vue";
+import Field from "../../../kit/Field.vue";
+import Input from "../../../kit/Input.vue";
+import Modal from "../../../kit/Modal.vue";
 
 const name = ref("Hair colour");
 const modalOpen = ref(false);

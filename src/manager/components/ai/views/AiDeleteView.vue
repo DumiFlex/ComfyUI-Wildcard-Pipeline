@@ -8,7 +8,7 @@
 import { computed } from "vue";
 import type { CardView } from "../../../composables/card-views/types";
 import { kindIcon } from "../../../../components/shared/kind-icons";
-import Chip from "../../ui/Chip.vue";
+import Chip from "../../../../kit/Chip.vue";
 
 type View = Extract<CardView, { kind: "delete" }>;
 const props = defineProps<{ view: View; full?: boolean }>();

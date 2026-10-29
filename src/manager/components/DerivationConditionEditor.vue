@@ -16,7 +16,7 @@
  * A nested group that loses its last member asks its parent to drop it.
  */
 import { computed } from "vue";
-import Button from "./ui/Button.vue";
+import Button from "../../kit/Button.vue";
 import DerivationConditionTest from "./DerivationConditionTest.vue";
 import type { VarProducerLike } from "./RefChip.vue";
 import type {

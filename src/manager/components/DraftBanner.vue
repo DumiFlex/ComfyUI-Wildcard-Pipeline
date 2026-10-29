@@ -9,7 +9,7 @@
  * Drawn by the kit Banner (tone info).
  */
 import Banner from "@/kit/Banner.vue";
-import Button from "./ui/Button.vue";
+import Button from "../../kit/Button.vue";
 import { formatDraftAge } from "../composables/useEditorDraft";
 
 interface Props {

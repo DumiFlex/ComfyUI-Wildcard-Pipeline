@@ -18,14 +18,14 @@
  */
 import { computed, onMounted } from "vue";
 
-import Card from "../components/ui/Card.vue";
-import Icon from "../components/ui/Icon.vue";
-import Button from "../components/ui/Button.vue";
+import Card from "../../kit/Card.vue";
+import Icon from "../../kit/Icon.vue";
+import Button from "../../kit/Button.vue";
 import { semverCompare, useReleaseCheck } from "../composables/useReleaseCheck";
 import { useEngagementStore } from "../stores/engagementStore";
 import { renderReleaseNotes } from "../utils/releaseNotes";
 import { GITHUB_REPO } from "../config/links";
-import RelativeDate from "../components/RelativeDate.vue";
+import RelativeDate from "../../kit/RelativeDate.vue";
 
 const release = useReleaseCheck();
 const engagement = useEngagementStore();

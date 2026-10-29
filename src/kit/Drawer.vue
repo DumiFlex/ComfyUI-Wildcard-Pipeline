@@ -5,9 +5,9 @@
  * Tab stays inside it and focus goes back where it was. With `modal` off
  * there is no backdrop, Tab moves on to the page and the page stays usable.
  */
-import CloseButton from "@/kit/CloseButton.vue";
+import CloseButton from "./CloseButton.vue";
 import { ref, useId, useSlots } from "vue";
-import { useDialogFocus } from "@/kit/useDialogFocus";
+import { useDialogFocus } from "./useDialogFocus";
 
 interface Props {
   open: boolean;

@@ -22,7 +22,7 @@ import { useRouter } from "vue-router";
 import { api } from "../api/client";
 import type { ModuleRow } from "../api/types";
 import { useCascadeStore } from "../cascade/cascade-store";
-import { useToast } from "../composables/useToast";
+import { useToast } from "../../kit/useToast";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useModuleStore } from "../stores/moduleStore";

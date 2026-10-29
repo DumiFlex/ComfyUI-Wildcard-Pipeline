@@ -6,8 +6,8 @@
  * Its buttons are the card's own (the drawer handles them).
  */
 import { computed } from "vue";
-import Modal from "../ui/Modal.vue";
-import Button from "../ui/Button.vue";
+import Modal from "../../../kit/Modal.vue";
+import Button from "../../../kit/Button.vue";
 import AiCardView from "./AiCardView.vue";
 import AiTestCard from "./AiTestCard.vue";
 import AiSyntax from "./AiSyntax.vue";

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import ListFilter from "../../components/ui/ListFilter.vue";
+import ListFilter from "../../../kit/ListFilter.vue";
 
 const query = ref("");
 const rules = ["when $mood is dramatic", "when $mood is calm", "when $weather is rain", "when $time is night", "otherwise"];

@@ -15,7 +15,7 @@
  * asserting directly rather than through a mounted component.
  */
 import { entitySubtitle, type SubtitleModuleLike } from "../import-export/picker-subtitle";
-import type { SelectOption } from "../components/ui/select-types";
+import type { SelectOption } from "../../kit/select-types";
 
 /** The subset of `ModuleRow` / `BundleRow` this needs. Loose so both fit
  *  without a cast, and so a caller holding a lighter row still works. */

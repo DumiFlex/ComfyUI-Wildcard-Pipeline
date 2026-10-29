@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import Toggle from "../../ui/Toggle.vue";
-import Button from "../../ui/Button.vue";
+import Toggle from "../../../../kit/Toggle.vue";
+import Button from "../../../../kit/Button.vue";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { useUiStore } from "../../../stores/uiStore";

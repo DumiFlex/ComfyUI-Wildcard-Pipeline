@@ -44,7 +44,7 @@ export const KIT_GROUPS: { id: KitGroup; label: string; blurb: string }[] = [
 export const KIT_ENTRIES: KitEntry[] = [
   // Actions
   {
-    id: "button", name: "Button", group: "actions", file: "src/manager/components/ui/Button.vue", surfaces: ["manager"],
+    id: "button", name: "Button", group: "actions", file: "src/kit/Button.vue", surfaces: ["manager"],
     use: "Every button in the manager. Primary for the one main action on a surface, secondary by default, ghost for quiet toolbar actions, danger for deletes, link for inline actions, add for the dashed \"Add a row\" button at the end of a list (with block for full width). Leave out the text for an icon button and give it an aria-label. pressed makes it a toggle. Sizes sm 24 / md 32 / lg 40; outline is a neutral bordered ghost; loading keeps its colours with the sparkle in the label colour; disabled fades.",
     instead: "A <button> with its own class and colours.",
   },
@@ -79,21 +79,21 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   // Inputs
   {
-    id: "input", name: "Input", group: "inputs", file: "src/manager/components/ui/Input.vue", surfaces: ["manager"],
+    id: "input", name: "Input", group: "inputs", file: "src/kit/Input.vue", surfaces: ["manager"],
     use: "One-line text in the manager, on the 24/32/40 scale (size sm/md/lg). Optional inline icon, a prefix like $ for variable names, a suffix like a unit, and a readonly look (dashed, dimmer, lock). Numbers use WpNumber, searches SearchInput.",
     instead: "A bare <input> with its own border and focus ring.",
   },
   {
-    id: "textarea", name: "Textarea", group: "inputs", file: "src/manager/components/ui/Textarea.vue", surfaces: ["manager"],
+    id: "textarea", name: "Textarea", group: "inputs", file: "src/kit/Textarea.vue", surfaces: ["manager"],
     use: "Several lines of plain text. Turn on autoResize when the box should grow with its text. Prompt text with $variables uses RichTextInput instead.",
   },
   {
-    id: "field", name: "Field", group: "inputs", file: "src/manager/components/ui/Field.vue", surfaces: ["manager"],
+    id: "field", name: "Field", group: "inputs", file: "src/kit/Field.vue", surfaces: ["manager"],
     use: "A label, a hint and an error around any control, so they line up the same everywhere.",
     instead: "A <label> and a <p class=\"hint\"> written per form.",
   },
   {
-    id: "select", name: "Select", group: "inputs", file: "src/manager/components/ui/Select.vue", surfaces: ["manager"],
+    id: "select", name: "Select", group: "inputs", file: "src/kit/Select.vue", surfaces: ["manager"],
     use: "Pick one value from a list in the manager. It filters as you type and can be cleared (the ✕ shows on hover or focus, set apart from the chevron). The list follows the field when the page scrolls.",
     instead: "A native <select>, which can't be themed in the dark.",
   },
@@ -112,7 +112,7 @@ export const KIT_ENTRIES: KitEntry[] = [
     instead: "PickerSearch, Input with a search icon, or a hand-made box with its own icon and clear button.",
   },
   {
-    id: "list-filter", name: "ListFilter", group: "inputs", file: "src/manager/components/ui/ListFilter.vue", surfaces: ["manager"],
+    id: "list-filter", name: "ListFilter", group: "inputs", file: "src/kit/ListFilter.vue", surfaces: ["manager"],
     use: "SearchInput for a long list inside an editor card: the count sits in the box, and it hides itself while the list is short.",
     instead: "Another search box with its own icon and count.",
   },
@@ -137,7 +137,7 @@ export const KIT_ENTRIES: KitEntry[] = [
     instead: "dragover and drop handlers on a div, with a hidden file input and its own highlight.",
   },
   {
-    id: "color-picker", name: "ColorPicker", group: "inputs", file: "src/manager/components/ColorPicker.vue", surfaces: ["manager"],
+    id: "color-picker", name: "ColorPicker", group: "inputs", file: "src/kit/ColorPicker.vue", surfaces: ["manager"],
     use: "Pick a colour from presets, the HSV square or a typed hex, as categories do. The closed picker shows the swatch, the hex and a chevron (`compact`: swatch and chevron only, for a name row); the panel is a kit Popover.",
   },
   {
@@ -166,7 +166,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   // Choice
   {
-    id: "checkbox", name: "Checkbox", group: "choice", file: "src/manager/components/ui/Checkbox.vue", surfaces: ["manager"],
+    id: "checkbox", name: "Checkbox", group: "choice", file: "src/kit/Checkbox.vue", surfaces: ["manager"],
     use: "Tick one item, or one row in a list. Supports a mixed state for \"some selected\". Disabled turns grey with a dimmed label. `field` draws it as an input-height box for a yes/no filter beside dropdowns (Favorites only).",
     instead: "<input type=\"checkbox\"> drawn by the browser.",
   },
@@ -175,7 +175,7 @@ export const KIT_ENTRIES: KitEntry[] = [
     use: "The checkbox for canvas widgets.",
   },
   {
-    id: "toggle", name: "Toggle", group: "choice", file: "src/manager/components/ui/Toggle.vue", surfaces: ["manager"],
+    id: "toggle", name: "Toggle", group: "choice", file: "src/kit/Toggle.vue", surfaces: ["manager"],
     use: "A setting that takes effect at once (on or off). Use a Checkbox when the choice is saved later with a button. It is WpSwitch at the manager size.",
   },
   {
@@ -184,7 +184,7 @@ export const KIT_ENTRIES: KitEntry[] = [
     instead: "A button with role=\"switch\" and its own toggle--on class.",
   },
   {
-    id: "radio", name: "Radio (.wp-radio)", group: "choice", file: "src/manager/styles/tokens.css", surfaces: ["manager"],
+    id: "radio", name: "Radio (.wp-radio)", group: "choice", file: "src/kit/theme/tokens.css", surfaces: ["manager"],
     use: "One of a few options that all need to be visible. A real radio input with the class wp-radio, so arrow keys work. Disabled turns grey.",
   },
   {
@@ -203,17 +203,17 @@ export const KIT_ENTRIES: KitEntry[] = [
     instead: "A column of .wp-radio inputs with their own labels and hint text.",
   },
   {
-    id: "choice-cards", name: "ChoiceCards", group: "choice", file: "src/manager/components/ui/ChoiceCards.vue", surfaces: ["manager"],
+    id: "choice-cards", name: "ChoiceCards", group: "choice", file: "src/kit/ChoiceCards.vue", surfaces: ["manager"],
     use: "Pick one of a handful of options that each need a picture (a colour theme, a look, a layout). Each card shows a preview slot, a name and a hint; compact puts three to a row and the hint in a tooltip. The arrow keys move the choice. For options a line of text explains, use RadioGroup.",
     instead: "A grid of hand-made buttons with role=\"radio\" and their own selected border.",
   },
   // Display
   {
-    id: "card", name: "Card", group: "display", file: "src/manager/components/ui/Card.vue", surfaces: ["manager"],
+    id: "card", name: "Card", group: "display", file: "src/kit/Card.vue", surfaces: ["manager"],
     use: "A panel with an optional title row (the card's name, 14px semibold). Editors and settings are made of these.",
   },
   {
-    id: "chip", name: "Chip", group: "display", file: "src/manager/components/ui/Chip.vue", surfaces: ["manager"],
+    id: "chip", name: "Chip", group: "display", file: "src/kit/Chip.vue", surfaces: ["manager"],
     use: "A short label: a tag, a status, a count, a category. Tones carry meaning (success, warn, danger, info); color tints it for a category or kind (the text blends toward the theme's text so any pick stays readable), and icon puts the category's icon in front. removable adds a plain ✕ that keeps the chip's height.",
     instead: "CategoryChip (merged into Chip: <Chip :color :icon>{{ name }}</Chip>) or a hand-made pill span.",
   },
@@ -238,12 +238,12 @@ export const KIT_ENTRIES: KitEntry[] = [
     instead: "A <pre> with its own copy button, or none.",
   },
   {
-    id: "icon", name: "Icon", group: "display", file: "src/manager/components/ui/Icon.vue", surfaces: ["manager"],
+    id: "icon", name: "Icon", group: "display", file: "src/kit/Icon.vue", surfaces: ["manager"],
     use: "Every icon. Use the ICON_SM, ICON_MD and ICON_LG sizes. Icons are decoration: the button or text next to them carries the meaning.",
     instead: "An inline <svg> pasted into a component.",
   },
   {
-    id: "empty-state", name: "EmptyState", group: "display", file: "src/manager/components/ui/EmptyState.vue", surfaces: ["manager"],
+    id: "empty-state", name: "EmptyState", group: "display", file: "src/kit/EmptyState.vue", surfaces: ["manager"],
     use: "A page or list with nothing in it yet: say what goes here and offer the one action that fills it. size page (an empty list page), panel (the default, in a card or panel) or inline (one row).",
   },
   {
@@ -257,7 +257,7 @@ export const KIT_ENTRIES: KitEntry[] = [
     instead: "A button with its own aria-expanded, chevron and v-if.",
   },
   {
-    id: "data-table", name: "DataTable", group: "display", file: "src/manager/components/ui/DataTable.vue", surfaces: ["manager"],
+    id: "data-table", name: "DataTable", group: "display", file: "src/kit/DataTable.vue", surfaces: ["manager"],
     use: "Rows and columns: sticky header, sort by a column, tick rows, loading and empty rows. Put custom cells in #cell-<key>.",
     instead: "A <table class=\"wp-table\"> with its own sort state and select-all.",
   },
@@ -334,7 +334,7 @@ export const KIT_ENTRIES: KitEntry[] = [
     instead: "The wp-skel classes from _skeleton.css, or a Loading… flash.",
   },
   {
-    id: "toast", name: "Toast (manager)", group: "feedback", file: "src/manager/composables/useToast.ts", surfaces: ["manager"],
+    id: "toast", name: "Toast (manager)", group: "feedback", file: "src/kit/useToast.ts", surfaces: ["manager"],
     use: "A short note after an action, with an optional Undo. Call useToast().push(); the app shows it.",
   },
   {
@@ -362,12 +362,12 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   // Overlays
   {
-    id: "modal", name: "Modal", group: "overlays", file: "src/manager/components/ui/Modal.vue", surfaces: ["manager"],
+    id: "modal", name: "Modal", group: "overlays", file: "src/kit/Modal.vue", surfaces: ["manager"],
     use: "A dialog in the manager with a title, body and footer buttons.",
     instead: "A div with role=\"dialog\" and its own backdrop.",
   },
   {
-    id: "drawer", name: "Drawer", group: "overlays", file: "src/manager/components/ui/Drawer.vue", surfaces: ["manager"],
+    id: "drawer", name: "Drawer", group: "overlays", file: "src/kit/Drawer.vue", surfaces: ["manager"],
     use: "A panel that slides in from the side: an inspector, history, settings beside the work. Escape closes it and focus goes back. Turn modal off to keep the page usable behind it.",
     instead: "Another fixed side panel with its own width, header and close button.",
   },
@@ -391,12 +391,12 @@ export const KIT_ENTRIES: KitEntry[] = [
     use: "The backdrop, focus trap and Escape handling for a canvas dialog. Put the dialog's own frame inside.",
   },
   {
-    id: "confirm-modal", name: "ConfirmModal", group: "overlays", file: "src/manager/components/ui/ConfirmModal.vue", surfaces: ["manager"],
+    id: "confirm-modal", name: "ConfirmModal", group: "overlays", file: "src/kit/ConfirmModal.vue", surfaces: ["manager"],
     use: "Ask before something that can't be undone, in the manager. Built on Modal, so Escape, Tab and focus return work like every other dialog. Name the action on the confirm button (Delete, not OK); tone=\"danger\" for deletes and discards.",
     instead: "ConfirmDialog in a manager screen, or window.confirm().",
   },
   {
-    id: "confirm-dialog", name: "ConfirmDialog", group: "overlays", file: "src/components/shared/ConfirmDialog.vue", surfaces: ["canvas"],
+    id: "confirm-dialog", name: "ConfirmDialog", group: "overlays", file: "src/kit/ConfirmDialog.vue", surfaces: ["canvas"],
     use: "The same question from a canvas widget, in the node colours. In the manager use ConfirmModal.",
   },
   {
@@ -436,11 +436,11 @@ export const KIT_ENTRIES: KitEntry[] = [
     use: "The check, warning or error mark in a list's Valid column, with the problems in its tooltip.",
   },
   {
-    id: "relative-date", name: "RelativeDate", group: "pieces", file: "src/manager/components/RelativeDate.vue", surfaces: ["manager"],
+    id: "relative-date", name: "RelativeDate", group: "pieces", file: "src/kit/RelativeDate.vue", surfaces: ["manager"],
     use: "\"5 min ago\" for a timestamp, with the full date on hover.",
   },
   {
-    id: "icon-picker", name: "IconPicker", group: "pieces", file: "src/manager/components/IconPicker.vue", surfaces: ["manager"],
+    id: "icon-picker", name: "IconPicker", group: "pieces", file: "src/kit/IconPicker.vue", surfaces: ["manager"],
     use: "Pick an icon for a category or bundle from the curated set. The closed picker names the icon (or says Choose icon); compact drops the name for a table cell. The panel is a kit Popover.",
   },
   // Brand
@@ -455,7 +455,7 @@ export const KIT_ENTRIES: KitEntry[] = [
  * test accepts these; everything else in a kit folder must be in KIT_ENTRIES.
  */
 export const KIT_EXEMPT: Record<string, string> = {
-  "src/manager/components/ui/ToastHost.vue": "Mounted once by the app; use useToast().",
+  "src/kit/ToastHost.vue": "Mounted once by the app; use useToast().",
   "src/components/shared/Toast.vue": "Mounted once by the canvas toast store; push to toast-store.",
   "src/components/shared/SeedListModal.vue": "The seed list dialog itself, not a building block.",
   "src/components/shared/SeedLockRow.vue": "One row of the seed list; only the seed widgets use it.",
@@ -463,7 +463,7 @@ export const KIT_EXEMPT: Record<string, string> = {
 };
 
 /** The folders whose components must each be a kit entry or exempt. */
-export const KIT_FOLDERS = ["src/manager/components/ui", "src/components/shared", "src/kit"];
+export const KIT_FOLDERS = ["src/components/shared", "src/kit"];
 
 /**
  * How to use each entry, shown under its demo. Code, so not translated.

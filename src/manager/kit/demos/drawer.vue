@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Button from "../../components/ui/Button.vue";
-import Drawer from "../../components/ui/Drawer.vue";
+import Button from "../../../kit/Button.vue";
+import Drawer from "../../../kit/Drawer.vue";
 
 const open = ref(false);
 const side = ref(false);

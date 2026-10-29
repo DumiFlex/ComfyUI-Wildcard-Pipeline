@@ -8,8 +8,8 @@
  */
 import { computed, ref, watch } from "vue";
 
-import Modal from "./ui/Modal.vue";
-import Button from "./ui/Button.vue";
+import Modal from "../../kit/Modal.vue";
+import Button from "../../kit/Button.vue";
 import { useReleaseCheck } from "../composables/useReleaseCheck";
 import { useComfyManagerUpdate, type ManagerAvailability } from "../composables/useComfyManagerUpdate";
 import { renderReleaseNotes, tailChangeCount } from "../utils/releaseNotes";

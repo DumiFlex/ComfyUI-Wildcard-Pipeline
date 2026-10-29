@@ -34,8 +34,8 @@
  * at a low number it argues against starring.
  */
 import { computed } from "vue";
-import Button from "./ui/Button.vue";
-import Icon from "./ui/Icon.vue";
+import Button from "../../kit/Button.vue";
+import Icon from "../../kit/Icon.vue";
 import { GITHUB_REPO } from "../config/links";
 import { useEngagementStore, measureSubstance } from "../stores/engagementStore";
 import { useModuleStore } from "../stores/moduleStore";

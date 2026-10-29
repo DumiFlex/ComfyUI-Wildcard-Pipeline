@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import Popover from "../../kit/Popover.vue";
-import Input from "./ui/Input.vue";
-import HsvPicker from "../../kit/HsvPicker.vue";
+import Popover from "./Popover.vue";
+import Input from "./Input.vue";
+import HsvPicker from "./HsvPicker.vue";
 
 interface Props {
   modelValue: string;
@@ -94,7 +94,7 @@ function isActivePreset(preset: string): boolean {
         <Input
           :model-value="hexDraft"
           aria-label="Hex color value"
-          class="wp-color-picker__hex font-mono"
+          class="wp-color-picker__hex"
           data-test="color-hex-input"
           @update:model-value="(v) => onHexInput(String(v ?? ''))"
         />
@@ -174,6 +174,7 @@ function isActivePreset(preset: string): boolean {
 .wp-color-picker__hex {
   flex: 1;
   min-width: 0;
+  font-family: var(--wp-font-mono);
   font-size: var(--wp-text-sm);
 }
 

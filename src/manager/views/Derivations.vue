@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import Checkbox from "../components/ui/Checkbox.vue";
+import Checkbox from "../../kit/Checkbox.vue";
 import CopyButton from "@/kit/CopyButton.vue";
 import { computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useToast } from "../composables/useToast";
+import { useToast } from "../../kit/useToast";
 import { useListUrlState } from "../composables/useListUrlState";
 import { useLoadError } from "../composables/useLoadError";
 import { useBulkActions } from "../composables/useBulkActions";
@@ -13,12 +13,12 @@ import SendToTestRunner from "../components/SendToTestRunner.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import ValidityIcon from "../components/ValidityIcon.vue";
 import { validateModule } from "../utils/validateModule";
-import Button from "../components/ui/Button.vue";
-import Select from "../components/ui/Select.vue";
-import EmptyState from "../components/ui/EmptyState.vue";
+import Button from "../../kit/Button.vue";
+import Select from "../../kit/Select.vue";
+import EmptyState from "../../kit/EmptyState.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import Chip from "../components/ui/Chip.vue";
+import Chip from "../../kit/Chip.vue";
 import { categoryAssignOptions, categoryFilterOptions } from "../utils/category-options";
 import type {
   CategoryRow,
@@ -30,7 +30,7 @@ import type {
   DerivationRule,
   ModuleRow,
 } from "../api/types";
-import ConfirmModal from "../components/ui/ConfirmModal.vue";
+import ConfirmModal from "../../kit/ConfirmModal.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 import { clauseActions, isConditionGroup, matchWord } from "../../extension/derivation-conditions";
 import { VALUE_DISABLED_OPS } from "../../components/context/editors/_shared/derivation-ops";

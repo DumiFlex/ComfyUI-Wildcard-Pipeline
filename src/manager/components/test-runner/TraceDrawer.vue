@@ -6,7 +6,7 @@
  */
 import CloseButton from "@/kit/CloseButton.vue";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import Button from "../ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 import type { ScenarioSample } from "../../api/types";
 import { renderValue } from "../../utils/scenario";
 import { KIND_META } from "./kinds";

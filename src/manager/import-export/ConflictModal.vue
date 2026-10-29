@@ -60,15 +60,15 @@
  *
  * Accessibility: the visual chrome (role="dialog", aria-modal,
  * Esc-to-close, backdrop click, Teleport-to-body) is delegated to the
- * shared `Modal` wrapper from `manager/components/ui/Modal.vue`. The
+ * shared `Modal` wrapper from `kit/Modal.vue`. The
  * `open` prop is optional (defaults to `true`) so the simplest caller
  * pattern — `<ConflictModal v-if="conflicts" ... @cancel="dismiss" />`
  * — works without extra wiring. Closing via Esc/backdrop routes
  * through `update:open` and emits `cancel`.
  */
 import { computed, ref } from "vue";
-import Modal from "../components/ui/Modal.vue";
-import Button from "../components/ui/Button.vue";
+import Modal from "../../kit/Modal.vue";
+import Button from "../../kit/Button.vue";
 import Toolbar from "@/kit/Toolbar.vue";
 import Disclosure from "@/kit/Disclosure.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
@@ -1240,7 +1240,7 @@ const importItemCount = computed<number>(() => {
 .wp-conflict-modal__item-row .wp-row-name {
   /* Explicit flex-direction: row to override the global
    * `.wp-row-name { flex-direction: column }` from
-   * manager/styles/tokens.css:1002. */
+   * kit/theme/tokens.css:1002. */
   display: flex;
   flex-direction: row;
   align-items: baseline;

@@ -5,7 +5,7 @@
  */
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, ref } from "vue";
-import DataTable, { type DataColumn, type DataSort } from "../ui/DataTable.vue";
+import DataTable, { type DataColumn, type DataSort } from "../../../kit/DataTable.vue";
 import type { ScenarioRunResponse } from "../../api/types";
 import { negativeText, orderByStack, renderValue, type StackItemView } from "../../utils/scenario";
 

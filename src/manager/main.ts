@@ -1,10 +1,10 @@
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import "primeicons/primeicons.css";
-import "./styles/tokens.css";
+import "../kit/theme/tokens.css";
 import "@/kit/button.css";
-import "./styles/themes.css";
-import "./styles/looks.css";
+import "../kit/theme/palettes.css";
+import "../kit/theme/looks.css";
 import "./styles/rich-text.css";
 import "./styles/tailwind.css";
 import App from "./App.vue";

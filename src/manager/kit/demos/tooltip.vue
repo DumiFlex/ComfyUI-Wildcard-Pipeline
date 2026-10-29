@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Button from "../../components/ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 import { vTooltip } from "@/kit/tooltip";
 </script>
 

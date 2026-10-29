@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import Button from "../../components/ui/Button.vue";
-import { useToast } from "../../composables/useToast";
+import Button from "../../../kit/Button.vue";
+import { useToast } from "../../../kit/useToast";
 
 const toast = useToast();
 function pushToast(kind: "success" | "warn"): void {

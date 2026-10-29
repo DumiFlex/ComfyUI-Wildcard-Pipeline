@@ -1,4 +1,4 @@
-import { useToast, type ToastSeverity } from "./useToast";
+import { useToast, type ToastSeverity } from "../../kit/useToast";
 import type { BulkAdapter, AnyRow, BulkResult } from "./bulkAdapters";
 
 interface CategorySnapshot { id: string; prevCategoryId: string | null; }

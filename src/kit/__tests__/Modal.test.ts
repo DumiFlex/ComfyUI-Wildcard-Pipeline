@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import { describe, expect, it } from "vitest";
-import Modal from "../../components/ui/Modal.vue";
+import Modal from "../Modal.vue";
 
 describe("Modal.vue", () => {
   it("renders teleported when open=true", () => {

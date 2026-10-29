@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import Button from "../../components/ui/Button.vue";
-import EmptyState from "../../components/ui/EmptyState.vue";
+import Button from "../../../kit/Button.vue";
+import EmptyState from "../../../kit/EmptyState.vue";
 </script>
 
 <template>

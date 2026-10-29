@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Text field. Number fields use WpNumber (`@/kit/WpNumber.vue`)
+ * Text field. Number fields use WpNumber (`WpNumber.vue`)
  * and search boxes use SearchInput; this one no longer has a number mode.
  */
 import { computed } from "vue";

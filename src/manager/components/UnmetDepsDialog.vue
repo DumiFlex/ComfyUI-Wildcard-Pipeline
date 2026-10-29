@@ -15,8 +15,8 @@
  */
 import type { BundleRow, ModuleRow } from "../api/types";
 import { kindIcon } from "../../components/shared/kind-icons";
-import Modal from "./ui/Modal.vue";
-import Button from "./ui/Button.vue";
+import Modal from "../../kit/Modal.vue";
+import Button from "../../kit/Button.vue";
 
 /** A gated dependency row: a wildcard `ModuleRow` (module publish) or an
  *  inner-bundle `BundleRow` (bundle publish, BR-A2). A `BundleRow` carries no

@@ -10,7 +10,7 @@
  */
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import Button from "./ui/Button.vue";
+import Button from "../../kit/Button.vue";
 import { UNGROUPED_HUE } from "../../components/shared/axis-color";
 
 interface Props {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import ColorPicker from "../../components/ColorPicker.vue";
+import ColorPicker from "../../../kit/ColorPicker.vue";
 
 const colour = ref("#60a5fa");
 const dark = ref("#1f2937");

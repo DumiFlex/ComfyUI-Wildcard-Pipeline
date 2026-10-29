@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import Banner from "@/kit/Banner.vue";
-import Button from "../../components/ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 
 const shown = ref(true);
 </script>

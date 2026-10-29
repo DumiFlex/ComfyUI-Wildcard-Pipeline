@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Textarea from "../../components/ui/Textarea.vue";
+import Textarea from "../../../kit/Textarea.vue";
 
 const notes = ref("Warm colours for portraits.");
 </script>

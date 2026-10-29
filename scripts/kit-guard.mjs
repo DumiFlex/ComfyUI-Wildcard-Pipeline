@@ -31,7 +31,7 @@ export const RULES = [
   {
     id: "native-checkbox",
     pattern: /type="checkbox"/g,
-    allow: ["src/manager/components/ui/Checkbox.vue", "src/manager/components/ui/Toggle.vue", "src/kit/WpCheck.vue"],
+    allow: ["src/kit/Checkbox.vue", "src/kit/Toggle.vue", "src/kit/WpCheck.vue"],
     fix: "Use Checkbox or Toggle (manager) or WpCheck (canvas).",
   },
   {
@@ -50,10 +50,10 @@ export const RULES = [
     id: "hand-dialog",
     pattern: /role="dialog"/g,
     allow: [
-      "src/manager/components/ui/Modal.vue",
+      "src/kit/Modal.vue",
       "src/kit/ModalShell.vue",
-      "src/components/shared/ConfirmDialog.vue",
-      "src/manager/components/ui/Drawer.vue",
+      "src/kit/ConfirmDialog.vue",
+      "src/kit/Drawer.vue",
     ],
     fix: "Use Modal (manager), or ModalShell / ConfirmDialog (canvas).",
   },
@@ -63,7 +63,7 @@ export const RULES = [
     only: "src/manager/",
     // DataTable's sort control is the header text itself, not a Button;
     // ChoiceCards' cards are radios holding a picture, not Buttons.
-    allow: ["src/manager/components/ui/DataTable.vue", "src/manager/components/ui/ChoiceCards.vue"],
+    allow: ["src/kit/DataTable.vue", "src/kit/ChoiceCards.vue"],
     fix: "Use Button. A raw <button> needs a reason the kit can't cover.",
   },
   {

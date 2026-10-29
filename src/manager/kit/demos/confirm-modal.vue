@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Button from "../../components/ui/Button.vue";
-import ConfirmModal from "../../components/ui/ConfirmModal.vue";
+import Button from "../../../kit/Button.vue";
+import ConfirmModal from "../../../kit/ConfirmModal.vue";
 
 const ask = ref<"delete" | "restore" | null>(null);
 </script>

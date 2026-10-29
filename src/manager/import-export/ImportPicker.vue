@@ -36,7 +36,7 @@
  * larger imports responsive.
  */
 import { computed, ref, watchEffect } from "vue";
-import Button from "../components/ui/Button.vue";
+import Button from "../../kit/Button.vue";
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
 import SearchInput from "@/kit/SearchInput.vue";

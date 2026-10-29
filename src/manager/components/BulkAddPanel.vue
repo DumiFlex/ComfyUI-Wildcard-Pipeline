@@ -15,7 +15,7 @@
  * snapshot/dirty tracking stays in one place.
  */
 import { computed, ref, watch, onBeforeUnmount } from "vue";
-import Button from "./ui/Button.vue";
+import Button from "../../kit/Button.vue";
 import {
   parseBulkOptions,
   summarizeBulkOptions,

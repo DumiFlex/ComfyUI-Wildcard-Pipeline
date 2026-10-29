@@ -13,7 +13,7 @@
  * answer, and clicking a step shows its answer.
  */
 import { computed, ref } from "vue";
-import Button from "../ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 import AiImagePicker from "./AiImagePicker.vue";
 import AiSearchFound from "./AiSearchFound.vue";
 import AiWorking from "./AiWorking.vue";

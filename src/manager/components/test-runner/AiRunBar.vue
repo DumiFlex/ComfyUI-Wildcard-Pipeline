@@ -7,7 +7,7 @@
  * cards, so nothing is saved until the user applies them.
  */
 import { computed, ref } from "vue";
-import Button from "../ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 import { useAiChat } from "../../composables/useAiChat";
 import type { ScenarioRunResponse } from "../../api/types";
 

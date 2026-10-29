@@ -2,7 +2,7 @@
  * The pack settings' fields: each choice with a line saying what it does.
  * Shared by the settings form and the recommended-settings line.
  */
-import type { SelectOption } from "../ui/select-types";
+import type { SelectOption } from "../../../kit/select-types";
 import type { AiPackSettings } from "../../api/types";
 
 export type Field = Exclude<keyof AiPackSettings, "count">;

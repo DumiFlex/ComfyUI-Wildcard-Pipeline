@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import IconPicker from "../../components/IconPicker.vue";
+import IconPicker from "../../../kit/IconPicker.vue";
 
 const pickedIcon = ref<string | null>("user");
 const noIcon = ref<string | null>(null);

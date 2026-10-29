@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Toggle from "../../components/ui/Toggle.vue";
+import Toggle from "../../../kit/Toggle.vue";
 
 const tooltips = ref(true);
 </script>

@@ -27,12 +27,12 @@
  * canonical bundle upgrade path.
  */
 import { computed, ref } from "vue";
-import Modal from "./ui/Modal.vue";
-import Button from "./ui/Button.vue";
+import Modal from "../../kit/Modal.vue";
+import Button from "../../kit/Button.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
-import { useToast } from "../composables/useToast";
+import { useToast } from "../../kit/useToast";
 import { WPC_API_URL } from "../config/links";
 import { appendSnapshot, stripHistory } from "../utils/history";
 import { installEnvelope } from "../import-export/install";

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import Icon, { ICON_LG, ICON_MD, ICON_SM } from "../../components/ui/Icon.vue";
-import { allCuratedIcons } from "../../components/icon-catalog";
+import Icon, { ICON_LG, ICON_MD, ICON_SM } from "../../../kit/Icon.vue";
+import { allCuratedIcons } from "../../../kit/icon-catalog";
 
 const icons = allCuratedIcons();
 </script>
