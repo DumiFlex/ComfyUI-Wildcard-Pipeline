@@ -125,3 +125,9 @@
 .wp-field-socket-host {
   opacity: 1 !important;
 }
+
+/* Legacy canvas: the dot is painted 10px into the node, which is where the
+ * panel's labels start. */
+.wp-field-sockets--legacy {
+  padding-left: 10px;
+}

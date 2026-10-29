@@ -71,6 +71,8 @@ const HOT_CLASS = "wp-field-socket--hot";
 /** The host's own wrapper around a widget's dot, which hides it until the
  *  widget row is hovered; we take that over. */
 const HOST_CLASS = "wp-field-socket-host";
+/** On the panel, under the legacy canvas: a left gutter for the dots. */
+const LEGACY_CLASS = "wp-field-sockets--legacy";
 /** Gap between dots stacked at the panel top for fields not on screen. */
 const STACK = 20;
 
@@ -241,7 +243,11 @@ function syncVue(entry: Entry): void {
 }
 
 function sync(entry: Entry): void {
-  if (isVueNodes()) {
+  const vue = isVueNodes();
+  // The legacy canvas draws the dot inside the node, over the panel's left
+  // edge; give the panel a gutter there. Nodes 2.0 puts it on the border.
+  entry.root.classList.toggle(LEGACY_CLASS, !vue);
+  if (vue) {
     unbindLegacy(entry);
     syncVue(entry);
   } else {
@@ -334,6 +340,7 @@ export function attachFieldSockets(
   return () => {
     registry.delete(entry);
     resize?.disconnect();
+    root.classList.remove(LEGACY_CLASS);
     root.removeEventListener("pointerover", over);
     root.removeEventListener("pointerout", out);
     if (node.onSerialize !== origSerialize) node.onSerialize = origSerialize;
