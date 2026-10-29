@@ -5,7 +5,7 @@ import SettingRow from "../SettingRow.vue";
 import { DISCORD_INVITE, GITHUB_REPO, SUPPORT_LINKS, WPC_API_URL } from "../../../config/links";
 
 // Build-time injected via vite `define` (see vite.config.mts) — source of
-// truth is package.json, which semantic-release stamps on every release.
+// truth is package.json, which the release PR stamps on every release.
 const appVersion = __APP_VERSION__;
 const appLicense = __APP_LICENSE__;
 </script>

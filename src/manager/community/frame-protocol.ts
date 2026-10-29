@@ -14,11 +14,20 @@
  *   install request's id); the reply is the decision map, or null to cancel.
  * - Frame → host events: `ready`, `navigate` (target), `close`, `tokens-adopted`.
  * - Host → frame: `hello` once after each `ready`; events `navigate` (target),
- *   `theme`, `publish` (the publish form's hash string).
+ *   `theme`, `appearance` (FrameAppearance), `publish` (the publish form's
+ *   hash string).
  */
 export const FRAME_PROTOCOL = 1;
 
 export type FrameTheme = "dark" | "light" | "auto";
+
+/** The manager's resolved light/dark, look id and live token values
+ *  (community/appearance.ts). Frames that predate it read `theme` only. */
+export interface FrameAppearance {
+  scheme: "dark" | "light";
+  look: string;
+  tokens: Record<string, string>;
+}
 
 export interface FrameTokenPair {
   access: string;
@@ -32,6 +41,7 @@ export interface FrameHello {
   abi: number;
   schemaVersion: number;
   theme?: FrameTheme;
+  appearance?: FrameAppearance;
   analytics?: boolean;
   legacyTokens?: FrameTokenPair;
 }

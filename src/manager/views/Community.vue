@@ -22,6 +22,7 @@ import Icon from "../../kit/Icon.vue";
 import LoadingMark from "@/kit/LoadingMark.vue";
 import { DISCORD_INVITE, WPC_API_URL, WPC_EMBED_FRAME_URL } from "../config/links";
 import { connectFrame, type FrameBridge, type FrameTarget } from "../community/frameBridge";
+import { readAppearance, watchAppearance } from "../community/appearance";
 import { createHostRuntime } from "../community/hostRuntime";
 import { readLegacyTokens, wipeLegacyTokens } from "../community/tokenStore";
 import { useUiStore } from "../stores/uiStore";
@@ -38,6 +39,7 @@ const loadError = ref<string | null>(null);
 const loading = ref(true);
 let bridge: FrameBridge | null = null;
 let readyTimer: ReturnType<typeof setTimeout> | null = null;
+let stopAppearance: (() => void) | null = null;
 
 // Map the extension's `/community/...` URL to the embed's view shape.
 // vue-router 4's `:rest(.*)*` matcher hands back an ARRAY of segments,
@@ -111,6 +113,8 @@ function connect() {
     runtime: createHostRuntime(),
     // Raw mode, not the resolved colour: the embed resolves "auto" itself.
     theme: () => ui.themeMode,
+    // Palette, look and resolved light/dark, so the page wears this theme.
+    appearance: () => readAppearance(),
     // Settings → General → "Share anonymous usage stats".
     analytics: () => ui.usageStats,
     legacyTokens: readLegacyTokens,
@@ -162,11 +166,16 @@ function onHashChange() {
 
 onMounted(() => {
   window.addEventListener("hashchange", onHashChange);
+  // Theme, palette, look and accent all land on <html>; one observer
+  // forwards every change.
+  stopAppearance = watchAppearance((a) => bridge?.setAppearance(a));
   connect();
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("hashchange", onHashChange);
+  stopAppearance?.();
+  stopAppearance = null;
   stopTimer();
   bridge?.dispose();
   bridge = null;
@@ -224,8 +233,13 @@ onBeforeUnmount(() => {
   min-height: 0;
   width: 100%;
   border: 0;
-  background: transparent;
+  /* The page draws square edges; the tab rounds them by the look, and the
+     page's own colour fills the frame from the first paint. */
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
+  background: var(--wp-bg);
+  color-scheme: dark;
 }
+:global(html.wp-theme-light) .wp-community-frame { color-scheme: light; }
 .wp-community-frame--loading {
   /* Loads behind the spinner; position: absolute keeps it out of the flow. */
   position: absolute;
