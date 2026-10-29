@@ -75,6 +75,32 @@ function watchNodeMode(node: ConnectableNode, cb: () => void): () => void {
   return () => { subs.delete(cb); };
 }
 
+/**
+ * Instant notice when any of a changing set of nodes changes mode: the nodes
+ * a WP Mode Relay watches, a WP Node Group's members. `reactiveFromGraph`
+ * hears its own node's mode at once but other nodes' only on its poll (400 ms,
+ * and longer on a still canvas), so a chain of relays and groups added that
+ * up hop by hop. Call `sync()` after the set may have changed (wires); the
+ * returned `stop()` drops every subscription.
+ */
+export function watchModes(nodes: () => readonly object[], cb: () => void): { sync(): void; stop(): void } {
+  const subs = new Map<object, () => void>();
+  const sync = (): void => {
+    const now = new Set(nodes());
+    for (const [n, off] of subs) {
+      if (!now.has(n)) { off(); subs.delete(n); }
+    }
+    for (const n of now) {
+      if (!subs.has(n)) subs.set(n, watchNodeMode(n as ConnectableNode, cb));
+    }
+  };
+  sync();
+  return {
+    sync,
+    stop: () => { for (const off of subs.values()) off(); subs.clear(); },
+  };
+}
+
 /** `key`'s descriptor on `obj` or the nearest prototype that defines it. */
 function findDescriptor(obj: object, key: string): PropertyDescriptor | undefined {
   for (let o: object | null = obj; o; o = Object.getPrototypeOf(o) as object | null) {

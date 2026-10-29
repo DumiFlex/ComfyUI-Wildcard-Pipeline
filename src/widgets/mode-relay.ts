@@ -1,6 +1,6 @@
-import { defineAsyncComponent, h, ref, watch, type Component } from "vue";
+import { defineAsyncComponent, h, onScopeDispose, ref, watch, type Component } from "vue";
 import { createDomWidgetHost, type MountTargetNode } from "./_shared";
-import { reactiveFromGraph } from "../extension/reactive";
+import { reactiveFromGraph, watchModes } from "../extension/reactive";
 import { nextInputName, stabilizeInputs } from "../extension/node-group";
 import {
   MODE_RELAY_TYPE,
@@ -51,16 +51,26 @@ export function mountModeRelay(node: RelayHostNode) {
       watch(saved, () => {
         map.value = parseRelayMap(node.properties?.[RELAY_PROP]);
       });
+      // Hear the watched nodes' mode changes at once (not on the poll), and
+      // follow the wires as they change.
+      const modes = watchModes(() => watched(node), () => {
+        state.value = combinedState(watched(node).map((n) => n.mode));
+      });
+      watch(counts, () => modes.sync());
+      onScopeDispose(() => modes.stop());
       watch(state, (now) => {
         if (justLoaded.has(node)) {
           justLoaded.delete(node);
           return;
         }
         if (relay(node, now, map.value)) node.setDirtyCanvas?.(true, true);
-      });
+      }, { flush: "sync" });
       function setMap(next: RelayMap): void {
         map.value = next;
         node.properties = { ...(node.properties ?? {}), [RELAY_PROP]: next };
+        // A new rule applies to what the watched nodes do now, not only to
+        // their next change.
+        if (relay(node, state.value, next)) node.setDirtyCanvas?.(true, true);
       }
       return () => {
         const [watching, driving] = counts.value.split(":").map(Number);
