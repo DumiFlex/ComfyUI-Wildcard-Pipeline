@@ -1,4 +1,4 @@
-import type { BundleInstance, ModuleEntry } from "../../widgets/_shared";
+import type { BundleInstance, ContextWidgetValue, ModuleEntry } from "../../widgets/_shared";
 import { classifyOne, type CollisionState } from "../../manager/import-export/collision";
 import { bundleHashes, hashes as libraryHashes } from "./drift-store";
 
@@ -126,4 +126,41 @@ export function isBundleMissingFromLibrary(bundle: BundleInstance): boolean {
  *  the local snapshot IS a real baseline and MOD still reads correctly. */
 export function isBundleUnlinked(bundle: BundleInstance): boolean {
   return bundleHashes.value !== null && !bundle.library_id;
+}
+
+/** True when a row came with an example workflow and has no library entry
+ *  yet. It is still "missing" for the save flows (Save to library, restore
+ *  missing references); only the badge differs: a neutral EXAMPLE chip
+ *  instead of red MISSING. */
+export function isExampleNotInLibrary(m: ModuleEntry): boolean {
+  return m.example === true && isMissingFromLibrary(m);
+}
+
+/** Bundle twin of `isExampleNotInLibrary`. */
+export function isExampleBundleNotInLibrary(bundle: BundleInstance): boolean {
+  return bundle.example === true && isBundleMissingFromLibrary(bundle);
+}
+
+/** Drops the `example` flag from every row and bundle the library now holds
+ *  (the user saved it), so a later deletion reads as a plain MISSING again.
+ *  Returns the new value, or null when nothing changed or before the first
+ *  library poll. */
+export function dropSavedExampleFlags(v: ContextWidgetValue): ContextWidgetValue | null {
+  if (libraryHashes.value === null || bundleHashes.value === null) return null;
+  let changed = false;
+  const modules = v.modules.map((m) => {
+    if (m.example !== true || isMissingFromLibrary(m)) return m;
+    changed = true;
+    const rest = { ...m };
+    delete rest.example;
+    return rest;
+  });
+  const bundles = (v.bundles ?? []).map((b) => {
+    if (b.example !== true || isBundleMissingFromLibrary(b)) return b;
+    changed = true;
+    const rest = { ...b };
+    delete rest.example;
+    return rest;
+  });
+  return changed ? { ...v, modules, bundles } : null;
 }

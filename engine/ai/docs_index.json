@@ -215,6 +215,36 @@
    ]
   },
   {
+   "id": "howto-examples",
+   "title": "Start from an example",
+   "group": "howto",
+   "blurb": "Three ready-made workflows that run on an empty library, with notes that walk you through each step.",
+   "keywords": [
+    "example",
+    "examples",
+    "template",
+    "templates",
+    "browse templates",
+    "starter",
+    "workflow",
+    "demo"
+   ],
+   "sections": [
+    {
+     "title": "Open one",
+     "text": "In ComfyUI, open Workflow › Browse Templates and pick Wildcard Pipeline in the list of node packs. Each example is a complete workflow: choose your checkpoint in Load Checkpoint and press Run.\n- 1 - One image: the core chain (two WP Contexts, the Assembler and the Cleaner) with WP Debug. WP Toggles is the switchboard: a LoRA switch bypasses its loader and swaps the trigger words from the Context Injector into the prompt, and another switches the group that reads the image size, sampler and CFG from the loaded model (a Mode Relay passes it on to a Node Group).\n- 2 - Batches and grids: a WP Context Loop sweeps every outfit against every time of day, a second Assembler writes the labels and WP Label & Grid lays the images out as an XY plot. WP Toggles in Pick one mode chooses Quick or Full: its value sets the steps through WP Var → Int, and WP Var → Bool picks a smaller image for Quick.\n- 3 - Pick and refine: four drafts, a pause at WP Image Filter to pick the keepers, then an upscale and a second pass on the picks only.\nA Start here note lists the steps and links to these docs, the Discord and the Community. Notes on the canvas explain each step, with links to the docs and to outside guides and checkpoints. The notes that open a step are also bookmarks that frame their whole group: the Bookmarks dock lists them, and Alt+1, Alt+2… jump between them."
+    },
+    {
+     "title": "The lists come with the workflow",
+     "text": "Every list, rule and bundle in an example is stored on its WP Context, so nothing has to be in your library. Bundle headers show a grey EXAMPLE chip instead of the red MISSING badge: nothing is wrong, the bundle just lives only in this workflow.\nTo keep one, right-click its header and choose Push to library… with Restore missing references ticked. It saves the bundle, its sub-bundles and every row in one step, and the chip goes away. See Bundles.\nThe Shared lists sub-bundle is switched off on purpose. Other lists read its colours through @{…} references, so it never adds words of its own."
+    },
+    {
+     "title": "Works with",
+     "text": "Quick start Bundles Share a pack or workflow"
+    }
+   ]
+  },
+  {
    "id": "howto-variations",
    "title": "Make variations in one click",
    "group": "howto",
@@ -2525,6 +2555,10 @@
     {
      "title": "Two copies of one bundle",
      "text": "Inserting a bundle twice gives two independent sets of rows, still linked to the library, and references and constraints inside it keep working. But both copies write the same $variables, and the later one wins. To keep both, rename the second copy's variables (each row's Variable binding), or use Duplicate on single rows, which renames for you ($hair becomes $hair_2).\nExtract to library in the bundle editor makes the modules into new stand-alone library modules (a copy you can change freely), points the references between them at the new copies, and leaves the per-use settings behind."
+    },
+    {
+     "title": "Bundles from an example workflow",
+     "text": "The example workflows (Workflow › Browse Templates › Wildcard Pipeline) keep their bundles on the canvas, so they run on an empty library. Their headers show a grey EXAMPLE chip instead of MISSING; sub-bundles and rows inside show nothing. Right-click the header and choose Push to library… with Restore missing references to keep the bundle, its sub-bundles and its rows; the chip goes away. Delete it from the library later and it reads as MISSING like any other. See Start from an example."
     },
     {
      "title": "Switch a bundle off",

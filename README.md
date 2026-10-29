@@ -66,6 +66,24 @@ pnpm build
 The [Quick Start wiki page](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start)
 walks through a fuller example.
 
+### Example workflows
+
+Prefer to start from something that already runs? Open **Workflow › Browse
+Templates** and pick **Wildcard Pipeline**. Three workflows ship in
+[`example_workflows/`](example_workflows/):
+
+| Workflow | Shows |
+|---|---|
+| **1 - One image** | The core chain, WP Debug, and WP Toggles as the switchboard: LoRA switches that bypass their loaders and swap in trigger words (Context Injector, derivations), and a switch for the group that reads size, sampler and CFG from the model (Model Info, Var → Int / Float / Choice, passed on by a Mode Relay to a Node Group). |
+| **2 - Batches and grids** | A Context Loop sweep laid out as an XY plot with Label & Grid, a Quick / Full pick in WP Toggles that sets the steps (Var → Int) and the image size (Var → Bool, If/Else Switch), and an optional Seed List. |
+| **3 - Pick and refine** | Four drafts, a pause at Image Filter to pick the keepers, then an upscale and a second pass on the picks only. |
+
+They run on an empty library: every list is stored on its WP Context as
+bundles. Their bundles show a grey **EXAMPLE** chip; right-click a header →
+**Push to library…** to keep one. A **Start here** note in each one lists
+the steps and links to the docs, Discord and the Community; the step notes
+double as bookmarks that frame their group (Alt+1, Alt+2…).
+
 ## How it works
 
 You stack **modules** inside a **WP Context** node. Each module sets one or more

@@ -61,6 +61,10 @@ export const DOC_PAGES: DocPageMeta[] = [
     blurb: "The words you'll see in these docs, one line each.",
     ...page(() => import("./pages/overview/glossary.vue")) },
   // How to
+  { id: "howto-examples", title: "Start from an example", group: "howto", icon: "pi pi-th-large", tone: "neutral",
+    blurb: "Three ready-made workflows that run on an empty library, with notes that walk you through each step.",
+    keywords: ["example", "examples", "template", "templates", "browse templates", "starter", "workflow", "demo"],
+    ...page(() => import("./pages/howto/examples.vue")) },
   { id: "howto-variations", title: "Make variations in one click", group: "howto", icon: "pi pi-images", tone: "neutral",
     blurb: "Several prompts and images from one Generate, or every combination of a few options.",
     keywords: ["batch", "variations", "many images", "loop", "sweep", "combinations", "count", "seed list"],

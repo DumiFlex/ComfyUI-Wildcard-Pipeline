@@ -1,0 +1,2447 @@
+{
+ "id": "76ca072d-f435-4ada-be43-1b1697805cbb",
+ "revision": 0,
+ "last_node_id": 38,
+ "last_link_id": 46,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "WP_Note",
+   "pos": [
+    -760,
+    0
+   ],
+   "size": [
+    620,
+    453
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "title": "Start here",
+   "properties": {},
+   "widgets_values": [
+    "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"flag\", \"text\": \"### One image, step by step\\n\\nEvery run rolls a new character and scene from the lists in the two **WP Context** nodes, writes the prompt and makes one image. Nothing has to be in your library: the lists come with this workflow.\\n\\n| Key | Step |\\n|---|---|\\n| `Alt+1` | Pick the character |\\n| `Alt+2` | Write the prompt |\\n| `Alt+3` | Pick a checkpoint and run |\\n| `Alt+4` | LoRAs and switches (optional) |\\n| `Alt+5` | Settings from the model (optional) |\\n| `Alt+6` | The image |\\n\\n:pi-bookmark: Jump with the keys or the **Bookmarks** dock (top bar).\\n\\n:pi-lightbulb:{#22c55e} New to ComfyUI? [ComfyUI's first-image guide](https://docs.comfy.org/tutorials/basic/text-to-image){button pi-external-link #eab308}\\n\\n---\\n\\n**Questions, ideas, packs to share:**\\n\\n[Discord](https://discord.gg/BFYR9WQdVR){button pi-discord #5865f2} [Community packs](https://wp.dumiflex.dev){button pi-globe #22c55e} [Wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki){button pi-github #8b949e} [About these examples](docs:howto-examples){button pi-th-large}\", \"color\": \"\", \"bookmark\": null}"
+   ],
+   "widgets_values_named": {
+    "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"flag\", \"text\": \"### One image, step by step\\n\\nEvery run rolls a new character and scene from the lists in the two **WP Context** nodes, writes the prompt and makes one image. Nothing has to be in your library: the lists come with this workflow.\\n\\n| Key | Step |\\n|---|---|\\n| `Alt+1` | Pick the character |\\n| `Alt+2` | Write the prompt |\\n| `Alt+3` | Pick a checkpoint and run |\\n| `Alt+4` | LoRAs and switches (optional) |\\n| `Alt+5` | Settings from the model (optional) |\\n| `Alt+6` | The image |\\n\\n:pi-bookmark: Jump with the keys or the **Bookmarks** dock (top bar).\\n\\n:pi-lightbulb:{#22c55e} New to ComfyUI? [ComfyUI's first-image guide](https://docs.comfy.org/tutorials/basic/text-to-image){button pi-external-link #eab308}\\n\\n---\\n\\n**Questions, ideas, packs to share:**\\n\\n[Discord](https://discord.gg/BFYR9WQdVR){button pi-discord #5865f2} [Community packs](https://wp.dumiflex.dev){button pi-globe #22c55e} [Wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki){button pi-github #8b949e} [About these examples](docs:howto-examples){button pi-th-large}\", \"color\": \"\", \"bookmark\": null}"
+   }
+  },
+  {
+   "id": 2,
+   "type": "WP_Note",
+   "pos": [
+    0,
+    0
+   ],
+   "size": [
+    560,
+    248
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "title": "Pick the character",
+   "properties": {},
+   "widgets_values": [
+    "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 1, \"icon\": \"info-circle\", \"text\": \"Each **WP Context** holds a **bundle**: a pack of lists that work together. Click a bundle header to open it.\\n\\n- A **list** (wildcard) picks one option per run and writes a `$variable`.\\n- **Sub-bundles** like *Look* and *Outfit* group lists inside a bundle.\\n- **Shared lists** is switched off on purpose: other lists read its colours through an `@{Colors}` reference, it adds no words itself.\\n\\n:pi-tag: The grey **EXAMPLE** chip means the bundle lives only in this workflow.\\n\\n[Bundles](docs:bundles){button pi-book} [WP Context](docs:wp-context){button pi-sitemap}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1190, \"y\": 580}, \"zoomMode\": \"fixed\", \"zoom\": 0.53, \"shortcut\": \"Alt+1\", \"order\": 1}}"
+   ],
+   "widgets_values_named": {
+    "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 1, \"icon\": \"info-circle\", \"text\": \"Each **WP Context** holds a **bundle**: a pack of lists that work together. Click a bundle header to open it.\\n\\n- A **list** (wildcard) picks one option per run and writes a `$variable`.\\n- **Sub-bundles** like *Look* and *Outfit* group lists inside a bundle.\\n- **Shared lists** is switched off on purpose: other lists read its colours through an `@{Colors}` reference, it adds no words itself.\\n\\n:pi-tag: The grey **EXAMPLE** chip means the bundle lives only in this workflow.\\n\\n[Bundles](docs:bundles){button pi-book} [WP Context](docs:wp-context){button pi-sitemap}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1190, \"y\": 580}, \"zoomMode\": \"fixed\", \"zoom\": 0.53, \"shortcut\": \"Alt+1\", \"order\": 1}}"
+   }
+  },
+  {
+   "id": 3,
+   "type": "WP_Context",
+   "pos": [
+    0,
+    320
+   ],
+   "size": [
+    540,
+    550
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "upstream",
+     "name": "upstream",
+     "shape": 7,
+     "type": "PIPELINE_CONTEXT",
+     "link": null
+    },
+    {
+     "localized_name": "seed",
+     "name": "seed",
+     "type": "INT",
+     "widget": {
+      "name": "seed"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "context",
+     "name": "context",
+     "type": "PIPELINE_CONTEXT",
+     "links": [
+      1
+     ]
+    }
+   ],
+   "title": "WP Context \u00b7 Character",
+   "properties": {
+    "Node name for S&R": "WP_Context"
+   },
+   "widgets_values": [
+    1,
+    "randomize",
+    "{\"version\": 1, \"modules\": [{\"id\": \"808878ba\", \"_uid\": \"8239dc1982bc\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Hero\", \"library_name\": \"Hero\", \"description\": \"Who the picture is about. The tags drive the Scene constraint.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"hero\", \"sub_categories\": [\"noble\", \"wild\", \"urban\"], \"options\": [{\"id\": \"c8fc80d0\", \"value\": \"a knight\", \"weight\": 1, \"sub_categories\": [\"noble\"]}, {\"id\": \"c243437e\", \"value\": \"a court mage\", \"weight\": 1, \"sub_categories\": [\"noble\"]}, {\"id\": \"784f4138\", \"value\": \"a forest ranger\", \"weight\": 1, \"sub_categories\": [\"wild\"]}, {\"id\": \"e291d944\", \"value\": \"a desert nomad\", \"weight\": 1, \"sub_categories\": [\"wild\"]}, {\"id\": \"dd612ba4\", \"value\": \"a street thief\", \"weight\": 1, \"sub_categories\": [\"urban\"]}, {\"id\": \"422b5317\", \"value\": \"an inventor\", \"weight\": 1, \"sub_categories\": [\"urban\"]}]}, \"payload_hash\": \"25088fc80c2d2ef51781559595f7916f71d9eaf1c3872030fcab81c8e838e6ed\", \"example\": true, \"bundle_origin\": \"55b935057561\"}, {\"id\": \"4facf8ce\", \"_uid\": \"577abb1b962f\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Hair\", \"library_name\": \"Hair\", \"description\": \"Uses the Colors list through an @{} reference.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"hair\", \"sub_categories\": [], \"options\": [{\"id\": \"a3ff1986\", \"value\": \"short @{bc15a82d#Colors} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"e6d04f1d\", \"value\": \"long braided @{bc15a82d#Colors} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"28356404\", \"value\": \"messy @{bc15a82d#Colors} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"5e455e15\", \"value\": \"a shaved head\", \"weight\": 1, \"sub_categories\": []}]}, \"payload_hash\": \"0490f3c8e08a8e069e24a5f96198e20a0b4a42afd567023647af3f3b690a064f\", \"example\": true, \"bundle_origin\": \"b5d51fd04042\"}, {\"id\": \"38c1b584\", \"_uid\": \"8c7312010704\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Eyes\", \"library_name\": \"Eyes\", \"description\": \"Has an empty option: sometimes the eyes aren't mentioned.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"eyes\", \"sub_categories\": [], \"options\": [{\"id\": \"fdffc693\", \"value\": \"@{bc15a82d#Colors} eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"c6e9202c\", \"value\": \"piercing eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"8313f6dc\", \"value\": \"tired eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"d8dda0e3\", \"value\": \"\", \"weight\": 1, \"sub_categories\": [], \"is_null\": true}]}, \"payload_hash\": \"10901dc30c2f89782b330dd2e365625ea330e471fb30c28ec180c3970085dac0\", \"example\": true, \"bundle_origin\": \"b5d51fd04042\"}, {\"id\": \"195238e2\", \"_uid\": \"587d500e2a44\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Outfit\", \"library_name\": \"Outfit\", \"description\": \"Options carry negative words; the tunic is the fallback.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"outfit\", \"sub_categories\": [\"armor\", \"travel\", \"formal\"], \"options\": [{\"id\": \"72f8e1d7\", \"value\": \"polished plate armor\", \"weight\": 1, \"sub_categories\": [\"armor\"], \"negative\": \"rust, broken armor\"}, {\"id\": \"b553cc92\", \"value\": \"a hooded leather coat\", \"weight\": 1, \"sub_categories\": [\"travel\"]}, {\"id\": \"1955f005\", \"value\": \"a flowing robe with gold trim\", \"weight\": 1, \"sub_categories\": [\"formal\"]}, {\"id\": \"9f7a6c18\", \"value\": \"a patched linen tunic\", \"weight\": 1, \"sub_categories\": [\"travel\"], \"fallback\": true}]}, \"payload_hash\": \"3a4ec4a5a139d28ec87df215a9de419d0d8c1696337ac97548dc09604e3df755\", \"example\": true, \"bundle_origin\": \"5db12ff2afae\"}, {\"id\": \"bc15a82d\", \"_uid\": \"67b4876b270e\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Colors\", \"library_name\": \"Colors\", \"description\": \"Switched off: only read through @{} references.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"color\", \"sub_categories\": [], \"options\": [{\"id\": \"7d1e78ef\", \"value\": \"auburn\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"6c3528de\", \"value\": \"silver\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"e6eda3f2\", \"value\": \"jet black\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"645b75a6\", \"value\": \"copper\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"c7331bc4\", \"value\": \"pale blonde\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"5693e178\", \"value\": \"emerald\", \"weight\": 1, \"sub_categories\": []}]}, \"payload_hash\": \"74a9c434f6533144c486b42e877994491f2d0122265d8dcfae70ab5769bbac77\", \"example\": true, \"bundle_origin\": \"86b8e329b2aa\"}], \"bundles\": [{\"_uid\": \"55b935057561\", \"library_id\": \"7e3d3ec2\", \"start_idx\": 0, \"end_idx\": 4, \"enabled\": true, \"collapsed\": false, \"inserted_at_hash\": \"\", \"name\": \"Character\", \"color\": \"#4f8cff\", \"parent_uid\": null, \"example\": true}, {\"_uid\": \"b5d51fd04042\", \"library_id\": \"37af0127\", \"start_idx\": 1, \"end_idx\": 2, \"enabled\": true, \"collapsed\": false, \"inserted_at_hash\": \"\", \"name\": \"Look\", \"color\": \"#9b6bff\", \"parent_uid\": \"55b935057561\", \"example\": true}, {\"_uid\": \"5db12ff2afae\", \"library_id\": \"b748104b\", \"start_idx\": 3, \"end_idx\": 3, \"enabled\": true, \"collapsed\": false, \"inserted_at_hash\": \"\", \"name\": \"Outfit\", \"color\": \"#e0a030\", \"parent_uid\": \"55b935057561\", \"example\": true}, {\"_uid\": \"86b8e329b2aa\", \"library_id\": \"805bdfa4\", \"start_idx\": 4, \"end_idx\": 4, \"enabled\": false, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Shared lists\", \"color\": \"#7a7f8a\", \"parent_uid\": \"55b935057561\", \"example\": true}]}"
+   ],
+   "widgets_values_named": {
+    "seed": 1,
+    "control_after_generate": "randomize",
+    "wp_modules": "{\"version\": 1, \"modules\": [{\"id\": \"808878ba\", \"_uid\": \"8239dc1982bc\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Hero\", \"library_name\": \"Hero\", \"description\": \"Who the picture is about. The tags drive the Scene constraint.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"hero\", \"sub_categories\": [\"noble\", \"wild\", \"urban\"], \"options\": [{\"id\": \"c8fc80d0\", \"value\": \"a knight\", \"weight\": 1, \"sub_categories\": [\"noble\"]}, {\"id\": \"c243437e\", \"value\": \"a court mage\", \"weight\": 1, \"sub_categories\": [\"noble\"]}, {\"id\": \"784f4138\", \"value\": \"a forest ranger\", \"weight\": 1, \"sub_categories\": [\"wild\"]}, {\"id\": \"e291d944\", \"value\": \"a desert nomad\", \"weight\": 1, \"sub_categories\": [\"wild\"]}, {\"id\": \"dd612ba4\", \"value\": \"a street thief\", \"weight\": 1, \"sub_categories\": [\"urban\"]}, {\"id\": \"422b5317\", \"value\": \"an inventor\", \"weight\": 1, \"sub_categories\": [\"urban\"]}]}, \"payload_hash\": \"25088fc80c2d2ef51781559595f7916f71d9eaf1c3872030fcab81c8e838e6ed\", \"example\": true, \"bundle_origin\": \"55b935057561\"}, {\"id\": \"4facf8ce\", \"_uid\": \"577abb1b962f\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Hair\", \"library_name\": \"Hair\", \"description\": \"Uses the Colors list through an @{} reference.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"hair\", \"sub_categories\": [], \"options\": [{\"id\": \"a3ff1986\", \"value\": \"short @{bc15a82d#Colors} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"e6d04f1d\", \"value\": \"long braided @{bc15a82d#Colors} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"28356404\", \"value\": \"messy @{bc15a82d#Colors} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"5e455e15\", \"value\": \"a shaved head\", \"weight\": 1, \"sub_categories\": []}]}, \"payload_hash\": \"0490f3c8e08a8e069e24a5f96198e20a0b4a42afd567023647af3f3b690a064f\", \"example\": true, \"bundle_origin\": \"b5d51fd04042\"}, {\"id\": \"38c1b584\", \"_uid\": \"8c7312010704\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Eyes\", \"library_name\": \"Eyes\", \"description\": \"Has an empty option: sometimes the eyes aren't mentioned.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"eyes\", \"sub_categories\": [], \"options\": [{\"id\": \"fdffc693\", \"value\": \"@{bc15a82d#Colors} eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"c6e9202c\", \"value\": \"piercing eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"8313f6dc\", \"value\": \"tired eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"d8dda0e3\", \"value\": \"\", \"weight\": 1, \"sub_categories\": [], \"is_null\": true}]}, \"payload_hash\": \"10901dc30c2f89782b330dd2e365625ea330e471fb30c28ec180c3970085dac0\", \"example\": true, \"bundle_origin\": \"b5d51fd04042\"}, {\"id\": \"195238e2\", \"_uid\": \"587d500e2a44\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Outfit\", \"library_name\": \"Outfit\", \"description\": \"Options carry negative words; the tunic is the fallback.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"outfit\", \"sub_categories\": [\"armor\", \"travel\", \"formal\"], \"options\": [{\"id\": \"72f8e1d7\", \"value\": \"polished plate armor\", \"weight\": 1, \"sub_categories\": [\"armor\"], \"negative\": \"rust, broken armor\"}, {\"id\": \"b553cc92\", \"value\": \"a hooded leather coat\", \"weight\": 1, \"sub_categories\": [\"travel\"]}, {\"id\": \"1955f005\", \"value\": \"a flowing robe with gold trim\", \"weight\": 1, \"sub_categories\": [\"formal\"]}, {\"id\": \"9f7a6c18\", \"value\": \"a patched linen tunic\", \"weight\": 1, \"sub_categories\": [\"travel\"], \"fallback\": true}]}, \"payload_hash\": \"3a4ec4a5a139d28ec87df215a9de419d0d8c1696337ac97548dc09604e3df755\", \"example\": true, \"bundle_origin\": \"5db12ff2afae\"}, {\"id\": \"bc15a82d\", \"_uid\": \"67b4876b270e\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Colors\", \"library_name\": \"Colors\", \"description\": \"Switched off: only read through @{} references.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"color\", \"sub_categories\": [], \"options\": [{\"id\": \"7d1e78ef\", \"value\": \"auburn\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"6c3528de\", \"value\": \"silver\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"e6eda3f2\", \"value\": \"jet black\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"645b75a6\", \"value\": \"copper\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"c7331bc4\", \"value\": \"pale blonde\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"5693e178\", \"value\": \"emerald\", \"weight\": 1, \"sub_categories\": []}]}, \"payload_hash\": \"74a9c434f6533144c486b42e877994491f2d0122265d8dcfae70ab5769bbac77\", \"example\": true, \"bundle_origin\": \"86b8e329b2aa\"}], \"bundles\": [{\"_uid\": \"55b935057561\", \"library_id\": \"7e3d3ec2\", \"start_idx\": 0, \"end_idx\": 4, \"enabled\": true, \"collapsed\": false, \"inserted_at_hash\": \"\", \"name\": \"Character\", \"color\": \"#4f8cff\", \"parent_uid\": null, \"example\": true}, {\"_uid\": \"b5d51fd04042\", \"library_id\": \"37af0127\", \"start_idx\": 1, \"end_idx\": 2, \"enabled\": true, \"collapsed\": false, \"inserted_at_hash\": \"\", \"name\": \"Look\", \"color\": \"#9b6bff\", \"parent_uid\": \"55b935057561\", \"example\": true}, {\"_uid\": \"5db12ff2afae\", \"library_id\": \"b748104b\", \"start_idx\": 3, \"end_idx\": 3, \"enabled\": true, \"collapsed\": false, \"inserted_at_hash\": \"\", \"name\": \"Outfit\", \"color\": \"#e0a030\", \"parent_uid\": \"55b935057561\", \"example\": true}, {\"_uid\": \"86b8e329b2aa\", \"library_id\": \"805bdfa4\", \"start_idx\": 4, \"end_idx\": 4, \"enabled\": false, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Shared lists\", \"color\": \"#7a7f8a\", \"parent_uid\": \"55b935057561\", \"example\": true}]}"
+   }
+  },
+  {
+   "id": 4,
+   "type": "WP_Note",
+   "pos": [
+    620,
+    0
+   ],
+   "size": [
+    560,
+    257
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "title": "Inside the Scene bundle",
+   "properties": {},
+   "widgets_values": [
+    "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"sitemap\", \"text\": \"The chip on each row says what it does:\\n\\n| Row | What it does |\\n|---|---|\\n| **constraint** | *Hero fits the place* reads the hero picked in the first Context, so a knight lands in a castle more often |\\n| **derivation** | night brings lantern light and its own negative words |\\n| **combine** | joins setting, time and light into `$scene` |\\n| **fixed** | the style, the same every run |\\n\\n[Constraints](docs:constraint){button pi-book} [Derivations](docs:derivation){button pi-directions}\", \"color\": \"teal\", \"bookmark\": null}"
+   ],
+   "widgets_values_named": {
+    "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"sitemap\", \"text\": \"The chip on each row says what it does:\\n\\n| Row | What it does |\\n|---|---|\\n| **constraint** | *Hero fits the place* reads the hero picked in the first Context, so a knight lands in a castle more often |\\n| **derivation** | night brings lantern light and its own negative words |\\n| **combine** | joins setting, time and light into `$scene` |\\n| **fixed** | the style, the same every run |\\n\\n[Constraints](docs:constraint){button pi-book} [Derivations](docs:derivation){button pi-directions}\", \"color\": \"teal\", \"bookmark\": null}"
+   }
+  },
+  {
+   "id": 5,
+   "type": "WP_Context",
+   "pos": [
+    620,
+    320
+   ],
+   "size": [
+    540,
+    480
+   ],
+   "flags": {},
+   "order": 15,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "upstream",
+     "name": "upstream",
+     "shape": 7,
+     "type": "PIPELINE_CONTEXT",
+     "link": 1
+    },
+    {
+     "localized_name": "seed",
+     "name": "seed",
+     "type": "INT",
+     "widget": {
+      "name": "seed"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "context",
+     "name": "context",
+     "type": "PIPELINE_CONTEXT",
+     "links": [
+      2
+     ]
+    }
+   ],
+   "title": "WP Context \u00b7 Scene",
+   "properties": {
+    "Node name for S&R": "WP_Context"
+   },
+   "widgets_values": [
+    2,
+    "randomize",
+    "{\"version\": 1, \"modules\": [{\"id\": \"7ff544c2\", \"_uid\": \"7bdf6799f90f\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Hero fits the place\", \"library_name\": \"Hero fits the place\", \"description\": \"Reads the Hero picked in the first Context and re-weights the Setting.\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"808878ba\", \"target_wildcard_id\": \"aa76ada8\", \"source_wildcard_name\": \"Hero\", \"target_wildcard_name\": \"Setting\", \"exceptions\": [], \"matrix\": {\"noble\": {\"castle\": {\"mode\": \"boost\", \"factor\": 4}, \"wilds\": {\"mode\": \"reduce\", \"factor\": 0.3}}, \"wild\": {\"wilds\": {\"mode\": \"boost\", \"factor\": 4}, \"city\": {\"mode\": \"reduce\", \"factor\": 0.3}}, \"urban\": {\"city\": {\"mode\": \"boost\", \"factor\": 4}, \"castle\": {\"mode\": \"exclude\", \"factor\": 0}}}}, \"payload_hash\": \"33a422a0e0c3dc191cb58b1089cc9175e997cfc6aa387a92b765c6169cd9019d\", \"example\": true, \"bundle_origin\": \"79c20f5d6bf8\"}, {\"id\": \"aa76ada8\", \"_uid\": \"ee2ef2d3f95c\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Setting\", \"library_name\": \"Setting\"}, \"entries\": [], \"payload\": {\"var_binding\": \"setting\", \"sub_categories\": [\"castle\", \"wilds\", \"city\"], \"options\": [{\"id\": \"ee9e1c67\", \"value\": \"a torch-lit throne room\", \"weight\": 1, \"sub_categories\": [\"castle\"]}, {\"id\": \"dee3f9da\", \"value\": \"castle ramparts\", \"weight\": 1, \"sub_categories\": [\"castle\"]}, {\"id\": \"7b51b895\", \"value\": \"an ancient pine forest\", \"weight\": 1, \"sub_categories\": [\"wilds\"]}, {\"id\": \"ade62889\", \"value\": \"a windswept canyon\", \"weight\": 1, \"sub_categories\": [\"wilds\"]}, {\"id\": \"4e80731f\", \"value\": \"a crowded market street\", \"weight\": 1, \"sub_categories\": [\"city\"]}, {\"id\": \"d61c40b7\", \"value\": \"a rooftop garden above the city\", \"weight\": 1, \"sub_categories\": [\"city\"]}]}, \"payload_hash\": \"56fb6858c6d5f7f1a2588df19e3bd1208669eaba42486fe5f28c749cd1af3e95\", \"example\": true, \"bundle_origin\": \"79c20f5d6bf8\"}, {\"id\": \"49cac59c\", \"_uid\": \"f9b0aec1ce3c\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Time of day\", \"library_name\": \"Time of day\"}, \"entries\": [], \"payload\": {\"var_binding\": \"time\", \"sub_categories\": [], \"options\": [{\"id\": \"7c740b5b\", \"value\": \"dawn\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"7ddc9c86\", \"value\": \"golden hour\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"a681b8ca\", \"value\": \"night\", \"weight\": 1, \"sub_categories\": []}]}, \"payload_hash\": \"5a4acb1f8e5bdd5fa5d70365a0fbc5eca38af96db6578b89e502694d5b9bc776\", \"example\": true, \"bundle_origin\": \"79c20f5d6bf8\"}, {\"id\": \"5774d2a1\", \"_uid\": \"7e51d68033f1\", \"type\": \"derivation\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Lighting from time\", \"library_name\": \"Lighting from time\", \"description\": \"Night gets lantern light (and a negative); else soft light.\"}, \"entries\": [], \"payload\": {\"rules\": [{\"branches\": [{\"condition\": {\"var\": \"time\", \"op\": \"equals\", \"value\": \"night\"}, \"action\": {\"target_var\": \"lighting\", \"mode\": \"replace\", \"value\": \"moonlight, warm lantern glow\"}, \"extra_actions\": [{\"target_var\": \"lighting\", \"mode\": \"negative\", \"value\": \"overexposed, harsh sunlight\"}]}], \"else\": {\"action\": {\"target_var\": \"lighting\", \"mode\": \"replace\", \"value\": \"soft natural light\"}}, \"id\": \"e751ba3a\"}]}, \"payload_hash\": \"e5b549fb4ac497a054a1fe2faf89c26fe9427460af2842f811e7d0aab5c8df05\", \"example\": true, \"bundle_origin\": \"79c20f5d6bf8\"}, {\"id\": \"5d75075f\", \"_uid\": \"a207f1262d9e\", \"type\": \"combine\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Scene line\", \"library_name\": \"Scene line\"}, \"entries\": [], \"payload\": {\"template\": \"in $setting at $time, $lighting\", \"output_var\": \"scene\", \"input_vars\": [\"setting\", \"time\", \"lighting\"]}, \"payload_hash\": \"a5b688137b629aedc42362a5dbd9a91ffe9e884084fba9ef4c3fd82bfa94cb52\", \"example\": true, \"bundle_origin\": \"79c20f5d6bf8\"}, {\"id\": \"c32f16d6\", \"_uid\": \"079c5fb2d096\", \"type\": \"fixed_values\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Style\", \"library_name\": \"Style\", \"description\": \"A fixed value with its own negative words.\"}, \"entries\": [], \"payload\": {\"values\": [{\"id\": \"9af7bf95\", \"name\": \"style\", \"value\": \"digital painting, detailed, painterly brushwork\", \"negative\": \"photo, 3d render, blurry\"}]}, \"payload_hash\": \"e9971ee9ccbf2f5249b67987e2021e5a3f9b3a9e5dc041747c3121c505415020\", \"example\": true, \"bundle_origin\": \"79c20f5d6bf8\"}], \"bundles\": [{\"_uid\": \"79c20f5d6bf8\", \"library_id\": \"86360bc3\", \"start_idx\": 0, \"end_idx\": 5, \"enabled\": true, \"collapsed\": false, \"inserted_at_hash\": \"\", \"name\": \"Scene\", \"color\": \"#2fb380\", \"parent_uid\": null, \"example\": true}]}"
+   ],
+   "widgets_values_named": {
+    "seed": 2,
+    "control_after_generate": "randomize",
+    "wp_modules": "{\"version\": 1, \"modules\": [{\"id\": \"7ff544c2\", \"_uid\": \"7bdf6799f90f\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Hero fits the place\", \"library_name\": \"Hero fits the place\", \"description\": \"Reads the Hero picked in the first Context and re-weights the Setting.\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"808878ba\", \"target_wildcard_id\": \"aa76ada8\", \"source_wildcard_name\": \"Hero\", \"target_wildcard_name\": \"Setting\", \"exceptions\": [], \"matrix\": {\"noble\": {\"castle\": {\"mode\": \"boost\", \"factor\": 4}, \"wilds\": {\"mode\": \"reduce\", \"factor\": 0.3}}, \"wild\": {\"wilds\": {\"mode\": \"boost\", \"factor\": 4}, \"city\": {\"mode\": \"reduce\", \"factor\": 0.3}}, \"urban\": {\"city\": {\"mode\": \"boost\", \"factor\": 4}, \"castle\": {\"mode\": \"exclude\", \"factor\": 0}}}}, \"payload_hash\": \"33a422a0e0c3dc191cb58b1089cc9175e997cfc6aa387a92b765c6169cd9019d\", \"example\": true, \"bundle_origin\": \"79c20f5d6bf8\"}, {\"id\": \"aa76ada8\", \"_uid\": \"ee2ef2d3f95c\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Setting\", \"library_name\": \"Setting\"}, \"entries\": [], \"payload\": {\"var_binding\": \"setting\", \"sub_categories\": [\"castle\", \"wilds\", \"city\"], \"options\": [{\"id\": \"ee9e1c67\", \"value\": \"a torch-lit throne room\", \"weight\": 1, \"sub_categories\": [\"castle\"]}, {\"id\": \"dee3f9da\", \"value\": \"castle ramparts\", \"weight\": 1, \"sub_categories\": [\"castle\"]}, {\"id\": \"7b51b895\", \"value\": \"an ancient pine forest\", \"weight\": 1, \"sub_categories\": [\"wilds\"]}, {\"id\": \"ade62889\", \"value\": \"a windswept canyon\", \"weight\": 1, \"sub_categories\": [\"wilds\"]}, {\"id\": \"4e80731f\", \"value\": \"a crowded market street\", \"weight\": 1, \"sub_categories\": [\"city\"]}, {\"id\": \"d61c40b7\", \"value\": \"a rooftop garden above the city\", \"weight\": 1, \"sub_categories\": [\"city\"]}]}, \"payload_hash\": \"56fb6858c6d5f7f1a2588df19e3bd1208669eaba42486fe5f28c749cd1af3e95\", \"example\": true, \"bundle_origin\": \"79c20f5d6bf8\"}, {\"id\": \"49cac59c\", \"_uid\": \"f9b0aec1ce3c\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Time of day\", \"library_name\": \"Time of day\"}, \"entries\": [], \"payload\": {\"var_binding\": \"time\", \"sub_categories\": [], \"options\": [{\"id\": \"7c740b5b\", \"value\": \"dawn\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"7ddc9c86\", \"value\": \"golden hour\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"a681b8ca\", \"value\": \"night\", \"weight\": 1, \"sub_categories\": []}]}, \"payload_hash\": \"5a4acb1f8e5bdd5fa5d70365a0fbc5eca38af96db6578b89e502694d5b9bc776\", \"example\": true, \"bundle_origin\": \"79c20f5d6bf8\"}, {\"id\": \"5774d2a1\", \"_uid\": \"7e51d68033f1\", \"type\": \"derivation\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Lighting from time\", \"library_name\": \"Lighting from time\", \"description\": \"Night gets lantern light (and a negative); else soft light.\"}, \"entries\": [], \"payload\": {\"rules\": [{\"branches\": [{\"condition\": {\"var\": \"time\", \"op\": \"equals\", \"value\": \"night\"}, \"action\": {\"target_var\": \"lighting\", \"mode\": \"replace\", \"value\": \"moonlight, warm lantern glow\"}, \"extra_actions\": [{\"target_var\": \"lighting\", \"mode\": \"negative\", \"value\": \"overexposed, harsh sunlight\"}]}], \"else\": {\"action\": {\"target_var\": \"lighting\", \"mode\": \"replace\", \"value\": \"soft natural light\"}}, \"id\": \"e751ba3a\"}]}, \"payload_hash\": \"e5b549fb4ac497a054a1fe2faf89c26fe9427460af2842f811e7d0aab5c8df05\", \"example\": true, \"bundle_origin\": \"79c20f5d6bf8\"}, {\"id\": \"5d75075f\", \"_uid\": \"a207f1262d9e\", \"type\": \"combine\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Scene line\", \"library_name\": \"Scene line\"}, \"entries\": [], \"payload\": {\"template\": \"in $setting at $time, $lighting\", \"output_var\": \"scene\", \"input_vars\": [\"setting\", \"time\", \"lighting\"]}, \"payload_hash\": \"a5b688137b629aedc42362a5dbd9a91ffe9e884084fba9ef4c3fd82bfa94cb52\", \"example\": true, \"bundle_origin\": \"79c20f5d6bf8\"}, {\"id\": \"c32f16d6\", \"_uid\": \"079c5fb2d096\", \"type\": \"fixed_values\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Style\", \"library_name\": \"Style\", \"description\": \"A fixed value with its own negative words.\"}, \"entries\": [], \"payload\": {\"values\": [{\"id\": \"9af7bf95\", \"name\": \"style\", \"value\": \"digital painting, detailed, painterly brushwork\", \"negative\": \"photo, 3d render, blurry\"}]}, \"payload_hash\": \"e9971ee9ccbf2f5249b67987e2021e5a3f9b3a9e5dc041747c3121c505415020\", \"example\": true, \"bundle_origin\": \"79c20f5d6bf8\"}], \"bundles\": [{\"_uid\": \"79c20f5d6bf8\", \"library_id\": \"86360bc3\", \"start_idx\": 0, \"end_idx\": 5, \"enabled\": true, \"collapsed\": false, \"inserted_at_hash\": \"\", \"name\": \"Scene\", \"color\": \"#2fb380\", \"parent_uid\": null, \"example\": true}]}"
+   }
+  },
+  {
+   "id": 6,
+   "type": "WP_Note",
+   "pos": [
+    1240,
+    0
+   ],
+   "size": [
+    560,
+    182
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "title": "Write the prompt",
+   "properties": {},
+   "widgets_values": [
+    "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 2, \"icon\": \"info-circle\", \"text\": \"Type `$` in the **Assembler** to add a variable. The preview shows what the last run picked.\\n\\n`$negatives` collects the negative words the picked options bring (plate armor adds *rust, broken armor*). The **Cleaner** tidies stray commas and repeats.\\n\\n[Prompt Assembler](docs:wp-prompt-assembler){button pi-book} [Negatives](docs:negatives){button pi-minus-circle}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1190, \"y\": 580}, \"zoomMode\": \"fixed\", \"zoom\": 0.53, \"shortcut\": \"Alt+2\", \"order\": 2}}"
+   ],
+   "widgets_values_named": {
+    "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 2, \"icon\": \"info-circle\", \"text\": \"Type `$` in the **Assembler** to add a variable. The preview shows what the last run picked.\\n\\n`$negatives` collects the negative words the picked options bring (plate armor adds *rust, broken armor*). The **Cleaner** tidies stray commas and repeats.\\n\\n[Prompt Assembler](docs:wp-prompt-assembler){button pi-book} [Negatives](docs:negatives){button pi-minus-circle}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1190, \"y\": 580}, \"zoomMode\": \"fixed\", \"zoom\": 0.53, \"shortcut\": \"Alt+2\", \"order\": 2}}"
+   }
+  },
+  {
+   "id": 7,
+   "type": "WP_PromptAssembler",
+   "pos": [
+    1240,
+    320
+   ],
+   "size": [
+    420,
+    520
+   ],
+   "flags": {},
+   "order": 30,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "context",
+     "name": "context",
+     "type": "PIPELINE_CONTEXT",
+     "link": 5
+    },
+    {
+     "localized_name": "template",
+     "name": "template",
+     "type": "STRING",
+     "widget": {
+      "name": "template"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "negative_template",
+     "name": "negative_template",
+     "shape": 7,
+     "type": "STRING",
+     "widget": {
+      "name": "negative_template"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "prompt",
+     "name": "prompt",
+     "type": "STRING",
+     "links": [
+      7
+     ]
+    },
+    {
+     "localized_name": "negative",
+     "name": "negative",
+     "type": "STRING",
+     "links": [
+      8
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "WP_PromptAssembler"
+   },
+   "widgets_values": [
+    "$hero, $hair, $eyes, wearing $outfit, $scene, $style",
+    "lowres, bad anatomy, watermark, $negatives",
+    ""
+   ],
+   "widgets_values_named": {
+    "template": "$hero, $hair, $eyes, wearing $outfit, $scene, $style",
+    "negative_template": "lowres, bad anatomy, watermark, $negatives",
+    "assembler-helper": ""
+   }
+  },
+  {
+   "id": 8,
+   "type": "WP_PromptCleaner",
+   "pos": [
+    1860,
+    320
+   ],
+   "size": [
+    480,
+    520
+   ],
+   "flags": {},
+   "order": 32,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "blocklist",
+     "name": "blocklist",
+     "shape": 7,
+     "type": "STRING",
+     "link": null
+    },
+    {
+     "localized_name": "prompt",
+     "name": "prompt",
+     "type": "STRING",
+     "widget": {
+      "name": "prompt"
+     },
+     "link": 7
+    },
+    {
+     "localized_name": "negative",
+     "name": "negative",
+     "shape": 7,
+     "type": "STRING",
+     "widget": {
+      "name": "negative"
+     },
+     "link": 8
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "prompt",
+     "name": "prompt",
+     "type": "STRING",
+     "links": [
+      22
+     ]
+    },
+    {
+     "localized_name": "negative",
+     "name": "negative",
+     "type": "STRING",
+     "links": [
+      23
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "WP_PromptCleaner"
+   },
+   "widgets_values": [
+    "",
+    "",
+    "{\"mode\":\"tags\",\"intensity\":\"balanced\",\"rules_override\":{},\"blocklist\":{\"kind\":\"list\",\"entries\":[]}}"
+   ],
+   "widgets_values_named": {
+    "prompt": "",
+    "negative": "",
+    "wp_cleaner": "{\"mode\":\"tags\",\"intensity\":\"balanced\",\"rules_override\":{},\"blocklist\":{\"kind\":\"list\",\"entries\":[]}}"
+   }
+  },
+  {
+   "id": 9,
+   "type": "WP_Note",
+   "pos": [
+    1860,
+    0
+   ],
+   "size": [
+    440,
+    154
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "title": "Keep these lists",
+   "properties": {},
+   "widgets_values": [
+    "{\"version\": 1, \"tone\": \"icon\", \"look\": \"sticky\", \"step\": 1, \"icon\": \"lightbulb\", \"text\": \"They live inside this workflow. Right-click a bundle header \\u2192 **Push to library\\u2026** to save it with its sub-bundles and rows, and the EXAMPLE chip goes away.\\n\\n[How](docs:howto-examples#s-the-lists-come-with-the-workflow){button pi-save}\", \"color\": \"tip\", \"bookmark\": null}"
+   ],
+   "widgets_values_named": {
+    "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"sticky\", \"step\": 1, \"icon\": \"lightbulb\", \"text\": \"They live inside this workflow. Right-click a bundle header \\u2192 **Push to library\\u2026** to save it with its sub-bundles and rows, and the EXAMPLE chip goes away.\\n\\n[How](docs:howto-examples#s-the-lists-come-with-the-workflow){button pi-save}\", \"color\": \"tip\", \"bookmark\": null}"
+   }
+  },
+  {
+   "id": 10,
+   "type": "WP_Debug",
+   "pos": [
+    1860,
+    780
+   ],
+   "size": [
+    524,
+    380
+   ],
+   "flags": {},
+   "order": 31,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "context",
+     "name": "context",
+     "type": "PIPELINE_CONTEXT",
+     "link": 6
+    }
+   ],
+   "outputs": [],
+   "properties": {
+    "Node name for S&R": "WP_Debug"
+   },
+   "widgets_values": [
+    ""
+   ],
+   "widgets_values_named": {
+    "wp_viewer": ""
+   }
+  },
+  {
+   "id": 11,
+   "type": "WP_Note",
+   "pos": [
+    1240,
+    920
+   ],
+   "size": [
+    420,
+    134
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "title": "See what was picked",
+   "properties": {},
+   "widgets_values": [
+    "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"search\", \"text\": \"After a run, **WP Debug** lists every variable, which option each list picked and any warnings. Safe to delete.\\n\\n[WP Debug](docs:wp-debug){button pi-search}\", \"color\": \"neutral\", \"bookmark\": null}"
+   ],
+   "widgets_values_named": {
+    "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"search\", \"text\": \"After a run, **WP Debug** lists every variable, which option each list picked and any warnings. Safe to delete.\\n\\n[WP Debug](docs:wp-debug){button pi-search}\", \"color\": \"neutral\", \"bookmark\": null}"
+   }
+  },
+  {
+   "id": 12,
+   "type": "WP_Note",
+   "pos": [
+    0,
+    1320
+   ],
+   "size": [
+    560,
+    306
+   ],
+   "flags": {},
+   "order": 7,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "title": "LoRAs and switches (optional, all off)",
+   "properties": {},
+   "widgets_values": [
+    "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"sliders-h\", \"text\": \"**WP Toggles** is the switchboard for this workflow:\\n\\n1. Pick a LoRA in a **Load LoRA** node and type its trigger words in the boxes.\\n2. Switch it on. The switch un-bypasses its loader *and* tells the **LoRA swaps** bundle to use the words: a character's replace `$hero` (and, with *Use its own clothes*, `$outfit`), a style's go after `$style`.\\n3. *Settings from the model* bypasses that whole group when off.\\n\\n> The toggles write `$lora_character`\\u2026 as true / false; the **Injector** writes the words to their own variables (`$lora_hero_words`\\u2026), so a switch never prints.\\n\\n[WP Toggles](docs:wp-toggles){button pi-sliders-h} [Injector](docs:wp-context-injector){button pi-sign-in}\\n\\n[Find LoRAs on Civitai](https://civitai.com/models?types=LORA){button pi-search #3b82f6} [ComfyUI LoRA guide](https://docs.comfy.org/tutorials/basic/lora){button pi-book #eab308}\", \"color\": \"violet\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1190, \"y\": 1810}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"Alt+4\", \"order\": 4}}"
+   ],
+   "widgets_values_named": {
+    "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"sliders-h\", \"text\": \"**WP Toggles** is the switchboard for this workflow:\\n\\n1. Pick a LoRA in a **Load LoRA** node and type its trigger words in the boxes.\\n2. Switch it on. The switch un-bypasses its loader *and* tells the **LoRA swaps** bundle to use the words: a character's replace `$hero` (and, with *Use its own clothes*, `$outfit`), a style's go after `$style`.\\n3. *Settings from the model* bypasses that whole group when off.\\n\\n> The toggles write `$lora_character`\\u2026 as true / false; the **Injector** writes the words to their own variables (`$lora_hero_words`\\u2026), so a switch never prints.\\n\\n[WP Toggles](docs:wp-toggles){button pi-sliders-h} [Injector](docs:wp-context-injector){button pi-sign-in}\\n\\n[Find LoRAs on Civitai](https://civitai.com/models?types=LORA){button pi-search #3b82f6} [ComfyUI LoRA guide](https://docs.comfy.org/tutorials/basic/lora){button pi-book #eab308}\", \"color\": \"violet\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1190, \"y\": 1810}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"Alt+4\", \"order\": 4}}"
+   }
+  },
+  {
+   "id": 13,
+   "type": "PrimitiveStringMultiline",
+   "pos": [
+    0,
+    1840
+   ],
+   "size": [
+    560,
+    110
+   ],
+   "flags": {},
+   "order": 8,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "value",
+     "name": "value",
+     "type": "STRING",
+     "widget": {
+      "name": "value"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "STRING",
+     "name": "STRING",
+     "type": "STRING",
+     "links": [
+      9
+     ]
+    }
+   ],
+   "title": "Character trigger words",
+   "properties": {
+    "Node name for S&R": "PrimitiveStringMultiline"
+   },
+   "widgets_values": [
+    "your character's trigger words"
+   ],
+   "widgets_values_named": {
+    "value": "your character's trigger words"
+   }
+  },
+  {
+   "id": 14,
+   "type": "PrimitiveStringMultiline",
+   "pos": [
+    0,
+    1990
+   ],
+   "size": [
+    560,
+    110
+   ],
+   "flags": {},
+   "order": 9,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "value",
+     "name": "value",
+     "type": "STRING",
+     "widget": {
+      "name": "value"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "STRING",
+     "name": "STRING",
+     "type": "STRING",
+     "links": [
+      10
+     ]
+    }
+   ],
+   "title": "Its clothes trigger words",
+   "properties": {
+    "Node name for S&R": "PrimitiveStringMultiline"
+   },
+   "widgets_values": [
+    "your character's outfit words"
+   ],
+   "widgets_values_named": {
+    "value": "your character's outfit words"
+   }
+  },
+  {
+   "id": 15,
+   "type": "PrimitiveStringMultiline",
+   "pos": [
+    0,
+    2140
+   ],
+   "size": [
+    560,
+    110
+   ],
+   "flags": {},
+   "order": 10,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "value",
+     "name": "value",
+     "type": "STRING",
+     "widget": {
+      "name": "value"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "STRING",
+     "name": "STRING",
+     "type": "STRING",
+     "links": [
+      11
+     ]
+    }
+   ],
+   "title": "Style trigger words",
+   "properties": {
+    "Node name for S&R": "PrimitiveStringMultiline"
+   },
+   "widgets_values": [
+    "your style's trigger words"
+   ],
+   "widgets_values_named": {
+    "value": "your style's trigger words"
+   }
+  },
+  {
+   "id": 16,
+   "type": "WP_ContextInjector",
+   "pos": [
+    620,
+    1320
+   ],
+   "size": [
+    570,
+    320
+   ],
+   "flags": {},
+   "order": 18,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "upstream",
+     "name": "upstream",
+     "shape": 7,
+     "type": "PIPELINE_CONTEXT",
+     "link": 2
+    },
+    {
+     "name": "input_0",
+     "type": "*",
+     "link": 9
+    },
+    {
+     "name": "input_1",
+     "type": "*",
+     "link": 10
+    },
+    {
+     "name": "input_2",
+     "type": "*",
+     "link": 11
+    },
+    {
+     "name": "input_3",
+     "type": "*",
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "context",
+     "name": "context",
+     "type": "PIPELINE_CONTEXT",
+     "links": [
+      3
+     ]
+    }
+   ],
+   "title": "WP Context Injector \u00b7 LoRA words",
+   "properties": {
+    "Node name for S&R": "WP_ContextInjector"
+   },
+   "widgets_values": [
+    "{\"version\": 1, \"rows\": [{\"_uid\": \"7f8586c3301a\", \"kind\": \"socket\", \"slot_name\": \"input_0\", \"binding\": \"lora_hero_words\", \"enabled\": true, \"internal\": true}, {\"_uid\": \"0ad022cb7927\", \"kind\": \"socket\", \"slot_name\": \"input_1\", \"binding\": \"lora_outfit_words\", \"enabled\": true, \"internal\": true}, {\"_uid\": \"5ab4f38cf708\", \"kind\": \"socket\", \"slot_name\": \"input_2\", \"binding\": \"lora_style_words\", \"enabled\": true, \"internal\": true}]}"
+   ],
+   "widgets_values_named": {
+    "wp_rows": "{\"version\":1,\"rows\":[{\"_uid\":\"f729338a10cf\",\"kind\":\"socket\",\"slot_name\":\"input_0\",\"binding\":\"\",\"enabled\":true,\"internal\":false,\"_collapsed\":true},{\"_uid\":\"01d48ee2ccf3\",\"kind\":\"socket\",\"slot_name\":\"input_1\",\"binding\":\"\",\"enabled\":true,\"internal\":false,\"_collapsed\":true},{\"_uid\":\"15faadb47a79\",\"kind\":\"socket\",\"slot_name\":\"input_2\",\"binding\":\"\",\"enabled\":true,\"internal\":false,\"_collapsed\":true}],\"bundles\":[]}"
+   }
+  },
+  {
+   "id": 17,
+   "type": "WP_Toggles",
+   "pos": [
+    620,
+    1660
+   ],
+   "size": [
+    560,
+    300
+   ],
+   "flags": {},
+   "order": 26,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "upstream",
+     "name": "upstream",
+     "shape": 7,
+     "type": "PIPELINE_CONTEXT",
+     "link": 3
+    },
+    {
+     "name": "ctl_75b9b8f2",
+     "type": "*",
+     "link": 16
+    },
+    {
+     "name": "ctl_c86c6752",
+     "type": "*",
+     "link": 17
+    },
+    {
+     "name": "ctl_1a5c7a2d",
+     "type": "*",
+     "link": 18
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "context",
+     "name": "context",
+     "type": "PIPELINE_CONTEXT",
+     "links": [
+      4
+     ]
+    }
+   ],
+   "title": "WP Toggles \u00b7 workflow switches",
+   "properties": {
+    "Node name for S&R": "WP_Toggles"
+   },
+   "widgets_values": [
+    "{\"version\": 1, \"mode\": \"any\", \"group_var\": \"\", \"rows\": [{\"id\": \"c248fdcf\", \"kind\": \"label\", \"name\": \"LoRAs\", \"color\": 5}, {\"id\": \"75b9b8f2\", \"kind\": \"toggle\", \"name\": \"LoRA character\", \"var\": \"lora_character\", \"on\": false, \"pin\": false, \"out\": 0, \"style\": \"switch\", \"control\": \"bypass\"}, {\"id\": \"218efd65\", \"kind\": \"toggle\", \"name\": \"Use its own clothes\", \"var\": \"lora_clothes\", \"on\": false, \"pin\": false, \"out\": 0, \"style\": \"switch\", \"needs\": \"75b9b8f2\"}, {\"id\": \"c86c6752\", \"kind\": \"toggle\", \"name\": \"Style LoRA\", \"var\": \"style_lora\", \"on\": false, \"pin\": false, \"out\": 0, \"style\": \"switch\", \"control\": \"bypass\"}, {\"id\": \"2db72368\", \"kind\": \"label\", \"name\": \"Extras\", \"color\": 3}, {\"id\": \"1a5c7a2d\", \"kind\": \"toggle\", \"name\": \"Settings from the model\", \"var\": \"model_settings\", \"on\": true, \"pin\": false, \"out\": 0, \"style\": \"switch\", \"control\": \"bypass\", \"hide_var\": true}]}"
+   ],
+   "widgets_values_named": {
+    "wp_toggles": "{\"version\": 1, \"mode\": \"any\", \"group_var\": \"\", \"rows\": [{\"id\": \"c248fdcf\", \"kind\": \"label\", \"name\": \"LoRAs\", \"color\": 5}, {\"id\": \"75b9b8f2\", \"kind\": \"toggle\", \"name\": \"LoRA character\", \"var\": \"lora_character\", \"on\": false, \"pin\": false, \"out\": 0, \"style\": \"switch\", \"control\": \"bypass\"}, {\"id\": \"218efd65\", \"kind\": \"toggle\", \"name\": \"Use its own clothes\", \"var\": \"lora_clothes\", \"on\": false, \"pin\": false, \"out\": 0, \"style\": \"switch\", \"needs\": \"75b9b8f2\"}, {\"id\": \"c86c6752\", \"kind\": \"toggle\", \"name\": \"Style LoRA\", \"var\": \"style_lora\", \"on\": false, \"pin\": false, \"out\": 0, \"style\": \"switch\", \"control\": \"bypass\"}, {\"id\": \"2db72368\", \"kind\": \"label\", \"name\": \"Extras\", \"color\": 3}, {\"id\": \"1a5c7a2d\", \"kind\": \"toggle\", \"name\": \"Settings from the model\", \"var\": \"model_settings\", \"on\": true, \"pin\": false, \"out\": 0, \"style\": \"switch\", \"control\": \"bypass\", \"hide_var\": true}]}"
+   }
+  },
+  {
+   "id": 18,
+   "type": "WP_Context",
+   "pos": [
+    1240,
+    1320
+   ],
+   "size": [
+    600,
+    360
+   ],
+   "flags": {},
+   "order": 29,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "upstream",
+     "name": "upstream",
+     "shape": 7,
+     "type": "PIPELINE_CONTEXT",
+     "link": 4
+    },
+    {
+     "localized_name": "seed",
+     "name": "seed",
+     "type": "INT",
+     "widget": {
+      "name": "seed"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "context",
+     "name": "context",
+     "type": "PIPELINE_CONTEXT",
+     "links": [
+      5,
+      6
+     ]
+    }
+   ],
+   "title": "WP Context \u00b7 LoRA swaps",
+   "properties": {
+    "Node name for S&R": "WP_Context"
+   },
+   "widgets_values": [
+    4,
+    "randomize",
+    "{\"version\": 1, \"modules\": [{\"id\": \"dd2bee53\", \"_uid\": \"f969fc08c722\", \"type\": \"derivation\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Character LoRA\", \"library_name\": \"Character LoRA\", \"description\": \"While the LoRA character toggle is on: its words replace $hero, and the rolled hair and eyes step aside.\"}, \"entries\": [], \"payload\": {\"rules\": [{\"branches\": [{\"condition\": {\"var\": \"lora_character\", \"op\": \"equals\", \"value\": \"true\"}, \"action\": {\"target_var\": \"hero\", \"mode\": \"replace\", \"value\": \"$lora_hero_words\"}, \"extra_actions\": [{\"target_var\": \"hair\", \"mode\": \"replace\", \"value\": \"\"}, {\"target_var\": \"eyes\", \"mode\": \"replace\", \"value\": \"\"}]}], \"id\": \"0420af2a\"}]}, \"payload_hash\": \"404b1613ac87aad0af31ac53ded2e1113069194a5b1c1c0a5de30275b48f69dd\", \"example\": true, \"bundle_origin\": \"7fe9e612e862\"}, {\"id\": \"435b5087\", \"_uid\": \"3da6825f9ace\", \"type\": \"derivation\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Its own clothes\", \"library_name\": \"Its own clothes\", \"description\": \"While 'Use its own clothes' is on: the LoRA's outfit words replace $outfit.\"}, \"entries\": [], \"payload\": {\"rules\": [{\"branches\": [{\"condition\": {\"var\": \"lora_clothes\", \"op\": \"equals\", \"value\": \"true\"}, \"action\": {\"target_var\": \"outfit\", \"mode\": \"replace\", \"value\": \"$lora_outfit_words\"}}], \"id\": \"7cf35a83\"}]}, \"payload_hash\": \"40a85f944f35041eec92671611711864d5cec3f3be8c1b0c5a568200fd0f087e\", \"example\": true, \"bundle_origin\": \"7fe9e612e862\"}, {\"id\": \"804fee67\", \"_uid\": \"70168759ea6f\", \"type\": \"derivation\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Style LoRA\", \"library_name\": \"Style LoRA\", \"description\": \"While the Style LoRA toggle is on: its words go after $style.\"}, \"entries\": [], \"payload\": {\"rules\": [{\"branches\": [{\"condition\": {\"var\": \"style_lora\", \"op\": \"equals\", \"value\": \"true\"}, \"action\": {\"target_var\": \"style\", \"mode\": \"append\", \"value\": \", $lora_style_words\"}}], \"id\": \"ddfcd524\"}]}, \"payload_hash\": \"6c318478ad2c1ec1d0b260d576c98fb0b76add95e471658f65dc504a32f8cc36\", \"example\": true, \"bundle_origin\": \"7fe9e612e862\"}], \"bundles\": [{\"_uid\": \"7fe9e612e862\", \"library_id\": \"3faee950\", \"start_idx\": 0, \"end_idx\": 2, \"enabled\": true, \"collapsed\": false, \"inserted_at_hash\": \"\", \"name\": \"LoRA swaps\", \"color\": \"#d0508a\", \"parent_uid\": null, \"example\": true}]}"
+   ],
+   "widgets_values_named": {
+    "seed": 4,
+    "control_after_generate": "randomize",
+    "wp_modules": "{\"version\": 1, \"modules\": [{\"id\": \"dd2bee53\", \"_uid\": \"f969fc08c722\", \"type\": \"derivation\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Character LoRA\", \"library_name\": \"Character LoRA\", \"description\": \"While the LoRA character toggle is on: its words replace $hero, and the rolled hair and eyes step aside.\"}, \"entries\": [], \"payload\": {\"rules\": [{\"branches\": [{\"condition\": {\"var\": \"lora_character\", \"op\": \"equals\", \"value\": \"true\"}, \"action\": {\"target_var\": \"hero\", \"mode\": \"replace\", \"value\": \"$lora_hero_words\"}, \"extra_actions\": [{\"target_var\": \"hair\", \"mode\": \"replace\", \"value\": \"\"}, {\"target_var\": \"eyes\", \"mode\": \"replace\", \"value\": \"\"}]}], \"id\": \"0420af2a\"}]}, \"payload_hash\": \"404b1613ac87aad0af31ac53ded2e1113069194a5b1c1c0a5de30275b48f69dd\", \"example\": true, \"bundle_origin\": \"7fe9e612e862\"}, {\"id\": \"435b5087\", \"_uid\": \"3da6825f9ace\", \"type\": \"derivation\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Its own clothes\", \"library_name\": \"Its own clothes\", \"description\": \"While 'Use its own clothes' is on: the LoRA's outfit words replace $outfit.\"}, \"entries\": [], \"payload\": {\"rules\": [{\"branches\": [{\"condition\": {\"var\": \"lora_clothes\", \"op\": \"equals\", \"value\": \"true\"}, \"action\": {\"target_var\": \"outfit\", \"mode\": \"replace\", \"value\": \"$lora_outfit_words\"}}], \"id\": \"7cf35a83\"}]}, \"payload_hash\": \"40a85f944f35041eec92671611711864d5cec3f3be8c1b0c5a568200fd0f087e\", \"example\": true, \"bundle_origin\": \"7fe9e612e862\"}, {\"id\": \"804fee67\", \"_uid\": \"70168759ea6f\", \"type\": \"derivation\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Style LoRA\", \"library_name\": \"Style LoRA\", \"description\": \"While the Style LoRA toggle is on: its words go after $style.\"}, \"entries\": [], \"payload\": {\"rules\": [{\"branches\": [{\"condition\": {\"var\": \"style_lora\", \"op\": \"equals\", \"value\": \"true\"}, \"action\": {\"target_var\": \"style\", \"mode\": \"append\", \"value\": \", $lora_style_words\"}}], \"id\": \"ddfcd524\"}]}, \"payload_hash\": \"6c318478ad2c1ec1d0b260d576c98fb0b76add95e471658f65dc504a32f8cc36\", \"example\": true, \"bundle_origin\": \"7fe9e612e862\"}], \"bundles\": [{\"_uid\": \"7fe9e612e862\", \"library_id\": \"3faee950\", \"start_idx\": 0, \"end_idx\": 2, \"enabled\": true, \"collapsed\": false, \"inserted_at_hash\": \"\", \"name\": \"LoRA swaps\", \"color\": \"#d0508a\", \"parent_uid\": null, \"example\": true}]}"
+   }
+  },
+  {
+   "id": 19,
+   "type": "LoraLoader",
+   "pos": [
+    1860,
+    1320
+   ],
+   "size": [
+    290.4380859375,
+    126
+   ],
+   "flags": {},
+   "order": 17,
+   "mode": 4,
+   "inputs": [
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "MODEL",
+     "link": 12
+    },
+    {
+     "localized_name": "clip",
+     "name": "clip",
+     "type": "CLIP",
+     "link": 13
+    },
+    {
+     "localized_name": "lora_name",
+     "name": "lora_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "lora_name"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "strength_model",
+     "name": "strength_model",
+     "type": "FLOAT",
+     "widget": {
+      "name": "strength_model"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "strength_clip",
+     "name": "strength_clip",
+     "type": "FLOAT",
+     "widget": {
+      "name": "strength_clip"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "MODEL",
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      14,
+      16
+     ]
+    },
+    {
+     "localized_name": "CLIP",
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      15
+     ]
+    }
+   ],
+   "title": "Character LoRA",
+   "properties": {
+    "Node name for S&R": "LoraLoader"
+   },
+   "widgets_values": [
+    null,
+    1,
+    1
+   ],
+   "widgets_values_named": {
+    "lora_name": null,
+    "strength_model": 1,
+    "strength_clip": 1
+   }
+  },
+  {
+   "id": 20,
+   "type": "LoraLoader",
+   "pos": [
+    1860,
+    1520
+   ],
+   "size": [
+    290.4380859375,
+    126
+   ],
+   "flags": {},
+   "order": 21,
+   "mode": 4,
+   "inputs": [
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "MODEL",
+     "link": 14
+    },
+    {
+     "localized_name": "clip",
+     "name": "clip",
+     "type": "CLIP",
+     "link": 15
+    },
+    {
+     "localized_name": "lora_name",
+     "name": "lora_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "lora_name"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "strength_model",
+     "name": "strength_model",
+     "type": "FLOAT",
+     "widget": {
+      "name": "strength_model"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "strength_clip",
+     "name": "strength_clip",
+     "type": "FLOAT",
+     "widget": {
+      "name": "strength_clip"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "MODEL",
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      17,
+      21
+     ]
+    },
+    {
+     "localized_name": "CLIP",
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      19,
+      20
+     ]
+    }
+   ],
+   "title": "Style LoRA",
+   "properties": {
+    "Node name for S&R": "LoraLoader"
+   },
+   "widgets_values": [
+    null,
+    1,
+    1
+   ],
+   "widgets_values_named": {
+    "lora_name": null,
+    "strength_model": 1,
+    "strength_clip": 1
+   }
+  },
+  {
+   "id": 21,
+   "type": "WP_Note",
+   "pos": [
+    2560,
+    0
+   ],
+   "size": [
+    560,
+    196
+   ],
+   "flags": {},
+   "order": 11,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "title": "Pick a checkpoint and run",
+   "properties": {},
+   "widgets_values": [
+    "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 3, \"icon\": \"info-circle\", \"text\": \"Choose your model in **Load Checkpoint**, then press **Run**. Every run rolls new picks; set a Context's seed to *fixed* to repeat one.\\n\\n:pi-star:{#f59e0b} No SDXL checkpoint yet? These suit the painterly lists here:\\n\\n[DreamShaper XL](https://civitai.com/models/112902/dreamshaper-xl){button pi-download #3b82f6} [Juggernaut XL](https://civitai.com/models/133005/juggernaut-xl){button pi-download #3b82f6}\\n\\n[Seeds & loops](docs:seeds-and-loops){button pi-refresh}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3750, \"y\": 580}, \"zoomMode\": \"fixed\", \"zoom\": 0.53, \"shortcut\": \"Alt+3\", \"order\": 3}}"
+   ],
+   "widgets_values_named": {
+    "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 3, \"icon\": \"info-circle\", \"text\": \"Choose your model in **Load Checkpoint**, then press **Run**. Every run rolls new picks; set a Context's seed to *fixed* to repeat one.\\n\\n:pi-star:{#f59e0b} No SDXL checkpoint yet? These suit the painterly lists here:\\n\\n[DreamShaper XL](https://civitai.com/models/112902/dreamshaper-xl){button pi-download #3b82f6} [Juggernaut XL](https://civitai.com/models/133005/juggernaut-xl){button pi-download #3b82f6}\\n\\n[Seeds & loops](docs:seeds-and-loops){button pi-refresh}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3750, \"y\": 580}, \"zoomMode\": \"fixed\", \"zoom\": 0.53, \"shortcut\": \"Alt+3\", \"order\": 3}}"
+   }
+  },
+  {
+   "id": 22,
+   "type": "CheckpointLoaderSimple",
+   "pos": [
+    2560,
+    420
+   ],
+   "size": [
+    270,
+    98
+   ],
+   "flags": {},
+   "order": 12,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "ckpt_name",
+     "name": "ckpt_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "ckpt_name"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "MODEL",
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      12,
+      30
+     ]
+    },
+    {
+     "localized_name": "CLIP",
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      13
+     ]
+    },
+    {
+     "localized_name": "VAE",
+     "name": "VAE",
+     "type": "VAE",
+     "links": [
+      28
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "CheckpointLoaderSimple"
+   },
+   "widgets_values": [
+    null
+   ],
+   "widgets_values_named": {
+    "ckpt_name": null
+   }
+  },
+  {
+   "id": 23,
+   "type": "CLIPTextEncode",
+   "pos": [
+    3180,
+    0
+   ],
+   "size": [
+    420,
+    120
+   ],
+   "flags": {},
+   "order": 33,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "clip",
+     "name": "clip",
+     "type": "CLIP",
+     "link": 19
+    },
+    {
+     "localized_name": "text",
+     "name": "text",
+     "type": "STRING",
+     "widget": {
+      "name": "text"
+     },
+     "link": 22
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "CONDITIONING",
+     "name": "CONDITIONING",
+     "type": "CONDITIONING",
+     "links": [
+      24
+     ]
+    }
+   ],
+   "title": "Positive",
+   "properties": {
+    "Node name for S&R": "CLIPTextEncode"
+   },
+   "widgets_values": [
+    ""
+   ],
+   "widgets_values_named": {
+    "text": ""
+   }
+  },
+  {
+   "id": 24,
+   "type": "CLIPTextEncode",
+   "pos": [
+    3180,
+    170
+   ],
+   "size": [
+    420,
+    120
+   ],
+   "flags": {},
+   "order": 34,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "clip",
+     "name": "clip",
+     "type": "CLIP",
+     "link": 20
+    },
+    {
+     "localized_name": "text",
+     "name": "text",
+     "type": "STRING",
+     "widget": {
+      "name": "text"
+     },
+     "link": 23
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "CONDITIONING",
+     "name": "CONDITIONING",
+     "type": "CONDITIONING",
+     "links": [
+      25
+     ]
+    }
+   ],
+   "title": "Negative",
+   "properties": {
+    "Node name for S&R": "CLIPTextEncode"
+   },
+   "widgets_values": [
+    ""
+   ],
+   "widgets_values_named": {
+    "text": ""
+   }
+  },
+  {
+   "id": 25,
+   "type": "EmptyLatentImage",
+   "pos": [
+    3180,
+    340
+   ],
+   "size": [
+    270,
+    106
+   ],
+   "flags": {},
+   "order": 27,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "width",
+     "name": "width",
+     "type": "INT",
+     "widget": {
+      "name": "width"
+     },
+     "link": 36
+    },
+    {
+     "localized_name": "height",
+     "name": "height",
+     "type": "INT",
+     "widget": {
+      "name": "height"
+     },
+     "link": 37
+    },
+    {
+     "localized_name": "batch_size",
+     "name": "batch_size",
+     "type": "INT",
+     "widget": {
+      "name": "batch_size"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "LATENT",
+     "name": "LATENT",
+     "type": "LATENT",
+     "links": [
+      26
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "EmptyLatentImage"
+   },
+   "widgets_values": [
+    1024,
+    1024,
+    1
+   ],
+   "widgets_values_named": {
+    "width": 1024,
+    "height": 1024,
+    "batch_size": 1
+   }
+  },
+  {
+   "id": 26,
+   "type": "KSampler",
+   "pos": [
+    3800,
+    0
+   ],
+   "size": [
+    270,
+    262
+   ],
+   "flags": {},
+   "order": 35,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "MODEL",
+     "link": 21
+    },
+    {
+     "localized_name": "positive",
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 24
+    },
+    {
+     "localized_name": "negative",
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 25
+    },
+    {
+     "localized_name": "latent_image",
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 26
+    },
+    {
+     "localized_name": "seed",
+     "name": "seed",
+     "type": "INT",
+     "widget": {
+      "name": "seed"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "steps",
+     "name": "steps",
+     "type": "INT",
+     "widget": {
+      "name": "steps"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "cfg",
+     "name": "cfg",
+     "type": "FLOAT",
+     "widget": {
+      "name": "cfg"
+     },
+     "link": 38
+    },
+    {
+     "localized_name": "sampler_name",
+     "name": "sampler_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "sampler_name"
+     },
+     "link": 39
+    },
+    {
+     "localized_name": "scheduler",
+     "name": "scheduler",
+     "type": "COMBO",
+     "widget": {
+      "name": "scheduler"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "denoise",
+     "name": "denoise",
+     "type": "FLOAT",
+     "widget": {
+      "name": "denoise"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "LATENT",
+     "name": "LATENT",
+     "type": "LATENT",
+     "links": [
+      27
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "KSampler"
+   },
+   "widgets_values": [
+    0,
+    "randomize",
+    28,
+    6,
+    "dpmpp_2m",
+    "karras",
+    1
+   ],
+   "widgets_values_named": {
+    "seed": 0,
+    "control_after_generate": "randomize",
+    "steps": 28,
+    "cfg": 6,
+    "sampler_name": "dpmpp_2m",
+    "scheduler": "karras",
+    "denoise": 1
+   }
+  },
+  {
+   "id": 27,
+   "type": "VAEDecode",
+   "pos": [
+    3800,
+    320
+   ],
+   "size": [
+    140,
+    46
+   ],
+   "flags": {},
+   "order": 36,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "samples",
+     "name": "samples",
+     "type": "LATENT",
+     "link": 27
+    },
+    {
+     "localized_name": "vae",
+     "name": "vae",
+     "type": "VAE",
+     "link": 28
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "IMAGE",
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      29
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "VAEDecode"
+   }
+  },
+  {
+   "id": 28,
+   "type": "WP_Bookmark",
+   "pos": [
+    4420,
+    0
+   ],
+   "size": [
+    183,
+    30
+   ],
+   "flags": {},
+   "order": 13,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "title": "The image",
+   "properties": {},
+   "widgets_values": [
+    "{\"version\": 1, \"color\": \"\", \"icon\": \"image\", \"hidden\": false, \"anchor\": \"custom\", \"view\": {\"x\": 4660, \"y\": 310}, \"zoomMode\": \"fixed\", \"zoom\": 0.97, \"shortcut\": \"Alt+6\", \"order\": 6}"
+   ],
+   "widgets_values_named": {
+    "wp_bookmark": "{\"version\": 1, \"color\": \"\", \"icon\": \"image\", \"hidden\": false, \"anchor\": \"custom\", \"view\": {\"x\": 4660, \"y\": 310}, \"zoomMode\": \"fixed\", \"zoom\": 0.97, \"shortcut\": \"Alt+6\", \"order\": 6}"
+   }
+  },
+  {
+   "id": 29,
+   "type": "SaveImage",
+   "pos": [
+    4420,
+    90
+   ],
+   "size": [
+    460,
+    520
+   ],
+   "flags": {},
+   "order": 37,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "images",
+     "name": "images",
+     "type": "IMAGE",
+     "link": 29
+    },
+    {
+     "localized_name": "filename_prefix",
+     "name": "filename_prefix",
+     "type": "STRING",
+     "widget": {
+      "name": "filename_prefix"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "images",
+     "name": "images",
+     "type": "IMAGE",
+     "links": null
+    }
+   ],
+   "properties": {},
+   "widgets_values": [
+    "wp-example/single"
+   ],
+   "widgets_values_named": {
+    "filename_prefix": "wp-example/single"
+   }
+  },
+  {
+   "id": 30,
+   "type": "WP_Note",
+   "pos": [
+    2560,
+    1320
+   ],
+   "size": [
+    560,
+    222
+   ],
+   "flags": {},
+   "order": 14,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "title": "Settings from the model (optional)",
+   "properties": {},
+   "widgets_values": [
+    "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"microchip\", \"text\": \"**Model Info** reads which model is loaded. A derivation in the **Render** Context turns `$model_family` into `$size` (like `832x1216`), `$sampler` and `$cfg`, and each **Var \\u2192** node reads one into a widget: **Width** takes the first number of `$size`, **Height** the second.\\n\\n:pi-sync: Switch it off in WP Toggles, or bypass **Model Info** (Ctrl+B): the **Mode Relay** passes that on to the **Node Group**, and the latent and sampler use their own widgets again.\\n\\n[Model Info](docs:wp-model-info){button pi-microchip} [Mode Relay](docs:wp-mode-relay){button pi-share-alt} [Node Group](docs:wp-node-group){button pi-objects-column}\", \"color\": \"warning\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3750, \"y\": 1810}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"Alt+5\", \"order\": 5}}"
+   ],
+   "widgets_values_named": {
+    "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"microchip\", \"text\": \"**Model Info** reads which model is loaded. A derivation in the **Render** Context turns `$model_family` into `$size` (like `832x1216`), `$sampler` and `$cfg`, and each **Var \\u2192** node reads one into a widget: **Width** takes the first number of `$size`, **Height** the second.\\n\\n:pi-sync: Switch it off in WP Toggles, or bypass **Model Info** (Ctrl+B): the **Mode Relay** passes that on to the **Node Group**, and the latent and sampler use their own widgets again.\\n\\n[Model Info](docs:wp-model-info){button pi-microchip} [Mode Relay](docs:wp-mode-relay){button pi-share-alt} [Node Group](docs:wp-node-group){button pi-objects-column}\", \"color\": \"warning\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3750, \"y\": 1810}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"Alt+5\", \"order\": 5}}"
+   }
+  },
+  {
+   "id": 31,
+   "type": "WP_ModelInfo",
+   "pos": [
+    2560,
+    1800
+   ],
+   "size": [
+    490,
+    320
+   ],
+   "flags": {},
+   "order": 16,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "upstream",
+     "name": "upstream",
+     "shape": 7,
+     "type": "PIPELINE_CONTEXT",
+     "link": null
+    },
+    {
+     "localized_name": "model",
+     "name": "model",
+     "shape": 7,
+     "type": "MODEL",
+     "link": 30
+    },
+    {
+     "localized_name": "family",
+     "name": "family",
+     "shape": 7,
+     "type": "STRING",
+     "link": null
+    },
+    {
+     "localized_name": "variant",
+     "name": "variant",
+     "shape": 7,
+     "type": "STRING",
+     "link": null
+    },
+    {
+     "localized_name": "name",
+     "name": "name",
+     "shape": 7,
+     "type": "STRING",
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "context",
+     "name": "context",
+     "type": "PIPELINE_CONTEXT",
+     "links": [
+      18,
+      31,
+      40
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "WP_ModelInfo"
+   },
+   "widgets_values": [
+    "{\"version\":1,\"rules\":[{\"variant\":\"noobai\",\"pattern\":\"noob\"},{\"variant\":\"pony\",\"pattern\":\"pony|pdxl\"},{\"variant\":\"illustrious\",\"pattern\":\"illustrious|ilxl\"},{\"variant\":\"animagine\",\"pattern\":\"animagine\"}],\"family\":\"\",\"variant\":\"\",\"name\":\"\",\"internal\":{\"family\":true,\"variant\":true,\"name\":true}}"
+   ],
+   "widgets_values_named": {
+    "wp_model_info": "{\"version\":1,\"rules\":[{\"variant\":\"noobai\",\"pattern\":\"noob\"},{\"variant\":\"pony\",\"pattern\":\"pony|pdxl\"},{\"variant\":\"illustrious\",\"pattern\":\"illustrious|ilxl\"},{\"variant\":\"animagine\",\"pattern\":\"animagine\"}],\"family\":\"\",\"variant\":\"\",\"name\":\"\",\"internal\":{\"family\":true,\"variant\":true,\"name\":true}}"
+   }
+  },
+  {
+   "id": 32,
+   "type": "WP_Context",
+   "pos": [
+    3180,
+    1320
+   ],
+   "size": [
+    540,
+    240
+   ],
+   "flags": {},
+   "order": 19,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "upstream",
+     "name": "upstream",
+     "shape": 7,
+     "type": "PIPELINE_CONTEXT",
+     "link": 31
+    },
+    {
+     "localized_name": "seed",
+     "name": "seed",
+     "type": "INT",
+     "widget": {
+      "name": "seed"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "context",
+     "name": "context",
+     "type": "PIPELINE_CONTEXT",
+     "links": [
+      32,
+      33,
+      34,
+      35,
+      42
+     ]
+    }
+   ],
+   "title": "WP Context \u00b7 Render",
+   "properties": {
+    "Node name for S&R": "WP_Context"
+   },
+   "widgets_values": [
+    3,
+    "randomize",
+    "{\"version\": 1, \"modules\": [{\"id\": \"5b008dc7\", \"_uid\": \"ee6beed627f5\", \"type\": \"derivation\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Settings per model\", \"library_name\": \"Settings per model\", \"description\": \"Reads $model_family from WP Model Info: $size, $sampler and $cfg.\"}, \"entries\": [], \"payload\": {\"rules\": [{\"branches\": [{\"condition\": {\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"sd15\"}, \"action\": {\"target_var\": \"size\", \"mode\": \"replace\", \"value\": \"512x768\"}, \"extra_actions\": [{\"target_var\": \"sampler\", \"mode\": \"replace\", \"value\": \"euler ancestral\"}, {\"target_var\": \"cfg\", \"mode\": \"replace\", \"value\": \"7\"}]}, {\"condition\": {\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"sdxl\"}, \"action\": {\"target_var\": \"size\", \"mode\": \"replace\", \"value\": \"832x1216\"}, \"extra_actions\": [{\"target_var\": \"sampler\", \"mode\": \"replace\", \"value\": \"dpmpp 2m\"}, {\"target_var\": \"cfg\", \"mode\": \"replace\", \"value\": \"6\"}]}, {\"condition\": {\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"flux\"}, \"action\": {\"target_var\": \"size\", \"mode\": \"replace\", \"value\": \"896x1152\"}, \"extra_actions\": [{\"target_var\": \"sampler\", \"mode\": \"replace\", \"value\": \"euler\"}, {\"target_var\": \"cfg\", \"mode\": \"replace\", \"value\": \"1\"}]}], \"else\": {\"action\": {\"target_var\": \"size\", \"mode\": \"replace\", \"value\": \"1024x1024\"}, \"extra_actions\": [{\"target_var\": \"sampler\", \"mode\": \"replace\", \"value\": \"euler\"}, {\"target_var\": \"cfg\", \"mode\": \"replace\", \"value\": \"5\"}]}, \"id\": \"e4788601\"}]}, \"payload_hash\": \"c0984a832695df2fe5a9023ea6495102b3a2fbb4cf05c92d376078c0f1ae4fe4\", \"example\": true}], \"bundles\": []}"
+   ],
+   "widgets_values_named": {
+    "seed": 3,
+    "control_after_generate": "randomize",
+    "wp_modules": "{\"version\": 1, \"modules\": [{\"id\": \"5b008dc7\", \"_uid\": \"ee6beed627f5\", \"type\": \"derivation\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Settings per model\", \"library_name\": \"Settings per model\", \"description\": \"Reads $model_family from WP Model Info: $size, $sampler and $cfg.\"}, \"entries\": [], \"payload\": {\"rules\": [{\"branches\": [{\"condition\": {\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"sd15\"}, \"action\": {\"target_var\": \"size\", \"mode\": \"replace\", \"value\": \"512x768\"}, \"extra_actions\": [{\"target_var\": \"sampler\", \"mode\": \"replace\", \"value\": \"euler ancestral\"}, {\"target_var\": \"cfg\", \"mode\": \"replace\", \"value\": \"7\"}]}, {\"condition\": {\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"sdxl\"}, \"action\": {\"target_var\": \"size\", \"mode\": \"replace\", \"value\": \"832x1216\"}, \"extra_actions\": [{\"target_var\": \"sampler\", \"mode\": \"replace\", \"value\": \"dpmpp 2m\"}, {\"target_var\": \"cfg\", \"mode\": \"replace\", \"value\": \"6\"}]}, {\"condition\": {\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"flux\"}, \"action\": {\"target_var\": \"size\", \"mode\": \"replace\", \"value\": \"896x1152\"}, \"extra_actions\": [{\"target_var\": \"sampler\", \"mode\": \"replace\", \"value\": \"euler\"}, {\"target_var\": \"cfg\", \"mode\": \"replace\", \"value\": \"1\"}]}], \"else\": {\"action\": {\"target_var\": \"size\", \"mode\": \"replace\", \"value\": \"1024x1024\"}, \"extra_actions\": [{\"target_var\": \"sampler\", \"mode\": \"replace\", \"value\": \"euler\"}, {\"target_var\": \"cfg\", \"mode\": \"replace\", \"value\": \"5\"}]}, \"id\": \"e4788601\"}]}, \"payload_hash\": \"c0984a832695df2fe5a9023ea6495102b3a2fbb4cf05c92d376078c0f1ae4fe4\", \"example\": true}], \"bundles\": []}"
+   }
+  },
+  {
+   "id": 33,
+   "type": "WP_VarToInt",
+   "pos": [
+    3800,
+    1320
+   ],
+   "size": [
+    420,
+    180
+   ],
+   "flags": {},
+   "order": 22,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "context",
+     "name": "context",
+     "type": "PIPELINE_CONTEXT",
+     "link": 32
+    },
+    {
+     "localized_name": "index",
+     "name": "index",
+     "type": "INT",
+     "widget": {
+      "name": "index"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "default",
+     "name": "default",
+     "type": "INT",
+     "widget": {
+      "name": "default"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "value",
+     "name": "value",
+     "type": "INT",
+     "links": [
+      36,
+      43
+     ]
+    }
+   ],
+   "title": "Width",
+   "properties": {
+    "var_name": "$size",
+    "Node name for S&R": "WP_VarToInt"
+   },
+   "widgets_values": [
+    "$size",
+    0,
+    1024
+   ],
+   "widgets_values_named": {
+    "wp_var_name": "$size",
+    "index": 0,
+    "default": 1024
+   }
+  },
+  {
+   "id": 34,
+   "type": "WP_VarToInt",
+   "pos": [
+    3800,
+    1580
+   ],
+   "size": [
+    420,
+    180
+   ],
+   "flags": {},
+   "order": 23,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "context",
+     "name": "context",
+     "type": "PIPELINE_CONTEXT",
+     "link": 33
+    },
+    {
+     "localized_name": "index",
+     "name": "index",
+     "type": "INT",
+     "widget": {
+      "name": "index"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "default",
+     "name": "default",
+     "type": "INT",
+     "widget": {
+      "name": "default"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "value",
+     "name": "value",
+     "type": "INT",
+     "links": [
+      37,
+      44
+     ]
+    }
+   ],
+   "title": "Height",
+   "properties": {
+    "var_name": "$size",
+    "Node name for S&R": "WP_VarToInt"
+   },
+   "widgets_values": [
+    "$size",
+    1,
+    1024
+   ],
+   "widgets_values_named": {
+    "wp_var_name": "$size",
+    "index": 1,
+    "default": 1024
+   }
+  },
+  {
+   "id": 35,
+   "type": "WP_VarToFloat",
+   "pos": [
+    3800,
+    1840
+   ],
+   "size": [
+    420,
+    180
+   ],
+   "flags": {},
+   "order": 24,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "context",
+     "name": "context",
+     "type": "PIPELINE_CONTEXT",
+     "link": 34
+    },
+    {
+     "localized_name": "index",
+     "name": "index",
+     "type": "INT",
+     "widget": {
+      "name": "index"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "default",
+     "name": "default",
+     "type": "FLOAT",
+     "widget": {
+      "name": "default"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "value",
+     "name": "value",
+     "type": "FLOAT",
+     "links": [
+      38,
+      45
+     ]
+    }
+   ],
+   "title": "CFG",
+   "properties": {
+    "var_name": "$cfg",
+    "Node name for S&R": "WP_VarToFloat"
+   },
+   "widgets_values": [
+    "$cfg",
+    0,
+    6
+   ],
+   "widgets_values_named": {
+    "wp_var_name": "$cfg",
+    "index": 0,
+    "default": 6
+   }
+  },
+  {
+   "id": 36,
+   "type": "WP_VarToChoice",
+   "pos": [
+    3800,
+    2100
+   ],
+   "size": [
+    420,
+    220
+   ],
+   "flags": {},
+   "order": 25,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "context",
+     "name": "context",
+     "type": "PIPELINE_CONTEXT",
+     "link": 35
+    },
+    {
+     "localized_name": "match",
+     "name": "match",
+     "type": "COMBO",
+     "widget": {
+      "name": "match"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "fallback",
+     "name": "fallback",
+     "type": "COMBO",
+     "widget": {
+      "name": "fallback"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "if_no_match",
+     "name": "if_no_match",
+     "type": "COMBO",
+     "widget": {
+      "name": "if_no_match"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "choice",
+     "name": "choice",
+     "type": "*",
+     "links": [
+      39,
+      46
+     ]
+    }
+   ],
+   "title": "Sampler",
+   "properties": {
+    "var_name": "$sampler",
+    "Node name for S&R": "WP_VarToChoice"
+   },
+   "widgets_values": [
+    "$sampler",
+    "loose",
+    "euler",
+    "use fallback"
+   ],
+   "widgets_values_named": {
+    "wp_var_name": "$sampler",
+    "match": "loose",
+    "fallback": "euler",
+    "if_no_match": "use fallback"
+   }
+  },
+  {
+   "id": 37,
+   "type": "WP_NodeGroup",
+   "pos": [
+    4420,
+    1320
+   ],
+   "size": [
+    360,
+    350
+   ],
+   "flags": {},
+   "order": 28,
+   "mode": 0,
+   "inputs": [
+    {
+     "label": "WP Mode Relay",
+     "name": "node_1",
+     "type": "*",
+     "link": 41
+    },
+    {
+     "label": "WP Context \u00b7 Render",
+     "name": "node_2",
+     "type": "*",
+     "link": 42
+    },
+    {
+     "label": "Width",
+     "name": "node_3",
+     "type": "*",
+     "link": 43
+    },
+    {
+     "label": "Height",
+     "name": "node_4",
+     "type": "*",
+     "link": 44
+    },
+    {
+     "label": "CFG",
+     "name": "node_5",
+     "type": "*",
+     "link": 45
+    },
+    {
+     "label": "Sampler",
+     "name": "node_6",
+     "type": "*",
+     "link": 46
+    },
+    {
+     "name": "node_7",
+     "type": "*",
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "name": "nodes",
+     "type": "WP_NODES",
+     "links": null
+    }
+   ],
+   "title": "WP Node Group \u00b7 model settings",
+   "properties": {}
+  },
+  {
+   "id": 38,
+   "type": "WP_ModeRelay",
+   "pos": [
+    3180,
+    1740
+   ],
+   "size": [
+    400,
+    180
+   ],
+   "flags": {},
+   "order": 20,
+   "mode": 0,
+   "inputs": [
+    {
+     "label": "WP Model Info",
+     "name": "node_1",
+     "type": "*",
+     "link": 40
+    },
+    {
+     "name": "node_2",
+     "type": "*",
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "name": "drives",
+     "type": "WP_NODES",
+     "links": [
+      41
+     ]
+    }
+   ],
+   "properties": {}
+  }
+ ],
+ "links": [
+  [
+   1,
+   3,
+   0,
+   5,
+   0,
+   "PIPELINE_CONTEXT"
+  ],
+  [
+   3,
+   16,
+   0,
+   17,
+   0,
+   "PIPELINE_CONTEXT"
+  ],
+  [
+   4,
+   17,
+   0,
+   18,
+   0,
+   "PIPELINE_CONTEXT"
+  ],
+  [
+   5,
+   18,
+   0,
+   7,
+   0,
+   "PIPELINE_CONTEXT"
+  ],
+  [
+   6,
+   18,
+   0,
+   10,
+   0,
+   "PIPELINE_CONTEXT"
+  ],
+  [
+   7,
+   7,
+   0,
+   8,
+   1,
+   "STRING"
+  ],
+  [
+   8,
+   7,
+   1,
+   8,
+   2,
+   "STRING"
+  ],
+  [
+   12,
+   22,
+   0,
+   19,
+   0,
+   "MODEL"
+  ],
+  [
+   13,
+   22,
+   1,
+   19,
+   1,
+   "CLIP"
+  ],
+  [
+   14,
+   19,
+   0,
+   20,
+   0,
+   "MODEL"
+  ],
+  [
+   15,
+   19,
+   1,
+   20,
+   1,
+   "CLIP"
+  ],
+  [
+   16,
+   19,
+   0,
+   17,
+   1,
+   "MODEL"
+  ],
+  [
+   17,
+   20,
+   0,
+   17,
+   2,
+   "MODEL"
+  ],
+  [
+   18,
+   31,
+   0,
+   17,
+   3,
+   "PIPELINE_CONTEXT"
+  ],
+  [
+   19,
+   20,
+   1,
+   23,
+   0,
+   "CLIP"
+  ],
+  [
+   20,
+   20,
+   1,
+   24,
+   0,
+   "CLIP"
+  ],
+  [
+   21,
+   20,
+   0,
+   26,
+   0,
+   "MODEL"
+  ],
+  [
+   22,
+   8,
+   0,
+   23,
+   1,
+   "STRING"
+  ],
+  [
+   23,
+   8,
+   1,
+   24,
+   1,
+   "STRING"
+  ],
+  [
+   24,
+   23,
+   0,
+   26,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   25,
+   24,
+   0,
+   26,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   26,
+   25,
+   0,
+   26,
+   3,
+   "LATENT"
+  ],
+  [
+   27,
+   26,
+   0,
+   27,
+   0,
+   "LATENT"
+  ],
+  [
+   28,
+   22,
+   2,
+   27,
+   1,
+   "VAE"
+  ],
+  [
+   29,
+   27,
+   0,
+   29,
+   0,
+   "IMAGE"
+  ],
+  [
+   30,
+   22,
+   0,
+   31,
+   1,
+   "MODEL"
+  ],
+  [
+   31,
+   31,
+   0,
+   32,
+   0,
+   "PIPELINE_CONTEXT"
+  ],
+  [
+   32,
+   32,
+   0,
+   33,
+   0,
+   "PIPELINE_CONTEXT"
+  ],
+  [
+   33,
+   32,
+   0,
+   34,
+   0,
+   "PIPELINE_CONTEXT"
+  ],
+  [
+   34,
+   32,
+   0,
+   35,
+   0,
+   "PIPELINE_CONTEXT"
+  ],
+  [
+   35,
+   32,
+   0,
+   36,
+   0,
+   "PIPELINE_CONTEXT"
+  ],
+  [
+   36,
+   33,
+   0,
+   25,
+   0,
+   "INT"
+  ],
+  [
+   37,
+   34,
+   0,
+   25,
+   1,
+   "INT"
+  ],
+  [
+   38,
+   35,
+   0,
+   26,
+   6,
+   "FLOAT"
+  ],
+  [
+   39,
+   36,
+   0,
+   26,
+   7,
+   "COMBO"
+  ],
+  [
+   40,
+   31,
+   0,
+   38,
+   0,
+   "PIPELINE_CONTEXT"
+  ],
+  [
+   41,
+   38,
+   0,
+   37,
+   0,
+   "WP_NODES"
+  ],
+  [
+   42,
+   32,
+   0,
+   37,
+   1,
+   "PIPELINE_CONTEXT"
+  ],
+  [
+   43,
+   33,
+   0,
+   37,
+   2,
+   "INT"
+  ],
+  [
+   44,
+   34,
+   0,
+   37,
+   3,
+   "INT"
+  ],
+  [
+   45,
+   35,
+   0,
+   37,
+   4,
+   "FLOAT"
+  ],
+  [
+   46,
+   36,
+   0,
+   37,
+   5,
+   "*"
+  ],
+  [
+   2,
+   5,
+   0,
+   16,
+   0,
+   "PIPELINE_CONTEXT"
+  ],
+  [
+   9,
+   13,
+   0,
+   16,
+   1,
+   "STRING"
+  ],
+  [
+   10,
+   14,
+   0,
+   16,
+   2,
+   "STRING"
+  ],
+  [
+   11,
+   15,
+   0,
+   16,
+   3,
+   "STRING"
+  ]
+ ],
+ "groups": [
+  {
+   "id": 1,
+   "title": "Prompt",
+   "bounding": [
+    -40,
+    -60,
+    2460,
+    1280
+   ],
+   "color": "#3f789e",
+   "flags": {}
+  },
+  {
+   "id": 2,
+   "title": "Image",
+   "bounding": [
+    2520,
+    -60,
+    2460,
+    1280
+   ],
+   "color": "#8a8a8a",
+   "flags": {}
+  },
+  {
+   "id": 3,
+   "title": "LoRAs and switches (optional)",
+   "bounding": [
+    -40,
+    1260,
+    2460,
+    1100
+   ],
+   "color": "#a1309b",
+   "flags": {}
+  },
+  {
+   "id": 4,
+   "title": "Settings from the model (optional)",
+   "bounding": [
+    2520,
+    1260,
+    2460,
+    1100
+   ],
+   "color": "#b06634",
+   "flags": {}
+  }
+ ],
+ "config": {},
+ "extra": {
+  "ds": {
+   "scale": 0.23,
+   "offset": [
+    2456,
+    360
+   ]
+  }
+ },
+ "version": 0.4
+}

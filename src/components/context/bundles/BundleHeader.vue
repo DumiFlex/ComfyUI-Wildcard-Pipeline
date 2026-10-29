@@ -56,8 +56,15 @@ const props = withDefaults(
      *  Surfaces a MISSING badge so the user knows "Save changes to
      *  library" will need to fork a new entry. */
     libraryMissing?: boolean;
+    /** True when the bundle came with an example workflow (`example: true`).
+     *  While it is library-missing it shows a neutral EXAMPLE chip in place
+     *  of MISSING: nothing is wrong, Save to library keeps it. */
+    example?: boolean;
+    /** A sub-bundle. An example sub-bundle shows no chip: its top bundle's
+     *  chip already says the whole group came with the workflow. */
+    nested?: boolean;
   }>(),
-  { color: null, driftedCount: 0, libraryDrifted: false, internalState: "none", lockState: null, snapshotModified: false, libraryMissing: false },
+  { example: false, nested: false, color: null, driftedCount: 0, libraryDrifted: false, internalState: "none", lockState: null, snapshotModified: false, libraryMissing: false },
 );
 
 const emit = defineEmits<{
@@ -84,6 +91,9 @@ const frameColor = computed(() =>
 const missingTitle =
   "No live library entry for this bundle under its recorded id. "
   + "Right-click → Push to library: re-link it to a matching entry, or save it as a new one.";
+
+const exampleTitle =
+  "From an example workflow, not in your library. Right-click → Push to library to keep it, with its rows.";
 
 const summary = computed(() => {
   const word = props.childCount === 1 ? "mod" : "mods";
@@ -181,7 +191,9 @@ const summary = computed(() => {
            was deleted, re-imported under a new id, or arrived in a shared
            workflow — and Push to library now offers Re-link for the last two,
            which "deleted" steered users away from. -->
-      <template v-if="libraryMissing">
+      <span v-if="libraryMissing && example && !nested" class="wp-mod-badge wp-mod-badge--example"
+        data-test="bundle-example" :title="exampleTitle">example</span>
+      <template v-else-if="libraryMissing && !example">
         <span class="wp-mod-dot wp-mod-dot--missing"
           :title="missingTitle"
           aria-hidden="true"></span>

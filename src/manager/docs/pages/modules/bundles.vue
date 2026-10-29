@@ -5,6 +5,7 @@ import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import StarterButton from "../../../components/docs/StarterButton.vue";
+import DocRef from "../../../components/docs/DocRef.vue";
 </script>
 
 <template>
@@ -79,6 +80,18 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
         <b>Extract to library</b> in the bundle editor makes the modules into new stand-alone
         library modules (a copy you can change freely), points the references between them at the
         new copies, and leaves the per-use settings behind.
+      </p>
+    </DocSection>
+
+    <DocSection title="Bundles from an example workflow">
+      <p>
+        The example workflows (<b>Workflow › Browse Templates › Wildcard Pipeline</b>) keep their
+        bundles on the canvas, so they run on an empty library. Their headers show a grey
+        <strong>EXAMPLE</strong> chip instead of <strong>MISSING</strong>; sub-bundles and rows
+        inside show nothing. Right-click the header and choose <b>Push to library…</b> with
+        <b>Restore missing references</b> to keep the bundle, its sub-bundles and its rows; the chip
+        goes away. Delete it from the library later and it reads as MISSING like any other.
+        See <DocRef id="howto-examples" />.
       </p>
     </DocSection>
 
