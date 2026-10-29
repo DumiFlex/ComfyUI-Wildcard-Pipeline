@@ -502,7 +502,8 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
   /* Links take the pointer; the rest of the note lets it through to the canvas. */
   .wp-note-md a { pointer-events: auto; cursor: pointer; }
   .wp-note-md .wp-note-md__link { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
-  .wp-note-md .wp-note-md__link:hover { color: var(--wp-text); text-decoration-color: var(--wp-note-tone, var(--wp-accent)); }
+  .wp-note-md .wp-note-md__link:hover { color: var(--wp-text); text-decoration-color: var(--wp-note-link, var(--wp-note-tone, var(--wp-accent))); }
+  .wp-note-md .wp-note-md__link--color { color: var(--wp-note-link); text-decoration-color: var(--wp-note-link); }
   .wp-note-md .wp-note-md__plain { text-decoration: underline dotted; }
   .wp-note-md .wp-note-md__icon { font-size: 0.95em; vertical-align: -0.05em; }
   .wp-note-md .wp-note-md__btn {
@@ -511,16 +512,16 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
     gap: 6px;
     margin: 2px 0;
     padding: 3px 10px;
-    border: 1px solid color-mix(in srgb, var(--wp-note-tone, var(--wp-accent)) 50%, transparent);
+    border: 1px solid color-mix(in srgb, var(--wp-note-link, var(--wp-note-tone, var(--wp-accent))) 50%, transparent);
     border-radius: var(--wp-radius-cap, 999px);
-    background: color-mix(in srgb, var(--wp-note-tone, var(--wp-accent)) 12%, transparent);
+    background: color-mix(in srgb, var(--wp-note-link, var(--wp-note-tone, var(--wp-accent))) 12%, transparent);
     font-size: 12px;
     line-height: 18px;
     color: var(--wp-text);
     text-decoration: none;
   }
-  .wp-note-md .wp-note-md__btn .pi { font-size: 11px; color: var(--wp-note-tone, var(--wp-accent)); }
-  .wp-note-md .wp-note-md__btn:hover { background: color-mix(in srgb, var(--wp-note-tone, var(--wp-accent)) 24%, transparent); }
+  .wp-note-md .wp-note-md__btn .pi { font-size: 11px; color: var(--wp-note-link, var(--wp-note-tone, var(--wp-accent))); }
+  .wp-note-md .wp-note-md__btn:hover { background: color-mix(in srgb, var(--wp-note-link, var(--wp-note-tone, var(--wp-accent))) 24%, transparent); }
   .wp-note-md a:focus-visible { outline: 2px solid var(--wp-focus-ring, var(--wp-accent)); outline-offset: 2px; }
 }
 </style>

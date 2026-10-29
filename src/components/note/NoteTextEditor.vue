@@ -24,8 +24,14 @@ const emit = defineEmits<{ (e: "update:modelValue", v: string): void }>();
 const area = ref<HTMLTextAreaElement | null>(null);
 const mode = ref<"write" | "preview">("write");
 const panel = ref<"" | "link" | "icon">("");
-// The selection when a panel opened: focus moves into the panel.
+// Where the text goes: the textarea's last selection. Kept up to date
+// while a panel is open (focus moves into the panel, and the user may click
+// back into the text to pick another spot before inserting).
 let sel = { start: 0, end: 0 };
+function remember(): void {
+  const el = area.value;
+  if (el) sel = { start: el.selectionStart, end: el.selectionEnd };
+}
 
 function apply(e: Edit): void {
   // The buttons write into the textarea, so they bring it back from Preview.
@@ -78,6 +84,8 @@ const linkPage = ref<string | null>(null);
 const linkSection = ref("");
 const linkStyle = ref<"text" | "button">("button");
 const linkIcon = ref("book");
+// "none": the note's tone colour.
+const linkColor = ref("none");
 const pickIcon = ref(false);
 
 const pageOptions = CATALOG.map((p) => ({ value: p.id, label: p.title, hint: p.group }));
@@ -110,7 +118,8 @@ function insertLink(): void {
   const section = page.value?.sections.find((s) => s.id === linkSection.value);
   const fallback = docs ? (section ? `${page.value?.title}: ${section.title}` : `${page.value?.title ?? ""} docs`) : "";
   const button = linkStyle.value === "button";
-  insertText(linkMarkdown(linkText.value || fallback, target, { button, icon: button ? linkIcon.value : "" }));
+  const color = linkColor.value === "none" ? "" : linkColor.value.slice(0, 7);
+  insertText(linkMarkdown(linkText.value || fallback, target, { button, icon: button ? linkIcon.value : "", color }));
 }
 
 // ── icon panel ─────────────────────────────────────────────────────────
@@ -217,6 +226,18 @@ function insertIcon(name: string): void {
           <i class="pi pi-chevron-down" aria-hidden="true"></i>
         </button>
       </div>
+      <div class="wp-note-ed__row">
+        <span class="wp-note-ed__label">Colour</span>
+        <ColorField
+          :model-value="linkColor"
+          allow-none
+          size="sm"
+          aria-label="Link colour"
+          data-test="note-link-color"
+          @update:model-value="(v: string) => (linkColor = v)"
+        />
+        <span class="wp-note-ed__hint">None follows the note.</span>
+      </div>
       <NoteIconGrid
         v-if="linkStyle === 'button' && pickIcon"
         :selected="linkIcon"
@@ -255,8 +276,12 @@ function insertIcon(name: string): void {
       :placeholder="hint"
       aria-label="Note text"
       data-test="note-text"
-      @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
+      @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value); remember()"
       @keydown="onKey"
+      @keyup="remember"
+      @mouseup="remember"
+      @select="remember"
+      @blur="remember"
     ></textarea>
     <div v-if="mode === 'preview'" class="wp-note-ed__preview" data-test="note-preview">
       <NoteMarkdown v-if="modelValue.trim()" :text="modelValue" />

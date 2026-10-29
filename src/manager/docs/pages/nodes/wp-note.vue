@@ -26,8 +26,8 @@ const bar = [
   { term: "Bold, italic, strikethrough", desc: "Wraps the selection in **, * or ~~.", kbd: "Ctrl+B / Ctrl+I" },
   { term: "Code", desc: "Wraps it in backticks, for a $variable." },
   { term: "Lists and quote", desc: "Puts - , 1. or > before each selected line (press again to take it off)." },
-  { term: "Link", desc: "A Docs page (type to find any page of these docs, then pick a section or the whole page) or a Web address, drawn as a Button with an icon or as a Text link. The selected text becomes the link's text.", kbd: "Ctrl+K" },
-  { term: "Icon", desc: "Any PrimeIcons icon, searchable, in a colour or the text's own." },
+  { term: "Link", desc: "A Docs page (type to find any page of these docs, then pick a section or the whole page) or a Web address, drawn as a Button with an icon or as a Text link, in its own colour or the note's. The selected text becomes the link's text. It goes where the caret is when you press Insert link, so you can click in the text after opening the panel.", kbd: "Ctrl+K" },
+  { term: "Icon", desc: "Any PrimeIcons icon, searchable, in a colour or the text's own, inserted where the caret is." },
   { term: "Preview (eye)", desc: "Shows the note as it will read." },
 ];
 
@@ -36,6 +36,7 @@ const syntax = [
   { term: "[Seeds](docs:seeds-and-loops)", desc: "A link to that page of these docs." },
   { term: "[The grid](docs:wp-label-grid#s-the-grid)", desc: "A link to one section of it." },
   { term: "[Start here](docs:quick-start){button pi-play}", desc: "The link drawn as a button with an icon. {button} alone has no icon." },
+  { term: "{button pi-play #rrggbb}  [Read more](https://example.com){#rrggbb}", desc: "A button or a text link in its own colour, a hex code like the colour field shows. Without one it takes the note's." },
   { term: ":pi-heart:  :pi-heart:{#rrggbb}", desc: "An icon, optionally in a colour: a hex code like the custom colour field shows." },
 ];
 </script>

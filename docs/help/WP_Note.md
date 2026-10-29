@@ -35,8 +35,8 @@ Turn on **Also a bookmark** at the bottom of the editor and the note joins the *
 | **B** / *I* / ~~S~~ | `**bold**`, `*italic*`, `~~strikethrough~~` (Ctrl+B, Ctrl+I) |
 | `<>` | `` `code` ``, for a `$variable` |
 | Lists, quote | `- item`, `1. item`, `> quote` on each selected line |
-| Link (Ctrl+K) | A link to a **Docs page** (type to find any page, then pick a section or the whole page) or a **Web address**, as a **Button** (with an icon) or a **Text link** |
-| Icon | Any PrimeIcons icon, in a colour or the text's own |
+| Link (Ctrl+K) | A link to a **Docs page** (type to find any page, then pick a section or the whole page) or a **Web address**, as a **Button** (with an icon) or a **Text link**, in its own **Colour** or the note's. It goes where the caret is when you press **Insert link**, so you can click in the text after opening the panel |
+| Icon | Any PrimeIcons icon, in a colour or the text's own, inserted where the caret is |
 | Eye | Preview the note as it will read |
 
 ## Syntax
@@ -47,6 +47,7 @@ Turn on **Also a bookmark** at the bottom of the editor and the note joins the *
 | `[Seeds](docs:seeds-and-loops)` | A link to that docs page |
 | `[The grid](docs:wp-label-grid#s-the-grid)` | A link to a section of it |
 | `[Start here](docs:quick-start){button pi-play}` | The link drawn as a button with an icon (`{button}` for none) |
+| `{button pi-play #22c55e}` / `[Read more](https://example.com){#22c55e}` | A button or a text link in its own colour (without one it takes the note's) |
 | `:pi-heart:` / `:pi-heart:{#ef4444}` | An icon, optionally coloured |
 
 Any other kind of link shows as plain text.
