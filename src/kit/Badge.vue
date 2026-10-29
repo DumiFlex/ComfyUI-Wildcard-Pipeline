@@ -15,20 +15,20 @@
 import { computed, useSlots } from "vue";
 
 const props = withDefaults(defineProps<{
-  count?: number;
+  count?: number | undefined;
   /** Counts above this read "max+". */
-  max?: number;
+  max?: number | undefined;
   /** A dot instead of a number. */
-  dot?: boolean;
-  tone?: "neutral" | "info" | "success" | "warn" | "danger" | "accent";
+  dot?: boolean | undefined;
+  tone?: "neutral" | "info" | "success" | "warn" | "danger" | "accent" | undefined;
   /** Visible text after the dot or count (a status line). */
-  text?: string;
+  text?: string | undefined;
   /** Name for screen readers when the badge has no text, e.g. "3 conflicts". */
-  label?: string;
+  label?: string | undefined;
   /** Show a count of 0 instead of hiding the badge. */
-  showZero?: boolean;
+  showZero?: boolean | undefined;
   /** Draw the dot as a soft pulse (something is running). */
-  pulse?: boolean;
+  pulse?: boolean | undefined;
 }>(), { count: undefined, max: 99, tone: "accent", text: undefined, label: undefined });
 
 const slots = useSlots();

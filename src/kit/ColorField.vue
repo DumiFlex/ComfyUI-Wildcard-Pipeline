@@ -20,13 +20,13 @@ import { rgbToHex } from "./hsv";
 const props = withDefaults(defineProps<{
   modelValue: string;
   /** Offer an opacity number (writes `#rrggbbaa`). */
-  alpha?: boolean;
+  alpha?: boolean | undefined;
   /** Offer "None" (writes `none`). */
-  allowNone?: boolean;
-  size?: "sm" | "md";
-  ariaLabel?: string;
-  disabled?: boolean;
-  dataTest?: string;
+  allowNone?: boolean | undefined;
+  size?: "sm" | "md" | undefined;
+  ariaLabel?: string | undefined;
+  disabled?: boolean | undefined;
+  dataTest?: string | undefined;
 }>(), { alpha: false, allowNone: false, size: "sm", ariaLabel: "Colour", disabled: false, dataTest: undefined });
 
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();

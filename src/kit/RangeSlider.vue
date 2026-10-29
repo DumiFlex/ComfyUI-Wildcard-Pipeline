@@ -17,16 +17,16 @@ import WpNumber from "./WpNumber.vue";
 
 const props = withDefaults(defineProps<{
   modelValue: [number, number];
-  min?: number;
-  max?: number;
-  step?: number;
+  min?: number | undefined;
+  max?: number | undefined;
+  step?: number | undefined;
   /** The smallest distance between the two ends. */
-  minGap?: number;
-  size?: "sm" | "md" | "lg";
-  disabled?: boolean;
-  ariaLabel?: string;
-  format?: (v: number) => string;
-  withInput?: boolean;
+  minGap?: number | undefined;
+  size?: "sm" | "md" | "lg" | undefined;
+  disabled?: boolean | undefined;
+  ariaLabel?: string | undefined;
+  format?: ((v: number) => string) | undefined;
+  withInput?: boolean | undefined;
 }>(), { min: 0, max: 100, step: 1, minGap: 0, size: "md", ariaLabel: "Range" });
 
 const emit = defineEmits<{ (e: "update:modelValue", v: [number, number]): void; (e: "change", v: [number, number]): void }>();
@@ -100,7 +100,7 @@ function onTyped(end: 0 | 1, v: number | null): void {
       class="wp-range-slider__input"
       :model-value="lo"
       :min="min"
-      :max="hi - minGap"
+      :max="hi - props.minGap"
       :step="step"
       :size="size"
       :disabled="disabled"
@@ -126,8 +126,8 @@ function onTyped(end: 0 | 1, v: number | null): void {
         role="slider"
         :tabindex="disabled ? -1 : 0"
         :aria-label="`${ariaLabel}, ${end === 0 ? 'low' : 'high'} end`"
-        :aria-valuemin="end === 0 ? min : lo + minGap"
-        :aria-valuemax="end === 0 ? hi - minGap : max"
+        :aria-valuemin="end === 0 ? min : lo + props.minGap"
+        :aria-valuemax="end === 0 ? hi - props.minGap : max"
         :aria-valuenow="end === 0 ? lo : hi"
         :aria-valuetext="format ? text(end === 0 ? lo : hi) : undefined"
         :aria-disabled="disabled || undefined"
@@ -140,7 +140,7 @@ function onTyped(end: 0 | 1, v: number | null): void {
       v-if="withInput"
       class="wp-range-slider__input"
       :model-value="hi"
-      :min="lo + minGap"
+      :min="lo + props.minGap"
       :max="max"
       :step="step"
       :size="size"

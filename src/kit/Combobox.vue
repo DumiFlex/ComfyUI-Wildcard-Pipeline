@@ -21,18 +21,18 @@ export interface ComboOption<V> { value: V; label: string; hint?: string; disabl
 const props = withDefaults(defineProps<{
   modelValue: T | null | T[];
   options: ComboOption<T>[];
-  multiple?: boolean;
-  placeholder?: string;
-  size?: "sm" | "md" | "lg";
-  disabled?: boolean;
-  invalid?: boolean;
-  ariaLabel?: string;
+  multiple?: boolean | undefined;
+  placeholder?: string | undefined;
+  size?: "sm" | "md" | "lg" | undefined;
+  disabled?: boolean | undefined;
+  invalid?: boolean | undefined;
+  ariaLabel?: string | undefined;
   /** Show a ✕ that clears a single pick. */
-  clearable?: boolean;
+  clearable?: boolean | undefined;
   /** What the list says when nothing matches. */
-  emptyText?: string;
+  emptyText?: string | undefined;
   /** How many options the list shows at once (it scrolls past that). */
-  limit?: number;
+  limit?: number | undefined;
 }>(), {
   multiple: false, placeholder: "Choose…", size: "md", ariaLabel: "Choose",
   clearable: false, emptyText: "No matches", limit: 50,

@@ -3,11 +3,11 @@ import { computed } from "vue";
 
 interface Props {
   modelValue: boolean;
-  label?: string;
-  disabled?: boolean;
-  error?: boolean;
-  id?: string;
-  ariaLabel?: string;
+  label?: string | undefined;
+  disabled?: boolean | undefined;
+  error?: boolean | undefined;
+  id?: string | undefined;
+  ariaLabel?: string | undefined;
   /**
    * Tri-state indicator. When true AND `modelValue` is false, the
    * checkbox renders a horizontal dash instead of a checkmark and
@@ -16,13 +16,13 @@ interface Props {
    * `modelValue=true` always wins — a fully-checked box never
    * renders as indeterminate even if the prop is set.
    */
-  indeterminate?: boolean;
+  indeterminate?: boolean | undefined;
   /**
    * Draw the whole row as an input-height field (border, fill, full width)
    * whose label fills it, for a yes/no filter that sits in a form grid
    * beside Selects (the list pages' "Favorites only").
    */
-  field?: boolean;
+  field?: boolean | undefined;
 }
 const props = defineProps<Props>();
 

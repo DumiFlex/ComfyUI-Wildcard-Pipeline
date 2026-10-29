@@ -19,20 +19,20 @@
 import { computed, ref, useId, useSlots } from "vue";
 
 const props = withDefaults(defineProps<{
-  open?: boolean;
+  open?: boolean | undefined;
   /** Where it starts when nobody binds `open`. */
-  defaultOpen?: boolean;
-  label?: string;
+  defaultOpen?: boolean | undefined;
+  label?: string | undefined;
   /** A small count after the label. */
-  count?: number | string;
-  size?: "sm" | "md";
-  disabled?: boolean;
+  count?: number | string | undefined;
+  size?: "sm" | "md" | undefined;
+  disabled?: boolean | undefined;
   /** Draw a border and a padded body, for a section that stands alone. */
-  boxed?: boolean;
+  boxed?: boolean | undefined;
   /** Build the body only while open (a long list, a costly panel). */
-  lazy?: boolean;
+  lazy?: boolean | undefined;
   /** Extra attributes on the heading button, e.g. `data-test`. */
-  triggerAttrs?: Record<string, string>;
+  triggerAttrs?: Record<string, string> | undefined;
 }>(), { open: undefined, size: "md", triggerAttrs: undefined });
 
 const emit = defineEmits<{ (e: "update:open", v: boolean): void }>();

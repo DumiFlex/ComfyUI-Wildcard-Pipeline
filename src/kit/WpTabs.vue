@@ -21,21 +21,21 @@ export interface TabItem<I extends string = string> {
   id: I;
   label: string;
   /** A PrimeIcons class, e.g. `pi-list`. */
-  icon?: string;
-  disabled?: boolean;
+  icon?: string | undefined;
+  disabled?: boolean | undefined;
   /** A small count after the label (rows, errors…). */
-  count?: number | string;
+  count?: number | string | undefined;
   /** Colour of the count: `success` for all good, `warn` for problems. */
-  tone?: "neutral" | "success" | "warn" | "danger";
+  tone?: "neutral" | "success" | "warn" | "danger" | undefined;
 }
 
 const props = withDefaults(defineProps<{
   modelValue: T;
   tabs: TabItem<T>[];
-  size?: "sm" | "md";
-  ariaLabel?: string;
+  size?: "sm" | "md" | undefined;
+  ariaLabel?: string | undefined;
   /** `data-test` of each tab is `<testPrefix>-<id>`. */
-  testPrefix?: string;
+  testPrefix?: string | undefined;
 }>(), { size: "md" });
 
 const emit = defineEmits<{ (e: "update:modelValue", id: T): void }>();

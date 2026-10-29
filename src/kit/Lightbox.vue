@@ -19,16 +19,16 @@ import WpImageZoom from "./WpImageZoom.vue";
 import CloseButton from "./CloseButton.vue";
 import { focusablesIn } from "./useDialogFocus";
 
-export interface LightboxImage { src: string; alt: string; caption?: string }
+export interface LightboxImage { src: string; alt: string; caption?: string | undefined }
 
 const props = withDefaults(defineProps<{
   open: boolean;
   images: LightboxImage[];
-  index?: number;
+  index?: number | undefined;
   /** Go round from the last image to the first. */
-  loop?: boolean;
+  loop?: boolean | undefined;
   /** Real zoom levels (WpImageZoom) instead of a picture fitted to the screen. */
-  zoom?: boolean;
+  zoom?: boolean | undefined;
 }>(), { index: 0, loop: false, zoom: false });
 
 /** The zoom level, kept across images while the viewer is open. */

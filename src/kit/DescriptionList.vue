@@ -15,21 +15,21 @@ import CopyButton from "./CopyButton.vue";
 
 export interface DescriptionItem {
   label: string;
-  value?: string | number | null;
+  value?: string | number | null | undefined;
   /** Names the `value-<key>` slot for this row. */
-  key?: string;
+  key?: string | undefined;
   /** Draw the value in the mono font (ids, seeds, paths). */
-  mono?: boolean;
+  mono?: boolean | undefined;
   /** Add a copy button after the value. */
-  copy?: boolean;
+  copy?: boolean | undefined;
 }
 
 withDefaults(defineProps<{
   items: DescriptionItem[];
-  layout?: "columns" | "stacked";
-  size?: "sm" | "md";
+  layout?: "columns" | "stacked" | undefined;
+  size?: "sm" | "md" | undefined;
   /** Lines between rows. */
-  divided?: boolean;
+  divided?: boolean | undefined;
 }>(), { layout: "columns", size: "md" });
 
 const empty = (v: DescriptionItem["value"]): boolean => v === undefined || v === null || v === "";

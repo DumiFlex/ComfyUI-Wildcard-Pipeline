@@ -21,20 +21,20 @@ export interface RejectedFile { file: File; reason: string }
 
 const props = withDefaults(defineProps<{
   /** Like the file input's accept: "image/*,.txt". Empty takes anything. */
-  accept?: string;
-  multiple?: boolean;
+  accept?: string | undefined;
+  multiple?: boolean | undefined;
   /** Largest file in bytes. */
-  maxSize?: number;
-  disabled?: boolean;
+  maxSize?: number | undefined;
+  disabled?: boolean | undefined;
   /** Wrap the slot and show only while a file is dragged over it. */
-  overlay?: boolean;
+  overlay?: boolean | undefined;
   /** The main line. */
-  label?: string;
+  label?: string | undefined;
   /** The line under it, e.g. what it takes. */
-  hint?: string;
+  hint?: string | undefined;
   /** Words for the Browse button. */
-  browseLabel?: string;
-  size?: "sm" | "md";
+  browseLabel?: string | undefined;
+  size?: "sm" | "md" | undefined;
 }>(), {
   accept: undefined, maxSize: undefined, label: undefined, hint: undefined,
   browseLabel: "Browse", size: "md",

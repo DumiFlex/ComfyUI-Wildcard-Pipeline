@@ -28,22 +28,22 @@ import Checkbox from "./Checkbox.vue";
 export interface DataColumn<R> {
   key: string;
   label: string;
-  sortable?: boolean;
-  align?: "left" | "right" | "center";
+  sortable?: boolean | undefined;
+  align?: "left" | "right" | "center" | undefined;
   /** A CSS width for the column, e.g. `120px` or `30%`. */
-  width?: string;
+  width?: string | undefined;
   /** Show the value in the mono font (counts, ids, seeds). */
-  mono?: boolean;
+  mono?: boolean | undefined;
   /** The value to sort by, when it isn't `row[key]`. */
   sortValue?: (row: R) => string | number | null | undefined;
   /** The direction a first click sorts in. */
-  firstDir?: "asc" | "desc";
+  firstDir?: "asc" | "desc" | undefined;
   /** Hide the header text (an actions column); it still names the cells. */
-  hideLabel?: boolean;
+  hideLabel?: boolean | undefined;
   /** A class on the column's header and cells. */
-  class?: string;
+  class?: string | undefined;
   /** Extra attributes on the header cell (e.g. `data-ai-anchor`). */
-  headAttrs?: Record<string, string>;
+  headAttrs?: Record<string, string> | undefined;
 }
 
 export interface DataSort { key: string; dir: "asc" | "desc" }
@@ -53,25 +53,25 @@ const props = withDefaults(defineProps<{
   rows: T[];
   /** A field name, or a function, giving each row a stable key. */
   rowKey: string | ((row: T) => string);
-  sort?: DataSort | null;
+  sort?: DataSort | null | undefined;
   /** The parent sorts the rows; the table only reports clicks. */
-  manualSort?: boolean;
-  selectable?: boolean;
-  selected?: string[];
-  loading?: boolean;
+  manualSort?: boolean | undefined;
+  selectable?: boolean | undefined;
+  selected?: string[] | undefined;
+  loading?: boolean | undefined;
   /** How many placeholder rows to draw while loading. */
-  loadingRows?: number;
-  stickyHead?: boolean;
+  loadingRows?: number | undefined;
+  stickyHead?: boolean | undefined;
   /** Shown when there are no rows and no `#empty` slot. */
-  emptyText?: string;
-  ariaLabel?: string;
+  emptyText?: string | undefined;
+  ariaLabel?: string | undefined;
   /** Extra attributes per row, e.g. `data-test`. */
-  rowAttrs?: (row: T) => Record<string, string | undefined>;
-  size?: "sm" | "md";
+  rowAttrs?: ((row: T) => Record<string, string | undefined>) | undefined;
+  size?: "sm" | "md" | undefined;
   /** Rows are focusable and emit `row-click` on click or Enter. */
-  rowClickable?: boolean;
+  rowClickable?: boolean | undefined;
   /** The key of the row that is open, drawn highlighted. */
-  activeKey?: string | null;
+  activeKey?: string | null | undefined;
 }>(), {
   sort: null,
   selected: () => [],

@@ -26,22 +26,22 @@ defineOptions({ inheritAttrs: false });
 const props = withDefaults(
   defineProps<{
     modelValue: number | null;
-    min?: number;
-    max?: number;
-    step?: number;
-    size?: "sm" | "md" | "lg";
-    placeholder?: string;
-    ariaLabel?: string;
-    upLabel?: string;
-    downLabel?: string;
-    dataTest?: string;
-    commit?: "change" | "input";
+    min?: number | undefined;
+    max?: number | undefined;
+    step?: number | undefined;
+    size?: "sm" | "md" | "lg" | undefined;
+    placeholder?: string | undefined;
+    ariaLabel?: string | undefined;
+    upLabel?: string | undefined;
+    downLabel?: string | undefined;
+    dataTest?: string | undefined;
+    commit?: "change" | "input" | undefined;
     /** Clearing the box emits null instead of being ignored. */
-    nullable?: boolean;
-    disabled?: boolean;
-    invalid?: boolean;
+    nullable?: boolean | undefined;
+    disabled?: boolean | undefined;
+    invalid?: boolean | undefined;
     /** Unit shown after the number ("px", "s"). */
-    suffix?: string;
+    suffix?: string | undefined;
   }>(),
   { step: 1, size: "sm", commit: "change", upLabel: "Increase", downLabel: "Decrease" },
 );

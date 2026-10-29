@@ -24,15 +24,15 @@ import { vTooltip } from "./tooltip";
 const props = withDefaults(defineProps<{
   text: string | (() => string | Promise<string>);
   /** The button's name and tooltip, e.g. "Copy prompt". */
-  label?: string;
+  label?: string | undefined;
   /** Show the label next to the icon. */
-  showLabel?: boolean;
-  size?: "sm" | "md" | "lg";
+  showLabel?: boolean | undefined;
+  size?: "sm" | "md" | "lg" | undefined;
   /** `ghost` (default) for rows and toolbars, `secondary` for a filled button. */
-  variant?: "ghost" | "secondary";
-  disabled?: boolean;
+  variant?: "ghost" | "secondary" | undefined;
+  disabled?: boolean | undefined;
   /** The PrimeIcons class shown before a copy, e.g. "pi-link" for a link. */
-  icon?: string;
+  icon?: string | undefined;
 }>(), { icon: "pi-copy", label: "Copy", size: "md", variant: "ghost" });
 
 const emit = defineEmits<{ (e: "copied", text: string): void; (e: "failed"): void }>();

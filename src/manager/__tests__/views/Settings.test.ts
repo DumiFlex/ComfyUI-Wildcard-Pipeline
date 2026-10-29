@@ -73,7 +73,7 @@ describe("Settings › About", () => {
       global: { plugins: [router], stubs: { Icon: true } },
     });
     expect(wrap.text()).toContain("2.9.0");
-    const links = wrap.findAll('[data-test^="settings-support-"]');
+    const links = wrap.findAll('[data-test="settings-support"] a');
     expect(links.map((a) => a.attributes("href"))).toEqual([
       "https://github.com/sponsors/DumiFlex",
       "https://buymeacoffee.com/dumiflex",

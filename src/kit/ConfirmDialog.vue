@@ -18,10 +18,10 @@ const props = withDefaults(
   defineProps<{
     visible: boolean;
     title: string;
-    body?: string;
-    confirmLabel?: string;
-    cancelLabel?: string;
-    variant?: "default" | "danger";
+    body?: string | undefined;
+    confirmLabel?: string | undefined;
+    cancelLabel?: string | undefined;
+    variant?: "default" | "danger" | undefined;
   }>(),
   {
     body: "",

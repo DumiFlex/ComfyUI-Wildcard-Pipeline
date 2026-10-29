@@ -23,24 +23,24 @@ import LoadingMark from "./LoadingMark.vue";
 import { vTooltip } from "./tooltip";
 
 const props = withDefaults(defineProps<{
-  variant?: "primary" | "secondary" | "ghost" | "danger" | "link" | "outline" | "add";
-  size?: "sm" | "md" | "lg";
+  variant?: "primary" | "secondary" | "ghost" | "danger" | "link" | "outline" | "add" | undefined;
+  size?: "sm" | "md" | "lg" | undefined;
   /** PrimeIcons class (e.g. `pi-plus`), drawn before the label. */
-  icon?: string;
-  loading?: boolean;
-  disabled?: boolean;
+  icon?: string | undefined;
+  loading?: boolean | undefined;
+  disabled?: boolean | undefined;
   /** Stretch to the container's full width. */
-  block?: boolean;
+  block?: boolean | undefined;
   /** Makes it a toggle (`aria-pressed`): on, it wears the accent tint. */
-  pressed?: boolean;
-  type?: "button" | "submit" | "reset";
-  ariaLabel?: string;
+  pressed?: boolean | undefined;
+  type?: "button" | "submit" | "reset" | undefined;
+  ariaLabel?: string | undefined;
   /** Tooltip text; an icon button shows its aria-label when this is unset.
    *  Use this, not `v-tooltip` on the component, which would fight the
    *  button's own. */
-  hint?: string;
+  hint?: string | undefined;
   /** A shortcut shown in the tooltip's key chip, e.g. "P". */
-  kbd?: string;
+  kbd?: string | undefined;
 }>(), { variant: "secondary", size: "sm", icon: undefined, type: "button", ariaLabel: undefined, hint: undefined, kbd: undefined, pressed: undefined });
 
 const emit = defineEmits<{ click: [evt: MouseEvent] }>();

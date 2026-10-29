@@ -20,10 +20,10 @@ const props = withDefaults(defineProps<{
   /** Every row's height in px. */
   itemHeight: number;
   /** CSS height of the scrolling box. */
-  height?: string;
+  height?: string | undefined;
   /** Rows built above and below the view. */
-  overscan?: number;
-  label?: string;
+  overscan?: number | undefined;
+  label?: string | undefined;
 }>(), { height: "320px", overscan: 6, label: undefined });
 
 const boxEl = ref<HTMLElement | null>(null);

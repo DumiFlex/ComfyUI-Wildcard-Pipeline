@@ -17,22 +17,22 @@ import WpButton from "./WpButton.vue";
 
 const props = withDefaults(defineProps<{
   /** pages: numbered pages. more: a Load more button. */
-  mode?: "pages" | "more";
+  mode?: "pages" | "more" | undefined;
   /** The current page, from 1. */
-  page?: number;
+  page?: number | undefined;
   /** How many items there are in all. */
   total: number;
-  pageSize?: number;
+  pageSize?: number | undefined;
   /** Pages shown either side of the current one. */
-  siblings?: number;
+  siblings?: number | undefined;
   /** In "more" mode: how many items are on screen. */
-  shown?: number;
-  loading?: boolean;
-  disabled?: boolean;
-  size?: "sm" | "md";
+  shown?: number | undefined;
+  loading?: boolean | undefined;
+  disabled?: boolean | undefined;
+  size?: "sm" | "md" | undefined;
   /** The item's name in "Showing 50 of 230 modules". */
-  noun?: string;
-  ariaLabel?: string;
+  noun?: string | undefined;
+  ariaLabel?: string | undefined;
 }>(), { mode: "pages", page: 1, pageSize: 25, siblings: 1, shown: 0, size: "md", noun: undefined, ariaLabel: "Pages" });
 
 const emit = defineEmits<{ (e: "update:page", v: number): void; (e: "more"): void }>();
@@ -54,7 +54,7 @@ const btnSize = computed(() => (props.size === "sm" ? "sm" : "md"));
     <span class="wp-paging__range" aria-live="polite">{{ from }}–{{ to }} of {{ total }}</span>
     <ul class="wp-paging__list">
       <li>
-        <WpButton variant="ghost" :size="btnSize" icon="pi-chevron-left" aria-label="Previous page" :disabled="disabled || page <= 1" @click="go(page - 1)" />
+        <WpButton variant="ghost" :size="btnSize" icon="pi-chevron-left" aria-label="Previous page" :disabled="disabled || props.page <= 1" @click="go(props.page - 1)" />
       </li>
       <li v-for="it in items" :key="it">
         <span v-if="typeof it !== 'number'" class="wp-paging__gap" aria-hidden="true">…</span>
@@ -70,13 +70,13 @@ const btnSize = computed(() => (props.size === "sm" ? "sm" : "md"));
         >{{ it }}</button>
       </li>
       <li>
-        <WpButton variant="ghost" :size="btnSize" icon="pi-chevron-right" aria-label="Next page" :disabled="disabled || page >= pages" @click="go(page + 1)" />
+        <WpButton variant="ghost" :size="btnSize" icon="pi-chevron-right" aria-label="Next page" :disabled="disabled || props.page >= pages" @click="go(props.page + 1)" />
       </li>
     </ul>
   </nav>
   <div v-else-if="mode === 'more' && total > 0" class="wp-paging wp-paging--more" :data-size="size">
-    <span class="wp-paging__range" aria-live="polite">Showing {{ Math.min(shown, total) }} of {{ total }}{{ noun ? ` ${noun}` : "" }}</span>
-    <WpButton v-if="shown < total" variant="secondary" :size="btnSize" :loading="loading" :disabled="disabled" @click="emit('more')">Load more</WpButton>
+    <span class="wp-paging__range" aria-live="polite">Showing {{ Math.min(props.shown, total) }} of {{ total }}{{ noun ? ` ${noun}` : "" }}</span>
+    <WpButton v-if="props.shown < total" variant="secondary" :size="btnSize" :loading="loading" :disabled="disabled" @click="emit('more')">Load more</WpButton>
   </div>
 </template>
 

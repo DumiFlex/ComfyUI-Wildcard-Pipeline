@@ -19,20 +19,20 @@ const props = withDefaults(defineProps<{
   /** The panel's size in px. */
   modelValue: number;
   /** x: the handle changes width (an upright bar). y: height (a flat bar). */
-  axis?: "x" | "y";
-  min?: number;
-  max?: number;
+  axis?: "x" | "y" | undefined;
+  min?: number | undefined;
+  max?: number | undefined;
   /** Dragging toward the start (left / up) makes the panel bigger. */
-  reverse?: boolean;
+  reverse?: boolean | undefined;
   /** Where Enter and a double click put it back. */
-  defaultSize?: number;
+  defaultSize?: number | undefined;
   /** Keyboard step in px. */
-  step?: number;
+  step?: number | undefined;
   /** What it resizes, for screen readers ("Chat width"). */
   label: string;
   /** The id of the panel it resizes. */
-  controls?: string;
-  disabled?: boolean;
+  controls?: string | undefined;
+  disabled?: boolean | undefined;
 }>(), { axis: "x", min: 0, max: Number.POSITIVE_INFINITY, defaultSize: undefined, step: 16, controls: undefined });
 
 const emit = defineEmits<{ (e: "update:modelValue", v: number): void; (e: "end", v: number): void }>();

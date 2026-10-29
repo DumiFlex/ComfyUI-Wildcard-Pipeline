@@ -35,23 +35,23 @@ const PANE_GAP = 8;
 
 const props = withDefaults(defineProps<{
   src: string;
-  alt?: string;
+  alt?: string | undefined;
   /** The level as a real-size factor (1 = 100%); null fits the picture in. */
-  zoom?: number | null;
+  zoom?: number | null | undefined;
   /** Show the zoom bar. */
-  controls?: boolean;
+  controls?: boolean | undefined;
   /** Hint shown under the bar's buttons, e.g. "Drag to move · scroll to zoom". */
-  hint?: string;
+  hint?: string | undefined;
   /** Offer a Fullscreen button (and key F). */
-  fullscreen?: boolean;
+  fullscreen?: boolean | undefined;
   /** Show a mini-map once the picture is bigger than the stage. */
-  minimap?: boolean;
+  minimap?: boolean | undefined;
   /** Fade the bar, hint and mini-map while the pointer and keys are still. */
-  autohide?: boolean;
+  autohide?: boolean | undefined;
   /** A second picture beside the first, locked to the same level and spot. */
-  second?: string | null;
-  secondAlt?: string;
-  size?: "sm" | "md";
+  second?: string | null | undefined;
+  secondAlt?: string | undefined;
+  size?: "sm" | "md" | undefined;
 }>(), {
   alt: "", zoom: null, controls: true, hint: undefined, fullscreen: false,
   minimap: false, autohide: false, second: null, secondAlt: "", size: "sm",
