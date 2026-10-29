@@ -7,10 +7,10 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import CloseButton from "../../kit/CloseButton.vue";
-import Kbd from "../../kit/Kbd.vue";
 import SortableList from "../../kit/SortableList.vue";
 import WpButton from "../../kit/WpButton.vue";
 import WpIconButton from "../../kit/WpIconButton.vue";
+import DockRow from "./DockRow.vue";
 import {
   addBookmarkHere,
   canGoBack,
@@ -35,6 +35,10 @@ function savePrefs(part: Partial<DockPrefs>): void {
   prefs.value = { ...prefs.value, ...part };
   writeDockPrefs(prefs.value);
 }
+
+/** View mode lists and jumps; edit mode adds the grips, the eyes, the side
+ *  switch and Bookmark this view. */
+const editing = ref(false);
 
 const entries = shallowRef<BookmarkEntry[]>([]);
 const current = shallowRef<unknown>(null);
@@ -112,13 +116,6 @@ function onReorder(next: BookmarkEntry[]): void {
   setOrder(next.map((b) => b.node));
 }
 
-function onRowKey(e: KeyboardEvent, b: BookmarkEntry): void {
-  if (e.key === "Enter" || e.key === " ") {
-    e.preventDefault();
-    jumpTo(b.node);
-  }
-}
-
 function close(): void {
   savePrefs({ open: false });
   emit("close");
@@ -145,21 +142,27 @@ function close(): void {
       <span class="wp-bmdock__title">Bookmarks</span>
       <span class="wp-bmdock__count">{{ shown }}<template v-if="hiddenCount"> · {{ hiddenCount }} hidden</template></span>
       <span class="wp-bmdock__spacer" />
-      <WpIconButton icon="pi-undo" label="Back to where you were" :disabled="!back" data-test="bm-dock-back" @click="jumpBack" />
-      <WpIconButton icon="pi-arrow-up" label="Previous bookmark" :disabled="!shown" data-test="bm-dock-prev" @click="jumpStep(-1)" />
-      <WpIconButton icon="pi-arrow-down" label="Next bookmark" :disabled="!shown" data-test="bm-dock-next" @click="jumpStep(1)" />
-      <WpIconButton
-        :icon="prefs.side === 'left' ? 'pi-arrow-right' : 'pi-arrow-left'"
-        :label="prefs.side === 'left' ? 'Move the dock to the right' : 'Move the dock to the left'"
-        data-test="bm-dock-side"
-        @click="savePrefs({ side: prefs.side === 'left' ? 'right' : 'left' })"
-      />
+      <template v-if="!editing">
+        <WpIconButton icon="pi-undo" label="Back to where you were" :disabled="!back" data-test="bm-dock-back" @click="jumpBack" />
+        <WpIconButton icon="pi-arrow-up" label="Previous bookmark" :disabled="!shown" data-test="bm-dock-prev" @click="jumpStep(-1)" />
+        <WpIconButton icon="pi-arrow-down" label="Next bookmark" :disabled="!shown" data-test="bm-dock-next" @click="jumpStep(1)" />
+        <WpIconButton icon="pi-pencil" label="Edit the bookmarks" data-test="bm-dock-edit" @click="editing = true; savePrefs({ collapsed: false })" />
+      </template>
+      <template v-else>
+        <WpIconButton
+          :icon="prefs.side === 'left' ? 'pi-arrow-right' : 'pi-arrow-left'"
+          :label="prefs.side === 'left' ? 'Move the dock to the right' : 'Move the dock to the left'"
+          data-test="bm-dock-side"
+          @click="savePrefs({ side: prefs.side === 'left' ? 'right' : 'left' })"
+        />
+        <WpButton variant="primary" size="sm" data-test="bm-dock-done" @click="editing = false">Done</WpButton>
+      </template>
       <CloseButton size="sm" label="Close the dock" data-test="bm-dock-close" @click="close" />
     </header>
 
     <div v-if="!prefs.collapsed" class="wp-bmdock__body">
       <SortableList
-        v-if="shown"
+        v-if="editing && shown"
         :model-value="entries"
         :item-key="keyOf"
         :item-label="(b: BookmarkEntry) => b.title"
@@ -168,41 +171,33 @@ function close(): void {
         @update:model-value="onReorder"
       >
         <template #item="{ item, index }">
-          <div
-            class="wp-bmdock__row"
-            :class="{
-              'is-off': (item as BookmarkEntry).disabled,
-              'is-hidden': (item as BookmarkEntry).config.hidden,
-              'is-current': current === (item as BookmarkEntry).node,
-            }"
-            :style="(item as BookmarkEntry).config.color ? { '--wp-bm-color': (item as BookmarkEntry).config.color } : undefined"
-            role="button"
-            tabindex="0"
-            :aria-label="`Jump to ${(item as BookmarkEntry).title}`"
-            :data-test="`bm-dock-row-${index}`"
-            @click="jumpTo((item as BookmarkEntry).node)"
-            @keydown="onRowKey($event, item as BookmarkEntry)"
-          >
-            <span class="wp-bmdock__num">{{ index + 1 }}</span>
-            <i class="pi wp-bmdock__icon" :class="`pi-${(item as BookmarkEntry).config.icon}`" aria-hidden="true" />
-            <span class="wp-bmdock__name">{{ (item as BookmarkEntry).title }}</span>
-            <i v-if="(item as BookmarkEntry).nested" class="pi pi-sitemap wp-bmdock__sub" title="In a subgraph" aria-label="In a subgraph" />
-            <span v-if="(item as BookmarkEntry).disabled" class="wp-bmdock__off">off</span>
-            <Kbd v-else-if="(item as BookmarkEntry).config.shortcut" :keys="(item as BookmarkEntry).config.shortcut" size="sm" />
-            <WpIconButton
-              :icon="(item as BookmarkEntry).config.hidden ? 'pi-eye-slash' : 'pi-eye'"
-              :label="(item as BookmarkEntry).config.hidden ? 'Show on canvas' : 'Hide on canvas'"
-              :pressed="(item as BookmarkEntry).config.hidden"
-              :data-test="`bm-dock-eye-${index}`"
-              @click.stop="setHidden((item as BookmarkEntry).node, !(item as BookmarkEntry).config.hidden)"
-            />
-          </div>
+          <DockRow
+            :entry="item as BookmarkEntry"
+            :index="index"
+            :current="current === (item as BookmarkEntry).node"
+            editing
+            @jump="jumpTo((item as BookmarkEntry).node)"
+            @toggle-hidden="setHidden((item as BookmarkEntry).node, !(item as BookmarkEntry).config.hidden)"
+          />
         </template>
       </SortableList>
+      <ul v-else-if="shown" class="wp-bmdock__list" aria-label="Bookmarks in this workflow">
+        <li v-for="(b, i) in entries" :key="keyOf(b)">
+          <DockRow :entry="b" :index="i" :current="current === b.node" :editing="false" @jump="jumpTo(b.node)" />
+        </li>
+      </ul>
       <p v-else class="wp-bmdock__empty" data-test="bm-dock-empty">
         No bookmarks in this workflow yet.
       </p>
-      <WpButton variant="add" size="sm" block icon="pi-plus" data-test="bm-dock-add" @click="addBookmarkHere()">
+      <WpButton
+        v-if="editing || !shown"
+        variant="add"
+        size="sm"
+        block
+        icon="pi-plus"
+        data-test="bm-dock-add"
+        @click="addBookmarkHere()"
+      >
         Bookmark this view
       </WpButton>
     </div>
@@ -246,38 +241,6 @@ function close(): void {
   border-top: 1px solid var(--wp-border);
   padding-top: 6px;
 }
-.wp-bmdock__row {
-  --wp-bm-color: var(--wp-accent);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 0 2px 0 6px;
-  border-radius: min(4px, var(--wp-radius-cap, 999px));
-  cursor: pointer;
-  box-shadow: inset 2px 0 0 var(--wp-bm-color);
-}
-.wp-bmdock__row:hover { background: var(--wp-bg-3, var(--wp-bg-1)); }
-.wp-bmdock__row:focus-visible { outline: 2px solid var(--wp-accent); outline-offset: -2px; }
-.wp-bmdock__row.is-current { background: color-mix(in srgb, var(--wp-bm-color) 14%, transparent); }
-.wp-bmdock__row.is-off { opacity: 0.55; }
-.wp-bmdock__row.is-hidden .wp-bmdock__name { font-style: italic; color: var(--wp-text-dim); }
-.wp-bmdock__num {
-  min-width: 14px;
-  color: var(--wp-text-dim);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-.wp-bmdock__icon { color: var(--wp-bm-color); font-size: 12px; }
-.wp-bmdock__name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-weight: 600;
-}
-.wp-bmdock__sub { color: var(--wp-text-dim); font-size: 11px; }
-.wp-bmdock__off { color: var(--wp-text-dim); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+.wp-bmdock__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .wp-bmdock__empty { margin: 4px 2px; color: var(--wp-text-dim); }
 </style>
