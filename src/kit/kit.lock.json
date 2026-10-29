@@ -1,7 +1,7 @@
 {
   "repo": "DumiFlex/wp-kit",
-  "ref": "e43fd477a2080991298bfa2d6f568ed70c319bf6",
-  "sha": "e43fd477a2080991298bfa2d6f568ed70c319bf6",
+  "ref": "v0.1.0",
+  "sha": "8afa20ccf998429678253ab7546d6132a586e3f0",
   "files": {
     "__tests__/Button.test.ts": "b77b35f520e64414753017c67771ab3779655641f584401cbf415335ea6fe2a7",
     "__tests__/Card.test.ts": "ff950ef07f9e6a6a867aa55ef92c55b9ff4cbd3de9b31df075ddee6c3733917d",
@@ -120,7 +120,7 @@
     "theme/fonts/OFL-JetBrainsMono.txt": "bb1c26eb6fe1839e3759548777c8a35b9495ce4878a4b833b1b63d43ff313a4b",
     "theme/fonts/OFL-Manrope.txt": "18aabf190848725e2576eefb5c29ba06aac1029d02132252a7f312eac2e50cf3",
     "theme/looks.css": "e4c3e15ae0438b23eb7cc58a1782f3ad0c78662b2b98a8edbf6f7ddb00ba2f8c",
-    "theme/palettes.css": "499589d5988dac524b8e9db34a451b15cf5d1367ae9f3f970064544570f59925",
+    "theme/palettes.css": "8e0d8c82771e4aea0c0a3f536c49655df7422f912ab4673bb1a3811c5a19bc6c",
     "theme/tokens.css": "ba5021edb21a78f88715aa179b7aa439625c0a5dfedaa71228fb0986128366a2",
     "Timeline.vue": "7dabfe054d6b3f1eb538f7a7d49e7d8a7e1c17e85435ca6f9479b4bc0eae3e02",
     "ToastCard.vue": "c13b1a181ecfce28acf286ae687c2db47d86565f9fff9cf5bbb82140dc2d0cef",

@@ -170,6 +170,36 @@ html.wp-theme-light[data-wp-palette="ember"] {
   --wp-text-dim:   #6c5f55;
 }
 
+/* ---------- Community: Orbit's night, rust accent, warm cream light ----------
+ * The community site's own theme, the counterpart to the extension's Orbit.
+ * Dark surfaces are Orbit's, so it has no dark block. Ramp shifted one step
+ * from the site's old values so the fill takes white text. */
+html[data-wp-palette="community"] {
+  --wp-accent-50:  #fef5f0;
+  --wp-accent-100: #fde6db;
+  --wp-accent-200: #fbcdb7;
+  --wp-accent-300: #f6a583;
+  --wp-accent-400: #ed8861;
+  --wp-accent-500: #d97757;
+  --wp-accent-600: #a44a2d; /* white 5.8:1 */
+  --wp-accent-700: #82391f;
+  --wp-accent-800: #5c2715;
+  --wp-accent-900: #3f1a0e;
+}
+html.wp-theme-light[data-wp-palette="community"] {
+  --wp-bg:   #f7f5f0;
+  --wp-bg-1: #ffffff;
+  --wp-bg-2: #f1ede4;
+  --wp-bg-3: #e9e4d8;
+  --wp-bg-4: #ddd6c5;
+  --wp-border:        rgba(20, 18, 15, 0.08);
+  --wp-border-strong: rgba(20, 18, 15, 0.16);
+  --wp-text:       #1a1815;
+  --wp-text-muted: #595449;
+  --wp-text-dim:   #6b6559;
+  --wp-row-hover:  rgba(20, 18, 15, 0.03);
+}
+
 /* ---------- High contrast: black / white, solid borders, yellow focus ----------
  * Keeps its own accent (the Accent setting is off). The fill is a deep
  * indigo so white text on it reads at 10:1; light accent text carries links
