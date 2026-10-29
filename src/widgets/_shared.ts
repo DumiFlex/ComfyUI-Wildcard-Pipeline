@@ -171,6 +171,43 @@ function unregisterFillSync(sync: () => void): void {
   fillSyncs.delete(sync);
 }
 
+/* ── Nodes 2.0 slot adoption ────────────────────────────────────────────
+ *
+ * Nodes 2.0 draws each DOM widget into a slot (`WidgetDOM.vue`) that attaches
+ * `widget.element` once, when the slot mounts. A graph reload that keeps node
+ * ids (undo / redo, reloading the same workflow) builds new nodes and new
+ * widgets but keeps the slots, so they go on showing the OLD element, whose
+ * Vue app was unmounted with its node: every WP node turned blank on Ctrl+Z.
+ * A new host that is still off the page a few frames after it was made finds
+ * the slot holding a stale host for the same node id and widget name and
+ * takes its place. Live hosts are tracked so a slot that belongs to a working
+ * widget is never taken.
+ */
+const liveHosts = new WeakSet<HTMLElement>();
+
+function adoptStaleSlot(node: unknown, widgetName: string, host: HTMLElement): void {
+  if (typeof document === "undefined" || typeof requestAnimationFrame === "undefined") return;
+  if (!isVueNodes()) return;
+  let frames = 0;
+  const tick = (): void => {
+    if (host.isConnected || !liveHosts.has(host) || !isVueNodes()) return;
+    const id = (node as { id?: unknown }).id;
+    if (id == null) return;
+    const card = [...document.querySelectorAll<HTMLElement>("[data-node-id]")]
+      .find((el) => el.getAttribute("data-node-id") === String(id));
+    const stale = card
+      ? [...card.querySelectorAll<HTMLElement>(".wp-widget")]
+        .find((el) => el.dataset.wpWidget === widgetName && !liveHosts.has(el))
+      : undefined;
+    if (stale?.parentElement) {
+      stale.parentElement.replaceChildren(host);
+      return;
+    }
+    if (++frames < 30) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
 interface ResizableNode {
   size?: number[];
   computeSize?: () => [number, number] | number[];
@@ -186,6 +223,8 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
 ): DomWidgetHost {
   const host = document.createElement("div");
   host.classList.add("wp-widget");
+  host.dataset.wpWidget = widgetName;
+  liveHosts.add(host);
   host.style.width = "100%";
   host.style.boxSizing = "border-box";
 
@@ -298,6 +337,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   // here — the public API on createDomWidgetHost is still strict in P.
   const app = createApp(component, (options.componentProps ?? {}) as unknown as P);
   app.mount(inner);
+  adoptStaleSlot(node, widgetName, host);
 
   const scope = options.scope ?? effectScope(true);
   const cleanups: Array<() => void> = [];
@@ -577,6 +617,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   function unmount(): void {
     if (unmounted) return;
     unmounted = true;
+    liveHosts.delete(host);
     // Each step guarded so one failing teardown can't strand the rest.
     const steps: Array<() => void> = [
       () => scope.stop(),
