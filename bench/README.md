@@ -1,5 +1,7 @@
 # AI bench
 
+For a quick pass or fail check of every AI flow, see the [AI smoke pack](smoke/README.md) instead.
+
 The AI assistant's bench as a [Watchwright](https://github.com/DumiFlex/watchwright) test pack. Its tests are the bench page's tests, copied into `meta.json` with the same titles, prompts and attempts per model. It clicks through each one in a browser the way a person would, against a running ComfyUI with the AI assistant set up. For every attempt it keeps:
 
 - shots of the answer, and the answer's text;
@@ -70,7 +72,8 @@ W7, C10, P10 and Z20 to Z22 attach an image. See [images/README.md](images/READM
 
 ## Change it
 
-- `pack.ts`: the pack's settings, setup, flags, rubric and collectors.
+- `pack.ts`: the pack's settings, setup, flags and rubric.
+- `shared.ts`: the collectors and the library reset, shared with the smoke pack.
 - `bench.ts`: the helpers the tests use. Examples: `h.panel`, `h.chat`, `h.aiIdle`, `h.applyCard`.
 - `shapes.ts`: the shapes most tests share. Examples: `make`, `describe`, `edit`, `chat`, `organize`, `pack`.
 - `tests/`: one file per section, in the bench page's order.
@@ -85,3 +88,5 @@ python bench/dev/serve.py
 ```
 
 It serves the manager at `http://127.0.0.1:8189/wp/` on a fresh library, with a fake OpenAI-style model that answers every JSON step with a made-up value of the requested shape. Run the bench with `reset` on. The answers are nonsense, but every step runs, so a broken attempt points at a click that no longer works.
+
+The fake model also takes a script of exact answers, which the smoke pack uses. See the docstring of `bench/dev/serve.py`.
