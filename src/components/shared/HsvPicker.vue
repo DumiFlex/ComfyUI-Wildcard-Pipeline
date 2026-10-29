@@ -167,7 +167,7 @@ const hueCursorStyle = computed(() => ({
   position: absolute;
   width: 14px;
   height: 14px;
-  border-radius: 50%;
+  border-radius: 50%; /* round: picker cursor on the colour field */
   border: 2px solid #fff;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 1px 2px rgba(0, 0, 0, 0.45);
   transform: translate(-50%, -50%);

@@ -185,7 +185,7 @@
 .wp-conflict-dot {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: 50%; /* round: status dot */
   flex-shrink: 0;
   cursor: help;
   border: 1px solid transparent;

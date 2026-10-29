@@ -1617,7 +1617,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__thumb { position: relative; width: 56px; height: 56px; border-radius: min(6px, var(--wp-radius-cap, 999px)); overflow: hidden; border: 1px solid var(--wp-border); }
 .wp-ai-chat__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .wp-ai-chat__thumb button {
-  position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%;
+  position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: min(50%, var(--wp-radius-cap, 999px));
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
   background: rgb(0 0 0 / 0.65); color: #fff;
 }

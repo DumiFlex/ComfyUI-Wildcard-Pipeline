@@ -270,7 +270,7 @@ function setOpen(v: boolean): void {
 /* Plain ✕: no background zone, the chip keeps its height; the hit area is 20 px. */
 .wp-tag-input__remove {
   display: inline-grid; place-items: center; width: 16px; height: 16px; margin: -2px 0; padding: 0;
-  border: 0; border-radius: 50%; background: transparent; color: var(--wp-text-muted); cursor: pointer;
+  border: 0; border-radius: min(50%, var(--wp-radius-cap, 999px)); background: transparent; color: var(--wp-text-muted); cursor: pointer;
   position: relative;
 }
 .wp-tag-input__remove::before { content: ""; position: absolute; inset: -2px; }

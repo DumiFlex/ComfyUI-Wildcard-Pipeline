@@ -462,7 +462,7 @@ function onKeydown(e: KeyboardEvent) {
   display: flex; align-items: center; gap: 6px;
   flex: 1; min-width: 0; overflow: hidden;
 }
-.wp-select__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.wp-select__dot { width: 8px; height: 8px; border-radius: 50%; /* round: colour dot */ flex-shrink: 0; display: inline-block; }
 /* Empty stand-in that holds the icon/dot column open for options without one.
  * Width is set inline from `markerWidth`, since it depends on what the list
  * actually contains. */

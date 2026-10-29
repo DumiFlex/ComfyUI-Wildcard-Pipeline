@@ -227,7 +227,7 @@ function announce(list: AiPointer[]): string {
   place-items: center;
   width: 20px;
   height: 20px;
-  border-radius: 50%;
+  border-radius: 50%; /* round: numbered marker */
   background: var(--wp-accent-500);
   color: #fff;
   font-size: 11px;

@@ -290,7 +290,7 @@ function setOpen(v: boolean): void {
 .wp-combo__chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wp-combo__remove, .wp-combo__clear {
   display: inline-grid; place-items: center; width: 16px; height: 16px; padding: 0;
-  border: 0; border-radius: 50%; background: transparent; color: var(--wp-text-muted); cursor: pointer;
+  border: 0; border-radius: min(50%, var(--wp-radius-cap, 999px)); background: transparent; color: var(--wp-text-muted); cursor: pointer;
 }
 .wp-combo__remove { margin: -2px 0; position: relative; }
 .wp-combo__remove::before { content: ""; position: absolute; inset: -2px; }

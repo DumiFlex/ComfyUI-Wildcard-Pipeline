@@ -167,7 +167,7 @@ function onTyped(v: number | null): void {
 .wp-slider__thumb {
   position: absolute; top: 50%; box-sizing: border-box;
   width: var(--_thumb); height: var(--_thumb); margin: calc(var(--_thumb) / -2) 0 0 calc(var(--_thumb) / -2);
-  border: 2px solid var(--wp-accent); border-radius: 50%; background: var(--wp-bg);
+  border: 2px solid var(--wp-accent); border-radius: min(50%, var(--wp-radius-cap, 999px)); background: var(--wp-bg);
   box-shadow: var(--wp-shadow-sm); outline: none;
   transition: transform var(--wp-motion-quick), box-shadow var(--wp-motion-quick);
 }

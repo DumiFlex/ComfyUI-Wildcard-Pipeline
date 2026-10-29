@@ -68,7 +68,7 @@ const lineWidth = (i: number): string | undefined =>
 .wp-skeleton__line { width: 100%; height: 0.75em; }
 .wp-skeleton__line--hint { height: 0.6em; opacity: 0.7; }
 .wp-skeleton__block { width: 100%; height: 64px; border-radius: var(--wp-radius); }
-.wp-skeleton__circle { flex: none; width: 28px; height: 28px; border-radius: 50%; }
+.wp-skeleton__circle { flex: none; width: 28px; height: 28px; border-radius: 50%; /* round: stands in for an avatar */ }
 .wp-skeleton__row { display: flex; align-items: center; gap: var(--wp-space-4); padding: var(--wp-space-2) 0; }
 .wp-skeleton__row-text { display: flex; flex-direction: column; gap: var(--wp-space-2); flex: 1; min-width: 0; }
 .wp-skeleton__sr {

@@ -126,14 +126,14 @@ function onKeydown(ev: KeyboardEvent, at: T): void {
 .wp-radio-group__opt[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 .wp-radio-group__dot {
   position: relative; flex: none; box-sizing: border-box; width: 16px; height: 16px; margin-top: 1px;
-  border: 1.5px solid var(--wp-border-strong); border-radius: 50%; background: var(--wp-bg-1);
+  border: 1.5px solid var(--wp-border-strong); border-radius: 50%; /* round: a radio is round in every look */ background: var(--wp-bg-1);
   transition: border-color var(--wp-motion-hover);
 }
 .wp-radio-group[data-size="sm"] .wp-radio-group__dot { width: 13px; height: 13px; }
 .wp-radio-group__opt:hover:not([aria-disabled="true"]) .wp-radio-group__dot { border-color: var(--wp-accent); }
 .wp-radio-group__opt[data-checked] .wp-radio-group__dot { border-color: var(--wp-accent); }
 .wp-radio-group__opt[data-checked] .wp-radio-group__dot::after {
-  content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--wp-accent);
+  content: ""; position: absolute; inset: 3px; border-radius: 50%; /* round: radio dot */ background: var(--wp-accent);
 }
 .wp-radio-group[data-size="sm"] .wp-radio-group__opt[data-checked] .wp-radio-group__dot::after { inset: 2.5px; }
 /* A picked option that is disabled turns grey, so it can't pass for a live one. */

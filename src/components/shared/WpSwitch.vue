@@ -104,7 +104,7 @@ function flip(): void {
   left: 1px;
   width: calc(var(--switch-h) - 4px);
   height: calc(var(--switch-h) - 4px);
-  border-radius: 50%;
+  border-radius: min(50%, var(--wp-radius-cap, 999px));
   background: var(--wp-text-dim);
   transition: transform var(--wp-motion-quick), background var(--wp-motion-quick);
 }

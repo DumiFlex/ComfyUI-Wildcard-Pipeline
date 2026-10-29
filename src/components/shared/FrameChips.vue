@@ -343,7 +343,7 @@ const hint = computed(() => {
   right: 2px;
   width: 4px;
   height: 4px;
-  border-radius: 50%;
+  border-radius: 50%; /* round: lock dot */
   background: var(--wp-accent, #6366f1);
 }
 /* A bypassed frame keeps its lock, and the dot must survive the dim — else
