@@ -8,19 +8,35 @@ import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
 const looks = [
-  { term: "Card", desc: "A panel with a coloured edge on the left. The title, the text and the docs button show on the canvas." },
+  { term: "Card", desc: "A panel with a coloured edge on the left. The title and the text show on the canvas." },
   { term: "Sticky", desc: "The same panel, tinted with the colour." },
-  { term: "Label", desc: "A small pill with the title only, sized to it. Hover it to see its text and docs link in a card; move onto the card to click them. Marks on the pill show that it has text (lines) or a docs link (book)." },
+  { term: "Label", desc: "A small pill with the title only, sized to it. Hover it to see its text and links in a card; move onto the card to click them. Marks on the pill show that it has text (lines) or a link (chain)." },
 ];
 
 const edit = [
-  { term: "Tone", desc: "Step (shows its number), Tip (lightbulb), Info (i) or Plain. Sets the colour." },
-  { term: "Colour", desc: "Your own colour in place of the tone's. The undo arrow next to it goes back to the tone's colour." },
+  { term: "Tone", desc: "Step (a numbered circle), Icon (pick any icon from the list next to it) or Plain (no badge)." },
+  { term: "Colour", desc: "Presets that follow the theme (Accent, Tip, Info, Warning, Danger, Teal, Violet, Neutral), or any colour from the picker." },
   { term: "Look", desc: "Card, Sticky or Label (above)." },
   { term: "Pinned", desc: "ComfyUI's own pin: a pinned note can't be moved or resized by accident. New notes start pinned." },
   { term: "Title", desc: "Shown in bold at the top, or on the pill of a Label." },
-  { term: "Text", desc: "Markdown: **bold**, *italic*, lists and `$var`. Links show as text." },
-  { term: "Docs link", desc: "A page of these docs. Shows as a button that opens it." },
+  { term: "Text", desc: "Markdown, with the formatting bar below over it." },
+];
+
+const bar = [
+  { term: "Bold, italic, strikethrough", desc: "Wraps the selection in **, * or ~~.", kbd: "Ctrl+B / Ctrl+I" },
+  { term: "Code", desc: "Wraps it in backticks, for a $variable." },
+  { term: "Lists and quote", desc: "Puts - , 1. or > before each selected line (press again to take it off)." },
+  { term: "Link", desc: "A Docs page (type to find any page of these docs, then pick a section or the whole page) or a Web address, drawn as a Button with an icon or as a Text link. The selected text becomes the link's text.", kbd: "Ctrl+K" },
+  { term: "Icon", desc: "Any PrimeIcons icon, searchable, in a colour or the text's own." },
+  { term: "Preview (eye)", desc: "Shows the note as it will read." },
+];
+
+const syntax = [
+  { term: "[Read more](https://example.com)", desc: "A link that opens in a new tab." },
+  { term: "[Seeds](docs:seeds-and-loops)", desc: "A link to that page of these docs." },
+  { term: "[The grid](docs:wp-label-grid#s-the-grid)", desc: "A link to one section of it." },
+  { term: "[Start here](docs:quick-start){button pi-play}", desc: "The link drawn as a button with an icon. {button} alone has no icon." },
+  { term: ":pi-heart:  :pi-heart:{#ef4444}", desc: "An icon, optionally in a colour." },
 ];
 </script>
 
@@ -31,7 +47,7 @@ const edit = [
     icon="pi pi-bookmark"
     tone="node"
     node-id="WP_Note"
-    blurb="A note that explains a workflow: a step, a tip or a label, with a link to these docs. It never runs."
+    blurb="A note that explains a workflow: a step, a warning or a label, with links into these docs. It never runs."
   >
     <DocSection title="What it's for">
       <p>
@@ -41,8 +57,8 @@ const edit = [
       </p>
       <DocImage
         src="images/docs/wp-note.png"
-        ratio="1720 / 644"
-        caption="A Step card with a docs link, a Tip sticky, and a Label showing its hover card."
+        ratio="1720 / 752"
+        caption="A Step card with docs buttons, a Warning card with its own icon, a Tip sticky, and a Label showing its hover card."
       />
     </DocSection>
 
@@ -50,7 +66,7 @@ const edit = [
       <DocUseWhen
         :good="[
           'Numbered steps through a shared workflow',
-          'A tip next to the node it is about, with its docs page one click away',
+          'A warning or tip next to the node it is about, with its docs page one click away',
           'A small label over a group of nodes',
         ]"
         :better="[
@@ -72,8 +88,26 @@ const edit = [
       </p>
       <DocKeyList :items="edit" />
       <DocCallout variant="tip">
-        Add one from the node search: type <code>WP Note</code>. A new note opens in its editor.
+        Keys you type in the editor stay in the editor: Delete, Ctrl+Z and ComfyUI's other shortcuts don't
+        reach the canvas.
       </DocCallout>
+    </DocSection>
+
+    <DocSection title="The formatting bar">
+      <DocImage
+        src="images/docs/wp-note-editor.png"
+        ratio="1720 / 860"
+        caption="The editor with the link panel open: a docs page found by typing, one of its sections, and a button with an icon."
+      />
+      <DocKeyList :items="bar" />
+    </DocSection>
+
+    <DocSection title="Links and icons in the text">
+      <p>
+        The bar writes these for you; you can also type them. A note can hold any number of links, anywhere
+        in the text. Any other kind of link shows as plain text.
+      </p>
+      <DocKeyList :items="syntax" />
     </DocSection>
 
     <DocSection title="Works with">
