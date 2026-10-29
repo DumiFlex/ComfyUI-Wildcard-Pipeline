@@ -16,6 +16,7 @@ const {
   modelInfoMod,
   imageFilterWidgetMod,
   labelGridMod,
+  noteMod,
   imageFilterMod,
   varPickerMod,
   ctxLoopMod,
@@ -211,6 +212,16 @@ app.registerExtension({
       await topbarMod.attachLegacyTopbarButton(app);
     }
     topbarMod.startIconReplaceLoop();
+  },
+
+  // WP Note: a frontend-only node (like ComfyUI's Note) that explains a
+  // workflow. Registered here because it has no Python node definition.
+  registerCustomNodes() {
+    noteMod.registerNoteNode();
+  },
+
+  beforeRegisterVueAppNodeDefs(defs: unknown[]) {
+    noteMod.fixNoteDef(defs as Parameters<typeof noteMod.fixNoteDef>[0]);
   },
 
   getCustomWidgets() {
