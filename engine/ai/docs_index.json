@@ -1671,6 +1671,47 @@
    ]
   },
   {
+   "id": "wp-toggles",
+   "title": "WP Toggles",
+   "group": "nodes",
+   "blurb": "Several on/off switches in one node, as $variables and BOOLEAN outputs.",
+   "keywords": [
+    "toggle",
+    "boolean",
+    "switch",
+    "on",
+    "off",
+    "lora",
+    "merge"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "WP Toggles replaces a stack of Boolean nodes. Each toggle writes $its_variable as true or false, so a derivation can branch on it without a Context Injector, and can show a BOOLEAN output at the right of its row for a switch node.\nFigure: Three toggles and a Scene label. Use its own clothes needs LoRA character; Anime look has no output, only its variable. A WP Toggles node with an Any on / Pick one switch at the top. Rows: LoRA character (a switch, on, $use_lora_character), Use its own clothes (a checkbox, indented, 'needs LoRA character'), Anime look (a chip with no output), then a Scene label with Time of day (Day / Night buttons, $is_day). Each row with an output has its BOOLEAN dot at the node's right edge, level with the row; Time of day is wired to a Preview as Text node."
+    },
+    {
+     "title": "When to use it",
+     "text": "Good for\n- Switches you flip by hand: use a LoRA, add a detailer, day or night\n- Paths a rule picks between: $use_lora_character in a derivation\nBetter with something else\n- A switch a random pick should flip: a wildcard and WP Var → Bool"
+    },
+    {
+     "title": "Controls",
+     "text": "upstream (in)\nOptional Context to extend. Only nodes after this one see the toggle variables.\nAny on / Pick one\nAny on: every toggle is on or off by itself. Pick one: exactly one is on, like radio buttons.\nwrites (Pick one)\nOptional variable that also gets the picked toggle's name, so one rule can branch on it.\nPencil\nOpens the toggle's edit panel: name, variable, style, needs, group and its output.\nAdd toggle / Add label\nA new toggle, or a label that groups the toggles under it. Click a label's arrow to fold it.\ncontext (out)\nThe Context with every toggle variable added, all internal.\ntoggle outputs\nOne BOOLEAN per toggle that has an output, at the right of its row. Up to 16."
+    },
+    {
+     "title": "Editing a toggle",
+     "text": "Name\nShown on the row and on its output.\nVariable\nGets true or false. It follows the name until you change it. Always internal, so it never prints in the prompt.\nStyle\nSwitch, Check, Buttons (two words of your own, like Day / Night) or Chip (a small chip with the name).\nNeeds\nAnother toggle this one needs. While that one is off, this one is off too; it keeps your choice for when it comes back on.\nGroup\nWhich label it sits under.\nBOOLEAN output\nShow an output for switch nodes. Off for a toggle only rules read.\nDrag the grip to reorder. A label moves with its toggles. Moving a row never re-points a wire: each output stays with its toggle."
+    },
+    {
+     "title": "Merge the Boolean nodes you have",
+     "text": "Select Boolean nodes, right-click one and pick Merge into WP Toggles. Each becomes a toggle named after its title, keeps its value, and its wires move to the matching output. A node can merge when its only output is BOOLEAN, nothing is wired into it and it has one on/off value, so ComfyUI's Boolean and most pack toggles work. Ctrl+Z undoes the merge."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Context Injector WP Var → Bool WP Model Info"
+    }
+   ]
+  },
+  {
    "id": "wp-prompt-assembler",
    "title": "WP Prompt Assembler",
    "group": "nodes",

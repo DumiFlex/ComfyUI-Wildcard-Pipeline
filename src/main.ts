@@ -14,6 +14,8 @@ const {
   injMod,
   cleanerMod,
   modelInfoMod,
+  togglesMod,
+  togglesMergeMod,
   imageFilterWidgetMod,
   labelGridMod,
   noteMod,
@@ -124,6 +126,7 @@ type DebugCreateNode = Parameters<typeof dbgMod.create>[0];
 type InjectorCreateNode = Parameters<typeof injMod.create>[0];
 type CleanerCreateNode = Parameters<typeof cleanerMod.create>[0];
 type ModelInfoCreateNode = Parameters<typeof modelInfoMod.create>[0];
+type TogglesCreateNode = Parameters<typeof togglesMod.create>[0];
 type ImageFilterCreateNode = Parameters<typeof imageFilterWidgetMod.create>[0];
 type LabelGridCreateNode = Parameters<typeof labelGridMod.create>[0];
 type VarPickerCreateNode = Parameters<typeof varPickerMod.create>[0];
@@ -180,6 +183,29 @@ app.registerExtension({
   // About panel — small badges under our extension's row, link out to
   // the repo, issue tracker, and docs. Uses PrimeIcons shipped by ComfyUI.
   aboutPageBadges: aboutMod.ABOUT_BADGES,
+
+  // "Merge into WP Toggles" on a right-clicked Boolean-like node.
+  getNodeMenuItems(node: unknown) {
+    type MergeNode = Parameters<typeof togglesMergeMod.isMergeable>[0];
+    type MergeGraph = Parameters<typeof togglesMergeMod.mergeIntoToggles>[0];
+    const canvas = (app as unknown as { canvas?: { selected_nodes?: Record<string, MergeNode>; graph?: MergeGraph } }).canvas;
+    if (!togglesMergeMod.isMergeable(node as MergeNode)) return [];
+    const picked = Object.values(canvas?.selected_nodes ?? {});
+    const selected = picked.includes(node as MergeNode) ? picked : [node as MergeNode];
+    const count = Math.min(selected.filter(togglesMergeMod.isMergeable).length, 16);
+    return [null, {
+      content: `Merge into WP Toggles (${count})`,
+      callback: () => {
+        const graph = canvas?.graph;
+        if (!graph) return;
+        const lg = (globalThis as { LiteGraph?: { createNode(type: string): MergeNode | null } }).LiteGraph;
+        const res = togglesMergeMod.mergeIntoToggles(graph, selected, () => lg?.createNode("WP_Toggles") ?? null);
+        if (res.skipped.length) {
+          toastStoreMod.pushToast(`Not merged: ${res.skipped.join(", ")}. Only nodes with one on/off value, one BOOLEAN output and no wired inputs can merge (16 at most).`, { severity: "warning" });
+        }
+      },
+    }];
+  },
 
   // Topbar dropdown entry — opens the SPA at /wp/dashboard. The direct
   // toolbar button (mounted via actionBarButtons / setup() below) is
@@ -250,6 +276,8 @@ app.registerExtension({
         seedListMod.create(node, inputName),
       WP_MODEL_INFO: (node: ModelInfoCreateNode, inputName: string) =>
         modelInfoMod.create(node, inputName),
+      WP_TOGGLES: (node: TogglesCreateNode, inputName: string) =>
+        togglesMod.create(node, inputName),
       WP_IMAGE_FILTER: (node: ImageFilterCreateNode, inputName: string) =>
         imageFilterWidgetMod.create(node, inputName),
       WP_LABEL_GRID: (node: LabelGridCreateNode, inputName: string) =>

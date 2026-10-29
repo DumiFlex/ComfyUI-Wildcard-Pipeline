@@ -1,0 +1,359 @@
+<script setup lang="ts">
+/**
+ * One toggle row of WP Toggles, plus its edit panel when open. Stateless:
+ * the parent (`TogglesWidget.vue`) works out every fact shown here and
+ * applies every change this emits.
+ *
+ * The row carries `data-wp-out="toggle_<out>"` while it has an output, so
+ * `extension/row-outputs.ts` puts that BOOLEAN dot at the row's right edge.
+ */
+import WpButton from "../../kit/WpButton.vue";
+import WpIconButton from "../../kit/WpIconButton.vue";
+import WpSegmented from "../../kit/WpSegmented.vue";
+import WpSwitch from "../../kit/WpSwitch.vue";
+import WpCheck from "../../kit/WpCheck.vue";
+import WpSelect from "../../kit/WpSelect.vue";
+import CloseButton from "../../kit/CloseButton.vue";
+import { vTooltip } from "../../kit/tooltip";
+import { varColorClass } from "../shared/var-color";
+import type { ToggleRow, ToggleStyle } from "../../extension/toggles";
+
+interface Choice { value: string; label: string }
+
+const props = defineProps<{
+  t: ToggleRow;
+  /** Pick one mode: a radio instead of the style's control. */
+  pickOne: boolean;
+  /** What the control shows (Pick one: picked; Any on: own choice). */
+  shownOn: boolean;
+  /** The output's value after needs / Pick one. */
+  effOn: boolean;
+  /** Name of the toggle this one needs (Any on), "" for none. */
+  parentName: string;
+  /** Off because that toggle is off. */
+  blocked: boolean;
+  problem?: string;
+  /** Left indent in px (needs depth). */
+  indent: number;
+  editing: boolean;
+  needsOptions: Choice[];
+  /** Label groups to move to; empty hides the field. */
+  groupOptions: Choice[];
+  groupId: string;
+  /** All 16 outputs are taken (an unpinned toggle can't get one). */
+  outputsFull: boolean;
+}>();
+
+const emit = defineEmits<{
+  "set-on": [on: boolean];
+  patch: [patch: Partial<ToggleRow>];
+  rename: [name: string];
+  "set-var": [v: string];
+  edit: [];
+  "move-group": [labelId: string];
+  remove: [];
+}>();
+
+const STYLES: { value: ToggleStyle; label: string; hint: string }[] = [
+  { value: "switch", label: "Switch", hint: "A sliding switch" },
+  { value: "checkbox", label: "Check", hint: "A checkbox" },
+  { value: "buttons", label: "Buttons", hint: "Two buttons with your own words, e.g. Day / Night" },
+  { value: "chip", label: "Chip", hint: "A small chip with the name, lit when on" },
+];
+
+function blockedHint(): string {
+  return props.blocked ? `Turn on "${props.parentName}" first` : "";
+}
+function sub(): string {
+  if (props.parentName) return props.blocked ? `Off: needs ${props.parentName}` : `needs ${props.parentName}`;
+  return props.t.var ? `$${props.t.var}` : "no variable";
+}
+function subClass(): string {
+  if (props.parentName) return props.blocked ? "is-warn" : "is-linked";
+  return props.t.var ? varColorClass(props.t.var) : "is-dim";
+}
+function value(ev: Event): string {
+  return (ev.target as HTMLInputElement).value.trim();
+}
+function flip(): void {
+  emit("set-on", !props.shownOn);
+}
+</script>
+
+<template>
+  <div class="wp-tgr" :style="indent ? { marginLeft: `${indent}px` } : undefined">
+    <div
+      class="wp-tgr__row"
+      :class="{ 'is-blocked': blocked, 'is-on': effOn, 'is-chip': t.style === 'chip' && !pickOne, 'is-editing': editing }"
+      :data-wp-out="t.pin && t.out ? `toggle_${t.out}` : undefined"
+      :data-test="`tg-row-${t.id}`"
+    >
+      <template v-if="t.style === 'chip' && !pickOne">
+        <span v-tooltip="blocked ? blockedHint() : t.var ? `$${t.var}` : ''" class="wp-tgr__chip">
+          <WpSwitch
+            :model-value="shownOn"
+            variant="chip"
+            size="sm"
+            :label="t.name"
+            :disabled="blocked"
+            :data-test="`tg-ctl-${t.id}`"
+            @update:model-value="(v: boolean) => emit('set-on', v)"
+          />
+        </span>
+        <span v-if="parentName" class="wp-tgr__sub" :class="subClass()"><i class="pi pi-link" aria-hidden="true" />{{ sub() }}</span>
+      </template>
+      <span v-else class="wp-tgr__name">
+        <b>{{ t.name }}</b>
+        <span class="wp-tgr__sub" :class="subClass()">
+          <i v-if="parentName" class="pi pi-link" aria-hidden="true" />{{ sub() }}
+        </span>
+      </span>
+      <i
+        v-if="problem"
+        v-tooltip="problem"
+        class="pi pi-exclamation-triangle wp-tgr__warn"
+        role="img"
+        :aria-label="problem"
+      />
+      <WpIconButton
+        icon="pi-pencil"
+        :pressed="editing"
+        :label="`Edit ${t.name}`"
+        :data-test="`tg-edit-${t.id}`"
+        @click="emit('edit')"
+      />
+      <template v-if="pickOne">
+        <span
+          v-tooltip="shownOn ? 'Picked' : 'Pick this one'"
+          role="radio"
+          tabindex="0"
+          class="wp-tgr__radio"
+          :class="{ 'is-on': shownOn }"
+          :aria-checked="shownOn"
+          :aria-label="t.name"
+          :data-test="`tg-ctl-${t.id}`"
+          @click="flip"
+          @keydown.space.prevent.stop="flip"
+          @keydown.enter.prevent.stop="flip"
+        />
+      </template>
+      <span v-else-if="t.style === 'checkbox'" v-tooltip="blockedHint()" class="wp-tgr__ctl">
+        <WpCheck
+          :model-value="t.on"
+          :disabled="blocked"
+          :aria-label="t.name"
+          :data-test="`tg-ctl-${t.id}`"
+          @update:model-value="(v: boolean) => emit('set-on', v)"
+        />
+      </span>
+      <span v-else-if="t.style === 'buttons'" v-tooltip="blockedHint()" class="wp-tgr__ctl">
+        <WpSegmented
+          :model-value="t.on ? 'on' : 'off'"
+          :options="[{ value: 'on', label: t.on_label || 'On' }, { value: 'off', label: t.off_label || 'Off' }]"
+          size="sm"
+          :disabled="blocked"
+          :aria-label="t.name"
+          :test-prefix="`tg-ctl-${t.id}`"
+          @update:model-value="(v: string) => emit('set-on', v === 'on')"
+        />
+      </span>
+      <span v-else-if="t.style === 'switch'" v-tooltip="blockedHint()" class="wp-tgr__ctl">
+        <WpSwitch
+          :model-value="t.on"
+          size="sm"
+          :disabled="blocked"
+          :aria-label="t.name"
+          :data-test="`tg-ctl-${t.id}`"
+          @update:model-value="(v: boolean) => emit('set-on', v)"
+        />
+      </span>
+    </div>
+
+    <div v-if="editing" class="wp-tgr__edit" :data-test="`tg-editor-${t.id}`">
+      <div class="wp-tgr__edit-head">
+        <span class="wp-tgr__cap">EDIT TOGGLE</span>
+        <CloseButton size="sm" label="Done" @click="emit('edit')" />
+      </div>
+      <label class="wp-tgr__field">
+        <span>Name <em>on the row and its output</em></span>
+        <input :value="t.name" spellcheck="false" data-test="tg-name" @keydown.stop @change="emit('rename', value($event))">
+      </label>
+      <label class="wp-tgr__field">
+        <span>Variable <em>true or false, for rules only</em></span>
+        <input
+          class="wp-tgr__mono"
+          :class="[t.var ? varColorClass(t.var) : undefined, { 'is-problem': !!problem }]"
+          :value="t.var ? `$${t.var}` : ''"
+          placeholder="$variable"
+          spellcheck="false"
+          data-test="tg-var"
+          @keydown.stop
+          @change="emit('set-var', value($event).replace(/^\$/, ''))"
+        >
+      </label>
+      <div class="wp-tgr__field">
+        <span>Style</span>
+        <WpSegmented
+          :model-value="t.style"
+          :options="STYLES"
+          size="sm"
+          block
+          aria-label="Style"
+          test-prefix="tg-style"
+          @update:model-value="(v: ToggleStyle) => emit('patch', { style: v })"
+        />
+      </div>
+      <div v-if="t.style === 'buttons'" class="wp-tgr__two">
+        <label class="wp-tgr__field">
+          <span>On word</span>
+          <input :value="t.on_label ?? ''" placeholder="On" data-test="tg-on-label" @keydown.stop @change="emit('patch', { on_label: value($event) || undefined })">
+        </label>
+        <label class="wp-tgr__field">
+          <span>Off word</span>
+          <input :value="t.off_label ?? ''" placeholder="Off" data-test="tg-off-label" @keydown.stop @change="emit('patch', { off_label: value($event) || undefined })">
+        </label>
+      </div>
+      <div class="wp-tgr__field">
+        <span>Needs <em>{{ pickOne ? "not used while Pick one is on" : "only on while that toggle is on" }}</em></span>
+        <WpSelect
+          :model-value="t.needs ?? ''"
+          :options="needsOptions"
+          aria-label="Needs"
+          data-test="tg-needs"
+          :disabled="pickOne"
+          @update:model-value="(v: string) => emit('patch', { needs: v || undefined })"
+        />
+      </div>
+      <div v-if="groupOptions.length" class="wp-tgr__field">
+        <span>Group</span>
+        <WpSelect
+          :model-value="groupId"
+          :options="groupOptions"
+          aria-label="Group"
+          data-test="tg-group"
+          @update:model-value="(v: string) => emit('move-group', v)"
+        />
+      </div>
+      <div class="wp-tgr__edit-foot">
+        <span v-tooltip="!t.pin && outputsFull ? 'All 16 outputs are in use' : 'Show a BOOLEAN output for switch nodes'" class="wp-tgr__check">
+          <WpCheck
+            :model-value="t.pin"
+            size="sm"
+            :disabled="!t.pin && outputsFull"
+            aria-label="BOOLEAN output"
+            data-test="tg-pin"
+            @update:model-value="(v: boolean) => emit('patch', { pin: v })"
+          />
+          <span aria-hidden="true">BOOLEAN output</span>
+        </span>
+        <WpButton variant="ghost" size="sm" icon="pi-trash" data-test="tg-delete" @click="emit('remove')">Remove</WpButton>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.wp-tgr { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wp-tgr__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 3px 6px 3px 8px;
+  background: var(--wp-bg2, var(--wp-bg-1));
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
+  box-sizing: border-box;
+  min-width: 0;
+}
+.wp-tgr__row.is-chip { min-height: 26px; padding-left: 4px; }
+.wp-tgr__row.is-blocked { background: transparent; box-shadow: inset 0 0 0 1px var(--wp-border); }
+.wp-tgr__row.is-editing { box-shadow: inset 0 0 0 1px var(--wp-accent); }
+.wp-tgr__name { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.wp-tgr__name b {
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wp-tgr__row.is-blocked .wp-tgr__name b { color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-tgr__chip { display: inline-flex; min-width: 0; }
+.wp-tgr__row.is-chip .wp-tgr__sub { flex: 1; }
+.wp-tgr__row.is-chip:not(:has(.wp-tgr__sub)) .wp-tgr__chip { margin-right: auto; }
+.wp-tgr__sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font: 10.5px/14px var(--wp-font-mono, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wp-tgr__sub .pi { font-size: 9px; }
+.wp-tgr__sub.is-linked { font-family: var(--wp-font-sans, sans-serif); color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-tgr__sub.is-linked .pi { color: var(--wp-accent); }
+.wp-tgr__sub.is-warn { font-family: var(--wp-font-sans, sans-serif); color: var(--wp-amber, var(--wp-warn)); }
+.wp-tgr__sub.is-dim { font-family: var(--wp-font-sans, sans-serif); font-style: italic; color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-tgr__warn { font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
+.wp-tgr__ctl { display: inline-flex; flex: none; }
+.wp-tgr__radio {
+  flex: none;
+  position: relative;
+  width: 16px;
+  height: 16px;
+  margin: 0 2px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  border: 2px solid var(--wp-text-dim, var(--wp-text3));
+  cursor: pointer;
+}
+.wp-tgr__radio.is-on { border-color: var(--wp-accent); }
+.wp-tgr__radio.is-on::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: var(--wp-accent);
+}
+.wp-tgr__radio:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--wp-border-focus, var(--wp-accent)); }
+
+/* Edit panel */
+.wp-tgr__edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border: 1px solid var(--wp-border);
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
+}
+.wp-tgr__edit-head { display: flex; align-items: center; justify-content: space-between; }
+.wp-tgr__cap {
+  font: 600 9px var(--wp-font-sans, sans-serif);
+  letter-spacing: 0.08em;
+  color: var(--wp-text-dim, var(--wp-text-muted, var(--wp-text2)));
+}
+.wp-tgr__field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.wp-tgr__field > span { font-size: 10.5px; font-weight: 600; color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-tgr__field em { font-style: normal; font-weight: 400; color: var(--wp-text-dim, var(--wp-text3)); margin-left: 4px; }
+.wp-tgr__field input {
+  min-width: 0;
+  height: var(--wp-control-h-sm, 24px);
+  padding: 0 8px;
+  box-sizing: border-box;
+  background: var(--wp-bg);
+  color: var(--wp-text);
+  border: 1px solid var(--wp-border);
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
+  font: 12px var(--wp-font-sans, sans-serif);
+  outline: none;
+}
+.wp-tgr__field input:focus { border-color: var(--wp-accent); }
+.wp-tgr__field input.wp-tgr__mono { font-family: var(--wp-font-mono, monospace); font-size: 11px; }
+.wp-tgr__field input.is-problem { border-color: var(--wp-amber, var(--wp-warn)); }
+.wp-tgr__two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.wp-tgr__edit-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wp-tgr__check { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
+</style>

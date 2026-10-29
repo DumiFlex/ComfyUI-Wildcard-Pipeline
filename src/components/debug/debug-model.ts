@@ -116,7 +116,7 @@ export interface RawRef {
 
 // ── View model ──────────────────────────────────────────────────────────
 
-export type Kind = "wildcard" | "fixed" | "combine" | "derivation" | "constraint" | "injector" | "model" | "unknown";
+export type Kind = "wildcard" | "fixed" | "combine" | "derivation" | "constraint" | "injector" | "model" | "toggle" | "unknown";
 export type StepStatus = "ok" | "off" | "frame" | "error" | "unknown" | "never";
 export type Severity = "info" | "warning" | "error";
 
@@ -317,6 +317,7 @@ const KIND_LABELS: Record<Kind, string> = {
   constraint: "constraint",
   injector: "injector",
   model: "model info",
+  toggle: "toggle",
   unknown: "module",
 };
 
@@ -358,6 +359,7 @@ function str(v: unknown): string {
 function kindOf(entry: RawTraceEntry): Kind {
   if (entry.node === "WP_ContextInjector") return "injector";
   if (entry.node === "WP_ModelInfo") return "model";
+  if (entry.node === "WP_Toggles") return "toggle";
   switch (entry.type) {
     case "wildcard": return "wildcard";
     case "fixed_values": return "fixed";
@@ -537,7 +539,7 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
       overwrite: !!w.overwrite,
       negative: str(w.negative).trim(),
     }));
-    if ((kind === "injector" || kind === "model") && t.binding) {
+    if ((kind === "injector" || kind === "model" || kind === "toggle") && t.binding) {
       writes.push({ variable: t.binding, value: formatValue(t.value), overwrite: false, negative: "" });
     }
     const declared = writes.length

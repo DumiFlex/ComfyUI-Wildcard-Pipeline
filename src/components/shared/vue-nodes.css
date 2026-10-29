@@ -132,3 +132,24 @@
 .wp-field-sockets--legacy {
   padding-left: 10px;
 }
+
+/* Output dots at the right edge of their row (`extension/row-outputs.ts`,
+ * WP Toggles). The row leaves the flow and loses its label; `top` / `left`
+ * are set inline. Unlayered + `!important` like the field sockets above. */
+[data-wp-row-output] {
+  position: absolute !important;
+  z-index: 30;
+  height: 20px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+[data-wp-row-output] > :not(:last-child) {
+  display: none !important;
+}
+
+/* Legacy canvas: the dot is painted 10px into the node, over the panel's
+ * right edge. */
+.wp-row-outputs--legacy {
+  padding-right: 10px;
+}

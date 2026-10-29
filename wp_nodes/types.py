@@ -235,6 +235,46 @@ class ModelInfoWidgetInput:
 
 
 
+@comfytype(io_type="WP_TOGGLES")
+class TogglesWidgetInput:
+    """Widget-only custom type — frontend binds ``getCustomWidgets["WP_TOGGLES"]``.
+
+    JSON ``{version, mode, group_var, rows: [toggle | label]}``. Parsed by
+    ``engine/toggles.py::parse_config``.
+    """
+
+    Type = str
+
+    class Input(io.WidgetInput):
+        def __init__(
+            self,
+            id: str,
+            display_name: str | None = None,
+            optional: bool = False,
+            tooltip: str | None = None,
+            lazy: bool | None = None,
+            default: str | None = None,
+            socketless: bool | None = None,
+            extra_dict: dict[str, Any] | None = None,
+            raw_link: bool | None = None,
+            advanced: bool | None = None,
+        ):
+            super().__init__(
+                id,
+                display_name,
+                optional,
+                tooltip,
+                lazy,
+                default,
+                socketless,
+                None,  # widget_type
+                None,  # force_input
+                extra_dict,
+                raw_link,
+                advanced,
+            )
+
+
 @comfytype(io_type="WP_LABEL_GRID")
 class LabelGridWidgetInput:
     """Widget-only custom type — frontend binds ``getCustomWidgets["WP_LABEL_GRID"]``.

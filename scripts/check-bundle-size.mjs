@@ -306,7 +306,10 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // places itself through kit/floating.ts (branch 508,348 bytes,
 // 444 over), and the canvas twins (Button, Switch, Tabs, Popover, Tooltip)
 // land next in widget chunks, never in boot.
-const TOTAL_LIMIT = 512 * 1024;     // 512 KB
+// RAISED 512 -> 536 KB on 2026-10-29 for WP Toggles (#200) landing on top of
+// WP Note (#199): the toggles widget, its row outputs and the merge command
+// are lazy widget chunks (boot unchanged); the merge sat at 545,077 bytes.
+const TOTAL_LIMIT = 536 * 1024;     // 536 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
