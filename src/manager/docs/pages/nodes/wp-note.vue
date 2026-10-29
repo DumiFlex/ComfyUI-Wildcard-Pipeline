@@ -36,7 +36,7 @@ const syntax = [
   { term: "[Seeds](docs:seeds-and-loops)", desc: "A link to that page of these docs." },
   { term: "[The grid](docs:wp-label-grid#s-the-grid)", desc: "A link to one section of it." },
   { term: "[Start here](docs:quick-start){button pi-play}", desc: "The link drawn as a button with an icon. {button} alone has no icon." },
-  { term: "{button pi-play #22c55e}  [Read more](https://example.com){#22c55e}", desc: "A button or a text link in its own colour. Without one it takes the note's." },
+  { term: "{button pi-play #rrggbb}  [Read more](https://example.com){#rrggbb}", desc: "A button or a text link in its own colour, a hex code like the colour field shows. Without one it takes the note's." },
   { term: ":pi-heart:  :pi-heart:{#rrggbb}", desc: "An icon, optionally in a colour: a hex code like the custom colour field shows." },
 ];
 </script>
