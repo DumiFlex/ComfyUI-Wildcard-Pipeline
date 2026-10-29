@@ -10,6 +10,7 @@ from aiohttp import web
 
 from engine.ai import config as ai_config
 from engine.ai import followup as ai_followup
+from engine.ai import note as ai_note
 from engine.ai import refs as ai_refs
 from engine.ai import research as ai_research
 from engine.ai import wildcard as ai_wildcard
@@ -80,11 +81,19 @@ async def _ask(
     Reference images (`images=`) go with the newest message, which says so;
     `extra` (web results) is added to it too."""
     history, user = ai_followup.conversation(first, turns, instruction)
+    if "system" in kwargs:
+        kwargs["system"] = _with_note(cfg, kwargs["system"])
     if extra:
         user = f"{user}\n\n{extra}"
     if image_note and kwargs.get("images"):
         user = f"{user}\n\n{_ai_images.note(len(kwargs['images']))}"
     return await _ai_client.complete_json(cfg, user=user, history=history, **kwargs)
+
+
+def _with_note(cfg: dict[str, Any], system: str) -> str:
+    """`system` with the user's "About my library" note after it
+    (`engine/ai/note.py`), for the requests that write library content."""
+    return ai_note.with_note(system, cfg.get("library_note"))
 
 
 class _Web:

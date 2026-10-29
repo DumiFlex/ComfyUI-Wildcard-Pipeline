@@ -903,6 +903,9 @@ export interface AiConfig {
    *  message; another language gets its requests read for the checks
    *  (older servers leave it out). */
   request_language?: AiRequestLanguage;
+  /** The "About my library" note every chat, Draft with AI and pack
+   *  builder request reads (older servers leave it out). */
+  library_note?: string;
   /** Advanced: small models name the tool, then fill its args (off when absent). */
   choose_first?: boolean;
   /** Advanced: small models get one line per tool, its docs when first offered. */
@@ -977,6 +980,8 @@ export interface AiConfigPatch {
   danbooru_lookup?: boolean;
   web_always_allow?: boolean;
   request_language?: AiRequestLanguage;
+  /** At most 600 characters; `""` clears it. */
+  library_note?: string;
   choose_first?: boolean;
   lean_prompt?: boolean;
   /** A partial update: `null` puts one sampler back to the server's setting. */
@@ -2296,4 +2301,14 @@ export interface TagDownloadResult {
   has_categories: boolean;
   /** Echoed back so the UI can name exactly where the file came from. */
   source: string;
+}
+
+/** POST /wp/api/ai/library-note/suggest: a first draft of the note. */
+export interface AiLibraryNoteSuggestRequest {
+  /** What the Settings box holds now, saved or not. */
+  current?: string;
+}
+export interface AiLibraryNoteSuggestResult {
+  note: string;
+  model: string;
 }

@@ -18,6 +18,8 @@ import type {
   AiDerivationDraftResult,
   AiConstraintDraftRequest,
   AiConstraintDraftResult,
+  AiLibraryNoteSuggestRequest,
+  AiLibraryNoteSuggestResult,
   AiOrganizeRequest,
   AiOrganizeResult,
   AiChatRequest,
@@ -541,6 +543,12 @@ export const api = {
     },
     draftConstraint(body: AiConstraintDraftRequest, signal?: AbortSignal) {
       return request<AiConstraintDraftResult>("/wp/api/ai/constraint/draft", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    /** A first draft of the "About my library" note; nothing is saved. */
+    suggestLibraryNote(body: AiLibraryNoteSuggestRequest, signal?: AbortSignal) {
+      return request<AiLibraryNoteSuggestResult>("/wp/api/ai/library-note/suggest", {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },

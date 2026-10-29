@@ -53,7 +53,7 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
-from engine.ai import budget
+from engine.ai import adult, budget, note
 from engine.ai.lang import LANGUAGES
 
 CONFIG_FILENAME = "ai.json"
@@ -162,6 +162,10 @@ DEFAULTS: dict[str, Any] = {
     # assistant › Chat): "auto" guesses per message, "english" never asks
     # for a request frame, "other" always does (`engine/ai/lang.py`).
     "request_language": "auto",
+    # The "About my library" note (Settings › AI assistant › About my
+    # library): the user's own words every chat, Draft with AI and pack
+    # builder request reads (`engine/ai/note.py`).
+    "library_note": "",
     # Small and medium models in JSON steps on a local server: name the tool
     # first, then write only its arguments (Settings › AI assistant ›
     # Advanced; an experiment, off by default).
@@ -426,7 +430,25 @@ def _normalize(raw: Any) -> dict[str, Any]:
         "web_always_allow": src.get("web_always_allow") is True,
         "request_language": src.get("request_language")
         if src.get("request_language") in LANGUAGES else "auto",
+        "library_note": note.clean(src.get("library_note")),
     }
+
+
+def _library_note(value: Any) -> str:
+    """A note from Settings, checked: text, at most `note.MAX_CHARS`, and
+    never one that asks for a minor or non-consent in a sexual context
+    (the same words a pack request is refused for)."""
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise ConfigError("library_note must be text")
+    text = note.tidy(value)
+    if len(text) > note.MAX_CHARS:
+        raise ConfigError(f"the note is longer than {note.MAX_CHARS} characters")
+    refused = adult.refused_request(text)
+    if refused:
+        raise ConfigError(refused.replace("This asks", "This note asks"))
+    return text
 
 
 def _normalize_search(raw: Any) -> dict[str, Any]:
@@ -495,6 +517,7 @@ def _active(cfg: dict[str, Any]) -> dict[str, Any]:
         "danbooru_lookup": cfg["danbooru_lookup"],
         "web_always_allow": cfg["web_always_allow"],
         "request_language": cfg["request_language"],
+        "library_note": cfg["library_note"],
         "choose_first": slot["choose_first"],
         "lean_prompt": slot["lean_prompt"],
         "embed_model": slot["embed_model"],
@@ -753,6 +776,8 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
             if patch["request_language"] not in LANGUAGES:
                 raise ConfigError(f"request_language must be one of {', '.join(LANGUAGES)}")
             cfg["request_language"] = patch["request_language"]
+        if "library_note" in patch:
+            cfg["library_note"] = _library_note(patch["library_note"])
         if "provider" in patch:
             if patch["provider"] not in PRESETS:
                 raise ConfigError(f"unknown provider {patch['provider']!r}")
