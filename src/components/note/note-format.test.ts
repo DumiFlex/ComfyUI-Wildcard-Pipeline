@@ -19,8 +19,13 @@ describe("note links", () => {
   });
 
   it("reads a button block after a link", () => {
-    expect(readLinkAttrs("{button} and more")).toEqual({ attrs: { button: true, icon: "" }, length: 8 });
-    expect(readLinkAttrs("{button pi-book}")).toEqual({ attrs: { button: true, icon: "book" }, length: 16 });
+    expect(readLinkAttrs("{button} and more")).toEqual({ attrs: { button: true, icon: "", color: "" }, length: 8 });
+    expect(readLinkAttrs("{button pi-book}")).toEqual({ attrs: { button: true, icon: "book", color: "" }, length: 16 });
+    expect(readLinkAttrs("{button pi-book #E11D48}")).toEqual({ attrs: { button: true, icon: "book", color: "#e11d48" }, length: 24 });
+    expect(readLinkAttrs("{button #0f0}")?.attrs).toEqual({ button: true, icon: "", color: "#0f0" });
+    expect(readLinkAttrs("{#e11d48} rest")).toEqual({ attrs: { button: false, icon: "", color: "#e11d48" }, length: 9 });
+    expect(readLinkAttrs("{pi-book}")).toBeNull();
+    expect(readLinkAttrs("{pi-book #e11d48}")).toBeNull();
     expect(readLinkAttrs("{button pi-nope}")?.attrs.icon).toBe("");
     expect(readLinkAttrs(" {button}")).toBeNull();
     expect(readLinkAttrs("{other}")).toBeNull();
@@ -30,6 +35,9 @@ describe("note links", () => {
     expect(linkMarkdown("Quick start", docsTarget("quick-start"), { button: true, icon: "play" }))
       .toBe("[Quick start](docs:quick-start){button pi-play}");
     expect(linkMarkdown("a [b] c", "https://x.y")).toBe("[a (b) c](https://x.y)");
+    expect(linkMarkdown("Go", "https://x.y", { button: true, icon: "play", color: "#E11D48" })).toBe("[Go](https://x.y){button pi-play #e11d48}");
+    expect(linkMarkdown("Go", "https://x.y", { color: "#e11d48", icon: "play" })).toBe("[Go](https://x.y){#e11d48}");
+    expect(linkMarkdown("Go", "https://x.y", { color: "none" })).toBe("[Go](https://x.y)");
     expect(linkMarkdown("", "https://x.y")).toBe("[https://x.y](https://x.y)");
   });
 });
