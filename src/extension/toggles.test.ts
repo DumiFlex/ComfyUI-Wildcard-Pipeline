@@ -3,6 +3,7 @@ import corpus from "../../tests/fixtures/toggles-corpus.json";
 import {
   MAX_OUTPUTS,
   defaultTogglesConfig,
+  withUpstream,
   groupsOf,
   needsDepth,
   needsLoop,
@@ -31,7 +32,7 @@ function cfg(rows: TogglesConfig["rows"], mode: TogglesConfig["mode"] = "any"): 
 describe("toggles corpus (shared with engine/toggles.py)", () => {
   for (const c of corpus.cases) {
     it(c.name, () => {
-      const parsed = parseTogglesConfig(JSON.stringify(c.config));
+      const parsed = withUpstream(parseTogglesConfig(JSON.stringify(c.config)), "upstream" in c ? c.upstream : null).config;
       expect(resolveToggles(parsed)).toEqual(c.values);
       const vals = outputValues(parsed);
       expect(vals).toHaveLength(MAX_OUTPUTS);

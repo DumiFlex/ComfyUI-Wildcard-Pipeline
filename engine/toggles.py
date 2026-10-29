@@ -9,13 +9,27 @@ or a toggle::
 
     {"id": "1a2b3c4d", "kind": "toggle", "name": "LoRA character",
      "var": "use_lora_character", "on": true, "pin": true, "out": 1,
-     "style": "switch", "on_label": "", "off_label": "", "needs": ""}
+     "style": "switch", "on_label": "", "off_label": "", "needs": "",
+     "upstream": true, "control": "bypass"}
 
 * ``Any on``: a toggle is on when its own switch is on AND the toggle it
   ``needs`` is on (transitively). A loop in ``needs`` counts as off.
-* ``Pick one``: only the first toggle whose switch is on is on; ``needs`` is
-  ignored. ``group_var`` (optional) gets the picked toggle's name, ``""``
-  when none is on.
+* ``Pick one``: one toggle is on; ``needs`` is ignored. Which one, first
+  match wins: the toggle the upstream ``group_var`` names (by name or
+  variable, any case; only with ``group_upstream``), then the first toggle
+  upstream set to a yes word, then the first toggle whose switch is on.
+  ``group_var`` (optional) gets the picked toggle's ``value`` (text that may
+  read ``$vars``; the node resolves it) or else its name, ``""`` when none
+  is on. It is internal unless ``group_visible``.
+
+``upstream`` (optional, stored only as ``true``): when the upstream Context
+holds the toggle's variable and its whole value is a yes/no word
+(:data:`TRUTHY` / :data:`FALSY`, any case), that value replaces the switch
+before ``needs`` / Pick one apply (:func:`with_upstream`). Anything else
+leaves the switch alone.
+
+``control`` / ``groups`` (mute or bypass other nodes) are frontend-only: the
+canvas sets node modes when a toggle flips, and the run never sees them.
 
 Every toggle writes ``"true"`` / ``"false"`` to its variable, always
 internal. A pinned toggle (``pin``) also has a BOOLEAN output; ``out`` is its
@@ -41,6 +55,10 @@ TRUE = "true"
 FALSE = "false"
 
 VAR_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$")
+#: Words an upstream value may be to set an ``upstream`` toggle (the same
+#: yes/no words as WP Var → Bool, but the whole value must be one).
+TRUTHY = frozenset({"true", "yes", "on", "1"})
+FALSY = frozenset({"false", "no", "off", "0"})
 
 
 @dataclass
@@ -52,6 +70,8 @@ class Toggle:
     pin: bool = False
     out: int = 0
     needs: str = ""
+    upstream: bool = False
+    value: str = ""
 
 
 @dataclass
@@ -59,6 +79,12 @@ class Config:
     mode: str = "any"
     group_var: str = ""
     toggles: list[Toggle] = field(default_factory=list)
+    group_visible: bool = False
+    group_upstream: bool = False
+    #: Set by :func:`with_upstream`: the toggle the upstream ``group_var``
+    #: picked, and the toggles upstream set to a yes word (row order).
+    forced: str = ""
+    upstream_on: list[str] = field(default_factory=list)
 
 
 def _str(v: Any) -> str:
@@ -87,6 +113,7 @@ def parse_config(raw: Any) -> Config:
         if not tid:
             continue
         out = row.get("out")
+        value = row.get("value")
         toggles.append(Toggle(
             id=tid,
             name=_str(row.get("name")) or tid,
@@ -95,15 +122,78 @@ def parse_config(raw: Any) -> Config:
             pin=row.get("pin") is True,
             out=out if isinstance(out, int) and not isinstance(out, bool) else 0,
             needs=_str(row.get("needs")),
+            upstream=row.get("upstream") is True,
+            value=value if isinstance(value, str) else "",
         ))
-    return Config(mode=mode, group_var=_str(data.get("group_var")), toggles=toggles)
+    return Config(
+        mode=mode,
+        group_var=_str(data.get("group_var")),
+        toggles=toggles,
+        group_visible=data.get("group_visible") is True,
+        group_upstream=data.get("group_upstream") is True,
+    )
+
+
+def upstream_bool(value: Any) -> bool | None:
+    """An upstream value as a switch position, or ``None`` when it isn't a
+    lone yes/no word."""
+    if isinstance(value, bool):
+        return value
+    if not isinstance(value, str):
+        return None
+    low = value.strip().lower()
+    if low in TRUTHY:
+        return True
+    if low in FALSY:
+        return False
+    return None
+
+
+def with_upstream(cfg: Config, upstream: dict[str, Any] | None) -> tuple[Config, list[str]]:
+    """``cfg`` with each ``upstream`` toggle's switch set from ``upstream``
+    where it holds a yes/no word for the toggle's variable. Returns the new
+    config and the ids of the toggles it set."""
+    if not upstream:
+        return cfg, []
+    set_ids: list[str] = []
+    on_ids: list[str] = []
+    toggles: list[Toggle] = []
+    for t in cfg.toggles:
+        val = upstream_bool(upstream.get(t.var)) if t.upstream and t.var else None
+        if val is None:
+            toggles.append(t)
+            continue
+        set_ids.append(t.id)
+        if val:
+            on_ids.append(t.id)
+        toggles.append(Toggle(**{**t.__dict__, "on": val}))
+    forced = ""
+    named = upstream.get(cfg.group_var) if cfg.group_var else None
+    if cfg.mode == "one" and cfg.group_upstream and isinstance(named, str) and named.strip():
+        key = named.strip().lower()
+        hit = next((t for t in toggles if key in (t.name.lower(), t.var.lower())), None)
+        if hit is not None:
+            forced = hit.id
+            set_ids.append(hit.id)
+    out = Config(**{**cfg.__dict__, "toggles": toggles, "forced": forced, "upstream_on": on_ids})
+    return out, set_ids
+
+
+def picked_id(cfg: Config) -> str | None:
+    """Pick one: the toggle that is on (see the module docstring)."""
+    ids = {t.id for t in cfg.toggles}
+    if cfg.forced in ids:
+        return cfg.forced
+    first_up = next((i for i in cfg.upstream_on if i in ids), None)
+    if first_up is not None:
+        return first_up
+    return next((t.id for t in cfg.toggles if t.on), None)
 
 
 def effective(cfg: Config) -> dict[str, bool]:
     """Toggle id → whether it is on after ``needs`` / Pick one."""
     if cfg.mode == "one":
-        picked = next((t.id for t in cfg.toggles if t.on), None)
-        return {t.id: t.id == picked for t in cfg.toggles}
+        return {t.id: t.id == picked_id(cfg) for t in cfg.toggles}
     by_id = {t.id: t for t in cfg.toggles}
     memo: dict[str, bool] = {}
 
@@ -159,8 +249,8 @@ def resolve(cfg: Config) -> dict[str, str]:
         if t.var and VAR_RE.match(t.var):
             values[t.var] = TRUE if eff[t.id] else FALSE
     if cfg.mode == "one" and cfg.group_var and VAR_RE.match(cfg.group_var):
-        picked = next((t.name for t in cfg.toggles if eff[t.id]), "")
-        values[cfg.group_var] = picked
+        picked = next((t for t in cfg.toggles if eff[t.id]), None)
+        values[cfg.group_var] = (picked.value or picked.name) if picked else ""
     return values
 
 

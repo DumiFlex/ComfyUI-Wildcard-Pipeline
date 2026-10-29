@@ -1,5 +1,5 @@
 {
- "_comment": "Shared by engine/toggles.py (tests/engine/test_toggles.py) and src/extension/toggles.ts (toggles.test.ts). outputs lists the pinned outputs only; the node pads to 16 with false.",
+ "_comment": "Shared by engine/toggles.py (tests/engine/test_toggles.py) and src/extension/toggles.ts (toggles.test.ts). outputs lists the pinned outputs only; the node pads to 16 with false. A case's optional upstream is the upstream Context (applied with with_upstream / withUpstream first).",
  "cases": [
   {
    "name": "plain switches",
@@ -490,6 +490,266 @@
     "x": "false"
    },
    "outputs": []
+  },
+  {
+   "name": "upstream sets a switch only from a lone yes/no word",
+   "config": {
+    "version": 1,
+    "mode": "any",
+    "group_var": "",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "a",
+      "var": "a",
+      "on": false,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": "",
+      "upstream": true
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "b",
+      "var": "b",
+      "on": true,
+      "pin": true,
+      "out": 2,
+      "style": "switch",
+      "needs": "",
+      "upstream": true
+     },
+     {
+      "id": "00000003",
+      "kind": "toggle",
+      "name": "c",
+      "var": "c",
+      "on": true,
+      "pin": true,
+      "out": 3,
+      "style": "switch",
+      "needs": "",
+      "upstream": true
+     },
+     {
+      "id": "00000004",
+      "kind": "toggle",
+      "name": "d",
+      "var": "d",
+      "on": false,
+      "pin": true,
+      "out": 4,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000005",
+      "kind": "toggle",
+      "name": "e",
+      "var": "e",
+      "on": true,
+      "pin": true,
+      "out": 5,
+      "style": "switch",
+      "needs": "00000002",
+      "upstream": true
+     }
+    ]
+   },
+   "upstream": {
+    "a": " Yes ",
+    "b": "0",
+    "c": "maybe true",
+    "d": "on",
+    "e": "on"
+   },
+   "values": {
+    "a": "true",
+    "b": "false",
+    "c": "true",
+    "d": "false",
+    "e": "false"
+   },
+   "outputs": [
+    true,
+    false,
+    true,
+    false,
+    false
+   ]
+  },
+  {
+   "name": "upstream feeds Pick one before the first-on rule",
+   "config": {
+    "version": 1,
+    "mode": "one",
+    "group_var": "picked",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "a",
+      "var": "a",
+      "on": true,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": "",
+      "upstream": true
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "b",
+      "var": "b",
+      "on": false,
+      "pin": true,
+      "out": 2,
+      "style": "switch",
+      "needs": "",
+      "upstream": true
+     }
+    ]
+   },
+   "upstream": {
+    "a": "off",
+    "b": "true"
+   },
+   "values": {
+    "a": "false",
+    "b": "true",
+    "picked": "b"
+   },
+   "outputs": [
+    false,
+    true
+   ]
+  },
+  {
+   "name": "pick one: upstream yes beats the canvas pick; a value replaces the name",
+   "config": {
+    "version": 1,
+    "mode": "one",
+    "group_var": "look",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "Day",
+      "var": "day",
+      "on": true,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": "",
+      "upstream": true,
+      "value": "bright daylight"
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "Night",
+      "var": "night",
+      "on": false,
+      "pin": true,
+      "out": 2,
+      "style": "switch",
+      "needs": "",
+      "upstream": true,
+      "value": "moonlit night"
+     },
+     {
+      "id": "00000003",
+      "kind": "toggle",
+      "name": "Dusk",
+      "var": "dusk",
+      "on": false,
+      "pin": true,
+      "out": 3,
+      "style": "switch",
+      "needs": "",
+      "upstream": true
+     }
+    ]
+   },
+   "upstream": {
+    "night": "yes",
+    "dusk": "1"
+   },
+   "values": {
+    "day": "false",
+    "night": "true",
+    "dusk": "false",
+    "look": "moonlit night"
+   },
+   "outputs": [
+    false,
+    true,
+    false
+   ]
+  },
+  {
+   "name": "pick one: the upstream picked variable names the pick",
+   "config": {
+    "version": 1,
+    "mode": "one",
+    "group_var": "look",
+    "group_upstream": true,
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "Day",
+      "var": "day",
+      "on": true,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "Night",
+      "var": "night",
+      "on": false,
+      "pin": true,
+      "out": 2,
+      "style": "switch",
+      "needs": "",
+      "upstream": true
+     },
+     {
+      "id": "00000003",
+      "kind": "toggle",
+      "name": "Dusk",
+      "var": "dusk",
+      "on": false,
+      "pin": true,
+      "out": 3,
+      "style": "switch",
+      "needs": ""
+     }
+    ]
+   },
+   "upstream": {
+    "look": " DUSK ",
+    "night": "true"
+   },
+   "values": {
+    "day": "false",
+    "night": "false",
+    "dusk": "true",
+    "look": "Dusk"
+   },
+   "outputs": [
+    false,
+    false,
+    true
+   ]
   }
  ]
 }

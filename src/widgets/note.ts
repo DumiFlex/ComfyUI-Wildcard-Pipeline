@@ -170,13 +170,19 @@ interface NodeDefLike {
  * off another WP node, so it badges and searches like the rest of ours.
  */
 export function fixNoteDef(defs: NodeDefLike[]): void {
-  const note = defs.find((d) => d.name === NOTE_NODE_TYPE);
-  if (!note) return;
-  const ours = defs.find((d) => d.name !== NOTE_NODE_TYPE && d.name.startsWith("WP_") && d.python_module);
-  if (ours?.python_module) note.python_module = ours.python_module;
-  note.display_name = "WP Note";
-  note.category = "wildcard-pipeline";
-  note.description = "A note that explains a workflow: steps, tips and a link to the docs. It never runs.";
+  fixFrontendDef(defs, NOTE_NODE_TYPE, "WP Note",
+    "A note that explains a workflow: steps, tips and a link to the docs. It never runs.");
+}
+
+/** The same fix for any of our frontend-only nodes. */
+export function fixFrontendDef(defs: NodeDefLike[], type: string, displayName: string, description: string): void {
+  const def = defs.find((d) => d.name === type);
+  if (!def) return;
+  const ours = defs.find((d) => d.name !== type && d.name.startsWith("WP_") && d.python_module && !d.python_module.includes("frontend_only"));
+  if (ours?.python_module) def.python_module = ours.python_module;
+  def.display_name = displayName;
+  def.category = "wildcard-pipeline";
+  def.description = description;
 }
 
 /**

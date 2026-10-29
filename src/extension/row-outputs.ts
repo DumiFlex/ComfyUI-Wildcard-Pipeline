@@ -13,6 +13,11 @@
  * its own stacking. We set it from the measured element and drop it from
  * the saved workflow (`onSerialize`), since it is only a screen position.
  *
+ * It also paints the output's name beside the dot, which would show through
+ * a see-through row. It skips the name only for `isWidgetInputSlot`, a
+ * getter output slots pin to `false`; a placed output gets its own
+ * non-enumerable `true` (`hideLabel`), dropped again when it goes back.
+ *
  * Nodes 2.0 (Vue) draws each output as a DOM row (`.lg-slot--output`: the
  * label, then the dot) and measures the dot to place wire ends. As
  * field-sockets does for inputs, we take the row out of the flow, hide its
@@ -50,6 +55,8 @@ interface Entry {
   widgetName: string;
   /** Which outputs this module places (others are left alone). */
   owns: (name: string) => boolean;
+  /** Frames in a row that a sync changed something (see `flush`). */
+  settling: number;
 }
 
 const ROW_ATTR = "data-wp-row-output";
@@ -58,6 +65,16 @@ const LEGACY_CLASS = "wp-row-outputs--legacy";
 const registry = new Set<Entry>();
 let bodyObserver: MutationObserver | null = null;
 let queued = false;
+
+/** Legacy canvas: paint no name beside a placed output (see the header). */
+function hideLabel(slot: OutSlot, hide: boolean): void {
+  const own = Object.prototype.hasOwnProperty.call(slot, "isWidgetInputSlot");
+  if (hide && !own) {
+    Object.defineProperty(slot, "isWidgetInputSlot", { get: () => true, configurable: true, enumerable: false });
+  } else if (!hide && own) {
+    delete (slot as { isWidgetInputSlot?: unknown }).isWidgetInputSlot;
+  }
+}
 
 function slotHalf(): number {
   const h = (globalThis as { LiteGraph?: { NODE_SLOT_HEIGHT?: number } }).LiteGraph?.NODE_SLOT_HEIGHT;
@@ -87,10 +104,10 @@ function centreOf(root: HTMLElement, name: string, top: number, scale: number): 
   return (r.top + r.height / 2 - top) / scale;
 }
 
-function syncLegacy(entry: Entry): void {
+function syncLegacy(entry: Entry): boolean {
   const { node, root } = entry;
   const widget = node.widgets?.find((w) => w.name === entry.widgetName);
-  if (!widget || !root.getClientRects().length) return;
+  if (!widget || !root.getClientRects().length) return false;
   const top = root.getBoundingClientRect().top;
   const scale = canvasScale();
   const x = (node.size?.[0] ?? 0) + 1 - slotHalf();
@@ -98,6 +115,7 @@ function syncLegacy(entry: Entry): void {
   for (const slot of node.outputs ?? []) {
     if (!entry.owns(slot.name)) continue;
     const y0 = centreOf(root, slot.name, top, scale);
+    hideLabel(slot, y0 != null);
     if (y0 == null) {
       if (slot.pos) {
         delete slot.pos;
@@ -126,11 +144,14 @@ function syncLegacy(entry: Entry): void {
     changed = true;
   }
   if (changed) node.setDirtyCanvas?.(true, true);
+  return changed;
 }
 
 function clearLegacy(entry: Entry): void {
   for (const slot of entry.node.outputs ?? []) {
-    if (entry.owns(slot.name)) delete slot.pos;
+    if (!entry.owns(slot.name)) continue;
+    delete slot.pos;
+    hideLabel(slot, false);
   }
   delete entry.node.widgets_start_y;
 }
@@ -153,13 +174,13 @@ function release(row: HTMLElement): boolean {
   return true;
 }
 
-function syncVue(entry: Entry): void {
+function syncVue(entry: Entry): boolean {
   const { node, root } = entry;
   const nodeEl = root.closest<HTMLElement>("[data-node-id]");
-  if (!nodeEl || !nodeEl.offsetWidth) return;
+  if (!nodeEl || !nodeEl.offsetWidth) return false;
   const nodeRect = nodeEl.getBoundingClientRect();
   const scale = nodeRect.width / nodeEl.offsetWidth;
-  if (!(scale > 0)) return;
+  if (!(scale > 0)) return false;
   const id = nodeEl.dataset.nodeId ?? String(node.id);
   let moved = false;
   (node.outputs ?? []).forEach((slot, i) => {
@@ -186,30 +207,42 @@ function syncVue(entry: Entry): void {
     }
   });
   if (moved) remeasure(nodeEl);
+  return moved;
 }
 
-function sync(entry: Entry): void {
+function sync(entry: Entry): boolean {
   const vue = isVueNodes();
   // The legacy canvas draws the dot inside the node, over the panel's right
   // edge; give the panel a gutter there. Nodes 2.0 puts it on the border.
   entry.root.classList.toggle(LEGACY_CLASS, !vue);
   if (vue) {
     clearLegacy(entry);
-    syncVue(entry);
-  } else {
-    syncLegacy(entry);
+    return syncVue(entry);
   }
+  return syncLegacy(entry);
 }
+
+/** Frames a sync may follow itself. A change moves things it measured from:
+ *  a new `widgets_start_y` moves `widget.y` only once the host lays the node
+ *  out again (on its next draw), and nothing in the DOM tells us when. */
+const SETTLE_FRAMES = 3;
 
 function flush(): void {
   queued = false;
+  let again = false;
   for (const entry of [...registry]) {
     if (entry.node.graph === null) {
       registry.delete(entry);
       continue;
     }
-    sync(entry);
+    if (sync(entry) && entry.settling < SETTLE_FRAMES) {
+      entry.settling++;
+      again = true;
+    } else {
+      entry.settling = 0;
+    }
   }
+  if (again) queueRowOutputs();
 }
 
 /** Re-place the dots on the next frame (after an output was added or removed). */
@@ -230,7 +263,7 @@ export function attachRowOutputs(
   widgetName: string,
   owns: (name: string) => boolean,
 ): () => void {
-  const entry: Entry = { node, root, widgetName, owns };
+  const entry: Entry = { node, root, widgetName, owns, settling: 0 };
   registry.add(entry);
 
   const origSerialize = node.onSerialize;

@@ -19,6 +19,9 @@ const {
   imageFilterWidgetMod,
   labelGridMod,
   noteMod,
+  nodeGroupMod,
+  modeRelayMod,
+  stripControlInputs,
   imageFilterMod,
   varPickerMod,
   ctxLoopMod,
@@ -244,10 +247,24 @@ app.registerExtension({
   // workflow. Registered here because it has no Python node definition.
   registerCustomNodes() {
     noteMod.registerNoteNode();
+    nodeGroupMod.registerNodeGroupNode();
+    modeRelayMod.registerModeRelayNode();
   },
 
   beforeRegisterVueAppNodeDefs(defs: unknown[]) {
     noteMod.fixNoteDef(defs as Parameters<typeof noteMod.fixNoteDef>[0]);
+    noteMod.fixFrontendDef(
+      defs as Parameters<typeof noteMod.fixFrontendDef>[0],
+      nodeGroupMod.NODE_GROUP_TYPE,
+      "WP Node Group",
+      "Gathers nodes so one WP Toggles control can mute or bypass them all. It never runs.",
+    );
+    noteMod.fixFrontendDef(
+      defs as Parameters<typeof noteMod.fixFrontendDef>[0],
+      modeRelayMod.MODE_RELAY_TYPE,
+      "WP Mode Relay",
+      "Watches nodes' mute / bypass and passes a mode on to a WP Node Group. It never runs.",
+    );
   },
 
   getCustomWidgets() {
@@ -529,6 +546,18 @@ function mountFlashOverlay(node: FocusableNode, canvas: AppCanvas) {
     cancelAnimationFrame(raf);
     overlay.remove();
   }, FLASH_DURATION_MS);
+}
+
+// WP Toggles' mute / bypass dots are links on a server node: drop them from
+// the prompt, or the server would run (or miss) the nodes wired into them.
+const appG = app as unknown as { graphToPrompt?: (...args: unknown[]) => Promise<{ output?: unknown }> };
+const origGraphToPrompt = appG.graphToPrompt;
+if (typeof origGraphToPrompt === "function") {
+  appG.graphToPrompt = async function (this: unknown, ...args: unknown[]) {
+    const res = await origGraphToPrompt.apply(this, args);
+    stripControlInputs(res?.output as Parameters<typeof stripControlInputs>[0]);
+    return res;
+  };
 }
 
 const origQueuePrompt = appQ.queuePrompt;

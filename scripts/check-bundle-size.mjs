@@ -309,7 +309,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // RAISED 512 -> 536 KB on 2026-10-29 for WP Toggles (#200) landing on top of
 // WP Note (#199): the toggles widget, its row outputs and the merge command
 // are lazy widget chunks (boot unchanged); the merge sat at 545,077 bytes.
-const TOTAL_LIMIT = 536 * 1024;     // 536 KB
+// RAISED 536 -> 552 KB on 2026-10-29 for WP Toggles' mute / bypass control
+// and WP Node Group (a new frontend-only node + panel), the clean/edit views
+// and the richer Pick one: lazy widget chunks plus a few KB of boot glue
+// (registration, the prompt strip); the branch sat at 552,937 bytes.
+const TOTAL_LIMIT = 552 * 1024;     // 552 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
