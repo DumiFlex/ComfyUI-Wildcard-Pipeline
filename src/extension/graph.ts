@@ -18,6 +18,7 @@ import {
   cacheVersion as previewCacheVersion,
 } from "./preview-resolver";
 import { assignCodenames, baseCodename } from "./node-codename";
+import { TOGGLES_NODE, staticToggleValues, togglesPreviewModules } from "./toggles";
 import { MODEL_INFO_NODE, MODEL_VARS, internalModelVars, modelInfoPreviewModules, staticModelValues } from "./model-info";
 import { clauseActions, derivationTargets, evalConditionTree, isNegativeMode } from "./derivation-conditions";
 import type { SeedStrategy } from "../components/shared/seed-derive";
@@ -647,6 +648,10 @@ export function collectUpstreamInjectorBindings(
       for (const v of MODEL_VARS) out.add(v);
       continue;
     }
+    if (n.type === TOGGLES_NODE && !isSkippedMode(n)) {
+      for (const v of Object.keys(staticToggleValues(n))) out.add(v);
+      continue;
+    }
     if (n.type !== "WP_ContextInjector") continue;
     if (isSkippedMode(n)) continue;
     const inj = parseCached<{
@@ -689,6 +694,10 @@ export function collectUpstreamInjectorNegatives(
     if (n.type === MODEL_INFO_NODE && !isSkippedMode(n)) {
       // A write replaces the variable's negatives; Model Info sets none.
       for (const v of MODEL_VARS) out[v] = null;
+      continue;
+    }
+    if (n.type === TOGGLES_NODE && !isSkippedMode(n)) {
+      for (const v of Object.keys(staticToggleValues(n))) out[v] = null;
       continue;
     }
     if (n.type !== "WP_ContextInjector" || isSkippedMode(n)) continue;
@@ -795,6 +804,10 @@ export function collectUpstreamChain(
       out.push(modelInfoPreviewModules(n));
       continue;
     }
+    if (opts.modelSteps && n.type === TOGGLES_NODE && !isSkippedMode(n)) {
+      out.push(togglesPreviewModules(n));
+      continue;
+    }
     if (n.type !== "WP_Context") continue;
     if (isSkippedMode(n)) continue;
     const v = parseCached<ContextWidgetValue>(
@@ -896,6 +909,13 @@ export function collectUpstreamKinds(
       for (const v of MODEL_VARS) {
         kinds[v] = "model";
         flagInternal(v, internal.has(v));
+      }
+      continue;
+    }
+    if (n.type === TOGGLES_NODE) {
+      for (const v of Object.keys(staticToggleValues(n))) {
+        kinds[v] = "toggle";
+        flagInternal(v, true);
       }
       continue;
     }
@@ -1087,6 +1107,7 @@ export function collectUpstreamProducers(
     const title = typeof n.title === "string" ? n.title.trim() : "";
     if (title) return title;
     if (n.type === MODEL_INFO_NODE) return "Model Info";
+    if (n.type === TOGGLES_NODE) return "Toggles";
     return n.type === "WP_ContextInjector" ? "Context Injector" : "Context Loop";
   };
 
@@ -1164,6 +1185,11 @@ export function collectUpstreamProducers(
     if (n.type === MODEL_INFO_NODE) {
       const internal = internalModelVars(n);
       for (const v of MODEL_VARS) write(v, { kind: "model", nodeId, nodeLabel, internal: internal.has(v) });
+      continue;
+    }
+
+    if (n.type === TOGGLES_NODE) {
+      for (const v of Object.keys(staticToggleValues(n))) write(v, { kind: "toggle", nodeId, nodeLabel, internal: true });
       continue;
     }
 
@@ -1376,6 +1402,7 @@ function chainParts(chain: LiteNodeLike[]): unknown[] {
     if (n.type === MODEL_INFO_NODE) {
       parts.push(JSON.stringify(staticModelValues(n)), [...internalModelVars(n)].join(","));
     }
+    if (n.type === TOGGLES_NODE) parts.push(widgetValue(n, "wp_toggles"));
   }
   return parts;
 }
@@ -1505,6 +1532,13 @@ function resolveChainStatic(
         ctx[k] = v;
         if (internal.has(k)) internalKeys.add(k);
         else internalKeys.delete(k);
+      }
+      continue;
+    }
+    if (n.type === TOGGLES_NODE) {
+      for (const [k, v] of Object.entries(staticToggleValues(n))) {
+        ctx[k] = v;
+        internalKeys.add(k);
       }
       continue;
     }
@@ -2266,7 +2300,7 @@ export function findWildcardHomesElsewhere(
  *  (`extension/canvas-facts.ts`). */
 export interface CanvasVar {
   name: string;
-  source: "injector" | "loop" | "model";
+  source: "injector" | "loop" | "model" | "toggle";
   about: string;
 }
 
@@ -2308,6 +2342,8 @@ export function collectCanvasVars(rootGraph: LiteGraphLike): CanvasVar[] {
       if (loopValuesWired(n)) add(`${base}_value`, "loop", "this frame's line from the values input");
     } else if (n.type === MODEL_INFO_NODE) {
       for (const v of MODEL_VARS) add(v, "model", "");
+    } else if (n.type === TOGGLES_NODE) {
+      for (const [v, val] of Object.entries(staticToggleValues(n))) add(v, "toggle", `toggle, now ${val || "nothing picked"}`);
     }
   }
   return out.slice(0, 40);

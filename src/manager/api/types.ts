@@ -2020,7 +2020,7 @@ export interface AiPackLocks {
  *  reports it to the manager (`utils/canvas-facts.ts`). */
 export interface AiCanvasVar {
   name: string;
-  source: "injector" | "loop" | "model";
+  source: "injector" | "loop" | "model" | "toggle";
   about?: string;
 }
 

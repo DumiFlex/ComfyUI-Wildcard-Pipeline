@@ -29,6 +29,8 @@ declare module "#comfyui/app" {
     registerExtension(ext: {
       name: string;
       getCustomWidgets?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
+      /** Extra right-click menu entries for a node (`null` is a separator). */
+      getNodeMenuItems?: (node: unknown) => Array<{ content: string; callback: () => void } | null>;
       beforeRegisterNodeDef?: (nodeType: unknown, nodeData: { name: string }) => Promise<void> | void;
       /** Called after ComfyUI restores all widget values on workflow load. */
       afterConfigureGraph?: (...args: unknown[]) => void;
