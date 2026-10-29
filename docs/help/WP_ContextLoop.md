@@ -22,7 +22,7 @@ Runs the whole chain N times from one Generate. Put it in front of your WP Conte
 
 Each frame sets `$iteration` (1, 2, 3 … up to the count) and `$iteration_total` (the count). They are hidden from the prompt by default; switch their internal flag off in the loop to print them, for example `frame $iteration of $iteration_total`.
 
-With **values** wired, each frame also sets `$iteration_value` to its line. It prints by default, so `a picture of $iteration_value` works straight away.
+The **values** dot sits beside the iteration variable (beside the values note once wired) and shows when you hover it. With **values** wired, each frame also sets `$iteration_value` to its line. It prints by default, so `a picture of $iteration_value` works straight away.
 
 ## Sweep combinations
 

@@ -1,4 +1,5 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
+import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
 import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
 import { listenApi } from "./_listen";
 import { reactiveFromGraph } from "../extension/reactive";
@@ -110,5 +111,6 @@ export function create(node: ModelInfoHostNode, inputName: string) {
   }
   listenApi(host, "executed", onExecuted);
 
+  host.onCleanup(attachFieldSockets(node as FieldSocketNode, host.element, inputName, WIRABLE));
   return host;
 }

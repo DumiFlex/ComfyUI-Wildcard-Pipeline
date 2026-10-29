@@ -12,7 +12,7 @@ Draws labels on images and lays them out in one labelled grid: compare runs, sho
 | `title` | `STRING` | Optional. Text from another node for the grid title; beats the panel's Title. |
 | `row_headers`, `column_headers` | `STRING` | Optional. One header per line (a list gives one per entry). Wiring one sets that side to typed headers and replaces its dropdown on the panel. |
 
-Everything else is set in the node's panel.
+Everything else is set in the node's panel. The text inputs have no row of their own: like a built-in widget's, each one's dot sits at the left edge beside the field it feeds (Text, Rows, Columns, Title) and shows when you hover that field or wire it.
 
 ## Label
 

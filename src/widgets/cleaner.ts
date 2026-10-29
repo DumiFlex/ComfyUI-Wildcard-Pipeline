@@ -1,4 +1,5 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
+import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
 import {
   createDomWidgetHost,
   parseWidgetJsonWithRecovery,
@@ -155,6 +156,7 @@ export function create(node: CleanerHostNode, inputName: string) {
   }
   listenApi(host, "executed", onExecuted);
 
+  host.onCleanup(attachFieldSockets(node as FieldSocketNode, host.element, inputName, ["blocklist"]));
   return host;
 }
 

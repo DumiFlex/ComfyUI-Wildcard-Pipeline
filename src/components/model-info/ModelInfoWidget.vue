@@ -194,6 +194,7 @@ function resetRules(): void {
           class="wp-mi__var"
           :class="{ 'is-pinned': isPinned(row.key), 'is-empty': !row.value && !showsInput(row.key) }"
           :data-test="`mi-var-${row.key}`"
+          :data-wp-socket="row.key"
         >
           <span class="wp-mi__var-name" :title="`${row.variable}: ${ROW_TOOLTIPS[row.key]}`">{{ row.label }}</span>
           <input

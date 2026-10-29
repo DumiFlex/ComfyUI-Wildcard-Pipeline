@@ -290,7 +290,7 @@ function toggleTotalInternal(): void {
       />
     </div>
 
-    <div class="wp-loop__section">
+    <div class="wp-loop__section" :data-wp-socket="valuesWired ? undefined : 'values'">
       <div class="wp-loop__label">iteration var</div>
       <div class="wp-loop__var-input">
         <span class="wp-loop__var-prefix">$</span>
@@ -328,7 +328,7 @@ function toggleTotalInternal(): void {
       </div>
     </div>
 
-    <div v-if="valuesWired" class="wp-loop__values" data-test="loop-values-note">
+    <div v-if="valuesWired" class="wp-loop__values" data-wp-socket="values" data-test="loop-values-note">
       <i class="pi pi-link" aria-hidden="true" />
       <span>
         One frame per line of the values input<template v-if="valuesCount != null"> ({{ valuesCount }} on the last run)</template>,

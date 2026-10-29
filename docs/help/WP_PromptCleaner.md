@@ -6,7 +6,7 @@ Tidy a prompt before the sampler: drop duplicate tags and stray commas, remove e
 
 - **prompt**: the text to clean, usually from a WP Prompt Assembler.
 - **negative**: optional, such as the Assembler's negative output.
-- **blocklist**: optional text from another node, such as one shared word list feeding several cleaners. Its entries join the panel's blocklist (comma- or newline-separated in list mode, one per line in regex mode) and turn the blocklist on. The Blocklist button then reads `+ input`.
+- **blocklist**: optional text from another node, such as one shared word list feeding several cleaners. Its entries join the panel's blocklist (comma- or newline-separated in list mode, one per line in regex mode) and turn the blocklist on. The Blocklist button then reads `+ input`. Its dot sits beside that button and shows when you hover it or wire it.
 
 ## Outputs
 

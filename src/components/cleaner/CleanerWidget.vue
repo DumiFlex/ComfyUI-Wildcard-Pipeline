@@ -445,7 +445,7 @@ function isOverridden(rid: RuleId): boolean {
       <span class="wp-cleaner__lastrun-line wp-cleaner__lastrun-line--neg" data-test="cleaner-last-run-neg">{{ negativeRunLine }}</span>
     </div>
 
-    <div class="wp-cleaner__blocklist">
+    <div class="wp-cleaner__blocklist" data-wp-socket="blocklist">
       <WpButton
         block
         icon="pi-ban"

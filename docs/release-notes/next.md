@@ -90,6 +90,7 @@ The assistant is new and **off by default**. Turn it on in **Settings › AI ass
 - **Library pages update when something is deleted.** A deleted category stayed on the Categories page until you refreshed. Undo now brings rows back on screen, chat changes refresh every library list, and Recently opened drops deleted items.
 - **Every random pick rolls on its own.** Picks used to share random sequences, so changing one could move another. This is the change behind the seed warning above.
 - **Constraints hold on multi-picks.** `{2$$…}` picks and `2-3` picks no longer bring back options a constraint or a weight of 0 shut out.
+- **Wire dots sit beside their fields.** The optional text inputs on Label & Grid, Model Info, Prompt Cleaner and Context Loop no longer add labelled rows at the top of the node. Like a built-in widget's, each dot sits at the left edge beside the field it feeds and shows when you hover that field or wire it. The Assembler's prompt and negative dots work the same way, and the negative's dot still follows it when you fold it.
 - **Clear template clears the negative too** on the Assembler.
 - **Cleaner prompts when a variable is empty.** The Assembler drops leftover commas, dangling joining words and doubled articles.
 - **`!warm` and `{2$$a|b|c}` work** the way other tools write them.
