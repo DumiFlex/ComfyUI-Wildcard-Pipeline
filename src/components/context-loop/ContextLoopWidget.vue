@@ -290,9 +290,9 @@ function toggleTotalInternal(): void {
       />
     </div>
 
-    <div class="wp-loop__section" :data-wp-socket="valuesWired ? undefined : 'values'">
+    <div class="wp-loop__section">
       <div class="wp-loop__label">iteration var</div>
-      <div class="wp-loop__var-input">
+      <div class="wp-loop__var-input" :data-wp-socket="valuesWired ? undefined : 'values'">
         <span class="wp-loop__var-prefix">$</span>
         <input
           type="text"

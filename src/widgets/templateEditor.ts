@@ -307,9 +307,10 @@ export function create(node: EditorNode, inputName: string) {
     model.value,
   );
   editorHost.onCleanup(attachThemeDetector(editorHost.widget.element, app));
-  // The input's dot sits level with the editor (or the folded negative line),
-  // the same as every other WP input that feeds a field.
-  editorHost.element.dataset.wpSocket = inputName;
+  // The input's dot sits level with the editor, the same as every other WP
+  // input that feeds a field. The negative box marks its own parts: the box
+  // when open, the folded line when not.
+  if (!variant.negative) editorHost.element.dataset.wpSocket = inputName;
   editorHost.onCleanup(attachFieldSockets(node as FieldSocketNode, editorHost.element, inputName, [inputName]));
 
   // Published for the assembler helper's chip strip, which is a different
