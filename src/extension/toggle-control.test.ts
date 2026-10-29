@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   applyControl,
-  controlSummary,
+  controlState,
+  drivesOff,
   ctlInputName,
   groupTitles,
   releaseTargets,
@@ -13,6 +14,7 @@ import {
   type CtlNode,
 } from "./toggle-control";
 import { members, nextInputName, setMembersMode, stabilizeInputs, type GroupHostNode } from "./node-group";
+import { combinedState, parseRelayMap, relay, relayTargets, watched, type RelayNode } from "./mode-relay";
 import type { ToggleRow, TogglesConfig } from "./toggles";
 
 /** A tiny graph: nodes by id, links by id, groups. */
@@ -138,11 +140,27 @@ describe("toggle control", () => {
     stripControlInputs(undefined);
   });
 
-  it("says what a toggle drives", () => {
-    expect(controlSummary(0, "mute", [])).toBe("mutes: wire nodes in");
-    expect(controlSummary(1, "bypass", [])).toBe("off bypasses 1 node");
-    expect(controlSummary(3, "mute", ["A"])).toBe("off mutes 3 nodes + group A");
-    expect(controlSummary(0, "bypass", ["A", "B"])).toBe("off bypasses 2 groups");
+  it("inverts: on mutes / bypasses", () => {
+    const g = makeGraph();
+    const toggles = g.add(1);
+    const a = g.add(2);
+    g.wire(a, toggles, ctlInputName("a"));
+    applyControl(toggles, cfg([tog("a", { on: true, control: "bypass", invert: true })]));
+    expect(a.mode).toBe(4);
+    applyControl(toggles, cfg([tog("a", { on: false, control: "bypass", invert: true })]));
+    expect(a.mode).toBe(0);
+    expect([drivesOff(true, true), drivesOff(false, undefined), drivesOff(true, undefined)]).toEqual([true, true, false]);
+  });
+
+  it("gives the row icon's state and tooltip", () => {
+    const n = (id: number, title = "") => ({ id, title, mode: 0 });
+    expect(controlState([], "mute", [], false, undefined)).toBeNull();
+    expect(controlState([n(1, "LoRA")], "bypass", [], false, undefined))
+      .toEqual({ control: "bypass", active: true, hint: "Bypasses now: LoRA" });
+    expect(controlState([n(1, "A"), n(2)], "mute", ["Detail"], true, undefined))
+      .toEqual({ control: "mute", active: false, hint: "Mutes when off: A, #2, group Detail" });
+    expect(controlState([1, 2, 3, 4, 5, 6].map((i) => n(i, `N${i}`)), "mute", ["X", "Y"], false, true)?.hint)
+      .toBe("Mutes when on: N1, N2, N3, N4, 2 more, 2 groups");
   });
 });
 
@@ -179,5 +197,40 @@ describe("WP Node Group inputs", () => {
     g.wire(a, n, "node_1");
     expect(setMembersMode(n, 2)).toBe(1);
     expect(a.mode).toBe(2);
+  });
+});
+
+describe("WP Mode Relay", () => {
+  it("combines watched modes", () => {
+    expect(combinedState([])).toBeNull();
+    expect(combinedState([2, 2])).toBe("muted");
+    expect(combinedState([4, 4])).toBe("bypassed");
+    expect(combinedState([2, 0, 4])).toBe("on");
+    expect(combinedState([2, 4])).toBeNull();
+  });
+
+  it("reads its map, defaulting what is missing", () => {
+    expect(parseRelayMap(null)).toEqual({ muted: "mute", bypassed: "bypass", on: "run" });
+    expect(parseRelayMap({ muted: "bypass", on: "nothing", bypassed: "x" })).toEqual({ muted: "bypass", bypassed: "bypass", on: "nothing" });
+  });
+
+  it("drives a node group's members (not the relay), mapped", () => {
+    const g = makeGraph();
+    const watchedNode = g.add(1, { mode: 2 });
+    const relayNode = g.add(2, { type: "WP_ModeRelay", isVirtualNode: true }) as RelayNode;
+    const group = g.add(3, { type: "WP_NodeGroup" });
+    const member = g.add(4);
+    g.wire(watchedNode, relayNode, "node_1");
+    g.wire(member, group, "node_1");
+    g.wire(relayNode, group, "node_2");
+    relayNode.outputs = [{ links: [3] }];
+    (g.graph.links as Map<number, { origin_id: number | string; origin_slot: number; target_id?: number }>).set(3, { origin_id: 2, origin_slot: 0, target_id: 3 });
+    expect(watched(relayNode)).toEqual([watchedNode]);
+    expect(relayTargets(relayNode)).toEqual([member]);
+    expect(members(group as GroupHostNode)).toEqual([member]);
+    expect(relay(relayNode, "muted", { muted: "bypass", bypassed: "bypass", on: "run" })).toBe(1);
+    expect(member.mode).toBe(4);
+    expect(relay(relayNode, "on", { muted: "mute", bypassed: "bypass", on: "nothing" })).toBe(0);
+    expect(relay(relayNode, null, parseRelayMap(null))).toBe(0);
   });
 });

@@ -3,7 +3,8 @@ import { attachRowOutputs, queueRowOutputs, type RowOutputNode } from "../extens
 import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
 import {
   applyControl,
-  controlSummary,
+  controlState,
+  type ControlState,
   groupTitles,
   isCtlInput,
   releaseTargets,
@@ -14,6 +15,7 @@ import {
 import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
 import { reactiveFromGraph } from "../extension/reactive";
 import {
+  effectiveToggles,
   defaultTogglesConfig,
   normalizeOuts,
   parseTogglesConfig,
@@ -183,11 +185,12 @@ export function create(node: TogglesHostNode, inputName: string) {
         (a, b) => a.join("\u0000") === b.join("\u0000"),
       );
       return () => {
-        const controls: Record<string, string> = {};
+        const controls: Record<string, ControlState> = {};
+        const eff = effectiveToggles(config.value);
         for (const t of toggleRows(config.value)) {
           if (!t.control) continue;
-          const wired = toggleTargets(ctlNode, t.id).length;
-          controls[t.id] = controlSummary(wired, t.control, t.groups ?? []);
+          const st = controlState(drives.value.get(t.id) ?? [], t.control, t.groups ?? [], !!eff.get(t.id), t.invert);
+          if (st) controls[t.id] = st;
         }
         void drives.value;
         return h(TogglesWidget, {

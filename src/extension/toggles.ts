@@ -42,6 +42,10 @@ export interface ToggleRow {
   control?: ToggleControl;
   /** Canvas group titles `control` also covers. */
   groups?: string[];
+  /** `control` acts while the toggle is ON instead of off. */
+  invert?: true;
+  /** Clean view: no `$variable` line under the name. */
+  hide_var?: true;
   /** Pick one: what the picked variable gets instead of the name (may read `$vars`). */
   value?: string;
 }
@@ -221,6 +225,8 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
     if (typeof o.value === "string" && o.value) t.value = o.value;
     if (o.upstream === true) t.upstream = true;
     if (TOGGLE_CONTROLS.includes(o.control as ToggleControl)) t.control = o.control as ToggleControl;
+    if (o.invert === true) t.invert = true;
+    if (o.hide_var === true) t.hide_var = true;
     const groups = Array.isArray(o.groups) ? o.groups.map(str).filter(Boolean) : [];
     if (groups.length) t.groups = [...new Set(groups)];
     rows.push(t);

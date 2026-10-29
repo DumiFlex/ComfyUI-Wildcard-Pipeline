@@ -20,6 +20,7 @@ const {
   labelGridMod,
   noteMod,
   nodeGroupMod,
+  modeRelayMod,
   stripControlInputs,
   imageFilterMod,
   varPickerMod,
@@ -247,6 +248,7 @@ app.registerExtension({
   registerCustomNodes() {
     noteMod.registerNoteNode();
     nodeGroupMod.registerNodeGroupNode();
+    modeRelayMod.registerModeRelayNode();
   },
 
   beforeRegisterVueAppNodeDefs(defs: unknown[]) {
@@ -256,6 +258,12 @@ app.registerExtension({
       nodeGroupMod.NODE_GROUP_TYPE,
       "WP Node Group",
       "Gathers nodes so one WP Toggles control can mute or bypass them all. It never runs.",
+    );
+    noteMod.fixFrontendDef(
+      defs as Parameters<typeof noteMod.fixFrontendDef>[0],
+      modeRelayMod.MODE_RELAY_TYPE,
+      "WP Mode Relay",
+      "Watches nodes' mute / bypass and passes a mode on to a WP Node Group. It never runs.",
     );
   },
 

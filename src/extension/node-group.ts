@@ -66,7 +66,8 @@ export function stabilizeInputs(node: GroupHostNode): boolean {
 
 /** The real nodes the group drives, nested groups and reroutes followed. */
 export function members(node: GroupHostNode): CtlNode[] {
-  return expandTargets(node).filter((n) => n !== node);
+  // A WP Mode Relay wired in drives the group; it is not a member.
+  return expandTargets(node).filter((n) => n !== node && !n.isVirtualNode);
 }
 
 /** Set every member to `mode`; returns how many nodes changed. */

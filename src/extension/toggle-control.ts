@@ -7,7 +7,7 @@
  * through reroutes and nested groups). Canvas groups named in the toggle's
  * `groups` add the nodes inside them. When the toggle is on its targets run
  * (mode 0); off (or off by `needs` / Pick one) they are muted (2) or
- * bypassed (4). A subgraph node takes the mode down into its inner nodes, as
+ * bypassed (4). `invert` swaps the two: on mutes / bypasses. A subgraph node takes the mode down into its inner nodes, as
  * ComfyUI does not do that itself (same as rgthree's `changeModeOfNodes`).
  *
  * The control links are real links on a server node, so `stripControlInputs`
@@ -115,6 +115,12 @@ export function toggleTargets(node: CtlNode, toggleId: string, groups: readonly 
   return [...found].filter((n) => !n.isVirtualNode);
 }
 
+/** Whether toggle state `on` (after needs / Pick one) drives its targets
+ *  off, given `invert`. */
+export function drivesOff(on: boolean, invert: boolean | undefined): boolean {
+  return invert ? on : !on;
+}
+
 /** Set `mode` on `n` and, for a subgraph node, on every node inside it.
  *  Returns how many nodes changed. */
 export function setMode(n: CtlNode, mode: number): number {
@@ -138,7 +144,7 @@ export function applyControl(node: CtlNode, cfg: TogglesConfig, only?: ReadonlyS
   let changed = 0;
   for (const t of toggleRows(cfg)) {
     if (!t.control || (only && !only.has(t.id))) continue;
-    const mode = eff.get(t.id) ? MODE_ALWAYS : offMode(t.control);
+    const mode = drivesOff(!!eff.get(t.id), t.invert) ? offMode(t.control) : MODE_ALWAYS;
     for (const target of toggleTargets(node, t.id, t.groups)) changed += setMode(target, mode);
   }
   return changed;
@@ -168,12 +174,29 @@ export function stripControlInputs(output: Record<string, PromptEntry | undefine
   }
 }
 
-/** Short line for a row: what its control drives. */
-export function controlSummary(count: number, control: ToggleControl, groups: readonly string[]): string {
-  const verb = control === "mute" ? "mutes" : "bypasses";
-  const parts: string[] = [];
-  if (count) parts.push(`${count} node${count === 1 ? "" : "s"}`);
-  else if (!groups.length) return `${verb}: wire nodes in`;
-  if (groups.length) parts.push(groups.length === 1 ? `group ${groups[0]}` : `${groups.length} groups`);
-  return `off ${verb} ${parts.join(" + ")}`;
+/** A toggle's control state for its row icon. `active`: it is muting /
+ *  bypassing its targets right now. */
+export interface ControlState {
+  control: ToggleControl;
+  active: boolean;
+  /** What the tooltip says. */
+  hint: string;
+}
+
+/** Row icon state, or null while nothing is wired and no group is picked. */
+export function controlState(
+  targets: readonly CtlNode[],
+  control: ToggleControl,
+  groups: readonly string[],
+  on: boolean,
+  invert: boolean | undefined,
+): ControlState | null {
+  if (!targets.length && !groups.length) return null;
+  const off = drivesOff(on, invert);
+  const word = control === "mute" ? "Mutes" : "Bypasses";
+  const verb = off ? `${word} now` : `${word} when ${invert ? "on" : "off"}`;
+  const names = targets.slice(0, 4).map((n) => n.title || `#${n.id}`);
+  if (targets.length > 4) names.push(`${targets.length - 4} more`);
+  if (groups.length) names.push(groups.length === 1 ? `group ${groups[0]}` : `${groups.length} groups`);
+  return { control, active: off, hint: `${verb}: ${names.join(", ")}` };
 }

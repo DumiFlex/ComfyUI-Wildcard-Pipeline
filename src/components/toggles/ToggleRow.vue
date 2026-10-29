@@ -18,7 +18,7 @@ import Combobox from "../../kit/Combobox.vue";
 import { vTooltip } from "../../kit/tooltip";
 import { varColorClass } from "../shared/var-color";
 import type { ToggleControl, ToggleRow, ToggleStyle } from "../../extension/toggles";
-import { ctlInputName } from "../../extension/toggle-control";
+import { ctlInputName, type ControlState } from "../../extension/toggle-control";
 
 interface Choice { value: string; label: string }
 
@@ -46,8 +46,8 @@ const props = defineProps<{
   outputsFull: boolean;
   /** Edit view: show the pencil and the edit panel. */
   editable: boolean;
-  /** What the toggle mutes / bypasses ("" without a control). */
-  controlText?: string;
+  /** Mute / bypass icon state; null while nothing is wired. */
+  controlState?: ControlState | null;
   /** Canvas group titles to offer in the edit panel. */
   canvasGroups?: string[];
 }>();
@@ -123,16 +123,30 @@ function flip(): void {
           />
         </span>
         <span v-if="parentName" class="wp-tgr__sub" :class="subClass()"><i class="pi pi-link" aria-hidden="true" />{{ sub() }}</span>
-        <span v-else-if="controlText" class="wp-tgr__sub is-control"><i class="pi pi-power-off" aria-hidden="true" />{{ controlText }}</span>
+        <i
+            v-if="controlState"
+            v-tooltip="controlState.hint"
+            class="pi wp-tgr__ctlicon"
+            :class="[controlState.control === 'mute' ? 'pi-volume-off' : 'pi-forward', `is-${controlState.control}`, { 'is-active': controlState.active }]"
+            role="img"
+            :aria-label="controlState.hint"
+          />
       </template>
       <span v-else class="wp-tgr__name">
-        <b>{{ t.name }}</b>
-        <span class="wp-tgr__subs">
-          <span class="wp-tgr__sub" :class="subClass()">
-            <i v-if="parentName" class="pi pi-link" aria-hidden="true" />{{ sub() }}
-            <i v-if="t.upstream" v-tooltip="'Upstream can set it'" class="pi pi-arrow-down-right wp-tgr__up" aria-label="Upstream can set it" />
-          </span>
-          <span v-if="controlText" v-tooltip="controlText" class="wp-tgr__sub is-control"><i class="pi pi-power-off" aria-hidden="true" />{{ controlText }}</span>
+        <span class="wp-tgr__title">
+          <b>{{ t.name }}</b>
+          <i
+            v-if="controlState"
+            v-tooltip="controlState.hint"
+            class="pi wp-tgr__ctlicon"
+            :class="[controlState.control === 'mute' ? 'pi-volume-off' : 'pi-forward', `is-${controlState.control}`, { 'is-active': controlState.active }]"
+            role="img"
+            :aria-label="controlState.hint"
+          />
+        </span>
+        <span v-if="editable || parentName || !t.hide_var" class="wp-tgr__sub" :class="subClass()">
+          <i v-if="parentName" class="pi pi-link" aria-hidden="true" />{{ sub() }}
+          <i v-if="t.upstream" v-tooltip="'Upstream can set it'" class="pi pi-arrow-down-right wp-tgr__up" aria-label="Upstream can set it" />
         </span>
       </span>
       <i
@@ -208,6 +222,7 @@ function flip(): void {
       </label>
       <label class="wp-tgr__field">
         <span>Variable <em>true or false, for rules only</em></span>
+        <span class="wp-tgr__var-row">
         <span class="wp-vbind-wrap" :class="{ 'wp-vbind-wrap--collision-warn': !!problem }">
           <span class="wp-vbind-prefix">$</span>
           <input
@@ -220,6 +235,17 @@ function flip(): void {
             @keydown.stop
             @change="emit('set-var', value($event).replace(/^\$/, ''))"
           >
+        </span>
+        <span v-tooltip="'Show the $variable under the name in the clean view'" class="wp-tgr__check">
+          <WpCheck
+            :model-value="!t.hide_var"
+            size="sm"
+            aria-label="Show in clean view"
+            data-test="tg-show-var"
+            @update:model-value="(v: boolean) => emit('patch', { hide_var: v ? undefined : true })"
+          />
+          <span aria-hidden="true">Show</span>
+        </span>
         </span>
       </label>
       <label v-if="pickOne" class="wp-tgr__field">
@@ -278,6 +304,16 @@ function flip(): void {
           @update:model-value="setControl"
         />
       </div>
+      <span v-if="t.control" v-tooltip="'Mute or bypass while the toggle is ON instead, for a node used only as a switchboard'" class="wp-tgr__check">
+        <WpCheck
+          :model-value="!!t.invert"
+          size="sm"
+          aria-label="Invert"
+          data-test="tg-invert"
+          @update:model-value="(v: boolean) => emit('patch', { invert: v ? true : undefined })"
+        />
+        <span aria-hidden="true">Invert: {{ t.control === "mute" ? "mute" : "bypass" }} while on</span>
+      </span>
       <div v-if="t.control" class="wp-tgr__field">
         <span>Canvas groups <em>wire nodes into the dot in front of the row, or pick groups</em></span>
         <Combobox
@@ -390,10 +426,14 @@ function flip(): void {
 .wp-tgr__sub.is-linked .pi { color: var(--wp-accent); }
 .wp-tgr__sub.is-warn { font-family: var(--wp-font-sans, sans-serif); color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__sub.is-dim { font-family: var(--wp-font-sans, sans-serif); font-style: italic; color: var(--wp-text-dim, var(--wp-text3)); }
-.wp-tgr__subs { display: flex; gap: 8px; min-width: 0; }
-.wp-tgr__subs > .wp-tgr__sub:first-child { flex: none; max-width: 60%; }
-.wp-tgr__sub.is-control { font-family: var(--wp-font-sans, sans-serif); color: var(--wp-text-muted, var(--wp-text2)); }
-.wp-tgr__sub.is-control .pi { color: var(--wp-accent); }
+.wp-tgr__title { display: flex; align-items: center; gap: 5px; min-width: 0; }
+/* Mute / bypass icon: dim while it isn't acting, coloured while it is
+ * (bypass in the host's bypass violet, mute in amber). */
+.wp-tgr__ctlicon { flex: none; font-size: 10px; color: var(--wp-text-dim, var(--wp-text3)); opacity: 0.7; }
+.wp-tgr__ctlicon.is-active { opacity: 1; }
+.wp-tgr__ctlicon.is-active.is-bypass { color: var(--wp-violet); }
+.wp-tgr__ctlicon.is-active.is-mute { color: var(--wp-amber, var(--wp-warn)); }
+.wp-tgr__var-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .wp-tgr__up { font-size: 9px; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-tgr__warn { font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__ctl { display: inline-flex; flex: none; }

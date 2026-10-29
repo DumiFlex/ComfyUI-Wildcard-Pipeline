@@ -44,6 +44,7 @@ export * as imageFilterWidgetMod from "./widgets/image_filter";
 export * as labelGridMod from "./widgets/label_grid";
 export * as noteMod from "./widgets/note";
 export * as nodeGroupMod from "./widgets/node-group";
+export * as modeRelayMod from "./widgets/mode-relay";
 export { stripControlInputs } from "./extension/toggle-control";
 export * as imageFilterMod from "./extension/image-filter";
 export * as graphEventsMod from "./extension/graph-events";

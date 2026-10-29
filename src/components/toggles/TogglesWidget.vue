@@ -47,14 +47,15 @@ import {
   type TogglesConfig,
   type TogglesMode,
 } from "../../extension/toggles";
+import type { ControlState } from "../../extension/toggle-control";
 
 const props = withDefaults(
   defineProps<{
     modelValue: TogglesConfig;
     /** Litegraph mode: 2 = muted, 4 = bypassed (dims the widget). */
     nodeMode?: number;
-    /** Toggle id → what its mute / bypass control drives. */
-    controls?: Record<string, string>;
+    /** Toggle id → its mute / bypass icon state (absent: nothing wired). */
+    controls?: Record<string, ControlState>;
     /** Canvas group titles, for the control's group picker. */
     canvasGroups?: string[];
   }>(),
@@ -207,7 +208,7 @@ function rowProps(t: ToggleRow) {
     groupId: groupIdOf(t),
     outputsFull: pinCount.value >= MAX_OUTPUTS,
     editable: editMode.value,
-    controlText: props.controls[t.id] ?? "",
+    controlState: props.controls[t.id] ?? null,
     canvasGroups: props.canvasGroups,
   };
 }
