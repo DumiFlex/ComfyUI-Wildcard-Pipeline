@@ -47,6 +47,7 @@ const summary = computed(() => {
       :aria-expanded="!collapsed"
       aria-controls="wp-negbox-body"
       data-test="neg-template-toggle"
+      :data-wp-socket="collapsed ? 'negative_template' : undefined"
       :title="collapsed ? 'Show the negative template' : 'Hide the negative template'"
       @click="emit('toggle')"
     >
@@ -58,7 +59,7 @@ const summary = computed(() => {
       <span v-if="collapsed" class="wp-negbox__summary" data-test="neg-template-summary">{{ summary }}</span>
       <span v-else-if="linked" class="wp-negbox__summary">driven by the connected input</span>
     </button>
-    <div v-if="!collapsed" class="wp-negbox__body">
+    <div v-if="!collapsed" class="wp-negbox__body" data-wp-socket="negative_template">
       <RichTextInput
         :model-value="modelValue"
         surface="assembler"
