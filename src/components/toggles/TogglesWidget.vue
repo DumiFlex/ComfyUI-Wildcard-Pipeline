@@ -281,21 +281,34 @@ function foldedOuts(g: ToggleGroup): string | undefined {
       />
       <label v-if="isOne" class="wp-tg__group">
         <span class="wp-tg__group-cap">writes</span>
-        <input
-          class="wp-tg__group-var"
-          :class="[cfg.group_var ? varColorClass(cfg.group_var) : undefined, { 'is-problem': problems.has('group') }]"
-          :value="cfg.group_var ? `$${cfg.group_var}` : ''"
-          placeholder="$picked (optional)"
-          spellcheck="false"
-          aria-label="Variable for the picked toggle's name"
-          :title="problems.get('group') ?? 'Also write the picked toggle\'s name to this variable'"
-          data-test="tg-group-var"
-          @keydown.stop
-          @change="setGroupVar"
-        >
+        <span class="wp-vbind-wrap" :class="{ 'wp-vbind-wrap--collision-warn': problems.has('group') }">
+          <span class="wp-vbind-prefix">$</span>
+          <input
+            class="wp-vbind-input"
+            :class="cfg.group_var ? varColorClass(cfg.group_var) : undefined"
+            :value="cfg.group_var"
+            placeholder="picked (optional)"
+            spellcheck="false"
+            aria-label="Variable for the picked toggle's value"
+            :title="problems.get('group') ?? 'Also write the picked toggle\'s value (or name) to this variable'"
+            data-test="tg-group-var"
+            @keydown.stop
+            @change="setGroupVar"
+          >
+        </span>
       </label>
       <span v-else class="wp-tg__spacer" />
       <WpButton variant="primary" size="sm" icon="pi-check" data-test="tg-edit-done" @click="closeEdit">Done</WpButton>
+    </div>
+    <div v-else class="wp-tg__bar wp-tg__bar--clean">
+      <span class="wp-tg__mode-cap">{{ isOne ? "Pick one" : "" }}</span>
+      <WpIconButton
+        icon="pi-pencil"
+        label="Edit toggles"
+        hint="Edit toggles: add, rename, reorder, outputs"
+        data-test="tg-edit-open"
+        @click="openEdit"
+      />
     </div>
     <div v-if="editMode && isOne" class="wp-tg__pickopts">
       <span v-tooltip="'Print the picked variable in the prompt (else it is for rules only)'" class="wp-tg__check">
@@ -318,16 +331,6 @@ function foldedOuts(g: ToggleGroup): string | undefined {
         />
         <span aria-hidden="true">Upstream can pick</span>
       </span>
-    </div>
-    <div v-else class="wp-tg__bar wp-tg__bar--clean">
-      <span class="wp-tg__mode-cap">{{ isOne ? "Pick one" : "" }}</span>
-      <WpIconButton
-        icon="pi-pencil"
-        label="Edit toggles"
-        hint="Edit toggles: add, rename, reorder, outputs"
-        data-test="tg-edit-open"
-        @click="openEdit"
-      />
     </div>
 
     <template v-for="g in groups" :key="g.label?.id ?? '__top'">
@@ -479,6 +482,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
 </template>
 
 <style scoped>
+@import "../shared/var-binding-input.css";
 .wp-tg {
   display: flex;
   flex-direction: column;
@@ -504,24 +508,14 @@ function foldedOuts(g: ToggleGroup): string | undefined {
 }
 .wp-tg__group { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
 .wp-tg__group-cap { font-size: 10.5px; color: var(--wp-text-dim, var(--wp-text3)); }
-.wp-tg__group-var {
-  flex: 1;
-  min-width: 0;
-  height: var(--wp-control-h-sm, 24px);
-  padding: 0 8px;
-  box-sizing: border-box;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  font: 11px var(--wp-font-mono, monospace);
-  outline: none;
-}
-.wp-tg__group-var:not([class*="var-"]) { color: var(--wp-text); }
-.wp-tg__group-var:focus { border-color: var(--wp-accent); }
-.wp-tg__group-var.is-problem { border-color: var(--wp-amber, var(--wp-warn)); }
 /* The sortable rows' own background would show behind our row cards. */
 .wp-tg :deep(.wp-sortable__row) { background: transparent; align-items: flex-start; }
-.wp-tg :deep(.wp-sortable__grip) { align-self: flex-start; min-height: 32px; }
+/* Edit view: every toggle and label row is one height (the subtitle and
+ * the control line share a line), so a top-aligned grip of the same
+ * height sits level with its row, also while the row's editor is open. */
+.wp-tg :deep(.wp-sortable__grip) { align-self: flex-start; height: 38px; min-height: 38px; }
+.wp-tg--edit :deep(.wp-tgr__row.wp-tgr__row) { min-height: 38px; }
+.wp-tg--edit .wp-tg__label { min-height: 38px; }
 .wp-tg__group-box { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .wp-tg__label {
   display: flex;

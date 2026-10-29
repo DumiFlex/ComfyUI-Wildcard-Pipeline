@@ -127,11 +127,13 @@ function flip(): void {
       </template>
       <span v-else class="wp-tgr__name">
         <b>{{ t.name }}</b>
-        <span class="wp-tgr__sub" :class="subClass()">
-          <i v-if="parentName" class="pi pi-link" aria-hidden="true" />{{ sub() }}
-          <i v-if="t.upstream" v-tooltip="'Upstream can set it'" class="pi pi-arrow-down-right wp-tgr__up" aria-label="Upstream can set it" />
+        <span class="wp-tgr__subs">
+          <span class="wp-tgr__sub" :class="subClass()">
+            <i v-if="parentName" class="pi pi-link" aria-hidden="true" />{{ sub() }}
+            <i v-if="t.upstream" v-tooltip="'Upstream can set it'" class="pi pi-arrow-down-right wp-tgr__up" aria-label="Upstream can set it" />
+          </span>
+          <span v-if="controlText" v-tooltip="controlText" class="wp-tgr__sub is-control"><i class="pi pi-power-off" aria-hidden="true" />{{ controlText }}</span>
         </span>
-        <span v-if="controlText" class="wp-tgr__sub is-control"><i class="pi pi-power-off" aria-hidden="true" />{{ controlText }}</span>
       </span>
       <i
         v-if="problem"
@@ -206,19 +208,22 @@ function flip(): void {
       </label>
       <label class="wp-tgr__field">
         <span>Variable <em>true or false, for rules only</em></span>
-        <input
-          class="wp-tgr__mono"
-          :class="[t.var ? varColorClass(t.var) : undefined, { 'is-problem': !!problem }]"
-          :value="t.var ? `$${t.var}` : ''"
-          placeholder="$variable"
-          spellcheck="false"
-          data-test="tg-var"
-          @keydown.stop
-          @change="emit('set-var', value($event).replace(/^\$/, ''))"
-        >
+        <span class="wp-vbind-wrap" :class="{ 'wp-vbind-wrap--collision-warn': !!problem }">
+          <span class="wp-vbind-prefix">$</span>
+          <input
+            class="wp-vbind-input"
+            :class="t.var ? varColorClass(t.var) : undefined"
+            :value="t.var"
+            placeholder="variable_name"
+            spellcheck="false"
+            data-test="tg-var"
+            @keydown.stop
+            @change="emit('set-var', value($event).replace(/^\$/, ''))"
+          >
+        </span>
       </label>
       <label v-if="pickOne" class="wp-tgr__field">
-        <span>Value <em>what the picked variable gets instead of the name; can read $variables</em></span>
+        <span>Value <em>picked variable gets this, not the name</em></span>
         <input
           :value="t.value ?? ''"
           :placeholder="t.name"
@@ -328,6 +333,7 @@ function flip(): void {
 </template>
 
 <style scoped>
+@import "../shared/var-binding-input.css";
 .wp-tgr { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .wp-tgr__row {
   display: flex;
@@ -384,6 +390,8 @@ function flip(): void {
 .wp-tgr__sub.is-linked .pi { color: var(--wp-accent); }
 .wp-tgr__sub.is-warn { font-family: var(--wp-font-sans, sans-serif); color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__sub.is-dim { font-family: var(--wp-font-sans, sans-serif); font-style: italic; color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-tgr__subs { display: flex; gap: 8px; min-width: 0; }
+.wp-tgr__subs > .wp-tgr__sub:first-child { flex: none; max-width: 60%; }
 .wp-tgr__sub.is-control { font-family: var(--wp-font-sans, sans-serif); color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-tgr__sub.is-control .pi { color: var(--wp-accent); }
 .wp-tgr__up { font-size: 9px; color: var(--wp-text-dim, var(--wp-text3)); }
@@ -429,7 +437,7 @@ function flip(): void {
 .wp-tgr__field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .wp-tgr__field > span { font-size: 10.5px; font-weight: 600; color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-tgr__field em { font-style: normal; font-weight: 400; color: var(--wp-text-dim, var(--wp-text3)); margin-left: 4px; }
-.wp-tgr__field input {
+.wp-tgr__field input:not(.wp-vbind-input) {
   min-width: 0;
   height: var(--wp-control-h-sm, 24px);
   padding: 0 8px;
@@ -441,9 +449,8 @@ function flip(): void {
   font: 12px var(--wp-font-sans, sans-serif);
   outline: none;
 }
-.wp-tgr__field input:focus { border-color: var(--wp-accent); }
-.wp-tgr__field input.wp-tgr__mono { font-family: var(--wp-font-mono, monospace); font-size: 11px; }
-.wp-tgr__field input.is-problem { border-color: var(--wp-amber, var(--wp-warn)); }
+.wp-tgr__field input:not(.wp-vbind-input):focus { border-color: var(--wp-accent); }
+.wp-tgr__field input:not(.wp-vbind-input).is-problem { border-color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .wp-tgr__edit-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .wp-tgr__foot-btns { display: inline-flex; align-items: center; gap: 6px; }

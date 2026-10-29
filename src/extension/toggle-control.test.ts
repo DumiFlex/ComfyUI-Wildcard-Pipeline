@@ -116,9 +116,6 @@ describe("toggle control", () => {
     const sub: CtlNode = { id: 1, mode: 0, subgraph: { nodes: [innerNode] } };
     expect(setMode(sub, 4)).toBe(2);
     expect(innerNode.mode).toBe(4);
-    const viaChange: CtlNode = { id: 2, mode: 0, changeMode(m) { this.mode = m * 1; } };
-    setMode(viaChange, 2);
-    expect(viaChange.mode).toBe(2);
   });
 
   it("releases only nodes still in the mode it gave them", () => {

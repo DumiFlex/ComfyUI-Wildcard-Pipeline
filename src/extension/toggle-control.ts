@@ -38,7 +38,6 @@ export interface CtlNode {
   inputs?: CtlInput[];
   graph?: CtlGraph | null;
   subgraph?: { nodes?: CtlNode[] } | null;
-  changeMode?: (mode: number) => unknown;
   isVirtualNode?: boolean;
 }
 export interface CtlGroup {
@@ -121,8 +120,8 @@ export function toggleTargets(node: CtlNode, toggleId: string, groups: readonly 
 export function setMode(n: CtlNode, mode: number): number {
   let changed = 0;
   if (n.mode !== mode) {
-    if (typeof n.changeMode === "function") n.changeMode(mode);
-    else n.mode = mode;
+    // Not `changeMode()`: it accepts only modes 0..3 and ignores bypass (4).
+    n.mode = mode;
     changed++;
   }
   for (const inner of n.subgraph?.nodes ?? []) changed += setMode(inner, mode);
