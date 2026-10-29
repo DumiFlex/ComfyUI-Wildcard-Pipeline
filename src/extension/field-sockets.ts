@@ -66,11 +66,15 @@ interface Entry {
   hot: Set<string>;
 }
 
-const ROW_CLASS = "wp-field-socket";
-const HOT_CLASS = "wp-field-socket--hot";
+/* Attributes, not classes, on the host's rows: Vue rewrites a row's whole
+ * `class` whenever its own classes change (a link drag dims rows), which
+ * wiped ours and dropped every dot back into a labelled row at the top.
+ * Vue leaves attributes it doesn't bind alone. */
+const ROW_ATTR = "data-wp-field-socket";
+const HOT_ATTR = "data-wp-field-socket-hot";
 /** The host's own wrapper around a widget's dot, which hides it until the
  *  widget row is hovered; we take that over. */
-const HOST_CLASS = "wp-field-socket-host";
+const HOST_ATTR = "data-wp-field-socket-host";
 /** On the panel, under the legacy canvas: a left gutter for the dots. */
 const LEGACY_CLASS = "wp-field-sockets--legacy";
 /** Gap between dots stacked at the panel top for fields not on screen. */
@@ -196,11 +200,12 @@ function remeasure(nodeEl: HTMLElement): void {
 }
 
 function release(row: HTMLElement): boolean {
-  if (!row.classList.contains(ROW_CLASS)) return false;
-  row.classList.remove(ROW_CLASS, HOT_CLASS);
+  if (!row.hasAttribute(ROW_ATTR)) return false;
+  row.removeAttribute(ROW_ATTR);
+  row.removeAttribute(HOT_ATTR);
   row.style.removeProperty("top");
   row.style.removeProperty("left");
-  row.parentElement?.classList.remove(HOST_CLASS);
+  row.parentElement?.removeAttribute(HOST_ATTR);
   return true;
 }
 
@@ -218,19 +223,21 @@ function syncVue(entry: Entry): void {
     const dot = nodeEl.querySelector<HTMLElement>(`[data-slot-key="${id}-in-${i}"]`);
     const row = dot?.closest<HTMLElement>(".lg-slot--input");
     if (!row) return;
-    const parent = row.offsetParent as HTMLElement | null;
-    if (!parent) return;
-    const pRect = parent.getBoundingClientRect();
-    const y = measure(entry, [slot.name], pRect.top, scale).get(slot.name);
-    if (y == null) {
+    const y0 = measure(entry, [slot.name], 0, scale).get(slot.name);
+    if (y0 == null) {
       if (release(row)) moved = true;
       return;
     }
-    row.classList.add(ROW_CLASS);
-    row.classList.toggle(HOT_CLASS, entry.hot.has(slot.name));
+    // Out of the flow first, so `offsetParent` is the one `top` lands in.
+    row.setAttribute(ROW_ATTR, "");
+    row.toggleAttribute(HOT_ATTR, entry.hot.has(slot.name));
     // A widget's own dot sits in a wrapper of the widget row that hides it
     // until the row is hovered.
-    if (row.closest("[data-widget-name]")) row.parentElement?.classList.add(HOST_CLASS);
+    if (row.closest("[data-widget-name]")) row.parentElement?.setAttribute(HOST_ATTR, "");
+    const parent = row.offsetParent as HTMLElement | null;
+    if (!parent) return;
+    const pRect = parent.getBoundingClientRect();
+    const y = y0 - pRect.top / scale;
     const top = `${Math.round((y - row.offsetHeight / 2) * 10) / 10}px`;
     const left = `${Math.round(((nodeRect.left - pRect.left) / scale) * 10) / 10}px`;
     if (row.style.top !== top || row.style.left !== left) {
