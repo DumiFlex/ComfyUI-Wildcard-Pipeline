@@ -11,10 +11,13 @@ import { resolve } from "node:path";
 import { createPinia } from "pinia";
 import { describe, expect, it } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
-import { DOC_PAGES } from "../registry";
+import { DOC_GROUPS, DOC_PAGES } from "../registry";
+import { createOutline } from "../outline";
 import { SECTIONS, SETTING_ENTRIES } from "../../components/settings/settings-index";
 
 const OUT = resolve(__dirname, "../../../../engine/ai/docs_index.json");
+/** The page and section list WP Note links to (src/extension/docs-catalog.json). */
+const CATALOG = resolve(__dirname, "../../../extension/docs-catalog.json");
 const BLOCK = new Set([
   "P", "LI", "H1", "H2", "H3", "H4", "TR", "DT", "DD", "PRE", "BLOCKQUOTE", "FIGCAPTION",
   "UL", "OL", "TABLE", "DL", "SECTION", "ARTICLE", "HEADER", "DETAILS", "SUMMARY",
@@ -68,7 +71,11 @@ export function plainText(root: Element): string {
     .join("\n");
 }
 
+interface CatalogPage { id: string; title: string; group: string; icon: string; sections: { id: string; title: string }[] }
+const catalog: CatalogPage[] = [];
+
 async function renderAll(): Promise<DocPageText[]> {
+  catalog.length = 0;
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: "/docs/:page?", name: "documentation-page", component: { template: "<div/>" } }],
@@ -87,6 +94,13 @@ async function renderAll(): Promise<DocPageText[]> {
     pages.push({
       id: p.id, title: p.title, group: p.group, blurb: p.blurb, keywords: p.keywords ?? [],
       sections: sections.filter((s) => s.text),
+    });
+    // Anchors as the docs page makes them (`s-<slug>`, then -2, -3 on repeats).
+    const outline = createOutline(() => {});
+    catalog.push({
+      id: p.id, title: p.title, icon: p.icon,
+      group: DOC_GROUPS.find((g) => g.id === p.group)?.label ?? p.group,
+      sections: sections.map((s) => ({ id: outline.add(s.title), title: s.title })),
     });
     w.unmount();
   }
@@ -113,6 +127,16 @@ describe("docs index for the AI chat", () => {
       committed = "";
     }
     expect(committed === json, "docs_index.json is stale: run `pnpm docs:index`").toBe(true);
+
+    const cat = `${JSON.stringify(catalog)}\n`;
+    if (process.env.WP_WRITE_DOCS_INDEX) writeFileSync(CATALOG, cat);
+    let catCommitted = "";
+    try {
+      catCommitted = readFileSync(CATALOG, "utf8");
+    } catch {
+      catCommitted = "";
+    }
+    expect(catCommitted === cat, "docs-catalog.json is stale: run `pnpm docs:index`").toBe(true);
   }, 60_000);
 
   it("keeps blocks, list items and table cells apart", () => {
