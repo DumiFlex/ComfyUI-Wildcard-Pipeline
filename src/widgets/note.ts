@@ -4,9 +4,10 @@ import { reactiveFromGraph } from "../extension/reactive";
 import { defaultNoteConfig, noteColorCss, parseNoteConfig, type NoteConfig } from "../extension/note";
 import { defaultBookmarkConfig, jumpFields, type BookmarkConfig } from "../extension/bookmarks";
 import { bookmarkCells } from "../extension/_stashes";
-import { bookmarksChanged, currentZoom, freshJump, keymapFor, noteBookmarkAdded, setRecording, type BookmarkNode } from "./bookmark";
+import { bookmarksChanged, currentViewPoint, currentZoom, freshJump, keymapFor, noteBookmarkAdded, setRecording, type BookmarkNode } from "./bookmark";
 import { isVueNodes } from "../extension/renderer";
 import { panelAt, trackPeek } from "./note-peek";
+import { keepPassThrough, publishTitleHeight, setPinned } from "./_frameless";
 
 const NoteWidget = defineAsyncComponent(() => import("../components/note/NoteWidget.vue"));
 
@@ -35,35 +36,7 @@ interface LiteGraphStatic {
   NO_TITLE?: number;
 }
 
-function setPinned(node: NoteNode, pinned: boolean): void {
-  // ComfyUI's own pin (the right-click Pin), so its lock icon and menu agree.
-  // pin() needs the node on a graph; before that, set the flag.
-  if (node.pin && node.graph) node.pin(pinned);
-  else node.flags = { ...(node.flags ?? {}), pinned };
-  node.setDirtyCanvas?.(true, true);
-}
 
-/**
- * Lets clicks through the note to the canvas, so the note drags, selects and
- * zooms like a node while it looks like a panel. ComfyUI's wrapper around a
- * DOM widget takes pointer events and its style binding writes `auto` back
- * on every layout change, so keep it at `none` with an observer. The note's
- * buttons and its edit form take events again in their own CSS. Returns a
- * stop function, or null while the wrapper isn't there yet.
- */
-function passPointerThrough(el: HTMLElement): (() => void) | null {
-  const wrap = el.closest<HTMLElement>(".dom-widget");
-  if (!wrap) return null;
-  const apply = (): void => {
-    if (wrap.style.getPropertyValue("pointer-events") !== "none") {
-      wrap.style.setProperty("pointer-events", "none", "important");
-    }
-  };
-  apply();
-  const obs = new MutationObserver(apply);
-  obs.observe(wrap, { attributes: true, attributeFilter: ["style"] });
-  return () => obs.disconnect();
-}
 
 /**
  * Double-click to edit in Nodes 2.0. There the note's node never gets
@@ -109,6 +82,7 @@ export function mountNote(node: NoteNode) {
         ...defaultBookmarkConfig(),
         ...c.bookmark,
         icon: c.tone === "icon" ? c.icon : "bookmark",
+        ...(c.tone === "step" ? { step: c.step } : {}),
         color: c.color ? noteColorCss(c.color) : "",
         hidden: false,
       };
@@ -151,6 +125,7 @@ export function mountNote(node: NoteNode) {
         "onUpdate:pinned": onPinned,
         getKeymap: () => keymapFor(node as unknown as BookmarkNode),
         getZoom: currentZoom,
+        getView: currentViewPoint,
         freshJump: () => freshJump(node),
         onRecording: setRecording,
       });
@@ -256,21 +231,8 @@ export function mountNote(node: NoteNode) {
   editTargets.add(editTarget);
   host.onCleanup(() => editTargets.delete(editTarget));
 
-  // Keep ComfyUI's wrapper letting clicks through. It is created after the
-  // node, and again when the graph is re-shown, so check on each draw.
-  let wrap: HTMLElement | null = null;
-  let stopPass: (() => void) | null = null;
-  host.onCleanup(() => stopPass?.());
-  const prevDraw = node.onDrawForeground;
-  node.onDrawForeground = function (this: NoteNode, ...args: unknown[]) {
-    prevDraw?.apply(this, args);
-    const parent = host.element.closest<HTMLElement>(".dom-widget");
-    if (parent && parent !== wrap) {
-      stopPass?.();
-      stopPass = passPointerThrough(host.element);
-      wrap = stopPass ? parent : null;
-    }
-  };
+  // Keep ComfyUI's wrapper letting clicks through (see _frameless.ts).
+  keepPassThrough(node, host);
   // Double-click anywhere on the note (it reaches the canvas) edits it.
   const prevDbl = node.onDblClick;
   node.onDblClick = function (this: NoteNode, ...args: unknown[]) {
@@ -316,6 +278,7 @@ export function fixFrontendDef(defs: NodeDefLike[], type: string, displayName: s
  * saved with the workflow. A new note starts pinned.
  */
 export function registerNoteNode(): void {
+  publishTitleHeight();
   const lg = (globalThis as { LiteGraph?: LiteGraphStatic }).LiteGraph;
   const Base = lg?.LGraphNode;
   if (!lg?.registerNodeType || !Base) return;

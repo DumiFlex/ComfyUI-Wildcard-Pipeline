@@ -33,6 +33,7 @@ const props = defineProps<{
    *  jump settings for a note that just became a bookmark. */
   getKeymap: () => KeyOwner[];
   getZoom: () => number;
+  getView: () => { x: number; y: number };
   freshJump: () => BookmarkJump;
 }>();
 
@@ -86,7 +87,7 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
 <template>
   <div
     ref="root"
-    class="wp-note"
+    class="wp-note wp-frameless"
     :class="[`wp-note--${config.tone}`, `wp-note--${config.look}`, { 'wp-note--editing': editing }]"
     :style="toneStyle"
     data-test="wp-note"
@@ -104,6 +105,13 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
           <i class="pi pi-align-left" data-test="note-has-text"></i>
           <i v-if="hasLink" class="pi pi-link" data-test="note-has-link"></i>
         </span>
+        <i
+          v-if="pinned"
+          v-tooltip="'Pinned'"
+          class="pi pi-thumbtack wp-note__bm wp-note__pinmark"
+          aria-label="Pinned"
+          data-test="note-pinned-mark"
+        ></i>
         <i
           v-if="config.bookmark"
           v-tooltip="bookmarkHint"
@@ -250,6 +258,7 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
         :value="config.bookmark"
         :get-keymap="getKeymap"
         :get-zoom="getZoom"
+        :get-view="getView"
         @update="onJump"
         @recording="(on: boolean) => emit('recording', on)"
       />
@@ -369,7 +378,9 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
   color: var(--wp-note-tone);
   pointer-events: auto;
 }
+.wp-note__bm + .wp-note__bm,
 .wp-note__bm + .wp-note__edit { margin-left: 2px; }
+.wp-note__pinmark { color: var(--wp-text-dim); font-size: 11px; }
 .wp-note--label .wp-note__bm { color: inherit; opacity: 0.85; }
 
 .wp-note__body { margin-top: 8px; color: var(--wp-text-muted, inherit); }
@@ -436,6 +447,8 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
 </style>
 
 <style>
+@import "../shared/frameless-node.css";
+
 @layer wp-extension {
   /* Nodes 2.0 draws every node as a card (background, border, padding, a
      225 px floor, the source badge row and an outline 7 px outside). A note

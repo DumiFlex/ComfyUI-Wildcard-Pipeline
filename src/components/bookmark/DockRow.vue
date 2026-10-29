@@ -38,7 +38,8 @@ function onKey(e: KeyboardEvent): void {
     @keydown="onKey"
   >
     <span class="wp-bmrow__num">{{ index + 1 }}</span>
-    <i class="pi wp-bmrow__icon" :class="`pi-${entry.config.icon}`" aria-hidden="true" />
+    <span v-if="entry.config.step" class="wp-bmrow__step" aria-hidden="true">{{ entry.config.step }}</span>
+    <i v-else class="pi wp-bmrow__icon" :class="`pi-${entry.config.icon}`" aria-hidden="true" />
     <span class="wp-bmrow__name">{{ entry.title }}</span>
     <i v-if="entry.nested" class="pi pi-sitemap wp-bmrow__sub" title="In a subgraph" aria-label="In a subgraph" />
     <i
@@ -91,6 +92,19 @@ function onKey(e: KeyboardEvent): void {
   text-align: right;
 }
 .wp-bmrow__icon { color: var(--wp-bm-color); font-size: 12px; }
+/* A Step note's number, in a circle like on the note. */
+.wp-bmrow__step {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--wp-radius-cap, 999px);
+  background: var(--wp-bm-color);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 .wp-bmrow__name {
   flex: 1;
   min-width: 0;

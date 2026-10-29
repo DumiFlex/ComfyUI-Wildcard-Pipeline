@@ -324,7 +324,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // boot glue for the node, the jump, the hidden filter and the one shortcut
 // listener, plus a WP Note that can be a bookmark (the shared jump fields);
 // the branch sat at 595,973 bytes after merging the WP Note editor.
-const TOTAL_LIMIT = 584 * 1024;     // 584 KB
+// RAISED 584 -> 586 KB on 2026-10-29 for the bookmark polish: frameless WP
+// Bookmark (shared with WP Note in _frameless.ts), the free-area measuring
+// for jumps and the dock, the draggable dock and Use this view; boot +1 KB,
+// the rest in the lazy bookmark chunks; the branch sat at 598,327 bytes.
+const TOTAL_LIMIT = 586 * 1024;     // 586 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

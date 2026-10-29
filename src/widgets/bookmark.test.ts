@@ -11,7 +11,6 @@ import {
   jumpTo,
   listBookmarks,
   setHidden,
-  titleTint,
   type BookmarkNode,
 } from "./bookmark";
 
@@ -161,13 +160,6 @@ describe("WP Bookmark shortcuts", () => {
   });
 });
 
-describe("WP Bookmark title tint", () => {
-  it("darkens the colour and ignores anything else", () => {
-    expect(titleTint("#ffffff")).toBe("#8a8a8a");
-    expect(titleTint("#000000")).toBe("#171717");
-    expect(titleTint("")).toBeUndefined();
-  });
-});
 
 describe("WP Note bookmarks", () => {
   function note(id: number, title: string, jump: Partial<BookmarkConfig> | null): BookmarkNode {

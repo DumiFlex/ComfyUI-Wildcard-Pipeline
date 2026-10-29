@@ -254,7 +254,7 @@ app.registerExtension({
     ? {
         actionBarButtons: [
           ...topbarMod.ACTION_BAR_BUTTONS,
-          { icon: "pi pi-bookmark", tooltip: "Bookmarks (Wildcard Pipeline)", onClick: toggleBookmarkDock },
+          { icon: "pi pi-bookmark", tooltip: topbarMod.BOOKMARK_TOOLTIP, onClick: toggleBookmarkDock },
         ],
       }
     : {}),

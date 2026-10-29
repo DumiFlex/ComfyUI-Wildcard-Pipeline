@@ -10,8 +10,11 @@ function make(config: Partial<BookmarkConfig> = {}, keymap: KeyOwner[] = [], edi
       title: "Sampler",
       disabled: false,
       nested: false,
+      pinned: false,
+      selected: false,
       getKeymap: () => keymap,
       getZoom: () => 0.75,
+      getView: () => ({ x: 120, y: 340 }),
       editing,
     },
     attachTo: document.body,
@@ -76,13 +79,31 @@ describe("BookmarkWidget", () => {
   it("reads as one line until the pencil opens the form, and Done closes it", async () => {
     const w = make({ anchor: "c", zoom: 1.25, shortcut: "Ctrl+S" }, [{ combo: "Ctrl+S", label: "Save workflow", source: "ComfyUI" }], false);
     expect(w.find('[data-test="bm-record"]').exists()).toBe(false);
-    expect(w.get('[data-test="bm-summary"]').text()).toBe("Centre · 1.25×");
+    expect(w.find('[data-test="bm-go"]').exists()).toBe(false);
+    expect(w.get('[data-test="bm-name"]').text()).toBe("Sampler");
+    expect(w.get('[data-test="bm-view"]').attributes("title")).toBe("Lands at: Centre · 1.25×");
     expect(w.get('[data-test="bm-view-clash"]').attributes("title")).toContain("Save workflow");
     await w.get('[data-test="bm-edit"]').trigger("click");
     expect(last(w.emitted("update:editing"))).toEqual([true]);
     await w.setProps({ editing: true });
     await w.get('[data-test="bm-done"]').trigger("click");
     expect(last(w.emitted("update:editing"))).toEqual([false]);
+    w.unmount();
+  });
+
+  it("lands on the view on screen with Use this view", async () => {
+    const w = make();
+    await w.get('[data-test="bm-use-view"]').trigger("click");
+    expect(lastConfig(w)).toMatchObject({ anchor: "custom", view: { x: 120, y: 340 }, zoomMode: "fixed", zoom: 0.75 });
+    w.unmount();
+  });
+
+  it("hides on Done, not when the switch moves", async () => {
+    const w = make();
+    await w.get('[data-test="bm-visible"]').trigger("click");
+    expect(lastConfig(w)?.hidden).toBeUndefined();
+    await w.get('[data-test="bm-done"]').trigger("click");
+    expect(lastConfig(w)?.hidden).toBe(true);
     w.unmount();
   });
 });

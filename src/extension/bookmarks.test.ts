@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BOOKMARK_ANCHORS,
+  clearOf,
   comboFromEvent,
   defaultBookmarkConfig,
   findConflicts,
@@ -23,6 +24,9 @@ describe("WP Bookmark config", () => {
     })).toEqual({
       ...defaultBookmarkConfig(), zoom: 10, shortcut: "Alt+K", order: 3,
     });
+    expect(parseBookmarkConfig({ anchor: "custom" }).anchor).toBe("tl");
+    expect(parseBookmarkConfig({ anchor: "custom", view: { x: 1, y: 2 } })).toMatchObject({ anchor: "custom", view: { x: 1, y: 2 } });
+    expect(parseBookmarkConfig({ anchor: "c", view: { x: 1, y: 2 } }).view).toBeNull();
     expect(parseBookmarkConfig(JSON.stringify({ anchor: "br", zoomMode: "keep", zoom: 0.01, color: "#AABBCC", hidden: true })))
       .toEqual({ ...defaultBookmarkConfig(), anchor: "br", zoomMode: "keep", zoom: 0.1, color: "#aabbcc", hidden: true });
   });
@@ -52,13 +56,42 @@ describe("jump maths", () => {
     expect([ox, oy]).toEqual([-100, -200]);
   });
 
-  it("lands beside the dock, not under it", () => {
-    const [ox] = jumpOffset({ rect, viewport, anchor: "tl", scale: 1, margin: 20, inset: [300, 0] });
-    expect(screen(rect[0], ox, 1)).toBeCloseTo(320);
-    const [rx] = jumpOffset({ rect, viewport, anchor: "tr", scale: 1, margin: 20, inset: [0, 300] });
-    expect(screen(rect[0] + rect[2], rx, 1)).toBeCloseTo(1000 - 300 - 20);
-    const [cx] = jumpOffset({ rect, viewport, anchor: "c", scale: 1, margin: 20, inset: [300, 0] });
-    expect(screen(rect[0] + rect[2] / 2, cx, 1)).toBeCloseTo(320 + (1000 - 300 - 40) / 2);
+  it("measures the anchors inside the host's bars", () => {
+    // Sidebar 56 px on the left, toolbar 50 px on top, zoom bar 40 px below.
+    const inset = [56, 50, 0, 40] as const;
+    for (const a of BOOKMARK_ANCHORS) {
+      const [ox, oy] = jumpOffset({ rect, viewport, anchor: a.id, scale: 1, margin: 20, inset });
+      expect(screen(rect[0] + a.fx * rect[2], ox, 1)).toBeCloseTo(56 + 20 + a.fx * (1000 - 56 - 40));
+      expect(screen(rect[1] + a.fy * rect[3], oy, 1)).toBeCloseTo(50 + 20 + a.fy * (800 - 50 - 40 - 40));
+    }
+  });
+
+  it("moves off the dock only when it would land under it", () => {
+    const dock = [12, 60, 312, 260] as const;
+    // Top left lands under the dock: the least move clears it (down here,
+    // 260 px, beats right, 312 px).
+    const [ox, oy] = jumpOffset({ rect, viewport, anchor: "tl", scale: 1, margin: 20, avoid: [dock] });
+    expect(screen(rect[0], ox, 1)).toBeCloseTo(20);
+    expect(screen(rect[1], oy, 1)).toBeCloseTo(260 + 20);
+    // A tall dock is cleared sideways instead.
+    const [wx] = jumpOffset({ rect, viewport, anchor: "tl", scale: 1, margin: 20, avoid: [[12, 12, 312, 700]] });
+    expect(screen(rect[0], wx, 1)).toBeCloseTo(312 + 20);
+    // Middle left is below the dock: it stays at the left edge.
+    const [mx] = jumpOffset({ rect, viewport, anchor: "ml", scale: 1, margin: 20, avoid: [dock] });
+    expect(screen(rect[0], mx, 1)).toBeCloseTo(20);
+  });
+
+  it("brings back a view the user set, in the middle of the free screen", () => {
+    const [ox, oy] = jumpOffset({ rect, viewport, anchor: "custom", scale: 2, view: { x: 500, y: 300 }, inset: [56, 50, 0, 40] });
+    expect(screen(500, ox, 2)).toBeCloseTo(56 + (1000 - 56) / 2);
+    expect(screen(300, oy, 2)).toBeCloseTo(50 + (800 - 50 - 40) / 2);
+  });
+
+  it("clears a box by the smallest move, inside the free area when it can", () => {
+    expect(clearOf([0, 0, 100, 100], [[200, 200, 300, 300]], [0, 0, 1000, 1000], 10)).toEqual([0, 0]);
+    expect(clearOf([90, 0, 190, 100], [[0, 0, 100, 100]], [0, 0, 1000, 1000], 10)).toEqual([20, 0]);
+    // Moving left would leave the free area, so it goes down instead.
+    expect(clearOf([0, 0, 100, 50], [[0, 0, 900, 40]], [0, 0, 1000, 1000], 10)).toEqual([0, 50]);
   });
 
   it("keeps or sets the zoom", () => {
