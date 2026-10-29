@@ -448,6 +448,8 @@ export function addBookmarkHere(at?: readonly number[]): void {
  *  open itself. ComfyUI's `nodeCreated` hook doesn't fire for node types
  *  registered straight with LiteGraph, so the node reports it. */
 let bookmarkAdded: (() => void) | null = null;
+/** Opens or closes a bookmark's form (double-click on the node). */
+const bookmarkEditors = new WeakMap<object, (on: boolean) => void>();
 export function onBookmarkAdded(fn: () => void): void {
   bookmarkAdded = fn;
 }
@@ -464,7 +466,10 @@ export function titleTint(hex: string): string | undefined {
 /** Mounts the bookmark's one widget. Its value is the JSON BookmarkConfig. */
 export function mountBookmark(node: BookmarkNode) {
   const config = ref<BookmarkConfig>(defaultBookmarkConfig());
+  // A saved bookmark shows its read view; a brand-new one opens the form.
+  const editing = ref(false);
   let restored = false;
+  bookmarkEditors.set(node, (on) => setEditing(on));
 
   function apply(next: BookmarkConfig): void {
     config.value = next;
@@ -493,6 +498,8 @@ export function mountBookmark(node: BookmarkNode) {
         nested: !!node.graph && node.graph !== rootGraph(),
         getKeymap: () => keymapFor(node),
         getZoom: () => canvasOf()?.ds?.scale ?? 1,
+        editing: editing.value,
+        "onUpdate:editing": setEditing,
         "onUpdate:config": apply,
         "onUpdate:title": onTitle,
         onRecording: setRecording,
@@ -503,19 +510,41 @@ export function mountBookmark(node: BookmarkNode) {
 
   const host = createDomWidgetHost(node, WIDGET_NAME, wrapper, {
     initialValue: serializeWidgetJson(config.value),
-    minHeight: 60,
+    minHeight: 30,
     minWidth: 300,
     autoHeight: true,
     onValueRestored: (raw: string) => {
       restored = true;
+      setEditing(false);
       config.value = parseBookmarkConfig(raw);
       node.color = titleTint(config.value.color);
       notify();
     },
   });
+  // The widget only ever grows the node; after the view changes, shrink it
+  // back to the content once the height settles (as WP Note does).
+  function fitHeight(): void {
+    let frames = 3;
+    const step = (): void => {
+      if (--frames > 0) { requestAnimationFrame(step); return; }
+      const min = (node as { computeSize?: () => number[] }).computeSize?.();
+      const setSize = (node as { setSize?: (s: number[]) => void }).setSize;
+      const h = min?.[1];
+      if (h != null && setSize && Math.abs(h - (node.size[1] ?? 0)) > 1) setSize.call(node, [node.size[0] ?? 340, h]);
+    };
+    requestAnimationFrame(step);
+  }
+  function setEditing(on: boolean): void {
+    editing.value = on;
+    fitHeight();
+  }
+
   // Nothing restored by the next tick: the user just added this bookmark.
   setTimeout(() => {
-    if (!restored && node.graph) apply(freshConfig(node));
+    if (!restored && node.graph) {
+      apply(freshConfig(node));
+      setEditing(true);
+    }
     if (node.graph) bookmarkAdded?.();
   }, 0);
   return host;
@@ -549,6 +578,11 @@ export function registerBookmarkNode(): void {
     // select; drop it again so Delete can't remove what nobody sees.
     onSelected(): void {
       if (readConfig(this).hidden) canvasOf()?.deselect?.(this);
+    }
+
+    // Double-click anywhere on the node opens its form.
+    onDblClick(): void {
+      bookmarkEditors.get(this)?.(true);
     }
 
     onRemoved(): void {

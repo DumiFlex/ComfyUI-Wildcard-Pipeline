@@ -3,7 +3,7 @@ import { mount } from "@vue/test-utils";
 import BookmarkWidget from "./BookmarkWidget.vue";
 import { defaultBookmarkConfig, type BookmarkConfig, type KeyOwner } from "../../extension/bookmarks";
 
-function make(config: Partial<BookmarkConfig> = {}, keymap: KeyOwner[] = []) {
+function make(config: Partial<BookmarkConfig> = {}, keymap: KeyOwner[] = [], editing = true) {
   return mount(BookmarkWidget, {
     props: {
       config: { ...defaultBookmarkConfig(), ...config },
@@ -12,6 +12,7 @@ function make(config: Partial<BookmarkConfig> = {}, keymap: KeyOwner[] = []) {
       nested: false,
       getKeymap: () => keymap,
       getZoom: () => 0.75,
+      editing,
     },
     attachTo: document.body,
   });
@@ -69,6 +70,19 @@ describe("BookmarkWidget", () => {
     expect(lastConfig(w)?.zoom).toBe(0.75);
     await w.get('[data-test="bm-suggest"]').trigger("click");
     expect(lastConfig(w)?.shortcut).toBe("Alt+2");
+    w.unmount();
+  });
+
+  it("reads as one line until the pencil opens the form, and Done closes it", async () => {
+    const w = make({ anchor: "c", zoom: 1.25, shortcut: "Ctrl+S" }, [{ combo: "Ctrl+S", label: "Save workflow", source: "ComfyUI" }], false);
+    expect(w.find('[data-test="bm-record"]').exists()).toBe(false);
+    expect(w.get('[data-test="bm-summary"]').text()).toBe("Centre · 1.25×");
+    expect(w.get('[data-test="bm-view-clash"]').attributes("title")).toContain("Save workflow");
+    await w.get('[data-test="bm-edit"]').trigger("click");
+    expect(last(w.emitted("update:editing"))).toEqual([true]);
+    await w.setProps({ editing: true });
+    await w.get('[data-test="bm-done"]').trigger("click");
+    expect(last(w.emitted("update:editing"))).toEqual([false]);
     w.unmount();
   });
 });

@@ -36,6 +36,8 @@ const props = defineProps<{
   getKeymap: () => KeyOwner[];
   /** The canvas zoom right now. */
   getZoom: () => number;
+  /** The form is open; otherwise the node shows its compact read view. */
+  editing: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -43,6 +45,7 @@ const emit = defineEmits<{
   (e: "update:title", next: string): void;
   (e: "recording", on: boolean): void;
   (e: "jump"): void;
+  (e: "update:editing", next: boolean): void;
 }>();
 
 const ZOOM_MODES: { value: BookmarkZoomMode; label: string }[] = [
@@ -55,6 +58,11 @@ function patch(part: Partial<BookmarkConfig>): void {
 }
 
 const anchorLabel = computed(() => BOOKMARK_ANCHORS.find((a) => a.id === props.config.anchor)?.label ?? "");
+/** The read view's one line: where it lands and at what zoom. */
+const summary = computed(() => {
+  const zoom = props.config.zoomMode === "keep" ? "your zoom" : `${props.config.zoom}×`;
+  return `${anchorLabel.value} · ${zoom}${props.nested ? " · subgraph" : ""}`;
+});
 
 // ── shortcut recording ───────────────────────────────────────────────
 const recording = ref(false);
@@ -128,10 +136,40 @@ function onShow(show: boolean): void {
 function onTitle(ev: Event): void {
   emit("update:title", (ev.target as HTMLInputElement).value);
 }
+
+function done(): void {
+  stopRecording();
+  emit("update:editing", false);
+}
 </script>
 
 <template>
   <div class="wp-bm" :class="{ 'wp-bm--off': disabled }" data-test="wp-bookmark">
+    <!-- Read view: one line, so a bookmark stays small on the canvas. -->
+    <div
+      v-if="!editing"
+      class="wp-bm__view"
+      :style="config.color ? { '--wp-bm-color': config.color } : undefined"
+      data-test="bm-view"
+    >
+      <i class="pi wp-bm__glyph" :class="`pi-${config.icon}`" aria-hidden="true"></i>
+      <span class="wp-bm__summary" data-test="bm-summary">{{ summary }}</span>
+      <span v-if="disabled" class="wp-bm__offtag" title="Muted or bypassed: its shortcut does nothing">off</span>
+      <template v-else-if="config.shortcut">
+        <i
+          v-if="worst !== 'info' && conflicts.length"
+          class="pi pi-exclamation-triangle wp-bm__clash"
+          :title="conflicts.map((c) => c.message).join(' ')"
+          :aria-label="conflicts.map((c) => c.message).join(' ')"
+          data-test="bm-view-clash"
+        ></i>
+        <Kbd :keys="config.shortcut" size="sm" />
+      </template>
+      <WpButton variant="primary" size="sm" icon="pi-directions" hint="Jump here" data-test="bm-go" @click="emit('jump')">Go</WpButton>
+      <WpIconButton icon="pi-pencil" label="Edit bookmark" data-test="bm-edit" @click="emit('update:editing', true)" />
+    </div>
+
+    <template v-else>
     <div class="wp-bm__head">
       <IconPicker
         :model-value="config.icon"
@@ -257,7 +295,10 @@ function onTitle(ev: Event): void {
         @update:model-value="onShow"
       />
       <span v-if="nested" class="wp-bm__hint">In a subgraph: the jump opens it.</span>
+      <span class="wp-bm__spacer"></span>
+      <WpButton variant="primary" size="sm" data-test="bm-done" @click="done">Done</WpButton>
     </div>
+    </template>
   </div>
 </template>
 
@@ -323,4 +364,27 @@ function onTitle(ev: Event): void {
 .wp-bm__hint--block { margin: 0; padding: 0 6px; }
 .wp-bm__refused { margin: 0; padding: 0 6px; font-size: 11px; color: var(--wp-danger); }
 .wp-bm__conflict { display: block; }
+.wp-bm__spacer { flex: 1; }
+.wp-bm__view {
+  --wp-bm-color: var(--wp-accent);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 2px 4px 2px 10px;
+  background: var(--wp-bg2, var(--wp-bg-1));
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
+  box-shadow: inset 3px 0 0 var(--wp-bm-color);
+}
+.wp-bm__glyph { color: var(--wp-bm-color); font-size: 14px; }
+.wp-bm__summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--wp-text-dim);
+}
+.wp-bm__clash { color: var(--wp-warn); font-size: 12px; }
+.wp-bm__offtag { color: var(--wp-text-dim); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
 </style>
