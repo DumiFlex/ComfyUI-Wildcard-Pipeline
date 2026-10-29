@@ -10,12 +10,12 @@ import { CANVAS_SETTINGS } from "../../../extension/settings-catalog";
 
 export type SectionId =
   | "general" | "appearance" | "editing" | "autocomplete"
-  | "canvas" | "test-runner" | "ai" | "library" | "advanced";
+  | "canvas" | "test-runner" | "ai" | "library" | "advanced" | "about";
 
 export interface SectionDef { id: SectionId; label: string; icon: string; blurb: string }
 
 export const SECTIONS: SectionDef[] = [
-  { id: "general", label: "General", icon: "pi-info-circle", blurb: "Version, updates, what's new and privacy." },
+  { id: "general", label: "General", icon: "pi-info-circle", blurb: "Updates, what's new and privacy." },
   { id: "appearance", label: "Appearance", icon: "pi-palette", blurb: "How the manager looks on this device." },
   { id: "editing", label: "Editing", icon: "pi-pencil", blurb: "How the module editors behave." },
   { id: "autocomplete", label: "Autocomplete", icon: "pi-bolt", blurb: "Suggestions while you type option values." },
@@ -24,6 +24,7 @@ export const SECTIONS: SectionDef[] = [
   { id: "ai", label: "AI assistant", icon: "pi-microchip-ai", blurb: "Use your own model (Claude, OpenAI or a local server) to draft modules." },
   { id: "library", label: "Library & data", icon: "pi-database", blurb: "Your module database, backups and maintenance." },
   { id: "advanced", label: "Advanced", icon: "pi-cog", blurb: "Move settings between machines, start over, or open the component kit." },
+  { id: "about", label: "About", icon: "pi-heart", blurb: "Version, who makes Wildcard Pipeline, and how to support it." },
 ];
 
 export interface SettingEntry {
@@ -35,7 +36,6 @@ export interface SettingEntry {
 }
 
 const STATIC_ENTRIES: SettingEntry[] = [
-  { key: "about", section: "general", label: "About", hint: "Version, license and source repository.", keywords: "version license github" },
   { key: "check-on-launch", section: "general", label: "Check for updates on launch", hint: "Look for a newer release when the manager opens.", keywords: "update release" },
   { key: "check-now", section: "general", label: "Check for updates now", hint: "Ask GitHub for the latest release.", keywords: "update release" },
   { key: "whats-new", section: "general", label: "Open What's new after an update", hint: "Show the release notes once, the first time the manager opens on a new version.", keywords: "changelog release notes" },
@@ -116,6 +116,10 @@ const STATIC_ENTRIES: SettingEntry[] = [
   { key: "import-settings", section: "advanced", label: "Import settings", hint: "Load a settings file from another machine.", keywords: "restore transfer json" },
   { key: "component-kit", section: "advanced", label: "Component kit", hint: "Every shared control with when to use it, for people building the extension.", keywords: "kit components design system buttons inputs tokens colours contributors developers ui" },
   { key: "reset-prefs", section: "advanced", label: "Reset browser preferences", hint: "Clear this device's preferences. Your library is untouched.", keywords: "reset clear localstorage" },
+
+  { key: "about", section: "about", label: "Wildcard Pipeline", hint: "Version, license and source repository.", keywords: "version license github about" },
+  { key: "support", section: "about", label: "Support the project", hint: "Sponsor on GitHub, buy a coffee or send a PayPal donation.", keywords: "donate donation sponsor coffee paypal tip money help" },
+  { key: "help-out", section: "about", label: "Other ways to help", hint: "Star the repo, join the Discord, share your modules.", keywords: "star discord community contribute" },
 ];
 
 const CANVAS_ENTRIES: SettingEntry[] = CANVAS_SETTINGS.map((s) => ({

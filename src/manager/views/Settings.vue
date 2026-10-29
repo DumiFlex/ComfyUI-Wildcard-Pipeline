@@ -22,6 +22,7 @@ import TestRunnerSection from "../components/settings/sections/TestRunnerSection
 import AiSection from "../components/settings/sections/AiSection.vue";
 import LibrarySection from "../components/settings/sections/LibrarySection.vue";
 import AdvancedSection from "../components/settings/sections/AdvancedSection.vue";
+import AboutSection from "../components/settings/sections/AboutSection.vue";
 import {
   SECTIONS,
   isSectionId,
@@ -45,6 +46,7 @@ const COMPONENTS: Record<SectionId, Component> = {
   ai: AiSection,
   library: LibrarySection,
   advanced: AdvancedSection,
+  about: AboutSection,
 };
 
 const active = computed<SectionId>(() => (isSectionId(props.section) ? props.section : "general"));

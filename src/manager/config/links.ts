@@ -76,3 +76,31 @@ export const WPC_API_URL: string =
 
 /** The Community tab's page, framed in a sandboxed iframe (Community.vue). */
 export const WPC_EMBED_FRAME_URL = `${WPC_API_URL}/embed-frame.html`;
+
+/**
+ * Ways to support the project, shown on Settings › About. One list so the
+ * About page and any later "support" surface stay in step.
+ */
+export const SUPPORT_LINKS = [
+  {
+    id: "github",
+    label: "Sponsor on GitHub",
+    detail: "Monthly or one-time, through GitHub Sponsors.",
+    icon: "pi-heart",
+    href: "https://github.com/sponsors/DumiFlex",
+  },
+  {
+    id: "coffee",
+    label: "Buy me a coffee",
+    detail: "A one-off thank you, no account needed.",
+    icon: "pi-gift",
+    href: "https://buymeacoffee.com/dumiflex",
+  },
+  {
+    id: "paypal",
+    label: "PayPal",
+    detail: "Send any amount through PayPal.me.",
+    icon: "pi-paypal",
+    href: "https://paypal.me/DumiFlex",
+  },
+] as const;

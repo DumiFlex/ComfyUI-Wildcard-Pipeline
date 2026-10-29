@@ -161,6 +161,14 @@ Made something you like? Post your images and workflows on Discord, and publish
 your modules on the [community site](https://wp.dumiflex.dev/?utm_source=github&utm_medium=readme) so others can
 install them from the manager's **Community** page.
 
+## Support
+
+Wildcard Pipeline is free and made by one person. If it helps you, you can
+support it on [GitHub Sponsors](https://github.com/sponsors/DumiFlex),
+[Buy Me a Coffee](https://buymeacoffee.com/dumiflex) or
+[PayPal](https://paypal.me/DumiFlex). The same links are in the manager under
+**Settings › About**.
+
 ## Privacy
 
 Everything runs locally. The extension only goes online to check for updates
