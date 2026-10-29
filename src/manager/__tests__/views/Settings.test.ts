@@ -64,3 +64,21 @@ describe("Settings › General › Updates", () => {
     expect(wrap.get('[data-test="settings-update-status"]').text()).toContain("2.10.0");
   });
 });
+
+describe("Settings › About", () => {
+  it("shows the version and a support link for each way to donate", async () => {
+    const router = await settingsRouter("about");
+    const wrap = mount(Settings, {
+      props: { section: "about" },
+      global: { plugins: [router], stubs: { Icon: true } },
+    });
+    expect(wrap.text()).toContain("2.9.0");
+    const links = wrap.findAll('[data-test^="settings-support-"]');
+    expect(links.map((a) => a.attributes("href"))).toEqual([
+      "https://github.com/sponsors/DumiFlex",
+      "https://buymeacoffee.com/dumiflex",
+      "https://paypal.me/DumiFlex",
+    ]);
+    for (const a of links) expect(a.attributes("rel")).toBe("noopener");
+  });
+});

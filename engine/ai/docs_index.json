@@ -2357,7 +2357,7 @@
    "sections": [
     {
      "title": "General",
-     "text": "Version, updates, what's new and privacy.\n- About: Version, license and source repository.\n- Check for updates on launch: Look for a newer release when the manager opens.\n- Check for updates now: Ask GitHub for the latest release.\n- Open What's new after an update: Show the release notes once, the first time the manager opens on a new version.\n- Share anonymous usage stats: Let the Community tab count page views, installs and publishes on the community site."
+     "text": "Updates, what's new and privacy.\n- Check for updates on launch: Look for a newer release when the manager opens.\n- Check for updates now: Ask GitHub for the latest release.\n- Open What's new after an update: Show the release notes once, the first time the manager opens on a new version.\n- Share anonymous usage stats: Let the Community tab count page views, installs and publishes on the community site."
     },
     {
      "title": "Appearance",
@@ -2390,6 +2390,10 @@
     {
      "title": "Advanced",
      "text": "Move settings between machines, start over, or open the component kit.\n- Export settings: Save every preference to a JSON file.\n- Import settings: Load a settings file from another machine.\n- Component kit: Every shared control with when to use it, for people building the extension.\n- Reset browser preferences: Clear this device's preferences. Your library is untouched."
+    },
+    {
+     "title": "About",
+     "text": "Version, who makes Wildcard Pipeline, and how to support it.\n- Wildcard Pipeline: Version, license and source repository.\n- Support the project: Sponsor on GitHub, buy a coffee or send a PayPal donation.\n- Other ways to help: Star the repo, join the Discord, share your modules."
     }
    ]
   }
