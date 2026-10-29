@@ -8,8 +8,8 @@ const NotePeek = defineAsyncComponent(() => import("../components/note/NotePeek.
  * canvas (so it drags like a node), which also means the browser never sees
  * the pointer on it: no `:hover`, no `title` tooltip. So one window listener
  * hit-tests the label panels instead, at most once a frame, and shows a card
- * with the note's text and docs link. The card takes the pointer, so moving
- * onto it keeps it open and its buttons can be clicked.
+ * with the note's text, links and an Edit button. The card takes the
+ * pointer, so moving onto it keeps it open and its links can be clicked.
  */
 export interface PeekTarget {
   /** The label's panel, or null while it isn't on the page. */
@@ -18,7 +18,6 @@ export interface PeekTarget {
   title(): string;
   /** Not while the note is open in its editor. */
   active(): boolean;
-  openDoc(id: string): void;
   edit(): void;
 }
 
@@ -45,9 +44,17 @@ function inside(r: DOMRect, x: number, y: number): boolean {
 
 /** The label under the pointer, if nothing else is on top of it there. */
 export function labelAt(x: number, y: number): PeekTarget | null {
-  let hit: PeekTarget | null = null;
-  for (const t of targets) {
-    if (!t.active()) continue;
+  return panelAt([...targets].filter((t) => t.active()), x, y);
+}
+
+/**
+ * The item whose panel is under the point, if nothing else is on top of it
+ * there. The note's panels let the pointer through, so the browser can't
+ * tell; this is the hit test the hover card and the double-click share.
+ */
+export function panelAt<T extends { panel(): HTMLElement | null }>(items: Iterable<T>, x: number, y: number): T | null {
+  let hit: T | null = null;
+  for (const t of items) {
     const panel = t.panel();
     if (panel?.isConnected && inside(panel.getBoundingClientRect(), x, y)) hit = t;
   }
@@ -89,7 +96,6 @@ function mountCard(): void {
           config: t.config(),
           title: t.title(),
           anchor: panel.getBoundingClientRect(),
-          onOpenDoc: (id: string) => { hidePeek(); t.openDoc(id); },
           onEdit: () => { hidePeek(); t.edit(); },
         });
       };

@@ -1,8 +1,9 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
 import { reactiveFromGraph } from "../extension/reactive";
-import { defaultNoteConfig, docUrl, parseNoteConfig, type NoteConfig } from "../extension/note";
-import { trackPeek } from "./note-peek";
+import { defaultNoteConfig, parseNoteConfig, type NoteConfig } from "../extension/note";
+import { isVueNodes } from "../extension/renderer";
+import { panelAt, trackPeek } from "./note-peek";
 
 const NoteWidget = defineAsyncComponent(() => import("../components/note/NoteWidget.vue"));
 
@@ -61,6 +62,27 @@ function passPointerThrough(el: HTMLElement): (() => void) | null {
   return () => obs.disconnect();
 }
 
+/**
+ * Double-click to edit in Nodes 2.0. There the note's node never gets
+ * LiteGraph's onDblClick (its body lets the pointer through to the canvas),
+ * so one document listener hit-tests the notes' panels instead. Classic
+ * keeps onDblClick.
+ */
+interface EditTarget { panel(): HTMLElement | null; edit(): void }
+const editTargets = new Set<EditTarget>();
+let dblWired = false;
+function wireDblClick(): void {
+  if (dblWired || typeof document === "undefined") return;
+  dblWired = true;
+  document.addEventListener("dblclick", (e) => {
+    if (!isVueNodes()) return;
+    const hit = panelAt(editTargets, e.clientX, e.clientY);
+    if (!hit) return;
+    e.stopPropagation();
+    hit.edit();
+  }, true);
+}
+
 /** The narrowest a card note gets, and the width a label opens its editor at. */
 const CARD_MIN_WIDTH = 160;
 const FORM_WIDTH = 340;
@@ -97,9 +119,6 @@ export function mountNote(node: NoteNode) {
         pinned.value = next;
         syncResizable();
       }
-      function onOpenDoc(id: string): void {
-        window.open(docUrl(id, window.location.origin), "_blank", "noopener");
-      }
       return () => h(NoteWidget, {
         config: config.value,
         title: title.value,
@@ -109,7 +128,6 @@ export function mountNote(node: NoteNode) {
         "onUpdate:config": onConfig,
         "onUpdate:title": onTitle,
         "onUpdate:pinned": onPinned,
-        onOpenDoc,
       });
     },
   };
@@ -194,10 +212,13 @@ export function mountNote(node: NoteNode) {
     config: () => config.value,
     title: () => node.title,
     active: () => config.value.look === "label" && !editing.value && !!node.graph,
-    openDoc: (id) => window.open(docUrl(id, window.location.origin), "_blank", "noopener"),
     edit: () => setEditing(true),
   });
   host.onCleanup(stopPeek);
+  wireDblClick();
+  const editTarget: EditTarget = { panel: () => (editing.value ? null : panel()), edit: () => setEditing(true) };
+  editTargets.add(editTarget);
+  host.onCleanup(() => editTargets.delete(editTarget));
 
   // Keep ComfyUI's wrapper letting clicks through. It is created after the
   // node, and again when the graph is re-shown, so check on each draw.
