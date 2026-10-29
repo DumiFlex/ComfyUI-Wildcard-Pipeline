@@ -8,7 +8,7 @@
  * `tags` is a new sub-category — emitted via apply-tag too; the host decides to
  * auto-create it (in Ungrouped).
  */
-import WpNumber from "@/components/shared/WpNumber.vue";
+import WpNumber from "@/kit/WpNumber.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "./ui/Button.vue";
 import { UNGROUPED_HUE } from "../../components/shared/axis-color";

@@ -13,14 +13,14 @@
  * pushes via `host.setValue` so ComfyUI's widget value matches.
  */
 import { computed, ref } from "vue";
-import WpSwitch from "../shared/WpSwitch.vue";
-import WpSegmented, { type SegmentedOption } from "../shared/WpSegmented.vue";
-import { vTooltip } from "../shared/tooltip";
+import WpSwitch from "../../kit/WpSwitch.vue";
+import WpSegmented, { type SegmentedOption } from "../../kit/WpSegmented.vue";
+import { vTooltip } from "../../kit/tooltip";
 import type { SeedListConfig, SeedListStrategy } from "./types";
 import SeedListModal from "../shared/SeedListModal.vue";
 import FrameChips from "../shared/FrameChips.vue";
 import { deriveLoopSeeds } from "../shared/seed-derive";
-import WpButton from "../shared/WpButton.vue";
+import WpButton from "../../kit/WpButton.vue";
 
 const props = withDefaults(
   defineProps<{

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { inject, onBeforeUnmount } from "vue";
-import CopyButton from "@/components/shared/CopyButton.vue";
+import CopyButton from "@/kit/CopyButton.vue";
 import { DOC_OUTLINE, sectionSlug } from "../../docs/outline";
 
 const props = defineProps<{ title: string }>();

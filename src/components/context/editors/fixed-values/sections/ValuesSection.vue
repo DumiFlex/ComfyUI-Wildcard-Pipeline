@@ -13,7 +13,7 @@ import {
   type LibraryRow,
 } from "../defaults";
 import ValueRow from "./ValueRow.vue";
-import WpButton from "../../../../shared/WpButton.vue";
+import WpButton from "../../../../../kit/WpButton.vue";
 
 const props = defineProps<{ module: ModuleEntry }>();
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CopyButton from "@/components/shared/CopyButton.vue";
+import CopyButton from "@/kit/CopyButton.vue";
 
 const prompt = "a portrait of a woman, red hair, golden hour";
 </script>

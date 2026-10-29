@@ -4,7 +4,7 @@
  * most readers can skip stays on the page (and in the assistant's docs
  * index) without making the page long to read.
  */
-import Disclosure from "@/components/shared/Disclosure.vue";
+import Disclosure from "@/kit/Disclosure.vue";
 
 withDefaults(defineProps<{ title?: string }>(), { title: "How it works" });
 </script>

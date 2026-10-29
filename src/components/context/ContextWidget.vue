@@ -33,7 +33,7 @@ import { buildTopLevelItems } from "./bundles/top-level-items";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import type { BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
-import ModalShell from "../shared/ModalShell.vue";
+import ModalShell from "../../kit/ModalShell.vue";
 // Lazy: bundle edit modal pulls in its own IdentitySection +
 // RuntimeSection + color-preset markup. Keeping it out of the
 // ContextWidget entry chunk preserves the size budget — the modal
@@ -43,7 +43,7 @@ const BundleInstanceModal = defineAsyncComponent(
 );
 import PushToLibraryModal from "./PushToLibraryModal.vue";
 import PushBundleToLibraryModal from "./PushBundleToLibraryModal.vue";
-import ContextMenu from "../shared/ContextMenu.vue";
+import ContextMenu from "../../kit/ContextMenu.vue";
 import { dragState } from "./drag-store";
 import { useContextDrag } from "./context-drag";
 import type { WidgetState } from "./widget-state";
@@ -71,7 +71,7 @@ import { KIND_TITLE } from "./editors/_shell";
 import { currentFrame } from "../context-loop/frame-cursor";
 import { withFrameInstance } from "./frame-overrides";
 import { varColorClass } from "../shared/var-color";
-import wpLogoSvg from "../shared/wp-logo.svg?raw";
+import wpLogoSvg from "../../kit/wp-logo.svg?raw";
 import { useLibrarySync } from "./library-sync";
 import {
   bundleChildDriftCount,
@@ -814,7 +814,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
         @drop="(ev) => onDrop(ev, null)"
       >
         <!-- eslint-disable-next-line vue/no-v-html — wpLogoSvg is a static
-             import from src/components/shared/wp-logo.svg via Vite ?raw,
+             import from src/kit/wp-logo.svg via Vite ?raw,
              not user input. Same pattern as extension/topbar.ts. -->
         <div
           class="wp-empty-hero-glyph"
@@ -952,7 +952,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
 @import "../shared/row-primitives.css";
 @import "./editors/_modal-head.css";
 @import "./editors/_modal-template-ctrls.css";
-@import "../shared/_modal-motion.css";
+@import "../../kit/_modal-motion.css";
 </style>
 
 <style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import DiffView from "@/components/shared/DiffView.vue";
+import DiffView from "@/kit/DiffView.vue";
 
 const before = `{
   "name": "Hair colour",

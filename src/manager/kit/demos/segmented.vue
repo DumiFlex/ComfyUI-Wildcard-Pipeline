@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import WpSegmented from "@/components/shared/WpSegmented.vue";
+import WpSegmented from "@/kit/WpSegmented.vue";
 
 const theme = ref<"system" | "dark" | "light">("dark");
 const view = ref<"grid" | "list">("grid");

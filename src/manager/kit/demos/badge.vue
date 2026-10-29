@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Badge from "@/components/shared/Badge.vue";
+import Badge from "@/kit/Badge.vue";
 import Button from "../../components/ui/Button.vue";
 import Icon from "../../components/ui/Icon.vue";
 </script>

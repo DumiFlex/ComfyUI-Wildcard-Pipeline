@@ -12,9 +12,9 @@ import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import DebugCondition from "./DebugCondition.vue";
 import { ruleActions, type RawRuleDetail, type TraceStep, type WarningRow } from "./debug-model";
 import { isNegativeMode } from "../../extension/derivation-conditions";
-import WpButton from "../shared/WpButton.vue";
-import Disclosure from "../shared/Disclosure.vue";
-import CopyButton from "../shared/CopyButton.vue";
+import WpButton from "../../kit/WpButton.vue";
+import Disclosure from "../../kit/Disclosure.vue";
+import CopyButton from "../../kit/CopyButton.vue";
 
 const props = defineProps<{
   step: TraceStep;

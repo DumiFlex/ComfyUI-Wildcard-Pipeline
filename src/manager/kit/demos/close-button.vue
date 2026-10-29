@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CloseButton from "@/components/shared/CloseButton.vue";
+import CloseButton from "@/kit/CloseButton.vue";
 </script>
 
 <template>

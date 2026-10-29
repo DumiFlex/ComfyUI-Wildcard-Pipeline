@@ -4,7 +4,7 @@ import type {
   ContextMenuEntry,
   ContextMenuHeader,
   ContextMenuItem,
-} from "../shared/ContextMenu.vue";
+} from "../../kit/ContextMenu.vue";
 import { kindIcon } from "../shared/kind-icons";
 import { KIND_TITLE } from "./editors/_shell";
 import { currentFrame } from "../context-loop/frame-cursor";

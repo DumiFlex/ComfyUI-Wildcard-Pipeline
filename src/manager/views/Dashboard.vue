@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
-import CloseButton from "@/components/shared/CloseButton.vue";
+import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
+import CloseButton from "@/kit/CloseButton.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { libraryVersion } from "../composables/useLibraryChanged";
 import { useRouter } from "vue-router";
@@ -19,7 +19,7 @@ import { useReleaseCheck } from "../composables/useReleaseCheck";
 import StarPrompt from "../components/StarPrompt.vue";
 import { useBundleStore } from "../stores/bundleStore";
 import { registerPageNote } from "../composables/useOpenEditor";
-import Logo from "@/components/shared/Logo.vue";
+import Logo from "@/kit/Logo.vue";
 
 /** Stat-tile + recent-row metadata. `type` is the ModuleType for module
  *  kinds; bundles get `key: "bundle"` with no `type` since they live in

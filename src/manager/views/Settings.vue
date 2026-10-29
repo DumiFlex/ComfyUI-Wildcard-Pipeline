@@ -9,7 +9,7 @@
  * search hit), so links, the command palette and the back button all work.
  * Every row a search can land on is listed in `settings-index.ts`.
  */
-import SearchInput from "@/components/shared/SearchInput.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, ref, watch, type Component } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import Icon from "../components/ui/Icon.vue";

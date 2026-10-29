@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Kbd from "@/components/shared/Kbd.vue";
+import Kbd from "@/kit/Kbd.vue";
 import { computed, defineAsyncComponent, ref } from "vue";
 import { useRouter } from "vue-router";
 import Icon from "../components/ui/Icon.vue";
@@ -16,7 +16,7 @@ import { useAiConfig } from "../composables/useAiConfig";
 import { useTweaksStore } from "../stores/tweaksStore";
 import { useEngagementStore } from "../stores/engagementStore";
 import { isMac } from "../utils/platform";
-import Logo from "@/components/shared/Logo.vue";
+import Logo from "@/kit/Logo.vue";
 
 const ui = useUiStore();
 const tweaks = useTweaksStore();

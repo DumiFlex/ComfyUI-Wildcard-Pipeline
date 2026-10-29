@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import Kbd from "../../../shared/Kbd.vue";
+import Kbd from "../../../../kit/Kbd.vue";
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
 import ValuesSection from "./sections/ValuesSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
-import WpButton from "../../../shared/WpButton.vue";
-import CloseButton from "../../../shared/CloseButton.vue";
+import WpButton from "../../../../kit/WpButton.vue";
+import CloseButton from "../../../../kit/CloseButton.vue";
 
 
 /** Platform-correct save chord for the footer hint. */

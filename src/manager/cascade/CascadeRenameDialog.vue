@@ -8,7 +8,7 @@ import Input from "../components/ui/Input.vue";
 import Modal from "../components/ui/Modal.vue";
 import { useCascadeApply, type CascadeApplyRequest } from "./useCascadeApply";
 import { validateSubcatName, validateRefGrammarName, validateVariableName } from "../validation/names";
-import LoadingMark from "@/components/shared/LoadingMark.vue";
+import LoadingMark from "@/kit/LoadingMark.vue";
 
 interface Props {
   open: boolean;

@@ -14,8 +14,8 @@
  * whole next config (`src/widgets/model_info.ts` serializes it).
  */
 import { computed, nextTick, ref } from "vue";
-import WpButton from "../shared/WpButton.vue";
-import WpIconButton from "../shared/WpIconButton.vue";
+import WpButton from "../../kit/WpButton.vue";
+import WpIconButton from "../../kit/WpIconButton.vue";
 import {
   DEFAULT_VARIANT_RULES,
   compileVariantRules,

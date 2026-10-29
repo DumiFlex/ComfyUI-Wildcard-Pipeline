@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Separator from "@/components/shared/Separator.vue";
+import Separator from "@/kit/Separator.vue";
 import Button from "../../components/ui/Button.vue";
 </script>
 

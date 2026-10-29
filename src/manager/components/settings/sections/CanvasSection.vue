@@ -4,7 +4,7 @@
  * Pipeline, editable here too (see `useCanvasSettings` for how the two stay
  * in step), plus the one run setting the engine reads from the server.
  */
-import WpNumber from "@/components/shared/WpNumber.vue";
+import WpNumber from "@/kit/WpNumber.vue";
 import { computed, ref, watch } from "vue";
 import Toggle from "../../ui/Toggle.vue";
 import Select from "../../ui/Select.vue";

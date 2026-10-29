@@ -10,7 +10,7 @@
  *  4. Rule matrix (ConstraintMatrix)
  *  5. Exceptions table
  */
-import WpNumber from "@/components/shared/WpNumber.vue";
+import WpNumber from "@/kit/WpNumber.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
@@ -25,7 +25,7 @@ import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import Select from "../components/ui/Select.vue";
 import Checkbox from "../components/ui/Checkbox.vue";
-import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
+import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import ListFilter from "../components/ui/ListFilter.vue";
 import { constraintExceptionHaystack } from "../utils/listFilter";
 import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";

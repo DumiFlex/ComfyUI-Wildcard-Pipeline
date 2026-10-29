@@ -21,7 +21,7 @@ import { applyVarAccessor, type ResolvedValue } from "../../../../../widgets/ric
 // asset and only pulled in when the combine instance modal opens. Bundle
 // budget is tight — eager import pushes total over.
 import type { VarProducerLike } from "../../../../../manager/components/RefChip.vue";
-import WpButton from "../../../../shared/WpButton.vue";
+import WpButton from "../../../../../kit/WpButton.vue";
 const RichTextInput = defineAsyncComponent(
   () => import("../../../../../manager/components/RichTextInput.vue"),
 );

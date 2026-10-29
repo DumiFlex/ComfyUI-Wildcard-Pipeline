@@ -69,9 +69,9 @@
 import { computed, ref } from "vue";
 import Modal from "../components/ui/Modal.vue";
 import Button from "../components/ui/Button.vue";
-import Toolbar from "@/components/shared/Toolbar.vue";
-import Disclosure from "@/components/shared/Disclosure.vue";
-import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
+import Toolbar from "@/kit/Toolbar.vue";
+import Disclosure from "@/kit/Disclosure.vue";
+import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import ImportAsNewRename from "./ImportAsNewRename.vue";
 import Tier3ChainViz from "./conflict-rows/Tier3ChainViz.vue";
 import type { ChainStep } from "./conflict-rows/chain-types";

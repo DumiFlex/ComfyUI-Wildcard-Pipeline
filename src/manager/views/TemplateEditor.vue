@@ -29,7 +29,7 @@ import {
 } from "../composables/useOpenEditor";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import LoadingMark from "@/components/shared/LoadingMark.vue";
+import LoadingMark from "@/kit/LoadingMark.vue";
 
 const props = defineProps<{ id?: string }>();
 

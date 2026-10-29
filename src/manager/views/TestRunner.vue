@@ -23,7 +23,7 @@ import SamplesPanel from "../components/test-runner/SamplesPanel.vue";
 import WarningsPanel from "../components/test-runner/WarningsPanel.vue";
 import ComparePanel from "../components/test-runner/ComparePanel.vue";
 import AiRunBar from "../components/test-runner/AiRunBar.vue";
-import WpTabs, { type TabItem } from "@/components/shared/WpTabs.vue";
+import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
 import { useAiConfig } from "../composables/useAiConfig";
 import TraceDrawer from "../components/test-runner/TraceDrawer.vue";
 import InspectorDrawer from "../components/test-runner/InspectorDrawer.vue";

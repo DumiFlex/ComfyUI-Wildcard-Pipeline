@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import InlineEdit from "@/components/shared/InlineEdit.vue";
+import InlineEdit from "@/kit/InlineEdit.vue";
 
 const name = ref("Hair colour");
 const chat = ref("");

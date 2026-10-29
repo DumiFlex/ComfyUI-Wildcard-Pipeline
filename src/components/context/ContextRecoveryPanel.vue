@@ -3,8 +3,8 @@
  *  JSON failed to parse. Styles live in `context-widget.css`. */
 /** `showRaw` ("View raw") is owned by the widget so it survives the panel
  *  unmounting and coming back. */
-import WpButton from "../shared/WpButton.vue";
-import CodeBlock from "../shared/CodeBlock.vue";
+import WpButton from "../../kit/WpButton.vue";
+import CodeBlock from "../../kit/CodeBlock.vue";
 
 defineProps<{ error: string; raw: string; showRaw: boolean }>();
 defineEmits<{ reset: []; toggleRaw: [] }>();

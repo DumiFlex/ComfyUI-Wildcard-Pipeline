@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import WpNumber from "@/components/shared/WpNumber.vue";
+import WpNumber from "@/kit/WpNumber.vue";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
-import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
+import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import { MAX_TEST_RUNNER_SEEDS, useUiStore } from "../../../stores/uiStore";
 
 const ui = useUiStore();

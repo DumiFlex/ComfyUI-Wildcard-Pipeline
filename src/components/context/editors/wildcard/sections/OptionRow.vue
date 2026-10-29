@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import WpNumber from "../../../../shared/WpNumber.vue";
+import WpNumber from "../../../../../kit/WpNumber.vue";
 import { computed, ref } from "vue";
 import {
   effectiveWeight,

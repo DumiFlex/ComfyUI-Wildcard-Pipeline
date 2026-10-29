@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import WpCheck from "../../../../shared/WpCheck.vue";
-import WpButton from "../../../../shared/WpButton.vue";
+import WpCheck from "../../../../../kit/WpCheck.vue";
+import WpButton from "../../../../../kit/WpButton.vue";
 
 interface Rule {
   id: string;

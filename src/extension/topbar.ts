@@ -34,7 +34,7 @@
 // `app.menu.settingsGroup` isn't there (older ComfyUI builds, headless
 // hosts, etc.).
 
-import wpLogoSvg from "../components/shared/wp-logo.svg?raw";
+import wpLogoSvg from "../kit/wp-logo.svg?raw";
 
 const SPA_PATH = "/wp/dashboard";
 const TOOLTIP = "Wildcard Pipeline Workspace (opens in a new window)";

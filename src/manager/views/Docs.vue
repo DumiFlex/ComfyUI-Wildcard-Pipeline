@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import SearchInput from "@/components/shared/SearchInput.vue";
-import Kbd from "@/components/shared/Kbd.vue";
+import SearchInput from "@/kit/SearchInput.vue";
+import Kbd from "@/kit/Kbd.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, shallowRef, watch, type Component } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { DOC_GROUPS, pagesByGroup, findPage, searchPages, toneVar, type DocGroupId, type DocPageMeta } from "../docs/registry";

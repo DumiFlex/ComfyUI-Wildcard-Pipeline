@@ -6,7 +6,7 @@
  * first and are never pruned; the rest are grouped by when they were last
  * used. Rename and pin don't move a chat; delete asks inline first.
  */
-import SearchInput from "@/components/shared/SearchInput.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
 import { api } from "../../api/client";

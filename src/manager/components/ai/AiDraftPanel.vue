@@ -12,7 +12,7 @@
  * The editor's current draft is sent, unsaved rows included, so the model
  * sees what is really in the list.
  */
-import WpNumber from "@/components/shared/WpNumber.vue";
+import WpNumber from "@/kit/WpNumber.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
 import Checkbox from "../ui/Checkbox.vue";

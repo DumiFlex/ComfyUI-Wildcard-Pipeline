@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Kbd from "@/components/shared/Kbd.vue";
+import Kbd from "@/kit/Kbd.vue";
 import { computed, nextTick, ref, watch } from "vue";
 import Icon from "./ui/Icon.vue";
 import type { CommandItem } from "./CommandPalette.types";
@@ -220,7 +220,7 @@ function onBackdropClick() {
 </template>
 
 <style scoped>
-@import "../../components/shared/_modal-motion.css";
+@import "../../kit/_modal-motion.css";
 
 .wp-cp-overlay {
   position: fixed; inset: 0; z-index: 10000;

@@ -34,7 +34,7 @@ import {
 import RefChip, { type VarProducerLike } from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import RemapRefPopup from "./RemapRefPopup.vue";
-import { useGrowableField } from "../../components/shared/useGrowableField";
+import { useGrowableField } from "../../kit/useGrowableField";
 import { rewriteBrokenRef } from "../cascade/remap-ref-rewrite";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";

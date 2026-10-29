@@ -11,12 +11,12 @@ import {
 } from "../../widgets/_shared";
 import { reorderInjectorRows } from "../../widgets/injector";
 import { shortConflictLabel, scanInjectorConflicts } from "../../extension/conflicts";
-import { applyFlip, captureRects, MOTION_FLIP_MS } from "../shared/flip";
+import { applyFlip, captureRects, MOTION_FLIP_MS } from "../../kit/flip";
 import InjectorRowComp from "./InjectorRow.vue";
-import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
+import ContextMenu, { type ContextMenuItem } from "../../kit/ContextMenu.vue";
 import InjectorBindingModal from "./InjectorBindingModal.vue";
-import WpButton from "../shared/WpButton.vue";
-import WpIconButton from "../shared/WpIconButton.vue";
+import WpButton from "../../kit/WpButton.vue";
+import WpIconButton from "../../kit/WpIconButton.vue";
 
 // NOTE: when we wire enter/leave animations (row added on connect,
 // row removed on disconnect) we'll pass `{ classes: INJ_ANIM_CLASSES }`

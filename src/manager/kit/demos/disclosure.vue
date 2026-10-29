@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Disclosure from "@/components/shared/Disclosure.vue";
+import Disclosure from "@/kit/Disclosure.vue";
 import Button from "../../components/ui/Button.vue";
 
 const open = ref(true);

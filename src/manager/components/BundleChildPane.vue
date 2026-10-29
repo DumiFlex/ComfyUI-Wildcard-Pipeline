@@ -14,7 +14,7 @@
  * Task 3 ships wildcard support. Combine / fixed_values / derivation /
  * constraint land in Task 4a–d.
  */
-import CloseButton from "@/components/shared/CloseButton.vue";
+import CloseButton from "@/kit/CloseButton.vue";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import WildcardIdentitySection from "../../components/context/editors/wildcard/sections/IdentitySection.vue";

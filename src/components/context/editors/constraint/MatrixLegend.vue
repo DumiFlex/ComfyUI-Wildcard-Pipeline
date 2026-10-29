@@ -4,7 +4,7 @@
  * Lists each rule state with a cell sample + plain-language
  * description of its runtime effect. Collapsed by default.
  */
-import Disclosure from "../../../shared/Disclosure.vue";
+import Disclosure from "../../../../kit/Disclosure.vue";
 
 defineProps<{
   /** Show the accepts-axis row — only when this matrix actually has one, so the

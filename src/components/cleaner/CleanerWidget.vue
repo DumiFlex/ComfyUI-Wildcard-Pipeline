@@ -14,9 +14,9 @@
  * overrides the same names with the SPA palette).
  */
 import { computed } from "vue";
-import WpButton from "../shared/WpButton.vue";
-import WpCheck from "../shared/WpCheck.vue";
-import WpSegmented, { type SegmentedOption } from "../shared/WpSegmented.vue";
+import WpButton from "../../kit/WpButton.vue";
+import WpCheck from "../../kit/WpCheck.vue";
+import WpSegmented, { type SegmentedOption } from "../../kit/WpSegmented.vue";
 import {
   INTENSITY_TO_NEG_RULES,
   INTENSITY_TO_RULES,

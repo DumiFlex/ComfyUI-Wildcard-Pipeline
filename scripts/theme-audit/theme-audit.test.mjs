@@ -29,6 +29,7 @@ describe("theme audit", () => {
       ...globSync("src/**/*.vue", { cwd: ROOT }),
       ...globSync("src/manager/**/*.css", { cwd: ROOT }),
       ...globSync("src/components/shared/**/*.css", { cwd: ROOT }),
+      ...globSync("src/kit/**/*.css", { cwd: ROOT }),
     ].filter((f) => !EXEMPT.has(f.split("\\").join("/")));
     const RAW = /border-(?:(?:top|bottom)-(?:left|right)-|(?:start|end)-(?:start|end)-)?radius\s*:\s*([^;{}\n]+)/g;
     const bad = [];
@@ -54,6 +55,7 @@ describe("theme audit", () => {
     const files = [
       ...globSync("src/manager/**/*.{vue,css}", { cwd: ROOT }),
       ...globSync("src/components/shared/**/*.{vue,css}", { cwd: ROOT }),
+      ...globSync("src/kit/**/*.{vue,css}", { cwd: ROOT }),
     ].filter((f) => !f.split("\\").join("/").endsWith("styles/looks.css"));
     const bad = [];
     for (const f of files) {

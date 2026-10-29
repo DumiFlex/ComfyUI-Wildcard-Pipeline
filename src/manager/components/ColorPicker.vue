@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import Popover from "../../components/shared/Popover.vue";
+import Popover from "../../kit/Popover.vue";
 import Input from "./ui/Input.vue";
-import HsvPicker from "../../components/shared/HsvPicker.vue";
+import HsvPicker from "../../kit/HsvPicker.vue";
 
 interface Props {
   modelValue: string;

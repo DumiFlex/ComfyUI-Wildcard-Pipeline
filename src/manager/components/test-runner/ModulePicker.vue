@@ -4,7 +4,7 @@
  * AND content (option values, templates, rule values), filters by kind and
  * sorts — the picker the old single-module dropdown never had.
  */
-import SearchInput from "@/components/shared/SearchInput.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import type { BundleRow, ModuleRow, ScenarioStackItem } from "../../api/types";
 import { moduleBinding, searchText, type StackKind } from "../../utils/scenario";

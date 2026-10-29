@@ -14,7 +14,7 @@
 
 // `?raw` returns the file contents as a string — Vite inlines into the
 // JS chunk so we don't depend on a runtime asset URL. Stays self-contained.
-import wpLogoSvg from "../components/shared/wp-logo.svg?raw";
+import wpLogoSvg from "../kit/wp-logo.svg?raw";
 import pkg from "../../package.json" with { type: "json" };
 
 export interface AboutPageBadge {

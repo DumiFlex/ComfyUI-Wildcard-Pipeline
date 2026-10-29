@@ -22,7 +22,7 @@ import { api, ApiError, type ExportBuildRequest } from "../api/client";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType, TemplateRow } from "../api/types";
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
-import SearchInput from "@/components/shared/SearchInput.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import { bundleSubtitle, moduleSubtitle, templateSubtitle } from "./picker-subtitle";
 import { kindIcon } from "../../components/shared/kind-icons";
 import type { DepRef } from "./PickerRow.vue";

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Checkbox from "../components/ui/Checkbox.vue";
-import CopyButton from "@/components/shared/CopyButton.vue";
+import CopyButton from "@/kit/CopyButton.vue";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useToast } from "../composables/useToast";

@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import Kbd from "../shared/Kbd.vue";
-import SearchInput from "../shared/SearchInput.vue";
+import Kbd from "../../kit/Kbd.vue";
+import SearchInput from "../../kit/SearchInput.vue";
 import { computed, nextTick, ref, watch } from "vue";
-import ModalShell from "../shared/ModalShell.vue";
+import ModalShell from "../../kit/ModalShell.vue";
 import ConfirmDialog from "../shared/ConfirmDialog.vue";
 import { api } from "../../manager/api/client";
 import type { BundleRow } from "../../manager/api/types";
-import WpButton from "../shared/WpButton.vue";
-import CloseButton from "../shared/CloseButton.vue";
+import WpButton from "../../kit/WpButton.vue";
+import CloseButton from "../../kit/CloseButton.vue";
 
 const props = defineProps<{
   visible: boolean;
@@ -304,7 +304,7 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 /* `wp-skel` family is shared with ModulePickerModal — import unscoped
  * so the keyframe + base rules dedupe across consumers and aren't
  * subject to per-component scoping rewrites. */
-@import "../shared/_skeleton.css";
+@import "../../kit/_skeleton.css";
 </style>
 
 <style scoped>

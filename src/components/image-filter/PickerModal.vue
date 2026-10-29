@@ -15,13 +15,13 @@
  * it: the run keeps waiting until one of the three answers is sent.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import ModalShell from "../shared/ModalShell.vue";
-import WpSegmented, { type SegmentedOption } from "../shared/WpSegmented.vue";
-import WpImageZoom from "../shared/WpImageZoom.vue";
-import CopyButton from "../shared/CopyButton.vue";
-import InlineEdit from "../shared/InlineEdit.vue";
+import ModalShell from "../../kit/ModalShell.vue";
+import WpSegmented, { type SegmentedOption } from "../../kit/WpSegmented.vue";
+import WpImageZoom from "../../kit/WpImageZoom.vue";
+import CopyButton from "../../kit/CopyButton.vue";
+import InlineEdit from "../../kit/InlineEdit.vue";
 import MaskPainter, { type MaskTool } from "./MaskPainter.vue";
-import Slider from "../shared/Slider.vue";
+import Slider from "../../kit/Slider.vue";
 import PickerTile from "./PickerTile.vue";
 import SweepGrid from "./SweepGrid.vue";
 import { pickKey, viewUrl, type Pick, type PickAnswer, type PickEdits, type ImageRef } from "./types";
@@ -37,9 +37,9 @@ import {
 } from "./picker-state";
 import { axisHueAt } from "../shared/axis-color";
 import { frameValues, promptRuns, valuesText } from "./picker-details";
-import WpButton from "../shared/WpButton.vue";
-import WpTabs, { type TabItem } from "../shared/WpTabs.vue";
-import { vTooltip } from "../shared/tooltip";
+import WpButton from "../../kit/WpButton.vue";
+import WpTabs, { type TabItem } from "../../kit/WpTabs.vue";
+import { vTooltip } from "../../kit/tooltip";
 
 const props = withDefaults(
   defineProps<{ request: WaitingRequest; moreWaiting?: number; graph?: LiteGraphLike }>(),

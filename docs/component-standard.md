@@ -6,7 +6,8 @@ Every custom control in the extension follows these rules. The component kit (Se
 
 | Folder | What goes there |
 |---|---|
-| `src/components/shared/` | Pieces the canvas uses, and pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`), controls (`SearchInput`, `WpNumber`, `WpCheck`, `WpSelect`, `WpButton`, `WpIconButton`, `WpSwitch`, `WpTabs`, `WpSegmented`, `Disclosure`, `Banner`, `CopyButton`, `CloseButton`, `Slider`, `TagInput`, `InlineEdit`, `DropZone`, `Toolbar`, `Combobox`, `DatePicker`, `RangeSlider`, `RadioGroup`), display and layout pieces (`Badge`, `Kbd`, `DescriptionList`, `CodeBlock`, `Separator`, `Stepper`, `Pagination`, `ResizeHandle`, `SplitPane`, `SortableList`, `Avatar`, `Timeline`, `DiffView`, `ImageGrid`, `VirtualList`, `VisuallyHidden`), the `Lightbox` overlay, feedback (`ProgressBar`, `Skeleton`) and the toast look (`ToastCard`). |
+| `src/kit/` | The shared kit, a copy of [DumiFlex/wp-kit](https://github.com/DumiFlex/wp-kit) (the community site uses it too). Never edit it here: change a piece in wp-kit, release it, then `pnpm kit:pull <tag>`; `pnpm kit:check` fails in CI on a hand edit. It holds the pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`), controls (`SearchInput`, `WpNumber`, `WpCheck`, `WpSelect`, `WpButton`, `WpIconButton`, `WpSwitch`, `WpTabs`, `WpSegmented`, `Disclosure`, `Banner`, `CopyButton`, `CloseButton`, `Slider`, `TagInput`, `InlineEdit`, `DropZone`, `Toolbar`, `Combobox`, `DatePicker`, `RangeSlider`, `RadioGroup`), display and layout pieces (`Badge`, `Kbd`, `DescriptionList`, `CodeBlock`, `Separator`, `Stepper`, `Pagination`, `ResizeHandle`, `SplitPane`, `SortableList`, `Avatar`, `Timeline`, `DiffView`, `ImageGrid`, `VirtualList`, `VisuallyHidden`), the `Lightbox` overlay, feedback (`ProgressBar`, `Skeleton`) and the toast look (`ToastCard`). |
+| `src/components/shared/` | Canvas pieces that are not shared with other apps: `ConfirmDialog`, the seed list, frame chips, the toast stack, `useHostDialogGuard`, and the canvas colour sheet `theme.css`. |
 | `src/manager/components/ui/` | Manager-only controls: `Button`, `Input`, `Select`, `Modal`, `ConfirmModal`, `Drawer`, `DataTable`, `ChoiceCards` and the rest. |
 
 A component anywhere else is a part of one screen, not a control. If a second screen needs it, move it into a kit folder first.
@@ -50,7 +51,7 @@ Don't add synonyms such as `kind`, `small`, `busy` or `visible` for these meanin
 ## 5. Tokens only
 
 - Colours, radii, spacing, shadows and type come from `--wp-*` tokens. kit-guard counts raw hex colours, and a file's count may not go up.
-- A component in `src/components/shared/` uses only the names both surfaces define. The list is `SHARED_TOKENS` in `src/components/shared/shared-tokens.test.ts`; the test fails when either side stops defining one, or when a shared overlay reads a name outside it. That is how one component wears the canvas colours in a node and the manager colours on a page.
+- A kit piece (`src/kit/`, and the shared pieces left in `src/components/shared/`) uses only the names both surfaces define. The list is `SHARED_TOKENS` in `src/kit/tokens.ts`; wp-kit's `tokens.test.ts` fails when a kit piece reads a name outside it, and `src/components/shared/shared-tokens.test.ts` fails when either side stops defining one. That is how one component wears the canvas colours in a node and the manager colours on a page.
 - Shadows follow the floating thing's size: `--wp-shadow-sm` for resting cards, `--wp-shadow-md` for menus, popovers, tooltips and dropdown lists, `--wp-shadow-lg` for dialogs, `--wp-shadow-xl` for drawers and full-page panels. A small menu never gets a dialog's shadow.
 - Every component must work in both light and dark.
 - Every component must work in every manager look and colour theme (`styles/looks.css`, `styles/themes.css`). A fixed corner is written `min(6px, var(--wp-radius-cap, 999px))` and a pill `var(--wp-radius-cap, 999px)`, so Terminal and TUI square it and Crisp nearly squares it (`scripts/theme-audit/theme-audit.test.mjs` fails on a raw `border-radius: 6px`). A circle inside a control (switch knob, slider thumb, step mark, round icon button) is `min(50%, var(--wp-radius-cap, 999px))` so it squares with its box; a dot, avatar, swatch or radio that stays round in every look carries `/* round: <why> */` on the same line (the test fails on a bare `50%`). A selected item uses `[data-active="true"]` (or `aria-current`) and gets its rule in each look that draws selection its own way. A checkbox is `ui/Checkbox` (`field` for a filter in a form grid), never a hand-drawn `.wp-check` with an inline style on its tick.
@@ -67,7 +68,7 @@ Don't add synonyms such as `kind`, `small`, `busy` or `visible` for these meanin
   - dialogs keep Tab inside (use `useDialogFocus`).
   - an overlay that can open on top of a ComfyUI dialog (the Display playground opens from Settings) also uses `useHostDialogGuard`: ComfyUI's reka dialogs turn off clicks outside themselves, trap focus and close on an outside click or Escape.
 - Hints use `v-tooltip`, not `title=`.
-- Icon-only buttons have an `aria-label`. The × that closes something is `CloseButton`; a copy is `CopyButton` (or `copyText` from `components/shared/clipboard.ts` behind a menu item), never `navigator.clipboard` directly, which is missing over plain http.
+- Icon-only buttons have an `aria-label`. The × that closes something is `CloseButton`; a copy is `CopyButton` (or `copyText` from `kit/clipboard.ts` behind a menu item), never `navigator.clipboard` directly, which is missing over plain http.
 - Shared pieces style themselves in `<style scoped>`, not in `@layer wp-extension`: the manager's Tailwind reset is unlayered and would beat a layered rule on `<button>`.
 - Motion respects `prefers-reduced-motion`.
 
@@ -97,7 +98,7 @@ A panel closes once its trigger has scrolled out of view. A scroll inside the pa
 
 ## 8. Canvas twins share a stylesheet
 
-When the canvas needs its own version of a manager control (Button, Switch, Select, Number), both versions use the same stylesheet in `src/components/shared/`. A change to one then changes both. The kit shows each shared piece in both looks (`kit/KitLooks.vue` draws a demo twice, at the canvas size `sm` and the manager size `md`; the manager never loads the canvas colours, so both wear the manager's).
+When the canvas needs its own version of a manager control (Button, Switch, Select, Number), both versions use the same stylesheet in `src/kit/` (`button.css`, `WpSwitch.vue`). A change to one then changes both. The kit shows each shared piece in both looks (`kit/KitLooks.vue` draws a demo twice, at the canvas size `sm` and the manager size `md`; the manager never loads the canvas colours, so both wear the manager's).
 
 Better still is one component for both sides, with only `size` changing. `WpSwitch` is the on/off switch everywhere (the manager's `Toggle` is `WpSwitch` at `md`), and `WpTabs` and `WpSegmented` are the tabs and value pickers everywhere. A canvas widget never draws its own `role="switch"`, tab strip or joined-button group.
 

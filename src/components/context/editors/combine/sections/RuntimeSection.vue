@@ -11,7 +11,7 @@
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import SeedLockControls from "../../_shared/SeedLockControls.vue";
-import WpSwitch from "../../../../shared/WpSwitch.vue";
+import WpSwitch from "../../../../../kit/WpSwitch.vue";
 
 const props = defineProps<{ module: ModuleEntry; frameActive?: boolean }>();
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();

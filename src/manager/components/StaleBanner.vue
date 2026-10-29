@@ -9,7 +9,7 @@
  */
 import { ref } from "vue";
 import Button from "./ui/Button.vue";
-import Banner from "@/components/shared/Banner.vue";
+import Banner from "@/kit/Banner.vue";
 import ConfirmModal from "./ui/ConfirmModal.vue";
 import { useStaleStore } from "../stores/staleStore";
 import { useSystemStore } from "../stores/systemStore";

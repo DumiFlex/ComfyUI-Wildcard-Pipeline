@@ -13,8 +13,8 @@ import { computed } from "vue";
 import Button from "../ui/Button.vue";
 import Modal from "../ui/Modal.vue";
 import type { MaintenanceOp, MaintenanceResult } from "../../api/types";
-import LoadingMark from "@/components/shared/LoadingMark.vue";
-import CodeBlock from "@/components/shared/CodeBlock.vue";
+import LoadingMark from "@/kit/LoadingMark.vue";
+import CodeBlock from "@/kit/CodeBlock.vue";
 
 type Phase = "confirm" | "loading" | "result-ok" | "result-error";
 

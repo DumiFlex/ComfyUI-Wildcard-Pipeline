@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { BundleInstance } from "../../../widgets/_shared";
-import WpCheck from "../../shared/WpCheck.vue";
-import WpIconButton from "../../shared/WpIconButton.vue";
+import WpCheck from "../../../kit/WpCheck.vue";
+import WpIconButton from "../../../kit/WpIconButton.vue";
 
 const props = withDefaults(
   defineProps<{

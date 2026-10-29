@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Slider from "@/components/shared/Slider.vue";
+import Slider from "@/kit/Slider.vue";
 
 const weight = ref(1);
 const size = ref(32);

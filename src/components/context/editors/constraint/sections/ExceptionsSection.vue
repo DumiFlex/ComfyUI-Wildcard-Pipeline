@@ -13,15 +13,15 @@
  * "+ Add extra exception" button at bottom appends a blank row
  * defaulting to mode=allow factor=1.
  */
-import WpNumber from "../../../../shared/WpNumber.vue";
+import WpNumber from "../../../../../kit/WpNumber.vue";
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { encodeKey } from "../../instance/keys";
 import { patchInstance } from "../../instance/patch";
 import RichTextPreview from "../../../../../manager/components/RichTextPreview.vue";
 import Select, { type SelectOption } from "../../../../../manager/components/ui/Select.vue";
-import WpButton from "../../../../shared/WpButton.vue";
-import WpIconButton from "../../../../shared/WpIconButton.vue";
+import WpButton from "../../../../../kit/WpButton.vue";
+import WpIconButton from "../../../../../kit/WpIconButton.vue";
 
 type Mode = "allow" | "exclude" | "boost" | "reduce" | "only";
 

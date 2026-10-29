@@ -18,7 +18,7 @@
  * its own.
  */
 
-import { copyText } from "@/components/shared/clipboard";
+import { copyText } from "@/kit/clipboard";
 import type { Router } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
 import {

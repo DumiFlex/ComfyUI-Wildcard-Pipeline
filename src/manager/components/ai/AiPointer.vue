@@ -14,7 +14,7 @@
  */
 import { onBeforeUnmount, ref, watch } from "vue";
 import { clearPointer, pointers, type AiPointer } from "../../composables/useAiActions";
-import VisuallyHidden from "@/components/shared/VisuallyHidden.vue";
+import VisuallyHidden from "@/kit/VisuallyHidden.vue";
 
 interface Box { top: number; left: number; width: number; height: number }
 interface Drawn {

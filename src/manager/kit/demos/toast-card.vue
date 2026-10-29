@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ToastCard from "@/components/shared/ToastCard.vue";
+import ToastCard from "@/kit/ToastCard.vue";
 </script>
 
 <template>

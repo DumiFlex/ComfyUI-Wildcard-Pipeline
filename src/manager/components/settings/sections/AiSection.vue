@@ -6,15 +6,15 @@
  * (`/wp/api/ai/config`), and the API key is write-only: the page can set or
  * remove it, never read it back.
  */
-import WpNumber from "@/components/shared/WpNumber.vue";
+import WpNumber from "@/kit/WpNumber.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { aiDebugEnabled, setAiDebug } from "../../../api/ai-debug";
 import Toggle from "../../ui/Toggle.vue";
 import Select from "../../ui/Select.vue";
 import Input from "../../ui/Input.vue";
 import Button from "../../ui/Button.vue";
-import RadioGroup, { type RadioOption } from "@/components/shared/RadioGroup.vue";
-import { vTooltip } from "@/components/shared/tooltip";
+import RadioGroup, { type RadioOption } from "@/kit/RadioGroup.vue";
+import { vTooltip } from "@/kit/tooltip";
 import type { SelectOption } from "../../ui/select-types";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";

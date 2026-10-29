@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import WpButton from "@/components/shared/WpButton.vue";
+import WpButton from "@/kit/WpButton.vue";
 import KitLooks from "../KitLooks.vue";
 
 const favs = ref(true);
