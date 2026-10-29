@@ -11,7 +11,7 @@
  * render with Kbd: "Mod" shows ⌘ on macOS and Ctrl elsewhere, since the
  * global shortcut handlers honor either modifier.
  */
-import Kbd from "@/components/shared/Kbd.vue";
+import Kbd from "@/kit/Kbd.vue";
 import { computed } from "vue";
 import Modal from "./ui/Modal.vue";
 

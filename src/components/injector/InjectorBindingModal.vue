@@ -24,12 +24,12 @@
  * there is no draft buffer, mirroring the lightweight per-row UX of
  * the inline row controls. Save = close.
  */
-import Kbd from "../shared/Kbd.vue";
+import Kbd from "../../kit/Kbd.vue";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
 import RichTextInput from "../../manager/components/RichTextInput.vue";
-import WpButton from "../shared/WpButton.vue";
-import CloseButton from "../shared/CloseButton.vue";
+import WpButton from "../../kit/WpButton.vue";
+import CloseButton from "../../kit/CloseButton.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -645,7 +645,7 @@ function onKeydown(ev: KeyboardEvent): void {
      leak-free regardless. -->
 <style>
 @import "../context/editors/_modal-template-ctrls.css";
-@import "../shared/_modal-motion.css";
+@import "../../kit/_modal-motion.css";
 </style>
 
 <style scoped>

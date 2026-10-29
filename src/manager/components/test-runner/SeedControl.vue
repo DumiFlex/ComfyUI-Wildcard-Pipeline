@@ -4,8 +4,8 @@
  * seeds. A range is reproducible — seed S here is seed S on the canvas — so
  * it is the default; random is for a quick look at variety.
  */
-import WpNumber from "@/components/shared/WpNumber.vue";
-import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
+import WpNumber from "@/kit/WpNumber.vue";
+import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import { computed } from "vue";
 import type { ScenarioSeedSpec } from "../../api/types";
 

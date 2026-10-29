@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import SplitPane from "@/components/shared/SplitPane.vue";
+import SplitPane from "@/kit/SplitPane.vue";
 
 const list = ref(200);
 const top = ref(70);

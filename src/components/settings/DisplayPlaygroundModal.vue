@@ -37,11 +37,11 @@ import {
 } from "./playground-store";
 import PlaygroundMockup from "./PlaygroundMockup.vue";
 import PlaygroundBehaviorPreview from "./PlaygroundBehaviorPreview.vue";
-import WpCheck from "@/components/shared/WpCheck.vue";
-import WpSelect from "@/components/shared/WpSelect.vue";
-import WpButton from "@/components/shared/WpButton.vue";
-import CloseButton from "@/components/shared/CloseButton.vue";
-import { useDialogFocus } from "@/components/shared/useDialogFocus";
+import WpCheck from "@/kit/WpCheck.vue";
+import WpSelect from "@/kit/WpSelect.vue";
+import WpButton from "@/kit/WpButton.vue";
+import CloseButton from "@/kit/CloseButton.vue";
+import { useDialogFocus } from "@/kit/useDialogFocus";
 import { useHostDialogGuard } from "@/components/shared/useHostDialogGuard";
 
 type Density = "comfortable" | "compact" | "minimal";

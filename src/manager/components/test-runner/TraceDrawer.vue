@@ -4,7 +4,7 @@
  * what it wrote. The seed is a real chain seed, so pasting it into a canvas
  * Context holding the same modules reproduces these values.
  */
-import CloseButton from "@/components/shared/CloseButton.vue";
+import CloseButton from "@/kit/CloseButton.vue";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import Button from "../ui/Button.vue";
 import type { ScenarioSample } from "../../api/types";

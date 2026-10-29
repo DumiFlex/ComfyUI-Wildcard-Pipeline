@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import VirtualList from "@/components/shared/VirtualList.vue";
-import WpButton from "@/components/shared/WpButton.vue";
+import VirtualList from "@/kit/VirtualList.vue";
+import WpButton from "@/kit/WpButton.vue";
 
 const colours = ["red", "teal", "amber", "violet", "silver", "black", "auburn", "rose"];
 const options = Array.from({ length: 5000 }, (_, i) => ({ id: i, text: `${colours[i % colours.length]} hair, variant ${i + 1}` }));

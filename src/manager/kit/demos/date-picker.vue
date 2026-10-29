@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import DatePicker from "@/components/shared/DatePicker.vue";
-import { fromDate, toYmd, addDays } from "@/components/shared/calendar";
+import DatePicker from "@/kit/DatePicker.vue";
+import { fromDate, toYmd, addDays } from "@/kit/calendar";
 
 const today = toYmd(fromDate(new Date()));
 const weekAgo = toYmd(addDays(fromDate(new Date()), -7));

@@ -14,7 +14,7 @@
  * Lightbox of its own. Placeholders stay non-clickable.
  */
 import { computed, inject, onBeforeUnmount, ref, watch } from "vue";
-import Lightbox from "@/components/shared/Lightbox.vue";
+import Lightbox from "@/kit/Lightbox.vue";
 import DocFigureText from "./DocFigureText.vue";
 import { DOC_GALLERY, type DocShot } from "../../docs/gallery";
 

@@ -23,7 +23,7 @@
  * Images can be attached (button, paste or drop) when the model sees them;
  * they are shrunk in the browser first (`utils/chat-image.ts`).
  */
-import CloseButton from "@/components/shared/CloseButton.vue";
+import CloseButton from "@/kit/CloseButton.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { isNavigationFailure, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import Button from "../ui/Button.vue";
@@ -32,7 +32,7 @@ import Select, { type SelectOption } from "../ui/Select.vue";
 import { api } from "../../api/client";
 import AiMessage from "./AiMessage.vue";
 import AiAsk from "./AiAsk.vue";
-import { copyText } from "@/components/shared/clipboard";
+import { copyText } from "@/kit/clipboard";
 import { plainText } from "../../utils/chat-markdown";
 import AiCardView from "./AiCardView.vue";
 import AiSyntax from "./AiSyntax.vue";

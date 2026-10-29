@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import HsvPicker from "@/components/shared/HsvPicker.vue";
+import HsvPicker from "@/kit/HsvPicker.vue";
 
 const hsv = ref("#6366f1");
 </script>

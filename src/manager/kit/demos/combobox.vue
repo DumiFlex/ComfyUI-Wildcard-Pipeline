@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Combobox from "@/components/shared/Combobox.vue";
+import Combobox from "@/kit/Combobox.vue";
 
 const models = [
   { value: "sdxl", label: "SDXL base", hint: "1024 px, tags or sentences" },

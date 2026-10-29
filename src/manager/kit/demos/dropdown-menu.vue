@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Button from "../../components/ui/Button.vue";
-import DropdownMenu from "@/components/shared/DropdownMenu.vue";
-import type { ContextMenuEntry } from "@/components/shared/ContextMenu.vue";
+import DropdownMenu from "@/kit/DropdownMenu.vue";
+import type { ContextMenuEntry } from "@/kit/ContextMenu.vue";
 import { useToast } from "../../composables/useToast";
 
 const toast = useToast();

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import SearchInput from "@/components/shared/SearchInput.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import {
   parse,
@@ -15,8 +15,8 @@ import {
   type TermState,
 } from "@/manager/parsing/subcatTermState";
 import { highlightExpression } from "@/manager/parsing/exprHighlight";
-import { useGrowableField } from "@/components/shared/useGrowableField";
-import WpCheck from "@/components/shared/WpCheck.vue";
+import { useGrowableField } from "@/kit/useGrowableField";
+import WpCheck from "@/kit/WpCheck.vue";
 
 interface Props {
   /** Sub-categories declared by the picked wildcard's payload. Used as

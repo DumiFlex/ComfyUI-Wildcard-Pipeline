@@ -5,7 +5,7 @@
  * doesn't lose a draft the user is still reviewing.
  */
 import { computed, nextTick, ref, watch } from "vue";
-import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
+import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import AiDraftPanel from "./AiDraftPanel.vue";
 import AiEditPanel from "./AiEditPanel.vue";
 import type {

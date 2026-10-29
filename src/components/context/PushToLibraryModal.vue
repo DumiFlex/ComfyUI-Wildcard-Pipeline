@@ -35,11 +35,11 @@ import {
 import { localPayloadFingerprint } from "../../manager/import-export/fingerprint";
 import { app } from "#comfyui/app";
 import type { ModuleEntry } from "../../widgets/_shared";
-import WpCheck from "@/components/shared/WpCheck.vue";
-import LoadingMark from "../shared/LoadingMark.vue";
-import CloseButton from "../shared/CloseButton.vue";
-import WpButton from "../shared/WpButton.vue";
-import CodeBlock from "../shared/CodeBlock.vue";
+import WpCheck from "@/kit/WpCheck.vue";
+import LoadingMark from "../../kit/LoadingMark.vue";
+import CloseButton from "../../kit/CloseButton.vue";
+import WpButton from "../../kit/WpButton.vue";
+import CodeBlock from "../../kit/CodeBlock.vue";
 
 interface Bundle {
   id: string;
@@ -651,7 +651,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 </template>
 
 <style scoped>
-@import "../shared/_modal-motion.css";
+@import "../../kit/_modal-motion.css";
 
 .wp-ptl-overlay {
   position: fixed; inset: 0; z-index: 10000;

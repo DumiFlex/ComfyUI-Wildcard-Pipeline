@@ -7,7 +7,7 @@
  * over a Loop) the planner reads from the request or asks. Sent with every
  * plan request; no model involved.
  */
-import WpNumber from "@/components/shared/WpNumber.vue";
+import WpNumber from "@/kit/WpNumber.vue";
 import Select from "../ui/Select.vue";
 import type { SelectOption } from "../ui/select-types";
 import type { AiPackSettings } from "../../api/types";

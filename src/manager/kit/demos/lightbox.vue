@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import Button from "../../components/ui/Button.vue";
-import Lightbox from "@/components/shared/Lightbox.vue";
+import Lightbox from "@/kit/Lightbox.vue";
 import { demoImage } from "./_images";
 
 const shots = Array.from({ length: 4 }, (_, i) => ({ src: demoImage(i + 2, 960, 640), alt: `Preview ${i + 1}`, caption: `Preview ${i + 1} of the Soft light pack` }));

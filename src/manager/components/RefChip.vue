@@ -1,6 +1,6 @@
 <!-- src/manager/components/RefChip.vue -->
 <script setup lang="ts">
-import { copyText } from "@/components/shared/clipboard";
+import { copyText } from "@/kit/clipboard";
 import { computed, inject, ref, onBeforeUnmount, watch } from "vue";
 import { varColorIndex } from "../../components/shared/var-color";
 import { KIND_ICON_MAP } from "../../components/shared/kind-icons";

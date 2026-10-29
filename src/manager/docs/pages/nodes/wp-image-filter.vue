@@ -8,7 +8,7 @@ import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import DocFigureText from "../../../components/docs/DocFigureText.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
-import Kbd from "@/components/shared/Kbd.vue";
+import Kbd from "@/kit/Kbd.vue";
 import picksDiagram from "../../images/how-picks-carry-over.webp";
 
 const ports = [

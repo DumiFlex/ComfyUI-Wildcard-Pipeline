@@ -5,13 +5,13 @@
  * Markdown copy: prompt, reply, thinking, tool calls, tokens) and Copy
  * JSON. Loaded only while the log is on.
  */
-import CloseButton from "@/components/shared/CloseButton.vue";
+import CloseButton from "@/kit/CloseButton.vue";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Button from "../ui/Button.vue";
 import {
   aiDebugSent, aiDebugUnseen, clearAiDebug, fetchAiDebug, listAiDebug, type AiDebugRow,
 } from "../../api/ai-debug";
-import { copyText } from "@/components/shared/clipboard";
+import { copyText } from "@/kit/clipboard";
 
 const emit = defineEmits<{ close: [] }>();
 

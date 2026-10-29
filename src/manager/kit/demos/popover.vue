@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import Button from "../../components/ui/Button.vue";
 import Checkbox from "../../components/ui/Checkbox.vue";
-import Popover from "@/components/shared/Popover.vue";
+import Popover from "@/kit/Popover.vue";
 
 const open = ref(false);
 const kinds = ref({ wildcard: true, fixed: true, derivation: false });

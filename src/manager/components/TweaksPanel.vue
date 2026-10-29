@@ -3,8 +3,8 @@ import { computed } from "vue";
 import Button from "./ui/Button.vue";
 import Drawer from "./ui/Drawer.vue";
 import Toggle from "./ui/Toggle.vue";
-import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
-import HsvPicker from "../../components/shared/HsvPicker.vue";
+import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
+import HsvPicker from "../../kit/HsvPicker.vue";
 import ThemeChoices from "./settings/ThemeChoices.vue";
 import {
   ACCENT_LABELS,

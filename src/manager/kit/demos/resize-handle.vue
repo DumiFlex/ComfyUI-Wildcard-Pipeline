@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import ResizeHandle from "@/components/shared/ResizeHandle.vue";
+import ResizeHandle from "@/kit/ResizeHandle.vue";
 
 const width = ref(220);
 const height = ref(72);

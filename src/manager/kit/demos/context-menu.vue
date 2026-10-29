@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import ContextMenu, { type ContextMenuEntry } from "@/components/shared/ContextMenu.vue";
+import ContextMenu, { type ContextMenuEntry } from "@/kit/ContextMenu.vue";
 
 const at = ref<{ x: number; y: number } | null>(null);
 const items: ContextMenuEntry[] = [

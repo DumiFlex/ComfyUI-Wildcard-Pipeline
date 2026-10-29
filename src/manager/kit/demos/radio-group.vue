@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import RadioGroup from "@/components/shared/RadioGroup.vue";
-import Badge from "@/components/shared/Badge.vue";
+import RadioGroup from "@/kit/RadioGroup.vue";
+import Badge from "@/kit/Badge.vue";
 
 type Style = "tags" | "sentences" | "both";
 const styles: { value: Style; label: string; hint?: string; disabled?: boolean }[] = [

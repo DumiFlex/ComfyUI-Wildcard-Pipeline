@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import WpIconButton from "@/components/shared/WpIconButton.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
 
 const locked = ref(true);
 const internal = ref(false);

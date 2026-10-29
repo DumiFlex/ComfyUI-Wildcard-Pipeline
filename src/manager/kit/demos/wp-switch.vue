@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import WpSwitch from "@/components/shared/WpSwitch.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
 import KitLooks from "../KitLooks.vue";
 
 const live = ref(true);

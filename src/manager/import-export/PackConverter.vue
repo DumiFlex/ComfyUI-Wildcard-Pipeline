@@ -24,7 +24,7 @@ import Field from "../components/ui/Field.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import type { SelectOption } from "../components/ui/select-types";
-import SearchInput from "@/components/shared/SearchInput.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import { type IntegrityWarning } from "./parse";
 import { parseCheckedPayload } from "./shape-check";
 import type { RawPayload } from "./migrations";

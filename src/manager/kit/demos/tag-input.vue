@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import TagInput from "@/components/shared/TagInput.vue";
+import TagInput from "@/kit/TagInput.vue";
 
 const tags = ref(["warm", "portrait"]);
 const axes = ref(["season"]);

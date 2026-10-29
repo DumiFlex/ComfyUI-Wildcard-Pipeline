@@ -24,7 +24,7 @@ import type {
 } from "../api/types";
 import CellRulePopover from "../../components/context/editors/constraint/CellRulePopover.vue";
 import MatrixLegend from "../../components/context/editors/constraint/MatrixLegend.vue";
-import Popover from "../../components/shared/Popover.vue";
+import Popover from "../../kit/Popover.vue";
 import {
   groupHue as tagHue,
   groupLabel,

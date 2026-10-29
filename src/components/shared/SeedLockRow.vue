@@ -2,10 +2,10 @@
 /** One per-iteration row in SeedListModal — a per-row mirror of the
  *  module SeedLockControls. Unlocked shows the derived seed; locking
  *  captures it; locked exposes a seed input + ±spinners + roll. */
-import WpNumber from "./WpNumber.vue";
-import WpSwitch from "./WpSwitch.vue";
-import WpButton from "./WpButton.vue";
-import { vTooltip } from "./tooltip";
+import WpNumber from "../../kit/WpNumber.vue";
+import WpSwitch from "../../kit/WpSwitch.vue";
+import WpButton from "../../kit/WpButton.vue";
+import { vTooltip } from "../../kit/tooltip";
 
 const props = defineProps<{
   index: number;       // 0-based

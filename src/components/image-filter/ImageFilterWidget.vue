@@ -7,9 +7,9 @@
  * whole next config (`src/widgets/image_filter.ts` serializes it).
  */
 import { computed } from "vue";
-import WpNumber from "../shared/WpNumber.vue";
-import WpSegmented, { type SegmentedOption } from "../shared/WpSegmented.vue";
-import WpSelect from "../shared/WpSelect.vue";
+import WpNumber from "../../kit/WpNumber.vue";
+import WpSegmented, { type SegmentedOption } from "../../kit/WpSegmented.vue";
+import WpSelect from "../../kit/WpSelect.vue";
 import {
   clampTimeout,
   viewUrl,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import WpTabs from "@/components/shared/WpTabs.vue";
+import WpTabs from "@/kit/WpTabs.vue";
 
 const tab = ref("options");
 const TABS = [

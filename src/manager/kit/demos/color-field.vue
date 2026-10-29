@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import ColorField from "@/components/shared/ColorField.vue";
+import ColorField from "@/kit/ColorField.vue";
 
 const text = ref("#ffffff");
 const band = ref("#00000099");

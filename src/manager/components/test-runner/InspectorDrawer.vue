@@ -5,8 +5,8 @@
  * own view (wildcard options vs. how often each came up, a constraint's
  * reach and hits, a combine's template and outputs, …).
  */
-import CloseButton from "@/components/shared/CloseButton.vue";
-import CodeBlock from "@/components/shared/CodeBlock.vue";
+import CloseButton from "@/kit/CloseButton.vue";
+import CodeBlock from "@/kit/CodeBlock.vue";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import Button from "../ui/Button.vue";
 import DataTable, { type DataColumn, type DataSort } from "../ui/DataTable.vue";

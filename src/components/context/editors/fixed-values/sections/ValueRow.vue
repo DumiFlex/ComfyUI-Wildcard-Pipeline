@@ -10,7 +10,7 @@ import {
 } from "../defaults";
 import { tokenize, type PreviewToken } from "../../_shared/preview-tokens";
 import { stripNonIdentifierChars } from "../../../../../manager/utils/slug";
-import WpButton from "../../../../shared/WpButton.vue";
+import WpButton from "../../../../../kit/WpButton.vue";
 
 const props = defineProps<{
   row: DraftRow;

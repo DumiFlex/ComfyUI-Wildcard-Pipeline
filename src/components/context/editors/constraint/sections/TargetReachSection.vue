@@ -27,9 +27,9 @@ import {
   type ChainModule,
   type TargetSelect,
 } from "../../../../../extension/constraint-pairs";
-import WpCheck from "../../../../shared/WpCheck.vue";
-import WpNumber from "../../../../shared/WpNumber.vue";
-import WpSegmented, { type SegmentedOption } from "../../../../shared/WpSegmented.vue";
+import WpCheck from "../../../../../kit/WpCheck.vue";
+import WpNumber from "../../../../../kit/WpNumber.vue";
+import WpSegmented, { type SegmentedOption } from "../../../../../kit/WpSegmented.vue";
 import { clauseActions } from "../../../../../extension/derivation-conditions";
 
 type PickEntry = NonNullable<TargetSelect["picks"]>[number];

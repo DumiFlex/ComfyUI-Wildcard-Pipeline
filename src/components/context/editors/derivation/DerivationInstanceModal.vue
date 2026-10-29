@@ -12,7 +12,7 @@
  * Section order matches all shipped v2 modals: Header → Identity →
  * Rules (kind-specific) → Runtime → Footer.
  */
-import Kbd from "../../../shared/Kbd.vue";
+import Kbd from "../../../../kit/Kbd.vue";
 import { computed, inject, onMounted, ref } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import type { PairingBadge } from "../../../../extension/constraint-pairs";
@@ -27,8 +27,8 @@ import RulesSection from "./sections/RulesSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
 import { CONTEXT_POOLS_KEY, overlayContextPools } from "../../../../extension/context-pools";
-import WpButton from "../../../shared/WpButton.vue";
-import CloseButton from "../../../shared/CloseButton.vue";
+import WpButton from "../../../../kit/WpButton.vue";
+import CloseButton from "../../../../kit/CloseButton.vue";
 
 
 /** Platform-correct save chord for the footer hint. */

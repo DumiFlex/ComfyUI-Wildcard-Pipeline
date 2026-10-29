@@ -303,7 +303,7 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // bytes; the branch at 502,904.
 // RAISED 496 -> 512 KB on 2026-10-27 for the shared component kit (Dumi
 // approved one component per control for canvas + manager): ContextMenu now
-// places itself through components/shared/floating.ts (branch 508,348 bytes,
+// places itself through kit/floating.ts (branch 508,348 bytes,
 // 444 over), and the canvas twins (Button, Switch, Tabs, Popover, Tooltip)
 // land next in widget chunks, never in boot.
 const TOTAL_LIMIT = 512 * 1024;     // 512 KB

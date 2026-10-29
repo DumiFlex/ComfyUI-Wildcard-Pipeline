@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import CloseButton from "@/components/shared/CloseButton.vue";
+import CloseButton from "@/kit/CloseButton.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
-import WpTabs, { type TabItem } from "@/components/shared/WpTabs.vue";
+import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
 import { useToast } from "../composables/useToast";
 import { useAiChat } from "../composables/useAiChat";
 import { useAiConfig } from "../composables/useAiConfig";

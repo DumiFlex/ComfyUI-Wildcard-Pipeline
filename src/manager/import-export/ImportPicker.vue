@@ -39,7 +39,7 @@ import { computed, ref, watchEffect } from "vue";
 import Button from "../components/ui/Button.vue";
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
-import SearchInput from "@/components/shared/SearchInput.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 import { entitySubtitle } from "./picker-subtitle";
 import type { StatusBadge, DepRef } from "./PickerRow.vue";

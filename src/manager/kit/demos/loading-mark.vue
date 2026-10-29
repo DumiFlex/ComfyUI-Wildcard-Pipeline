@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import LoadingMark from "@/components/shared/LoadingMark.vue";
+import LoadingMark from "@/kit/LoadingMark.vue";
 import Button from "../../components/ui/Button.vue";
 </script>
 

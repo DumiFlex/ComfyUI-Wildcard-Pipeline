@@ -16,8 +16,8 @@ import ConfirmModal from "../ui/ConfirmModal.vue";
 import { useDatabaseStore } from "../../stores/databaseStore";
 import { useSystemStore } from "../../stores/systemStore";
 import type { MaintenanceOp, MaintenanceResult } from "../../api/types";
-import LoadingMark from "@/components/shared/LoadingMark.vue";
-import DescriptionList, { type DescriptionItem } from "@/components/shared/DescriptionList.vue";
+import LoadingMark from "@/kit/LoadingMark.vue";
+import DescriptionList, { type DescriptionItem } from "@/kit/DescriptionList.vue";
 
 interface OpSpec {
   op: MaintenanceOp;

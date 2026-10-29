@@ -21,7 +21,7 @@
  * we actually want.
  */
 import Checkbox from "../components/ui/Checkbox.vue";
-import CopyButton from "@/components/shared/CopyButton.vue";
+import CopyButton from "@/kit/CopyButton.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { libraryVersion, markDeleted } from "../composables/useLibraryChanged";
 import { useRoute, useRouter } from "vue-router";
@@ -45,7 +45,7 @@ import { categoryAssignOptions, categoryFilterOptions } from "../utils/category-
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType } from "../api/types";
-import LoadingMark from "@/components/shared/LoadingMark.vue";
+import LoadingMark from "@/kit/LoadingMark.vue";
 
 const route = useRoute();
 const router = useRouter();

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Stepper from "@/components/shared/Stepper.vue";
+import Stepper from "@/kit/Stepper.vue";
 
 const step = ref<"describe" | "plan" | "build" | "test" | "install">("build");
 const steps = [

@@ -16,8 +16,8 @@
  *   - `actions`               — trailing per-row action buttons
  *   - `expansion`             — body of the expanded-row drawer
  */
-import SearchInput from "@/components/shared/SearchInput.vue";
-import Banner from "@/components/shared/Banner.vue";
+import SearchInput from "@/kit/SearchInput.vue";
+import Banner from "@/kit/Banner.vue";
 import { computed, defineAsyncComponent, nextTick, ref, watch, useSlots } from "vue";
 import { useRouter } from "vue-router";
 import Button from "./ui/Button.vue";

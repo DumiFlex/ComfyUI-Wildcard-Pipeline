@@ -4,7 +4,7 @@
  * Each row is a highlighted term chip + a plain description, so a page
  * reads as scannable key→meaning pairs instead of a wall of bold bullets.
  */
-import Kbd from "@/components/shared/Kbd.vue";
+import Kbd from "@/kit/Kbd.vue";
 
 /** `kbd`: the row's key or chord (Kbd's grammar, "Mod+Enter"), drawn after the term. */
 defineProps<{ items: { term: string; desc: string; kbd?: string }[] }>();

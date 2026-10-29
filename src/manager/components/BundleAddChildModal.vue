@@ -7,10 +7,10 @@
  * Parent (BundleEditor) takes the emitted ModuleRow, builds a snapshot,
  * and appends to `children[]`.
  */
-import SearchInput from "@/components/shared/SearchInput.vue";
-import CloseButton from "@/components/shared/CloseButton.vue";
+import SearchInput from "@/kit/SearchInput.vue";
+import CloseButton from "@/kit/CloseButton.vue";
 import { computed, ref, watch } from "vue";
-import WpTabs, { type TabItem } from "@/components/shared/WpTabs.vue";
+import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 import type { BundleRow, ModuleRow, ModuleType } from "../api/types";
 

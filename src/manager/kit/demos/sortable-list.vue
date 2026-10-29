@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import SortableList from "@/components/shared/SortableList.vue";
+import SortableList from "@/kit/SortableList.vue";
 import Chip from "../../components/ui/Chip.vue";
 
 interface Rule { id: string; name: string; kind: string }

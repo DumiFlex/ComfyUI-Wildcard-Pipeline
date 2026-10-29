@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
-import WpCheck from "../shared/WpCheck.vue";
-import WpIconButton from "../shared/WpIconButton.vue";
+import WpCheck from "../../kit/WpCheck.vue";
+import WpIconButton from "../../kit/WpIconButton.vue";
 
 const props = defineProps<{
   row: InjectorRow;
@@ -423,8 +423,8 @@ function onDragEnd(): void {
   to   { opacity: 1; transform: scaleX(1); }
 }
 
-/* Enter / leave / flash classes consumed by src/components/shared/
- * flip.ts when InjectorWidget calls withEnterAnimation /
+/* Enter / leave / flash classes consumed by src/kit/flip.ts
+ * when InjectorWidget calls withEnterAnimation /
  * withLeaveAnimation / flashRows. Mirror of ModuleRow's
  * .wp-module--* family with injector-tinted accents — visual parity
  * across both row UIs. The `transition: none` on --arriving snaps
