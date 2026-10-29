@@ -20,6 +20,18 @@ export function sel(test: string): string {
 /** How long the AI may write nothing new before the wait gives up with a `model-loop` finding. */
 export const STALL_MS = 10 * 60_000;
 
+/**
+ * The manager is bench/dev/serve.py, whose fake model answers with made-up values: an answer
+ * with nothing to apply is the fake's, not a broken click, so it flags `fake-answer` (info)
+ * instead of `no-card` / `not-saved`. The pack's setup sets it.
+ */
+export const fakeModel = { on: false };
+
+/** The flag for "nothing to apply": `robot` on a real model, `fake-answer` on the fake. */
+export function nothingFlag(robot: "no-card" | "not-saved"): string {
+  return fakeModel.on ? "fake-answer" : robot;
+}
+
 /** Ends a test early when the model stopped making progress; the bench's test wrapper files it. */
 export class ModelLoop extends Error {
   override name = "ModelLoop";
@@ -747,7 +759,7 @@ export function benchHelpers(h: Helpers): Record<string, unknown> {
         }
       }
       h.log("No card to apply.");
-      h.flag("no-card", "The turn left no card to apply.");
+      h.flag(nothingFlag("no-card"), "The turn left no card to apply.");
       return false;
     },
 

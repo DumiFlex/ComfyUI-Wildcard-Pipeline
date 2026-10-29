@@ -22,17 +22,21 @@ async function applyButton(h: Helpers): Promise<string | null> {
 
 /** Asks an item's AI panel, checks it answered, then applies the answer to the editor (unsaved). */
 async function ask(h: Helpers, kind: ItemKind, name: string, button: string, prompt: string, mode?: string): Promise<void> {
-  await h.open(kind, name);
-  await h.panel(button, { mode, prompt });
-  await h.keep("answer", PANEL);
-  await h.panelShot("answer");
+  await h.step("ask", async () => {
+    await h.open(kind, name);
+    await h.panel(button, { mode, prompt });
+    await h.keep("answer", PANEL);
+    await h.panelShot("answer");
+  });
   const apply = await applyButton(h);
   check(h, !!apply, "no-answer", `the ${mode ?? button} panel shows an answer to apply`);
   await noAiError(h);
   if (apply) {
-    await h.tap(apply);
-    await h.wait(800);
-    await h.snap("applied");
+    await h.step("apply", async () => {
+      await h.tap(apply);
+      await h.wait(800);
+      await h.snap("applied");
+    });
     await noAiError(h);
   }
 }
@@ -46,14 +50,18 @@ smoke(
     description: "Wildcards › New › AI › Add: the drafted options go into a new wildcard that saves. The test deletes it again.",
   },
   async ({ h }) => {
-    await h.visit("wildcards/new");
-    await h.panel("wc-ai-draft", { mode: "add", prompt: "6 hairstyles for fantasy characters" });
-    await h.panelShot("answer");
+    await h.step("ask", async () => {
+      await h.visit("wildcards/new");
+      await h.panel("wc-ai-draft", { mode: "add", prompt: "6 hairstyles for fantasy characters" });
+      await h.panelShot("answer");
+    });
     check(h, await h.shows("ai-draft-add", 5000), "no-answer", "the draft shows options to add");
-    await h.tap("ai-draft-add");
-    await h.setVar("smoke_hair");
-    await h.setName("Smoke hairstyles");
-    await h.saveItem();
+    await h.step("add and save", async () => {
+      await h.tap("ai-draft-add");
+      await h.setVar("smoke_hair");
+      await h.setName("Smoke hairstyles");
+      await h.saveItem();
+    });
     const made = (await h.library()).modules.find((m) => m.name === "Smoke hairstyles");
     check(h, !!made, "apply-did-nothing", "Smoke hairstyles is in the library");
     if (made) await h.api(`/wp/api/modules/${made.id}`, { method: "DELETE" });
@@ -106,12 +114,15 @@ smoke(
   "E13",
   { title: "Bundle split suggestion", section: SECTION, description: "Bench character › Split › Suggest: the dialog shows a suggestion and no error." },
   async ({ h }) => {
-    await h.open("bundles", "Bench character");
-    await h.tap("bd-split-btn", { done: () => h.shows("split-suggest") });
-    await h.tap("split-suggest", { done: () => h.busy() });
-    await h.aiIdle({ expect: true });
-    const text = await h.keep("answer", '[role="dialog"]');
-    await h.snap("answer", '[role="dialog"]');
+    const text = await h.step("suggest", async () => {
+      await h.open("bundles", "Bench character");
+      await h.tap("bd-split-btn", { done: () => h.shows("split-suggest") });
+      await h.tap("split-suggest", { done: () => h.busy() });
+      await h.aiIdle({ expect: true });
+      const answer = await h.keep("answer", '[role="dialog"]');
+      await h.snap("answer", '[role="dialog"]');
+      return answer;
+    });
     check(h, text.trim().length > 0, "no-answer", "the split dialog shows text");
     await noAiError(h);
     await h.page.keyboard.press("Escape");
@@ -122,12 +133,14 @@ smoke(
   "E14",
   { title: "Organize with AI", section: SECTION, description: "Wildcards › select all › Organize with AI: the panel answers with changes to apply. Nothing is applied." },
   async ({ h }) => {
-    await h.visit("wildcards");
-    await h.tap('[aria-label="Select all"]');
-    await h.tap("bulk-ai-organize");
-    await h.panel("bulk-ai-organize", { prompt: "file each into the right category" });
-    await h.keep("answer", PANEL);
-    await h.panelShot("answer");
+    await h.step("organize", async () => {
+      await h.visit("wildcards");
+      await h.tap('[aria-label="Select all"]');
+      await h.tap("bulk-ai-organize");
+      await h.panel("bulk-ai-organize", { prompt: "file each into the right category" });
+      await h.keep("answer", PANEL);
+      await h.panelShot("answer");
+    });
     check(h, await h.shows("ai-apply", 5000), "no-answer", "Organize shows changes to apply");
     await noAiError(h);
   },
