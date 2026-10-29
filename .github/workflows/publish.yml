@@ -2,8 +2,8 @@ name: Publish to ComfyUI Registry
 
 # Mirrors what the ComfyUI Manager search results read from. Fires on
 # every published GitHub release so the registry listing stays in sync
-# with semantic-release tags. Manual dispatch left available for
-# re-publishing if a release ever needs to be force-pushed.
+# with the release tags (release.yml publishes each release once its zip
+# and notes are on it). Manual dispatch left available for re-publishing.
 #
 # Calls `comfy node publish` directly (via comfy-cli) instead of the
 # wrapper `Comfy-Org/publish-node-action@main`. The wrapper runs its

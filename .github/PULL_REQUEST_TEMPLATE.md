@@ -18,7 +18,8 @@ mean the commit-type controls the next release version bump:
   - perf     → patch
   - refactor → patch
   - docs/style/test/build/ci/chore → no release
-See .releaserc.js for the full filter. -->
+The PR title is the squash commit release-please reads, and the
+pr-title check holds it to these types. See release-please-config.json. -->
 
 - [ ] 🐛 `fix` — bug fix (patch release)
 - [ ] ✨ `feat` — new feature (minor release)
