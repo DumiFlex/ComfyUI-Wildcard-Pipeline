@@ -44,14 +44,15 @@ const REGISTRY_ORDER: RuleId[] = [
  *      off even with entries present, or on with no entries.
  *   2. No override + entries non-empty → auto-enable.
  *   3. No override + entries empty → off. */
-export function computeEffectiveRules(config: CleanerNodeConfig): RuleId[] {
+export function computeEffectiveRules(config: CleanerNodeConfig, blocklistWired = false): RuleId[] {
   const base = new Set<RuleId>(INTENSITY_TO_RULES[config.intensity]);
   for (const [rid, on] of Object.entries(config.rules_override) as Array<[RuleId, boolean]>) {
     if (on) base.add(rid);
     else base.delete(rid);
   }
   if (!("blocklist" in config.rules_override)) {
-    if (config.blocklist.entries.length > 0) base.add("blocklist");
+    // A wired `blocklist` input adds entries at run time, so it counts.
+    if (config.blocklist.entries.length > 0 || blocklistWired) base.add("blocklist");
     else base.delete("blocklist");
   }
   return REGISTRY_ORDER.filter((rid) => base.has(rid));

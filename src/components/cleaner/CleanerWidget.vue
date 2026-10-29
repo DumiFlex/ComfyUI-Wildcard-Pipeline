@@ -46,7 +46,13 @@ const props = withDefaults(defineProps<{
   negativeReport?: NegativeRunReport | null;
   /** Word count of the cleaned negative; null when there was none. */
   negativeWordCount?: number | null;
-}>(), { nodeMode: 0, negativeReport: null, negativeWordCount: null });
+  /** The node's `blocklist` text input is wired: its entries join the list. */
+  blocklistWired?: boolean;
+}>(), { nodeMode: 0, negativeReport: null, negativeWordCount: null, blocklistWired: false });
+
+/** The blocklist turns itself on when it has entries; a wired input counts. */
+const blocklistFilled = computed(() =>
+  props.modelValue.blocklist.entries.length > 0 || props.blocklistWired);
 
 const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 
@@ -133,7 +139,7 @@ const INTENSITY_OPTIONS: SegmentedOption<Intensity>[] = (["gentle", "balanced", 
 const MODE_OPTIONS: SegmentedOption<Mode>[] = (["tags", "text"] as const)
   .map((m) => ({ value: m, label: m, hint: MODE_TOOLTIPS[m] }));
 
-const effective = computed(() => new Set(computeEffectiveRules(props.modelValue)));
+const effective = computed(() => new Set(computeEffectiveRules(props.modelValue, props.blocklistWired)));
 const effectiveNeg = computed(() => new Set(computeEffectiveNegativeRules(props.modelValue)));
 const pristine = computed(() => isPristine(props.modelValue));
 
@@ -147,7 +153,7 @@ function pruneStaleOverrides(
   intensity: Intensity,
 ): Partial<Record<RuleId, boolean>> {
   const defaults = new Set(INTENSITY_TO_RULES[intensity]);
-  const hasEntries = props.modelValue.blocklist.entries.length > 0;
+  const hasEntries = blocklistFilled.value;
   const next: Partial<Record<RuleId, boolean>> = {};
   for (const [rid, on] of Object.entries(overrides) as [RuleId, boolean][]) {
     const baseline = defaults.has(rid) || (rid === "blocklist" && hasEntries);
@@ -205,7 +211,7 @@ function setMode(mode: Mode): void { patch({ mode }); }
  *  semantics stay honest for rules with multiple "default" sources. */
 function ruleBaseline(rid: RuleId): boolean {
   if (INTENSITY_TO_RULES[props.modelValue.intensity].includes(rid)) return true;
-  if (rid === "blocklist" && props.modelValue.blocklist.entries.length > 0) {
+  if (rid === "blocklist" && blocklistFilled.value) {
     return true;
   }
   return false;
@@ -449,8 +455,8 @@ function isOverridden(rid: RuleId): boolean {
       >
         Blocklist…
         <span class="wp-cleaner__blocklist-fill" />
-        <span class="wp-cleaner__blocklist-meta" :class="{ 'has-entries': modelValue.blocklist.entries.length > 0 }">
-          {{ modelValue.blocklist.entries.length }} entries · {{ modelValue.blocklist.kind }}
+        <span class="wp-cleaner__blocklist-meta" :class="{ 'has-entries': blocklistFilled }">
+          {{ modelValue.blocklist.entries.length }} entries<template v-if="blocklistWired"> + input</template> · {{ modelValue.blocklist.kind }}
         </span>
         <i class="pi pi-chevron-right wp-cleaner__blocklist-chev" aria-hidden="true" />
       </WpButton>
