@@ -49,8 +49,15 @@ function onKey(e: KeyboardEvent): void {
     />
     <span v-if="entry.disabled" class="wp-bmrow__off">off</span>
     <Kbd v-else-if="entry.config.shortcut" :keys="entry.config.shortcut" size="sm" />
+    <i
+      v-if="editing && entry.kind === 'note'"
+      class="pi pi-file-edit wp-bmrow__note"
+      title="A WP Note that is also a bookmark: it always shows on the canvas"
+      aria-label="A WP Note: always shown on the canvas"
+      :data-test="`bm-dock-note-${index}`"
+    />
     <WpIconButton
-      v-if="editing"
+      v-else-if="editing"
       :icon="entry.config.hidden ? 'pi-eye-slash' : 'pi-eye'"
       :label="entry.config.hidden ? 'Show on canvas' : 'Hide on canvas'"
       :pressed="entry.config.hidden"
@@ -93,5 +100,7 @@ function onKey(e: KeyboardEvent): void {
   font-weight: 600;
 }
 .wp-bmrow__sub { color: var(--wp-text-dim); font-size: 11px; }
+/* Where the eye sits on a WP Bookmark row, same width so names line up. */
+.wp-bmrow__note { width: 20px; text-align: center; color: var(--wp-text-dim); font-size: 11px; }
 .wp-bmrow__off { color: var(--wp-text-dim); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
 </style>

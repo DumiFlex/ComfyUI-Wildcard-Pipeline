@@ -168,3 +168,37 @@ describe("WP Bookmark title tint", () => {
     expect(titleTint("")).toBeUndefined();
   });
 });
+
+describe("WP Note bookmarks", () => {
+  function note(id: number, title: string, jump: Partial<BookmarkConfig> | null): BookmarkNode {
+    let on: BookmarkConfig | null = jump ? { ...defaultBookmarkConfig(), ...jump } : null;
+    const node = {
+      id, title, mode: 0, type: "WP_Note", graph: root,
+      pos: [id * 1000, 500], size: [300, 120], boundingRect: [id * 1000, 500, 300, 120],
+      addDOMWidget: vi.fn(),
+    } as unknown as BookmarkNode;
+    bookmarkCells.set(node, { kind: "note", get: () => on, set: (next) => { on = next as BookmarkConfig; } });
+    root._nodes.push(node);
+    return node;
+  }
+
+  it("lists a note only while its switch is on, and never hides it", () => {
+    const on = note(1, "Read me", { shortcut: "Alt+5", order: 0 });
+    note(2, "Just a note", null);
+    installHiddenFilter();
+    const list = listBookmarks();
+    expect(list.map((b) => [b.title, b.kind])).toEqual([["Read me", "note"]]);
+    setHidden(on, true);
+    expect(listBookmarks()[0]?.config.hidden).toBe(false);
+    expect(canvas.computeVisibleNodes()).toContain(on);
+  });
+
+  it("jumps on the note's shortcut", () => {
+    note(2, "Read me", { shortcut: "Alt+6" });
+    installBookmarkKeys();
+    const e = new KeyboardEvent("keydown", { key: "6", code: "Digit6", altKey: true, bubbles: true, cancelable: true });
+    window.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+    expect(Math.round(-ox() + 24)).toBe(2000);
+  });
+});

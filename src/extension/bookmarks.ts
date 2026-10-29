@@ -28,6 +28,13 @@ export interface BookmarkConfig {
   order: number;
 }
 
+/** The jump settings a WP Note keeps when it is also a bookmark. */
+export type BookmarkJump = Pick<BookmarkConfig, "anchor" | "zoomMode" | "zoom" | "shortcut" | "order">;
+
+export function jumpFields(c: BookmarkConfig): BookmarkJump {
+  return { anchor: c.anchor, zoomMode: c.zoomMode, zoom: c.zoom, shortcut: c.shortcut, order: c.order };
+}
+
 export const BOOKMARK_ANCHORS: { id: BookmarkAnchor; label: string; fx: number; fy: number }[] = [
   { id: "tl", label: "Top left", fx: 0, fy: 0 },
   { id: "tc", label: "Top", fx: 0.5, fy: 0 },

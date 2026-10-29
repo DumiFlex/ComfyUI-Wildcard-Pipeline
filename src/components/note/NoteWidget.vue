@@ -10,6 +10,8 @@ import NoteMarkdown from "./note-markdown";
 import NoteTextEditor from "./NoteTextEditor.vue";
 import NoteIconGrid from "./NoteIconGrid.vue";
 import { vTooltip } from "../../kit/tooltip";
+import BookmarkFields from "../bookmark/BookmarkFields.vue";
+import type { BookmarkJump, KeyOwner } from "../../extension/bookmarks";
 import {
   NOTE_COLOR_PRESETS,
   NOTE_LOOKS,
@@ -27,6 +29,11 @@ const props = defineProps<{
   title: string;
   pinned: boolean;
   editing: boolean;
+  /** For the Bookmark settings: everyone else's keys, the zoom now, and
+   *  jump settings for a note that just became a bookmark. */
+  getKeymap: () => KeyOwner[];
+  getZoom: () => number;
+  freshJump: () => BookmarkJump;
 }>();
 
 const emit = defineEmits<{
@@ -34,6 +41,7 @@ const emit = defineEmits<{
   (e: "update:title", next: string): void;
   (e: "update:pinned", next: boolean): void;
   (e: "update:editing", next: boolean): void;
+  (e: "recording", on: boolean): void;
 }>();
 
 const hasTitle = computed(() => props.title.trim() !== "" && props.title !== "WP Note");
@@ -60,6 +68,17 @@ function patch(part: Partial<NoteConfig>): void {
 function onTitle(ev: Event): void {
   emit("update:title", (ev.target as HTMLInputElement).value);
 }
+function onBookmark(on: boolean): void {
+  patch({ bookmark: on ? props.config.bookmark ?? props.freshJump() : null });
+}
+function onJump(part: Partial<BookmarkJump>): void {
+  if (props.config.bookmark) patch({ bookmark: { ...props.config.bookmark, ...part } });
+}
+const bookmarkHint = computed(() => {
+  const b = props.config.bookmark;
+  return b ? `Also a bookmark${b.shortcut ? ` · ${b.shortcut}` : ""}` : "";
+});
+
 /** Any link in the text: a label shows a mark for it. */
 const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.text));
 </script>
@@ -85,6 +104,13 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
           <i class="pi pi-align-left" data-test="note-has-text"></i>
           <i v-if="hasLink" class="pi pi-link" data-test="note-has-link"></i>
         </span>
+        <i
+          v-if="config.bookmark"
+          v-tooltip="bookmarkHint"
+          class="pi pi-bookmark-fill wp-note__bm"
+          :aria-label="bookmarkHint"
+          data-test="note-bookmark-mark"
+        ></i>
         <WpIconButton
           class="wp-note__edit"
           icon="pi-pencil"
@@ -209,6 +235,24 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
           @update:model-value="(v: string) => patch({ text: v })"
         />
       </div>
+      <div class="wp-note__row">
+        <WpSwitch
+          :model-value="!!config.bookmark"
+          size="sm"
+          label="Also a bookmark"
+          data-test="note-bookmark"
+          @update:model-value="onBookmark"
+        />
+        <span class="wp-note__hint">Jump here from the Bookmarks dock or a shortcut.</span>
+      </div>
+      <BookmarkFields
+        v-if="config.bookmark"
+        :value="config.bookmark"
+        :get-keymap="getKeymap"
+        :get-zoom="getZoom"
+        @update="onJump"
+        @recording="(on: boolean) => emit('recording', on)"
+      />
       <div class="wp-note__actions">
         <WpButton variant="primary" size="sm" type="submit" data-test="note-done">Done</WpButton>
       </div>
@@ -317,6 +361,16 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
 .wp-note__edit:hover,
 .wp-note__edit:focus-visible { opacity: 1; }
 .wp-note--label .wp-note__edit { display: none; }
+/* Also a bookmark: a small mark in the head (its tooltip names the key). */
+.wp-note__bm {
+  flex: none;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--wp-note-tone);
+  pointer-events: auto;
+}
+.wp-note__bm + .wp-note__edit { margin-left: 2px; }
+.wp-note--label .wp-note__bm { color: inherit; opacity: 0.85; }
 
 .wp-note__body { margin-top: 8px; color: var(--wp-text-muted, inherit); }
 .wp-note__empty { margin: 0; color: var(--wp-text-dim); }

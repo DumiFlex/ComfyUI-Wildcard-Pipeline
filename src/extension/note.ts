@@ -5,6 +5,8 @@
  * node itself is registered in `widgets/note.ts`.
  */
 
+import { jumpFields, parseBookmarkConfig, type BookmarkJump } from "./bookmarks";
+
 export type NoteTone = "step" | "icon" | "plain";
 export type NoteLook = "card" | "sticky" | "label";
 
@@ -23,6 +25,8 @@ export interface NoteConfig {
   /** A preset name (see NOTE_COLOR_PRESETS), a hex colour, or "" for the
    *  theme's accent. */
   color: string;
+  /** The note is also a bookmark (its jump settings), or null when not. */
+  bookmark: BookmarkJump | null;
 }
 
 export const NOTE_TONES: { id: NoteTone; label: string }[] = [
@@ -76,7 +80,7 @@ function legacyDocLink(page: string): string {
 export const NOTE_STEP_MAX = 99;
 
 export function defaultNoteConfig(): NoteConfig {
-  return { version: 1, tone: "step", look: "card", step: 1, icon: "lightbulb", text: "", color: "" };
+  return { version: 1, tone: "step", look: "card", step: 1, icon: "lightbulb", text: "", color: "", bookmark: null };
 }
 
 const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -128,6 +132,7 @@ export function parseNoteConfig(raw: unknown): NoteConfig {
     icon,
     text: withLegacyDoc(typeof d.text === "string" ? d.text : base.text, d.doc),
     color: noteColor(d.color) || old?.color || "",
+    bookmark: d.bookmark && typeof d.bookmark === "object" ? jumpFields(parseBookmarkConfig(d.bookmark)) : null,
   };
 }
 

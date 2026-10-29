@@ -12,12 +12,14 @@ import {
   comboFromEvent,
   defaultBookmarkConfig,
   easeInOutQuad,
+  jumpFields,
   jumpOffset,
   jumpScale,
   parseBookmarkConfig,
   sortBookmarks,
   suggestFreeCombo,
   type BookmarkConfig,
+  type BookmarkJump,
   type KeyOwner,
 } from "../extension/bookmarks";
 
@@ -59,6 +61,11 @@ function canvasOf(): CanvasLike | undefined {
   return (app as unknown as { canvas?: CanvasLike }).canvas;
 }
 
+/** The canvas zoom right now ("use the zoom you're at"). */
+export function currentZoom(): number {
+  return canvasOf()?.ds?.scale ?? 1;
+}
+
 function rootGraph(): LiteGraphLike | undefined {
   return (app as unknown as { graph?: LiteGraphLike }).graph;
 }
@@ -74,14 +81,27 @@ export function onBookmarksChanged(fn: () => void): () => void {
 function notify(): void {
   for (const fn of [...listeners]) fn();
 }
+/** A note's bookmark settings changed: re-read the dock. */
+export const bookmarksChanged = notify;
 
+/** A WP Bookmark node, or a WP Note with its Bookmark switch on. */
 export function isBookmark(node: unknown): node is BookmarkNode {
-  return (node as { type?: string } | null)?.type === BOOKMARK_NODE_TYPE;
+  if (!node || typeof node !== "object") return false;
+  const cell = bookmarkCells.get(node);
+  if (cell?.kind === "note") return cell.get() != null;
+  return (node as { type?: string }).type === BOOKMARK_NODE_TYPE;
+}
+
+/** A note bookmark rather than a WP Bookmark node. */
+export function isNoteBookmark(node: unknown): boolean {
+  return !!node && typeof node === "object" && bookmarkCells.get(node)?.kind === "note";
 }
 
 export function readConfig(node: BookmarkNode): BookmarkConfig {
   const cell = bookmarkCells.get(node);
-  if (cell) return cell.get() as BookmarkConfig;
+  const got = cell?.get() as BookmarkConfig | null | undefined;
+  if (got) return got;
+  if (cell) return defaultBookmarkConfig();
   return parseBookmarkConfig(node.widgets?.find((w) => w.name === WIDGET_NAME)?.value);
 }
 
@@ -103,6 +123,8 @@ export interface BookmarkEntry {
   disabled: boolean;
   /** Inside a subgraph rather than on the root graph. */
   nested: boolean;
+  /** A WP Note that is also a bookmark: always shown on the canvas. */
+  kind: "node" | "note";
 }
 
 /** Every bookmark in the workflow, subgraphs included, in dock order. */
@@ -115,10 +137,11 @@ export function listBookmarks(): BookmarkEntry[] {
     out.push({
       node,
       graph,
-      title: node.title || DEFAULT_TITLE,
+      title: node.title || (isNoteBookmark(node) ? "WP Note" : DEFAULT_TITLE),
       config: readConfig(node),
       disabled: isDisabled(node),
       nested: graph !== root,
+      kind: isNoteBookmark(node) ? "note" : "node",
     });
   }
   return sortBookmarks(out);
@@ -128,7 +151,7 @@ export function listBookmarks(): BookmarkEntry[] {
 function bookmarkOwners(except?: BookmarkNode): KeyOwner[] {
   return listBookmarks()
     .filter((b) => b.node !== except && b.config.shortcut)
-    .map((b) => ({ combo: b.config.shortcut, label: `jump to ${b.title}`, source: "WP Bookmark" }));
+    .map((b) => ({ combo: b.config.shortcut, label: `jump to ${b.title}`, source: b.kind === "note" ? "WP Note bookmark" : "WP Bookmark" }));
 }
 
 /** Everyone else holding a key, for `node`'s conflict check. */
@@ -337,6 +360,8 @@ const hiddenFilterInstalled = new WeakSet<object>();
 
 /** Show or hide a bookmark on the canvas (the dock's eye button). */
 export function setHidden(node: BookmarkNode, hidden: boolean): void {
+  // A note is there to be read: it never hides.
+  if (isNoteBookmark(node)) return;
   writeConfig(node, { ...readConfig(node), hidden });
   if (hidden) canvasOf()?.deselect?.(node);
   canvasOf()?.setDirty?.(true, true);
@@ -410,6 +435,18 @@ interface LiteGraphStatic {
 
 function liteGraph(): LiteGraphStatic | undefined {
   return (globalThis as { LiteGraph?: LiteGraphStatic }).LiteGraph;
+}
+
+/** Jump settings for a WP Note whose Bookmark switch just went on: last in
+ *  the dock, a free shortcut. */
+export function freshJump(node: object): BookmarkJump {
+  return jumpFields(freshConfig(node as BookmarkNode));
+}
+
+/** A note's Bookmark switch went on: the dock may open itself. */
+export function noteBookmarkAdded(): void {
+  notify();
+  bookmarkAdded?.();
 }
 
 /** Fresh config for a new bookmark: last in the dock, a free shortcut. */
@@ -497,7 +534,7 @@ export function mountBookmark(node: BookmarkNode) {
         disabled: disabled.value,
         nested: !!node.graph && node.graph !== rootGraph(),
         getKeymap: () => keymapFor(node),
-        getZoom: () => canvasOf()?.ds?.scale ?? 1,
+        getZoom: currentZoom,
         editing: editing.value,
         "onUpdate:editing": setEditing,
         "onUpdate:config": apply,

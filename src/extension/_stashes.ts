@@ -120,7 +120,8 @@ export const nodeLoopSeeds: WeakMap<object, number[]> = new WeakMap();
  *  Replaces the string property `__wp_prev_seeds__`. */
 export const nodePrevSeeds: WeakMap<object, number[]> = new WeakMap();
 
-/** A WP Bookmark's live config cell and writer (`widgets/bookmark.ts`), so
+/** A bookmark's live config cell and writer (`widgets/bookmark.ts`), so
  *  the dock, the key listener and the hidden-node filter read the same
- *  state the node's widget edits. */
-export const bookmarkCells: WeakMap<object, { get(): unknown; set(next: unknown): void }> = new WeakMap();
+ *  state the node's widget edits. A WP Note that is also a bookmark has a
+ *  cell of kind "note", whose `get` is null while its switch is off. */
+export const bookmarkCells: WeakMap<object, { get(): unknown; set(next: unknown): void; kind?: "note" }> = new WeakMap();

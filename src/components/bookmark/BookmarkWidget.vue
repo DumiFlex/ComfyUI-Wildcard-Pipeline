@@ -1,27 +1,19 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import Banner from "../../kit/Banner.vue";
 import ColorField from "../../kit/ColorField.vue";
 import IconPicker from "../../kit/IconPicker.vue";
 import Kbd from "../../kit/Kbd.vue";
 import WpButton from "../../kit/WpButton.vue";
 import WpIconButton from "../../kit/WpIconButton.vue";
-import WpNumber from "../../kit/WpNumber.vue";
-import WpSegmented from "../../kit/WpSegmented.vue";
 import WpSwitch from "../../kit/WpSwitch.vue";
+import BookmarkFields from "./BookmarkFields.vue";
 import { pushToast } from "../shared/toast-store";
 import {
   BOOKMARK_ANCHORS,
-  BOOKMARK_MARGIN,
-  BOOKMARK_ZOOM_MAX,
-  BOOKMARK_ZOOM_MIN,
-  BROWSER_RESERVED,
-  comboFromEvent,
   findConflicts,
-  suggestFreeCombo,
-  type BookmarkAnchor,
   type BookmarkConfig,
-  type BookmarkZoomMode,
+  type BookmarkJump,
   type KeyOwner,
 } from "../../extension/bookmarks";
 
@@ -48,11 +40,6 @@ const emit = defineEmits<{
   (e: "update:editing", next: boolean): void;
 }>();
 
-const ZOOM_MODES: { value: BookmarkZoomMode; label: string }[] = [
-  { value: "fixed", label: "Set" },
-  { value: "keep", label: "Keep current" },
-];
-
 function patch(part: Partial<BookmarkConfig>): void {
   emit("update:config", { ...props.config, ...part });
 }
@@ -64,64 +51,11 @@ const summary = computed(() => {
   return `${anchorLabel.value} · ${zoom}${props.nested ? " · subgraph" : ""}`;
 });
 
-// ── shortcut recording ───────────────────────────────────────────────
-const recording = ref(false);
-const refused = ref("");
-const keymap = ref<KeyOwner[]>([]);
-function refreshKeymap(): void {
-  keymap.value = props.getKeymap();
-}
-refreshKeymap();
-watch(() => props.config.shortcut, refreshKeymap);
+// The read view marks a clash; the form's fields list it in full.
+const clashes = computed(() =>
+  props.editing ? [] : findConflicts(props.config.shortcut, props.getKeymap()).filter((c) => c.severity !== "info"));
 
-const conflicts = computed(() => findConflicts(props.config.shortcut, keymap.value));
-const worst = computed(() =>
-  conflicts.value.some((c) => c.severity === "error") ? "danger"
-  : conflicts.value.some((c) => c.severity === "warning") ? "warn"
-  : "info");
-
-function onRecordKey(e: KeyboardEvent): void {
-  e.preventDefault();
-  e.stopPropagation();
-  if (e.key === "Escape") return stopRecording();
-  if (e.key === "Backspace" || e.key === "Delete") {
-    patch({ shortcut: "" });
-    return stopRecording();
-  }
-  const combo = comboFromEvent(e);
-  if (!combo) return; // a modifier on its own: wait for the key
-  if (BROWSER_RESERVED.has(combo)) {
-    refused.value = `${combo} belongs to the browser. Try another.`;
-    return;
-  }
-  patch({ shortcut: combo });
-  stopRecording();
-}
-
-function startRecording(): void {
-  if (recording.value) return stopRecording();
-  refreshKeymap();
-  refused.value = "";
-  recording.value = true;
-  emit("recording", true);
-  window.addEventListener("keydown", onRecordKey, true);
-}
-
-function stopRecording(): void {
-  if (!recording.value) return;
-  recording.value = false;
-  refused.value = "";
-  emit("recording", false);
-  window.removeEventListener("keydown", onRecordKey, true);
-}
-onBeforeUnmount(stopRecording);
-
-function suggest(): void {
-  refreshKeymap();
-  const combo = suggestFreeCombo(keymap.value);
-  if (combo) patch({ shortcut: combo });
-  else pushToast("No free shortcut left to suggest. Record one instead.", { severity: "info" });
-}
+const fields = ref<InstanceType<typeof BookmarkFields> | null>(null);
 
 function onShow(show: boolean): void {
   patch({ hidden: !show });
@@ -138,7 +72,7 @@ function onTitle(ev: Event): void {
 }
 
 function done(): void {
-  stopRecording();
+  fields.value?.stopRecording();
   emit("update:editing", false);
 }
 </script>
@@ -157,10 +91,10 @@ function done(): void {
       <span v-if="disabled" class="wp-bm__offtag" title="Muted or bypassed: its shortcut does nothing">off</span>
       <template v-else-if="config.shortcut">
         <i
-          v-if="worst !== 'info' && conflicts.length"
+          v-if="clashes.length"
           class="pi pi-exclamation-triangle wp-bm__clash"
-          :title="conflicts.map((c) => c.message).join(' ')"
-          :aria-label="conflicts.map((c) => c.message).join(' ')"
+          :title="clashes.map((c) => c.message).join(' ')"
+          :aria-label="clashes.map((c) => c.message).join(' ')"
           data-test="bm-view-clash"
         ></i>
         <Kbd :keys="config.shortcut" size="sm" />
@@ -199,92 +133,14 @@ function done(): void {
       Muted or bypassed: its shortcut does nothing until you turn it back on.
     </Banner>
 
-    <div class="wp-bm__row wp-bm__row--top">
-      <span class="wp-bm__label">Lands at</span>
-      <div class="wp-bm__grid" role="radiogroup" aria-label="Where the bookmark lands on screen">
-        <WpIconButton
-          v-for="a in BOOKMARK_ANCHORS"
-          :key="a.id"
-          :icon="config.anchor === a.id ? 'pi-circle-fill' : 'pi-circle'"
-          :label="a.label"
-          :pressed="config.anchor === a.id"
-          :tone="config.anchor === a.id ? 'accent' : 'neutral'"
-          :data-test="`bm-anchor-${a.id}`"
-          @click="patch({ anchor: a.id as BookmarkAnchor })"
-        />
-      </div>
-      <div class="wp-bm__anchor-note">
-        <span class="wp-bm__anchor-name">{{ anchorLabel }}</span>
-        <span class="wp-bm__hint">of the screen, {{ BOOKMARK_MARGIN }} px in</span>
-      </div>
-    </div>
-
-    <div class="wp-bm__row">
-      <span class="wp-bm__label">Zoom</span>
-      <WpSegmented
-        :model-value="config.zoomMode"
-        :options="ZOOM_MODES"
-        size="sm"
-        aria-label="Zoom"
-        test-prefix="bm-zoom"
-        @update:model-value="(v: BookmarkZoomMode) => patch({ zoomMode: v })"
-      />
-      <template v-if="config.zoomMode === 'fixed'">
-        <WpNumber
-          class="wp-bm__zoom"
-          :model-value="config.zoom"
-          :min="BOOKMARK_ZOOM_MIN"
-          :max="BOOKMARK_ZOOM_MAX"
-          :step="0.1"
-          size="sm"
-          suffix="×"
-          aria-label="Zoom level"
-          data-test="bm-zoom-value"
-          @update:model-value="(v: number | null) => patch({ zoom: v ?? 1 })"
-        />
-        <WpIconButton
-          icon="pi-search-plus"
-          label="Use the zoom you're at now"
-          data-test="bm-zoom-now"
-          @click="patch({ zoom: Math.round(getZoom() * 100) / 100 })"
-        />
-      </template>
-    </div>
-
-    <div class="wp-bm__row">
-      <span class="wp-bm__label">Shortcut</span>
-      <WpButton
-        size="sm"
-        :pressed="recording"
-        class="wp-bm__record"
-        :hint="recording ? 'Press the keys. Esc cancels, Backspace clears.' : 'Click, then press the keys'"
-        data-test="bm-record"
-        @click="startRecording"
-        @blur="stopRecording"
-      >
-        <template v-if="recording">Press keys…</template>
-        <Kbd v-else-if="config.shortcut" :keys="config.shortcut" size="sm" />
-        <template v-else>Record</template>
-      </WpButton>
-      <WpIconButton icon="pi-bolt" label="Suggest a free shortcut" data-test="bm-suggest" @click="suggest" />
-      <WpIconButton
-        v-if="config.shortcut"
-        icon="pi-times"
-        label="Remove the shortcut"
-        data-test="bm-clear"
-        @click="patch({ shortcut: '' })"
-      />
-    </div>
-    <p v-if="refused" class="wp-bm__refused" role="alert" data-test="bm-refused">{{ refused }}</p>
-    <Banner
-      v-else-if="conflicts.length && worst !== 'info'"
-      :tone="worst"
-      size="sm"
-      data-test="bm-conflicts"
-    >
-      <span v-for="(c, i) in conflicts" :key="i" class="wp-bm__conflict">{{ c.message }}</span>
-    </Banner>
-    <p v-else-if="conflicts.length" class="wp-bm__hint wp-bm__hint--block" data-test="bm-conflicts">{{ conflicts[0]?.message }}</p>
+    <BookmarkFields
+      ref="fields"
+      :value="config"
+      :get-keymap="getKeymap"
+      :get-zoom="getZoom"
+      @update="(part: Partial<BookmarkJump>) => patch(part)"
+      @recording="(on: boolean) => emit('recording', on)"
+    />
 
     <div class="wp-bm__row">
       <WpSwitch
@@ -340,30 +196,7 @@ function done(): void {
   background: var(--wp-bg2, var(--wp-bg-1));
   border-radius: min(4px, var(--wp-radius-cap, 999px));
 }
-.wp-bm__row--top { align-items: center; padding-block: 4px; }
-.wp-bm__label {
-  width: 58px;
-  flex: none;
-  font-weight: 600;
-  color: var(--wp-text-dim);
-}
-.wp-bm__grid {
-  display: grid;
-  grid-template-columns: repeat(3, 20px);
-  gap: 1px;
-  padding: 2px;
-  border: 1px solid var(--wp-border);
-  border-radius: min(4px, var(--wp-radius-cap, 999px));
-}
-.wp-bm__grid :deep(.pi) { font-size: 8px; }
-.wp-bm__anchor-note { display: flex; flex-direction: column; min-width: 0; }
-.wp-bm__anchor-name { font-weight: 600; }
-.wp-bm__zoom { width: 84px; }
-.wp-bm__record { min-width: 86px; }
 .wp-bm__hint { font-size: 10.5px; color: var(--wp-text-dim); }
-.wp-bm__hint--block { margin: 0; padding: 0 6px; }
-.wp-bm__refused { margin: 0; padding: 0 6px; font-size: 11px; color: var(--wp-danger); }
-.wp-bm__conflict { display: block; }
 .wp-bm__spacer { flex: 1; }
 .wp-bm__view {
   --wp-bm-color: var(--wp-accent);

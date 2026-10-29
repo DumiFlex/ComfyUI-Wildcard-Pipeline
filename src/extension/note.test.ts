@@ -8,9 +8,9 @@ describe("WP Note config", () => {
     expect(parseNoteConfig("")).toEqual(defaultNoteConfig());
     expect(parseNoteConfig("{oops")).toEqual(defaultNoteConfig());
     expect(parseNoteConfig({ tone: "loud", look: "label", step: 250, text: 3 }))
-      .toEqual({ version: 1, tone: "step", look: "label", step: 99, icon: "lightbulb", text: "", color: "" });
+      .toEqual({ version: 1, tone: "step", look: "label", step: 99, icon: "lightbulb", text: "", color: "", bookmark: null });
     expect(parseNoteConfig(JSON.stringify({ tone: "plain", step: 0.4, text: "hi" })))
-      .toEqual({ version: 1, tone: "plain", look: "card", step: 1, icon: "lightbulb", text: "hi", color: "" });
+      .toEqual({ version: 1, tone: "plain", look: "card", step: 1, icon: "lightbulb", text: "hi", color: "", bookmark: null });
   });
 
   it("turns the old Tip and Info tones into Icon notes that look the same", () => {
@@ -47,5 +47,14 @@ describe("WP Note config", () => {
       expect(p.title).toBeTruthy();
       for (const s of p.sections) expect(s.id).toMatch(/^s-[a-z0-9-]+$/);
     }
+  });
+});
+
+describe("WP Note as a bookmark", () => {
+  it("reads its jump settings with the bookmark's rules, or none", () => {
+    expect(parseNoteConfig({}).bookmark).toBeNull();
+    expect(parseNoteConfig({ bookmark: "yes" }).bookmark).toBeNull();
+    expect(parseNoteConfig({ bookmark: { anchor: "c", zoom: 40, shortcut: "alt + 3", hidden: true, color: "#ffffff" } }).bookmark)
+      .toEqual({ anchor: "c", zoomMode: "fixed", zoom: 10, shortcut: "Alt+3", order: 0 });
   });
 });

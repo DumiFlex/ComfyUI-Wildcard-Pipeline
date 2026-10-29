@@ -1,7 +1,10 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
 import { reactiveFromGraph } from "../extension/reactive";
-import { defaultNoteConfig, parseNoteConfig, type NoteConfig } from "../extension/note";
+import { defaultNoteConfig, noteColorCss, parseNoteConfig, type NoteConfig } from "../extension/note";
+import { defaultBookmarkConfig, jumpFields, type BookmarkConfig } from "../extension/bookmarks";
+import { bookmarkCells } from "../extension/_stashes";
+import { bookmarksChanged, currentZoom, freshJump, keymapFor, noteBookmarkAdded, setRecording, type BookmarkNode } from "./bookmark";
 import { isVueNodes } from "../extension/renderer";
 import { panelAt, trackPeek } from "./note-peek";
 
@@ -93,6 +96,27 @@ export function mountNote(node: NoteNode) {
   // A saved note reads; a brand-new one opens in the editor (below).
   const editing = ref(false);
   let restored = false;
+
+  // With its Bookmark switch on the note is also a bookmark: the dock, the
+  // shortcuts and Next / Previous read it through this cell. It never hides
+  // and takes its icon and colour from the note.
+  bookmarkCells.set(node, {
+    kind: "note",
+    get: (): BookmarkConfig | null => {
+      const c = config.value;
+      if (!c.bookmark) return null;
+      return {
+        ...defaultBookmarkConfig(),
+        ...c.bookmark,
+        icon: c.tone === "icon" ? c.icon : "bookmark",
+        color: c.color ? noteColorCss(c.color) : "",
+        hidden: false,
+      };
+    },
+    set: (next) => {
+      if (config.value.bookmark) writeNote({ ...config.value, bookmark: jumpFields(next as BookmarkConfig) });
+    },
+  });
   const isLabel = (): boolean => config.value.look === "label" && !editing.value;
   // A label sizes itself to its text; a card's width is the user's. Pinned
   // never resizes (ComfyUI's pin() and configure() write this too).
@@ -104,10 +128,7 @@ export function mountNote(node: NoteNode) {
       const pinned = reactiveFromGraph(graphNode, () => node.flags?.pinned === true, Object.is);
       const title = reactiveFromGraph(graphNode, () => node.title, Object.is);
       function onConfig(next: NoteConfig): void {
-        config.value = next;
-        host.setValue(serializeWidgetJson(next));
-        syncResizable();
-        fitSize();
+        writeNote(next);
       }
       function onTitle(next: string): void {
         node.title = next;
@@ -128,6 +149,10 @@ export function mountNote(node: NoteNode) {
         "onUpdate:config": onConfig,
         "onUpdate:title": onTitle,
         "onUpdate:pinned": onPinned,
+        getKeymap: () => keymapFor(node as unknown as BookmarkNode),
+        getZoom: currentZoom,
+        freshJump: () => freshJump(node),
+        onRecording: setRecording,
       });
     },
   };
@@ -136,6 +161,16 @@ export function mountNote(node: NoteNode) {
   const panel = (): HTMLElement | null =>
     host.element.querySelector<HTMLElement>(".wp-note__panel");
   const labelWidth = (): number => Math.ceil(panel()?.scrollWidth ?? 0);
+
+  function writeNote(next: NoteConfig): void {
+    const was = config.value.bookmark;
+    config.value = next;
+    host.setValue(serializeWidgetJson(next));
+    syncResizable();
+    fitSize();
+    if (!was && next.bookmark) noteBookmarkAdded();
+    else if (was || next.bookmark) bookmarksChanged();
+  }
 
   const host = createDomWidgetHost(node, "wp_note", wrapper, {
     initialValue: serializeWidgetJson(config.value),
@@ -146,6 +181,7 @@ export function mountNote(node: NoteNode) {
     onValueRestored: (raw: string) => {
       restored = true;
       config.value = parseNoteConfig(raw);
+      if (config.value.bookmark) noteBookmarkAdded();
       editing.value = false;
       syncResizable();
       fitSize();
