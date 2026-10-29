@@ -24,6 +24,7 @@ const BlocklistModal = defineAsyncComponent(
 interface CleanerHostNode extends MountTargetNode {
   id?: string | number;
   mode?: number;
+  inputs?: { name: string; link: number | null }[];
 }
 
 /**
@@ -65,6 +66,11 @@ export function create(node: CleanerHostNode, inputName: string) {
         () => node.mode ?? 0,
         Object.is,
       );
+      const blocklistWired = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => node.inputs?.find((i) => i.name === "blocklist")?.link != null,
+        Object.is,
+      );
       function onUpdate(next: CleanerNodeConfig): void {
         config.value = next;
         host.setValue(serializeWidgetJson(next));
@@ -81,6 +87,7 @@ export function create(node: CleanerHostNode, inputName: string) {
           nodeMode: nodeMode.value,
           negativeReport: negativeReport.value,
           negativeWordCount: negativeWordCount.value,
+          blocklistWired: blocklistWired.value,
           "onUpdate:modelValue": onUpdate,
           "onOpen-blocklist": () => { blocklistOpen.value = true; },
         }),
