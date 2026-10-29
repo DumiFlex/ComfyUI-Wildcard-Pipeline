@@ -11,4 +11,4 @@ Watches the nodes wired into it and, when what they do changes, mutes, bypasses 
 
 ## What it sends
 
-The watched nodes count as **all muted**, **all bypassed** or **any runs** (a mix of muted and bypassed sends nothing). Each case maps to **Run**, **Mute**, **Bypass** or nothing. It acts on a change only, never when a workflow loads.
+The watched nodes count as **all muted**, **all bypassed** or **any runs** (a mix of muted and bypassed sends nothing). Each case maps to **Run**, **Mute**, **Bypass** or nothing. It acts at once when the watched nodes change and when you change one of these choices, never when a workflow loads.

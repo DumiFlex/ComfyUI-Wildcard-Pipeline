@@ -1779,7 +1779,7 @@
     },
     {
      "title": "Controls",
-     "text": "watch dots (in)\nWire the nodes to watch. A new free dot appears as you wire.\ndrives (out)\nWire it into a WP Node Group: the relay sets that group's nodes.\nAll muted\nWhat to send when every watched node is muted: Run, Mute, Bypass or nothing (—).\nAll bypassed\nWhat to send when every watched node is bypassed.\nAny runs\nWhat to send when at least one watched node runs.\nA mix of muted and bypassed sends nothing. The relay acts only when the watched nodes change, never when a workflow loads."
+     "text": "watch dots (in)\nWire the nodes to watch. A new free dot appears as you wire.\ndrives (out)\nWire it into a WP Node Group: the relay sets that group's nodes.\nAll muted\nWhat to send when every watched node is muted: Run, Mute, Bypass or nothing (—).\nAll bypassed\nWhat to send when every watched node is bypassed.\nAny runs\nWhat to send when at least one watched node runs.\nA mix of muted and bypassed sends nothing. The relay acts at once when the watched nodes change and when you change one of its choices, never when a workflow loads."
     },
     {
      "title": "Works with",
