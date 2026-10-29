@@ -56,6 +56,7 @@ const MODELFILE = "FROM hf.co/<repo>:<quant>\nRENDERER qwen3.5\nPARSER qwen3.5\n
           { term: 'API key', desc: 'Stored on the ComfyUI side and never shown again; Remove deletes it. A key is only sent to the address it was saved for.' },
           { term: 'Model', desc: 'Picked from your server\'s list (refresh after downloading a new one), or typed in.' },
           { term: 'Unload after', desc: 'For local servers: how long an idle model stays loaded, so ComfyUI gets the GPU memory back. From right after each answer up to 1 hour, or Custom.' },
+          { term: 'About my library', desc: 'A short note (up to 600 characters) every chat, Draft with AI and Pack builder request reads. Suggest drafts one from your library. See the Chat page.' },
           { term: 'Thinking', desc: 'How much a thinking model reasons before it answers. The list shows what the chosen model takes: Off and On for a model with an on/off switch, or its own levels (Low to Max) for a model with levels, and a line under it says which. The same picker sits in the chat header. For a small or medium local model, As the model does means Off, and a choice you pick holds for the whole answer (switching between steps made LM Studio re-read the whole prompt).' },
         ]"
       />
@@ -71,8 +72,8 @@ const MODELFILE = "FROM hf.co/<repo>:<quant>\nRENDERER qwen3.5\nPARSER qwen3.5\n
         on, and Unload after for the provider. Switch from Claude at Medium thinking to a Qwen in LM
         Studio and you get the Qwen's own settings back, not Claude's. A model you haven't used yet
         keeps the provider's values but starts Thinking and Model size at automatic, since another
-        model's level or size may not fit it. Permissions, web search and the chat display options
-        are the same for every provider.
+        model's level or size may not fit it. Permissions, web search, the About my library note
+        and the chat display options are the same for every provider.
       </p>
       <DocDetails title="Advanced settings">
         <DocKeyList

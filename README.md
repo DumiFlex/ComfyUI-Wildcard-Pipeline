@@ -137,7 +137,8 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   edits modules in every editor, answers questions about your library in a chat,
   explains Test Runner runs, organizes your library and builds whole packs from a
   description. Every change comes back for you to review, and nothing is saved
-  until you apply it.
+  until you apply it. A short **About my library** note in its settings (your
+  naming, style, model, what to never add) is read by every request.
 - **Constraint preview:** a table of each target option's chance for every
   source option, so you can see what a constraint does before running it.
 - **Themes:** six colour themes (Orbit, Native, Nebula, Tide, Ember, High

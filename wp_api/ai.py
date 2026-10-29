@@ -98,6 +98,7 @@ from wp_api._ai_drafts import (
     post_constraint_draft,
     post_derivation_draft,
     post_describe,
+    post_library_note,
     post_organize,
     post_text_draft,
     post_wildcard_draft,
@@ -321,6 +322,7 @@ def register(router: web.UrlDispatcher) -> None:
     add("POST", "/wp/api/ai/text/draft", post_text_draft)
     add("POST", "/wp/api/ai/describe", post_describe)
     add("POST", "/wp/api/ai/organize", post_organize)
+    add("POST", "/wp/api/ai/library-note/suggest", post_library_note)
     add("POST", "/wp/api/ai/chat", post_chat)
     add("GET", "/wp/api/ai/vision", get_vision)
     add("GET", "/wp/api/ai/progress/{pid}", get_progress, cut_short=False)

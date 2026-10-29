@@ -165,6 +165,29 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       </p>
     </DocSection>
 
+    <DocSection title="Tell it about your library">
+      <p>
+        <b>Settings › AI assistant › About my library</b> holds a short note, up to 600 characters,
+        that the assistant reads before every request: the chat, every Draft with AI box and the
+        Pack builder. Use it for what it can't guess from one request:
+      </p>
+      <ul>
+        <li>"My wildcards use booru tags, all lowercase."</li>
+        <li>"Variables are snake_case, like $hair_colour."</li>
+        <li>"I write for Illustrious. Never add artist names."</li>
+      </ul>
+      <p>
+        Short, concrete lines work best, above all on small local models. The app's own rules come
+        first, so a note can't turn off a safety check or a permission.
+      </p>
+      <p>
+        <b>Suggest</b> asks the model for a first draft from your library summary (names, variables,
+        tags, how you write options) and puts it in the box. Nothing is saved until you press
+        <b>Save</b>, so edit it first; <b>Put back</b> returns to the saved note. A chat keeps the
+        note it started with, so start a new chat to use a new one.
+      </p>
+    </DocSection>
+
     <DocSection title="Writing in another language">
       <p>
         Write in any language the model knows. The model always reads your own words, but some of

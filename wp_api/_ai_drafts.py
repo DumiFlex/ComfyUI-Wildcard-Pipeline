@@ -1,5 +1,6 @@
 """Editor panels: wildcard draft + edit, derivation, text and constraint
-drafts, describe and organize. Nothing here writes to the library."""
+drafts, describe and organize, and the Suggest button of the "About my
+library" note. Nothing here writes to the library."""
 from __future__ import annotations
 
 from typing import Any
@@ -7,14 +8,17 @@ from typing import Any
 from aiohttp import web
 
 from engine.ai import about as ai_about
+from engine.ai import chat as ai_chat
 from engine.ai import constraint as ai_constraint
 from engine.ai import derivation as ai_derivation
 from engine.ai import describe as ai_describe
 from engine.ai import followup as ai_followup
 from engine.ai import lang as ai_lang
 from engine.ai import library_vars, text_items
+from engine.ai import note as ai_note
 from engine.ai import organize as ai_organize
 from engine.ai import refs as ai_refs
+from engine.ai import safety as ai_safety
 from engine.ai import wildcard as ai_wildcard
 from engine.ai import wildcard_edit as ai_edit
 from engine.db.repositories import (
@@ -859,3 +863,45 @@ async def post_organize(request: web.Request) -> web.Response:
     result["model"] = cfg["model"]
     result["answer"] = answer
     return json_ok(result)
+
+
+#: Items the Suggest button's library summary lists (newest first); the
+#: counts, tags and habits above them cover the rest.
+_NOTE_ITEMS = 60
+
+
+async def post_library_note(request: web.Request) -> web.Response:
+    """Body: {current?}. A first draft of the "About my library" note from
+    the library summary (`engine/ai/note.py`). `current` is what the
+    Settings box holds now, saved or not. Nothing is saved: the user edits
+    the draft and saves it with the rest of Settings."""
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+    current = _got if isinstance(_got := body.get("current"), str) else ""
+    with db_session(request) as conn:
+        modules = ModuleRepository(conn).list()
+        lib = ai_chat.Library(
+            modules, BundleRepository(conn).list(),
+            CategoryRepository(conn).list(), TemplateRepository(conn).list(),
+        )
+    if not lib.modules and not lib.bundles and not lib.templates:
+        return json_error("the library is empty, so there is nothing to describe yet",
+                          status=400)
+    try:
+        answer = await _ai_client.complete_json(
+            cfg, system=ai_note.SUGGEST_SYSTEM,
+            user=ai_note.suggest_prompt(ai_safety.strip_invisible(
+                lib.overview(limit=_NOTE_ITEMS)), current, ai_note.samples(modules)),
+            schema=ai_note.SUGGEST_SCHEMA, schema_name="library_note",
+            temperature=0.3, quick=True,
+        )
+    except _ai_client.AIError as e:
+        return json_error(e.message, status=e.status)
+    note = ai_note.suggested(answer)
+    if not note:
+        return json_error("the model wrote no note. Try again, or a larger model.", status=502)
+    return json_ok({"note": note, "model": cfg["model"]})
