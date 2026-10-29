@@ -2099,7 +2099,7 @@
     },
     {
      "title": "Links and icons in the text",
-     "text": "The bar writes these for you; you can also type them. A note can hold any number of links, anywhere in the text. Any other kind of link shows as plain text.\n[Read more](https://example.com)\nA link that opens in a new tab.\n[Seeds](docs:seeds-and-loops)\nA link to that page of these docs.\n[The grid](docs:wp-label-grid#s-the-grid)\nA link to one section of it.\n[Start here](docs:quick-start){button pi-play}\nThe link drawn as a button with an icon. {button} alone has no icon.\n:pi-heart: :pi-heart:{#ef4444}\nAn icon, optionally in a colour."
+     "text": "The bar writes these for you; you can also type them. A note can hold any number of links, anywhere in the text. Any other kind of link shows as plain text.\n[Read more](https://example.com)\nA link that opens in a new tab.\n[Seeds](docs:seeds-and-loops)\nA link to that page of these docs.\n[The grid](docs:wp-label-grid#s-the-grid)\nA link to one section of it.\n[Start here](docs:quick-start){button pi-play}\nThe link drawn as a button with an icon. {button} alone has no icon.\n:pi-heart: :pi-heart:{#rrggbb}\nAn icon, optionally in a colour: a hex code like the custom colour field shows."
     },
     {
      "title": "Works with",
