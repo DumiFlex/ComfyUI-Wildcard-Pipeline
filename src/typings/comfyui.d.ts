@@ -31,6 +31,8 @@ declare module "#comfyui/app" {
       getCustomWidgets?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
       /** Extra right-click menu entries for a node (`null` is a separator). */
       getNodeMenuItems?: (node: unknown) => Array<{ content: string; callback: () => void } | null>;
+      /** Extra right-click menu entries for the empty canvas. */
+      getCanvasMenuItems?: (canvas: unknown) => Array<{ content: string; callback: () => void } | null>;
       /** Register frontend-only node types (LiteGraph.registerNodeType). */
       registerCustomNodes?: () => Promise<void> | void;
       /** Called with every node definition before the node library and

@@ -21,6 +21,7 @@ const {
   noteMod,
   nodeGroupMod,
   modeRelayMod,
+  bookmarkMod,
   stripControlInputs,
   imageFilterMod,
   varPickerMod,
@@ -43,6 +44,7 @@ const {
   loadPlayground,
   loadSubgraphBadge,
   loadImageFilterPicker,
+  loadBookmarkDock,
 } = await import("./boot");
 
 // Singleton toast container — one Vue app mounted to a body-level div renders
@@ -180,6 +182,22 @@ setTimeout(() => settingsMod.markBootCompleted(), 100);
 // cheap (window var or one fetch to /system_stats) and runs once.
 const useActionBar = await topbarMod.supportsActionBar();
 
+// WP Bookmark's dock lives in its own chunk: loaded by the top-bar button or
+// once a workflow has a bookmark (unless the user closed the dock).
+function toggleBookmarkDock(): void {
+  void loadBookmarkDock().then((m) => m.toggleDock());
+}
+function maybeShowBookmarkDock(): void {
+  if (bookmarkMod.dockWantsAutoOpen()) void loadBookmarkDock().then((m) => m.showDock());
+}
+const BOOKMARK_COMMANDS = [
+  { id: "wildcardPipeline.bookmark.next", label: "WP Bookmarks: next bookmark", function: () => bookmarkMod.jumpStep(1) },
+  { id: "wildcardPipeline.bookmark.previous", label: "WP Bookmarks: previous bookmark", function: () => bookmarkMod.jumpStep(-1) },
+  { id: "wildcardPipeline.bookmark.back", label: "WP Bookmarks: back to where you were", function: () => bookmarkMod.jumpBack() },
+  { id: "wildcardPipeline.bookmark.add", label: "WP Bookmarks: bookmark this view", function: () => bookmarkMod.addBookmarkHere() },
+  { id: "wildcardPipeline.bookmark.dock", label: "WP Bookmarks: show or hide the dock", function: toggleBookmarkDock },
+];
+
 app.registerExtension({
   name: "wildcard-pipeline",
 
@@ -214,14 +232,32 @@ app.registerExtension({
   // toolbar button (mounted via actionBarButtons / setup() below) is
   // the primary surface; this command is the dropdown twin so the SPA
   // is reachable on builds where neither toolbar path works.
-  commands: topbarMod.TOPBAR_COMMANDS,
-  menuCommands: topbarMod.TOPBAR_MENU_COMMANDS,
+  // The bookmark commands ship without keys: bind them in ComfyUI's
+  // Settings › Keybinding, where its own dialog flags clashes.
+  commands: [...topbarMod.TOPBAR_COMMANDS, ...BOOKMARK_COMMANDS],
+  menuCommands: [
+    ...topbarMod.TOPBAR_MENU_COMMANDS,
+    { path: ["Extensions", "Wildcard Pipeline", "Bookmarks"], commands: BOOKMARK_COMMANDS.map((c) => c.id) },
+  ],
+
+  // "Add WP Bookmark here" on a right-click of the empty canvas.
+  getCanvasMenuItems(canvas: unknown) {
+    const at = [...((canvas as { graph_mouse?: number[] }).graph_mouse ?? [])];
+    return [null, { content: "Add WP Bookmark here", callback: () => bookmarkMod.addBookmarkHere(at.length >= 2 ? at : undefined) }];
+  },
 
   // Modern actionbar entry — only included on ComfyUI ≥ 1.33.9.
   // Including it on older builds would either be silently ignored or
   // throw, depending on the frontend's strictness; conditional include
   // is the safe path.
-  ...(useActionBar ? { actionBarButtons: topbarMod.ACTION_BAR_BUTTONS } : {}),
+  ...(useActionBar
+    ? {
+        actionBarButtons: [
+          ...topbarMod.ACTION_BAR_BUTTONS,
+          { icon: "pi pi-bookmark", tooltip: "Bookmarks (Wildcard Pipeline)", onClick: toggleBookmarkDock },
+        ],
+      }
+    : {}),
 
   // ComfyUI Settings panel entries — accessibility tri-state combos. Their
   // onChange handlers re-run applyA11yClasses to flip the body markers.
@@ -241,6 +277,9 @@ app.registerExtension({
       await topbarMod.attachLegacyTopbarButton(app);
     }
     topbarMod.startIconReplaceLoop();
+    bookmarkMod.installBookmarkKeys();
+    bookmarkMod.installHiddenFilter();
+    maybeShowBookmarkDock();
   },
 
   // WP Note: a frontend-only node (like ComfyUI's Note) that explains a
@@ -249,6 +288,7 @@ app.registerExtension({
     noteMod.registerNoteNode();
     nodeGroupMod.registerNodeGroupNode();
     modeRelayMod.registerModeRelayNode();
+    bookmarkMod.registerBookmarkNode();
   },
 
   beforeRegisterVueAppNodeDefs(defs: unknown[]) {
@@ -264,6 +304,12 @@ app.registerExtension({
       modeRelayMod.MODE_RELAY_TYPE,
       "WP Mode Relay",
       "Watches nodes' mute / bypass and passes a mode on to a WP Node Group. It never runs.",
+    );
+    noteMod.fixFrontendDef(
+      defs as Parameters<typeof noteMod.fixFrontendDef>[0],
+      bookmarkMod.BOOKMARK_NODE_TYPE,
+      "WP Bookmark",
+      "Marks a spot on the canvas to jump back to, with a shortcut or from the Bookmarks dock. It never runs.",
     );
   },
 
@@ -344,6 +390,7 @@ app.registerExtension({
   // widgets to recompute immediately.
   afterConfigureGraph() {
     graphEventsMod.notifyGraphLoaded();
+    maybeShowBookmarkDock();
     // Re-attach badges in case the loaded workflow contained SubgraphNodes
     // that bypassed nodeCreated (loaded path uses different hooks).
     // Nested subgraph nodes always sit inside a top-level one, so the top
@@ -360,6 +407,9 @@ app.registerExtension({
   // conflict badge so users can spot WP issues nested inside a subgraph
   // without opening it.
   nodeCreated(node: unknown) {
+    // The first bookmark in a workflow brings the dock up (after its
+    // config lands, a tick later).
+    if (bookmarkMod.isBookmark(node)) setTimeout(maybeShowBookmarkDock, 0);
     if (!isSubgraphNode(node)) return;
     const root = (app as unknown as { graph?: LiteGraphLike }).graph;
     if (root) withBadges((badgeMod) => badgeMod.attachSubgraphBadge(node as Parameters<BadgeModule["attachSubgraphBadge"]>[0], root));

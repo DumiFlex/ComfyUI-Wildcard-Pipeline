@@ -313,7 +313,12 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // and WP Node Group (a new frontend-only node + panel), the clean/edit views
 // and the richer Pick one: lazy widget chunks plus a few KB of boot glue
 // (registration, the prompt strip); the branch sat at 552,937 bytes.
-const TOTAL_LIMIT = 552 * 1024;     // 552 KB
+// RAISED 552 -> 562 KB on 2026-10-29 for WP Bookmark (a frontend-only node
+// that jumps the canvas to a saved spot): its widget and the Bookmarks dock
+// are lazy chunks (~10 KB, plus the kit pieces they share), with ~5 KB of
+// boot glue for the node, the jump, the hidden filter and the one shortcut
+// listener; the branch sat at 573,693 bytes.
+const TOTAL_LIMIT = 562 * 1024;     // 562 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
