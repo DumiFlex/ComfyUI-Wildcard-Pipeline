@@ -36,17 +36,17 @@ type Variant = "primary" | "secondary" | "ghost" | "danger" | "link" | "outline"
 type Size = "sm" | "md" | "lg";
 
 interface Props {
-  variant?: Variant;
-  size?: Size;
-  icon?: string;
-  iconRight?: string;
-  loading?: boolean;
-  disabled?: boolean;
-  block?: boolean;
+  variant?: Variant | undefined;
+  size?: Size | undefined;
+  icon?: string | undefined;
+  iconRight?: string | undefined;
+  loading?: boolean | undefined;
+  disabled?: boolean | undefined;
+  block?: boolean | undefined;
   /** Makes it a toggle (`aria-pressed`): on, it wears the accent tint. */
-  pressed?: boolean;
-  type?: "button" | "submit" | "reset";
-  ariaLabel?: string;
+  pressed?: boolean | undefined;
+  type?: "button" | "submit" | "reset" | undefined;
+  ariaLabel?: string | undefined;
 }
 const props = withDefaults(defineProps<Props>(), {
   variant: "secondary",

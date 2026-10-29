@@ -22,9 +22,9 @@
 const props = withDefaults(
   defineProps<{
     /** Checked state — use with `v-model` or `:model-value` + `@update:model-value`. */
-    modelValue?: boolean;
-    disabled?: boolean;
-    size?: "sm" | "md";
+    modelValue?: boolean | undefined;
+    disabled?: boolean | undefined;
+    size?: "sm" | "md" | undefined;
   }>(),
   { modelValue: false, disabled: false, size: "md" },
 );

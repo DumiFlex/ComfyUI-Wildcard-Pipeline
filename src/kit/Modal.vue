@@ -5,9 +5,9 @@ import { useDialogFocus } from "./useDialogFocus";
 
 interface Props {
   open: boolean;
-  title?: string;
-  size?: "sm" | "md" | "lg";
-  closeOnBackdrop?: boolean;
+  title?: string | undefined;
+  size?: "sm" | "md" | "lg" | undefined;
+  closeOnBackdrop?: boolean | undefined;
 }
 const props = withDefaults(defineProps<Props>(), { size: "md", closeOnBackdrop: true });
 

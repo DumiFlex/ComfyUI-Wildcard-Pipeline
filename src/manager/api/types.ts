@@ -371,6 +371,64 @@ export interface BundleUpdateInput {
   content_rating?: "safe" | "nsfw";
 }
 
+/** Library health (`/wp/api/health`, `engine/health.py`). */
+export type HealthSeverity = "problem" | "warning" | "tidy";
+export type HealthItemKind = "module" | "bundle" | "template" | "category" | "tag";
+
+export interface HealthItem {
+  kind: HealthItemKind;
+  id: string;
+  name: string;
+  /** The module type for modules, otherwise the kind itself. */
+  type: string;
+}
+
+export interface HealthFinding {
+  check: string;
+  severity: HealthSeverity;
+  /** `check:kind:id[:extra]` — what Ignore stores. */
+  key: string;
+  item: HealthItem;
+  detail: string;
+  /** Other items in the same finding (duplicates, the item a tag sits on). */
+  others?: HealthItem[];
+  /** The names or values the finding is about, for search. */
+  values?: string[];
+}
+
+export interface HealthCheckInfo {
+  id: string;
+  severity: HealthSeverity;
+  title: string;
+}
+
+export interface HealthScan {
+  findings: HealthFinding[];
+  ignored: string[];
+  counts: Record<HealthSeverity, number>;
+  checks: HealthCheckInfo[];
+  /** True when an open canvas tab answered and its use was counted. */
+  canvas: boolean;
+  checked_at: string;
+}
+
+/** What an open canvas tab says it uses; null when none answered. */
+export interface HealthCanvasFacts {
+  ids: string[];
+  vars: string[];
+  reads: string[];
+}
+
+export interface HealthVariety {
+  runs: number;
+  failed: number;
+  distinct: number;
+  ratio: number;
+  stuck: Array<{ var: string; name: string; value: string }>;
+  never_picked: Array<{ id: string; name: string; options: string[]; count: number; total: number }>;
+  warnings: Array<{ type: string; message: string; count: number }>;
+}
+
 /** Rows changed per kind by a library-tag rename or delete. */
 export interface LibraryTagUpdateCounts {
   modules: number;
@@ -779,6 +837,15 @@ export interface BackupEntry {
   /** ISO timestamp (UTC). */
   created_at: string;
   reason: BackupReason;
+  /** Pinned backups are never pruned and don't count toward `keep`. */
+  pinned: boolean;
+  /** The short note typed for a manual backup, shown instead of "Manual". */
+  note: string | null;
+}
+
+export interface BackupCreated extends BackupEntry {
+  /** Backups the keep limit removed right after this one was made. */
+  pruned: string[];
 }
 
 export interface BackupList {
@@ -793,7 +860,7 @@ export interface ServerSettings {
   max_ref_depth: number;
   backups: {
     enabled: boolean;
-    /** Automatic backups kept; manual ones are never pruned. */
+    /** Unpinned backups kept, manual or automatic; pinned ones are never pruned. */
     keep: number;
     daily: boolean;
   };
@@ -894,6 +961,9 @@ export interface AiConfig {
    *  message; another language gets its requests read for the checks
    *  (older servers leave it out). */
   request_language?: AiRequestLanguage;
+  /** The "About my library" note every chat, Draft with AI and pack
+   *  builder request reads (older servers leave it out). */
+  library_note?: string;
   /** Advanced: small models name the tool, then fill its args (off when absent). */
   choose_first?: boolean;
   /** Advanced: small models get one line per tool, its docs when first offered. */
@@ -968,6 +1038,8 @@ export interface AiConfigPatch {
   danbooru_lookup?: boolean;
   web_always_allow?: boolean;
   request_language?: AiRequestLanguage;
+  /** At most 600 characters; `""` clears it. */
+  library_note?: string;
   choose_first?: boolean;
   lean_prompt?: boolean;
   /** A partial update: `null` puts one sampler back to the server's setting. */
@@ -2287,4 +2359,14 @@ export interface TagDownloadResult {
   has_categories: boolean;
   /** Echoed back so the UI can name exactly where the file came from. */
   source: string;
+}
+
+/** POST /wp/api/ai/library-note/suggest: a first draft of the note. */
+export interface AiLibraryNoteSuggestRequest {
+  /** What the Settings box holds now, saved or not. */
+  current?: string;
+}
+export interface AiLibraryNoteSuggestResult {
+  note: string;
+  model: string;
 }

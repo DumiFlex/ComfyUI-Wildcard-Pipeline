@@ -15,14 +15,14 @@ import { computed } from "vue";
 
 const props = withDefaults(defineProps<{
   /** How far along, 0 to `max`; `null` or left out = not known yet. */
-  value?: number | null;
-  max?: number;
-  tone?: "accent" | "success" | "warn" | "danger";
-  size?: "sm" | "md";
+  value?: number | null | undefined;
+  max?: number | undefined;
+  tone?: "accent" | "success" | "warn" | "danger" | undefined;
+  size?: "sm" | "md" | undefined;
   /** The job's name for screen readers, and the line above the bar with `show-value`. */
-  label?: string;
+  label?: string | undefined;
   /** Show the label and the percentage above the bar. */
-  showValue?: boolean;
+  showValue?: boolean | undefined;
 }>(), { value: null, max: 100, tone: "accent", size: "md", label: undefined });
 
 const known = computed(() => typeof props.value === "number" && Number.isFinite(props.value));

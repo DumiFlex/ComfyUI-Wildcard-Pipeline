@@ -7,7 +7,7 @@ import type {
   BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
   CategoryCreateInput, CategoryRow,
   DatabaseConfig, DatabaseConfigUpdate,
-  BackupEntry, BackupList, ServerSettings, ServerSettingsPatch,
+  BackupCreated, BackupEntry, BackupList, ServerSettings, ServerSettingsPatch,
   AiConfig, AiConfigPatch, AiTestResult, AiThinkingInfo, AiIndexStatus, AiWildcardDraftRequest, AiWildcardDraftResult,
   AiWildcardEditRequest,
   AiWildcardEditResult,
@@ -18,6 +18,8 @@ import type {
   AiDerivationDraftResult,
   AiConstraintDraftRequest,
   AiConstraintDraftResult,
+  AiLibraryNoteSuggestRequest,
+  AiLibraryNoteSuggestResult,
   AiOrganizeRequest,
   AiOrganizeResult,
   AiChatRequest,
@@ -44,6 +46,7 @@ import type {
   AiDescribeRequest,
   AiDescribeResult,
   TagStatus, TagSuggestResponse, TagDownloadResult, LibraryTagUpdateCounts,
+  HealthCanvasFacts, HealthScan, HealthVariety,
   ModelKind, ModelSourceStatus, ModelSuggestResponse,
   DatabaseInfo, MaintenanceOp, MaintenanceResult,
   EmbedBundle,
@@ -368,6 +371,26 @@ export const api = {
     },
   },
 
+  /** Library health: one scan over the whole library, the findings the
+   *  user ignored, and a per-bundle variety run. */
+  health: {
+    scan(canvas: HealthCanvasFacts | null) {
+      return request<HealthScan>("/wp/api/health/scan", {
+        method: "POST", body: JSON.stringify({ canvas }),
+      });
+    },
+    ignore(add: string[], remove: string[] = []) {
+      return request<{ ignored: string[] }>("/wp/api/health/ignored", {
+        method: "PUT", body: JSON.stringify({ add, remove }),
+      });
+    },
+    variety(bundleId: string, seeds = 200) {
+      return request<HealthVariety>("/wp/api/health/variety", {
+        method: "POST", body: JSON.stringify({ bundle_id: bundleId, seeds }),
+      });
+    },
+  },
+
   /** Library tags: the free-form labels on modules, bundles and templates.
    *  Not the prompt-tag autocomplete list under `tags` below. Both calls
    *  rewrite every row that carries the tag and report how many changed. */
@@ -446,8 +469,18 @@ export const api = {
     backups() {
       return request<BackupList>("/wp/api/database/backups", { method: "GET" });
     },
-    createBackup() {
-      return request<BackupEntry>("/wp/api/database/backups", { method: "POST" });
+    createBackup(note?: string) {
+      const text = note?.trim();
+      return request<BackupCreated>("/wp/api/database/backups", {
+        method: "POST",
+        ...(text ? { body: JSON.stringify({ note: text }) } : {}),
+      });
+    },
+    pinBackup(name: string, pinned: boolean) {
+      return request<BackupEntry>(`/wp/api/database/backups/${encodeURIComponent(name)}/pin`, {
+        method: "PUT",
+        body: JSON.stringify({ pinned }),
+      });
     },
     deleteBackup(name: string) {
       return request<void>(`/wp/api/database/backups/${encodeURIComponent(name)}`, { method: "DELETE" });
@@ -531,6 +564,12 @@ export const api = {
     },
     draftConstraint(body: AiConstraintDraftRequest, signal?: AbortSignal) {
       return request<AiConstraintDraftResult>("/wp/api/ai/constraint/draft", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    /** A first draft of the "About my library" note; nothing is saved. */
+    suggestLibraryNote(body: AiLibraryNoteSuggestRequest, signal?: AbortSignal) {
+      return request<AiLibraryNoteSuggestResult>("/wp/api/ai/library-note/suggest", {
         method: "POST", body: JSON.stringify(body), signal,
       });
     },

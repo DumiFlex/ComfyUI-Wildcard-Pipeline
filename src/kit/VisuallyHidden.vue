@@ -10,9 +10,9 @@
  */
 withDefaults(defineProps<{
   /** The element to draw. */
-  as?: string;
+  as?: string | undefined;
   /** Show while focused (skip links). */
-  focusable?: boolean;
+  focusable?: boolean | undefined;
 }>(), { as: "span" });
 </script>
 

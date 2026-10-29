@@ -22,17 +22,17 @@ import { placeFloating, viewportSize, type Placement, type Side } from "./floati
 
 const props = withDefaults(defineProps<{
   open: boolean;
-  placement?: Placement;
+  placement?: Placement | undefined;
   /** The panel's name for screen readers. */
-  label?: string;
+  label?: string | undefined;
   /** Make the panel at least as wide as the trigger (lists under a field). */
-  matchWidth?: boolean;
+  matchWidth?: boolean | undefined;
   /** Move focus into the panel when it opens. Off for panels you type past. */
-  autofocus?: boolean;
+  autofocus?: boolean | undefined;
   /** "dialog" for panels with controls, "menu"/"listbox" when the content is one. */
-  role?: "dialog" | "menu" | "listbox" | "group";
+  role?: "dialog" | "menu" | "listbox" | "group" | undefined;
   /** Place the panel against this element instead of the trigger slot. */
-  anchor?: HTMLElement | null;
+  anchor?: HTMLElement | null | undefined;
 }>(), { placement: "bottom-start", autofocus: true, role: "dialog", anchor: null });
 
 const emit = defineEmits<{ (e: "update:open", v: boolean): void }>();
@@ -40,7 +40,7 @@ const emit = defineEmits<{ (e: "update:open", v: boolean): void }>();
 const id = `wp-popover-${useId()}`;
 const anchorEl = ref<HTMLElement | null>(null);
 const panelEl = ref<HTMLElement | null>(null);
-const pos = ref<{ x: number; y: number; side: Side; minWidth?: number }>({ x: -9999, y: -9999, side: "bottom" });
+const pos = ref<{ x: number; y: number; side: Side; minWidth?: number | undefined }>({ x: -9999, y: -9999, side: "bottom" });
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), '
   + 'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';

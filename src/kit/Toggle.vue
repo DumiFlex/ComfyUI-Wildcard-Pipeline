@@ -8,13 +8,13 @@ import WpSwitch from "./WpSwitch.vue";
 
 interface Props {
   modelValue: boolean;
-  label?: string;
-  size?: "sm" | "md" | "lg";
-  disabled?: boolean;
-  invalid?: boolean;
+  label?: string | undefined;
+  size?: "sm" | "md" | "lg" | undefined;
+  disabled?: boolean | undefined;
+  invalid?: boolean | undefined;
   /** @deprecated use `invalid`. */
-  error?: boolean;
-  ariaLabel?: string;
+  error?: boolean | undefined;
+  ariaLabel?: string | undefined;
 }
 const props = withDefaults(defineProps<Props>(), { size: "md", label: undefined, ariaLabel: undefined });
 

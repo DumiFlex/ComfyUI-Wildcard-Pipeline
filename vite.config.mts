@@ -18,6 +18,12 @@ const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8")
 const APP_VERSION = pkg.version;
 const APP_LICENSE = pkg.license;
 
+// The wp-kit version src/kit/ was pulled at (`pnpm kit:pull`), as
+// `__KIT_VERSION__` = { ref, sha }, for the Settings About card. Only those
+// two fields, not the lock's file hashes.
+const kitLock = JSON.parse(readFileSync(resolve(__dirname, "src/kit/kit.lock.json"), "utf-8")) as { ref: string; sha: string };
+const KIT_VERSION = { ref: kitLock.ref, sha: kitLock.sha };
+
 // Two build targets controlled by --mode flag:
 //   pnpm build:extension → js/main.js  (ComfyUI web extension, critical-path bundle)
 //   pnpm build:manager   → web_dist/   (standalone SPA, post-MVP)
@@ -37,6 +43,7 @@ export default defineConfig(({ mode }) => {
       "process.env.NODE_ENV": JSON.stringify("production"),
       __APP_VERSION__: JSON.stringify(APP_VERSION),
       __APP_LICENSE__: JSON.stringify(APP_LICENSE),
+      __KIT_VERSION__: JSON.stringify(KIT_VERSION),
     },
     // PostCSS config moved to `config/postcss.config.js` — Vite no
     // longer auto-discovers it from the project root, so point at it

@@ -27,7 +27,7 @@ import { hexToHsv, hsvToHex, type Hsv } from "./hsv";
 
 interface Props {
   modelValue: string;
-  ariaLabel?: string;
+  ariaLabel?: string | undefined;
 }
 const props = defineProps<Props>();
 

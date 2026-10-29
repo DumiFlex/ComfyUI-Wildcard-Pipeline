@@ -18,6 +18,7 @@ import { vTooltip } from "@/kit/tooltip";
 import type { SelectOption } from "../../../../kit/select-types";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
+import LibraryNoteGroup from "../LibraryNoteGroup.vue";
 import { api } from "../../../api/client";
 import type { AiConfigPatch, AiEmbedApi, AiIndexStatus, AiModelSize, AiProviderId, AiRequestLanguage, AiSamplerId, AiTestResult, AiToolFormat } from "../../../api/types";
 import { useAiConfig } from "../../../composables/useAiConfig";
@@ -723,6 +724,8 @@ const off = computed(() => !config.value?.enabled);
             </template>
           </SettingRow>
         </SettingGroup>
+
+        <LibraryNoteGroup />
 
         <SettingGroup title="Provider" :note="off ? 'You can set this up before turning the assistant on. Test connection works once it is on.' : undefined">
           <RadioGroup

@@ -1,6 +1,6 @@
 // Kit guard: counts hand-rolled controls in .vue files, per rule and file.
 //
-// The component kit (`/kit`, src/manager/kit/registry.ts) has a shared
+// The component kit (wp-kit, shown on its site; app pieces at `/kit`) has a shared
 // control for each of these. Existing code is the baseline in
 // `kit-guard-baseline.json`; `kit-guard.test.mjs` fails when a file gets MORE
 // than its baseline (use the kit instead) and when it gets FEWER (the

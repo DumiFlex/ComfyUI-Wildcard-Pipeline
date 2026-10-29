@@ -49,6 +49,10 @@ export const DOC_PAGES: DocPageMeta[] = [
     blurb: "Run modules on many seeds, inspect each one, and compare against a baseline.",
     keywords: ["test", "scenario", "seed", "baseline", "compare", "inspect", "trace", "preview"],
     ...page(() => import("./pages/overview/test-runner.vue")) },
+  { id: "library-health", title: "Library health", group: "overview", icon: "pi pi-heart", tone: "neutral",
+    blurb: "Check the whole library: broken references, likely mistakes, unused items, and how varied each bundle is.",
+    keywords: ["health", "unused", "broken", "missing", "duplicate", "orphan", "clean up", "tidy", "ignore", "variety", "check"],
+    ...page(() => import("./pages/overview/library-health.vue")) },
   { id: "themes", title: "Themes and looks", group: "overview", icon: "pi pi-palette", tone: "neutral",
     blurb: "Pick the manager's colours and its look separately, and mix any of them.",
     keywords: ["theme", "colours", "colors", "look", "dark", "light", "high contrast", "accent", "tui", "terminal", "font"],
@@ -239,7 +243,7 @@ export const DOC_PAGES: DocPageMeta[] = [
     blurb: "Every warning, what it means and what to do.", keywords: ["warning", "error", "conflict", "reference"],
     ...page(() => import("./pages/reference/warning-types.vue")) },
   { id: "component-kit", title: "Component kit", group: "reference", icon: "pi pi-th-large", tone: "neutral",
-    blurb: "Every shared control, colour and size, shown live.", keywords: ["kit", "components", "design", "buttons", "tokens", "colours", "contributors"],
+    blurb: "Every shared control, colour and size, shown live.", keywords: ["kit", "wp-kit", "kit site", "kit version", "components", "design", "buttons", "tokens", "colours", "contributors"],
     ...page(() => import("./pages/reference/component-kit.vue")) },
 ];
 

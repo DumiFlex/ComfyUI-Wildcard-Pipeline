@@ -11,17 +11,17 @@ export type { SelectOption };
 interface Props {
   modelValue: string | number | null;
   options: SelectOption[];
-  placeholder?: string;
-  clearable?: boolean;
-  size?: "sm" | "md" | "lg";
-  disabled?: boolean;
-  error?: boolean;
-  ariaLabel?: string;
+  placeholder?: string | undefined;
+  clearable?: boolean | undefined;
+  size?: "sm" | "md" | "lg" | undefined;
+  disabled?: boolean | undefined;
+  error?: boolean | undefined;
+  ariaLabel?: string | undefined;
   /** Type-to-filter. Default on. Turn OFF for a small fixed list (e.g. a
    *  4-item mode picker) that needs neither the "Type to filter" hint nor the
    *  height it adds — the hint row was what pushed the menu into a scrollbar
    *  that overlapped the selected row's tick. */
-  filterable?: boolean;
+  filterable?: boolean | undefined;
 }
 const props = withDefaults(defineProps<Props>(), { size: "md", placeholder: "Select…", filterable: true });
 

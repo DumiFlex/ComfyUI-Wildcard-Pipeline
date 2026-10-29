@@ -11,12 +11,12 @@
  * `decorative=false` when it really divides two parts of the content.
  */
 withDefaults(defineProps<{
-  orientation?: "horizontal" | "vertical";
+  orientation?: "horizontal" | "vertical" | undefined;
   /** Text in the middle of a horizontal line. */
-  label?: string;
-  decorative?: boolean;
+  label?: string | undefined;
+  decorative?: boolean | undefined;
   /** Room around the line. */
-  spacing?: "none" | "sm" | "md" | "lg";
+  spacing?: "none" | "sm" | "md" | "lg" | undefined;
 }>(), { orientation: "horizontal", label: undefined, decorative: true, spacing: "sm" });
 </script>
 

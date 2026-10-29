@@ -14,11 +14,11 @@
 import { vTooltip } from "./tooltip";
 
 withDefaults(defineProps<{
-  label?: string;
-  size?: "sm" | "md" | "lg";
-  disabled?: boolean;
+  label?: string | undefined;
+  size?: "sm" | "md" | "lg" | undefined;
+  disabled?: boolean | undefined;
   /** A shortcut for the tooltip, e.g. "Esc". */
-  kbd?: string;
+  kbd?: string | undefined;
 }>(), { label: "Close", size: "md", kbd: undefined });
 
 const emit = defineEmits<{ (e: "click", ev: MouseEvent): void }>();

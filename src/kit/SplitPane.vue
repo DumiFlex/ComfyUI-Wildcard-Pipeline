@@ -16,17 +16,17 @@
 import { useId } from "vue";
 import ResizeHandle from "./ResizeHandle.vue";
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   /** The first panel's size in px. */
   modelValue: number;
   /** horizontal: side by side. vertical: one above the other. */
-  orientation?: "horizontal" | "vertical";
-  min?: number;
-  max?: number;
-  defaultSize?: number;
+  orientation?: "horizontal" | "vertical" | undefined;
+  min?: number | undefined;
+  max?: number | undefined;
+  defaultSize?: number | undefined;
   /** What the handle resizes, for screen readers. */
-  label?: string;
-  disabled?: boolean;
+  label?: string | undefined;
+  disabled?: boolean | undefined;
 }>(), { orientation: "horizontal", min: 120, max: Number.POSITIVE_INFINITY, defaultSize: undefined, label: "Resize panels" });
 
 const emit = defineEmits<{ (e: "update:modelValue", v: number): void; (e: "end", v: number): void }>();
@@ -48,7 +48,7 @@ const startId = `wp-split-${useId()}`;
       :min="min"
       :max="max"
       :default-size="defaultSize"
-      :label="label"
+      :label="props.label"
       :controls="startId"
       :disabled="disabled"
       @update:model-value="emit('update:modelValue', $event)"

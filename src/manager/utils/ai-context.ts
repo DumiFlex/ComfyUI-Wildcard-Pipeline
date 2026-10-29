@@ -21,19 +21,28 @@ const FRESH_MS = 4000;
 let last: { at: number; vars: AiCanvasVar[] | undefined } | null = null;
 let asking: Promise<AiCanvasVar[] | undefined> | null = null;
 
+/** Everything the open canvas tabs said, merged. */
+export interface CanvasFacts {
+  vars: AiCanvasVar[];
+  ids: string[];
+  reads: string[];
+}
+
 /** Ask every open canvas tab; merged answers, or undefined when none
  *  answered in time (no canvas open, or no BroadcastChannel). */
-export function askCanvas(wait = WAIT_MS): Promise<AiCanvasVar[] | undefined> {
+export function askCanvasFacts(wait = WAIT_MS): Promise<CanvasFacts | undefined> {
   if (typeof BroadcastChannel === "undefined") return Promise.resolve(undefined);
   return new Promise((resolve) => {
     const channel = new BroadcastChannel(CANVAS_FACTS_CHANNEL);
     const id = Math.random().toString(36).slice(2);
-    let got: AiCanvasVar[] | undefined;
+    let got: CanvasFacts | undefined;
     channel.onmessage = (event: MessageEvent<CanvasFactsMessage>) => {
       const msg = event.data;
       if (!msg || msg.type !== "facts" || msg.id !== id || !Array.isArray(msg.vars)) return;
-      got = got ?? [];
-      for (const v of msg.vars) if (!got.some((x) => x.name === v.name)) got.push(v);
+      got = got ?? { vars: [], ids: [], reads: [] };
+      for (const v of msg.vars) if (!got.vars.some((x) => x.name === v.name)) got.vars.push(v);
+      for (const i of msg.ids ?? []) if (!got.ids.includes(i)) got.ids.push(i);
+      for (const r of msg.reads ?? []) if (!got.reads.includes(r)) got.reads.push(r);
     };
     channel.postMessage({ type: "ask", id } satisfies CanvasFactsMessage);
     setTimeout(() => {
@@ -41,6 +50,11 @@ export function askCanvas(wait = WAIT_MS): Promise<AiCanvasVar[] | undefined> {
       resolve(got);
     }, wait);
   });
+}
+
+/** The run-time variables the open canvas tabs set. */
+export async function askCanvas(wait = WAIT_MS): Promise<AiCanvasVar[] | undefined> {
+  return (await askCanvasFacts(wait))?.vars;
 }
 
 async function canvasVars(): Promise<AiCanvasVar[] | undefined> {

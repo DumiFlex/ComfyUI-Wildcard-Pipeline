@@ -20,15 +20,15 @@ export interface GridImage { id: string; src: string; alt: string; thumb?: strin
 const props = withDefaults(defineProps<{
   images: GridImage[];
   /** Smallest tile width in px. */
-  minSize?: number;
+  minSize?: number | undefined;
   /** Width / height of a tile. */
-  aspect?: number;
-  gap?: "sm" | "md";
-  selectable?: boolean;
-  selected?: string[];
+  aspect?: number | undefined;
+  gap?: "sm" | "md" | undefined;
+  selectable?: boolean | undefined;
+  selected?: string[] | undefined;
   /** Open the Lightbox on a click (off: emit `open` and do your own thing). */
-  lightbox?: boolean;
-  ariaLabel?: string;
+  lightbox?: boolean | undefined;
+  ariaLabel?: string | undefined;
 }>(), { minSize: 120, aspect: 1, gap: "md", selectable: false, selected: () => [], lightbox: true, ariaLabel: "Images" });
 
 const emit = defineEmits<{
@@ -64,7 +64,7 @@ function toggle(id: string, on: boolean): void {
       v-for="(img, i) in images"
       :key="img.id"
       class="wp-image-grid__tile"
-      :data-selected="(selectable && selected.includes(img.id)) || undefined"
+      :data-selected="(selectable && props.selected.includes(img.id)) || undefined"
     >
       <button
         type="button"
@@ -78,7 +78,7 @@ function toggle(id: string, on: boolean): void {
       <WpCheck
         v-if="selectable"
         class="wp-image-grid__check"
-        :model-value="selected.includes(img.id)"
+        :model-value="props.selected.includes(img.id)"
         :aria-label="`Select ${img.alt}`"
         @update:model-value="toggle(img.id, $event)"
       />

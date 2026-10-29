@@ -15,13 +15,13 @@ import { computed, ref, watch } from "vue";
 
 const props = withDefaults(defineProps<{
   name: string;
-  src?: string | null;
+  src?: string | null | undefined;
   /** A PrimeIcons class to draw instead of initials. */
-  icon?: string;
-  size?: "sm" | "md" | "lg";
-  shape?: "circle" | "square";
+  icon?: string | undefined;
+  size?: "sm" | "md" | "lg" | undefined;
+  shape?: "circle" | "square" | undefined;
   /** The name is written next to it already. */
-  decorative?: boolean;
+  decorative?: boolean | undefined;
 }>(), { src: null, icon: undefined, size: "md", shape: "circle" });
 
 const failed = ref(false);

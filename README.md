@@ -119,6 +119,10 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
 - **Library:** create, edit and search your modules, bundles and prompt
   templates. The **Tags** page groups them into collections, and you can rename
   or merge a tag across the whole library.
+- **Library health:** one page that finds broken references, constraint rules
+  for options that are gone, variables nothing sets, duplicates and unused
+  items, with a way to fix or ignore each, and checks how varied a bundle's
+  prompts are.
 - **Test Runner:** try a set of modules over many seeds without generating
   images. See how often each option comes up and which rules fired, save a
   baseline, and after an edit see exactly which outputs changed.
@@ -134,7 +138,8 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
   edits modules in every editor, answers questions about your library in a chat,
   explains Test Runner runs, organizes your library and builds whole packs from a
   description. Every change comes back for you to review, and nothing is saved
-  until you apply it.
+  until you apply it. A short **About my library** note in its settings (your
+  naming, style, model, what to never add) is read by every request.
 - **Constraint preview:** a table of each target option's chance for every
   source option, so you can see what a constraint does before running it.
 - **Themes:** six colour themes (Orbit, Native, Nebula, Tide, Ember, High

@@ -5,9 +5,9 @@ import Icon from "./Icon.vue";
 type Tone = "default" | "accent" | "success" | "warn" | "danger" | "info";
 
 interface Props {
-  tone?: Tone;
-  icon?: string | null;
-  removable?: boolean;
+  tone?: Tone | undefined;
+  icon?: string | null | undefined;
+  removable?: boolean | undefined;
   /**
    * Free-form colour (hex or any CSS colour), e.g. a category's. When set it
    * overrides the tone and renders a tinted pill: background = colour @ 18%,
@@ -16,7 +16,7 @@ interface Props {
    * in dark mode. `null` reads as no colour (a category without one).
    * This is what CategoryChip used to be: `<Chip :color :icon>{{ name }}</Chip>`.
    */
-  color?: string | null;
+  color?: string | null | undefined;
 }
 const props = withDefaults(defineProps<Props>(), { tone: "default" });
 

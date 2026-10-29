@@ -21,9 +21,9 @@ export type TooltipValue =
   | undefined
   | {
     text: string | null | undefined;
-    placement?: Placement;
+    placement?: Placement | undefined;
     /** A shortcut shown after the text, e.g. "Ctrl C". */
-    kbd?: string;
+    kbd?: string | undefined;
   };
 
 interface State {

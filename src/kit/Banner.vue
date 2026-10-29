@@ -28,17 +28,17 @@ const TONE_ICON: Record<BannerTone, string> = {
 };
 
 const props = withDefaults(defineProps<{
-  tone?: BannerTone;
-  title?: string;
+  tone?: BannerTone | undefined;
+  title?: string | undefined;
   /** A PrimeIcons class to use instead of the tone's icon; `""` for none. */
-  icon?: string;
-  size?: "sm" | "md";
+  icon?: string | undefined;
+  size?: "sm" | "md" | undefined;
   /** Show a close button; it emits `dismiss`. */
-  dismissible?: boolean;
+  dismissible?: boolean | undefined;
   /** The close button's name. */
-  dismissLabel?: string;
+  dismissLabel?: string | undefined;
   /** Part of the page, not news: `role="note"` instead of a live region. */
-  note?: boolean;
+  note?: boolean | undefined;
 }>(), { tone: "info", size: "md", icon: undefined, dismissLabel: "Dismiss" });
 
 const emit = defineEmits<{ (e: "dismiss"): void }>();

@@ -7,6 +7,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 
 import Kit from "../views/Kit.vue";
 import { KIT_ENTRIES, KIT_EXEMPT, KIT_FOLDERS, KIT_GROUPS } from "../kit/registry";
+import { KIT_SITE } from "../config/links";
 
 const ROOT = resolve(__dirname, "../../..");
 
@@ -74,11 +75,9 @@ describe("Kit.vue", () => {
     wrap.unmount();
   });
 
-  it("filters the sample list with ListFilter", async () => {
+  it("links the kit site for every shared piece", () => {
     const wrap = mountKit();
-    const box = wrap.find('[data-test="kit-filter-search"]');
-    await box.setValue("mood");
-    expect(wrap.find('[data-kit-entry="list-filter"]').findAll("li")).toHaveLength(2);
+    expect(wrap.get('[data-test="kit-site-link"]').attributes("href")).toBe(KIT_SITE);
     wrap.unmount();
   });
 });

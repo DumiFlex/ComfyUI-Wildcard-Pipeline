@@ -22,11 +22,11 @@ const props = withDefaults(defineProps<{
   /** A stable key per item. */
   itemKey: (item: T) => string | number;
   /** The item's name in the grip's label and the announcements. */
-  itemLabel?: (item: T, index: number) => string;
+  itemLabel?: ((item: T, index: number) => string) | undefined;
   /** The list's name for screen readers. */
   label: string;
-  disabled?: boolean;
-  size?: "sm" | "md";
+  disabled?: boolean | undefined;
+  size?: "sm" | "md" | undefined;
 }>(), { size: "md" });
 
 const emit = defineEmits<{

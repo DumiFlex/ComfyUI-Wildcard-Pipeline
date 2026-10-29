@@ -16,10 +16,10 @@ import type { Placement } from "./floating";
 
 const props = withDefaults(defineProps<{
   items: ContextMenuEntry[];
-  header?: ContextMenuHeader;
-  placement?: Placement;
+  header?: ContextMenuHeader | undefined;
+  placement?: Placement | undefined;
   /** Names the menu for screen readers when the trigger is an icon. */
-  label?: string;
+  label?: string | undefined;
 }>(), { placement: "bottom-start" });
 
 const open = ref(false);

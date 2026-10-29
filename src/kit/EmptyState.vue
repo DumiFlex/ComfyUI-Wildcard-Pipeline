@@ -4,14 +4,14 @@ import Icon from "./Icon.vue";
 interface Props {
   icon: string;
   headline: string;
-  body?: string;
+  body?: string | undefined;
   /** "library" = encouraging first-run; "no-results" = corrective for
    *  filter misses; "error" = network/permission failure with retry. */
-  variant?: "library" | "no-results" | "error";
+  variant?: "library" | "no-results" | "error" | undefined;
   /** How much room it takes. `page` fills an empty list page, `panel` (the
    *  default) sits in a card or panel at its own height, `inline` is one
    *  compact row for a small box. */
-  size?: "page" | "panel" | "inline";
+  size?: "page" | "panel" | "inline" | undefined;
 }
 const props = withDefaults(defineProps<Props>(), {
   variant: "library",

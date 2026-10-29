@@ -21,15 +21,15 @@
  */
 const props = withDefaults(
   defineProps<{
-    modelValue?: boolean;
-    variant?: "track" | "chip";
-    size?: "sm" | "md" | "lg";
-    label?: string;
+    modelValue?: boolean | undefined;
+    variant?: "track" | "chip" | undefined;
+    size?: "sm" | "md" | "lg" | undefined;
+    label?: string | undefined;
     /** PrimeIcons class (e.g. `pi-lock`), drawn before the label. */
-    icon?: string;
-    mixed?: boolean;
-    disabled?: boolean;
-    invalid?: boolean;
+    icon?: string | undefined;
+    mixed?: boolean | undefined;
+    disabled?: boolean | undefined;
+    invalid?: boolean | undefined;
   }>(),
   { modelValue: false, variant: "track", size: "sm", label: undefined, icon: undefined },
 );

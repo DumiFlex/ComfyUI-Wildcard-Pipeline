@@ -42,6 +42,7 @@ from wp_api._ai_common import (
     _instruction,
     _request_images,
     _turns,
+    _with_note,
 )
 from wp_api._ai_context import (
     _vocab_kinds,
@@ -449,7 +450,7 @@ async def post_pack_change(request: web.Request) -> web.Response:
         if isinstance(plan.get("graph"), dict):
             # A graph plan: one part on its own schema, merged by the code.
             answer = await _ai_client.complete_json(
-                cfg, system=ai_pack.GRAPH_CHANGE_SYSTEM,
+                cfg, system=_with_note(cfg, ai_pack.GRAPH_CHANGE_SYSTEM),
                 user=ai_pack.graph_change_prompt(plan, key, instruction),
                 schema=ai_pack.change_schema(plan, key), schema_name="pack_graph_change",
                 temperature=0.4,
@@ -462,7 +463,7 @@ async def post_pack_change(request: web.Request) -> web.Response:
                                          canvas=_canvas(body), request=asked)
         else:
             answer = await _ai_client.complete_json(
-                cfg, system=ai_pack.CHANGE_SYSTEM,
+                cfg, system=_with_note(cfg, ai_pack.CHANGE_SYSTEM),
                 user=ai_pack.change_prompt(plan, key, instruction),
                 schema=ai_pack.CHANGE_SCHEMA, schema_name="pack_change", temperature=0.4,
             )
@@ -507,7 +508,8 @@ async def post_pack_images(request: web.Request) -> web.Response:
     asked = _got if isinstance(_got := body.get("request"), str) else ""
     try:
         answer = await _ai_client.complete_json(
-            cfg, system=ai_pack.IMAGES_SYSTEM, user=ai_pack.images_prompt(plan, note),
+            cfg, system=_with_note(cfg, ai_pack.IMAGES_SYSTEM),
+            user=ai_pack.images_prompt(plan, note),
             schema=ai_pack.IMAGES_SCHEMA, schema_name="pack_images", temperature=0.3,
             images=images,
         )
@@ -548,7 +550,7 @@ async def post_pack_review(request: web.Request) -> web.Response:
         raw = body.get("recheck")
         recheck = [ai_safety.strip_invisible(t).strip()[:300] for t in raw[:ai_pack.MAX_RECHECK]
                    if isinstance(t, str) and t.strip()] if isinstance(raw, list) else None
-        ask = {"system": ai_pack.review_system(plan),
+        ask = {"system": _with_note(cfg, ai_pack.review_system(plan)),
                "user": ai_pack.review_prompt(plan, findings, own_words, recheck),
                "schema": ai_pack.review_schema(plan), "schema_name": "pack_review",
                "temperature": 0.3}
@@ -621,6 +623,7 @@ async def post_pack_item(request: web.Request) -> web.Response:
         req = ai_pack.item_request(plan, key, built, note[:1500], library=library)
     except ai_pack.PlanError as e:
         return json_error(str(e), status=400)
+    req["system"] = _with_note(cfg, req["system"])
     vocab_line = ai_pack.item_vocab_note(plan, key, _ai_vocab.lookup, kinds)
     if vocab_line:
         req["user"] += "\n\n" + vocab_line

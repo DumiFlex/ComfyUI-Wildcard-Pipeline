@@ -14,6 +14,7 @@ from engine.ai import chatlog as ai_chatlog
 from engine.ai import compact as ai_compact
 from engine.ai import docs as ai_docs
 from engine.ai import index as ai_index
+from engine.ai import note as ai_note
 from engine.ai import pack as ai_pack
 from engine.ai import safety as ai_safety
 from engine.ai import tools as ai_tools
@@ -347,7 +348,7 @@ def _system_text(prof: dict[str, Any], meta: dict[str, Any], fmt: str, snapshot:
         typed=fmt == "json" and bool(meta.get("typed")),
         split=fmt == "native" and bool(meta.get("split")),
         index=fmt == "json" and bool(meta.get("tool_index")),
-    ) + _LIBRARY_HEAD + snapshot
+    ) + ai_note.section(meta.get("note")) + _LIBRARY_HEAD + snapshot
 
 
 def _fixed_chars(cfg: dict[str, Any], prof: dict[str, Any], meta: dict[str, Any], fmt: str,
@@ -380,7 +381,12 @@ def _open_chat(lib: Any, cfg: dict[str, Any], meta: dict[str, Any], base: dict[s
     """Pick a new chat's tools and library summary: the leanest level from
     `start` whose fixed part fits the model's window (the last one when
     none does; the server's own count then decides). Sets `meta["tools"]`
-    and `meta["lean"]` and returns the library summary."""
+    and `meta["lean"]` and returns the library summary. The "About my
+    library" note is kept in `meta["note"]` as it was when the chat opened,
+    so the instructions never change under a chat."""
+    note = ai_note.clean(cfg.get("library_note"))
+    if note and "note" not in meta:
+        meta["note"] = note
     snapshot = ""
     for level in range(start, len(ai_budget.LEVELS)):
         lean = ai_budget.LEVELS[level]

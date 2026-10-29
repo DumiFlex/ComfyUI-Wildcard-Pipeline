@@ -16,7 +16,7 @@ import { isApplePlatform } from "./platform-keys";
 const props = withDefaults(defineProps<{
   /** "Mod+Shift+P" or ["Mod", "Shift", "P"]. */
   keys: string | string[];
-  size?: "sm" | "md";
+  size?: "sm" | "md" | undefined;
 }>(), { size: "md" });
 
 const MAC: Record<string, string> = { Mod: "⌘", Ctrl: "⌃", Alt: "⌥", Shift: "⇧", Enter: "↵" };

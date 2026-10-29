@@ -19,20 +19,20 @@ import WpNumber from "./WpNumber.vue";
 
 const props = withDefaults(defineProps<{
   modelValue: number;
-  min?: number;
-  max?: number;
-  step?: number;
-  size?: "sm" | "md" | "lg";
-  disabled?: boolean;
-  ariaLabel?: string;
+  min?: number | undefined;
+  max?: number | undefined;
+  step?: number | undefined;
+  size?: "sm" | "md" | "lg" | undefined;
+  disabled?: boolean | undefined;
+  ariaLabel?: string | undefined;
   /** Labelled ticks under the track. */
-  marks?: { value: number; label?: string }[];
+  marks?: { value: number; label?: string }[] | undefined;
   /** How the value reads (the tooltip-free label and screen readers). */
-  format?: (v: number) => string;
+  format?: ((v: number) => string) | undefined;
   /** Show the value after the track. */
-  showValue?: boolean;
+  showValue?: boolean | undefined;
   /** Put a WpNumber after the track to type the exact value. */
-  withInput?: boolean;
+  withInput?: boolean | undefined;
 }>(), { min: 0, max: 100, step: 1, size: "md", ariaLabel: undefined, marks: undefined });
 
 const emit = defineEmits<{ (e: "update:modelValue", v: number): void; (e: "change", v: number): void }>();
@@ -109,7 +109,7 @@ function onTyped(v: number | null): void {
         :key="m.value"
         class="wp-slider__mark"
         :data-passed="m.value <= value || undefined"
-        :style="{ left: `${percentOf(m.value, min, max)}%` }"
+        :style="{ left: `${percentOf(m.value, props.min, props.max)}%` }"
         aria-hidden="true"
       ><span v-if="m.label" class="wp-slider__mark-label">{{ m.label }}</span></span>
       <!-- Focusable unless disabled (tabindex is bound). -->

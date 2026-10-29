@@ -8,22 +8,22 @@ import Icon from "./Icon.vue";
 
 interface Props {
   modelValue: string;
-  type?: "text" | "email" | "url" | "password" | "tel";
-  placeholder?: string;
-  disabled?: boolean;
+  type?: "text" | "email" | "url" | "password" | "tel" | undefined;
+  placeholder?: string | undefined;
+  disabled?: boolean | undefined;
   /** Shown but not editable: dimmer fill, no focus ring, a lock icon. */
-  readonly?: boolean;
-  error?: boolean;
+  readonly?: boolean | undefined;
+  error?: boolean | undefined;
   /** Height on the control scale: sm 24 / md 32 / lg 40. */
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | undefined;
   /** Icon before the text (a search glass). Drawn inline, no box. */
-  icon?: string;
+  icon?: string | undefined;
   /** Text before the value, e.g. `$` for a variable name. */
-  prefix?: string;
+  prefix?: string | undefined;
   /** Text after the value, e.g. a unit. */
-  suffix?: string;
-  id?: string;
-  ariaLabel?: string;
+  suffix?: string | undefined;
+  id?: string | undefined;
+  ariaLabel?: string | undefined;
 }
 const props = withDefaults(defineProps<Props>(), {
   type: "text",

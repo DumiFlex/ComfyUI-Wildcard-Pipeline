@@ -2348,3 +2348,39 @@ export function collectCanvasVars(rootGraph: LiteGraphLike): CanvasVar[] {
   }
   return out.slice(0, 40);
 }
+
+/** Library ids the canvas uses and variables its Assemblers read. */
+export interface CanvasLibraryUse {
+  ids: string[];
+  reads: string[];
+}
+
+const LIBRARY_REF_RE = /@\{([0-9a-f]{8})/g;
+const VAR_READ_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
+
+/**
+ * What the library's health page can't see from the library alone: which
+ * library items sit on this canvas (each WP_Context's module ids, its
+ * bundles' library ids and every `@{uuid}` inside its copies) and which
+ * variables the canvas's WP_PromptAssembler templates read. Bypassed and
+ * muted nodes count too: they are still on the canvas, just switched off.
+ * Ids and names only, never values.
+ */
+export function collectCanvasLibraryUse(rootGraph: LiteGraphLike): CanvasLibraryUse {
+  const ids = new Set<string>();
+  const reads = new Set<string>();
+  for (const { node: n } of walkAllNodes(rootGraph)) {
+    if (n.type === "WP_Context") {
+      const raw = widgetValue(n, "wp_modules");
+      const v = parseCached<ContextWidgetValue>(raw, { version: 1, modules: [] });
+      for (const m of v.modules ?? []) if (typeof m.id === "string") ids.add(m.id);
+      for (const b of v.bundles ?? []) if (typeof b.library_id === "string") ids.add(b.library_id);
+      for (const match of raw.matchAll(LIBRARY_REF_RE)) ids.add(match[1]);
+    } else if (n.type === "WP_PromptAssembler") {
+      const text = `${widgetValue(n, "template")} ${widgetValue(n, "negative_template")}`;
+      for (const match of text.matchAll(VAR_READ_RE)) reads.add(match[1]);
+      for (const match of text.matchAll(LIBRARY_REF_RE)) ids.add(match[1]);
+    }
+  }
+  return { ids: [...ids], reads: [...reads] };
+}
