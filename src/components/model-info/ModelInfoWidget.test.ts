@@ -49,6 +49,17 @@ describe("ModelInfoWidget", () => {
     expect(lastEmit(w).variant).toBe("");
   });
 
+  it("a wired input replaces the pin until a run says what it held", async () => {
+    const w = mk({ loaderName: PONY, wired: ["name"], modelValue: { ...defaultModelInfoConfig(), name: "x.safetensors" } });
+    expect(w.find('[data-test="mi-value-name"]').text()).toBe("from the name input, after a run");
+    expect(w.find('[data-test="mi-var-name"]').text()).toContain("wired");
+    expect(w.find('[data-test="mi-pin-name"]').attributes("disabled")).toBeDefined();
+    expect(w.find('[data-test="mi-pin-input-name"]').exists()).toBe(false);
+    await w.setProps({ lastRun: { family: "sdxl", variant: "illustrious", name: "waiIllustrious", sources: { name: "wired" } } });
+    expect(w.find('[data-test="mi-value-name"]').text()).toBe("waiIllustrious");
+    expect(w.find('[data-test="mi-value-variant"]').text()).toBe("illustrious");
+  });
+
   it("a pinned name drives the rules", () => {
     const w = mk({ modelValue: { ...defaultModelInfoConfig(), name: "waiIllustrious.safetensors" } });
     expect(w.find('[data-test="mi-value-variant"]').text()).toBe("illustrious");

@@ -35,8 +35,10 @@ const props = withDefaults(
     lastRun?: ModelInfoRun | null;
     /** Litegraph mode: 2 = muted, 4 = bypassed (dims the widget). */
     nodeMode?: number;
+    /** Text inputs (`family`, `variant`, `name`) wired from another node. */
+    wired?: string[];
   }>(),
-  { loaderName: "", modelWired: false, lastRun: null, nodeMode: 0 },
+  { loaderName: "", modelWired: false, lastRun: null, nodeMode: 0, wired: () => [] },
 );
 const emit = defineEmits<{ "update:modelValue": [next: ModelInfoConfig] }>();
 
@@ -51,8 +53,19 @@ const problemByRow = computed(() => {
   return out;
 });
 
+function isWired(k: Key): boolean {
+  return props.wired.includes(k);
+}
+/** A wired value is only known after a run that used the wire. */
+function wiredValue(k: Key): string {
+  return props.lastRun?.sources[k] === "wired" ? props.lastRun[k] : "";
+}
+
 const detectedName = computed(() => (props.loaderName ? modelStem(props.loaderName) : ""));
-const effectiveName = computed(() => (props.modelValue.name ? modelStem(props.modelValue.name) : detectedName.value));
+const effectiveName = computed(() => {
+  if (isWired("name")) return wiredValue("name");
+  return props.modelValue.name ? modelStem(props.modelValue.name) : detectedName.value;
+});
 const matched = computed(() => matchRule(effectiveName.value, compiled.value.rules));
 
 interface Row { key: Key; label: string; variable: string; value: string; source: string; hint: string }
@@ -83,6 +96,12 @@ const rows = computed<Row[]>(() => {
     source: cfg.name ? "pinned" : detectedName.value ? "from loader" : "",
     hint: props.modelWired ? "no file name found" : "wire a model",
   };
+  for (const row of [family, variant, name]) {
+    if (!isWired(row.key)) continue;
+    row.value = wiredValue(row.key);
+    row.source = "wired";
+    row.hint = `from the ${row.key} input, after a run`;
+  }
   return [family, variant, name];
 });
 
@@ -98,7 +117,7 @@ const editing = ref<Key | null>(null);
 const pinInputs = ref<Partial<Record<Key, HTMLInputElement | null>>>({});
 
 function isPinned(k: Key): boolean {
-  return !!props.modelValue[k];
+  return !isWired(k) && !!props.modelValue[k];
 }
 function setPin(k: Key, value: string): void {
   emit("update:modelValue", { ...props.modelValue, [k]: value.trim() });
@@ -119,7 +138,7 @@ function onPinBlur(k: Key, ev: Event): void {
   if (editing.value === k) editing.value = null;
 }
 function showsInput(k: Key): boolean {
-  return isPinned(k) || editing.value === k;
+  return !isWired(k) && (isPinned(k) || editing.value === k);
 }
 
 /* ── internal (hidden from the Assembler) ─────────────────────────────── */
@@ -195,7 +214,9 @@ function resetRules(): void {
             :title="row.value || row.hint"
             :data-test="`mi-value-${row.key}`"
           >{{ row.value || row.hint }}</span>
-          <span class="wp-mi__source" :class="{ 'is-pinned': isPinned(row.key) }">{{ row.source }}</span>
+          <span class="wp-mi__source" :class="{ 'is-pinned': isPinned(row.key), 'is-wired': isWired(row.key) }">
+            <i v-if="isWired(row.key)" class="pi pi-link" aria-hidden="true" />{{ row.source }}
+          </span>
           <span class="wp-mi__actions">
           <WpIconButton
             icon="pi-globe"
@@ -210,8 +231,9 @@ function resetRules(): void {
             icon="pi-thumbtack"
             tone="warn"
             :pressed="isPinned(row.key)"
+            :disabled="isWired(row.key)"
             :label="isPinned(row.key) ? `Unpin ${row.variable}` : `Pin ${row.variable}`"
-            :hint="isPinned(row.key) ? 'Unpin: detect it again' : `Pin ${row.variable} to a value of your own`"
+            :hint="isWired(row.key) ? `Set by the ${row.key} input` : isPinned(row.key) ? 'Unpin: detect it again' : `Pin ${row.variable} to a value of your own`"
             :data-test="`mi-pin-${row.key}`"
             @click="startPin(row)"
           />
@@ -374,6 +396,8 @@ function resetRules(): void {
   color: var(--wp-text-dim, var(--wp-text3));
   white-space: nowrap;
 }
+.wp-mi__source.is-wired { color: var(--wp-accent); }
+.wp-mi__source.is-wired .pi { font-size: 8px; margin-right: 3px; }
 .wp-mi__source.is-pinned { color: var(--wp-amber, var(--wp-warn, #fbbf24)); }
 /* VARIANT RULES */
 .wp-mi__rules { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; }

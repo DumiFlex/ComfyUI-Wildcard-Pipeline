@@ -12,6 +12,7 @@ Pony and Illustrious are both SDXL underneath, so only the file name can tell th
 
 - **upstream** *(optional)*: an existing Context to extend. Only nodes **after** Model Info see its variables, so put it first in the chain.
 - **model** *(optional)*: the MODEL from your checkpoint loader. Gives the family, and the node follows the wire back to the loader to read its file name (through LoRA loaders and other model patches).
+- **family**, **variant**, **name** *(optional, text)*: values from another node, for example a switch that names the model you're testing. A wired value beats the pin and detection (an empty one is ignored); a wired **name** goes through the variant rules like the loader's. The row shows **wired** and its value after a run.
 
 ## The widget
 
@@ -34,4 +35,4 @@ Pony and Illustrious are both SDXL underneath, so only the file name can tell th
 
 - If a node that loads LoRAs from the prompt sits on the model, take MODEL from **before** it, or the graph loops.
 - A wildcard set to **Match variable** uses its fallback option when no option matches; without one it rolls as usual and WP Debug says why.
-- WP Debug's trace shows each value and where it came from (model, loader, rules or pinned).
+- WP Debug's trace shows each value and where it came from (model, loader, rules, pinned or wired).
