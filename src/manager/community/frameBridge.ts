@@ -17,6 +17,7 @@ import {
   FRAME_PROTOCOL,
   isFrameMessage,
   type FrameMessage,
+  type FrameAppearance,
   type FrameTheme,
   type FrameTokenPair,
 } from "./frame-protocol";
@@ -37,6 +38,8 @@ export interface FrameBridgeOptions {
   origin: string;
   runtime: HostRuntime;
   theme: () => FrameTheme;
+  /** Palette, look and resolved scheme, sent in hello (community/appearance.ts). */
+  appearance?: () => FrameAppearance;
   analytics: () => boolean;
   /** Sign-in the old script embed kept in this page's storage. Sent once in
    *  hello; `onTokensAdopted` fires when the frame has taken it. */
@@ -52,6 +55,7 @@ export interface FrameBridgeOptions {
 export interface FrameBridge {
   navigate(target: FrameTarget): void;
   setTheme(theme: FrameTheme): void;
+  setAppearance(appearance: FrameAppearance): void;
   /** Hand the publish form its payload (the `#…` string single-row-publish builds). */
   publish(hash: string): void;
   dispose(): void;
@@ -174,6 +178,7 @@ export function connectFrame(opts: FrameBridgeOptions): FrameBridge {
       abi: opts.runtime.abi,
       schemaVersion: opts.runtime.schemaVersion,
       theme: opts.theme(),
+      ...(opts.appearance ? { appearance: opts.appearance() } : {}),
       analytics: opts.analytics(),
       ...(tokens ? { legacyTokens: tokens } : {}),
     }, opts.origin);
@@ -249,6 +254,7 @@ export function connectFrame(opts: FrameBridgeOptions): FrameBridge {
   return {
     navigate: (target) => post({ type: "event", name: "navigate", data: target }),
     setTheme: (theme) => post({ type: "event", name: "theme", data: theme }),
+    setAppearance: (appearance) => post({ type: "event", name: "appearance", data: appearance }),
     publish: (hash) => post({ type: "event", name: "publish", data: hash }),
     dispose() {
       disposed = true;

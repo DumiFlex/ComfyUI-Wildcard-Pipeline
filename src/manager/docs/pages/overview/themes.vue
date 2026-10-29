@@ -54,8 +54,9 @@ import { LOOK_OPTIONS, PALETTE_OPTIONS } from "../../../stores/tweaksStore";
         accent so its text stays readable; your pick comes back when you leave it.
       </p>
       <DocCallout variant="tip">
-        Themes change the manager only. The canvas nodes keep ComfyUI's colours, so they sit well next to
-        other nodes.
+        Themes change the manager, and the Community tab follows them: it takes the colour theme, the look
+        and light or dark, and changes with them. The canvas nodes keep ComfyUI's colours, so they sit well
+        next to other nodes.
       </DocCallout>
     </DocSection>
   </DocPage>
