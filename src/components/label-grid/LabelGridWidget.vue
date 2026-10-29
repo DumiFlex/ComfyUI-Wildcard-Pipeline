@@ -23,6 +23,7 @@ import WpSelect from "../shared/WpSelect.vue";
 import WpSwitch from "../shared/WpSwitch.vue";
 import Combobox from "../shared/Combobox.vue";
 import ColorField from "../shared/ColorField.vue";
+import { vTooltip } from "../shared/tooltip";
 import {
   DEFAULT_LABEL_GRID_CONFIG,
   type GridArrange,
@@ -113,6 +114,15 @@ function setFontSize(v: number | null): void {
   set("font_size", v ?? 0);
 }
 
+/** What each token in the label text stands for (shown on hover). */
+const TOKENS: { token: string; hint: string }[] = [
+  { token: "{label}", hint: "The incoming label from the labels input, e.g. the Image Filter's \"#3 · dawn · pastel\". Empty when nothing is wired." },
+  { token: "{frame}", hint: "Which input item the image came from (a loop frame or list entry), counting from 1." },
+  { token: "{image}", hint: "The image's place inside its item's batch, counting from 1." },
+  { token: "{index}", hint: "The image's place across every image, counting from 1." },
+  { token: "{count}", hint: "How many images came in." },
+];
+
 const labelPlaceholder = computed(() => (props.lastRun && !props.lastRun.labelled ? "e.g. #{index}" : "{label}"));
 
 /* ── grid ─────────────────────────────────────────────────────────────── */
@@ -194,7 +204,17 @@ function text(ev: Event): string {
     <section class="wp-lg__section">
       <div class="wp-lg__head">
         <span class="wp-lg__label">LABEL</span>
-        <span class="wp-lg__head-note">{label} {frame} {image} {index} {count}</span>
+        <span class="wp-lg__head-note wp-lg__tokens">
+          <span
+            v-for="t in TOKENS"
+            :key="t.token"
+            v-tooltip="t.hint"
+            class="wp-lg__token"
+            tabindex="0"
+            :aria-label="`${t.token}: ${t.hint}`"
+            :data-test="`lg-token-${t.token.slice(1, -1)}`"
+          >{{ t.token }}</span>
+        </span>
       </div>
       <input
         class="wp-lg__input wp-lg__template"
@@ -513,6 +533,10 @@ function text(ev: Event): string {
   font: 9px var(--wp-font-mono, monospace);
   color: var(--wp-text-dim);
 }
+
+.wp-lg__tokens { display: flex; gap: 6px; }
+.wp-lg__token { cursor: help; border-bottom: 1px dotted var(--wp-border-strong); }
+.wp-lg__token:hover, .wp-lg__token:focus-visible { color: var(--wp-text-muted); outline: none; }
 
 .wp-lg__row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .wp-lg__row--wrap { flex-wrap: wrap; }

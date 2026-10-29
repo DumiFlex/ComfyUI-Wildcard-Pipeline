@@ -45,6 +45,12 @@ describe("LabelGridWidget", () => {
     expect(lastEmit(w)).toMatchObject({ position: "over_top", label_color: "#00000099" });
   });
 
+  it("explains each label token", () => {
+    const tokens = mk().findAll('[data-test^="lg-token-"]');
+    expect(tokens.map((t) => t.text())).toEqual(["{label}", "{frame}", "{image}", "{index}", "{count}"]);
+    expect(tokens[1].attributes("aria-label")).toContain("input item");
+  });
+
   it("hides font and colours when there is no label", () => {
     const w = mk({ modelValue: { ...defaultLabelGridConfig(), position: "none" } });
     expect(w.find('[data-test="lg-text-color"]').exists()).toBe(false);
