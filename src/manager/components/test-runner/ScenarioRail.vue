@@ -6,8 +6,8 @@
  */
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, ref } from "vue";
-import Button from "../ui/Button.vue";
-import Icon, { ICON_SM } from "../ui/Icon.vue";
+import Button from "../../../kit/Button.vue";
+import Icon, { ICON_SM } from "../../../kit/Icon.vue";
 import type { ScenarioRow } from "../../api/types";
 import { seedLabel, type LastRunSummary } from "../../utils/scenario";
 

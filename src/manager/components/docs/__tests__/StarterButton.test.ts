@@ -36,7 +36,7 @@ vi.mock("../../../docs/useStarterSet", () => ({
 }));
 
 const pushMock = vi.hoisted(() => vi.fn());
-vi.mock("../../../composables/useToast", () => ({
+vi.mock("../../../../kit/useToast", () => ({
   useToast: () => ({ toasts: { value: [] }, push: pushMock, dismiss: vi.fn() }),
 }));
 

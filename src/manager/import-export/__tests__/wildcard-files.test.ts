@@ -14,7 +14,7 @@ vi.mock("../../api/client", () => ({
 
 import ImportTab from "../ImportTab.vue";
 import PackConverter from "../PackConverter.vue";
-import Select from "../../components/ui/Select.vue";
+import Select from "../../../kit/Select.vue";
 import {
   buildWildcardForm,
   describeNote,

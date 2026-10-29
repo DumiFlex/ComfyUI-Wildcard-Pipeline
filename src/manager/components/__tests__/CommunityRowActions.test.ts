@@ -20,7 +20,7 @@ vi.mock("vue-router", () => ({
 }));
 
 // Stub the toast composable (no host mounted in this unit test).
-vi.mock("../../composables/useToast", () => ({
+vi.mock("../../../kit/useToast", () => ({
   useToast: () => ({ push: vi.fn() }),
 }));
 

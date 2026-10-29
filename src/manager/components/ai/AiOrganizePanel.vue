@@ -8,8 +8,8 @@
  * offers Undo. Follow-ups refine the answer like every AI panel.
  */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import Button from "../ui/Button.vue";
-import Checkbox from "../ui/Checkbox.vue";
+import Button from "../../../kit/Button.vue";
+import Checkbox from "../../../kit/Checkbox.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
 import { api } from "../../api/client";
 import type { AiOrganizeChange, AiOrganizeResult, ModuleUpdateInput } from "../../api/types";
@@ -17,7 +17,7 @@ import { useAiConversation } from "../../composables/useAiConversation";
 import { useModuleStore } from "../../stores/moduleStore";
 import { useBundleStore } from "../../stores/bundleStore";
 import { useCategoryStore } from "../../stores/categoryStore";
-import { useToast } from "../../composables/useToast";
+import { useToast } from "../../../kit/useToast";
 
 /** A library list row: a module, or a bundle (which has `children`). */
 interface Row {

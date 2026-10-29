@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Icon from "../../ui/Icon.vue";
+import Icon from "../../../../kit/Icon.vue";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { DISCORD_INVITE, GITHUB_REPO, SUPPORT_LINKS, WPC_API_URL } from "../../../config/links";

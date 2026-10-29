@@ -3,7 +3,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
 import AiSection from "../sections/AiSection.vue";
-import Select from "../../ui/Select.vue";
+import Select from "../../../../kit/Select.vue";
 import { SUGGESTED_LOCAL_MODELS, SUGGESTED_MODELS, suggestionsFor } from "../ai-models";
 import { api } from "../../../api/client";
 import { _resetAiConfigForTests } from "../../../composables/useAiConfig";

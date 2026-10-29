@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import RelativeDate from "../../components/RelativeDate.vue";
+import RelativeDate from "../../../kit/RelativeDate.vue";
 
 const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
 const yesterday = new Date(Date.now() - 26 * 3600_000).toISOString();

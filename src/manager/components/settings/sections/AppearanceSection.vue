@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
-import Select from "../../ui/Select.vue";
-import Icon from "../../ui/Icon.vue";
-import type { SelectOption } from "../../ui/select-types";
+import Select from "../../../../kit/Select.vue";
+import Icon from "../../../../kit/Icon.vue";
+import type { SelectOption } from "../../../../kit/select-types";
 import HsvPicker from "../../../../kit/HsvPicker.vue";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";

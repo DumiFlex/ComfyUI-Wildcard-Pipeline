@@ -9,7 +9,7 @@
  *
  * Scope:
  *   - src/manager/**\/*.vue   (scoped + global style blocks)
- *   - src/manager/styles/tokens.css (definitions only; consumers
+ *   - src/kit/theme/tokens.css (definitions only; consumers
  *     elsewhere flagged)
  *
  * Run: pnpm check:spacing

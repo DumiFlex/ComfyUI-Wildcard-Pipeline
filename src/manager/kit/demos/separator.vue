@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Separator from "@/kit/Separator.vue";
-import Button from "../../components/ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 </script>
 
 <template>

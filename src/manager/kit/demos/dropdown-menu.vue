@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import Button from "../../components/ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 import DropdownMenu from "@/kit/DropdownMenu.vue";
 import type { ContextMenuEntry } from "@/kit/ContextMenu.vue";
-import { useToast } from "../../composables/useToast";
+import { useToast } from "../../../kit/useToast";
 
 const toast = useToast();
 const did = (what: string) => () => toast.push({ severity: "success", summary: what });

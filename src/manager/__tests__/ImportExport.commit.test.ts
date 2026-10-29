@@ -36,7 +36,7 @@ import ImportExport from "../views/ImportExport.vue";
 import ConflictModal from "../import-export/ConflictModal.vue";
 import ImportPicker from "../import-export/ImportPicker.vue";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
-import { useToast } from "../composables/useToast";
+import { useToast } from "../../kit/useToast";
 import type { AiConfig, ModuleRow } from "../api/types";
 import PackConverter from "../import-export/PackConverter.vue";
 import { _resetAiConfigForTests } from "../composables/useAiConfig";

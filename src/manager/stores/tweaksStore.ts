@@ -19,10 +19,10 @@ export type PresetAccent = "violet" | "indigo" | "teal" | "rose" | "amber";
 /** `"theme"` = the colour theme's own accent (no inline override). */
 export type AccentName  = PresetAccent | "theme" | "custom";
 /** Colour theme: surfaces, borders, text and a default accent. `data-wp-palette`
- *  on <html>; the rules live in styles/themes.css. */
+ *  on <html>; the rules live in kit/theme/palettes.css. */
 export type PaletteName = "orbit" | "native" | "nebula" | "tide" | "ember" | "contrast";
 /** Look: everything that is not colour (shape, type, borders, depth).
- *  `data-wp-look` on <html>; the rules live in styles/looks.css. */
+ *  `data-wp-look` on <html>; the rules live in kit/theme/looks.css. */
 export type LookName    = "orbit" | "crisp" | "soft" | "terminal" | "editorial" | "compact" | "tui";
 export type Density     = DensityMode;
 export type SidebarMode = "expanded" | "collapsed";
@@ -135,7 +135,7 @@ export interface PaletteOption {
   locksAccent?: boolean;
 }
 
-/** Values mirror styles/themes.css. */
+/** Values mirror kit/theme/palettes.css. */
 export const PALETTE_OPTIONS: PaletteOption[] = [
   { id: "orbit",    label: "Orbit",         hint: "Logo indigo on cool ink. The default.",
     swatch: { dark: ["#0b0b12", "#1c1c28", "#4f46e5"], light: ["#f7f7fb", "#e6e6ee", "#4f46e5"] } },
@@ -294,7 +294,7 @@ export const useTweaksStore = defineStore("tweaks", () => {
 
   function applyAccent(name: AccentName) {
     if (!hasDocument()) return;
-    // The theme's own ramp comes from styles/themes.css, so drop the inline one.
+    // The theme's own ramp comes from kit/theme/palettes.css, so drop the inline one.
     if (name === "theme" || accentLocked.value) {
       clearAccent();
       return;

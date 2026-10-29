@@ -23,5 +23,13 @@ const display = computed(() => {
 </script>
 
 <template>
-  <span class="text-xs text-wp-text2" :title="value || ''">{{ display }}</span>
+  <span class="wp-reldate" :title="value || ''">{{ display }}</span>
 </template>
+
+<style scoped>
+.wp-reldate {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--wp-text2);
+}
+</style>

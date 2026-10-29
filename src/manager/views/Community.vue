@@ -17,8 +17,8 @@
  */
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import Card from "../components/ui/Card.vue";
-import Icon from "../components/ui/Icon.vue";
+import Card from "../../kit/Card.vue";
+import Icon from "../../kit/Icon.vue";
 import LoadingMark from "@/kit/LoadingMark.vue";
 import { DISCORD_INVITE, WPC_API_URL, WPC_EMBED_FRAME_URL } from "../config/links";
 import { connectFrame, type FrameBridge, type FrameTarget } from "../community/frameBridge";

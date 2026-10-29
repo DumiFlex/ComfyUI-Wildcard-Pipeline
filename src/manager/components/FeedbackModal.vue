@@ -7,7 +7,7 @@
  * Discord first — it gets a faster answer and is more likely to be seen, which
  * the copy says outright rather than leaving the user to guess which to pick.
  */
-import Modal from "./ui/Modal.vue";
+import Modal from "../../kit/Modal.vue";
 import { DISCORD_INVITE, GITHUB_NEW_ISSUE } from "../config/links";
 
 defineProps<{ open: boolean }>();

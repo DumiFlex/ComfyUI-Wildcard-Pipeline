@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Select from "../../components/ui/Select.vue";
-import type { SelectOption } from "../../components/ui/select-types";
+import Select from "../../../kit/Select.vue";
+import type { SelectOption } from "../../../kit/select-types";
 
 const category = ref<string | number | null>("characters");
 const empty = ref<string | number | null>(null);

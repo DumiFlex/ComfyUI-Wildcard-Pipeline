@@ -3,7 +3,7 @@ import { ref } from "vue";
 import Separator from "@/kit/Separator.vue";
 import Toolbar from "@/kit/Toolbar.vue";
 import WpButton from "@/kit/WpButton.vue";
-import Button from "../../components/ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 
 const last = ref("");
 </script>

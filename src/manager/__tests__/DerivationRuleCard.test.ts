@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import DerivationRuleCard from "../components/DerivationRuleCard.vue";
 import RichTextInput from "../components/RichTextInput.vue";
-import Select from "../components/ui/Select.vue";
+import Select from "../../kit/Select.vue";
 import type { DerivationCondition, DerivationRule } from "../api/types";
 
 function makeRule(overrides: Partial<DerivationRule> = {}): DerivationRule {

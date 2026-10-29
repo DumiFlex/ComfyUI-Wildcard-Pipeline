@@ -6,7 +6,7 @@
  * Runner" runs the same stack there, where the user can dig in.
  */
 import { computed, ref } from "vue";
-import Button from "../ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 import type { AiTestCard } from "../../api/types";
 
 const props = defineProps<{ card: AiTestCard; full?: boolean }>();

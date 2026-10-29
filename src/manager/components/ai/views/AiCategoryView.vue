@@ -5,7 +5,7 @@
  * icons as old chip → new chip.
  */
 import type { CardView } from "../../../composables/card-views/types";
-import Chip from "../../ui/Chip.vue";
+import Chip from "../../../../kit/Chip.vue";
 
 type View = Extract<CardView, { kind: "categories" }>;
 defineProps<{ view: View }>();

@@ -4,7 +4,7 @@
  * manager size, so the canvas and the manager draw one switch. Use it for a
  * setting that takes effect at once.
  */
-import WpSwitch from "@/kit/WpSwitch.vue";
+import WpSwitch from "./WpSwitch.vue";
 
 interface Props {
   modelValue: boolean;

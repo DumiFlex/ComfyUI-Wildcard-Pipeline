@@ -2,7 +2,7 @@
 import Kbd from "@/kit/Kbd.vue";
 import { computed, defineAsyncComponent, ref } from "vue";
 import { useRouter } from "vue-router";
-import Icon from "../components/ui/Icon.vue";
+import Icon from "../../kit/Icon.vue";
 import UpdateDialog from "../components/UpdateDialog.vue";
 import { DISCORD_INVITE, GITHUB_REPO } from "../config/links";
 import { useBrowserHistory } from "../composables/useBrowserHistory";

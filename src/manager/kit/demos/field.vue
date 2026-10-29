@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Field from "../../components/ui/Field.vue";
-import Input from "../../components/ui/Input.vue";
+import Field from "../../../kit/Field.vue";
+import Input from "../../../kit/Input.vue";
 
 const name = ref("Hair colour");
 </script>

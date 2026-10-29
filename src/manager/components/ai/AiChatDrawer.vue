@@ -26,9 +26,9 @@
 import CloseButton from "@/kit/CloseButton.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { isNavigationFailure, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
-import Button from "../ui/Button.vue";
-import Checkbox from "../ui/Checkbox.vue";
-import Select, { type SelectOption } from "../ui/Select.vue";
+import Button from "../../../kit/Button.vue";
+import Checkbox from "../../../kit/Checkbox.vue";
+import Select, { type SelectOption } from "../../../kit/Select.vue";
 import { api } from "../../api/client";
 import AiMessage from "./AiMessage.vue";
 import AiAsk from "./AiAsk.vue";

@@ -16,8 +16,8 @@
  * the editor (`rename-tag` / `delete-tag`), which owns the cascade dialogs.
  */
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import Card from "../ui/Card.vue";
-import { useToast } from "../../composables/useToast";
+import Card from "../../../kit/Card.vue";
+import { useToast } from "../../../kit/useToast";
 import { validateSubcatName } from "@/manager/validation/names";
 import {
   acceptsPromotionRefusal,

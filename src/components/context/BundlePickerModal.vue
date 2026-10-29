@@ -3,7 +3,7 @@ import Kbd from "../../kit/Kbd.vue";
 import SearchInput from "../../kit/SearchInput.vue";
 import { computed, nextTick, ref, watch } from "vue";
 import ModalShell from "../../kit/ModalShell.vue";
-import ConfirmDialog from "../shared/ConfirmDialog.vue";
+import ConfirmDialog from "../../kit/ConfirmDialog.vue";
 import { api } from "../../manager/api/client";
 import type { BundleRow } from "../../manager/api/types";
 import WpButton from "../../kit/WpButton.vue";

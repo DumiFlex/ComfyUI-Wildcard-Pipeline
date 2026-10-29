@@ -18,7 +18,7 @@ vi.mock("../../api/client", () => ({
   },
 }));
 
-vi.mock("../../composables/useToast", () => {
+vi.mock("../../../kit/useToast", () => {
   const push = vi.fn();
   const dismiss = vi.fn();
   return {
@@ -30,7 +30,7 @@ vi.mock("../../composables/useToast", () => {
 import ExportTab from "../ExportTab.vue";
 import PickerRow from "../PickerRow.vue";
 import { api, ApiError } from "../../api/client";
-import * as toastModule from "../../composables/useToast";
+import * as toastModule from "../../../kit/useToast";
 import type { ModuleRow, BundleRow, CategoryRow, TemplateRow } from "../../api/types";
 
 /**

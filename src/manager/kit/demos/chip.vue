@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Chip from "../../components/ui/Chip.vue";
+import Chip from "../../../kit/Chip.vue";
 </script>
 
 <template>

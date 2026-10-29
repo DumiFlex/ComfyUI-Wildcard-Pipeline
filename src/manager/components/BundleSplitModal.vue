@@ -8,8 +8,8 @@
  * flagged because the children after the gap would run earlier.
  */
 import { computed, ref, watch } from "vue";
-import Button from "./ui/Button.vue";
-import Modal from "./ui/Modal.vue";
+import Button from "../../kit/Button.vue";
+import Modal from "../../kit/Modal.vue";
 import { api, ApiError } from "../api/client";
 import { useAiConfig } from "../composables/useAiConfig";
 

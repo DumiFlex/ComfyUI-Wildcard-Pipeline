@@ -10,19 +10,19 @@
  * undone.
  */
 import { computed, onMounted, ref } from "vue";
-import Toggle from "../ui/Toggle.vue";
-import Button from "../ui/Button.vue";
-import Select from "../ui/Select.vue";
-import Icon from "../ui/Icon.vue";
-import type { SelectOption } from "../ui/select-types";
-import ConfirmModal from "../ui/ConfirmModal.vue";
+import Toggle from "../../../kit/Toggle.vue";
+import Button from "../../../kit/Button.vue";
+import Select from "../../../kit/Select.vue";
+import Icon from "../../../kit/Icon.vue";
+import type { SelectOption } from "../../../kit/select-types";
+import ConfirmModal from "../../../kit/ConfirmModal.vue";
 import SettingGroup from "./SettingGroup.vue";
 import SettingRow from "./SettingRow.vue";
 import { api } from "../../api/client";
 import type { BackupEntry, BackupList, BackupReason } from "../../api/types";
 import { useServerSettings } from "../../composables/useServerSettings";
 import { useSystemStore } from "../../stores/systemStore";
-import { useToast } from "../../composables/useToast";
+import { useToast } from "../../../kit/useToast";
 
 const server = useServerSettings();
 const system = useSystemStore();

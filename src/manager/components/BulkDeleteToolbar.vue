@@ -8,7 +8,7 @@
  * Presentational: emits `delete-selected` / `clear`; the host mutates rows +
  * tracks dirty.
  */
-import Button from "./ui/Button.vue";
+import Button from "../../kit/Button.vue";
 
 defineProps<{
   count: number;

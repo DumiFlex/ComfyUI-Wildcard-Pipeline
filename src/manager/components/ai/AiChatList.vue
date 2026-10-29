@@ -8,7 +8,7 @@
  */
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import Button from "../ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 import { api } from "../../api/client";
 import type { AiChatSummary } from "../../api/types";
 import { plainMentions } from "../../utils/chat-completions";

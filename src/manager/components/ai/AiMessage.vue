@@ -24,7 +24,7 @@ import { computed, h, ref, watch, type VNode } from "vue";
 import { useRouter } from "vue-router";
 import { deletedIds } from "../../composables/useLibraryChanged";
 import { useCardViewContext } from "../../composables/card-views/context";
-import Chip from "../ui/Chip.vue";
+import Chip from "../../../kit/Chip.vue";
 import { KIND_ICON_MAP } from "../../../components/shared/kind-icons";
 import type { AiChatRef } from "../../api/types";
 import { closeOpen, parseMarkdown, type Block, type Inline, type ListItem, type Tone } from "../../utils/chat-markdown";

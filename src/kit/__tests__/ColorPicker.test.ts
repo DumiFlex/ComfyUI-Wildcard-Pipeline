@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import ColorPicker from "../components/ColorPicker.vue";
+import ColorPicker from "../ColorPicker.vue";
 
 function makeWrapper(modelValue = "#7c3aed") {
   return mount(ColorPicker, {

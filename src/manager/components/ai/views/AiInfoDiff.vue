@@ -6,7 +6,7 @@
  * green, text as old struck → new.
  */
 import type { InfoRowView } from "../../../composables/card-views/types";
-import Chip from "../../ui/Chip.vue";
+import Chip from "../../../../kit/Chip.vue";
 import AiSyntax from "../AiSyntax.vue";
 
 defineProps<{ rows: InfoRowView[]; full?: boolean }>();

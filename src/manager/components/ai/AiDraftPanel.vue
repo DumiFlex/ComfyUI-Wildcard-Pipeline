@@ -14,8 +14,8 @@
  */
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import Button from "../ui/Button.vue";
-import Checkbox from "../ui/Checkbox.vue";
+import Button from "../../../kit/Button.vue";
+import Checkbox from "../../../kit/Checkbox.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
 import AiSyntax from "./AiSyntax.vue";
 import { useAiImages } from "../../composables/useAiImages";

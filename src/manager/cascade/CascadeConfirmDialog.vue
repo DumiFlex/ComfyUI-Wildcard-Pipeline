@@ -2,11 +2,11 @@
 import { computed, ref, watch } from "vue";
 
 import { kindIcon } from "../../components/shared/kind-icons";
-import Button from "../components/ui/Button.vue";
-import Modal from "../components/ui/Modal.vue";
+import Button from "../../kit/Button.vue";
+import Modal from "../../kit/Modal.vue";
 import { useCascadeApply, type CascadeApplyRequest } from "./useCascadeApply";
 import { useBundleStore } from "../stores/bundleStore";
-import Checkbox from "../components/ui/Checkbox.vue";
+import Checkbox from "../../kit/Checkbox.vue";
 import LoadingMark from "@/kit/LoadingMark.vue";
 
 interface Props {

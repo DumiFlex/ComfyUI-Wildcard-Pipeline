@@ -13,7 +13,7 @@
  * surfaces the names so the user can decide without scrolling back to
  * the picker to figure out what's missing.
  */
-import Modal from "../components/ui/Modal.vue";
+import Modal from "../../kit/Modal.vue";
 
 export interface ExportDepWarningRow {
   /** Display name of the row whose deps are unsatisfied. */

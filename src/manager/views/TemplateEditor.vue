@@ -16,13 +16,13 @@ import { useRoute, useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import { usePanelAction, viaPanel } from "../composables/usePanelAction";
-import Card from "../components/ui/Card.vue";
-import Field from "../components/ui/Field.vue";
+import Card from "../../kit/Card.vue";
+import Field from "../../kit/Field.vue";
 import RichTextInput from "../components/RichTextInput.vue";
-import Button from "../components/ui/Button.vue";
+import Button from "../../kit/Button.vue";
 import AiTextPanel from "../components/ai/AiTextPanel.vue";
 import { useAiConfig } from "../composables/useAiConfig";
-import { useToast } from "../composables/useToast";
+import { useToast } from "../../kit/useToast";
 import { useReturnTo } from "../composables/useReturnTo";
 import {
   registerOpenEditor, draftCreateId, draftSaved, type StagedDraft,

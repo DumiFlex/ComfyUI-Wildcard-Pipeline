@@ -5,7 +5,7 @@
  * Click a row to open that seed's trace.
  */
 import { computed, ref } from "vue";
-import Select from "../ui/Select.vue";
+import Select from "../../../kit/Select.vue";
 import type { ScenarioRunResponse } from "../../api/types";
 import { negativeSegments, orderByStack, renderValue, segmentOutput, type StackItemView } from "../../utils/scenario";
 

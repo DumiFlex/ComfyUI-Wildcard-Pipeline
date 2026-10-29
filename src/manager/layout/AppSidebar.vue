@@ -2,7 +2,7 @@
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import Icon, { ICON_SM } from "../components/ui/Icon.vue";
+import Icon, { ICON_SM } from "../../kit/Icon.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import Button from "./ui/Button.vue";
-import Drawer from "./ui/Drawer.vue";
-import Toggle from "./ui/Toggle.vue";
+import Button from "../../kit/Button.vue";
+import Drawer from "../../kit/Drawer.vue";
+import Toggle from "../../kit/Toggle.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import HsvPicker from "../../kit/HsvPicker.vue";
 import ThemeChoices from "./settings/ThemeChoices.vue";

@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import PackSettings from "../PackSettings.vue";
-import Select from "../../ui/Select.vue";
+import Select from "../../../../kit/Select.vue";
 import { DEFAULT_SETTINGS } from "../../../composables/usePackBuilder";
 import type { AiPackSettings } from "../../../api/types";
 

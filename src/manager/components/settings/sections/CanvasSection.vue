@@ -6,9 +6,9 @@
  */
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, ref, watch } from "vue";
-import Toggle from "../../ui/Toggle.vue";
-import Select from "../../ui/Select.vue";
-import type { SelectOption } from "../../ui/select-types";
+import Toggle from "../../../../kit/Toggle.vue";
+import Select from "../../../../kit/Select.vue";
+import type { SelectOption } from "../../../../kit/select-types";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { CANVAS_SETTINGS, type CanvasSettingGroup, type CanvasSettingMeta } from "../../../../extension/settings-catalog";

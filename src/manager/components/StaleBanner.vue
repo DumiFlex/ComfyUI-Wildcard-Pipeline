@@ -8,9 +8,9 @@
  * visibility; transition fades it in/out.
  */
 import { ref } from "vue";
-import Button from "./ui/Button.vue";
+import Button from "../../kit/Button.vue";
 import Banner from "@/kit/Banner.vue";
-import ConfirmModal from "./ui/ConfirmModal.vue";
+import ConfirmModal from "../../kit/ConfirmModal.vue";
 import { useStaleStore } from "../stores/staleStore";
 import { useSystemStore } from "../stores/systemStore";
 

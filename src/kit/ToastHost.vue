@@ -3,8 +3,8 @@
  * The manager's toast stack (bottom right). The toast itself is the shared
  * ToastCard, the same one the canvas stack draws.
  */
-import { useToast } from "../../composables/useToast";
-import ToastCard from "@/kit/ToastCard.vue";
+import { useToast } from "./useToast";
+import ToastCard from "./ToastCard.vue";
 
 const { toasts, push, dismiss } = useToast();
 

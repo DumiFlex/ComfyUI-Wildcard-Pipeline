@@ -19,7 +19,7 @@
  */
 import { computed, ref, watch, nextTick } from "vue";
 import { RouterLink } from "vue-router";
-import Button from "./ui/Button.vue";
+import Button from "../../kit/Button.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import Breadcrumb from "./Breadcrumb.vue";
 import type { BreadcrumbItem } from "./Breadcrumb.types";

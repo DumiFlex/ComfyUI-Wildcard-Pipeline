@@ -4,7 +4,7 @@
  * point to that differ from the user's, each with why, and a button that
  * takes them all. Nothing changes until the button is pressed.
  */
-import Button from "../ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 import type { AiPackSettings } from "../../api/types";
 import { settingLabel } from "./pack-settings-fields";
 

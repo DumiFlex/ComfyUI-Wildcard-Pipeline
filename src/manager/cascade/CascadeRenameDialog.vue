@@ -2,10 +2,10 @@
 import { computed, ref, watch } from "vue";
 
 import { kindIcon } from "../../components/shared/kind-icons";
-import Button from "../components/ui/Button.vue";
-import Checkbox from "../components/ui/Checkbox.vue";
-import Input from "../components/ui/Input.vue";
-import Modal from "../components/ui/Modal.vue";
+import Button from "../../kit/Button.vue";
+import Checkbox from "../../kit/Checkbox.vue";
+import Input from "../../kit/Input.vue";
+import Modal from "../../kit/Modal.vue";
 import { useCascadeApply, type CascadeApplyRequest } from "./useCascadeApply";
 import { validateSubcatName, validateRefGrammarName, validateVariableName } from "../validation/names";
 import LoadingMark from "@/kit/LoadingMark.vue";

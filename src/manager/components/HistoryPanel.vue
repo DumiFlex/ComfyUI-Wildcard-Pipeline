@@ -11,10 +11,10 @@
  * back to the History button. The snapshot is a CodeBlock with copy.
  */
 import { computed, ref, watch } from "vue";
-import Button from "./ui/Button.vue";
-import Modal from "./ui/Modal.vue";
+import Button from "../../kit/Button.vue";
+import Modal from "../../kit/Modal.vue";
 import CodeBlock from "@/kit/CodeBlock.vue";
-import RelativeDate from "./RelativeDate.vue";
+import RelativeDate from "../../kit/RelativeDate.vue";
 import type { ModuleHistoryEntry } from "../api/types";
 
 const props = defineProps<{

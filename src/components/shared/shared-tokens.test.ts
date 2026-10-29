@@ -1,6 +1,6 @@
 // The token names a kit piece may use (SHARED_TOKENS, src/kit/tokens.ts,
 // pulled from wp-kit): both the canvas theme (components/shared/theme.css)
-// and the manager (manager/styles/tokens.css) must define every one, so a
+// and the manager (kit/theme/tokens.css) must define every one, so a
 // piece reads the same names on both sides and wears each side's colours.
 // wp-kit's own tokens.test.ts keeps every kit piece to the list; this file
 // checks both hosts define it and the shared pieces left here use it
@@ -18,7 +18,7 @@ const defined = (css: string): Set<string> =>
 
 describe("shared token names", () => {
   const canvas = defined(read("./theme.css"));
-  const manager = defined(read("../../manager/styles/tokens.css"));
+  const manager = defined(read("../../kit/theme/tokens.css"));
 
   it("are defined by the canvas theme", () => {
     expect(SHARED_TOKENS.filter((t) => !canvas.has(t))).toEqual([]);
@@ -31,7 +31,7 @@ describe("shared token names", () => {
   it("are the only --wp names the shared pieces left here read", () => {
     const shared = new Set<string>(SHARED_TOKENS);
     // Kit pieces are held to the list by wp-kit's tokens.test.ts.
-    const files = ["./ConfirmDialog.vue"];
+    const files = ["../../kit/ConfirmDialog.vue"];
     const stray = files.flatMap((f) =>
       [...read(f).matchAll(/var\((--wp-[a-z0-9-]+)/g)].map((m) => m[1]).filter((n) => !shared.has(n)).map((n) => `${f}: ${n}`),
     );

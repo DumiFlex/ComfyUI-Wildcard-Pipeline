@@ -30,7 +30,7 @@
  */
 import { computed, useSlots } from "vue";
 import Icon from "./Icon.vue";
-import LoadingMark from "@/kit/LoadingMark.vue";
+import LoadingMark from "./LoadingMark.vue";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger" | "link" | "outline" | "add";
 type Size = "sm" | "md" | "lg";

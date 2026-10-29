@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Button from "../../components/ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 
 const favs = ref(true);
 </script>

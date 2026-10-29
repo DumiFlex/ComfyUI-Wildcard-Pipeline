@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import DataTable, { type DataColumn, type DataSort } from "../../components/ui/DataTable.vue";
-import Chip from "../../components/ui/Chip.vue";
-import Button from "../../components/ui/Button.vue";
+import DataTable, { type DataColumn, type DataSort } from "../../../kit/DataTable.vue";
+import Chip from "../../../kit/Chip.vue";
+import Button from "../../../kit/Button.vue";
 
 interface Row { id: string; tag: string; modules: number; bundles: number }
 const rows: Row[] = [

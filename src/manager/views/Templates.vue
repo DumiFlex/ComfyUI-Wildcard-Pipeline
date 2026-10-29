@@ -1,23 +1,23 @@
 <script setup lang="ts">
-import Checkbox from "../components/ui/Checkbox.vue";
+import Checkbox from "../../kit/Checkbox.vue";
 import CopyButton from "@/kit/CopyButton.vue";
 import { computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useToast } from "../composables/useToast";
+import { useToast } from "../../kit/useToast";
 import { useListUrlState } from "../composables/useListUrlState";
 import { useLoadError } from "../composables/useLoadError";
 import { useBulkActions } from "../composables/useBulkActions";
 import { makeTemplateStoreAdapter } from "../composables/bulkAdapters";
 import ModuleListView from "../components/ModuleListView.vue";
-import Button from "../components/ui/Button.vue";
-import Select from "../components/ui/Select.vue";
-import EmptyState from "../components/ui/EmptyState.vue";
+import Button from "../../kit/Button.vue";
+import Select from "../../kit/Select.vue";
+import EmptyState from "../../kit/EmptyState.vue";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import Chip from "../components/ui/Chip.vue";
+import Chip from "../../kit/Chip.vue";
 import { categoryFilterOptions } from "../utils/category-options";
 import type { CategoryRow, TemplateRow } from "../api/types";
-import ConfirmModal from "../components/ui/ConfirmModal.vue";
+import ConfirmModal from "../../kit/ConfirmModal.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 
 const route = useRoute();

@@ -15,8 +15,8 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
-import Button from "./ui/Button.vue";
-import { useToast } from "../composables/useToast";
+import Button from "../../kit/Button.vue";
+import { useToast } from "../../kit/useToast";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useGuidedPublishStore } from "../import-export/guided-publish-store";

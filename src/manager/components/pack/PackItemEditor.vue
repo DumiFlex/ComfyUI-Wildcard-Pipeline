@@ -6,9 +6,9 @@
  */
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, ref } from "vue";
-import Button from "../ui/Button.vue";
-import Select from "../ui/Select.vue";
-import type { SelectOption } from "../ui/select-types";
+import Button from "../../../kit/Button.vue";
+import Select from "../../../kit/Select.vue";
+import type { SelectOption } from "../../../kit/select-types";
 import type { AiPackItem } from "../../api/types";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 import PackGraphItem from "./PackGraphItem.vue";

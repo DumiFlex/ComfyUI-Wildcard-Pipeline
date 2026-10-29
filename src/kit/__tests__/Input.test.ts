@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import Input from "../../components/ui/Input.vue";
+import Input from "../Input.vue";
 
 describe("Input.vue", () => {
   it("two-way binds via v-model", async () => {

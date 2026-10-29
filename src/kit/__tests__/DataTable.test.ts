@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import DataTable, { type DataColumn } from "../components/ui/DataTable.vue";
+import DataTable, { type DataColumn } from "../DataTable.vue";
 
 interface Row { id: string; name: string; uses: number | null }
 const ROWS: Row[] = [

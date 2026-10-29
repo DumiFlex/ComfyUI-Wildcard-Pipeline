@@ -20,8 +20,8 @@ import { computed, ref } from "vue";
 import { STARTER_EDIT_ROUTE, useStarterSet } from "../../docs/useStarterSet";
 import { STARTER_MODULE_NAMES, type StarterModuleSlot, type StarterSlot } from "../../docs/starter-recipe";
 import { useStarterStore } from "../../stores/starterStore";
-import { useToast } from "../../composables/useToast";
-import Button from "../ui/Button.vue";
+import { useToast } from "../../../kit/useToast";
+import Button from "../../../kit/Button.vue";
 
 /** Every slot this button can drive: the starter slots (incl. `template`)
  *  plus the assembled `bundle`. */

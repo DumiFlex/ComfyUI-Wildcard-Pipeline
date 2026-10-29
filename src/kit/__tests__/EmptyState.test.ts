@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import EmptyState from "../../components/ui/EmptyState.vue";
+import EmptyState from "../EmptyState.vue";
 
 describe("EmptyState.vue", () => {
   it("renders icon, headline, body", () => {

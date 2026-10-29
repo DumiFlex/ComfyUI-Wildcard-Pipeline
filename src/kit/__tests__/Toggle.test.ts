@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import Toggle from "../../components/ui/Toggle.vue";
+import Toggle from "../Toggle.vue";
 
 describe("Toggle.vue", () => {
   it("toggles modelValue", async () => {

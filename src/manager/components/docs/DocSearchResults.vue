@@ -6,7 +6,7 @@
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import LoadingMark from "@/kit/LoadingMark.vue";
-import EmptyState from "../ui/EmptyState.vue";
+import EmptyState from "../../../kit/EmptyState.vue";
 import { loadDocsIndex, searchDocs, type DocHit, type IndexPage } from "../../docs/search";
 import { sectionSlug } from "../../docs/outline";
 import { SECTIONS } from "../settings/settings-index";

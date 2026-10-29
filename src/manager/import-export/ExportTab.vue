@@ -16,8 +16,8 @@
  */
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import Button from "../components/ui/Button.vue";
-import { useToast } from "../composables/useToast";
+import Button from "../../kit/Button.vue";
+import { useToast } from "../../kit/useToast";
 import { api, ApiError, type ExportBuildRequest } from "../api/client";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType, TemplateRow } from "../api/types";
 import PickerSection from "./PickerSection.vue";

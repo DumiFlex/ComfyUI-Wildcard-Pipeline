@@ -33,7 +33,7 @@ import InstanceIdChip from "../InstanceIdChip.vue";
 // wildcard instead of the saved-matrix's frozen keys.
 import { cacheVersion, ensure, lookup } from "../../../../extension/preview-resolver";
 import ConstraintReattachSection from "./sections/ConstraintReattachSection.vue";
-import ConfirmDialog from "../../../shared/ConfirmDialog.vue";
+import ConfirmDialog from "../../../../kit/ConfirmDialog.vue";
 import { walkRemap } from "../../bundles/uuid-remap";
 import { buildWildcardRefData } from "../../../../manager/utils/library-suggestions";
 import type { ModuleRow } from "../../../../manager/api/types";

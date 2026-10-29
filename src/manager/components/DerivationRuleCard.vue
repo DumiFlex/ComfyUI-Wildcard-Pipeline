@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import Card from "./ui/Card.vue";
-import Button from "./ui/Button.vue";
-import Select from "./ui/Select.vue";
-import Chip from "./ui/Chip.vue";
+import Card from "../../kit/Card.vue";
+import Button from "../../kit/Button.vue";
+import Select from "../../kit/Select.vue";
+import Chip from "../../kit/Chip.vue";
 import RichTextInput from "./RichTextInput.vue";
 import type { VarProducerLike } from "./RefChip.vue";
 import VarAutocompleteInput from "./VarAutocompleteInput.vue";

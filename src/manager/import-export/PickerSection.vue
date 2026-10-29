@@ -24,7 +24,7 @@
  * rows are selected.
  */
 import { ref, computed } from "vue";
-import Checkbox from "../components/ui/Checkbox.vue";
+import Checkbox from "../../kit/Checkbox.vue";
 import Disclosure from "../../kit/Disclosure.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 
@@ -216,7 +216,7 @@ function toggleOpen(): void {
   overscroll-behavior: contain;
 }
 /* Scrollbar styling — match the global pattern in
- * `manager/styles/tokens.css` (10px wide, transparent track, muted
+ * `kit/theme/tokens.css` (10px wide, transparent track, muted
  * thumb that brightens on hover). Scoped to the section body so
  * other surfaces keep using the global rule. */
 .wp-picker-section__body::-webkit-scrollbar { width: 10px; height: 10px; }

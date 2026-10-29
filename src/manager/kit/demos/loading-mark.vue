@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import LoadingMark from "@/kit/LoadingMark.vue";
-import Button from "../../components/ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 </script>
 
 <template>

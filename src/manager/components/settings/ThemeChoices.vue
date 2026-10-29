@@ -7,7 +7,7 @@
  * panel (`compact`).
  */
 import { computed } from "vue";
-import ChoiceCards, { type ChoiceCardOption } from "../ui/ChoiceCards.vue";
+import ChoiceCards, { type ChoiceCardOption } from "../../../kit/ChoiceCards.vue";
 import {
   LOOK_OPTIONS,
   PALETTE_OPTIONS,
@@ -22,7 +22,7 @@ const props = defineProps<{ kind: "palette" | "look"; compact?: boolean; testPre
 const tweaks = useTweaksStore();
 const ui = useUiStore();
 
-/** How each look's mini drawing is shaped. Mirrors styles/looks.css. */
+/** How each look's mini drawing is shaped. Mirrors kit/theme/looks.css. */
 const LOOK_SHAPE: Record<LookName, { radius: string; pill: string; font: string; border: string; shadow: string; title: string }> = {
   orbit:     { radius: "6px", pill: "6px",   font: "var(--wp-font)",      border: "1px solid var(--wp-border)",        shadow: "none",               title: "Aa" },
   crisp:     { radius: "2px", pill: "2px",   font: "var(--wp-font)",      border: "1px solid var(--wp-border-strong)", shadow: "none",               title: "Aa" },

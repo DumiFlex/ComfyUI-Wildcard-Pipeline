@@ -19,7 +19,7 @@ import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { encodeKey } from "../../instance/keys";
 import { patchInstance } from "../../instance/patch";
 import RichTextPreview from "../../../../../manager/components/RichTextPreview.vue";
-import Select, { type SelectOption } from "../../../../../manager/components/ui/Select.vue";
+import Select, { type SelectOption } from "../../../../../kit/Select.vue";
 import WpButton from "../../../../../kit/WpButton.vue";
 import WpIconButton from "../../../../../kit/WpIconButton.vue";
 

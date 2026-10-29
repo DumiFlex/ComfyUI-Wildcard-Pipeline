@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { useBulkActions } from "../../composables/useBulkActions";
-import { useToast } from "../../composables/useToast";
+import { useToast } from "../../../kit/useToast";
 import type { BulkAdapter, BulkResult } from "../../composables/bulkAdapters";
 
 function makeResult(over: Partial<BulkResult> = {}): BulkResult {

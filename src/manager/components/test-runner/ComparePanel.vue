@@ -7,7 +7,7 @@
  * used the same seeds, since different seeds differ by chance.
  */
 import { computed, ref } from "vue";
-import Button from "../ui/Button.vue";
+import Button from "../../../kit/Button.vue";
 import type { ScenarioRunResponse } from "../../api/types";
 import { wordDiff, type BaselineDiff, type ScenarioBaseline } from "../../utils/baseline";
 
