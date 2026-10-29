@@ -60,7 +60,7 @@
  *
  * Accessibility: the visual chrome (role="dialog", aria-modal,
  * Esc-to-close, backdrop click, Teleport-to-body) is delegated to the
- * shared `Modal` wrapper from `manager/components/ui/Modal.vue`. The
+ * shared `Modal` wrapper from `kit/Modal.vue`. The
  * `open` prop is optional (defaults to `true`) so the simplest caller
  * pattern — `<ConflictModal v-if="conflicts" ... @cancel="dismiss" />`
  * — works without extra wiring. Closing via Esc/backdrop routes
