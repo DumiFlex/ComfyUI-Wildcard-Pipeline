@@ -6,6 +6,7 @@ Runs the whole chain N times from one Generate. Put it in front of your WP Conte
 
 - **seed**: the base seed, with the usual control after generate. You can convert it to an input and wire any INT.
 - **count**: how many frames. 1 means no loop.
+- **values** *(optional, text)*: one frame per line (or per list entry) from another node, such as a list of subjects. Each frame writes its line to `$iteration_value`. The values set the frame count, and **count** follows the last run. With a sweep on, every value runs every combination (the value changes slowest).
 - **strategy**: how the frames' seeds are spread from the base. **hash** (default) gives unrelated seeds, **sequential** gives base, base+1, base+2…, **stride** takes large fixed jumps. No strategy makes the images more or less varied.
 - **override seed**: off (default) lets each WP Context keep its own seed, and the loop only varies it per frame. On makes the loop's seed the base for every frame, so the whole batch can be reproduced from that one seed. Per-frame seed locks only apply while it is on.
 - **iteration var**: the name of the frame counter, `iteration` by default.
@@ -20,6 +21,8 @@ Runs the whole chain N times from one Generate. Put it in front of your WP Conte
 ## Frame variables
 
 Each frame sets `$iteration` (1, 2, 3 … up to the count) and `$iteration_total` (the count). They are hidden from the prompt by default; switch their internal flag off in the loop to print them, for example `frame $iteration of $iteration_total`.
+
+With **values** wired, each frame also sets `$iteration_value` to its line. It prints by default, so `a picture of $iteration_value` works straight away.
 
 ## Sweep combinations
 

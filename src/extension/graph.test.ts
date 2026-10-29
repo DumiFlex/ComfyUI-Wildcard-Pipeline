@@ -293,6 +293,21 @@ describe("collectUpstreamProducers", () => {
     expect(out.frame.internal).toBe(true);
     expect(out.frame_total.kind).toBe("loop");
     expect(out.frame_total.internal).toBe(false);
+    expect(out.frame_value).toBeUndefined();
+  });
+
+  it("adds $<name>_value once the loop's values input is wired", () => {
+    const loop: LiteNodeLike = {
+      id: 1,
+      type: "WP_ContextLoop",
+      inputs: [{ name: "values", link: 7 }],
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{ name: "wp_context_loop_config", value: JSON.stringify({ iteration_var_name: "frame" }) }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const out = collectUpstreamProducers(chain([loop, pov], { 100: { origin_id: 1, target_id: 2 } }), pov);
+    expect(out.frame_value.kind).toBe("loop");
+    expect(out.frame_value.internal).toBe(false);
   });
 
   it("reports the LAST writer and counts the writes it shadowed", () => {

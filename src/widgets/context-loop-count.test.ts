@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { onCountEdited, syncCountToSweep } from "./context_loop";
+import { onCountEdited, parseLoopValues, syncCountToSweep } from "./context_loop";
 
 describe("count widget follows the sweep", () => {
   it("shows the sweep's frame count and locks the widget", () => {
@@ -28,5 +28,14 @@ describe("editing the count", () => {
     w.value = 3;
     w.callback?.();
     expect(calls).toEqual(["own", "count 3"]);
+  });
+});
+
+describe("parseLoopValues", () => {
+  it("reads the run's values count and frames", () => {
+    expect(parseLoopValues([{ count: 3, frames: 6 }])).toEqual({ count: 3, frames: 6 });
+    expect(parseLoopValues(undefined)).toBeNull();
+    expect(parseLoopValues([{ count: 3 }])).toBeNull();
+    expect(parseLoopValues([{ count: 0, frames: 0 }])).toBeNull();
   });
 });

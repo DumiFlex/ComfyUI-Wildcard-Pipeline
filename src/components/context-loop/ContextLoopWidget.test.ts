@@ -18,6 +18,15 @@ describe("ContextLoopWidget", () => {
     expect(w.find('[data-test="loop-total-internal"]').attributes("aria-pressed")).toBe("true");
   });
 
+  it("says the values input sets the frames once it is wired", async () => {
+    const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig() } });
+    expect(w.find('[data-test="loop-values-note"]').exists()).toBe(false);
+    await w.setProps({ valuesWired: true });
+    expect(w.find('[data-test="loop-values-note"]').text()).toContain("$iteration_value");
+    await w.setProps({ valuesCount: 5 });
+    expect(w.find('[data-test="loop-values-note"]').text()).toContain("5 on the last run");
+  });
+
   it("emits new strategy on chip click", async () => {
     const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig() } });
     await w.find('[data-test="loop-strategy-sequential"]').trigger("click");

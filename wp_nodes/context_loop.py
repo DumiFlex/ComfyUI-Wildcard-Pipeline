@@ -26,6 +26,29 @@ from wp_nodes.types import (
 
 _STRATEGIES = {"sequential", "hash_index", "prime_stride"}
 
+#: Most frames a loop emits (the `count` widget's max).
+_MAX_FRAMES = 999
+
+
+def _first(values: Any, default: Any = None) -> Any:
+    """A widget's value under ``is_input_list`` (ComfyUI wraps it in a list)."""
+    if isinstance(values, list):
+        return values[0] if values else default
+    return default if values is None else values
+
+
+def _wired_values(values: Any) -> list[str]:
+    """The ``values`` input's entries: every list entry, one per line, blank
+    lines dropped. Empty when nothing is wired."""
+    if values is None:
+        return []
+    out: list[str] = []
+    for entry in values if isinstance(values, list) else [values]:
+        if entry is None:
+            continue
+        out.extend(line.strip() for line in str(entry).splitlines() if line.strip())
+    return out
+
 
 def _parse_config(raw: str) -> dict[str, Any]:
     """Recovery-friendly JSON parse for the DOM widget value.
@@ -135,6 +158,17 @@ class WPContextLoop(io.ComfyNode):
                 # single-type design forced an `inputName` gate in
                 # main.ts that ended up hiding SeedList's socket
                 # entirely.
+                io.String.Input(
+                    "values",
+                    optional=True,
+                    force_input=True,
+                    tooltip=(
+                        "Optional text from another node: one frame per line (or per "
+                        "list entry), each writing its line to $iteration_value. Sets "
+                        "the frame count; with a sweep on, every value runs every "
+                        "combination."
+                    ),
+                ),
                 ContextLoopWidgetInput.Input(
                     "wp_context_loop_config",
                     socketless=True,
@@ -155,12 +189,18 @@ class WPContextLoop(io.ComfyNode):
                 # context-fan-out happening on the first output.
                 ContextLoopConfigInput.Output("loop_config"),
             ],
+            # A list wired into `values` must arrive in ONE call (one loop),
+            # not run the whole loop once per entry.
+            is_input_list=True,
             not_idempotent=False,
         )
 
     @classmethod
-    def execute(cls, seed, count, wp_context_loop_config):
-        cfg = _parse_config(wp_context_loop_config)
+    def execute(cls, seed, count, wp_context_loop_config, values=None):
+        seed = _first(seed, 0)
+        count = _first(count, 1)
+        cfg = _parse_config(_first(wp_context_loop_config, "{}"))
+        wired_values = _wired_values(values)
         override_seed = bool(cfg["override_seed"])
         strategy = cfg["strategy"]
         iteration_var_name = cfg["iteration_var_name"]
@@ -194,6 +234,12 @@ class WPContextLoop(io.ComfyNode):
             sweep_pins = sweep_frames(sweep["axes"], sweep["limit"])
             if sweep_pins:
                 configured_count = len(sweep_pins)
+        # A wired value list sets the frame count: every value runs every
+        # sweep combination (the value is the outer, slower axis).
+        combos = max(1, len(sweep_pins))
+        if wired_values and not bypass:
+            wired_values = wired_values[: max(1, _MAX_FRAMES // combos)]
+            configured_count = len(wired_values) * combos
         if bypass:
             total_count = 1
             kept = [0]
@@ -235,6 +281,8 @@ class WPContextLoop(io.ComfyNode):
         if sweep_pins:
             # Combinations before the limit, so a UI can say "64 of 120".
             loop_config_payload["sweep_total"] = sweep_total(sweep["axes"])
+        if wired_values:
+            loop_config_payload["values_count"] = len(wired_values)
 
         # Build the internal-flags map once — same across iterations
         # (per-iteration values differ but their internal-ness doesn't).
@@ -242,6 +290,7 @@ class WPContextLoop(io.ComfyNode):
         # at downstream merge time; PromptAssembler then strips internal
         # keys at render so they never leak into prompts.
         total_var_name = f"{iteration_var_name}_total"
+        value_var_name = f"{iteration_var_name}_value"
         internal_flags: dict[str, bool] = {}
         if iteration_internal:
             internal_flags[iteration_var_name] = True
@@ -261,6 +310,10 @@ class WPContextLoop(io.ComfyNode):
                 iteration_var_name: str(idx + 1),
                 total_var_name: str(total_count),
             }
+            if wired_values:
+                # Bypass collapses to frame 0, which reads the first value.
+                pick = min(idx // combos, len(wired_values) - 1)
+                context_vars[value_var_name] = wired_values[pick]
             internals: dict[str, object] = {
                 "__wp_loop_index__": idx,
                 "__wp_seed_override__": (derived[idx] if has_override else None),
@@ -271,7 +324,7 @@ class WPContextLoop(io.ComfyNode):
             if has_override:
                 internals["__wp_loop_seeds__"] = list(derived or [])
             if sweep_pins:
-                internals[PIN_KEY] = dict(sweep_pins[idx])
+                internals[PIN_KEY] = dict(sweep_pins[idx % combos])
                 internals[HOLD_KEY] = bool(sweep["hold_others"])
             if internal_flags:
                 # Merge by-value so successive iterations don't share
@@ -299,8 +352,8 @@ class WPContextLoop(io.ComfyNode):
         # Only meaningful when the Loop drives the seeds (override on); an empty
         # list otherwise greys the button out per-frame.
         ui_seeds = [int(s) for s in derived] if (has_override and derived) else []
-        return io.NodeOutput(
-            payloads,
-            loop_config_payload,
-            ui={"loop_seeds": [ui_seeds]},
-        )
+        ui: dict[str, list[Any]] = {"loop_seeds": [ui_seeds]}
+        if wired_values:
+            # The widget shows the frame count the wire set, after a run.
+            ui["loop_values"] = [{"count": len(wired_values), "frames": total_count}]
+        return io.NodeOutput(payloads, loop_config_payload, ui=ui)
