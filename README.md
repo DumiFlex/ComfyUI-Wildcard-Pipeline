@@ -118,6 +118,10 @@ Open it from the ComfyUI sidebar. It's where your modules live between workflows
 - **Library:** create, edit and search your modules, bundles and prompt
   templates. The **Tags** page groups them into collections, and you can rename
   or merge a tag across the whole library.
+- **Library health:** one page that finds broken references, constraint rules
+  for options that are gone, variables nothing sets, duplicates and unused
+  items, with a way to fix or ignore each, and checks how varied a bundle's
+  prompts are.
 - **Test Runner:** try a set of modules over many seeds without generating
   images. See how often each option comes up and which rules fired, save a
   baseline, and after an edit see exactly which outputs changed.

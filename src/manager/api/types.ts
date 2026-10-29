@@ -371,6 +371,64 @@ export interface BundleUpdateInput {
   content_rating?: "safe" | "nsfw";
 }
 
+/** Library health (`/wp/api/health`, `engine/health.py`). */
+export type HealthSeverity = "problem" | "warning" | "tidy";
+export type HealthItemKind = "module" | "bundle" | "template" | "category" | "tag";
+
+export interface HealthItem {
+  kind: HealthItemKind;
+  id: string;
+  name: string;
+  /** The module type for modules, otherwise the kind itself. */
+  type: string;
+}
+
+export interface HealthFinding {
+  check: string;
+  severity: HealthSeverity;
+  /** `check:kind:id[:extra]` — what Ignore stores. */
+  key: string;
+  item: HealthItem;
+  detail: string;
+  /** Other items in the same finding (duplicates, the item a tag sits on). */
+  others?: HealthItem[];
+  /** The names or values the finding is about, for search. */
+  values?: string[];
+}
+
+export interface HealthCheckInfo {
+  id: string;
+  severity: HealthSeverity;
+  title: string;
+}
+
+export interface HealthScan {
+  findings: HealthFinding[];
+  ignored: string[];
+  counts: Record<HealthSeverity, number>;
+  checks: HealthCheckInfo[];
+  /** True when an open canvas tab answered and its use was counted. */
+  canvas: boolean;
+  checked_at: string;
+}
+
+/** What an open canvas tab says it uses; null when none answered. */
+export interface HealthCanvasFacts {
+  ids: string[];
+  vars: string[];
+  reads: string[];
+}
+
+export interface HealthVariety {
+  runs: number;
+  failed: number;
+  distinct: number;
+  ratio: number;
+  stuck: Array<{ var: string; name: string; value: string }>;
+  never_picked: Array<{ id: string; name: string; options: string[]; count: number; total: number }>;
+  warnings: Array<{ type: string; message: string; count: number }>;
+}
+
 /** Rows changed per kind by a library-tag rename or delete. */
 export interface LibraryTagUpdateCounts {
   modules: number;

@@ -11,6 +11,7 @@ import { useCategoryStore } from "../stores/categoryStore";
 import { GITHUB_REPO } from "../config/links";
 import { libraryTagCounts } from "../utils/library-tags";
 import { useAiConfig } from "../composables/useAiConfig";
+import { useHealthStore } from "../stores/healthStore";
 
 interface NavItem {
   id: string;
@@ -42,6 +43,10 @@ const moduleStore = useModuleStore();
 const bundleStore = useBundleStore();
 const templateStore = useTemplateStore();
 const categoryStore = useCategoryStore();
+// Library health scans once on load and again after library edits, so the
+// badge shows problems + warnings without the page being open.
+const health = useHealthStore();
+health.ensure();
 
 const SECTIONS: NavSection[] = [
   {
@@ -69,6 +74,7 @@ const SECTIONS: NavSection[] = [
       { id: "categories", label: "Categories",      icon: "pi-bookmark",                 to: "/categories"     },
       // A single entry, not a list of tags: a library can hold hundreds.
       { id: "tags",       label: "Tags",            icon: "pi-hashtag",                  to: "/tags"           },
+      { id: "health",     label: "Library health",  icon: "pi-heart",                    to: "/health"         },
       { id: "io",         label: "Import / Export", icon: "pi-arrow-right-arrow-left",   to: "/import-export"  },
       { id: "test",       label: "Test Runner",     icon: "pi-bolt",                     to: "/test"           },
       { id: "pack",       label: "Pack builder",    icon: "pi-microchip-ai",             to: "/pack-builder", ai: true },
@@ -109,6 +115,7 @@ const activeId = computed<string>(() => {
     ["templates", "templates"],
     ["categories", "categories"],
     ["tags", "tags"],
+    ["health", "health"],
     ["import-export", "io"],
     ["test", "test"],
     ["pack-builder", "pack"],
@@ -312,6 +319,13 @@ const countByKey = computed<Record<string, number>>(() => {
             v-if="!ui.sidebarCollapsed && countByKey[item.id] !== undefined"
             class="wp-nav__count"
           >{{ countByKey[item.id] }}</span>
+          <span
+            v-if="!ui.sidebarCollapsed && item.id === 'health' && health.badge > 0"
+            class="wp-nav__count wp-nav__count--health"
+            :data-tone="health.counts.problem > 0 ? 'danger' : 'warn'"
+            :title="`${health.counts.problem} problems, ${health.counts.warning} warnings`"
+            data-test="health-badge"
+          >{{ health.badge }}</span>
         </button>
       </template>
     </template>
@@ -384,6 +398,16 @@ const countByKey = computed<Record<string, number>>(() => {
   border-radius: var(--wp-radius-sm);
   min-width: 18px;
   text-align: center;
+}
+
+.wp-nav__count--health { font-weight: 600; }
+.wp-nav__count--health[data-tone="danger"] {
+  color: var(--wp-danger);
+  background: color-mix(in oklab, var(--wp-danger) 16%, transparent);
+}
+.wp-nav__count--health[data-tone="warn"] {
+  color: var(--wp-warn);
+  background: color-mix(in oklab, var(--wp-warn) 16%, transparent);
 }
 
 /* Recents section CSS removed — Dashboard owns the recent surface now. */

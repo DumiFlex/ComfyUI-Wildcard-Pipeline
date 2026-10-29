@@ -7,7 +7,7 @@
     "inline-svg": 25,
     "hand-dialog": 13,
     "manager-raw-button": 239,
-    "raw-hex": 839
+    "raw-hex": 835
   },
   "native-select": {},
   "native-number": {},
@@ -240,7 +240,7 @@
     "src/manager/views/Bundles.vue": 1,
     "src/manager/views/Categories.vue": 3,
     "src/manager/views/ConstraintEditor.vue": 1,
-    "src/manager/views/Dashboard.vue": 9,
+    "src/manager/views/Dashboard.vue": 5,
     "src/manager/views/NotFound.vue": 1,
     "src/manager/views/PackBuilder.vue": 2,
     "src/manager/views/Settings.vue": 1,

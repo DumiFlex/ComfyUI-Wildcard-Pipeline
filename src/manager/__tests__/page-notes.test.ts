@@ -17,7 +17,12 @@ vi.mock("../api/client", () => ({
     libraryTags: { rename: vi.fn(), delete: vi.fn() },
     importExport: { build: vi.fn(), commit: vi.fn(), undo: vi.fn() },
     ai: { config: vi.fn().mockRejectedValue(new Error("off")) },
+    health: { scan: vi.fn() },
   },
+}));
+vi.mock("../utils/ai-context", async (orig) => ({
+  ...(await orig<typeof import("../utils/ai-context")>()),
+  askCanvasFacts: async () => undefined,
 }));
 
 import { api } from "../api/client";
@@ -37,6 +42,17 @@ const m = api as unknown as {
   templates: { list: Fn };
   categories: { list: Fn };
   importExport: { commit: Fn };
+  health: { scan: Fn };
+};
+
+const SCAN = {
+  findings: [{
+    check: "wildcard_dead", severity: "problem", key: "wildcard_dead:module:aaaa0002",
+    item: { kind: "module", id: "aaaa0002", name: "Blank", type: "wildcard" },
+    detail: "It has no options.",
+  }],
+  ignored: [], counts: { problem: 1, warning: 0, tidy: 0 }, checks: [],
+  canvas: false, checked_at: "2026-10-29T00:00:00Z",
 };
 
 const MODULES = [
@@ -58,6 +74,7 @@ beforeEach(() => {
   _resetOpenEditorForTests();
   m.modules.list.mockReset().mockResolvedValue({ items: MODULES, total: MODULES.length });
   m.bundles.list.mockReset().mockResolvedValue({ items: [], total: 0 });
+  m.health.scan.mockReset().mockResolvedValue(SCAN);
   m.templates.list.mockReset().mockResolvedValue({ items: [{ id: "tttt0001", tags: ["portrait"] }], total: 1 });
   m.categories.list.mockReset().mockResolvedValue({
     items: [
@@ -154,9 +171,10 @@ describe("Dashboard page note", () => {
     useModuleStore().catalog = MODULES as unknown as ModuleRow[];
     useBundleStore().catalog = [{ id: "bbbb0001", name: "Kit", children: [] }] as unknown as BundleRow[];
     await flushPromises();
+    await flushPromises();
     const note = currentPageNote();
     expect(note).toContain("Dashboard: 11 items (2 wildcards, 2 fixed values, 2 combines, 2 derivations, 2 constraints, 1 bundle)");
-    expect(note).toContain("Things to look at: 1 wildcard with no usable options: Blank (aaaa0002); 1 empty bundle: Kit (bbbb0001)");
+    expect(note).toContain("Library health: 1 problem, 0 warnings, 0 to tidy up (first: Blank: It has no options.)");
     expect(note).toContain("Recently opened tab: empty");
     await w.find('[data-test="dashboard-tab-recent"]').trigger("click");
     expect(currentPageNote()).toContain("Recent edits tab: Outfit (wildcard, aaaa0001)");

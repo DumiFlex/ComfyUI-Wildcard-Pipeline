@@ -33,6 +33,7 @@ const routes: RouteRecordRaw[] = [
       { path: "templates/:id/edit", name: "templates-edit", component: () => import("../views/TemplateEditor.vue"), props: true },
       { path: "categories", name: "categories", component: () => import("../views/Categories.vue") },
       { path: "tags", name: "tags", component: () => import("../views/Tags.vue") },
+      { path: "health", name: "health", component: () => import("../views/LibraryHealth.vue") },
       { path: "import-export", name: "import-export", component: () => import("../views/ImportExport.vue") },
       { path: "test", name: "test", component: () => import("../views/TestRunner.vue") },
       { path: "pack-builder", name: "pack-builder", component: () => import("../views/PackBuilder.vue") },

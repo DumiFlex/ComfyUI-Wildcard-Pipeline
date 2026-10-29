@@ -82,6 +82,7 @@ const SCREENS = [
   { id: "whats-new", path: "whats-new" },
   { id: "docs", path: "docs" },
   { id: "kit", path: "kit" },
+  { id: "health", path: "health" },
 ];
 
 /** Screens the palette pass (colour only) walks in dark and light. */
