@@ -197,7 +197,7 @@ describe("attachFieldSockets — Nodes 2.0", () => {
     };
     attach(node, root, "wp_label_grid", ["title"]);
     vi.runOnlyPendingTimers();
-    expect(row.classList.contains("wp-field-socket")).toBe(true);
+    expect(row.hasAttribute("data-wp-field-socket")).toBe(true);
     // field centre 210, node top 50, half a row 10.
     expect(row.style.top).toBe("150px");
     expect(row.style.left).toBe("0px");
@@ -224,16 +224,16 @@ describe("attachFieldSockets — Nodes 2.0", () => {
     };
     attach(node, root, "template", ["template"]);
     vi.runOnlyPendingTimers();
-    expect(row.classList.contains("wp-field-socket")).toBe(true);
-    expect(wrap.classList.contains("wp-field-socket-host")).toBe(true);
+    expect(row.hasAttribute("data-wp-field-socket")).toBe(true);
+    expect(wrap.hasAttribute("data-wp-field-socket-host")).toBe(true);
     expect(ins(node)[1].widget).toEqual({ name: "template" });
 
     root.getClientRects = () => [] as unknown as DOMRectList;
     document.body.appendChild(document.createElement("span"));
     await Promise.resolve();
     flushFrames();
-    expect(row.classList.contains("wp-field-socket")).toBe(false);
-    expect(wrap.classList.contains("wp-field-socket-host")).toBe(false);
+    expect(row.hasAttribute("data-wp-field-socket")).toBe(false);
+    expect(wrap.hasAttribute("data-wp-field-socket-host")).toBe(false);
     expect(row.style.top).toBe("");
   });
 });

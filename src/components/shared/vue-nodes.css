@@ -100,9 +100,10 @@
  * The row leaves the flow, loses its label and sits level with its field,
  * hidden like a built-in widget's dot until you hover the field or the dot,
  * or the input is wired. `top` / `left` are set inline from the field's
- * measured place. Unlayered + `!important` for the same reason as above:
+ * measured place. Marked by attributes, not classes: Vue rewrites the row's
+ * `class` during a link drag. Unlayered + `!important` for the same reason as above:
  * they beat host utilities (`h-5`, `pr-2`) on the row. */
-.wp-field-socket.lg-slot--input {
+[data-wp-field-socket] {
   position: absolute !important;
   z-index: 30;
   height: 20px !important;
@@ -112,17 +113,17 @@
   transition: opacity 150ms;
 }
 
-.wp-field-socket.lg-slot--input > :not(:first-child) {
+[data-wp-field-socket] > :not(:first-child) {
   display: none !important;
 }
 
-.wp-field-socket.lg-slot--input:hover,
-.wp-field-socket.lg-slot--input.wp-field-socket--hot,
-.wp-field-socket.lg-slot--input.lg-slot--connected {
+[data-wp-field-socket]:hover,
+[data-wp-field-socket][data-wp-field-socket-hot],
+[data-wp-field-socket].lg-slot--connected {
   opacity: 1;
 }
 
-.wp-field-socket-host {
+[data-wp-field-socket-host] {
   opacity: 1 !important;
 }
 
