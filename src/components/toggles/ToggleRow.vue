@@ -14,9 +14,11 @@ import WpSwitch from "../../kit/WpSwitch.vue";
 import WpCheck from "../../kit/WpCheck.vue";
 import WpSelect from "../../kit/WpSelect.vue";
 import CloseButton from "../../kit/CloseButton.vue";
+import Combobox from "../../kit/Combobox.vue";
 import { vTooltip } from "../../kit/tooltip";
 import { varColorClass } from "../shared/var-color";
-import type { ToggleRow, ToggleStyle } from "../../extension/toggles";
+import type { ToggleControl, ToggleRow, ToggleStyle } from "../../extension/toggles";
+import { ctlInputName } from "../../extension/toggle-control";
 
 interface Choice { value: string; label: string }
 
@@ -44,6 +46,10 @@ const props = defineProps<{
   outputsFull: boolean;
   /** Edit view: show the pencil and the edit panel. */
   editable: boolean;
+  /** What the toggle mutes / bypasses ("" without a control). */
+  controlText?: string;
+  /** Canvas group titles to offer in the edit panel. */
+  canvasGroups?: string[];
 }>();
 
 const emit = defineEmits<{
@@ -55,6 +61,19 @@ const emit = defineEmits<{
   "move-group": [labelId: string];
   remove: [];
 }>();
+
+const CONTROLS = [
+  { value: "", label: "Nothing", hint: "Off only writes false and sends False" },
+  { value: "mute", label: "Mute", hint: "Off also mutes the nodes wired into the dot in front of the row" },
+  { value: "bypass", label: "Bypass", hint: "Off also bypasses the nodes wired into the dot in front of the row" },
+];
+function setControl(v: string): void {
+  emit("patch", v ? { control: v as ToggleControl } : { control: undefined, groups: undefined });
+}
+function setGroups(v: string[] | string | null): void {
+  const list = Array.isArray(v) ? v : [];
+  emit("patch", { groups: list.length ? list : undefined });
+}
 
 const STYLES: { value: ToggleStyle; label: string; hint: string }[] = [
   { value: "switch", label: "Switch", hint: "A sliding switch" },
@@ -88,6 +107,7 @@ function flip(): void {
       class="wp-tgr__row"
       :class="{ 'is-blocked': blocked, 'is-on': effOn, 'is-chip': t.style === 'chip' && !pickOne, 'is-editing': editing }"
       :data-wp-out="t.pin && t.out ? `toggle_${t.out}` : undefined"
+      :data-wp-socket="t.control ? ctlInputName(t.id) : undefined"
       :data-test="`tg-row-${t.id}`"
     >
       <template v-if="t.style === 'chip' && !pickOne">
@@ -103,12 +123,15 @@ function flip(): void {
           />
         </span>
         <span v-if="parentName" class="wp-tgr__sub" :class="subClass()"><i class="pi pi-link" aria-hidden="true" />{{ sub() }}</span>
+        <span v-else-if="controlText" class="wp-tgr__sub is-control"><i class="pi pi-power-off" aria-hidden="true" />{{ controlText }}</span>
       </template>
       <span v-else class="wp-tgr__name">
         <b>{{ t.name }}</b>
         <span class="wp-tgr__sub" :class="subClass()">
           <i v-if="parentName" class="pi pi-link" aria-hidden="true" />{{ sub() }}
+          <i v-if="t.upstream" v-tooltip="'Upstream can set it'" class="pi pi-arrow-down-right wp-tgr__up" aria-label="Upstream can set it" />
         </span>
+        <span v-if="controlText" class="wp-tgr__sub is-control"><i class="pi pi-power-off" aria-hidden="true" />{{ controlText }}</span>
       </span>
       <i
         v-if="problem"
@@ -194,6 +217,17 @@ function flip(): void {
           @change="emit('set-var', value($event).replace(/^\$/, ''))"
         >
       </label>
+      <label v-if="pickOne" class="wp-tgr__field">
+        <span>Value <em>what the picked variable gets instead of the name; can read $variables</em></span>
+        <input
+          :value="t.value ?? ''"
+          :placeholder="t.name"
+          spellcheck="false"
+          data-test="tg-value"
+          @keydown.stop
+          @change="emit('patch', { value: ($event.target as HTMLInputElement).value || undefined })"
+        >
+      </label>
       <div class="wp-tgr__field">
         <span>Style</span>
         <WpSegmented
@@ -227,6 +261,41 @@ function flip(): void {
           @update:model-value="(v: string) => emit('patch', { needs: v || undefined })"
         />
       </div>
+      <div class="wp-tgr__field">
+        <span>When off <em>also mute or bypass other nodes</em></span>
+        <WpSegmented
+          :model-value="t.control ?? ''"
+          :options="CONTROLS"
+          size="sm"
+          block
+          aria-label="When off"
+          test-prefix="tg-control"
+          @update:model-value="setControl"
+        />
+      </div>
+      <div v-if="t.control" class="wp-tgr__field">
+        <span>Canvas groups <em>wire nodes into the dot in front of the row, or pick groups</em></span>
+        <Combobox
+          :model-value="t.groups ?? []"
+          multiple
+          :options="(canvasGroups ?? []).map((g) => ({ value: g, label: g }))"
+          placeholder="No groups"
+          size="sm"
+          aria-label="Canvas groups"
+          data-test="tg-groups"
+          @update:model-value="setGroups"
+        />
+      </div>
+      <span v-tooltip="'When the upstream Context holds this variable as a yes/no word (true, on, 1, no …), it sets the switch'" class="wp-tgr__check">
+        <WpCheck
+          :model-value="!!t.upstream"
+          size="sm"
+          aria-label="Upstream can set it"
+          data-test="tg-upstream"
+          @update:model-value="(v: boolean) => emit('patch', { upstream: v ? true : undefined })"
+        />
+        <span aria-hidden="true">Upstream can set it</span>
+      </span>
       <div v-if="groupOptions.length" class="wp-tgr__field">
         <span>Group</span>
         <WpSelect
@@ -315,6 +384,9 @@ function flip(): void {
 .wp-tgr__sub.is-linked .pi { color: var(--wp-accent); }
 .wp-tgr__sub.is-warn { font-family: var(--wp-font-sans, sans-serif); color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__sub.is-dim { font-family: var(--wp-font-sans, sans-serif); font-style: italic; color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-tgr__sub.is-control { font-family: var(--wp-font-sans, sans-serif); color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-tgr__sub.is-control .pi { color: var(--wp-accent); }
+.wp-tgr__up { font-size: 9px; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-tgr__warn { font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__ctl { display: inline-flex; flex: none; }
 .wp-tgr__radio {

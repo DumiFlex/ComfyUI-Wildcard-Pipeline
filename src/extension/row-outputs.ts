@@ -13,6 +13,11 @@
  * its own stacking. We set it from the measured element and drop it from
  * the saved workflow (`onSerialize`), since it is only a screen position.
  *
+ * It also paints the output's name beside the dot, which would show through
+ * a see-through row. It skips the name only for `isWidgetInputSlot`, a
+ * getter output slots pin to `false`; a placed output gets its own
+ * non-enumerable `true` (`hideLabel`), dropped again when it goes back.
+ *
  * Nodes 2.0 (Vue) draws each output as a DOM row (`.lg-slot--output`: the
  * label, then the dot) and measures the dot to place wire ends. As
  * field-sockets does for inputs, we take the row out of the flow, hide its
@@ -61,6 +66,16 @@ const registry = new Set<Entry>();
 let bodyObserver: MutationObserver | null = null;
 let queued = false;
 
+/** Legacy canvas: paint no name beside a placed output (see the header). */
+function hideLabel(slot: OutSlot, hide: boolean): void {
+  const own = Object.prototype.hasOwnProperty.call(slot, "isWidgetInputSlot");
+  if (hide && !own) {
+    Object.defineProperty(slot, "isWidgetInputSlot", { get: () => true, configurable: true, enumerable: false });
+  } else if (!hide && own) {
+    delete (slot as { isWidgetInputSlot?: unknown }).isWidgetInputSlot;
+  }
+}
+
 function slotHalf(): number {
   const h = (globalThis as { LiteGraph?: { NODE_SLOT_HEIGHT?: number } }).LiteGraph?.NODE_SLOT_HEIGHT;
   return (typeof h === "number" ? h : 20) / 2;
@@ -100,6 +115,7 @@ function syncLegacy(entry: Entry): boolean {
   for (const slot of node.outputs ?? []) {
     if (!entry.owns(slot.name)) continue;
     const y0 = centreOf(root, slot.name, top, scale);
+    hideLabel(slot, y0 != null);
     if (y0 == null) {
       if (slot.pos) {
         delete slot.pos;
@@ -133,7 +149,9 @@ function syncLegacy(entry: Entry): boolean {
 
 function clearLegacy(entry: Entry): void {
   for (const slot of entry.node.outputs ?? []) {
-    if (entry.owns(slot.name)) delete slot.pos;
+    if (!entry.owns(slot.name)) continue;
+    delete slot.pos;
+    hideLabel(slot, false);
   }
   delete entry.node.widgets_start_y;
 }

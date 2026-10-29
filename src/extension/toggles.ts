@@ -36,7 +36,18 @@ export interface ToggleRow {
   off_label?: string;
   /** Id of the toggle this one needs (Any on mode). */
   needs?: string;
+  /** An upstream yes/no value for `var` sets the switch (`withUpstream`). */
+  upstream?: true;
+  /** Frontend only: off mutes or bypasses the wired nodes and `groups`. */
+  control?: ToggleControl;
+  /** Canvas group titles `control` also covers. */
+  groups?: string[];
+  /** Pick one: what the picked variable gets instead of the name (may read `$vars`). */
+  value?: string;
 }
+
+export const TOGGLE_CONTROLS = ["mute", "bypass"] as const;
+export type ToggleControl = (typeof TOGGLE_CONTROLS)[number];
 
 export interface LabelRow {
   id: string;
@@ -52,12 +63,63 @@ export type TogglesItem = ToggleRow | LabelRow;
 export interface TogglesConfig {
   version: 1;
   mode: TogglesMode;
-  /** Pick one: also write the picked toggle's name here. */
+  /** Pick one: also write the picked toggle's value (or name) here. */
   group_var: string;
   rows: TogglesItem[];
+  /** Pick one: the picked variable prints in the prompt (else internal). */
+  group_visible?: true;
+  /** Pick one: an upstream `group_var` naming a toggle picks it. */
+  group_upstream?: true;
+  /** Set by `withUpstream` only, never saved: the toggle the upstream
+   *  `group_var` picked, and the toggles upstream set to a yes word. */
+  forced?: string;
+  upstream_on?: string[];
 }
 
 export const VAR_RE = /^[a-zA-Z][a-zA-Z0-9_]*$/;
+const TRUTHY = new Set(["true", "yes", "on", "1"]);
+const FALSY = new Set(["false", "no", "off", "0"]);
+
+/** An upstream value as a switch position, or null when it isn't a lone
+ *  yes/no word (mirror of `engine/toggles.py::upstream_bool`). */
+export function upstreamBool(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return null;
+  const low = value.trim().toLowerCase();
+  if (TRUTHY.has(low)) return true;
+  if (FALSY.has(low)) return false;
+  return null;
+}
+
+/** `cfg` with each `upstream` toggle's switch set from `upstream` values
+ *  (mirror of `with_upstream`); `set` lists the toggles it set. */
+export function withUpstream(
+  cfg: TogglesConfig,
+  upstream: Record<string, unknown> | null | undefined,
+): { config: TogglesConfig; set: string[] } {
+  if (!upstream) return { config: cfg, set: [] };
+  const set: string[] = [];
+  const on: string[] = [];
+  const rows = cfg.rows.map((r) => {
+    if (r.kind !== "toggle" || !r.upstream || !r.var) return r;
+    const v = upstreamBool(upstream[r.var]);
+    if (v === null) return r;
+    set.push(r.id);
+    if (v) on.push(r.id);
+    return { ...r, on: v };
+  });
+  const config: TogglesConfig = { ...cfg, rows, upstream_on: on };
+  const named = cfg.group_var ? upstream[cfg.group_var] : undefined;
+  if (cfg.mode === "one" && cfg.group_upstream && typeof named === "string" && named.trim()) {
+    const key = named.trim().toLowerCase();
+    const hit = toggleRows(config).find((t) => key === t.name.toLowerCase() || key === t.var.toLowerCase());
+    if (hit) {
+      config.forced = hit.id;
+      set.push(hit.id);
+    }
+  }
+  return { config, set };
+}
 
 export function newToggleId(): string {
   const bytes = new Uint8Array(4);
@@ -156,22 +218,40 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
     if (str(o.on_label)) t.on_label = str(o.on_label);
     if (str(o.off_label)) t.off_label = str(o.off_label);
     if (str(o.needs)) t.needs = str(o.needs);
+    if (typeof o.value === "string" && o.value) t.value = o.value;
+    if (o.upstream === true) t.upstream = true;
+    if (TOGGLE_CONTROLS.includes(o.control as ToggleControl)) t.control = o.control as ToggleControl;
+    const groups = Array.isArray(o.groups) ? o.groups.map(str).filter(Boolean) : [];
+    if (groups.length) t.groups = [...new Set(groups)];
     rows.push(t);
   }
-  return {
+  const cfg: TogglesConfig = {
     version: 1,
     mode: d.mode === "one" ? "one" : "any",
     group_var: str(d.group_var),
     rows,
   };
+  if (d.group_visible === true) cfg.group_visible = true;
+  if (d.group_upstream === true) cfg.group_upstream = true;
+  return cfg;
 }
 
-/** Toggle id → on after `needs` (Any on) or the first-on rule (Pick one). */
+/** Pick one: the toggle that is on. First match wins: the one the upstream
+ *  picked variable names, the first one upstream set on, the first one on. */
+export function pickedId(cfg: TogglesConfig): string | undefined {
+  const toggles = toggleRows(cfg);
+  const ids = new Set(toggles.map((t) => t.id));
+  if (cfg.forced && ids.has(cfg.forced)) return cfg.forced;
+  const up = (cfg.upstream_on ?? []).find((id) => ids.has(id));
+  return up ?? toggles.find((t) => t.on)?.id;
+}
+
+/** Toggle id → on after `needs` (Any on) or the Pick one rules. */
 export function effectiveToggles(cfg: TogglesConfig): Map<string, boolean> {
   const toggles = toggleRows(cfg);
   const out = new Map<string, boolean>();
   if (cfg.mode === "one") {
-    const picked = toggles.find((t) => t.on)?.id;
+    const picked = pickedId(cfg);
     for (const t of toggles) out.set(t.id, t.id === picked);
     return out;
   }
@@ -197,7 +277,8 @@ export function resolveToggles(cfg: TogglesConfig): Record<string, string> {
     if (t.var && VAR_RE.test(t.var)) values[t.var] = eff.get(t.id) ? "true" : "false";
   }
   if (cfg.mode === "one" && cfg.group_var && VAR_RE.test(cfg.group_var)) {
-    values[cfg.group_var] = toggleRows(cfg).find((t) => eff.get(t.id))?.name ?? "";
+    const picked = toggleRows(cfg).find((t) => eff.get(t.id));
+    values[cfg.group_var] = picked ? picked.value || picked.name : "";
   }
   return values;
 }

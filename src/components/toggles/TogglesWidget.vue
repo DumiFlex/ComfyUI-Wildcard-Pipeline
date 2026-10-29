@@ -24,6 +24,8 @@ import WpButton from "../../kit/WpButton.vue";
 import WpIconButton from "../../kit/WpIconButton.vue";
 import WpSegmented from "../../kit/WpSegmented.vue";
 import SortableList from "../../kit/SortableList.vue";
+import WpCheck from "../../kit/WpCheck.vue";
+import { vTooltip } from "../../kit/tooltip";
 import ToggleRowView from "./ToggleRow.vue";
 import { varColorClass } from "../shared/var-color";
 import {
@@ -51,8 +53,12 @@ const props = withDefaults(
     modelValue: TogglesConfig;
     /** Litegraph mode: 2 = muted, 4 = bypassed (dims the widget). */
     nodeMode?: number;
+    /** Toggle id → what its mute / bypass control drives. */
+    controls?: Record<string, string>;
+    /** Canvas group titles, for the control's group picker. */
+    canvasGroups?: string[];
   }>(),
-  { nodeMode: 0 },
+  { nodeMode: 0, controls: () => ({}), canvasGroups: () => [] },
 );
 const emit = defineEmits<{ "update:modelValue": [next: TogglesConfig] }>();
 
@@ -201,6 +207,8 @@ function rowProps(t: ToggleRow) {
     groupId: groupIdOf(t),
     outputsFull: pinCount.value >= MAX_OUTPUTS,
     editable: editMode.value,
+    controlText: props.controls[t.id] ?? "",
+    canvasGroups: props.canvasGroups,
   };
 }
 
@@ -288,6 +296,28 @@ function foldedOuts(g: ToggleGroup): string | undefined {
       </label>
       <span v-else class="wp-tg__spacer" />
       <WpButton variant="primary" size="sm" icon="pi-check" data-test="tg-edit-done" @click="closeEdit">Done</WpButton>
+    </div>
+    <div v-if="editMode && isOne" class="wp-tg__pickopts">
+      <span v-tooltip="'Print the picked variable in the prompt (else it is for rules only)'" class="wp-tg__check">
+        <WpCheck
+          :model-value="!!cfg.group_visible"
+          size="sm"
+          aria-label="Show in prompt"
+          data-test="tg-group-visible"
+          @update:model-value="(v: boolean) => commit({ group_visible: v ? true : undefined })"
+        />
+        <span aria-hidden="true">Show in prompt</span>
+      </span>
+      <span v-tooltip="'When the upstream Context holds the picked variable naming a toggle (its name or variable), that toggle is picked'" class="wp-tg__check">
+        <WpCheck
+          :model-value="!!cfg.group_upstream"
+          size="sm"
+          aria-label="Upstream can pick"
+          data-test="tg-group-upstream"
+          @update:model-value="(v: boolean) => commit({ group_upstream: v ? true : undefined })"
+        />
+        <span aria-hidden="true">Upstream can pick</span>
+      </span>
     </div>
     <div v-else class="wp-tg__bar wp-tg__bar--clean">
       <span class="wp-tg__mode-cap">{{ isOne ? "Pick one" : "" }}</span>
@@ -462,6 +492,8 @@ function foldedOuts(g: ToggleGroup): string | undefined {
 .wp-tg__bar { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .wp-tg__bar--clean { justify-content: space-between; min-height: 20px; margin-bottom: -2px; }
 .wp-tg__spacer { flex: 1; }
+.wp-tg__pickopts { display: flex; gap: 12px; padding: 0 2px; }
+.wp-tg__check { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
 .wp-tg__mode-cap { font-size: 10.5px; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-tg__label-text {
   font: 600 11px var(--wp-font-sans, sans-serif);

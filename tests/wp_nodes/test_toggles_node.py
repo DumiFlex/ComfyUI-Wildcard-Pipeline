@@ -100,3 +100,58 @@ def test_empty_widget():
         del WPToggles.hidden
     assert payload.context == {}
     assert bools == [False] * 16
+
+
+def test_upstream_sets_an_opted_in_switch_before_needs():
+    cfg = json.loads(json.dumps(CFG))
+    cfg["rows"][1]["upstream"] = True
+    cfg["rows"][3]["upstream"] = True
+    up = ContextPayload(
+        context={"use_lora_character": "Yes", "anime_look": "maybe"}, debug={}, internals={},
+    )
+    payload, *bools = _run(cfg, upstream=up).values
+    assert bools[:2] == [True, True]  # parent set by upstream, child follows
+    assert payload.context["anime_look"] == "true"  # not a yes/no word: switch kept
+    trace = {t["binding"]: t for t in payload.debug["__wp_trace__"]}
+    assert trace["use_lora_character"]["source"] == "upstream"
+    assert "source" not in trace["anime_look"]
+
+
+PICK = {"version": 1, "mode": "one", "group_var": "look", "rows": [
+    {"id": "00000001", "kind": "toggle", "name": "Day", "var": "day", "on": True,
+     "upstream": True, "value": "bright $time light"},
+    {"id": "00000002", "kind": "toggle", "name": "Night", "var": "night", "on": False,
+     "upstream": True},
+    {"id": "00000003", "kind": "toggle", "name": "Dusk", "var": "dusk", "on": False,
+     "upstream": True},
+]}
+
+
+def test_pick_value_resolves_vars_and_stays_internal_by_default():
+    up = ContextPayload(context={"time": "noon"}, debug={}, internals={})
+    payload, *_ = _run(PICK, upstream=up).values
+    assert payload.context["look"] == "bright noon light"
+    assert payload.internals["__wp_internal_flags__"]["look"] is True
+
+
+def test_pick_shown_in_prompt():
+    cfg = {**PICK, "group_visible": True}
+    payload, *_ = _run(cfg).values
+    assert "look" not in payload.internals["__wp_internal_flags__"]
+    assert payload.internals["__wp_internal_flags__"]["day"] is True
+
+
+def test_upstream_trues_beat_the_canvas_pick_and_warn_when_several():
+    up = ContextPayload(context={"night": "yes", "dusk": "on"}, debug={}, internals={})
+    payload, *_ = _run(PICK, upstream=up).values
+    assert payload.context["look"] == "Night"
+    warns = [w for w in payload.debug["__wp_warnings__"] if w["type"] == "toggles_upstream_many"]
+    assert warns and "Night" in warns[0]["message"]
+
+
+def test_upstream_group_var_names_the_pick():
+    cfg = {**PICK, "group_upstream": True}
+    up = ContextPayload(context={"look": "dusk", "night": "yes"}, debug={}, internals={})
+    payload, *_ = _run(cfg, upstream=up).values
+    assert payload.context["look"] == "Dusk"
+    assert payload.context["dusk"] == "true" and payload.context["night"] == "false"
