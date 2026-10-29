@@ -54,8 +54,8 @@ const controls = [
     <DocSection title="Controls">
       <DocKeyList :items="controls" />
       <DocCallout variant="tip">
-        A mix of muted and bypassed sends nothing. The relay acts only when the watched nodes
-        change, never when a workflow loads.
+        A mix of muted and bypassed sends nothing. The relay acts at once when the watched nodes
+        change and when you change one of its choices, never when a workflow loads.
       </DocCallout>
     </DocSection>
 

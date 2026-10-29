@@ -1,6 +1,6 @@
-import { defineAsyncComponent, h, watch, type Component } from "vue";
+import { defineAsyncComponent, h, onScopeDispose, watch, type Component } from "vue";
 import { createDomWidgetHost, type MountTargetNode } from "./_shared";
-import { reactiveFromGraph } from "../extension/reactive";
+import { reactiveFromGraph, watchModes } from "../extension/reactive";
 import {
   NODE_GROUP_OUTPUT,
   NODE_GROUP_TYPE,
@@ -60,7 +60,15 @@ export function mountNodeGroup(node: GroupNode) {
         }
         setMembersMode(node, MODE_OF[mode]);
         list.value = view(node);
+      }, { flush: "sync" });
+      // A member muted or bypassed from anywhere (a relay, a toggle, Ctrl+M)
+      // shows at once, not on the next poll.
+      const modes = watchModes(() => members(node), () => {
+        const next = view(node);
+        if (!sameView(list.value, next)) list.value = next;
       });
+      watch(list, () => modes.sync());
+      onScopeDispose(() => modes.stop());
       function setMember(id: number | string, mode: MemberMode): void {
         const m = members(node).find((x) => x.id === id);
         if (m) setMode(m, MODE_OF[mode]);
