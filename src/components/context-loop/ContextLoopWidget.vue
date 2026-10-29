@@ -44,8 +44,15 @@ const props = withDefaults(
     /** Downstream Context nodes (id + module JSON) the Sweep section
      *  draws its wildcards from. */
     sweepSources?: SweepSourceRaw[];
+    /** The node's `values` text input is wired: it sets the frames. */
+    valuesWired?: boolean;
+    /** How many values the last run read from it (null before a run). */
+    valuesCount?: number | null;
   }>(),
-  { nodeMode: 0, baseSeed: 0, count: 1, previousSeeds: null, sweepSources: () => [] },
+  {
+    nodeMode: 0, baseSeed: 0, count: 1, previousSeeds: null, sweepSources: () => [],
+    valuesWired: false, valuesCount: null,
+  },
 );
 
 const emit = defineEmits<{ "update:modelValue": [next: ContextLoopConfig] }>();
@@ -321,6 +328,14 @@ function toggleTotalInternal(): void {
       </div>
     </div>
 
+    <div v-if="valuesWired" class="wp-loop__values" data-test="loop-values-note">
+      <i class="pi pi-link" aria-hidden="true" />
+      <span>
+        One frame per line of the values input<template v-if="valuesCount != null"> ({{ valuesCount }} on the last run)</template>,
+        each writing <code>${{ modelValue.iteration_var_name }}_value</code>.
+      </span>
+    </div>
+
     <div class="wp-loop__row">
       <span class="wp-loop__row-label">Bypass loop</span>
       <WpSwitch
@@ -420,4 +435,16 @@ function toggleTotalInternal(): void {
 /* Mute / bypass dim — same convention as WP_VarTo* and WP_Cleaner. */
 .wp-loop--muted { opacity: 0.45; pointer-events: none; }
 .wp-loop--bypassed { opacity: 0.65; }
+.wp-loop__values {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 4px 8px;
+  border: 1px dashed var(--wp-border);
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
+  font-size: 10px;
+  color: var(--wp-text-dim);
+}
+.wp-loop__values .pi { font-size: 9px; color: var(--wp-accent); }
+.wp-loop__values code { color: var(--wp-text); }
 </style>

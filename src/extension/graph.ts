@@ -179,6 +179,12 @@ function widgetValue(node: LiteNodeLike, name: string): string {
   return typeof w?.value === "string" ? w.value : "";
 }
 
+/** A Context Loop whose `values` text input is wired writes
+ *  `$<iteration_var_name>_value` (its line for the frame) too. */
+function loopValuesWired(node: LiteNodeLike): boolean {
+  return node.inputs?.find((i) => i.name === "values")?.link != null;
+}
+
 /** Numeric widget read — `widgetValue` is string-only (returns "" for Int /
  *  Float / combo widgets), so a numeric widget like the Loop's `seed`/`count`
  *  must be read here. Coerces the raw value; NaN when absent/unparseable. */
@@ -911,6 +917,10 @@ export function collectUpstreamKinds(
       kinds[totalName] = "loop";
       flagInternal(baseName, cfg.iteration_internal === true);
       flagInternal(totalName, cfg.total_internal === true);
+      if (loopValuesWired(n)) {
+        kinds[`${baseName}_value`] = "loop";
+        flagInternal(`${baseName}_value`, false);
+      }
       continue;
     }
     if (n.type !== "WP_Context") continue;
@@ -1171,6 +1181,7 @@ export function collectUpstreamProducers(
       write(`${baseName}_total`, {
         kind: "loop", nodeId, nodeLabel, internal: cfg.total_internal === true,
       });
+      if (loopValuesWired(n)) write(`${baseName}_value`, { kind: "loop", nodeId, nodeLabel, internal: false });
       continue;
     }
 
@@ -1519,6 +1530,11 @@ function resolveChainStatic(
       else internalKeys.delete(baseName);
       if (cfg.total_internal === true) internalKeys.add(totalName);
       else internalKeys.delete(totalName);
+      if (loopValuesWired(n)) {
+        // The wired text is only known at run time.
+        ctx[`${baseName}_value`] = "";
+        internalKeys.delete(`${baseName}_value`);
+      }
       continue;
     }
     if (n.type !== "WP_Context") continue;
@@ -2289,6 +2305,7 @@ export function collectCanvasVars(rootGraph: LiteGraphLike): CanvasVar[] {
       const frames = typeof count === "number" ? `, ${count} frames` : "";
       add(base, "loop", `frame number 1 to N${frames}`);
       add(`${base}_total`, "loop", `number of frames${frames}`);
+      if (loopValuesWired(n)) add(`${base}_value`, "loop", "this frame's line from the values input");
     } else if (n.type === MODEL_INFO_NODE) {
       for (const v of MODEL_VARS) add(v, "model", "");
     }

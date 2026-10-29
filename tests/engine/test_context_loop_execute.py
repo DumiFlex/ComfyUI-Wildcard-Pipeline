@@ -220,3 +220,46 @@ def test_loop_config_strategy_falls_back_to_default_on_unknown():
     values = _execute_full(42, 3, {"strategy": "wat"})
     loop_config = values[1]
     assert loop_config["strategy"] == "hash_index"
+
+
+def test_wired_values_set_the_frames_and_write_iteration_value():
+    out = WPContextLoop.execute(
+        seed=[7], count=[3], wp_context_loop_config=["{}"],
+        values=["wolf\n\n fox ", "owl"],
+    )
+    payloads, loop_cfg = out.values
+    assert [p.context["iteration_value"] for p in payloads] == ["wolf", "fox", "owl"]
+    assert [p.context["iteration_total"] for p in payloads] == ["3", "3", "3"]
+    assert loop_cfg["count"] == 3 and loop_cfg["values_count"] == 3
+    assert out.ui["loop_values"] == [{"count": 3, "frames": 3}]
+    # not internal: the value is meant to print
+    assert "iteration_value" not in payloads[0].internals.get("__wp_internal_flags__", {})
+
+
+def test_wired_values_times_sweep_combinations():
+    sweep = {"enabled": True, "axes": [{"uid": "u1", "option_ids": ["a", "b"]}]}
+    out = WPContextLoop.execute(
+        seed=0, count=1, wp_context_loop_config=json.dumps({"sweep": sweep}),
+        values="x\ny",
+    )
+    payloads = out.values[0]
+    assert [p.context["iteration_value"] for p in payloads] == ["x", "x", "y", "y"]
+    assert [p.internals["__wp_pin_overrides__"]["u1"] for p in payloads] == ["a", "b", "a", "b"]
+
+
+def test_empty_values_wire_keeps_the_count_and_bypass_reads_the_first():
+    out = WPContextLoop.execute(seed=0, count=2, wp_context_loop_config="{}", values=["  \n"])
+    assert len(out.values[0]) == 2
+    assert "iteration_value" not in out.values[0][0].context
+    assert "loop_values" not in out.ui
+    out = WPContextLoop.execute(
+        seed=0, count=2, wp_context_loop_config=json.dumps({"bypass": True}), values="a\nb",
+    )
+    assert [p.context["iteration_value"] for p in out.values[0]] == ["a"]
+
+
+def test_wired_values_cap_at_the_frame_limit():
+    out = WPContextLoop.execute(
+        seed=0, count=1, wp_context_loop_config="{}", values="\n".join(map(str, range(1200))),
+    )
+    assert len(out.values[0]) == 999
