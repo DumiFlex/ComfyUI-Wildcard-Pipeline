@@ -112,6 +112,59 @@
    ]
   },
   {
+   "id": "library-health",
+   "title": "Library health",
+   "group": "overview",
+   "blurb": "Check the whole library: broken references, likely mistakes, unused items, and how varied each bundle is.",
+   "keywords": [
+    "health",
+    "unused",
+    "broken",
+    "missing",
+    "duplicate",
+    "orphan",
+    "clean up",
+    "tidy",
+    "ignore",
+    "variety",
+    "check"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "After a few months of imports, AI packs and deletes, a library collects references to wildcards that are gone, constraint rules for options that were renamed, near-duplicates and items nothing uses. The canvas warnings only look at one chain. Library health, in the manager sidebar under Library, looks at everything at once.\nFigure: Library health: the three counts at the top, the filter and search, and one fold-out list per check, each row with Open and Ignore. Screenshot of the Library health page. At the top, three cards count 4 problems (print wrong or nothing), 3 warnings (probably a mistake) and 5 to tidy up, above a filter (All, Problems, Warnings, Tidy up) and a search box. Below, one fold-out list per check: Points at a wildcard that's gone lists the Fantasy hero bundle and the Outfit wildcard, which point at a deleted Shoes wildcard; Constraint rule for an option or tag that's gone lists Class → Weapon with two rules for \"heavy\" and \"warrior\"; Reads a variable nothing sets lists the Scene combine reading $pose; Wildcards with the same options lists Mood (2) with a link to Mood. Each row has Open and Ignore.\nThe sidebar entry shows a red count when there are problems and an amber one when there are only warnings, and the Dashboard shows the same counts with the first problem. The page checks again on its own a moment after you change the library; Check again runs it now."
+    },
+    {
+     "title": "Problems: print wrong or nothing",
+     "text": "Points at a wildcard that’s gone\nA @{reference} in an option, combine, fixed value, derivation, saved template or bundle copy names a wildcard no longer in the library. It prints nothing where it sits.\nConstraint lost its wildcard\nIts source or target wildcard was deleted, so it never applies.\nConstraint rule for an option or tag that’s gone\nA matrix tag or an exception value the wildcard no longer has. That rule never matches.\nBundle holds a bundle that’s gone\nA nested bundle was deleted, so inserting the outer one skips it.\nEmpty bundle\nInserting it adds nothing.\nWildcard can’t pick anything\nNo options, only the empty option, or every option at weight 0 with no fallback.\nReads a variable nothing sets\nA $variable no library item, WP Model Info, WP Context Loop or the open canvas sets. Unless a WP Context Injector sets it, it prints as empty."
+    },
+    {
+     "title": "Warnings: probably a mistake",
+     "text": "No name\nHard to find in pickers and references.\nSame name twice\nTwo items of one kind with one name. The row links to both.\nWildcards with the same options\nOften a pack imported twice.\nSame option listed twice\nIt rolls twice as often. Raise one option’s weight instead.\nOptions that never roll\nWeight 0 and not the fallback.\nTwo wildcards write the same variable\nOn one chain the later one wins, which is fine when they are alternatives.\nBundle copies of deleted items\nThe bundle still runs its copies, but they no longer follow the library. Open the bundle to relink them."
+    },
+    {
+     "title": "Tidy up: clutter",
+     "text": "Not used by any bundle, template or reference\nNothing in the library uses it, and it is not on the open canvas. Delete all removes every one shown, after one confirm.\nSets a variable nothing in the library reads\nA combine, derivation or fixed value whose variable no saved template, combine, derivation or open Assembler prints.\nBundle holds an older copy\nThe library item changed since the bundle was saved.\nTag used only once\nWith a hint when it looks like a typo of another tag (outfit / outfits).\nEmpty category\nNothing is filed under it. Delete removes the category only.\nNewer version on Community\nThe author published a newer version of a pack you installed. Update opens the same dialog as the list pages.\nInstalled from a newer format\nIt came from a newer Wildcard Pipeline, so settings this version doesn’t know were left out. Update the extension and reinstall it."
+    },
+    {
+     "title": "Open your canvas first",
+     "text": "A WP Context keeps its own copy of what you insert, so the library can't tell what sits on a canvas. When a ComfyUI tab is open, the page asks it which library items it holds, which variables its Injectors, Loops and Model Info set, and which $variables its Assemblers read, and counts those as used. Ids and names only, never values.\nWith no canvas open, the page says so: items you only use on a canvas show under Not used. Open your workflow in another tab and press Check again, or Ignore them."
+    },
+    {
+     "title": "Fix, ignore, filter",
+     "text": "Open\nOpens the item’s editor (a tag opens the items carrying it). Rows about two items, like duplicates, link to each one.\nDelete\nOnly on rows where it is safe: unused items and empty categories. Copies on a canvas keep working, and a backup from Settings › Library & data can bring an item back.\nIgnore\nHides the row for good and leaves it out of the counts. Show ignored brings ignored rows back so you can Unignore them. If the same item turns up for a different reason, it shows again.\nFilter and search\nAll, Problems, Warnings or Tidy up, and a search over item names, details and values."
+    },
+    {
+     "title": "Variety check",
+     "text": "Under the findings, every bundle has Check variety. It runs the bundle 200 times with random seeds through the real engine and shows how many of the results were different, which variables never changed although their wildcard has more options, which options never came up, and the run's warnings. Open in Test Runner takes the same bundle to the Test Runner for a closer look."
+    },
+    {
+     "title": "Works with",
+     "text": "Test Runner Warning & conflict types Bundles"
+    }
+   ]
+  },
+  {
    "id": "themes",
    "title": "Themes and looks",
    "group": "overview",

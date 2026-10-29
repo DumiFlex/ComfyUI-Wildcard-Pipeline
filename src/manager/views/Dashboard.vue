@@ -18,6 +18,7 @@ import { useEngagementStore, measureSubstance } from "../stores/engagementStore"
 import { useReleaseCheck } from "../composables/useReleaseCheck";
 import StarPrompt from "../components/StarPrompt.vue";
 import { useBundleStore } from "../stores/bundleStore";
+import { useHealthStore } from "../stores/healthStore";
 import { registerPageNote } from "../composables/useOpenEditor";
 import Logo from "@/kit/Logo.vue";
 
@@ -172,69 +173,15 @@ const showOnboardingCard = computed<boolean>(
   () => showGettingStarted.value && !onboardingDismissed.value,
 );
 
-/** Health issues derived from the live catalog. Lightweight checks
- *  surfaced as a single advisory card — runtime conflicts (missing
- *  $vars, etc.) are the extension's domain; this card focuses on
- *  *editor-time* mistakes the user can fix from the library. */
-interface HealthIssue {
-  id: string;
-  label: string;
-  detail: string;
-  count: number;
-  route: string;
-  /** The items it is about, "Name (id)", for the AI chat's page note. */
-  items: string[];
-}
-function itemLabels(rows: { id: string; name?: string | null }[]): string[] {
-  return rows.map((r) => `${r.name?.trim() || "(unnamed)"} (${r.id})`);
-}
-const healthIssues = computed<HealthIssue[]>(() => {
-  const issues: HealthIssue[] = [];
-  const blankWildcards = moduleStore.catalog.filter((m) => {
-    if (m.type !== "wildcard") return false;
-    const opts = (m.payload as { options?: { value?: string }[] } | null)?.options ?? [];
-    return opts.length === 0 || opts.every((o) => !(o.value || "").trim());
-  });
-  if (blankWildcards.length) {
-    issues.push({
-      id: "blank-wildcards",
-      label: `${blankWildcards.length} wildcard${blankWildcards.length === 1 ? '' : 's'} with no usable options`,
-      detail: "Wildcards need at least one non-empty option to resolve.",
-      count: blankWildcards.length,
-      route: "/wildcards",
-      items: itemLabels(blankWildcards),
-    });
-  }
-  const emptyBundles = bundleStore.catalog.filter((b) => {
-    const kids = Array.isArray(b.children) ? b.children : [];
-    return kids.length === 0;
-  });
-  if (emptyBundles.length) {
-    issues.push({
-      id: "empty-bundles",
-      label: `${emptyBundles.length} empty bundle${emptyBundles.length === 1 ? '' : 's'}`,
-      detail: "Bundles without children won't surface anything at run time.",
-      count: emptyBundles.length,
-      route: "/bundles",
-      items: itemLabels(emptyBundles),
-    });
-  }
-  const unnamed = [
-    ...moduleStore.catalog.filter((m) => !m.name?.trim()),
-    ...bundleStore.catalog.filter((b) => !b.name?.trim()),
-  ];
-  if (unnamed.length) {
-    issues.push({
-      id: "unnamed",
-      label: `${unnamed.length} unnamed item${unnamed.length === 1 ? '' : 's'}`,
-      detail: "Items without names are hard to find in pickers and references.",
-      count: unnamed.length,
-      route: "/all",
-      items: itemLabels(unnamed),
-    });
-  }
-  return issues;
+/** Library health summary: the same scan as the Library health page
+ *  (`stores/healthStore.ts`), shown as counts plus the first problem. */
+const health = useHealthStore();
+health.ensure();
+const healthTop = computed(() => {
+  const open = health.findings.filter((f) => !health.ignored.has(f.key));
+  return open.find((f) => f.severity === "problem") ?? open.find((f) => f.severity === "warning") ?? null;
 });
+const healthShown = computed(() => health.scan !== null && health.counts.problem + health.counts.warning > 0);
 
 /** Getting-started steps. The check column reflects actual library
  *  state so users can see their progress against the checklist as
@@ -440,13 +387,12 @@ registerPageNote(() => {
     return `${n} ${(n === 1 ? k.label.replace(/s$/, "") : k.label).toLowerCase()}`;
   });
   const bits = [`Dashboard: ${totalItems.value} items (${tiles.join(", ")})`];
-  if (healthIssues.value.length) {
-    const issues = healthIssues.value.map((i) =>
-      `${i.label}${i.items.length ? `: ${i.items.slice(0, 8).join(", ")}${i.items.length > 8 ? ", …" : ""}` : ""}`);
-    bits.push(`Things to look at: ${issues.join("; ")}`);
-  } else {
-    bits.push("No warnings");
-  }
+  const c = health.counts;
+  bits.push(health.scan
+    ? `Library health: ${c.problem} problem${c.problem === 1 ? "" : "s"}, `
+      + `${c.warning} warning${c.warning === 1 ? "" : "s"}, ${c.tidy} to tidy up`
+      + (healthTop.value ? ` (first: ${healthTop.value.item.name}: ${healthTop.value.detail})` : "")
+    : "Library health: not checked yet");
   const rows = visibleItems.value;
   bits.push(rows.length
     ? `${TAB_LABEL[tab.value]} tab: ${rows.map((r) => `${r.name} (${r.moduleType ?? r.kind}, ${r.id})`).join(", ")}`
@@ -545,32 +491,23 @@ onMounted(async () => {
       <Button variant="ghost" size="sm" icon="pi-arrow-right-arrow-left" @click="openImportExport">Import / Export</Button>
     </div>
 
-    <!-- Health issues — advisory card, surfaced only when the catalog
-         has real editor-time problems. Each row links to the list view
-         where the user can find + fix the offending items. -->
-    <Card v-if="healthIssues.length" data-test="dashboard-health" data-ai-anchor="health" data-ai-label="Things to look at">
+    <!-- Library health — the counts from the Library health page, shown
+         only when something needs fixing (problems or warnings). -->
+    <Card v-if="healthShown" data-test="dashboard-health" data-ai-anchor="health" data-ai-label="Library health">
       <template #default>
         <div class="dashboard__health-head">
-          <Icon name="pi-exclamation-triangle" />
-          <span class="dashboard__health-title">{{ healthIssues.length }} thing{{ healthIssues.length === 1 ? '' : 's' }} to look at</span>
+          <Icon name="pi-heart" />
+          <span class="dashboard__health-title">Library health</span>
+          <Button variant="link" size="sm" class="dashboard__health-open" @click="router.push('/health')">Open</Button>
         </div>
-        <ul class="dashboard__health-list">
-          <li
-            v-for="issue in healthIssues"
-            :key="issue.id"
-            class="dashboard__health-row"
-            tabindex="0"
-            role="button"
-            :aria-label="`${issue.label}. Open ${issue.route}`"
-            @click="router.push(issue.route)"
-            @keydown.enter.prevent="router.push(issue.route)"
-            @keydown.space.prevent="router.push(issue.route)"
-          >
-            <strong>{{ issue.label }}</strong>
-            <span class="dashboard__health-detail">{{ issue.detail }}</span>
-            <Icon name="pi-arrow-right" :size="ICON_SM" />
-          </li>
-        </ul>
+        <div class="dashboard__health-counts">
+          <Chip v-if="health.counts.problem" tone="danger">{{ health.counts.problem }} problem{{ health.counts.problem === 1 ? '' : 's' }}</Chip>
+          <Chip v-if="health.counts.warning" tone="warn">{{ health.counts.warning }} warning{{ health.counts.warning === 1 ? '' : 's' }}</Chip>
+          <Chip v-if="health.counts.tidy" tone="info">{{ health.counts.tidy }} to tidy up</Chip>
+        </div>
+        <p v-if="healthTop" class="dashboard__health-detail">
+          <strong>{{ healthTop.item.name || healthTop.item.id }}</strong>: {{ healthTop.detail }}
+        </p>
       </template>
     </Card>
 
@@ -710,43 +647,17 @@ onMounted(async () => {
   border-right: 1px solid var(--wp-border);
 }
 
-/* Health card — danger-tinted advisory list. Each row is keyboard
- * focusable + clickable to jump to the relevant kind page. */
+/* Library health card: counts as chips, then the first problem. */
 .dashboard__health-head {
   display: flex;
   align-items: center;
   gap: var(--wp-space-3);
   margin-bottom: var(--wp-space-4);
-  color: var(--wp-warn, #facc15);
 }
-.dashboard__health-title { font-weight: 600; font-size: var(--wp-text-base); }
-.dashboard__health-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-3);
-}
-.dashboard__health-row {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-4);
-  padding: var(--wp-space-3) var(--wp-space-4);
-  background: color-mix(in oklab, var(--wp-warn, #facc15) 8%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-warn, #facc15) 22%, transparent);
-  border-radius: var(--wp-radius);
-  cursor: pointer;
-  transition: background 120ms ease;
-}
-.dashboard__health-row:hover,
-.dashboard__health-row:focus-visible {
-  background: color-mix(in oklab, var(--wp-warn, #facc15) 14%, transparent);
-  outline: none;
-}
-.dashboard__health-row strong { font-weight: 600; }
+.dashboard__health-title { font-weight: 600; font-size: var(--wp-text-base); flex: 1; }
+.dashboard__health-counts { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
 .dashboard__health-detail {
-  flex: 1;
+  margin: var(--wp-space-4) 0 0;
   color: var(--wp-text-muted);
   font-size: var(--wp-text-sm);
 }

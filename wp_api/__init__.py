@@ -17,6 +17,7 @@ from wp_api import bundles as _bundles
 from wp_api import cascade as _cascade
 from wp_api import categories as _categories
 from wp_api import database as _database
+from wp_api import health as _health
 from wp_api import image_filter as _image_filter
 from wp_api import import_export as _import_export
 from wp_api import label_grid as _label_grid
@@ -156,6 +157,7 @@ def register_routes(app: web.Application) -> None:
     _preview.register(app.router)
     _tags.register(app.router)
     _library_tags.register(app.router)
+    _health.register(app.router)
     _models.register(app.router)
     _image_filter.register(app.router)
     _label_grid.register(app.router)

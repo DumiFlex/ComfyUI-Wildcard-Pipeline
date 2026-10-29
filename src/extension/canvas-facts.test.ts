@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { collectCanvasVars, type LiteGraphLike, type LiteNodeLike } from "./graph";
+import { collectCanvasLibraryUse, collectCanvasVars, type LiteGraphLike, type LiteNodeLike } from "./graph";
 import { answerCanvasFacts } from "./canvas-facts";
 import { CANVAS_FACTS_CHANNEL } from "./canvas-facts-channel";
-import { _resetAiContextForTests, askCanvas } from "../manager/utils/ai-context";
+import { _resetAiContextForTests, askCanvas, askCanvasFacts } from "../manager/utils/ai-context";
 
 function graph(nodes: LiteNodeLike[]): LiteGraphLike {
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
@@ -59,5 +59,44 @@ describe("canvas facts for the AI", () => {
     const other = new BroadcastChannel(CANVAS_FACTS_CHANNEL);
     expect(await askCanvas(20)).toBeUndefined();
     other.close();
+  });
+});
+
+describe("canvas facts for Library health", () => {
+  afterEach(() => _resetAiContextForTests());
+
+  const USE_NODES: LiteNodeLike[] = [
+    {
+      id: 10, type: "WP_Context", mode: 4, widgets: [{
+        name: "wp_modules",
+        value: JSON.stringify({
+          version: 1,
+          modules: [
+            { id: "aaaa0001", type: "wildcard", payload: { options: [{ value: "@{bbbb0002#Hat} red" }] } },
+          ],
+          bundles: [{ _uid: "u1", library_id: "cccc0003", start_idx: 0, end_idx: 0 }],
+        }),
+      }],
+    },
+    {
+      id: 11, type: "WP_PromptAssembler", widgets: [
+        { name: "template", value: "$hair, $scene.neg @{dddd0004}" },
+        { name: "negative_template", value: "$bad" },
+      ],
+    },
+  ];
+
+  it("lists library ids on the canvas (bypassed nodes too) and Assembler reads", () => {
+    const use = collectCanvasLibraryUse(graph(USE_NODES));
+    expect(use.ids.sort()).toEqual(["aaaa0001", "bbbb0002", "cccc0003", "dddd0004"]);
+    expect(use.reads.sort()).toEqual(["bad", "hair", "scene"]);
+  });
+
+  it("the canvas answer carries ids and reads", async () => {
+    const stop = answerCanvasFacts(() => graph(USE_NODES));
+    const facts = await askCanvasFacts(50);
+    expect(facts?.ids).toContain("cccc0003");
+    expect(facts?.reads).toContain("hair");
+    stop();
   });
 });

@@ -44,6 +44,7 @@ import type {
   AiDescribeRequest,
   AiDescribeResult,
   TagStatus, TagSuggestResponse, TagDownloadResult, LibraryTagUpdateCounts,
+  HealthCanvasFacts, HealthScan, HealthVariety,
   ModelKind, ModelSourceStatus, ModelSuggestResponse,
   DatabaseInfo, MaintenanceOp, MaintenanceResult,
   EmbedBundle,
@@ -365,6 +366,26 @@ export const api = {
      *  added while the server runs is invisible until something asks again. */
     refresh() {
       return request<ModelSourceStatus>("/wp/api/models/refresh", { method: "POST" });
+    },
+  },
+
+  /** Library health: one scan over the whole library, the findings the
+   *  user ignored, and a per-bundle variety run. */
+  health: {
+    scan(canvas: HealthCanvasFacts | null) {
+      return request<HealthScan>("/wp/api/health/scan", {
+        method: "POST", body: JSON.stringify({ canvas }),
+      });
+    },
+    ignore(add: string[], remove: string[] = []) {
+      return request<{ ignored: string[] }>("/wp/api/health/ignored", {
+        method: "PUT", body: JSON.stringify({ add, remove }),
+      });
+    },
+    variety(bundleId: string, seeds = 200) {
+      return request<HealthVariety>("/wp/api/health/variety", {
+        method: "POST", body: JSON.stringify({ bundle_id: bundleId, seeds }),
+      });
     },
   },
 
