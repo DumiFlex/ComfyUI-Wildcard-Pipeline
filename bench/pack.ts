@@ -2,7 +2,7 @@
 // way a person would, against a running ComfyUI with the AI assistant set up. See README.md.
 import path from "node:path";
 import { pack, StepError } from "watchwright";
-import { benchHelpers } from "./bench.js";
+import { benchHelpers, fakeModel } from "./bench.js";
 import { aiDebug, consoleErrors, failedRequests, resetLibrary } from "./shared.js";
 import { MODELS } from "./meta.js";
 
@@ -41,6 +41,7 @@ export default pack({
     "dismissed-findings": "info",
     "research-skipped": "info",
     "forced-click": "info",
+    "fake-answer": "info",
   },
   rubric: [
     { id: "correct", title: "Correct", description: "Does the answer work in the app: valid items, right variables, nothing broken?", scale: 5 },
@@ -71,6 +72,9 @@ export default pack({
     await h.visit("wildcards");
     const cfg = await h.aiConfig();
     info("AI model", `${String(cfg.provider ?? "?")} · ${String(cfg.model ?? "?")}`);
+    const fake = await h.api("/fake/script").catch(() => null);
+    fakeModel.on = fake?.status === 200;
+    if (fakeModel.on) info("Fake model", "bench/dev/serve.py: nothing to apply flags fake-answer, not a robot flag");
     if (!cfg.enabled) throw new StepError("The AI assistant is off in Settings.");
     if (params.reset === true) await resetLibrary(h, path.join(packDir, "bench-library.json"));
     // W22 checks the chat can't delete while this is off; W23 and Z16 turn it on for themselves.

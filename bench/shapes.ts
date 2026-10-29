@@ -4,7 +4,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { test, StepError, type Helpers, type TestContext, type TestMeta } from "watchwright";
-import { ModelLoop, PANEL, sel, type ItemKind } from "./bench.js";
+import { ModelLoop, PANEL, nothingFlag, sel, type ItemKind } from "./bench.js";
 import { prompt, testMeta } from "./meta.js";
 
 /** What a bench test body gets: Watchwright's context plus its id and its prompt. */
@@ -73,7 +73,7 @@ export function make(route: string, button: string, { mode, name, varName, setup
     await h.step("save", async () => {
       if (button !== "cn-ai") {
         if (!(await h.shows(apply, 5000))) {
-          h.flag("not-saved", `Nothing to apply, so ${name} wasn't saved (later tests that use it will fail).`);
+          h.flag(nothingFlag("not-saved"), `Nothing to apply, so ${name} wasn't saved (later tests that use it will fail).`);
           return;
         }
         await h.tap(apply);
@@ -487,6 +487,12 @@ export function pack({ sample = false, nsfw = false, images, install = false, ex
     if (fixSecs) h.metric("Fix s", Math.round(fixSecs), "s");
     if (install && t.last && (await h.shows("pack-install"))) {
       await h.step("install", async () => {
+        // Install stays greyed out when the build left nothing new to add (its note says why).
+        if (!(await h.page.locator(sel("pack-install")).first().isEnabled().catch(() => false))) {
+          h.flag("not-installed", "Install is greyed out after the build: nothing new to install.");
+          await h.pageScrollShots("not-installed");
+          return;
+        }
         await h.tap("pack-install");
         await h.aiIdle({ quiet: 2000 });
         await h.shot("installed");

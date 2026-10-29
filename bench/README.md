@@ -51,7 +51,7 @@ A finding flag fails the attempt, because the app or the model did something wro
 | `model-loop` | The model wrote nothing new for 10 minutes. |
 | `deleted-while-off` | The chat deleted something while deleting was off. |
 | `build-blocked` | The pack builder wouldn't build. |
-| `not-installed` | Install didn't finish. |
+| `not-installed` | Install didn't finish, or stayed greyed out after the build. |
 | `fix-changed-nothing` | **Fix all with AI** left the same findings. |
 | `problem-fix-did-nothing` | A problem's **Fix** left the problem there. |
 
@@ -62,7 +62,7 @@ A robot flag breaks the attempt, meaning the bench couldn't do a step and the re
 | `not-saved` | A new item didn't save. |
 | `no-card` | The chat turn ended without a card to apply. |
 
-`research-skipped`, `dismissed-findings` and `forced-click` are notes only.
+`research-skipped`, `dismissed-findings`, `forced-click` and `fake-answer` are notes only. On the fake model (below) a turn or panel with nothing to apply flags `fake-answer` instead of `no-card` or `not-saved`, since the fake's made-up answers rarely make a card.
 
 Tests tagged `changes-library` delete or change items for good. Each attempt of one starts with a database backup. The backup is kept, and named in the attempt's notes, only when the attempt didn't pass.
 

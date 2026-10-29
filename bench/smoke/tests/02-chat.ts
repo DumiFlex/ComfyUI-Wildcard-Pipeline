@@ -8,14 +8,18 @@ const SECTION = "Chat";
 
 /** Sends `text` in a new chat and keeps the turn. */
 async function send(h: Helpers, text: string): Promise<void> {
-  await h.chat(text);
-  await h.chatShot("turn");
+  await h.step("send", async () => {
+    await h.chat(text);
+    await h.chatShot("turn");
+  });
 }
 
 /** Changes the AI settings, then reloads: the open page keeps the settings it read at load. */
 async function settings(h: Helpers, patch: Record<string, unknown>): Promise<void> {
-  await h.setAiConfig(patch);
-  await h.visit("wildcards");
+  await h.step("settings", async () => {
+    await h.setAiConfig(patch);
+    await h.visit("wildcards");
+  });
 }
 
 smoke(
@@ -54,12 +58,14 @@ smoke(
     check(h, await card.isVisible().catch(() => false), "no-card", "a proposal card shows");
     const cardText = (await card.innerText().catch(() => "")) ?? "";
     check(h, /Smoke colours/.test(cardText) && /crimson/.test(cardText), "wrong-card", "the card names Smoke colours and shows its options");
-    await h.applyCard();
-    await h.snap("applied", '[data-test="ai-chat"]');
+    await h.step("apply", async () => {
+      await h.step("apply", () => h.applyCard());
+      await h.snap("applied", '[data-test="ai-chat"]');
+    });
     const made = (await h.library()).modules.find((m) => m.name === "Smoke colours");
     const options = made ? optionTexts(await moduleById(h, made.id)) : [];
     check(h, !!made && ["crimson", "teal", "amber"].every((o) => options.includes(o)), "apply-did-nothing", `Apply made Smoke colours with ${options.length} option(s)`);
-    await h.undoCard();
+    await h.step("undo", () => h.undoCard());
     check(h, (await snapshot(h)) === before, "undo-left-changes", "Undo left the library exactly as before");
     await noAiError(h);
   },
@@ -78,10 +84,10 @@ smoke(
     const before = await snapshot(h);
     await script(h, { calls: [{ tool: "add_options", args: { id: "Weather", options: [{ text: "smoke test haze" }] } }] });
     await send(h, "Add a hazy option to Weather.");
-    await h.applyCard();
+    await h.step("apply", () => h.applyCard());
     const options = optionTexts(await moduleById(h, WEATHER));
     check(h, options.includes("smoke test haze"), "apply-did-nothing", `Weather has ${options.length} options after Apply`);
-    await h.undoCard();
+    await h.step("undo", () => h.undoCard());
     check(h, (await snapshot(h)) === before, "undo-left-changes", "Undo left the library exactly as before");
     await noAiError(h);
   },
@@ -121,10 +127,10 @@ smoke(
       await script(h, { calls: [{ tool: "delete_items", args: { items: ["Weather copy"] } }] });
       await send(h, "Delete Weather copy.");
       check(h, await h.shows("ai-chat-delete"), "no-card", "a Delete card shows");
-      await h.applyCard();
+      await h.step("apply", () => h.applyCard());
       const gone = !(await h.library()).modules.some((m) => m.name === "Weather copy");
       check(h, gone, "apply-did-nothing", "Weather copy is deleted");
-      await h.undoCard();
+      await h.step("undo", () => h.undoCard());
       check(h, (await snapshot(h)) === before, "undo-left-changes", "Undo brought Weather copy back exactly");
     } finally {
       await h.setAiConfig({ allow_delete: false });
@@ -162,8 +168,10 @@ smoke(
     await send(h, "Make me something.");
     check(h, await h.shows("ai-ask-decide"), "no-card", "the questions show with Decide for me");
     check(h, (await h.page.locator('[data-test="ai-ask-choice"]:visible').count()) >= 2, "wrong-card", "both choices show");
-    await h.answerAsk();
-    await h.chatShot("decided");
+    await h.step("decide for me", async () => {
+      await h.answerAsk();
+      await h.chatShot("decided");
+    });
     check(h, (await lastReply(h)).includes("Going with Anime."), "no-answer", "the turn went on to the reply");
     await noAiError(h);
   },

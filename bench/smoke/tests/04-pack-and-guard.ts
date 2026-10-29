@@ -6,17 +6,21 @@ import { check, fakeLog, noAiError, script, smoke, snapshot } from "../smoke.js"
 
 /** Starts a fresh pack in the pack builder from `request` and presses Plan it. */
 async function planPack(h: Helpers, request: string): Promise<void> {
-  await h.visit("pack-builder");
-  if (await h.shows("pack-reset")) {
-    await h.tap("pack-reset");
-    await h.wait(500);
-  }
-  await h.type("pack-request", request);
-  await h.tap("pack-next");
-  await h.aiIdle({ quiet: 2000 });
-  if (await h.shows("pack-use-recommended")) await h.tap("pack-use-recommended");
-  await h.tap("pack-plan");
-  await h.aiIdle({ expect: true, timeout: 20 * 60_000 });
+  await h.step("describe", async () => {
+    await h.visit("pack-builder");
+    if (await h.shows("pack-reset")) {
+      await h.tap("pack-reset");
+      await h.wait(500);
+    }
+    await h.type("pack-request", request);
+    await h.tap("pack-next");
+    await h.aiIdle({ quiet: 2000 });
+    if (await h.shows("pack-use-recommended")) await h.tap("pack-use-recommended");
+  });
+  await h.step("plan", async () => {
+    await h.tap("pack-plan");
+    await h.aiIdle({ expect: true, timeout: 20 * 60_000 });
+  });
 }
 
 /** The pack builder's error lines. */
@@ -35,10 +39,13 @@ smoke(
   async ({ h }) => {
     const before = await snapshot(h);
     await planPack(h, "A small pack for fantasy tavern scenes: a patron, their drink and the mood.");
-    for (let i = 0; i < 3 && (await h.shows("pack-decide-all")); i++) {
-      await h.tap("pack-decide-all");
-      await h.aiIdle({ timeout: 20 * 60_000 });
-    }
+    if (await h.shows("pack-decide-all"))
+      await h.step("decide all", async () => {
+        for (let i = 0; i < 3 && (await h.shows("pack-decide-all")); i++) {
+          await h.tap("pack-decide-all");
+          await h.aiIdle({ timeout: 20 * 60_000 });
+        }
+      });
     await h.pageScrollShots("plan");
     const items = await h.page.locator('[data-test="pack-item"]').count();
     check(h, items > 0, "no-answer", `the plan shows ${items} item(s)`);
@@ -52,22 +59,28 @@ smoke(
       h.log("Build is held back by the plan's findings: build and install not tested.");
       return;
     }
-    await h.tap("pack-build");
-    await h.aiIdle({ expect: true, timeout: 30 * 60_000, quiet: 5000 });
-    await h.pageScrollShots("built");
+    await h.step("build", async () => {
+      await h.tap("pack-build");
+      await h.aiIdle({ expect: true, timeout: 30 * 60_000, quiet: 5000 });
+      await h.pageScrollShots("built");
+    });
     const built = await packErrors(h);
     check(h, !built, "ai-error", built ? `The build showed an error: ${built.slice(0, 300)}` : "no build error");
     check(h, await h.shows("pack-install", 5000), "no-answer", "the built pack offers Install");
     if (!(await h.shows("pack-install"))) return;
 
-    await h.tap("pack-install");
-    await h.aiIdle({ quiet: 2000 });
-    await h.shot("installed");
+    await h.step("install", async () => {
+      await h.tap("pack-install");
+      await h.aiIdle({ quiet: 2000 });
+      await h.shot("installed");
+    });
     check(h, (await snapshot(h)) !== before, "apply-did-nothing", "Install changed the library");
     check(h, await h.shows("pack-undo", 5000), "no-card", "Install offers Undo");
     if (!(await h.shows("pack-undo"))) return;
-    await h.tap("pack-undo");
-    await h.wait(1500);
+    await h.step("undo", async () => {
+      await h.tap("pack-undo");
+      await h.wait(1500);
+    });
     check(h, (await snapshot(h)) === before, "undo-left-changes", "Undo left the library exactly as before");
   },
 );
@@ -109,10 +122,13 @@ smoke(
         ],
       },
     });
-    await h.open("wildcards", "Outfit");
-    await h.panel("wc-ai-draft", { mode: "add", prompt: "2 more outfits" });
-    const text = await h.keep("answer", PANEL);
-    await h.panelShot("answer");
+    const text = await h.step("ask", async () => {
+      await h.open("wildcards", "Outfit");
+      await h.panel("wc-ai-draft", { mode: "add", prompt: "2 more outfits" });
+      const answer = await h.keep("answer", PANEL);
+      await h.panelShot("answer");
+      return answer;
+    });
     check(h, /silk robe/.test(text), "no-answer", "the fine option is offered");
     check(h, !/loli/i.test(text.replace(/skipped[^\n]*/gi, "")), "guard-missed", "the blocked option is not offered");
     check(h, /skipped/i.test(text), "guard-missed", "the panel says it skipped one");
