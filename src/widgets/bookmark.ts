@@ -191,6 +191,19 @@ function animateView(c: CanvasLike, offset: [number, number], scale: number): vo
   animFrame = requestAnimationFrame(step);
 }
 
+/** The screen strip the open dock covers on the canvas's left or right. */
+function dockInset(c: CanvasLike): [number, number] {
+  const dock = document.querySelector<HTMLElement>('[data-test="bm-dock"]');
+  const el = c.canvas;
+  if (!dock || !el) return [0, 0];
+  const d = dock.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  if (d.width <= 0 || d.right <= r.left || d.left >= r.right) return [0, 0];
+  return d.left + d.width / 2 < r.left + r.width / 2
+    ? [Math.max(0, d.right - r.left), 0]
+    : [0, Math.max(0, r.right - d.left)];
+}
+
 function currentView(c: CanvasLike): View {
   return { graph: c.graph, offset: [c.ds?.offset[0] ?? 0, c.ds?.offset[1] ?? 0], scale: c.ds?.scale ?? 1 };
 }
@@ -233,6 +246,7 @@ export function jumpTo(node: BookmarkNode): void {
       anchor: config.anchor,
       scale,
       margin: BOOKMARK_MARGIN,
+      inset: dockInset(c),
     });
     animateView(c, offset, scale);
   });
@@ -430,6 +444,23 @@ export function addBookmarkHere(at?: readonly number[]): void {
 
 // ── the widget ────────────────────────────────────────────────────────
 
+/** Called once a bookmark joins a graph (added or loaded), so the dock can
+ *  open itself. ComfyUI's `nodeCreated` hook doesn't fire for node types
+ *  registered straight with LiteGraph, so the node reports it. */
+let bookmarkAdded: (() => void) | null = null;
+export function onBookmarkAdded(fn: () => void): void {
+  bookmarkAdded = fn;
+}
+
+/** The title-bar colour for a bookmark colour: a dark tint of it, so the
+ *  title text stays readable on any colour. */
+export function titleTint(hex: string): string | undefined {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!m) return undefined;
+  const mix = (c: string): string => Math.round(parseInt(c, 16) * 0.45 + 0x2a * 0.55).toString(16).padStart(2, "0");
+  return `#${mix(m[1] ?? "0")}${mix(m[2] ?? "0")}${mix(m[3] ?? "0")}`;
+}
+
 /** Mounts the bookmark's one widget. Its value is the JSON BookmarkConfig. */
 export function mountBookmark(node: BookmarkNode) {
   const config = ref<BookmarkConfig>(defaultBookmarkConfig());
@@ -438,7 +469,7 @@ export function mountBookmark(node: BookmarkNode) {
   function apply(next: BookmarkConfig): void {
     config.value = next;
     host.setValue(serializeWidgetJson(next));
-    node.color = next.color || undefined;
+    node.color = titleTint(next.color);
     node.setDirtyCanvas?.(true, true);
     notify();
   }
@@ -478,13 +509,14 @@ export function mountBookmark(node: BookmarkNode) {
     onValueRestored: (raw: string) => {
       restored = true;
       config.value = parseBookmarkConfig(raw);
-      node.color = config.value.color || undefined;
+      node.color = titleTint(config.value.color);
       notify();
     },
   });
   // Nothing restored by the next tick: the user just added this bookmark.
   setTimeout(() => {
     if (!restored && node.graph) apply(freshConfig(node));
+    if (node.graph) bookmarkAdded?.();
   }, 0);
   return host;
 }
@@ -509,7 +541,8 @@ export function registerBookmarkNode(): void {
     constructor(title?: string) {
       super(title ?? DEFAULT_TITLE);
       mountBookmark(this);
-      this.size = [320, 200];
+      // Grows to fit the widget on the first layout.
+      this.size = [340, 80];
     }
 
     // A hidden bookmark can still get caught by Select all or a box

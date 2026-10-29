@@ -105,6 +105,9 @@ export interface JumpInput {
   anchor: BookmarkAnchor;
   scale: number;
   margin?: number;
+  /** Screen pixels covered on the left and right (the open dock), so the
+   *  bookmark lands beside it rather than under it. */
+  inset?: readonly [number, number];
 }
 
 /**
@@ -119,7 +122,8 @@ export function jumpOffset(input: JumpInput): [number, number] {
   const m = input.margin ?? BOOKMARK_MARGIN;
   const [x, y, w, h] = input.rect;
   const [vw, vh] = input.viewport;
-  const sx = m + a.fx * Math.max(0, vw - 2 * m);
+  const [il, ir] = input.inset ?? [0, 0];
+  const sx = il + m + a.fx * Math.max(0, vw - il - ir - 2 * m);
   const sy = m + a.fy * Math.max(0, vh - 2 * m);
   const px = x + a.fx * w;
   const py = y + a.fy * h;

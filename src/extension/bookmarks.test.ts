@@ -52,6 +52,15 @@ describe("jump maths", () => {
     expect([ox, oy]).toEqual([-100, -200]);
   });
 
+  it("lands beside the dock, not under it", () => {
+    const [ox] = jumpOffset({ rect, viewport, anchor: "tl", scale: 1, margin: 20, inset: [300, 0] });
+    expect(screen(rect[0], ox, 1)).toBeCloseTo(320);
+    const [rx] = jumpOffset({ rect, viewport, anchor: "tr", scale: 1, margin: 20, inset: [0, 300] });
+    expect(screen(rect[0] + rect[2], rx, 1)).toBeCloseTo(1000 - 300 - 20);
+    const [cx] = jumpOffset({ rect, viewport, anchor: "c", scale: 1, margin: 20, inset: [300, 0] });
+    expect(screen(rect[0] + rect[2] / 2, cx, 1)).toBeCloseTo(320 + (1000 - 300 - 40) / 2);
+  });
+
   it("keeps or sets the zoom", () => {
     expect(jumpScale({ ...defaultBookmarkConfig(), zoom: 1.5 }, 0.7)).toBe(1.5);
     expect(jumpScale({ ...defaultBookmarkConfig(), zoomMode: "keep", zoom: 1.5 }, 0.7)).toBe(0.7);

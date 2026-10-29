@@ -279,6 +279,9 @@ app.registerExtension({
     topbarMod.startIconReplaceLoop();
     bookmarkMod.installBookmarkKeys();
     bookmarkMod.installHiddenFilter();
+    // A bookmark joining the graph (added, pasted or loaded) brings the
+    // dock up unless the user closed it.
+    bookmarkMod.onBookmarkAdded(maybeShowBookmarkDock);
     maybeShowBookmarkDock();
   },
 
@@ -407,9 +410,6 @@ app.registerExtension({
   // conflict badge so users can spot WP issues nested inside a subgraph
   // without opening it.
   nodeCreated(node: unknown) {
-    // The first bookmark in a workflow brings the dock up (after its
-    // config lands, a tick later).
-    if (bookmarkMod.isBookmark(node)) setTimeout(maybeShowBookmarkDock, 0);
     if (!isSubgraphNode(node)) return;
     const root = (app as unknown as { graph?: LiteGraphLike }).graph;
     if (root) withBadges((badgeMod) => badgeMod.attachSubgraphBadge(node as Parameters<BadgeModule["attachSubgraphBadge"]>[0], root));

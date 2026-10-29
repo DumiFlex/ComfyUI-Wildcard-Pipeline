@@ -11,6 +11,7 @@ import {
   jumpTo,
   listBookmarks,
   setHidden,
+  titleTint,
   type BookmarkNode,
 } from "./bookmark";
 
@@ -157,5 +158,13 @@ describe("WP Bookmark shortcuts", () => {
     press({ key: "3", code: "Digit3", altKey: true }, (e) => e.preventDefault());
     expect(canvas.ds.offset).toEqual([7, 7]);
     expect(b.title).toBe("A");
+  });
+});
+
+describe("WP Bookmark title tint", () => {
+  it("darkens the colour and ignores anything else", () => {
+    expect(titleTint("#ffffff")).toBe("#8a8a8a");
+    expect(titleTint("#000000")).toBe("#171717");
+    expect(titleTint("")).toBeUndefined();
   });
 });
