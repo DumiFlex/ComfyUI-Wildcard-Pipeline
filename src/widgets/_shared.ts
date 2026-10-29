@@ -92,6 +92,15 @@ export interface CreateDomWidgetHostOptions<P extends Record<string, unknown>> {
    */
   fitContent?: boolean;
   /**
+   * The glue sizes the node itself: the host still reports its measured
+   * height as the widget's minimum, but never resizes the node (no grid
+   * snap, no computeSize margins). For a node that must be exactly its
+   * content, like WP Note.
+   */
+  ownSize?: boolean;
+  /** The DOM widget's inset inside the node, in px. ComfyUI's default is 10. */
+  margin?: number;
+  /**
    * Effect scope the glue already ran its reactive setup in (see
    * {@link buildInScope}). The host adopts it and stops it on unmount.
    * Omitted → the host creates its own (`host.scope`).
@@ -250,6 +259,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     // Cached number so ComfyUI skips per-frame getComputedStyle (perf hint
     // from LoRA Manager's DOM widget guide).
     getMinHeight: () => minHeight,
+    ...(options.margin !== undefined ? { margin: options.margin } : {}),
     ...(options.fitContent ? { getMaxHeight: () => minHeight } : {}),
   };
 
@@ -321,8 +331,11 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       // getMinHeight callback AND our own min[1] read below. Keeping
       // it grid-aligned at the source means setSize never has to
       // correct an off-grid value after the fact.
-      const next = snapToGrid(Math.max(baseMin, measured));
+      // An own-size node is exactly its content: LiteGraph grows the node
+      // to this minimum, so a grid-snapped value would leave a gap under it.
+      const next = options.ownSize ? Math.max(baseMin, measured) : snapToGrid(Math.max(baseMin, measured));
       if (next !== minHeight) minHeight = next;
+      if (options.ownSize) return;
 
       const min = resizable.computeSize?.();
       const cur = resizable.size;
@@ -509,7 +522,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   let lastAutoSetWidth = 0;
   let lastAutoSetHeight = 0;
   function requestRelayout(): void {
-    if (relayouting) return;
+    if (relayouting || options.ownSize) return;
     relayouting = true;
     try {
       // See pushSize comment — same reason: skip while the collapse

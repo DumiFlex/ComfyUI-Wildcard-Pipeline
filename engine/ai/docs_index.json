@@ -2185,6 +2185,51 @@
    ]
   },
   {
+   "id": "wp-note",
+   "title": "WP Note",
+   "group": "nodes",
+   "blurb": "A note that explains a workflow: a step, a tip or a label, with a docs link.",
+   "keywords": [
+    "note",
+    "comment",
+    "label",
+    "sticky",
+    "step",
+    "tip",
+    "explain"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "WP Note explains a workflow on the canvas. It looks like a panel, not a node: no title bar, no frame and no sockets, in the classic renderer and in Nodes 2.0, and its selection outline hugs the panel. It is left out of the prompt; its text is saved with the workflow.\nFigure: A Step card with docs buttons, a Warning card with its own icon, a Tip sticky, and a Label showing its hover card. Four WP Notes on the canvas with no node frame around them. A Step 1 card, Load your model, with a $model_family code span and two docs buttons (WP Model Info, Writing prompts for your model); an amber Warning card with a triangle icon and a lock icon in its text; a green Tip sticky with a lightbulb, tinted with its colour; and a small purple Label pill, Label each frame, whose hover card is open above it with the label's text, a The grid docs button and an Edit button."
+    },
+    {
+     "title": "When to use it",
+     "text": "Good for\n- Numbered steps through a shared workflow\n- A warning or tip next to the node it is about, with its docs page one click away\n- A small label over a group of nodes\nBetter with something else\n- A heading for a group of nodes: ComfyUI's own group title"
+    },
+    {
+     "title": "Looks",
+     "text": "Card\nA panel with a coloured edge on the left. The title and the text show on the canvas.\nSticky\nThe same panel, tinted with the colour.\nLabel\nA small pill with the title only, sized to it. Hover it to see its text and links in a card; move onto the card to click them. Marks on the pill show that it has text (lines) or a link (chain)."
+    },
+    {
+     "title": "Moving, sizing and editing",
+     "text": "Unpin a note to drag it like any node. A Card or Sticky resizes from its corner: the width is yours and the height follows the text. A Label sizes itself to its title. Double-click a note, press its pencil or press Edit on a label's hover card to open the editor; Done goes back to reading.\nTone\nStep (a numbered circle), Icon (pick any icon from the list next to it) or Plain (no badge).\nColour\nPresets that follow the theme (Accent, Tip, Info, Warning, Danger, Teal, Violet, Neutral), or any colour from the picker.\nLook\nCard, Sticky or Label (above).\nPinned\nComfyUI's own pin: a pinned note can't be moved or resized by accident. New notes start pinned.\nTitle\nShown in bold at the top, or on the pill of a Label.\nText\nMarkdown, with the formatting bar below over it.\nKeys you type in the editor stay in the editor: Delete, Ctrl+Z and ComfyUI's other shortcuts don't reach the canvas."
+    },
+    {
+     "title": "The formatting bar",
+     "text": "Figure: The editor with the link panel open: a docs page found by typing, one of its sections, and a button with an icon. A WP Note open in its editor next to a finished Step card. The editor has Tone (Step, Icon, Plain) with the step number, Look (Card, Sticky, Label) with the Pinned switch, a row of colour presets with a custom colour field, the Title, and the Text with its formatting bar: bold, italic, strikethrough, code, bulleted and numbered list, quote, link (pressed), icon and a preview eye. The link panel under the bar has Docs page chosen, WP Label & Grid found by typing, its section The grid, the link text, and Button with the Th Large icon, ready to Insert link.\nBold, italic, strikethrough Ctrl+B / Ctrl+I\nWraps the selection in **, * or ~~.\nCode\nWraps it in backticks, for a $variable.\nLists and quote\nPuts - , 1. or > before each selected line (press again to take it off).\nLink Ctrl+K\nA Docs page (type to find any page of these docs, then pick a section or the whole page) or a Web address, drawn as a Button with an icon or as a Text link. The selected text becomes the link's text.\nIcon\nAny PrimeIcons icon, searchable, in a colour or the text's own.\nPreview (eye)\nShows the note as it will read."
+    },
+    {
+     "title": "Links and icons in the text",
+     "text": "The bar writes these for you; you can also type them. A note can hold any number of links, anywhere in the text. Any other kind of link shows as plain text.\n[Read more](https://example.com)\nA link that opens in a new tab.\n[Seeds](docs:seeds-and-loops)\nA link to that page of these docs.\n[The grid](docs:wp-label-grid#s-the-grid)\nA link to one section of it.\n[Start here](docs:quick-start){button pi-play}\nThe link drawn as a button with an icon. {button} alone has no icon.\n:pi-heart: :pi-heart:{#rrggbb}\nAn icon, optionally in a colour: a hex code like the custom colour field shows."
+    },
+    {
+     "title": "Works with",
+     "text": "Quick start WP Label & Grid"
+    }
+   ]
+  },
+  {
    "id": "wildcard",
    "title": "Wildcard",
    "group": "modules",

@@ -70,7 +70,7 @@ function extractUnscopedStyles(vueSource) {
 
 /** Find top-level class selectors. Match `.classname` at the start of
  *  a rule (after `}`, newline, or block start). */
-const TOP_LEVEL_CLASS_RE = /(?:^|[}\n])\s*(\.[a-zA-Z][\w-]*)/g;
+const TOP_LEVEL_CLASS_RE = /(?:^|[}\n])\s*(\.[a-zA-Z][\w-]*)(:has\(\.wp-)?/g;
 
 function violationsIn(content) {
   const violations = [];
@@ -80,6 +80,9 @@ function violationsIn(content) {
     const selector = m[1];
     if (ALLOWED_PREFIXES.some((re) => re.test(selector))) continue;
     if (LEGACY_ALLOWLIST.has(selector)) continue;
+    // A host element scoped to the ones holding ours (`.lg-node:has(.wp-note)`,
+    // to restyle the node frame around a widget) can't match anyone else's.
+    if (m[2]) continue;
     const offset = m.index;
     const line = stripped.slice(0, offset).split("\n").length;
     violations.push({ selector, line });

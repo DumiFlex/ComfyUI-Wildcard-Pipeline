@@ -184,18 +184,19 @@ async def test_the_same_card_sent_again_is_not_proposed_again(wp_client, fake_ll
 
 
 async def test_keys_and_variables_nothing_mentions_are_checked_once(wp_client, fake_llm):
-    # Sonnet probe 2026-10-21: a how-to answer named Ctrl+K and $final_prompt.
+    # Sonnet probe 2026-10-21: a how-to answer named a key and $final_prompt
+    # nothing mentions (it was Ctrl+K, which the WP Note docs now use).
     from engine.ai import chat as ai_chat
     _on(fake_llm)
     fake_llm.chat_steps.extend([
-        {"message": "Press Ctrl+K, then read `$final_prompt`.", "calls": []},
+        {"message": "Press Ctrl+J, then read `$final_prompt`.", "calls": []},
         {"message": "Press Ctrl+Enter to send; the Assembler's output is the prompt.",
          "calls": []},
     ])
     out = await _chat(wp_client, "How do I see the final prompt?")
     assert out["message"].startswith("Press Ctrl+Enter")
     nudge = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
-    assert ai_chat.facts_nudge(["Ctrl+K", "$final_prompt"]) in nudge
+    assert ai_chat.facts_nudge(["Ctrl+J", "$final_prompt"]) in nudge
     # The docs' keys, the library's variables and the user's own words pass.
     assert ai_chat.unknown_names("Ctrl + S saves; Ctrl+Shift+X explains.", "") == []
     assert ai_chat.unknown_names("Set $hair and $mood.", "my $mood wildcard", ["hair"]) == []
@@ -210,7 +211,7 @@ def test_a_sent_back_answer_is_rewritten_whole():
     # apology and lost its Warning box.
     from engine.ai import chat as ai_chat
     assert ai_chat.REWRITE_KEEP in ai_chat.CLAIM_NUDGE
-    assert ai_chat.REWRITE_KEEP in ai_chat.facts_nudge(["Ctrl+K"])
+    assert ai_chat.REWRITE_KEEP in ai_chat.facts_nudge(["Ctrl+J"])
 
 
 async def test_an_item_made_from_this_chats_card_may_be_changed(wp_client, fake_llm):

@@ -1,7 +1,9 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
 import { reactiveFromGraph } from "../extension/reactive";
-import { defaultNoteConfig, docUrl, parseNoteConfig, type NoteConfig } from "../extension/note";
+import { defaultNoteConfig, parseNoteConfig, type NoteConfig } from "../extension/note";
+import { isVueNodes } from "../extension/renderer";
+import { panelAt, trackPeek } from "./note-peek";
 
 const NoteWidget = defineAsyncComponent(() => import("../components/note/NoteWidget.vue"));
 
@@ -18,6 +20,8 @@ interface NoteNode extends MountTargetNode {
   computeSize?: () => [number, number];
   setSize?: (size: [number, number]) => void;
   setDirtyCanvas?: (fg: boolean, bg: boolean) => void;
+  resizable?: boolean;
+  graph?: unknown;
 }
 
 type NodeBase = new (title?: string) => NoteNode;
@@ -30,7 +34,8 @@ interface LiteGraphStatic {
 
 function setPinned(node: NoteNode, pinned: boolean): void {
   // ComfyUI's own pin (the right-click Pin), so its lock icon and menu agree.
-  if (node.pin) node.pin(pinned);
+  // pin() needs the node on a graph; before that, set the flag.
+  if (node.pin && node.graph) node.pin(pinned);
   else node.flags = { ...(node.flags ?? {}), pinned };
   node.setDirtyCanvas?.(true, true);
 }
@@ -57,12 +62,41 @@ function passPointerThrough(el: HTMLElement): (() => void) | null {
   return () => obs.disconnect();
 }
 
+/**
+ * Double-click to edit in Nodes 2.0. There the note's node never gets
+ * LiteGraph's onDblClick (its body lets the pointer through to the canvas),
+ * so one document listener hit-tests the notes' panels instead. Classic
+ * keeps onDblClick.
+ */
+interface EditTarget { panel(): HTMLElement | null; edit(): void }
+const editTargets = new Set<EditTarget>();
+let dblWired = false;
+function wireDblClick(): void {
+  if (dblWired || typeof document === "undefined") return;
+  dblWired = true;
+  document.addEventListener("dblclick", (e) => {
+    if (!isVueNodes()) return;
+    const hit = panelAt(editTargets, e.clientX, e.clientY);
+    if (!hit) return;
+    e.stopPropagation();
+    hit.edit();
+  }, true);
+}
+
+/** The narrowest a card note gets, and the width a label opens its editor at. */
+const CARD_MIN_WIDTH = 160;
+const FORM_WIDTH = 340;
+
 /** Mounts the note's one widget. Its value is the JSON NoteConfig. */
 export function mountNote(node: NoteNode) {
   const config = ref<NoteConfig>(defaultNoteConfig());
   // A saved note reads; a brand-new one opens in the editor (below).
   const editing = ref(false);
   let restored = false;
+  const isLabel = (): boolean => config.value.look === "label" && !editing.value;
+  // A label sizes itself to its text; a card's width is the user's. Pinned
+  // never resizes (ComfyUI's pin() and configure() write this too).
+  const syncResizable = (): void => { node.resizable = node.flags?.pinned !== true && !isLabel(); };
 
   const wrapper: Component = {
     setup() {
@@ -72,19 +106,18 @@ export function mountNote(node: NoteNode) {
       function onConfig(next: NoteConfig): void {
         config.value = next;
         host.setValue(serializeWidgetJson(next));
-        node.setDirtyCanvas?.(true, true);
+        syncResizable();
+        fitSize();
       }
       function onTitle(next: string): void {
         node.title = next;
         title.value = next;
-        node.setDirtyCanvas?.(true, true);
+        fitSize();
       }
       function onPinned(next: boolean): void {
         setPinned(node, next);
         pinned.value = next;
-      }
-      function onOpenDoc(id: string): void {
-        window.open(docUrl(id, window.location.origin), "_blank", "noopener");
+        syncResizable();
       }
       return () => h(NoteWidget, {
         config: config.value,
@@ -95,41 +128,97 @@ export function mountNote(node: NoteNode) {
         "onUpdate:config": onConfig,
         "onUpdate:title": onTitle,
         "onUpdate:pinned": onPinned,
-        onOpenDoc,
       });
     },
   };
 
+  // The panel's own width, which is the label's width.
+  const panel = (): HTMLElement | null =>
+    host.element.querySelector<HTMLElement>(".wp-note__panel");
+  const labelWidth = (): number => Math.ceil(panel()?.scrollWidth ?? 0);
+
   const host = createDomWidgetHost(node, "wp_note", wrapper, {
     initialValue: serializeWidgetJson(config.value),
     minHeight: 30,
-    minWidth: 120,
-    autoHeight: true,
+    minWidth: () => minWidth(),
+    ownSize: true,
+    margin: 0,
     onValueRestored: (raw: string) => {
       restored = true;
       config.value = parseNoteConfig(raw);
       editing.value = false;
-      fitHeight();
+      syncResizable();
+      fitSize();
     },
   });
 
-  // Shrink the node to the panel once its height settles (the widget only
-  // ever grows it), so the selection outline hugs the note.
-  function fitHeight(): void {
-    let frames = 3;
+  function minWidth(): number {
+    if (isLabel()) return Math.max(labelWidth(), 40);
+    return editing.value ? FORM_WIDTH : CARD_MIN_WIDTH;
+  }
+  /** The size the panel needs: its own height, and a label's own width. */
+  function contentSize(): [number, number] | null {
+    const el = host.element.querySelector<HTMLElement>(".wp-note");
+    if (!el?.isConnected || el.offsetHeight <= 0) return null;
+    return [minWidth(), Math.ceil(el.offsetHeight)];
+  }
+  // The node is exactly the panel, so the selection outline hugs the note:
+  // LiteGraph's resize floor and every layout pass ask this.
+  node.computeSize = () => contentSize() ?? [minWidth(), 30];
+
+  // Make the node exactly the panel once the layout settles: a label's
+  // width is its text, a card's width is the user's, and the height is the
+  // text. Checked again whenever the panel's height changes.
+  function fitSize(): void {
+    node.setDirtyCanvas?.(true, true);
+    let frames = 2;
     const step = (): void => {
       if (--frames > 0) { requestAnimationFrame(step); return; }
-      const min = node.computeSize?.();
-      if (min && node.setSize && Math.abs(min[1] - node.size[1]) > 1) node.setSize([node.size[0], min[1]]);
+      applySize();
     };
     requestAnimationFrame(step);
   }
+  function applySize(): void {
+    const want = contentSize();
+    if (!want) return;
+    const size = node.size;
+    const w = isLabel() ? want[0] : Math.max(size[0], want[0]);
+    const h = want[1];
+    if (Math.abs(w - size[0]) <= 1 && Math.abs(h - size[1]) <= 1) return;
+    size[0] = w;
+    size[1] = h;
+    node.setDirtyCanvas?.(true, true);
+  }
+  const sizeObserver = new ResizeObserver(() => applySize());
+  sizeObserver.observe(host.element);
+  host.onCleanup(() => sizeObserver.disconnect());
   function setEditing(v: boolean): void {
     editing.value = v;
-    fitHeight();
+    syncResizable();
+    fitSize();
   }
-  // Nothing restored by the next tick: the user just added this note.
-  setTimeout(() => { if (!restored) setEditing(true); }, 0);
+  // Nothing restored by the next tick: the user just added this note. It
+  // starts pinned. (Pinning in the constructor would also pin every loaded
+  // note: an unpinned one saves no flag, so the default would win.)
+  setTimeout(() => {
+    if (restored) return;
+    setPinned(node, true);
+    setEditing(true);
+  }, 0);
+
+  // A label keeps its text for a hover card (see note-peek.ts).
+  const stopPeek = trackPeek({
+    panel: () => (config.value.look === "label" && !editing.value ? panel() : null),
+    config: () => config.value,
+    title: () => node.title,
+    active: () => config.value.look === "label" && !editing.value && !!node.graph,
+    edit: () => setEditing(true),
+  });
+  host.onCleanup(stopPeek);
+  wireDblClick();
+  const editTarget: EditTarget = { panel: () => (editing.value ? null : panel()), edit: () => setEditing(true) };
+  editTargets.add(editTarget);
+  host.onCleanup(() => editTargets.delete(editTarget));
 
   // Keep ComfyUI's wrapper letting clicks through. It is created after the
   // node, and again when the graph is re-shown, so check on each draw.
@@ -171,7 +260,7 @@ interface NodeDefLike {
  */
 export function fixNoteDef(defs: NodeDefLike[]): void {
   fixFrontendDef(defs, NOTE_NODE_TYPE, "WP Note",
-    "A note that explains a workflow: steps, tips and a link to the docs. It never runs.");
+    "A note that explains a workflow: steps, warnings and labels, with links to the docs. It never runs.");
 }
 
 /** The same fix for any of our frontend-only nodes. */
@@ -200,6 +289,8 @@ export function registerNoteNode(): void {
     static category = "wildcard-pipeline";
     // No title bar and no node box: the note draws its own panel.
     static title_mode = lg?.NO_TITLE ?? 1;
+    // The widget starts at the node's top edge, not 2 px under it.
+    widgets_start_y = 0;
     isVirtualNode = true;
     serialize_widgets = true;
     collapsable = true;
@@ -221,8 +312,6 @@ export function registerNoteNode(): void {
       super(title ?? "WP Note");
       mountNote(this);
       this.size = [360, 100];
-      // Pinned by default. A loaded note's saved flags replace this.
-      this.flags = { ...(this.flags ?? {}), pinned: true };
     }
   }
   lg.registerNodeType(NOTE_NODE_TYPE, WPNoteNode);

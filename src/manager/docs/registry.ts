@@ -222,6 +222,9 @@ export const DOC_PAGES: DocPageMeta[] = [
   { id: "wp-var-to-choice", title: "WP Var → Choice", group: "nodes", icon: "pi pi-list", tone: "node", nodeId: "WP_VarToChoice",
     blurb: "Send a $variable into a dropdown: checkpoint, sampler, scheduler, VAE, LoRA.", keywords: ["convert", "combo", "dropdown", "checkpoint", "sampler", "scheduler", "model", "choice"],
     ...page(() => import("./pages/nodes/wp-var-to-choice.vue")) },
+  { id: "wp-note", title: "WP Note", group: "nodes", icon: "pi pi-bookmark", tone: "node", nodeId: "WP_Note",
+    blurb: "A note that explains a workflow: a step, a tip or a label, with a docs link.", keywords: ["note", "comment", "label", "sticky", "step", "tip", "explain"],
+    ...page(() => import("./pages/nodes/wp-note.vue")) },
   // Modules
   { id: "wildcard", title: "Wildcard", group: "modules", icon: "pi pi-sparkles", tone: "wildcard",
     blurb: "A list of options; each run picks one into a $variable.", keywords: ["random", "weight", "option", "tag groups", "fallback", "multi-pick", "match variable"],

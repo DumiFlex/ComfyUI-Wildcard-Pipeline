@@ -1,23 +1,63 @@
 import { defineComponent, h, type VNode } from "vue";
 import { parseMarkdown, type Block, type Inline } from "../../manager/utils/chat-markdown";
+import { parseTarget, readLinkAttrs, splitIcons, targetUrl } from "./note-format";
 
 /**
  * The note body: Markdown through the chat parser, drawn with plain
- * elements (no v-html). Links show their text only, like in the chat.
- * `$variables` in code spans keep the mono look.
+ * elements (no v-html), plus the note syntax in note-format.ts: web and
+ * docs links (opening in a new tab), `{button}` links and `:pi-name:` icons.
+ * A link to anything but http(s) or docs: shows its text only.
  */
+function origin(): string {
+  return typeof window === "undefined" ? "" : window.location.origin;
+}
+
+function text(v: string): (VNode | string)[] {
+  return splitIcons(v).map((p) => (typeof p === "string"
+    ? p
+    : h("i", { class: ["pi", `pi-${p.icon}`, "wp-note-md__icon"], style: p.color ? { color: p.color } : undefined, "aria-hidden": "true" })));
+}
+
+function link(n: Extract<Inline, { t: "link" }>, button: boolean, icon: string): VNode {
+  const target = parseTarget(n.href);
+  const url = targetUrl(target, origin());
+  if (!url) return h("span", { class: "wp-note-md__plain" }, inline(n.c));
+  const external = { href: url, target: "_blank", rel: "noopener noreferrer", title: url, draggable: "false" };
+  if (!button) return h("a", { class: "wp-note-md__link", ...external }, inline(n.c));
+  return h("a", { class: "wp-note-md__btn", ...external }, [
+    icon ? h("i", { class: ["pi", `pi-${icon}`], "aria-hidden": "true" }) : null,
+    h("span", inline(n.c)),
+    h("i", { class: "pi pi-arrow-up-right", "aria-hidden": "true" }),
+  ]);
+}
+
 function inline(nodes: Inline[]): (VNode | string)[] {
-  return nodes.map((n) => {
+  const out: (VNode | string)[] = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    if (!n) continue;
     switch (n.t) {
-      case "text": return n.v;
-      case "b": return h("strong", inline(n.c));
-      case "i": return h("em", inline(n.c));
-      case "s": return h("s", inline(n.c));
-      case "code": return h("code", { class: "wp-note-md__code" }, n.v);
-      case "ref": return h("span", n.v);
-      case "link": return h("span", { class: "wp-note-md__link", title: n.href }, inline(n.c));
+      case "text": out.push(...text(n.v)); break;
+      case "b": out.push(h("strong", inline(n.c))); break;
+      case "i": out.push(h("em", inline(n.c))); break;
+      case "s": out.push(h("s", inline(n.c))); break;
+      case "code": out.push(h("code", { class: "wp-note-md__code" }, n.v)); break;
+      case "ref": out.push(h("span", n.v)); break;
+      case "link": {
+        // A `{button …}` right after the link is its attribute block.
+        const next = nodes[i + 1];
+        const attrs = next?.t === "text" ? readLinkAttrs(next.v) : null;
+        out.push(link(n, !!attrs, attrs?.attrs.icon ?? ""));
+        if (attrs && next?.t === "text") {
+          const rest = next.v.slice(attrs.length);
+          if (rest) out.push(...text(rest));
+          i++;
+        }
+        break;
+      }
     }
-  });
+  }
+  return out;
 }
 
 function block(b: Block): VNode {

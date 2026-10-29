@@ -1,20 +1,48 @@
 # WP Note
 
-A note that explains a workflow. It looks like a panel, not a node: no title bar, no sockets. It never runs and is left out of the prompt; its text is saved with the workflow.
+A note that explains a workflow. It looks like a panel, not a node: no title bar, no frame, no sockets, in both the classic renderer and Nodes 2.0. The selection outline hugs the panel. It never runs and is left out of the prompt; its text is saved with the workflow.
 
 ## Using it
 
 - **Add** it from the node search (`WP Note`). A new note opens in its editor and starts pinned.
 - **Edit** by double-clicking the note or pressing its pencil. **Done** goes back to reading.
 - **Move** it by dragging like any node (unpin it first).
+- **Resize** a Card or Sticky note from its corner: the width is yours, the height follows the text. A Label sizes itself to its title.
+- **Hover** a Label to see its text and links in a card. Move onto the card to click a link or **Edit**. Marks on the pill show that it has text (lines) or a link (chain).
+- **Links** in a note open in a new tab: a docs link opens that page (and section) of the built-in docs.
 
 ## Editor
 
 | Setting | Notes |
 |---|---|
-| Tone | **Step** (shows its number), **Tip** (lightbulb), **Info** (i) or **Plain**. Sets the colour. |
-| Look | **Card**: a panel with a coloured edge. **Sticky**: tinted with the tone. **Label**: a small coloured pill with the title only; the text shows on hover. |
+| Tone | **Step** (a numbered circle), **Icon** (pick any icon from the list next to it) or **Plain** (no badge). |
+| Colour | Presets that follow the theme (Accent, Tip, Info, Warning, Danger, Teal, Violet, Neutral), or any colour from the picker. |
+| Look | **Card**: a panel with a coloured edge. **Sticky**: tinted with the colour. **Label**: a small coloured pill with the title only; hovering it shows the text. |
 | Pinned | ComfyUI's own pin: a pinned note can't be moved or resized by accident. |
 | Title | Shown in bold at the top. |
-| Text | Markdown: `**bold**`, `*italic*`, lists and `` `$var` ``. Links show as text. |
-| Docs link | Adds a button that opens that page of the built-in docs. |
+| Text | Markdown, with a formatting bar over it. |
+
+Keys you type in the editor stay in the editor: Delete, Ctrl+Z and the other ComfyUI shortcuts don't reach the canvas.
+
+## The formatting bar
+
+| Button | Writes |
+|---|---|
+| **B** / *I* / ~~S~~ | `**bold**`, `*italic*`, `~~strikethrough~~` (Ctrl+B, Ctrl+I) |
+| `<>` | `` `code` ``, for a `$variable` |
+| Lists, quote | `- item`, `1. item`, `> quote` on each selected line |
+| Link (Ctrl+K) | A link to a **Docs page** (type to find any page, then pick a section or the whole page) or a **Web address**, as a **Button** (with an icon) or a **Text link** |
+| Icon | Any PrimeIcons icon, in a colour or the text's own |
+| Eye | Preview the note as it will read |
+
+## Syntax
+
+| Write | Shows |
+|---|---|
+| `[Read more](https://example.com)` | A link that opens in a new tab |
+| `[Seeds](docs:seeds-and-loops)` | A link to that docs page |
+| `[The grid](docs:wp-label-grid#s-the-grid)` | A link to a section of it |
+| `[Start here](docs:quick-start){button pi-play}` | The link drawn as a button with an icon (`{button}` for none) |
+| `:pi-heart:` / `:pi-heart:{#ef4444}` | An icon, optionally coloured |
+
+Any other kind of link shows as plain text.

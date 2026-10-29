@@ -313,12 +313,17 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // and WP Node Group (a new frontend-only node + panel), the clean/edit views
 // and the richer Pick one: lazy widget chunks plus a few KB of boot glue
 // (registration, the prompt strip); the branch sat at 552,937 bytes.
-// RAISED 552 -> 564 KB on 2026-10-29 for WP Bookmark (a frontend-only node
+// RAISED 552 -> 576 KB on 2026-10-29 for the WP Note editor: a formatting
+// bar, links to any docs page and section (the page/section catalog, ~5 KB
+// gzip) and icons from the full PrimeIcons list. All of it is in the note's
+// lazy chunks (NoteWidget, NotePeek, note-markdown), loaded only when a
+// note is on the canvas; boot unchanged. dev sat at ~556,000 bytes after #201, the merge at 575,436.
+// RAISED 576 -> 582 KB on 2026-10-29 for WP Bookmark (a frontend-only node
 // that jumps the canvas to a saved spot): its widget and the Bookmarks dock
 // are lazy chunks (~11 KB, plus the kit pieces they share), with ~5 KB of
 // boot glue for the node, the jump, the hidden filter and the one shortcut
-// listener; the branch sat at 575,211 bytes.
-const TOTAL_LIMIT = 564 * 1024;     // 564 KB
+// listener; the branch sat at 593,475 bytes after merging the WP Note editor.
+const TOTAL_LIMIT = 582 * 1024;     // 582 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
