@@ -226,12 +226,13 @@ function text(ev: Event): string {
           >{{ t.token }}</span>
         </span>
       </div>
-      <span v-if="textWired" class="wp-lg__wired" data-test="lg-template-wired">
+      <span v-if="textWired" class="wp-lg__wired" data-wp-socket="label_text" data-test="lg-template-wired">
         <i class="pi pi-link" aria-hidden="true" />from the label_text input (tokens still work)
       </span>
       <input
         v-else
         class="wp-lg__input wp-lg__template"
+        data-wp-socket="label_text"
         :value="cfg.label"
         :placeholder="labelPlaceholder"
         spellcheck="false"
@@ -376,7 +377,7 @@ function text(ev: Event): string {
           <span v-else-if="headersLift" class="wp-lg__note">from the label parts</span>
           <span v-else-if="autoNote" class="wp-lg__note">{{ autoNote }}</span>
         </div>
-        <div class="wp-lg__row">
+        <div class="wp-lg__row" data-wp-socket="row_headers">
           <span class="wp-lg__key">Rows</span>
           <span v-if="rowsWired" class="wp-lg__wired" data-test="lg-rows-wired">
             <i class="pi pi-link" aria-hidden="true" />from the row_headers input
@@ -403,7 +404,7 @@ function text(ev: Event): string {
           @keydown.stop
           @change="set('row_headers', text($event))"
         />
-        <div class="wp-lg__row">
+        <div class="wp-lg__row" data-wp-socket="column_headers">
           <span class="wp-lg__key">Columns</span>
           <span v-if="colsWired" class="wp-lg__wired" data-test="lg-columns-wired">
             <i class="pi pi-link" aria-hidden="true" />from the column_headers input
@@ -430,7 +431,7 @@ function text(ev: Event): string {
           @keydown.stop
           @change="set('column_headers', text($event))"
         />
-        <div class="wp-lg__row">
+        <div class="wp-lg__row" data-wp-socket="title">
           <span class="wp-lg__key">Title</span>
           <span v-if="titleWired" class="wp-lg__wired" data-test="lg-title-wired">
             <i class="pi pi-link" aria-hidden="true" />from the title input

@@ -2,6 +2,7 @@ import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
 import { listenApi } from "./_listen";
 import { reactiveFromGraph } from "../extension/reactive";
+import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
 import {
   defaultLabelGridConfig,
   parseLabelGridConfig,
@@ -106,6 +107,7 @@ export function create(node: LabelGridHostNode, inputName: string) {
     lastRun.value = run;
   }
   listenApi(host, "executed", onExecuted);
+  host.onCleanup(attachFieldSockets(node as FieldSocketNode, host.element, inputName, WIRABLE));
 
   return host;
 }

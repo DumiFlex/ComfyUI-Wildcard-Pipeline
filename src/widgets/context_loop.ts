@@ -9,6 +9,7 @@
  * state matches what `execute()` sees.
  */
 import { defineAsyncComponent, h, ref, watch, type Component, type EffectScope } from "vue";
+import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
 import { app } from "#comfyui/app";
 import { buildInScope, createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
 import { attachLoopSeedsCapture } from "./_seed-capture";
@@ -236,6 +237,7 @@ function build(node: ContextLoopHostNode, inputName: string, scope: EffectScope)
   });
   host.onCleanup(() => loopEditors.delete(node));
 
+  host.onCleanup(attachFieldSockets(node as FieldSocketNode, host.element, inputName, ["values"]));
   return host;
 }
 

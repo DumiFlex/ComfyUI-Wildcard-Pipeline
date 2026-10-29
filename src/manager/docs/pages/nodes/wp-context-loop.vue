@@ -13,7 +13,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
 const controls = [
   { term: "seed", desc: "The loop's own seed. Only used when Override Context seed is on." },
   { term: "count", desc: "How many frames one Generate makes (1–999). 1 switches looping off without unwiring the node." },
-  { term: "values", desc: "Optional text from another node: one frame per line (or per list entry), each writing its line to $iteration_value. The values set the frame count and count follows the last run; with a sweep on, every value runs every combination." },
+  { term: "values", desc: "Optional text from another node: one frame per line (or per list entry), each writing its line to $iteration_value. The values set the frame count and count follows the last run; with a sweep on, every value runs every combination. Its dot sits beside the iteration variable (beside the values note once wired) and shows when you hover it." },
   { term: "Strategy", desc: "hash, sequential or stride: how the frame seeds are worked out when Override Context seed is on. See Seeds & loops." },
   { term: "Per-iteration seeds", desc: "The seed each frame will use. Lock single frames, Lock all, Copy / Paste, or Prev to keep the seed a frame used last run. Locks need Override Context seed on." },
   { term: "Sweep combinations", desc: "Run every combination of the options you pick instead of random rolls. See below." },

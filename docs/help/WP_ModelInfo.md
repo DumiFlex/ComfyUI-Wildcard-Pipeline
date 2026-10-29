@@ -12,7 +12,7 @@ Pony and Illustrious are both SDXL underneath, so only the file name can tell th
 
 - **upstream** *(optional)*: an existing Context to extend. Only nodes **after** Model Info see its variables, so put it first in the chain.
 - **model** *(optional)*: the MODEL from your checkpoint loader. Gives the family, and the node follows the wire back to the loader to read its file name (through LoRA loaders and other model patches).
-- **family**, **variant**, **name** *(optional, text)*: values from another node, for example a switch that names the model you're testing. A wired value beats the pin and detection (an empty one is ignored); a wired **name** goes through the variant rules like the loader's. The row shows **wired** and its value after a run.
+- **family**, **variant**, **name** *(optional, text)*: values from another node, for example a switch that names the model you're testing. A wired value beats the pin and detection (an empty one is ignored); a wired **name** goes through the variant rules like the loader's. The row shows **wired** and its value after a run. Each input's dot sits beside its row, like a built-in widget's, and shows when you hover the row or wire it.
 
 ## The widget
 
