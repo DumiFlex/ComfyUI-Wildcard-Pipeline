@@ -29,6 +29,11 @@ declare module "#comfyui/app" {
     registerExtension(ext: {
       name: string;
       getCustomWidgets?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
+      /** Register frontend-only node types (LiteGraph.registerNodeType). */
+      registerCustomNodes?: () => Promise<void> | void;
+      /** Called with every node definition before the node library and
+       *  search are built; definitions may be edited in place. */
+      beforeRegisterVueAppNodeDefs?: (defs: unknown[]) => void;
       beforeRegisterNodeDef?: (nodeType: unknown, nodeData: { name: string }) => Promise<void> | void;
       /** Called after ComfyUI restores all widget values on workflow load. */
       afterConfigureGraph?: (...args: unknown[]) => void;
