@@ -131,7 +131,7 @@ describe("attachFieldSockets — legacy canvas", () => {
     expect(prev).toHaveBeenCalledWith(o);
   });
 
-  it("shows the dot while its field is hovered and cleans up", () => {
+  it("shows the dot while its field is hovered and cleans up", async () => {
     const { root, title } = panel();
     document.body.appendChild(root);
     const dirty = vi.fn();
@@ -141,12 +141,22 @@ describe("attachFieldSockets — legacy canvas", () => {
       widgets: [{ name: "wp_label_grid", y: 0 }],
       setDirtyCanvas: dirty,
     };
+    // jsdom never matches :hover; say which field is under the mouse.
+    let hovered: HTMLElement[] = [];
+    const all = root.querySelectorAll.bind(root);
+    vi.spyOn(root, "querySelectorAll").mockImplementation(((sel: string) =>
+      sel.includes(":hover") ? hovered : all(sel)) as typeof root.querySelectorAll);
     const off = attach(node, root, "wp_label_grid", ["title"]);
     flushFrames();
+    hovered = [title];
     title.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
     expect(ins(node)[0].alwaysVisible).toBe(true);
     expect(dirty).toHaveBeenCalled();
-    title.dispatchEvent(new PointerEvent("pointerout", { bubbles: true }));
+    // A missed pointerout: the next frame still reads the real hover state.
+    hovered = [];
+    document.body.appendChild(document.createElement("span"));
+    await Promise.resolve();
+    flushFrames();
     expect(ins(node)[0].alwaysVisible).toBeUndefined();
     off();
     expect(ins(node)[0].widget).toBeUndefined();

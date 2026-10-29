@@ -263,6 +263,7 @@ function flush(): void {
       registry.delete(entry);
       continue;
     }
+    entry.hot = hoveredNames(entry);
     sync(entry);
   }
 }
@@ -273,16 +274,25 @@ function queue(): void {
   requestAnimationFrame(flush);
 }
 
-/** Toggle the "hovering this field" look on every input `el` sits in. */
-function hover(entry: Entry, el: EventTarget | null, on: boolean): void {
-  const field = el instanceof Element ? el.closest<HTMLElement>("[data-wp-socket]") : null;
-  if (!field || !entry.root.contains(field)) return;
-  const names = (field.dataset.wpSocket ?? "").split(/\s+/).filter((n) => entry.names.includes(n));
-  if (!names.length) return;
-  for (const n of names) {
-    if (on) entry.hot.add(n);
-    else entry.hot.delete(n);
+/** Which inputs' fields are under the mouse, read from the page itself
+ *  (`:hover`) so a missed pointerout (the field re-rendered under the mouse)
+ *  can't leave a dot showing. */
+function hoveredNames(entry: Entry): Set<string> {
+  const out = new Set<string>();
+  for (const el of entry.root.querySelectorAll<HTMLElement>("[data-wp-socket]:hover")) {
+    for (const n of (el.dataset.wpSocket ?? "").split(/\s+/)) if (entry.names.includes(n)) out.add(n);
   }
+  if (entry.root.matches("[data-wp-socket]:hover")) {
+    for (const n of (entry.root.dataset.wpSocket ?? "").split(/\s+/)) if (entry.names.includes(n)) out.add(n);
+  }
+  return out;
+}
+
+/** Re-read the hovered fields; repaint when that changed. */
+function rehover(entry: Entry): void {
+  const next = hoveredNames(entry);
+  if (next.size === entry.hot.size && [...next].every((n) => entry.hot.has(n))) return;
+  entry.hot = next;
   sync(entry);
   entry.node.setDirtyCanvas?.(true, false);
 }
@@ -320,14 +330,10 @@ export function attachFieldSockets(
     return origSerialize?.call(this, o);
   };
 
-  const over = (e: PointerEvent): void => hover(entry, e.target, true);
-  const out = (e: PointerEvent): void => {
-    const to = e.relatedTarget instanceof Element ? e.relatedTarget.closest("[data-wp-socket]") : null;
-    const from = e.target instanceof Element ? e.target.closest("[data-wp-socket]") : null;
-    if (from && from !== to) hover(entry, from, false);
-  };
-  root.addEventListener("pointerover", over);
-  root.addEventListener("pointerout", out);
+  const onPointer = (): void => rehover(entry);
+  root.addEventListener("pointerover", onPointer);
+  root.addEventListener("pointerout", onPointer);
+  root.addEventListener("pointerleave", onPointer);
 
   const resize = typeof ResizeObserver !== "undefined" ? new ResizeObserver(queue) : null;
   resize?.observe(root);
@@ -341,8 +347,9 @@ export function attachFieldSockets(
     registry.delete(entry);
     resize?.disconnect();
     root.classList.remove(LEGACY_CLASS);
-    root.removeEventListener("pointerover", over);
-    root.removeEventListener("pointerout", out);
+    root.removeEventListener("pointerover", onPointer);
+    root.removeEventListener("pointerout", onPointer);
+    root.removeEventListener("pointerleave", onPointer);
     if (node.onSerialize !== origSerialize) node.onSerialize = origSerialize;
     unbindLegacy(entry);
   };
