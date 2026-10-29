@@ -69,6 +69,7 @@ The assistant is new and **off by default**. Turn it on in **Settings › AI ass
 ### Community
 
 - **The Community tab runs in its own frame**, so nothing it loads can reach ComfyUI or other custom nodes. Your community sign-in moves over on its own.
+- **The Community tab wears your theme.** It takes the colour theme, the look and light or dark from Tweaks, and follows them when you change them. The white marks at its corners are gone.
 - **Broken packs are refused before install.** Import, Community install and dependency downloads check every item and name the one that's wrong.
 
 ### Fixes

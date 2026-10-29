@@ -56,6 +56,17 @@ describe("community frame bridge", () => {
     });
   });
 
+  it("sends the appearance in hello and as an event", () => {
+    const look = { scheme: "light" as const, look: "tui", tokens: { "--wp-bg": "#f3f3f3" } };
+    const { ready, sent, bridge } = setup({ appearance: () => look });
+    ready();
+    expect(sent[0]!.msg.appearance).toEqual(look);
+    bridge.setAppearance({ ...look, look: "soft" });
+    expect(last().msg).toEqual({
+      wpc: FRAME_PROTOCOL, type: "event", name: "appearance", data: { ...look, look: "soft" },
+    });
+  });
+
   it("ignores messages from another window or origin", () => {
     const onReady = vi.fn();
     const { send } = setup({ onReady });
