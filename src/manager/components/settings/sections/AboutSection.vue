@@ -2,12 +2,14 @@
 import Icon from "../../../../kit/Icon.vue";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
-import { DISCORD_INVITE, GITHUB_REPO, SUPPORT_LINKS, WPC_API_URL } from "../../../config/links";
+import { DISCORD_INVITE, GITHUB_REPO, KIT_SITE, SUPPORT_LINKS, WPC_API_URL, kitVersion } from "../../../config/links";
 
 // Build-time injected via vite `define` (see vite.config.mts) — source of
 // truth is package.json, which the release PR stamps on every release.
 const appVersion = __APP_VERSION__;
 const appLicense = __APP_LICENSE__;
+// The wp-kit commit src/kit/ was pulled at, from src/kit/kit.lock.json.
+const kit = kitVersion(__KIT_VERSION__);
 </script>
 
 <template>
@@ -16,6 +18,11 @@ const appLicense = __APP_LICENSE__;
       <div class="wp-set-about">
         <span class="wp-dim">Version</span><span class="wp-mono">{{ appVersion }}</span>
         <span class="wp-dim">License</span><span class="wp-mono">{{ appLicense }}</span>
+        <span class="wp-dim">Component kit</span>
+        <span class="wp-set-about__kit">
+          <a class="wp-set-about__link wp-mono" :href="kit.href" target="_blank" rel="noopener" data-test="about-kit-version">wp-kit {{ kit.label }}</a>
+          <a class="wp-set-about__link" :href="KIT_SITE" target="_blank" rel="noopener" data-test="about-kit-site">See every piece</a>
+        </span>
         <span class="wp-dim">Repository</span>
         <a class="wp-set-about__link wp-mono" :href="GITHUB_REPO" target="_blank" rel="noopener">
           <Icon name="pi-github" /> {{ GITHUB_REPO }}
@@ -97,6 +104,7 @@ const appLicense = __APP_LICENSE__;
   overflow-wrap: anywhere;
 }
 .wp-set-about__link:hover { color: var(--wp-text); }
+.wp-set-about__kit { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--wp-space-2) var(--wp-space-5); min-width: 0; }
 
 .wp-support {
   flex: 1 1 100%;
