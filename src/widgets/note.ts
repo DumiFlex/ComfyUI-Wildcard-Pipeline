@@ -33,7 +33,8 @@ interface LiteGraphStatic {
 
 function setPinned(node: NoteNode, pinned: boolean): void {
   // ComfyUI's own pin (the right-click Pin), so its lock icon and menu agree.
-  if (node.pin) node.pin(pinned);
+  // pin() needs the node on a graph; before that, set the flag.
+  if (node.pin && node.graph) node.pin(pinned);
   else node.flags = { ...(node.flags ?? {}), pinned };
   node.setDirtyCanvas?.(true, true);
 }
@@ -71,8 +72,9 @@ export function mountNote(node: NoteNode) {
   const editing = ref(false);
   let restored = false;
   const isLabel = (): boolean => config.value.look === "label" && !editing.value;
-  // A label sizes itself to its text; a card's width is the user's.
-  const syncResizable = (): void => { node.resizable = !isLabel(); };
+  // A label sizes itself to its text; a card's width is the user's. Pinned
+  // never resizes (ComfyUI's pin() and configure() write this too).
+  const syncResizable = (): void => { node.resizable = node.flags?.pinned !== true && !isLabel(); };
 
   const wrapper: Component = {
     setup() {
@@ -93,6 +95,7 @@ export function mountNote(node: NoteNode) {
       function onPinned(next: boolean): void {
         setPinned(node, next);
         pinned.value = next;
+        syncResizable();
       }
       function onOpenDoc(id: string): void {
         window.open(docUrl(id, window.location.origin), "_blank", "noopener");
@@ -119,8 +122,9 @@ export function mountNote(node: NoteNode) {
   const host = createDomWidgetHost(node, "wp_note", wrapper, {
     initialValue: serializeWidgetJson(config.value),
     minHeight: 30,
-    minWidth: () => (isLabel() ? Math.max(labelWidth(), 40) : editing.value ? FORM_WIDTH : CARD_MIN_WIDTH),
-    autoHeight: true,
+    minWidth: () => minWidth(),
+    ownSize: true,
+    margin: 0,
     onValueRestored: (raw: string) => {
       restored = true;
       config.value = parseNoteConfig(raw);
@@ -130,38 +134,59 @@ export function mountNote(node: NoteNode) {
     },
   });
 
-  // Make the node exactly the panel once the layout settles, so the
-  // selection outline hugs the note: a label's width is its text, a card's
-  // height is its text (the widget only ever grows the node). node.size is
-  // written directly: setSize clamps the width to 225 px in Nodes 2.0.
+  function minWidth(): number {
+    if (isLabel()) return Math.max(labelWidth(), 40);
+    return editing.value ? FORM_WIDTH : CARD_MIN_WIDTH;
+  }
+  /** The size the panel needs: its own height, and a label's own width. */
+  function contentSize(): [number, number] | null {
+    const el = host.element.querySelector<HTMLElement>(".wp-note");
+    if (!el?.isConnected || el.offsetHeight <= 0) return null;
+    return [minWidth(), Math.ceil(el.offsetHeight)];
+  }
+  // The node is exactly the panel, so the selection outline hugs the note:
+  // LiteGraph's resize floor and every layout pass ask this.
+  node.computeSize = () => contentSize() ?? [minWidth(), 30];
+
+  // Make the node exactly the panel once the layout settles: a label's
+  // width is its text, a card's width is the user's, and the height is the
+  // text. Checked again whenever the panel's height changes.
   function fitSize(): void {
     node.setDirtyCanvas?.(true, true);
-    let frames = 3;
+    let frames = 2;
     const step = (): void => {
       if (--frames > 0) { requestAnimationFrame(step); return; }
-      const el = host.element.querySelector<HTMLElement>(".wp-note");
-      if (!el?.isConnected) return;
-      const size = node.size;
-      let w = size[0];
-      if (isLabel()) w = Math.max(labelWidth(), 40);
-      else if (editing.value) w = Math.max(w, FORM_WIDTH);
-      else w = Math.max(w, CARD_MIN_WIDTH);
-      const h = Math.ceil(el.offsetHeight);
-      if (h > 0 && (Math.abs(w - size[0]) > 1 || Math.abs(h - size[1]) > 1)) {
-        size[0] = w;
-        size[1] = h;
-        node.setDirtyCanvas?.(true, true);
-      }
+      applySize();
     };
     requestAnimationFrame(step);
   }
+  function applySize(): void {
+    const want = contentSize();
+    if (!want) return;
+    const size = node.size;
+    const w = isLabel() ? want[0] : Math.max(size[0], want[0]);
+    const h = want[1];
+    if (Math.abs(w - size[0]) <= 1 && Math.abs(h - size[1]) <= 1) return;
+    size[0] = w;
+    size[1] = h;
+    node.setDirtyCanvas?.(true, true);
+  }
+  const sizeObserver = new ResizeObserver(() => applySize());
+  sizeObserver.observe(host.element);
+  host.onCleanup(() => sizeObserver.disconnect());
   function setEditing(v: boolean): void {
     editing.value = v;
     syncResizable();
     fitSize();
   }
-  // Nothing restored by the next tick: the user just added this note.
-  setTimeout(() => { if (!restored) setEditing(true); }, 0);
+  // Nothing restored by the next tick: the user just added this note. It
+  // starts pinned. (Pinning in the constructor would also pin every loaded
+  // note: an unpinned one saves no flag, so the default would win.)
+  setTimeout(() => {
+    if (restored) return;
+    setPinned(node, true);
+    setEditing(true);
+  }, 0);
 
   // A label keeps its text for a hover card (see note-peek.ts).
   const stopPeek = trackPeek({
@@ -237,6 +262,8 @@ export function registerNoteNode(): void {
     static category = "wildcard-pipeline";
     // No title bar and no node box: the note draws its own panel.
     static title_mode = lg?.NO_TITLE ?? 1;
+    // The widget starts at the node's top edge, not 2 px under it.
+    widgets_start_y = 0;
     isVirtualNode = true;
     serialize_widgets = true;
     collapsable = true;
@@ -258,8 +285,6 @@ export function registerNoteNode(): void {
       super(title ?? "WP Note");
       mountNote(this);
       this.size = [360, 100];
-      // Pinned by default. A loaded note's saved flags replace this.
-      this.flags = { ...(this.flags ?? {}), pinned: true };
     }
   }
   lg.registerNodeType(NOTE_NODE_TYPE, WPNoteNode);

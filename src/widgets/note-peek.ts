@@ -28,6 +28,9 @@ const HIDE_DELAY = 250;
 const targets = new Set<PeekTarget>();
 const shown = shallowRef<PeekTarget | null>(null);
 let pending: PeekTarget | null = null;
+// A label that was just pressed (to drag or select it): no card for it until
+// the pointer leaves it.
+let pressed: PeekTarget | null = null;
 let showTimer: ReturnType<typeof setTimeout> | null = null;
 let hideTimer: ReturnType<typeof setTimeout> | null = null;
 let cardHost: HTMLElement | null = null;
@@ -109,6 +112,8 @@ function tick(): void {
     return;
   }
   const t = labelAt(e.clientX, e.clientY);
+  if (pressed && t !== pressed) pressed = null;
+  if (t && t === pressed) return;
   if (t && t === shown.value) {
     clearTimers();
     return;
@@ -143,7 +148,9 @@ function wire(): void {
     if (!raf) raf = requestAnimationFrame(tick);
   }, { capture: true, passive: true });
   window.addEventListener("pointerdown", (e) => {
-    if (!overCard(e.clientX, e.clientY)) hidePeek();
+    if (overCard(e.clientX, e.clientY)) return;
+    pressed = labelAt(e.clientX, e.clientY);
+    hidePeek();
   }, true);
   window.addEventListener("wheel", (e) => {
     if (!overCard(e.clientX, e.clientY)) hidePeek();
