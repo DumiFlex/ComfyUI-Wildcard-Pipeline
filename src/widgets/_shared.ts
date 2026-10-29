@@ -799,6 +799,11 @@ export interface BundleInstance {
   /** Mirror of `master_internal_chained_by` for the seed-lock
    *  master chain. Same lifecycle rules. */
   master_lock_chained_by?: string | null;
+  /** Set on bundles shipped in an example workflow (`example_workflows/`).
+   *  Only changes the badge: while the bundle has no library entry it shows
+   *  a neutral EXAMPLE chip instead of MISSING. Cleared when it is saved to
+   *  the library. Stored only as `true`. */
+  example?: true;
 }
 
 /** Module kind discriminator — the five kinds the SPA library carries. */
@@ -1150,6 +1155,11 @@ export interface ModuleEntry {
    *  for others. effective = frame_enabled[k] ?? base enabled. Only frames that
    *  differ from base are stored. */
   frame_enabled?: Record<string, boolean>;
+  /** Set on rows shipped in an example workflow (`example_workflows/`). Only
+   *  changes the badge: while the row has no library entry it shows a
+   *  neutral EXAMPLE chip (or nothing inside an example bundle, whose header
+   *  carries the chip) instead of MISSING. Stored only as `true`. */
+  example?: true;
 }
 
 export function parseWidgetJson<T>(raw: string, fallback: T): T {

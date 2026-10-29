@@ -68,6 +68,8 @@ if (!ctx) throw new Error("BundleFrame requires BundleFrameCtx — provided by C
       :drifted-count="ctx.bundleChildDriftCount(bundle)"
       :library-drifted="ctx.isBundleLibraryDrifted(bundle)"
       :library-missing="ctx.isBundleMissingFromLibrary(bundle)"
+      :example="bundle.example === true"
+      :nested="!!bundle.parent_uid"
       :internal-state="ctx.bundleInternalState(bundle)"
       :lock-state="ctx.bundleLockState(bundle)"
       :snapshot-modified="ctx.isBundleSnapshotModified(bundle)"

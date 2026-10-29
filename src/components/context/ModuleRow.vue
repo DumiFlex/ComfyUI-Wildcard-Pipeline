@@ -1,12 +1,19 @@
 <script setup lang="ts">
-import { inject } from "vue";
+import { computed, inject } from "vue";
 import type { ModuleEntry } from "../../widgets/_shared";
 import { ModuleRowCtxKey } from "./module-row-ctx";
 import PairBadge from "./PairBadge.vue";
 import WpCheck from "../../kit/WpCheck.vue";
 import WpIconButton from "../../kit/WpIconButton.vue";
 
-defineProps<{ module: ModuleEntry; idx: number }>();
+const props = defineProps<{ module: ModuleEntry; idx: number }>();
+
+/** Rows inside a bundle leave the EXAMPLE chip to the bundle header. */
+const inBundle = computed(() => {
+  const origin = (props.module as { bundle_origin?: unknown }).bundle_origin;
+  return typeof origin === "string" && origin !== "";
+});
+const EXAMPLE_TITLE = "From an example workflow, not in your library. Right-click → Save to library to keep it.";
 
 const ctx = inject(ModuleRowCtxKey);
 if (!ctx) throw new Error("ModuleRow: missing moduleRowCtx provider");
@@ -44,14 +51,14 @@ const {
       'wp-conflict-info': severityFor(module._uid ?? module.id) === 'info',
       'wp-state-modified': isModified(module),
       'wp-state-drift': isDrifted(module),
-      'wp-state-missing': isMissingFromLibrary(module),
+      'wp-state-missing': isMissingFromLibrary(module) && !module.example,
       'wp-gap-before': rowGap(idx) === 'before',
       'wp-gap-after': rowGap(idx) === 'after',
       'wp-module--dragging': module._uid === ctx.draggingModuleUid.value,
       'wp-drop-pulse': !!module._uid && ctx.recentDropUids.value.has(module._uid),
       'wp-mod--mod': isModified(module),
       'wp-mod--drift': isDrifted(module),
-      'wp-mod--err': isMissingFromLibrary(module),
+      'wp-mod--err': isMissingFromLibrary(module) && !module.example,
     }"
     :style="!!module._uid && ctx.recentDropUids.value.has(module._uid)
       ? { animationDelay: ctx.pulseDelayFor(module._uid) }
@@ -141,10 +148,12 @@ const {
           title="Id clash — a different kind of item uses this id in your library. Right-click → Push to library to add this one as a new entry." aria-hidden="true"></span>
         <span v-if="isTypeConflict(module)" class="wp-mod-badge wp-mod-badge--clash"
           title="Id clash — a different kind of item uses this id in your library. Right-click → Push to library to add this one as a new entry.">clash</span>
-        <span v-if="isMissingFromLibrary(module)" class="wp-mod-dot wp-mod-dot--missing"
+        <span v-if="isMissingFromLibrary(module) && !module.example" class="wp-mod-dot wp-mod-dot--missing"
           title="Not in library — right-click → Save to library to add it" aria-hidden="true"></span>
-        <span v-if="isMissingFromLibrary(module)" class="wp-mod-badge wp-mod-badge--missing"
+        <span v-if="isMissingFromLibrary(module) && !module.example" class="wp-mod-badge wp-mod-badge--missing"
           title="Not in library — right-click → Save to library to add it">missing</span>
+        <span v-if="isMissingFromLibrary(module) && module.example && !inBundle" class="wp-mod-badge wp-mod-badge--example"
+          data-test="mod-example" :title="EXAMPLE_TITLE">example</span>
         <span v-if="severityFor(module._uid ?? module.id)" class="wp-conflict-dot"
           :class="`wp-conflict-dot--${severityFor(module._uid ?? module.id)}`" :title="conflictTooltip(module._uid ?? module.id)" aria-hidden="true"></span>
         <span v-if="severityFor(module._uid ?? module.id) && conflictBadgeText(module._uid ?? module.id)"

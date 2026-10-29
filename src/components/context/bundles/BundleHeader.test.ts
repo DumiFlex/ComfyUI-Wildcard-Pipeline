@@ -119,3 +119,36 @@ describe("BundleHeader", () => {
     expect(w.emitted("contextmenu")).toBeTruthy();
   });
 });
+
+describe("BundleHeader — EXAMPLE chip", () => {
+  it("shows EXAMPLE instead of MISSING on a missing example bundle", () => {
+    const w = mount(BundleHeader, {
+      props: { instance: instance(), name: "x", childCount: 1, libraryMissing: true, example: true },
+    });
+    expect(w.find('[data-test="bundle-example"]').exists()).toBe(true);
+    expect(w.find(".wp-mod-badge--missing").exists()).toBe(false);
+  });
+
+  it("shows nothing on a missing example sub-bundle", () => {
+    const w = mount(BundleHeader, {
+      props: { instance: instance(), name: "x", childCount: 1, libraryMissing: true, example: true, nested: true },
+    });
+    expect(w.find('[data-test="bundle-example"]').exists()).toBe(false);
+    expect(w.find(".wp-mod-badge--missing").exists()).toBe(false);
+  });
+
+  it("shows MISSING on a missing bundle without the flag", () => {
+    const w = mount(BundleHeader, {
+      props: { instance: instance(), name: "x", childCount: 1, libraryMissing: true },
+    });
+    expect(w.find('[data-test="bundle-example"]').exists()).toBe(false);
+    expect(w.find(".wp-mod-badge--missing").exists()).toBe(true);
+  });
+
+  it("shows no chip once the example bundle is in the library", () => {
+    const w = mount(BundleHeader, {
+      props: { instance: instance(), name: "x", childCount: 1, libraryMissing: false, example: true },
+    });
+    expect(w.find('[data-test="bundle-example"]').exists()).toBe(false);
+  });
+});

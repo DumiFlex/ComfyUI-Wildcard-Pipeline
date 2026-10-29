@@ -66,6 +66,8 @@ import {
   modifiedTooltip,
 } from "./module-state";
 import { pushToast } from "../shared/toast-store";
+import { dropSavedExampleFlags } from "./library-status";
+import { bundleHashes, hashes as libraryHashes } from "./drift-store";
 import { kindIcon } from "../shared/kind-icons";
 import { KIND_TITLE } from "./editors/_shell";
 import { currentFrame } from "../context-loop/frame-cursor";
@@ -561,6 +563,13 @@ watch(value, (v) => {
   if (suppressWatch) { suppressWatch = false; return; }
   props.onChange(serializeWidgetJson(v));
 }, { deep: true });
+
+// Rows and bundles from an example workflow lose their `example` flag once
+// the library holds them (saved via Push to library).
+watch([libraryHashes, bundleHashes, value], () => {
+  const next = dropSavedExampleFlags(value.value);
+  if (next) value.value = next;
+});
 
 watch(() => props.initialJson, (raw) => {
   // Reuse the recovery-aware parser so a workflow loaded with corrupt JSON

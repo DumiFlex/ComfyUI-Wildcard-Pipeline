@@ -251,7 +251,8 @@
 .wp-mod-badge--drift,
 .wp-mod-badge--missing,
 .wp-mod-badge--clash,
-.wp-mod-badge--on {
+.wp-mod-badge--on,
+.wp-mod-badge--example {
   flex-shrink: 0;
 }
 .wp-mod-badge--mod {
@@ -279,6 +280,15 @@
 .wp-mod-badge--clash {
   background: color-mix(in oklab, var(--wp-accent) 18%, transparent);
   color: var(--wp-accent);
+}
+
+/* `--example` variant: a bundle or row that came with an example workflow
+ * and isn't in the library yet. Neutral grey, not MISSING red: nothing is
+ * wrong, Save to library keeps it. */
+.wp-mod-badge--example {
+  background: var(--wp-bg-3);
+  color: var(--wp-text-dim);
+  cursor: help;
 }
 
 /* `--new` variant: incoming entity with no UUID collision (import side).

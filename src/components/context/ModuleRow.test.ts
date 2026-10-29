@@ -208,3 +208,26 @@ describe("ModuleRow.vue — per-frame enable/disable", () => {
     expect(calls).toEqual([0]);
   });
 });
+
+describe("ModuleRow.vue — EXAMPLE chip", () => {
+  const missing = makeCtx({ isMissingFromLibrary: () => true });
+
+  it("shows EXAMPLE instead of MISSING on a missing example row", () => {
+    const w = mountRow(missing, module({ example: true }));
+    expect(w.find('[data-test="mod-example"]').exists()).toBe(true);
+    expect(w.find(".wp-mod-badge--missing").exists()).toBe(false);
+    expect(w.find(".wp-state-missing").exists()).toBe(false);
+  });
+
+  it("leaves the chip to the bundle header for a row inside a bundle", () => {
+    const w = mountRow(missing, module({ example: true, bundle_origin: "bundle-1" } as Partial<ModuleEntry>));
+    expect(w.find('[data-test="mod-example"]').exists()).toBe(false);
+    expect(w.find(".wp-mod-badge--missing").exists()).toBe(false);
+  });
+
+  it("shows MISSING on a missing row without the flag", () => {
+    const w = mountRow(missing, module());
+    expect(w.find('[data-test="mod-example"]').exists()).toBe(false);
+    expect(w.find(".wp-mod-badge--missing").exists()).toBe(true);
+  });
+});
