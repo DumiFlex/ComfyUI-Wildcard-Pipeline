@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import WpCheck from "@/components/shared/WpCheck.vue";
+import WpCheck from "@/kit/WpCheck.vue";
 
 const hold = ref(true);
 </script>

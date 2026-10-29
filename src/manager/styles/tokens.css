@@ -703,7 +703,7 @@ input, textarea, select { font: inherit; }
 }
 
 /* ---------- Buttons ----------
- * The .wp-btn rules live in components/shared/button.css, shared with the
+ * The .wp-btn rules live in kit/button.css, shared with the
  * canvas Button (component standard, rule 8). main.ts loads it right after
  * this file. */
 
@@ -1587,7 +1587,7 @@ input, textarea, select { font: inherit; }
 
 /* ---------- Toggle ----------
    Toggle.vue wraps the shared WpSwitch; its look lives in
-   components/shared/WpSwitch.vue (one sheet for canvas + manager). */
+   kit/WpSwitch.vue (one sheet for canvas + manager). */
 
 /* ---------- Checkbox ----------
    Canonical geometry matches the wildcard pool's per-option box
@@ -1768,7 +1768,7 @@ label:has(> .wp-radio:disabled) { cursor: not-allowed; color: var(--wp-text-dim)
   z-index: 100;
   pointer-events: none;
 }
-/* The toast itself is components/shared/ToastCard.vue (shared with the canvas). */
+/* The toast itself is kit/ToastCard.vue (shared with the canvas). */
 .wp-toast-stack > * { animation: wp-slide-in .18s ease-out; }
 @keyframes wp-slide-in { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 

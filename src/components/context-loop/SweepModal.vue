@@ -7,12 +7,12 @@
  * run, so the grid can be checked before anything is queued.
  */
 import { computed } from "vue";
-import ModalShell from "../shared/ModalShell.vue";
+import ModalShell from "../../kit/ModalShell.vue";
 import SweepPanel from "./SweepPanel.vue";
 import { liveAxes, sweepTotal, type SweepConfig } from "./types";
 import type { SweepCandidate } from "./sweep-candidates";
-import WpButton from "../shared/WpButton.vue";
-import CloseButton from "../shared/CloseButton.vue";
+import WpButton from "../../kit/WpButton.vue";
+import CloseButton from "../../kit/CloseButton.vue";
 
 const props = withDefaults(
   defineProps<{

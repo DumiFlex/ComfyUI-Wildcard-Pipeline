@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CodeBlock from "@/components/shared/CodeBlock.vue";
+import CodeBlock from "@/kit/CodeBlock.vue";
 
 const json = `{
   "type": "wildcard",

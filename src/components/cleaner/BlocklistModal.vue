@@ -8,10 +8,10 @@
  * Cancel discards. Parent gates visibility via `visible`.
  */
 import { ref, watch, computed } from "vue";
-import ModalShell from "../shared/ModalShell.vue";
+import ModalShell from "../../kit/ModalShell.vue";
 import type { BlocklistKind } from "./types";
-import WpButton from "../shared/WpButton.vue";
-import WpSegmented, { type SegmentedOption } from "../shared/WpSegmented.vue";
+import WpButton from "../../kit/WpButton.vue";
+import WpSegmented, { type SegmentedOption } from "../../kit/WpSegmented.vue";
 
 const props = defineProps<{
   visible: boolean;

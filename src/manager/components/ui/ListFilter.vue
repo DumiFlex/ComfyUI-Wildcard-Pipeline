@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import SearchInput from "@/components/shared/SearchInput.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 
 /**
  * Text filter for a long list inside an editor card.

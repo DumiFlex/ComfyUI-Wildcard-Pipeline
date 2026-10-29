@@ -8,15 +8,15 @@
  * row so the assembler can persist the load identity for round-trip
  * "Update existing" saves.
  */
-import SearchInput from "../shared/SearchInput.vue";
+import SearchInput from "../../kit/SearchInput.vue";
 import { computed, nextTick, ref, watch } from "vue";
-import WpSelect from "../shared/WpSelect.vue";
+import WpSelect from "../../kit/WpSelect.vue";
 import { api } from "../../manager/api/client";
 import type { TemplateRow } from "../../manager/api/types";
-import ModalShell from "../shared/ModalShell.vue";
-import LoadingMark from "../shared/LoadingMark.vue";
-import CloseButton from "../shared/CloseButton.vue";
-import WpButton from "../shared/WpButton.vue";
+import ModalShell from "../../kit/ModalShell.vue";
+import LoadingMark from "../../kit/LoadingMark.vue";
+import CloseButton from "../../kit/CloseButton.vue";
+import WpButton from "../../kit/WpButton.vue";
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: []; pick: [TemplateRow] }>();

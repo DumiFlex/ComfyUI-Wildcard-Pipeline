@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Timeline, { type TimelineItem } from "@/components/shared/Timeline.vue";
+import Timeline, { type TimelineItem } from "@/kit/Timeline.vue";
 
 const history: TimelineItem[] = [
   { id: 1, title: "Saved Hair colour", time: "5 min ago", tone: "success", icon: "pi-check", body: "Added 3 options: silver, auburn, teal." },

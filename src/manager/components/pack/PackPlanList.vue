@@ -10,7 +10,7 @@ import Button from "../ui/Button.vue";
 import PackItemEditor from "./PackItemEditor.vue";
 import type { AiPackItem, AiPackKind } from "../../api/types";
 import { usePackBuilder } from "../../composables/usePackBuilder";
-import LoadingMark from "@/components/shared/LoadingMark.vue";
+import LoadingMark from "@/kit/LoadingMark.vue";
 
 const pb = usePackBuilder();
 const open = ref<string>("");

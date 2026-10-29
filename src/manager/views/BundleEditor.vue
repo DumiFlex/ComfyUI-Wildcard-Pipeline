@@ -164,7 +164,7 @@ import {
 } from "../community/community-posts";
 import { collectTransitiveDeps } from "../community/transitive-deps";
 import { downloadDepsForDangling } from "../community/download-and-reattach";
-import LoadingMark from "@/components/shared/LoadingMark.vue";
+import LoadingMark from "@/kit/LoadingMark.vue";
 
 const props = defineProps<{ id?: string }>();
 

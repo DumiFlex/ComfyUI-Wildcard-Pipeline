@@ -14,7 +14,7 @@ import Checkbox from "../ui/Checkbox.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
 import { useAiImages } from "../../composables/useAiImages";
 import ConstraintPreview from "../ConstraintPreview.vue";
-import WpSegmented, { type SegmentedOption } from "@/components/shared/WpSegmented.vue";
+import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import { mergeAiRules, type PreviewWildcard } from "../../utils/constraint-preview";
 import { api } from "../../api/client";
 import { keptNote, useAiConversation } from "../../composables/useAiConversation";

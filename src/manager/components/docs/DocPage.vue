@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { provide, ref, shallowRef } from "vue";
-import Lightbox, { type LightboxImage } from "@/components/shared/Lightbox.vue";
+import Lightbox, { type LightboxImage } from "@/kit/Lightbox.vue";
 import { toneVar, type DocTone } from "../../docs/registry";
 import { DOC_GALLERY, inPageOrder, type DocShot } from "../../docs/gallery";
 const props = defineProps<{ group: string; title: string; icon: string; tone: DocTone; blurb: string; nodeId?: string }>();

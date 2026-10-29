@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import WpNumber from "../../../../shared/WpNumber.vue";
+import WpNumber from "../../../../../kit/WpNumber.vue";
 import { computed, ref, watch } from "vue";
 import type { VarProducerLike } from "@/manager/components/RefChip.vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
@@ -14,9 +14,9 @@ import {
   type Ast,
 } from "@/manager/parsing/subcatFilter";
 import OptionRow from "./OptionRow.vue";
-import WpCheck from "../../../../shared/WpCheck.vue";
-import WpButton from "../../../../shared/WpButton.vue";
-import WpIconButton from "../../../../shared/WpIconButton.vue";
+import WpCheck from "../../../../../kit/WpCheck.vue";
+import WpButton from "../../../../../kit/WpButton.vue";
+import WpIconButton from "../../../../../kit/WpIconButton.vue";
 import { axisHueAt, UNGROUPED_HUE } from "../../../../shared/axis-color";
 
 interface OptionFull extends WildcardOption {

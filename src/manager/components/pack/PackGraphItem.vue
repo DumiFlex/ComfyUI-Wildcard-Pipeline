@@ -6,7 +6,7 @@
  * text, or the template's lead, order and negative. Every change goes to
  * the graph; the server compiles the item from it again.
  */
-import WpNumber from "@/components/shared/WpNumber.vue";
+import WpNumber from "@/kit/WpNumber.vue";
 import { computed } from "vue";
 import Checkbox from "../ui/Checkbox.vue";
 import Select from "../ui/Select.vue";

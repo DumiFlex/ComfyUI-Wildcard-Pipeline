@@ -11,7 +11,7 @@
  * a user might need at queue time: name, variable binding, template
  * override, locked seed, hide-from-prompt.
  */
-import Kbd from "../../../shared/Kbd.vue";
+import Kbd from "../../../../kit/Kbd.vue";
 import { computed } from "vue";
 import { type ResolvedValue } from "../../../../widgets/richTokenize";
 import type { ModuleEntry } from "../../../../widgets/_shared";
@@ -20,8 +20,8 @@ import TemplateSection from "./sections/TemplateSection.vue";
 import type { VarProducerLike } from "../../../../manager/components/RefChip.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
-import WpButton from "../../../shared/WpButton.vue";
-import CloseButton from "../../../shared/CloseButton.vue";
+import WpButton from "../../../../kit/WpButton.vue";
+import CloseButton from "../../../../kit/CloseButton.vue";
 
 
 /** Platform-correct save chord for the footer hint. */

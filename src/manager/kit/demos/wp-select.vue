@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import WpSelect from "@/components/shared/WpSelect.vue";
+import WpSelect from "@/kit/WpSelect.vue";
 
 const strategy = ref<"hash" | "sequential" | "stride">("hash");
 const strategies = [

@@ -12,7 +12,7 @@
  */
 import { onErrorCaptured, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import CodeBlock from "@/components/shared/CodeBlock.vue";
+import CodeBlock from "@/kit/CodeBlock.vue";
 
 const error = ref<Error | null>(null);
 const showStack = ref(false);

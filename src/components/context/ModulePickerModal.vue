@@ -339,15 +339,15 @@
  * Every embeddable kind with a payload is pickable. Rows render
  * disabled only when their payload is missing (broken library entry).
  */
-import Kbd from "../shared/Kbd.vue";
-import SearchInput from "../shared/SearchInput.vue";
+import Kbd from "../../kit/Kbd.vue";
+import SearchInput from "../../kit/SearchInput.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
-import ModalShell from "../shared/ModalShell.vue";
-import WpSelect from "../shared/WpSelect.vue";
+import ModalShell from "../../kit/ModalShell.vue";
+import WpSelect from "../../kit/WpSelect.vue";
 import { kindIcon } from "../shared/kind-icons";
-import WpTabs, { type TabItem } from "../shared/WpTabs.vue";
-import WpButton from "../shared/WpButton.vue";
-import CloseButton from "../shared/CloseButton.vue";
+import WpTabs, { type TabItem } from "../../kit/WpTabs.vue";
+import WpButton from "../../kit/WpButton.vue";
+import CloseButton from "../../kit/CloseButton.vue";
 
 interface PickerModule {
   id: string;
@@ -970,7 +970,7 @@ onBeforeUnmount(detachCaptureListeners);
 /* `wp-skel` family is shared with BundlePickerModal — import unscoped
  * so the keyframe + base rules dedupe across consumers and aren't
  * subject to per-component scoping rewrites. */
-@import "../shared/_skeleton.css";
+@import "../../kit/_skeleton.css";
 </style>
 
 <style scoped>

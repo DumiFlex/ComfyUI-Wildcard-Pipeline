@@ -4,7 +4,7 @@
  * DocPage provides it; each DocImage with a real image registers itself.
  */
 import type { InjectionKey } from "vue";
-import type { LightboxImage } from "@/components/shared/Lightbox.vue";
+import type { LightboxImage } from "@/kit/Lightbox.vue";
 
 export interface DocShot { image: LightboxImage; el: () => Element | null }
 

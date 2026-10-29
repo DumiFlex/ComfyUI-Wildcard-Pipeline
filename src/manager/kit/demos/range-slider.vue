@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import RangeSlider from "@/components/shared/RangeSlider.vue";
+import RangeSlider from "@/kit/RangeSlider.vue";
 
 const weight = ref<[number, number]>([0.6, 1.2]);
 const tokens = ref<[number, number]>([40, 120]);

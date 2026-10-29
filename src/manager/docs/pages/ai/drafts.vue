@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Kbd from "@/components/shared/Kbd.vue";
+import Kbd from "@/kit/Kbd.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";

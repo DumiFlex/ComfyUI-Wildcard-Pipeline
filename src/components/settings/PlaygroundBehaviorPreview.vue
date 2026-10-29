@@ -15,7 +15,7 @@
  * here at once, before ComfyUI's store has fired its onChange.
  */
 import { computed, nextTick, ref } from "vue";
-import WpButton from "@/components/shared/WpButton.vue";
+import WpButton from "@/kit/WpButton.vue";
 import { pushToast } from "@/components/shared/toast-store";
 import { filterForValidation, type ValidationMode } from "@/extension/settings";
 import { committedSuffixFor, tagInsertText } from "@/manager/components/rich-text/word-rows";

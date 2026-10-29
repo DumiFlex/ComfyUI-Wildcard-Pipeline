@@ -25,7 +25,7 @@
  */
 import { ref, computed } from "vue";
 import Checkbox from "../components/ui/Checkbox.vue";
-import Disclosure from "../../components/shared/Disclosure.vue";
+import Disclosure from "../../kit/Disclosure.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 
 /** Mirror of PickerRow's KIND_CLASS — same slug rules. */

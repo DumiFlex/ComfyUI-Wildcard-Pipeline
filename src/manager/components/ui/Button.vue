@@ -25,12 +25,12 @@
  * Icon-only mode auto-engages when no slot content is provided (.wp-btn--icon).
  * Pass `aria-label` for screen reader text when using icon-only mode.
  *
- * The styles live in components/shared/button.css, shared with the canvas
+ * The styles live in kit/button.css, shared with the canvas
  * Button twin.
  */
 import { computed, useSlots } from "vue";
 import Icon from "./Icon.vue";
-import LoadingMark from "@/components/shared/LoadingMark.vue";
+import LoadingMark from "@/kit/LoadingMark.vue";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger" | "link" | "outline" | "add";
 type Size = "sm" | "md" | "lg";

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import SearchInput from "@/components/shared/SearchInput.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 
 const rows = ["Hair colour", "Hair style", "Mood", "Weather", "Time of day", "Lighting"];
 const query = ref("hair");

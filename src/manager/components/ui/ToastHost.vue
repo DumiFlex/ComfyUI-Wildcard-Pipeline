@@ -4,7 +4,7 @@
  * ToastCard, the same one the canvas stack draws.
  */
 import { useToast } from "../../composables/useToast";
-import ToastCard from "@/components/shared/ToastCard.vue";
+import ToastCard from "@/kit/ToastCard.vue";
 
 const { toasts, push, dismiss } = useToast();
 

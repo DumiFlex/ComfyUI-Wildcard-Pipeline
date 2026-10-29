@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Pagination from "@/components/shared/Pagination.vue";
+import Pagination from "@/kit/Pagination.vue";
 
 const page = ref(4);
 const small = ref(1);

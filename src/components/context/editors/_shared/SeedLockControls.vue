@@ -24,9 +24,9 @@
 import { computed, inject } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import { LockSeedKey } from "../../lock-seed-ctx";
-import WpNumber from "../../../shared/WpNumber.vue";
-import WpSwitch from "../../../shared/WpSwitch.vue";
-import WpButton from "../../../shared/WpButton.vue";
+import WpNumber from "../../../../kit/WpNumber.vue";
+import WpSwitch from "../../../../kit/WpSwitch.vue";
+import WpButton from "../../../../kit/WpButton.vue";
 
 const props = withDefaults(
   defineProps<{

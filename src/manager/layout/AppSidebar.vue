@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import SearchInput from "@/components/shared/SearchInput.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Icon, { ICON_SM } from "../components/ui/Icon.vue";

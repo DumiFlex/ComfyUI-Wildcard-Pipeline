@@ -7,7 +7,7 @@ import Modal from "../components/ui/Modal.vue";
 import { useCascadeApply, type CascadeApplyRequest } from "./useCascadeApply";
 import { useBundleStore } from "../stores/bundleStore";
 import Checkbox from "../components/ui/Checkbox.vue";
-import LoadingMark from "@/components/shared/LoadingMark.vue";
+import LoadingMark from "@/kit/LoadingMark.vue";
 
 interface Props {
   open: boolean;

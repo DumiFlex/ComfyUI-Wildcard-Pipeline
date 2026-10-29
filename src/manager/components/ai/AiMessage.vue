@@ -28,7 +28,7 @@ import Chip from "../ui/Chip.vue";
 import { KIND_ICON_MAP } from "../../../components/shared/kind-icons";
 import type { AiChatRef } from "../../api/types";
 import { closeOpen, parseMarkdown, type Block, type Inline, type ListItem, type Tone } from "../../utils/chat-markdown";
-import { copyText } from "@/components/shared/clipboard";
+import { copyText } from "@/kit/clipboard";
 import { syntaxNodes } from "../../utils/chat-syntax";
 import { stripStepFields } from "../../utils/chat-step-fields";
 

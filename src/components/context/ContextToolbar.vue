@@ -2,8 +2,8 @@
 /** Context list toolbar: module count, bulk drift refresh and
  *  collapse / expand / toggle-all. Styles live in `context-widget.css`,
  *  except the drift button's colour below. */
-import WpButton from "../shared/WpButton.vue";
-import WpIconButton from "../shared/WpIconButton.vue";
+import WpButton from "../../kit/WpButton.vue";
+import WpIconButton from "../../kit/WpIconButton.vue";
 
 defineProps<{ enabledCount: number; totalCount: number; driftedCount: number }>();
 defineEmits<{ refresh: []; collapse: []; expand: []; toggleAll: [] }>();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hexToHsv, hexToRgb, hsvToHex, hsvToRgb, rgbToHex, rgbToHsv } from "../../components/shared/hsv";
+import { hexToHsv, hexToRgb, hsvToHex, hsvToRgb, rgbToHex, rgbToHsv } from "../../kit/hsv";
 
 describe("hsv utilities", () => {
   describe("hexToRgb", () => {

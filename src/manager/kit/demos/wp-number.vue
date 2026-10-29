@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import WpNumber from "@/components/shared/WpNumber.vue";
+import WpNumber from "@/kit/WpNumber.vue";
 
 const count = ref<number | null>(4);
 const width = ref<number | null>(1024);

@@ -11,7 +11,7 @@
  * scrollers that would otherwise clip it. The host owns the anchor: it knows
  * which element the menu belongs to and when that element has moved.
  */
-import SearchInput from "@/components/shared/SearchInput.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import { computed, ref, watch } from "vue";
 
 export interface TagGroup {

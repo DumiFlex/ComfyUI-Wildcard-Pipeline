@@ -4,14 +4,14 @@
  *  so this is dispatched directly from ContextWidget rather than via
  *  ModuleEditModal. Master Lock/Hide route to the live cascade
  *  handlers (same ones BundleHeader buttons call). */
-import Kbd from "../../../shared/Kbd.vue";
+import Kbd from "../../../../kit/Kbd.vue";
 import { computed } from "vue";
 import type { BundleInstance } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
-import WpButton from "../../../shared/WpButton.vue";
-import CloseButton from "../../../shared/CloseButton.vue";
+import WpButton from "../../../../kit/WpButton.vue";
+import CloseButton from "../../../../kit/CloseButton.vue";
 
 
 /** Platform-correct save chord for the footer hint. */

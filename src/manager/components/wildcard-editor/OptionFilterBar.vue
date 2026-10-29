@@ -4,7 +4,7 @@
  * and the "N of M" count. The editor owns the filter state (it also drives
  * the option table and the no-results row); this renders it.
  */
-import SearchInput from "@/components/shared/SearchInput.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import TagPickerMenu, { type TagGroup } from "../TagPickerMenu.vue";
 
 const query = defineModel<string>("query", { required: true });

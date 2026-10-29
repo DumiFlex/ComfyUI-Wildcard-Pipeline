@@ -11,7 +11,7 @@
  * both identities are one hover away without cluttering the header.
  */
 import { computed } from "vue";
-import CopyButton from "../../shared/CopyButton.vue";
+import CopyButton from "../../../kit/CopyButton.vue";
 
 const props = defineProps<{
   /** Library uuid — the payload row id. Matches `@{id}`, constraint

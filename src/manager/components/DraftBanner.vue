@@ -8,7 +8,7 @@
  * Transition wrapper so the banner fades-down on enter and out on leave.
  * Drawn by the kit Banner (tone info).
  */
-import Banner from "@/components/shared/Banner.vue";
+import Banner from "@/kit/Banner.vue";
 import Button from "./ui/Button.vue";
 import { formatDraftAge } from "../composables/useEditorDraft";
 

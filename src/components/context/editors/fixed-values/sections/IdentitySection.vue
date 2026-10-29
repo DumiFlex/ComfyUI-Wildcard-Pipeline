@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
-import WpButton from "../../../../shared/WpButton.vue";
+import WpButton from "../../../../../kit/WpButton.vue";
 
 const props = defineProps<{ module: ModuleEntry }>();
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();

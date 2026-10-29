@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Separator from "@/components/shared/Separator.vue";
-import Toolbar from "@/components/shared/Toolbar.vue";
-import WpButton from "@/components/shared/WpButton.vue";
+import Separator from "@/kit/Separator.vue";
+import Toolbar from "@/kit/Toolbar.vue";
+import WpButton from "@/kit/WpButton.vue";
 import Button from "../../components/ui/Button.vue";
 
 const last = ref("");

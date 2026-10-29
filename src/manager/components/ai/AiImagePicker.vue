@@ -9,7 +9,7 @@
 import { onMounted, ref, watch } from "vue";
 import { useAiConfig } from "../../composables/useAiConfig";
 import { checkVision, type AiImages } from "../../composables/useAiImages";
-import LoadingMark from "@/components/shared/LoadingMark.vue";
+import LoadingMark from "@/kit/LoadingMark.vue";
 
 const props = withDefaults(defineProps<{
   images: AiImages;

@@ -14,7 +14,7 @@
  * is what the engine column already holds and what `Icon.vue` expects.
  */
 import { computed, ref } from "vue";
-import Popover from "../../components/shared/Popover.vue";
+import Popover from "../../kit/Popover.vue";
 import { ICON_GROUPS } from "./icon-catalog";
 
 const props = withDefaults(

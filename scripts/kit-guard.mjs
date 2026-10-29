@@ -19,19 +19,19 @@ export const RULES = [
   {
     id: "native-select",
     pattern: /<select\b/g,
-    allow: ["src/components/shared/WpSelect.vue"],
+    allow: ["src/kit/WpSelect.vue"],
     fix: "Use Select (manager) or WpSelect (canvas).",
   },
   {
     id: "native-number",
     pattern: /type="number"/g,
-    allow: ["src/components/shared/WpNumber.vue"],
+    allow: ["src/kit/WpNumber.vue"],
     fix: "Use WpNumber: our arrows, keys and wheel, clamped.",
   },
   {
     id: "native-checkbox",
     pattern: /type="checkbox"/g,
-    allow: ["src/manager/components/ui/Checkbox.vue", "src/manager/components/ui/Toggle.vue", "src/components/shared/WpCheck.vue"],
+    allow: ["src/manager/components/ui/Checkbox.vue", "src/manager/components/ui/Toggle.vue", "src/kit/WpCheck.vue"],
     fix: "Use Checkbox or Toggle (manager) or WpCheck (canvas).",
   },
   {
@@ -43,7 +43,7 @@ export const RULES = [
   {
     id: "inline-svg",
     pattern: /<svg\b/g,
-    allow: ["src/components/shared/Logo.vue", "src/components/shared/LoadingMark.vue"],
+    allow: ["src/kit/Logo.vue", "src/kit/LoadingMark.vue"],
     fix: "Use Icon. A drawing that is not an icon belongs in its own component.",
   },
   {
@@ -51,7 +51,7 @@ export const RULES = [
     pattern: /role="dialog"/g,
     allow: [
       "src/manager/components/ui/Modal.vue",
-      "src/components/shared/ModalShell.vue",
+      "src/kit/ModalShell.vue",
       "src/components/shared/ConfirmDialog.vue",
       "src/manager/components/ui/Drawer.vue",
     ],

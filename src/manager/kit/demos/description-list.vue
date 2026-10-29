@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import Badge from "@/components/shared/Badge.vue";
-import DescriptionList from "@/components/shared/DescriptionList.vue";
+import Badge from "@/kit/Badge.vue";
+import DescriptionList from "@/kit/DescriptionList.vue";
 
 const items = [
   { label: "Family", value: "SDXL" },

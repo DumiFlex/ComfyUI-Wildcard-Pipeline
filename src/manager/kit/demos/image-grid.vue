@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import ImageGrid from "@/components/shared/ImageGrid.vue";
+import ImageGrid from "@/kit/ImageGrid.vue";
 import { demoImage } from "./_images";
 
 const outputs = Array.from({ length: 6 }, (_, i) => ({

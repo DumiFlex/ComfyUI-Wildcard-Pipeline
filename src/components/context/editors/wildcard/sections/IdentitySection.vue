@@ -3,7 +3,7 @@ import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { patchInstance } from "../../instance/patch";
 import { stripNonIdentifierChars } from "../../../../../manager/utils/slug";
-import WpButton from "../../../../shared/WpButton.vue";
+import WpButton from "../../../../../kit/WpButton.vue";
 
 const props = withDefaults(
   defineProps<{

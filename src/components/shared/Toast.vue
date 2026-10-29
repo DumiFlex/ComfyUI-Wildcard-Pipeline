@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from "vue";
 import { toasts, dismissToast, type Toast } from "./toast-store";
-import ToastCard from "./ToastCard.vue";
+import ToastCard from "../../kit/ToastCard.vue";
 
 /** The canvas store says `warning`; the shared card says `warn`. */
 function toneOf(s: Toast["severity"]): "info" | "success" | "warn" | "error" {

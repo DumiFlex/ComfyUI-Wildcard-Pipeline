@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Badge from "@/components/shared/Badge.vue";
+import Badge from "@/kit/Badge.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";

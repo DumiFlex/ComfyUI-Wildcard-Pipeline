@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** A tip or warning on a docs page: the kit's Banner, as page text (`note`). */
-import Banner, { type BannerTone } from "@/components/shared/Banner.vue";
+import Banner, { type BannerTone } from "@/kit/Banner.vue";
 
 withDefaults(defineProps<{ variant?: "tip" | "warn" | "danger" }>(), { variant: "tip" });
 const TONE: Record<"tip" | "warn" | "danger", BannerTone> = { tip: "info", warn: "warn", danger: "danger" };

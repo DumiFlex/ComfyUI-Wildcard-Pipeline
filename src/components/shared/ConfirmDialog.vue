@@ -12,7 +12,7 @@
  *              reset overrides)
  */
 import { onBeforeUnmount, watch } from "vue";
-import WpButton from "./WpButton.vue";
+import WpButton from "../../kit/WpButton.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -103,7 +103,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
  * `wp-modal-*` transition class names match the Vue-emitted classes
  * cleanly (named transitions don't survive Vue's `data-v-...`
  * scoping). */
-@import "./_modal-motion.css";
+@import "../../kit/_modal-motion.css";
 </style>
 
 <style scoped>

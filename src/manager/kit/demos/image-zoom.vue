@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import WpButton from "@/components/shared/WpButton.vue";
-import WpImageZoom from "@/components/shared/WpImageZoom.vue";
+import WpButton from "@/kit/WpButton.vue";
+import WpImageZoom from "@/kit/WpImageZoom.vue";
 
 /** A big test picture with fine print, so 100% and 200% show something Fit can't. */
 function picture(hue: number): string {

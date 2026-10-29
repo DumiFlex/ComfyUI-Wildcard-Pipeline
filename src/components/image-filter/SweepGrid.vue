@@ -7,7 +7,7 @@
  */
 import { computed } from "vue";
 import PickerTile from "./PickerTile.vue";
-import WpSelect from "../shared/WpSelect.vue";
+import WpSelect from "../../kit/WpSelect.vue";
 import { axisHueAt } from "../shared/axis-color";
 import { moveAxis, type GridLayout, type SweepAxisInfo, type SweepGrid } from "./picker-loop";
 import { pickKey, viewUrl, type ImageRef, type PickEdits } from "./types";

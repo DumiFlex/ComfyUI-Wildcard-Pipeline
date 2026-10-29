@@ -20,7 +20,7 @@ import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { encodeKey } from "../../instance/keys";
 import { patchInstance } from "../../instance/patch";
 import CellRulePopover from "../CellRulePopover.vue";
-import Popover from "../../../../shared/Popover.vue";
+import Popover from "../../../../../kit/Popover.vue";
 import MatrixLegend from "../MatrixLegend.vue";
 import {
   groupHue as tagHue,

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import Button from "../../components/ui/Button.vue";
-import ModalShell from "@/components/shared/ModalShell.vue";
+import ModalShell from "@/kit/ModalShell.vue";
 
 const open = ref(false);
 </script>

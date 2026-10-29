@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CodeBlock from "@/components/shared/CodeBlock.vue";
+import CodeBlock from "@/kit/CodeBlock.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocImage from "../../../components/docs/DocImage.vue";

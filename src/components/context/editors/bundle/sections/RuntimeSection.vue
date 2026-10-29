@@ -4,8 +4,8 @@
  *  the BundleHeader button visual. Stateless: parent calls the same
  *  `toggleBundleLock` / `toggleBundleInternal` handlers the header
  *  buttons use. `null` state hides the button entirely. */
-import WpSwitch from "../../../../shared/WpSwitch.vue";
-import { vTooltip } from "../../../../shared/tooltip";
+import WpSwitch from "../../../../../kit/WpSwitch.vue";
+import { vTooltip } from "../../../../../kit/tooltip";
 
 const props = withDefaults(
   defineProps<{

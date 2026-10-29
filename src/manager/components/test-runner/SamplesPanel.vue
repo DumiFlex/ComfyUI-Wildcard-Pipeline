@@ -3,7 +3,7 @@
  * Samples tab: one row per returned seed with the variables that varied,
  * filterable by any cell text. Click a row for that seed's trace.
  */
-import SearchInput from "@/components/shared/SearchInput.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import { computed, ref } from "vue";
 import DataTable, { type DataColumn, type DataSort } from "../ui/DataTable.vue";
 import type { ScenarioRunResponse } from "../../api/types";

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ProgressBar from "@/components/shared/ProgressBar.vue";
+import ProgressBar from "@/kit/ProgressBar.vue";
 </script>
 
 <template>

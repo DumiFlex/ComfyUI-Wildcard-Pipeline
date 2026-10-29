@@ -60,6 +60,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm check:css-isolation
+      # src/kit/ is a copy of DumiFlex/wp-kit; change pieces there and pull.
+      - run: pnpm kit:check
       - run: pnpm test:coverage
       - name: TS syntax tests (parity + snapshot)
         run: pnpm vitest run src/manager/__tests__/syntax/

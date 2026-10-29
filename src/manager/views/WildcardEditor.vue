@@ -13,7 +13,7 @@
  * Save flow appends a snapshot to `payload.history` (utils/history.ts) so
  * the EditorFrame's history button works on the next mount.
  */
-import WpNumber from "@/components/shared/WpNumber.vue";
+import WpNumber from "@/kit/WpNumber.vue";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";

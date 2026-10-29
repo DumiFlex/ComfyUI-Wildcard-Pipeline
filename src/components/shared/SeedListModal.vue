@@ -2,11 +2,11 @@
 /** Per-iteration seed modal — shared by the Context Loop + Seed List
  *  node widgets. Computes the derived list locally (seed-derive mirror)
  *  and overlays seed_locks; edits re-emit the full merged lock map. */
-import Kbd from "./Kbd.vue";
+import Kbd from "../../kit/Kbd.vue";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { deriveLoopSeeds, parseSeedLocks, type SeedStrategy } from "./seed-derive";
 import SeedLockRow from "./SeedLockRow.vue";
-import CloseButton from "./CloseButton.vue";
+import CloseButton from "../../kit/CloseButton.vue";
 
 const props = defineProps<{
   nodeName: string;

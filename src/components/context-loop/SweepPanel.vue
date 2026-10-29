@@ -8,8 +8,8 @@
  * parent: `modelValue` is the `SweepConfig`, every change emits a new one.
  */
 import { computed, ref } from "vue";
-import WpSwitch from "../shared/WpSwitch.vue";
-import { vTooltip } from "../shared/tooltip";
+import WpSwitch from "../../kit/WpSwitch.vue";
+import { vTooltip } from "../../kit/tooltip";
 import {
   SWEEP_MAX_LIMIT,
   liveAxes,
@@ -18,10 +18,10 @@ import {
   type SweepConfig,
 } from "./types";
 import { axisStatus, type SweepCandidate } from "./sweep-candidates";
-import WpNumber from "../shared/WpNumber.vue";
-import WpSelect from "../shared/WpSelect.vue";
-import WpButton from "../shared/WpButton.vue";
-import WpIconButton from "../shared/WpIconButton.vue";
+import WpNumber from "../../kit/WpNumber.vue";
+import WpSelect from "../../kit/WpSelect.vue";
+import WpButton from "../../kit/WpButton.vue";
+import WpIconButton from "../../kit/WpIconButton.vue";
 
 const props = withDefaults(
   defineProps<{

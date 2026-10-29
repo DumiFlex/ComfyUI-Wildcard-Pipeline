@@ -13,7 +13,7 @@
 import { computed, ref, watch } from "vue";
 import Button from "./ui/Button.vue";
 import Modal from "./ui/Modal.vue";
-import CodeBlock from "@/components/shared/CodeBlock.vue";
+import CodeBlock from "@/kit/CodeBlock.vue";
 import RelativeDate from "./RelativeDate.vue";
 import type { ModuleHistoryEntry } from "../api/types";
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import VisuallyHidden from "@/components/shared/VisuallyHidden.vue";
+import VisuallyHidden from "@/kit/VisuallyHidden.vue";
 </script>
 
 <template>

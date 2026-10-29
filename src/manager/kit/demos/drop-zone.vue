@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import DropZone, { type RejectedFile } from "@/components/shared/DropZone.vue";
+import DropZone, { type RejectedFile } from "@/kit/DropZone.vue";
 
 const got = ref("");
 function took(files: File[]): void { got.value = `Took ${files.map((f) => f.name).join(", ")}`; }

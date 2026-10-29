@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Kbd from "@/components/shared/Kbd.vue";
+import Kbd from "@/kit/Kbd.vue";
 </script>
 
 <template>

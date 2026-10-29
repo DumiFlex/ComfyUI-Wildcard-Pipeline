@@ -31,8 +31,8 @@ import type { VarProducerLike } from "../../../../../manager/components/RefChip.
 import { patchInstance } from "../../instance/patch";
 import { varColorClass } from "../../../../shared/var-color";
 import RuleValueChips from "./RuleValueChips.vue";
-import WpSwitch from "../../../../shared/WpSwitch.vue";
-import Disclosure from "../../../../shared/Disclosure.vue";
+import WpSwitch from "../../../../../kit/WpSwitch.vue";
+import Disclosure from "../../../../../kit/Disclosure.vue";
 import { tokenizeRich } from "../../../../../widgets/richTokenize";
 import PairBadge from "../../../PairBadge.vue";
 import {
@@ -43,7 +43,7 @@ import {
   isConditionGroup,
   matchWord,
 } from "../../../../../extension/derivation-conditions";
-import WpButton from "../../../../shared/WpButton.vue";
+import WpButton from "../../../../../kit/WpButton.vue";
 
 // Async-import the rich-text editor so its chunk stays split + is only
 // pulled in when a derivation instance modal expands a rule. RichTextInput

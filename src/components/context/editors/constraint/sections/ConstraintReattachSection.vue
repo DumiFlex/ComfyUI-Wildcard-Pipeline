@@ -24,7 +24,7 @@
  */
 import { ref } from "vue";
 import type { WildcardRefData } from "../../../../../manager/utils/library-suggestions";
-import WpButton from "../../../../shared/WpButton.vue";
+import WpButton from "../../../../../kit/WpButton.vue";
 
 const props = withDefaults(defineProps<{
   danglingSource: boolean;

@@ -10,9 +10,9 @@
  * the parent owns close via outside-click / Escape. Picking a state or
  * typing a factor keeps the popover open so the user can keep tweaking.
  */
-import WpNumber from "../../../shared/WpNumber.vue";
+import WpNumber from "../../../../kit/WpNumber.vue";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
-import WpButton from "../../../shared/WpButton.vue";
+import WpButton from "../../../../kit/WpButton.vue";
 
 type RuleState = "neutral" | "exclude" | "boost" | "reduce" | "only";
 

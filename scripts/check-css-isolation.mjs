@@ -13,6 +13,7 @@
  * - src/components/**\/*.{vue,css}
  * - src/extension/**\/*.css
  * - src/widgets/**\/*.css
+ * - src/kit/**\/*.{vue,css} (the shared kit pulled from wp-kit)
  *
  * NOT included: src/manager/** (separate bundle with its own scope —
  * Tailwind utilities + global tokens.css are intentional there).
@@ -43,6 +44,8 @@ const LEGACY_ALLOWLIST = new Set([
 const SCOPES = [
   "src/components/**/*.vue",
   "src/components/**/*.css",
+  "src/kit/**/*.vue",
+  "src/kit/**/*.css",
   "src/extension/**/*.css",
   "src/widgets/**/*.css",
 ];

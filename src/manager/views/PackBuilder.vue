@@ -13,7 +13,7 @@
  * before offering Install. "Extend with AI" on a bundle opens this page
  * aimed at that bundle (`pb.target`).
  */
-import WpNumber from "@/components/shared/WpNumber.vue";
+import WpNumber from "@/kit/WpNumber.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
@@ -32,7 +32,7 @@ import PackSettings from "../components/pack/PackSettings.vue";
 import { registerPageNote } from "../composables/useOpenEditor";
 import { useAiChat } from "../composables/useAiChat";
 import { mentionsImages, usePackBuilder, type ItemStatus } from "../composables/usePackBuilder";
-import WpCheck from "../../components/shared/WpCheck.vue";
+import WpCheck from "../../kit/WpCheck.vue";
 import { useAiConfig } from "../composables/useAiConfig";
 import { useToast } from "../composables/useToast";
 import { useModuleStore } from "../stores/moduleStore";
@@ -40,7 +40,7 @@ import { useBundleStore } from "../stores/bundleStore";
 import { useTemplateStore } from "../stores/templateStore";
 import { stillThere as problemStill } from "../utils/pack-problems";
 import type { AiPackItem, AiPackRun } from "../api/types";
-import LoadingMark from "@/components/shared/LoadingMark.vue";
+import LoadingMark from "@/kit/LoadingMark.vue";
 
 const pb = usePackBuilder();
 

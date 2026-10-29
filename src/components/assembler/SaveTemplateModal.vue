@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { api } from "../../manager/api/client";
-import ModalShell from "../shared/ModalShell.vue";
-import WpSelect from "../shared/WpSelect.vue";
+import ModalShell from "../../kit/ModalShell.vue";
+import WpSelect from "../../kit/WpSelect.vue";
 import { pushToast } from "../shared/toast-store";
-import WpButton from "../shared/WpButton.vue";
-import CodeBlock from "../shared/CodeBlock.vue";
-import CloseButton from "../shared/CloseButton.vue";
+import WpButton from "../../kit/WpButton.vue";
+import CodeBlock from "../../kit/CodeBlock.vue";
+import CloseButton from "../../kit/CloseButton.vue";
 
 const props = defineProps<{
   open: boolean;

@@ -19,8 +19,8 @@
  */
 import { computed } from "vue";
 import { kindIcon } from "../shared/kind-icons";
-import WpCheck from "../shared/WpCheck.vue";
-import WpIconButton from "../shared/WpIconButton.vue";
+import WpCheck from "../../kit/WpCheck.vue";
+import WpIconButton from "../../kit/WpIconButton.vue";
 
 export interface SummaryToken { isVar: boolean; text: string; }
 
