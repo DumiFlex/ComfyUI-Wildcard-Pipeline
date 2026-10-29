@@ -45,7 +45,9 @@ def test_schema():
     assert s.node_id == "WP_ModelInfo"
     assert s.category == "wildcard-pipeline"
     assert [o.name for o in s.outputs] == ["context"]
-    assert [i.name for i in s.inputs] == ["upstream", "model", "wp_model_info"]
+    assert [i.name for i in s.inputs] == [
+        "upstream", "model", "family", "variant", "name", "wp_model_info",
+    ]
 
 
 def test_never_cached():
@@ -86,6 +88,28 @@ def test_pinned_name_wins_over_loader():
 def test_pins():
     out = _run(model=_model(SDXL), config={"family": " sd15 ", "variant": "illustrious"})
     assert _vars(out)[:2] == ("sd15", "illustrious")
+
+
+def test_wired_text_beats_pins_and_detection():
+    out = _run(
+        model=_model(SDXL),
+        config={"family": "sd15", "variant": "pinned"},
+        family=" flux ",
+        name="noobaiXL_v1.safetensors",
+    )
+    assert _vars(out) == ("flux", "pinned", "noobaiXL_v1")
+    assert out.ui["wp_model_info"][0]["sources"] == {
+        "family": "wired", "variant": "pinned", "name": "wired",
+    }
+    assert [t["type"] for t in out.values[0].debug["__wp_trace__"]] == [
+        "wired", "pinned", "wired",
+    ]
+
+
+def test_wired_name_feeds_the_rules_without_a_model():
+    out = _run(name="ponyDiffusionV6XL.safetensors", variant="  ")
+    assert _vars(out) == ("", "pony", "ponyDiffusionV6XL")
+    assert "__wp_warnings__" not in out.values[0].debug
 
 
 def test_custom_rules_and_bad_rule_warning():

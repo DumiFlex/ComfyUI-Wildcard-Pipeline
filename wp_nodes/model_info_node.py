@@ -27,6 +27,12 @@ def _config_class_name(model: Any) -> str:
     return type(config).__name__ if config is not None else ""
 
 
+def _pin_source(key: str, wired: dict[str, str], pinned: str, detected: str) -> str:
+    if key in wired:
+        return "wired"
+    return "pinned" if pinned else detected
+
+
 class WPModelInfo(io.ComfyNode):
     """Chain source that names the loaded model."""
 
@@ -61,6 +67,22 @@ class WPModelInfo(io.ComfyNode):
                         "BEFORE it, or the graph loops."
                     ),
                 ),
+                *(
+                    io.String.Input(
+                        key,
+                        optional=True,
+                        force_input=True,
+                        tooltip=tip,
+                    )
+                    for key, tip in (
+                        ("family", "Text from another node for $model_family. "
+                         "Beats detection and the pin."),
+                        ("variant", "Text from another node for $model_variant. "
+                         "Beats the rules and the pin."),
+                        ("name", "A checkpoint file name from another node. The "
+                         "variant rules read it, as they read the loader's."),
+                    )
+                ),
                 # Detected values, pins and the variant rules all live in one
                 # DOM widget (src/components/model-info/ModelInfoWidget.vue).
                 ModelInfoWidgetInput.Input(
@@ -85,9 +107,19 @@ class WPModelInfo(io.ComfyNode):
         cls,
         upstream: PipelineContext | None = None,
         model: Any = None,
+        family: str | None = None,
+        variant: str | None = None,
+        name: str | None = None,
         wp_model_info: str = "",
     ):
         cfg = model_info.parse_config(wp_model_info)
+        # A wired text input beats the panel's pin (an empty wire leaves it).
+        wired = {
+            k: v.strip()
+            for k, v in (("family", family), ("variant", variant), ("name", name))
+            if isinstance(v, str) and v.strip()
+        }
+        pins = {k: wired.get(k) or getattr(cfg, k) for k in ("family", "variant", "name")}
         upstream_ctx: dict = upstream.context if upstream is not None else {}
         upstream_debug: dict = upstream.debug if upstream is not None else {}
         upstream_internals: dict = upstream.internals if upstream is not None else {}
@@ -98,8 +130,8 @@ class WPModelInfo(io.ComfyNode):
 
         warnings: list[dict] = []
 
-        file_name = cfg.name
-        name_source = "pinned" if file_name else "loader"
+        file_name = pins["name"]
+        name_source = ("wired" if "name" in wired else "pinned") if file_name else "loader"
         if not file_name and model is not None:
             file_name = model_info.find_checkpoint_name(prompt, node_id)
             name_source = "loader"
@@ -112,11 +144,11 @@ class WPModelInfo(io.ComfyNode):
                 "message": f"WP Model Info skipped a variant rule: {problem}",
             })
 
-        family = cfg.family or model_info.family_from_config_name(
+        family = pins["family"] or model_info.family_from_config_name(
             _config_class_name(model),
         )
         stem = model_info.model_stem(file_name)
-        variant = cfg.variant or model_info.detect_variant(stem, rules)
+        variant = pins["variant"] or model_info.detect_variant(stem, rules)
 
         if model is None and not file_name and not family and not variant:
             warnings.append({
@@ -157,8 +189,8 @@ class WPModelInfo(io.ComfyNode):
             out_internals["__wp_internal_flags__"] = flags
 
         sources = {
-            model_info.FAMILY_VAR: "pinned" if cfg.family else "model",
-            model_info.VARIANT_VAR: "pinned" if cfg.variant else "rules",
+            model_info.FAMILY_VAR: _pin_source("family", wired, cfg.family, "model"),
+            model_info.VARIANT_VAR: _pin_source("variant", wired, cfg.variant, "rules"),
             model_info.NAME_VAR: name_source,
         }
         traces = [
