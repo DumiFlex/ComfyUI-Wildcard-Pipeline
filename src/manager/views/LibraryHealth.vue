@@ -22,6 +22,7 @@ import Drawer from "@/kit/Drawer.vue";
 import EmptyState from "@/kit/EmptyState.vue";
 import Icon from "@/kit/Icon.vue";
 import RelativeDate from "@/kit/RelativeDate.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import CommunityUpdateDialog from "../components/CommunityUpdateDialog.vue";
 import { api, ApiError } from "../api/client";
 import type {
@@ -339,7 +340,10 @@ registerPageNote(() => {
       >
         <span class="wp-health__card-icon"><Icon :name="SEVERITY_ICON[s.severity]" /></span>
         <span class="wp-health__card-text">
-          <span class="wp-health__card-count">{{ health.counts[s.severity] }}</span>
+          <span class="wp-health__card-count">
+            <template v-if="health.scan || health.error">{{ health.counts[s.severity] }}</template>
+            <Skeleton v-else width="2ch" class="wp-health__count-skel" />
+          </span>
           <span class="wp-health__card-label">{{ SEVERITY_LABEL[s.severity] }}: {{ s.text.toLowerCase() }}</span>
         </span>
       </div>
@@ -369,7 +373,14 @@ registerPageNote(() => {
       Open your workflow in another tab and check again.
     </Banner>
 
-    <div v-if="health.scan && groups.length" class="wp-health__groups">
+    <div
+      v-if="!health.scan && !health.error"
+      class="wp-health__groups"
+      data-test="health-skeleton"
+    >
+      <Skeleton v-for="i in 3" :key="i" shape="block" height="44px" :label="i === 1 ? 'Checking the library' : undefined" />
+    </div>
+    <div v-else-if="health.scan && groups.length" class="wp-health__groups">
       <Disclosure
         v-for="g in groups"
         :key="g.check.id"
@@ -601,6 +612,7 @@ registerPageNote(() => {
 .wp-health__card[data-severity="tidy"] .wp-health__card-icon { color: var(--wp-info); background: color-mix(in oklab, var(--wp-info) 14%, transparent); }
 .wp-health__card-text { display: flex; flex-direction: column; min-width: 0; }
 .wp-health__card-count { font-size: var(--wp-text-xl, 20px); line-height: 28px; font-weight: 600; }
+.wp-health__count-skel { display: inline-flex; width: auto; vertical-align: middle; }
 .wp-health__card-label { color: var(--wp-text-muted); }
 
 .wp-health__toolbar {

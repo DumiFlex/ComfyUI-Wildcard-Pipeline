@@ -28,6 +28,7 @@ import Select from "@/kit/Select.vue";
 import type { SelectOption } from "@/kit/select-types";
 import RelativeDate from "@/kit/RelativeDate.vue";
 import EmptyState from "@/kit/EmptyState.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
 import { registerPageNote } from "../composables/useOpenEditor";
 import { registerAiAction } from "../composables/useAiActions";
@@ -1226,10 +1227,12 @@ defineExpose({
               v-for="n in 6"
               :key="`skel-${n}`"
               class="wp-row-skel"
-              aria-hidden="true"
             >
               <td v-for="c in totalCols" :key="c">
-                <span class="wp-skel-bar" :style="`width:${30 + ((c * 17) % 55)}%`" />
+                <Skeleton
+                  :width="`${30 + ((c * 17 + n * 11) % 55)}%`"
+                  :label="n === 1 && c === 1 ? `Loading ${title.toLowerCase()}` : undefined"
+                />
               </td>
             </tr>
           </template>

@@ -9,6 +9,7 @@
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import { api } from "../../api/client";
 import type { AiChatSummary } from "../../api/types";
 import { plainMentions } from "../../utils/chat-completions";
@@ -140,7 +141,8 @@ function turnsLabel(n: number): string {
       data-test="ai-chats-search"
     />
     <p v-if="error" class="wp-ai-chats__error" role="alert">{{ error }}</p>
-    <p v-if="loaded && !chats.length" class="wp-ai-chats__empty" data-test="ai-chats-empty">
+    <Skeleton v-if="!loaded" :lines="5" label="Loading chats" class="wp-ai-chats__skel" data-test="ai-chats-skeleton" />
+    <p v-else-if="!chats.length" class="wp-ai-chats__empty" data-test="ai-chats-empty">
       {{ q.trim() ? "No chat mentions that." : "No saved chats yet. Chats are kept once they have an answer." }}
     </p>
     <section v-for="g in groups" :key="g.label" class="wp-ai-chats__group">
@@ -196,6 +198,7 @@ function turnsLabel(n: number): string {
 </template>
 
 <style scoped>
+.wp-ai-chats__skel { padding: var(--wp-space-3) 0; }
 .wp-ai-chats { display: flex; flex-direction: column; gap: 10px; }
 .wp-ai-chats__empty, .wp-ai-chats__error { margin: 0; font-size: 12px; color: var(--wp-text-muted); }
 .wp-ai-chats__error { color: var(--wp-danger); }

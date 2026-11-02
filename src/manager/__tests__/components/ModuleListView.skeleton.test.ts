@@ -36,7 +36,11 @@ describe("ModuleListView skeleton rows", () => {
   it("renders skeleton rows when loading and items empty", async () => {
     const wrapper = await mountList({ items: [], loading: true });
     expect(wrapper.findAll(".wp-row-skel").length).toBe(6);
-    expect(wrapper.findAll(".wp-skel-bar").length).toBeGreaterThan(0);
+    // Kit Skeleton bones in every cell, and one screen-reader line.
+    expect(wrapper.findAll(".wp-row-skel .wp-skeleton").length).toBeGreaterThan(6);
+    const status = wrapper.findAll('.wp-row-skel [role="status"]');
+    expect(status).toHaveLength(1);
+    expect(status[0].text()).toContain("Loading t");
     // Empty state should NOT render while skeleton is up.
     expect(wrapper.find(".wp-empty").exists()).toBe(false);
   });

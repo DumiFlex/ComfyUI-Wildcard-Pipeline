@@ -332,7 +332,12 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // side / bottom panel pane, minimap and zoom controls, the dock's snap
 // spots), the page key probe for shortcuts, and the note's tables, task
 // boxes and callouts (~1.2 KB gzip, in the bookmark and note chunks).
-const TOTAL_LIMIT = 590 * 1024;     // 590 KB
+// RAISED 590 -> 596 KB on 2026-11-02 for kit 0.5.0 (one field box, one
+// Chip, CodeBlock syntax colours, Skeleton shapes; ~2.5 KB gzip on its own,
+// dev at 606,638 bytes) and the loading shapes that replace empty states and
+// spinners in the list pages, editors, pickers and settings (~1.2 KB, mostly
+// in lazy manager chunks); the branch sat at 607,885 bytes.
+const TOTAL_LIMIT = 596 * 1024;     // 596 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

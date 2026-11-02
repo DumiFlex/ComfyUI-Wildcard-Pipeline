@@ -166,28 +166,12 @@
 
       <!-- Body: scrollable list grouped by kind -->
       <div class="wp-picker__body">
-        <div
-          v-if="loading"
-          class="wp-picker__skel"
-          aria-busy="true"
-          aria-live="polite"
-          aria-label="Loading modules"
-        >
+        <!-- First load only: a reopen keeps the list it has and refreshes
+             it quietly, so the rows don't flash back to grey shapes. -->
+        <div v-if="loading && !modules.length" class="wp-picker__skel">
           <template v-for="g in 2" :key="g">
-            <div class="wp-picker__skel-head">
-              <span class="wp-skel wp-skel--text wp-picker__skel-label"></span>
-              <span class="wp-picker__skel-line"></span>
-              <span class="wp-skel wp-skel--text wp-picker__skel-tally"></span>
-            </div>
-            <div v-for="i in 4" :key="`${g}-${i}`" class="wp-picker__skel-row">
-              <span class="wp-skel wp-picker__skel-check"></span>
-              <span class="wp-skel wp-picker__skel-icon"></span>
-              <span class="wp-picker__skel-main">
-                <span class="wp-skel wp-skel--text wp-picker__skel-name"></span>
-                <span class="wp-skel wp-skel--text wp-picker__skel-var"></span>
-              </span>
-              <span class="wp-skel wp-skel--text wp-picker__skel-uuid"></span>
-            </div>
+            <Skeleton width="84px" class="wp-picker__skel-head" :label="g === 1 ? 'Loading modules' : undefined" />
+            <Skeleton shape="row" icon="square" :lines="4" class="wp-picker__skel-rows" />
           </template>
         </div>
         <div v-else-if="loadError" class="wp-picker__state wp-picker__state--error">
@@ -343,6 +327,7 @@ import Kbd from "@/kit/Kbd.vue";
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import ModalShell from "@/kit/ModalShell.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import WpSelect from "@/kit/WpSelect.vue";
 import { kindIcon } from "../shared/kind-icons";
 import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
@@ -966,67 +951,15 @@ watch(
 onBeforeUnmount(detachCaptureListeners);
 </script>
 
-<style>
-/* `wp-skel` family is shared with BundlePickerModal — import unscoped
- * so the keyframe + base rules dedupe across consumers and aren't
- * subject to per-component scoping rewrites. */
-@import "@/kit/_skeleton.css";
-</style>
-
 <style scoped>
 /* Tokens via global tokens.css. Keep selectors prefixed `wp-picker__`
  * so this component never collides with SPA Manager classes. */
 
-/* Skeleton frames — geometry mirrors `.wp-picker__row` + the section
- * head pattern so the placeholder layout matches the loaded list and
- * doesn't shift on resolve. Rows get a faint translucent wash so each
- * row reads as a distinct shape against the modal body (loaded rows
- * are transparent until hover; the skeleton needs a touch more
- * visual weight or the stack reads as floating bars). */
+/* Skeleton frames: a section head and four rows per kind group, in the
+ * loaded list's padding so nothing shifts when it lands. */
 .wp-picker__skel { padding: 6px 8px 8px; }
-.wp-picker__skel-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 8px 6px;
-}
-.wp-picker__skel-label { width: 84px; height: 11px; }
-.wp-picker__skel-line {
-  flex: 1;
-  height: 1px;
-  background: var(--wp-border);
-}
-.wp-picker__skel-tally { width: 22px; height: 11px; }
-.wp-picker__skel-row {
-  display: grid;
-  grid-template-columns: 18px 24px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  height: 40px;
-  padding: 0 10px;
-  border-radius: min(5px, var(--wp-radius-cap, 999px));
-  background: color-mix(in srgb, var(--wp-text) 3%, transparent);
-  margin-bottom: 2px;
-}
-.wp-picker__skel-check { width: 16px; height: 16px; border-radius: min(4px, var(--wp-radius-cap, 999px)); }
-.wp-picker__skel-icon { width: 22px; height: 22px; border-radius: min(4px, var(--wp-radius-cap, 999px)); }
-.wp-picker__skel-main {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
-}
-.wp-picker__skel-name { width: 38%; min-width: 80px; max-width: 220px; height: 12px; }
-.wp-picker__skel-var { width: 60px; height: 9px; opacity: 0.7; }
-.wp-picker__skel-uuid { width: 64px; height: 10px; }
-
-/* Width variation so the rows don't read as a perfectly aligned grid —
- * a real library has names of varying length, so a perfectly identical
- * stack tells the eye "this is fake" instantly. */
-.wp-picker__skel-row:nth-child(3n) .wp-picker__skel-name { width: 28%; }
-.wp-picker__skel-row:nth-child(3n+1) .wp-picker__skel-name { width: 46%; }
-.wp-picker__skel-row:nth-child(4n) .wp-picker__skel-var { width: 80px; }
-.wp-picker__skel-row:nth-child(4n+2) .wp-picker__skel-var { width: 46px; }
+.wp-picker__skel-head { padding: 12px 8px 6px; }
+.wp-picker__skel-rows { padding: 0 10px; }
 
 .wp-picker {
   background: var(--wp-bg-2);

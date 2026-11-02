@@ -233,6 +233,8 @@ registerPageNote(() => {
       class="wp-table-wrap--scroll"
       :columns="COLUMNS"
       :rows="shown"
+      :loading="loading && !counts.length"
+      :loading-rows="6"
       row-key="tag"
       :row-attrs="(c) => ({ class: 'wp-tags-row', 'data-test': `tag-row-${c.tag}` })"
       aria-label="Tags"

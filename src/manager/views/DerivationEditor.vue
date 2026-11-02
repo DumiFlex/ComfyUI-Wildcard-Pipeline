@@ -136,6 +136,9 @@ function setSaveState(next: SaveState, ttl?: number): void {
   }
 }
 const isEdit = computed(() => !!props.id);
+/** False until an existing item has loaded: the frame draws its skeleton
+ *  instead of an empty form (and holds Save) meanwhile. */
+const loaded = ref(!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
 
 // Unsaved-changes guard
@@ -373,6 +376,7 @@ onMounted(async () => {
       router.replace("/derivations");
     }
   }
+  loaded.value = true;
   baseline.value = snapshot();
   // "Open in editor" on a chat card: the proposed derivation, unsaved.
   const fromChat = props.id ? null : fillFromChat();
@@ -600,6 +604,8 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
 
 <template>
   <EditorFrame
+    :loading="!loaded"
+    loading-label="Loading derivation"
     :title="isEdit ? 'Edit derivation' : 'New derivation'"
     back-route="/derivations"
     back-label="Derivations"

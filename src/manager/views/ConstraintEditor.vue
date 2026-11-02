@@ -187,6 +187,9 @@ function setSaveState(next: SaveState, ttl?: number): void {
   }
 }
 const isEdit = computed(() => !!props.id);
+/** False until an existing item has loaded: the frame draws its skeleton
+ *  instead of an empty form (and holds Save) meanwhile. */
+const loaded = ref(!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
 
 // Unsaved-changes guard
@@ -959,6 +962,7 @@ onMounted(async () => {
       router.replace("/constraints");
     }
   }
+  loaded.value = true;
   baseline.value = snapshot();
   // "Open in editor" on a chat card: the proposed constraint, unsaved.
   if (!props.id) {
@@ -1308,6 +1312,8 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
 
 <template>
   <EditorFrame
+    :loading="!loaded"
+    loading-label="Loading constraint"
     :title="isEdit ? 'Edit constraint' : 'New constraint'"
     back-route="/constraints"
     back-label="Constraints"

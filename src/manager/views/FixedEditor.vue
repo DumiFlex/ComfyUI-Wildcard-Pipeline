@@ -142,6 +142,9 @@ function setSaveState(next: SaveState, ttl?: number): void {
   }
 }
 const isEdit = computed(() => !!props.id);
+/** False until an existing item has loaded: the frame draws its skeleton
+ *  instead of an empty form (and holds Save) meanwhile. */
+const loaded = ref(!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
 
 // Unsaved-changes guard
@@ -260,6 +263,7 @@ onMounted(async () => {
       router.replace("/fixed-values");
     }
   }
+  loaded.value = true;
   baseline.value = snapshot();
   // "Open in editor" on a chat card: the proposed values, unsaved.
   if (!props.id) {
@@ -570,6 +574,8 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
 
 <template>
   <EditorFrame
+    :loading="!loaded"
+    loading-label="Loading fixed values"
     :save-disabled="bulkAddOpen"
     save-disabled-reason="Finish or cancel the bulk add first — use its own Add / Cancel buttons"
     :title="isEdit ? 'Edit fixed values' : 'New fixed values'"

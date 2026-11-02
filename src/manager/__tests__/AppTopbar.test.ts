@@ -133,6 +133,7 @@ describe("AppTopbar.vue", () => {
       checking: ref(false),
       rateLimitedUntil: ref(null),
       history: ref([]),
+      historyLoading: ref(false),
       loadHistory: vi.fn(),
       checkNow: vi.fn(),
     } as ReturnType<typeof releaseCheck.useReleaseCheck>);

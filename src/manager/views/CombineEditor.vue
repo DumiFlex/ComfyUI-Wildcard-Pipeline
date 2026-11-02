@@ -239,6 +239,9 @@ function setSaveState(next: SaveState, ttl?: number): void {
   }
 }
 const isEdit = computed(() => !!props.id);
+/** False until an existing item has loaded: the frame draws its skeleton
+ *  instead of an empty form (and holds Save) meanwhile. */
+const loaded = ref(!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
 
 // Unsaved-changes guard
@@ -456,6 +459,7 @@ onMounted(async () => {
       router.replace("/combines");
     }
   }
+  loaded.value = true;
   baseline.value = snapshot();
   // "Open in editor" on a chat card: the proposed combine, unsaved.
   if (!props.id) {
@@ -617,6 +621,8 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
 
 <template>
   <EditorFrame
+    :loading="!loaded"
+    loading-label="Loading combine"
     :title="isEdit ? 'Edit combine' : 'New combine'"
     back-route="/combines"
     back-label="Combines"

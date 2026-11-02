@@ -165,7 +165,7 @@ import {
 } from "../community/community-posts";
 import { collectTransitiveDeps } from "../community/transitive-deps";
 import { downloadDepsForDangling } from "../community/download-and-reattach";
-import LoadingMark from "@/kit/LoadingMark.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 
 const props = defineProps<{ id?: string }>();
 
@@ -245,7 +245,7 @@ function resolveDefaultColor(): void {
 }
 
 
-const loading = ref(false);
+const loading = ref(!!props.id);
 const saving = ref(false);
 const saveState = ref<SaveState>("idle");
 const saveError = ref<string>("");
@@ -1142,7 +1142,9 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
 
 <template>
   <EditorFrame
-    :title="isEdit ? (original?.name || 'Loading…') : 'New bundle'"
+    :title="isEdit ? (original?.name ?? '') : 'New bundle'"
+    :loading="loading"
+    loading-label="Loading bundle"
     back-route="/bundles"
     back-label="Bundles"
     :breadcrumb="breadcrumb"
@@ -1186,9 +1188,11 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
         @discard="draft.discard"
       />
     </template>
-    <LoadingMark v-if="loading" :size="40" block>Loading bundle…</LoadingMark>
+    <template #loading>
+      <Skeleton shape="row" icon="square" :lines="4" />
+    </template>
 
-    <template v-else>
+    <template v-if="!loading">
       <div id="editor-section-identity">
         <IdentityCard
           ref="identityCard"

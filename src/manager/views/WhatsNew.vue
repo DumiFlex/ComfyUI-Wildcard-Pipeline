@@ -21,6 +21,7 @@ import { computed, onMounted } from "vue";
 import Card from "@/kit/Card.vue";
 import Icon from "@/kit/Icon.vue";
 import Button from "@/kit/Button.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import { semverCompare, useReleaseCheck } from "../composables/useReleaseCheck";
 import { useEngagementStore } from "../stores/engagementStore";
 import { renderReleaseNotes } from "../utils/releaseNotes";
@@ -127,6 +128,12 @@ onMounted(() => {
 
     <Card>
       <div v-if="hasNotes" class="wp-relnotes" data-test="whats-new-body" v-html="notesHtml" />
+      <Skeleton
+        v-else-if="release.historyLoading.value"
+        :lines="8"
+        label="Loading release notes"
+        data-test="whats-new-skeleton"
+      />
       <div v-else class="wp-relnotes__none" data-test="whats-new-empty">
         <Icon name="pi-inbox" />
         <p>
@@ -141,7 +148,13 @@ onMounted(() => {
 
     <!-- Previous releases. Rendered as native <details> so each stays
          collapsed, findable, and costs nothing when unopened. -->
-    <Card v-if="older.length" data-test="whats-new-older">
+    <Card v-if="!older.length && release.historyLoading.value">
+      <h3 class="wp-relnotes__older-head">Earlier releases</h3>
+      <div class="wp-relnotes__older-skel">
+        <Skeleton v-for="i in 3" :key="i" shape="block" height="40px" />
+      </div>
+    </Card>
+    <Card v-else-if="older.length" data-test="whats-new-older">
       <h3 class="wp-relnotes__older-head">Earlier releases</h3>
       <details
         v-for="rel in older"
@@ -167,6 +180,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.wp-relnotes__older-skel { display: flex; flex-direction: column; gap: var(--wp-space-3); }
 .wp-whatsnew-hero__text { flex: 1; min-width: 0; }
 .wp-whatsnew-hero__link { flex: none; text-decoration: none; }
 

@@ -169,4 +169,12 @@ describe("Categories.vue", () => {
     expect(apiCat.delete).not.toHaveBeenCalled();
     expect(wrap.find('[data-test="cat-row-c1"]').exists()).toBe(false);
   });
+
+  it("draws loading rows, not 'No categories yet', while the list loads", async () => {
+    apiCat.list.mockReturnValue(new Promise(() => {}));
+    const wrap = mount(Categories, { global: { plugins: [] } });
+    await flushPromises();
+    expect(wrap.text()).not.toContain("No categories yet");
+    expect(wrap.findAll(".wp-data-table__loading").length).toBe(5);
+  });
 });

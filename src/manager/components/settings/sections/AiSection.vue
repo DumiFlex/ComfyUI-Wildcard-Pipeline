@@ -13,6 +13,7 @@ import Toggle from "@/kit/Toggle.vue";
 import Select from "@/kit/Select.vue";
 import Input from "@/kit/Input.vue";
 import Button from "@/kit/Button.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import RadioGroup, { type RadioOption } from "@/kit/RadioGroup.vue";
 import { vTooltip } from "@/kit/tooltip";
 import type { SelectOption } from "@/kit/select-types";
@@ -1519,12 +1520,20 @@ const off = computed(() => !config.value?.enabled);
       </aside>
     </div>
   </div>
+  <!-- The settings are still loading: one group's shape instead of a blank section. -->
+  <SettingGroup v-else-if="!error" title="Assistant" data-test="ai-settings-skeleton">
+    <div v-for="i in 4" :key="i" class="wp-ai-set__skel-row">
+      <Skeleton width="30%" :label="i === 1 ? 'Loading AI settings' : undefined" />
+      <Skeleton shape="block" height="32px" />
+    </div>
+  </SettingGroup>
 </template>
 
 <style scoped>
 /* The side cards drop below once the section is narrow, whatever makes it
  * narrow (a small window, or the AI chat open beside it). */
 .wp-ai-set-wrap { container-type: inline-size; }
+.wp-ai-set__skel-row { display: flex; flex-direction: column; gap: var(--wp-space-3); padding: var(--wp-space-4); }
 .wp-ai-set {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);

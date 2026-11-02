@@ -20,6 +20,8 @@
 import { computed, ref, watch, nextTick } from "vue";
 import { RouterLink } from "vue-router";
 import Button from "@/kit/Button.vue";
+import Card from "@/kit/Card.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import Breadcrumb from "./Breadcrumb.vue";
 import type { BreadcrumbItem } from "./Breadcrumb.types";
@@ -54,6 +56,14 @@ interface Props {
    *  field. Editors typically gate visibility behind a "tried to save
    *  while invalid" flag so the banner is feedback, not nagging. */
   errors?: EditorFieldError[];
+  /** The item is still loading: draw the editor's shape (an identity card and
+   *  a section of rows) instead of an empty form, and hold Save. The body is
+   *  kept mounted but hidden, so editors behave as before once it lands.
+   *  An empty `title` shows as a skeleton line too. Override the second card
+   *  with the `loading` slot. */
+  loading?: boolean;
+  /** Screen-reader line while loading, e.g. "Loading wildcard". */
+  loadingLabel?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -65,6 +75,8 @@ const props = withDefaults(defineProps<Props>(), {
   saveState: "idle",
   saveError: "",
   errors: () => [],
+  loading: false,
+  loadingLabel: "Loading",
 });
 
 const emit = defineEmits<{
@@ -152,9 +164,10 @@ watch(
     <div class="wp-page__header">
       <div class="wp-page__title-wrap">
         <h1 class="wp-page__title">
-          {{ title }}
+          <Skeleton v-if="loading && !title" width="12ch" class="wp-editor__title-skel" />
+          <template v-else>{{ title }}</template>
           <slot name="title-extra" />
-          <span v-if="dirty" class="wp-editor__dirty-chip" data-test="editor-dirty-chip">
+          <span v-if="dirty && !loading" class="wp-editor__dirty-chip" data-test="editor-dirty-chip">
             <span class="wp-editor__dirty-dot" aria-hidden="true" />
             Unsaved
           </span>
@@ -186,7 +199,23 @@ watch(
           </ul>
         </div>
       </Transition>
-      <slot />
+      <div v-if="loading" class="wp-editor__skeleton" data-test="editor-skeleton">
+        <Card>
+          <Skeleton width="40%" :label="loadingLabel" />
+          <div class="wp-editor__skeleton-fields">
+            <Skeleton shape="block" height="32px" />
+            <Skeleton shape="block" height="32px" />
+          </div>
+        </Card>
+        <Card>
+          <slot name="loading">
+            <Skeleton shape="row" icon="square" :lines="5" />
+          </slot>
+        </Card>
+      </div>
+      <div v-show="!loading" class="wp-editor__content">
+        <slot />
+      </div>
     </div>
 
     <div class="wp-footer-bar">
@@ -207,8 +236,8 @@ watch(
           variant="primary"
           :icon="saveIcon"
           :loading="effectiveSaveState === 'saving'"
-          :disabled="saveDisabled || effectiveSaveState === 'saving'"
-          :data-dirty="dirty || undefined"
+          :disabled="loading || saveDisabled || effectiveSaveState === 'saving'"
+          :data-dirty="(dirty && !loading) || undefined"
           :data-save-state="effectiveSaveState"
           :title="effectiveSaveState === 'error'
             ? saveError
@@ -246,6 +275,15 @@ watch(
   /* Buffer so the last card clears the gradient + sticky footer top. */
   padding-bottom: var(--wp-space-7);
 }
+/* The body's cards sit straight in the body's flex column; v-show's
+   display:none hides them while loading and lifting it restores this. */
+.wp-editor__content { display: contents; }
+.wp-editor__skeleton { display: flex; flex-direction: column; gap: var(--wp-space-6); }
+.wp-editor__skeleton-fields {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--wp-space-4);
+  margin-top: var(--wp-space-5);
+}
+.wp-editor__title-skel { display: inline-flex; width: auto; vertical-align: middle; height: 1.1em; justify-content: center; }
 .wp-editor__dirty-chip {
   display: inline-flex;
   align-items: center;

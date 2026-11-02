@@ -17,6 +17,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import Button from "@/kit/Button.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import { useToast } from "@/kit/useToast";
 import { api, ApiError, type ExportBuildRequest } from "../api/client";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType, TemplateRow } from "../api/types";
@@ -123,6 +124,10 @@ async function loadLibrary() {
 }
 
 onMounted(loadLibrary);
+
+/** First load only: a refetch keeps the sections it has. */
+const libraryLoading = computed<boolean>(() =>
+  loading.value && !modules.value.length && !bundles.value.length && !templates.value.length);
 
 // Let the parent ImportExport view re-run our library fetch from its
 // shared Refresh button. ExportTab keeps its OWN modules/bundles/
@@ -789,7 +794,18 @@ function presetFavoritesOnly(): void {
       data-test="export-tab-search"
     />
 
-    <div class="wp-export-tab__sections">
+    <!-- The library is still loading: the section heads' shape, not seven
+         heads that all say 0. -->
+    <div v-if="libraryLoading" class="wp-export-tab__sections" data-test="export-tab-skeleton">
+      <Skeleton
+        v-for="(b, i) in BUCKETS"
+        :key="b.key"
+        shape="block"
+        height="40px"
+        :label="i === 0 ? 'Loading library' : undefined"
+      />
+    </div>
+    <div v-else class="wp-export-tab__sections">
       <PickerSection
         v-for="bucket in BUCKETS"
         :key="bucket.key"

@@ -96,4 +96,12 @@ describe("BackupsPanel", () => {
     expect(db.createBackup).toHaveBeenCalledWith("before the rework");
     expect((w.find("[data-test='backup-note']").element as HTMLInputElement).value).toBe("");
   });
+
+  it("draws skeleton rows, not an empty list, until the backups load", async () => {
+    db.backups.mockReturnValue(new Promise(() => {}));
+    const w = await mountPanel();
+    expect(w.find("[data-test='backup-skeleton']").exists()).toBe(true);
+    expect(w.find("[data-test='backup-list']").exists()).toBe(false);
+    expect(w.find("[data-test='backup-empty']").exists()).toBe(false);
+  });
 });

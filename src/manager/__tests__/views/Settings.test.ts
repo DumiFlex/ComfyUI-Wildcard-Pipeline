@@ -29,6 +29,7 @@ beforeEach(() => {
     checking: ref(false),
     rateLimitedUntil: ref(null),
     history: ref([]),
+    historyLoading: ref(false),
     loadHistory: vi.fn(),
     checkNow,
   } as ReturnType<typeof releaseCheck.useReleaseCheck>);

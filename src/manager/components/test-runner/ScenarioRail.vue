@@ -8,6 +8,7 @@ import SearchInput from "@/kit/SearchInput.vue";
 import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
 import Icon, { ICON_SM } from "@/kit/Icon.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import type { ScenarioRow } from "../../api/types";
 import { seedLabel, type LastRunSummary } from "../../utils/scenario";
 
@@ -20,6 +21,9 @@ const props = defineProps<{
   rerun: { done: number; total: number } | null;
   /** Narrow the list to scenarios whose stack holds this module or bundle. */
   uses?: { id: string; name: string } | null;
+  /** The saved scenarios are still loading: draw their lines, not "No saved
+   *  scenarios yet". */
+  loading?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -156,7 +160,10 @@ function itemCount(row: ScenarioRow): string {
         </li>
       </template>
 
-      <li v-if="!scenarios.length" class="wp-trr__empty">
+      <li v-if="loading && !scenarios.length" class="wp-trr__skel" data-test="scenario-skeleton">
+        <Skeleton :lines="4" label="Loading scenarios" />
+      </li>
+      <li v-else-if="!scenarios.length" class="wp-trr__empty">
         No saved scenarios yet. Build a stack, run it, then Save to keep it here.
       </li>
       <li v-else-if="!filtered.length" class="wp-trr__empty">
@@ -167,6 +174,7 @@ function itemCount(row: ScenarioRow): string {
 </template>
 
 <style scoped>
+.wp-trr__skel { list-style: none; padding: var(--wp-space-3) var(--wp-space-4); }
 .wp-trr {
   display: flex; flex-direction: column; min-height: 0;
   background: var(--wp-bg-1);
