@@ -30,6 +30,7 @@ import BundleHeader from "../context/bundles/BundleHeader.vue";
 import MockModuleCard, { type MockModule, type ModRuntimeState } from "./MockModuleCard.vue";
 import type { BundleInstance } from "../../widgets/_shared";
 import { getCollapseMode } from "../../extension/settings";
+import { COLOUR_PRESETS } from "@/kit/colour-presets";
 
 // The row and bundle frame styles (context-widget.css) ship in the
 // ContextWidget chunk, which loads only once a WP Context node exists. On an
@@ -77,7 +78,7 @@ const topItems: TopItem[] = [
     bundle: {
       key: "b_subject",
       name: "Subject phrase",
-      color: "#06b6d4",
+      color: COLOUR_PRESETS[2] ?? "",
       libraryDrifted: true,
     },
     children: [

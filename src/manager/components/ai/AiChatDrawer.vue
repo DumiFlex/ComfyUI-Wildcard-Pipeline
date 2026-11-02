@@ -1619,7 +1619,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__thumb button {
   position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: min(50%, var(--wp-radius-cap, 999px));
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
-  background: rgb(0 0 0 / 0.65); color: #fff;
+  background: var(--wp-scrim); color: var(--wp-on-media);
 }
 .wp-ai-chat__thumb button .pi { font-size: 9px; }
 .wp-ai-chat__vision-note { font-size: 11px; color: var(--wp-text-dim); flex: 1; min-width: 120px; }

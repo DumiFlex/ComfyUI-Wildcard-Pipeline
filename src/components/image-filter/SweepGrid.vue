@@ -171,7 +171,7 @@ function isEdited(key: string): boolean {
 
 .wp-ifg__table { display: grid; gap: 8px; align-items: center; justify-items: center; width: max-content; margin: 0 auto; }
 .wp-ifg__corner { justify-self: end; font: 10.5px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); white-space: nowrap; }
-.wp-ifg__chip { padding: 2px 8px; border: 0; border-radius: min(4px, var(--wp-radius-cap, 999px)); font: 11px var(--wp-font-mono, monospace); white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; color: color-mix(in srgb, var(--wp-ifg-hue) 85%, #fff); background: color-mix(in srgb, var(--wp-ifg-hue) 18%, transparent); }
+.wp-ifg__chip { padding: 2px 8px; border: 0; border-radius: min(4px, var(--wp-radius-cap, 999px)); font: 11px var(--wp-font-mono, monospace); white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; color: color-mix(in srgb, var(--wp-ifg-hue) 85%, white); background: color-mix(in srgb, var(--wp-ifg-hue) 18%, transparent); }
 button.wp-ifg__chip { cursor: pointer; }
 button.wp-ifg__chip:hover { background: color-mix(in srgb, var(--wp-ifg-hue) 32%, transparent); }
 .wp-ifg__row { justify-self: end; }

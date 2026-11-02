@@ -158,7 +158,7 @@ const emit = defineEmits<{
   font-size: 7px;
 }
 .wc-optfilter__menuitem[data-on] .wc-optfilter__box {
-  background: var(--wp-accent-600); border-color: var(--wp-accent-600); color: #fff;
+  background: var(--wp-accent-600); border-color: var(--wp-accent-600); color: var(--wp-on-accent);
 }
 .wc-optfilter__count {
   display: flex; align-items: center; gap: var(--wp-space-3);

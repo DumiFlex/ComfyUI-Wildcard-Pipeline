@@ -910,7 +910,7 @@ const PAGE = 150;
   display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-3); font-size: var(--wp-text-xs); font-weight: var(--wp-weight-semibold);
 }
-.wp-pack__step[data-state="current"] .wp-pack__step-n { background: var(--wp-accent-500); color: #fff; } /* audit-exempt: white on accent-500 ≥4.5:1 */
+.wp-pack__step[data-state="current"] .wp-pack__step-n { background: var(--wp-accent-500); color: var(--wp-on-accent); }
 .wp-pack__step[data-state="done"] .wp-pack__step-n { background: color-mix(in oklab, var(--wp-success) 25%, transparent); color: var(--wp-success); }
 
 /* Step 1 */

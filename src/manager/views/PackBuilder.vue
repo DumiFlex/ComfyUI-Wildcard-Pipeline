@@ -1120,9 +1120,9 @@ function stopExtending(): void {
 }
 .wp-pack__chip b { font-weight: 600; color: var(--wp-text-muted); }
 .wp-pack__chip--guess { border-style: dashed; color: var(--wp-text-muted); }
-.wp-pack__chip--image { border-color: color-mix(in srgb, #33d6c6 45%, var(--wp-border)); }
+.wp-pack__chip--image { border-color: color-mix(in srgb, var(--wp-teal) 45%, var(--wp-border)); }
 .wp-pack__chip .pi { font-size: 11px; margin-right: 4px; }
-.wp-pack__chip--image .pi, .wp-pack__dim .pi-image { color: #33d6c6; }
+.wp-pack__chip--image .pi, .wp-pack__dim .pi-image { color: var(--wp-teal); }
 .wp-pack__chip[data-reopened="true"] { border-color: var(--wp-accent-400); color: var(--wp-text-muted); text-decoration: line-through; text-decoration-color: var(--wp-accent-400); }
 .wp-pack__chip[data-reopened="true"] .pi { color: var(--wp-accent-text); text-decoration: none; }
 /* The web search ask: answered before anything else moves on. */

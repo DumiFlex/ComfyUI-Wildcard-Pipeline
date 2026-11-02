@@ -250,5 +250,5 @@ onBeforeUnmount(() => {
 .sm__foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; flex-shrink: 0; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
 .sm__foot-hint { font: 10px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
 .sm__foot-spacer { flex: 1; }
-.btn { padding: 6px 14px; border: 1px solid var(--wp-accent); border-radius: min(3px, var(--wp-radius-cap, 999px)); background: var(--wp-accent); color: #fff; font: 11px var(--wp-font-sans); cursor: pointer; }
+.btn { padding: 6px 14px; border: 1px solid var(--wp-accent); border-radius: min(3px, var(--wp-radius-cap, 999px)); background: var(--wp-accent); color: var(--wp-on-accent); font: 11px var(--wp-font-sans); cursor: pointer; }
 </style>

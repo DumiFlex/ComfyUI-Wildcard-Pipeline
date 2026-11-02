@@ -229,7 +229,7 @@ function announce(list: AiPointer[]): string {
   height: 20px;
   border-radius: 50%; /* round: numbered marker */
   background: var(--wp-accent-500);
-  color: #fff;
+  color: var(--wp-on-accent);
   font-size: 11px;
   font-weight: 700;
 }
@@ -239,7 +239,7 @@ function announce(list: AiPointer[]): string {
   padding: 6px 10px;
   border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-accent-500);
-  color: #fff;
+  color: var(--wp-on-accent);
   font-size: 12.5px;
   line-height: 1.35;
   box-shadow: var(--wp-shadow-md);
