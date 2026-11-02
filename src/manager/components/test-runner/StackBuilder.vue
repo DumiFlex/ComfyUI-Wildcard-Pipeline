@@ -12,6 +12,7 @@ import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
 import Icon, { ICON_SM } from "@/kit/Icon.vue";
 import Toggle from "@/kit/Toggle.vue";
+import Popover from "@/kit/Popover.vue";
 import ModulePicker from "./ModulePicker.vue";
 import { KIND_META } from "./kinds";
 import type { BundleRow, ModuleRow, ScenarioStackItem } from "../../api/types";
@@ -183,20 +184,21 @@ function removePin(name: string): void {
         ><Icon name="pi-times" :size="ICON_SM" /></button>
       </li>
       <li class="wp-trs__add-wrap">
-        <button
-          type="button"
-          class="wp-trs__add"
-          :aria-expanded="pickerOpen"
-          data-test="stack-add"
-          @click="pickerOpen = !pickerOpen"
-        ><Icon name="pi-plus" :size="ICON_SM" /> Add module or bundle</button>
-        <ModulePicker
-          v-if="pickerOpen"
-          :modules="modules"
-          :bundles="bundles"
-          @pick="add"
-          @close="pickerOpen = false"
-        />
+        <Popover v-model:open="pickerOpen" label="Add to stack">
+          <template #trigger="{ props: triggerProps }">
+            <button
+              v-bind="triggerProps"
+              type="button"
+              class="wp-trs__add"
+              data-test="stack-add"
+            ><Icon name="pi-plus" :size="ICON_SM" /> Add module or bundle</button>
+          </template>
+          <ModulePicker
+            :modules="modules"
+            :bundles="bundles"
+            @pick="add"
+          />
+        </Popover>
       </li>
     </ol>
 

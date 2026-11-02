@@ -128,19 +128,18 @@ const extraFilters = computed(() => [
   {
     key: "has-refs",
     label: "Uses nested refs",
-    chipClass: "wp-chip--syntax-ref",
+    color: "var(--wp-kind-ref)",
     check: (m: ModuleRow) => getWildcardSyntax(m).hasRefs,
   },
   {
     key: "has-inline",
     label: "Has inline {a|b|c}",
-    chipClass: "wp-chip--syntax-dp",
+    color: "var(--wp-kind-derivation)",
     check: (m: ModuleRow) => getWildcardSyntax(m).hasInline,
   },
   {
     key: "is-referenced",
     label: "Referenced by others",
-    chipClass: "wp-chip--syntax-in",
     check: (m: ModuleRow) => {
       // Graph keyed by `mod.id` (= 8-hex uuid). See syntaxView.
       const inc = wildcardGraph.value.incoming.get(m.id);
@@ -361,15 +360,12 @@ function issuesFor(row: ModuleRow) {
           </label>
           <div v-if="!allTags.length" class="wp-dim wp-tags-empty">No tags in this collection.</div>
           <div v-else class="wp-tags-row">
-            <button
+            <Chip
               v-for="t in allTags" :key="t"
-              type="button"
-              class="wp-tag-chip"
-              :data-active="(filter.tags ?? []).includes(t) ? 'true' : 'false'"
+              :pressed="(filter.tags ?? []).includes(t)"
+              size="sm"
               @click="filter.tags = toggleTag(t, filter.tags); emitFetch()"
-            >
-              {{ t }}
-            </button>
+            >{{ t }}</Chip>
           </div>
         </div>
       </div>
@@ -522,11 +518,6 @@ function issuesFor(row: ModuleRow) {
   gap: var(--wp-space-3);
 }
 .wp-tags-empty { font-size: var(--wp-text-sm); }
-.wp-tag-chip[data-active="true"] {
-  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
-  color: var(--wp-accent-text);
-}
 
 .wp-syntax-cell {
   display: inline-flex;

@@ -101,7 +101,6 @@
   .wp-chip,
   .wp-chip--toggle,
   .wp-pill,
-  .wp-tag-chip,
   .wp-kind-chip,
   .wp-check
 ) {
@@ -119,7 +118,6 @@
   .wp-chip,
   .wp-chip--toggle,
   .wp-pill,
-  .wp-tag-chip,
   .wp-kind-chip,
   .wp-check
 ):focus-visible,

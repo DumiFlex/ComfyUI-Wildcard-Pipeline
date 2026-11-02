@@ -108,11 +108,10 @@ interface ExtraFilter<R> {
   key: string;
   label: string;
   check: (item: R) => boolean;
-  /** Optional extra class on the filter chip — used by Wildcards to
-   *  color the Syntax chips so they match the colored pills in the
-   *  body's Syntax column. Same `wp-chip--syntax-*` token set keeps
-   *  the colors consistent across both surfaces. */
-  chipClass?: string;
+  /** Optional colour of the filter chip — used by Wildcards to colour
+   *  the Syntax chips like the pills in the body's Syntax column, so
+   *  users learn one colour set for both surfaces. */
+  color?: string;
 }
 
 interface Props {
@@ -797,17 +796,14 @@ defineExpose({
           <div v-if="extraFilters?.length" class="wp-filter-panel__extra">
             <span class="wp-filter-panel__extra-label">Syntax</span>
             <div class="wp-filter-panel__extra-chips">
-              <button
+              <Chip
                 v-for="ef in extraFilters" :key="ef.key"
-                type="button"
-                class="wp-chip wp-chip--toggle"
-                :class="ef.chipClass"
-                :data-active="extraActive[ef.key] ? '' : null"
+                :pressed="!!extraActive[ef.key]"
+                :color="ef.color"
+                :count="matchCount(ef)"
+                size="sm"
                 @click="setExtraActiveKey(ef.key, !extraActive[ef.key])"
-              >
-                {{ ef.label }}
-                <span class="wp-dim wp-chip__count">{{ matchCount(ef) }}</span>
-              </button>
+              >{{ ef.label }}</Chip>
             </div>
           </div>
           <!-- Content-rating filter (shared across every list view).
@@ -815,13 +811,12 @@ defineExpose({
           <div class="wp-filter-panel__extra">
             <span class="wp-filter-panel__extra-label">Content</span>
             <div class="wp-filter-panel__extra-chips">
-              <button
+              <Chip
                 v-for="opt in NSFW_FILTER_OPTIONS" :key="opt.value"
-                type="button"
-                class="wp-chip wp-chip--toggle"
-                :data-active="(filter.nsfw ?? 'all') === opt.value ? '' : null"
+                :pressed="(filter.nsfw ?? 'all') === opt.value"
+                size="sm"
                 @click="filter.nsfw = opt.value"
-              >{{ opt.label }}</button>
+              >{{ opt.label }}</Chip>
             </div>
           </div>
           <div v-if="hasActiveFilters" class="wp-filter-panel__footer">
@@ -895,13 +890,13 @@ defineExpose({
           @keydown.enter="submitTagAdd"
         />
         <div v-if="availableTags.length" class="wp-bulk-modal-suggestions">
-          <button
+          <Chip
             v-for="t in availableTags"
             :key="t"
-            type="button"
-            class="wp-chip wp-chip--toggle"
+            :pressed="tagAddValue === t"
+            size="sm"
             @click="tagAddValue = t"
-          >{{ t }}</button>
+          >{{ t }}</Chip>
         </div>
       </div>
       <template #footer>
@@ -922,14 +917,13 @@ defineExpose({
       </template>
       <div class="wp-bulk-modal-body">
         <div class="wp-bulk-modal-suggestions">
-          <button
+          <Chip
             v-for="t in tagsOnSelection"
             :key="t"
-            type="button"
-            class="wp-chip wp-chip--toggle"
-            :data-active="tagRemoveValue === t ? '' : null"
+            :pressed="tagRemoveValue === t"
+            size="sm"
             @click="tagRemoveValue = t"
-          >{{ t }}</button>
+          >{{ t }}</Chip>
           <span v-if="!tagsOnSelection.length" class="wp-dim">No tags on selected items.</span>
         </div>
       </div>
@@ -1382,26 +1376,6 @@ defineExpose({
 .wp-filter-panel__footer {
   display: flex;
   justify-content: flex-end;
-}
-/* Toggle-able chip used in the extra-filter row. Inherits the global
-   `.wp-chip` pill (999 radius, 2/8 padding, 11px font) and overrides the
-   active state with the accent tint per prototype `lists.jsx:185-211`. */
-.wp-chip--toggle {
-  cursor: pointer;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-}
-.wp-chip--toggle:hover {
-  background: var(--wp-bg-4);
-  color: var(--wp-text);
-}
-.wp-chip--toggle[data-active] {
-  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
-  color: var(--wp-accent-text);
-}
-.wp-chip__count {
-  font-size: var(--wp-text-xs);
-  margin-left: 2px;
 }
 
 /* Wraps: the actions run longer than the list in a wide look (TUI's
