@@ -3404,10 +3404,10 @@ function onHostKeydown(ev: KeyboardEvent): void {
   font-size: 12px;
   /* Neutral is the `general` category, which is most rows — a coloured icon
      on every line would make the coloured ones stop meaning anything. */
-  color: #6a6a7a;
+  color: var(--wp-text-dim);
 }
 
-.wp-rt-tag__cat--general   { color: #6a6a7a; }
+.wp-rt-tag__cat--general   { color: var(--wp-text-dim); }
 /* The two model sources. Their own hues rather than a category colour — a LoRA
    has no danbooru category, and reusing one would imply a relationship that
    does not exist. */

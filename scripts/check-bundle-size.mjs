@@ -328,7 +328,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // Bookmark (shared with WP Note in _frameless.ts), the free-area measuring
 // for jumps and the dock, the draggable dock and Use this view; boot +1 KB,
 // the rest in the lazy bookmark chunks; the branch sat at 598,327 bytes.
-const TOTAL_LIMIT = 586 * 1024;     // 586 KB
+// RAISED 586 -> 590 KB on 2026-11-02 for bookmarks on the free canvas (the
+// side / bottom panel pane, minimap and zoom controls, the dock's snap
+// spots), the page key probe for shortcuts, and the note's tables, task
+// boxes and callouts (~1.2 KB gzip, in the bookmark and note chunks).
+const TOTAL_LIMIT = 590 * 1024;     // 590 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

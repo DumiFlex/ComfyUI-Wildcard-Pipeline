@@ -334,7 +334,7 @@ function openPalette(): void {
   padding: 0 3px;
   border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-accent-500);
-  color: #fff;
+  color: var(--wp-on-accent);
   font-size: 9px;
   font-weight: 700;
   line-height: 14px;

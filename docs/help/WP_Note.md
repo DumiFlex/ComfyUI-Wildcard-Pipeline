@@ -20,7 +20,7 @@ A note that explains a workflow. It looks like a panel, not a node: no title bar
 | Look | **Card**: a panel with a coloured edge. **Sticky**: tinted with the colour. **Label**: a small coloured pill with the title only; hovering it shows the text. |
 | Pinned | ComfyUI's own pin: a pinned note can't be moved or resized by accident. |
 | Title | Shown in bold at the top. |
-| Text | Markdown, with a formatting bar over it. |
+| Text | Markdown, with a formatting bar over it: headings (`#` to `####`), bold, italic, strikethrough, `code`, bulleted, numbered and nested lists, task lists (`- [x]` / `- [ ]`), quotes and callouts (`> [!TIP]`, `> [!WARNING]`), tables with column alignment (`:--`, `:-:`, `--:`), rules (`---`) and code blocks. |
 
 Keys you type in the editor stay in the editor: Delete, Ctrl+Z and the other ComfyUI shortcuts don't reach the canvas.
 

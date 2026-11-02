@@ -1226,7 +1226,7 @@ onBeforeUnmount(detachCaptureListeners);
 }
 .wp-picker__check .pi {
   font-size: 9px;
-  color: #fff;
+  color: var(--wp-on-accent);
 }
 .wp-picker__row[data-checked] .wp-picker__check,
 .wp-picker__check.on {
@@ -1296,7 +1296,7 @@ onBeforeUnmount(detachCaptureListeners);
 }
 .wp-picker__selection-count strong {
   font-family: var(--wp-font-mono);
-  color: #fff;
+  color: var(--wp-on-accent);
   background: var(--wp-accent-600);
   padding: 1px 7px;
   border-radius: var(--wp-radius-cap, 999px);
@@ -1386,7 +1386,7 @@ onBeforeUnmount(detachCaptureListeners);
   padding: 0 3px;
   border-radius: min(7px, var(--wp-radius-cap, 999px));
   background: var(--wp-amber);
-  color: #000;
+  color: color-mix(in srgb, var(--wp-amber) 15%, black);
   font-family: var(--wp-font-mono, monospace);
   font-size: 9px;
   font-weight: 700;

@@ -1355,7 +1355,7 @@ defineExpose({
   border-radius: var(--wp-radius-cap, 999px);
   font-size: var(--wp-text-xs);
   background: var(--wp-accent-500);
-  color: #fff; /* audit-exempt: white text on saturated accent-500 is theme-agnostic (≥4.5:1 both themes) */
+  color: var(--wp-on-accent);
   margin-left: var(--wp-space-2);
 }
 
@@ -1545,9 +1545,9 @@ defineExpose({
   height: 18px;
   padding: 0 6px;
   border-radius: min(4px, var(--wp-radius-cap, 999px));
-  background: color-mix(in oklab, #06b6d4 12%, transparent);
-  border: 1px solid color-mix(in oklab, #06b6d4 24%, transparent);
-  color: #67e8f9;
+  background: color-mix(in oklab, var(--wp-var-7) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-var-7) 24%, transparent);
+  color: var(--wp-var-7);
   font-size: 10px;
   font-weight: 500;
   line-height: 1;

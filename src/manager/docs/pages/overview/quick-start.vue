@@ -111,7 +111,7 @@ function createStarterWildcard(): void {
   gap: var(--wp-space-3);
   padding: var(--wp-space-3) var(--wp-space-6);
   background: var(--wp-accent-gradient, var(--wp-accent-500));
-  color: #fff;
+  color: var(--wp-on-accent);
   font-size: var(--wp-text-sm);
   font-weight: 600;
   border: none;

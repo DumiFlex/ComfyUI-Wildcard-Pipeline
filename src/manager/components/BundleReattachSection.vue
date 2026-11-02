@@ -194,7 +194,7 @@ function confirm(childId: string): void {
   font: 11px var(--wp-font-sans);
   cursor: pointer;
 }
-.rb__confirm { background: var(--wp-accent); color: #fff; margin-top: 6px; }
+.rb__confirm { background: var(--wp-accent); color: var(--wp-on-accent); margin-top: 6px; }
 /* Secondary affordance beside Reattach — pulls the missing dep from the
  * community. Quieter than the primary accent border so the manual dropdown
  * stays the obvious first action; the cloud icon signals the network pull. */

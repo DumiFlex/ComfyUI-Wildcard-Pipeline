@@ -451,7 +451,7 @@ const Body = () => {
   background: var(--wp-bg-2); border: 1px solid var(--wp-border); border-bottom-width: 2px; border-radius: var(--wp-radius-sm);
 }
 .wp-ai-msg :deep(.wp-ai-msg__pre[data-folded]) {
-  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  mask-image: linear-gradient(to bottom, black 70%, transparent);
 }
 .wp-ai-msg :deep(.wp-ai-msg__fold) {
   display: block; width: 100%; padding: 3px 8px; border: 0; border-top: 1px solid var(--wp-border);

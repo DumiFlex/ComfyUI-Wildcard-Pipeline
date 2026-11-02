@@ -7,6 +7,7 @@ import EmptyState from "@/kit/EmptyState.vue";
 import Field from "@/kit/Field.vue";
 import Input from "@/kit/Input.vue";
 import ColorPicker from "@/kit/ColorPicker.vue";
+import { DEFAULT_COLOUR } from "@/kit/colour-presets";
 import IconPicker from "@/kit/IconPicker.vue";
 import { useCategoryStore } from "../stores/categoryStore";
 import Chip from "@/kit/Chip.vue";
@@ -31,7 +32,7 @@ const cascadeApply = useCascadeApply();
 const cascadeDialogRow = ref<CategoryRow | null>(null);
 
 const newName = ref("");
-const newColor = ref("#a78bfa");
+const newColor = ref(DEFAULT_COLOUR);
 const newIcon = ref<string | null>(null);
 
 /** Single-row edit state — matches prototype's pencil → save/cancel flow. */
@@ -107,7 +108,7 @@ async function add() {
   try {
     await store.create({ name, color: newColor.value, icon: newIcon.value });
     newName.value = "";
-    newColor.value = "#a78bfa";
+    newColor.value = DEFAULT_COLOUR;
     newIcon.value = null;
     toast.push({ severity: "success", summary: "Created", life: 2000 });
   } catch (e) { reportError(e, "Failed"); }
@@ -180,7 +181,7 @@ function startEdit(row: CategoryRow) {
   editing.value = {
     id: row.id,
     name: row.name,
-    color: row.color || "#a78bfa",
+    color: row.color || DEFAULT_COLOUR,
     icon: row.icon,
   };
   nextTick(() => {

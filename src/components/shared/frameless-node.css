@@ -40,6 +40,10 @@
   .lg-node:has(.wp-frameless) [class*="component-node-background"] > div.text-muted-foreground,
   .lg-node:has(.wp-frameless) .bg-node-component-surface { display: none !important; }
   .lg-node:has(.wp-frameless) > div.absolute.border:not([data-testid]) { display: none !important; }
+  /* A bookmark sizes itself: no resize corners (the node class says so too;
+     this covers a frontend that draws them anyway). */
+  .lg-node:has(.wp-bm) [role="button"][data-corner],
+  .lg-node:has(.wp-bm) [role="button"][class*="-resize"] { display: none !important; }
   /* The selection outline hugs the panel. */
   .lg-node:has(.wp-frameless) [data-testid="node-state-outline-overlay"],
   .lg-node:has(.wp-frameless) > div.absolute.outline-none { inset: -2px !important; }

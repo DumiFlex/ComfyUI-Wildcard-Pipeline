@@ -60,7 +60,7 @@ const isBundleRef = computed(() => kind.value === "bundle");
  *  reference before it surprises them at insert time. */
 const isMissingRef = computed(() => isBundleRef.value && props.child._missing_ref === true);
 const meta = computed<KindMeta>(
-  () => KIND_META[kind.value] ?? { label: kind.value.toUpperCase(), color: "#8b949e" },
+  () => KIND_META[kind.value] ?? { label: kind.value.toUpperCase(), color: "var(--wp-text-dim)" },
 );
 // Tier-2 nesting: bundle children are stored as REFERENCES (the API
 // expands them inline on read), not as frozen snapshots like other

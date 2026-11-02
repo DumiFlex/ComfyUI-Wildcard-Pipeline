@@ -327,7 +327,7 @@ function pick(row: TemplateRow) {
   position: absolute; top: -4px; right: -4px;
   min-width: 14px; height: 14px; padding: 0 3px;
   border-radius: min(7px, var(--wp-radius-cap, 999px));
-  background: var(--wp-amber); color: #000;
+  background: var(--wp-amber); color: color-mix(in srgb, var(--wp-amber) 15%, black);
   font-family: var(--wp-font-mono, monospace);
   font-size: 9px; font-weight: 700; line-height: 14px; text-align: center;
   pointer-events: none;

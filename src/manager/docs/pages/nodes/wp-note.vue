@@ -19,7 +19,7 @@ const edit = [
   { term: "Look", desc: "Card, Sticky or Label (above)." },
   { term: "Pinned", desc: "ComfyUI's own pin: a pinned note can't be moved or resized by accident. New notes start pinned." },
   { term: "Title", desc: "Shown in bold at the top, or on the pill of a Label." },
-  { term: "Text", desc: "Markdown, with the formatting bar below over it." },
+  { term: "Text", desc: "Markdown, with the formatting bar below over it: headings (# to ####), bold, italic, strikethrough, code, bulleted, numbered and nested lists, task lists (- [x] / - [ ]), quotes and callouts (> [!TIP], > [!WARNING]), tables with column alignment (:--, :-:, --:), rules (---) and code blocks." },
 ];
 
 const bar = [

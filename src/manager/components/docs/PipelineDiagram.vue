@@ -187,8 +187,8 @@
   background: var(--wp-bg-2);
 }
 .wp-doc-diagram__vchip--a { color: var(--wp-accent-text); border-color: color-mix(in oklab, var(--wp-accent-500) 40%, transparent); }
-.wp-doc-diagram__vchip--b { color: #67e8f9; border-color: color-mix(in oklab, #22d3ee 40%, transparent); }
-.wp-doc-diagram__vchip--c { color: #86efac; border-color: color-mix(in oklab, #34d399 40%, transparent); }
+.wp-doc-diagram__vchip--b { color: var(--wp-var-7); border-color: color-mix(in oklab, var(--wp-var-7) 40%, transparent); }
+.wp-doc-diagram__vchip--c { color: var(--wp-var-3); border-color: color-mix(in oklab, var(--wp-var-3) 40%, transparent); }
 /* Too narrow for one row (the docs beside an open chat): the flow runs top
    to bottom, each arrow pointing down with its label beside it. */
 @container wp-doc-diagram (max-width: 620px) {
