@@ -7,7 +7,10 @@ import {
   findConflicts,
   jumpOffset,
   jumpScale,
+  nearestSpot,
   normalizeCombo,
+  parseCombo,
+  spotPosition,
   parseBookmarkConfig,
   sortBookmarks,
   suggestFreeCombo,
@@ -94,6 +97,21 @@ describe("jump maths", () => {
     expect(clearOf([0, 0, 100, 50], [[0, 0, 900, 40]], [0, 0, 1000, 1000], 10)).toEqual([0, 50]);
   });
 
+  it("clears every box at once, never trading one for another", () => {
+    // The zoom controls at the bottom right with the minimap right above:
+    // up off the controls lands on the minimap, down leaves the screen, so
+    // it goes left of both.
+    const zoom = [700, 430, 1000, 470] as const;
+    const minimap = [760, 220, 1000, 420] as const;
+    const box = [880, 420, 980, 450] as const;
+    const [dx, dy] = clearOf(box, [zoom, minimap], [0, 0, 1000, 470], 10);
+    const moved = [box[0] + dx, box[1] + dy, box[2] + dx, box[3] + dy] as const;
+    const touches = (o: readonly number[]) => moved[0] < o[2] + 10 && moved[2] > o[0] - 10 && moved[1] < o[3] + 10 && moved[3] > o[1] - 10;
+    expect(touches(zoom) || touches(minimap)).toBe(false);
+    expect(moved[2]).toBeLessThanOrEqual(1000);
+    expect(moved[3]).toBeLessThanOrEqual(470);
+  });
+
   it("keeps or sets the zoom", () => {
     expect(jumpScale({ ...defaultBookmarkConfig(), zoom: 1.5 }, 0.7)).toBe(1.5);
     expect(jumpScale({ ...defaultBookmarkConfig(), zoomMode: "keep", zoom: 1.5 }, 0.7)).toBe(0.7);
@@ -137,5 +155,32 @@ describe("dock order", () => {
   it("sorts by order, then title", () => {
     const e = (title: string, order: number) => ({ title, config: { ...defaultBookmarkConfig(), order } });
     expect(sortBookmarks([e("b", 1), e("c", 0), e("a", 1)]).map((x) => x.title)).toEqual(["c", "a", "b"]);
+  });
+});
+
+describe("dock spots", () => {
+  const free = [100, 50, 1100, 650] as const;
+  it("puts a box at each spot of the free area, gap in", () => {
+    expect(spotPosition("tl", free, [300, 200], [], 12)).toEqual([112, 62]);
+    expect(spotPosition("br", free, [300, 200], [], 12)).toEqual([788, 438]);
+    expect(spotPosition("c", free, [300, 200], [], 12)).toEqual([450, 250]);
+  });
+  it("steps off a floating box (the minimap)", () => {
+    const [x, y] = spotPosition("br", free, [300, 200], [[850, 400, 1100, 600]], 12);
+    expect(x + 300 <= 850 - 12 || y + 200 <= 400 - 12).toBe(true);
+  });
+  it("snaps a dropped box to the nearest spot", () => {
+    expect(nearestSpot([120, 70], free, [300, 200], 12)).toBe("tl");
+    expect(nearestSpot([760, 420], free, [300, 200], 12)).toBe("br");
+    expect(nearestSpot([430, 240], free, [300, 200], 12)).toBe("c");
+    expect(nearestSpot([780, 260], free, [300, 200], 12)).toBe("mr");
+  });
+});
+
+describe("parseCombo", () => {
+  it("reads a combo back into its parts", () => {
+    expect(parseCombo("Ctrl+Shift+K")).toEqual({ key: "K", ctrl: true, alt: false, shift: true });
+    expect(parseCombo("alt + 1")).toEqual({ key: "1", ctrl: false, alt: true, shift: false });
+    expect(parseCombo("")).toBeNull();
   });
 });

@@ -10,7 +10,9 @@ import { bookmarkCells } from "../extension/_stashes";
 import { liveKeymap, type KeymapAppLike } from "../extension/bookmark-keymap";
 import { MODE_BYPASS, MODE_NEVER } from "../extension/toggle-control";
 import { pushToast } from "../components/shared/toast-store";
+import { isProbeEvent, probeCombo } from "../extension/key-probe";
 import {
+  BOOKMARK_ANCHORS,
   BOOKMARK_MARGIN,
   comboFromEvent,
   defaultBookmarkConfig,
@@ -23,6 +25,7 @@ import {
   suggestFreeCombo,
   type BookmarkConfig,
   type BookmarkJump,
+  type DockSpot,
   type KeyOwner,
   type ScreenBox,
 } from "../extension/bookmarks";
@@ -189,10 +192,37 @@ function rememberTaken(combo: string): void {
 export function keymapFor(node?: BookmarkNode): KeyOwner[] {
   const learned = takenKeys().map((combo) => ({
     combo,
-    label: "a key another extension took when you pressed it",
-    source: "seen on this page",
+    label: "something on this page answers this key (another extension)",
+    source: "checked on this page",
   }));
   return [...liveKeymap(app as unknown as KeymapAppLike, bookmarkOwners(node)), ...learned];
+}
+
+/**
+ * Ask the page whether anything answers `combo` (see key-probe.ts) and
+ * remember it when something does, so the clash check lists it from then
+ * on. The probe is sent where a real press lands: the canvas.
+ */
+export function checkCombo(combo: string): boolean {
+  if (!combo) return false;
+  const taken = probeCombo(combo, canvasElement() ?? null);
+  // A key ComfyUI's keymap already names needs no second line.
+  if (taken && !liveKeymap(app as unknown as KeymapAppLike, []).some((o) => o.combo === combo)) rememberTaken(combo);
+  return taken;
+}
+
+/** A free shortcut for `node`: the first suggestion no keymap owner holds
+ *  and nothing on the page answers. `skip` is a key not to offer (the one it
+ *  has). "" when none is left. */
+export function suggestShortcut(node?: BookmarkNode, skip = ""): string {
+  const owners = keymapFor(node);
+  if (skip) owners.push({ combo: skip, label: "", source: "" });
+  for (let tries = 0; tries < 40; tries++) {
+    const combo = suggestFreeCombo(owners);
+    if (!combo || !checkCombo(combo)) return combo;
+    owners.push({ combo, label: "", source: "" });
+  }
+  return "";
 }
 
 // ── jumping ───────────────────────────────────────────────────────────
@@ -256,29 +286,111 @@ function animateView(c: CanvasLike, offset: [number, number], scale: number): vo
  *  renderer's nodes, and our own dock and toasts. */
 const GRAPH_CONTENT = ".dom-widget, [data-node-id], .lg-node, .wp-widget, #wp-bookmark-dock-root, .wp-toast-stack";
 
-/** True when nothing but the graph covers this screen point. */
-function isFreeAt(canvasEl: Element, x: number, y: number): boolean {
+/** True when nothing but the graph (or one of `skip`) covers this screen
+ *  point. */
+function isFreeAt(canvasEl: Element, x: number, y: number, skip: readonly Element[] = []): boolean {
   if (typeof document.elementsFromPoint !== "function") return true;
   for (const el of document.elementsFromPoint(x, y)) {
     if (el === canvasEl) return true;
     if (el.closest(GRAPH_CONTENT)) continue;
+    if (skip.some((s) => s.contains(el))) continue;
     return false;
   }
   return true;
 }
 
+/** ComfyUI's pane for the canvas: what the side panel and the bottom panel
+ *  (console, shortcuts) leave, below the floating toolbar. */
+const CANVAS_PANEL = "#graph-canvas-panel";
+
+function visible(el: Element): boolean {
+  const cs = getComputedStyle(el);
+  return cs.display !== "none" && cs.visibility !== "hidden" && cs.opacity !== "0";
+}
+
 /**
- * How far the host's own bars reach into the canvas from each edge, in
- * screen px: `[left, top, right, bottom]`. ComfyUI lays its sidebar, its
- * breadcrumb, the floating toolbar and the zoom controls over the canvas,
- * and their layout changes between versions and with the user's settings,
- * so this walks in from each edge with `elementsFromPoint` until it meets
- * bare canvas, at a few spots along it, rather than naming any of them.
+ * The host's floating pieces inside the canvas pane (the minimap, the zoom
+ * controls, the selection toolbox): the first element down each branch that
+ * takes the pointer and has a size. Containers that let clicks through
+ * (`pointer-events: none`) are looked into, not counted; graph content is
+ * skipped.
+ */
+function paneOverlays(pane: Element): Element[] {
+  const out: Element[] = [];
+  const look = (el: Element, depth: number): void => {
+    for (const child of Array.from(el.children)) {
+      if (child.matches(GRAPH_CONTENT) || !visible(child)) continue;
+      const r = child.getBoundingClientRect();
+      if (getComputedStyle(child).pointerEvents !== "none" && r.width > 0 && r.height > 0) out.push(child);
+      else if (depth < 6) look(child, depth + 1);
+    }
+  };
+  look(pane, 0);
+  return out;
+}
+
+/** The free part of the canvas, in page px. */
+export interface FreeArea {
+  /** `[left, top, right, bottom]` of what the host's bars and panels leave. */
+  free: ScreenBox;
+  /** Floating boxes inside it to keep clear of (minimap, zoom controls). */
+  avoid: ScreenBox[];
+}
+
+/**
+ * Where bookmarks land and the dock sits. ComfyUI's canvas pane gives what
+ * the side panel, the bottom panel and the floating toolbar leave, and moves
+ * with them; inside it the minimap and zoom controls float and are boxes to
+ * keep clear of. Bars the pane doesn't know (another extension's toolbar, an
+ * older frontend without the pane) are found by walking in from each edge
+ * with `elementsFromPoint` until bare canvas.
+ */
+export function freeArea(canvasEl: Element | undefined): FreeArea {
+  if (!canvasEl) return { free: [0, 0, 0, 0], avoid: [] };
+  const r = canvasEl.getBoundingClientRect();
+  const pane = document.querySelector(CANVAS_PANEL);
+  const p = pane?.getBoundingClientRect();
+  const usable = p && p.width > 40 && p.height > 40;
+  const base = {
+    left: usable ? Math.max(r.left, p.left) : r.left,
+    top: usable ? Math.max(r.top, p.top) : r.top,
+    right: usable ? Math.min(r.right, p.right) : r.right,
+    bottom: usable ? Math.min(r.bottom, p.bottom) : r.bottom,
+  };
+  const overlays = usable && pane ? paneOverlays(pane) : [];
+  const [il, it, ir, ib] = walkInsets(canvasEl, base, overlays);
+  const box = (el: Element): ScreenBox => {
+    const b = el.getBoundingClientRect();
+    return [b.left, b.top, b.right, b.bottom];
+  };
+  return {
+    free: [base.left + il, base.top + it, base.right - ir, base.bottom - ib],
+    avoid: overlays.map(box),
+  };
+}
+
+/**
+ * How far the host's bars reach into the canvas from each edge, in screen
+ * px: `[left, top, right, bottom]`. Kept for callers that only want the
+ * insets; the minimap and other floating boxes are not in it.
  */
 export function freeInsets(canvasEl: Element | undefined): [number, number, number, number] {
   if (!canvasEl) return [0, 0, 0, 0];
   const r = canvasEl.getBoundingClientRect();
-  if (r.width <= 0 || r.height <= 0) return [0, 0, 0, 0];
+  const { free } = freeArea(canvasEl);
+  return [free[0] - r.left, free[1] - r.top, r.right - free[2], r.bottom - free[3]];
+}
+
+/** Walks in from each edge of `base` to the deepest covered point (see
+ *  `freeArea`). */
+function walkInsets(
+  canvasEl: Element,
+  r: { left: number; top: number; right: number; bottom: number },
+  skip: readonly Element[],
+): [number, number, number, number] {
+  const width = r.right - r.left;
+  const height = r.bottom - r.top;
+  if (width <= 0 || height <= 0) return [0, 0, 0, 0];
   const STEP = 6;
   // Walk in from the edge along `dir` across a band (25 % of the side) and
   // return how far the deepest covered point reaches. Not the first free
@@ -289,16 +401,16 @@ export function freeInsets(canvasEl: Element | undefined): [number, number, numb
     let deepest = 0;
     let free = false;
     for (let d = 0; d <= limit; d += STEP) {
-      if (isFreeAt(canvasEl, x0 + dx * d, y0 + dy * d)) free = true;
+      if (isFreeAt(canvasEl, x0 + dx * d, y0 + dy * d, skip)) free = true;
       else deepest = d + STEP;
     }
     return free ? deepest : 0;
   };
   const along = (fracs: number[], len: number, start: number): number[] => fracs.map((f) => start + f * len);
-  const left = Math.max(...along([0.3, 0.5, 0.7], r.height, r.top).map((y) => walk(r.left + 1, y, 1, 0, r.width * 0.25)));
-  const right = Math.max(...along([0.3, 0.5, 0.7], r.height, r.top).map((y) => walk(r.right - 1, y, -1, 0, r.width * 0.25)));
-  const top = Math.max(...along([0.06, 0.3, 0.5, 0.7, 0.94], r.width, r.left).map((x) => walk(x, r.top + 1, 0, 1, r.height * 0.25)));
-  const bottom = Math.max(...along([0.06, 0.3, 0.5, 0.7, 0.94], r.width, r.left).map((x) => walk(x, r.bottom - 1, 0, -1, r.height * 0.25)));
+  const left = Math.max(...along([0.3, 0.5, 0.7], height, r.top).map((y) => walk(r.left + 1, y, 1, 0, width * 0.25)));
+  const right = Math.max(...along([0.3, 0.5, 0.7], height, r.top).map((y) => walk(r.right - 1, y, -1, 0, width * 0.25)));
+  const top = Math.max(...along([0.06, 0.3, 0.5, 0.7, 0.94], width, r.left).map((x) => walk(x, r.top + 1, 0, 1, height * 0.25)));
+  const bottom = Math.max(...along([0.06, 0.3, 0.5, 0.7, 0.94], width, r.left).map((x) => walk(x, r.bottom - 1, 0, -1, height * 0.25)));
   return [left, top, right, bottom];
 }
 
@@ -350,14 +462,19 @@ export function jumpTo(node: BookmarkNode): void {
     if (!c.ds) return;
     const config = readConfig(node);
     const scale = jumpScale(config, c.ds.scale);
+    const cr = c.canvas?.getBoundingClientRect();
+    const area = freeArea(c.canvas);
+    const rel = (b: ScreenBox): ScreenBox => [b[0] - (cr?.left ?? 0), b[1] - (cr?.top ?? 0), b[2] - (cr?.left ?? 0), b[3] - (cr?.top ?? 0)];
+    const [vw, vh] = viewportSize(c);
+    const free = rel(area.free);
     const offset = jumpOffset({
       rect: nodeRect(node),
       viewport: viewportSize(c),
       anchor: config.anchor,
       scale,
       margin: BOOKMARK_MARGIN,
-      inset: freeInsets(c.canvas),
-      avoid: dockBoxes(c),
+      inset: [free[0], free[1], Math.max(0, vw - free[2]), Math.max(0, vh - free[3])],
+      avoid: [...area.avoid.map(rel), ...dockBoxes(c)],
       view: config.view,
     });
     animateView(c, offset, scale);
@@ -480,38 +597,65 @@ function isTyping(target: EventTarget | null): boolean {
   return !!el.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""], [role="dialog"], .graphdialog');
 }
 
+function bookmarkForKey(e: KeyboardEvent): { combo: string; hit: BookmarkEntry } | null {
+  if (e.repeat || recording > 0 || isProbeEvent(e) || isTyping(e.target)) return null;
+  const combo = comboFromEvent(e);
+  if (!combo) return null;
+  const hit = listBookmarks().find((b) => !b.disabled && b.config.shortcut === combo);
+  return hit ? { combo, hit } : null;
+}
+
+function warnTaken(combo: string, title: string): void {
+  rememberTaken(combo);
+  if (warnedCombos.has(combo)) return;
+  warnedCombos.add(combo);
+  pushToast(`${combo} is also used by another shortcut, so "${title}" didn't jump. Give the bookmark another key.`, {
+    severity: "warning",
+    singletonKey: `wp-bookmark-clash-${combo}`,
+  });
+}
+
+/** The press seen on the way down (capture), until the bubble phase
+ *  reaches the window. */
+let pending: KeyboardEvent | null = null;
+
+function onKeyDownCapture(e: KeyboardEvent): void {
+  const found = bookmarkForKey(e);
+  if (!found) return;
+  pending = e;
+  // Still pending after this event: someone stopped it on the way up.
+  setTimeout(() => {
+    if (pending !== e) return;
+    pending = null;
+    warnTaken(found.combo, found.hit.title);
+  }, 0);
+}
+
 /**
  * One listener for every bookmark. Runs on `window` in the bubble phase, so
  * ComfyUI's keybindings and any extension listening earlier get the key
- * first. When one of them already used it (`defaultPrevented`), the bookmark
- * stands down and says once which combo collided: that is how a clash with
- * an extension the keymap can't see shows up.
+ * first. When one of them already used it (`defaultPrevented`, or stopped
+ * it before it got here, which the capture listener notices), the bookmark
+ * stands down, says once which combo collided and remembers it as taken:
+ * that is how a clash with an extension the keymap can't see shows up.
  */
 function onKeyDown(e: KeyboardEvent): void {
-  if (e.repeat || recording > 0 || isTyping(e.target)) return;
-  const combo = comboFromEvent(e);
-  if (!combo) return;
-  const hit = listBookmarks().find((b) => !b.disabled && b.config.shortcut === combo);
-  if (!hit) return;
+  if (pending === e) pending = null;
+  const found = bookmarkForKey(e);
+  if (!found) return;
   if (e.defaultPrevented) {
-    rememberTaken(combo);
-    if (!warnedCombos.has(combo)) {
-      warnedCombos.add(combo);
-      pushToast(`${combo} is also used by another shortcut, so "${hit.title}" didn't jump. Give the bookmark another key.`, {
-        severity: "warning",
-        singletonKey: `wp-bookmark-clash-${combo}`,
-      });
-    }
+    warnTaken(found.combo, found.hit.title);
     return;
   }
   e.preventDefault();
-  jumpTo(hit.node);
+  jumpTo(found.hit.node);
 }
 
 let keysInstalled = false;
 export function installBookmarkKeys(): void {
   if (keysInstalled || typeof window === "undefined") return;
   keysInstalled = true;
+  window.addEventListener("keydown", onKeyDownCapture, true);
   window.addEventListener("keydown", onKeyDown);
 }
 
@@ -546,7 +690,7 @@ function freshConfig(node: BookmarkNode, scale?: number): BookmarkConfig {
   return {
     ...defaultBookmarkConfig(),
     order: others.reduce((m, b) => Math.max(m, b.config.order + 1), 0),
-    shortcut: suggestFreeCombo(keymapFor(node)),
+    shortcut: suggestShortcut(node),
     ...(scale ? { zoom: Math.round(scale * 100) / 100 } : {}),
   };
 }
@@ -745,6 +889,13 @@ export function registerBookmarkNode(): void {
       return "transparent";
     }
 
+    // The bookmark sizes itself to its pill or form: no resize handles,
+    // ever (LiteGraph turns `resizable` back on when a node is unpinned).
+    get resizable(): boolean {
+      return false;
+    }
+    set resizable(_on: boolean) {}
+
     // ComfyUI's source badge would float over the panel.
     drawBadges(): void {}
 
@@ -786,31 +937,43 @@ export interface DockPrefs {
   /** null: open by itself when the workflow has bookmarks. */
   open: boolean | null;
   collapsed: boolean;
-  side: "left" | "right";
-  /** Where the user dragged it (screen px, top-left), or null for the
-   *  default spot on `side`. */
-  pos: { x: number; y: number } | null;
+  /** Which of the 3×3 spots of the free canvas it sits in (it snaps to the
+   *  nearest one when dragged), so it moves with the side and bottom
+   *  panels. */
+  spot: DockSpot;
 }
 
 const DOCK_KEY = "wp.bookmarkDock";
 
 /** Per-viewer convenience, so browser storage (and fine when it's gone). */
 export function readDockPrefs(): DockPrefs {
-  const base: DockPrefs = { open: null, collapsed: false, side: "left", pos: null };
+  const base: DockPrefs = { open: null, collapsed: false, spot: "tl" };
   try {
-    const raw = JSON.parse(localStorage.getItem(DOCK_KEY) ?? "null") as Partial<DockPrefs> | null;
+    const raw = JSON.parse(localStorage.getItem(DOCK_KEY) ?? "null") as (Partial<DockPrefs> & { side?: unknown }) | null;
     if (!raw || typeof raw !== "object") return base;
-    const p = raw.pos;
-    const pos = p && typeof p === "object" && Number.isFinite(p.x) && Number.isFinite(p.y) ? { x: p.x, y: p.y } : null;
+    // Before spots it had a side.
+    const spot = BOOKMARK_ANCHORS.find((a) => a.id === raw.spot)?.id ?? (raw.side === "right" ? "tr" : "tl");
     return {
       open: typeof raw.open === "boolean" ? raw.open : null,
       collapsed: raw.collapsed === true,
-      side: raw.side === "right" ? "right" : "left",
-      pos,
+      spot,
     };
   } catch {
     return base;
   }
+}
+
+/** What moves the dock when it changes: the canvas pane's box and the
+ *  floating pieces in it (the minimap shown or hidden). Cheap: no
+ *  `elementsFromPoint`. */
+export function dockLayoutKey(): string {
+  const pane = document.querySelector(CANVAS_PANEL);
+  if (!pane) return `${window.innerWidth}x${window.innerHeight}`;
+  const rect = (el: Element): string => {
+    const b = el.getBoundingClientRect();
+    return [b.left, b.top, b.right, b.bottom].map(Math.round).join(",");
+  };
+  return [rect(pane), ...paneOverlays(pane).map(rect)].join(";");
 }
 
 export function writeDockPrefs(next: DockPrefs): void {

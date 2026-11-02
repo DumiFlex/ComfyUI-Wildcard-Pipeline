@@ -5,7 +5,7 @@
  * hides the bookmark on the canvas (the only way back for a hidden one);
  * the grip reorders, which is also the order Previous / Next walk.
  */
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import CloseButton from "@/kit/CloseButton.vue";
 import SortableList from "@/kit/SortableList.vue";
 import WpButton from "@/kit/WpButton.vue";
@@ -25,10 +25,12 @@ import {
   setOrder,
   writeDockPrefs,
   canvasElement,
-  freeInsets,
+  dockLayoutKey,
+  freeArea,
   type BookmarkEntry,
   type DockPrefs,
 } from "../../widgets/bookmark";
+import { nearestSpot, spotPosition, type ScreenBox } from "../../extension/bookmarks";
 
 const emit = defineEmits<{ (e: "close"): void }>();
 
@@ -61,7 +63,14 @@ function refresh(): void {
   }
   current.value = lastJumpedNode();
   back.value = canGoBack();
+  // The side or bottom panel opened, the minimap came or went: move with it.
+  const layout = dockLayoutKey();
+  if (layout !== lastLayout) {
+    lastLayout = layout;
+    place();
+  }
 }
+let lastLayout = "";
 
 // Nodes come and go (add, delete, workflow switch) without telling us, so
 // also poll, like the widgets' `reactiveFromGraph`.
@@ -73,10 +82,9 @@ onMounted(() => {
   timer = window.setInterval(refresh, 500);
   window.addEventListener("resize", place);
   requestAnimationFrame(place);
-  const el = canvasElement() ?? document.querySelector(".graph-canvas-container");
-  if (el && typeof ResizeObserver !== "undefined") {
+  if (typeof ResizeObserver !== "undefined") {
     observer = new ResizeObserver(place);
-    observer.observe(el);
+    for (const el of [canvasElement(), document.querySelector("#graph-canvas-panel")]) if (el) observer.observe(el);
   }
 });
 onBeforeUnmount(() => {
@@ -86,44 +94,51 @@ onBeforeUnmount(() => {
   observer?.disconnect();
 });
 
-// ── placement: inside the free part of the canvas ─────────────────────
-// By default the dock sits just inside ComfyUI's own bars (sidebar,
-// breadcrumb, toolbar) on its side; in edit mode it can be dragged anywhere
-// and stays where it was dropped.
+// ── placement: a spot of the free part of the canvas ─────────────────
+// The dock sits in one of the 3×3 spots of what ComfyUI's bars and panels
+// leave (the same grid bookmarks land on), kept off the minimap and the zoom
+// controls. In edit mode it is dragged by its header and snaps to the
+// nearest spot on drop, so it follows the side and bottom panels as they
+// open and close.
 const root = ref<HTMLElement | null>(null);
 const box = ref({ x: 16, y: 64 });
+/** The free area's height, for the dock's max height. */
+const room = ref(0);
 let observer: ResizeObserver | null = null;
 const GAP = 12;
 
-function clamp(x: number, y: number): { x: number; y: number } {
-  const w = root.value?.offsetWidth ?? 300;
-  const h = root.value?.offsetHeight ?? 40;
-  return {
-    x: Math.min(Math.max(4, x), Math.max(4, window.innerWidth - w - 4)),
-    y: Math.min(Math.max(4, y), Math.max(4, window.innerHeight - Math.min(h, 80) - 4)),
-  };
+function area(): { free: ScreenBox; avoid: ScreenBox[] } {
+  const el = canvasElement() ?? document.querySelector<HTMLElement>(".graph-canvas-container") ?? undefined;
+  const a = freeArea(el);
+  // No canvas (tests, a page still loading): the window.
+  return a.free[2] > a.free[0] ? a : { free: [0, 0, window.innerWidth, window.innerHeight], avoid: [] };
+}
+
+function size(): [number, number] {
+  return [root.value?.offsetWidth ?? 300, root.value?.offsetHeight ?? 40];
 }
 
 function place(): void {
   if (dragging) return;
-  const p = prefs.value.pos;
-  if (p) {
-    box.value = clamp(p.x, p.y);
-    return;
-  }
-  const el = canvasElement() ?? document.querySelector<HTMLElement>(".graph-canvas-container");
-  if (!el) return;
-  const r = el.getBoundingClientRect();
-  const [il, it, ir] = freeInsets(el);
-  const w = root.value?.offsetWidth ?? 300;
-  const x = prefs.value.side === "left" ? r.left + il + GAP : r.right - ir - GAP - w;
-  box.value = clamp(x, r.top + it + GAP);
+  const { free, avoid } = area();
+  room.value = Math.max(80, free[3] - free[1] - 2 * GAP);
+  const [x, y] = spotPosition(prefs.value.spot, free, size(), avoid, GAP);
+  box.value = { x, y };
 }
-const style = computed(() => ({ left: `${box.value.x}px`, top: `${box.value.y}px` }));
+const style = computed(() => ({
+  left: `${box.value.x}px`,
+  top: `${box.value.y}px`,
+  maxHeight: room.value ? `${room.value}px` : undefined,
+}));
+// Collapsing or a longer list changes its height: a bottom spot keeps its
+// bottom edge.
+watch(() => [prefs.value.collapsed, entries.value.length, editing.value], () => { void nextTick(place); });
 
-// Drag by the header in edit mode (not from its buttons).
+// Drag by the header in edit mode (not from its buttons); a ghost shows the
+// spot it will snap to.
 let dragging = false;
 let grab = { dx: 0, dy: 0 };
+const ghost = ref<{ x: number; y: number; w: number; h: number } | null>(null);
 function onHeadDown(e: PointerEvent): void {
   if (!editing.value || e.button !== 0) return;
   if ((e.target as HTMLElement).closest("button, input, a")) return;
@@ -134,15 +149,20 @@ function onHeadDown(e: PointerEvent): void {
 }
 function onHeadMove(e: PointerEvent): void {
   if (!dragging) return;
-  box.value = clamp(e.clientX - grab.dx, e.clientY - grab.dy);
+  const [w, h] = size();
+  const x = Math.min(Math.max(0, e.clientX - grab.dx), window.innerWidth - w);
+  const y = Math.min(Math.max(0, e.clientY - grab.dy), window.innerHeight - Math.min(h, 60));
+  box.value = { x, y };
+  const { free, avoid } = area();
+  const [gx, gy] = spotPosition(nearestSpot([x, y], free, [w, h], GAP), free, [w, h], avoid, GAP);
+  ghost.value = { x: gx, y: gy, w, h };
 }
 function onHeadUp(): void {
   if (!dragging) return;
   dragging = false;
-  savePrefs({ pos: { ...box.value } });
-}
-function toSide(side: "left" | "right"): void {
-  savePrefs({ side, pos: null });
+  ghost.value = null;
+  const { free } = area();
+  savePrefs({ spot: nearestSpot([box.value.x, box.value.y], free, size(), GAP) });
   place();
 }
 
@@ -202,12 +222,6 @@ function close(): void {
         <WpIconButton icon="pi-pencil" label="Edit the bookmarks" data-test="bm-dock-edit" @click="editing = true; savePrefs({ collapsed: false })" />
       </template>
       <template v-else>
-        <WpIconButton
-          :icon="prefs.side === 'left' ? 'pi-arrow-right' : 'pi-arrow-left'"
-          :label="prefs.side === 'left' ? 'Put the dock back at the right' : 'Put the dock back at the left'"
-          data-test="bm-dock-side"
-          @click="toSide(prefs.side === 'left' ? 'right' : 'left')"
-        />
         <WpButton variant="primary" size="sm" data-test="bm-dock-done" @click="editing = false">Done</WpButton>
       </template>
       <CloseButton size="sm" label="Close the dock" data-test="bm-dock-close" @click="close" />
@@ -255,6 +269,13 @@ function close(): void {
       </WpButton>
     </div>
   </section>
+  <div
+    v-if="ghost"
+    class="wp-bmdock-ghost"
+    :style="{ left: `${ghost.x}px`, top: `${ghost.y}px`, width: `${ghost.w}px`, height: `${ghost.h}px` }"
+    aria-hidden="true"
+    data-test="bm-dock-ghost"
+  />
 </template>
 
 <style scoped>
@@ -262,24 +283,24 @@ function close(): void {
   position: fixed;
   z-index: 1000;
   width: 300px;
-  max-height: calc(100vh - 160px);
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
   color: var(--wp-text);
   font: 12px var(--wp-font-sans, sans-serif);
-  /* See-through, so a bookmark or note under it still shows; solid while
-     the pointer is on it. */
-  background: color-mix(in srgb, var(--wp-bg-2) 78%, transparent);
-  backdrop-filter: blur(2px);
-  transition: background-color 120ms;
+  /* See-through, so a bookmark or note under it still shows (more so when
+     collapsed); solid while the pointer or focus is on it. */
+  background: color-mix(in srgb, var(--wp-bg-2) 62%, transparent);
+  backdrop-filter: blur(1px);
+  transition: background-color 120ms, opacity 120ms;
   border: 1px solid var(--wp-border);
   border-radius: min(8px, var(--wp-radius-cap, 999px));
   box-shadow: var(--wp-shadow-md, 0 4px 14px rgb(0 0 0 / 0.35));
 }
 .wp-bmdock:hover,
 .wp-bmdock:focus-within { background: var(--wp-bg-2); }
-.wp-bmdock--collapsed { width: auto; }
+.wp-bmdock--collapsed { width: auto; background: color-mix(in srgb, var(--wp-bg-2) 40%, transparent); }
+.wp-bmdock--collapsed:not(:hover, :focus-within) { opacity: 0.72; }
 .wp-bmdock--editing .wp-bmdock__head { cursor: move; touch-action: none; }
 .wp-bmdock__head {
   display: flex;
@@ -301,6 +322,18 @@ function close(): void {
   border-top: 1px solid var(--wp-border);
   padding-top: 6px;
 }
-.wp-bmdock__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.wp-bmdock__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+/* The same air between rows in edit mode (the kit list's small size packs
+   them at 2px). */
+.wp-bmdock__body :deep(.wp-sortable__list) { gap: 5px; }
 .wp-bmdock__empty { margin: 4px 2px; color: var(--wp-text-dim); }
+.wp-bmdock-ghost {
+  position: fixed;
+  z-index: 999;
+  box-sizing: border-box;
+  pointer-events: none;
+  border: 2px dashed var(--wp-accent);
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
+  background: color-mix(in srgb, var(--wp-accent) 10%, transparent);
+}
 </style>

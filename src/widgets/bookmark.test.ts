@@ -10,9 +10,13 @@ import {
   jumpStep,
   jumpTo,
   listBookmarks,
+  readDockPrefs,
   setHidden,
+  suggestShortcut,
+  takenKeys,
   type BookmarkNode,
 } from "./bookmark";
+import { probeCombo } from "../extension/key-probe";
 
 type Graph = { _nodes: unknown[] };
 
@@ -157,6 +161,48 @@ describe("WP Bookmark shortcuts", () => {
     press({ key: "3", code: "Digit3", altKey: true }, (e) => e.preventDefault());
     expect(canvas.ds.offset).toEqual([7, 7]);
     expect(b.title).toBe("A");
+  });
+
+  it("notices a key another listener stopped on its way up, and remembers it", () => {
+    localStorage.removeItem("wp.bookmarkTakenKeys");
+    bookmark(1, "A", { shortcut: "Alt+4" }, root);
+    canvas.ds.offset = [7, 7];
+    const stop = (e: Event): void => { if ((e as KeyboardEvent).code === "Digit4") e.stopPropagation(); };
+    document.addEventListener("keydown", stop);
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "4", code: "Digit4", altKey: true, bubbles: true, cancelable: true }));
+    vi.runAllTimers();
+    document.removeEventListener("keydown", stop);
+    expect(canvas.ds.offset).toEqual([7, 7]);
+    expect(takenKeys()).toContain("Alt+4");
+  });
+
+  it("never jumps on the probe's own events", () => {
+    bookmark(1, "A", { shortcut: "Alt+6" }, root);
+    canvas.ds.offset = [7, 7];
+    expect(probeCombo("Alt+6")).toBe(false);
+    vi.runAllTimers();
+    expect(canvas.ds.offset).toEqual([7, 7]);
+  });
+
+  it("suggests past a key a listener answers", () => {
+    localStorage.removeItem("wp.bookmarkTakenKeys");
+    const claim = (e: Event): void => { const k = e as KeyboardEvent; if (k.altKey && k.key === "1") k.preventDefault(); };
+    window.addEventListener("keydown", claim, true);
+    expect(suggestShortcut()).toBe("Alt+2");
+    window.removeEventListener("keydown", claim, true);
+    expect(takenKeys()).toContain("Alt+1");
+  });
+});
+
+describe("Bookmarks dock prefs", () => {
+  it("reads the old side setting as a spot", () => {
+    localStorage.setItem("wp.bookmarkDock", JSON.stringify({ open: true, collapsed: false, side: "right", pos: { x: 5, y: 5 } }));
+    expect(readDockPrefs()).toEqual({ open: true, collapsed: false, spot: "tr" });
+    localStorage.setItem("wp.bookmarkDock", JSON.stringify({ spot: "bc" }));
+    expect(readDockPrefs().spot).toBe("bc");
+    localStorage.setItem("wp.bookmarkDock", JSON.stringify({ spot: "nowhere" }));
+    expect(readDockPrefs().spot).toBe("tl");
+    localStorage.removeItem("wp.bookmarkDock");
   });
 });
 
