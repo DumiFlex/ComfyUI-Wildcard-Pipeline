@@ -302,7 +302,6 @@ function openPalette(): void {
 
 .wp-topbar__ai[aria-pressed="true"] { color: var(--wp-accent-text); }
 .wp-topbar__ai-working { margin-right: 14px; min-width: 0; }
-@media (max-width: 900px) { .wp-topbar__ai-working :deep(.wp-aiw__detail) { display: none; } }
 
 /* What's new — an unread dot in the icon's BOTTOM-right corner, which is the
  * only corner the megaphone's horn leaves empty; at top-right it merged into
