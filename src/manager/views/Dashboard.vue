@@ -139,7 +139,10 @@ function newOfKind(slug: string) {
 const totalItems = computed<number>(() =>
   Object.values(counts.value).reduce((sum, n) => sum + n, 0),
 );
-const showGettingStarted = computed<boolean>(() => totalItems.value < 3);
+/** The counts start at 0, so until they land every library looks new and
+ *  the intro card flashed for everyone. */
+const countsLoaded = ref(false);
+const showGettingStarted = computed<boolean>(() => countsLoaded.value && totalItems.value < 3);
 
 // "New here?" intro card dismissal. The card used to REPLACE the recents
 // list (mutually-exclusive v-if), so a user who'd made a module or two
@@ -314,6 +317,7 @@ async function loadCounts() {
       }
     }),
   );
+  countsLoaded.value = true;
 }
 
 async function loadRecent() {

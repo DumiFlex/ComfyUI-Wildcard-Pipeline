@@ -102,6 +102,13 @@ describe("Dashboard.vue", () => {
     expect(wrap.find('[data-test="dashboard-tab-opened"]').exists()).toBe(true);
   });
 
+  it("doesn't flash the intro card while the counts are still loading", async () => {
+    apiMod.list.mockReturnValue(new Promise(() => {}));
+    const wrap = mountView();
+    await flushPromises();
+    expect(wrap.find('[data-test="dashboard-getting-started"]').exists()).toBe(false);
+  });
+
   it("dismissing the intro card hides it (persisted) but keeps the recents", async () => {
     apiMod.list.mockResolvedValue({ items: [], total: 0 });
     const wrap = mountView();

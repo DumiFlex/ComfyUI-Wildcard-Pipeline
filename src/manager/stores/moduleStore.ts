@@ -24,7 +24,20 @@ export const useModuleStore = defineStore("modules", () => {
    *  re-fetches what some page has already loaded. */
   const listed = ref(false);
 
+  /** The kind the rows in `items` are, and the newest request: a slow
+   *  earlier response must not land last and replace the right rows. */
+  let listedType: ModuleType | undefined;
+  let ticket = 0;
+
   async function fetchAll() {
+    const mine = ++ticket;
+    // Another kind's page (Wildcards → Constraints) must not show the last
+    // kind's rows under its columns while it loads; a search or filter on
+    // the same kind keeps them up until the new ones land.
+    if (filter.type !== listedType) {
+      items.value = [];
+      listedType = filter.type;
+    }
     loading.value = true;
     try {
       const params: Record<string, string | boolean | undefined> = {};
@@ -33,10 +46,11 @@ export const useModuleStore = defineStore("modules", () => {
       if (filter.q) params.q = filter.q;
       if (filter.favorites) params.favorites = true;
       const res = await api.modules.list(params);
+      if (mine !== ticket) return;
       items.value = res.items;
       listed.value = true;
     } finally {
-      loading.value = false;
+      if (mine === ticket) loading.value = false;
     }
   }
 
