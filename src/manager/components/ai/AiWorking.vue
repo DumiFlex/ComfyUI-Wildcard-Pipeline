@@ -366,71 +366,120 @@ const TYPING = [[250, A], [512, BIG], [774, B]] as const;
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
-/* Crossfade in place: the old word fades out on top of the new one. */
-.wp-aiw-word-enter-active, .wp-aiw-word-leave-active { transition: opacity 0.45s ease, filter 0.45s ease; }
-.wp-aiw-word-leave-active { position: absolute; left: 0; top: 50%; translate: 0 -50%; }
-.wp-aiw-word-enter-from, .wp-aiw-word-leave-to { opacity: 0; filter: blur(2px); }
+/* Crossfade in place: the old word fades out on top of the new one. The
+ * fade and blur run through registered custom properties (see the marks
+ * below for why): an `opacity` / `filter` transition lifts the word onto a
+ * compositor layer, which re-rasterises the text and snaps it to whole
+ * pixels as the fade begins. The leaving word keeps its exact spot (top 0,
+ * the box is one word tall), with no -50% translate to land between pixels. */
+.wp-aiw-word-enter-active, .wp-aiw-word-leave-active {
+  opacity: var(--wp-aiw-wo);
+  filter: blur(var(--wp-aiw-wb));
+  transition: --wp-aiw-wo 0.45s ease, --wp-aiw-wb 0.45s ease;
+}
+.wp-aiw-word-leave-active { position: absolute; left: 0; top: 0; }
+.wp-aiw-word-enter-from, .wp-aiw-word-leave-to { --wp-aiw-wo: 0; --wp-aiw-wb: 2px; }
 @media (prefers-reduced-motion: reduce) {
   .wp-aiw__word { animation: none; }
   .wp-aiw__words { transition: none; }
-  .wp-aiw-word-enter-from, .wp-aiw-word-leave-to { filter: none; }
+  .wp-aiw-word-enter-from, .wp-aiw-word-leave-to { --wp-aiw-wb: 0px; }
 }
+
+/* Every mark animates registered custom properties, never `transform` or
+ * `opacity` themselves. A `transform` / `opacity` animation goes to the
+ * compositor, which lifts each path onto its own layer as it starts:
+ * rasterised once at a fixed scale and snapped to whole pixels, so the sharp
+ * mark went soft and jumped half a pixel the moment it began to move. A
+ * custom property animates on the main thread and each frame repaints the
+ * vector paths in place, as sharp as at rest. */
+@property --wp-aiw-x { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --wp-aiw-f { syntax: "<number>"; inherits: false; initial-value: 0; }
+@property --wp-aiw-r { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@property --wp-aiw-s { syntax: "<number>"; inherits: false; initial-value: 1; }
+@property --wp-aiw-o { syntax: "<number>"; inherits: false; initial-value: 1; }
+@property --wp-aiw-wo { syntax: "<number>"; inherits: false; initial-value: 1; }
+@property --wp-aiw-wb { syntax: "<length>"; inherits: false; initial-value: 0px; }
 
 .wp-aiw__star, .wp-aiw__dot, .wp-aiw__hop { transform-box: fill-box; transform-origin: center; }
 .wp-aiw__vb { transform-box: view-box; transform-origin: 512px 512px; }
 
 /* Typing stars: each hops in turn. */
 .wp-aiw__hop {
+  transform: translateY(var(--wp-aiw-x)) scale(var(--wp-aiw-s));
   animation: wp-aiw-hop var(--wp-aiw-t) ease-in-out infinite;
   animation-delay: calc(var(--wp-aiw-t) * var(--wp-aiw-k) * 0.15);
 }
 @keyframes wp-aiw-hop {
-  0%, 40%, 100% { transform: translateY(0) scale(1); }
-  20% { transform: translateY(-110px) scale(1.12); }
+  0%, 40%, 100% { --wp-aiw-x: 0px; --wp-aiw-s: 1; }
+  20% { --wp-aiw-x: -110px; --wp-aiw-s: 1.12; }
 }
 
 /* Shuffle: the small stars swap places, the big one dips and turns. */
-.wp-aiw__swap { animation: wp-aiw-swap calc(var(--wp-aiw-t) * 2) cubic-bezier(0.65, 0, 0.35, 1) infinite; }
-.wp-aiw__dip { animation: wp-aiw-dip var(--wp-aiw-t) cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+.wp-aiw__swap {
+  transform: rotate(var(--wp-aiw-r));
+  animation: wp-aiw-swap calc(var(--wp-aiw-t) * 2) cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+.wp-aiw__dip {
+  transform: rotate(var(--wp-aiw-r)) scale(var(--wp-aiw-s));
+  animation: wp-aiw-dip var(--wp-aiw-t) cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
 @keyframes wp-aiw-swap {
-  0%, 15% { transform: rotate(0deg); }
-  50%, 65% { transform: rotate(180deg); }
-  100% { transform: rotate(360deg); }
+  0%, 15% { --wp-aiw-r: 0deg; }
+  50%, 65% { --wp-aiw-r: 180deg; }
+  100% { --wp-aiw-r: 360deg; }
 }
 @keyframes wp-aiw-dip {
-  0%, 15% { transform: scale(1) rotate(0deg); }
-  32% { transform: scale(0.7) rotate(45deg); }
-  50%, 100% { transform: scale(1) rotate(90deg); }
+  0%, 15% { --wp-aiw-s: 1; --wp-aiw-r: 0deg; }
+  32% { --wp-aiw-s: 0.7; --wp-aiw-r: 45deg; }
+  50%, 100% { --wp-aiw-s: 1; --wp-aiw-r: 90deg; }
 }
 
 /* Orbit: the four nodes circle the stars and twinkle in turn. */
-.wp-aiw__spin { animation: wp-aiw-spin calc(var(--wp-aiw-t) * 2) cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite; }
+.wp-aiw__spin {
+  transform: rotate(var(--wp-aiw-r));
+  animation: wp-aiw-spin calc(var(--wp-aiw-t) * 2) cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite;
+}
 .wp-aiw__dot {
+  opacity: var(--wp-aiw-o);
+  transform: scale(var(--wp-aiw-s));
   animation: wp-aiw-twinkle var(--wp-aiw-t) ease-in-out infinite;
   animation-delay: calc(var(--wp-aiw-t) * var(--wp-aiw-k) * -0.25);
 }
-.wp-aiw__breathe { animation: wp-aiw-breathe var(--wp-aiw-t) ease-in-out infinite; }
-@keyframes wp-aiw-spin { to { transform: rotate(360deg); } }
+.wp-aiw__breathe {
+  transform: scale(var(--wp-aiw-s));
+  animation: wp-aiw-breathe var(--wp-aiw-t) ease-in-out infinite;
+}
+@keyframes wp-aiw-spin { from { --wp-aiw-r: 0deg; } to { --wp-aiw-r: 360deg; } }
 @keyframes wp-aiw-twinkle {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.35; transform: scale(0.6); }
+  0%, 100% { --wp-aiw-o: 1; --wp-aiw-s: 1; }
+  50% { --wp-aiw-o: 0.35; --wp-aiw-s: 0.6; }
 }
-@keyframes wp-aiw-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.86); } }
+@keyframes wp-aiw-breathe { 0%, 100% { --wp-aiw-s: 1; } 50% { --wp-aiw-s: 0.86; } }
 
-/* Burst: the small stars fly out of the big one and back. */
-.wp-aiw__burst { animation: wp-aiw-burst var(--wp-aiw-t) cubic-bezier(0.3, 0, 0.2, 1) infinite; }
-.wp-aiw__pop { animation: wp-aiw-pop var(--wp-aiw-t) ease-in-out infinite; }
-@keyframes wp-aiw-burst {
-  0% { transform: translate(var(--wp-aiw-dx), var(--wp-aiw-dy)) scale(0); opacity: 0; }
-  15% { opacity: 1; }
-  45%, 75% { transform: translate(0, 0) scale(1.15); opacity: 1; }
-  100% { transform: translate(var(--wp-aiw-dx), var(--wp-aiw-dy)) scale(0); opacity: 0; }
+/* Burst: the small stars fly out of the big one and back. `--wp-aiw-f` is
+ * how far out they are (1 = at --wp-aiw-dx/dy, 0 = home). */
+.wp-aiw__burst {
+  opacity: var(--wp-aiw-o);
+  transform:
+    translate(calc(var(--wp-aiw-dx) * var(--wp-aiw-f)), calc(var(--wp-aiw-dy) * var(--wp-aiw-f)))
+    scale(var(--wp-aiw-s));
+  animation: wp-aiw-burst var(--wp-aiw-t) cubic-bezier(0.3, 0, 0.2, 1) infinite;
 }
-@keyframes wp-aiw-pop { 0%, 100% { transform: scale(1.1); } 40% { transform: scale(0.8); } }
+.wp-aiw__pop {
+  transform: scale(var(--wp-aiw-s));
+  animation: wp-aiw-pop var(--wp-aiw-t) ease-in-out infinite;
+}
+@keyframes wp-aiw-burst {
+  0% { --wp-aiw-f: 1; --wp-aiw-s: 0; --wp-aiw-o: 0; }
+  15% { --wp-aiw-o: 1; }
+  45%, 75% { --wp-aiw-f: 0; --wp-aiw-s: 1.15; --wp-aiw-o: 1; }
+  100% { --wp-aiw-f: 1; --wp-aiw-s: 0; --wp-aiw-o: 0; }
+}
+@keyframes wp-aiw-pop { 0%, 100% { --wp-aiw-s: 1.1; } 40% { --wp-aiw-s: 0.8; } }
 
 @media (prefers-reduced-motion: reduce) {
   .wp-aiw__logo * { animation: none !important; }
-  .wp-aiw__logo { animation: wp-aiw-fade 2.4s ease-in-out infinite; }
-  @keyframes wp-aiw-fade { 50% { opacity: 0.55; } }
+  .wp-aiw__logo { opacity: var(--wp-aiw-o); animation: wp-aiw-fade 2.4s ease-in-out infinite; }
+  @keyframes wp-aiw-fade { 0%, 100% { --wp-aiw-o: 1; } 50% { --wp-aiw-o: 0.55; } }
 }
 </style>
