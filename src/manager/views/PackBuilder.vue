@@ -32,7 +32,7 @@ import PackSettings from "../components/pack/PackSettings.vue";
 import { registerPageNote } from "../composables/useOpenEditor";
 import { useAiChat } from "../composables/useAiChat";
 import { mentionsImages, usePackBuilder, type ItemStatus } from "../composables/usePackBuilder";
-import WpCheck from "@/kit/WpCheck.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import { useAiConfig } from "../composables/useAiConfig";
 import { useToast } from "@/kit/useToast";
 import { useModuleStore } from "../stores/moduleStore";
@@ -657,7 +657,7 @@ function stopExtending(): void {
             <p v-if="pb.changing.value === 'images'" class="wp-pack__dim wp-pack__settings" data-test="pack-reading-images"><LoadingMark decorative /> Reading the new images into the plan…</p>
           </template>
           <label v-if="pb.images.images.value.length" class="wp-pack__resend" data-test="pack-resend-images">
-            <WpCheck :model-value="pb.resendImages.value || imagesMentioned" :disabled="imagesMentioned || convo.loading.value" @update:model-value="(v: boolean) => (pb.resendImages.value = v)" />
+            <Checkbox :model-value="pb.resendImages.value || imagesMentioned" :disabled="imagesMentioned || convo.loading.value" @update:model-value="(v: boolean) => (pb.resendImages.value = v)" />
             <span>Show the images again with this update<span class="wp-pack__dim"> · {{ imagesMentioned ? 'your text mentions them, so they go along' : 'about 1,000 tokens each; otherwise they go only when you add or remove one' }}</span></span>
           </label>
           <div class="wp-pack__row">

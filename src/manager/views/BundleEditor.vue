@@ -125,7 +125,7 @@ import Card from "@/kit/Card.vue";
 import Button from "@/kit/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
-import ColorPicker from "@/kit/ColorPicker.vue";
+import ColorField from "@/kit/ColorField.vue";
 import BundleChildRow from "../components/BundleChildRow.vue";
 import BundleChildPane from "../components/BundleChildPane.vue";
 import BundleAddChildModal from "../components/BundleAddChildModal.vue";
@@ -1210,8 +1210,8 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
           @update:content-rating="(v) => (contentRating = v)"
         >
           <template #nameLeading>
-            <ColorPicker
-              v-model="color"
+            <ColorField v-model="color" presets
+              size="md"
               compact
               aria-label="Bundle frame color"
             />

@@ -14,7 +14,7 @@
  */
 import { computed, ref, watch } from "vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import { vTooltip } from "@/kit/tooltip";
@@ -230,7 +230,8 @@ function toggleTotalInternal(): void {
       />
     </div>
 
-    <WpButton
+    <Button
+      size="sm"
       block
       icon="pi-list"
       class="wp-loop__seedbtn"
@@ -242,9 +243,10 @@ function toggleTotalInternal(): void {
       <span v-if="lockedCount" class="wp-loop__seedbtn-badge" data-test="loop-seeds-badge">{{ lockedCount }} locked</span>
       <span v-if="bypassedCount" class="wp-loop__seedbtn-badge" data-test="loop-seeds-bypass-badge">{{ bypassedCount }} bypassed</span>
       <i class="pi pi-chevron-right wp-loop__seedbtn-chev" aria-hidden="true" />
-    </WpButton>
+    </Button>
 
-    <WpButton
+    <Button
+      size="sm"
       block
       icon="pi-th-large"
       class="wp-loop__seedbtn"
@@ -257,16 +259,16 @@ function toggleTotalInternal(): void {
       <span v-if="sweepFrames != null" class="wp-loop__seedbtn-badge" data-test="loop-sweep-badge">{{ sweepFrames }} {{ sweepFrames === 1 ? "frame" : "frames" }}</span>
       <span v-else-if="modelValue.sweep.enabled" class="wp-loop__seedbtn-badge wp-loop__seedbtn-badge--dim" data-test="loop-sweep-badge">on</span>
       <i class="pi pi-chevron-right wp-loop__seedbtn-chev" aria-hidden="true" />
-    </WpButton>
+    </Button>
 
     <!-- `base` is not a frame: it has no seed to lock and nothing to bypass,
          so it takes no modifiers. -->
     <FrameChips
+      v-model:collapsed="chipsCollapsed"
       label="edit frame"
       :count="Math.max(1, count ?? 1)"
       :locked="[...lockSet]"
       :bypassed="[...bypassSet]"
-      v-model:collapsed="chipsCollapsed"
       :current="currentFrame"
       selectable
       show-base
@@ -278,8 +280,8 @@ function toggleTotalInternal(): void {
 
 
     <div
-      class="wp-loop__row"
       v-tooltip="OVERRIDE_SEED_TOOLTIP"
+      class="wp-loop__row"
     >
       <span class="wp-loop__row-label">Override Context seed</span>
       <WpSwitch

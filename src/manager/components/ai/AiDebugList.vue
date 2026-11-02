@@ -6,7 +6,6 @@
  * JSON. Loaded only while the log is on. The top bar shows it in a kit
  * Popover, which closes it on Escape or a click outside.
  */
-import CloseButton from "@/kit/CloseButton.vue";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
 import {
@@ -91,7 +90,7 @@ watch(() => aiDebugSent.value.length, () => {
     <header class="wp-ai-debug__head">
       <h2 class="wp-ai-debug__title">AI debug log</h2>
       <Button variant="ghost" size="sm" data-test="ai-debug-clear" @click="clear">Clear</Button>
-      <CloseButton data-test="ai-debug-close" @click="emit('close')" />
+      <Button variant="ghost" icon="times" aria-label="Close" data-test="ai-debug-close" @click="emit('close')" />
     </header>
     <p class="wp-ai-debug__note">
       Each AI request with every model call it made: the prompt as sent, the reply, thinking,

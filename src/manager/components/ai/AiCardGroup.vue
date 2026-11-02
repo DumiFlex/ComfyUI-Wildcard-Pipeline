@@ -130,7 +130,7 @@ const STATE: Record<string, string> = {
     <ul class="wp-ai-group__rows">
       <li v-for="p in cards" :key="p.pid" class="wp-ai-group__row" :data-state="stateOf(p)" :data-open="open.has(p.pid) || undefined" data-test="ai-group-row">
         <div class="wp-ai-group__line">
-          <Checkbox v-if="stateOf(p) === 'pending'" class="wp-checkbox--inline" :model-value="!unticked.has(p.pid)" :aria-label="`Include ${p.title}`" data-test="ai-group-tick" @update:model-value="tick(p.pid)" />
+          <Checkbox v-if="stateOf(p) === 'pending'" :model-value="!unticked.has(p.pid)" :aria-label="`Include ${p.title}`" data-test="ai-group-tick" @update:model-value="tick(p.pid)" />
           <i v-else :class="['pi', ICON[stateOf(p)] ?? 'pi-circle', 'wp-ai-group__state']" :title="STATE[stateOf(p)]" aria-hidden="true" />
           <button
             type="button"

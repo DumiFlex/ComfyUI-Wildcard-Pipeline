@@ -15,7 +15,7 @@
  * marked and goes at the next backup rather than the moment it's unpinned.
  */
 import { computed, onMounted, ref } from "vue";
-import Toggle from "@/kit/Toggle.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
 import Button from "@/kit/Button.vue";
 import Select from "@/kit/Select.vue";
 import Icon, { ICON_SM } from "@/kit/Icon.vue";
@@ -240,7 +240,8 @@ onMounted(() => {
       hint="Copy the database before every update that changes its schema, and once a day while ComfyUI runs."
       setting-key="backups-auto"
     >
-      <Toggle
+      <WpSwitch
+        size="md"
         :model-value="enabled"
         aria-label="Automatic backups"
         :disabled="!server.settings.value"
@@ -253,7 +254,8 @@ onMounted(() => {
       label="Daily backup"
       hint="Off keeps only the backups taken before updates."
     >
-      <Toggle
+      <WpSwitch
+        size="md"
         :model-value="server.settings.value?.backups.daily ?? true"
         aria-label="Daily backup"
         :disabled="!server.settings.value"

@@ -3,7 +3,7 @@ import { computed, inject } from "vue";
 import type { ModuleEntry } from "../../widgets/_shared";
 import { ModuleRowCtxKey } from "./module-row-ctx";
 import PairBadge from "./PairBadge.vue";
-import WpCheck from "@/kit/WpCheck.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 
 const props = defineProps<{ module: ModuleEntry; idx: number }>();
@@ -82,7 +82,7 @@ const {
       <WpIconButton variant="bare" class="wp-collapse-btn" draggable="false"
         :icon="isCollapsed(module) ? 'pi-caret-right' : 'pi-caret-down'"
         :label="isCollapsed(module) ? 'Expand' : 'Collapse'" @click="toggleCollapsed(idx)" />
-      <WpCheck size="sm" draggable="false" data-test="module-enabled"
+      <Checkbox size="sm" draggable="false" data-test="module-enabled"
         :title="ctx && ctx.currentFrame.value != null ? (ctx.effectiveEnabled(module) ? 'Disable on this frame' : 'Enable on this frame') : (module.enabled ? 'Disable' : 'Enable')"
         :model-value="ctx ? ctx.effectiveEnabled(module) : module.enabled"
         :aria-label="`enable ${module.meta.name}`"

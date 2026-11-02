@@ -8,8 +8,7 @@ import IdentitySection from "./sections/IdentitySection.vue";
 import PoolSection from "./sections/PoolSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
-import WpButton from "@/kit/WpButton.vue";
-import CloseButton from "@/kit/CloseButton.vue";
+import Button from "@/kit/Button.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
@@ -105,7 +104,7 @@ function onSpaClick(): void {
             : "Library entry · weighted options resolved per pick" }}
         </div>
       </div>
-      <CloseButton size="sm" kbd="Esc" data-test="wcm-close" @click="emit('cancel')" />
+      <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="wcm-close" @click="emit('cancel')" />
     </header>
 
     <IdentitySection
@@ -137,23 +136,25 @@ function onSpaClick(): void {
         <i class="pi pi-external-link" aria-hidden="true" />
         Edit library entry in SPA
       </a>
-      <WpButton
+      <Button
+        size="sm"
         variant="ghost"
         icon="pi-replay"
         data-test="wcm-clear-all"
         title="Clear all instance overrides on this wildcard"
         @click="emit('clear-all-overrides')"
-      >Reset overrides</WpButton>
+      >Reset overrides</Button>
       <span class="wp-wcm__hint">
         <Kbd keys="Esc" size="sm" /> cancel · <Kbd keys="Mod+Enter" size="sm" /> save
       </span>
-      <WpButton
+      <Button
         v-if="canSaveToLibrary"
+        size="sm"
         data-test="wcm-save-lib"
         @click="emit('save-to-library')"
-      >Save to library</WpButton>
-      <WpButton data-test="wcm-cancel" @click="emit('cancel')">Cancel</WpButton>
-      <WpButton variant="primary" data-test="wcm-save" @click="emit('save')">Save</WpButton>
+      >Save to library</Button>
+      <Button size="sm" data-test="wcm-cancel" @click="emit('cancel')">Cancel</Button>
+      <Button size="sm" variant="primary" data-test="wcm-save" @click="emit('save')">Save</Button>
     </footer>
     </div>
   </div>

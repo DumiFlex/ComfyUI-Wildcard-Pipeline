@@ -758,7 +758,7 @@ describe("ConflictModal.vue", () => {
     const wrap = mountModal({
       perItemIssues: [makePerItemIssue({ entity: { id: "b1", name: "B1" } })],
     });
-    const dialog = $('.wp-modal[role="dialog"]');
+    const dialog = $('[role="dialog"]');
     expect(dialog.getAttribute("aria-modal")).toBe("true");
     wrap.unmount();
   });

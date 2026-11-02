@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from "vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import NoteMarkdown from "./note-markdown";
 import { noteColorCss, type NoteConfig } from "../../extension/note";
 
@@ -55,7 +55,7 @@ const hasTitle = computed(() => props.title.trim() !== "" && props.title !== "WP
       <p v-else class="wp-note-peek__empty">No text yet.</p>
     </div>
     <div class="wp-note-peek__actions">
-      <WpButton class="wp-note-peek__edit" size="sm" variant="ghost" icon="pi-pencil" data-test="note-peek-edit" @click="emit('edit')">Edit</WpButton>
+      <Button class="wp-note-peek__edit" size="sm" variant="ghost" icon="pi-pencil" data-test="note-peek-edit" @click="emit('edit')">Edit</Button>
     </div>
   </div>
 </template>

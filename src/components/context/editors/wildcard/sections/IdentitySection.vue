@@ -3,7 +3,7 @@ import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { patchInstance } from "../../instance/patch";
 import { stripNonIdentifierChars } from "../../../../../manager/utils/slug";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -134,8 +134,9 @@ function onResetBinding(): void {
           aria-label="Display name"
           @input="onNameInput"
         />
-        <WpButton
+        <Button
           v-if="nameOverridden"
+          size="sm"
           variant="outline"
           icon="pi-replay"
           data-test="id-name-reset"
@@ -170,8 +171,9 @@ function onResetBinding(): void {
             @input="onBindingInput"
           />
         </div>
-        <WpButton
+        <Button
           v-if="bindingOverridden"
+          size="sm"
           variant="outline"
           icon="pi-replay"
           data-test="id-binding-reset"

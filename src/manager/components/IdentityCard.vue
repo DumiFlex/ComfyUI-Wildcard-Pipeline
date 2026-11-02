@@ -18,7 +18,7 @@ import Textarea from "@/kit/Textarea.vue";
 import Select, { type SelectOption } from "@/kit/Select.vue";
 import Chip from "@/kit/Chip.vue";
 import Button from "@/kit/Button.vue";
-import Toggle from "@/kit/Toggle.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
 import { useCategoryStore } from "../stores/categoryStore";
 import { categorySelectOptions } from "../utils/category-options";
 import { toIdentifier } from "../utils/slug";
@@ -275,7 +275,8 @@ defineExpose({ describe });
         hint="Marks this entry as adult content. Community posts you install carry this automatically."
         class="identity-grid__full"
       >
-        <Toggle
+        <WpSwitch
+          size="md"
           :model-value="isNsfw"
           label="Mark as NSFW (18+)"
           aria-label="Mark as NSFW"

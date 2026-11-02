@@ -283,7 +283,7 @@ describe("SubcategoryFilterPicker — null counts as an option", () => {
 
   it("drops it from the pool when Exclude null is ticked", async () => {
     const w = mount(SubcategoryFilterPicker, { props: withNull });
-    // WpCheck renders a role="checkbox" span, not a native input.
+    // Checkbox renders a role="checkbox" span, not a native input.
     await w.get('[data-test="subcat-exclude-null"] .wp-check').trigger("click");
     expect(w.get('[data-test="match-count"]').text()).toMatch(/2 of 2/);
   });

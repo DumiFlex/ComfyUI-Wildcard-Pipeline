@@ -11,8 +11,7 @@ import ModalShell from "@/kit/ModalShell.vue";
 import SweepPanel from "./SweepPanel.vue";
 import { liveAxes, sweepTotal, type SweepConfig } from "./types";
 import type { SweepCandidate } from "./sweep-candidates";
-import WpButton from "@/kit/WpButton.vue";
-import CloseButton from "@/kit/CloseButton.vue";
+import Button from "@/kit/Button.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -71,7 +70,7 @@ const preview = computed(() => {
           <div class="wp-swm__title-row"><span class="wp-swm__name">WP Context Loop</span><span class="wp-swm__chip">Sweep</span></div>
           <div class="wp-swm__sub">Run every combination of the wildcards you pick, one frame each.</div>
         </div>
-        <CloseButton size="sm" kbd="Esc" data-test="sweep-modal-close" @click="emit('close')" />
+        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="sweep-modal-close" @click="emit('close')" />
       </div>
 
       <div class="wp-swm__body">
@@ -97,7 +96,7 @@ const preview = computed(() => {
       <div class="wp-swm__foot">
         <span class="wp-swm__foot-hint">Changes save as you make them.</span>
         <span class="wp-swm__spacer" />
-        <WpButton variant="primary" data-test="sweep-modal-done" @click="emit('close')">Done</WpButton>
+        <Button size="sm" variant="primary" data-test="sweep-modal-done" @click="emit('close')">Done</Button>
       </div>
     </div>
   </ModalShell>

@@ -12,7 +12,7 @@ import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import DebugCondition from "./DebugCondition.vue";
 import { ruleActions, type RawRuleDetail, type TraceStep, type WarningRow } from "./debug-model";
 import { isNegativeMode } from "../../extension/derivation-conditions";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import Disclosure from "@/kit/Disclosure.vue";
 import CopyButton from "@/kit/CopyButton.vue";
 
@@ -134,11 +134,12 @@ function modeGlyph(mode: string | undefined): string {
     <template v-if="step.kind === 'derivation' && d?.rules">
       <div v-if="d.rules.length > 1" class="wp-dbg-rules__bar">
         <span class="wp-dbg-dim">{{ d.rules.length }} rules, {{ d.rules.filter((r) => ruleOutcome(r).tone === "ok").length }} fired</span>
-        <WpButton
+        <Button
+          size="sm"
           variant="link"
           data-test="dbg-rules-all"
           @click="setAllRules(!allRulesOpen)"
-        >{{ allRulesOpen ? "Fold all" : "Open all" }}</WpButton>
+        >{{ allRulesOpen ? "Fold all" : "Open all" }}</Button>
       </div>
       <div
         v-for="(rule, ri) in d.rules"
@@ -287,14 +288,15 @@ function modeGlyph(mode: string | undefined): string {
         label="Copy module id"
         class="wp-dbg-meta-btn"
       ><i class="pi pi-id-card" aria-hidden="true" /> {{ step.id }}</CopyButton>
-      <WpButton
+      <Button
         v-if="canFocus && step.nodeId"
+        size="sm"
         variant="outline"
         icon="pi-arrow-up-right"
         data-test="dbg-focus-node"
         hint="Select the node this ran in"
         @click="emit('focus-node', step.nodeId)"
-      >Show node</WpButton>
+      >Show node</Button>
     </div>
   </div>
 </template>

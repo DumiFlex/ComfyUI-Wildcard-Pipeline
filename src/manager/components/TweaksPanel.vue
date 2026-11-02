@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import Button from "@/kit/Button.vue";
 import Drawer from "@/kit/Drawer.vue";
-import Toggle from "@/kit/Toggle.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import HsvPicker from "@/kit/HsvPicker.vue";
 import ThemeChoices from "./settings/ThemeChoices.vue";
@@ -121,8 +121,9 @@ function onCustomHex(hex: string) {
 
       <section class="wp-tweaks__section">
         <h3 class="wp-tweaks__section-title">Sidebar</h3>
-        <Toggle
+        <WpSwitch
           v-model="sidebarCollapsed"
+          size="md"
           label="Collapse to icons"
           aria-label="Collapse sidebar to icons"
           data-test="tweaks-sidebar-toggle"

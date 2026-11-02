@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { BundleInstance } from "../../../widgets/_shared";
-import WpCheck from "@/kit/WpCheck.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 
 const props = withDefaults(
@@ -159,7 +159,7 @@ const summary = computed(() => {
       :hint="instance.collapsed ? 'Expand' : 'Collapse'"
       @click.stop="emit('toggle-collapse')"
     />
-    <WpCheck
+    <Checkbox
       class="wp-bundle-enabled"
       size="sm"
       draggable="false"
@@ -333,7 +333,7 @@ const summary = computed(() => {
   color: var(--wp-text2);
 }
 
-/* The on/off box is WpCheck; checked, it takes the bundle colour. */
+/* The on/off box is Checkbox; checked, it takes the bundle colour. */
 .wp-bundle-enabled { --check-on: var(--b); }
 /* Bundle icon base from shared .wp-row-type-icon (16×16 inline-flex).
  * Bundle-specific override: color from bundle frame token, font-size

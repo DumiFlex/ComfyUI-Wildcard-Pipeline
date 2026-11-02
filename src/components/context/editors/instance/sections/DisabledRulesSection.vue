@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import WpCheck from "@/kit/WpCheck.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Checkbox from "@/kit/Checkbox.vue";
+import Button from "@/kit/Button.vue";
 
 interface Rule {
   id: string;
@@ -61,13 +61,14 @@ function onClickReset(): void {
     <div class="wp-instance-section-head">
       <span class="wp-instance-section-title">Disabled rules</span>
       <span v-if="hasOverride" class="wp-instance-section-modified">modified</span>
-      <WpButton
+      <Button
         v-if="hasOverride"
+        size="sm"
         variant="ghost"
         icon="pi-replay"
         data-test="dr-reset"
         @click="onClickReset"
-      >Reset</WpButton>
+      >Reset</Button>
     </div>
     <div class="wp-instance-section-body wp-instance-section-body-col">
       <div
@@ -75,7 +76,7 @@ function onClickReset(): void {
         :key="rule.id"
         class="wp-instance-row"
       >
-        <WpCheck
+        <Checkbox
           :data-test="`dr-cb-${rule.id}`"
           :model-value="isDisabled(rule.id)"
           :aria-label="`disable rule ${rule.id}`"

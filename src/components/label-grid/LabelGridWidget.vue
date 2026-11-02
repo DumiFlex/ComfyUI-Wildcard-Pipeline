@@ -16,7 +16,7 @@
  * whole next config (`src/widgets/label_grid.ts` serializes it).
  */
 import { computed } from "vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import WpSelect from "@/kit/WpSelect.vue";
@@ -330,7 +330,7 @@ function text(ev: Event): string {
       </div>
 
       <div class="wp-lg__presets" role="group" aria-label="Grid presets">
-        <WpButton
+        <Button
           v-for="p in PRESETS"
           :key="p.id"
           size="sm"
@@ -341,12 +341,12 @@ function text(ev: Event): string {
           :class="{ 'is-suggested': suggested === p.id }"
           :data-test="`lg-preset-${p.id}`"
           @click="pickPreset(p.id)"
-        >{{ p.label }}</WpButton>
+        >{{ p.label }}</Button>
       </div>
       <div v-if="suggested && suggested !== activePreset" class="wp-lg__suggest" data-test="lg-suggest">
         <i class="pi pi-lightbulb" aria-hidden="true" />
         <span><b>{{ suggestedLabel }}</b> fits the last run.</span>
-        <WpButton size="sm" variant="link" data-test="lg-suggest-use" @click="pickPreset(suggested)">Use it</WpButton>
+        <Button size="sm" variant="link" data-test="lg-suggest-use" @click="pickPreset(suggested)">Use it</Button>
       </div>
 
       <template v-if="cfg.grid">
@@ -498,7 +498,7 @@ function text(ev: Event): string {
             data-test="lg-header-color"
             @update:model-value="(v) => set('header_color', v)"
           />
-          <WpButton
+          <Button
             v-if="!isDefaultStyle"
             size="sm"
             variant="ghost"
@@ -507,7 +507,7 @@ function text(ev: Event): string {
             class="wp-lg__reset"
             data-test="lg-reset-style"
             @click="resetStyle"
-          >Reset</WpButton>
+          >Reset</Button>
         </div>
       </template>
     </section>

@@ -12,7 +12,7 @@
  */
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 
 type RuleState = "neutral" | "exclude" | "boost" | "reduce" | "only";
 
@@ -108,9 +108,10 @@ function onReset(): void {
   <div class="pop">
     <div class="pop-title">Cell rule</div>
     <div class="pop-states">
-      <WpButton
+      <Button
         v-for="b in STATES"
         :key="b.state"
+        size="sm"
         class="pop-btn"
         :class="[`b-${b.state}`, { active: state === b.state }]"
         :pressed="state === b.state"
@@ -118,7 +119,7 @@ function onReset(): void {
         @click="pickState(b.state)"
       >
         <span class="b-glyph" aria-hidden="true">{{ b.glyph }}</span> {{ b.label }}
-      </WpButton>
+      </Button>
     </div>
     <div v-if="state === 'only'" class="pop-note">
       Every target in this row without a rule of its own is excluded when {{ srcLabel }} fires.
@@ -141,13 +142,14 @@ function onReset(): void {
     </div>
 
     <div v-if="canReset" class="pop-foot">
-      <WpButton
+      <Button
+        size="sm"
         variant="ghost"
         icon="pi-replay"
         class="pop-reset"
         hint="Reset cell to library default"
         @click="onReset"
-      >Reset to library</WpButton>
+      >Reset to library</Button>
     </div>
 
     <div class="pop-hint">Click outside or press Esc to close</div>
@@ -176,7 +178,7 @@ function onReset(): void {
   gap: 4px;
   margin-bottom: 8px;
 }
-/* WpButton carries the size, focus ring and hover; the compound selectors
+/* Button carries the size, focus ring and hover; the compound selectors
  * beat its scoped rules on a tie. Each state wears its matrix colour once
  * picked. */
 .wp-btn.pop-btn {

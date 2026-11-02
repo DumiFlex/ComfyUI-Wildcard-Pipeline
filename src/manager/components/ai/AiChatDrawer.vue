@@ -23,7 +23,6 @@
  * Images can be attached (button, paste or drop) when the model sees them;
  * they are shrunk in the browser first (`utils/chat-image.ts`).
  */
-import CloseButton from "@/kit/CloseButton.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { isNavigationFailure, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import Button from "@/kit/Button.vue";
@@ -866,9 +865,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         title="Start a new chat"
         @click="newChat"
       ><span class="wp-ai-chat__btn-label">New chat</span></Button>
-      <CloseButton
+      <Button
+        variant="ghost" icon="times"
         class="wp-ai-chat__close"
-        label="Close the assistant"
+        aria-label="Close the assistant"
         data-test="ai-chat-close"
         @click="chat.open.value = false"
       />
@@ -1100,7 +1100,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               <ul>
                 <li v-for="o in shownOptions(i, p)" :key="o.id" :data-off="isSkipped(entry, p, o.id) || undefined">
                   <label>
-                    <Checkbox class="wp-checkbox--inline" :model-value="!isSkipped(entry, p, o.id)" :disabled="!!entry.status[p.pid]" :aria-label="`Keep ${o.empty ? 'the empty option' : o.text}`" data-test="ai-chat-card-option" @update:model-value="chat.toggleOption(entry, p, o.id)" />
+                    <Checkbox :model-value="!isSkipped(entry, p, o.id)" :disabled="!!entry.status[p.pid]" :aria-label="`Keep ${o.empty ? 'the empty option' : o.text}`" data-test="ai-chat-card-option" @update:model-value="chat.toggleOption(entry, p, o.id)" />
                     <span class="wp-ai-chat__opt-text wp-ai-chat__clamp" :title="o.empty ? undefined : o.text"><template v-if="o.empty">∅ nothing</template><AiSyntax v-else :text="o.text" /></span>
                     <span v-if="o.weight !== 1" class="wp-ai-chat__opt-weight">×{{ o.weight }}</span>
                     <span v-if="o.fallback" class="wp-ai-chat__chip" data-tone="accent">fallback</span>

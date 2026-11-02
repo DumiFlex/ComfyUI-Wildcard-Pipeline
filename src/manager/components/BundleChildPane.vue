@@ -14,7 +14,7 @@
  * Task 3 ships wildcard support. Combine / fixed_values / derivation /
  * constraint land in Task 4a–d.
  */
-import CloseButton from "@/kit/CloseButton.vue";
+import Button from "@/kit/Button.vue";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import WildcardIdentitySection from "../../components/context/editors/wildcard/sections/IdentitySection.vue";
@@ -199,10 +199,11 @@ const constraintTargetValues = computed<string[]>(() => {
         </span>
         <span class="wp-bpane__name">{{ displayName }}</span>
         <span class="wp-bpane__kind">{{ KIND_LABEL[kind] ?? kind }}</span>
-        <CloseButton
+        <Button
+          variant="ghost" icon="times"
           class="wp-bpane__close"
           size="sm"
-          label="Close child editor"
+          aria-label="Close child editor"
           data-test="bundle-pane-close"
           @click="emit('close')"
         />

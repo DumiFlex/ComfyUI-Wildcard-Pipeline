@@ -179,6 +179,9 @@ function fmtWeight(w: number | undefined): string {
     :answered="!!result"
     :error="error"
     :steps="convo.steps.value"
+    :research="convo.research.value"
+    :searching="convo.searching.value"
+    :found="convo.web"
     @run="convo.ask"
     @refine="convo.refine"
     @retry="convo.retry"
@@ -187,9 +190,6 @@ function fmtWeight(w: number | undefined): string {
     @flip="convo.flip"
     @stop="convo.stop"
     @close="cancel"
-    :research="convo.research.value"
-    :searching="convo.searching.value"
-    :found="convo.web"
     @allow-research="convo.allowResearch"
     @skip-research="convo.skipResearch"
     @use-found="convo.useFound"
@@ -214,7 +214,7 @@ function fmtWeight(w: number | undefined): string {
           :data-off="unticked.has(i) ? 'true' : 'false'"
         >
           <label class="wp-ai-edit__body">
-            <Checkbox class="wp-checkbox--inline wp-ai-edit__check" :model-value="!unticked.has(i)" @update:model-value="toggle(i)" />
+            <Checkbox class="wp-ai-edit__check" :model-value="!unticked.has(i)" @update:model-value="toggle(i)" />
             <template v-if="action === 'remove'">
               <span class="wp-ai-edit__old" data-removed="true"><AiSyntax :text="c.before.value ?? ''" /></span>
               <span v-if="c.reason" class="wp-ai-edit__reason">{{ c.reason }}</span>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import ColorField from "@/kit/ColorField.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
@@ -263,7 +263,7 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
         @recording="(on: boolean) => emit('recording', on)"
       />
       <div class="wp-note__actions">
-        <WpButton variant="primary" size="sm" type="submit" data-test="note-done">Done</WpButton>
+        <Button variant="primary" size="sm" type="submit" data-test="note-done">Done</Button>
       </div>
     </form>
   </div>

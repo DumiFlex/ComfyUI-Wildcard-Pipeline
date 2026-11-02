@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Checkbox from "@/kit/Checkbox.vue";
 /**
  * Constraint ExceptionsSection — library exception list + extras
  * section. Library rows: checkbox toggles `disabled_exception_keys`,
@@ -20,7 +21,7 @@ import { encodeKey } from "../../instance/keys";
 import { patchInstance } from "../../instance/patch";
 import RichTextPreview from "../../../../../manager/components/RichTextPreview.vue";
 import Select, { type SelectOption } from "@/kit/Select.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 
 type Mode = "allow" | "exclude" | "boost" | "reduce" | "only";
@@ -315,37 +316,17 @@ const FACTOR_STEP = 0.1;
       ]"
       :data-test="`ex-row-${i}`"
     >
-      <!-- Styled checkbox matching OptionRow's wildcard pattern — a
-           role-checkbox span with inline SVG tick. Replaces the bare
-           native input for visual parity with the wildcard / fixed-
-           values edit modals. Hidden when stranded: a broken constraint
+      <!-- The kit Checkbox, as on OptionRow and ValueRow. Hidden when stranded: a broken constraint
            is a read-only snapshot, so the enable/disable toggle is gone. -->
-      <span
+      <Checkbox
         v-if="!stranded"
         class="ex__check"
-        :class="{ 'ex__check--on': !disabledKeys.has(libKey(exc)) }"
+        size="sm"
+        :model-value="!disabledKeys.has(libKey(exc))"
         :data-test="`ex-cb-${i}`"
-        role="checkbox"
-        :aria-checked="!disabledKeys.has(libKey(exc))"
-        tabindex="0"
         aria-label="Enable this exception"
-        @click="onLibCheckboxChange(exc, disabledKeys.has(libKey(exc)))"
-        @keydown.space.prevent="onLibCheckboxChange(exc, disabledKeys.has(libKey(exc)))"
-        @keydown.enter.prevent="onLibCheckboxChange(exc, disabledKeys.has(libKey(exc)))"
-      >
-        <svg
-          v-if="!disabledKeys.has(libKey(exc))"
-          class="ex__check-tick"
-          width="8"
-          height="8"
-          viewBox="0 0 12 12"
-          aria-hidden="true"
-        >
-          <path d="M2.5 6.5 L5 9 L9.5 3.5"
-                fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </span>
+        @update:model-value="onLibCheckboxChange(exc, disabledKeys.has(libKey(exc)))"
+      />
       <span class="ex__pair">
         <span class="ex__src">
           <span
@@ -383,8 +364,9 @@ const FACTOR_STEP = 0.1;
       </span>
       <!-- Editable: click-to-cycle chip with glyph + label. Read-only
            (stranded): the same colored chip as a static span — no cycle. -->
-      <WpButton
+      <Button
         v-if="!stranded"
+        size="sm"
         variant="outline"
         class="ex__mode-chip"
         :class="`ex__mode-chip--${effectiveMode(exc)}`"
@@ -394,7 +376,7 @@ const FACTOR_STEP = 0.1;
       >
         <span class="ex__mode-glyph" aria-hidden="true">{{ MODE_META[effectiveMode(exc)].glyph }}</span>
         {{ MODE_META[effectiveMode(exc)].label }}
-      </WpButton>
+      </Button>
       <span
         v-else
         class="ex__mode-chip ex__mode-chip--ro"
@@ -511,7 +493,8 @@ const FACTOR_STEP = 0.1;
           />
         </template>
       </Select>
-      <WpButton
+      <Button
+        size="sm"
         variant="outline"
         class="ex__mode-chip"
         :class="`ex__mode-chip--${exc.mode}`"
@@ -520,7 +503,7 @@ const FACTOR_STEP = 0.1;
       >
         <span class="ex__mode-glyph" aria-hidden="true">{{ MODE_META[exc.mode].glyph }}</span>
         {{ MODE_META[exc.mode].label }}
-      </WpButton>
+      </Button>
       <span
         v-if="exc.mode === 'boost' || exc.mode === 'reduce'"
         class="ex__factor-wrap"
@@ -555,14 +538,15 @@ const FACTOR_STEP = 0.1;
       {{ onlyLinkSources.length === 1 ? "it" : "them" }} can be picked.
     </p>
 
-    <WpButton
+    <Button
       v-if="!stranded"
+      size="sm"
       variant="add"
       icon="pi-plus"
       block
       data-test="ex-add-extra"
       @click="onAddExtra"
-    >Add extra exception</WpButton>
+    >Add extra exception</Button>
 
     <!-- Stranded snapshot has no editable list; a hint points to the
          reattach banner above (mirrors the SPA read-only exceptions). -->
@@ -665,27 +649,7 @@ const FACTOR_STEP = 0.1;
   min-width: 0;
 }
 
-/* Styled checkbox — mirror of OptionRow's `.opt__check` pattern so
- * users see one consistent on/off control across wildcard / fixed-
- * values / constraint edit modals. */
-.ex__check {
-  width: 14px;
-  height: 14px;
-  border: 1.5px solid var(--wp-border-soft, var(--wp-border));
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  background: var(--wp-bg);
-  flex-shrink: 0;
-  cursor: pointer;
-}
-.ex__check-tick { display: block; }
-.ex__check--on {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
-}
+.ex__check { flex-shrink: 0; }
 
 /* Null-option chip — shown in the src/tgt cell when the exception
  * targets the wildcard's null option (value === ""). Visually distinct
@@ -714,7 +678,7 @@ const FACTOR_STEP = 0.1;
 .ex__row--off .ex__arrow {
   opacity: 0.5;
 }
-.ex__row--off /* The read-only chip is a span; the editable one is a WpButton, whose size,
+.ex__row--off /* The read-only chip is a span; the editable one is a Button, whose size,
  * focus ring and hover it keeps (the compound `.wp-btn` selectors beat its
  * scoped rules on a tie). */
 .ex__mode-chip {

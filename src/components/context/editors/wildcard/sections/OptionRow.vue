@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Checkbox from "@/kit/Checkbox.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, ref } from "vue";
 import {
@@ -366,33 +367,15 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
     }"
     :title="hasBrokenRef ? 'References a module that is not in the library' : undefined"
   >
-    <span
+    <Checkbox
       class="opt__check"
-      :class="{ 'opt__check--on': enabled && !nullDisabledInMulti }"
+      size="sm"
+      :model-value="enabled && !nullDisabledInMulti"
+      :disabled="interactionLocked"
+      :aria-label="`Use option ${option.value || 'empty'}`"
       data-test="opt-check"
-      role="checkbox"
-      :aria-checked="enabled"
-      :aria-disabled="interactionLocked"
-      :tabindex="interactionLocked ? -1 : 0"
-      @click="onToggle"
-      @keydown.space.prevent="onToggle"
-    >
-      <!-- Inline SVG checkmark instead of PrimeIcon: precise sizing
-           (8×8 inside 14px box) without the icon-font's intrinsic
-           line-height inflating the glyph past the box edge. -->
-      <svg
-        v-if="enabled && !nullDisabledInMulti"
-        class="opt__check-tick"
-        width="8"
-        height="8"
-        viewBox="0 0 12 12"
-        aria-hidden="true"
-      >
-        <path d="M2.5 6.5 L5 9 L9.5 3.5"
-              fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
-    </span>
+      @update:model-value="onToggle"
+    />
     <span class="opt__name" data-test="opt-name" :class="{ 'opt__name--null': option.is_null }">
       <span class="opt__name-main" :title="option.value || undefined">
       <span
@@ -526,35 +509,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   box-shadow: inset 3px 0 0 var(--wp-danger);
 }
 .opt:hover { background: var(--wp-row-hover, rgba(255, 255, 255, 0.02)); }
-.opt__check {
-  width: 14px;
-  height: 14px;
-  border: 1.5px solid var(--wp-border-soft, var(--wp-border));
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  background: var(--wp-bg);
-  flex-shrink: 0;
-}
-.opt__check-tick {
-  display: block;
-}
-.opt__check--on {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
-}
-/* Category-filtered rows are read-only — the chip controls them.
- * Show a "not-allowed" cursor + slight opacity so the user knows the
- * per-option checkbox is intentionally inert in this state. */
-/* Any locked checkbox — category-filtered OR the null row in multi-pick —
- * reads as intentionally inert: not-allowed cursor + dimmed. Keyed on
- * aria-disabled so both lock reasons share one rule. */
-.opt__check[aria-disabled="true"] {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
+.opt__check { flex-shrink: 0; }
 .opt--filtered { cursor: default; }
 .opt__name {
   /* Outer cell is a flex row so the trailing pair-badge cluster

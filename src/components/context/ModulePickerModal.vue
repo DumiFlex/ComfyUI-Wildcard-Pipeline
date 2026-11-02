@@ -15,7 +15,7 @@
             </span>
           </div>
         </div>
-        <CloseButton size="sm" kbd="Esc" @click="$emit('close')" />
+        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" @click="$emit('close')" />
       </header>
 
       <!-- Toolbar: search + kind tabs + compact filter buttons.
@@ -41,10 +41,11 @@
           data-testid="picker-search"
         />
 
-        <!-- Inline icon-only quick toggles (WpButton `pressed`), next to
+        <!-- Inline icon-only quick toggles (Button `pressed`), next to
              search. On = accent tint. -->
-        <WpButton
+        <Button
           v-if="hasFavoritesInData"
+          size="sm"
           variant="outline"
           :icon="favoritesOnly ? 'pi-star-fill' : 'pi-star'"
           :pressed="favoritesOnly"
@@ -52,8 +53,9 @@
           data-testid="picker-filter-favorites"
           @click="favoritesOnly = !favoritesOnly"
         />
-        <WpButton
+        <Button
           v-if="alreadyAddedSet.size > 0"
+          size="sm"
           variant="outline"
           :icon="hideAlreadyAdded ? 'pi-eye-slash' : 'pi-eye'"
           :pressed="hideAlreadyAdded"
@@ -72,7 +74,8 @@
           v-if="usedCategories.length || availableTags.length"
           class="wp-picker__filters-pop"
         >
-          <WpButton
+          <Button
+            size="sm"
             variant="outline"
             class="wp-picker__filter-trigger"
             icon="pi-filter"
@@ -126,13 +129,14 @@
                 </div>
               </div>
 
-              <WpButton
+              <Button
                 v-if="hasActiveFilter"
+                size="sm"
                 variant="ghost"
                 icon="pi-filter-slash"
                 data-testid="picker-filter-clear"
                 @click="clearAllFilters"
-              >Clear all filters</WpButton>
+              >Clear all filters</Button>
             </div>
           </Transition>
         </div>
@@ -177,7 +181,7 @@
         <div v-else-if="loadError" class="wp-picker__state wp-picker__state--error">
           <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>
           {{ loadError }}
-          <WpButton @click="reload">Retry</WpButton>
+          <Button size="sm" @click="reload">Retry</Button>
         </div>
         <div v-else-if="filteredModules.length === 0" class="wp-picker__state">
           <i class="pi pi-inbox" aria-hidden="true"></i>
@@ -186,22 +190,24 @@
             All matching modules are already in this Context.
           </template>
           <template v-else>No modules in this category.</template>
-          <WpButton
+          <Button
             v-if="isHideAddedSuppressing"
+            size="sm"
             variant="outline"
             icon="pi-eye"
             data-testid="picker-show-already-added"
             hint="Turn off the hide-already-added filter so you can re-add an existing module as a sibling."
             @click="hideAlreadyAdded = false"
-          >Show already added</WpButton>
-          <WpButton
+          >Show already added</Button>
+          <Button
             v-else-if="!searchTerm"
+            size="sm"
             variant="outline"
             icon="pi-plus"
             data-testid="picker-create-module"
             :hint="`Open the library to create a new ${kindFilter === 'all' ? 'module' : (KIND_SINGULAR[kindFilter] ?? 'module')}`"
             @click="createInSpa"
-          >{{ createLabel }}</WpButton>
+          >{{ createLabel }}</Button>
         </div>
 
         <template v-else>
@@ -254,7 +260,7 @@
             picked
           </span>
           <span class="wp-picker__selection-spacer"></span>
-          <WpButton variant="ghost" data-testid="picker-clear" @click="selected.clear()">Clear</WpButton>
+          <Button size="sm" variant="ghost" data-testid="picker-clear" @click="selected.clear()">Clear</Button>
         </div>
         <div class="wp-picker__selection-chips">
           <span
@@ -293,14 +299,15 @@
           · <Kbd keys="Esc" size="sm" /> cancel
         </span>
         <span class="wp-picker__footer-spacer"></span>
-        <WpButton @click="$emit('close')">Cancel</WpButton>
-        <WpButton
+        <Button size="sm" @click="$emit('close')">Cancel</Button>
+        <Button
+          size="sm"
           variant="primary"
           icon="pi-plus"
           data-test="picker-add-btn"
           :disabled="selected.size === 0"
           @click="commitAdd"
-        >Add {{ selected.size }} {{ selected.size === 1 ? "module" : "modules" }}</WpButton>
+        >Add {{ selected.size }} {{ selected.size === 1 ? "module" : "modules" }}</Button>
       </footer>
     </div>
   </ModalShell>
@@ -331,8 +338,7 @@ import Skeleton from "@/kit/Skeleton.vue";
 import WpSelect from "@/kit/WpSelect.vue";
 import { kindIcon } from "../shared/kind-icons";
 import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
-import WpButton from "@/kit/WpButton.vue";
-import CloseButton from "@/kit/CloseButton.vue";
+import Button from "@/kit/Button.vue";
 
 interface PickerModule {
   id: string;

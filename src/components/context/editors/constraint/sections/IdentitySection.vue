@@ -8,7 +8,7 @@
  */
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 
 const props = defineProps<{ module: ModuleEntry }>();
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
@@ -48,8 +48,9 @@ function onResetName(): void {
           aria-label="Display name"
           @input="onNameInput"
         />
-        <WpButton
+        <Button
           v-if="nameOverridden"
+          size="sm"
           variant="outline"
           icon="pi-replay"
           data-test="id-name-reset"

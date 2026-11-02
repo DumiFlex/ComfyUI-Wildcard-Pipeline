@@ -5,7 +5,6 @@
  * own view (wildcard options vs. how often each came up, a constraint's
  * reach and hits, a combine's template and outputs, …).
  */
-import CloseButton from "@/kit/CloseButton.vue";
 import CodeBlock from "@/kit/CodeBlock.vue";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import Button from "@/kit/Button.vue";
@@ -94,7 +93,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
           <h3>{{ view.name }}</h3>
         </div>
         <Button v-if="!view.missing" variant="ghost" size="sm" icon="pi-pencil" data-test="inspector-edit" @click="emit('edit')">Edit</Button>
-        <CloseButton size="sm" label="Close inspector" data-test="inspector-close" @click="emit('close')" />
+        <Button variant="ghost" icon="times" size="sm" aria-label="Close inspector" data-test="inspector-close" @click="emit('close')" />
       </header>
 
       <p v-if="view.missing" class="wp-tri__note">This item was deleted from the library, so the run skips it.</p>

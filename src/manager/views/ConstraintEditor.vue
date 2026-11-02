@@ -1717,20 +1717,12 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
             :style="{ '--cn-mode-var': `var(${modeMeta(ex.mode).cssVar})` }"
           >
             <td v-if="exBulkActive" class="cn-ex-col-check">
-              <button
-                type="button"
-                class="wp-check"
-                role="checkbox"
-                :aria-checked="exBulkIsSelected(exUid(ex))"
-                :data-checked="exBulkIsSelected(exUid(ex)) ? 'true' : 'false'"
+              <Checkbox
+                :model-value="exBulkIsSelected(exUid(ex))"
                 :aria-label="`Select exception ${idx + 1}`"
                 :data-test="`cn-ex-check-${idx}`"
-                @click="exBulkToggle(exUid(ex))"
-              >
-                <svg v-if="exBulkIsSelected(exUid(ex))" viewBox="0 0 12 12" fill="none">
-                  <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </button>
+                @update:model-value="exBulkToggle(exUid(ex))"
+              />
             </td>
             <td>
               <Select

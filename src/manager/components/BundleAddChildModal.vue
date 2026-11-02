@@ -8,7 +8,7 @@
  * and appends to `children[]`.
  */
 import SearchInput from "@/kit/SearchInput.vue";
-import CloseButton from "@/kit/CloseButton.vue";
+import Button from "@/kit/Button.vue";
 import { computed, ref, watch } from "vue";
 import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
@@ -129,9 +129,10 @@ function pickBundle(row: BundleRow) {
         <div class="wp-bundle-add__head">
           <i class="pi pi-plus" aria-hidden="true" />
           <span class="wp-bundle-add__title">Add child to bundle</span>
-          <CloseButton
+          <Button
+            variant="ghost" icon="times"
             class="wp-bundle-add__close"
-            label="Close picker"
+            aria-label="Close picker"
             kbd="Esc"
             data-test="bundle-add-close"
             @click="close"

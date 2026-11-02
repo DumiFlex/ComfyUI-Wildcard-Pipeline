@@ -19,7 +19,7 @@
  */
 import { computed } from "vue";
 import { kindIcon } from "../shared/kind-icons";
-import WpCheck from "@/kit/WpCheck.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 
 export interface SummaryToken { isVar: boolean; text: string; }
@@ -108,7 +108,7 @@ const states = computed(() => props.module.states ?? {});
         :label="state.collapsed ? 'Expand' : 'Collapse'"
         @click="emit('toggle-collapse')"
       />
-      <WpCheck
+      <Checkbox
         size="sm"
         :title="state.enabled ? 'Disable' : 'Enable'"
         :aria-label="`enable ${module.name}`"

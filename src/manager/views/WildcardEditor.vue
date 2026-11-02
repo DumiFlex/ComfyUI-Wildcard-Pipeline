@@ -1949,20 +1949,12 @@ defineExpose({
                  would be unclickable, so the strip lives inside the first cell
                  of the row it lands ABOVE. -->
             <td v-if="bulkMode" class="opt-col-check">
-              <button
-                type="button"
-                class="wp-check"
-                role="checkbox"
-                :aria-checked="isSelected(o.id)"
-                :data-checked="isSelected(o.id) ? 'true' : 'false'"
+              <Checkbox
+                :model-value="isSelected(o.id)"
                 :aria-label="`Select option ${i + 1}`"
                 :data-test="`wc-opt-check-${i}`"
-                @click="toggleSelect(o.id)"
-              >
-                <svg v-if="isSelected(o.id)" viewBox="0 0 12 12" fill="none">
-                  <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </button>
+                @update:model-value="toggleSelect(o.id)"
+              />
             </td>
             <td class="opt-col-grip">
               <!-- The only pointer affordance the value cell's contenteditable

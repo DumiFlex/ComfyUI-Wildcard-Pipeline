@@ -33,7 +33,7 @@ import InstanceIdChip from "../InstanceIdChip.vue";
 // wildcard instead of the saved-matrix's frozen keys.
 import { cacheVersion, ensure, lookup } from "../../../../extension/preview-resolver";
 import ConstraintReattachSection from "./sections/ConstraintReattachSection.vue";
-import ConfirmDialog from "@/kit/ConfirmDialog.vue";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
 import { walkRemap } from "../../bundles/uuid-remap";
 import { buildWildcardRefData } from "../../../../manager/utils/library-suggestions";
 import type { ModuleRow } from "../../../../manager/api/types";
@@ -46,8 +46,7 @@ import {
 import { collectTransitiveDeps } from "../../../../manager/community/transitive-deps";
 import { downloadDepsForDangling } from "../../../../manager/community/download-and-reattach";
 import { installEnvelope } from "../../../../manager/import-export/install";
-import WpButton from "@/kit/WpButton.vue";
-import CloseButton from "@/kit/CloseButton.vue";
+import Button from "@/kit/Button.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
@@ -687,7 +686,7 @@ function onSpaClick(): void {
         </div>
         <div class="wp-cnm__sub">Library entry · source pick → modifies target option weights</div>
       </div>
-      <CloseButton size="sm" kbd="Esc" data-test="cnm-close" @click="emit('cancel')" />
+      <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="cnm-close" @click="emit('cancel')" />
     </header>
 
     <ConstraintReattachSection
@@ -759,30 +758,32 @@ function onSpaClick(): void {
         <i class="pi pi-external-link" aria-hidden="true" />
         Edit library entry in SPA
       </a>
-      <WpButton
+      <Button
+        size="sm"
         variant="ghost"
         icon="pi-replay"
         data-test="cnm-clear-all"
         title="Clear all instance overrides on this constraint"
         @click="emit('clear-all-overrides')"
-      >Reset overrides</WpButton>
+      >Reset overrides</Button>
       <span class="wp-cnm__hint">
         <Kbd keys="Esc" size="sm" /> cancel · <Kbd keys="Mod+Enter" size="sm" /> save
       </span>
-      <WpButton
+      <Button
         v-if="canSaveToLibrary"
+        size="sm"
         data-test="cnm-save-lib"
         @click="emit('save-to-library')"
-      >Save to library</WpButton>
-      <WpButton data-test="cnm-cancel" @click="emit('cancel')">Cancel</WpButton>
-      <WpButton variant="primary" data-test="cnm-save" @click="emit('save')">Save</WpButton>
+      >Save to library</Button>
+      <Button size="sm" data-test="cnm-cancel" @click="emit('cancel')">Cancel</Button>
+      <Button size="sm" variant="primary" data-test="cnm-save" @click="emit('save')">Save</Button>
     </footer>
     </div>
 
     <!-- Feature 2: confirm pulling the missing dependency (+ its closure)
          from the community before any network/install side effect. -->
-    <ConfirmDialog
-      :visible="downloadConfirmOpen"
+    <ConfirmModal
+      :open="downloadConfirmOpen"
       title="Download dependencies"
       :body="downloadConfirmBody"
       confirm-label="Download & install"

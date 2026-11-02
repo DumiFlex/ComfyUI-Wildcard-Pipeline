@@ -430,7 +430,7 @@ describe("Settings › AI assistant", () => {
     await flushPromises();
     expect(api.ai.saveConfig).toHaveBeenCalledWith({ reader_url: "http://127.0.0.1:11235" });
     expect(w.find('[data-test="ai-web-notice"]').exists()).toBe(false);
-    w.findAllComponents({ name: "Toggle" }).find((c) => c.attributes("data-test") === "ai-danbooru")!
+    w.findAllComponents({ name: "WpSwitch" }).find((c) => c.attributes("data-test") === "ai-danbooru")!
       .vm.$emit("update:modelValue", true);
     await flushPromises();
     expect(api.ai.saveConfig).toHaveBeenCalledWith({ danbooru_lookup: true });
@@ -438,7 +438,7 @@ describe("Settings › AI assistant", () => {
     expect(w.get('[data-test="ai-web-notice"]').text()).toContain("What leaves your machine");
     await w.get('[data-test="ai-web-notice-dismiss"]').trigger("click");
     expect(w.find('[data-test="ai-web-notice"]').exists()).toBe(false);
-    w.findAllComponents({ name: "Toggle" }).find((c) => c.attributes("data-test") === "ai-web-always")!
+    w.findAllComponents({ name: "WpSwitch" }).find((c) => c.attributes("data-test") === "ai-web-always")!
       .vm.$emit("update:modelValue", true);
     await flushPromises();
     expect(api.ai.saveConfig).toHaveBeenCalledWith({ web_always_allow: true });

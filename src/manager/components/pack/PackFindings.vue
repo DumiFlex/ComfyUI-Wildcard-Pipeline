@@ -39,7 +39,7 @@ function patchLabel(f: AiPackFinding): string {
     </p>
     <ul v-else class="wp-pack-findings__list">
       <li v-for="f in pb.findings.value" :key="f.id" :data-level="f.level" data-test="pack-finding">
-        <Checkbox class="wp-checkbox--inline wp-pack-findings__tick" :model-value="pb.selected.value.has(f.id)" :disabled="busy" :aria-label="`Send to the AI: ${f.text}`" @update:model-value="pb.toggleSelected(f.id)" />
+        <Checkbox class="wp-pack-findings__tick" :model-value="pb.selected.value.has(f.id)" :disabled="busy" :aria-label="`Send to the AI: ${f.text}`" @update:model-value="pb.toggleSelected(f.id)" />
         <i :class="['pi', f.level === 'fix' ? 'pi-exclamation-triangle' : 'pi-lightbulb']" aria-hidden="true" />
         <span class="wp-pack-findings__text">
           <b v-if="f.key && itemName(f.key)">{{ itemName(f.key) }}: </b>{{ f.text }}<span v-if="f.by === 'model'" class="wp-pack-findings__by"> · AI review</span><span v-if="pb.stuck.value.has(f.id)" class="wp-pack-findings__by" data-test="pack-finding-stuck"> · the AI couldn't change this; do it by hand, dismiss it, or tick it to send it again</span><span v-else-if="pb.unfixed.value.has(f.id)" class="wp-pack-findings__by" data-test="pack-finding-unfixed"> · the AI left this unchanged</span>

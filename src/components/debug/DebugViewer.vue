@@ -13,7 +13,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import { highlightJson } from "./highlight";
 import ContextMenu, { type ContextMenuItem } from "@/kit/ContextMenu.vue";
 import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import CopyButton from "@/kit/CopyButton.vue";
 import { copyText } from "@/kit/clipboard";
 import DebugVariables from "./DebugVariables.vue";
@@ -355,7 +355,8 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
           data-test="dbg-seed"
         ><span class="wp-dbg-head__seed-label">seed</span>{{ model.seed }}</CopyButton>
         <div v-if="iterationCount > 1" class="wp-dbg-iter" role="navigation" aria-label="loop iteration picker">
-          <WpButton
+          <Button
+            size="sm"
             variant="ghost"
             icon="pi-chevron-left"
             :disabled="iterationIndex <= 0"
@@ -364,11 +365,11 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
             @click="gotoIteration(iterationIndex - 1)"
           />
           <span class="wp-dbg-iter__label" data-test="dbg-iter-label">frame {{ iterationIndex + 1 }} / {{ iterationCount }}</span>
-          <WpButton variant="ghost" :disabled="iterationIndex>= iterationCount - 1"
+          <Button size="sm" variant="ghost" :disabled="iterationIndex>= iterationCount - 1"
             data-test="dbg-iter-next"
             title="Next iteration"
             @click="gotoIteration(iterationIndex + 1)"
-          ><i class="pi pi-chevron-right" aria-hidden="true" /></WpButton>
+          ><i class="pi pi-chevron-right" aria-hidden="true" /></Button>
         </div>
         <span class="wp-dbg-head__stat">{{ model.steps.length }} step{{ model.steps.length === 1 ? "" : "s" }}</span>
         <span v-if="model.groups.length > 1" class="wp-dbg-head__stat">{{ model.groups.length }} nodes</span>
@@ -389,7 +390,8 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
         <span v-else class="wp-dbg-head__ok" data-test="dbg-head-ok"><i class="pi pi-check-circle" aria-hidden="true" /> clean run</span>
         <div class="wp-dbg-head__actions">
           <CopyButton :text="() => tabText" label="Copy this tab as JSON" size="sm" data-test="dbg-copy" />
-          <WpButton
+          <Button
+            size="sm"
             variant="ghost"
             icon="pi-download"
             data-test="dbg-download"
@@ -425,8 +427,9 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
           aria-label="Filter"
           clear-label="Clear filter"
         />
-        <WpButton
+        <Button
           v-if="activeTab === 'trace' && model.steps.length"
+          size="sm"
           variant="ghost"
           :icon="allOpen ? 'pi-angle-double-up' : 'pi-angle-double-down'"
           data-test="dbg-expand-all"

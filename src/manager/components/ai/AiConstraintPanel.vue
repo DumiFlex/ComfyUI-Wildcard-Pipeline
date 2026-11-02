@@ -188,7 +188,7 @@ function shown(v: string): string {
           data-test="ai-cn-cell"
         >
           <label class="wp-ai-cn__body">
-            <Checkbox class="wp-checkbox--inline wp-ai-cn__check" :model-value="!unticked.has(`c:${i}`)" @update:model-value="toggle(`c:${i}`)" />
+            <Checkbox class="wp-ai-cn__check" :model-value="!unticked.has(`c:${i}`)" @update:model-value="toggle(`c:${i}`)" />
             <span class="wp-ai-cn__tag">#{{ c.source_tag }}</span>
             <i class="pi pi-arrow-right wp-ai-cn__arrow" aria-hidden="true" />
             <span class="wp-ai-cn__tag">#{{ c.target_tag }}</span>
@@ -207,7 +207,7 @@ function shown(v: string): string {
           data-test="ai-cn-exception"
         >
           <label class="wp-ai-cn__body">
-            <Checkbox class="wp-checkbox--inline wp-ai-cn__check" :model-value="!unticked.has(`e:${i}`)" @update:model-value="toggle(`e:${i}`)" />
+            <Checkbox class="wp-ai-cn__check" :model-value="!unticked.has(`e:${i}`)" @update:model-value="toggle(`e:${i}`)" />
             <span class="wp-ai-cn__opt">{{ shown(e.exception.source) }}</span>
             <i class="pi pi-arrow-right wp-ai-cn__arrow" aria-hidden="true" />
             <span class="wp-ai-cn__opt">{{ shown(e.exception.target) }}</span>

@@ -14,8 +14,8 @@
  * overrides the same names with the SPA palette).
  */
 import { computed } from "vue";
-import WpButton from "@/kit/WpButton.vue";
-import WpCheck from "@/kit/WpCheck.vue";
+import Button from "@/kit/Button.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import {
   INTENSITY_TO_NEG_RULES,
@@ -376,7 +376,7 @@ function isOverridden(rid: RuleId): boolean {
             }]"
             :title="isRuleDisabled(rule.id) ? `${rule.tooltip} (disabled in text mode)` : rule.tooltip"
           >
-            <WpCheck
+            <Checkbox
               size="sm"
               :data-test="`cleaner-rule-${rule.id}`"
               :class="{
@@ -404,7 +404,7 @@ function isOverridden(rid: RuleId): boolean {
               class="wp-cleaner__rule-stat"
             >{{ ruleStat(rule.id) }}</span>
           </div>
-          <WpCheck
+          <Checkbox
             size="sm"
             :data-test="`cleaner-neg-rule-${rule.id}`"
             :class="['wp-cleaner__neg-toggle', {
@@ -426,7 +426,7 @@ function isOverridden(rid: RuleId): boolean {
             <span class="wp-cleaner__rule-dash" aria-hidden="true">–</span>
             <span class="wp-cleaner__rule-label">drop negative tags also in prompt</span>
           </span>
-          <WpCheck
+          <Checkbox
             size="sm"
             data-test="cleaner-drop-overlap"
             :class="['wp-cleaner__neg-toggle', { 'is-on': !!modelValue.drop_prompt_overlap }]"
@@ -446,7 +446,8 @@ function isOverridden(rid: RuleId): boolean {
     </div>
 
     <div class="wp-cleaner__blocklist" data-wp-socket="blocklist">
-      <WpButton
+      <Button
+        size="sm"
         block
         icon="pi-ban"
         data-test="cleaner-blocklist-btn"
@@ -459,7 +460,7 @@ function isOverridden(rid: RuleId): boolean {
           {{ modelValue.blocklist.entries.length }} entries<template v-if="blocklistWired"> + input</template> · {{ modelValue.blocklist.kind }}
         </span>
         <i class="pi pi-chevron-right wp-cleaner__blocklist-chev" aria-hidden="true" />
-      </WpButton>
+      </Button>
     </div>
   </div>
 </template>
@@ -544,7 +545,7 @@ function isOverridden(rid: RuleId): boolean {
   text-align: center;
 }
 .wp-cleaner__col-label--neg { color: var(--wp-danger); }
-/* The on/off boxes are WpCheck (`sm`, the canvas rows' box); the negative
+/* The on/off boxes are Checkbox (`sm`, the canvas rows' box); the negative
  * column wears the danger colour, and an amber ring marks a rule changed
  * from the intensity preset. */
 .wp-check.wp-cleaner__neg-toggle { justify-self: center; --check-on: var(--wp-danger); }

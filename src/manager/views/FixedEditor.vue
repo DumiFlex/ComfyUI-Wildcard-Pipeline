@@ -750,20 +750,12 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
             @drop.prevent="onFvDrop(idx)"
           >
             <td v-if="bulkActive" class="fv-col-check">
-              <button
-                type="button"
-                class="wp-check"
-                role="checkbox"
-                :aria-checked="bulkIsSelected(v.id)"
-                :data-checked="bulkIsSelected(v.id) ? 'true' : 'false'"
+              <Checkbox
+                :model-value="bulkIsSelected(v.id)"
                 :aria-label="`Select value ${idx + 1}`"
                 :data-test="`fv-check-${idx}`"
-                @click="bulkToggle(v.id)"
-              >
-                <svg v-if="bulkIsSelected(v.id)" viewBox="0 0 12 12" fill="none">
-                  <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </button>
+                @update:model-value="bulkToggle(v.id)"
+              />
             </td>
             <td class="fv-col-grip">
               <!-- Same affordance as the wildcard options list: its own cell,

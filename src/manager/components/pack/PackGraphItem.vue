@@ -152,11 +152,11 @@ function move(v: string, by: number): void {
           <WpNumber commit="input" size="sm" :model-value="slot.sometimes_none" :min="0" :max="90" :disabled="busy" aria-label="Sometimes none" @update:model-value="(v) => setSlot({ sometimes_none: Math.max(0, Math.min(90, Math.round(Number(v)) || 0)) })" />
         </label>
         <label class="wp-pack-graph__check">
-          <Checkbox class="wp-checkbox--inline" :model-value="slot.hold === true" :disabled="busy" data-test="pack-slot-hold" @update:model-value="(v) => setSlot({ hold: v })" />
+          <Checkbox :model-value="slot.hold === true" :disabled="busy" data-test="pack-slot-hold" @update:model-value="(v) => setSlot({ hold: v })" />
           <span>Hold the pick across a batch</span>
         </label>
         <label v-if="pb.draft.value?.run?.mode === 'sweep'" class="wp-pack-graph__check">
-          <Checkbox class="wp-checkbox--inline" :model-value="slot.sweep === true" :disabled="busy" data-test="pack-slot-sweep" @update:model-value="(v) => setSlot({ sweep: v })" />
+          <Checkbox :model-value="slot.sweep === true" :disabled="busy" data-test="pack-slot-sweep" @update:model-value="(v) => setSlot({ sweep: v })" />
           <span>Sweep axis (the Loop sweeps its options)</span>
         </label>
       </div>

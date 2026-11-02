@@ -23,7 +23,7 @@ function modal(props = {}) {
     attachTo: document.body,
     // The modal body renders inside `<Teleport to="body">`; stubbing teleport
     // renders the children in place so the wrapper's `find()` reaches them
-    // (repo convention — see RemapRefPopup.test.ts, ConfirmDialog.test.ts).
+    // (repo convention — see RemapRefPopup.test.ts).
     global: { stubs: { teleport: true } },
   });
 }

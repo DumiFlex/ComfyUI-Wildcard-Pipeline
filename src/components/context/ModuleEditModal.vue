@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Button from "@/kit/Button.vue";
 import { ref, computed, watch } from "vue";
 
 import ModalShell from "@/kit/ModalShell.vue";
@@ -10,8 +11,7 @@ import {
 } from "./editors/_shell";
 import { setLibraryHash } from "./drift-store";
 import { pushToast } from "../shared/toast-store";
-import ConfirmDialog from "@/kit/ConfirmDialog.vue";
-import WpButton from "@/kit/WpButton.vue";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
 import PushToLibraryModal from "./PushToLibraryModal.vue";
 import WildcardInstanceModal from "./editors/wildcard/WildcardInstanceModal.vue";
 import FixedValuesInstanceModal from "./editors/fixed-values/FixedValuesInstanceModal.vue";
@@ -441,7 +441,7 @@ function cancel() {
       data-test="modal-frame-banner"
     >
       <span>Editing frame #{{ currentFrame + 1 }} — changes affect only this frame.</span>
-      <WpButton variant="outline" icon="pi-replay" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</WpButton>
+      <Button size="sm" variant="outline" icon="pi-replay" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</Button>
     </div>
 
     <!-- v2 wildcard branch — single-pane tailored modal renders its
@@ -542,13 +542,13 @@ function cancel() {
   <!-- Themed confirm dialog — replaces window.confirm() for any
        prompt the modal raises (reset overrides, reset to library,
        save to library). Single-instance: only one prompt at a time. -->
-  <ConfirmDialog
-    :visible="confirmDialog !== null"
+  <ConfirmModal
+    :open="confirmDialog !== null"
     :title="confirmDialog?.title ?? ''"
     :body="confirmDialog?.body ?? ''"
     :confirm-label="confirmDialog?.confirmLabel ?? 'Confirm'"
     :cancel-label="confirmDialog?.cancelLabel ?? 'Cancel'"
-    :variant="confirmDialog?.variant ?? 'default'"
+    :tone="confirmDialog?.variant === 'danger' ? 'danger' : 'accent'"
     @confirm="onConfirmDialogConfirm"
     @cancel="onConfirmDialogCancel"
   />

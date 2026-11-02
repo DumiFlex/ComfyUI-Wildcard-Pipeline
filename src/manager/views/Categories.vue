@@ -6,7 +6,7 @@ import DataTable, { type DataColumn, type DataSort } from "@/kit/DataTable.vue";
 import EmptyState from "@/kit/EmptyState.vue";
 import Field from "@/kit/Field.vue";
 import Input from "@/kit/Input.vue";
-import ColorPicker from "@/kit/ColorPicker.vue";
+import ColorField from "@/kit/ColorField.vue";
 import { DEFAULT_COLOUR } from "@/kit/colour-presets";
 import IconPicker from "@/kit/IconPicker.vue";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -256,7 +256,7 @@ async function saveEdit() {
           />
         </Field>
         <Field label="Color">
-          <ColorPicker v-model="newColor" aria-label="New category color" />
+          <ColorField v-model="newColor" presets size="md" aria-label="New category color" />
         </Field>
         <Field label="Name" class="wp-cat-newrow__name">
           <Input
@@ -320,8 +320,8 @@ async function saveEdit() {
       </template>
       <template #cell-color="{ row }">
         <template v-if="editing && editing.id === row.id">
-          <ColorPicker
-            v-model="editing.color"
+          <ColorField v-model="editing.color" presets
+            size="md"
             :aria-label="`Edit color for ${row.name}`"
           />
         </template>

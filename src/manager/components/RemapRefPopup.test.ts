@@ -28,7 +28,7 @@ function mountPopup(overrides = {}) {
     attachTo: document.body,
     // The popup body renders inside `<Teleport to="body">`; stubbing teleport
     // renders the children in place so the wrapper's `find()` reaches them
-    // (repo convention — see ConfirmDialog / ModuleEditModal tests).
+    // (repo convention — see ModuleEditModal tests).
     global: { stubs: { teleport: true } },
   });
 }

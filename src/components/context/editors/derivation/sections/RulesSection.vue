@@ -43,7 +43,7 @@ import {
   isConditionGroup,
   matchWord,
 } from "../../../../../extension/derivation-conditions";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 
 // Async-import the rich-text editor so its chunk stays split + is only
 // pulled in when a derivation instance modal expands a rule. RichTextInput
@@ -773,12 +773,13 @@ function condRows(cond: unknown, bi: number): CondRow[] {
                       >
                         <span class="fld__lib-label">library</span>
                         <RuleValueChips :value="row.test.value ?? ''" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware />
-                        <WpButton
+                        <Button
+                          size="sm"
                           variant="link"
                           icon="pi-replay"
                           :data-test="`cond-reset-${rule.id}-${row.key}`"
                           @click="onCondOverrideInput(rule.id, String(row.key), '')"
-                        >Use library</WpButton>
+                        >Use library</Button>
                       </div>
                     </div>
                   </div>
@@ -850,12 +851,13 @@ function condRows(cond: unknown, bi: number): CondRow[] {
                       <div v-if="getOverride('action_value_overrides', rule.id, key) !== ''" class="fld__lib">
                         <span class="fld__lib-label">library</span>
                         <RuleValueChips :value="action.value ?? ''" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware />
-                        <WpButton
+                        <Button
+                          size="sm"
                           variant="link"
                           icon="pi-replay"
                           :data-test="`action-reset-${rule.id}-${key}`"
                           @click="onActionOverrideInput(rule.id, key, '')"
-                        >Use library</WpButton>
+                        >Use library</Button>
                       </div>
                     </div>
                   </div>

@@ -106,13 +106,13 @@ describe("ValueRow", () => {
 
   it("checkbox is checked when enabled", () => {
     const w = mount(ValueRow, { props: { row: plainDraft, library: lib }, global: { stubs: globalStubs } });
-    expect(w.find('[data-test="row-check"]').classes()).toContain("row__check--on");
+    expect(w.find('[data-test="row-check"]').attributes("aria-checked")).toBe("true");
   });
 
   it("checkbox unchecked + line-through when disabled", () => {
     const draft = { ...plainDraft, enabled: false };
     const w = mount(ValueRow, { props: { row: draft, library: lib }, global: { stubs: globalStubs } });
-    expect(w.find('[data-test="row-check"]').classes()).not.toContain("row__check--on");
+    expect(w.find('[data-test="row-check"]').attributes("aria-checked")).toBe("false");
     expect(w.classes()).toContain("row--off");
   });
 

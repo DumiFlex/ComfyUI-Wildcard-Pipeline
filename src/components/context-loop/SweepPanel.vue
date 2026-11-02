@@ -20,7 +20,7 @@ import {
 import { axisStatus, type SweepCandidate } from "./sweep-candidates";
 import WpNumber from "@/kit/WpNumber.vue";
 import WpSelect from "@/kit/WpSelect.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 
 const props = withDefaults(
@@ -208,9 +208,9 @@ function moveAxis(uid: string, dir: -1 | 1): void {
         </div>
         <div v-if="openUid === row.axis.uid && row.candidate" class="wp-sweep__opts">
           <div class="wp-sweep__opts-bar">
-            <WpButton variant="link" data-test="sweep-all" @click="selectAll(row.axis, row.candidate)">All</WpButton>
-            <WpButton variant="link" data-test="sweep-none" @click="selectNone(row.axis)">None</WpButton>
-            <WpButton variant="link" @click="selectDefault(row.axis, row.candidate)">Enabled only</WpButton>
+            <Button size="sm" variant="link" data-test="sweep-all" @click="selectAll(row.axis, row.candidate)">All</Button>
+            <Button size="sm" variant="link" data-test="sweep-none" @click="selectNone(row.axis)">None</Button>
+            <Button size="sm" variant="link" @click="selectDefault(row.axis, row.candidate)">Enabled only</Button>
           </div>
           <div class="wp-sweep__opts-list">
             <button
@@ -255,7 +255,7 @@ function moveAxis(uid: string, dir: -1 | 1): void {
           @update:model-value="(n) => n !== null && setLimit(Math.round(n))"
         />
       </div>
-      <div class="wp-sweep__row" v-tooltip="HOLD_TOOLTIP">
+      <div v-tooltip="HOLD_TOOLTIP" class="wp-sweep__row">
         <span class="wp-sweep__row-label">Hold other picks</span>
         <WpSwitch
           data-test="sweep-hold-toggle"

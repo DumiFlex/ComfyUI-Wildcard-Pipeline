@@ -12,7 +12,7 @@ import type { BundleInstance } from "../../../../../widgets/_shared";
 import { COLOUR_PRESETS, DEFAULT_COLOUR } from "@/kit/colour-presets";
 import HsvPicker from "@/kit/HsvPicker.vue";
 import Popover from "@/kit/Popover.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -94,8 +94,9 @@ function onResetColor(): void {
           aria-label="Display name"
           @input="onNameInput"
         />
-        <WpButton
+        <Button
           v-if="nameOverridden"
+          size="sm"
           variant="outline"
           icon="pi-replay"
           data-test="bdm-name-reset"

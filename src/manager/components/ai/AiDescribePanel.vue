@@ -104,7 +104,7 @@ function close(): void {
   >
     <template v-if="result">
       <label v-if="result.description" class="wp-ai-desc__desc" data-test="ai-desc-description">
-        <Checkbox class="wp-checkbox--inline wp-ai-desc__check" v-model="useDescription" />
+        <Checkbox v-model="useDescription" class="wp-ai-desc__check" />
         <span class="wp-ai-desc__body">
           <span v-if="description" class="wp-ai-desc__old">{{ description }}</span>
           <span class="wp-ai-desc__new">{{ result.description }}</span>

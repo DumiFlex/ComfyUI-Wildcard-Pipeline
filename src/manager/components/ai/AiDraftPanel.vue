@@ -254,7 +254,7 @@ const skippedSummary = computed(() => {
       <ul class="wp-ai-draft__list" data-test="ai-draft-results">
         <li v-for="(o, i) in result.options" :key="i" class="wp-ai-draft__row" :data-off="unticked.has(i) ? 'true' : 'false'">
           <label class="wp-ai-draft__row-label">
-            <Checkbox class="wp-checkbox--inline wp-ai-draft__check" :model-value="!unticked.has(i)" @update:model-value="toggle(i)" />
+            <Checkbox class="wp-ai-draft__check" :model-value="!unticked.has(i)" @update:model-value="toggle(i)" />
             <span class="wp-ai-draft__value"><AiSyntax :text="o.value" /></span>
           </label>
           <span v-if="o.weight !== 1" class="wp-ai-draft__weight" title="Weight">×{{ o.weight }}</span>

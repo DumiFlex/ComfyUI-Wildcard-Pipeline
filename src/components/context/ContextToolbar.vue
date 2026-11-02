@@ -2,7 +2,7 @@
 /** Context list toolbar: module count, bulk drift refresh and
  *  collapse / expand / toggle-all. Styles live in `context-widget.css`,
  *  except the drift button's colour below. */
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 
 defineProps<{ enabledCount: number; totalCount: number; driftedCount: number }>();
@@ -17,15 +17,16 @@ defineEmits<{ refresh: []; collapse: []; expand: []; toggleAll: [] }>();
     <!-- Bulk-refresh drifted. Visible only when at least one module
          drifted from its library version; orange accent matches the
          per-card drift dot. -->
-    <WpButton
+    <Button
       v-if="driftedCount > 0"
+      size="sm"
       variant="outline"
       icon="pi-refresh"
       class="wp-w-drift"
       :hint="`Refresh ${driftedCount} drifted module(s) from the library.`"
       data-testid="bulk-refresh-drifted"
       @click="$emit('refresh')"
-    >refresh {{ driftedCount }} drifted</WpButton>
+    >refresh {{ driftedCount }} drifted</Button>
 
     <span class="wp-w-toolbar-spacer" />
     <WpIconButton
@@ -46,7 +47,7 @@ defineEmits<{ refresh: []; collapse: []; expand: []; toggleAll: [] }>();
 
 <style scoped>
 /* The drift colour matches the per-card drift dot; compound selectors beat
- * WpButton's own scoped outline rules. */
+ * Button's own scoped outline rules. */
 .wp-btn.wp-w-drift {
   border-color: var(--wp-warn);
   color: var(--wp-warn);

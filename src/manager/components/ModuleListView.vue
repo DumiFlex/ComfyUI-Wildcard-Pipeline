@@ -864,8 +864,8 @@ defineExpose({
 
     <!-- Organize with AI -->
     <Modal v-if="canOrganize" :open="organizeOpen" size="lg" @update:open="organizeOpen = $event">
-      <template #header>
-        <h3 class="wp-modal__title"><i class="pi pi-microchip-ai" aria-hidden="true" /> Organize with AI</h3>
+      <template #header="{ titleId }">
+        <h3 :id="titleId" class="wp-modal__title wp-mlv-modal-title"><i class="pi pi-microchip-ai" aria-hidden="true" /> Organize with AI</h3>
       </template>
       <AiOrganizePanel
         v-if="organizeOpen"
@@ -878,8 +878,8 @@ defineExpose({
 
     <!-- Tag-add modal -->
     <Modal :open="tagAddOpen" @update:open="tagAddOpen = $event">
-      <template #header>
-        <h3 class="wp-modal__title">Add tag to {{ selected.size }} items</h3>
+      <template #header="{ titleId }">
+        <h3 :id="titleId" class="wp-modal__title wp-mlv-modal-title">Add tag to {{ selected.size }} items</h3>
       </template>
       <div class="wp-bulk-modal-body">
         <input
@@ -913,8 +913,8 @@ defineExpose({
 
     <!-- Tag-remove modal -->
     <Modal :open="tagRemoveOpen" @update:open="tagRemoveOpen = $event">
-      <template #header>
-        <h3 class="wp-modal__title">Remove tag from {{ selected.size }} items</h3>
+      <template #header="{ titleId }">
+        <h3 :id="titleId" class="wp-modal__title wp-mlv-modal-title">Remove tag from {{ selected.size }} items</h3>
       </template>
       <div class="wp-bulk-modal-body">
         <div class="wp-bulk-modal-suggestions">
@@ -941,8 +941,8 @@ defineExpose({
 
     <!-- Set-category modal -->
     <Modal :open="categoryOpen" @update:open="categoryOpen = $event">
-      <template #header>
-        <h3 class="wp-modal__title">Set category for {{ selected.size }} items</h3>
+      <template #header="{ titleId }">
+        <h3 :id="titleId" class="wp-modal__title wp-mlv-modal-title">Set category for {{ selected.size }} items</h3>
       </template>
       <div class="wp-bulk-modal-body">
         <Select v-model="categoryValue" :options="categoryOptions" aria-label="Category" />
@@ -960,8 +960,8 @@ defineExpose({
 
     <!-- Delete confirm -->
     <Modal :open="deleteOpen" @update:open="deleteOpen = $event">
-      <template #header>
-        <h3 class="wp-modal__title">Delete {{ selected.size }} items?</h3>
+      <template #header="{ titleId }">
+        <h3 :id="titleId" class="wp-modal__title wp-mlv-modal-title">Delete {{ selected.size }} items?</h3>
       </template>
       <p>This cannot be undone.</p>
       <template #footer>
@@ -1110,19 +1110,11 @@ defineExpose({
                 class="wp-table__select-cell"
                 @click.stop="toggleSelect(row)"
               >
-                <button
-                  type="button"
-                  class="wp-check"
-                  role="checkbox"
-                  :aria-checked="isSelected(row)"
-                  :data-checked="isSelected(row) ? 'true' : 'false'"
+                <Checkbox
+                  :model-value="isSelected(row)"
                   aria-label="Select row"
                   tabindex="-1"
-                >
-                  <svg v-if="isSelected(row)" viewBox="0 0 12 12" fill="none">
-                    <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                </button>
+                />
               </td>
               <td>
                 <button
@@ -1738,4 +1730,6 @@ defineExpose({
   }
 }
 
+/* Modal styles its own title only (a custom #header styles its own). */
+.wp-mlv-modal-title { flex: 1; display: flex; align-items: center; gap: var(--wp-space-2); margin: 0; font-size: var(--wp-text-md); font-weight: 600; color: var(--wp-text); }
 </style>
