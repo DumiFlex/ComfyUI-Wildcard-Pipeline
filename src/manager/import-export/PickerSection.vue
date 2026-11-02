@@ -24,8 +24,8 @@
  * rows are selected.
  */
 import { ref, computed } from "vue";
-import Checkbox from "../../kit/Checkbox.vue";
-import Disclosure from "../../kit/Disclosure.vue";
+import Checkbox from "@/kit/Checkbox.vue";
+import Disclosure from "@/kit/Disclosure.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 
 /** Mirror of PickerRow's KIND_CLASS — same slug rules. */

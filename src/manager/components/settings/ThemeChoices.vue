@@ -7,7 +7,7 @@
  * panel (`compact`).
  */
 import { computed } from "vue";
-import ChoiceCards, { type ChoiceCardOption } from "../../../kit/ChoiceCards.vue";
+import ChoiceCards, { type ChoiceCardOption } from "@/kit/ChoiceCards.vue";
 import {
   LOOK_OPTIONS,
   PALETTE_OPTIONS,

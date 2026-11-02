@@ -15,7 +15,7 @@ import type {
   ScenarioSeedSpec,
   ScenarioStackItem,
 } from "../api/types";
-import { useToast } from "../../kit/useToast";
+import { useToast } from "@/kit/useToast";
 import { readTestRunnerDefaults } from "../stores/uiStore";
 import {
   defaultOutputVar,

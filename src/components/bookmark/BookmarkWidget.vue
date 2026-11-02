@@ -5,12 +5,12 @@
  * selected); double-click or the pencil opens the editor card.
  */
 import { computed, ref, watch } from "vue";
-import Banner from "../../kit/Banner.vue";
-import ColorField from "../../kit/ColorField.vue";
-import Kbd from "../../kit/Kbd.vue";
-import WpButton from "../../kit/WpButton.vue";
-import WpIconButton from "../../kit/WpIconButton.vue";
-import WpSwitch from "../../kit/WpSwitch.vue";
+import Banner from "@/kit/Banner.vue";
+import ColorField from "@/kit/ColorField.vue";
+import Kbd from "@/kit/Kbd.vue";
+import WpButton from "@/kit/WpButton.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
 import BookmarkFields from "./BookmarkFields.vue";
 import NoteIconGrid from "../note/NoteIconGrid.vue";
 import { pushToast } from "../shared/toast-store";

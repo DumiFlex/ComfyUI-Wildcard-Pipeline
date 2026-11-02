@@ -9,13 +9,13 @@
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { aiDebugEnabled, setAiDebug } from "../../../api/ai-debug";
-import Toggle from "../../../../kit/Toggle.vue";
-import Select from "../../../../kit/Select.vue";
-import Input from "../../../../kit/Input.vue";
-import Button from "../../../../kit/Button.vue";
+import Toggle from "@/kit/Toggle.vue";
+import Select from "@/kit/Select.vue";
+import Input from "@/kit/Input.vue";
+import Button from "@/kit/Button.vue";
 import RadioGroup, { type RadioOption } from "@/kit/RadioGroup.vue";
 import { vTooltip } from "@/kit/tooltip";
-import type { SelectOption } from "../../../../kit/select-types";
+import type { SelectOption } from "@/kit/select-types";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import LibraryNoteGroup from "../LibraryNoteGroup.vue";

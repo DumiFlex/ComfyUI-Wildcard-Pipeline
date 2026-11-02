@@ -15,20 +15,20 @@
  * marked and goes at the next backup rather than the moment it's unpinned.
  */
 import { computed, onMounted, ref } from "vue";
-import Toggle from "../../../kit/Toggle.vue";
-import Button from "../../../kit/Button.vue";
-import Select from "../../../kit/Select.vue";
-import Icon, { ICON_SM } from "../../../kit/Icon.vue";
-import Input from "../../../kit/Input.vue";
-import type { SelectOption } from "../../../kit/select-types";
-import ConfirmModal from "../../../kit/ConfirmModal.vue";
+import Toggle from "@/kit/Toggle.vue";
+import Button from "@/kit/Button.vue";
+import Select from "@/kit/Select.vue";
+import Icon, { ICON_SM } from "@/kit/Icon.vue";
+import Input from "@/kit/Input.vue";
+import type { SelectOption } from "@/kit/select-types";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
 import SettingGroup from "./SettingGroup.vue";
 import SettingRow from "./SettingRow.vue";
 import { api } from "../../api/client";
 import type { BackupEntry, BackupList, BackupReason } from "../../api/types";
 import { useServerSettings } from "../../composables/useServerSettings";
 import { useSystemStore } from "../../stores/systemStore";
-import { useToast } from "../../../kit/useToast";
+import { useToast } from "@/kit/useToast";
 
 const server = useServerSettings();
 const system = useSystemStore();

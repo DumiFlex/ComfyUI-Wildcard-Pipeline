@@ -6,10 +6,10 @@
  * the grip reorders, which is also the order Previous / Next walk.
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
-import CloseButton from "../../kit/CloseButton.vue";
-import SortableList from "../../kit/SortableList.vue";
-import WpButton from "../../kit/WpButton.vue";
-import WpIconButton from "../../kit/WpIconButton.vue";
+import CloseButton from "@/kit/CloseButton.vue";
+import SortableList from "@/kit/SortableList.vue";
+import WpButton from "@/kit/WpButton.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
 import DockRow from "./DockRow.vue";
 import {
   addBookmarkHere,

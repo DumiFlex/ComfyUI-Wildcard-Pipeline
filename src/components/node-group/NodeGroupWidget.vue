@@ -6,8 +6,8 @@
  * → bypassed), and a bar that sets them all. Stateless: the glue reads the
  * members off the graph and applies every change this emits.
  */
-import WpSegmented from "../../kit/WpSegmented.vue";
-import { vTooltip } from "../../kit/tooltip";
+import WpSegmented from "@/kit/WpSegmented.vue";
+import { vTooltip } from "@/kit/tooltip";
 import type { MemberMode } from "../../extension/node-group";
 
 export interface MemberView {

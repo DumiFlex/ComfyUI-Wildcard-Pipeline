@@ -6,8 +6,8 @@
  * rows sends only those; "None of these" sends nothing. Afterwards it folds
  * to one line saying what was used.
  */
-import Button from "../../../kit/Button.vue";
-import Checkbox from "../../../kit/Checkbox.vue";
+import Button from "@/kit/Button.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import { siteOf, type SearchFound } from "../../composables/searchFound";
 
 const props = withDefaults(defineProps<{

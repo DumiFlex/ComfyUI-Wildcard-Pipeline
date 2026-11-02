@@ -16,7 +16,7 @@
  * `locked_seed` for this kind. Dropping the section is honest;
  * dimmed dead UI would lie.
  */
-import Kbd from "../../../../kit/Kbd.vue";
+import Kbd from "@/kit/Kbd.vue";
 import { computed, ref, watch } from "vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import type { ChainModule, TargetSelect } from "../../../../extension/constraint-pairs";
@@ -33,7 +33,7 @@ import InstanceIdChip from "../InstanceIdChip.vue";
 // wildcard instead of the saved-matrix's frozen keys.
 import { cacheVersion, ensure, lookup } from "../../../../extension/preview-resolver";
 import ConstraintReattachSection from "./sections/ConstraintReattachSection.vue";
-import ConfirmDialog from "../../../../kit/ConfirmDialog.vue";
+import ConfirmDialog from "@/kit/ConfirmDialog.vue";
 import { walkRemap } from "../../bundles/uuid-remap";
 import { buildWildcardRefData } from "../../../../manager/utils/library-suggestions";
 import type { ModuleRow } from "../../../../manager/api/types";
@@ -46,8 +46,8 @@ import {
 import { collectTransitiveDeps } from "../../../../manager/community/transitive-deps";
 import { downloadDepsForDangling } from "../../../../manager/community/download-and-reattach";
 import { installEnvelope } from "../../../../manager/import-export/install";
-import WpButton from "../../../../kit/WpButton.vue";
-import CloseButton from "../../../../kit/CloseButton.vue";
+import WpButton from "@/kit/WpButton.vue";
+import CloseButton from "@/kit/CloseButton.vue";
 
 
 /** Platform-correct save chord for the footer hint. */

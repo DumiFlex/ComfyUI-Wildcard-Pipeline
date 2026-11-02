@@ -8,9 +8,9 @@
  */
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed } from "vue";
-import Checkbox from "../../../kit/Checkbox.vue";
-import Select from "../../../kit/Select.vue";
-import type { SelectOption } from "../../../kit/select-types";
+import Checkbox from "@/kit/Checkbox.vue";
+import Select from "@/kit/Select.vue";
+import type { SelectOption } from "@/kit/select-types";
 import type { AiPackItem, AiPackRelation, AiPackRelationKind, AiPackSlot } from "../../api/types";
 import { usePackBuilder } from "../../composables/usePackBuilder";
 

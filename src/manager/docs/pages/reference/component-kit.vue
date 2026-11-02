@@ -3,7 +3,7 @@ import { useRouter } from "vue-router";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocCallout from "../../../components/docs/DocCallout.vue";
-import Button from "../../../../kit/Button.vue";
+import Button from "@/kit/Button.vue";
 import { KIT_ENTRIES } from "../../../kit/registry";
 import { KIT_SITE } from "../../../config/links";
 

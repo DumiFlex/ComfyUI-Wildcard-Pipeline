@@ -6,7 +6,7 @@
  * under them says what it watches, what they are and what it drives.
  * Stateless: the glue owns the map (on `node.properties`) and the graph.
  */
-import WpSegmented from "../../kit/WpSegmented.vue";
+import WpSegmented from "@/kit/WpSegmented.vue";
 import type { MemberMode } from "../../extension/node-group";
 import type { RelayAction, RelayMap } from "../../extension/mode-relay";
 

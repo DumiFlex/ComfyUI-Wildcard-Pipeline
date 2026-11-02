@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
-import Combobox from "../../kit/Combobox.vue";
-import ColorField from "../../kit/ColorField.vue";
-import WpButton from "../../kit/WpButton.vue";
-import WpSegmented from "../../kit/WpSegmented.vue";
-import WpSelect from "../../kit/WpSelect.vue";
-import { vTooltip } from "../../kit/tooltip";
+import Combobox from "@/kit/Combobox.vue";
+import ColorField from "@/kit/ColorField.vue";
+import WpButton from "@/kit/WpButton.vue";
+import WpSegmented from "@/kit/WpSegmented.vue";
+import WpSelect from "@/kit/WpSelect.vue";
+import { vTooltip } from "@/kit/tooltip";
 import CATALOG from "../../extension/docs-catalog.json";
 import NoteIconGrid from "./NoteIconGrid.vue";
 import NoteMarkdown from "./note-markdown";

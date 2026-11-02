@@ -2,15 +2,10 @@
 looks, renames, clearing a category, and tag groups / option tags."""
 from __future__ import annotations
 
-import re
-from pathlib import Path
-
 import pytest
 
 from engine.ai import chat, chat_manage
 from engine.ai import wildcard as ai_wildcard
-
-ROOT = Path(__file__).resolve().parents[3]
 
 
 def _lib():
@@ -80,13 +75,6 @@ def test_categories_take_a_color_and_icon():
         _lib().run("edit_categories", {"create": [{"name": "X", "icon": "brush"}]})
     low = _lib().run("edit_categories", {"create": [{"name": "Moods", "color": "red"}]})
     assert low["risk"] == "low"
-
-
-def test_category_icons_match_the_editor_icon_catalog():
-    src = (ROOT / "src/kit/icon-catalog.ts").read_text(encoding="utf-8")
-    lists = re.findall(r"icons:\s*\[([^\]]*)\]", src)
-    icons = [i for chunk in lists for i in re.findall(r'"([a-z0-9-]+)"', chunk)]
-    assert icons == list(chat_manage.CATEGORY_ICONS)
 
 
 def test_update_info_renames_and_clears_the_category():

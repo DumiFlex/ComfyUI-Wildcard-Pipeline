@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { copyText } from "../../kit/clipboard";
+import { copyText } from "@/kit/clipboard";
 import { computed, ref, watch } from "vue";
 import { varColorClass } from "../shared/var-color";
 import { modelSyntaxHtml } from "../../widgets/richTokenize";
 import { buildNegativePreview, type NegativesTable } from "../../extension/negatives";
-import ContextMenu, { type ContextMenuItem } from "../../kit/ContextMenu.vue";
+import ContextMenu, { type ContextMenuItem } from "@/kit/ContextMenu.vue";
 import { kindIcon, type WpKind } from "../shared/kind-icons";
 import {
   applyVarAccessor,
@@ -13,7 +13,7 @@ import {
   type ResolvedValue,
   type RolledAxes,
 } from "../../widgets/richTokenize";
-import WpButton from "../../kit/WpButton.vue";
+import WpButton from "@/kit/WpButton.vue";
 
 const props = defineProps<{
   /** Flat array of upstream variable names. Primary prop shape. */

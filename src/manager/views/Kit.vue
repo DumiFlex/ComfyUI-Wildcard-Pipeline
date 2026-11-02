@@ -8,7 +8,7 @@
  * demo in `kit/demos/<id>.vue` and every kit-folder component has an entry.
  */
 import { computed, type Component } from "vue";
-import Banner from "../../kit/Banner.vue";
+import Banner from "@/kit/Banner.vue";
 import KitEntry from "../kit/KitEntry.vue";
 import { KIT_ENTRIES, KIT_GROUPS } from "../kit/registry";
 import { KIT_SITE } from "../config/links";

@@ -10,8 +10,8 @@
  *  library entry stored the now-deprecated gray default. */
 import { computed, onBeforeUnmount, ref, nextTick } from "vue";
 import type { BundleInstance } from "../../../../../widgets/_shared";
-import HsvPicker from "../../../../../kit/HsvPicker.vue";
-import WpButton from "../../../../../kit/WpButton.vue";
+import HsvPicker from "@/kit/HsvPicker.vue";
+import WpButton from "@/kit/WpButton.vue";
 
 const props = withDefaults(
   defineProps<{

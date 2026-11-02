@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import Icon from "../../../../kit/Icon.vue";
-import SupportLinks from "../../../../kit/SupportLinks.vue";
+import Icon from "@/kit/Icon.vue";
+import SupportLinks from "@/kit/SupportLinks.vue";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { DISCORD_INVITE, GITHUB_REPO, KIT_SITE, SUPPORT_LINKS, WPC_API_URL, kitVersion } from "../../../config/links";
@@ -9,7 +9,7 @@ import { DISCORD_INVITE, GITHUB_REPO, KIT_SITE, SUPPORT_LINKS, WPC_API_URL, kitV
 // truth is package.json, which the release PR stamps on every release.
 const appVersion = __APP_VERSION__;
 const appLicense = __APP_LICENSE__;
-// The wp-kit commit src/kit/ was pulled at, from src/kit/kit.lock.json.
+// The installed @dumiflex/wp-kit version.
 const kit = kitVersion(__KIT_VERSION__);
 </script>
 

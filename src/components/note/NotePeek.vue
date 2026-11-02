@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from "vue";
-import WpButton from "../../kit/WpButton.vue";
+import WpButton from "@/kit/WpButton.vue";
 import NoteMarkdown from "./note-markdown";
 import { noteColorCss, type NoteConfig } from "../../extension/note";
 

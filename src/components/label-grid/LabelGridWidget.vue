@@ -16,14 +16,14 @@
  * whole next config (`src/widgets/label_grid.ts` serializes it).
  */
 import { computed } from "vue";
-import WpButton from "../../kit/WpButton.vue";
-import WpNumber from "../../kit/WpNumber.vue";
-import WpSegmented from "../../kit/WpSegmented.vue";
-import WpSelect from "../../kit/WpSelect.vue";
-import WpSwitch from "../../kit/WpSwitch.vue";
-import Combobox from "../../kit/Combobox.vue";
-import ColorField from "../../kit/ColorField.vue";
-import { vTooltip } from "../../kit/tooltip";
+import WpButton from "@/kit/WpButton.vue";
+import WpNumber from "@/kit/WpNumber.vue";
+import WpSegmented from "@/kit/WpSegmented.vue";
+import WpSelect from "@/kit/WpSelect.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
+import Combobox from "@/kit/Combobox.vue";
+import ColorField from "@/kit/ColorField.vue";
+import { vTooltip } from "@/kit/tooltip";
 import {
   DEFAULT_LABEL_GRID_CONFIG,
   type GridArrange,
