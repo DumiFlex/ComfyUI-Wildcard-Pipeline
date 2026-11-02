@@ -16,7 +16,7 @@ import ConfirmModal from "@/kit/ConfirmModal.vue";
 import { useDatabaseStore } from "../../stores/databaseStore";
 import { useSystemStore } from "../../stores/systemStore";
 import type { MaintenanceOp, MaintenanceResult } from "../../api/types";
-import LoadingMark from "@/kit/LoadingMark.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import DescriptionList, { type DescriptionItem } from "@/kit/DescriptionList.vue";
 
 interface OpSpec {
@@ -177,8 +177,14 @@ onMounted(() => {
       <Button variant="link" @click="refresh">Retry</Button>
     </div>
 
-    <div v-else-if="store.loading && !store.info" data-test="database-loading" class="wp-db__loading">
-      <LoadingMark block :size="32">Loading database info…</LoadingMark>
+    <div v-else-if="store.loading && !store.info" data-test="database-loading" class="wp-db__stats">
+      <Skeleton
+        v-for="i in 4"
+        :key="i"
+        shape="block"
+        height="56px"
+        :label="i === 1 ? 'Loading database info' : undefined"
+      />
     </div>
 
     <div v-else-if="store.info">
@@ -364,7 +370,7 @@ onMounted(() => {
   display: inline-flex; align-items: center; gap: var(--wp-space-3);
 }
 .wp-db__op-desc { color: var(--wp-text-dim); font-size: var(--wp-text-xs); margin: 0; }
-.wp-db__error, .wp-db__loading {
+.wp-db__error {
   display: flex; align-items: center; gap: var(--wp-space-4);
   padding: var(--wp-space-4); color: var(--wp-text-muted);
   font-size: var(--wp-text-sm);

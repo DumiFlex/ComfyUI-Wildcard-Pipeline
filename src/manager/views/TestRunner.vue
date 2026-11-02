@@ -14,6 +14,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Button from "@/kit/Button.vue";
 import Icon, { ICON_SM } from "@/kit/Icon.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import ScenarioRail from "../components/test-runner/ScenarioRail.vue";
 import StackBuilder from "../components/test-runner/StackBuilder.vue";
 import SeedControl from "../components/test-runner/SeedControl.vue";
@@ -318,6 +319,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       :quick-run-name="draft.id ? null : draft.name"
       :rerun="wb.rerun.value"
       :uses="uses"
+      :loading="wb.loading.value"
       @clear-uses="usesId = null"
       @select="onSelect"
       @rerun-pinned="wb.rerunPinned"
@@ -385,7 +387,15 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           @inspect="openInspector"
         />
 
-        <div v-if="!draft.stack.length" class="wp-tr__start" data-test="start-hint">
+        <Skeleton
+          v-if="wb.loading.value && !draft.stack.length"
+          shape="row"
+          icon="square"
+          :lines="3"
+          label="Loading the library"
+          data-test="stack-skeleton"
+        />
+        <div v-else-if="!draft.stack.length" class="wp-tr__start" data-test="start-hint">
           <strong>Add a module or bundle to start.</strong>
           <span>Stack upstream modules in front of the one you're testing, the way they sit on the canvas, and pin any value a node further up would provide. Then Run: every seed goes through the real engine.</span>
         </div>

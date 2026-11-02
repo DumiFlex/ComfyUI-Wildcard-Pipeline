@@ -8,6 +8,7 @@ import { api } from "../../manager/api/client";
 import type { BundleRow } from "../../manager/api/types";
 import WpButton from "@/kit/WpButton.vue";
 import CloseButton from "@/kit/CloseButton.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 
 const props = defineProps<{
   visible: boolean;
@@ -204,21 +205,16 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
       </div>
 
       <div class="wp-bp__body">
-        <div
-          v-if="loading"
+        <!-- First load only: a reopen keeps the bundles it has and
+             refreshes them quietly. -->
+        <Skeleton
+          v-if="loading && !items.length"
+          shape="row"
+          icon="square"
+          :lines="6"
+          label="Loading bundles"
           class="wp-bp__skel-list"
-          aria-busy="true"
-          aria-live="polite"
-          aria-label="Loading bundles"
-        >
-          <div v-for="i in 6" :key="i" class="wp-bp__skel-row">
-            <span class="wp-skel wp-bp__skel-icon"></span>
-            <span class="wp-skel wp-skel--text wp-bp__skel-name"></span>
-            <span class="wp-skel wp-skel--text wp-bp__skel-count"></span>
-            <span class="wp-skel wp-skel--pill wp-bp__skel-pill"></span>
-            <span class="wp-skel wp-skel--pill wp-bp__skel-pill"></span>
-          </div>
-        </div>
+        />
         <div v-else-if="loadError" class="wp-bp__state wp-bp__state--err">
           <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>
           {{ loadError }}
@@ -300,42 +296,9 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
     />
 </template>
 
-<style>
-/* `wp-skel` family is shared with ModulePickerModal — import unscoped
- * so the keyframe + base rules dedupe across consumers and aren't
- * subject to per-component scoping rewrites. */
-@import "@/kit/_skeleton.css";
-</style>
-
 <style scoped>
-/* Skeleton frames — geometry mirrors `.wp-bp__row` so the placeholder
- * stack matches the loaded list layout (no jump on resolve). */
-.wp-bp__skel-list {
-  display: flex;
-  flex-direction: column;
-  padding: 6px;
-  gap: 2px;
-}
-.wp-bp__skel-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-left: 3px solid var(--wp-bundle-default);
-  border-radius: min(4px, var(--wp-radius-cap, 999px));
-}
-.wp-bp__skel-icon { width: 22px; height: 22px; border-radius: min(4px, var(--wp-radius-cap, 999px)); flex-shrink: 0; }
-.wp-bp__skel-name { flex: 1; max-width: 200px; height: 13px; }
-.wp-bp__skel-count { width: 48px; height: 10px; flex-shrink: 0; }
-.wp-bp__skel-pill { width: 28px; height: 14px; flex-shrink: 0; }
-
-/* Vary name widths so the column doesn't read as a perfectly aligned
- * grid — real bundle names have organic length variation. */
-.wp-bp__skel-row:nth-child(3n) .wp-bp__skel-name { max-width: 130px; }
-.wp-bp__skel-row:nth-child(3n+1) .wp-bp__skel-name { max-width: 180px; }
-.wp-bp__skel-row:nth-child(4n+2) .wp-bp__skel-name { max-width: 100px; }
+/* Skeleton rows in the loaded list's padding, so nothing shifts on resolve. */
+.wp-bp__skel-list { padding: 6px 16px; }
 
 .wp-bp {
   background: var(--wp-bg-deep, var(--wp-bg));

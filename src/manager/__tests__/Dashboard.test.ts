@@ -157,4 +157,26 @@ describe("Dashboard.vue", () => {
     await stats[0]!.trigger("click"); // wildcards
     expect(push).toHaveBeenCalledWith("/wildcards");
   });
+
+  it("shows skeleton numbers until the counts load, not 0", async () => {
+    apiMod.list.mockReturnValue(new Promise(() => {}));
+    apiBundles.list.mockReturnValue(new Promise(() => {}));
+    const wrap = mountView();
+    await flushPromises();
+    const value = wrap.findAll(".wp-stat__value")[0];
+    expect(value.find(".wp-skeleton").exists()).toBe(true);
+    expect(value.text()).not.toContain("0");
+  });
+
+  it("shows row skeletons, not 'No edits yet.', while the recent edits load", async () => {
+    apiMod.list.mockReturnValue(new Promise(() => {}));
+    apiBundles.list.mockReturnValue(new Promise(() => {}));
+    const wrap = mountView();
+    await flushPromises();
+    await wrap.get('[data-test="dashboard-tab-recent"]').trigger("click");
+    expect(wrap.text()).not.toContain("No edits yet.");
+    expect(wrap.find('[role="status"]').exists()).toBe(true);
+    await wrap.get('[data-test="dashboard-tab-favorites"]').trigger("click");
+    expect(wrap.text()).not.toContain("No favorites yet.");
+  });
 });

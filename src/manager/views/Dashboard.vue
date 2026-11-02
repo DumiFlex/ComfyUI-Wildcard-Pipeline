@@ -12,6 +12,7 @@ import { api } from "../api/client";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType } from "../api/types";
 import { useCategoryStore } from "../stores/categoryStore";
 import Chip from "@/kit/Chip.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import { useRecentStore } from "../stores/recentStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useEngagementStore, measureSubstance } from "../stores/engagementStore";
@@ -142,6 +143,13 @@ const totalItems = computed<number>(() =>
 /** The counts start at 0, so until they land every library looks new and
  *  the intro card flashed for everyone. */
 const countsLoaded = ref(false);
+// The server lists land after first paint: until then the Recent edits and
+// Favorites tabs draw row skeletons instead of "No edits yet." (the
+// Recently opened tab is local, so it never waits).
+const recentLoaded = ref(false);
+const favoritesLoaded = ref(false);
+const listLoading = computed<boolean>(() =>
+  (tab.value === "recent" && !recentLoaded.value) || (tab.value === "favorites" && !favoritesLoaded.value));
 const showGettingStarted = computed<boolean>(() => countsLoaded.value && totalItems.value < 3);
 
 // "New here?" intro card dismissal. The card used to REPLACE the recents
@@ -343,6 +351,7 @@ async function loadRecent() {
   } catch {
     recentItems.value = [];
   }
+  recentLoaded.value = true;
 }
 
 async function loadFavorites() {
@@ -364,6 +373,7 @@ async function loadFavorites() {
   } catch {
     favoriteItems.value = [];
   }
+  favoritesLoaded.value = true;
 }
 
 const refreshing = ref(false);
@@ -463,11 +473,15 @@ onMounted(async () => {
           <Icon :name="kind.icon" />
         </div>
         <div class="wp-stat__label">{{ kind.label }}</div>
-        <div class="wp-stat__value">{{ counts[kind.key] }}</div>
+        <div class="wp-stat__value">
+          <template v-if="countsLoaded">{{ counts[kind.key] }}</template>
+          <Skeleton v-else width="2.5ch" class="dashboard__stat-skel" :label="kind.key === KIND_META[0]?.key ? 'Loading counts' : undefined" />
+        </div>
         <div class="wp-stat__delta dashboard__stat-foot">
           <span class="dashboard__stat-edit">
             <Icon name="pi-clock" :size="ICON_SM" />
-            <RelativeDate v-if="lastEditByKind[kind.key]" :value="lastEditByKind[kind.key]" />
+            <Skeleton v-if="!countsLoaded" width="6ch" class="dashboard__stat-skel" />
+            <RelativeDate v-else-if="lastEditByKind[kind.key]" :value="lastEditByKind[kind.key]" />
             <span v-else>—</span>
           </span>
           <span class="dashboard__stat-cta">
@@ -564,7 +578,14 @@ onMounted(async () => {
           @click.prevent="router.push('/all')"
         >View all <Icon name="pi-arrow-right" :size="ICON_SM" /></a>
       </div>
-      <div v-if="visibleItems.length" class="wp-list wp-recent">
+      <Skeleton
+        v-if="listLoading"
+        shape="row"
+        icon="square"
+        :lines="5"
+        :label="tab === 'favorites' ? 'Loading favorites' : 'Loading recent edits'"
+      />
+      <div v-else-if="visibleItems.length" class="wp-list wp-recent">
         <div
           v-for="row in visibleItems"
           :key="`${row.kind}:${row.id}`"
@@ -608,6 +629,10 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* A stat tile's number and last-edit line while the counts load: as wide as
+   the text they stand for, not the whole tile. */
+.dashboard__stat-skel { display: inline-flex; width: auto; vertical-align: middle; }
+.wp-stat__value .dashboard__stat-skel { height: 1.1em; justify-content: center; }
 .dashboard__hero-text { flex: 1; min-width: 0; }
 .dashboard__hero-actions { gap: var(--wp-space-4); }
 

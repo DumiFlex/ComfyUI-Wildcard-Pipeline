@@ -14,7 +14,7 @@ import WpSelect from "@/kit/WpSelect.vue";
 import { api } from "../../manager/api/client";
 import type { TemplateRow } from "../../manager/api/types";
 import ModalShell from "@/kit/ModalShell.vue";
-import LoadingMark from "@/kit/LoadingMark.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import CloseButton from "@/kit/CloseButton.vue";
 import WpButton from "@/kit/WpButton.vue";
 
@@ -216,9 +216,16 @@ function pick(row: TemplateRow) {
       <div v-if="filtersOpen" class="wp-ltm__pop-shield" @click="filtersOpen = false" />
 
       <div class="wp-ltm__body">
-        <div v-if="loading" class="wp-ltm__state" aria-busy="true">
-          <LoadingMark block :size="32">Loading templates…</LoadingMark>
-        </div>
+        <!-- First load only: a reopen keeps the rows it has and refreshes
+             them quietly. -->
+        <Skeleton
+          v-if="loading && !rows.length"
+          shape="row"
+          icon="square"
+          :lines="5"
+          label="Loading templates"
+          class="wp-ltm__skel"
+        />
         <div v-else-if="loadError" class="wp-ltm__state wp-ltm__state--error">
           <i class="pi pi-exclamation-triangle" aria-hidden="true" />
           {{ loadError }}
@@ -379,6 +386,7 @@ function pick(row: TemplateRow) {
 
 /* Body / rows */
 .wp-ltm__body { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 8px 8px; }
+.wp-ltm__skel { padding: 0 8px; }
 .wp-ltm__state {
   padding: 36px 16px; text-align: center;
   color: var(--wp-text-muted); font-size: 12.5px;

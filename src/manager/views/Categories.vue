@@ -283,6 +283,8 @@ async function saveEdit() {
       class="wp-table-wrap--scroll"
       :columns="COLUMNS"
       :rows="store.items"
+      :loading="store.loading && !store.items.length"
+      :loading-rows="5"
       row-key="id"
       :row-attrs="(row) => ({ class: 'wp-cat-row', 'data-test': `cat-row-${row.id}` })"
       aria-label="Categories"

@@ -29,7 +29,7 @@ import {
 } from "../composables/useOpenEditor";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import LoadingMark from "@/kit/LoadingMark.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 
 const props = defineProps<{ id?: string }>();
 
@@ -63,7 +63,7 @@ const negativeTemplate = ref("");
  *  leaves the Assembler's negative box alone. */
 const negativeOriginal = ref<string | null>(null);
 
-const loading = ref(false);
+const loading = ref(true);
 const saving = ref(false);
 
 /** Serialized baseline for the dirty check — set after load / save. */
@@ -185,7 +185,9 @@ function cancel() {
 
 <template>
   <EditorFrame
-    :title="isEdit ? (name || 'Loading…') : 'New template'"
+    :title="isEdit && loading ? '' : isEdit ? name : 'New template'"
+    :loading="loading"
+    loading-label="Loading template"
     back-route="/templates"
     back-label="Templates"
     :saving="saving"
@@ -193,8 +195,10 @@ function cancel() {
     @save="save"
     @cancel="cancel"
   >
-    <LoadingMark v-if="loading" :size="40" block>Loading template…</LoadingMark>
-    <template v-else>
+    <template #loading>
+      <Skeleton shape="block" height="160px" />
+    </template>
+    <template v-if="!loading">
       <IdentityCard
         ref="identityCard"
         ai-kind="template"

@@ -198,6 +198,9 @@ function setSaveState(next: SaveState, ttl?: number): void {
   }
 }
 const isEdit = computed(() => !!props.id);
+/** False until an existing item has loaded: the frame draws its skeleton
+ *  instead of an empty form (and holds Save) meanwhile. */
+const loaded = ref(!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
 
 // Unsaved-changes guard
@@ -672,6 +675,7 @@ onMounted(async () => {
   }
   // After every load path (existing row, blank new, starter) settle the
   // sub-category panel to the user's chosen default.
+  loaded.value = true;
   subcatOpen.value = resolveSubcatDefaultOpen();
   baseline.value = snapshot();
   // "Open in editor" on a chat card: the proposed wildcard, unsaved.
@@ -1692,6 +1696,8 @@ defineExpose({
 
 <template>
   <EditorFrame
+    :loading="!loaded"
+    loading-label="Loading wildcard"
     :save-disabled="bulkAddOpen || aiPending"
     :save-disabled-reason="aiPending
       ? 'Add or discard the AI draft first, with its own buttons'

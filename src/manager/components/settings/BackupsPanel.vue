@@ -20,6 +20,7 @@ import Button from "@/kit/Button.vue";
 import Select from "@/kit/Select.vue";
 import Icon, { ICON_SM } from "@/kit/Icon.vue";
 import Input from "@/kit/Input.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import type { SelectOption } from "@/kit/select-types";
 import ConfirmModal from "@/kit/ConfirmModal.vue";
 import SettingGroup from "./SettingGroup.vue";
@@ -276,7 +277,8 @@ onMounted(() => {
     </SettingRow>
     <SettingRow label="Backups" setting-key="backups-list" stacked>
       <template #extra>
-        <p class="wp-bk__dir wp-mono">{{ list?.dir ?? "…" }}</p>
+        <p v-if="list || loadError" class="wp-bk__dir wp-mono">{{ list?.dir ?? "…" }}</p>
+        <Skeleton v-else width="24ch" class="wp-bk__dir" />
       </template>
       <div class="wp-bk__toolbar">
         <Input
@@ -296,7 +298,15 @@ onMounted(() => {
         </span>
       </div>
       <p v-if="loadError" class="wp-set-error" role="alert">{{ loadError }}</p>
-      <p v-else-if="list && backups.length === 0" class="wp-bk__empty" data-test="backup-empty">
+      <Skeleton
+        v-else-if="!list"
+        shape="row"
+        icon="square"
+        :lines="3"
+        label="Loading backups"
+        data-test="backup-skeleton"
+      />
+      <p v-else-if="backups.length === 0" class="wp-bk__empty" data-test="backup-empty">
         No backups yet. The first one is made today, or before the next update.
       </p>
       <ul v-else class="wp-bk__list" data-test="backup-list">

@@ -15,6 +15,7 @@ import ValidityIcon from "../components/ValidityIcon.vue";
 import Button from "@/kit/Button.vue";
 import Select from "@/kit/Select.vue";
 import EmptyState from "@/kit/EmptyState.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import { useBundleStore } from "../stores/bundleStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -310,7 +311,8 @@ function frameColor(row: BundleRow): string {
           <label class="wp-field__label">
             Tags{{ filter.tags?.length ? ` (${filter.tags.length})` : "" }}
           </label>
-          <div v-if="!allTags.length" class="wp-dim wp-tags-empty">No tags in this collection.</div>
+          <Skeleton v-if="store.loading && !store.items.length" shape="chip" :lines="6" height="24px" label="Loading tags" />
+          <div v-else-if="!allTags.length" class="wp-dim wp-tags-empty">No tags in this collection.</div>
           <div v-else class="wp-tags-row">
             <Chip
               v-for="t in allTags" :key="t"
