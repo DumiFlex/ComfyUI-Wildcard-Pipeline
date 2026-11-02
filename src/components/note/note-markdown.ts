@@ -1,5 +1,5 @@
 import { defineComponent, h, type VNode } from "vue";
-import { parseMarkdown, type Block, type Inline } from "../../manager/utils/chat-markdown";
+import { parseMarkdown, type Align, type Block, type Inline, type ListItem } from "../../manager/utils/chat-markdown";
 import { parseTarget, readLinkAttrs, splitIcons, targetUrl } from "./note-format";
 
 /**
@@ -62,21 +62,45 @@ function inline(nodes: Inline[]): (VNode | string)[] {
   return out;
 }
 
+function cellStyle(align: Align): Record<string, string> | undefined {
+  return align ? { textAlign: align } : undefined;
+}
+
+function item(it: ListItem): VNode {
+  if (it.task === null) return h("li", it.blocks.map(block));
+  // A task: a read-only box (an icon, not an input: the note is read-only).
+  return h("li", { class: ["wp-note-md__task", { "wp-note-md__task--done": it.task }] }, [
+    h("i", { class: ["pi", it.task ? "pi-check-square" : "pi-stop", "wp-note-md__box"], "aria-hidden": "true" }),
+    h("span", { class: "wp-note-md__sr" }, it.task ? "Done: " : "To do: "),
+    ...it.blocks.map(block),
+  ]);
+}
+
 function block(b: Block): VNode {
   switch (b.t) {
     case "p": return h("p", inline(b.c));
-    case "h": return h("p", { class: "wp-note-md__h" }, inline(b.c));
+    case "h": return h("p", { class: ["wp-note-md__h", `wp-note-md__h--${Math.min(b.level, 4)}`], role: "heading", "aria-level": b.level }, inline(b.c));
     case "list":
-      return h(b.ordered ? "ol" : "ul", b.ordered && b.start !== 1 ? { start: b.start } : {},
-        b.items.map((it) => h("li", it.blocks.map(block))));
-    case "pre": return h("pre", { class: "wp-note-md__pre" }, b.v);
-    case "quote": return h("blockquote", b.blocks.map(block));
-    case "table":
-      return h("table", [
-        h("thead", [h("tr", b.head.map((c) => h("th", inline(c))))]),
-        h("tbody", b.rows.map((r) => h("tr", r.map((c) => h("td", inline(c)))))),
+      return h(b.ordered ? "ol" : "ul", {
+        class: { "wp-note-md__tasks": b.items.some((it) => it.task !== null) },
+        ...(b.ordered && b.start !== 1 ? { start: b.start } : {}),
+      }, b.items.map(item));
+    case "pre": return h("pre", { class: "wp-note-md__pre", "data-lang": b.lang || undefined }, b.v);
+    case "quote":
+      return h("blockquote", { class: b.tone ? ["wp-note-md__callout", `wp-note-md__callout--${b.tone}`] : undefined }, [
+        b.tone ? h("i", { class: ["pi", b.tone === "warn" ? "pi-exclamation-triangle" : "pi-info-circle", "wp-note-md__callout-icon"], "aria-hidden": "true" }) : null,
+        h("div", b.blocks.map(block)),
       ]);
-    case "hr": return h("hr");
+    case "table":
+      // Fits the note's width and wraps its cells (the note lets the
+      // pointer through to the canvas, so it can't scroll sideways).
+      return h("div", { class: "wp-note-md__table" }, [
+        h("table", [
+          h("thead", [h("tr", b.head.map((c, i) => h("th", { style: cellStyle(b.align[i] ?? null) }, inline(c))))]),
+          h("tbody", b.rows.map((r) => h("tr", r.map((c, i) => h("td", { style: cellStyle(b.align[i] ?? null) }, inline(c)))))),
+        ]),
+      ]);
+    case "hr": return h("hr", { class: "wp-note-md__hr" });
   }
 }
 
