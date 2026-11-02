@@ -12,6 +12,7 @@ import WpIconButton from "@/kit/WpIconButton.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import { pushToast } from "../shared/toast-store";
+import { checkCombo } from "../../widgets/bookmark";
 import {
   BOOKMARK_ANCHORS,
   BOOKMARK_MARGIN,
@@ -86,8 +87,12 @@ function onRecordKey(e: KeyboardEvent): void {
     refused.value = `${combo} belongs to the browser. Try another.`;
     return;
   }
+  // Ask the page too: an extension's own key listener is in no keymap. A
+  // taken key is remembered, so the clash list below names it.
+  checkCombo(combo);
   emit("update", { shortcut: combo });
   stopRecording();
+  refreshKeymap();
 }
 
 function startRecording(): void {
@@ -113,10 +118,22 @@ defineExpose({ stopRecording });
 function suggest(): void {
   refreshKeymap();
   // Never offer the key it already has: each press moves on to the next.
-  const own = props.value.shortcut ? [{ combo: props.value.shortcut, label: "", source: "" }] : [];
-  const combo = suggestFreeCombo([...keymap.value, ...own]);
-  if (combo) emit("update", { shortcut: combo });
-  else pushToast("No free shortcut left to suggest. Record one instead.", { severity: "info" });
+  const owners = [...keymap.value];
+  if (props.value.shortcut) owners.push({ combo: props.value.shortcut, label: "", source: "" });
+  // Each candidate is also tried on the page (checkCombo), so a key another
+  // extension answers is skipped and remembered.
+  for (let tries = 0; tries < 40; tries++) {
+    const combo = suggestFreeCombo(owners);
+    if (!combo) break;
+    if (!checkCombo(combo)) {
+      emit("update", { shortcut: combo });
+      refreshKeymap();
+      return;
+    }
+    owners.push({ combo, label: "", source: "" });
+  }
+  refreshKeymap();
+  pushToast("No free shortcut left to suggest. Record one instead.", { severity: "info" });
 }
 </script>
 

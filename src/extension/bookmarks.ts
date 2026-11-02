@@ -148,31 +148,46 @@ function overlaps(a: ScreenBox, b: ScreenBox): boolean {
 
 /**
  * The smallest move `[dx, dy]` (screen px) that takes `box` off every box in
- * `avoid`, preferring moves that keep it inside `free`. `[0, 0]` when it
- * covers nothing. Each obstacle is cleared in turn, so two docks side by side
- * still work out.
+ * `avoid` at once, keeping it inside `free` when it can. `[0, 0]` when it
+ * covers nothing. Moves are built from the edges of the boxes it hits, a few
+ * rounds deep, so clearing one obstacle never parks it on another (the
+ * minimap right above the zoom controls). When nothing fits it takes the
+ * smallest move that clears them all, leaving `free`.
  */
 export function clearOf(box: ScreenBox, avoid: readonly ScreenBox[], free: ScreenBox, margin: number): [number, number] {
-  let [l, t, r, b] = box;
-  let dx = 0;
-  let dy = 0;
-  for (const o of avoid) {
-    if (!overlaps([l, t, r, b], o)) continue;
-    const moves: [number, number][] = [
-      [o[2] + margin - l, 0],
-      [o[0] - margin - r, 0],
-      [0, o[3] + margin - t],
-      [0, o[1] - margin - b],
-    ];
-    const inside = (m: [number, number]): boolean =>
-      l + m[0] >= free[0] && r + m[0] <= free[2] && t + m[1] >= free[1] && b + m[1] <= free[3];
-    const size = (m: [number, number]): number => Math.abs(m[0]) + Math.abs(m[1]);
-    const ok = moves.filter(inside);
-    const pick = (ok.length ? ok : moves).reduce((best, m) => (size(m) < size(best) ? m : best));
-    l += pick[0]; r += pick[0]; t += pick[1]; b += pick[1];
-    dx += pick[0]; dy += pick[1];
+  const at = (m: readonly [number, number]): ScreenBox => [box[0] + m[0], box[1] + m[1], box[2] + m[0], box[3] + m[1]];
+  // Each box keeps `margin` around it.
+  const grown = avoid.map((o): ScreenBox => [o[0] - margin, o[1] - margin, o[2] + margin, o[3] + margin]);
+  const hits = (m: readonly [number, number]): ScreenBox[] => grown.filter((o) => overlaps(at(m), o));
+  if (!hits([0, 0]).length) return [0, 0];
+  const inside = (m: readonly [number, number]): boolean => {
+    const [l, t, r, b] = at(m);
+    return l >= free[0] && r <= free[2] && t >= free[1] && b <= free[3];
+  };
+  const size = (m: readonly [number, number]): number => Math.abs(m[0]) + Math.abs(m[1]);
+  let frontier: [number, number][] = [[0, 0]];
+  const seen = new Set<string>(["0,0"]);
+  const clear: [number, number][] = [];
+  for (let round = 0; round < 4 && frontier.length; round++) {
+    const next: [number, number][] = [];
+    for (const m of frontier) {
+      const [l, t, r, b] = at(m);
+      for (const o of hits(m)) {
+        for (const d of [[o[2] - l, 0], [o[0] - r, 0], [0, o[3] - t], [0, o[1] - b]] as const) {
+          const c: [number, number] = [m[0] + d[0], m[1] + d[1]];
+          const key = `${Math.round(c[0])},${Math.round(c[1])}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          if (hits(c).length) next.push(c);
+          else clear.push(c);
+        }
+      }
+    }
+    frontier = next;
   }
-  return [dx, dy];
+  const best = (list: [number, number][]): [number, number] | null =>
+    list.length ? list.reduce((x, y) => (size(y) < size(x) ? y : x)) : null;
+  return best(clear.filter(inside)) ?? best(clear) ?? [0, 0];
 }
 
 /**
@@ -209,6 +224,44 @@ export function jumpOffset(input: JumpInput): [number, number] {
     oy += dy / s;
   }
   return [ox, oy];
+}
+
+// ── dock spots ────────────────────────────────────────────────────────
+
+/** One of the 3×3 spots the dock snaps to. */
+export type DockSpot = Exclude<BookmarkAnchor, "custom">;
+
+/**
+ * Top-left corner of a `size` box at `spot` of `free` (both screen boxes),
+ * `gap` in from its edges, then moved the least it can off `avoid` (the
+ * minimap, the zoom controls). A box bigger than `free` keeps to its top
+ * left.
+ */
+export function spotPosition(
+  spot: DockSpot,
+  free: ScreenBox,
+  size: readonly [number, number],
+  avoid: readonly ScreenBox[],
+  gap: number,
+): [number, number] {
+  const a = BOOKMARK_ANCHORS.find((x) => x.id === spot) ?? { fx: 0, fy: 0 };
+  const [w, h] = size;
+  const x = free[0] + gap + a.fx * Math.max(0, free[2] - free[0] - 2 * gap - w);
+  const y = free[1] + gap + a.fy * Math.max(0, free[3] - free[1] - 2 * gap - h);
+  const [dx, dy] = clearOf([x, y, x + w, y + h], avoid, free, gap);
+  return [x + dx, y + dy];
+}
+
+/** The spot whose position is nearest a box dropped at `at` (top left). */
+export function nearestSpot(at: readonly [number, number], free: ScreenBox, size: readonly [number, number], gap: number): DockSpot {
+  let best: DockSpot = "tl";
+  let bestD = Infinity;
+  for (const a of BOOKMARK_ANCHORS) {
+    const [x, y] = spotPosition(a.id, free, size, [], gap);
+    const d = (x - at[0]) ** 2 + (y - at[1]) ** 2;
+    if (d < bestD) { bestD = d; best = a.id; }
+  }
+  return best;
 }
 
 /** The zoom a jump ends at. */
@@ -276,6 +329,17 @@ export function normalizeCombo(text: string): string {
     else p.key = part;
   }
   return comboToString(p);
+}
+
+/** A canonical combo back into its parts, or null for "". */
+export function parseCombo(combo: string): ComboParts | null {
+  const text = normalizeCombo(combo);
+  if (!text) return null;
+  const parts = text.split("+");
+  // "Ctrl++": the key itself is "+".
+  const key = text.endsWith("++") ? "+" : parts[parts.length - 1] ?? "";
+  const mods = new Set(parts.slice(0, -1));
+  return { key, ctrl: mods.has("Ctrl"), alt: mods.has("Alt"), shift: mods.has("Shift") };
 }
 
 interface KeyEventLike {
