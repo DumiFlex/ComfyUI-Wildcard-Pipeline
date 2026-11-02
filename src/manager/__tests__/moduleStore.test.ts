@@ -27,6 +27,40 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("moduleStore", () => {
+  it("clears the rows when the kind changes, keeps them for a search on the same kind", async () => {
+    apiMod.list.mockResolvedValue({ items: [{ id: "w1", name: "w", type: "wildcard", is_favorite: false }], total: 1 });
+    const s = useModuleStore();
+    s.filter.type = "wildcard";
+    await s.fetchAll();
+    expect(s.items).toHaveLength(1);
+    // Same kind, a search: the rows stay up while it loads.
+    s.filter.q = "w";
+    const same = s.fetchAll();
+    expect(s.items).toHaveLength(1);
+    await same;
+    // Wildcards → Constraints: no wildcard rows under the Constraints columns.
+    s.filter.type = "constraint";
+    s.filter.q = undefined;
+    apiMod.list.mockReturnValue(new Promise(() => {}));
+    void s.fetchAll();
+    expect(s.items).toHaveLength(0);
+  });
+
+  it("keeps the newest request's rows when an older one lands last", async () => {
+    let slow: (v: unknown) => void = () => {};
+    apiMod.list
+      .mockReturnValueOnce(new Promise((r) => { slow = r; }))
+      .mockResolvedValueOnce({ items: [{ id: "new", name: "n", type: "wildcard", is_favorite: false }], total: 1 });
+    const s = useModuleStore();
+    s.filter.type = "wildcard";
+    const first = s.fetchAll();
+    await s.fetchAll();
+    slow({ items: [{ id: "old", name: "o", type: "wildcard", is_favorite: false }], total: 1 });
+    await first;
+    expect(s.items.map((i) => i.id)).toEqual(["new"]);
+    expect(s.loading).toBe(false);
+  });
+
   it("fetchAll populates items", async () => {
     apiMod.list.mockResolvedValue({
       items: [{ id: "wc_x_1", name: "x", type: "wildcard", is_favorite: false }],
