@@ -41,18 +41,21 @@ DisplayName = "Wildcard Pipeline"
 # Max 400×400 per the Registry spec. SVG so it scales without the
 # Manager refetching at higher DPI.
 Icon = "https://raw.githubusercontent.com/DumiFlex/ComfyUI-Wildcard-Pipeline/main/public/images/favicon.svg"
-# Wide promotional banner — 21:9 spec. Our SVG is 1400×600 (≈2.33:1)
-# which renders crisp on the registry listing card. Local file at
-# public/images/comfy-banner.svg, served by GitHub raw so the
-# Registry resolves a stable URL between releases.
-Banner = "https://raw.githubusercontent.com/DumiFlex/ComfyUI-Wildcard-Pipeline/main/public/images/comfy-banner.svg"
+# Card banner (7:3, the Manager card's aspect). The new ComfyUI Manager
+# shows it about 275 px wide, so it carries the logo and a node-graph
+# shape and no text: the card prints the name under it. The text-heavy
+# public/images/comfy-banner.svg stays for places that show it large.
+# Served from main by GitHub raw, so it changes when main does.
+Banner = "https://raw.githubusercontent.com/DumiFlex/ComfyUI-Wildcard-Pipeline/main/public/images/comfy-card-banner.svg"
 
-# ComfyUI version floor. The pack uses the V3 io.* schema (custom
-# types via @comfytype, ComfyTypeIO subclasses, NodeOutput / io.Schema
-# class-based handlers) — landed in ComfyUI ≥0.3.36 per the
-# release notes. Pin to that floor so the Manager warns users on
-# older runtimes instead of installing then crashing at import.
-requires-comfyui = ">=0.3.36"
+# ComfyUI version floor: the oldest ComfyUI that has every V3 API the
+# nodes use. The newest one is `io.Schema(accept_all_inputs=...)`
+# (WP Context Injector), added in ComfyUI 0.11.0; io.Schema is a
+# dataclass, so ComfyUI 0.3.48-0.10 stops registering our nodes there
+# (only the four listed before it load), and anything older has no
+# comfy_api.latest at all. The Manager reads this to warn before
+# installing on an older ComfyUI.
+requires-comfyui = ">=0.11.0"
 
 # Force-include built artifacts that are gitignored so the publish
 # action's "everything git tracks" default would otherwise drop them.
