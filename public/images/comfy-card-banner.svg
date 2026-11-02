@@ -27,7 +27,7 @@
     <path fill="#33d6c6" d="m738.07,361.84c-51.08,10.25-61.96,21.13-72.22,72.22-.41,2.02-3.29,2.02-3.69,0-10.25-51.08-21.13-61.96-72.22-72.22-2.02-.41-2.02-3.29,0-3.69,51.08-10.25,61.96-21.13,72.22-72.22.41-2.02,3.29-2.02,3.69,0,10.25,51.08,21.13,61.96,72.22,72.22,2.02.41,2.02,3.29,0,3.69Z"/>
   </g>
   <path d="M720 250C775.0 250 765.0 170 820 170" stroke="#6366f1" stroke-width="9" fill="none" stroke-linecap="round"/>
-  <path d="M720 250C775.0 250 765.0 410 820 410" stroke="#33d6c6" stroke-width="9" fill="none" stroke-linecap="round"/>
+  <path d="M720 250C775.0 250 765.0 410 820 410" stroke="#6366f1" stroke-width="9" fill="none" stroke-linecap="round"/>
   <path d="M1000 170C1044.0 170 1036.0 260 1080 260" stroke="#33d6c6" stroke-width="9" fill="none" stroke-linecap="round"/>
   <path d="M1000 410C1044.0 410 1036.0 340 1080 340" stroke="#a970ff" stroke-width="9" fill="none" stroke-linecap="round"/>
   <g transform="translate(560,190)">
