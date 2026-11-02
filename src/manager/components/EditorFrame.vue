@@ -252,12 +252,12 @@ watch(
   gap: var(--wp-space-2);
   margin-left: var(--wp-space-4);
   padding: 2px var(--wp-space-3);
-  background: color-mix(in oklab, var(--wp-warn, #facc15) 14%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-warn, #facc15) 32%, transparent);
+  background: color-mix(in oklab, var(--wp-warn) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-warn) 32%, transparent);
   border-radius: var(--wp-radius-cap, 999px);
   font-size: var(--wp-text-xs);
   font-weight: 500;
-  color: var(--wp-warn, #facc15);
+  color: var(--wp-warn);
   letter-spacing: 0.02em;
   text-transform: none;
   vertical-align: middle;
@@ -288,12 +288,12 @@ watch(
 /* Save button state-machine visuals. Base button styling lives in
  * tokens.css; this layers the saved/error nuance on top. */
 :deep(.wp-btn[data-save-state="saved"]) {
-  background: var(--wp-success, #22c55e);
-  border-color: var(--wp-success, #22c55e);
+  background: var(--wp-success);
+  border-color: var(--wp-success);
 }
 :deep(.wp-btn[data-save-state="error"]) {
-  background: var(--wp-danger, #ef4444);
-  border-color: var(--wp-danger, #ef4444);
+  background: var(--wp-danger);
+  border-color: var(--wp-danger);
 }
 :deep(.wp-btn[data-dirty]:not([data-save-state="saved"]):not([data-save-state="error"])) {
   box-shadow: 0 0 0 2px color-mix(in oklab, var(--wp-accent-500) 30%, transparent);
@@ -306,8 +306,8 @@ watch(
  * the issues (validation computed re-evaluates). */
 .wp-editor__errors {
   padding: var(--wp-space-4) var(--wp-space-5);
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 12%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 32%, transparent);
+  background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-danger) 32%, transparent);
   border-radius: var(--wp-radius);
   font-size: var(--wp-text-sm);
 }

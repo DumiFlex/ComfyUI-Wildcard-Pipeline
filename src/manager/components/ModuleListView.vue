@@ -1510,7 +1510,7 @@ defineExpose({
   align-items: center;
   justify-content: center;
 }
-.wp-row-fav-btn[data-on="true"] { color: var(--wp-warn, #fcd34d); }
+.wp-row-fav-btn[data-on="true"] { color: var(--wp-warn); }
 .wp-row-fav-btn .pi { font-size: var(--wp-text-base); }
 
 .wp-row-name-wrap {
@@ -1557,9 +1557,9 @@ defineExpose({
   font-size: 9px;
 }
 .wp-row-community-pill--update {
-  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 16%, transparent);
-  border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 30%, transparent);
-  color: var(--wp-warn, #f59e0b);
+  background: color-mix(in oklab, var(--wp-warn) 16%, transparent);
+  border-color: color-mix(in oklab, var(--wp-warn) 30%, transparent);
+  color: var(--wp-warn);
 }
 .wp-row-community-pill--button {
   font: inherit;
@@ -1567,13 +1567,13 @@ defineExpose({
   transition: background 0.12s, border-color 0.12s;
 }
 .wp-row-community-pill--button:hover {
-  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 40%, transparent);
+  background: color-mix(in oklab, var(--wp-warn) 22%, transparent);
+  border-color: color-mix(in oklab, var(--wp-warn) 40%, transparent);
 }
 .wp-row-community-pill--nsfw {
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 14%, transparent);
-  border-color: color-mix(in oklab, var(--wp-danger, #ef4444) 28%, transparent);
-  color: var(--wp-danger, #ef4444);
+  background: color-mix(in oklab, var(--wp-danger) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-danger) 28%, transparent);
+  color: var(--wp-danger);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -1617,9 +1617,9 @@ defineExpose({
   color: var(--wp-text);
 }
 .wp-row-tag-btn[data-active] {
-  background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500, #6366f1) 45%, transparent);
-  color: var(--wp-accent-text, #a5b4fc);
+  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
+  border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
+  color: var(--wp-accent-text);
 }
 
 .wp-row-actions {
@@ -1695,7 +1695,7 @@ defineExpose({
 }
 
 .wp-row-favorite > td:first-child {
-  border-left: 2px solid var(--wp-warn, #f7b955);
+  border-left: 2px solid var(--wp-warn);
 }
 
 /* Keyboard-nav focus marker. Driven by :focus-visible only (NOT the

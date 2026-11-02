@@ -78,23 +78,23 @@ function actsOf(b: BranchView): Array<{ text: string; change?: string }> {
 <style scoped>
 .wp-ai-deriv { display: flex; flex-direction: column; gap: 6px; }
 .wp-ai-deriv__rules { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.wp-ai-deriv__rules > li[data-change="added"] { border-left: 2px solid var(--wp-success, #30a46c); padding-left: 6px; }
-.wp-ai-deriv__rules > li[data-change="removed"] { border-left: 2px solid var(--wp-danger, #e5484d); padding-left: 6px; }
+.wp-ai-deriv__rules > li[data-change="added"] { border-left: 2px solid var(--wp-success); padding-left: 6px; }
+.wp-ai-deriv__rules > li[data-change="removed"] { border-left: 2px solid var(--wp-danger); padding-left: 6px; }
 .wp-ai-deriv__rules > li[data-change="changed"] { border-left: 2px solid var(--wp-warn); padding-left: 6px; }
 .wp-ai-deriv__rule-n { font-size: 11px; color: var(--wp-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .wp-ai-card-view__branch { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; align-items: baseline; margin-top: 2px; padding: 1px 4px 1px 0; border-radius: min(4px, var(--wp-radius-cap, 999px)); }
-.wp-ai-card-view__branch[data-change="added"] { background: color-mix(in oklab, var(--wp-success, #30a46c) 9%, transparent); }
-.wp-ai-card-view__branch[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger, #e5484d) 8%, transparent); }
+.wp-ai-card-view__branch[data-change="added"] { background: color-mix(in oklab, var(--wp-success) 9%, transparent); }
+.wp-ai-card-view__branch[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger) 8%, transparent); }
 .wp-ai-card-view__branch[data-change="same"] { opacity: 0.6; }
 .wp-ai-card-view__branch ul { grid-column: 2; margin: 0; padding-left: 16px; }
 .wp-ai-card-view__branch li[data-change] { list-style: none; margin-left: -1em; }
 .wp-ai-card-view__branch li[data-change] .wp-ai-diff__mark { display: inline-block; }
-.wp-ai-card-view__branch li[data-change="added"] .wp-ai-diff__mark { color: var(--wp-success, #30a46c); }
-.wp-ai-card-view__branch li[data-change="removed"] .wp-ai-diff__mark { color: var(--wp-danger, #e5484d); }
+.wp-ai-card-view__branch li[data-change="added"] .wp-ai-diff__mark { color: var(--wp-success); }
+.wp-ai-card-view__branch li[data-change="removed"] .wp-ai-diff__mark { color: var(--wp-danger); }
 .wp-ai-card-view__branch code { overflow-wrap: anywhere; }
 .wp-ai-card-view__kw { font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: min(4px, var(--wp-radius-cap, 999px)); background: color-mix(in oklab, var(--wp-warn) 22%, transparent); color: var(--wp-warn); white-space: nowrap; }
 .wp-ai-deriv__mark { margin-right: 3px; }
-.wp-ai-card-view__branch[data-change="added"] .wp-ai-deriv__mark { color: var(--wp-success, #30a46c); }
-.wp-ai-card-view__branch[data-change="removed"] .wp-ai-deriv__mark { color: var(--wp-danger, #e5484d); }
+.wp-ai-card-view__branch[data-change="added"] .wp-ai-deriv__mark { color: var(--wp-success); }
+.wp-ai-card-view__branch[data-change="removed"] .wp-ai-deriv__mark { color: var(--wp-danger); }
 .wp-ai-deriv__clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
 </style>

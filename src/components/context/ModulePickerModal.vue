@@ -1141,7 +1141,7 @@ onBeforeUnmount(detachCaptureListeners);
   gap: 8px;
 }
 .wp-picker__state .pi { font-size: 18px; color: var(--wp-text-dim); }
-.wp-picker__state--error { color: var(--wp-danger, #fca5a5); }
+.wp-picker__state--error { color: var(--wp-danger); }
 
 .wp-picker__section-head {
   display: flex; align-items: center; gap: 8px;
@@ -1385,7 +1385,7 @@ onBeforeUnmount(detachCaptureListeners);
   height: 14px;
   padding: 0 3px;
   border-radius: min(7px, var(--wp-radius-cap, 999px));
-  background: var(--wp-amber, #ffd400);
+  background: var(--wp-amber);
   color: #000;
   font-family: var(--wp-font-mono, monospace);
   font-size: 9px;

@@ -200,8 +200,8 @@ function onSearchKeydown(ev: KeyboardEvent): void {
   justify-content: space-between;
   align-items: center;
   padding: 4px 8px;
-  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
-  border: 1px solid var(--wp-border, #353841);
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border: 1px solid var(--wp-border);
   border-radius: min(3px, var(--wp-radius-cap, 999px));
   color: var(--wp-text);
   cursor: pointer;
@@ -209,17 +209,17 @@ function onSearchKeydown(ev: KeyboardEvent): void {
   font-size: 11px;
 }
 .wp-var-picker__trigger--open {
-  border-color: var(--wp-accent, #6366f1);
+  border-color: var(--wp-accent);
 }
-.wp-var-picker__value { color: var(--wp-accent, #6366f1); }
-.wp-var-picker__caret { color: var(--wp-text-dim, #7a7d88); }
+.wp-var-picker__value { color: var(--wp-accent); }
+.wp-var-picker__caret { color: var(--wp-text-dim); }
 
 .wp-var-picker__menu {
   list-style: none;
   margin: 0;
   padding: 4px 0;
-  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
-  border: 1px solid var(--wp-border, #353841);
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border: 1px solid var(--wp-border);
   border-radius: min(3px, var(--wp-radius-cap, 999px));
   max-height: 180px;
   overflow-y: auto;
@@ -227,14 +227,14 @@ function onSearchKeydown(ev: KeyboardEvent): void {
 .wp-var-picker__opt {
   padding: 4px 8px;
   cursor: pointer;
-  color: var(--wp-text-muted, #aeb1bb);
+  color: var(--wp-text-muted);
 }
 .wp-var-picker__opt:hover { background: rgba(196, 181, 253, 0.1); color: var(--wp-text); }
-.wp-var-picker__opt--active { background: color-mix(in srgb, var(--wp-accent) 18%, transparent); color: var(--wp-accent-text, #a5b4fc); }
+.wp-var-picker__opt--active { background: color-mix(in srgb, var(--wp-accent) 18%, transparent); color: var(--wp-accent-text); }
 .wp-var-picker__empty {
   padding: 6px 8px;
   font-style: italic;
-  color: var(--wp-text-dim, #7a7d88);
+  color: var(--wp-text-dim);
   font-size: 10px;
 }
 
@@ -243,15 +243,15 @@ function onSearchKeydown(ev: KeyboardEvent): void {
 .wp-var-picker__search {
   position: sticky;
   top: -4px; /* cancels the menu's 4px top padding */
-  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
+  background: var(--wp-bg-deep, var(--wp-bg));
   padding: 4px 6px;
-  border-bottom: 1px solid var(--wp-border, #353841);
+  border-bottom: 1px solid var(--wp-border);
 }
 .wp-var-picker__search-field {
   width: 100%;
   box-sizing: border-box;
-  background: var(--wp-bg, #0e1015);
-  border: 1px solid var(--wp-border, #353841);
+  background: var(--wp-bg);
+  border: 1px solid var(--wp-border);
   border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 3px 6px;
   color: var(--wp-text);
@@ -260,7 +260,7 @@ function onSearchKeydown(ev: KeyboardEvent): void {
 }
 .wp-var-picker__search-field:focus {
   outline: none;
-  border-color: var(--wp-accent, #6366f1);
+  border-color: var(--wp-accent);
 }
 
 .wp-var-picker__preview {
@@ -268,28 +268,28 @@ function onSearchKeydown(ev: KeyboardEvent): void {
   justify-content: space-between;
   gap: 8px;
   padding: 6px 8px;
-  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
-  border-left: 2px solid var(--wp-rt-token-good, #4ad4c4);
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border-left: 2px solid var(--wp-rt-token-good);
   border-radius: min(3px, var(--wp-radius-cap, 999px));
   font-size: 10px;
 }
-.wp-var-picker__preview--default { border-left-color: var(--wp-status-modified, #fbbf24); }
-.wp-var-picker__preview--idle { border-left-color: var(--wp-text-dim, #595c66); }
-.wp-var-picker__preview--idle .wp-var-picker__preview-value { color: var(--wp-text-dim, #7a7d88); font-weight: 400; font-style: italic; }
-.wp-var-picker__preview-label { color: var(--wp-text-dim, #7a7d88); flex: none; }
+.wp-var-picker__preview--default { border-left-color: var(--wp-status-modified); }
+.wp-var-picker__preview--idle { border-left-color: var(--wp-text-dim); }
+.wp-var-picker__preview--idle .wp-var-picker__preview-value { color: var(--wp-text-dim); font-weight: 400; font-style: italic; }
+.wp-var-picker__preview-label { color: var(--wp-text-dim); flex: none; }
 .wp-var-picker__preview-value {
   min-width: 0;
   text-align: right;
   overflow-wrap: anywhere;
   font-weight: 600;
-  color: var(--wp-rt-token-good, #4ad4c4);
+  color: var(--wp-rt-token-good);
 }
 .wp-var-picker__preview--default .wp-var-picker__preview-value {
-  color: var(--wp-status-modified, #fbbf24);
+  color: var(--wp-status-modified);
 }
 .wp-var-picker__preview-src {
   font-size: 9px;
-  color: var(--wp-text-dim, #7a7d88);
+  color: var(--wp-text-dim);
   text-align: right;
   overflow-wrap: anywhere;
 }

@@ -378,7 +378,7 @@ function toggleTotalInternal(): void {
   font: 600 9px var(--wp-font-sans, sans-serif);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
+  color: var(--wp-text-dim, var(--wp-text-muted));
 }
 
 
@@ -389,21 +389,21 @@ function toggleTotalInternal(): void {
 }
 .wp-loop__row-label {
   font: 10px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-muted, #aeb1bb);
+  color: var(--wp-text-muted);
 }
 
 
 .wp-loop__var-input {
   display: flex;
   align-items: center;
-  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
-  border: 1px solid var(--wp-border, #353841);
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border: 1px solid var(--wp-border);
   border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 0 6px;
 }
 .wp-loop__var-prefix {
   font: 600 11px var(--wp-font-mono, monospace);
-  color: var(--wp-accent, #6366f1);
+  color: var(--wp-accent);
   margin-right: 4px;
 }
 .wp-loop__var-text {

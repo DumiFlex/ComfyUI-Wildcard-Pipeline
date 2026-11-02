@@ -404,7 +404,7 @@ const branchCount = computed(() => rule.value.branches.length);
               :model-value="act.target_var"
               :suggestions="varSuggestions"
               placeholder="target_var"
-              input-color="var(--wp-success, #34d399)"
+              input-color="var(--wp-success)"
               :aria-label="`Action target variable for rule ${ruleNumber} branch ${bi + 1}${ai ? ` (action ${ai + 1})` : ''}`"
               :data-test="actTid(`act-target-${index}-${bi}`, ai)"
               @update:model-value="(v) => patchAction(bi, ai, { target_var: v })"
@@ -531,7 +531,7 @@ const branchCount = computed(() => rule.value.branches.length);
               :model-value="act.target_var"
               :suggestions="varSuggestions"
               placeholder="target_var"
-              input-color="var(--wp-success, #34d399)"
+              input-color="var(--wp-success)"
               :aria-label="`ELSE action target variable for rule ${ruleNumber}${ai ? ` (action ${ai + 1})` : ''}`"
               :data-test="actTid(`else-target-${index}`, ai)"
               @update:model-value="(v) => patchAction(-1, ai, { target_var: v })"
@@ -625,8 +625,8 @@ const branchCount = computed(() => rule.value.branches.length);
 
 <style scoped>
 .derivation-rule-card {
-  border-left: var(--wp-kind-stripe-w) solid var(--wp-kind-derivation, #fbbf24);
-  background: var(--wp-bg, #1e1e22);
+  border-left: var(--wp-kind-stripe-w) solid var(--wp-kind-derivation);
+  background: var(--wp-bg);
 }
 
 .rule-head {
@@ -653,7 +653,7 @@ const branchCount = computed(() => rule.value.branches.length);
 }
 .rule-meta {
   font-size: var(--wp-text-xs);
-  color: var(--wp-text-muted, #9ca3af);
+  color: var(--wp-text-muted);
 }
 .spacer { flex: 1; }
 .rule-head__branch-ctrls { display: inline-flex; gap: 2px; }
@@ -663,12 +663,12 @@ const branchCount = computed(() => rule.value.branches.length);
   flex-direction: column;
   gap: var(--wp-space-5);
   padding-left: var(--wp-space-5);
-  border-left: 2px solid color-mix(in oklab, var(--wp-kind-derivation, #fbbf24) 30%, transparent);
+  border-left: 2px solid color-mix(in oklab, var(--wp-kind-derivation) 30%, transparent);
 }
 
 .branch {
-  background: var(--wp-bg-2, #18181b);
-  border: 1px solid var(--wp-border, #2c2c34);
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
   padding: var(--wp-space-5) var(--wp-space-5);
   display: flex;
@@ -680,14 +680,14 @@ const branchCount = computed(() => rule.value.branches.length);
 }
 /* A branch holding a ref that points at nothing. */
 .branch--broken {
-  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 55%, transparent);
-  box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
+  border-color: color-mix(in srgb, var(--wp-danger) 55%, transparent);
+  box-shadow: inset 3px 0 0 var(--wp-danger);
 }
 .dvr-value-input--neg.wp-rt:not(.wp-rt--focused) {
-  border-color: color-mix(in oklab, var(--wp-danger, #ef4444) 45%, transparent);
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 7%, var(--wp-bg-2));
+  border-color: color-mix(in oklab, var(--wp-danger) 45%, transparent);
+  background: color-mix(in oklab, var(--wp-danger) 7%, var(--wp-bg-2));
 }
-.dvr-hint--neg { color: var(--wp-danger, #ef4444); }
+.dvr-hint--neg { color: var(--wp-danger); }
 /* THEN ... AND ...: each action is a block; later ones sit under an AND. */
 .dvr-action {
   display: flex;
@@ -696,9 +696,9 @@ const branchCount = computed(() => rule.value.branches.length);
 }
 .dvr-action--and {
   padding-top: var(--wp-space-4);
-  border-top: 1px dashed var(--wp-border, #2c2c34);
+  border-top: 1px dashed var(--wp-border);
 }
-.dvr-label--and { color: var(--wp-kind-derivation, #fbbf24); font-weight: 600; }
+.dvr-label--and { color: var(--wp-kind-derivation); font-weight: 600; }
 .dvr-mode-cell { display: flex; align-items: center; gap: var(--wp-space-2); min-width: 0; }
 .dvr-mode-cell .dvr-op { flex: 1; min-width: 0; }
 .dvr-add-action {
@@ -707,7 +707,7 @@ const branchCount = computed(() => rule.value.branches.length);
   align-items: center;
   gap: var(--wp-space-2);
   padding: 2px var(--wp-space-4); /* audit-exempt: compact inline add chip */
-  border: 1px dashed var(--wp-border, #2c2c34);
+  border: 1px dashed var(--wp-border);
   border-radius: var(--wp-radius-sm);
   background: transparent;
   color: var(--wp-text-muted);
@@ -715,14 +715,14 @@ const branchCount = computed(() => rule.value.branches.length);
   font-size: var(--wp-text-xs);
   cursor: pointer;
 }
-.dvr-add-action:hover { color: var(--wp-text); border-color: var(--wp-kind-derivation, #fbbf24); }
+.dvr-add-action:hover { color: var(--wp-text); border-color: var(--wp-kind-derivation); }
 .dvr-add-action:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
 .dvr-broken-mark {
   display: inline-flex;
   align-items: center;
   gap: var(--wp-space-2);
   font-size: var(--wp-text-xs);
-  color: var(--wp-danger, #ef4444);
+  color: var(--wp-danger);
 }
 
 .branch-head {
@@ -779,16 +779,16 @@ const branchCount = computed(() => rule.value.branches.length);
   text-transform: uppercase;
 }
 .branch-tag[data-kind="if"] {
-  background: color-mix(in oklab, var(--wp-kind-derivation, #fbbf24) 22%, transparent);
-  color: var(--wp-kind-derivation, #fbbf24);
+  background: color-mix(in oklab, var(--wp-kind-derivation) 22%, transparent);
+  color: var(--wp-kind-derivation);
 }
 .branch-tag[data-kind="elif"] {
-  background: color-mix(in oklab, var(--wp-info, #60a5fa) 22%, transparent);
-  color: var(--wp-info, #60a5fa);
+  background: color-mix(in oklab, var(--wp-info) 22%, transparent);
+  color: var(--wp-info);
 }
 .branch-tag[data-kind="else"] {
-  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 22%, transparent);
-  color: var(--wp-warn, #f59e0b);
+  background: color-mix(in oklab, var(--wp-warn) 22%, transparent);
+  color: var(--wp-warn);
 }
 
 .addbar {

@@ -950,12 +950,12 @@ function condRows(cond: unknown, bi: number): CondRow[] {
 }
 .rule-card--off { opacity: 0.55; }
 .rule-card--broken {
-  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 55%, transparent);
-  box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
+  border-color: color-mix(in srgb, var(--wp-danger) 55%, transparent);
+  box-shadow: inset 3px 0 0 var(--wp-danger);
 }
 .rule-head__broken {
   font-size: 10px;
-  color: var(--wp-danger, #ef4444);
+  color: var(--wp-danger);
 }
 .rule-card--dragging { opacity: 0.5; }
 .rule-card--drop-target {
@@ -1016,9 +1016,9 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   color: var(--wp-text-muted, var(--wp-text2));
 }
 .rule-head__chip--mod {
-  color: var(--wp-status-modified, #f59e0b);
-  border-color: color-mix(in srgb, var(--wp-status-modified, #f59e0b) 35%, transparent);
-  background: color-mix(in srgb, var(--wp-status-modified, #f59e0b) 10%, transparent);
+  color: var(--wp-status-modified);
+  border-color: color-mix(in srgb, var(--wp-status-modified) 35%, transparent);
+  background: color-mix(in srgb, var(--wp-status-modified) 10%, transparent);
 }
 .rule-head__drag {
   color: var(--wp-text-dim, var(--wp-text3));
@@ -1037,14 +1037,14 @@ function condRows(cond: unknown, bi: number): CondRow[] {
 }
 .br {
   border: 1px solid var(--wp-border-soft, var(--wp-border));
-  border-left: 3px solid var(--wp-kind-derivation, #fbbf24);
+  border-left: 3px solid var(--wp-kind-derivation);
   border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg);
   padding: 8px 10px;
 }
-.br[data-kind="elif"] { border-left-color: var(--wp-info, #60a5fa); }
+.br[data-kind="elif"] { border-left-color: var(--wp-info); }
 .br[data-kind="else"] {
-  border-left-color: var(--wp-warn, var(--wp-status-modified, #f59e0b));
+  border-left-color: var(--wp-warn, var(--wp-status-modified));
   border-style: dashed;
   border-left-style: solid;
 }
@@ -1062,16 +1062,16 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .br__tag[data-kind="if"] {
-  color: var(--wp-kind-derivation, #fbbf24);
-  background: color-mix(in srgb, var(--wp-kind-derivation, #fbbf24) 18%, transparent);
+  color: var(--wp-kind-derivation);
+  background: color-mix(in srgb, var(--wp-kind-derivation) 18%, transparent);
 }
 .br__tag[data-kind="elif"] {
-  color: var(--wp-info, #60a5fa);
-  background: color-mix(in srgb, var(--wp-info, #60a5fa) 18%, transparent);
+  color: var(--wp-info);
+  background: color-mix(in srgb, var(--wp-info) 18%, transparent);
 }
 .br__tag[data-kind="else"] {
-  color: var(--wp-warn, var(--wp-status-modified, #f59e0b));
-  background: color-mix(in srgb, var(--wp-warn, var(--wp-status-modified, #f59e0b)) 18%, transparent);
+  color: var(--wp-warn, var(--wp-status-modified));
+  background: color-mix(in srgb, var(--wp-warn, var(--wp-status-modified)) 18%, transparent);
 }
 .br__hint {
   font: 400 10px var(--wp-font-sans);
@@ -1116,12 +1116,12 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   align-self: stretch;
   width: 10px;
   margin-left: 2px;
-  border-left: 2px solid color-mix(in srgb, var(--wp-info, #60a5fa) 45%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--wp-info) 45%, transparent);
 }
 .br__group {
   font: 600 9px var(--wp-font-sans);
   letter-spacing: 0.06em;
-  color: var(--wp-info, #60a5fa);
+  color: var(--wp-info);
 }
 
 /* A value field: the RichTextInput, with the library value laid over it as a
@@ -1167,7 +1167,7 @@ function condRows(cond: unknown, bi: number): CondRow[] {
 
 /* Token coloring (re-used from prior list rendering) */
 .rule-tok-var { font-weight: 600; }
-.rule-tok-op--neg { color: var(--wp-danger, #ef4444); }
+.rule-tok-op--neg { color: var(--wp-danger); }
 .rule-tok-op {
   color: var(--wp-text-dim, var(--wp-text3));
   font-weight: 600;
@@ -1190,5 +1190,5 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   color: var(--wp-accent);
   padding: 0 3px;
 }
-.rule-tok-join--or { color: var(--wp-info, #60a5fa); }
+.rule-tok-join--or { color: var(--wp-info); }
 </style>

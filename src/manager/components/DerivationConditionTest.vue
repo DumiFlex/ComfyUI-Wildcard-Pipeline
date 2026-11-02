@@ -236,20 +236,20 @@ function set(patch: Partial<DerivationCondition>): void {
   border-radius: var(--wp-radius-sm);
   border: 1px solid var(--wp-border, rgba(255, 255, 255, 0.08));
   background: var(--wp-bg-2);
-  color: var(--wp-text-dim, #9ca3af);
+  color: var(--wp-text-dim);
   font: 600 11px var(--wp-font-sans, sans-serif);
   letter-spacing: 0.05em;
   cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-.dvr-not:hover { color: var(--wp-text, #fff); background: var(--wp-bg-1); }
+.dvr-not:hover { color: var(--wp-text); background: var(--wp-bg-1); }
 .dvr-not--on,
 .dvr-not--on:hover {
-  border-color: color-mix(in srgb, var(--wp-accent, #6366f1) 60%, transparent);
-  color: var(--wp-text, #fff);
-  background: color-mix(in srgb, var(--wp-accent, #6366f1) 30%, var(--wp-bg-2));
+  border-color: color-mix(in srgb, var(--wp-accent) 60%, transparent);
+  color: var(--wp-text);
+  background: color-mix(in srgb, var(--wp-accent) 30%, var(--wp-bg-2));
 }
-.dvr-not:focus-visible { outline: 2px solid var(--wp-accent-500, #6366f1); outline-offset: 2px; }
+.dvr-not:focus-visible { outline: 2px solid var(--wp-accent-500); outline-offset: 2px; }
 .dvr-op-cell {
   /* Wraps the op Select + the optional "must have value" tick. The
    * tick is absolute-positioned below the Select so its presence
@@ -286,14 +286,14 @@ function set(patch: Partial<DerivationCondition>): void {
   width: 22px;
   height: 22px;
   border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-muted, #9ca3af);
-  background: var(--wp-bg-3, #2a2a2a);
-  border: 1px solid var(--wp-border, #3a3a3a);
+  color: var(--wp-text-muted);
+  background: var(--wp-bg-3);
+  border: 1px solid var(--wp-border);
   text-decoration: none;
 }
 .dvr-regex-help:hover {
-  color: var(--wp-accent, #6366f1);
-  border-color: color-mix(in oklab, var(--wp-accent, #6366f1) 40%, transparent);
+  color: var(--wp-accent);
+  border-color: color-mix(in oklab, var(--wp-accent) 40%, transparent);
 }
 .dvr-regex-help .pi { font-size: var(--wp-text-xs); }
 </style>

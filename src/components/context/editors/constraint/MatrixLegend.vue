@@ -60,26 +60,26 @@ defineProps<{
 <style scoped>
 .legend { margin-top: 14px; }
 .legend-sample.s-only {
-  color: var(--wp-info, #3b82f6);
-  background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent);
-  border: 1px solid color-mix(in srgb, var(--wp-info, #3b82f6) 45%, transparent);
+  color: var(--wp-info);
+  background: color-mix(in srgb, var(--wp-info) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-info) 45%, transparent);
 }
-.legend-name.n-only { color: var(--wp-info, #3b82f6); }
+.legend-name.n-only { color: var(--wp-info); }
 .legend-sample.s-axis {
-  color: var(--wp-axis, #fbbf24);
-  background: color-mix(in srgb, var(--wp-axis, #fbbf24) 14%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wp-axis, #fbbf24) 40%, transparent);
+  color: var(--wp-axis);
+  background: color-mix(in srgb, var(--wp-axis) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wp-axis) 40%, transparent);
 }
-.legend-name.n-axis { color: var(--wp-axis, #fbbf24); }
+.legend-name.n-axis { color: var(--wp-axis); }
 .legend-desc code {
   font-family: var(--wp-font-mono, monospace);
-  color: var(--wp-text-muted, #a1a1ad);
+  color: var(--wp-text-muted);
 }
-.legend-desc .pi-sync { color: var(--wp-axis, #fbbf24); font-size: 10px; }
+.legend-desc .pi-sync { color: var(--wp-axis); font-size: 10px; }
 
 .legend-body {
-  background: var(--wp-bg2, #1a1d24);
-  border: 1px solid var(--wp-border, #2a2d35);
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
   border-radius: min(6px, var(--wp-radius-cap, 999px));
   padding: 12px 14px;
 }
@@ -104,12 +104,12 @@ defineProps<{
 }
 .legend-sample.s-neutral {
   background: color-mix(in srgb, var(--wp-text) 4%, transparent);
-  color: var(--wp-text-dim, #595c66);
+  color: var(--wp-text-dim);
   border: 1px dashed color-mix(in srgb, var(--wp-text) 10%, transparent);
 }
-.legend-sample.s-exclude { background: color-mix(in srgb, var(--wp-danger, #ef4444) 22%, transparent); color: var(--wp-danger); border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 45%, transparent); }
-.legend-sample.s-boost { background: color-mix(in srgb, var(--wp-success, #22c55e) 22%, transparent); color: var(--wp-success); border: 1px solid color-mix(in srgb, var(--wp-success, #22c55e) 45%, transparent); }
-.legend-sample.s-reduce { background: color-mix(in srgb, var(--wp-warn, #f97316) 22%, transparent); color: var(--wp-warn); border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 45%, transparent); }
+.legend-sample.s-exclude { background: color-mix(in srgb, var(--wp-danger) 22%, transparent); color: var(--wp-danger); border: 1px solid color-mix(in srgb, var(--wp-danger) 45%, transparent); }
+.legend-sample.s-boost { background: color-mix(in srgb, var(--wp-success) 22%, transparent); color: var(--wp-success); border: 1px solid color-mix(in srgb, var(--wp-success) 45%, transparent); }
+.legend-sample.s-reduce { background: color-mix(in srgb, var(--wp-warn) 22%, transparent); color: var(--wp-warn); border: 1px solid color-mix(in srgb, var(--wp-warn) 45%, transparent); }
 .glyph { font-size: 14px; line-height: 1; }
 .factor { font-size: 11px; font-weight: 700; }
 .legend-name {
@@ -123,7 +123,7 @@ defineProps<{
 .legend-name.n-reduce { color: var(--wp-warn); }
 .legend-desc {
   font: 11px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-muted, #8a8d99);
+  color: var(--wp-text-muted);
   line-height: 1.45;
 }
 </style>

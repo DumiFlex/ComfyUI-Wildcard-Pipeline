@@ -522,8 +522,8 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
 }
 .opt:last-child { border-bottom: none; }
 .opt--broken {
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 6%, transparent);
-  box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
+  background: color-mix(in srgb, var(--wp-danger) 6%, transparent);
+  box-shadow: inset 3px 0 0 var(--wp-danger);
 }
 .opt:hover { background: var(--wp-row-hover, rgba(255, 255, 255, 0.02)); }
 .opt__check {
@@ -591,8 +591,8 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.05em;
-  color: var(--wp-danger, #ef4444);
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 14%, transparent);
+  color: var(--wp-danger);
+  background: color-mix(in srgb, var(--wp-danger) 14%, transparent);
   cursor: help;
 }
 .opt__neg--fb {
@@ -665,13 +665,13 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   align-items: center;
   gap: 2px;
   margin-left: 2px;
-  color: var(--wp-status-modified, #fbbf24);
+  color: var(--wp-status-modified);
 }
 .opt__tok-funnel { font-size: 8px; line-height: 1; }
 .opt__tok-nonull { font-size: 8px; line-height: 1; opacity: 0.85; }
 .opt__tok--ref {
-  background: color-mix(in srgb, var(--wp-kind-wildcard, #a855f7) 15%, transparent);
-  border-color: color-mix(in srgb, var(--wp-kind-wildcard, #a855f7) 50%, transparent);
+  background: color-mix(in srgb, var(--wp-kind-wildcard) 15%, transparent);
+  border-color: color-mix(in srgb, var(--wp-kind-wildcard) 50%, transparent);
   color: var(--wp-kind-wildcard);
 }
 /* Unresolved ref — broken reference (target uuid not in library +
@@ -680,9 +680,9 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
  * the same broken-state grammar. Wins over the base `.opt__tok--ref`
  * accent via selector specificity. */
 .opt__tok--ref.opt__tok--unresolved {
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 15%, transparent);
-  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 50%, transparent);
-  color: var(--wp-danger, #ef4444);
+  background: color-mix(in srgb, var(--wp-danger) 15%, transparent);
+  border-color: color-mix(in srgb, var(--wp-danger) 50%, transparent);
+  color: var(--wp-danger);
   cursor: help;
 }
 .opt__tok--var {
@@ -692,7 +692,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
 /* Plain `{a|b|c}` inline-choice block — warn-tone yellow (matches the
  * SPA `wp-rt-dp-brace` palette in `manager/styles/rich-text.css`). */
 .opt__tok--brace {
-  color: var(--wp-warn, #fcd34d);
+  color: var(--wp-warn);
   font-weight: 600;
 }
 /* `{N$$sep$$a|b|c}` multi-pick block — distinct teal/green tone so users
@@ -701,7 +701,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
  * NO background / box (continuous block-coloured text) — same treatment the
  * SPA editor + preview now use for brace-block scaffolding. */
 .opt__tok--multi {
-  color: var(--wp-rt-token-good, #4ad4c4);
+  color: var(--wp-rt-token-good);
   font-weight: 500;
 }
 .opt__tok--escape {

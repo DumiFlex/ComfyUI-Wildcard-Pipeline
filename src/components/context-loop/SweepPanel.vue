@@ -272,24 +272,24 @@ function moveAxis(uid: string, dir: -1 | 1): void {
 .wp-sweep { display: flex; flex-direction: column; gap: 6px; }
 .wp-sweep--on {
   padding: 6px 7px;
-  border: 1px solid color-mix(in srgb, var(--wp-accent, #6366f1) 35%, var(--wp-border, #353841));
+  border: 1px solid color-mix(in srgb, var(--wp-accent) 35%, var(--wp-border));
   border-radius: min(4px, var(--wp-radius-cap, 999px));
-  background: color-mix(in srgb, var(--wp-accent, #6366f1) 5%, transparent);
+  background: color-mix(in srgb, var(--wp-accent) 5%, transparent);
 }
 .wp-sweep__row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.wp-sweep__row-label { font: 10px var(--wp-font-sans, sans-serif); color: var(--wp-text-muted, #aeb1bb); }
+.wp-sweep__row-label { font: 10px var(--wp-font-sans, sans-serif); color: var(--wp-text-muted); }
 
 
 .wp-sweep__total { font: 10.5px var(--wp-font-sans, sans-serif); color: var(--wp-text); }
-.wp-sweep__total strong { color: var(--wp-accent, #6366f1); }
-.wp-sweep__total--warn strong:last-child { color: var(--wp-warning, #f59e0b); }
-.wp-sweep__math { font-family: var(--wp-font-mono, monospace); color: var(--wp-text-muted, #aeb1bb); }
-.wp-sweep__hint { font: 10px var(--wp-font-sans, sans-serif); color: var(--wp-text-dim, #7a7d88); }
+.wp-sweep__total strong { color: var(--wp-accent); }
+.wp-sweep__total--warn strong:last-child { color: var(--wp-warn); }
+.wp-sweep__math { font-family: var(--wp-font-mono, monospace); color: var(--wp-text-muted); }
+.wp-sweep__hint { font: 10px var(--wp-font-sans, sans-serif); color: var(--wp-text-dim); }
 
 .wp-sweep__axis {
-  border: 1px solid var(--wp-border, #353841);
+  border: 1px solid var(--wp-border);
   border-radius: min(3px, var(--wp-radius-cap, 999px));
-  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
+  background: var(--wp-bg-deep, var(--wp-bg));
 }
 .wp-sweep__axis--missing { border-style: dashed; opacity: .75; }
 .wp-sweep__axis-head { display: flex; align-items: center; gap: 4px; padding: 3px 4px 3px 6px; }
@@ -298,23 +298,23 @@ function moveAxis(uid: string, dir: -1 | 1): void {
   background: none; border: 0; padding: 0; cursor: pointer; text-align: left; color: var(--wp-text);
 }
 .wp-sweep__axis-name:disabled { cursor: default; }
-.wp-sweep__axis-var { font: 600 11px var(--wp-font-mono, monospace); color: var(--wp-accent, #6366f1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wp-sweep__axis-node { font: 9.5px var(--wp-font-sans, sans-serif); color: var(--wp-text-dim, #7a7d88); white-space: nowrap; }
-.wp-sweep__axis--missing .wp-sweep__axis-node { color: var(--wp-warning, #f59e0b); }
-.wp-sweep__axis-count { font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-muted, #aeb1bb); white-space: nowrap; }
-.wp-sweep__warn-ico { font-size: 9px; color: var(--wp-warning, #f59e0b); margin-left: 2px; }
-.wp-sweep__opts { border-top: 1px solid var(--wp-border, #353841); padding: 4px 6px 6px; }
+.wp-sweep__axis-var { font: 600 11px var(--wp-font-mono, monospace); color: var(--wp-accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-sweep__axis-node { font: 9.5px var(--wp-font-sans, sans-serif); color: var(--wp-text-dim); white-space: nowrap; }
+.wp-sweep__axis--missing .wp-sweep__axis-node { color: var(--wp-warn); }
+.wp-sweep__axis-count { font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-muted); white-space: nowrap; }
+.wp-sweep__warn-ico { font-size: 9px; color: var(--wp-warn); margin-left: 2px; }
+.wp-sweep__opts { border-top: 1px solid var(--wp-border); padding: 4px 6px 6px; }
 .wp-sweep__opts-bar { display: flex; gap: 10px; margin-bottom: 4px; }
 .wp-sweep__opts-list { display: flex; flex-wrap: wrap; gap: 3px; max-height: 120px; overflow-y: auto; }
 .wp-sweep__opt {
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   padding: 2px 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); cursor: pointer;
   font: 10px var(--wp-font-sans, sans-serif);
-  background: transparent; border: 1px solid var(--wp-border, #353841); color: var(--wp-text-dim, #7a7d88);
+  background: transparent; border: 1px solid var(--wp-border); color: var(--wp-text-dim);
 }
 .wp-sweep__opt--on {
-  background: color-mix(in srgb, var(--wp-accent, #6366f1) 16%, transparent);
-  border-color: var(--wp-accent, #6366f1);
+  background: color-mix(in srgb, var(--wp-accent) 16%, transparent);
+  border-color: var(--wp-accent);
   color: var(--wp-text);
 }
 

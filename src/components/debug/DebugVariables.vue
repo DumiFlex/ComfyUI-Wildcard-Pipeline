@@ -126,7 +126,7 @@ const nameWidth = computed(() => {
 .wp-dbg-var-row__items li { display: flex; gap: 6px; align-items: baseline; }
 .wp-dbg-var-row__idx { font: 500 9.5px/1 var(--wp-font-mono); color: var(--wp-text-dim); min-width: 16px; }
 .wp-dbg-var-row__neg { display: flex; gap: 5px; align-items: baseline; font: 500 10.5px/1.5 var(--wp-font-mono); }
-.wp-dbg-var-row__neg-mark, .wp-dbg-var-row__neg-text { color: var(--wp-red, #e5484d); }
+.wp-dbg-var-row__neg-mark, .wp-dbg-var-row__neg-text { color: var(--wp-red); }
 .wp-dbg-var-row__neg-text { min-width: 0; overflow-wrap: anywhere; }
 .wp-dbg-var-row__neg-src { flex: none; color: var(--wp-text-dim); font-family: var(--wp-font-sans); }
 .wp-dbg-var-row__extra { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }

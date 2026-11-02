@@ -88,7 +88,7 @@ function ownerLabel(key: string | null): string {
   margin-top: 5px;
   background: var(--wp-warn);
 }
-.wp-dbg-warn.is-error .wp-dbg-warn__dot { background: var(--wp-red, #e5484d); }
+.wp-dbg-warn.is-error .wp-dbg-warn__dot { background: var(--wp-red); }
 .wp-dbg-warn.is-info .wp-dbg-warn__dot { background: var(--wp-info, var(--wp-accent)); }
 .wp-dbg-warn__body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .wp-dbg-warn__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -100,7 +100,7 @@ function ownerLabel(key: string | null): string {
   background: color-mix(in oklab, var(--wp-warn) 14%, transparent);
   color: var(--wp-warn);
 }
-.wp-dbg-warn.is-error .wp-dbg-warn__detail { background: color-mix(in oklab, var(--wp-red, #e5484d) 14%, transparent); color: var(--wp-red, #e5484d); }
+.wp-dbg-warn.is-error .wp-dbg-warn__detail { background: color-mix(in oklab, var(--wp-red) 14%, transparent); color: var(--wp-red); }
 .wp-dbg-warn__owner {
   margin-left: auto;
   display: inline-flex;

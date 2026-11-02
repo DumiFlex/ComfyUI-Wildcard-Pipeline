@@ -325,7 +325,7 @@ function onDismiss() {
     <template v-if="entry">
       <header style="padding: 18px 22px; border-bottom: 1px solid var(--wp-border)">
         <h2 style="margin: 0; font-size: 16px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px">
-          <i class="pi pi-arrow-up" style="color: var(--wp-warn, #f59e0b)" />
+          <i class="pi pi-arrow-up" style="color: var(--wp-warn)" />
           Update available
         </h2>
         <p style="margin: 6px 0 0; color: var(--wp-text-muted); font-size: 12.5px">
@@ -433,9 +433,9 @@ function onDismiss() {
   margin: 0;
   padding: 10px 12px;
   border-radius: min(6px, var(--wp-radius-cap, 999px));
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 14%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 36%, transparent);
-  color: var(--wp-danger-text, #ef4444);
+  background: color-mix(in oklab, var(--wp-danger) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-danger) 36%, transparent);
+  color: var(--wp-danger-text);
   font-size: 12.5px;
 }
 .wpc-update-error i { font-size: 14px; flex-shrink: 0; }

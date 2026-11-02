@@ -260,7 +260,7 @@ onBeforeUnmount(() => {
   padding: var(--wp-space-3) var(--wp-space-5);
   font: 600 11px var(--wp-font-mono, ui-monospace, monospace); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
   min-width: 0;
-  color: var(--wp-kind-derivation, #fbbf24);
+  color: var(--wp-kind-derivation);
 }
 .dvr-var-input:focus { outline: none; }
 </style>

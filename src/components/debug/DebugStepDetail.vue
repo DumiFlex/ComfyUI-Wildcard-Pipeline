@@ -400,8 +400,8 @@ function modeGlyph(mode: string | undefined): string {
 }
 /* A later action of the same clause (THEN ... AND ...). */
 .wp-dbg-and { font: 600 9px/1.5 var(--wp-font-sans); text-transform: uppercase; color: var(--wp-kind-derivation); }
-.wp-dbg-neg-mode { font: 600 10px/1.5 var(--wp-font-mono); color: var(--wp-red, #e5484d); }
-.wp-dbg-neg-text { color: var(--wp-red, #e5484d); }
+.wp-dbg-neg-mode { font: 600 10px/1.5 var(--wp-font-mono); color: var(--wp-red); }
+.wp-dbg-neg-text { color: var(--wp-red); }
 .wp-dbg-ref {
   display: flex;
   align-items: baseline;
@@ -411,10 +411,10 @@ function modeGlyph(mode: string | undefined): string {
 }
 .wp-dbg-ref__arrow { color: var(--wp-text-dim); }
 .wp-dbg-ref__name { font-family: var(--wp-font-mono); color: var(--wp-kind-wildcard); white-space: nowrap; }
-.wp-dbg-detail__error { margin: 0; color: var(--wp-red, #e5484d); font-family: var(--wp-font-mono); word-break: break-word; }
+.wp-dbg-detail__error { margin: 0; color: var(--wp-red); font-family: var(--wp-font-mono); word-break: break-word; }
 .wp-dbg-detail__warn { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
 .wp-dbg-detail__warn-label { font-weight: 600; color: var(--wp-warn); }
-.wp-dbg-detail__warn.is-error .wp-dbg-detail__warn-label { color: var(--wp-red, #e5484d); }
+.wp-dbg-detail__warn.is-error .wp-dbg-detail__warn-label { color: var(--wp-red); }
 .wp-dbg-detail__warn.is-info .wp-dbg-detail__warn-label { color: var(--wp-info, var(--wp-accent)); }
 .wp-dbg-detail__meta { display: flex; flex-wrap: wrap; gap: 4px; }
 .wp-copy-btn.wp-dbg-meta-btn {

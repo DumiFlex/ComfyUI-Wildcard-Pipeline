@@ -1474,12 +1474,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
 .wp-ai-chat__opt-neg.wp-ai-chat__clamp { -webkit-line-clamp: 1; line-clamp: 1; }
 .wp-ai-chat__chip[data-tone="more"] { color: var(--wp-text-muted); }
 .wp-ai-chat__opt-weight { font-family: var(--wp-font-mono, monospace); font-size: 11px; color: var(--wp-accent-text); }
-.wp-ai-chat__opt-neg { font-size: 11px; color: var(--wp-danger, #f87171); overflow-wrap: anywhere; }
+.wp-ai-chat__opt-neg { font-size: 11px; color: var(--wp-danger); overflow-wrap: anywhere; }
 .wp-ai-chat__link {
   border: 0; background: none; padding: 0; font: inherit; font-size: 11px; color: var(--wp-accent-text);
   cursor: pointer; text-decoration: underline;
 }
-.wp-ai-chat__by[data-tone="warn"] { color: var(--wp-warning, #d9a400); }
+.wp-ai-chat__by[data-tone="warn"] { color: var(--wp-warn); }
 .wp-ai-chat__by {
   display: flex; align-items: center; gap: 5px; margin: 0 0 4px;
   font-family: var(--wp-font-mono, monospace); font-size: 11px; color: var(--wp-text-dim);

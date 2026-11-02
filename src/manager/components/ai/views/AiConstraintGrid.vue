@@ -139,21 +139,21 @@ function effectText(effect: string, factor: number | null): string {
 .wp-ai-cgrid__grid th { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wp-ai-cgrid__grid th[scope="row"] { text-align: left; }
 .wp-ai-cgrid__grid td { color: var(--wp-text-dim); }
-.wp-ai-cgrid__grid td[data-effect="exclude"] { color: var(--wp-danger, #e5484d); }
-.wp-ai-cgrid__grid td[data-effect="boost"], .wp-ai-cgrid__grid td[data-effect="only"] { color: var(--wp-success, #46a758); }
+.wp-ai-cgrid__grid td[data-effect="exclude"] { color: var(--wp-danger); }
+.wp-ai-cgrid__grid td[data-effect="boost"], .wp-ai-cgrid__grid td[data-effect="only"] { color: var(--wp-success); }
 .wp-ai-cgrid__grid td[data-effect="reduce"] { color: var(--wp-warn); }
 .wp-ai-cgrid__grid td[data-change="same"] { opacity: 0.55; }
-.wp-ai-cgrid__grid td[data-change="added"] { background: color-mix(in oklab, var(--wp-success, #30a46c) 14%, transparent); }
-.wp-ai-cgrid__grid td[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger, #e5484d) 12%, transparent); }
+.wp-ai-cgrid__grid td[data-change="added"] { background: color-mix(in oklab, var(--wp-success) 14%, transparent); }
+.wp-ai-cgrid__grid td[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger) 12%, transparent); }
 .wp-ai-cgrid__grid td[data-change="changed"] { background: color-mix(in oklab, var(--wp-warn) 14%, transparent); }
 .wp-ai-cgrid__was { color: var(--wp-text-muted); margin-right: 3px; }
 .wp-ai-cgrid__table { border-collapse: collapse; width: 100%; }
 .wp-ai-cgrid__table td { padding: 2px 6px 2px 0; vertical-align: top; overflow-wrap: anywhere; }
-.wp-ai-cgrid__table tr[data-change="added"] { background: color-mix(in oklab, var(--wp-success, #30a46c) 9%, transparent); }
-.wp-ai-cgrid__table tr[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger, #e5484d) 8%, transparent); }
+.wp-ai-cgrid__table tr[data-change="added"] { background: color-mix(in oklab, var(--wp-success) 9%, transparent); }
+.wp-ai-cgrid__table tr[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger) 8%, transparent); }
 .wp-ai-cgrid__tag { color: var(--wp-accent-400, var(--wp-accent-500)); }
 .wp-ai-cgrid__effect { white-space: nowrap; color: var(--wp-text-muted); }
-.wp-ai-cgrid__effect[data-effect="exclude"] { color: var(--wp-danger, #e5484d); }
-.wp-ai-cgrid__effect[data-effect="boost"] { color: var(--wp-success, #30a46c); }
+.wp-ai-cgrid__effect[data-effect="exclude"] { color: var(--wp-danger); }
+.wp-ai-cgrid__effect[data-effect="boost"] { color: var(--wp-success); }
 .wp-ai-cgrid__effect[data-effect="only"] { color: var(--wp-warn); }
 </style>

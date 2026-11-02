@@ -89,7 +89,7 @@ function onSeed(n: number | null) {
 
 <style scoped>
 .srow { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: min(5px, var(--wp-radius-cap, 999px)); }
-.srow--locked { background: rgba(99,102,241,0.07); box-shadow: inset 2px 0 0 var(--wp-accent, #6366f1); }
+.srow--locked { background: rgba(99,102,241,0.07); box-shadow: inset 2px 0 0 var(--wp-accent); }
 /* out-of-range lock: dimmed ("deemed down") but still interactive — hover lifts it. */
 .srow--inactive { opacity: .5; }
 .srow--inactive:hover { opacity: .85; }
@@ -100,21 +100,21 @@ function onSeed(n: number | null) {
   background:
     repeating-linear-gradient(
       to bottom,
-      var(--wp-accent, #6366f1) 0 4px,
+      var(--wp-accent) 0 4px,
       transparent 4px 8px
     ) left / 3px 100% no-repeat,
-    color-mix(in srgb, var(--wp-accent, #6366f1) 11%, transparent);
+    color-mix(in srgb, var(--wp-accent) 11%, transparent);
   border-radius: min(5px, var(--wp-radius-cap, 999px));
 }
 .srow--bypassed .derived__val { text-decoration: line-through; opacity: .65; }
-.srow--bypassed .srow__idx { color: var(--wp-accent-text, #a5b4fc); opacity: .75; }
-.srow__idx { flex-shrink: 0; width: 30px; text-align: right; font: 600 11px var(--wp-font-mono, monospace); color: var(--wp-text-dim, #7a7d88); }
-.srow--locked .srow__idx { color: var(--wp-accent-text, #a5b4fc); }
+.srow--bypassed .srow__idx { color: var(--wp-accent-text); opacity: .75; }
+.srow__idx { flex-shrink: 0; width: 30px; text-align: right; font: 600 11px var(--wp-font-mono, monospace); color: var(--wp-text-dim); }
+.srow--locked .srow__idx { color: var(--wp-accent-text); }
 .srow__fill { flex: 1; }
 /* Same shrink rule as the locked column, so a 15-digit derived seed clips
  * instead of shoving the DERIVED tag past the panel edge. */
 .derived { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
-.derived__val { font: 11px var(--wp-font-mono, monospace); color: var(--wp-text4, #888); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.derived__val { font: 11px var(--wp-font-mono, monospace); color: var(--wp-text4); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .derived__tag { flex-shrink: 0; }
 .derived__tag { font: 600 8px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .07em; color: var(--wp-text-dim, var(--wp-text3)); border: 1px solid var(--wp-border); border-radius: min(3px, var(--wp-radius-cap, 999px)); padding: 1px 5px; }
 /* The value column has to SHRINK. A locked row carries three fixed-width

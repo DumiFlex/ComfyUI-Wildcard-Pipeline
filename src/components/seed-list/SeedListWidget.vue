@@ -276,7 +276,7 @@ function toggleOverrideStrategy(): void {
   font: 600 9px var(--wp-font-sans, sans-serif);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
+  color: var(--wp-text-dim, var(--wp-text-muted));
 }
 
 .wp-seedlist__row {
@@ -287,7 +287,7 @@ function toggleOverrideStrategy(): void {
 }
 .wp-seedlist__row-label {
   font: 10px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-muted, #aeb1bb);
+  color: var(--wp-text-muted);
   flex: 1;
 }
 

@@ -67,7 +67,7 @@ const actual = computed(() => {
   font-size: 11px;
   color: var(--wp-text-muted);
 }
-.wp-dbg-cond-mark { font-size: 9px; color: var(--wp-red, #e5484d); flex: none; }
+.wp-dbg-cond-mark { font-size: 9px; color: var(--wp-red); flex: none; }
 .is-ok > .wp-dbg-cond-mark,
 .is-ok > .wp-dbg-cond-group__head > .wp-dbg-cond-mark { color: var(--wp-green); }
 .wp-dbg-cond__var { font-family: var(--wp-font-mono); color: var(--wp-accent-text, var(--wp-accent)); }
@@ -76,7 +76,7 @@ const actual = computed(() => {
 .wp-dbg-cond__actual { color: var(--wp-text-dim); font-style: italic; }
 .wp-dbg-cond__actual code { font-style: normal; font-family: var(--wp-font-mono); color: var(--wp-text-muted); }
 .wp-dbg-cond-group {
-  border-left: 2px solid color-mix(in oklab, var(--wp-red, #e5484d) 45%, transparent);
+  border-left: 2px solid color-mix(in oklab, var(--wp-red) 45%, transparent);
   padding: 1px 0 1px 8px;
   margin: 2px 0;
 }

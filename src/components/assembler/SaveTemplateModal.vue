@@ -203,14 +203,14 @@ async function submit(mode: "update" | "new") {
 .wp-stm {
   width: min(560px, 100%);
   max-height: calc(100vh - 40px);
-  background: var(--wp-bg-1, #0b0b12);
-  border: 1px solid var(--wp-border-strong, var(--wp-border, #2a2a3a));
+  background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border-strong, var(--wp-border));
   border-radius: var(--wp-radius-lg, 12px);
   box-shadow: var(--wp-shadow-lg, 0 20px 60px rgba(0, 0, 0, 0.55));
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  color: var(--wp-text, #e7e7ee);
+  color: var(--wp-text);
   font-family: var(--wp-font-sans, sans-serif);
 }
 .wp-stm__head {
@@ -218,7 +218,7 @@ async function submit(mode: "update" | "new") {
   align-items: center;
   justify-content: space-between;
   padding: 13px 16px;
-  border-bottom: 1px solid var(--wp-border, #2a2a3a);
+  border-bottom: 1px solid var(--wp-border);
   background: var(--wp-brand-gradient, transparent);
   position: relative;
 }
@@ -226,7 +226,7 @@ async function submit(mode: "update" | "new") {
   content: "";
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--wp-bg, #0b0b12) 85%, transparent);
+  background: color-mix(in srgb, var(--wp-bg) 85%, transparent);
   pointer-events: none;
 }
 .wp-stm__head > * { position: relative; z-index: 1; }
@@ -253,9 +253,9 @@ async function submit(mode: "update" | "new") {
 }
 .wp-stm-input {
   width: 100%;
-  background: var(--wp-bg-2, #15151f);
-  color: var(--wp-text, #e7e7ee);
-  border: 1px solid var(--wp-border, #2a2a3a);
+  background: var(--wp-bg-2);
+  color: var(--wp-text);
+  border: 1px solid var(--wp-border);
   border-radius: min(6px, var(--wp-radius-cap, 999px));
   padding: 6px 8px;
   font-size: 13px;
@@ -282,7 +282,7 @@ async function submit(mode: "update" | "new") {
 .wp-stm-error {
   margin: 0;
   font-size: 11.5px;
-  color: var(--wp-danger, #f87171);
+  color: var(--wp-danger);
 }
 
 .wp-stm__foot {
@@ -290,7 +290,7 @@ async function submit(mode: "update" | "new") {
   align-items: center;
   gap: 8px;
   padding: 11px 16px;
-  border-top: 1px solid var(--wp-border, #2a2a3a);
+  border-top: 1px solid var(--wp-border);
   background: var(--wp-bg-1);
 }
 .wp-stm-spacer { flex: 1; }

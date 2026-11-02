@@ -805,12 +805,12 @@ function onGroupDrop(axis: string): void {
   margin: 9px 2px 2px;
   font-size: 11px;
   line-height: 1.45;
-  color: var(--wp-warn, #f59e0b);
+  color: var(--wp-warn);
 }
 .subcat-group__axis-note .pi { font-size: 12px; margin-top: 1px; flex-shrink: 0; }
 .subcat-group__axis-note code {
   font-family: var(--wp-font-mono, monospace);
-  color: color-mix(in srgb, var(--wp-warn, #f59e0b) 80%, var(--wp-text));
+  color: color-mix(in srgb, var(--wp-warn) 80%, var(--wp-text));
 }
 .subcat-group__axis-note b { color: var(--wp-text); font-weight: 600; }
 

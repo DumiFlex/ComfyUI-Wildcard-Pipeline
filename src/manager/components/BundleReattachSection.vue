@@ -168,7 +168,7 @@ function confirm(childId: string): void {
 <style scoped>
 .rb {
   padding: 12px 16px;
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 6%, var(--wp-bg2, #15151f));
+  background: color-mix(in oklab, var(--wp-danger) 6%, var(--wp-bg-2));
   border: 1px solid var(--wp-border-soft, var(--wp-border));
   border-radius: var(--wp-radius, 4px);
   margin-bottom: var(--wp-space-5, 16px);
@@ -177,24 +177,24 @@ function confirm(childId: string): void {
   font: 600 9px var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  color: var(--wp-danger, #ef4444);
+  color: var(--wp-danger);
   margin-bottom: 8px;
 }
 .rb__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font: 11px var(--wp-font-sans); padding: 4px 0; }
-.rb__warn-icon { color: var(--wp-danger, #ef4444); font-size: 12px; }
-.rb__txt { flex: 1; color: var(--wp-text, #e7e7ee); }
+.rb__warn-icon { color: var(--wp-danger); font-size: 12px; }
+.rb__txt { flex: 1; color: var(--wp-text); }
 .rb__txt code { font-family: var(--wp-font-mono, monospace); }
 .rb__btn,
 .rb__confirm {
   padding: 4px 12px;
-  border: 1px solid var(--wp-accent, #6366f1);
+  border: 1px solid var(--wp-accent);
   border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: transparent;
   color: var(--wp-accent-text, var(--wp-text));
   font: 11px var(--wp-font-sans);
   cursor: pointer;
 }
-.rb__confirm { background: var(--wp-accent, #6366f1); color: #fff; margin-top: 6px; }
+.rb__confirm { background: var(--wp-accent); color: #fff; margin-top: 6px; }
 /* Secondary affordance beside Reattach — pulls the missing dep from the
  * community. Quieter than the primary accent border so the manual dropdown
  * stays the obvious first action; the cloud icon signals the network pull. */
@@ -206,7 +206,7 @@ function confirm(childId: string): void {
   color: var(--wp-text-muted, var(--wp-text2, var(--wp-text)));
 }
 .rb__btn--download:hover {
-  border-color: var(--wp-accent, #6366f1);
+  border-color: var(--wp-accent);
   color: var(--wp-accent-text, var(--wp-text));
 }
 .rb__btn--download .pi { font-size: 11px; }
@@ -216,7 +216,7 @@ function confirm(childId: string): void {
   padding: 10px;
   border: 1px solid var(--wp-border, rgba(255,255,255,0.12));
   border-radius: min(6px, var(--wp-radius-cap, 999px));
-  background: var(--wp-bg, #11111b);
+  background: var(--wp-bg);
 }
 .rb__search {
   width: 100%;
@@ -224,17 +224,17 @@ function confirm(childId: string): void {
   padding: 6px 9px;
   border-radius: min(4px, var(--wp-radius-cap, 999px));
   border: 1px solid var(--wp-border, rgba(255,255,255,0.12));
-  background: var(--wp-bg-2, #15151f);
-  color: var(--wp-text, #e7e7ee);
+  background: var(--wp-bg-2);
+  color: var(--wp-text);
   font: 12px var(--wp-font-mono, monospace);
   outline: none;
 }
 .rb__list { list-style: none; margin: 6px 0; padding: 0; max-height: 150px; overflow-y: auto; }
-.rb__cand { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 5px 8px; border-radius: min(4px, var(--wp-radius-cap, 999px)); cursor: pointer; color: var(--wp-text, #e7e7ee); }
+.rb__cand { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 5px 8px; border-radius: min(4px, var(--wp-radius-cap, 999px)); cursor: pointer; color: var(--wp-text); }
 .rb__cand-name { font: 11px var(--wp-font-sans); }
-.rb__cand-id { flex-shrink: 0; font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-dim, #6e6e7c); }
-.rb__cand:hover { background: color-mix(in oklab, var(--wp-accent, #6366f1) 18%, transparent); }
-.rb__cand--picked { background: color-mix(in oklab, var(--wp-accent, #6366f1) 28%, transparent); }
-.rb__empty { padding: 5px 8px; font: 11px var(--wp-font-sans); color: var(--wp-text-dim, #6e6e7c); }
-.rb__note { margin: 6px 0 0; font: 10px var(--wp-font-sans); color: var(--wp-text-dim, #6e6e7c); }
+.rb__cand-id { flex-shrink: 0; font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-dim); }
+.rb__cand:hover { background: color-mix(in oklab, var(--wp-accent) 18%, transparent); }
+.rb__cand--picked { background: color-mix(in oklab, var(--wp-accent) 28%, transparent); }
+.rb__empty { padding: 5px 8px; font: 11px var(--wp-font-sans); color: var(--wp-text-dim); }
+.rb__note { margin: 6px 0 0; font: 10px var(--wp-font-sans); color: var(--wp-text-dim); }
 </style>

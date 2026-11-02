@@ -123,7 +123,7 @@ const pending = computed(() => !!p.value && props.canApply !== undefined);
 .wp-ai-preview__opts li[data-off] .wp-ai-preview__opt-text { color: var(--wp-text-dim); text-decoration: line-through; }
 .wp-ai-preview__opts li > span + span { margin-left: 6px; }
 .wp-ai-preview__dim { color: var(--wp-text-muted); font-size: 12px; }
-.wp-ai-preview__neg { font-size: 12px; color: var(--wp-danger, #f87171); }
+.wp-ai-preview__neg { font-size: 12px; color: var(--wp-danger); }
 .wp-ai-preview__lines { margin: 0; padding-left: 18px; overflow-wrap: anywhere; }
 .wp-ai-preview__warnings { list-style: none; margin: 0; padding: 0; color: var(--wp-warn); font-size: 12.5px; display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
 .wp-ai-preview__blocked { margin-right: auto; font-size: 12px; color: var(--wp-text-muted); }

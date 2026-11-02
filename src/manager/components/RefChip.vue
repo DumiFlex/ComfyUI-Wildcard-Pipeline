@@ -818,8 +818,8 @@ onBeforeUnmount(() => {
    clearly marked as part of the selection. */
 .wp-refchip ::selection,
 .wp-refchip::selection {
-  background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 45%, transparent);
-  color: var(--wp-text, #e7e7ee);
+  background: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
+  color: var(--wp-text);
 }
 /* A `$var` is syntax-coloured text, not a boxed chip (Dumi, 2026-10-14: the
    green chip served no purpose, the hover card is what matters). No fill, no
@@ -839,8 +839,8 @@ onBeforeUnmount(() => {
 /* No name (a bare `$`): the danger colour with a wavy rule, still no box. */
 .wp-refchip--var.wp-refchip--unresolved {
   background: none;
-  color: var(--wp-danger, #ef4444);
-  text-decoration: underline wavy color-mix(in srgb, var(--wp-danger, #ef4444) 70%, transparent);
+  color: var(--wp-danger);
+  text-decoration: underline wavy color-mix(in srgb, var(--wp-danger) 70%, transparent);
   text-underline-offset: 3px;
 }
 .wp-refchip--var.wp-refchip--unresolved:hover { background: none; }
@@ -856,13 +856,13 @@ onBeforeUnmount(() => {
    Colour is set here rather than inherited because the accessor sits inside
    the label, which carries the chip's own colour. */
 .wp-refchip__accessor {
-  color: var(--wp-axis, #fbbf24);
+  color: var(--wp-axis);
   font-weight: var(--wp-weight-semibold);
 }
 
 /* `.neg` reads the variable's negatives, not a tag: the negative red. */
 .wp-refchip__accessor--neg {
-  color: var(--wp-danger, #ef4444);
+  color: var(--wp-danger);
 }
 
 /* The pick-index segment (`.0`). Deliberately UNaccented — it shares the
@@ -880,28 +880,28 @@ onBeforeUnmount(() => {
    one. The engine renders such a read as an empty string, so without this the
    only symptom is a word silently missing from the prompt. */
 .wp-refchip__accessor--unknown {
-  color: var(--wp-warn, #f59e0b);
+  color: var(--wp-warn);
   text-decoration: underline wavy
-    color-mix(in srgb, var(--wp-warn, #f59e0b) 70%, transparent);
+    color-mix(in srgb, var(--wp-warn) 70%, transparent);
   text-underline-offset: 2px;
   text-decoration-thickness: 1px;
 }
 
 .wp-refchip--ref {
-  background: color-mix(in srgb, var(--wp-refchip-tone, var(--wp-kind-wildcard, #a855f7)) 15%, transparent);
-  border-color: color-mix(in srgb, var(--wp-refchip-tone, var(--wp-kind-wildcard, #a855f7)) 50%, transparent);
+  background: color-mix(in srgb, var(--wp-refchip-tone, var(--wp-kind-wildcard)) 15%, transparent);
+  border-color: color-mix(in srgb, var(--wp-refchip-tone, var(--wp-kind-wildcard)) 50%, transparent);
   color: var(--wp-refchip-tone, var(--wp-kind-wildcard));
   cursor: pointer;
 }
-.wp-refchip--ref:hover { background: color-mix(in srgb, var(--wp-refchip-tone, var(--wp-kind-wildcard, #a855f7)) 25%, transparent); }
+.wp-refchip--ref:hover { background: color-mix(in srgb, var(--wp-refchip-tone, var(--wp-kind-wildcard)) 25%, transparent); }
 .wp-refchip--unresolved {
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 15%, transparent);
-  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 50%, transparent);
+  background: color-mix(in srgb, var(--wp-danger) 15%, transparent);
+  border-color: color-mix(in srgb, var(--wp-danger) 50%, transparent);
   color: var(--wp-danger);
   cursor: pointer;
 }
 .wp-refchip--unresolved:hover {
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 25%, transparent);
+  background: color-mix(in srgb, var(--wp-danger) 25%, transparent);
 }
 .wp-refchip__icon { font-size: 8px; opacity: 0.75; }
 /* PrimeIcon variant (moduleKind set) — sized to align with the unicode glyph baseline. */
@@ -915,7 +915,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 2px;
   margin-left: 1px;
-  color: var(--wp-status-modified, #fbbf24);
+  color: var(--wp-status-modified);
   cursor: help;
 }
 /* Node-supplied pool. Deliberately the same hue as the funnel rather than a
@@ -984,7 +984,7 @@ onBeforeUnmount(() => {
   outline: none; background: var(--wp-bg-3); color: var(--wp-text);
 }
 .wp-refchip-pop__act .pi { font-size: 11px; }
-.wp-refchip-pop__act .pi-check { color: var(--wp-success, #22c55e); }
+.wp-refchip-pop__act .pi-check { color: var(--wp-success); }
 .wp-refchip-pop--up { transform: translateY(-100%); }
 .wp-refchip-pop > div { padding: 1px 0; word-break: break-word; }
 .wp-refchip-pop__head { display: flex; gap: 6px; align-items: baseline; }
@@ -1002,7 +1002,7 @@ onBeforeUnmount(() => {
  * opened it — an accent-purple explanation under a red chip reads as ordinary
  * information rather than a fault. */
 .wp-refchip-pop__count[data-test="refchip-broken"] {
-  color: var(--wp-danger-text, var(--wp-danger, #f87171));
+  color: var(--wp-danger-text, var(--wp-danger));
 }
 .wp-refchip-pop__broken {
   color: var(--wp-text-muted);
@@ -1011,7 +1011,7 @@ onBeforeUnmount(() => {
   margin-top: 2px;
 }
 .wp-refchip-pop__broken--fix { color: var(--wp-text-dim); font-style: italic; }
-.wp-refchip-pop__nonull { color: var(--wp-status-modified, #fbbf24); margin-left: 4px; }
+.wp-refchip-pop__nonull { color: var(--wp-status-modified); margin-left: 4px; }
 /* Pool provenance — dimmer than the count it qualifies, since it is context
    for that number rather than a second fact competing with it. */
 .wp-refchip-pop__pool {
@@ -1020,10 +1020,10 @@ onBeforeUnmount(() => {
 }
 /* The node's snapshot and the library disagree — same amber the drift dot and
    the context-menu "Refresh from library" accent use. */
-.wp-refchip-pop__pool--drift { color: var(--wp-status-modified, #fbbf24); }
+.wp-refchip-pop__pool--drift { color: var(--wp-status-modified); }
 /* Informational, not a problem — the ref is behaving correctly, the user just
    cannot see why from anywhere else. Info blue rather than the drift amber. */
-.wp-refchip-pop__pool--foreign { color: var(--wp-info, #60a5fa); }
+.wp-refchip-pop__pool--foreign { color: var(--wp-info); }
 
 /* Producer attribution row — "wildcard · Outfit · in dusk-marten". */
 .wp-refchip-pop__producer {
@@ -1043,7 +1043,7 @@ onBeforeUnmount(() => {
 /* Same warning tone the internal/globe toggle uses elsewhere — this is the
    state where a var resolves but contributes nothing to the prompt. */
 .wp-refchip-pop__internal {
-  color: var(--wp-status-modified, #fbbf24);
+  color: var(--wp-status-modified);
   font-weight: 600;
 }
 </style>

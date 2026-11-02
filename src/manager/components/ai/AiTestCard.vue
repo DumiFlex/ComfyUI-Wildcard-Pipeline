@@ -104,7 +104,7 @@ function delta(top: { pct: number; was?: number }): string {
 .wp-ai-test { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--wp-border); border-radius: min(8px, var(--wp-radius-cap, 999px)); background: var(--wp-bg-sunken, rgb(0 0 0 / 15%)); font-size: 12px; }
 .wp-ai-test__head { display: flex; align-items: center; gap: 6px; font-weight: 600; }
 .wp-ai-test__title { flex: 1; }
-.wp-ai-test__bad { color: var(--wp-danger, #e5484d); font-weight: 500; }
+.wp-ai-test__bad { color: var(--wp-danger); font-weight: 500; }
 .wp-ai-test__var { display: flex; flex-direction: column; gap: 2px; }
 .wp-ai-test__var-head { display: flex; justify-content: space-between; gap: 8px; }
 .wp-ai-test__dim { color: var(--wp-text-dim); font-weight: 400; }

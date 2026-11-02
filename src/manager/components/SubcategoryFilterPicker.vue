@@ -923,7 +923,7 @@ function onApply(): void {
                and guaranteed to match nothing. Dashed rather than disabled,
                because inserting it is legal and sometimes deliberate. */
 .wp-subcat-chip[data-state="in"] {
-  background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 28%, transparent);
+  background: color-mix(in oklab, var(--wp-accent-500) 28%, transparent);
   border-color: var(--wp-accent);
   color: var(--wp-text);
 }
@@ -952,7 +952,7 @@ function onApply(): void {
 .wp-subcat-picker__error {
   margin: 0 0 8px;
   font: 11px var(--wp-font-sans);
-  color: var(--wp-danger, #ef4444);
+  color: var(--wp-danger);
 }
 
 /* Boxed, matching the null row above it: this is derived OUTPUT — what the

@@ -40,7 +40,7 @@ const KIND_META: KindMeta[] = [
   { key: "combine",      type: "combine",      label: "Combines",      icon: "pi-link",                    color: "var(--wp-kind-combine)",    slug: "combines" },
   { key: "derivation",   type: "derivation",   label: "Derivations",   icon: "pi-arrow-right-arrow-left",  color: "var(--wp-kind-derivation)", slug: "derivations" },
   { key: "constraint",   type: "constraint",   label: "Constraints",   icon: "pi-filter",                  color: "var(--wp-kind-constraint)", slug: "constraints" },
-  { key: "bundle",                            label: "Bundles",       icon: "pi-box",                     color: "var(--wp-bundle-default, #6366f1)", slug: "bundles" },
+  { key: "bundle",                            label: "Bundles",       icon: "pi-box",                     color: "var(--wp-bundle-default)", slug: "bundles" },
 ];
 
 const KIND_BY_KEY: Record<string, KindMeta> = KIND_META.reduce((acc, k) => {
@@ -696,8 +696,8 @@ onMounted(async () => {
   border-radius: var(--wp-radius);
 }
 .dashboard__start-row[data-done] {
-  background: color-mix(in oklab, var(--wp-success, #22c55e) 6%, transparent);
-  border-color: color-mix(in oklab, var(--wp-success, #22c55e) 26%, transparent);
+  background: color-mix(in oklab, var(--wp-success) 6%, transparent);
+  border-color: color-mix(in oklab, var(--wp-success) 26%, transparent);
 }
 .dashboard__start-cta {
   display: flex;
@@ -717,8 +717,8 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 .dashboard__start-row[data-done] .dashboard__start-step {
-  background: color-mix(in oklab, var(--wp-success, #22c55e) 20%, transparent);
-  color: var(--wp-success, #22c55e);
+  background: color-mix(in oklab, var(--wp-success) 20%, transparent);
+  color: var(--wp-success);
 }
 .dashboard__start-num { font-size: 12.5px; }
 .dashboard__start-body { flex: 1; min-width: 0; }

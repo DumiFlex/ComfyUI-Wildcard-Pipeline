@@ -12,8 +12,9 @@ import { fileURLToPath } from "node:url";
 // Under Vitest import.meta.url is a /@fs/ URL; resolve from the file path.
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url).replace(/^\/@fs/, "")), "..");
 
-/** Files that ARE the kit, or demo it, may use what they replace. */
-const KIT_PAGE = ["src/manager/views/Kit.vue", "src/manager/kit/demos/"];
+/** Files that ARE the kit, or demo it, may use what they replace. The kit
+ *  copy itself (src/kit/, pulled from wp-kit) is checked in wp-kit. */
+const KIT_PAGE = ["src/manager/views/Kit.vue", "src/manager/kit/demos/", "src/kit/"];
 
 export const RULES = [
   {
@@ -68,8 +69,10 @@ export const RULES = [
   },
   {
     id: "raw-hex",
-    pattern: /#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3}(?:[0-9a-fA-F]{2})?)?\b/g,
-    allow: [],
+    // Not after `&` (an HTML entity such as `&#123;`) or a word character.
+    pattern: /(?<![&\w])#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3}(?:[0-9a-fA-F]{2})?)?\b/g,
+    // Prompt advice that quotes a hex colour as text ("a #1E90FF umbrella").
+    allow: ["src/manager/docs/pages/guides/prompt-writing.vue"],
     fix: "Use a colour token (var(--wp-…)); see Tokens on the kit page.",
   },
 ];

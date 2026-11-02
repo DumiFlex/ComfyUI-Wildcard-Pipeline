@@ -2240,10 +2240,10 @@ defineExpose({
 /* An option holding a ref that points at nothing: red rail on the leading
    cell plus a faint wash, so the row is findable in a long table. */
 .wc-opt-row--broken > td {
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 6%, transparent);
+  background: color-mix(in srgb, var(--wp-danger) 6%, transparent);
 }
 .wc-opt-row--broken > td:first-child {
-  box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
+  box-shadow: inset 3px 0 0 var(--wp-danger);
 }
 .wc-broken-note {
   display: flex;
@@ -2251,7 +2251,7 @@ defineExpose({
   gap: var(--wp-space-2);
   margin-top: var(--wp-space-2);
   font-size: var(--wp-text-xs);
-  color: var(--wp-danger, #ef4444);
+  color: var(--wp-danger);
 }
 
 /* Teleported to <body>, so coordinates are viewport-relative and no ancestor

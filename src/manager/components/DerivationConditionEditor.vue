@@ -261,9 +261,9 @@ const canRemove = computed(() => props.depth > 0 || group.value.conditions.lengt
 .dvc-group--nested {
   margin-left: 68px; /* audit-exempt: 60px label col + 8px gap, aligns with the inputs */
   padding: var(--wp-space-3) var(--wp-space-4);
-  border: 1px dashed color-mix(in oklab, var(--wp-kind-derivation, #fbbf24) 35%, transparent);
+  border: 1px dashed color-mix(in oklab, var(--wp-kind-derivation) 35%, transparent);
   border-radius: var(--wp-radius-sm);
-  background: color-mix(in oklab, var(--wp-kind-derivation, #fbbf24) 4%, transparent);
+  background: color-mix(in oklab, var(--wp-kind-derivation) 4%, transparent);
 }
 .dvc-group__head {
   display: flex;
@@ -294,12 +294,12 @@ const canRemove = computed(() => props.depth > 0 || group.value.conditions.lengt
   border-radius: var(--wp-radius-sm);
   border: 1px solid transparent;
   cursor: pointer;
-  background: color-mix(in oklab, var(--wp-kind-derivation, #fbbf24) 20%, transparent);
-  color: var(--wp-kind-derivation, #fbbf24);
+  background: color-mix(in oklab, var(--wp-kind-derivation) 20%, transparent);
+  color: var(--wp-kind-derivation);
 }
 .dvc-match[data-match="any"] {
-  background: color-mix(in oklab, var(--wp-info, #60a5fa) 20%, transparent);
-  color: var(--wp-info, #60a5fa);
+  background: color-mix(in oklab, var(--wp-info) 20%, transparent);
+  color: var(--wp-info);
 }
 .dvc-match:hover { border-color: currentColor; }
 .dvc-match:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
