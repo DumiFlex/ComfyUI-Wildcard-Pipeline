@@ -31,35 +31,43 @@
   <path d="M1000 170C1044.0 170 1036.0 260 1080 260" stroke="#33d6c6" stroke-width="9" fill="none" stroke-linecap="round"/>
   <path d="M1000 410C1044.0 410 1036.0 340 1080 340" stroke="#a970ff" stroke-width="9" fill="none" stroke-linecap="round"/>
   <g transform="translate(560,190)">
-    <rect width="160" height="190" rx="22" fill="#171a2b" stroke="#6366f1" stroke-width="5"/>
-    <path d="M2.5 24.5a22 22 0 0 1 22-22h111a22 22 0 0 1 22 22v24h-155z" fill="#6366f1"/>
+    <clipPath id="node1"><rect width="160" height="190" rx="22"/></clipPath>
+    <rect width="160" height="190" rx="22" fill="#171a2b"/>
+    <rect width="160" height="50" fill="#6366f1" clip-path="url(#node1)"/>
     <rect x="28" y="76" width="104" height="14" rx="7" fill="#fff" fill-opacity="0.16"/>
     <rect x="28" y="108" width="68" height="14" rx="7" fill="#fff" fill-opacity="0.12"/>
     <rect x="28" y="140" width="32" height="14" rx="7" fill="#fff" fill-opacity="0.08"/>
+    <rect width="160" height="190" rx="22" fill="none" stroke="#6366f1" stroke-width="5"/>
     <circle cx="160" cy="60" r="13" fill="#6366f1"/>
   </g>
   <g transform="translate(820,110)">
-    <rect width="180" height="150" rx="22" fill="#171a2b" stroke="#33d6c6" stroke-width="5"/>
-    <path d="M2.5 24.5a22 22 0 0 1 22-22h131a22 22 0 0 1 22 22v24h-175z" fill="#33d6c6"/>
+    <clipPath id="node2"><rect width="180" height="150" rx="22"/></clipPath>
+    <rect width="180" height="150" rx="22" fill="#171a2b"/>
+    <rect width="180" height="50" fill="#33d6c6" clip-path="url(#node2)"/>
     <rect x="28" y="76" width="124" height="14" rx="7" fill="#fff" fill-opacity="0.16"/>
     <rect x="28" y="108" width="88" height="14" rx="7" fill="#fff" fill-opacity="0.12"/>
+    <rect width="180" height="150" rx="22" fill="none" stroke="#33d6c6" stroke-width="5"/>
     <circle cy="60" r="13" fill="#0d0f1a" stroke="#33d6c6" stroke-width="6"/>
     <circle cx="180" cy="60" r="13" fill="#33d6c6"/>
   </g>
   <g transform="translate(820,340)">
-    <rect width="180" height="150" rx="22" fill="#171a2b" stroke="#a970ff" stroke-width="5"/>
-    <path d="M2.5 24.5a22 22 0 0 1 22-22h131a22 22 0 0 1 22 22v24h-175z" fill="#a970ff"/>
+    <clipPath id="node3"><rect width="180" height="150" rx="22"/></clipPath>
+    <rect width="180" height="150" rx="22" fill="#171a2b"/>
+    <rect width="180" height="50" fill="#a970ff" clip-path="url(#node3)"/>
     <rect x="28" y="76" width="124" height="14" rx="7" fill="#fff" fill-opacity="0.16"/>
     <rect x="28" y="108" width="88" height="14" rx="7" fill="#fff" fill-opacity="0.12"/>
+    <rect width="180" height="150" rx="22" fill="none" stroke="#a970ff" stroke-width="5"/>
     <circle cy="70" r="13" fill="#0d0f1a" stroke="#a970ff" stroke-width="6"/>
     <circle cx="180" cy="70" r="13" fill="#a970ff"/>
   </g>
   <g transform="translate(1080,200)">
-    <rect width="200" height="200" rx="22" fill="#171a2b" stroke="url(#outGrad)" stroke-width="5"/>
-    <path d="M2.5 24.5a22 22 0 0 1 22-22h151a22 22 0 0 1 22 22v24h-195z" fill="url(#outGrad)"/>
+    <clipPath id="node4"><rect width="200" height="200" rx="22"/></clipPath>
+    <rect width="200" height="200" rx="22" fill="#171a2b"/>
+    <rect width="200" height="50" fill="url(#outGrad)" clip-path="url(#node4)"/>
     <rect x="28" y="76" width="144" height="14" rx="7" fill="#fff" fill-opacity="0.16"/>
     <rect x="28" y="108" width="108" height="14" rx="7" fill="#fff" fill-opacity="0.12"/>
     <rect x="28" y="140" width="72" height="14" rx="7" fill="#fff" fill-opacity="0.08"/>
+    <rect width="200" height="200" rx="22" fill="none" stroke="url(#outGrad)" stroke-width="5"/>
     <circle cy="60" r="13" fill="#0d0f1a" stroke="url(#outGrad)" stroke-width="6"/>
     <circle cy="140" r="13" fill="#0d0f1a" stroke="url(#outGrad)" stroke-width="6"/>
   </g>
