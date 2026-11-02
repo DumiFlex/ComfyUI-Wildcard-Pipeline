@@ -78,9 +78,9 @@ describe("SeedListModal", () => {
   it("Copy flashes a 'Copied' indicator on click", async () => {
     const w = modal();
     const btn = () => w.find('[data-test="mx-seed-copy"]');
-    expect(btn().classes()).not.toContain("ghost--copied");
+    expect(btn().classes()).not.toContain("sm__done");
     await btn().trigger("click");
-    expect(btn().classes()).toContain("ghost--copied");
+    expect(btn().classes()).toContain("sm__done");
     expect(btn().text()).toContain("Copied");
     w.unmount(); // clears the 1.5s reset timer via onBeforeUnmount
   });

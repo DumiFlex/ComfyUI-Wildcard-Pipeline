@@ -3,7 +3,8 @@
  * The top bar's AI debug list (Settings › AI assistant › Debug log): the
  * AI requests the server kept, newest first, each with Copy debug (the
  * Markdown copy: prompt, reply, thinking, tool calls, tokens) and Copy
- * JSON. Loaded only while the log is on.
+ * JSON. Loaded only while the log is on. The top bar shows it in a kit
+ * Popover, which closes it on Escape or a click outside.
  */
 import CloseButton from "@/kit/CloseButton.vue";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -69,21 +70,15 @@ function tokens(r: AiDebugRow): string {
   return `${t.prompt ?? 0}${cached} in · ${t.output ?? 0} out`;
 }
 
-function onKey(e: KeyboardEvent): void {
-  if (e.key === "Escape") emit("close");
-}
-
 let timer: ReturnType<typeof setInterval> | undefined;
 onMounted(() => {
   aiDebugUnseen.value = 0;
   void load();
   // A request still running shows up when it finishes.
   timer = setInterval(() => { if (rows.value.some((r) => r.seconds === null)) void load(); }, 2000);
-  window.addEventListener("keydown", onKey);
 });
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer);
-  window.removeEventListener("keydown", onKey);
 });
 watch(() => aiDebugSent.value.length, () => {
   aiDebugUnseen.value = 0;
@@ -92,10 +87,10 @@ watch(() => aiDebugSent.value.length, () => {
 </script>
 
 <template>
-  <section class="wp-ai-debug" role="dialog" aria-label="AI debug log" data-test="ai-debug-list">
+  <section class="wp-ai-debug" data-test="ai-debug-list">
     <header class="wp-ai-debug__head">
       <h2 class="wp-ai-debug__title">AI debug log</h2>
-      <button type="button" class="wp-ai-debug__link" data-test="ai-debug-clear" @click="clear">Clear</button>
+      <Button variant="ghost" size="sm" data-test="ai-debug-clear" @click="clear">Clear</Button>
       <CloseButton data-test="ai-debug-close" @click="emit('close')" />
     </header>
     <p class="wp-ai-debug__note">
@@ -148,29 +143,14 @@ watch(() => aiDebugSent.value.length, () => {
 
 <style scoped>
 .wp-ai-debug {
-  position: fixed;
-  top: calc(var(--wp-topbar-h) + 6px);
-  right: 12px;
-  z-index: 60;
-  width: min(460px, calc(100vw - 24px));
+  width: min(396px, calc(100vw - 40px));
   max-height: min(70vh, 640px);
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px;
-  background: var(--wp-bg-2);
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  border-radius: min(10px, var(--wp-radius-cap, 999px));
-  box-shadow: var(--wp-shadow-md);
 }
 .wp-ai-debug__head { display: flex; align-items: center; gap: 8px; }
 .wp-ai-debug__title { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
-.wp-ai-debug__link {
-  background: none; border: 0; color: var(--wp-text-muted); cursor: pointer;
-  font: inherit; font-size: 12px; padding: 2px 6px; border-radius: min(4px, var(--wp-radius-cap, 999px));
-}
-.wp-ai-debug__link:hover { color: var(--wp-text); }
 .wp-ai-debug__note, .wp-ai-debug__empty { margin: 0; font-size: 12px; color: var(--wp-text-muted); line-height: 1.45; }
 .wp-ai-debug__note code { font-size: 11px; word-break: break-all; }
 .wp-ai-debug__error { margin: 0; font-size: 12px; color: var(--wp-danger-text); }
@@ -188,7 +168,4 @@ watch(() => aiDebugSent.value.length, () => {
 .wp-ai-debug__meta { font-size: 11px; color: var(--wp-text-muted); font-variant-numeric: tabular-nums; }
 .wp-ai-debug__err { font-size: 11px; color: var(--wp-danger-text); overflow-wrap: anywhere; }
 .wp-ai-debug__actions { display: flex; gap: 4px; flex-shrink: 0; }
-.wp-ai-debug__link:focus-visible {
-  outline: 2px solid var(--wp-accent); outline-offset: 1px;
-}
 </style>

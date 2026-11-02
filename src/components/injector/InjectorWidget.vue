@@ -916,20 +916,16 @@ defineExpose({ addRow, addGeneralRow, removeRow });
       :header="ctxMenu.header"
       @close="ctxMenu.visible = false"
     />
-    <Teleport to="body">
-      <Transition name="wp-modal" appear>
-        <InjectorBindingModal
-          v-if="editingRow"
-          :row="editingRow"
-          :sibling-rows="value.rows"
-          :slot-types="slotTypes"
-          :slot-labels="slotLabels"
-          :references="editingRow?.kind === 'general' ? generalRowReferences : []"
-          @update="(patch) => editingRow && updateRow(editingRow._uid, patch)"
-          @close="closeEditModal"
-        />
-      </Transition>
-    </Teleport>
+    <InjectorBindingModal
+      v-if="editingRow"
+      :row="editingRow"
+      :sibling-rows="value.rows"
+      :slot-types="slotTypes"
+      :slot-labels="slotLabels"
+      :references="editingRow?.kind === 'general' ? generalRowReferences : []"
+      @update="(patch) => editingRow && updateRow(editingRow._uid, patch)"
+      @close="closeEditModal"
+    />
   </div>
 </template>
 

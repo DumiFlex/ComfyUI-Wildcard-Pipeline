@@ -23,7 +23,7 @@
  *
  * Tests live in src/components/context/PushToLibraryModal.test.ts.
  */
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { workflowSiblingCount } from "./duplicates/sibling-count";
 import { forkModule } from "./duplicates/fork";
 import { hashes as libraryHashes } from "./drift-store";
@@ -38,6 +38,7 @@ import type { ModuleEntry } from "../../widgets/_shared";
 import WpCheck from "@/kit/WpCheck.vue";
 import LoadingMark from "@/kit/LoadingMark.vue";
 import CloseButton from "@/kit/CloseButton.vue";
+import ModalShell from "@/kit/ModalShell.vue";
 import WpButton from "@/kit/WpButton.vue";
 import CodeBlock from "@/kit/CodeBlock.vue";
 
@@ -436,230 +437,192 @@ async function doSaveAsNew(): Promise<void> {
   }
 }
 
-function onKey(ev: KeyboardEvent): void {
-  if (!props.open) return;
-  if (ev.key === "Escape") {
-    ev.preventDefault();
-    close();
-  }
-}
-watch(
-  () => props.open,
-  (v) => {
-    if (v) window.addEventListener("keydown", onKey);
-    else window.removeEventListener("keydown", onKey);
-  },
-  { immediate: true },
-);
-onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="wp-modal" appear>
-      <div
-        v-if="open && draft"
-        class="wp-ptl-overlay"
-        data-test="ptl-overlay"
-        @click="close"
-      >
+  <ModalShell :visible="!!(open && draft)" labelledby="wp-ptl-title" @close="close">
+    <div
+      class="wp-ptl"
+      data-test="ptl"
+    >
+      <header class="wp-ptl__head">
+        <h3 id="wp-ptl-title" class="wp-ptl__title">Push to library</h3>
+        <CloseButton size="sm" kbd="Esc" data-test="ptl-close" @click="close" />
+      </header>
+
+      <div class="wp-ptl__body">
+        <div class="wp-ptl-field">
+          <label class="wp-ptl-field__label" for="wp-ptl-name">Name</label>
+          <input
+            id="wp-ptl-name"
+            v-model="name"
+            type="text"
+            class="wp-ptl-input"
+            data-test="ptl-name"
+            placeholder="(unnamed)"
+          />
+        </div>
+
+        <div class="wp-ptl-field">
+          <label class="wp-ptl-field__label" for="wp-ptl-description">Description</label>
+          <textarea
+            id="wp-ptl-description"
+            v-model="description"
+            class="wp-ptl-input wp-ptl-input--multi"
+            data-test="ptl-description"
+            rows="2"
+          />
+        </div>
+
+        <div class="wp-ptl-field">
+          <label class="wp-ptl-field__label" for="wp-ptl-tags">Tags (comma-separated)</label>
+          <input
+            id="wp-ptl-tags"
+            v-model="tagsText"
+            type="text"
+            class="wp-ptl-input"
+            data-test="ptl-tags"
+            placeholder="e.g. style, qa"
+          />
+        </div>
+
+        <div class="wp-ptl-field">
+          <label class="wp-ptl-field__label">Payload preview</label>
+          <CodeBlock class="wp-ptl-payload" :code="payloadPreview" language="JSON" size="sm" max-height="140px" data-test="ptl-payload-preview" />
+        </div>
+
+        <div v-if="bundlesLoading" class="wp-ptl-bundles wp-ptl-bundles--loading">
+          <LoadingMark>Checking bundles…</LoadingMark>
+        </div>
         <div
-          class="wp-ptl"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="wp-ptl-title"
-          data-test="ptl"
-          @click.stop
+          v-else-if="bundles.length"
+          class="wp-ptl-bundles"
+          data-test="ptl-bundles"
         >
-          <header class="wp-ptl__head">
-            <h3 id="wp-ptl-title" class="wp-ptl__title">Push to library</h3>
-            <CloseButton size="sm" kbd="Esc" data-test="ptl-close" @click="close" />
-          </header>
-
-          <div class="wp-ptl__body">
-            <div class="wp-ptl-field">
-              <label class="wp-ptl-field__label" for="wp-ptl-name">Name</label>
-              <input
-                id="wp-ptl-name"
-                v-model="name"
-                type="text"
-                class="wp-ptl-input"
-                data-test="ptl-name"
-                placeholder="(unnamed)"
-              />
-            </div>
-
-            <div class="wp-ptl-field">
-              <label class="wp-ptl-field__label" for="wp-ptl-description">Description</label>
-              <textarea
-                id="wp-ptl-description"
-                v-model="description"
-                class="wp-ptl-input wp-ptl-input--multi"
-                data-test="ptl-description"
-                rows="2"
-              />
-            </div>
-
-            <div class="wp-ptl-field">
-              <label class="wp-ptl-field__label" for="wp-ptl-tags">Tags (comma-separated)</label>
-              <input
-                id="wp-ptl-tags"
-                v-model="tagsText"
-                type="text"
-                class="wp-ptl-input"
-                data-test="ptl-tags"
-                placeholder="e.g. style, qa"
-              />
-            </div>
-
-            <div class="wp-ptl-field">
-              <label class="wp-ptl-field__label">Payload preview</label>
-              <CodeBlock class="wp-ptl-payload" :code="payloadPreview" language="JSON" size="sm" max-height="140px" data-test="ptl-payload-preview" />
-            </div>
-
-            <div v-if="bundlesLoading" class="wp-ptl-bundles wp-ptl-bundles--loading">
-              <LoadingMark>Checking bundles…</LoadingMark>
-            </div>
-            <div
-              v-else-if="bundles.length"
-              class="wp-ptl-bundles"
-              data-test="ptl-bundles"
-            >
-              <div class="wp-ptl-bundles__title">
-                Affects {{ bundles.length }} saved bundle{{ bundles.length === 1 ? '' : 's' }}:
-              </div>
-              <ul class="wp-ptl-bundles__list">
-                <li v-for="b in bundles" :key="b.id">{{ b.name }}</li>
-              </ul>
-              <span class="wp-ptl-checkbox">
-                <WpCheck
-                  v-model="propagate"
-                  data-test="ptl-propagate"
-                  aria-label="Propagate update to those bundles"
-                />
-                Propagate update to those bundles
-              </span>
-            </div>
-
-            <div v-if="siblings > 1" class="wp-ptl-note wp-ptl-note--warn" data-test="ptl-siblings">
-              This module has {{ siblings }} instances in the workflow. "Update existing"
-              changes the library entry every instance reads from.
-            </div>
-
-            <div
-              v-if="needsRelink && relinkCandidates.length"
-              class="wp-ptl-relink"
-              data-test="ptl-relink"
-            >
-              <div class="wp-ptl-relink__title">Re-link to an existing library entry</div>
-              <p class="wp-ptl-relink__hint">
-                This module's content matches a library entry under a different id (a re-import
-                minted a new one). Re-link to reconnect drift + refresh instead of adding a duplicate.
-              </p>
-              <input
-                v-if="relinkCandidates.length > 1"
-                v-model="relinkQuery"
-                type="text"
-                class="wp-ptl-input"
-                data-test="ptl-relink-search"
-                placeholder="Search by name or id…"
-                aria-label="Search library entries to re-link"
-                spellcheck="false"
-                autocomplete="off"
-              />
-              <ul class="wp-ptl-relink__list">
-                <li
-                  v-for="c in relinkFiltered"
-                  :key="c.uuid"
-                  class="wp-ptl-relink__cand"
-                  :class="{ 'is-picked': relinkTarget != null && relinkTarget.uuid === c.uuid }"
-                  data-test="ptl-relink-candidate"
-                  @click="relinkPick = c"
-                >
-                  <span class="wp-ptl-relink__name">{{ c.name || "(unnamed)" }}</span>
-                  <code class="wp-ptl-relink__uuid">{{ c.uuid }}</code>
-                  <!-- "identical (content)" distinguishes a match established
-                       by locally fingerprinting the payload — the hash-less
-                       path — from one the server's own hash confirmed. Same
-                       confidence in practice, but the label shouldn't imply
-                       the authoritative hash agreed when there wasn't one. -->
-                  <span
-                    class="wp-ptl-relink__tag"
-                    :class="c.contentIdentical ? 'is-identical' : 'is-diff'"
-                    :title="c.matchedByContent
-                      ? 'Matched by comparing payload content — this module carries no stored hash'
-                      : undefined"
-                  >{{ c.contentIdentical
-                    ? (c.matchedByContent ? "identical (content)" : "identical")
-                    : "content differs" }}</span>
-                </li>
-              </ul>
-              <WpButton
-                variant="primary"
-                data-test="ptl-relink-confirm"
-                :disabled="!relinkTarget || undefined"
-                @click="doRelink"
-              >Re-link<template v-if="relinkTarget"> to “{{ relinkTarget.name || relinkTarget.uuid }}”</template></WpButton>
-            </div>
-
-            <!-- States the OBSERVABLE fact and points at Re-link first when a
-                 match exists. The old copy asserted the entry "has been
-                 deleted upstream" — a cause it cannot know (a shared workflow,
-                 a re-import under a new id, or a lost hash all look identical
-                 from here) — and recommended "Save as new entry" while the
-                 Re-link panel sat directly above offering the better option,
-                 which is how duplicates got made. -->
-            <div v-if="needsRelink" class="wp-ptl-note" :class="relinkNoteClass" data-test="ptl-missing">
-              <template v-if="relinkCandidates.length > 0">
-                This module isn’t linked to any library entry under its recorded id.
-                {{ relinkTarget?.contentIdentical
-                  ? "A library entry with identical content is selected above — re-linking reconnects them."
-                  : "Pick a match above to re-link, or save it as a new entry." }}
-              </template>
-              <template v-else>
-                This module isn’t linked to any library entry under its recorded id, and
-                nothing in the library matches its content or name. “Update existing” is
-                unavailable — “Save as new entry” adds it to the library.
-              </template>
-            </div>
-
-            <div v-if="errorMsg" class="wp-ptl-error" data-test="ptl-error">
-              {{ errorMsg }}
-            </div>
+          <div class="wp-ptl-bundles__title">
+            Affects {{ bundles.length }} saved bundle{{ bundles.length === 1 ? '' : 's' }}:
           </div>
+          <ul class="wp-ptl-bundles__list">
+            <li v-for="b in bundles" :key="b.id">{{ b.name }}</li>
+          </ul>
+          <span class="wp-ptl-checkbox">
+            <WpCheck
+              v-model="propagate"
+              data-test="ptl-propagate"
+              aria-label="Propagate update to those bundles"
+            />
+            Propagate update to those bundles
+          </span>
+        </div>
 
-          <footer class="wp-ptl__foot">
-            <WpButton data-test="ptl-cancel" :disabled="busy" @click="close">Cancel</WpButton>
-            <span class="wp-ptl-spacer" />
-            <WpButton
-              data-test="ptl-save-new"
-              :disabled="busy"
-              @click="doSaveAsNew"
-            >Save as new entry</WpButton>
-            <WpButton
-              variant="primary"
-              data-test="ptl-update"
-              :disabled="busy || !canUpdateExisting"
-              :hint="!isLibraryTracked ? 'No existing library entry to update' : isLibraryMissing ? 'Library entry has been deleted — save as new entry instead' : undefined"
-              @click="doUpdate"
-            >Update existing</WpButton>
-          </footer>
+        <div v-if="siblings > 1" class="wp-ptl-note wp-ptl-note--warn" data-test="ptl-siblings">
+          This module has {{ siblings }} instances in the workflow. "Update existing"
+          changes the library entry every instance reads from.
+        </div>
+
+        <div
+          v-if="needsRelink && relinkCandidates.length"
+          class="wp-ptl-relink"
+          data-test="ptl-relink"
+        >
+          <div class="wp-ptl-relink__title">Re-link to an existing library entry</div>
+          <p class="wp-ptl-relink__hint">
+            This module's content matches a library entry under a different id (a re-import
+            minted a new one). Re-link to reconnect drift + refresh instead of adding a duplicate.
+          </p>
+          <input
+            v-if="relinkCandidates.length > 1"
+            v-model="relinkQuery"
+            type="text"
+            class="wp-ptl-input"
+            data-test="ptl-relink-search"
+            placeholder="Search by name or id…"
+            aria-label="Search library entries to re-link"
+            spellcheck="false"
+            autocomplete="off"
+          />
+          <ul class="wp-ptl-relink__list">
+            <li
+              v-for="c in relinkFiltered"
+              :key="c.uuid"
+              class="wp-ptl-relink__cand"
+              :class="{ 'is-picked': relinkTarget != null && relinkTarget.uuid === c.uuid }"
+              data-test="ptl-relink-candidate"
+              @click="relinkPick = c"
+            >
+              <span class="wp-ptl-relink__name">{{ c.name || "(unnamed)" }}</span>
+              <code class="wp-ptl-relink__uuid">{{ c.uuid }}</code>
+              <!-- "identical (content)" distinguishes a match established
+                   by locally fingerprinting the payload — the hash-less
+                   path — from one the server's own hash confirmed. Same
+                   confidence in practice, but the label shouldn't imply
+                   the authoritative hash agreed when there wasn't one. -->
+              <span
+                class="wp-ptl-relink__tag"
+                :class="c.contentIdentical ? 'is-identical' : 'is-diff'"
+                :title="c.matchedByContent
+                  ? 'Matched by comparing payload content — this module carries no stored hash'
+                  : undefined"
+              >{{ c.contentIdentical
+                ? (c.matchedByContent ? "identical (content)" : "identical")
+                : "content differs" }}</span>
+            </li>
+          </ul>
+          <WpButton
+            variant="primary"
+            data-test="ptl-relink-confirm"
+            :disabled="!relinkTarget || undefined"
+            @click="doRelink"
+          >Re-link<template v-if="relinkTarget"> to “{{ relinkTarget.name || relinkTarget.uuid }}”</template></WpButton>
+        </div>
+
+        <!-- States the OBSERVABLE fact and points at Re-link first when a
+             match exists. The old copy asserted the entry "has been
+             deleted upstream" — a cause it cannot know (a shared workflow,
+             a re-import under a new id, or a lost hash all look identical
+             from here) — and recommended "Save as new entry" while the
+             Re-link panel sat directly above offering the better option,
+             which is how duplicates got made. -->
+        <div v-if="needsRelink" class="wp-ptl-note" :class="relinkNoteClass" data-test="ptl-missing">
+          <template v-if="relinkCandidates.length > 0">
+            This module isn’t linked to any library entry under its recorded id.
+            {{ relinkTarget?.contentIdentical
+              ? "A library entry with identical content is selected above — re-linking reconnects them."
+              : "Pick a match above to re-link, or save it as a new entry." }}
+          </template>
+          <template v-else>
+            This module isn’t linked to any library entry under its recorded id, and
+            nothing in the library matches its content or name. “Update existing” is
+            unavailable — “Save as new entry” adds it to the library.
+          </template>
+        </div>
+
+        <div v-if="errorMsg" class="wp-ptl-error" data-test="ptl-error">
+          {{ errorMsg }}
         </div>
       </div>
-    </Transition>
-  </Teleport>
+
+      <footer class="wp-ptl__foot">
+        <WpButton data-test="ptl-cancel" :disabled="busy" @click="close">Cancel</WpButton>
+        <span class="wp-ptl-spacer" />
+        <WpButton
+          data-test="ptl-save-new"
+          :disabled="busy"
+          @click="doSaveAsNew"
+        >Save as new entry</WpButton>
+        <WpButton
+          variant="primary"
+          data-test="ptl-update"
+          :disabled="busy || !canUpdateExisting"
+          :hint="!isLibraryTracked ? 'No existing library entry to update' : isLibraryMissing ? 'Library entry has been deleted — save as new entry instead' : undefined"
+          @click="doUpdate"
+        >Update existing</WpButton>
+      </footer>
+    </div>
+  </ModalShell>
 </template>
 
 <style scoped>
-@import "@/kit/_modal-motion.css";
-
-.wp-ptl-overlay {
-  position: fixed; inset: 0; z-index: 10000;
-  display: flex; align-items: center; justify-content: center;
-  padding: 16px;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(2px);
-}
 .wp-ptl {
   width: min(620px, 100%);
   max-height: calc(100vh - 32px);

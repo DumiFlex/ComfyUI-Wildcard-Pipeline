@@ -3,6 +3,7 @@ import Kbd from "@/kit/Kbd.vue";
 import { computed, defineAsyncComponent, ref } from "vue";
 import { useRouter } from "vue-router";
 import Icon from "@/kit/Icon.vue";
+import Popover from "@/kit/Popover.vue";
 import UpdateDialog from "../components/UpdateDialog.vue";
 import { DISCORD_INVITE, GITHUB_REPO } from "../config/links";
 import { useBrowserHistory } from "../composables/useBrowserHistory";
@@ -175,24 +176,22 @@ function openPalette(): void {
       <Kbd keys="Mod+K" size="sm" aria-hidden="true" />
     </button>
 
-    <button
-      v-if="aiDebugEnabled"
-      type="button"
-      class="wp-topbar__icon-btn wp-topbar__debug"
-      :aria-pressed="debugOpen"
-      :aria-label="aiDebugUnseen ? `AI debug log, ${aiDebugUnseen} new` : 'AI debug log'"
-      title="AI debug log"
-      data-test="topbar-ai-debug"
-      @click="debugOpen = !debugOpen"
-    >
-      <Icon name="pi-code" />
-      <span v-if="aiDebugUnseen" class="wp-topbar__debug-count" aria-hidden="true">{{ aiDebugUnseen > 9 ? "9+" : aiDebugUnseen }}</span>
-    </button>
-    <!-- On body: the top bar's own stacking context (z-index 30) would keep
-         the list under the AI chat drawer (z-index 50). -->
-    <Teleport to="body">
-      <AiDebugList v-if="aiDebugEnabled && debugOpen" @close="debugOpen = false" />
-    </Teleport>
+    <Popover v-if="aiDebugEnabled" v-model:open="debugOpen" label="AI debug log" placement="bottom-end">
+      <template #trigger="{ props: triggerProps }">
+        <button
+          v-bind="triggerProps"
+          type="button"
+          class="wp-topbar__icon-btn wp-topbar__debug"
+          :aria-label="aiDebugUnseen ? `AI debug log, ${aiDebugUnseen} new` : 'AI debug log'"
+          title="AI debug log"
+          data-test="topbar-ai-debug"
+        >
+          <Icon name="pi-code" />
+          <span v-if="aiDebugUnseen" class="wp-topbar__debug-count" aria-hidden="true">{{ aiDebugUnseen > 9 ? "9+" : aiDebugUnseen }}</span>
+        </button>
+      </template>
+      <AiDebugList @close="debugOpen = false" />
+    </Popover>
 
     <button
       v-if="aiReady || aiChat.open.value"

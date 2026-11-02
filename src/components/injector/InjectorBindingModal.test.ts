@@ -15,7 +15,18 @@ const RichTextInputStub = {
   emits: ["update:modelValue"],
   template: `<div class="wp-rt-stub" data-test="ibm-template" :data-model-value="modelValue"></div>`,
 };
-const globalStubs = { RichTextInput: RichTextInputStub };
+// ModalShell teleports to body, out of the wrapper's reach. This stand-in
+// keeps its contract in place: every key inside goes out as `keydown`
+// first, then Escape and a backdrop click go out as `close`.
+const ModalShellStub = {
+  name: "ModalShell",
+  props: ["visible", "label", "labelledby"],
+  emits: ["close", "keydown"],
+  template: `<div v-if="visible" data-test="ibm-overlay" role="dialog" :aria-labelledby="labelledby"
+    @click.self="$emit('close')"
+    @keydown="(e) => { $emit('keydown', e); if (e.key === 'Escape') $emit('close'); }"><slot /></div>`,
+};
+const globalStubs = { RichTextInput: RichTextInputStub, ModalShell: ModalShellStub };
 
 /** Read what the template field is currently showing. */
 function templateValue(w: any): string | undefined {
