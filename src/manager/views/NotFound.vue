@@ -52,7 +52,7 @@ const route = useRoute();
   font-size: 64px;
   font-weight: 700;
   letter-spacing: -2px;
-  color: var(--wp-accent-text, #d97757);
+  color: var(--wp-accent-text);
   line-height: 1;
   margin-bottom: 14px;
 }

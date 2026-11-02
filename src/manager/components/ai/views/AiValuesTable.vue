@@ -66,8 +66,8 @@ const hasNegative = computed(() => props.view.rows.some((r) => r.negative || r.w
 .wp-ai-values__table { border-collapse: collapse; width: 100%; table-layout: auto; }
 .wp-ai-values__table th { text-align: left; font-weight: 500; font-size: 11px; color: var(--wp-text-muted); padding: 0 8px 2px 0; }
 .wp-ai-values__table td { padding: 2px 8px 2px 0; vertical-align: top; overflow-wrap: anywhere; }
-.wp-ai-values__table tr[data-change="added"] { background: color-mix(in oklab, var(--wp-success, #30a46c) 9%, transparent); }
-.wp-ai-values__table tr[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger, #e5484d) 8%, transparent); }
+.wp-ai-values__table tr[data-change="added"] { background: color-mix(in oklab, var(--wp-success) 9%, transparent); }
+.wp-ai-values__table tr[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger) 8%, transparent); }
 .wp-ai-values__name { white-space: nowrap; }
 .wp-ai-values__neg { color: var(--wp-text-muted); }
 .wp-ai-values__clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }

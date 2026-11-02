@@ -388,7 +388,7 @@ function onDelete(): void {
 .tpl-tok--text { color: var(--wp-text); }
 .tpl-tok--var { font-weight: 600; }
 .tpl-tok--var-error {
-  color: var(--wp-danger, #e05252);
+  color: var(--wp-danger);
   text-decoration: underline dashed;
   text-underline-offset: 2px;
 }
@@ -397,16 +397,16 @@ function onDelete(): void {
   font-weight: 600;
 }
 .tpl-tok--ref-error {
-  color: var(--wp-danger, #e05252);
+  color: var(--wp-danger);
   text-decoration: underline dashed;
   text-underline-offset: 2px;
 }
 .tpl-tok--alt {
-  color: var(--wp-amber, #d4a04a);
+  color: var(--wp-amber);
   font-weight: 600;
 }
 .tpl-tok--repeat {
-  color: var(--wp-teal, #4ad4c4);
+  color: var(--wp-teal);
   font-weight: 600;
 }
 .tpl-tok--escape {

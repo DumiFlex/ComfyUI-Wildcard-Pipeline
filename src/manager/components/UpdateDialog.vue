@@ -161,7 +161,7 @@ git pull
 .wpc-upd__arrow { color: var(--wp-text-dim); }
 .wpc-upd__badge { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 2px 7px; border-radius: var(--wp-radius-cap, 999px); }
 .wpc-upd__badge--accent { color: var(--wp-accent-text); background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent); }
-.wpc-upd__badge--warn { color: var(--wp-warn, #f59e0b); background: color-mix(in oklab, var(--wp-warn, #f59e0b) 18%, transparent); }
+.wpc-upd__badge--warn { color: var(--wp-warn); background: color-mix(in oklab, var(--wp-warn) 18%, transparent); }
 .wpc-relnotes { max-height: 320px; overflow-y: auto; font-size: var(--wp-text-sm); line-height: 1.55; color: var(--wp-text-muted); background: var(--wp-bg-2); border: 1px solid var(--wp-border); border-radius: var(--wp-radius); padding: var(--wp-space-4); }
 .wpc-relnotes :deep(h1), .wpc-relnotes :deep(h2), .wpc-relnotes :deep(h3) { color: var(--wp-text); margin: var(--wp-space-3) 0 var(--wp-space-2); font-size: var(--wp-text-sm); font-weight: 700; }
 .wpc-relnotes :deep(ul) { margin: var(--wp-space-2) 0; padding-left: var(--wp-space-6); }
@@ -175,7 +175,7 @@ git pull
 .wpc-upd__fallback-title { font-weight: 700; color: var(--wp-text); margin: 0; }
 .wpc-upd__more { margin: var(--wp-space-2) 0 0; font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wpc-upd__fallback-body { font-size: var(--wp-text-sm); color: var(--wp-text-muted); margin: 0; }
-.wpc-upd__error { color: var(--wp-warn, #f59e0b); }
+.wpc-upd__error { color: var(--wp-warn); }
 .wpc-upd__manager-link { font-size: var(--wp-text-sm); color: var(--wp-accent-text); text-decoration: none; }
 .wpc-upd__cmd { background: var(--wp-bg-1); border: 1px solid var(--wp-border); border-radius: var(--wp-radius); padding: var(--wp-space-3); font-size: var(--wp-text-sm); overflow-x: auto; margin: 0; }
 .wpc-upd__staged { font-size: var(--wp-text-sm); color: var(--wp-accent-text); margin: 0; }

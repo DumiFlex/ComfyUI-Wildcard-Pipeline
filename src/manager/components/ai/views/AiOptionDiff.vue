@@ -75,14 +75,14 @@ function shareMoved(r: OptionDiffRow): boolean {
 .wp-ai-optdiff__head { margin: 0; font-size: 11.5px; color: var(--wp-text-muted); }
 .wp-ai-optdiff__rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .wp-ai-optdiff__rows > li { display: flex; gap: 6px; align-items: baseline; padding: 2px 6px 2px 2px; border-radius: min(4px, var(--wp-radius-cap, 999px)); }
-.wp-ai-optdiff__rows > li[data-change="added"] { background: color-mix(in oklab, var(--wp-success, #30a46c) 9%, transparent); }
-.wp-ai-optdiff__rows > li[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger, #e5484d) 8%, transparent); }
+.wp-ai-optdiff__rows > li[data-change="added"] { background: color-mix(in oklab, var(--wp-success) 9%, transparent); }
+.wp-ai-optdiff__rows > li[data-change="removed"] { background: color-mix(in oklab, var(--wp-danger) 8%, transparent); }
 .wp-ai-optdiff__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .wp-ai-optdiff__line { display: flex; gap: 8px; align-items: baseline; }
 .wp-ai-optdiff__text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .wp-ai-optdiff__share { flex: none; font-size: 11.5px; color: var(--wp-text-muted); white-space: nowrap; }
 .wp-ai-optdiff__chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .wp-ai-optdiff__neg { font-size: 12px; color: var(--wp-text-muted); overflow-wrap: anywhere; }
-.wp-ai-optdiff__neg-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; margin-right: 6px; color: var(--wp-danger, #e5484d); }
+.wp-ai-optdiff__neg-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; margin-right: 6px; color: var(--wp-danger); }
 .wp-ai-optdiff__clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 </style>

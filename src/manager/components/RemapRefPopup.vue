@@ -206,19 +206,19 @@ function doConfirm(): void {
      also re-hugs the chip on every growth so the popup stays anchored. */
   max-height: calc(100vh - 16px);
   overflow-y: auto;
-  background: var(--wp-bg-2, #15151f);
-  border: 1px solid var(--wp-accent, #6366f1);
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-accent);
   border-radius: min(8px, var(--wp-radius-cap, 999px));
   padding: 12px 14px;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));
   font: 12px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text, #e7e7ee);
+  color: var(--wp-text);
 }
 .wpc-remap__head {
   font: 600 10px var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--wp-text-dim, #6e6e7c);
+  color: var(--wp-text-dim);
   margin-bottom: 8px;
 }
 .wpc-remap__search {
@@ -227,12 +227,12 @@ function doConfirm(): void {
   padding: 7px 10px;
   border-radius: min(5px, var(--wp-radius-cap, 999px));
   border: 1px solid var(--wp-border, rgba(255,255,255,0.12));
-  background: var(--wp-bg, #11111b);
-  color: var(--wp-text, #e7e7ee);
+  background: var(--wp-bg);
+  color: var(--wp-text);
   font: 13px var(--wp-font-mono, monospace);
   outline: none;
 }
-.wpc-remap__search:focus { border-color: var(--wp-accent, #6366f1); }
+.wpc-remap__search:focus { border-color: var(--wp-accent); }
 .wpc-remap__list {
   list-style: none;
   margin: 8px 0;
@@ -248,10 +248,10 @@ function doConfirm(): void {
   border-radius: min(4px, var(--wp-radius-cap, 999px));
   cursor: pointer;
 }
-.wpc-remap__candidate:hover { background: color-mix(in oklab, var(--wp-accent, #6366f1) 18%, transparent); }
-.wpc-remap__candidate--picked { background: color-mix(in oklab, var(--wp-accent, #6366f1) 28%, transparent); }
-.wpc-remap__cand-meta { font: 10px var(--wp-font-mono); color: var(--wp-text-dim, #8a8a93); }
-.wpc-remap__cand-uuid { font: inherit; color: var(--wp-text-muted, var(--wp-text-dim, #8a8a93)); }
+.wpc-remap__candidate:hover { background: color-mix(in oklab, var(--wp-accent) 18%, transparent); }
+.wpc-remap__candidate--picked { background: color-mix(in oklab, var(--wp-accent) 28%, transparent); }
+.wpc-remap__cand-meta { font: 10px var(--wp-font-mono); color: var(--wp-text-dim); }
+.wpc-remap__cand-uuid { font: inherit; color: var(--wp-text-muted, var(--wp-text-dim)); }
 .wpc-remap__reconcile {
   border-top: 1px dashed var(--wp-border, rgba(255,255,255,0.12));
   padding-top: 8px;
@@ -260,9 +260,9 @@ function doConfirm(): void {
 .wpc-remap__dropped {
   margin: 0 0 8px;
   font: 11px var(--wp-font-sans);
-  color: var(--wp-text-muted, #a8a8b0);
+  color: var(--wp-text-muted);
 }
-.wpc-remap__dropped-count { color: var(--wp-danger, #ef4444); font-weight: 600; }
+.wpc-remap__dropped-count { color: var(--wp-danger); font-weight: 600; }
 .wpc-remap__dropped-tok {
   text-decoration: line-through;
   opacity: 0.7;
@@ -278,6 +278,6 @@ function doConfirm(): void {
 .wpc-remap__note {
   flex: 1;
   font: 10px var(--wp-font-sans);
-  color: var(--wp-text-dim, #6e6e7c);
+  color: var(--wp-text-dim);
 }
 </style>

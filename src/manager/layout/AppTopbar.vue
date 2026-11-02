@@ -425,14 +425,14 @@ button.wp-topbar__update-pill:hover {
   line-height: 1;
 }
 .wp-topbar__update-pill--accent {
-  color: var(--wp-accent, #6366f1);
-  background: color-mix(in oklab, var(--wp-accent, #6366f1) 18%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent, #6366f1) 40%, transparent);
+  color: var(--wp-accent);
+  background: color-mix(in oklab, var(--wp-accent) 18%, transparent);
+  border-color: color-mix(in oklab, var(--wp-accent) 40%, transparent);
 }
 .wp-topbar__update-pill--warn {
-  color: var(--wp-warn, #f59e0b);
-  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 18%, transparent);
-  border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 40%, transparent);
+  color: var(--wp-warn);
+  background: color-mix(in oklab, var(--wp-warn) 18%, transparent);
+  border-color: color-mix(in oklab, var(--wp-warn) 40%, transparent);
 }
 @media (max-width: 640px) {
   .wp-topbar__palette-label { display: none; }

@@ -57,7 +57,7 @@ const ariaLabel = computed<string>(() => {
    * global utility classes via tokens.css; the --error variant is
    * scoped here because nothing else in the SPA shipped it yet. */
   .wp-icon--error {
-    color: var(--wp-danger, var(--wp-color-error-fg, #ef4444));
+    color: var(--wp-danger, var(--wp-error-text));
   }
 }
 </style>

@@ -260,9 +260,9 @@ const hint = computed(() => {
   border: 0;
   cursor: pointer;
   text-align: left;
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
+  color: var(--wp-text-dim, var(--wp-text-muted));
 }
-.wp-fchips__head:hover { color: var(--wp-text-muted, #aeb1bb); }
+.wp-fchips__head:hover { color: var(--wp-text-muted); }
 .wp-fchips__caret { flex: none; transition: transform var(--wp-motion-hover, 120ms) ease; }
 .wp-fchips__caret--collapsed { transform: rotate(-90deg); }
 .wp-fchips__label {
@@ -279,9 +279,9 @@ const hint = computed(() => {
   letter-spacing: 0.05em;
   padding: 2px 6px;
   border-radius: min(3px, var(--wp-radius-cap, 999px));
-  color: var(--wp-accent-text, var(--wp-text, #e6e7ea));
+  color: var(--wp-accent-text, var(--wp-text));
   background: rgba(99, 102, 241, 0.14);
-  border: 1px solid color-mix(in srgb, var(--wp-accent, #6366f1) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent);
 }
 
 /* auto-fill keeps a uniform cell width so 15+ chips WRAP instead of
@@ -312,24 +312,24 @@ const hint = computed(() => {
   position: relative;
   padding: 4px 6px;
   text-align: center;
-  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
-  border: 1px solid var(--wp-border, #353841);
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border: 1px solid var(--wp-border);
   border-radius: min(3px, var(--wp-radius-cap, 999px));
-  color: var(--wp-text-muted, #aeb1bb);
+  color: var(--wp-text-muted);
   font: 600 10px var(--wp-font-sans, sans-serif);
   cursor: pointer;
 }
-.wp-fchips__chip:hover { color: var(--wp-text, #e6e7ea); border-color: var(--wp-border-strong, #4a4d55); }
+.wp-fchips__chip:hover { color: var(--wp-text); border-color: var(--wp-border-strong); }
 .wp-fchips__chip--active {
-  background: color-mix(in srgb, var(--wp-accent, #6366f1) 18%, transparent);
-  border-color: var(--wp-accent, #6366f1);
-  color: var(--wp-accent, #6366f1);
+  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
+  border-color: var(--wp-accent);
+  color: var(--wp-accent);
 }
 /* Bypassed — interrupted (dashed) border + dimmed, so it reads at a glance.
  * Composes with --active (dashed overrides the solid). */
 .wp-fchips__chip--bypassed {
   border-style: dashed;
-  border-color: var(--wp-border-strong, #4a4d55);
+  border-color: var(--wp-border-strong);
   opacity: 0.5;
 }
 .wp-fchips__chip--bypassed:hover { opacity: 0.8; }
@@ -344,7 +344,7 @@ const hint = computed(() => {
   width: 4px;
   height: 4px;
   border-radius: 50%; /* round: lock dot */
-  background: var(--wp-accent, #6366f1);
+  background: var(--wp-accent);
 }
 /* A bypassed frame keeps its lock, and the dot must survive the dim — else
  * unlocking it later looks like it did nothing. */
@@ -353,6 +353,6 @@ const hint = computed(() => {
 .wp-fchips__hint {
   margin: 1px 0 0;
   font: 400 9px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
+  color: var(--wp-text-dim, var(--wp-text-muted));
 }
 </style>

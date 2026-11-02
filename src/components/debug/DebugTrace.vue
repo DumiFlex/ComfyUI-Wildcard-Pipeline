@@ -327,17 +327,17 @@ function groupTooltip(g: TraceGroup): string {
   color: var(--wp-text-dim);
   background: var(--wp-bg-2, var(--wp-bg2));
 }
-.wp-dbg-status.is-error { color: var(--wp-red, #e5484d); background: color-mix(in oklab, var(--wp-red, #e5484d) 16%, transparent); }
+.wp-dbg-status.is-error { color: var(--wp-red); background: color-mix(in oklab, var(--wp-red) 16%, transparent); }
 .wp-dbg-status.is-never { color: var(--wp-warn); background: color-mix(in oklab, var(--wp-warn) 16%, transparent); }
 .wp-dbg-step.is-off .wp-dbg-step__row, .wp-dbg-step.is-frame .wp-dbg-step__row { opacity: 0.55; }
-.wp-dbg-step.is-error { box-shadow: inset 2px 0 0 var(--wp-red, #e5484d); }
+.wp-dbg-step.is-error { box-shadow: inset 2px 0 0 var(--wp-red); }
 .wp-dbg-step__chev { font-size: 8px; color: var(--wp-text-dim); transition: transform var(--wp-motion-quick, 0.12s) ease; }
 .wp-dbg-step.is-open .wp-dbg-step__chev { transform: rotate(90deg); }
 .wp-dbg-step__negs { display: flex; flex-direction: column; gap: 1px; padding: 2px 8px 0 30px; font-size: 11px; }
 .wp-dbg-step__neg { display: flex; flex-wrap: wrap; gap: 5px; align-items: baseline; }
 .wp-dbg-step__neg code { font-family: var(--wp-font-mono); color: var(--wp-accent-text, var(--wp-accent)); }
-.wp-dbg-step__neg-label { font: 600 10px/1.5 var(--wp-font-mono); color: var(--wp-red, #e5484d); }
-.wp-dbg-step__neg-text { color: var(--wp-red, #e5484d); word-break: break-word; }
+.wp-dbg-step__neg-label { font: 600 10px/1.5 var(--wp-font-mono); color: var(--wp-red); }
+.wp-dbg-step__neg-text { color: var(--wp-red); word-break: break-word; }
 .wp-dbg-step__writes, .wp-dbg-step__full {
   display: flex;
   flex-direction: column;

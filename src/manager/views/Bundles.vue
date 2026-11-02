@@ -233,7 +233,7 @@ const KIND_ICON: Record<string, string> = {
 function frameColor(row: BundleRow): string {
   return row.color && row.color.length
     ? row.color
-    : "var(--wp-bundle-default, #334155)";
+    : "var(--wp-bundle-default)";
 }
 </script>
 

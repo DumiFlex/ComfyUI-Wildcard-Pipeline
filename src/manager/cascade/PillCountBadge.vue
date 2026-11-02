@@ -32,9 +32,9 @@ defineProps<Props>();
     font-size: 10px;
     font-weight: 600;
     line-height: 1;
-    color: var(--wp-warn, #f59e0b);
-    background: color-mix(in oklab, var(--wp-warn, #f59e0b) 16%, transparent);
-    border: 1px solid color-mix(in oklab, var(--wp-warn, #f59e0b) 36%, transparent);
+    color: var(--wp-warn);
+    background: color-mix(in oklab, var(--wp-warn) 16%, transparent);
+    border: 1px solid color-mix(in oklab, var(--wp-warn) 36%, transparent);
     margin-left: 4px;
   }
 }

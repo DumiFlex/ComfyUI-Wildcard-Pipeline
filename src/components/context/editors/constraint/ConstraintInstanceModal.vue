@@ -847,7 +847,7 @@ function onSpaClick(): void {
   padding: 8px 16px;
   font: 11px var(--wp-font-sans);
   color: var(--wp-danger, var(--wp-red));
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 8%, transparent);
+  background: color-mix(in oklab, var(--wp-danger) 8%, transparent);
 }
 .wp-cnm__dl-error .pi { font-size: 12px; }
 </style>

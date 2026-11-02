@@ -283,9 +283,9 @@ function onResetBinding(): void {
   border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .id__collision--warn {
-  color: var(--wp-status-modified, #f59e0b);
-  background: color-mix(in srgb, var(--wp-status-modified, #f59e0b) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--wp-status-modified, #f59e0b) 35%, transparent);
+  color: var(--wp-status-modified);
+  background: color-mix(in srgb, var(--wp-status-modified) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-status-modified) 35%, transparent);
 }
 .id__collision--info {
   color: var(--wp-accent);

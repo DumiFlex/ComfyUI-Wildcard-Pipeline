@@ -439,12 +439,12 @@ const multiEntryTitle = computed<string>(() =>
   z-index: 10030;
   width: 280px;
   padding: 8px 10px;
-  background: var(--wp-bg-1, var(--wp-bg2, #1a1d24));
-  border: 1px solid var(--wp-border-strong, var(--wp-border, #353841));
+  background: var(--wp-bg-1, var(--wp-bg-2));
+  border: 1px solid var(--wp-border-strong, var(--wp-border));
   border-radius: min(5px, var(--wp-radius-cap, 999px));
   box-shadow: var(--wp-shadow-md);
   font: 11px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text, #e0e0e8);
+  color: var(--wp-text);
   pointer-events: auto;
 }
 .wp-pair-pop__head {
@@ -453,7 +453,7 @@ const multiEntryTitle = computed<string>(() =>
   gap: 6px;
   margin-bottom: 6px;
   padding-bottom: 6px;
-  border-bottom: 1px solid var(--wp-border, #2a2d35);
+  border-bottom: 1px solid var(--wp-border);
 }
 .wp-pair-pop__num {
   font: 600 11px var(--wp-font-mono, monospace);
@@ -466,12 +466,12 @@ const multiEntryTitle = computed<string>(() =>
   font: 600 9px var(--wp-font-sans, sans-serif);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
+  color: var(--wp-text-dim, var(--wp-text-muted));
 }
 .wp-pair-pop__entry + .wp-pair-pop__entry {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid var(--wp-border, #2a2d35);
+  border-top: 1px solid var(--wp-border);
 }
 .wp-pair-pop__entry-head {
   margin-bottom: 4px;
@@ -503,18 +503,18 @@ const multiEntryTitle = computed<string>(() =>
   font: 600 9px var(--wp-font-sans, sans-serif);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
+  color: var(--wp-text-dim, var(--wp-text-muted));
 }
 .wp-pair-pop__val {
   flex: 1;
   font: 11px var(--wp-font-mono, monospace);
-  color: var(--wp-text, #e0e0e8);
+  color: var(--wp-text);
   word-break: break-word;
 }
 .wp-pair-pop__uuid {
   display: block;
   font: 9px var(--wp-font-mono, monospace);
-  color: var(--wp-text-dim, #7a7d88);
+  color: var(--wp-text-dim);
   margin-top: 1px;
 }
 .wp-pair-pop__optids { display: flex; flex-wrap: wrap; gap: 3px; }
@@ -524,21 +524,21 @@ const multiEntryTitle = computed<string>(() =>
   background: color-mix(in srgb, currentColor 10%, transparent);
   border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
   border-radius: min(3px, var(--wp-radius-cap, 999px));
-  color: var(--wp-text-muted, #aeb1bb);
+  color: var(--wp-text-muted);
 }
 .wp-pair-pop__hint {
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid var(--wp-border, #2a2d35);
+  border-top: 1px solid var(--wp-border);
   font: 10px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
+  color: var(--wp-text-dim, var(--wp-text-muted));
   line-height: 1.4;
 }
 /* Reach row — green so the constraint's coverage selector reads as a
  * distinct, positive fact in the card (mirrors the green reach accent
  * the reach-selector UI uses elsewhere). */
 .wp-pair-pop__reach {
-  color: var(--wp-green, #6bc96f);
+  color: var(--wp-green);
   font-weight: 600;
 }
 /* Path row — the transitive hop chain a constraint travels to reach a
@@ -548,7 +548,7 @@ const multiEntryTitle = computed<string>(() =>
   word-break: break-word;
 }
 .wp-pair-pop__hop-arrow {
-  color: var(--wp-text-dim, #7a7d88);
+  color: var(--wp-text-dim);
   white-space: pre;
 }
 

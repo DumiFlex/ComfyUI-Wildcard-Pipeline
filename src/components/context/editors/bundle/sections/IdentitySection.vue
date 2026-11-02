@@ -47,7 +47,7 @@ const colorOverridden = computed(() => {
 const previewColor = computed(() => {
   if (HEX_RE.test(colorValue.value)) return colorValue.value;
   if (props.libraryColor && HEX_RE.test(props.libraryColor)) return props.libraryColor;
-  return "var(--wp-bundle-default, #6366f1)";
+  return "var(--wp-bundle-default)";
 });
 const hsvModelValue = computed(() => {
   if (HEX_RE.test(colorValue.value)) return colorValue.value;

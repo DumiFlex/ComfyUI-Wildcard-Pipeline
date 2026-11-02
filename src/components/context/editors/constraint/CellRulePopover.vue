@@ -160,11 +160,11 @@ function onReset(): void {
 .pop {
   width: 236px;
   font: 11px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text, #e0e0e8);
+  color: var(--wp-text);
 }
 .pop-title {
   font: 600 9px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
+  color: var(--wp-text-dim, var(--wp-text-muted));
   text-transform: uppercase;
   letter-spacing: 0.08em;
   margin-bottom: 6px;
@@ -202,7 +202,7 @@ function onReset(): void {
 .pop-note {
   margin: -2px 0 8px;
   font: 10px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-muted, #8a8d99);
+  color: var(--wp-text-muted);
   line-height: 1.4;
 }
 
@@ -214,9 +214,9 @@ function onReset(): void {
   align-items: center;
   gap: 8px;
   padding-top: 8px;
-  border-top: 1px solid var(--wp-border, #2a2d35);
+  border-top: 1px solid var(--wp-border);
   font: 10px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-muted, #8a8d99);
+  color: var(--wp-text-muted);
 }
 .pop-factor__label {
   text-transform: uppercase;
@@ -229,7 +229,7 @@ function onReset(): void {
 .pop-foot {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid var(--wp-border, #2a2d35);
+  border-top: 1px solid var(--wp-border);
   display: flex;
   justify-content: flex-end;
 }
@@ -237,7 +237,7 @@ function onReset(): void {
 .pop-hint {
   margin-top: 6px;
   font: 9px var(--wp-font-mono, monospace);
-  color: var(--wp-text-dim, #595c66);
+  color: var(--wp-text-dim);
   text-align: right;
 }
 </style>

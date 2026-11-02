@@ -889,7 +889,7 @@ function onKeydown(ev: KeyboardEvent): void {
   border-radius: min(2px, var(--wp-radius-cap, 999px));
 }
 .ibm-tok--ref-unknown {
-  color: var(--wp-status-modified, #f59e0b);
+  color: var(--wp-status-modified);
   text-decoration: underline dashed;
   text-underline-offset: 2px;
   font-weight: 600;

@@ -496,7 +496,7 @@ defineExpose({ cellAt });
 /* ── Grid frame — scrolls on BOTH axes; headers + corner freeze ── */
 .wp-mx-grid {
   display: inline-block;
-  background: var(--wp-bg-deep, var(--wp-bg-1, #0e1015));
+  background: var(--wp-bg-deep, var(--wp-bg-1));
   border: 1px solid var(--wp-border);
   border-radius: min(6px, var(--wp-radius-cap, 999px));
   /* No padding on the SCROLL container: position:sticky pins headers at the
@@ -522,7 +522,7 @@ defineExpose({ cellAt });
 .wp-mx-grid thead th,
 .wp-mx-grid tbody th {
   position: sticky;
-  background: var(--wp-bg-deep, var(--wp-bg-1, #0e1015));
+  background: var(--wp-bg-deep, var(--wp-bg-1));
 }
 .wp-mx-grid thead th { top: 0; z-index: 2; }
 .wp-mx-grid tbody th { left: 0; z-index: 1; }
@@ -574,7 +574,7 @@ defineExpose({ cellAt });
    band keeps its own group hue (so it never collides with an amber group); the
    mark is a distinct glyph. Meaning lives in the tooltip + the legend row. */
 .wp-mx-axis-mark {
-  color: var(--wp-axis, #fbbf24);
+  color: var(--wp-axis);
   font-size: 9px;
   margin-left: 5px;
   vertical-align: baseline;
@@ -705,38 +705,38 @@ defineExpose({ cellAt });
               0 2px 6px color-mix(in srgb, var(--wp-text) 20%, transparent);
 }
 .wp-mx-cell.open {
-  box-shadow: 0 0 0 2px var(--wp-accent, #6366f1), var(--wp-shadow-md);
+  box-shadow: 0 0 0 2px var(--wp-accent), var(--wp-shadow-md);
 }
 .wp-mx-cell.s-neutral {
   background: color-mix(in srgb, var(--wp-text) 5%, transparent);
-  color: var(--wp-text-dim, var(--wp-text-muted, #595c66));
+  color: var(--wp-text-dim, var(--wp-text-muted));
   border: 1px dashed color-mix(in srgb, var(--wp-text) 10%, transparent);
 }
 .wp-mx-cell.s-exclude {
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 22%, transparent);
+  background: color-mix(in srgb, var(--wp-danger) 22%, transparent);
   color: var(--wp-danger);
-  border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-danger) 45%, transparent);
 }
 .wp-mx-cell.s-boost {
-  background: color-mix(in srgb, var(--wp-success, #22c55e) 22%, transparent);
+  background: color-mix(in srgb, var(--wp-success) 22%, transparent);
   color: var(--wp-success);
-  border: 1px solid color-mix(in srgb, var(--wp-success, #22c55e) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-success) 45%, transparent);
 }
 .wp-mx-cell.s-reduce {
-  background: color-mix(in srgb, var(--wp-warn, #f97316) 22%, transparent);
+  background: color-mix(in srgb, var(--wp-warn) 22%, transparent);
   color: var(--wp-warn);
-  border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-warn) 45%, transparent);
 }
 .wp-mx-cell.s-only {
-  background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent);
-  color: var(--wp-info, #3b82f6);
-  border: 1px solid color-mix(in srgb, var(--wp-info, #3b82f6) 45%, transparent);
+  background: color-mix(in srgb, var(--wp-info) 22%, transparent);
+  color: var(--wp-info);
+  border: 1px solid color-mix(in srgb, var(--wp-info) 45%, transparent);
 }
 /* A neutral cell in a row that has an Only rule: shut out at runtime. Faint
  * danger hue + dashed border so it reads as "implied", not authored. */
 .wp-mx-cell.s-neutral.implied-out {
-  color: color-mix(in srgb, var(--wp-danger, #ef4444) 60%, var(--wp-text-dim, #595c66));
-  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 30%, transparent);
+  color: color-mix(in srgb, var(--wp-danger) 60%, var(--wp-text-dim));
+  border-color: color-mix(in srgb, var(--wp-danger) 30%, transparent);
 }
 .glyph { font-size: 14px; line-height: 1; }
 .factor { font-size: 11px; font-weight: 700; }
@@ -757,24 +757,24 @@ defineExpose({ cellAt });
   box-shadow: none;
 }
 .wp-mx--readonly .wp-mx-cell.s-boost {
-  background: color-mix(in srgb, var(--wp-success, #22c55e) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--wp-success, #22c55e) 18%, transparent);
-  color: color-mix(in srgb, var(--wp-success, #22c55e) 70%, var(--wp-text-dim));
+  background: color-mix(in srgb, var(--wp-success) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-success) 18%, transparent);
+  color: color-mix(in srgb, var(--wp-success) 70%, var(--wp-text-dim));
 }
 .wp-mx--readonly .wp-mx-cell.s-reduce {
-  background: color-mix(in srgb, var(--wp-warn, #f97316) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 18%, transparent);
-  color: color-mix(in srgb, var(--wp-warn, #f97316) 70%, var(--wp-text-dim));
+  background: color-mix(in srgb, var(--wp-warn) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-warn) 18%, transparent);
+  color: color-mix(in srgb, var(--wp-warn) 70%, var(--wp-text-dim));
 }
 .wp-mx--readonly .wp-mx-cell.s-exclude {
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 18%, transparent);
-  color: color-mix(in srgb, var(--wp-danger, #ef4444) 70%, var(--wp-text-dim));
+  background: color-mix(in srgb, var(--wp-danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-danger) 18%, transparent);
+  color: color-mix(in srgb, var(--wp-danger) 70%, var(--wp-text-dim));
 }
 .wp-mx--readonly .wp-mx-cell.s-only {
-  background: color-mix(in srgb, var(--wp-info, #3b82f6) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--wp-info, #3b82f6) 18%, transparent);
-  color: color-mix(in srgb, var(--wp-info, #3b82f6) 70%, var(--wp-text-dim));
+  background: color-mix(in srgb, var(--wp-info) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-info) 18%, transparent);
+  color: color-mix(in srgb, var(--wp-info) 70%, var(--wp-text-dim));
 }
 .wp-mx-readonly-hint {
   margin: 8px 0 0;

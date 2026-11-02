@@ -79,7 +79,7 @@ const KIND_META: KindMeta[] = [
   { key: "combine",      label: "Combines",     icon: "pi pi-link",                    color: "var(--wp-kind-combine)",    slug: "combines" },
   { key: "derivation",   label: "Derivations",  icon: "pi pi-arrow-right-arrow-left",  color: "var(--wp-kind-derivation)", slug: "derivations" },
   { key: "constraint",   label: "Constraints",  icon: "pi pi-filter",                  color: "var(--wp-kind-constraint)", slug: "constraints" },
-  { key: "bundle",       label: "Bundles",      icon: "pi pi-box",                     color: "var(--wp-bundle-default, #6366f1)", slug: "bundles" },
+  { key: "bundle",       label: "Bundles",      icon: "pi pi-box",                     color: "var(--wp-bundle-default)", slug: "bundles" },
 ];
 
 const KIND_BY_KEY: Record<LibraryKind, KindMeta> = KIND_META.reduce((acc, k) => {

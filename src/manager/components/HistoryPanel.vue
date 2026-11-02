@@ -292,7 +292,7 @@ watch(
 }
 .wp-history-empty i {
   font-size: var(--wp-text-3xl);
-  color: var(--wp-text-dim, #6e6e7c);
+  color: var(--wp-text-dim);
   margin-bottom: var(--wp-space-5);
 }
 .wp-history-empty p {
@@ -302,6 +302,6 @@ watch(
 .wp-history-empty__hint {
   margin-top: var(--wp-space-2) !important;
   font-size: var(--wp-text-sm);
-  color: var(--wp-text-dim, #6e6e7c);
+  color: var(--wp-text-dim);
 }
 </style>

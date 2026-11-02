@@ -2025,7 +2025,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
   color: var(--wp-text-muted);
   border-bottom: 1px solid var(--wp-border);
 }
-.cn-only-note__glyph { color: var(--wp-info, #3b82f6); margin-right: 4px; }
+.cn-only-note__glyph { color: var(--wp-info); margin-right: 4px; }
 /* Read-only (stranded) value cells: clip long text to one line to match the
  * editable Selects rather than wrapping into tall rows. */
 .cn-ex-table td.wp-mono {

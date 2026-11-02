@@ -578,7 +578,7 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
   background: color-mix(in oklab, var(--wp-warn) 15%, transparent);
 }
 .wp-dbg-head__warn .pi { font-size: 9px; }
-.wp-dbg-head__warn.is-error { color: var(--wp-red, #e5484d); background: color-mix(in oklab, var(--wp-red, #e5484d) 15%, transparent); }
+.wp-dbg-head__warn.is-error { color: var(--wp-red); background: color-mix(in oklab, var(--wp-red) 15%, transparent); }
 .wp-dbg-head__warn.is-info { color: var(--wp-info, var(--wp-accent)); background: color-mix(in oklab, var(--wp-info, var(--wp-accent)) 15%, transparent); }
 .wp-dbg-head__ok { display: inline-flex; align-items: center; gap: 4px; color: var(--wp-green); }
 .wp-dbg-head__ok .pi { font-size: 10px; }
@@ -603,8 +603,8 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
   padding: 3px 6px;
   border-radius: min(4px, var(--wp-radius-cap, 999px));
   white-space: nowrap;
-  background: var(--wp-red-bg, color-mix(in oklab, var(--wp-red, #e5484d) 15%, transparent));
-  color: var(--wp-red, #e5484d);
+  background: var(--wp-red-bg, color-mix(in oklab, var(--wp-red) 15%, transparent));
+  color: var(--wp-red);
 }
 .wp-dbg-tabs__neg + .wp-dbg-filter { margin-left: 6px; }
 
@@ -654,6 +654,6 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
 .wp-dbg-raw :deep(.wp-jh-k) { color: var(--wp-accent); }
 .wp-dbg-raw :deep(.wp-jh-s) { color: var(--wp-amber); }
 .wp-dbg-raw :deep(.wp-jh-n) { color: var(--wp-green); }
-.wp-dbg-raw :deep(.wp-jh-b) { color: var(--wp-violet, #b48aff); font-weight: 600; }
+.wp-dbg-raw :deep(.wp-jh-b) { color: var(--wp-violet); font-weight: 600; }
 .wp-dbg-raw :deep(.wp-jh-p) { color: var(--wp-text-dim, var(--wp-text3)); }
 </style>

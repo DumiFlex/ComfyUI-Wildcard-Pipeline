@@ -43,12 +43,12 @@ interface KindMeta {
  *  `kindIcon()` map so every surface (Context widget, picker, assembler,
  *  bundle editor) renders the same glyph for a given kind. */
 const KIND_META: Record<string, KindMeta> = {
-  wildcard:     { label: "Wildcard",   color: "var(--wp-kind-wildcard, #34d399)" },
-  fixed_values: { label: "Fixed",      color: "var(--wp-kind-fixed, #22d3ee)" },
-  combine:      { label: "Combine",    color: "var(--wp-kind-combine, #fbbf24)" },
-  derivation:   { label: "Derivation", color: "var(--wp-kind-derivation, #a78bfa)" },
-  constraint:   { label: "Constraint", color: "var(--wp-kind-constraint, #f87171)" },
-  bundle:       { label: "Bundle",     color: "var(--wp-bundle-default, #6366f1)" },
+  wildcard:     { label: "Wildcard",   color: "var(--wp-kind-wildcard)" },
+  fixed_values: { label: "Fixed",      color: "var(--wp-kind-fixed)" },
+  combine:      { label: "Combine",    color: "var(--wp-kind-combine)" },
+  derivation:   { label: "Derivation", color: "var(--wp-kind-derivation)" },
+  constraint:   { label: "Constraint", color: "var(--wp-kind-constraint)" },
+  bundle:       { label: "Bundle",     color: "var(--wp-bundle-default)" },
 };
 
 const kind = computed(() => String(props.child.type ?? "module"));
@@ -105,7 +105,7 @@ const badgeAccent = computed(() => isBundleRef.value || props.edited);
     :data-missing="isMissingRef ? 'true' : null"
     :data-test="`bundle-child-${idx}`"
     :title="isMissingRef ? `Referenced bundle ${child.id} no longer exists — remove or pick a replacement` : undefined"
-    :style="{ '--row-kind': isMissingRef ? 'var(--wp-danger, #ef4444)' : rowTint }"
+    :style="{ '--row-kind': isMissingRef ? 'var(--wp-danger)' : rowTint }"
     draggable="true"
     @dragstart="(e) => emit('drag-start', e)"
     @dragover="(e) => emit('drag-over', e)"
@@ -207,10 +207,10 @@ const badgeAccent = computed(() => isBundleRef.value || props.edited);
  * "red-tinted bundle". The badge picks up the same danger tint via the
  * --row-kind cascade through `.wp-bchild__frozen[data-edited]`. */
 .wp-bchild[data-missing="true"] {
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 8%, var(--wp-bg-2));
+  background: color-mix(in oklab, var(--wp-danger) 8%, var(--wp-bg-2));
 }
 .wp-bchild[data-missing="true"]:hover {
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 14%, var(--wp-bg-2));
+  background: color-mix(in oklab, var(--wp-danger) 14%, var(--wp-bg-2));
 }
 .wp-bchild[data-selected="true"] {
   background: color-mix(in oklab, var(--row-kind) 12%, var(--wp-bg-2));
@@ -237,9 +237,9 @@ const badgeAccent = computed(() => isBundleRef.value || props.edited);
   border-color: var(--wp-border);
 }
 .wp-bchild__act--danger:hover {
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 16%, transparent);
+  background: color-mix(in oklab, var(--wp-danger) 16%, transparent);
   color: var(--wp-danger-text);
-  border-color: color-mix(in oklab, var(--wp-danger, #ef4444) 30%, transparent);
+  border-color: color-mix(in oklab, var(--wp-danger) 30%, transparent);
 }
 
 .wp-bchild__kindicon {

@@ -46,10 +46,10 @@ const label = computed(() =>
   align-items: center;
   gap: 4px;
   padding: 1px 6px;
-  border: 1px solid var(--wp-border, #33333f);
+  border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius-sm, 4px);
-  background: var(--wp-bg2, #1b1b22);
-  color: var(--wp-text-dim, #8a8a99);
+  background: var(--wp-bg-2);
+  color: var(--wp-text-dim);
   font: 500 10px/1.4 var(--wp-font-mono, ui-monospace, "JetBrains Mono", monospace);
   letter-spacing: 0.02em;
   cursor: pointer;
@@ -57,8 +57,8 @@ const label = computed(() =>
   transition: color 0.12s, border-color 0.12s, background 0.12s;
 }
 .wp-idchip:hover {
-  color: var(--wp-text, #e7e7ee);
-  border-color: color-mix(in oklab, var(--wp-accent, #7c6ad6) 55%, var(--wp-border, #33333f));
+  color: var(--wp-text);
+  border-color: color-mix(in oklab, var(--wp-accent) 55%, var(--wp-border));
 }
 .wp-idchip__icon {
   font-size: 9px;
@@ -68,7 +68,7 @@ const label = computed(() =>
   font-family: inherit;
 }
 .wp-idchip[data-state="copied"] {
-  color: var(--wp-green, #6ad28b);
-  border-color: color-mix(in oklab, var(--wp-green, #6ad28b) 55%, transparent);
+  color: var(--wp-green);
+  border-color: color-mix(in oklab, var(--wp-green) 55%, transparent);
 }
 </style>

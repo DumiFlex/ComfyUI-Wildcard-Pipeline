@@ -61,12 +61,12 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 const KIND_COLOR: Record<string, string> = {
-  wildcard:     "var(--wp-kind-wildcard, #34d399)",
-  fixed_values: "var(--wp-kind-fixed, #22d3ee)",
-  combine:      "var(--wp-kind-combine, #fbbf24)",
-  derivation:   "var(--wp-kind-derivation, #a78bfa)",
-  constraint:   "var(--wp-kind-constraint, #f87171)",
-  bundle:       "var(--wp-bundle-default, #6366f1)",
+  wildcard:     "var(--wp-kind-wildcard)",
+  fixed_values: "var(--wp-kind-fixed)",
+  combine:      "var(--wp-kind-combine)",
+  derivation:   "var(--wp-kind-derivation)",
+  constraint:   "var(--wp-kind-constraint)",
+  bundle:       "var(--wp-bundle-default)",
 };
 
 const kind = computed<string>(() => String(props.child?.type ?? ""));
@@ -423,8 +423,8 @@ const constraintTargetValues = computed<string[]>(() => {
 
 .wp-bpane__banner {
   display: flex; align-items: flex-start; gap: var(--wp-space-3);
-  background: color-mix(in oklab, var(--wp-amber, #fbbf24) 12%, transparent);
-  border-left: 2px solid var(--wp-amber, #fbbf24);
+  background: color-mix(in oklab, var(--wp-amber) 12%, transparent);
+  border-left: 2px solid var(--wp-amber);
   color: var(--wp-text);
   padding: 7px var(--wp-space-5); /* audit-exempt: 7px vertical hairline, 10px horiz rounded to 12px */
   border-radius: var(--wp-radius-sm);
@@ -432,23 +432,23 @@ const constraintTargetValues = computed<string[]>(() => {
   font-size: var(--wp-text-xs);
   line-height: 1.45;
 }
-.wp-bpane__banner .pi { color: var(--wp-amber, #fbbf24); margin-top: 2px; flex-shrink: 0; }
+.wp-bpane__banner .pi { color: var(--wp-amber); margin-top: 2px; flex-shrink: 0; }
 /* Bundle-reference banner uses accent (purple) instead of amber to read
  * as "live link, all good" rather than "warning — frozen snapshot". */
 .wp-bpane__banner--ref {
-  background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 12%, transparent);
-  border-left-color: var(--wp-accent-500, #6366f1);
+  background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent);
+  border-left-color: var(--wp-accent-500);
 }
-.wp-bpane__banner--ref .pi { color: var(--wp-accent-500, #6366f1); }
+.wp-bpane__banner--ref .pi { color: var(--wp-accent-500); }
 /* Missing-reference variant — referenced bundle deleted upstream.
  * Stronger tint than the amber default since this is an actual broken
  * link, not just an informational warning. Border-left + icon flip to
  * the danger token so the row reads as "you need to fix this". */
 .wp-bpane__banner--missing {
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 12%, transparent);
-  border-left-color: var(--wp-danger, #ef4444);
+  background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
+  border-left-color: var(--wp-danger);
 }
-.wp-bpane__banner--missing .pi { color: var(--wp-danger, #ef4444); }
+.wp-bpane__banner--missing .pi { color: var(--wp-danger); }
 
 .wp-bpane__ref-summary {
   display: flex;
@@ -501,7 +501,7 @@ const constraintTargetValues = computed<string[]>(() => {
   gap: var(--wp-space-3);
   align-self: flex-start;
   padding: var(--wp-space-3) var(--wp-space-5);
-  background: var(--wp-accent-500, #6366f1);
+  background: var(--wp-accent-500);
   color: white;
   border-radius: var(--wp-radius-sm);
   font-size: var(--wp-text-xs);

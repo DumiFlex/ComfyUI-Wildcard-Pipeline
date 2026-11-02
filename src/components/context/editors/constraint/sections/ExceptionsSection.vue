@@ -603,7 +603,7 @@ const FACTOR_STEP = 0.1;
 .ex__row:last-of-type { border-bottom: 0; }
 .ex__row--extra {
   background: rgba(251, 146, 60, 0.06);
-  border-left: 2px solid var(--wp-status-modified, #fb923c);
+  border-left: 2px solid var(--wp-status-modified);
   padding-left: 6px;
 }
 
@@ -617,20 +617,20 @@ const FACTOR_STEP = 0.1;
   padding-left: 6px;
 }
 .ex__row--boost:not(.ex__row--extra) {
-  border-left-color: color-mix(in srgb, var(--wp-success, #22c55e) 60%, transparent);
-  background: color-mix(in srgb, var(--wp-success, #22c55e) 5%, transparent);
+  border-left-color: color-mix(in srgb, var(--wp-success) 60%, transparent);
+  background: color-mix(in srgb, var(--wp-success) 5%, transparent);
 }
 .ex__row--reduce:not(.ex__row--extra) {
-  border-left-color: color-mix(in srgb, var(--wp-warn, #f97316) 60%, transparent);
-  background: color-mix(in srgb, var(--wp-warn, #f97316) 5%, transparent);
+  border-left-color: color-mix(in srgb, var(--wp-warn) 60%, transparent);
+  background: color-mix(in srgb, var(--wp-warn) 5%, transparent);
 }
 .ex__row--only:not(.ex__row--extra) {
-  border-left-color: color-mix(in srgb, var(--wp-info, #3b82f6) 60%, transparent);
-  background: color-mix(in srgb, var(--wp-info, #3b82f6) 5%, transparent);
+  border-left-color: color-mix(in srgb, var(--wp-info) 60%, transparent);
+  background: color-mix(in srgb, var(--wp-info) 5%, transparent);
 }
 .ex__row--exclude:not(.ex__row--extra) {
-  border-left-color: color-mix(in srgb, var(--wp-danger, #ef4444) 60%, transparent);
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 5%, transparent);
+  border-left-color: color-mix(in srgb, var(--wp-danger) 60%, transparent);
+  background: color-mix(in srgb, var(--wp-danger) 5%, transparent);
 }
 .ex__pair {
   flex: 1;
@@ -750,10 +750,10 @@ const FACTOR_STEP = 0.1;
  * (purple-ish) because it's a "neutral pass-through" — visually distinct
  * from boost's green so users don't confuse `allow ×1` with `boost ×1.5`. */
 .ex__mode-chip.ex__mode-chip--allow { background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-text)); }
-.ex__mode-chip.ex__mode-chip--exclude { background: color-mix(in srgb, var(--wp-danger, #e05252) 22%, transparent); color: var(--wp-danger, #e05252); }
-.ex__mode-chip.ex__mode-chip--boost { background: color-mix(in srgb, var(--wp-success, #6bc96f) 22%, transparent); color: var(--wp-success, #6bc96f); }
-.ex__mode-chip.ex__mode-chip--only { background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent); color: var(--wp-info, #3b82f6); }
-.ex__mode-chip.ex__mode-chip--reduce { background: color-mix(in srgb, var(--wp-warn, #f59e0b) 22%, transparent); color: var(--wp-warn, #f59e0b); }
+.ex__mode-chip.ex__mode-chip--exclude { background: color-mix(in srgb, var(--wp-danger) 22%, transparent); color: var(--wp-danger); }
+.ex__mode-chip.ex__mode-chip--boost { background: color-mix(in srgb, var(--wp-success) 22%, transparent); color: var(--wp-success); }
+.ex__mode-chip.ex__mode-chip--only { background: color-mix(in srgb, var(--wp-info) 22%, transparent); color: var(--wp-info); }
+.ex__mode-chip.ex__mode-chip--reduce { background: color-mix(in srgb, var(--wp-warn) 22%, transparent); color: var(--wp-warn); }
 .ex__factor-wrap { display: inline-flex; width: 64px; }
 .ex__factor-num { width: 100%; }
 .ex__extra-badge {
@@ -761,15 +761,15 @@ const FACTOR_STEP = 0.1;
   text-transform: uppercase;
   padding: 1px 5px;
   border-radius: min(2px, var(--wp-radius-cap, 999px));
-  background: color-mix(in srgb, var(--wp-status-modified, #fb923c) 22%, transparent);
-  color: var(--wp-status-modified, #fb923c);
+  background: color-mix(in srgb, var(--wp-status-modified) 22%, transparent);
+  color: var(--wp-status-modified);
 }
 .ex__only-note {
   margin: 8px 0 0;
   font: 400 11px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.ex__only-note-glyph { color: var(--wp-info, #3b82f6); margin-right: 4px; }
+.ex__only-note-glyph { color: var(--wp-info); margin-right: 4px; }
 .ex__readonly-hint {
   margin: 8px 0 0;
   font: 10px var(--wp-font-sans);

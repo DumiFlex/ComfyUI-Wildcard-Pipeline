@@ -137,8 +137,8 @@ function clear(): void {
 .wp-negfield__add:hover,
 .wp-negfield__add:focus-visible {
   opacity: 1;
-  color: var(--wp-danger, #ef4444);
-  border-color: color-mix(in oklab, var(--wp-danger, #ef4444) 55%, transparent);
+  color: var(--wp-danger);
+  border-color: color-mix(in oklab, var(--wp-danger) 55%, transparent);
 }
 .wp-negfield__row {
   display: flex;
@@ -154,16 +154,16 @@ function clear(): void {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: var(--wp-danger, #ef4444);
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 14%, transparent);
+  color: var(--wp-danger);
+  background: color-mix(in oklab, var(--wp-danger) 14%, transparent);
 }
 .wp-negfield__input {
   flex: 1;
   min-width: 0;
 }
 .wp-negfield__input.wp-rt:not(.wp-rt--focused) {
-  border-color: color-mix(in oklab, var(--wp-danger, #ef4444) 45%, transparent);
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 7%, var(--wp-bg-2));
+  border-color: color-mix(in oklab, var(--wp-danger) 45%, transparent);
+  background: color-mix(in oklab, var(--wp-danger) 7%, var(--wp-bg-2));
 }
 .wp-negfield__clear {
   flex: none;
@@ -175,13 +175,13 @@ function clear(): void {
   cursor: pointer;
   border-radius: min(4px, var(--wp-radius-cap, 999px));
 }
-.wp-negfield__clear:hover { color: var(--wp-danger, #ef4444); }
+.wp-negfield__clear:hover { color: var(--wp-danger); }
 .wp-negfield__broken {
   display: flex;
   align-items: center;
   gap: var(--wp-space-2, 6px);
   margin-top: var(--wp-space-2, 6px);
   font-size: var(--wp-text-xs, 11px);
-  color: var(--wp-danger, #ef4444);
+  color: var(--wp-danger);
 }
 </style>

@@ -271,7 +271,7 @@ function pick(row: TemplateRow) {
 
 <style scoped>
 .wp-ltm {
-  background: var(--wp-bg-2, #15151f);
+  background: var(--wp-bg-2);
   border: 1px solid var(--wp-border-strong, var(--wp-border));
   border-radius: var(--wp-radius-lg, 12px);
   box-shadow: var(--wp-shadow-lg, 0 20px 60px rgba(0, 0, 0, 0.55));
@@ -327,7 +327,7 @@ function pick(row: TemplateRow) {
   position: absolute; top: -4px; right: -4px;
   min-width: 14px; height: 14px; padding: 0 3px;
   border-radius: min(7px, var(--wp-radius-cap, 999px));
-  background: var(--wp-amber, #ffd400); color: #000;
+  background: var(--wp-amber); color: #000;
   font-family: var(--wp-font-mono, monospace);
   font-size: 9px; font-weight: 700; line-height: 14px; text-align: center;
   pointer-events: none;
@@ -385,7 +385,7 @@ function pick(row: TemplateRow) {
   display: flex; flex-direction: column; align-items: center; gap: 8px;
 }
 .wp-ltm__state .pi { font-size: 18px; color: var(--wp-text-dim); }
-.wp-ltm__state--error { color: var(--wp-danger, #fca5a5); }
+.wp-ltm__state--error { color: var(--wp-danger); }
 
 .wp-ltm__row {
   display: grid;
@@ -423,7 +423,7 @@ function pick(row: TemplateRow) {
   display: inline-flex; align-items: center; gap: 6px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.wp-ltm__row-fav { font-size: 9px; color: var(--wp-amber, #ffd400); }
+.wp-ltm__row-fav { font-size: 9px; color: var(--wp-amber); }
 .wp-ltm__row-preview {
   font-family: var(--wp-font-mono, monospace);
   font-size: 11px;

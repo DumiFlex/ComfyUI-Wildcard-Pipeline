@@ -557,18 +557,18 @@ function issuesFor(row: ModuleRow) {
   border-color: color-mix(in oklab, var(--wp-kind-ref) 32%, transparent);
 }
 .wp-syntax-pill--in {
-  color: var(--wp-accent-text, #a5b4fc);
+  color: var(--wp-accent-text);
   background: rgba(99, 102, 241, 0.18);
-  background: color-mix(in oklab, var(--wp-accent-500, #6366f1) 18%, transparent);
+  background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
   border-color: rgba(99, 102, 241, 0.35);
-  border-color: color-mix(in oklab, var(--wp-accent-500, #6366f1) 35%, transparent);
+  border-color: color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
 }
 .wp-syntax-pill--dp {
-  color: var(--wp-warn, #fcd34d);
+  color: var(--wp-warn);
   background: rgba(250, 204, 21, 0.18);
-  background: color-mix(in oklab, var(--wp-warn, #facc15) 18%, transparent);
+  background: color-mix(in oklab, var(--wp-warn) 18%, transparent);
   border-color: rgba(250, 204, 21, 0.32);
-  border-color: color-mix(in oklab, var(--wp-warn, #facc15) 32%, transparent);
+  border-color: color-mix(in oklab, var(--wp-warn) 32%, transparent);
 }
 
 /* Light-mode overrides — must repeat here because scoped [data-v-xxx] wins specificity

@@ -104,7 +104,7 @@ watch(
   text-align: center;
   padding: 44px 32px;
   background: var(--wp-bg-2);
-  border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 38%, var(--wp-border));
+  border: 1px solid color-mix(in oklab, var(--wp-danger) 38%, var(--wp-border));
   border-radius: min(12px, var(--wp-radius-cap, 999px));
 }
 .wp-error__icon {
@@ -115,8 +115,8 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 22%, transparent);
-  color: var(--wp-danger, #ef4444);
+  background: color-mix(in oklab, var(--wp-danger) 22%, transparent);
+  color: var(--wp-danger);
   font-size: 22px;
 }
 .wp-error__title {

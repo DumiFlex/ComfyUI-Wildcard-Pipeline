@@ -242,9 +242,9 @@ onBeforeUnmount(() => {
 .sm__bar-spacer { flex: 1; }
 .ghost { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: min(3px, var(--wp-radius-cap, 999px)); border: 1px solid var(--wp-border); background: transparent; color: var(--wp-text-muted, var(--wp-text2)); font: 11px var(--wp-font-sans); cursor: pointer; }
 .ghost:hover { border-color: var(--wp-border-strong, var(--wp-border2)); color: var(--wp-text); }
-.ghost--copied, .ghost--copied:hover { border-color: var(--wp-green, #6bc96f); color: var(--wp-green, #6bc96f); }
-.sm__hint { display: flex; align-items: center; gap: 7px; padding: 7px 14px; flex-shrink: 0; font: 11px var(--wp-font-sans); color: color-mix(in srgb, var(--wp-amber, #fbbf24) 75%, var(--wp-text-muted)); background: color-mix(in srgb, var(--wp-amber, #fbbf24) 9%, transparent); border-bottom: 1px solid var(--wp-border); }
-.sm__hint svg { flex-shrink: 0; color: var(--wp-amber, #fbbf24); }
+.ghost--copied, .ghost--copied:hover { border-color: var(--wp-green); color: var(--wp-green); }
+.sm__hint { display: flex; align-items: center; gap: 7px; padding: 7px 14px; flex-shrink: 0; font: 11px var(--wp-font-sans); color: color-mix(in srgb, var(--wp-amber) 75%, var(--wp-text-muted)); background: color-mix(in srgb, var(--wp-amber) 9%, transparent); border-bottom: 1px solid var(--wp-border); }
+.sm__hint svg { flex-shrink: 0; color: var(--wp-amber); }
 .sm__list { overflow-y: auto; padding: 6px; flex: 1; min-height: 0; }
 .sm__inactive-label { padding: 8px 8px 4px; margin-top: 4px; border-top: 1px dashed var(--wp-border); font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .08em; color: var(--wp-text-dim, var(--wp-text3)); }
 .sm__foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; flex-shrink: 0; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }

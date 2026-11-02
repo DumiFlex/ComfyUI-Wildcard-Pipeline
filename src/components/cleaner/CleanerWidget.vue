@@ -543,13 +543,13 @@ function isOverridden(rid: RuleId): boolean {
   color: var(--wp-text-dim, var(--wp-text3));
   text-align: center;
 }
-.wp-cleaner__col-label--neg { color: var(--wp-danger, #ef4444); }
+.wp-cleaner__col-label--neg { color: var(--wp-danger); }
 /* The on/off boxes are WpCheck (`sm`, the canvas rows' box); the negative
  * column wears the danger colour, and an amber ring marks a rule changed
  * from the intensity preset. */
-.wp-check.wp-cleaner__neg-toggle { justify-self: center; --check-on: var(--wp-danger, #ef4444); }
+.wp-check.wp-cleaner__neg-toggle { justify-self: center; --check-on: var(--wp-danger); }
 .wp-check.is-overridden {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--wp-amber, var(--wp-warn, #fbbf24)) 70%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--wp-amber, var(--wp-warn)) 70%, transparent);
 }
 .wp-cleaner__rule-row--overlap {
   border-top: 1px solid var(--wp-border-soft, var(--wp-border));
@@ -561,7 +561,7 @@ function isOverridden(rid: RuleId): boolean {
   text-align: center;
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.wp-cleaner__counter-neg { color: var(--wp-danger, #ef4444); }
+.wp-cleaner__counter-neg { color: var(--wp-danger); }
 .wp-cleaner__lastrun {
   display: flex;
   flex-direction: column;
@@ -574,7 +574,7 @@ function isOverridden(rid: RuleId): boolean {
   color: var(--wp-text-muted, var(--wp-text2));
 }
 .wp-cleaner__lastrun-line { word-break: break-word; }
-.wp-cleaner__lastrun-line--neg { color: var(--wp-danger, #ef4444); }
+.wp-cleaner__lastrun-line--neg { color: var(--wp-danger); }
 .wp-cleaner__rule {
   position: relative;
   display: grid;
@@ -601,7 +601,7 @@ function isOverridden(rid: RuleId): boolean {
   display: inline-block;
   width: 5px;
   height: 5px;
-  background: var(--wp-amber, var(--wp-warn, #fbbf24));
+  background: var(--wp-amber, var(--wp-warn));
   border-radius: 50%;
   flex: 0 0 auto;
 }

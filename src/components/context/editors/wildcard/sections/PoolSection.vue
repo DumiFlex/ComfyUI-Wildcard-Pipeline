@@ -612,7 +612,7 @@ const skewedTowards = computed(() => {
 .pool__collapsed-count {
   font: 600 9px var(--wp-font-sans);
   letter-spacing: 0.06em;
-  color: var(--wp-accent, #6366f1);
+  color: var(--wp-accent);
 }
 .pool__label {
   font: 600 9px var(--wp-font-sans);
@@ -742,11 +742,11 @@ const skewedTowards = computed(() => {
   border-color: var(--wp-accent);
 }
 .pool__expr-input--invalid {
-  border-color: var(--wp-danger, #ef4444);
+  border-color: var(--wp-danger);
 }
 .pool__expr-error {
   font: 10px var(--wp-font-mono);
-  color: var(--wp-danger, #ef4444);
+  color: var(--wp-danger);
 }
 .pool__expr-meta {
   display: flex;

@@ -385,9 +385,9 @@ function resetRules(): void {
   min-width: 0;
   height: 20px;
   padding: 0 6px;
-  background: var(--wp-bg, #111);
+  background: var(--wp-bg);
   color: var(--wp-text);
-  border: 1px solid var(--wp-amber, var(--wp-warn, #fbbf24));
+  border: 1px solid var(--wp-amber, var(--wp-warn));
   border-radius: min(3px, var(--wp-radius-cap, 999px));
   font: 11px var(--wp-font-mono, monospace);
   outline: none;
@@ -399,7 +399,7 @@ function resetRules(): void {
 }
 .wp-mi__source.is-wired { color: var(--wp-accent); }
 .wp-mi__source.is-wired .pi { font-size: 8px; margin-right: 3px; }
-.wp-mi__source.is-pinned { color: var(--wp-amber, var(--wp-warn, #fbbf24)); }
+.wp-mi__source.is-pinned { color: var(--wp-amber, var(--wp-warn)); }
 /* VARIANT RULES */
 .wp-mi__rules { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; }
 .wp-mi__rule {
@@ -414,7 +414,7 @@ function resetRules(): void {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--wp-border2, var(--wp-border-strong, #444));
+  background: var(--wp-border2, var(--wp-border-strong));
 }
 .wp-mi__rule.is-match .wp-mi__rule-dot { background: var(--wp-accent); }
 .wp-mi__rule.is-match .wp-mi__rule-variant { color: var(--wp-accent-text, var(--wp-accent)); }
@@ -434,7 +434,7 @@ function resetRules(): void {
 .wp-mi__rule-variant:focus,
 .wp-mi__rule-pattern:focus { border-color: var(--wp-accent); }
 .wp-mi__rule.is-problem .wp-mi__rule-variant,
-.wp-mi__rule.is-problem .wp-mi__rule-pattern { border-color: var(--wp-danger, #ef4444); }
+.wp-mi__rule.is-problem .wp-mi__rule-pattern { border-color: var(--wp-danger); }
 .wp-mi__ghost {
   padding: 6px 4px;
   font-size: 10px;

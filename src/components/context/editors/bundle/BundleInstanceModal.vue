@@ -63,7 +63,7 @@ const headerColor = computed(() => {
   const c = props.bundle.color ?? "";
   if (HEX_RE.test(c)) return c;
   if (props.libraryColor && HEX_RE.test(props.libraryColor)) return props.libraryColor;
-  return "var(--wp-bundle-default, #6366f1)";
+  return "var(--wp-bundle-default)";
 });
 const headerName = computed(() => props.bundle.name || props.libraryName || "Bundle");
 </script>
@@ -155,8 +155,8 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
 .wp-bdm__chip { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: min(2px, var(--wp-radius-cap, 999px)); background: color-mix(in srgb, var(--modal-accent, var(--wp-accent)) 22%, transparent); color: var(--modal-accent, var(--wp-accent)); }
 .wp-bdm__sub { font: 400 10px var(--wp-font-mono); color: var(--wp-text-dim, var(--wp-text3)); margin-top: 2px; }
 .wp-bdm__badge { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: min(2px, var(--wp-radius-cap, 999px)); }
-.wp-bdm__badge--drift { background: color-mix(in srgb, var(--wp-warn, #fcd34d) 22%, transparent); color: var(--wp-warn, #fcd34d); }
-.wp-bdm__badge--mod { background: color-mix(in srgb, var(--wp-status-modified, #f59e0b) 22%, transparent); color: var(--wp-status-modified, #f59e0b); }
+.wp-bdm__badge--drift { background: color-mix(in srgb, var(--wp-warn) 22%, transparent); color: var(--wp-warn); }
+.wp-bdm__badge--mod { background: color-mix(in srgb, var(--wp-status-modified) 22%, transparent); color: var(--wp-status-modified); }
 .wp-bdm__dock { position: sticky; bottom: 0; z-index: 2; background: var(--wp-bg2); }
 .wp-bdm__foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
 .wp-bdm__spa-link { display: inline-flex; align-items: center; gap: 5px; font: 10px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); text-decoration: none; }
