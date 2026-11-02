@@ -500,8 +500,42 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
   .wp-note-md p { margin: 0 0 6px; }
   .wp-note-md p:last-child { margin-bottom: 0; }
   .wp-note-md strong { color: var(--wp-text); }
-  .wp-note-md .wp-note-md__h { font-weight: 600; }
+  .wp-note-md .wp-note-md__h { font-weight: 600; color: var(--wp-text); margin: 8px 0 4px; }
+  .wp-note-md .wp-note-md__h:first-child { margin-top: 0; }
+  .wp-note-md .wp-note-md__h--1 { font-size: 1.3em; }
+  .wp-note-md .wp-note-md__h--2 { font-size: 1.15em; }
+  .wp-note-md .wp-note-md__h--3 { font-size: 1.05em; }
   .wp-note-md ul, .wp-note-md ol { margin: 0 0 6px; padding-left: 18px; }
+  .wp-note-md li > p { margin-bottom: 2px; }
+  .wp-note-md ul ul, .wp-note-md ol ol, .wp-note-md ul ol, .wp-note-md ol ul { margin: 2px 0; }
+  .wp-note-md .wp-note-md__tasks { list-style: none; padding-left: 2px; }
+  .wp-note-md .wp-note-md__task { position: relative; padding-left: 20px; }
+  .wp-note-md .wp-note-md__task--done > p:first-of-type { color: var(--wp-text-dim); text-decoration: line-through; }
+  .wp-note-md .wp-note-md__box { position: absolute; left: 0; top: 0.2em; font-size: 0.95em; color: var(--wp-note-tone, var(--wp-accent)); }
+  .wp-note-md .wp-note-md__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* Rounded box, lines between rows only; the header takes a faint wash of
+     the note's colour. */
+  .wp-note-md .wp-note-md__table {
+    margin: 2px 0 8px;
+    border: 1px solid var(--wp-border);
+    border-radius: min(6px, var(--wp-radius-cap, 999px));
+    overflow: hidden;
+  }
+  .wp-note-md table { width: 100%; border-collapse: collapse; font-size: 0.95em; }
+  .wp-note-md th, .wp-note-md td {
+    padding: 4px 10px;
+    text-align: left;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }
+  .wp-note-md tr + tr td, .wp-note-md tbody tr:first-child td { border-top: 1px solid color-mix(in srgb, var(--wp-border) 70%, transparent); }
+  .wp-note-md th {
+    font-weight: 600;
+    font-size: 0.92em;
+    color: var(--wp-text);
+    background: color-mix(in srgb, var(--wp-note-tone, var(--wp-accent)) 6%, var(--wp-bg-2, transparent));
+  }
+  .wp-note-md .wp-note-md__hr { border: 0; border-top: 1px solid var(--wp-border); margin: 8px 0; }
   .wp-note-md .wp-note-md__code,
   .wp-note-md .wp-note-md__pre {
     font-family: var(--wp-font-mono, monospace);
@@ -512,6 +546,18 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
   }
   .wp-note-md .wp-note-md__pre { padding: 6px 8px; margin: 0 0 6px; white-space: pre-wrap; }
   .wp-note-md blockquote { margin: 0 0 6px; padding-left: 8px; border-left: 2px solid var(--wp-border-strong); color: var(--wp-text-muted); }
+  .wp-note-md .wp-note-md__callout {
+    --wp-note-callout: var(--wp-accent);
+    display: flex;
+    gap: 8px;
+    padding: 6px 8px;
+    border-left-color: var(--wp-note-callout);
+    border-radius: min(4px, var(--wp-radius-cap, 999px));
+    background: color-mix(in srgb, var(--wp-note-callout) 10%, transparent);
+    color: var(--wp-text);
+  }
+  .wp-note-md .wp-note-md__callout--warn { --wp-note-callout: var(--wp-warn); }
+  .wp-note-md .wp-note-md__callout-icon { color: var(--wp-note-callout); margin-top: 2px; }
   /* Links take the pointer; the rest of the note lets it through to the canvas. */
   .wp-note-md a { pointer-events: auto; cursor: pointer; }
   .wp-note-md .wp-note-md__link { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
