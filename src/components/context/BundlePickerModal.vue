@@ -177,8 +177,8 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 </script>
 
 <template>
-  <ModalShell :visible="visible" @close="emit('close')" @keydown="onKeydown">
-    <div class="wp-bp" role="dialog">
+  <ModalShell :visible="visible" label="Add bundle from library" @close="emit('close')" @keydown="onKeydown">
+    <div class="wp-bp">
       <header class="wp-bp__head">
         <div class="wp-bp__head-text">
           <div class="wp-bp__eyebrow">Add bundle from library</div>

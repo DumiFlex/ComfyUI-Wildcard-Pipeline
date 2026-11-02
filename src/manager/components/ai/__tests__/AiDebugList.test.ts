@@ -60,12 +60,13 @@ describe("AiDebugList", () => {
     w.unmount();
   });
 
-  it("says when there is nothing yet, and closes on Escape", async () => {
+  // Escape and a click outside are the top bar Popover's job.
+  it("says when there is nothing yet, and closes from its close button", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ records: [], folder: "" })));
     const w = mount(AiDebugList);
     await flushPromises();
     expect(w.find('[data-test="ai-debug-empty"]').exists()).toBe(true);
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await w.find('[data-test="ai-debug-close"]').trigger("click");
     expect(w.emitted("close")).toHaveLength(1);
     w.unmount();
   });

@@ -127,8 +127,8 @@ function pick(row: TemplateRow) {
 </script>
 
 <template>
-  <ModalShell :visible="open" @close="emit('close')">
-    <div class="wp-ltm" role="dialog" aria-modal="true" aria-labelledby="wp-ltm-title" @click.stop>
+  <ModalShell :visible="open" labelledby="wp-ltm-title" @close="emit('close')">
+    <div class="wp-ltm" @click.stop>
       <header class="wp-ltm__head">
         <div class="wp-ltm__head-text">
           <div class="wp-ltm__eyebrow">Load template from library</div>

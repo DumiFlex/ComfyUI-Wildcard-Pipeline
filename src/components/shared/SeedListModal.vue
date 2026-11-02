@@ -3,10 +3,12 @@
  *  node widgets. Computes the derived list locally (seed-derive mirror)
  *  and overlays seed_locks; edits re-emit the full merged lock map. */
 import Kbd from "@/kit/Kbd.vue";
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import { deriveLoopSeeds, parseSeedLocks, type SeedStrategy } from "./seed-derive";
 import SeedLockRow from "./SeedLockRow.vue";
 import CloseButton from "@/kit/CloseButton.vue";
+import ModalShell from "@/kit/ModalShell.vue";
+import WpButton from "@/kit/WpButton.vue";
 
 const props = defineProps<{
   nodeName: string;
@@ -133,23 +135,17 @@ async function pasteAll(): Promise<void> {
   if (pastedTimer) clearTimeout(pastedTimer);
   pastedTimer = setTimeout(() => { pasted.value = false; }, 1500);
 }
-function onKeydown(ev: KeyboardEvent): void {
-  if (ev.key === "Escape") { ev.preventDefault(); emit("close"); }
-}
-onMounted(() => window.addEventListener("keydown", onKeydown));
 onBeforeUnmount(() => {
-  window.removeEventListener("keydown", onKeydown);
   if (copiedTimer) clearTimeout(copiedTimer);
   if (pastedTimer) clearTimeout(pastedTimer);
 });
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="sm-overlay" @click="emit('close')">
-      <div class="sm" role="dialog" aria-modal="true" data-test="seed-modal" @click.stop>
+  <ModalShell :visible="true" label="Iteration seeds" @close="emit('close')">
+      <div class="sm" data-test="seed-modal">
         <div class="sm__head">
-          <span class="sm__head-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10" /><circle cx="20" cy="18" r="1.4" fill="currentColor" stroke="none" /></svg></span>
+          <span class="sm__head-icon"><i class="pi pi-list" aria-hidden="true" /></span>
           <div class="sm__title-block">
             <div class="sm__title-row"><span class="sm__name">{{ nodeName }}</span><span class="sm__chip">Iteration Seeds</span></div>
             <div class="sm__sub">base {{ baseSeed }} · {{ strategy }} · {{ Math.max(1, count) }} iterations</div>
@@ -163,17 +159,16 @@ onBeforeUnmount(() => {
           <span v-if="lockedCount" class="sm__lockcount" data-test="mx-seed-lockcount">{{ lockedCount }} locked</span>
           <span v-if="bypassEnabled && bypassCount" class="sm__lockcount" data-test="mx-bypass-count">{{ bypassCount }} bypassed</span>
           <span class="sm__bar-spacer" />
-          <button class="ghost" data-test="mx-seed-lockall" @click="lockAll">Lock all</button>
-          <button class="ghost" data-test="mx-seed-unlockall" @click="unlockAll">Unlock all</button>
-          <button class="ghost" :class="{ 'ghost--copied': copied }" data-test="mx-seed-copy"
-            title="Copy all seeds · Alt-click to copy only the locked ones" @click="copyAll">
-            <svg v-if="copied" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7" /></svg>
-            {{ copied ? "Copied" : "Copy" }}
-          </button>
+          <WpButton variant="outline" data-test="mx-seed-lockall" @click="lockAll">Lock all</WpButton>
+          <WpButton variant="outline" data-test="mx-seed-unlockall" @click="unlockAll">Unlock all</WpButton>
+          <WpButton
+            variant="outline" :class="{ 'sm__done': copied }" :icon="copied ? 'pi-check' : 'pi-copy'"
+            data-test="mx-seed-copy" hint="Copy all seeds · Alt-click to copy only the locked ones" @click="copyAll"
+          >{{ copied ? "Copied" : "Copy" }}</WpButton>
         </div>
 
         <div v-if="overrideHint" class="sm__hint" data-test="mx-seed-hint">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9" /><path d="M12 11v5" stroke-linecap="round" /><circle cx="12" cy="7.5" r="1" fill="currentColor" stroke="none" /></svg>
+          <i class="pi pi-info-circle" aria-hidden="true" />
           <span>{{ overrideHint }}</span>
         </div>
 
@@ -208,26 +203,22 @@ onBeforeUnmount(() => {
         <div class="sm__foot">
           <span class="sm__foot-hint"><Kbd keys="Esc" size="sm" /> to close · locks save with the node</span>
           <span class="sm__foot-spacer" />
-          <button class="ghost" :class="{ 'ghost--copied': pasted }" data-test="mx-seed-paste"
-            title="Replace all locks from copied text" @click="pasteAll">
-            <svg v-if="pasted" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7" /></svg>
-            <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2.5" width="8" height="4" rx="1" /><path d="M8 4.5H6a2 2 0 0 0-2 2V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6.5a2 2 0 0 0-2-2h-2" /></svg>
-            {{ pasted ? "Pasted" : "Paste" }}
-          </button>
-          <button class="btn" data-test="seed-modal-done" @click="emit('close')">Done</button>
+          <WpButton
+            variant="outline" :class="{ 'sm__done': pasted }" :icon="pasted ? 'pi-check' : 'pi-clipboard'"
+            data-test="mx-seed-paste" hint="Replace all locks from copied text" @click="pasteAll"
+          >{{ pasted ? "Pasted" : "Paste" }}</WpButton>
+          <WpButton variant="primary" data-test="seed-modal-done" @click="emit('close')">Done</WpButton>
         </div>
       </div>
-    </div>
-  </Teleport>
+  </ModalShell>
 </template>
 
 <style scoped>
-.sm-overlay { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,.62); font-family: var(--wp-font-sans, sans-serif); }
 /* 560px, up from 486px: the toolbar (iterations · strategy · N locked · N
  * bypassed · Lock all · Unlock all · Copy) and each row's three toggles were
  * being squeezed into near-square boxes to fit. Widening is the cheaper fix
  * than re-organising the toolbar. */
-.sm { width: 560px; max-width: 100%; max-height: 86vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: min(6px, var(--wp-radius-cap, 999px)); overflow: hidden; color: var(--wp-text); font-size: 12px; box-shadow: var(--wp-shadow-lg); }
+.sm { width: 560px; max-width: 100%; max-height: 86vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: min(6px, var(--wp-radius-cap, 999px)); overflow: hidden; color: var(--wp-text); font-size: 12px; font-family: var(--wp-font-sans, sans-serif); box-shadow: var(--wp-shadow-lg); }
 .sm__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); background: color-mix(in srgb, var(--wp-accent) 9%, var(--wp-bg2)); }
 .sm__head-icon { color: var(--wp-accent); width: 24px; display: flex; justify-content: center; }
 .sm__title-block { flex: 1; min-width: 0; }
@@ -240,15 +231,12 @@ onBeforeUnmount(() => {
 .sm__strat { font: 600 9px var(--wp-font-mono); text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: min(3px, var(--wp-radius-cap, 999px)); color: var(--wp-text-muted, var(--wp-text2)); background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); }
 .sm__lockcount { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: min(3px, var(--wp-radius-cap, 999px)); color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.12); border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent); }
 .sm__bar-spacer { flex: 1; }
-.ghost { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: min(3px, var(--wp-radius-cap, 999px)); border: 1px solid var(--wp-border); background: transparent; color: var(--wp-text-muted, var(--wp-text2)); font: 11px var(--wp-font-sans); cursor: pointer; }
-.ghost:hover { border-color: var(--wp-border-strong, var(--wp-border2)); color: var(--wp-text); }
-.ghost--copied, .ghost--copied:hover { border-color: var(--wp-green); color: var(--wp-green); }
+.sm__done, .sm__done:hover { border-color: var(--wp-green); color: var(--wp-green); }
 .sm__hint { display: flex; align-items: center; gap: 7px; padding: 7px 14px; flex-shrink: 0; font: 11px var(--wp-font-sans); color: color-mix(in srgb, var(--wp-amber) 75%, var(--wp-text-muted)); background: color-mix(in srgb, var(--wp-amber) 9%, transparent); border-bottom: 1px solid var(--wp-border); }
-.sm__hint svg { flex-shrink: 0; color: var(--wp-amber); }
+.sm__hint .pi { flex-shrink: 0; color: var(--wp-amber); }
 .sm__list { overflow-y: auto; padding: 6px; flex: 1; min-height: 0; }
 .sm__inactive-label { padding: 8px 8px 4px; margin-top: 4px; border-top: 1px dashed var(--wp-border); font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .08em; color: var(--wp-text-dim, var(--wp-text3)); }
 .sm__foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; flex-shrink: 0; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
 .sm__foot-hint { font: 10px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
 .sm__foot-spacer { flex: 1; }
-.btn { padding: 6px 14px; border: 1px solid var(--wp-accent); border-radius: min(3px, var(--wp-radius-cap, 999px)); background: var(--wp-accent); color: #fff; font: 11px var(--wp-font-sans); cursor: pointer; }
 </style>

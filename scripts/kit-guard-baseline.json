@@ -4,10 +4,10 @@
     "native-number": 0,
     "native-checkbox": 0,
     "native-range": 1,
-    "inline-svg": 21,
-    "hand-dialog": 13,
-    "manager-raw-button": 239,
-    "raw-hex": 93
+    "inline-svg": 16,
+    "hand-dialog": 5,
+    "manager-raw-button": 238,
+    "raw-hex": 92
   },
   "native-select": {},
   "native-number": {},
@@ -25,7 +25,6 @@
     "src/components/injector/InjectorRow.vue": 1,
     "src/components/settings/MockModuleCard.vue": 1,
     "src/components/shared/FrameChips.vue": 1,
-    "src/components/shared/SeedListModal.vue": 5,
     "src/manager/components/ModuleListView.vue": 1,
     "src/manager/components/TagPickerMenu.vue": 1,
     "src/manager/components/ai/AiWorking.vue": 1,
@@ -35,18 +34,10 @@
     "src/manager/views/WildcardEditor.vue": 1
   },
   "hand-dialog": {
-    "src/components/assembler/LoadTemplateModal.vue": 1,
-    "src/components/assembler/SaveTemplateModal.vue": 1,
-    "src/components/context/BundlePickerModal.vue": 1,
-    "src/components/context/PushBundleToLibraryModal.vue": 1,
-    "src/components/context/PushToLibraryModal.vue": 1,
     "src/components/context/editors/bundle/sections/IdentitySection.vue": 1,
-    "src/components/injector/InjectorBindingModal.vue": 1,
     "src/components/settings/DisplayPlaygroundModal.vue": 1,
-    "src/components/shared/SeedListModal.vue": 1,
     "src/manager/components/CommandPalette.vue": 1,
     "src/manager/components/ai/AiChatDrawer.vue": 1,
-    "src/manager/components/ai/AiDebugList.vue": 1,
     "src/manager/components/test-runner/ModulePicker.vue": 1
   },
   "manager-raw-button": {
@@ -73,7 +64,6 @@
     "src/manager/components/ai/AiCardGroup.vue": 2,
     "src/manager/components/ai/AiChatDrawer.vue": 15,
     "src/manager/components/ai/AiChatList.vue": 4,
-    "src/manager/components/ai/AiDebugList.vue": 1,
     "src/manager/components/ai/AiDescribePanel.vue": 1,
     "src/manager/components/ai/AiImagePicker.vue": 1,
     "src/manager/components/ai/AiOrganizePanel.vue": 4,
@@ -138,7 +128,6 @@
     "src/components/image-filter/PickerTile.vue": 5,
     "src/components/image-filter/SweepGrid.vue": 1,
     "src/components/settings/PlaygroundMockup.vue": 1,
-    "src/components/shared/SeedListModal.vue": 1,
     "src/manager/components/BundleChildRow.vue": 1,
     "src/manager/components/BundleReattachSection.vue": 1,
     "src/manager/components/ModuleListView.vue": 4,

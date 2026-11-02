@@ -30,6 +30,7 @@ import type { InjectorRow } from "../../widgets/_shared";
 import RichTextInput from "../../manager/components/RichTextInput.vue";
 import WpButton from "@/kit/WpButton.vue";
 import CloseButton from "@/kit/CloseButton.vue";
+import ModalShell from "@/kit/ModalShell.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -393,22 +394,19 @@ function menuThemeClass(): string {
   return themed.classList.contains("wp-theme-light") ? "wp-theme-light" : "wp-theme-dark";
 }
 
-// Esc cancels (drops draft), Cmd/Ctrl+Enter saves. Mirrors the
-// module InstanceModal keybinds so users carry one habit across both
-// editors. Bound to the overlay so it fires regardless of which inner
-// field has focus — the overlay receives the keydown bubble.
-function onKeydown(ev: KeyboardEvent): void {
-  if (ev.key === "Escape") {
-    ev.preventDefault();
-    // Escape dismisses the insert menu first — losing the whole draft
-    // because a dropdown happened to be open is a nasty surprise.
-    if (showInsertMenu.value) {
-      closeInsertMenu();
-      return;
-    }
-    onCancel();
+// Esc or a backdrop click cancels (drops draft), Cmd/Ctrl+Enter saves.
+// Mirrors the module InstanceModal keybinds so users carry one habit
+// across both editors. ModalShell reports both as `close`; it closes the
+// insert menu first, since losing the whole draft because a dropdown
+// happened to be open is a nasty surprise.
+function onShellClose(): void {
+  if (showInsertMenu.value) {
+    closeInsertMenu();
     return;
   }
+  onCancel();
+}
+function onKeydown(ev: KeyboardEvent): void {
   if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
     ev.preventDefault();
     onSave();
@@ -417,13 +415,8 @@ function onKeydown(ev: KeyboardEvent): void {
 </script>
 
 <template>
-  <div
-    class="ibm__overlay"
-    data-test="ibm-overlay"
-    @click.self="onCancel"
-    @keydown="onKeydown"
-  >
-    <div class="ibm" role="dialog" aria-labelledby="ibm-title" tabindex="-1">
+  <ModalShell :visible="true" labelledby="ibm-title" @close="onShellClose" @keydown="onKeydown">
+    <div class="ibm" tabindex="-1">
       <header class="ibm__head" :style="{ '--ibm-accent': headerColor }">
         <i :class="['pi', headerIcon, 'ibm__head-icon']" aria-hidden="true" />
         <div class="ibm__title-block">
@@ -631,7 +624,7 @@ function onKeydown(ev: KeyboardEvent): void {
         <WpButton variant="primary" :disabled="!isDirty" data-test="ibm-save" @click="onSave">Save</WpButton>
       </footer>
     </div>
-  </div>
+  </ModalShell>
 </template>
 
 <!-- Shared modal-template-controls partial — imported UNSCOPED so the
@@ -645,21 +638,9 @@ function onKeydown(ev: KeyboardEvent): void {
      leak-free regardless. -->
 <style>
 @import "../context/editors/_modal-template-ctrls.css";
-@import "@/kit/_modal-motion.css";
 </style>
 
 <style scoped>
-.ibm__overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 10010;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  box-sizing: border-box;
-}
 .ibm {
   width: 100%;
   max-width: 520px;

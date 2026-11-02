@@ -99,8 +99,8 @@ async function submit(mode: "update" | "new") {
 </script>
 
 <template>
-  <ModalShell :visible="open" @close="emit('close')">
-    <div class="wp-stm" role="dialog" aria-modal="true" aria-labelledby="wp-stm-title" @click.stop>
+  <ModalShell :visible="open" labelledby="wp-stm-title" @close="emit('close')">
+    <div class="wp-stm" @click.stop>
       <header class="wp-stm__head">
         <h3 id="wp-stm-title" class="wp-stm__title">Save template</h3>
         <CloseButton size="sm" kbd="Esc" data-test="save-tpl-close" @click="emit('close')" />
