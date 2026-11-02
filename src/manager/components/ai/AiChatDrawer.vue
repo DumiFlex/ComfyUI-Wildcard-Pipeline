@@ -1507,11 +1507,18 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   display: inline-flex; align-items: center; justify-content: center; border-radius: min(11px, var(--wp-radius-cap, 999px));
   font-size: 13px; line-height: 1; background: var(--wp-bg-1);
   border: 1px solid var(--wp-border); box-shadow: var(--wp-shadow-sm);
+  transform: scale(var(--wp-ai-react-s)); opacity: var(--wp-ai-react-o);
   animation: wp-ai-chat-react 0.32s cubic-bezier(0.3, 1.6, 0.5, 1) both;
 }
+/* Animated through a registered custom property, not `opacity` / `transform`
+ * directly: those go to the compositor, which lifts the element onto its own
+ * layer while it moves and drops it after, so the text went soft during the
+ * motion and snapped by half a pixel at its end. */
+@property --wp-ai-react-s { syntax: "<number>"; inherits: false; initial-value: 1; }
+@property --wp-ai-react-o { syntax: "<number>"; inherits: false; initial-value: 1; }
 @keyframes wp-ai-chat-react {
-  from { transform: scale(0.3); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from { --wp-ai-react-s: 0.3; --wp-ai-react-o: 0; }
+  to { --wp-ai-react-s: 1; --wp-ai-react-o: 1; }
 }
 @media (prefers-reduced-motion: reduce) { .wp-ai-chat__reaction { animation: none; } }
 .wp-ai-chat__reply { display: flex; flex-direction: column; gap: 8px; }

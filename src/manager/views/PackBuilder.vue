@@ -1130,12 +1130,19 @@ function stopExtending(): void {
   display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: min(10px, var(--wp-radius-cap, 999px));
   border: 1px solid var(--wp-accent-400); background: color-mix(in oklab, var(--wp-accent-500) 6%, var(--wp-bg-1));
   box-shadow: 0 0 0 3px var(--wp-accent-glow);
+  transform: translateY(var(--wp-pack-ask-y)); opacity: var(--wp-pack-ask-o);
   animation: wp-pack-ask-in 0.5s ease-out, wp-pack-ask-pulse 2.4s ease-in-out 0.5s 3;
 }
 .wp-pack__ask-web-head { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--wp-text); }
 .wp-pack__ask-web-head .pi { color: var(--wp-accent-text); font-size: 16px; }
 .wp-pack__ask-web-why { margin: 0; font-size: 12px; color: var(--wp-text-muted); }
-@keyframes wp-pack-ask-in { from { opacity: 0; transform: translateY(-6px); } }
+/* Animated through a registered custom property, not `opacity` / `transform`
+ * directly: those go to the compositor, which lifts the element onto its own
+ * layer while it moves and drops it after, so the text went soft during the
+ * motion and snapped by half a pixel at its end. */
+@property --wp-pack-ask-y { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --wp-pack-ask-o { syntax: "<number>"; inherits: false; initial-value: 1; }
+@keyframes wp-pack-ask-in { from { --wp-pack-ask-o: 0; --wp-pack-ask-y: -6px; } }
 @keyframes wp-pack-ask-pulse { 50% { box-shadow: 0 0 0 6px var(--wp-accent-glow); } }
 .wp-pack__waiting, .wp-pack__changed { margin: 6px 0; display: flex; gap: 6px; align-items: baseline; font-size: 12px; color: var(--wp-text-muted); }
 .wp-pack__waiting { color: var(--wp-accent-text); }

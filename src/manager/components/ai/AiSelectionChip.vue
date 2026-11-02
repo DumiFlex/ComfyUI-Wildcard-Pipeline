@@ -153,7 +153,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .wp-ai-sel {
-  position: fixed; z-index: 9000; transform: translateX(-50%);
+  position: fixed; z-index: 9000;
+  transform: translate(-50%, var(--wp-ai-sel-y)); opacity: var(--wp-ai-sel-o);
   display: inline-flex; align-items: center; height: 30px; padding: 0 3px;
   border-radius: min(8px, var(--wp-radius-cap, 999px)); background: var(--wp-bg-1);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 45%, var(--wp-border));
@@ -171,14 +172,20 @@ onBeforeUnmount(() => {
 .wp-ai-sel__btn:disabled { opacity: 0.5; cursor: default; }
 .wp-ai-sel__btn .pi { font-size: 12px; color: var(--wp-accent-400, var(--wp-accent-500)); }
 .wp-ai-sel__sep { width: 1px; height: 16px; background: var(--wp-border); margin: 0 2px; }
+/* Animated through a registered custom property, not `opacity` / `transform`
+ * directly: those go to the compositor, which lifts the element onto its own
+ * layer while it moves and drops it after, so the text went soft during the
+ * motion and snapped by half a pixel at its end. */
+@property --wp-ai-sel-y { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --wp-ai-sel-o { syntax: "<number>"; inherits: false; initial-value: 1; }
 @keyframes wp-ai-sel-in {
-  from { opacity: 0; transform: translate(-50%, 4px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
+  from { --wp-ai-sel-o: 0; --wp-ai-sel-y: 4px; }
+  to { --wp-ai-sel-o: 1; --wp-ai-sel-y: 0px; }
 }
 .wp-ai-sel[data-below] { animation-name: wp-ai-sel-in-below; }
 @keyframes wp-ai-sel-in-below {
-  from { opacity: 0; transform: translate(-50%, -4px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
+  from { --wp-ai-sel-o: 0; --wp-ai-sel-y: -4px; }
+  to { --wp-ai-sel-o: 1; --wp-ai-sel-y: 0px; }
 }
 @media (prefers-reduced-motion: reduce) { .wp-ai-sel { animation: none; } }
 </style>
