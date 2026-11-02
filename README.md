@@ -28,7 +28,7 @@ fresh prompt that still hangs together.
 
 ## Install
 
-Needs a ComfyUI with the V3 node API and Python 3.10 or newer. The canvas
+Needs ComfyUI 0.11 or newer and Python 3.10 or newer. The canvas
 side is built against ComfyUI frontend 1.42 (the
 `@comfyorg/comfyui-frontend-types` version in `package.json`); it uses some
 frontend internals, so a much older or newer frontend may break parts of it.
