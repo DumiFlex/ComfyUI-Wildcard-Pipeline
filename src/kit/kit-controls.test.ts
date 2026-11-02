@@ -123,6 +123,11 @@ describe("Disclosure", () => {
     await w.setProps({ open: false });
     expect(w.find("button").attributes("aria-expanded")).toBe("false");
   });
+
+  it("marks a flush section on its root", () => {
+    expect(mount(Disclosure, { props: { label: "A", flush: true } }).attributes("data-flush")).toBeDefined();
+    expect(mount(Disclosure, { props: { label: "A" } }).attributes("data-flush")).toBeUndefined();
+  });
 });
 
 describe("Banner", () => {

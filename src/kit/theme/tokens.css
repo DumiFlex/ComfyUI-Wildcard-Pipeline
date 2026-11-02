@@ -189,6 +189,11 @@
 
   /* Focus ring — single declaration reused across all controls. */
   --wp-focus-ring: 0 0 0 3px rgba(99, 102, 241, 0.45);
+  /* Text and marks on a solid accent fill, and over a picture: the same in
+     both themes. --wp-scrim darkens a picture enough to read on it. */
+  --wp-on-accent: #fff;
+  --wp-on-media: #fff;
+  --wp-scrim: rgba(0, 0, 0, 0.55);
 
   /* Error treatment */
   --wp-error-border: var(--wp-danger);

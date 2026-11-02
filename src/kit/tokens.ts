@@ -19,7 +19,7 @@ export const SHARED_TOKENS = [
   // Accent and states
   "--wp-accent", "--wp-accent-glow", "--wp-accent-text", "--wp-accent-text-strong",
   "--wp-accent-300", "--wp-accent-400", "--wp-accent-500", "--wp-accent-600", "--wp-accent-700", "--wp-accent-800",
-  "--wp-focus-ring",
+  "--wp-focus-ring", "--wp-on-accent", "--wp-on-media", "--wp-scrim",
   "--wp-success", "--wp-warn", "--wp-danger", "--wp-info", "--wp-danger-text",
   "--wp-error-border", "--wp-error-text",
   "--wp-red", "--wp-red-bg", "--wp-green", "--wp-green-bg", "--wp-amber", "--wp-amber-bg",
@@ -45,10 +45,11 @@ export const SHARED_TOKENS = [
 export const OPTIONAL_TOKENS = ["--wp-bg-deep", "--wp-bg2"] as const;
 
 /** Set by the piece itself, on its own root, not by the host. */
-export const LOCAL_TOKENS = ["--wp-hsv-hue", "--wp-lm-t", "--wp-select-line-h"] as const;
+export const LOCAL_TOKENS = ["--wp-hsv-hue", "--wp-lm-t", "--wp-select-line-h", "--wp-list-row-depth", "--wp-list-row-icon"] as const;
 
 /** Pieces that need a page with src/theme/ loaded (not the canvas). */
 export const PAGE_PIECES = [
+  "axis-color.ts", "matrix-axis.ts", "BundleMeta.vue", "ConstraintMatrixPreview.vue", "KindChip.vue", "PostCard.vue", "RatingBadge.vue", "TokenizedValue.vue",
   "Button.vue", "Card.vue", "Checkbox.vue", "Chip.vue", "ChoiceCards.vue", "ColorPicker.vue", "ConfirmModal.vue",
   "DataTable.vue", "Drawer.vue", "EmptyState.vue", "Field.vue", "Icon.vue", "IconPicker.vue", "Input.vue",
   "ListFilter.vue", "Modal.vue", "RelativeDate.vue", "Select.vue", "Textarea.vue", "ToastHost.vue", "Toggle.vue",

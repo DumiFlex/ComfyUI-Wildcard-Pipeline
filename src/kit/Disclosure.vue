@@ -14,7 +14,9 @@
  * the button, for controls that should not fold the section; `#lead` sits
  * before the button for the same (a "select all" checkbox lined up with
  * the rows' own). `lazy` builds
- * the body only while it is open.
+ * the body only while it is open. `flush` makes the heading a full-width
+ * band with a rule under it and drops the body's indent, for a section of a
+ * table or list that fills its card (a group of options, a rule).
  */
 import { computed, ref, useId, useSlots } from "vue";
 
@@ -29,6 +31,8 @@ const props = withDefaults(defineProps<{
   disabled?: boolean | undefined;
   /** Draw a border and a padded body, for a section that stands alone. */
   boxed?: boolean | undefined;
+  /** Full-width heading band, body without indent: a section of a table or list. */
+  flush?: boolean | undefined;
   /** Build the body only while open (a long list, a costly panel). */
   lazy?: boolean | undefined;
   /** Extra attributes on the heading button, e.g. `data-test`. */
@@ -51,7 +55,7 @@ function toggle(): void {
 </script>
 
 <template>
-  <div class="wp-disclosure" :data-size="size" :data-open="isOpen" :data-boxed="boxed || undefined">
+  <div class="wp-disclosure" :data-size="size" :data-open="isOpen" :data-boxed="boxed || undefined" :data-flush="flush || undefined">
     <div class="wp-disclosure__head">
       <div v-if="slots.lead" class="wp-disclosure__lead"><slot name="lead" /></div>
       <button
@@ -144,6 +148,18 @@ function toggle(): void {
 .wp-disclosure__content { padding: var(--wp-space-3) 0 var(--wp-space-2) calc(var(--wp-space-2) + 1.1em + var(--wp-space-3)); }
 .wp-disclosure[data-size="sm"] .wp-disclosure__content { padding: var(--wp-space-2) 0 var(--wp-space-2) calc(var(--wp-space-2) + 1em); }
 .wp-disclosure[data-boxed] .wp-disclosure__content { padding: var(--wp-space-2) var(--wp-space-5) var(--wp-space-5); }
+.wp-disclosure[data-flush] > .wp-disclosure__head {
+  border-bottom: 1px solid var(--wp-border);
+  background: var(--wp-bg-2);
+}
+.wp-disclosure[data-flush] .wp-disclosure__trigger {
+  padding: 0 var(--wp-space-5);
+  border-radius: 0;
+  font-size: var(--wp-text-xs);
+}
+.wp-disclosure[data-flush] .wp-disclosure__trigger:focus-visible { box-shadow: inset 0 0 0 2px var(--wp-border-focus); }
+.wp-disclosure[data-flush] .wp-disclosure__content,
+.wp-disclosure[data-flush][data-size="sm"] .wp-disclosure__content { padding: 0; }
 @media (prefers-reduced-motion: reduce) {
   .wp-disclosure__chev, .wp-disclosure__body { transition: none; }
 }

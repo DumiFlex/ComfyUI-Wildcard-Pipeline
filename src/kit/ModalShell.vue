@@ -2,7 +2,14 @@
   <Teleport to="body">
     <Transition name="wp-modal" appear>
       <div v-if="visible" ref="overlayEl" class="wp-modal-overlay" @click="$emit('close')">
-        <div class="wp-modal-wrapper" role="dialog" aria-modal="true" @click.stop>
+        <div
+          class="wp-modal-wrapper"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="label"
+          :aria-labelledby="labelledby"
+          @click.stop
+        >
           <slot></slot>
         </div>
       </div>
@@ -14,7 +21,13 @@
 import { ref, watch, onBeforeUnmount } from "vue";
 import { useModalKeyShield } from "./useModalKeyShield";
 
-const props = defineProps<{ visible: boolean }>();
+const props = defineProps<{
+  visible: boolean;
+  /** The dialog's name when it has no visible title. */
+  label?: string | undefined;
+  /** Id of the element that names the dialog (its title). */
+  labelledby?: string | undefined;
+}>();
 const emit = defineEmits<{
   (e: "close"): void;
   /** Every keydown inside the modal. Consumers MUST use this instead of a

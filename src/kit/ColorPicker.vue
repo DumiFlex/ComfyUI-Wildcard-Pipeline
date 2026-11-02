@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import Popover from "./Popover.vue";
 import Input from "./Input.vue";
 import HsvPicker from "./HsvPicker.vue";
+import { COLOUR_PRESETS } from "./colour-presets";
 
 interface Props {
   modelValue: string;
@@ -13,11 +14,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  presets: () => [
-    "#7c3aed", "#a78bfa", "#22d3ee", "#34d399",
-    "#fbbf24", "#f472b6", "#fb7185", "#ef4444",
-    "#6366f1", "#10b981", "#f59e0b", "#8b5cf6",
-  ],
+  presets: () => [...COLOUR_PRESETS],
   ariaLabel: undefined,
   compact: false,
 });

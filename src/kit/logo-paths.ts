@@ -10,3 +10,12 @@ export const STAR_A =
   "m434.06,665.85c-51.08,10.25-61.96,21.13-72.22,72.22-.41,2.02-3.29,2.02-3.69,0-10.25-51.08-21.13-61.96-72.22-72.22-2.02-.41-2.02-3.29,0-3.69,51.08-10.25,61.96-21.13,72.22-72.22.41-2.02,3.29-2.02,3.69,0,10.25,51.08,21.13,61.96,72.22,72.22,2.02.41,2.02,3.29,0,3.69Z";
 export const STAR_B =
   "m738.07,361.84c-51.08,10.25-61.96,21.13-72.22,72.22-.41,2.02-3.29,2.02-3.69,0-10.25-51.08-21.13-61.96-72.22-72.22-2.02-.41-2.02-3.29,0-3.69,51.08-10.25,61.96-21.13,72.22-72.22.41-2.02,3.29-2.02,3.69,0,10.25,51.08,21.13,61.96,72.22,72.22,2.02.41,2.02,3.29,0,3.69Z";
+
+/** The logo's colours: [big star and first ring start, middle, small star and
+ *  second ring end]. Brand colours, not theme tokens: the mark looks the same
+ *  in light and dark. `community` is the community site's rust counterpart. */
+export const BRAND_COLOURS = {
+  extension: ["#a970ff", "#6366f1", "#33d6c6"],
+  community: ["#da7550", "#f1636c", "#ad33d6"],
+} as const;
+export type LogoBrand = keyof typeof BRAND_COLOURS;
