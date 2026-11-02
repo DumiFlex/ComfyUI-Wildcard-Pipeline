@@ -26,9 +26,9 @@
  * bundle row gets `indent=1`); each level adds 16px of left padding.
  */
 import { computed, ref, useId } from "vue";
-import Checkbox from "../../kit/Checkbox.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
-import Chip from "../../kit/Chip.vue";
+import Chip from "@/kit/Chip.vue";
 
 /**
  * Status-badge taxonomy — six variants paired 1:1 with

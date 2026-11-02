@@ -25,14 +25,11 @@ export const KIT_REPO = "https://github.com/DumiFlex/wp-kit";
 export const KIT_SITE = "https://dumiflex.github.io/wp-kit/";
 
 /**
- * How the About card names the kit version: a release tag with its commit
- * ("v0.1.0 · f3841a3"), or the commit alone when src/kit/ was pulled from a
- * branch or a commit. The link opens that commit's files.
+ * How the About card names the kit version: the installed
+ * @dumiflex/wp-kit version ("v0.3.0"), linked to that release's notes.
  */
-export function kitVersion(v: { ref: string; sha: string }): { label: string; href: string } {
-  const short = v.sha.slice(0, 7);
-  const tagged = /^v\d+\.\d+\.\d+/.test(v.ref);
-  return { label: tagged ? `${v.ref} · ${short}` : short, href: tagged ? `${KIT_REPO}/releases/tag/${v.ref}` : `${KIT_REPO}/tree/${v.sha}` };
+export function kitVersion(v: { version: string }): { label: string; href: string } {
+  return { label: `v${v.version}`, href: `${KIT_REPO}/releases/tag/v${v.version}` };
 }
 
 /**

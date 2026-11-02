@@ -19,8 +19,6 @@
     "lint": "eslint \"src/**/*.{ts,vue}\"",
     "lint:baseline": "node scripts/lint-baseline.mjs",
     "size": "node scripts/check-bundle-size.mjs",
-    "kit:pull": "node scripts/kit-pull.mjs",
-    "kit:check": "node scripts/kit-pull.mjs --check",
     "check:css-isolation": "node scripts/check-css-isolation.mjs",
     "check:spacing": "node scripts/check-spacing-tokens.mjs",
     "check:typography": "node scripts/check-typography-tokens.mjs",
@@ -35,6 +33,7 @@
     "announce": "node scripts/discord-announce.mjs"
   },
   "dependencies": {
+    "@dumiflex/wp-kit": "^0.3.0",
     "pinia": "^2.2.6",
     "primeicons": "^7.0.0",
     "vue": "^3.5.44",

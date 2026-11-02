@@ -47,8 +47,8 @@ Open **Settings › Advanced › Component kit** (`/wp/kit`) before building a
 screen. It shows every shared control live in the current theme, with when to
 use it and how to write it. Use those. When nothing fits, make the new
 component in `src/manager/components/ui/` (manager) or, for a piece the canvas
-and manager share, in [wp-kit](https://github.com/DumiFlex/wp-kit) (then
-`pnpm kit:pull <tag>`; `src/kit/` is never edited here), and add its entry to `src/manager/kit/registry.ts` and a
+and manager share, in [wp-kit](https://github.com/DumiFlex/wp-kit) (release it,
+then bump the `@dumiflex/wp-kit` dependency here; the kit is imported as `@/kit/<file>`), and add its entry to `src/manager/kit/registry.ts` and a
 demo to `src/manager/views/Kit.vue` in the same PR. Two tests hold this:
 `kit-coverage.test.ts` fails on a kit-folder component without an entry, and
 `scripts/kit-guard.test.mjs` fails when a file adds a native select, number,

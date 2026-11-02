@@ -20,7 +20,7 @@ vi.mock("../../api/client", () => ({
   },
 }));
 
-vi.mock("../../../kit/useToast", () => ({
+vi.mock("@/kit/useToast", () => ({
   useToast: () => ({ toasts: { value: [] }, push: pushMock, dismiss: vi.fn() }),
 }));
 

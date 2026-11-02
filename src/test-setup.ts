@@ -8,7 +8,7 @@ import { vi } from "vitest";
 // tests that need a specific value override this on globalThis.
 (globalThis as unknown as { __APP_VERSION__?: string }).__APP_VERSION__ ??= "0.0.0-test";
 (globalThis as unknown as { __APP_LICENSE__?: string }).__APP_LICENSE__ ??= "TEST-LICENSE";
-(globalThis as unknown as { __KIT_VERSION__?: { ref: string; sha: string } }).__KIT_VERSION__ ??= { ref: "v0.0.0-test", sha: "0123456789abcdef" };
+(globalThis as unknown as { __KIT_VERSION__?: { version: string } }).__KIT_VERSION__ ??= { version: "0.0.0-test" };
 
 vi.mock("#comfyui/app", () => ({
   app: {

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /** One bookmark row of the dock. In view mode it is just a jump target; in
  *  edit mode it also carries the show / hide eye. */
-import Kbd from "../../kit/Kbd.vue";
-import WpIconButton from "../../kit/WpIconButton.vue";
+import Kbd from "@/kit/Kbd.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
 import type { BookmarkEntry } from "../../widgets/bookmark";
 
 defineProps<{

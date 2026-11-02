@@ -7,15 +7,15 @@
  * The row carries `data-wp-out="toggle_<out>"` while it has an output, so
  * `extension/row-outputs.ts` puts that BOOLEAN dot at the row's right edge.
  */
-import WpButton from "../../kit/WpButton.vue";
-import WpIconButton from "../../kit/WpIconButton.vue";
-import WpSegmented from "../../kit/WpSegmented.vue";
-import WpSwitch from "../../kit/WpSwitch.vue";
-import WpCheck from "../../kit/WpCheck.vue";
-import WpSelect from "../../kit/WpSelect.vue";
-import CloseButton from "../../kit/CloseButton.vue";
-import Combobox from "../../kit/Combobox.vue";
-import { vTooltip } from "../../kit/tooltip";
+import WpButton from "@/kit/WpButton.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
+import WpSegmented from "@/kit/WpSegmented.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
+import WpCheck from "@/kit/WpCheck.vue";
+import WpSelect from "@/kit/WpSelect.vue";
+import CloseButton from "@/kit/CloseButton.vue";
+import Combobox from "@/kit/Combobox.vue";
+import { vTooltip } from "@/kit/tooltip";
 import { varColorClass } from "../shared/var-color";
 import type { ToggleControl, ToggleRow, ToggleStyle } from "../../extension/toggles";
 import { ctlInputName, type ControlState } from "../../extension/toggle-control";

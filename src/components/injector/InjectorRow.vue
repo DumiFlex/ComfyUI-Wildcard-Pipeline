@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
-import WpCheck from "../../kit/WpCheck.vue";
-import WpIconButton from "../../kit/WpIconButton.vue";
+import WpCheck from "@/kit/WpCheck.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
 
 const props = defineProps<{
   row: InjectorRow;
@@ -423,7 +423,7 @@ function onDragEnd(): void {
   to   { opacity: 1; transform: scaleX(1); }
 }
 
-/* Enter / leave / flash classes consumed by src/kit/flip.ts
+/* Enter / leave / flash classes consumed by the kit's flip.ts (@/kit/flip)
  * when InjectorWidget calls withEnterAnimation /
  * withLeaveAnimation / flashRows. Mirror of ModuleRow's
  * .wp-module--* family with injector-tinted accents — visual parity

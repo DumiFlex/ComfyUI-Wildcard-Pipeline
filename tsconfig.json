@@ -12,6 +12,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "paths": {
+      "@/kit/*": ["./node_modules/@dumiflex/wp-kit/src/*"],
       "@/*": ["./src/*"],
       "#comfyui/app": ["./src/typings/comfyui.d.ts"]
     },

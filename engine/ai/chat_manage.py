@@ -29,8 +29,8 @@ MAX_TAG_ITEMS = 200
 #: Items one bulk update may touch.
 MAX_BULK = 100
 #: Category icons: PrimeIcons ids without "pi-", the ones the Categories
-#: page offers (`src/kit/icon-catalog.ts`; a test keeps the
-#: two the same).
+#: page offers (the kit's `icon-catalog.ts`, in @dumiflex/wp-kit;
+#: `src/manager/__tests__/category-icons.test.ts` keeps the two the same).
 CATEGORY_ICONS = (
     "user", "users", "heart", "star", "eye", "face-smile", "crown", "id-card", "palette",
     "pencil", "sliders-h", "camera", "image", "sparkles", "sun", "moon", "home", "building",

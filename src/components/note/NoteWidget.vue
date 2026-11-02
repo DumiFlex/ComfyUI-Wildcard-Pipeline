@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import ColorField from "../../kit/ColorField.vue";
-import WpButton from "../../kit/WpButton.vue";
-import WpIconButton from "../../kit/WpIconButton.vue";
-import WpNumber from "../../kit/WpNumber.vue";
-import WpSegmented from "../../kit/WpSegmented.vue";
-import WpSwitch from "../../kit/WpSwitch.vue";
+import ColorField from "@/kit/ColorField.vue";
+import WpButton from "@/kit/WpButton.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
+import WpNumber from "@/kit/WpNumber.vue";
+import WpSegmented from "@/kit/WpSegmented.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
 import NoteMarkdown from "./note-markdown";
 import NoteTextEditor from "./NoteTextEditor.vue";
 import NoteIconGrid from "./NoteIconGrid.vue";
-import { vTooltip } from "../../kit/tooltip";
+import { vTooltip } from "@/kit/tooltip";
 import BookmarkFields from "../bookmark/BookmarkFields.vue";
 import type { BookmarkJump, KeyOwner } from "../../extension/bookmarks";
 import {

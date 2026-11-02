@@ -13,7 +13,7 @@
  * - src/components/**\/*.{vue,css}
  * - src/extension/**\/*.css
  * - src/widgets/**\/*.css
- * - src/kit/*.{vue,css} (the shared kit pulled from wp-kit; not its theme/,
+ * - node_modules/@dumiflex/wp-kit/src/*.{vue,css} (the shared kit, from its npm package; not its theme/,
  *   which is the manager's page sheet)
  *
  * NOT included: src/manager/** (separate bundle with its own scope —
@@ -45,8 +45,8 @@ const LEGACY_ALLOWLIST = new Set([
 const SCOPES = [
   "src/components/**/*.vue",
   "src/components/**/*.css",
-  "src/kit/*.vue",
-  "src/kit/*.css",
+  "node_modules/@dumiflex/wp-kit/src/*.vue",
+  "node_modules/@dumiflex/wp-kit/src/*.css",
   "src/extension/**/*.css",
   "src/widgets/**/*.css",
 ];

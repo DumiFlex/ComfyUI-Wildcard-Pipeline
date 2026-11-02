@@ -20,16 +20,16 @@
  * ComfyUI's panel both ways.
  */
 import { computed, onMounted, ref } from "vue";
-import Toggle from "../../../../kit/Toggle.vue";
-import Button from "../../../../kit/Button.vue";
-import Select from "../../../../kit/Select.vue";
-import type { SelectOption } from "../../../../kit/select-types";
+import Toggle from "@/kit/Toggle.vue";
+import Button from "@/kit/Button.vue";
+import Select from "@/kit/Select.vue";
+import type { SelectOption } from "@/kit/select-types";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { api } from "../../../api/client";
 import type { ModelKind, TagStatus } from "../../../api/types";
 import { useUiStore } from "../../../stores/uiStore";
-import { useToast } from "../../../../kit/useToast";
+import { useToast } from "@/kit/useToast";
 import { resetTagAvailability } from "../../../utils/tagStatus";
 import {
   completionLimit,

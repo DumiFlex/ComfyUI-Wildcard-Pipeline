@@ -20,12 +20,12 @@
  * whole next config (`src/widgets/toggles.ts` fits the outputs to it).
  */
 import { computed, nextTick, ref } from "vue";
-import WpButton from "../../kit/WpButton.vue";
-import WpIconButton from "../../kit/WpIconButton.vue";
-import WpSegmented from "../../kit/WpSegmented.vue";
-import SortableList from "../../kit/SortableList.vue";
-import WpCheck from "../../kit/WpCheck.vue";
-import { vTooltip } from "../../kit/tooltip";
+import WpButton from "@/kit/WpButton.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
+import WpSegmented from "@/kit/WpSegmented.vue";
+import SortableList from "@/kit/SortableList.vue";
+import WpCheck from "@/kit/WpCheck.vue";
+import { vTooltip } from "@/kit/tooltip";
 import ToggleRowView from "./ToggleRow.vue";
 import { varColorClass } from "../shared/var-color";
 import {

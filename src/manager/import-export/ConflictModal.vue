@@ -67,8 +67,8 @@
  * through `update:open` and emits `cancel`.
  */
 import { computed, ref } from "vue";
-import Modal from "../../kit/Modal.vue";
-import Button from "../../kit/Button.vue";
+import Modal from "@/kit/Modal.vue";
+import Button from "@/kit/Button.vue";
 import Toolbar from "@/kit/Toolbar.vue";
 import Disclosure from "@/kit/Disclosure.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";

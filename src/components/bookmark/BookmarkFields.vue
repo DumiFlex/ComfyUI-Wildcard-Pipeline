@@ -5,12 +5,12 @@
  * Note that is also a bookmark, so the two can't drift apart.
  */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import Banner from "../../kit/Banner.vue";
-import Kbd from "../../kit/Kbd.vue";
-import WpButton from "../../kit/WpButton.vue";
-import WpIconButton from "../../kit/WpIconButton.vue";
-import WpNumber from "../../kit/WpNumber.vue";
-import WpSegmented from "../../kit/WpSegmented.vue";
+import Banner from "@/kit/Banner.vue";
+import Kbd from "@/kit/Kbd.vue";
+import WpButton from "@/kit/WpButton.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
+import WpNumber from "@/kit/WpNumber.vue";
+import WpSegmented from "@/kit/WpSegmented.vue";
 import { pushToast } from "../shared/toast-store";
 import {
   BOOKMARK_ANCHORS,

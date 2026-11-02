@@ -7,8 +7,8 @@
  * the library summary; nothing is saved until the user presses Save.
  */
 import { computed, ref, watch } from "vue";
-import Button from "../../../kit/Button.vue";
-import Textarea from "../../../kit/Textarea.vue";
+import Button from "@/kit/Button.vue";
+import Textarea from "@/kit/Textarea.vue";
 import SettingGroup from "./SettingGroup.vue";
 import SettingRow from "./SettingRow.vue";
 import { api } from "../../api/client";

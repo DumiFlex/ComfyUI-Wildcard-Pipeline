@@ -9,7 +9,7 @@
  *
  * Scope:
  *   - src/manager/**\/*.vue   (scoped + global style blocks)
- *   - src/kit/theme/tokens.css (definitions only; consumers
+ *   - node_modules/@dumiflex/wp-kit/src/theme/tokens.css (definitions only; consumers
  *     elsewhere flagged)
  *
  * Run: pnpm check:spacing

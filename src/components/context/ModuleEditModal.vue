@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 
-import ModalShell from "../../kit/ModalShell.vue";
+import ModalShell from "@/kit/ModalShell.vue";
 import type { ModuleEntry, ModuleEntryKind } from "../../widgets/_shared";
 import { type ResolvedValue } from "../../widgets/richTokenize";
 import {
@@ -10,8 +10,8 @@ import {
 } from "./editors/_shell";
 import { setLibraryHash } from "./drift-store";
 import { pushToast } from "../shared/toast-store";
-import ConfirmDialog from "../../kit/ConfirmDialog.vue";
-import WpButton from "../../kit/WpButton.vue";
+import ConfirmDialog from "@/kit/ConfirmDialog.vue";
+import WpButton from "@/kit/WpButton.vue";
 import PushToLibraryModal from "./PushToLibraryModal.vue";
 import WildcardInstanceModal from "./editors/wildcard/WildcardInstanceModal.vue";
 import FixedValuesInstanceModal from "./editors/fixed-values/FixedValuesInstanceModal.vue";

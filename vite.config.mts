@@ -18,11 +18,12 @@ const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8")
 const APP_VERSION = pkg.version;
 const APP_LICENSE = pkg.license;
 
-// The wp-kit version src/kit/ was pulled at (`pnpm kit:pull`), as
-// `__KIT_VERSION__` = { ref, sha }, for the Settings About card. Only those
-// two fields, not the lock's file hashes.
-const kitLock = JSON.parse(readFileSync(resolve(__dirname, "src/kit/kit.lock.json"), "utf-8")) as { ref: string; sha: string };
-const KIT_VERSION = { ref: kitLock.ref, sha: kitLock.sha };
+// The shared component kit comes from npm (@dumiflex/wp-kit, source .vue /
+// .ts / CSS) and is imported as `@/kit/<file>`, so that alias points into the
+// package. Its version is `__KIT_VERSION__`, for the Settings About card.
+const KIT_DIR = resolve(__dirname, "node_modules/@dumiflex/wp-kit/src");
+const kitPkg = JSON.parse(readFileSync(resolve(KIT_DIR, "../package.json"), "utf-8")) as { version: string };
+const KIT_VERSION = { version: kitPkg.version };
 
 // Two build targets controlled by --mode flag:
 //   pnpm build:extension → js/main.js  (ComfyUI web extension, critical-path bundle)
@@ -34,7 +35,9 @@ export default defineConfig(({ mode }) => {
   const common = {
     plugins: [vue()],
     resolve: {
+      // "@/kit" before "@": the first prefix that matches wins.
       alias: {
+        "@/kit": KIT_DIR,
         "@": resolve(__dirname, "./src"),
         vue: "vue/dist/vue.runtime.esm-bundler.js",
       },

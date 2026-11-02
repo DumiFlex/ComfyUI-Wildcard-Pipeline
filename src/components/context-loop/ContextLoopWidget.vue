@@ -13,11 +13,11 @@
  * pushes via `host.setValue` so ComfyUI's widget value matches.
  */
 import { computed, ref, watch } from "vue";
-import WpSwitch from "../../kit/WpSwitch.vue";
-import WpButton from "../../kit/WpButton.vue";
-import WpIconButton from "../../kit/WpIconButton.vue";
-import WpSegmented, { type SegmentedOption } from "../../kit/WpSegmented.vue";
-import { vTooltip } from "../../kit/tooltip";
+import WpSwitch from "@/kit/WpSwitch.vue";
+import WpButton from "@/kit/WpButton.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
+import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
+import { vTooltip } from "@/kit/tooltip";
 import { remapSweepFrames, sweepFrameCount, type ContextLoopConfig, type LoopStrategy, type SweepConfig } from "./types";
 import { collectSweepCandidates, sweepSourcesFromRaw, type SweepSourceRaw } from "./sweep-candidates";
 import SweepModal from "./SweepModal.vue";

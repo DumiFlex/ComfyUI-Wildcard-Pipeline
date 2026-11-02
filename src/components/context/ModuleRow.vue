@@ -3,8 +3,8 @@ import { computed, inject } from "vue";
 import type { ModuleEntry } from "../../widgets/_shared";
 import { ModuleRowCtxKey } from "./module-row-ctx";
 import PairBadge from "./PairBadge.vue";
-import WpCheck from "../../kit/WpCheck.vue";
-import WpIconButton from "../../kit/WpIconButton.vue";
+import WpCheck from "@/kit/WpCheck.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
 
 const props = defineProps<{ module: ModuleEntry; idx: number }>();
 

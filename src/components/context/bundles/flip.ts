@@ -2,11 +2,11 @@
  * Re-export shim. The original FLIP helper lived here back when only
  * the Context module list used it. Now also consumed by InjectorRow
  * and (future) other row UIs — the real module moved to
- * `src/kit/flip.ts`. This file kept as a thin
+ * `the kit's flip.ts (@/kit/flip)`. This file kept as a thin
  * passthrough so existing ContextWidget imports don't break.
  *
  * New code should import directly from
- * `src/kit/flip.ts`.
+ * `the kit's flip.ts (@/kit/flip)`.
  */
 export {
   MOTION_COLLAPSE_MS,
@@ -23,9 +23,9 @@ export {
   flashRows,
   withLeaveAnimation,
   type AnimationClasses,
-} from "../../../kit/flip";
+} from "@/kit/flip";
 
-import { applyFlip, captureRects, MOTION_CURVE_FLIP, MOTION_FLIP_MS } from "../../../kit/flip";
+import { applyFlip, captureRects, MOTION_CURVE_FLIP, MOTION_FLIP_MS } from "@/kit/flip";
 
 /**
  * FLIP rects captured at every list-level container in a ContextWidget.

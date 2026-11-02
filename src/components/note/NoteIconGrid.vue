@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { vTooltip } from "../../kit/tooltip";
+import { vTooltip } from "@/kit/tooltip";
 import { PI_ICONS } from "./pi-icons";
 
 /** Every PrimeIcons glyph in a grid you can search. Emits the picked name

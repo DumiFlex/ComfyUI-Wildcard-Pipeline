@@ -21,7 +21,7 @@ describe("theme audit", () => {
     // Files whose corners are not the manager look's on purpose: the look
     // sheet itself, the look/palette previews, and the canvas colour sheet.
     const EXEMPT = new Set([
-      "src/kit/theme/looks.css",
+      "node_modules/@dumiflex/wp-kit/src/theme/looks.css",
       "src/manager/components/settings/ThemeChoices.vue",
       "src/components/shared/theme.css",
     ]);
@@ -29,7 +29,8 @@ describe("theme audit", () => {
       ...globSync("src/**/*.vue", { cwd: ROOT }),
       ...globSync("src/manager/**/*.css", { cwd: ROOT }),
       ...globSync("src/components/shared/**/*.css", { cwd: ROOT }),
-      ...globSync("src/kit/**/*.css", { cwd: ROOT }),
+      // The kit, from its npm package.
+      ...globSync("node_modules/@dumiflex/wp-kit/src/**/*.css", { cwd: ROOT }),
     ].filter((f) => !EXEMPT.has(f.split("\\").join("/")));
     const RAW = /border-(?:(?:top|bottom)-(?:left|right)-|(?:start|end)-(?:start|end)-)?radius\s*:\s*([^;{}\n]+)/g;
     const bad = [];
@@ -55,7 +56,7 @@ describe("theme audit", () => {
     const files = [
       ...globSync("src/manager/**/*.{vue,css}", { cwd: ROOT }),
       ...globSync("src/components/shared/**/*.{vue,css}", { cwd: ROOT }),
-      ...globSync("src/kit/**/*.{vue,css}", { cwd: ROOT }),
+      ...globSync("node_modules/@dumiflex/wp-kit/src/**/*.{vue,css}", { cwd: ROOT }),
     ].filter((f) => !f.split("\\").join("/").endsWith("theme/looks.css"));
     const bad = [];
     for (const f of files) {

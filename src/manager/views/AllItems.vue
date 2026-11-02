@@ -20,7 +20,7 @@
  * items array before handing it to ModuleListView gives us the OR
  * we actually want.
  */
-import Checkbox from "../../kit/Checkbox.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import CopyButton from "@/kit/CopyButton.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { libraryVersion, markDeleted } from "../composables/useLibraryChanged";
@@ -34,13 +34,13 @@ import SendToTestRunner from "../components/SendToTestRunner.vue";
 import type { TestRunnerKind } from "../components/SendToTestRunner.vue";
 import ValidityIcon from "../components/ValidityIcon.vue";
 import { validateBundle, validateModule, type ValidationIssue } from "../utils/validateModule";
-import Button from "../../kit/Button.vue";
-import Select from "../../kit/Select.vue";
-import EmptyState from "../../kit/EmptyState.vue";
-import { useToast } from "../../kit/useToast";
+import Button from "@/kit/Button.vue";
+import Select from "@/kit/Select.vue";
+import EmptyState from "@/kit/EmptyState.vue";
+import { useToast } from "@/kit/useToast";
 import { api } from "../api/client";
 import { useCategoryStore } from "../stores/categoryStore";
-import Chip from "../../kit/Chip.vue";
+import Chip from "@/kit/Chip.vue";
 import { categoryAssignOptions, categoryFilterOptions } from "../utils/category-options";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";

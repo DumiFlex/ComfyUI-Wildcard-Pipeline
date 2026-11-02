@@ -8,14 +8,14 @@
  *   Warnings  — what the engine flagged, linked to the step that raised it
  *   Raw       — the snapshot JSON
  */
-import SearchInput from "../../kit/SearchInput.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, ref, watch } from "vue";
 import { highlightJson } from "./highlight";
-import ContextMenu, { type ContextMenuItem } from "../../kit/ContextMenu.vue";
-import WpTabs, { type TabItem } from "../../kit/WpTabs.vue";
-import WpButton from "../../kit/WpButton.vue";
-import CopyButton from "../../kit/CopyButton.vue";
-import { copyText } from "../../kit/clipboard";
+import ContextMenu, { type ContextMenuItem } from "@/kit/ContextMenu.vue";
+import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
+import WpButton from "@/kit/WpButton.vue";
+import CopyButton from "@/kit/CopyButton.vue";
+import { copyText } from "@/kit/clipboard";
 import DebugVariables from "./DebugVariables.vue";
 import DebugTrace from "./DebugTrace.vue";
 import DebugWarnings from "./DebugWarnings.vue";

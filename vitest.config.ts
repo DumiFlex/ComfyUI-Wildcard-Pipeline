@@ -2,10 +2,15 @@ import { defineConfig } from "vitest/config";
 import vue from "@vitejs/plugin-vue";
 import { resolve } from "node:path";
 
+/** The kit's source inside its npm package; `@/kit/<file>` points here. */
+const KIT_DIR = resolve(__dirname, "node_modules/@dumiflex/wp-kit/src");
+
 export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: [
+      // Before "@": the first entry that matches wins.
+      { find: /^@\/kit\//, replacement: `${KIT_DIR}/` },
       { find: "@", replacement: resolve(__dirname, "./src") },
       { find: "vue", replacement: "vue/dist/vue.runtime.esm-bundler.js" },
       // Mock ComfyUI runtime APIs for widget tests.

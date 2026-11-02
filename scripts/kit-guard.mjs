@@ -12,27 +12,27 @@ import { fileURLToPath } from "node:url";
 // Under Vitest import.meta.url is a /@fs/ URL; resolve from the file path.
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url).replace(/^\/@fs/, "")), "..");
 
-/** Files that ARE the kit, or demo it, may use what they replace. The kit
- *  copy itself (src/kit/, pulled from wp-kit) is checked in wp-kit. */
-const KIT_PAGE = ["src/manager/views/Kit.vue", "src/manager/kit/demos/", "src/kit/"];
+/** Files that demo the kit may use what they replace. The kit itself comes
+ *  from npm (@dumiflex/wp-kit) and is checked in wp-kit. */
+const KIT_PAGE = ["src/manager/views/Kit.vue", "src/manager/kit/demos/"];
 
 export const RULES = [
   {
     id: "native-select",
     pattern: /<select\b/g,
-    allow: ["src/kit/WpSelect.vue"],
+    allow: [],
     fix: "Use Select (manager) or WpSelect (canvas).",
   },
   {
     id: "native-number",
     pattern: /type="number"/g,
-    allow: ["src/kit/WpNumber.vue"],
+    allow: [],
     fix: "Use WpNumber: our arrows, keys and wheel, clamped.",
   },
   {
     id: "native-checkbox",
     pattern: /type="checkbox"/g,
-    allow: ["src/kit/Checkbox.vue", "src/kit/Toggle.vue", "src/kit/WpCheck.vue"],
+    allow: [],
     fix: "Use Checkbox or Toggle (manager) or WpCheck (canvas).",
   },
   {
@@ -44,18 +44,13 @@ export const RULES = [
   {
     id: "inline-svg",
     pattern: /<svg\b/g,
-    allow: ["src/kit/Logo.vue", "src/kit/LoadingMark.vue"],
+    allow: [],
     fix: "Use Icon. A drawing that is not an icon belongs in its own component.",
   },
   {
     id: "hand-dialog",
     pattern: /role="dialog"/g,
-    allow: [
-      "src/kit/Modal.vue",
-      "src/kit/ModalShell.vue",
-      "src/kit/ConfirmDialog.vue",
-      "src/kit/Drawer.vue",
-    ],
+    allow: [],
     fix: "Use Modal (manager), or ModalShell / ConfirmDialog (canvas).",
   },
   {
@@ -64,7 +59,7 @@ export const RULES = [
     only: "src/manager/",
     // DataTable's sort control is the header text itself, not a Button;
     // ChoiceCards' cards are radios holding a picture, not Buttons.
-    allow: ["src/kit/DataTable.vue", "src/kit/ChoiceCards.vue"],
+    allow: [],
     fix: "Use Button. A raw <button> needs a reason the kit can't cover.",
   },
   {
