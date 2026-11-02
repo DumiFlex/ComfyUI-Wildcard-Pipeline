@@ -218,7 +218,7 @@ function setSidebar(v: SidebarChoice): void {
 .wp-set-accent[aria-checked="true"] .wp-set-swatch { outline: 2px solid var(--wp-text); outline-offset: 2px; }
 .wp-set-accent:focus-visible .wp-set-swatch { outline: 2px solid var(--wp-accent-500); outline-offset: 2px; }
 .wp-set-swatch--custom {
-  background: conic-gradient(#f43f5e, #f59e0b, #22c55e, #14b8a6, #6366f1, #a855f7, #f43f5e) border-box;
+  background: conic-gradient(hsl(350 89% 60%), hsl(38 92% 50%), hsl(142 71% 45%), hsl(173 80% 40%), hsl(239 84% 67%), hsl(271 91% 65%), hsl(350 89% 60%)) border-box;
 }
 /* "Theme's own": half the live accent, half the page, so it reads as
  * "whatever the colour theme brings". `border-box` sizes the gradient to the

@@ -5,9 +5,9 @@
     "native-checkbox": 0,
     "native-range": 1,
     "inline-svg": 21,
-    "hand-dialog": 13,
+    "hand-dialog": 12,
     "manager-raw-button": 239,
-    "raw-hex": 93
+    "raw-hex": 1
   },
   "native-select": {},
   "native-number": {},
@@ -40,7 +40,6 @@
     "src/components/context/BundlePickerModal.vue": 1,
     "src/components/context/PushBundleToLibraryModal.vue": 1,
     "src/components/context/PushToLibraryModal.vue": 1,
-    "src/components/context/editors/bundle/sections/IdentitySection.vue": 1,
     "src/components/injector/InjectorBindingModal.vue": 1,
     "src/components/settings/DisplayPlaygroundModal.vue": 1,
     "src/components/shared/SeedListModal.vue": 1,
@@ -132,30 +131,6 @@
     "src/manager/views/Wildcards.vue": 2
   },
   "raw-hex": {
-    "src/components/assembler/LoadTemplateModal.vue": 1,
-    "src/components/context/ModulePickerModal.vue": 3,
-    "src/components/context/editors/bundle/sections/IdentitySection.vue": 14,
-    "src/components/image-filter/PickerTile.vue": 5,
-    "src/components/image-filter/SweepGrid.vue": 1,
-    "src/components/settings/PlaygroundMockup.vue": 1,
-    "src/components/shared/SeedListModal.vue": 1,
-    "src/manager/components/BundleChildRow.vue": 1,
-    "src/manager/components/BundleReattachSection.vue": 1,
-    "src/manager/components/ModuleListView.vue": 4,
-    "src/manager/components/RichTextInput.vue": 2,
-    "src/manager/components/ai/AiChatDrawer.vue": 1,
-    "src/manager/components/ai/AiImagePicker.vue": 2,
-    "src/manager/components/ai/AiMessage.vue": 1,
-    "src/manager/components/ai/AiPointer.vue": 2,
-    "src/manager/components/ai/AiWorking.vue": 19,
-    "src/manager/components/docs/PipelineDiagram.vue": 4,
-    "src/manager/components/settings/sections/AppearanceSection.vue": 7,
-    "src/manager/components/wildcard-editor/OptionFilterBar.vue": 1,
-    "src/manager/docs/pages/overview/quick-start.vue": 1,
-    "src/manager/import-export/PackConverter.vue": 1,
-    "src/manager/layout/AppTopbar.vue": 2,
-    "src/manager/views/BundleEditor.vue": 13,
-    "src/manager/views/Categories.vue": 3,
-    "src/manager/views/PackBuilder.vue": 2
+    "src/manager/layout/AppTopbar.vue": 1
   }
 }

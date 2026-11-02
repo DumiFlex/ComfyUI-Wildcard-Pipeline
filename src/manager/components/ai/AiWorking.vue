@@ -98,6 +98,7 @@ export function formatElapsed(s: number): string {
  * its own `text` and `phase` from its stream.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, watch } from "vue";
+import { BRAND_COLOURS, STAR_A, STAR_B, STAR_BIG } from "@/kit/logo-paths";
 import { activeAiRequests, fetchAiProgress, type AiPhase, type AiProgress } from "../../api/ai-progress";
 
 const props = withDefaults(defineProps<{
@@ -240,13 +241,15 @@ const title = computed(() => (slow.value
 const tempo = computed(() => (shownPhase.value === "writing" ? "fast"
   : shownPhase.value === "thinking" ? "mid" : "slow"));
 
-const STAR_BIG = "m735.02,517.56c-153.82,30.87-186.59,63.64-217.46,217.46-1.22,6.08-9.9,6.08-11.12,0-30.87-153.82-63.64-186.59-217.46-217.46-6.08-1.22-6.08-9.9,0-11.12,153.82-30.87,186.59-63.64,217.46-217.46,1.22-6.08,9.9-6.08,11.12,0,30.87,153.82,63.64,186.59,217.46,217.46,6.08,1.22,6.08,9.9,0,11.12Z";
-const STAR_A = "m434.06,665.85c-51.08,10.25-61.96,21.13-72.22,72.22-.41,2.02-3.29,2.02-3.69,0-10.25-51.08-21.13-61.96-72.22-72.22-2.02-.41-2.02-3.29,0-3.69,51.08-10.25,61.96-21.13,72.22-72.22.41-2.02,3.29-2.02,3.69,0,10.25,51.08,21.13,61.96,72.22,72.22,2.02.41,2.02,3.29,0,3.69Z";
-const STAR_B = "m738.07,361.84c-51.08,10.25-61.96,21.13-72.22,72.22-.41,2.02-3.29,2.02-3.69,0-10.25-51.08-21.13-61.96-72.22-72.22-2.02-.41-2.02-3.29,0-3.69,51.08-10.25,61.96-21.13,72.22-72.22.41-2.02,3.29-2.02,3.69,0,10.25,51.08,21.13,61.96,72.22,72.22,2.02.41,2.02,3.29,0,3.69Z";
+/** The logo's colours: big star, first small star, second small star. */
+const [BIG, A, B] = BRAND_COLOURS.extension;
+/** Steps between them, for the orbit's in-between nodes. */
+const AB = `color-mix(in srgb, ${B} 70%, ${A})`;
+const BA = `color-mix(in srgb, ${BIG} 60%, ${A})`;
 /** The logo's four nodes, for the orbit. */
-const NODES = [[911, 512, "#33d6c6"], [512, 911, "#3fb7cf"], [113, 512, "#8b6cf8"], [512, 113, "#6366f1"]] as const;
+const NODES = [[911, 512, B], [512, 911, AB], [113, 512, BA], [512, 113, A]] as const;
 /** Typing stars: the big sparkle drawn small three times in a row. */
-const TYPING = [[250, "#6366f1"], [512, "#a970ff"], [774, "#33d6c6"]] as const;
+const TYPING = [[250, A], [512, BIG], [774, B]] as const;
 </script>
 
 <template>
@@ -259,35 +262,36 @@ const TYPING = [[250, "#6366f1"], [512, "#a970ff"], [774, "#33d6c6"]] as const;
     :aria-label="title"
     :title="title"
     data-test="ai-working"
+    :style="{ '--wp-aiw-big': BIG, '--wp-aiw-a': A, '--wp-aiw-b': B }"
   >
     <svg class="wp-aiw__logo" viewBox="0 0 1024 1024" :width="size" :height="size" aria-hidden="true">
       <template v-if="mark === 'typing'">
         <g v-for="([x, c], i) in TYPING" :key="i" class="wp-aiw__hop" :style="{ '--wp-aiw-k': i }">
-          <path class="wp-aiw__star" :fill="c" :transform="`translate(${x - 256} 256) scale(.5)`" :d="STAR_BIG" />
+          <path class="wp-aiw__star" :style="{ fill: c }" :transform="`translate(${x - 256} 256) scale(.5)`" :d="STAR_BIG" />
         </g>
       </template>
       <g v-else-if="mark === 'shuffle'" transform="translate(512 512) scale(1.45) translate(-512 -512)">
-        <path class="wp-aiw__star wp-aiw__star--big wp-aiw__dip" fill="#a970ff" :d="STAR_BIG" />
+        <path class="wp-aiw__star wp-aiw__star--big wp-aiw__dip" :style="{ fill: BIG }" :d="STAR_BIG" />
         <g class="wp-aiw__vb wp-aiw__swap">
-          <path class="wp-aiw__star" fill="#6366f1" :d="STAR_A" />
-          <path class="wp-aiw__star" fill="#33d6c6" :d="STAR_B" />
+          <path class="wp-aiw__star" :style="{ fill: A }" :d="STAR_A" />
+          <path class="wp-aiw__star" :style="{ fill: B }" :d="STAR_B" />
         </g>
       </g>
       <template v-else-if="mark === 'orbit'">
         <g class="wp-aiw__vb wp-aiw__spin">
           <circle
             v-for="([x, y, c], i) in NODES" :key="i" class="wp-aiw__dot"
-            :style="{ '--wp-aiw-k': i }" :cx="x" :cy="y" r="70" :fill="c"
+            :style="{ '--wp-aiw-k': i, fill: c }" :cx="x" :cy="y" r="70"
           />
         </g>
-        <path class="wp-aiw__star wp-aiw__star--big wp-aiw__breathe" fill="#a970ff" :d="STAR_BIG" />
-        <path class="wp-aiw__star" fill="#6366f1" :d="STAR_A" />
-        <path class="wp-aiw__star" fill="#33d6c6" :d="STAR_B" />
+        <path class="wp-aiw__star wp-aiw__star--big wp-aiw__breathe" :style="{ fill: BIG }" :d="STAR_BIG" />
+        <path class="wp-aiw__star" :style="{ fill: A }" :d="STAR_A" />
+        <path class="wp-aiw__star" :style="{ fill: B }" :d="STAR_B" />
       </template>
       <g v-else transform="translate(512 512) scale(1.3) translate(-512 -512)">
-        <path class="wp-aiw__star wp-aiw__star--big wp-aiw__pop" fill="#a970ff" :d="STAR_BIG" />
-        <path class="wp-aiw__star wp-aiw__burst" style="--wp-aiw-dx: 152px; --wp-aiw-dy: -152px" fill="#6366f1" :d="STAR_A" />
-        <path class="wp-aiw__star wp-aiw__burst" style="--wp-aiw-dx: -152px; --wp-aiw-dy: 152px" fill="#33d6c6" :d="STAR_B" />
+        <path class="wp-aiw__star wp-aiw__star--big wp-aiw__pop" :style="{ fill: BIG }" :d="STAR_BIG" />
+        <path class="wp-aiw__star wp-aiw__burst" :style="{ fill: A, '--wp-aiw-dx': '152px', '--wp-aiw-dy': '-152px' }" :d="STAR_A" />
+        <path class="wp-aiw__star wp-aiw__burst" :style="{ fill: B, '--wp-aiw-dx': '-152px', '--wp-aiw-dy': '152px' }" :d="STAR_B" />
       </g>
     </svg>
     <span
@@ -339,7 +343,7 @@ const TYPING = [[250, "#6366f1"], [512, "#a970ff"], [774, "#33d6c6"]] as const;
   /* A light band sweeps over the gradient text, like Claude's own line. */
   background:
     linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.75) 50%, transparent 65%) no-repeat,
-    linear-gradient(90deg, #a970ff, #6366f1 45%, #33d6c6);
+    linear-gradient(90deg, var(--wp-aiw-big), var(--wp-aiw-a) 45%, var(--wp-aiw-b));
   background-size: 250% 100%, 100% 100%;
   background-position: 150% 0, 0 0;
   -webkit-background-clip: text; background-clip: text; color: transparent;

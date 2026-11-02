@@ -100,6 +100,7 @@ export function computeHasDangling(
 </script>
 
 <script setup lang="ts">
+import { DEFAULT_COLOUR } from "@/kit/colour-presets";
 /**
  * BundleEditor — SPA editor for library-tracked bundles.
  *
@@ -223,17 +224,17 @@ const addModalOpen = ref(false);
 
 /** Default bundle frame color when user hasn't picked one. Resolved
  *  at mount from the `--wp-bundle-default` CSS token (see
- *  `tokens.css`), with a slate-700 hard fallback for unit-test envs
- *  where `getComputedStyle` returns "". This keeps the editor picker,
+ *  `tokens.css`), with the kit's DEFAULT_COLOUR as the fallback for
+ *  unit-test envs where `getComputedStyle` returns "". This keeps the editor picker,
  *  the Bundles list swatch, the Dashboard swatch, and the canvas
  *  frame all paint the same colour for "no explicit colour", and
  *  retheming is a one-line token change.
  *
- *  Previous version hardcoded `#6366f1` (indigo) which diverged from
+ *  Previous version hardcoded indigo, which diverged from
  *  the slate token the canvas + dashboard actually paint with — list
  *  showed slate, picker showed indigo, neither agreed with the user
  *  intent the comment claimed. */
-const DEFAULT_COLOR_FALLBACK = "#334155";
+const DEFAULT_COLOR_FALLBACK = DEFAULT_COLOUR;
 const defaultColor = ref<string>(DEFAULT_COLOR_FALLBACK);
 
 function resolveDefaultColor(): void {
@@ -243,11 +244,6 @@ function resolveDefaultColor(): void {
   if (v) defaultColor.value = v;
 }
 
-const COLOR_PRESETS = [
-  "#6366f1", "#7c3aed", "#a78bfa", "#22d3ee", "#34d399",
-  "#fbbf24", "#f472b6", "#fb7185", "#ef4444", "#46566B",
-  "#10b981", "#f59e0b",
-];
 
 const loading = ref(false);
 const saving = ref(false);
@@ -1212,7 +1208,6 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
           <template #nameLeading>
             <ColorPicker
               v-model="color"
-              :presets="COLOR_PRESETS"
               compact
               aria-label="Bundle frame color"
             />
