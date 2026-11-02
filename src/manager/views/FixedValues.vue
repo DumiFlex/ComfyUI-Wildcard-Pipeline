@@ -203,15 +203,12 @@ function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 4
           </label>
           <div v-if="!allTags.length" class="wp-dim wp-tags-empty">No tags in this collection.</div>
           <div v-else class="wp-tags-row">
-            <button
+            <Chip
               v-for="t in allTags" :key="t"
-              type="button"
-              class="wp-tag-chip"
-              :data-active="(filter.tags ?? []).includes(t) ? 'true' : 'false'"
+              :pressed="(filter.tags ?? []).includes(t)"
+              size="sm"
               @click="filter.tags = toggleTag(t, filter.tags); emitFetch()"
-            >
-              {{ t }}
-            </button>
+            >{{ t }}</Chip>
           </div>
         </div>
       </div>
@@ -303,11 +300,6 @@ function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 4
 .wp-route-root { display: contents; }
 .wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
 .wp-tags-empty { font-size: var(--wp-text-sm); }
-.wp-tag-chip[data-active="true"] {
-  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
-  color: var(--wp-accent-text);
-}
 .wp-opts-more { margin-top: var(--wp-space-4); font-size: var(--wp-text-xs); }
 .wp-fv-row { display: flex; align-items: baseline; gap: var(--wp-space-3); }
 .wp-fv-sep { color: var(--wp-text-muted); }

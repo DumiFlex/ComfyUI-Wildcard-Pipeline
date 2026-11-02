@@ -5,9 +5,9 @@
     "native-checkbox": 0,
     "native-range": 1,
     "inline-svg": 16,
-    "hand-dialog": 4,
-    "manager-raw-button": 238,
-    "raw-hex": 1
+    "hand-dialog": 3,
+    "manager-raw-button": 224,
+    "raw-hex": 0
   },
   "native-select": {},
   "native-number": {},
@@ -36,8 +36,7 @@
   "hand-dialog": {
     "src/components/settings/DisplayPlaygroundModal.vue": 1,
     "src/manager/components/CommandPalette.vue": 1,
-    "src/manager/components/ai/AiChatDrawer.vue": 1,
-    "src/manager/components/test-runner/ModulePicker.vue": 1
+    "src/manager/components/ai/AiChatDrawer.vue": 1
   },
   "manager-raw-button": {
     "src/manager/components/BundleAddChildModal.vue": 2,
@@ -49,7 +48,7 @@
     "src/manager/components/DerivationRuleCard.vue": 5,
     "src/manager/components/ErrorBoundary.vue": 3,
     "src/manager/components/HistoryPanel.vue": 1,
-    "src/manager/components/ModuleListView.vue": 9,
+    "src/manager/components/ModuleListView.vue": 5,
     "src/manager/components/NegativeField.vue": 2,
     "src/manager/components/RefChip.vue": 2,
     "src/manager/components/RemapRefPopup.vue": 2,
@@ -78,7 +77,6 @@
     "src/manager/components/settings/sections/AiSection.vue": 1,
     "src/manager/components/settings/sections/AppearanceSection.vue": 1,
     "src/manager/components/test-runner/ComparePanel.vue": 1,
-    "src/manager/components/test-runner/ModulePicker.vue": 2,
     "src/manager/components/test-runner/OutputsPanel.vue": 2,
     "src/manager/components/test-runner/ScenarioRail.vue": 6,
     "src/manager/components/test-runner/StackBuilder.vue": 3,
@@ -99,28 +97,26 @@
     "src/manager/import-export/conflict-rows/Tier3ChainViz.vue": 1,
     "src/manager/layout/AppSidebar.vue": 3,
     "src/manager/layout/AppTopbar.vue": 8,
-    "src/manager/views/AllItems.vue": 3,
+    "src/manager/views/AllItems.vue": 2,
     "src/manager/views/BundleEditor.vue": 1,
-    "src/manager/views/Bundles.vue": 3,
-    "src/manager/views/Combines.vue": 2,
+    "src/manager/views/Bundles.vue": 2,
+    "src/manager/views/Combines.vue": 1,
     "src/manager/views/Community.vue": 1,
     "src/manager/views/ConstraintEditor.vue": 2,
-    "src/manager/views/Constraints.vue": 2,
+    "src/manager/views/Constraints.vue": 1,
     "src/manager/views/Dashboard.vue": 1,
     "src/manager/views/DerivationEditor.vue": 2,
-    "src/manager/views/Derivations.vue": 2,
+    "src/manager/views/Derivations.vue": 1,
     "src/manager/views/Docs.vue": 1,
     "src/manager/views/FixedEditor.vue": 3,
-    "src/manager/views/FixedValues.vue": 2,
+    "src/manager/views/FixedValues.vue": 1,
     "src/manager/views/PackBuilder.vue": 22,
     "src/manager/views/Settings.vue": 1,
     "src/manager/views/Tags.vue": 1,
-    "src/manager/views/Templates.vue": 2,
+    "src/manager/views/Templates.vue": 1,
     "src/manager/views/TestRunner.vue": 1,
     "src/manager/views/WildcardEditor.vue": 3,
-    "src/manager/views/Wildcards.vue": 2
+    "src/manager/views/Wildcards.vue": 1
   },
-  "raw-hex": {
-    "src/manager/layout/AppTopbar.vue": 1
-  }
+  "raw-hex": {}
 }

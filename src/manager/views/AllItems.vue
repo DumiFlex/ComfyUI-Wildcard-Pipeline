@@ -468,15 +468,12 @@ function refresh() {
             <div v-if="!hasLoaded" class="wp-dim wp-tags-empty"><LoadingMark>Loading tags…</LoadingMark></div>
             <div v-else-if="!allTags.length" class="wp-dim wp-tags-empty">No tags in this collection.</div>
             <div v-else class="wp-tags-row">
-              <button
+              <Chip
                 v-for="t in allTags" :key="t"
-                type="button"
-                class="wp-tag-chip"
-                :data-active="(f.tags ?? []).includes(t) ? 'true' : 'false'"
+                :pressed="(f.tags ?? []).includes(t)"
+                size="sm"
                 @click="f.tags = toggleTag(t, f.tags); emitFetch()"
-              >
-                {{ t }}
-              </button>
+              >{{ t }}</Chip>
             </div>
           </div>
         </div>
@@ -584,9 +581,4 @@ function refresh() {
 .wp-tags-slot { min-height: 28px; }
 .wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
 .wp-tags-empty { font-size: var(--wp-text-sm); }
-.wp-tag-chip[data-active="true"] {
-  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
-  color: var(--wp-accent-text);
-}
 </style>

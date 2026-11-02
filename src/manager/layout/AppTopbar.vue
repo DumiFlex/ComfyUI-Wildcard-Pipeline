@@ -298,7 +298,7 @@ function openPalette(): void {
 
 /* Discord brand tint on hover so it reads as the social route, not another
    settings control. */
-.wp-topbar__discord:hover { color: #5865f2; }
+.wp-topbar__discord:hover { color: var(--wp-brand-discord); }
 
 .wp-topbar__ai[aria-pressed="true"] { color: var(--wp-accent-text); }
 .wp-topbar__ai-working { margin-right: 14px; min-width: 0; }

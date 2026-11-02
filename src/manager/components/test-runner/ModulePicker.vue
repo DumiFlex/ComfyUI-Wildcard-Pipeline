@@ -2,14 +2,17 @@
 /**
  * "Add module" popover for the Test Runner stack. Searches names, ids, tags
  * AND content (option values, templates, rule values), filters by kind and
- * sorts — the picker the old single-module dropdown never had.
+ * sorts — the picker the old single-module dropdown never had. StackBuilder
+ * shows it in a kit Popover, which places it, closes it on Escape or a click
+ * outside, and counts the sort dropdown's list as inside.
  */
 import SearchInput from "@/kit/SearchInput.vue";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import type { BundleRow, ModuleRow, ScenarioStackItem } from "../../api/types";
 import { moduleBinding, searchText, type StackKind } from "../../utils/scenario";
 import { KIND_META } from "./kinds";
 import Select from "@/kit/Select.vue";
+import Chip from "@/kit/Chip.vue";
 
 const props = defineProps<{
   modules: ModuleRow[];
@@ -18,7 +21,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "pick", item: ScenarioStackItem): void;
-  (e: "close"): void;
 }>();
 
 type Sort = "updated" | "name" | "name-desc" | "created";
@@ -84,14 +86,13 @@ function pick(e: Entry): void {
 }
 
 /** The sort dropdown (its trigger here, its menu teleported to the body)
- *  owns its own keys and clicks; they must not move or close the picker. */
+ *  owns its own keys; they must not move the picker's highlight. */
 function inSortSelect(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(".wp-select-wrap, .wp-select__menu") !== null;
 }
 
 function onKey(ev: KeyboardEvent): void {
   if (inSortSelect(ev.target)) return;
-  if (ev.key === "Escape") { ev.preventDefault(); emit("close"); return; }
   if (ev.key === "ArrowDown") { ev.preventDefault(); active.value = Math.min(results.value.length - 1, active.value + 1); }
   if (ev.key === "ArrowUp") { ev.preventDefault(); active.value = Math.max(0, active.value - 1); }
   if (ev.key === "Enter") {
@@ -101,20 +102,13 @@ function onKey(ev: KeyboardEvent): void {
   }
 }
 
-function onDocDown(ev: MouseEvent): void {
-  if (inSortSelect(ev.target)) return;
-  if (root.value && !root.value.contains(ev.target as Node)) emit("close");
-}
-
 onMounted(() => {
   void nextTick(() => input.value?.focus());
-  document.addEventListener("mousedown", onDocDown);
 });
-onBeforeUnmount(() => document.removeEventListener("mousedown", onDocDown));
 </script>
 
 <template>
-  <div ref="root" class="wp-trp" role="dialog" aria-label="Add to stack" data-test="module-picker" @keydown="onKey">
+  <div ref="root" class="wp-trp" data-test="module-picker" @keydown="onKey">
     <SearchInput
       ref="input"
       v-model="query"
@@ -124,17 +118,16 @@ onBeforeUnmount(() => document.removeEventListener("mousedown", onDocDown));
       @input="active = 0"
     />
     <div class="wp-trp__kinds" role="group" aria-label="Kind">
-      <button type="button" class="wp-trp__kind" :data-on="kind === 'all' ? 'true' : 'false'" @click="kind = 'all'; active = 0">All</button>
-      <button
+      <Chip :pressed="kind === 'all'" size="sm" @click="kind = 'all'; active = 0">All</Chip>
+      <Chip
         v-for="k in KINDS"
         :key="k"
-        type="button"
-        class="wp-trp__kind"
-        :data-on="kind === k ? 'true' : 'false'"
-        :style="{ '--kc': KIND_META[k].color }"
+        :pressed="kind === k"
+        :color="KIND_META[k].color"
+        size="sm"
         :data-test="`picker-kind-${k}`"
         @click="kind = k; active = 0"
-      >{{ KIND_META[k].label }}</button>
+      >{{ KIND_META[k].label }}</Chip>
     </div>
     <div class="wp-trp__bar">
       <span>{{ results.length }} {{ results.length === 1 ? "match" : "matches" }}</span>
@@ -173,20 +166,10 @@ onBeforeUnmount(() => document.removeEventListener("mousedown", onDocDown));
 
 <style scoped>
 .wp-trp {
-  position: absolute; z-index: 30; top: 100%; left: 0; margin-top: var(--wp-space-3);
-  width: min(480px, 92vw);
-  background: var(--wp-bg-1); border: 1px solid var(--wp-border-strong);
-  border-radius: var(--wp-radius); box-shadow: var(--wp-shadow-xl);
-  padding: var(--wp-space-5); display: flex; flex-direction: column; gap: var(--wp-space-4);
+  width: min(396px, calc(100vw - 40px));
+  display: flex; flex-direction: column; gap: var(--wp-space-4);
 }
 .wp-trp__kinds { display: flex; flex-wrap: wrap; gap: var(--wp-space-2); }
-.wp-trp__kind {
-  border: 1px solid var(--wp-border); background: var(--wp-bg-2); color: var(--wp-text-muted);
-  border-radius: var(--wp-radius-cap, 999px); padding: var(--wp-space-1) var(--wp-space-4); /* audit-exempt: pill */
-  font-size: var(--wp-text-xs); cursor: pointer;
-}
-.wp-trp__kind[data-on="true"] { border-color: var(--kc, var(--wp-accent-500)); color: var(--kc, var(--wp-accent-text)); }
-.wp-trp__kind:focus-visible { outline: 2px solid var(--wp-border-focus); }
 .wp-trp__bar { display: flex; justify-content: space-between; align-items: center; font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wp-trp__sort { display: inline-flex; gap: var(--wp-space-3); align-items: center; }
 .wp-trp__sort select {
