@@ -44,4 +44,11 @@ describe("LoadingMark", () => {
     const w = mount(LoadingMark, { props: { mono: true } });
     expect(w.findAll("path").every((p) => p.attributes("fill") === "currentColor")).toBe(true);
   });
+
+  it("wears the community colours with brand=community", () => {
+    const w = mount(LoadingMark, { props: { block: true, brand: "community" } });
+    const html = w.html();
+    expect(html).toContain("#da7550");
+    expect(html).not.toContain("#a970ff");
+  });
 });

@@ -15,6 +15,10 @@
  *   <RadioGroup v-model="provider" :options="opts" test-prefix="provider">
  *     <template #label="{ option }">{{ option.label }} <Badge text="Local" /></template>
  *   </RadioGroup>
+ *
+ * `variant="swatch"` draws each option as a round colour swatch (its
+ * `color`), in a row, with the label as its name and tooltip: an accent or
+ * frame colour picked from a few.
  */
 import { nextTick, ref } from "vue";
 
@@ -23,6 +27,8 @@ export interface RadioOption<V extends string = string> {
   label: string;
   hint?: string | undefined;
   disabled?: boolean | undefined;
+  /** The swatch colour, for `variant="swatch"`. */
+  color?: string | undefined;
 }
 
 const props = withDefaults(defineProps<{
@@ -37,7 +43,9 @@ const props = withDefaults(defineProps<{
   cards?: boolean | undefined;
   /** `data-test` of each option is `<testPrefix>-<value>`. */
   testPrefix?: string | undefined;
-}>(), { orientation: "vertical", size: "md", ariaLabel: undefined, testPrefix: undefined });
+  /** `swatch`: round colour swatches in a row, named by their label. */
+  variant?: "default" | "swatch" | undefined;
+}>(), { orientation: "vertical", size: "md", ariaLabel: undefined, testPrefix: undefined, variant: "default" });
 
 defineSlots<{ label?: (p: { option: RadioOption<T> }) => unknown }>();
 
@@ -84,6 +92,7 @@ function onKeydown(ev: KeyboardEvent, at: T): void {
     :data-orientation="orientation"
     :data-size="size"
     :data-cards="cards || undefined"
+    :data-variant="variant"
   >
     <!-- Each radio has a tabindex (roving: only the checked one is a Tab stop). -->
     <!-- eslint-disable-next-line vuejs-accessibility/interactive-supports-focus -->
@@ -97,11 +106,19 @@ function onKeydown(ev: KeyboardEvent, at: T): void {
       :tabindex="!disabled && o.value === tabStop() ? 0 : -1"
       :data-checked="modelValue === o.value || undefined"
       :data-test="testPrefix ? `${testPrefix}-${o.value}` : undefined"
+      :aria-label="variant === 'swatch' ? o.label : undefined"
+      :title="variant === 'swatch' ? o.label : undefined"
       @click="!o.disabled && pick(o.value)"
       @keydown="onKeydown($event, o.value)"
     >
-      <span class="wp-radio-group__dot" aria-hidden="true" />
-      <span class="wp-radio-group__text">
+      <span
+        v-if="variant === 'swatch'"
+        class="wp-radio-group__swatch"
+        :style="{ background: o.color }"
+        aria-hidden="true"
+      />
+      <span v-else class="wp-radio-group__dot" aria-hidden="true" />
+      <span v-if="variant !== 'swatch'" class="wp-radio-group__text">
         <span class="wp-radio-group__label"><slot name="label" :option="o">{{ o.label }}</slot></span>
         <span v-if="o.hint" class="wp-radio-group__hint">{{ o.hint }}</span>
       </span>
@@ -144,6 +161,16 @@ function onKeydown(ev: KeyboardEvent, at: T): void {
 .wp-radio-group__label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--wp-space-3); font-size: var(--wp-text-sm); line-height: 18px; }
 .wp-radio-group[data-size="sm"] .wp-radio-group__label { font-size: var(--wp-text-xs); line-height: 15px; }
 .wp-radio-group__hint { color: var(--wp-text-muted); font-size: var(--wp-text-xs); line-height: 1.4; }
+.wp-radio-group[data-variant="swatch"] { flex-direction: row; flex-wrap: wrap; gap: var(--wp-space-3); }
+.wp-radio-group[data-variant="swatch"] .wp-radio-group__opt { padding: 2px; border-radius: min(50%, var(--wp-radius-cap, 999px)); }
+.wp-radio-group__swatch {
+  display: block; width: 20px; height: 20px; border-radius: min(50%, var(--wp-radius-cap, 999px));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wp-text) 18%, transparent);
+}
+.wp-radio-group[data-size="sm"] .wp-radio-group__swatch { width: 16px; height: 16px; }
+.wp-radio-group[data-variant="swatch"] .wp-radio-group__opt[data-checked] { box-shadow: 0 0 0 2px var(--wp-accent); }
+.wp-radio-group[data-variant="swatch"] .wp-radio-group__opt:focus-visible { box-shadow: 0 0 0 2px var(--wp-border-focus); }
+.wp-radio-group[data-variant="swatch"] .wp-radio-group__opt[data-checked]:focus-visible { box-shadow: 0 0 0 2px var(--wp-accent), 0 0 0 4px var(--wp-border-focus); }
 @media (prefers-reduced-motion: reduce) {
   .wp-radio-group__dot, .wp-radio-group[data-cards] .wp-radio-group__opt { transition: none; }
 }

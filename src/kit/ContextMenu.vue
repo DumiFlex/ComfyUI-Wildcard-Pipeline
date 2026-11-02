@@ -22,6 +22,12 @@ export interface ContextMenuItem {
    *  version" or "Restore frozen state from bundle". When provided,
    *  the row becomes two-line and uses more vertical space. */
   subtitle?: string | undefined;
+  /** A checkable item (menuitemcheckbox): a tick shows when true. Leave it
+   *  out for a plain action. */
+  checked?: boolean | undefined;
+  /** Keep the menu open after this item is picked, so several checkable
+   *  items can be ticked in a row (a tag picker). */
+  keepOpen?: boolean | undefined;
   onSelect: () => void;
 }
 
@@ -178,7 +184,7 @@ onBeforeUnmount(() => {
 function pick(item: ContextMenuItem) {
   if (item.disabled) return;
   item.onSelect();
-  emit("close");
+  if (!item.keepOpen) emit("close");
 }
 
 function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
@@ -218,6 +224,9 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
         <!-- Item action — same shape as before plus optional subtitle. -->
         <template v-else>
           <li v-if="entry.divider" class="wp-ctxmenu__sep" aria-hidden="true"></li>
+          <!-- The role is menuitem or menuitemcheckbox (bound, so the rule
+               can't see it); keys come from the menu's own keydown. -->
+          <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
           <li
             class="wp-ctxmenu__item"
             :class="{
@@ -227,13 +236,20 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
               'wp-ctxmenu__item--active': activeIndex === i,
               'wp-ctxmenu__item--with-sub': !!entry.subtitle,
             }"
-            role="menuitem"
+            :role="entry.checked === undefined ? 'menuitem' : 'menuitemcheckbox'"
+            :aria-checked="entry.checked === undefined ? undefined : entry.checked"
             :aria-disabled="entry.disabled || undefined"
             @mouseenter="!entry.disabled && (activeIndex = i)"
             @click="pick(entry)"
           >
+            <i
+              v-if="entry.checked !== undefined"
+              class="pi pi-check wp-ctxmenu__check"
+              :data-on="entry.checked || undefined"
+              aria-hidden="true"
+            ></i>
             <i v-if="entry.icon" :class="['pi', entry.icon, 'wp-ctxmenu__icon']" aria-hidden="true"></i>
-            <span v-else class="wp-ctxmenu__icon-spacer" aria-hidden="true"></span>
+            <span v-else-if="entry.checked === undefined" class="wp-ctxmenu__icon-spacer" aria-hidden="true"></span>
             <span class="wp-ctxmenu__text">
               <span class="wp-ctxmenu__title">{{ entry.label }}</span>
               <span v-if="entry.subtitle" class="wp-ctxmenu__sub">{{ entry.subtitle }}</span>
@@ -306,6 +322,9 @@ function isSectionEntry(entry: ContextMenuEntry): entry is ContextMenuSection {
 }
 .wp-ctxmenu__item--active,
 .wp-ctxmenu__item:hover { background: var(--wp-accent-glow); color: var(--wp-accent); }
+/* A checkable item's tick: always takes its room, shows only when on. */
+.wp-ctxmenu__check { width: 14px; font-size: 11px; text-align: center; visibility: hidden; color: var(--wp-accent); }
+.wp-ctxmenu__check[data-on] { visibility: visible; }
 .wp-ctxmenu__item--danger { color: var(--wp-red); }
 .wp-ctxmenu__item--danger.wp-ctxmenu__item--active,
 .wp-ctxmenu__item--danger:hover { background: var(--wp-red-bg); color: var(--wp-red); }

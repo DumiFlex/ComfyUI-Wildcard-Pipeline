@@ -22,7 +22,7 @@ let nextId = 0;
  * colour, for a host with its own colours (a busy button).
  */
 import { computed, useSlots } from "vue";
-import { RING_A, RING_B, STAR_A, STAR_B, STAR_BIG } from "./logo-paths";
+import { BRAND_COLOURS, RING_A, RING_B, STAR_A, STAR_B, STAR_BIG, type LogoBrand } from "./logo-paths";
 
 const props = withDefaults(defineProps<{
   /** Width and height in px. Default 14, or 40 with `block`. */
@@ -38,7 +38,9 @@ const props = withDefaults(defineProps<{
   /** Hidden from screen readers, for a host that says it is busy itself
    *  (a button with `aria-busy`). */
   decorative?: boolean | undefined;
-}>(), { size: undefined, label: "Loading", block: false, variant: undefined, mono: false, decorative: false });
+  /** Whose colours: the extension's (default) or the community site's. */
+  brand?: LogoBrand | undefined;
+}>(), { size: undefined, label: "Loading", block: false, variant: undefined, mono: false, decorative: false, brand: "extension" });
 
 const slots = useSlots();
 const id = `wp-lm-${nextId++}`;
@@ -46,9 +48,9 @@ const px = computed(() => props.size ?? (props.block ? 40 : 14));
 const drawing = computed(() => props.variant ?? (props.block || px.value >= 24 ? "logo" : "sparkle"));
 /** The logo's own colours (brand, not theme tokens: the mark looks the same
  *  in light and dark). */
-const VIOLET = "#a970ff";
-const INDIGO = "#6366f1";
-const TEAL = "#33d6c6";
+const VIOLET = computed(() => BRAND_COLOURS[props.brand][0]);
+const INDIGO = computed(() => BRAND_COLOURS[props.brand][1]);
+const TEAL = computed(() => BRAND_COLOURS[props.brand][2]);
 const fill = (colour: string): string => (props.mono ? "currentColor" : colour);
 </script>
 
