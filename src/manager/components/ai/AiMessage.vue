@@ -459,9 +459,14 @@ const Body = () => {
 }
 .wp-ai-msg :deep(.wp-ai-msg__fold:hover) { color: var(--wp-text); background: var(--wp-bg-2); }
 .wp-ai-msg :deep(.wp-ai-msg__fold:focus-visible) { outline: 2px solid var(--wp-accent-500); outline-offset: -2px; }
-.wp-ai-msg--live :deep(.wp-ai-msg__new) { animation: wp-ai-msg-fade 150ms ease-out; }
-.wp-ai-msg--live > :deep(:last-child:not(.wp-ai-msg__codeblock)) { animation: wp-ai-msg-fade 150ms ease-out; }
-@keyframes wp-ai-msg-fade { from { opacity: 0; } to { opacity: 1; } }
+/* Animated through a registered custom property, not `opacity` / `transform`
+ * directly: those go to the compositor, which lifts the element onto its own
+ * layer while it moves and drops it after, so the text went soft during the
+ * motion and snapped by half a pixel at its end. */
+@property --wp-ai-msg-o { syntax: "<number>"; inherits: false; initial-value: 1; }
+.wp-ai-msg--live :deep(.wp-ai-msg__new) { opacity: var(--wp-ai-msg-o); animation: wp-ai-msg-fade 150ms ease-out; }
+.wp-ai-msg--live > :deep(:last-child:not(.wp-ai-msg__codeblock)) { opacity: var(--wp-ai-msg-o); animation: wp-ai-msg-fade 150ms ease-out; }
+@keyframes wp-ai-msg-fade { from { --wp-ai-msg-o: 0; } to { --wp-ai-msg-o: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .wp-ai-msg--live :deep(.wp-ai-msg__new), .wp-ai-msg--live > :deep(:last-child:not(.wp-ai-msg__codeblock)) { animation: none; }
 }
