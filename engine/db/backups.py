@@ -34,11 +34,20 @@ Copies go through SQLite's online backup API rather than a file copy: the
 library runs in WAL mode, where committed data can sit in ``-wal`` rather
 than the main file, and a plain copy of the main file would silently lose it.
 
-Restore is staged, like the DB location move: the request only records the
-chosen backup in the sidecar (``engine/db/config.py``), and
-``execute_pending_restore`` swaps the file at the next start, before any
-connection opens. Swapping a SQLite file out from under live connections is
-how databases get corrupted.
+Restore runs live (``restore_now``): it copies the backup INTO the open
+library through SQLite's online backup API, the same API that makes backups,
+pointed the other way. That is one write transaction on the live database
+under SQLite's own locks, so other connections either see the old library or
+the restored one, never a mix, and no file is swapped. (Swapping the file out
+from under live connections is how databases get corrupted, and Windows
+refuses to replace a file another handle holds.) The live library is backed
+up as ``pre-restore`` first, the backup is checked before anything is
+written, and the restored library is migrated to this build's schema.
+
+The older staged restore (record the choice in the sidecar,
+``engine/db/config.py``; ``execute_pending_restore`` swaps the file at the
+next start, before any connection opens) still runs a restore an older
+build staged.
 """
 from __future__ import annotations
 
@@ -395,6 +404,116 @@ def _main_db_file(conn: sqlite3.Connection) -> Path | None:
         if row[1] == "main":
             return Path(row[2]) if row[2] else None
     return None
+
+
+# ── live restore ─────────────────────────────────────────────────────
+
+
+class RestoreRefused(ValueError):
+    """The backup can't be restored here; the message says why, for the user."""
+
+
+#: One restore at a time; a second request waits for the first.
+_RESTORE_LOCK = threading.Lock()
+
+
+def _open_readonly(path: Path) -> sqlite3.Connection:
+    return sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+
+
+def _check_backup(src: sqlite3.Connection) -> None:
+    """Refuse a backup that is damaged, isn't a library, or comes from a
+    newer build (whose schema this build would misread)."""
+    from engine.db.migrations import SchemaAheadError, assert_schema_compatible
+
+    try:
+        ok = src.execute("PRAGMA quick_check;").fetchone()
+        tables = {r[0] for r in src.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table';").fetchall()}
+    except sqlite3.DatabaseError as exc:
+        raise RestoreRefused(f"This backup can't be read ({exc}).") from exc
+    if not ok or ok[0] != "ok":
+        raise RestoreRefused(
+            "This backup is damaged (SQLite's check failed), so it wasn't restored.")
+    if "modules" not in tables:
+        raise RestoreRefused("This file isn't a Wildcard Pipeline library, so it wasn't restored.")
+    try:
+        assert_schema_compatible(src)
+    except SchemaAheadError as exc:
+        raise RestoreRefused(str(exc)) from exc
+
+
+def _page_size(conn: sqlite3.Connection) -> int:
+    return int(conn.execute("PRAGMA page_size;").fetchone()[0])
+
+
+def _copy_into(src_path: Path, live: sqlite3.Connection) -> None:
+    """Copy the database at ``src_path`` over ``live``'s, in one step.
+
+    A WAL-mode destination only takes pages of its own size, so a backup
+    with another page size is first rebuilt at the live size in a temp file
+    (``VACUUM`` applies a new ``page_size`` to a non-WAL database).
+    """
+    src = _open_readonly(src_path)
+    try:
+        if _page_size(src) == _page_size(live):
+            src.backup(live)
+            return
+    finally:
+        src.close()
+    fd, tmp_str = tempfile.mkstemp(prefix=".restore-", suffix=".db", dir=str(src_path.parent))
+    os.close(fd)
+    tmp = Path(tmp_str)
+    try:
+        shutil.copyfile(src_path, tmp)
+        conv = sqlite3.connect(str(tmp))
+        try:
+            conv.execute("PRAGMA journal_mode=DELETE;")
+            conv.execute(f"PRAGMA page_size={_page_size(live)};")
+            conv.execute("VACUUM;")
+            conv.backup(live)
+        finally:
+            conv.close()
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def restore_now(db_path: Path, name: str) -> dict[str, Any]:
+    """Restore backup ``name`` into the live library, with no restart.
+
+    Order: check the backup (readable, a library, not from a newer build),
+    back up the live library as ``pre-restore`` (so the restore can be
+    undone; no safety copy, no restore), copy the backup in, migrate it to
+    this build's schema. Returns ``{restored, pre_restore}`` (backup
+    names). Raises ``BackupNotFound``,
+    ``RestoreRefused`` (nothing was changed) or ``sqlite3.Error``.
+    """
+    from engine.db.connection import get_connection
+    from engine.db.migrations import migrate
+
+    db_path = Path(db_path)
+    src_path = resolve_backup(db_path, name)
+    with _RESTORE_LOCK:
+        src = _open_readonly(src_path)
+        try:
+            _check_backup(src)
+        finally:
+            src.close()
+
+        live = get_connection(db_path)
+        try:
+            pre = create_backup(db_path, "pre-restore", conn=live)
+            _copy_into(src_path, live)
+            migrate(live)
+        finally:
+            live.close()
+        # A restore someone staged earlier is superseded by this one.
+        if db_config.load().get("pending_restore"):
+            db_config.clear_pending_restore()
+    # No prune here: with a low "Backups to keep" it could drop the
+    # pre-restore backup the user needs to undo this. The next backup prunes.
+    logger.info("wp_db_restore: restored %s into %s (live)", src_path, db_path)
+    return {"restored": src_path.name, "pre_restore": pre["name"]}
 
 
 # ── staged restore ───────────────────────────────────────────────────

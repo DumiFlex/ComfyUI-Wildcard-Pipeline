@@ -851,8 +851,16 @@ export interface BackupCreated extends BackupEntry {
 export interface BackupList {
   dir: string;
   backups: BackupEntry[];
-  /** Backup name staged to replace the database on the next ComfyUI start. */
+  /** Backup name an older version staged to replace the database on the
+   *  next ComfyUI start (restores now run at once). */
   pending_restore: string | null;
+}
+
+/** `POST /wp/api/database/backups/restore`: the backup now live, and the
+ *  backup of the library as it was just before (restore it to undo). */
+export interface RestoreResult {
+  restored: string;
+  pre_restore: string;
 }
 
 export interface ServerSettings {
