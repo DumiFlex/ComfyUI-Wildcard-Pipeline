@@ -326,15 +326,16 @@ function frameColor(row: BundleRow): string {
     </template>
 
     <template #favorite="{ row }">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         class="wp-row-fav-btn"
+        :icon="row.is_favorite ? 'pi-star-fill' : 'pi-star'"
         :data-on="row.is_favorite ? 'true' : 'false'"
+        :aria-pressed="row.is_favorite"
         :aria-label="row.is_favorite ? 'Unfavorite' : 'Favorite'"
         @click.stop="fav(row)"
-      >
-        <i :class="row.is_favorite ? 'pi pi-star-fill' : 'pi pi-star'" />
-      </button>
+      />
     </template>
 
     <template #name="{ row }">
@@ -407,9 +408,10 @@ function frameColor(row: BundleRow): string {
             <span class="wp-dim wp-bundle-child__kind">{{ c.type }}</span>
           </li>
         </ul>
-        <button
+        <Button
           v-if="childCount(row) > CHILD_PREVIEW_LIMIT"
-          type="button"
+          variant="link"
+          size="sm"
           class="wp-bundle-children__more"
           :data-test="`bundle-children-toggle-${row.id}`"
           @click="toggleFullChildList(row)"
@@ -417,7 +419,7 @@ function frameColor(row: BundleRow): string {
           {{ showingAll(row)
             ? "Show fewer"
             : `Show all ${childCount(row)}` }}
-        </button>
+        </Button>
       </template>
     </template>
   </ModuleListView>
@@ -481,17 +483,9 @@ function frameColor(row: BundleRow): string {
   font-size: var(--wp-text-xs);
   margin-bottom: var(--wp-space-2);
 }
-/* "Show all N" / "Show fewer" toggle — text affordance, not a Button, so it
- * reads as list scaffolding rather than a row action. */
-.wp-bundle-children__more {
-  margin-top: var(--wp-space-2);
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  font-size: var(--wp-text-xs);
-  font-weight: 600;
-  color: var(--wp-accent-text, var(--wp-accent));
-}
-.wp-bundle-children__more:hover { text-decoration: underline; }
+/* "Show all N" / "Show fewer": a link button, so it reads as list
+ * scaffolding rather than a row action. */
+.wp-bundle-children__more { margin-top: var(--wp-space-2); }
+/* The favourite star: the kit ghost button, the star in the warn colour when on. */
+.wp-row-fav-btn[data-on="true"] { color: var(--wp-warn); }
 </style>

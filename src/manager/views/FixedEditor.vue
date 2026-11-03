@@ -761,11 +761,13 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
               <!-- Same affordance as the wildcard options list: its own cell,
                    because the value beside it is a contenteditable and a
                    press-and-move over that is a text selection. -->
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 class="fv-grip"
+                icon="pi-bars"
                 :disabled="fvFilterActive || undefined"
-                :title="fvFilterActive
+                :hint="fvFilterActive
                   ? 'Dragging is off while a filter is active — use Bulk edit ▸ Top / Bottom'
                   : 'Drag to reorder · Alt+↑/↓ to move one step'"
                 :aria-label="`Reorder ${v.name || 'value'}`"
@@ -775,7 +777,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
                 @dragend="onFvDragEnd"
                 @keydown.alt.up.prevent="nudgeValue(v.id, -1)"
                 @keydown.alt.down.prevent="nudgeValue(v.id, 1)"
-              ><i class="pi pi-bars" aria-hidden="true" /></button>
+              />
             </td>
             <td>
               <div class="wp-input-group">
@@ -837,7 +839,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
             <td :colspan="bulkActive ? 5 : 4" class="fv-filter__empty" data-test="fv-noresults">
               <b>No value matches this filter</b>
               All {{ values.length }} are still here — only the view is filtered.
-              <button type="button" class="fv-filter__clear" @click="fvQuery = ''">Clear filter</button>
+              <Button variant="link" size="sm" class="fv-filter__clear" @click="fvQuery = ''">Clear filter</Button>
             </td>
           </tr>
         </tbody>
@@ -901,11 +903,6 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
 }
 
 /* ── Filter + reorder ───────────────────────────────────────────────── */
-.fv-filter__clear {
-  background: none; border: none; padding: 0; cursor: pointer;
-  color: var(--wp-text-muted); font: 11px var(--wp-font-sans);
-  text-decoration: underline;
-}
 .fv-filter__empty {
   padding: var(--wp-space-6) var(--wp-space-5);
   text-align: center; color: var(--wp-text-dim); font-size: 12px;
@@ -917,17 +914,10 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
 .fv-filter__empty .fv-filter__clear { margin-left: var(--wp-space-3); }
 
 .fv-col-grip { width: 26px; }
-.fv-grip {
-  display: grid; place-items: center;
-  width: 18px; height: 22px;
-  padding: 0; background: none; border: none;
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-dim); font-size: 11px;
-  cursor: grab; opacity: 0; transition: opacity 0.1s;
-}
+/* The kit row icon button, shown on row hover only. */
+.fv-grip { cursor: grab; opacity: 0; transition: opacity 0.1s; }
 tr:hover .fv-grip { opacity: 0.7; }
-.fv-grip:hover { opacity: 1; background: var(--wp-bg-3); }
-.fv-grip:focus-visible { opacity: 1; outline: 2px solid var(--wp-accent-500); outline-offset: 1px; }
+.fv-grip:hover, .fv-grip:focus-visible { opacity: 1; }
 .fv-grip:disabled { cursor: not-allowed; }
 tr:hover .fv-grip:disabled { opacity: 0.2; }
 /* The dragged row stays put, dimmed — pulling it out reflows everything below
