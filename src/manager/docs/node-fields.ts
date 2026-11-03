@@ -192,6 +192,7 @@ export const NODE_FIELDS = {
       { term: "Text", desc: "Markdown, with the formatting bar below over it: headings (# to ####), bold, italic, strikethrough, code, bulleted, numbered and nested lists, task lists (- [x] / - [ ]), quotes and callouts (> [!TIP], > [!WARNING]), tables with column alignment (:--, :-:, --:), rules (---) and code blocks." },
     ],
     bar: [
+      { term: "Undo and redo", kbd: "Ctrl+Z / Ctrl+Y", desc: "Step back or forward through your changes, typing and the bar's own edits alike (Ctrl+Shift+Z and the right-click Undo and Redo work too). Typing counts as one step until you pause, move the caret or start a new line. The steps last while the editor is open." },
       { term: "Bold, italic, strikethrough", kbd: "Ctrl+B / Ctrl+I", desc: "Wraps the selection in **, * or ~~." },
       { term: "Code", desc: "Wraps it in backticks, for a $variable." },
       { term: "Lists and quote", desc: "Puts - , 1. or > before each selected line (press again to take it off)." },

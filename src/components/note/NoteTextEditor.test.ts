@@ -101,6 +101,85 @@ describe("NoteTextEditor inserts", () => {
   });
 });
 
+describe("NoteTextEditor undo and redo", () => {
+  // A parent that feeds the emitted value back, like the node does.
+  async function feed(w: ReturnType<typeof make>): Promise<void> {
+    const v = lastText(w);
+    if (v !== undefined) await w.setProps({ modelValue: v });
+  }
+  function type(w: ReturnType<typeof make>, value: string): Promise<void> {
+    const area = w.get('[data-test="note-text"]').element as HTMLTextAreaElement;
+    area.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertText", data: value.slice(-1), bubbles: true, cancelable: true }));
+    area.value = value;
+    area.setSelectionRange(value.length, value.length);
+    area.dispatchEvent(new InputEvent("input", { inputType: "insertText", bubbles: true }));
+    return feed(w);
+  }
+
+  it("undoes a toolbar insert with Ctrl+Z and redoes it with Ctrl+Y", async () => {
+    const w = make("hello");
+    const area = w.get('[data-test="note-text"]').element as HTMLTextAreaElement;
+    expect(w.get('[data-test="note-undo"]').attributes("disabled")).toBeDefined();
+    area.setSelectionRange(0, 5);
+    await w.get('[data-test="note-fmt-bold"]').trigger("click");
+    await feed(w);
+    expect(lastText(w)).toBe("**hello**");
+    expect(w.get('[data-test="note-undo"]').attributes("disabled")).toBeUndefined();
+    await w.get('[data-test="note-text"]').trigger("keydown", { key: "z", ctrlKey: true });
+    await feed(w);
+    expect(lastText(w)).toBe("hello");
+    expect(w.get('[data-test="note-redo"]').attributes("disabled")).toBeUndefined();
+    await w.get('[data-test="note-text"]').trigger("keydown", { key: "y", ctrlKey: true });
+    await feed(w);
+    expect(lastText(w)).toBe("**hello**");
+    w.unmount();
+  });
+
+  it("steps back through typing and toolbar edits with the buttons", async () => {
+    const w = make("");
+    await type(w, "a");
+    await type(w, "ab");
+    await w.get('[data-test="note-fmt-list"]').trigger("click");
+    await feed(w);
+    expect(lastText(w)).toBe("- ab");
+    await w.get('[data-test="note-undo"]').trigger("click");
+    await feed(w);
+    expect(lastText(w)).toBe("ab");
+    await w.get('[data-test="note-undo"]').trigger("click");
+    await feed(w);
+    expect(lastText(w)).toBe("");
+    expect(w.get('[data-test="note-undo"]').attributes("disabled")).toBeDefined();
+    await w.get('[data-test="note-redo"]').trigger("click");
+    await w.get('[data-test="note-redo"]').trigger("click");
+    await feed(w);
+    expect(lastText(w)).toBe("- ab");
+    w.unmount();
+  });
+
+  it("undoes an inserted icon", async () => {
+    const w = make("ab");
+    const area = w.get('[data-test="note-text"]').element as HTMLTextAreaElement;
+    area.setSelectionRange(1, 1);
+    await w.get('[data-test="note-fmt-icon"]').trigger("click");
+    await w.get('[data-test="icon-picker-cog"]').trigger("click");
+    await feed(w);
+    expect(lastText(w)).toBe("a:pi-cog:b");
+    await w.get('[data-test="note-undo"]').trigger("click");
+    await feed(w);
+    expect(lastText(w)).toBe("ab");
+    w.unmount();
+  });
+
+  it("forgets the steps when the text changes from outside", async () => {
+    const w = make("a");
+    await w.get('[data-test="note-fmt-bold"]').trigger("click");
+    await feed(w);
+    await w.setProps({ modelValue: "loaded" });
+    expect(w.get('[data-test="note-undo"]').attributes("disabled")).toBeDefined();
+    w.unmount();
+  });
+});
+
 describe("NoteMarkdown link colours", () => {
   it("draws a coloured button and a coloured text link, and leaves plain links on the tone", () => {
     const w = mount(NoteMarkdown, {

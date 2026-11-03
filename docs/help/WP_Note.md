@@ -24,6 +24,7 @@ A note that explains a workflow. It looks like a panel, not a node: no title bar
 
 ## The formatting bar
 
+- **Undo and redo** (Ctrl+Z / Ctrl+Y): Step back or forward through your changes, typing and the bar's own edits alike (Ctrl+Shift+Z and the right-click Undo and Redo work too). Typing counts as one step until you pause, move the caret or start a new line. The steps last while the editor is open.
 - **Bold, italic, strikethrough** (Ctrl+B / Ctrl+I): Wraps the selection in **, * or ~~.
 - **Code**: Wraps it in backticks, for a $variable.
 - **Lists and quote**: Puts - , 1. or > before each selected line (press again to take it off).
