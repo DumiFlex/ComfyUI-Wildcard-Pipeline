@@ -547,7 +547,9 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
     margin: 2px 0;
     padding: 3px 10px;
     border: 1px solid color-mix(in srgb, var(--wp-note-link, var(--wp-note-tone, var(--wp-accent))) 50%, transparent);
-    border-radius: var(--wp-radius-cap, 999px);
+    /* A finite radius, not 999px: Firefox draws a bordered full pill in pieces
+       that seam at canvas zooms like 0.64 / 0.8 (docs/component-standard.md). */
+    border-radius: min(12px, var(--wp-radius-cap, 999px)); /* 26px tall */
     background: color-mix(in srgb, var(--wp-note-link, var(--wp-note-tone, var(--wp-accent))) 12%, transparent);
     font-size: 12px;
     line-height: 18px;
