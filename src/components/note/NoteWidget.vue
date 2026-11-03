@@ -409,7 +409,9 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
 .wp-note__stepnum { width: 72px; }
 .wp-note__pin { margin-left: auto; }
 /* The kit's colour swatches, held at the old 18 px. */
-.wp-note__swatches :deep(.wp-radio-group__swatch) { width: 18px; height: 18px; }
+/* Flat circles: no inset outline. The picked one keeps the kit's accent ring
+   (offset by the option's 2px padding) and keyboard focus its focus ring. */
+.wp-note__swatches :deep(.wp-radio-group__swatch) { width: 18px; height: 18px; box-shadow: none; }
 .wp-note__swatches.wp-radio-group[data-variant="swatch"] { gap: 0; }
 /* The custom field is the pick when the colour is a hex, not a preset. */
 .wp-note__custom--on { border-color: var(--wp-text); }
