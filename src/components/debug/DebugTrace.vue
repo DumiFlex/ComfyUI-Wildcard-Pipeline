@@ -4,6 +4,7 @@
  * Context node that ran it. A row says what the step wrote; clicking it
  * opens DebugStepDetail with the reasons.
  */
+import WpIconButton from "@/kit/WpIconButton.vue";
 import { nextTick, ref, watch } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import DebugStepDetail from "./DebugStepDetail.vue";
@@ -90,13 +91,13 @@ function groupTooltip(g: TraceGroup): string {
           data-test="dbg-group-title"
         >{{ groupLabel(g) }}</span>
         <span v-if="g.seed" class="wp-dbg-group__seed" title="Chain seed this node ran with">seed {{ g.seed }}</span>
-        <button
+        <WpIconButton
           v-if="canFocus && g.nodeId"
-          type="button"
           class="wp-dbg-group__focus"
-          title="Select this node on the canvas"
+          icon="pi-arrow-up-right"
+          label="Select this node on the canvas"
           @click="emit('focus-node', g.nodeId)"
-        ><i class="pi pi-arrow-up-right" aria-hidden="true" /></button>
+        />
       </header>
       <div
         v-for="s in g.steps"
@@ -242,16 +243,7 @@ function groupTooltip(g: TraceGroup): string {
   border-radius: var(--wp-radius-cap, 999px);
   border: 1px solid var(--wp-border);
 }
-.wp-dbg-group__focus {
-  margin-left: auto;
-  background: transparent;
-  border: 0;
-  color: var(--wp-text-dim);
-  cursor: pointer;
-  padding: 0 2px;
-}
-.wp-dbg-group__focus:hover { color: var(--wp-text); }
-.wp-dbg-group__focus .pi { font-size: 10px; }
+.wp-dbg-group__focus { margin-left: auto; }
 .wp-dbg-step {
   border-top: 1px solid var(--wp-border-soft, var(--wp-border));
 }
