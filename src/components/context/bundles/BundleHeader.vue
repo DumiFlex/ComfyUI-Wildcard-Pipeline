@@ -3,6 +3,7 @@ import { computed } from "vue";
 import type { BundleInstance } from "../../../widgets/_shared";
 import Checkbox from "@/kit/Checkbox.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
+import DragHandle from "@/kit/DragHandle.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -127,26 +128,11 @@ const summary = computed(() => {
     @contextmenu.stop.prevent="(ev) => emit('contextmenu', ev)"
   >
     <!-- Drag handle — uses the shared `.wp-drag-handle` class from
-         row-primitives.css, same 6×12 SVG grip ModuleRow + InjectorRow
-         render. Per-state hover/active behavior comes from shared CSS;
+         row-primitives.css around the kit's DragHandle grip, as ModuleRow
+         + InjectorRow do. Per-state hover/active behavior comes from shared CSS;
          bundle-specific opacity-fade-on-header-hover stays in scoped. -->
-    <span class="wp-drag-handle" aria-hidden="true" title="Drag to reorder bundle">
-      <svg
-        class="wp-drag-handle__grip"
-        viewBox="0 0 6 12"
-        width="6"
-        height="12"
-        fill="currentColor"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <circle cx="1.5" cy="2" r="1" />
-        <circle cx="4.5" cy="2" r="1" />
-        <circle cx="1.5" cy="6" r="1" />
-        <circle cx="4.5" cy="6" r="1" />
-        <circle cx="1.5" cy="10" r="1" />
-        <circle cx="4.5" cy="10" r="1" />
-      </svg>
+    <span class="wp-drag-handle" aria-hidden="true">
+      <DragHandle title="Drag to reorder bundle" />
     </span>
     <!-- Caret stays pi-caret-down — parent .wp-bundle--collapsed
          rotates -90deg via CSS for the transition (Phase B.1). -->
@@ -325,7 +311,7 @@ const summary = computed(() => {
   );
 }
 /* Drag handle base styles come from shared row-primitives.css
- * (`.wp-drag-handle` + `.wp-drag-handle__grip`). Bundle-specific
+ * (`.wp-drag-handle` around the kit DragHandle). Bundle-specific
  * tweak: hover-on-header reveal (the row-level grip stays subtle
  * until the user looks at the row). */
 .wp-bundle-header:hover .wp-drag-handle {

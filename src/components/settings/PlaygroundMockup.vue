@@ -456,7 +456,6 @@ function viewForBundle(key: string) {
   opacity: 0.6;
 }
 .wp-pg-mockup .wp-drag-handle:active { cursor: grabbing; }
-.wp-pg-mockup .wp-drag-handle__grip { display: block; }
 .wp-pg-mockup .wp-row-type-icon {
   width: 16px;
   height: 16px;

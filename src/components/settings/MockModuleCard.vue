@@ -21,6 +21,7 @@ import { computed } from "vue";
 import { kindIcon } from "../shared/kind-icons";
 import Checkbox from "@/kit/Checkbox.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
+import DragHandle from "@/kit/DragHandle.vue";
 
 export interface SummaryToken { isVar: boolean; text: string; }
 
@@ -92,14 +93,7 @@ const states = computed(() => props.module.states ?? {});
   >
     <div class="wp-module-header">
       <span class="wp-drag-handle" aria-hidden="true">
-        <svg class="wp-drag-handle__grip" viewBox="0 0 6 12" width="6" height="12" fill="currentColor" aria-hidden="true" focusable="false">
-          <circle cx="1.5" cy="2" r="1" />
-          <circle cx="4.5" cy="2" r="1" />
-          <circle cx="1.5" cy="6" r="1" />
-          <circle cx="4.5" cy="6" r="1" />
-          <circle cx="1.5" cy="10" r="1" />
-          <circle cx="4.5" cy="10" r="1" />
-        </svg>
+        <DragHandle />
       </span>
       <WpIconButton
         variant="bare"
