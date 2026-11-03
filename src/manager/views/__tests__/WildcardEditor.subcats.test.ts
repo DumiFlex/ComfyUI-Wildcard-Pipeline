@@ -101,10 +101,11 @@ describe("WildcardEditor sub-categories", () => {
     const w = await mountSeeded();
     await w.get('[data-test="subcat-kebab-a"]').trigger("click");
     await flushPromises();
-    // The menu is a kit Popover, teleported to <body>.
-    expect(document.querySelector('[data-test="subcat-rename"]')).not.toBeNull();
-    expect(document.querySelector('[data-test="subcat-move"]')).not.toBeNull();
-    expect(document.querySelector('[data-test="subcat-delete"]')).not.toBeNull();
+    // The menu is a kit DropdownMenu, teleported to <body>: Rename, a
+    // "Move to group" section naming the other box, then Delete.
+    const items = [...document.querySelectorAll(".wp-ctxmenu__item")].map((el) => el.textContent?.trim());
+    expect(items).toEqual(["Rename…", "ungrouped", "Delete…"]);
+    expect(document.querySelector(".wp-ctxmenu__section")?.textContent?.trim()).toBe("Move to group");
     w.unmount();
   });
 
@@ -172,12 +173,12 @@ describe("WildcardEditor sub-categories", () => {
     const w = await mountSeeded();
     await w.get('[data-test="subcat-kebab-a"]').trigger("click");
     await flushPromises();
-    expect(document.querySelector(".subcat-menu")).not.toBeNull();
-    // A click anywhere outside a pill / menu dismisses it (document-level
-    // handler). Dispatch on body — outside the editor's detached subtree.
-    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(document.querySelector(".wp-ctxmenu")).not.toBeNull();
+    // A press anywhere outside the menu dismisses it. Dispatch on body —
+    // outside the editor's detached subtree.
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     await flushPromises();
-    expect(document.querySelector(".subcat-menu")).toBeNull();
+    expect(document.querySelector(".wp-ctxmenu")).toBeNull();
   });
 
   it("dragging a pill onto another box re-homes the tag", async () => {

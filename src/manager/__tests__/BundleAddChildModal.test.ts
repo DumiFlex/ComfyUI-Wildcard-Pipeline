@@ -99,10 +99,24 @@ describe("BundleAddChildModal.vue", () => {
       props: { visible: true, modules: [] },
       attachTo: document.body,
     });
-    const backdrop = document.body.querySelector('[data-test="bundle-add-backdrop"]') as HTMLElement | null;
+    // The kit Modal's backdrop: a press that starts and ends on it closes.
+    const backdrop = document.body.querySelector('[data-test="modal-backdrop"]') as HTMLElement | null;
     expect(backdrop).not.toBeNull();
-    backdrop!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    backdrop?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    backdrop?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(wrap.emitted("close")).toBeTruthy();
+    wrap.unmount();
+  });
+
+  it("emits close on Escape and from the close button", async () => {
+    const wrap = mount(BundleAddChildModal, {
+      props: { visible: true, modules: [] },
+      attachTo: document.body,
+    });
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(wrap.emitted("close")).toHaveLength(1);
+    (document.body.querySelector('[data-test="modal-close"]') as HTMLElement | null)?.click();
+    expect(wrap.emitted("close")).toHaveLength(2);
     wrap.unmount();
   });
 
