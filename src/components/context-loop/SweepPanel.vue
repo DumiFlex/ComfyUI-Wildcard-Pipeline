@@ -21,6 +21,7 @@ import { axisStatus, type SweepCandidate } from "./sweep-candidates";
 import WpNumber from "@/kit/WpNumber.vue";
 import WpSelect from "@/kit/WpSelect.vue";
 import Button from "@/kit/Button.vue";
+import Chip from "@/kit/Chip.vue";
 import ListRow from "@/kit/ListRow.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 
@@ -214,19 +215,18 @@ function moveAxis(uid: string, dir: -1 | 1): void {
             <Button size="sm" variant="link" @click="selectDefault(row.axis, row.candidate)">Enabled only</Button>
           </div>
           <div class="wp-sweep__opts-list">
-            <button
+            <Chip
               v-for="o in row.candidate.options"
               :key="o.id"
-              type="button"
               class="wp-sweep__opt"
               :class="{ 'wp-sweep__opt--on': row.axis.option_ids.includes(o.id) }"
-              :aria-pressed="row.axis.option_ids.includes(o.id)"
+              :pressed="row.axis.option_ids.includes(o.id)"
               :title="o.label"
               :data-test="`sweep-opt-${o.id}`"
               @click="toggleOption(row.axis, o.id, row.candidate)"
             >
               {{ o.label || "(empty)" }}
-            </button>
+            </Chip>
           </div>
         </div>
       </div>
@@ -305,13 +305,15 @@ function moveAxis(uid: string, dir: -1 | 1): void {
 .wp-sweep__opts { border-top: 1px solid var(--wp-border); padding: 4px 6px 6px; }
 .wp-sweep__opts-bar { display: flex; gap: 10px; margin-bottom: 4px; }
 .wp-sweep__opts-list { display: flex; flex-wrap: wrap; gap: 3px; max-height: 120px; overflow-y: auto; }
-.wp-sweep__opt {
+/* Kit Chip toggles kept in the old small square-ish look. */
+.wp-chip.wp-sweep__opt {
+  display: block; height: auto;
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   padding: 2px 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); cursor: pointer;
   font: 10px var(--wp-font-sans, sans-serif);
   background: transparent; border: 1px solid var(--wp-border); color: var(--wp-text-dim);
 }
-.wp-sweep__opt--on {
+.wp-chip.wp-sweep__opt--on {
   background: color-mix(in srgb, var(--wp-accent) 16%, transparent);
   border-color: var(--wp-accent);
   color: var(--wp-text);

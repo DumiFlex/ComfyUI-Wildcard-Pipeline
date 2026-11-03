@@ -117,15 +117,14 @@
                   <span class="wp-picker__pop-label-hint">click to AND-narrow</span>
                 </div>
                 <div class="wp-picker__filter-tags">
-                  <button
+                  <Chip
                     v-for="tag in availableTags"
                     :key="tag"
-                    type="button"
                     class="wp-picker__tag-chip"
-                    :class="{ 'wp-picker__tag-chip--active': selectedTags.has(tag) }"
+                    :pressed="selectedTags.has(tag)"
                     :data-testid="`picker-tag-${tag}`"
                     @click="toggleTag(tag)"
-                  >{{ tag }}</button>
+                  >{{ tag }}</Chip>
                 </div>
               </div>
 
@@ -339,6 +338,7 @@ import WpSelect from "@/kit/WpSelect.vue";
 import { kindIcon } from "../shared/kind-icons";
 import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
 import Button from "@/kit/Button.vue";
+import Chip from "@/kit/Chip.vue";
 import ListRow from "@/kit/ListRow.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 
@@ -1392,36 +1392,30 @@ onBeforeUnmount(detachCaptureListeners);
 
 /* Tag chips inside popover (same visual as before, just in a
  * tighter container). */
-.wp-picker__tag-chip {
-  display: inline-flex;
-  align-items: center;
+
+
+/* The kit Chip toggles, in the picker's own outline look: transparent when
+ * off, the accent tint when on. Tags read in mono. */
+.wp-chip.wp-picker__tag-chip {
+  height: auto;
   gap: 4px;
-  background: transparent;
+  padding: 2px 8px;
   border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-cap, 999px);
-  color: var(--wp-text3);
+  border-radius: min(9px, var(--wp-radius-cap, 999px));
+  background: transparent;
+  color: var(--wp-text3, var(--wp-text-dim));
   font-family: var(--wp-font-mono, monospace);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  padding: 2px 8px;
-  cursor: pointer;
-  transition: background var(--wp-motion-quick), color var(--wp-motion-quick), border-color var(--wp-motion-quick);
 }
-.wp-picker__tag-chip:hover {
-  color: var(--wp-text);
-  border-color: var(--wp-border2);
-}
-.wp-picker__tag-chip--active {
+.wp-chip.wp-picker__tag-chip:hover { color: var(--wp-text); border-color: var(--wp-border2, var(--wp-border-strong)); }
+.wp-chip.wp-picker__tag-chip[aria-pressed="true"] {
   background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
   border-color: var(--wp-accent);
   color: var(--wp-accent);
 }
-.wp-picker__tag-chip--active:hover {
-  background: color-mix(in srgb, var(--wp-accent) 28%, transparent);
-  color: var(--wp-accent2, var(--wp-accent));
-}
-
+.wp-chip.wp-picker__tag-chip[aria-pressed="true"]:hover { background: color-mix(in srgb, var(--wp-accent) 28%, transparent); }
 
 .wp-picker__filter-tags {
   display: flex;

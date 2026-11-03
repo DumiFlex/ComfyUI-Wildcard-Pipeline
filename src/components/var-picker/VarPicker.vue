@@ -71,6 +71,7 @@ const isBypassed = computed<boolean>(() => props.nodeMode === 4);
       :model-value="picked"
       :options="options"
       size="sm"
+      mono
       placeholder="(no var selected)"
       :empty-text="upstreamVars.length ? 'No variable matches' : 'No upstream variables: connect a WP Context node first.'"
       aria-label="Variable"
@@ -115,7 +116,7 @@ const isBypassed = computed<boolean>(() => props.nodeMode === 4);
   color: var(--wp-text);
 }
 /* The kit Combobox; the picked $var reads in the accent like the old trigger. */
-.wp-var-picker__field :deep(.wp-combo__field) { font-family: var(--wp-font-mono, monospace); color: var(--wp-accent); }
+.wp-var-picker__field :deep(.wp-combo__field) { color: var(--wp-accent); }
 .wp-var-picker__preview {
   display: flex;
   justify-content: space-between;
