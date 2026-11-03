@@ -6,7 +6,7 @@
     "native-range": 0,
     "inline-svg": 0,
     "hand-dialog": 0,
-    "manager-raw-button": 110,
+    "manager-raw-button": 108,
     "raw-hex": 0
   },
   "native-select": {},
@@ -52,7 +52,6 @@
     "src/manager/import-export/ExportTab.vue": 3,
     "src/manager/import-export/ImportPicker.vue": 2,
     "src/manager/import-export/ImportTab.vue": 1,
-    "src/manager/import-export/PackConverter.vue": 2,
     "src/manager/import-export/PickerRow.vue": 3,
     "src/manager/import-export/conflict-rows/Tier3ChainViz.vue": 1,
     "src/manager/layout/AppSidebar.vue": 3,
