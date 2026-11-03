@@ -6,7 +6,7 @@
     "native-range": 0,
     "inline-svg": 0,
     "hand-dialog": 0,
-    "manager-raw-button": 47,
+    "manager-raw-button": 3,
     "raw-hex": 0
   },
   "native-select": {},
@@ -16,28 +16,9 @@
   "inline-svg": {},
   "hand-dialog": {},
   "manager-raw-button": {
-    "src/manager/components/BundleAddChildModal.vue": 2,
-    "src/manager/components/BundleChildPane.vue": 1,
-    "src/manager/components/BundleChildRow.vue": 4,
-    "src/manager/components/BundleReattachSection.vue": 3,
-    "src/manager/components/DerivationConditionEditor.vue": 2,
-    "src/manager/components/DerivationConditionTest.vue": 1,
-    "src/manager/components/DerivationRuleCard.vue": 5,
-    "src/manager/components/HistoryPanel.vue": 1,
-    "src/manager/components/ModuleListView.vue": 4,
-    "src/manager/components/NegativeField.vue": 2,
-    "src/manager/components/RefChip.vue": 2,
-    "src/manager/components/RemapRefPopup.vue": 2,
-    "src/manager/components/RichTextInput.vue": 3,
-    "src/manager/components/SelectionToolbar.vue": 4,
-    "src/manager/components/TagPickerMenu.vue": 1,
     "src/manager/components/TweaksPanel.vue": 1,
-    "src/manager/components/VarAutocompleteInput.vue": 1,
     "src/manager/components/docs/DocImage.vue": 1,
-    "src/manager/components/settings/sections/AppearanceSection.vue": 1,
-    "src/manager/components/wildcard-editor/OptionFilterBar.vue": 2,
-    "src/manager/components/wildcard-editor/OptionProbabilityCell.vue": 1,
-    "src/manager/components/wildcard-editor/OptionTagsCell.vue": 3
+    "src/manager/components/settings/sections/AppearanceSection.vue": 1
   },
   "raw-hex": {}
 }

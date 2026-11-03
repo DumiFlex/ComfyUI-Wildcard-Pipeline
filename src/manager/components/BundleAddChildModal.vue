@@ -9,6 +9,7 @@
  */
 import SearchInput from "@/kit/SearchInput.vue";
 import Button from "@/kit/Button.vue";
+import ListRow from "@/kit/ListRow.vue";
 import { computed, ref, watch } from "vue";
 import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
@@ -162,46 +163,36 @@ function pickBundle(row: BundleRow) {
             >
               No entries match.
             </div>
-            <button
+            <ListRow
               v-for="m in filteredModules"
               :key="`mod-${m.id}`"
-              type="button"
               class="wp-bundle-add__row"
               :data-kind="m.type"
               :data-test="`bundle-add-row-${m.id}`"
               @click="pickModule(m)"
             >
-              <span class="wp-bundle-add__rowicon" aria-hidden="true">
-                <i :class="kindIcon(m.type)" />
-              </span>
-              <div class="wp-bundle-add__rowmain">
-                <div class="wp-bundle-add__rowname">{{ m.name }}</div>
-                <div class="wp-bundle-add__rowsub">{{ KIND_LABEL[m.type] ?? m.type }} · {{ m.id }}</div>
-              </div>
-              <span class="wp-bundle-add__rowadd" aria-hidden="true">
-                <i class="pi pi-plus" />
-              </span>
-            </button>
-            <button
+              <template #start>
+                <span class="wp-bundle-add__rowicon" aria-hidden="true"><i :class="kindIcon(m.type)" /></span>
+              </template>
+              <span class="wp-bundle-add__rowname">{{ m.name }}</span>
+              <template #description><span class="wp-bundle-add__rowsub">{{ KIND_LABEL[m.type] ?? m.type }} · {{ m.id }}</span></template>
+              <template #end><i class="pi pi-plus wp-bundle-add__rowadd" aria-hidden="true" /></template>
+            </ListRow>
+            <ListRow
               v-for="b in filteredBundles"
               :key="`bun-${b.id}`"
-              type="button"
               class="wp-bundle-add__row"
               data-kind="bundle"
               :data-test="`bundle-add-bundle-${b.id}`"
               @click="pickBundle(b)"
             >
-              <span class="wp-bundle-add__rowicon" aria-hidden="true">
-                <i class="pi pi-box" />
-              </span>
-              <div class="wp-bundle-add__rowmain">
-                <div class="wp-bundle-add__rowname">{{ b.name }}</div>
-                <div class="wp-bundle-add__rowsub">Bundle · {{ b.id }}</div>
-              </div>
-              <span class="wp-bundle-add__rowadd" aria-hidden="true">
-                <i class="pi pi-plus" />
-              </span>
-            </button>
+              <template #start>
+                <span class="wp-bundle-add__rowicon" aria-hidden="true"><i class="pi pi-box" /></span>
+              </template>
+              <span class="wp-bundle-add__rowname">{{ b.name }}</span>
+              <template #description><span class="wp-bundle-add__rowsub">Bundle · {{ b.id }}</span></template>
+              <template #end><i class="pi pi-plus wp-bundle-add__rowadd" aria-hidden="true" /></template>
+            </ListRow>
           </div>
         </div>
       </div>
@@ -270,10 +261,12 @@ function pickBundle(row: BundleRow) {
   color: var(--wp-text-dim);
   font-size: var(--wp-text-sm);
 }
+/* A kit ListRow drawn as a bordered card row: start icon, name + id, plus. */
 .wp-bundle-add__row {
   display: grid;
   grid-template-columns: 28px 1fr 22px;
   align-items: center;
+  min-height: 0;
   gap: var(--wp-space-5);
   padding: 7px var(--wp-space-5); /* audit-exempt: 7px vertical hairline keeps row compact */
   background: var(--wp-bg);
@@ -302,7 +295,6 @@ function pickBundle(row: BundleRow) {
 .wp-bundle-add__row[data-kind="derivation"]   .wp-bundle-add__rowicon { color: var(--wp-kind-derivation); }
 .wp-bundle-add__row[data-kind="constraint"]   .wp-bundle-add__rowicon { color: var(--wp-kind-constraint); }
 .wp-bundle-add__row[data-kind="bundle"]       .wp-bundle-add__rowicon { color: var(--wp-accent-500); }
-.wp-bundle-add__rowmain { min-width: 0; }
 .wp-bundle-add__rowname {
   font: 500 12.5px/1.2 var(--wp-font-sans); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
   overflow: hidden;

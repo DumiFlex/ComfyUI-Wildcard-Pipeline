@@ -1,6 +1,7 @@
 <!-- src/manager/components/RefChip.vue -->
 <script setup lang="ts">
 import { copyText } from "@/kit/clipboard";
+import Button from "@/kit/Button.vue";
 import { computed, inject, ref, onBeforeUnmount, watch } from "vue";
 import { varColorIndex } from "../../components/shared/var-color";
 import { KIND_ICON_MAP } from "../../components/shared/kind-icons";
@@ -726,27 +727,25 @@ onBeforeUnmount(() => {
              even for a broken ref (the id is still known); open is gated on the
              ref resolving, since a missing module would 404. -->
         <div v-if="uuid" class="wp-refchip-pop__acts" data-test="refchip-acts">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             class="wp-refchip-pop__act"
+            :icon="copied ? 'pi-check' : 'pi-copy'"
             data-test="refchip-copy-id"
             title="Copy the module id"
             @click.stop="copyId"
-          >
-            <i :class="copied ? 'pi pi-check' : 'pi pi-copy'" aria-hidden="true"></i>
-            {{ copied ? "Copied" : "Copy id" }}
-          </button>
-          <button
+          >{{ copied ? "Copied" : "Copy id" }}</Button>
+          <Button
             v-if="resolved"
-            type="button"
+            variant="ghost"
+            size="sm"
             class="wp-refchip-pop__act"
+            icon="pi-external-link"
             data-test="refchip-open-new"
             title="Open the linked module in a new window"
             @click.stop="openInNewWindow"
-          >
-            <i class="pi pi-external-link" aria-hidden="true"></i>
-            Open
-          </button>
+          >Open</Button>
         </div>
       </template>
       <template v-else>
@@ -962,28 +961,9 @@ onBeforeUnmount(() => {
   border-top: 1px solid var(--wp-border);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
-.wp-refchip-pop__act {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 5px 8px;
-  font-size: 11px;
-  white-space: nowrap;
-  color: var(--wp-text-muted);
-  background: transparent;
-  border: none;
-  border-right: 1px solid var(--wp-border);
-  cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
-}
+/* Kit ghost buttons laid edge to edge as the card's footer. */
+.wp-refchip-pop__act { flex: 1; border-radius: 0; border-right: 1px solid var(--wp-border); }
 .wp-refchip-pop__act:last-child { border-right: none; }
-.wp-refchip-pop__act:hover { background: var(--wp-bg-3); color: var(--wp-text); }
-.wp-refchip-pop__act:focus-visible {
-  outline: none; background: var(--wp-bg-3); color: var(--wp-text);
-}
-.wp-refchip-pop__act .pi { font-size: 11px; }
 .wp-refchip-pop__act .pi-check { color: var(--wp-success); }
 .wp-refchip-pop--up { transform: translateY(-100%); }
 .wp-refchip-pop > div { padding: 1px 0; word-break: break-word; }

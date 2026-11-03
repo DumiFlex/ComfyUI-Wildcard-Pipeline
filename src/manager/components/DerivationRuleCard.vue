@@ -4,6 +4,8 @@ import Card from "@/kit/Card.vue";
 import Button from "@/kit/Button.vue";
 import Select from "@/kit/Select.vue";
 import Chip from "@/kit/Chip.vue";
+import ListRow from "@/kit/ListRow.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
 import RichTextInput from "./RichTextInput.vue";
 import type { VarProducerLike } from "./RefChip.vue";
 import VarAutocompleteInput from "./VarAutocompleteInput.vue";
@@ -269,26 +271,28 @@ const branchCount = computed(() => rule.value.branches.length);
 
 <template>
   <Card class="derivation-rule-card" :data-test="`rule-card-${index}`">
-    <button
-      type="button"
-      class="rule-head"
-      :aria-expanded="!collapsed"
-      :data-test="`toggle-rule-${index}`"
-      @click="toggleCollapsed"
-    >
-      <i :class="collapsed ? 'pi pi-chevron-right' : 'pi pi-chevron-down'" class="rule-head__chev" aria-hidden="true" />
-      <Chip tone="info" data-test="rule-label">Rule {{ ruleNumber }}</Chip>
-      <span class="rule-meta">
-        {{ branchCount }} branch{{ branchCount === 1 ? "" : "es" }}
-        <span v-if="rule.else"> + ELSE</span>
-      </span>
-      <i
-        v-if="ruleHasBrokenRef"
-        class="pi pi-exclamation-triangle dvr-broken-mark"
-        title="A branch in this rule references a module that is not in the library"
-        :data-test="`rule-broken-${index}`"
-      />
-      <span class="spacer" />
+    <!-- The head: one ListRow toggles the rule (it was a button holding the
+         other buttons, which HTML doesn't allow); the actions sit beside it. -->
+    <div class="rule-head" :data-open="!collapsed || undefined">
+      <ListRow
+        class="rule-head__toggle"
+        :icon="collapsed ? 'pi-chevron-right' : 'pi-chevron-down'"
+        :aria-expanded="!collapsed"
+        :data-test="`toggle-rule-${index}`"
+        @click="toggleCollapsed"
+      >
+        <Chip tone="info" data-test="rule-label">Rule {{ ruleNumber }}</Chip>
+        <span class="rule-meta">
+          {{ branchCount }} branch{{ branchCount === 1 ? "" : "es" }}
+          <span v-if="rule.else"> + ELSE</span>
+        </span>
+        <i
+          v-if="ruleHasBrokenRef"
+          class="pi pi-exclamation-triangle dvr-broken-mark"
+          title="A branch in this rule references a module that is not in the library"
+          :data-test="`rule-broken-${index}`"
+        />
+      </ListRow>
       <!-- Inline per-rule collapse/expand of THIS rule's conditions. Only
            useful when the rule card itself is open. -->
       <span v-if="!collapsed" class="rule-head__branch-ctrls">
@@ -317,7 +321,7 @@ const branchCount = computed(() => rule.value.branches.length);
         :data-test="`remove-rule-${index}`"
         @click.stop="emit('remove')"
       />
-    </button>
+    </div>
 
     <div v-show="!collapsed" class="branches">
       <div
@@ -334,16 +338,15 @@ const branchCount = computed(() => rule.value.branches.length);
              chevron button, the enable checkbox, the delete action) so those
              keep their own behaviour and don't double-toggle. -->
         <div class="branch-head" @click="onBranchHeadClick($event, bi)">
-          <button
-            type="button"
+          <WpIconButton
             class="branch-collapse"
+            variant="bare"
+            :icon="isBranchCollapsed(bi) ? 'pi-chevron-right' : 'pi-chevron-down'"
             :aria-expanded="!isBranchCollapsed(bi)"
-            :aria-label="`${isBranchCollapsed(bi) ? 'Expand' : 'Collapse'} branch ${bi + 1} of rule ${ruleNumber}`"
+            :label="`${isBranchCollapsed(bi) ? 'Expand' : 'Collapse'} branch ${bi + 1} of rule ${ruleNumber}`"
             :data-test="`toggle-branch-${index}-${bi}`"
             @click="toggleBranch(bi)"
-          >
-            <i :class="isBranchCollapsed(bi) ? 'pi pi-chevron-right' : 'pi pi-chevron-down'" aria-hidden="true" />
-          </button>
+          />
           <span class="branch-tag" :data-kind="bi === 0 ? 'if' : 'elif'">
             {{ bi === 0 ? "IF" : "ELIF" }}
           </span>
@@ -463,12 +466,14 @@ const branchCount = computed(() => rule.value.branches.length);
           >{{ act.mode === 'negative_replace' ? 'Replaces' : 'Adds to' }} {{ act.target_var ? "$" + act.target_var : "the variable" }}'s negative — its value is not changed. </span>{{ SUPPORTED_SYNTAX_HINT }}
         </div>
         </div>
-        <button
-          type="button"
+        <Button
+          variant="add"
+          size="sm"
+          icon="pi-plus"
           class="dvr-add-action"
           :data-test="`act-add-${index}-${bi}`"
           @click="addAction(bi)"
-        ><i class="pi pi-plus" aria-hidden="true" /> And</button>
+        >And</Button>
         </div>
       </div>
 
@@ -481,16 +486,15 @@ const branchCount = computed(() => rule.value.branches.length);
         :data-test="`branch-else-${index}`"
       >
         <div class="branch-head" @click="onBranchHeadClick($event, -1)">
-          <button
-            type="button"
+          <WpIconButton
             class="branch-collapse"
+            variant="bare"
+            :icon="isBranchCollapsed(-1) ? 'pi-chevron-right' : 'pi-chevron-down'"
             :aria-expanded="!isBranchCollapsed(-1)"
-            :aria-label="`${isBranchCollapsed(-1) ? 'Expand' : 'Collapse'} ELSE branch of rule ${ruleNumber}`"
+            :label="`${isBranchCollapsed(-1) ? 'Expand' : 'Collapse'} ELSE branch of rule ${ruleNumber}`"
             :data-test="`toggle-branch-else-${index}`"
             @click="toggleBranch(-1)"
-          >
-            <i :class="isBranchCollapsed(-1) ? 'pi pi-chevron-right' : 'pi pi-chevron-down'" aria-hidden="true" />
-          </button>
+          />
           <span class="branch-tag" data-kind="else">ELSE</span>
           <span
             v-if="isBranchCollapsed(-1)"
@@ -590,12 +594,14 @@ const branchCount = computed(() => rule.value.branches.length);
           >{{ act.mode === 'negative_replace' ? 'Replaces' : 'Adds to' }} {{ act.target_var ? "$" + act.target_var : "the variable" }}'s negative — its value is not changed. </span>{{ SUPPORTED_SYNTAX_HINT }}
         </div>
         </div>
-        <button
-          type="button"
+        <Button
+          variant="add"
+          size="sm"
+          icon="pi-plus"
           class="dvr-add-action"
           :data-test="`else-add-action-${index}`"
           @click="addAction(-1)"
-        ><i class="pi pi-plus" aria-hidden="true" /> And</button>
+        >And</Button>
         </div>
       </div>
     </div>
@@ -634,28 +640,14 @@ const branchCount = computed(() => rule.value.branches.length);
   align-items: center;
   gap: var(--wp-space-4);
   margin-bottom: 0;
-  width: 100%;
-  text-align: left;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  font: inherit;
-  color: var(--wp-text);
 }
-.rule-head[aria-expanded="true"] { margin-bottom: var(--wp-space-5); }
-.rule-head__chev {
-  font-size: var(--wp-text-xs);
-  color: var(--wp-text-muted);
-  width: 12px;
-  text-align: center;
-  transition: transform 0.15s ease;
-}
+.rule-head[data-open] { margin-bottom: var(--wp-space-5); }
+.rule-head__toggle { flex: 1; min-width: 0; min-height: 0; padding-top: 2px; padding-bottom: 2px; margin-left: calc(-1 * var(--wp-space-4)); }
+.rule-head__toggle :deep(.wp-list-row__label) { display: inline-flex; align-items: center; gap: var(--wp-space-4); }
 .rule-meta {
   font-size: var(--wp-text-xs);
   color: var(--wp-text-muted);
 }
-.spacer { flex: 1; }
 .rule-head__branch-ctrls { display: inline-flex; gap: 2px; }
 
 .branches {
@@ -701,22 +693,8 @@ const branchCount = computed(() => rule.value.branches.length);
 .dvr-label--and { color: var(--wp-kind-derivation); font-weight: 600; }
 .dvr-mode-cell { display: flex; align-items: center; gap: var(--wp-space-2); min-width: 0; }
 .dvr-mode-cell .dvr-op { flex: 1; min-width: 0; }
-.dvr-add-action {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--wp-space-2);
-  padding: 2px var(--wp-space-4); /* audit-exempt: compact inline add chip */
-  border: 1px dashed var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  background: transparent;
-  color: var(--wp-text-muted);
-  font: inherit;
-  font-size: var(--wp-text-xs);
-  cursor: pointer;
-}
-.dvr-add-action:hover { color: var(--wp-text); border-color: var(--wp-kind-derivation); }
-.dvr-add-action:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
+.dvr-add-action { align-self: flex-start; }
+.spacer { flex: 1; }
 .dvr-broken-mark {
   display: inline-flex;
   align-items: center;
@@ -737,22 +715,6 @@ const branchCount = computed(() => rule.value.branches.length);
 .branch-head input,
 .branch-head label { cursor: revert; }
 /* Per-branch collapse chevron — mirrors the rule-card head toggle. */
-.branch-collapse {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  border-radius: min(4px, var(--wp-radius-cap, 999px));
-}
-.branch-collapse:hover { background: var(--wp-bg-3); color: var(--wp-text); }
-.branch-collapse:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
-.branch-collapse i { font-size: var(--wp-text-xs); }
 /* One-line peek shown in a collapsed branch head. */
 .branch-peek {
   font-family: var(--wp-font-mono, ui-monospace, monospace);

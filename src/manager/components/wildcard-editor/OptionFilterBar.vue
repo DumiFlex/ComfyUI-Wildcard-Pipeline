@@ -5,6 +5,7 @@
  * the option table and the no-results row); this renders it.
  */
 import SearchInput from "@/kit/SearchInput.vue";
+import Button from "@/kit/Button.vue";
 import TagPickerMenu, { type TagGroup } from "../TagPickerMenu.vue";
 
 const query = defineModel<string>("query", { required: true });
@@ -46,18 +47,17 @@ const emit = defineEmits<{
     />
 
     <div v-if="allTags.length > 0" class="wc-optfilter__tagwrap">
-      <button
-        type="button"
+      <Button
+        variant="secondary"
+        size="sm"
+        icon="pi-tag"
+        icon-right="pi-chevron-down"
         class="wc-optfilter__tagbtn"
-        :data-on="selectedTags.length > 0 ? '' : null"
+        :pressed="selectedTags.length > 0"
         :aria-expanded="menuOpen"
         data-test="wc-opt-tagfilter"
-        @click.stop="emit('toggle-menu', $event)"
-      >
-        <i class="pi pi-tag" aria-hidden="true" />
-        tags<template v-if="selectedTags.length"> · {{ selectedTags.length }}</template>
-        <i class="pi pi-chevron-down" aria-hidden="true" />
-      </button>
+        @click.stop="(e: MouseEvent) => emit('toggle-menu', e)"
+      >tags<template v-if="selectedTags.length"> · {{ selectedTags.length }}</template></Button>
       <TagPickerMenu
         :open="menuOpen"
         :anchor="anchor"
@@ -82,7 +82,7 @@ const emit = defineEmits<{
         <span class="wc-optfilter__n" :data-zero="shown === 0 ? '' : null">
           {{ shown }} of {{ total }}
         </span>
-        <button type="button" class="wc-optfilter__clear" data-test="wc-opt-clear" @click="emit('clear')">Clear</button>
+        <Button variant="link" size="sm" data-test="wc-opt-clear" @click="emit('clear')">Clear</Button>
       </template>
       <span v-else class="wc-optfilter__idle">{{ total }} options</span>
     </span>
@@ -113,22 +113,6 @@ const emit = defineEmits<{
    it. */
 .wc-optfilter__search { flex: 1; min-width: 90px; }
 .wc-optfilter__tagwrap { position: relative; }
-.wc-optfilter__tagbtn {
-  display: inline-flex; align-items: center; gap: 5px; /* audit-exempt: icon gap */
-  padding: 4px var(--wp-space-4);
-  background: var(--wp-bg-3);
-  border: 1px solid var(--wp-border-strong);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-muted);
-  font: 11px var(--wp-font-sans);
-  cursor: pointer;
-}
-.wc-optfilter__tagbtn[data-on] {
-  background: color-mix(in oklab, var(--wp-accent-500) 24%, transparent);
-  border-color: var(--wp-accent-500);
-  color: var(--wp-accent-300);
-}
-.wc-optfilter__tagbtn .pi { font-size: 9px; }
 .wc-optfilter__menu {
   position: absolute; top: calc(100% + 4px); right: 0; z-index: 30;
   min-width: 170px; max-height: 240px; overflow-y: auto;
@@ -176,9 +160,6 @@ const emit = defineEmits<{
 }
 .wc-optfilter__n[data-zero] { color: var(--wp-danger); }
 .wc-optfilter__idle { color: var(--wp-text-dim); font-family: var(--wp-font-mono); }
-.wc-optfilter__clear {
-  background: none; border: none; padding: 0; cursor: pointer;
-  color: var(--wp-text-muted); font: 11px var(--wp-font-sans);
-  text-decoration: underline;
-}
+/* Compact, like the "12 options" count beside it. */
+.wc-optfilter__tagbtn { font-size: 11px; }
 </style>

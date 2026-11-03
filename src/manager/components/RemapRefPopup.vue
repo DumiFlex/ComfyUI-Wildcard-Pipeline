@@ -15,6 +15,7 @@
  * post-confirm undo of dropped tokens in v1 (spec "Reconcile loss").
  */
 import { computed, ref, watch } from "vue";
+import Button from "@/kit/Button.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import { reconcileSubcatExpr } from "../cascade/reconcile-subcat";
 import type { WildcardRefData } from "../utils/library-suggestions";
@@ -180,14 +181,14 @@ function doConfirm(): void {
 
       <div class="wpc-remap__actions">
         <span class="wpc-remap__note">Cancel is the only undo — confirm is final.</span>
-        <button type="button" class="wp-btn" data-test="remap-cancel" @click="emit('cancel')">Cancel</button>
-        <button
-          type="button"
-          class="wp-btn wp-btn--primary"
+        <Button size="sm" data-test="remap-cancel" @click="emit('cancel')">Cancel</Button>
+        <Button
+          variant="primary"
+          size="sm"
           data-test="remap-confirm"
-          :disabled="!pickedUuid || undefined"
+          :disabled="!pickedUuid"
           @click="doConfirm"
-        >Remap</button>
+        >Remap</Button>
       </div>
     </div>
   </Teleport>

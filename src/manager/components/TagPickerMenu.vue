@@ -14,6 +14,7 @@
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, ref, watch } from "vue";
 import Icon from "@/kit/Icon.vue";
+import ListRow from "@/kit/ListRow.vue";
 
 export interface TagGroup {
   axis: string;
@@ -132,10 +133,10 @@ const menuStyle = computed<Record<string, string>>(() => {
       <div class="opt-tags__scroll">
         <div v-for="grp in visibleGroups" :key="grp.axis" class="opt-tags__section">
           <span class="opt-tags__section-name">{{ grp.isOther ? "ungrouped" : grp.axis }}</span>
-          <button
+          <ListRow
             v-for="tag in grp.tags"
             :key="tag"
-            type="button"
+            size="sm"
             class="opt-tags__toggle"
             :class="{ 'is-on': selectedSet.has(tag) }"
             :style="styleFor(tag)"
@@ -144,11 +145,13 @@ const menuStyle = computed<Record<string, string>>(() => {
             :data-test="`${testPrefix}-toggle-${tag}`"
             @click.stop="emit('toggle', tag)"
           >
-            <span class="opt-tags__toggle-box" aria-hidden="true">
-              <Icon v-if="selectedSet.has(tag)" name="check" :size="8" />
-            </span>
+            <template #start>
+              <span class="opt-tags__toggle-box" aria-hidden="true">
+                <Icon v-if="selectedSet.has(tag)" name="check" :size="8" />
+              </span>
+            </template>
             {{ tag }}
-          </button>
+          </ListRow>
         </div>
         <p
           v-if="allTags.length && !visibleGroups.length"
@@ -216,20 +219,8 @@ const menuStyle = computed<Record<string, string>>(() => {
    elsewhere; a flat grey list loses the one cue that says which axis a tag
    belongs to. Ported from the picker's original rules — rewriting them from
    scratch is how the colour went missing in the first place. */
-.opt-tags__toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-  padding: 4px var(--wp-space-4);
-  background: none;
-  border: none;
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text);
-  font: 11px var(--wp-font-mono);
-  text-align: left;
-  cursor: pointer;
-}
-.opt-tags__toggle:hover { background: var(--wp-bg-3); }
+/* A kit ListRow per tag, in the menu's mono type, with its hue box in front. */
+.opt-tags__toggle { color: var(--wp-text); font: 11px var(--wp-font-mono); }
 .opt-tags__toggle-box {
   width: 15px;
   height: 15px;

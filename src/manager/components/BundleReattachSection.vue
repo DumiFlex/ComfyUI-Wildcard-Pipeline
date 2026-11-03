@@ -16,6 +16,7 @@
  * This is UI-layer reference-healing only — it doesn't touch the engine.
  */
 import { ref } from "vue";
+import Button from "@/kit/Button.vue";
 
 interface DanglingChild {
   childId: string;
@@ -112,19 +113,20 @@ function confirm(childId: string): void {
         <span v-if="child.cachedName"> (was “{{ child.cachedName }}”)</span>
         is not in your library.
       </span>
-      <button
-        type="button"
-        class="rb__btn"
+      <Button
+        variant="outline"
+        size="sm"
         :data-test="`bundle-reattach-btn-${child.childId}`"
         @click="openDropdown(child.childId)"
-      >Reattach</button>
-      <button
+      >Reattach</Button>
+      <Button
         v-if="isDownloadable(child.childId)"
-        type="button"
-        class="rb__btn rb__btn--download"
+        variant="ghost"
+        size="sm"
+        icon="pi-cloud-download"
         :data-test="`bundle-reattach-download-${child.childId}`"
         @click="emit('downloadreattach', { childId: child.childId })"
-      ><i class="pi pi-cloud-download" aria-hidden="true" /> Download from community</button>
+      >Download from community</Button>
 
       <div v-if="openChildId === child.childId" class="rb__picker">
         <input
@@ -153,13 +155,14 @@ function confirm(childId: string): void {
           </li>
         </ul>
         <p class="rb__note">Cancel is the only undo — confirm rewrites the child + saves.</p>
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           class="rb__confirm"
           :data-test="`bundle-reattach-confirm-${child.childId}`"
-          :disabled="!picked || undefined"
+          :disabled="!picked"
           @click="confirm(child.childId)"
-        >Confirm reattach</button>
+        >Confirm reattach</Button>
       </div>
     </div>
   </section>
@@ -184,32 +187,7 @@ function confirm(childId: string): void {
 .rb__warn-icon { color: var(--wp-danger); font-size: 12px; }
 .rb__txt { flex: 1; color: var(--wp-text); }
 .rb__txt code { font-family: var(--wp-font-mono, monospace); }
-.rb__btn,
-.rb__confirm {
-  padding: 4px 12px;
-  border: 1px solid var(--wp-accent);
-  border-radius: min(4px, var(--wp-radius-cap, 999px));
-  background: transparent;
-  color: var(--wp-accent-text, var(--wp-text));
-  font: 11px var(--wp-font-sans);
-  cursor: pointer;
-}
-.rb__confirm { background: var(--wp-accent); color: var(--wp-on-accent); margin-top: 6px; }
-/* Secondary affordance beside Reattach — pulls the missing dep from the
- * community. Quieter than the primary accent border so the manual dropdown
- * stays the obvious first action; the cloud icon signals the network pull. */
-.rb__btn--download {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border-color: var(--wp-border, rgba(255,255,255,0.12));
-  color: var(--wp-text-muted, var(--wp-text2, var(--wp-text)));
-}
-.rb__btn--download:hover {
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-text));
-}
-.rb__btn--download .pi { font-size: 11px; }
+.rb__confirm { margin-top: 6px; }
 .rb__picker {
   flex-basis: 100%;
   margin-top: 8px;
