@@ -46,7 +46,7 @@ describe("constraint IdentitySection", () => {
     const w = mount(IdentitySection, {
       props: { module: makeModule({ meta: { name: "Custom", library_name: "color-fabric-rules" } }) },
     });
-    expect(w.find('[data-test="id-name"]').classes()).toContain("id__input--mod");
+    expect(w.find('[data-test="id-name"]').attributes("data-tone")).toBe("accent");
   });
 
   it("name reset button restores meta.name to library_name", async () => {

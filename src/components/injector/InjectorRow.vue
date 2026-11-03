@@ -232,26 +232,20 @@ function onDragEnd(): void {
         data-test="inj-row-type"
       >{{ valueType.toLowerCase() }}</span>
 
-      <div
-        class="wp-vbind-wrap"
-        :class="{ 'wp-vbind-wrap--empty': isEmpty }"
+      <Input
+        size="sm"
+        mono
+        prefix="$"
+        class="wp-inj-bind"
+        :tone="isEmpty ? 'warn' : undefined"
+        data-test="inj-row-binding"
+        :model-value="row.binding"
+        :aria-label="isGeneral ? 'binding for template row' : `binding for ${row.slot_name}`"
+        placeholder="variable_name"
+        spellcheck="false"
         draggable="false"
-      >
-        <span class="wp-vbind-prefix">$</span>
-        <Input
-         
-          size="sm"
-         
-          class="wp-vbind-input"
-          data-test="inj-row-binding"
-          :model-value="row.binding"
-          :aria-label="isGeneral ? 'binding for template row' : `binding for ${row.slot_name}`"
-          placeholder="variable_name"
-          spellcheck="false"
-          draggable="false"
-          @input="onBindingInput"
-        />
-      </div>
+        @input="onBindingInput"
+      />
 
       <span
         v-if="conflictSeverity"
@@ -325,7 +319,6 @@ function onDragEnd(): void {
 </template>
 
 <style scoped>
-@import "../shared/var-binding-input.css";
 @import "../shared/row-primitives.css";
 
 /* Card-framed row — mirrors .wp-module shape. Type-color left stripe
@@ -576,7 +569,7 @@ function onDragEnd(): void {
 
 /* Injector-specific badge truncation. The shared .wp-conflict-badge
  * doesn't truncate by default (Context's row has flex:1 module name
- * absorbing slack). Injector's row layout puts vbind-wrap right next
+ * absorbing slack). Injector's row layout puts the binding right next
  * to the badge, so a long label can squeeze the binding input. Cap
  * + ellipsis prevents that. */
 .wp-conflict-badge {
@@ -586,6 +579,11 @@ function onDragEnd(): void {
   white-space: nowrap;
   flex-shrink: 1;
 }
+
+/* Binding field: takes the row's slack, floored at 80px so siblings
+ * (conflict badge, action cluster) can't squash it; the `$` and a few
+ * characters stay visible on the narrowest node. */
+.wp-inj-row .wp-inj-bind { flex: 1 1 0; min-width: 80px; }
 
 /* Row action cluster — flex row of WpIconButtons. */
 .wp-row-actions { display: flex; gap: 1px; flex-shrink: 0; }

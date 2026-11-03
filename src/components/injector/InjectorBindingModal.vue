@@ -369,21 +369,17 @@ function onKeydown(ev: KeyboardEvent): void {
           <span class="ibm__section-label">Binding</span>
           <span class="ibm__section-hint">variable name written to ctx</span>
         </div>
-        <div class="ibm__binding-wrap" :class="{ 'ibm__binding-wrap--empty': !draftBinding.trim() }">
-          <span class="ibm__binding-prefix">$</span>
-          <Input
-           
-            size="sm"
-           
-            class="ibm__binding-input"
-            data-test="ibm-binding"
-            :model-value="draftBinding"
-            :aria-label="isGeneral ? 'binding for template row' : `binding for ${row.slot_name}`"
-            placeholder="variable_name"
-            spellcheck="false"
-            @input="onBindingInput"
-          />
-        </div>
+        <Input
+          mono
+          prefix="$"
+          :tone="draftBinding.trim() ? undefined : 'warn'"
+          data-test="ibm-binding"
+          :model-value="draftBinding"
+          :aria-label="isGeneral ? 'binding for template row' : `binding for ${row.slot_name}`"
+          placeholder="variable_name"
+          spellcheck="false"
+          @input="onBindingInput"
+        />
       </section>
 
       <section class="ibm__section">
@@ -668,33 +664,6 @@ function onKeydown(ev: KeyboardEvent): void {
   align-items: center;
   gap: 6px;
 }
-
-.ibm__binding-wrap {
-  display: flex;
-  align-items: center;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  overflow: hidden;
-}
-.ibm__binding-wrap:focus-within { border-color: var(--wp-accent); }
-.ibm__binding-wrap--empty { border-color: var(--wp-warn); }
-.ibm__binding-prefix {
-  font: 700 13px var(--wp-font-mono);
-  color: var(--wp-accent);
-  padding: 6px 8px;
-  background: color-mix(in srgb, var(--wp-accent) 8%, transparent);
-}
-.ibm__binding-input {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  outline: none;
-  font: 600 13px var(--wp-font-mono);
-  color: var(--wp-text);
-  padding: 6px 8px;
-}
-.ibm__binding-input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
 
 /* Insert-slot menu button + reset button + dropdown panel + items —
  * shared with Combine's TemplateSection via

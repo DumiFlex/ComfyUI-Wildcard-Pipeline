@@ -296,11 +296,10 @@ function toggleTotalInternal(): void {
     <div class="wp-loop__section">
       <div class="wp-loop__label">iteration var</div>
       <div class="wp-loop__var-input" :data-wp-socket="valuesWired ? undefined : 'values'">
-        <span class="wp-loop__var-prefix">$</span>
         <Input
-         
           size="sm"
-         
+          mono
+          prefix="$"
           class="wp-loop__var-text"
           :model-value="modelValue.iteration_var_name"
           data-test="loop-iteration-var"
@@ -398,30 +397,9 @@ function toggleTotalInternal(): void {
 }
 
 
-.wp-loop__var-input {
-  display: flex;
-  align-items: center;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  padding: 0 6px;
-}
-.wp-loop__var-prefix {
-  font: 600 11px var(--wp-font-mono, monospace);
-  color: var(--wp-accent);
-  margin-right: 4px;
-}
-.wp-loop__var-text {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  padding: 4px 0;
-  font: 11px var(--wp-font-mono, monospace);
-  color: var(--wp-text);
-  outline: none;
-}
-.wp-loop__var-text:focus { color: var(--wp-text); }
-
+/* The `$name` field with its two internal-flag buttons beside it. */
+.wp-loop__var-input { display: flex; align-items: center; gap: 4px; }
+.wp-loop__var-input .wp-loop__var-text { flex: 1 1 0; min-width: 0; }
 
 .wp-loop__seedbtn-fill { flex: 1; }
 .wp-loop__seedbtn-badge { font: 600 8px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.14); border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent); }

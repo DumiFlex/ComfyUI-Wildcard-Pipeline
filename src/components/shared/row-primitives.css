@@ -13,7 +13,7 @@
  * consumer; no more duplicating CSS across feature widgets.
  *
  * NOT wrapped in `@layer wp-extension` — same constraint as
- * theme.css and var-binding-input.css: Vue's <style scoped> scoper
+ * theme.css: Vue's <style scoped> scoper
  * can't parse @layer atrules in CSS that gets @imported into a
  * scoped block. The `.wp-*` namespace prefix carries isolation duty
  * for this file.

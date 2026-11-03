@@ -234,7 +234,7 @@ function text(ev: Event): string {
       <Input
         v-else
         size="sm"
-        class="wp-lg__input wp-lg__template"
+        mono
         data-wp-socket="label_text"
         :model-value="cfg.label"
         :placeholder="labelPlaceholder"
@@ -397,7 +397,8 @@ function text(ev: Event): string {
         </div>
         <Textarea
           v-if="cfg.rows_from === 'typed' && !rowsWired"
-          class="wp-lg__input wp-lg__area"
+          mono
+          class="wp-lg__area"
           :model-value="cfg.row_headers"
           :rows="2"
           placeholder="One row header per line"
@@ -424,7 +425,8 @@ function text(ev: Event): string {
         </div>
         <Textarea
           v-if="cfg.columns_from === 'typed' && !colsWired"
-          class="wp-lg__input wp-lg__area"
+          mono
+          class="wp-lg__area"
           :model-value="cfg.column_headers"
           :rows="2"
           placeholder="One column header per line"
@@ -442,7 +444,8 @@ function text(ev: Event): string {
           <Input
             v-else
             size="sm"
-            class="wp-lg__input wp-lg__grow"
+            mono
+            class="wp-lg__grow"
             :model-value="cfg.title"
             placeholder="Drawn above the grid"
             spellcheck="false"
@@ -594,20 +597,8 @@ function text(ev: Event): string {
 .wp-lg__key--inline { width: auto; margin-left: 4px; }
 .wp-lg__note { font-size: 9px; color: var(--wp-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.wp-lg__input {
-  min-width: 0;
-  height: var(--wp-control-h-sm, 24px);
-  padding: 0 6px;
-  background: var(--wp-bg-1);
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  border-radius: min(4px, var(--wp-radius-cap, 999px));
-  font: 11px var(--wp-font-mono, monospace);
-  outline: none;
-}
-.wp-lg__input:focus { border-color: var(--wp-border-focus); }
-.wp-lg__input::placeholder { color: var(--wp-text-dim); font-family: var(--wp-font-sans, sans-serif); }
-.wp-lg__area { height: auto; padding: 4px 6px; resize: vertical; margin-left: 54px; }
+/* Typed header lists sit under their row's control, past the key column. */
+.wp-lg__area { margin-left: 54px; width: calc(100% - 54px); }
 .wp-lg__grow, .wp-lg__select, .wp-lg__font { flex: 1; min-width: 0; }
 .wp-lg__num { width: 84px; flex: none; }
 .wp-lg__num--wide { width: 112px; }

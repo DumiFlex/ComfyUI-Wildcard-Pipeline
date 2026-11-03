@@ -299,19 +299,7 @@ function done(): void {
   align-items: center;
   gap: 6px;
 }
-.wp-bm__name {
-  flex: 1;
-  min-width: 0;
-  height: var(--wp-control-h-sm, 24px);
-  padding: 0 8px;
-  box-sizing: border-box;
-  color: var(--wp-text);
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border);
-  border-radius: min(4px, var(--wp-radius-cap, 999px));
-  font: 600 12.5px var(--wp-font-sans, sans-serif);
-}
-.wp-bm__name:focus-visible { outline: 2px solid var(--wp-accent); outline-offset: -1px; }
+.wp-bm__name { flex: 1; min-width: 0; }
 .wp-bm__row {
   display: flex;
   align-items: center;

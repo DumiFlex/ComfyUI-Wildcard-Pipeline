@@ -210,8 +210,8 @@ function insertIcon(name: string): void {
           @update:model-value="(v: string) => (linkSection = v)"
         />
       </template>
-      <Input v-else v-model="linkUrl" size="sm" class="wp-note-ed__input" aria-label="Web address" placeholder="https://…" data-test="note-link-url" @keydown.enter.prevent="insertLink" />
-      <Input v-model="linkText" size="sm" class="wp-note-ed__input" aria-label="Link text" placeholder="Text (optional)" data-test="note-link-text" @keydown.enter.prevent="insertLink" />
+      <Input v-else v-model="linkUrl" size="sm" aria-label="Web address" placeholder="https://…" data-test="note-link-url" @keydown.enter.prevent="insertLink" />
+      <Input v-model="linkText" size="sm" aria-label="Link text" placeholder="Text (optional)" data-test="note-link-text" @keydown.enter.prevent="insertLink" />
       <div class="wp-note-ed__row">
         <WpSegmented
           :model-value="linkStyle"
@@ -292,7 +292,7 @@ function insertIcon(name: string): void {
     <Textarea
       v-show="mode === 'write'"
       :ref="(c) => (area = textareaEl(c))"
-      class="wp-note-ed__text"
+      mono
       :rows="5"
       :model-value="modelValue"
       :placeholder="hint"
@@ -351,11 +351,6 @@ function insertIcon(name: string): void {
 .wp-note-ed__label { font-size: 11px; font-weight: 600; color: var(--wp-text-muted); }
 .wp-note-ed__hint { font-size: 11px; color: var(--wp-text-dim); margin: 0; }
 .wp-note-ed__actions { display: flex; justify-content: flex-end; gap: 6px; }
-/* The kit Input / Textarea draw the boxes (the node has no border-box reset,
-   and the kit field doesn't set one, so a full-width field would overrun the
-   card by its padding); the note source is monospace. */
-.wp-note-ed__input, .wp-note-ed__text { box-sizing: border-box; }
-.wp-note-ed__text { font-family: var(--wp-font-mono, monospace); font-size: 12px; line-height: 18px; }
 .wp-note-ed__iconpick.wp-btn { font-size: 12px; text-transform: capitalize; }
 .wp-note-ed__chev { font-size: 9px; color: var(--wp-text-dim); }
 .wp-note-ed__preview {
