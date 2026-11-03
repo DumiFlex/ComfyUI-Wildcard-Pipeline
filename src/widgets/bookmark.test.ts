@@ -257,6 +257,28 @@ describe("Bookmark jumps around the host's floating pieces", () => {
     expect(at()[1]).toBeCloseTo(24);
   });
 
+  it("is not moved by a toast in the corner", () => {
+    const b = bookmark(1, "B", { anchor: "tr", zoom: 1 }, root);
+    const cv = (canvas as unknown as { canvas: HTMLCanvasElement }).canvas;
+    // ComfyUI's toast viewport, top right, over the canvas.
+    const viewport = el("ol", [1300, 80, 1000, 200]);
+    viewport.dataset.testid = "toast-viewport";
+    const toast = el("li", [1300, 80, 1000, 200], viewport);
+    toast.dataset.testid = "toast";
+    const orig = document.elementsFromPoint;
+    document.elementsFromPoint = (x: number, y: number): Element[] =>
+      x > 600 && y > 60 && y < 200 ? [toast, viewport, cv] : [cv];
+    try {
+      jumpTo(b);
+    } finally {
+      document.elementsFromPoint = orig;
+    }
+    // Top right: the bookmark's top-right corner 24 px in from the top
+    // right of the canvas, as with no toast.
+    expect((1000 + 300 + ox())).toBeCloseTo(1000 - 24);
+    expect(at()[1]).toBeCloseTo(24);
+  });
+
   it("moves out from under the dock, or lands behind it when that is off", () => {
     const b = bookmark(1, "B", { anchor: "tl", zoom: 1 }, root);
     const dock = el("section", [0, 0, 300, 400]);

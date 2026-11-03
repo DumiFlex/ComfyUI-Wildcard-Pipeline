@@ -19,7 +19,7 @@ A bookmark has no node frame and can't be resized: it is a small pill with its i
 | Setting | Notes |
 |---|---|
 | Icon, colour, name | The icon opens the full icon list. The colour marks the pill and its dock row. |
-| Lands at | A 3×3 grid: the corner, edge or centre of the free part of the screen the bookmark goes to, 24 px in. The free part is what ComfyUI's toolbar, the open side panel and the bottom panel (console, shortcuts) leave, and it follows them as they open and close; a jump that would land under the dock, the minimap or the zoom controls moves just enough to clear them all (the dock only while **Land clear of the dock** is on). It lands in the same place however often you press the key, selected or not. |
+| Lands at | A 3×3 grid: the corner, edge or centre of the free part of the screen the bookmark goes to, 24 px in. The free part is what ComfyUI's toolbar, the open side panel and the bottom panel (console, shortcuts) leave, and it follows them as they open and close; a jump that would land under the dock, the minimap or the zoom controls moves just enough to clear them all (the dock only while **Land clear of the dock** is on). It lands in the same place however often you press the key, selected or not, and a toast showing at the time doesn't move it (or the dock). |
 | Use this view | Lands on the view on screen now, at its zoom, instead of a grid spot. |
 | Zoom | **Set** jumps to that zoom (0.1–10×; the magnifier takes the zoom you're at). **Keep current** leaves the zoom alone. |
 | Shortcut | Click **Record**, then press the keys. Esc cancels, Backspace clears. The bolt picks a free one (a new one on each press), checked against the page too (see below). |

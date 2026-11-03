@@ -282,13 +282,16 @@ function animateView(c: CanvasLike, offset: [number, number], scale: number): vo
 
 // ── the free part of the canvas ───────────────────────────────────────
 
-/** Part of the graph, not the host's chrome: nodes' DOM widgets, the Vue
- *  renderer's nodes, our own dock and toasts, and ComfyUI's selection
- *  toolbox. The toolbox floats over the selected node and moves with it, so
- *  keeping a jump clear of it pushed a selected bookmark further down on
- *  every press. */
+/** Not the host's chrome, so never a bar or a box to keep clear of: nodes'
+ *  DOM widgets, the Vue renderer's nodes, our own dock and toasts,
+ *  ComfyUI's selection toolbox and ComfyUI's toasts. The toolbox floats over
+ *  the selected node and moves with it, so keeping a jump clear of it pushed
+ *  a selected bookmark further down on every press. A toast (the reka
+ *  viewport, or PrimeVue's on older frontends) comes and goes, and read as a
+ *  bar it moved the dock and the jump spot while it showed. */
 const GRAPH_CONTENT = ".dom-widget, [data-node-id], .lg-node, .wp-widget, #wp-bookmark-dock-root, .wp-toast-stack, "
-  + ".selection-toolbox, [data-testid=\"selection-toolbox\"], .selection-overlay-container";
+  + ".selection-toolbox, [data-testid=\"selection-toolbox\"], .selection-overlay-container, "
+  + "[data-testid=\"toast-viewport\"], [data-testid=\"toast\"], .p-toast";
 
 /** True when nothing but the graph (or one of `skip`) covers this screen
  *  point. */

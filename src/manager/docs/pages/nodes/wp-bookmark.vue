@@ -9,7 +9,7 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
 const controls = [
   { term: "Icon, colour, name", desc: "The icon opens the full icon list. The colour marks the pill and its dock row." },
-  { term: "Lands at", desc: "A 3×3 grid: the corner, edge or centre of the free part of the screen (what ComfyUI's toolbar, the open side panel and the bottom panel leave, following them as they open and close), 24 px in. A jump that would land under the dock, the minimap or the zoom controls moves just enough to clear them all (the dock only while its Land clear of the dock switch is on). It lands in the same place however often you press the key, selected or not." },
+  { term: "Lands at", desc: "A 3×3 grid: the corner, edge or centre of the free part of the screen (what ComfyUI's toolbar, the open side panel and the bottom panel leave, following them as they open and close), 24 px in. A jump that would land under the dock, the minimap or the zoom controls moves just enough to clear them all (the dock only while its Land clear of the dock switch is on). It lands in the same place however often you press the key, selected or not, and a toast showing at the time doesn't move it." },
   { term: "Use this view", desc: "Lands on the view on screen now, at its zoom, instead of a grid spot." },
   { term: "Zoom", desc: "Set jumps to that zoom (0.1–10×; the magnifier takes the zoom you're at). Keep current leaves it alone." },
   { term: "Shortcut", desc: "Record, then press the keys (Esc cancels, Backspace clears). The bolt picks a free one, a new one on each press." },
