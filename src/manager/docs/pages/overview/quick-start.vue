@@ -3,6 +3,7 @@ import { useRouter } from "vue-router";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import Banner from "@/kit/Banner.vue";
+import Button from "@/kit/Button.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
@@ -29,10 +30,7 @@ function createStarterWildcard(): void {
         you like, then click <b>Save</b>.
       </p>
       <div class="wp-qs-cta">
-        <button class="wp-qs-cta__btn" type="button" @click="createStarterWildcard">
-          <i class="pi pi-sparkles" aria-hidden="true" />
-          Create a starter wildcard
-        </button>
+        <Button variant="primary" icon="pi-sparkles" class="wp-qs-cta__btn" @click="createStarterWildcard">Create a starter wildcard</Button>
       </div>
       <DocImage
         src="images/docs/quick-start-starter.png"
@@ -104,26 +102,5 @@ function createStarterWildcard(): void {
 <style scoped>
 .wp-qs-cta {
   margin: var(--wp-space-5) 0;
-}
-.wp-qs-cta__btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-  padding: var(--wp-space-3) var(--wp-space-6);
-  background: var(--wp-accent-gradient, var(--wp-accent-500));
-  color: var(--wp-on-accent);
-  font-size: var(--wp-text-sm);
-  font-weight: 600;
-  border: none;
-  border-radius: var(--wp-radius);
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-.wp-qs-cta__btn:hover,
-.wp-qs-cta__btn:focus-visible {
-  opacity: 0.88;
-}
-.wp-qs-cta__btn .pi {
-  font-size: 15px;
 }
 </style>

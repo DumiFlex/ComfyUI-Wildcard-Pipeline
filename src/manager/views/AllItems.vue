@@ -418,21 +418,16 @@ function refresh() {
             Kinds{{ selectedKinds.size ? ` (${selectedKinds.size})` : "" }}
           </label>
           <div class="wp-kind-row">
-            <button
+            <Chip
               v-for="k in KIND_META" :key="k.key"
-              type="button"
+              size="md"
               class="wp-kind-chip"
+              :icon="k.icon.replace(/^pi /, '')"
+              :color="k.color"
+              :pressed="selectedKinds.has(k.key)"
               :data-active="selectedKinds.has(k.key) ? 'true' : 'false'"
-              :style="selectedKinds.has(k.key) ? {
-                borderColor: k.color,
-                background: `color-mix(in oklab, ${k.color} 18%, transparent)`,
-                color: k.color,
-              } : undefined"
               @click="toggleKind(k.key)"
-            >
-              <i :class="k.icon" aria-hidden="true" />
-              {{ k.label }}
-            </button>
+            >{{ k.label }}</Chip>
           </div>
         </div>
         <div class="wp-field">
@@ -481,15 +476,16 @@ function refresh() {
     </template>
 
     <template #favorite="{ row }">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         class="wp-row-fav-btn"
+        :icon="row.is_favorite ? 'pi-star-fill' : 'pi-star'"
         :data-on="row.is_favorite ? 'true' : 'false'"
+        :aria-pressed="row.is_favorite"
         :aria-label="row.is_favorite ? 'Unfavorite' : 'Favorite'"
         @click.stop="fav(row)"
-      >
-        <i :class="row.is_favorite ? 'pi pi-star-fill' : 'pi pi-star'" />
-      </button>
+      />
     </template>
 
     <template #name="{ row }">
@@ -552,18 +548,6 @@ function refresh() {
 
 <style scoped>
 .wp-kind-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
-.wp-kind-chip {
-  display: inline-flex; align-items: center; gap: var(--wp-space-3);
-  padding: var(--wp-space-2) 10px; /* audit-exempt: 10px matches PrimeVue chip horizontal rhythm */
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  background: var(--wp-bg-2);
-  color: var(--wp-text);
-  font-size: var(--wp-text-sm);
-  cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
-}
-.wp-kind-chip:hover { border-color: var(--wp-border-strong); }
 
 .wp-kind-cell {
   display: inline-flex; align-items: center; gap: 5px; /* audit-exempt: 5px matches icon+label optical balance */
@@ -581,4 +565,6 @@ function refresh() {
 .wp-tags-slot { min-height: 28px; }
 .wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
 .wp-tags-empty { font-size: var(--wp-text-sm); }
+/* The favourite star: the kit ghost button, the star in the warn colour when on. */
+.wp-row-fav-btn[data-on="true"] { color: var(--wp-warn); }
 </style>

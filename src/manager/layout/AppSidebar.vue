@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import SearchInput from "@/kit/SearchInput.vue";
+import ListRow from "@/kit/ListRow.vue";
 import { computed, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import Icon, { ICON_SM } from "@/kit/Icon.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useModuleStore } from "../stores/moduleStore";
@@ -254,8 +255,7 @@ const countByKey = computed<Record<string, number>>(() => {
              parent route still navigates on click so users get the
              dashboard view AND see the submenu reveal. -->
         <template v-else-if="item.children?.length">
-          <button
-            type="button"
+          <ListRow
             class="wp-nav wp-nav--parent"
             :data-active="activeId === item.id || undefined"
             :data-nav-id="item.id"
@@ -277,7 +277,7 @@ const countByKey = computed<Record<string, number>>(() => {
               class="wp-nav__caret"
               :size="ICON_SM"
             />
-          </button>
+          </ListRow>
           <!-- Children rendered only when sidebar is expanded AND
                the parent is open. Collapsed-sidebar mode hides the
                submenu entirely (icon-only sidebar has no room for
@@ -287,30 +287,28 @@ const countByKey = computed<Record<string, number>>(() => {
             v-if="!ui.sidebarCollapsed && isParentExpanded(item)"
             class="wp-nav__children"
           >
-            <button
+            <RouterLink
               v-for="child in item.children" :key="child.id"
-              type="button"
+              :to="child.to ?? ''"
               class="wp-nav wp-nav--child"
               :data-active="activeId === child.id || undefined"
               :data-nav-id="child.id"
-              @click="onItemClick(child)"
             >
               <span class="wp-nav__icon"><Icon :name="child.icon" /></span>
               <span class="wp-nav__label">{{ child.label }}</span>
-            </button>
+            </RouterLink>
           </div>
         </template>
 
-        <!-- Leaf item — single navigation button, no nesting. -->
-        <button
-          v-else
-          type="button"
+        <!-- Leaf item: a link to its page (middle-click opens a new tab). -->
+        <RouterLink
+          v-else-if="item.to"
+          :to="item.to"
           class="wp-nav"
           :data-active="activeId === item.id || undefined"
           :data-nav-id="item.id"
           :title="ui.sidebarCollapsed ? item.label : undefined"
           :style="ui.sidebarCollapsed ? { justifyContent: 'center' } : undefined"
-          @click="onItemClick(item)"
         >
           <span class="wp-nav__icon"><Icon :name="item.icon" /></span>
           <span v-if="!ui.sidebarCollapsed" class="wp-nav__label">{{ item.label }}</span>
@@ -326,7 +324,19 @@ const countByKey = computed<Record<string, number>>(() => {
             :title="`${health.counts.problem} problems, ${health.counts.warning} warnings`"
             data-test="health-badge"
           >{{ health.badge }}</span>
-        </button>
+        </RouterLink>
+        <!-- An in-app action (Feedback & support): a kit row. -->
+        <ListRow
+          v-else
+          class="wp-nav wp-nav--action"
+          :data-nav-id="item.id"
+          :title="ui.sidebarCollapsed ? item.label : undefined"
+          :style="ui.sidebarCollapsed ? { justifyContent: 'center' } : undefined"
+          @click="onItemClick(item)"
+        >
+          <template #start><span class="wp-nav__icon"><Icon :name="item.icon" /></span></template>
+          <span v-if="!ui.sidebarCollapsed" class="wp-nav__label">{{ item.label }}</span>
+        </ListRow>
       </template>
     </template>
 
@@ -411,4 +421,7 @@ const countByKey = computed<Record<string, number>>(() => {
 }
 
 /* Recents section CSS removed — Dashboard owns the recent surface now. */
+/* The action row is the kit ListRow; it keeps the nav rows' spacing and type. */
+.wp-nav--action { width: 100%; min-height: 0; gap: 10px; padding: 7px 10px; font-size: 13px; color: var(--wp-text-muted); border: 1px solid transparent; }
+.wp-nav--action:hover { background: var(--wp-bg-3); color: var(--wp-text); }
 </style>
