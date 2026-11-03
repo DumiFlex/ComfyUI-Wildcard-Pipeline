@@ -767,7 +767,7 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
       >
         <b>No rule matches this filter</b>
         All {{ rules.length }} are still here — only the view is filtered.
-        <button type="button" class="drv-clearlink" @click="ruleQuery = ''">Clear filter</button>
+        <Button variant="link" size="sm" class="drv-clearlink" @click="ruleQuery = ''">Clear filter</Button>
       </div>
 
       <div v-else class="rules-stack" data-test="rules-stack">
@@ -849,12 +849,7 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
 .rule-row { display: flex; align-items: flex-start; gap: 10px; }
 .rule-row__card { flex: 1 1 auto; min-width: 0; }
 .rule-row__check { margin-top: 14px; flex: 0 0 auto; }
-.drv-clearlink {
-  background: none; border: none; padding: 0; cursor: pointer;
-  color: var(--wp-text-muted); font: 11px var(--wp-font-sans);
-  text-decoration: underline;
-  margin-left: var(--wp-space-3);
-}
+.drv-clearlink { margin-left: var(--wp-space-3); }
 .rule-row--selected .rule-row__card {
   outline: 2px solid color-mix(in oklab, var(--wp-accent) 45%, transparent);
   outline-offset: 2px;

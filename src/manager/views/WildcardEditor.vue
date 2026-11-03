@@ -1964,11 +1964,13 @@ defineExpose({
                    since dropping between two visible rows says nothing about
                    the hidden ones between them. The bulk moves above stay
                    available there — their destination is absolute. -->
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 class="opt-grip"
+                icon="pi-bars"
                 :disabled="optionFilterActive || undefined"
-                :title="optionFilterActive
+                :hint="optionFilterActive
                   ? 'Dragging is off while a filter is active — use Bulk edit ▸ Top / Bottom / Move here'
                   : 'Drag to reorder · Alt+↑/↓ to move one step'"
                 :aria-label="`Reorder ${o.value || 'option'}`"
@@ -1978,7 +1980,7 @@ defineExpose({
                 @dragend="onOptDragEnd"
                 @keydown.alt.up.prevent="nudgeOption(o.id, -1)"
                 @keydown.alt.down.prevent="nudgeOption(o.id, 1)"
-              ><i class="pi pi-bars" aria-hidden="true" /></button>
+              />
             </td>
             <td>
               <WpNumber commit="input"
@@ -2101,7 +2103,7 @@ defineExpose({
             <td :colspan="bulkMode ? 6 : 5" class="wc-optfilter__empty" data-test="wc-opt-noresults">
               <b>No option matches this filter</b>
               All {{ options.length }} are still here — only the view is filtered.
-              <button type="button" class="wc-optfilter__clear" @click="clearOptionFilter">Clear filter</button>
+              <Button variant="link" size="sm" class="wc-optfilter__clear" @click="clearOptionFilter">Clear filter</Button>
             </td>
           </tr>
         </tbody>
@@ -2258,24 +2260,10 @@ defineExpose({
 .opt-col-grip { width: 26px; }
 /* The only pointer affordance the value cell's contenteditable does not
    poison. Hidden until row hover so the resting table is unchanged. */
-.opt-grip {
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 22px;
-  padding: 0;
-  background: none;
-  border: none;
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-dim);
-  font-size: 11px;
-  cursor: grab;
-  opacity: 0;
-  transition: opacity 0.1s;
-}
+/* The kit row icon button, shown on row hover only. */
+.opt-grip { cursor: grab; opacity: 0; transition: opacity 0.1s; }
 tr:hover .opt-grip { opacity: 0.7; }
-.opt-grip:hover { opacity: 1; background: var(--wp-bg-3); }
-.opt-grip:focus-visible { opacity: 1; outline: 2px solid var(--wp-accent-500); outline-offset: 1px; }
+.opt-grip:hover, .opt-grip:focus-visible { opacity: 1; }
 .opt-grip:disabled { cursor: not-allowed; }
 tr:hover .opt-grip:disabled { opacity: 0.2; }
 
@@ -2294,11 +2282,6 @@ tr:hover .opt-grip:disabled { opacity: 0.2; }
 }
 
 /* Also styled inside OptionFilterBar; this copy serves the no-results row. */
-.wc-optfilter__clear {
-  background: none; border: none; padding: 0; cursor: pointer;
-  color: var(--wp-text-muted); font: 11px var(--wp-font-sans);
-  text-decoration: underline;
-}
 .wc-optfilter__empty {
   padding: var(--wp-space-6) var(--wp-space-5);
   text-align: center; color: var(--wp-text-dim); font-size: 12px;

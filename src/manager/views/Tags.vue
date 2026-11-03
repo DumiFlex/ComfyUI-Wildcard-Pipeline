@@ -263,15 +263,14 @@ registerPageNote(() => {
           @keydown.enter.stop.prevent="saveRename"
           @keydown.esc.stop="cancelRename"
         />
-        <button
+        <Chip
           v-else
-          type="button"
+          as="button"
+          tone="accent"
           class="wp-tags-open"
           :title="`Show items tagged '${c.tag}'`"
           @click="open(c)"
-        >
-          <Chip tone="accent">{{ c.tag }}</Chip>
-        </button>
+        >{{ c.tag }}</Chip>
       </template>
       <template #cell-modules="{ value }">{{ value || "—" }}</template>
       <template #cell-bundles="{ value }">{{ value || "—" }}</template>
@@ -338,10 +337,4 @@ registerPageNote(() => {
 .wp-tags-col--actions { white-space: nowrap; }
 .wp-tags-col--actions .wp-btn + .wp-btn { margin-left: var(--wp-space-2); }
 
-.wp-tags-open {
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-}
 </style>

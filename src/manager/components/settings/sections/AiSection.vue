@@ -1383,7 +1383,7 @@ const off = computed(() => !config.value?.enabled);
             <Button size="sm" variant="ghost" data-test="ai-always-notice-dismiss" @click="dismissNotice('always')">Got it</Button>
           </div>
           <p v-if="dismissed.length" class="wp-ai-set__muted">
-            <button type="button" class="wp-ai-set__link" data-test="ai-notices-again" @click="showNoticesAgain">Show dismissed notices again</button>
+            <Button variant="link" size="sm" class="wp-ai-set__link" data-test="ai-notices-again" @click="showNoticesAgain">Show dismissed notices again</Button>
           </p>
         </SettingGroup>
 
@@ -1615,10 +1615,6 @@ div.wp-ai-set__ctx { display: flex; align-items: flex-start; gap: var(--wp-space
 div.wp-ai-set__ctx p { margin: 0; flex: 1; color: var(--wp-text-muted); }
 div.wp-ai-set__ctx strong { color: var(--wp-text); }
 p.wp-ai-set__muted:has(.wp-ai-set__link) { padding: var(--wp-space-2) var(--wp-space-6); }
-.wp-ai-set__link {
-  padding: 0; border: 0; background: none; cursor: pointer;
-  font: inherit; color: var(--wp-accent); text-decoration: underline;
-}
 
 /* Side cards. */
 .wp-ai-set__card {
