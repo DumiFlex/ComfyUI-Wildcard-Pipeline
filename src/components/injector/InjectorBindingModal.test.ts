@@ -326,7 +326,7 @@ describe("InjectorBindingModal — general (template) row", () => {
     await w.find('[data-test="ibm-neg-insert-slot"]').trigger("click");
     await nextTick();
     expect(menuItem("input_0")).not.toBeNull();
-    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     await nextTick();
     expect(menuItem("input_0")).toBeNull();
   });
@@ -340,7 +340,7 @@ describe("InjectorBindingModal — general (template) row", () => {
     await w.find('[data-test="ibm-insert-slot"]').trigger("click");
     await nextTick();
     expect(menuItem("input_0")).not.toBeNull();
-    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     await nextTick();
     expect(menuItem("input_0")).toBeNull();
   });

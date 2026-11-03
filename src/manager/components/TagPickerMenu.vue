@@ -7,14 +7,16 @@
  * several — and a second implementation would have drifted from the first
  * within a release. Same component, two callers, one behaviour.
  *
- * Teleported to <body> because both hosts sit inside `overflow: auto`
- * scrollers that would otherwise clip it. The host owns the anchor: it knows
- * which element the menu belongs to and when that element has moved.
+ * The panel is the kit Popover's menu: it hangs off the trigger the host
+ * passes in the `trigger` slot, flips above it when there is no room below,
+ * follows it while the page scrolls, closes once it scrolls out of view, on
+ * Escape (focus goes back to the trigger) and on a click outside.
  */
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, ref, watch } from "vue";
 import Icon from "@/kit/Icon.vue";
 import ListRow from "@/kit/ListRow.vue";
+import Popover from "@/kit/Popover.vue";
 
 export interface TagGroup {
   axis: string;
@@ -24,10 +26,6 @@ export interface TagGroup {
 
 interface Props {
   open: boolean;
-  /** Viewport coordinates, from the trigger's own rect. */
-  anchor: { top: number; left: number };
-  /** Flip above the trigger when there is no room below. */
-  dropUp?: boolean;
   groups: TagGroup[];
   /** Every tag on offer — drives the search placeholder and its threshold. */
   allTags: string[];
@@ -41,13 +39,15 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  dropUp: false,
   tagStyle: undefined,
   testPrefix: "tagmenu",
   emptyText: "No sub-categories yet.",
 });
 
-const emit = defineEmits<{ (e: "toggle", tag: string): void }>();
+const emit = defineEmits<{
+  (e: "toggle", tag: string): void;
+  (e: "update:open", open: boolean): void;
+}>();
 
 const query = ref("");
 // Cleared on each open, so the menu never comes back pre-filtered by something
@@ -70,67 +70,40 @@ function styleFor(tag: string): Record<string, string> | undefined {
   return props.tagStyle ? props.tagStyle(tag) : undefined;
 }
 
-/**
- * Position, plus a height bounded by the room actually available.
- *
- * A flat cap on the menu's own height does not stop it running off the bottom:
- * the height that fits depends entirely on where the top edge lands. Opened low
- * on the page, a 400px menu at y=700 overflows however small its `max-height`
- * is, unless that height is measured from y=700 to the bottom of the window.
- *
- * Recomputed on every open and on each re-anchor, because both the trigger's
- * position and the window's height change under it.
- */
-const VIEWPORT_MARGIN = 12;
-/** Comfortable height for a tag list — roughly a dozen rows plus the search.
- *  The viewport is the LIMIT, not the target: filling a tall window with one
- *  menu makes it harder to read, not easier, and buries the page behind it. */
+/** Comfortable height for a tag list: roughly a dozen rows plus the search.
+ *  Popover also caps it at the room on the trigger's side. */
 const PREFERRED_MAX = 340;
-/** Below this a menu is more frustrating than useful, so it scrolls instead. */
-const MIN_USABLE = 140;
-
-const menuStyle = computed<Record<string, string>>(() => {
-  const vh = typeof window === "undefined" ? 0 : window.innerHeight;
-  const room = props.dropUp
-    // Flipped: the menu grows upward from the trigger's top edge.
-    ? props.anchor.top - VIEWPORT_MARGIN
-    : vh - props.anchor.top - VIEWPORT_MARGIN;
-  return {
-    top: `${props.anchor.top}px`,
-    left: `${props.anchor.left}px`,
-    maxHeight: `${Math.max(MIN_USABLE, Math.min(PREFERRED_MAX, room))}px`,
-  };
-});
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="opt-tags__picker"
-      :class="{ 'opt-tags__picker--up': dropUp }"
-      :style="menuStyle"
-      role="menu"
-      :data-test="`${testPrefix}-menu`"
-      @click.stop
-    >
+  <Popover
+    :open="open"
+    variant="menu"
+    role="menu"
+    :max-height="PREFERRED_MAX"
+    :label="`Sub-categories (${allTags.length})`"
+    @update:open="(v: boolean) => emit('update:open', v)"
+  >
+    <template #trigger="{ props: triggerProps }">
+      <slot name="trigger" :props="triggerProps" />
+    </template>
+    <div class="opt-tags__picker" :data-test="`${testPrefix}-menu`">
       <p v-if="!allTags.length" class="opt-tags__empty">{{ emptyText }}</p>
 
-      <!-- Pinned above the scroller, so it stays visible while the list it
-           filters scrolls under it. -->
-      <SearchInput
-        v-if="allTags.length > 8"
-        v-model="query"
-        class="opt-tags__search"
-        size="sm"
-        :placeholder="`Filter ${allTags.length} tags…`"
-        :aria-label="`Filter ${allTags.length} tags`"
-        clear-label="Clear filter"
-        :data-test="`${testPrefix}-search`"
-        @click.stop
-      />
+      <!-- Sticks to the top of the panel, so it stays visible while the list
+           it filters scrolls under it. -->
+      <div v-if="allTags.length > 8" class="opt-tags__searchbar">
+        <SearchInput
+          v-model="query"
+          size="sm"
+          :placeholder="`Filter ${allTags.length} tags…`"
+          :aria-label="`Filter ${allTags.length} tags`"
+          clear-label="Clear filter"
+          :data-test="`${testPrefix}-search`"
+        />
+      </div>
 
-      <div class="opt-tags__scroll">
+      <div class="opt-tags__list" data-wp-rows>
         <div v-for="grp in visibleGroups" :key="grp.axis" class="opt-tags__section">
           <span class="opt-tags__section-name">{{ grp.isOther ? "ungrouped" : grp.axis }}</span>
           <ListRow
@@ -143,7 +116,7 @@ const menuStyle = computed<Record<string, string>>(() => {
             role="menuitemcheckbox"
             :aria-checked="selectedSet.has(tag)"
             :data-test="`${testPrefix}-toggle-${tag}`"
-            @click.stop="emit('toggle', tag)"
+            @click="emit('toggle', tag)"
           >
             <template #start>
               <span class="opt-tags__toggle-box" aria-hidden="true">
@@ -160,52 +133,32 @@ const menuStyle = computed<Record<string, string>>(() => {
         >No tag matches this search.</p>
       </div>
     </div>
-  </Teleport>
+  </Popover>
 </template>
 
 <style scoped>
-/* Teleported to <body>, so coordinates are viewport-relative and no ancestor
-   can clip it. z-index sits above the editor chrome but below modals. */
+/* The panel (placement, flip, cap, layer, look) is the kit Popover's menu. */
 .opt-tags__picker {
-  position: fixed;
-  z-index: 3000;
   min-width: 210px;
-  /* `max-height` is set inline from the room below (or above) the trigger —
-     a static cap cannot know where the top edge landed. See `menuStyle`. */
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-3);
-  padding: var(--wp-space-3);
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius);
-  box-shadow: var(--wp-shadow-md);
-}
-/* Flipped above the trigger. The host sets `top` to the trigger's TOP edge in
-   that case, so shifting up by the menu's own height puts its bottom edge
-   exactly there — no height measurement needed. */
-.opt-tags__picker--up { transform: translateY(-100%); }
-
-/* Only the LIST scrolls, so the search box stays put.
-   `overscroll-behavior: contain` stops the page lurching when either end is
-   reached. */
-.opt-tags__scroll {
-  /* `min-height: 0` lets this shrink inside the capped flex column above;
-     without it the list keeps its content height and pushes the menu past the
-     viewport instead of scrolling. */
-  min-height: 0;
-  /* No cap of its own: the menu's inline `max-height` bounds the whole thing,
-     and this is the part that gives. A fixed 240px here fought that cap and
-     won, which is how the list kept overflowing a menu that was itself the
-     right height. */
-  flex: 1 1 auto;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: var(--wp-space-3);
 }
-.opt-tags__search { flex-shrink: 0; }
+/* The panel scrolls as a whole; the search sticks to its top edge, on the
+   panel's colour so rows pass under it. */
+.opt-tags__searchbar {
+  position: sticky;
+  top: -4px; /* the menu's own padding, so nothing peeks above it */
+  z-index: 1;
+  margin: -4px -4px 0;
+  padding: 4px;
+  background: var(--wp-bg-2);
+}
+.opt-tags__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-3);
+}
 .opt-tags__section { display: flex; flex-direction: column; gap: 2px; }
 .opt-tags__section-name {
   font: 500 9px var(--wp-font-sans);

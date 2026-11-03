@@ -6,22 +6,23 @@
  * insertion order) plus a trailing "ungrouped" box for registry tags not
  * claimed by any axis (§4.3, H1). Each box owns its pills (⠿ name (count) ⋯),
  * an inline "+ tag", a fold caret, a rename input and a classify/accepts kind
- * toggle. Pills move between boxes by drag-and-drop or the kebab's
- * "Move to group…".
+ * toggle. Pills move between boxes by drag-and-drop or the kebab menu's
+ * "Move to group" section.
  *
  * The registry, groups, kinds and the card's open state are v-models owned by
- * the editor (they are part of its draft + dirty snapshot). Menus, folds,
- * drag state and the inline add-tag draft are transient and live here.
+ * the editor (they are part of its draft + dirty snapshot). Folds, drag state
+ * and the inline add-tag draft are transient and live here; each pill's
+ * kebab is a kit DropdownMenu, which owns its own open state.
  * Rename… and Delete… cascade to other modules, so they are handed back to
  * the editor (`rename-tag` / `delete-tag`), which owns the cascade dialogs.
  */
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
 import Input from "@/kit/Input.vue";
 import Card from "@/kit/Card.vue";
 import Chip from "@/kit/Chip.vue";
-import ListRow from "@/kit/ListRow.vue";
-import Popover from "@/kit/Popover.vue";
+import DropdownMenu from "@/kit/DropdownMenu.vue";
+import type { ContextMenuEntry } from "@/kit/ContextMenu.vue";
 import { vTooltip } from "@/kit/tooltip";
 import { useToast } from "@/kit/useToast";
 import { validateSubcatName } from "@/manager/validation/names";
@@ -98,12 +99,6 @@ function axisUncoveredCount(axis: string): number {
 const addTagAxis = ref<string | null>(null);
 const addTagDraft = ref("");
 const addTagError = ref("");
-/** Which pill's kebab menu is open, as `<axis>::<tag>` (axis namespaces
- *  the key so the same tag in two boxes doesn't collide). */
-const openKebab = ref<string | null>(null);
-/** The "Move to group…" submenu target — `<axis>::<tag>` of the pill
- *  whose move picker is expanded. */
-const moveMenuFor = ref<string | null>(null);
 /** Drag-and-drop state: which pill tag is being dragged + which group box
  *  it's currently hovering, for the drop highlight (bug #2). */
 const draggedTag = ref<string | null>(null);
@@ -129,59 +124,6 @@ function toggleAxisCollapsed(axis: string): void {
   else next.add(axis);
   collapsedAxes.value = next;
 }
-
-function kebabKey(axis: string, tag: string): string {
-  return `${axis}::${tag}`;
-}
-
-/** The kebab Popover opens or closes a pill's menu (it places and flips
- *  the menu itself, so a pill near the page bottom opens it upward). */
-function setKebab(axis: string, tag: string, open: boolean): void {
-  if (!open) { closeMenus(); return; }
-  openKebab.value = kebabKey(axis, tag);
-  moveMenuFor.value = null;
-}
-
-function closeMenus(): void {
-  openKebab.value = null;
-  moveMenuFor.value = null;
-}
-
-/** Outside-click: any pointer landing outside an open menu / its trigger
- *  dismisses this card's menus and the inline add-tag input (bug #3). The
- *  exclusion list is the editor's own, so a click on another of its menus
- *  (an option's tag picker, the options filter) leaves these alone exactly as
- *  it leaves those. */
-function onDocPointerDown(e: MouseEvent): void {
-  const t = e.target as HTMLElement | null;
-  if (
-    t?.closest(
-      ".subcat-pill, .subcat-menu, .subcat-addtag, .subcat-addtag__open, .opt-tags,"
-      + " .opt-tags__picker, .wc-optfilter__tagbtn",
-    )
-  ) {
-    return;
-  }
-  closeMenus();
-  cancelAddTag();
-}
-
-function onDocKeydown(e: KeyboardEvent): void {
-  if (e.key === "Escape") {
-    closeMenus();
-    cancelAddTag();
-  }
-}
-
-onMounted(() => {
-  document.addEventListener("click", onDocPointerDown);
-  document.addEventListener("keydown", onDocKeydown);
-});
-
-onUnmounted(() => {
-  document.removeEventListener("click", onDocPointerDown);
-  document.removeEventListener("keydown", onDocKeydown);
-});
 
 /* ── Inline "+ tag" per group ──────────────────────────────────────── */
 
@@ -319,37 +261,33 @@ function moveTargets(fromAxis: string): Array<{ axis: string; label: string }> {
  *  ungroup it). A tag lives in at most one axis (§2.2). */
 function moveTagToGroup(tag: string, targetAxis: string): void {
   tagGroups.value = moveTagToAxis(tagGroups.value, tag, targetAxis);
-  closeMenus();
 }
 
 defineExpose({ renameGroup, ungroupAxis });
 
-/* ── Pill kebab actions (Rename / Move / Delete) ────────────────────── */
+/* ── Pill kebab menu (Rename / Move to group / Delete) ──────────────── */
 
-/** Kebab → Rename… — closes the menu and asks the editor to open the
- *  cascade rename dialog (expression-aware via Chunk E). */
-function onKebabRename(tag: string): void {
-  closeMenus();
-  emit("rename-tag", tag);
-}
-
-/** Kebab → Delete… — closes the menu and asks the editor to run the
- *  cascade delete path (silent when no refs, confirm dialog when refs > 0). */
-function onKebabDelete(tag: string): void {
-  closeMenus();
-  emit("delete-tag", tag);
-}
-
-/** Kebab → Move to group… — open the inline move submenu for this pill. */
-function onKebabMove(axis: string, tag: string): void {
-  moveMenuFor.value = kebabKey(axis, tag);
+/** A pill's kebab menu. Rename… and Delete… hand off to the editor's cascade
+ *  dialogs; the "Move to group" section lists every other box (ungrouped
+ *  included) as its own item, so keyboard users reach them with the arrows. */
+function kebabItems(axis: string, tag: string): ContextMenuEntry[] {
+  const targets = moveTargets(axis);
+  return [
+    { label: "Rename…", icon: "pi-pencil", onSelect: () => emit("rename-tag", tag) },
+    ...(targets.length ? [{ section: "Move to group" }] : []),
+    ...targets.map((dest) => ({
+      label: dest.label,
+      icon: "pi-arrow-right",
+      onSelect: () => moveTagToGroup(tag, dest.axis),
+    })),
+    { label: "Delete…", icon: "pi-trash", danger: true, divider: true, onSelect: () => emit("delete-tag", tag) },
+  ];
 }
 
 /* ── Drag-and-drop pills between group boxes (bug #2) ───────────────── */
 
 function onPillDragStart(tag: string, e: DragEvent): void {
   draggedTag.value = tag;
-  closeMenus();
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", tag);
@@ -370,7 +308,7 @@ function onGroupDragLeave(axis: string): void {
 }
 
 /** Drop a dragged pill into `axis` (OTHER_AXIS box = ungroup). Reuses the
- *  same move routine the kebab "Move to group…" submenu calls. */
+ *  same move routine the kebab menu's "Move to group" items call. */
 function onGroupDrop(axis: string): void {
   const tag = draggedTag.value;
   draggedTag.value = null;
@@ -405,7 +343,7 @@ function onGroupDrop(axis: string): void {
     <!-- Group boxes: one per tag_groups axis + a trailing ungrouped
          box. Each box owns its pills (⠿ name (count) ⋯) + an inline
          "+ tag". Adding is contextual per group — no global add bar. -->
-    <div v-else class="subcat-groups" @click="closeMenus">
+    <div v-else class="subcat-groups">
       <section
         v-for="group in groups"
         :key="group.axis"
@@ -502,14 +440,12 @@ function onGroupDrop(axis: string): void {
             <span class="subcat-pill__grip" aria-hidden="true">⠿</span>
             <span class="subcat-pill__name">{{ tag }}</span>
             <span class="subcat-pill__count" :title="`${tagUsageCount(tag)} option(s) use this tag`">{{ tagUsageCount(tag) }}</span>
-            <!-- Kebab menu: Rename / Move to group… / Delete. Rename
+            <!-- Kebab menu: Rename / Move to group / Delete. Rename
                  + Delete route through the existing cascade dialogs. -->
-            <Popover
-              :open="openKebab === kebabKey(group.axis, tag)"
-              variant="menu"
-              role="menu"
+            <DropdownMenu
+              :items="kebabItems(group.axis, tag)"
+              :header="{ icon: 'pi-tag', label: tag }"
               :label="`Actions for ${tag}`"
-              @update:open="(v) => setKebab(group.axis, tag, v)"
             >
               <template #trigger="{ props: triggerProps }">
                 <Button
@@ -518,51 +454,10 @@ function onGroupDrop(axis: string): void {
                   size="sm"
                   icon="pi-ellipsis-h"
                   class="subcat-pill__kebab"
-                  :aria-label="`Actions for ${tag}`"
                   :data-test="`subcat-kebab-${tag}`"
-                  @click.stop
                 />
               </template>
-              <div class="subcat-menu" data-wp-rows @click.stop>
-                <ListRow
-                  size="sm"
-                  icon="pi-pencil"
-                  role="menuitem"
-                  data-test="subcat-rename"
-                  @click="onKebabRename(tag)"
-                >Rename…</ListRow>
-                <ListRow
-                  size="sm"
-                  icon="pi-arrow-right-arrow-left"
-                  role="menuitem"
-                  data-test="subcat-move"
-                  :aria-expanded="moveMenuFor === kebabKey(group.axis, tag)"
-                  @click="onKebabMove(group.axis, tag)"
-                >Move to group…</ListRow>
-                <div
-                  v-if="moveMenuFor === kebabKey(group.axis, tag)"
-                  class="subcat-menu__sub"
-                  role="menu"
-                >
-                  <ListRow
-                    v-for="dest in moveTargets(group.axis)"
-                    :key="dest.axis"
-                    size="sm"
-                    role="menuitem"
-                    :data-test="`subcat-move-to-${dest.axis}`"
-                    @click="moveTagToGroup(tag, dest.axis)"
-                  >{{ dest.label }}</ListRow>
-                </div>
-                <ListRow
-                  size="sm"
-                  icon="pi-trash"
-                  class="subcat-menu__item--danger"
-                  role="menuitem"
-                  data-test="subcat-delete"
-                  @click="onKebabDelete(tag)"
-                >Delete…</ListRow>
-              </div>
-            </Popover>
+            </DropdownMenu>
           </span>
 
           <!-- Inline "+ tag" for this group. Collapsed to a button;
@@ -790,24 +685,6 @@ function onGroupDrop(axis: string): void {
   width: 20px;
   height: 20px;
   border-radius: var(--wp-radius-cap, 999px);
-}
-
-/* Kebab menu: kit ListRows in a menu Popover. */
-.subcat-menu {
-  display: flex;
-  flex-direction: column;
-  min-width: 180px;
-}
-.subcat-menu__item--danger {
-  --wp-list-row-icon: var(--wp-danger-text, var(--wp-danger));
-  color: var(--wp-danger-text, var(--wp-danger));
-}
-.subcat-menu__sub {
-  display: flex;
-  flex-direction: column;
-  margin: 2px 0 2px var(--wp-space-3);
-  padding-left: var(--wp-space-2);
-  border-left: 1px solid var(--wp-border);
 }
 
 /* Inline "+ tag" (per group) + "+ Group". */
