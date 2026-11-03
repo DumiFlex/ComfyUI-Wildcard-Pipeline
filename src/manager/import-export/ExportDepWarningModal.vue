@@ -14,6 +14,7 @@
  * the picker to figure out what's missing.
  */
 import Modal from "@/kit/Modal.vue";
+import Button from "@/kit/Button.vue";
 
 export interface ExportDepWarningRow {
   /** Display name of the row whose deps are unsatisfied. */
@@ -149,27 +150,22 @@ function onExportAnyway(): void {
     </div>
 
     <template #footer>
-      <button
-        type="button"
-        class="wp-btn wp-btn--ghost"
+      <Button
+        variant="ghost"
         data-test="export-dep-cancel"
         @click="onCancel"
-      >Cancel</button>
+      >Cancel</Button>
       <span class="wp-export-dep-modal__spacer" />
-      <button
-        type="button"
-        class="wp-btn"
+      <Button
         data-test="export-dep-export-anyway"
         @click="onExportAnyway"
-      >Export anyway</button>
-      <button
-        type="button"
-        class="wp-btn wp-btn--primary"
+      >Export anyway</Button>
+      <Button
+        variant="primary"
+        icon="pi-sitemap"
         data-test="export-dep-include"
         @click="onIncludeDeps"
-      >
-        <i class="pi pi-sitemap" aria-hidden="true" /> Include dependencies
-      </button>
+      >Include dependencies</Button>
     </template>
   </Modal>
 </template>

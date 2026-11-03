@@ -758,32 +758,32 @@ function presetFavoritesOnly(): void {
       aria-label="Quick selection presets"
     >
       <span class="wp-export-presets__label">Quick select</span>
-      <button
-        class="wp-preset-btn"
+      <Button
+        size="sm"
+        icon="pi-database"
         data-test="preset-full"
-        type="button"
         @click="presetFullLibrary"
-      ><i class="pi pi-database" /> Full library</button>
-      <button
-        class="wp-preset-btn"
+      >Full library</Button>
+      <Button
+        size="sm"
+        icon="pi-star-fill"
         data-test="preset-favorites"
-        type="button"
         @click="presetFavoritesOnly"
-      ><i class="pi pi-star-fill" /> Favorites</button>
+      >Favorites</Button>
       <span class="wp-export-presets__sep" aria-hidden="true"></span>
       <!-- Per-kind presets: clear everything, select only this kind. Disabled
            when the library has none of that kind. -->
       <!-- Kind presets carry their canonical kind glyph, matching Full library
            and Favorites (which already had icons) and the section headers. -->
-      <button
+      <Button
         v-for="b in BUCKETS"
         :key="b.key"
-        class="wp-preset-btn"
+        size="sm"
+        :icon="kindIcon(b.key).replace(/^pi /, '')"
         :data-test="`preset-kind-${b.key}`"
-        type="button"
         :disabled="idsForBucket(b.key).length === 0"
         @click="presetKindOnly(b.key)"
-      ><i :class="kindIcon(b.key)" aria-hidden="true" /> {{ b.title }}</button>
+      >{{ b.title }}</Button>
     </div>
 
     <SearchInput
@@ -936,8 +936,7 @@ function presetFavoritesOnly(): void {
   text-transform: uppercase;
   font-weight: 600;
 }
-/* `.wp-preset-btn` itself is a shared atom in tokens.css — used by the
- * export presets bar AND the import picker's mirror. */
+/* The presets are kit Buttons (small, secondary), as on the import picker. */
 
 .wp-export-tab__sections {
   display: flex;

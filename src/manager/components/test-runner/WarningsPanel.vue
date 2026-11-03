@@ -4,6 +4,7 @@
  * runs raised each and the first seeds it happened on (click one to open
  * its trace). Messages may carry `@{uuid}` refs, rendered as name chips.
  */
+import Chip from "@/kit/Chip.vue";
 import type { ScenarioRunResponse } from "../../api/types";
 import RichTextPreview from "../RichTextPreview.vue";
 
@@ -36,7 +37,7 @@ function label(type: string): string {
       <RichTextPreview :value="w.message" :uuid-to-name="uuidToName" surface="wildcard" />
       <div class="wp-trw__seeds">
         <span>Seeds:</span>
-        <button v-for="s in w.seeds" :key="s" type="button" @click="emit('open', s)">{{ s }}</button>
+        <Chip v-for="s in w.seeds" :key="s" as="button" class="wp-trw__seed" :aria-label="`Open seed ${s}`" @click="emit('open', s)">{{ s }}</Chip>
         <span v-if="w.count > w.seeds.length">and {{ w.count - w.seeds.length }} more</span>
       </div>
     </div>
@@ -62,10 +63,5 @@ function label(type: string): string {
 .wp-trw__item[data-severity="error"] .wp-trw__type { color: var(--wp-danger-text); }
 .wp-trw__count { font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wp-trw__seeds { display: flex; flex-wrap: wrap; align-items: center; gap: var(--wp-space-2); font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
-.wp-trw__seeds button {
-  font: var(--wp-text-xs) var(--wp-font-mono); cursor: pointer;
-  background: var(--wp-bg-3); color: var(--wp-text-muted); border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm); padding: 0 var(--wp-space-3);
-}
-.wp-trw__seeds button:hover { color: var(--wp-text); border-color: var(--wp-border-strong); }
+.wp-trw__seed { font-family: var(--wp-font-mono); }
 </style>
