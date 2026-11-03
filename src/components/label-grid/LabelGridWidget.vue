@@ -17,6 +17,8 @@
  */
 import { computed } from "vue";
 import Button from "@/kit/Button.vue";
+import Textarea from "@/kit/Textarea.vue";
+import Input from "@/kit/Input.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import WpSelect from "@/kit/WpSelect.vue";
@@ -229,11 +231,12 @@ function text(ev: Event): string {
       <span v-if="textWired" class="wp-lg__wired" data-wp-socket="label_text" data-test="lg-template-wired">
         <i class="pi pi-link" aria-hidden="true" />from the label_text input (tokens still work)
       </span>
-      <input
+      <Input
         v-else
+        size="sm"
         class="wp-lg__input wp-lg__template"
         data-wp-socket="label_text"
-        :value="cfg.label"
+        :model-value="cfg.label"
         :placeholder="labelPlaceholder"
         spellcheck="false"
         aria-label="Label text"
@@ -241,7 +244,7 @@ function text(ev: Event): string {
         data-test="lg-template"
         @keydown.stop
         @change="set('label', text($event))"
-      >
+      />
       <div class="wp-lg__row">
         <span class="wp-lg__key">Place</span>
         <WpSegmented
@@ -392,11 +395,11 @@ function text(ev: Event): string {
             @update:model-value="(v) => set('rows_from', v)"
           />
         </div>
-        <textarea
+        <Textarea
           v-if="cfg.rows_from === 'typed' && !rowsWired"
           class="wp-lg__input wp-lg__area"
-          :value="cfg.row_headers"
-          rows="2"
+          :model-value="cfg.row_headers"
+          :rows="2"
           placeholder="One row header per line"
           spellcheck="false"
           aria-label="Row headers"
@@ -419,11 +422,11 @@ function text(ev: Event): string {
             @update:model-value="(v) => set('columns_from', v)"
           />
         </div>
-        <textarea
+        <Textarea
           v-if="cfg.columns_from === 'typed' && !colsWired"
           class="wp-lg__input wp-lg__area"
-          :value="cfg.column_headers"
-          rows="2"
+          :model-value="cfg.column_headers"
+          :rows="2"
           placeholder="One column header per line"
           spellcheck="false"
           aria-label="Column headers"
@@ -436,17 +439,18 @@ function text(ev: Event): string {
           <span v-if="titleWired" class="wp-lg__wired" data-test="lg-title-wired">
             <i class="pi pi-link" aria-hidden="true" />from the title input
           </span>
-          <input
+          <Input
             v-else
+            size="sm"
             class="wp-lg__input wp-lg__grow"
-            :value="cfg.title"
+            :model-value="cfg.title"
             placeholder="Drawn above the grid"
             spellcheck="false"
             aria-label="Grid title"
             data-test="lg-title"
             @keydown.stop
             @change="set('title', text($event))"
-          >
+          />
         </div>
         <div class="wp-lg__row wp-lg__row--wrap">
           <span class="wp-lg__key">Spacing</span>

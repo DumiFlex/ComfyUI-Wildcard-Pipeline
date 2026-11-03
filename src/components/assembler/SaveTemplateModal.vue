@@ -2,6 +2,8 @@
 import { computed, ref, watch } from "vue";
 import { api } from "../../manager/api/client";
 import ModalShell from "@/kit/ModalShell.vue";
+import Textarea from "@/kit/Textarea.vue";
+import Input from "@/kit/Input.vue";
 import WpSelect from "@/kit/WpSelect.vue";
 import { pushToast } from "../shared/toast-store";
 import Button from "@/kit/Button.vue";
@@ -108,10 +110,11 @@ async function submit(mode: "update" | "new") {
       <div class="wp-stm__body">
         <div class="wp-stm-field">
           <label class="wp-stm-field__label" for="wp-stm-name">Name</label>
-          <input
+          <Input
             id="wp-stm-name"
             v-model="name"
-            type="text"
+            size="sm"
+           
             class="wp-stm-input"
             data-test="save-tpl-name"
             placeholder="e.g. cinematic portrait"
@@ -125,11 +128,11 @@ async function submit(mode: "update" | "new") {
 
         <div class="wp-stm-field">
           <label class="wp-stm-field__label" for="wp-stm-desc">Description</label>
-          <textarea
+          <Textarea
             id="wp-stm-desc"
             v-model="description"
             class="wp-stm-input wp-stm-input--multi"
-            rows="2"
+            :rows="2"
           />
         </div>
 
@@ -147,10 +150,11 @@ async function submit(mode: "update" | "new") {
           </div>
           <div class="wp-stm-field wp-stm-field--grow">
             <label class="wp-stm-field__label" for="wp-stm-tags">Tags (comma-separated)</label>
-            <input
+            <Input
               id="wp-stm-tags"
               v-model="tagsText"
-              type="text"
+              size="sm"
+             
               class="wp-stm-input"
               placeholder="e.g. style, portrait"
             />

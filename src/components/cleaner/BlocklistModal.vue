@@ -9,6 +9,7 @@
  */
 import { ref, watch, computed } from "vue";
 import ModalShell from "@/kit/ModalShell.vue";
+import Textarea from "@/kit/Textarea.vue";
 import type { BlocklistKind } from "./types";
 import Button from "@/kit/Button.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
@@ -78,7 +79,7 @@ function onCancel(): void {
       </div>
       <div class="wp-blocklist__body">
         <label for="blocklist-textarea" class="wp-blocklist__textarea-label">Entries</label>
-        <textarea
+        <Textarea
           id="blocklist-textarea"
           v-model="draftText"
           data-test="blocklist-textarea"
