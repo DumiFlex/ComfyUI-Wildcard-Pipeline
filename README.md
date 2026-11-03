@@ -125,7 +125,8 @@ doesn't exist yet, pick **Placeholder** from the `@` list and connect it later.
 
 Select a WP node and the indigo **?** in ComfyUI's selection toolbar opens
 its page of the built-in docs over the canvas (WP Toggles, WP Note and WP
-Bookmark also get an indigo pencil there that opens their editor). Most
+Bookmark also get an indigo pencil there that opens their editor, in
+place of a pencil on the node). Most
 nodes also have a help page in ComfyUI's node info panel, and the
 [wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) covers
 [nodes](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Nodes),

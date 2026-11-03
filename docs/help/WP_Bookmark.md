@@ -12,7 +12,7 @@ A **WP Note** can be a bookmark too: turn on **Also a bookmark** in its editor (
 
 ## On the canvas
 
-A bookmark has no node frame and can't be resized: it is a small pill with its icon, name and shortcut (a warning mark when something else uses the key, a pin when it is pinned). Hover it for where it lands. Select it to show its pencil; the pencil, the indigo pencil in the selection toolbar or a double-click opens the editor, and **Done** closes it. A new bookmark opens in the editor.
+A bookmark has no node frame and can't be resized: it is a small pill with its icon, name and shortcut (a warning mark when something else uses the key, a pin when it is pinned). Hover it for where it lands. A double-click, or the indigo pencil in ComfyUI's selection toolbar while it is selected, opens the editor, and **Done** closes it. A new bookmark opens in the editor.
 
 ## Settings
 

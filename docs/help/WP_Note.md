@@ -5,7 +5,7 @@ A note that explains a workflow. It looks like a panel, not a node: no title bar
 ## Using it
 
 - **Add** it from the node search (`WP Note`). A new note opens in its editor and starts pinned.
-- **Edit** by double-clicking the note, pressing its pencil, or the indigo pencil in the selection toolbar while it is selected. **Done** goes back to reading.
+- **Edit** by double-clicking the note or with the indigo pencil in the selection toolbar while it is selected. **Done** goes back to reading.
 - **Move** it by dragging like any node (unpin it first).
 - **Resize** a Card or Sticky note from its corner: the width is yours, the height follows the text. A Label sizes itself to its title.
 - **Hover** a Label to see its text and links in a card. Move onto the card to click a link or **Edit**. Marks on the pill show that it has text (lines) or a link (chain).

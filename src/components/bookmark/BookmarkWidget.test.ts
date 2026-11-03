@@ -88,15 +88,14 @@ describe("BookmarkWidget", () => {
     w.unmount();
   });
 
-  it("reads as one line until the pencil opens the form, and Done closes it", async () => {
+  it("reads as one line with no pencil of its own until editing opens the form, and Done closes it", async () => {
     const w = make({ anchor: "c", zoom: 1.25, shortcut: "Ctrl+S" }, [{ combo: "Ctrl+S", label: "Save workflow", source: "ComfyUI" }], false);
     expect(w.find('[data-test="bm-record"]').exists()).toBe(false);
     expect(w.find('[data-test="bm-go"]').exists()).toBe(false);
     expect(w.get('[data-test="bm-name"]').text()).toBe("Sampler");
     expect(w.get('[data-test="bm-view"]').attributes("title")).toBe("Lands at: Centre · 1.25×");
     expect(w.get('[data-test="bm-view-clash"]').attributes("title")).toContain("Save workflow");
-    await w.get('[data-test="bm-edit"]').trigger("click");
-    expect(last(w.emitted("update:editing"))).toEqual([true]);
+    expect(w.find('[data-test="bm-edit"]').exists()).toBe(false);
     await w.setProps({ editing: true });
     await w.get('[data-test="bm-done"]').trigger("click");
     expect(last(w.emitted("update:editing"))).toEqual([false]);
