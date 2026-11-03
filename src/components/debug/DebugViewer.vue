@@ -373,20 +373,21 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
         </div>
         <span class="wp-dbg-head__stat">{{ model.steps.length }} step{{ model.steps.length === 1 ? "" : "s" }}</span>
         <span v-if="model.groups.length > 1" class="wp-dbg-head__stat">{{ model.groups.length }} nodes</span>
-        <button
+        <Button
           v-if="warnTone"
-          type="button"
+          variant="ghost"
+          size="sm"
           class="wp-dbg-head__warn"
           :class="`is-${warnTone}`"
+          icon="pi-exclamation-triangle"
           data-test="dbg-head-warn"
           @click="activeTab = 'warnings'"
         >
-          <i class="pi pi-exclamation-triangle" aria-hidden="true" />
           <template v-if="model.counts.error">{{ model.counts.error }} error{{ model.counts.error === 1 ? "" : "s" }}</template>
           <template v-if="model.counts.error && model.counts.warning">, </template>
           <template v-if="model.counts.warning">{{ model.counts.warning }} warning{{ model.counts.warning === 1 ? "" : "s" }}</template>
           <template v-if="!model.counts.error && !model.counts.warning">{{ model.counts.info }} note{{ model.counts.info === 1 ? "" : "s" }}</template>
-        </button>
+        </Button>
         <span v-else class="wp-dbg-head__ok" data-test="dbg-head-ok"><i class="pi pi-check-circle" aria-hidden="true" /> clean run</span>
         <div class="wp-dbg-head__actions">
           <CopyButton :text="() => tabText" label="Copy this tab as JSON" size="sm" data-test="dbg-copy" />
@@ -568,21 +569,16 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
 .wp-dbg-head__seed-label { font-family: var(--wp-font-sans); color: var(--wp-text-dim); }
 .wp-dbg-head__seed:hover { border-color: var(--wp-border-strong, var(--wp-accent)); }
 .wp-dbg-head__stat { white-space: nowrap; }
-.wp-dbg-head__warn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 0;
-  border-radius: var(--wp-radius-cap, 999px);
-  padding: 2px 8px;
-  font: 600 10.5px/1.5 var(--wp-font-sans);
-  cursor: pointer;
-  color: var(--wp-warn);
-  background: color-mix(in oklab, var(--wp-warn) 15%, transparent);
+/* A kit ghost Button drawn as the old tinted pill. */
+.wp-dbg-head__warn.wp-btn {
+  gap: 5px; height: auto; min-height: 0; padding: 2px 8px; border: 0; border-radius: var(--wp-radius-cap, 999px);
+  font: 600 10.5px/1.5 var(--wp-font-sans); color: var(--wp-warn); background: color-mix(in oklab, var(--wp-warn) 15%, transparent);
 }
-.wp-dbg-head__warn .pi { font-size: 9px; }
-.wp-dbg-head__warn.is-error { color: var(--wp-red); background: color-mix(in oklab, var(--wp-red) 15%, transparent); }
-.wp-dbg-head__warn.is-info { color: var(--wp-info, var(--wp-accent)); background: color-mix(in oklab, var(--wp-info, var(--wp-accent)) 15%, transparent); }
+.wp-dbg-head__warn.wp-btn :deep(.pi) { font-size: 9px; }
+.wp-dbg-head__warn.wp-btn:not(.wp-btn--link) :deep(.wp-btn__label) { line-height: inherit; text-box: normal; }
+.wp-dbg-head__warn.wp-btn:hover:not(:disabled) { color: var(--wp-warn); background: color-mix(in oklab, var(--wp-warn) 25%, transparent); }
+.wp-dbg-head__warn.is-error.wp-btn { color: var(--wp-red); background: color-mix(in oklab, var(--wp-red) 15%, transparent); }
+.wp-dbg-head__warn.is-info.wp-btn { color: var(--wp-info, var(--wp-accent)); background: color-mix(in oklab, var(--wp-info, var(--wp-accent)) 15%, transparent); }
 .wp-dbg-head__ok { display: inline-flex; align-items: center; gap: 4px; color: var(--wp-green); }
 .wp-dbg-head__ok .pi { font-size: 10px; }
 .wp-dbg-head__actions { margin-left: auto; display: flex; gap: 2px; }
