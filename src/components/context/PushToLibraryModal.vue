@@ -652,19 +652,9 @@ async function doSaveAsNew(): Promise<void> {
   font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
   text-transform: uppercase; color: var(--wp-text-dim);
 }
-.wp-ptl-input {
-  width: 100%;
-  background: var(--wp-bg-2);
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  border-radius: min(6px, var(--wp-radius-cap, 999px));
-  padding: 6px 8px;
-  font-size: 13px;
-  font-family: inherit;
-}
-.wp-ptl-input:focus { outline: 1px solid var(--wp-accent-500); }
 .wp-ptl-search { width: 100%; }
-.wp-ptl-input--multi { resize: vertical; overscroll-behavior: contain; min-height: 48px; }
+/* The kit Textarea draws the box; the description box is two lines tall. */
+.wp-ptl-input--multi { overscroll-behavior: contain; min-height: 48px; }
 
 .wp-ptl-bundles {
   padding: 8px 10px;

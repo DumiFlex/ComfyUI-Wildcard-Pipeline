@@ -272,6 +272,9 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
 </template>
 
 <style scoped>
+/* The kit Input draws the box; border-box so its full width stays in the card
+   (the node has no reset and the kit field doesn't set one). */
+.wp-note__input { box-sizing: border-box; }
 /* The kit picker's list, sized for a node: as wide as the panel, a short
  * scroll area, cells packed by width instead of a fixed 8 columns. */
 .wp-note__icons :deep(.wp-iconpick__panel) { width: auto; max-height: 184px; }
@@ -418,17 +421,6 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
 .wp-note__custom--on { border-color: var(--wp-text); }
 .wp-note__chev { font-size: 9px; color: var(--wp-text-dim); }
 .wp-note__field { display: flex; flex-direction: column; gap: 4px; }
-.wp-note__input {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 4px 8px;
-  border: 1px solid var(--wp-border-strong, var(--wp-border));
-  border-radius: min(6px, var(--wp-radius-cap, 999px));
-  background: var(--wp-bg-3, transparent);
-  color: var(--wp-text);
-  font: inherit;
-}
-.wp-note__input:focus-visible { outline: 2px solid var(--wp-focus-ring, var(--wp-accent)); outline-offset: 1px; }
 .wp-note__actions { display: flex; justify-content: flex-end; }
 </style>
 

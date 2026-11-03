@@ -883,7 +883,7 @@ describe("RichTextInput.vue", () => {
     wrap.unmount();
   });
 
-  it("backdrop click cancels picker without inserting", async () => {
+  it("a press outside cancels the picker without inserting", async () => {
     const wrap = mount(RichTextInput, {
       props: {
         modelValue: "",
@@ -900,9 +900,11 @@ describe("RichTextInput.vue", () => {
       .__applyAutocompleteForTest("aabbccdd");
     // Picker is open.
     expect(document.querySelector('[data-test="subcat-picker"]')).not.toBeNull();
-    // Click backdrop (the overlay div, not the picker contents).
-    const overlay = document.querySelector(".wp-subcat-picker__backdrop") as HTMLElement;
-    overlay.click();
+    // Press outside the picker (anywhere that isn't its panel).
+    const outside = document.createElement("div");
+    document.body.appendChild(outside);
+    outside.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
+    outside.remove();
     await flushPromises();
     // Picker closed, no chip inserted.
     expect(document.querySelector('[data-test="subcat-picker"]')).toBeNull();
@@ -1794,7 +1796,7 @@ describe("allowNestedRefs — derivation action-value @{} reuse", () => {
     document.body.classList.remove("wp-theme-light");
   });
 
-  it("stamps the host's wp-theme-light class onto the teleported subcat picker anchor + backdrop", async () => {
+  it("stamps the host's wp-theme-light class onto the teleported subcat picker panel", async () => {
     document.body.classList.add("wp-theme-light");
     const wrap = mount(RichTextInput, {
       props: {
@@ -1811,11 +1813,8 @@ describe("allowNestedRefs — derivation action-value @{} reuse", () => {
     await (wrap.vm as unknown as { __applyAutocompleteForTest: (label: string) => Promise<void> })
       .__applyAutocompleteForTest("aabbccdd");
     const anchor = document.querySelector(".wp-subcat-picker__anchor");
-    const backdrop = document.querySelector(".wp-subcat-picker__backdrop");
     expect(anchor).not.toBeNull();
-    expect(backdrop).not.toBeNull();
     expect(anchor!.classList.contains("wp-theme-light")).toBe(true);
-    expect(backdrop!.classList.contains("wp-theme-light")).toBe(true);
     wrap.unmount();
     document.body.classList.remove("wp-theme-light");
   });

@@ -351,20 +351,11 @@ function insertIcon(name: string): void {
 .wp-note-ed__label { font-size: 11px; font-weight: 600; color: var(--wp-text-muted); }
 .wp-note-ed__hint { font-size: 11px; color: var(--wp-text-dim); margin: 0; }
 .wp-note-ed__actions { display: flex; justify-content: flex-end; gap: 6px; }
-.wp-note-ed__input,
-.wp-note-ed__text {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 4px 8px;
-  border: 1px solid var(--wp-border-strong, var(--wp-border));
-  border-radius: min(6px, var(--wp-radius-cap, 999px));
-  background: var(--wp-bg-3, transparent);
-  color: var(--wp-text);
-  font: inherit;
-}
-.wp-note-ed__text { font-family: var(--wp-font-mono, monospace); font-size: 12px; line-height: 18px; resize: vertical; }
-.wp-note-ed__input:focus-visible,
-.wp-note-ed__text:focus-visible { outline: 2px solid var(--wp-focus-ring, var(--wp-accent)); outline-offset: 1px; }
+/* The kit Input / Textarea draw the boxes (the node has no border-box reset,
+   and the kit field doesn't set one, so a full-width field would overrun the
+   card by its padding); the note source is monospace. */
+.wp-note-ed__input, .wp-note-ed__text { box-sizing: border-box; }
+.wp-note-ed__text { font-family: var(--wp-font-mono, monospace); font-size: 12px; line-height: 18px; }
 .wp-note-ed__iconpick.wp-btn { font-size: 12px; text-transform: capitalize; }
 .wp-note-ed__chev { font-size: 9px; color: var(--wp-text-dim); }
 .wp-note-ed__preview {

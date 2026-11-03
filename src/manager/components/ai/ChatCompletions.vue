@@ -9,12 +9,15 @@
  * own `v-model` stays the single source of the text and its own key handler
  * (Enter to send) still runs whenever the menu is closed. While the menu is
  * open it takes Up / Down, Enter / Tab and Escape first (a capture listener
- * on the document, which runs before the box's own).
+ * on the document, which runs before the box's own). The menu is a kit
+ * Popover hanging from the start of the word being completed.
  *
  * What gets inserted, and why: `utils/chat-completions.ts`.
  */
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { getActivePinia } from "pinia";
+import Popover from "@/kit/Popover.vue";
+import type { VirtualAnchor } from "@/kit/floating";
 import { api } from "../../api/client";
 import type { ModelKind, ModelSuggestion, TagSuggestion } from "../../api/types";
 import { useModuleStore } from "../../stores/moduleStore";
@@ -48,7 +51,8 @@ const bundles = pinia ? useBundleStore() : { catalog: [], fetchCatalog: async ()
 const probe = ref<ChatProbe | null>(null);
 const rows = ref<ChatRow[]>([]);
 const active = ref(0);
-const pos = ref({ top: 0, left: 0, up: false });
+/** The start of the word being completed, read live so the menu follows the box. */
+const anchor = shallowRef<VirtualAnchor | null>(null);
 const tagsReady = ref(false);
 let fetchSeq = 0;
 let fetchTimer: ReturnType<typeof setTimeout> | undefined;
@@ -86,14 +90,27 @@ function close(): void {
 }
 
 function place(el: HTMLTextAreaElement, at: number): void {
-  const r = textareaCaretRect(el, at);
-  const MENU_H = 240;
-  const up = window.innerHeight - (r.top + r.height) < MENU_H + 8 && r.top > MENU_H;
-  pos.value = {
-    top: up ? r.top - 4 : r.top + r.height + 4,
-    left: Math.max(8, Math.min(r.left, window.innerWidth - 300)),
-    up,
+  anchor.value = {
+    getBoundingClientRect: () => {
+      const r = textareaCaretRect(el, at);
+      return { left: r.left, top: r.top, width: 0, height: r.height };
+    },
   };
+}
+
+/** True while a press on the box itself is being handled: the Popover counts
+ *  it as outside (its anchor is the caret), but a click in the box moves the
+ *  caret and `refresh` decides from there, as before. */
+let pressOnBox = false;
+function onPress(ev: Event): void {
+  const el = props.target;
+  pressOnBox = !!el && ev.composedPath().includes(el);
+  setTimeout(() => { pressOnBox = false; }, 0);
+}
+
+/** Escape, or a press outside the menu and the box. */
+function onOpenChange(v: boolean): void {
+  if (!v && !pressOnBox) close();
 }
 
 /** Booru tags + model files for a bare word or a `<lora:` / `embedding:`
@@ -208,6 +225,11 @@ function bind(el: HTMLTextAreaElement | null | undefined, on: boolean): void {
   // on the box itself (its Enter-to-send), whatever order they were added in.
   if (on) el.ownerDocument.addEventListener("keydown", onKeydown, true);
   else el.ownerDocument.removeEventListener("keydown", onKeydown, true);
+  // On the window, added now, so it runs before the Popover's own outside
+  // press listener (added when the menu opens).
+  const win = el.ownerDocument.defaultView;
+  if (on) win?.addEventListener("pointerdown", onPress, true);
+  else win?.removeEventListener("pointerdown", onPress, true);
   fn("input", refresh);
   fn("keyup", onCaretMove);
   fn("click", refresh);
@@ -272,62 +294,49 @@ function rowTitle(row: ChatRow): string {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      :id="listId"
-      class="wp-ai-ac"
-      :class="{ 'wp-ai-ac--up': pos.up }"
-      :style="{ top: `${pos.top}px`, left: `${pos.left}px` }"
-      role="listbox"
-      aria-label="Suggestions"
-      data-test="ai-ac"
-    >
-      <template v-for="s in sections" :key="s.label">
-        <div class="wp-ai-ac__head">{{ s.label }}</div>
-        <!-- A combobox option: the composer keeps focus and moves through the rows with the arrow keys (aria-activedescendant). -->
-        <!-- eslint-disable-next-line vuejs-accessibility/interactive-supports-focus, vuejs-accessibility/mouse-events-have-key-events -->
-        <div
-          v-for="e in s.rows"
-          :id="`${listId}-${e.index}`"
-          :key="e.index"
-          class="wp-ai-ac__row"
-          :data-active="e.index === active || undefined"
-          role="option"
-          :aria-selected="e.index === active"
-          :title="rowTitle(e.row)"
-          :data-test="`ai-ac-row-${e.index}`"
-          @mousedown.prevent="pick(e.row)"
-          @mouseenter="active = e.index"
-        >
-          <i :class="rowIcon(e.row)" class="wp-ai-ac__icon" aria-hidden="true" />
-          <span
-            class="wp-ai-ac__label"
-            :class="e.row.source === 'var' ? varColorClass(e.row.v.name) : null"
-          >{{ rowLabel(e.row) }}</span>
-          <span class="wp-ai-ac__note">{{ rowNote(e.row) }}</span>
-        </div>
-      </template>
-      <div class="wp-ai-ac__foot">↑↓ choose · Enter or Tab inserts · Esc closes</div>
-    </div>
-  </Teleport>
+  <!-- The kit Popover's own prop, turning its focus move OFF. -->
+  <!-- eslint-disable-next-line vuejs-accessibility/no-autofocus -->
+  <Popover :id="listId" :autofocus="false"
+    :open="open"
+    :anchor="anchor"
+    :max-height="240"
+    variant="menu"
+    role="listbox"
+    label="Suggestions"
+    class="wp-ai-ac"
+    data-test="ai-ac"
+    @update:open="onOpenChange"
+  >
+    <template v-for="s in sections" :key="s.label">
+      <div class="wp-ai-ac__head">{{ s.label }}</div>
+      <!-- A combobox option: the composer keeps focus and moves through the rows with the arrow keys (aria-activedescendant). -->
+      <!-- eslint-disable-next-line vuejs-accessibility/interactive-supports-focus, vuejs-accessibility/mouse-events-have-key-events -->
+      <div
+        v-for="e in s.rows"
+        :id="`${listId}-${e.index}`"
+        :key="e.index"
+        class="wp-ai-ac__row"
+        :data-active="e.index === active || undefined"
+        role="option"
+        :aria-selected="e.index === active"
+        :title="rowTitle(e.row)"
+        :data-test="`ai-ac-row-${e.index}`"
+        @mousedown.prevent="pick(e.row)"
+        @mouseenter="active = e.index"
+      >
+        <i :class="rowIcon(e.row)" class="wp-ai-ac__icon" aria-hidden="true" />
+        <span
+          class="wp-ai-ac__label"
+          :class="e.row.source === 'var' ? varColorClass(e.row.v.name) : null"
+        >{{ rowLabel(e.row) }}</span>
+        <span class="wp-ai-ac__note">{{ rowNote(e.row) }}</span>
+      </div>
+    </template>
+    <div class="wp-ai-ac__foot">↑↓ choose · Enter or Tab inserts · Esc closes</div>
+  </Popover>
 </template>
 
 <style scoped>
-.wp-ai-ac {
-  position: fixed;
-  z-index: 10040;
-  width: 290px;
-  max-height: 240px;
-  overflow-y: auto;
-  padding: 4px 0;
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border-strong, var(--wp-border));
-  border-radius: min(7px, var(--wp-radius-cap, 999px));
-  box-shadow: var(--wp-shadow-md);
-  font-size: var(--wp-text-sm, 12px);
-}
-.wp-ai-ac--up { transform: translateY(-100%); }
 .wp-ai-ac__head {
   padding: 4px 10px 2px;
   font-size: 10px; /* audit-exempt: micro section label */
@@ -348,4 +357,15 @@ function rowTitle(row: ChatRow): string {
 .wp-ai-ac__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--wp-font-mono); }
 .wp-ai-ac__note { margin-left: auto; flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wp-text-dim); font-size: 11px; }
 .wp-ai-ac__foot { padding: 4px 10px 2px; border-top: 1px solid var(--wp-border); margin-top: 4px; color: var(--wp-text-dim); font-size: 10.5px; } /* audit-exempt: micro hint */
+</style>
+
+<style>
+/* The Popover panel (under <body>, so not scoped): the kit menu, a fixed
+   width, rows edge to edge, and above the chat drawer. */
+.wp-popover.wp-ai-ac.wp-menu {
+  z-index: 10040;
+  width: 290px;
+  padding: 4px 0;
+  font-size: var(--wp-text-sm, 12px);
+}
 </style>

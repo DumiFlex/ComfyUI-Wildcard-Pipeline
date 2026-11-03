@@ -1093,8 +1093,8 @@ const subLine = computed(() => {
 .wp-ifp__marked mark { padding: 0 2px; border-radius: min(3px, var(--wp-radius-cap, 999px)); color: var(--wp-text); background: color-mix(in srgb, var(--wp-ifp-hue, var(--wp-accent)) 20%, transparent); box-shadow: inset 0 -1.5px 0 var(--wp-ifp-hue, var(--wp-accent)); }
 .wp-ifp__marked mark:hover { background: color-mix(in srgb, var(--wp-ifp-hue, var(--wp-accent)) 38%, transparent); }
 .wp-ifp__badge { font: 600 10px var(--wp-font-sans); padding: 1px 5px; border-radius: min(3px, var(--wp-radius-cap, 999px)); background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-accent)); }
-.wp-ifp__text { width: 100%; box-sizing: border-box; resize: vertical; min-height: 64px; padding: 6px; border: 1px solid var(--wp-border); border-radius: min(4px, var(--wp-radius-cap, 999px)); background: var(--wp-bg2); color: var(--wp-text); font: 11px/1.45 var(--wp-font-mono, monospace); }
-.wp-ifp__text:focus { outline: none; border-color: var(--wp-accent); }
+/* The kit Textarea draws the box; prompts read in small monospace. */
+.wp-ifp__text { min-height: 64px; font: 11px/1.45 var(--wp-font-mono, monospace); }
 .wp-ifp__hint { margin: 0; font: 11px/1.4 var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-ifp__warn { margin: 0; font: 11px/1.4 var(--wp-font-sans); color: var(--wp-amber); }
 .wp-ifp__brush { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 10px; }

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
- * RemapRefPopup — heals a broken nested `@{uuid}` chip (#3). Teleported +
- * anchored to the broken chip's rect (same pattern as RichTextInput's
- * SubcategoryFilterPicker anchor). The user:
+ * RemapRefPopup — heals a broken nested `@{uuid}` chip (#3). A kit Popover
+ * hanging from the broken chip (`anchor`, a virtual anchor RichTextInput
+ * builds, like the SubcategoryFilterPicker's). A press outside or Escape
+ * cancels. The user:
  *   1. Picks a replacement wildcard from a searchable dropdown (seeded with
  *      the broken ref's cached `#name` so the likely match floats up).
  *   2. If the broken ref carried a `:subcat` filter, reconciles it against
@@ -14,8 +15,10 @@
  * rewrites the open module's payload); CANCEL is the only undo. There is no
  * post-confirm undo of dropped tokens in v1 (spec "Reconcile loss").
  */
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
+import Popover from "@/kit/Popover.vue";
+import type { VirtualAnchor } from "@/kit/floating";
 import SearchInput from "@/kit/SearchInput.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import { reconcileSubcatExpr } from "../cascade/reconcile-subcat";
@@ -27,7 +30,8 @@ const props = defineProps<{
   refData: WildcardRefData;
   oldExpr: string;
   oldExcludeNull: boolean;
-  anchor: { top: number; left: number };
+  /** What the popup hangs from: the broken chip. */
+  anchor: VirtualAnchor | null;
 }>();
 
 const emit = defineEmits<{
@@ -91,6 +95,21 @@ watch(pickedUuid, () => {
   liveExcludeNull.value = props.oldExcludeNull; // null is universal — carries as-is
 });
 
+// The popup GROWS when a wildcard is picked (the reconcile section and the
+// filter picker mount), so it is placed again on every size change: one that
+// fit below the chip at open can overflow the viewport after a pick.
+const pop = ref<{ place: () => void } | null>(null);
+let sizeObs: ResizeObserver | null = null;
+function watchSize(el: Element | null): void {
+  sizeObs?.disconnect();
+  sizeObs = null;
+  // jsdom has no ResizeObserver; the Popover still places once on open.
+  if (!el || typeof ResizeObserver === "undefined") return;
+  sizeObs = new ResizeObserver(() => pop.value?.place());
+  sizeObs.observe(el);
+}
+onBeforeUnmount(() => sizeObs?.disconnect());
+
 function pick(uuid: string): void {
   pickedUuid.value = uuid;
 }
@@ -113,14 +132,16 @@ function doConfirm(): void {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="wpc-remap__backdrop" data-test="remap-backdrop" @click="emit('cancel')"></div>
-    <div
-      class="wpc-remap"
-      data-test="remap-popup"
-      :style="{ top: anchor.top + 'px', left: anchor.left + 'px' }"
-      @click.stop
-    >
+  <Popover
+    ref="pop"
+    :open="true"
+    :anchor="anchor"
+    label="Remap broken reference"
+    class="wp-remap-pop"
+    data-test="remap-popup"
+    @update:open="(v: boolean) => { if (!v) emit('cancel'); }"
+  >
+    <div :ref="(el) => watchSize(el as Element | null)" class="wpc-remap">
       <div class="wpc-remap__head">Remap broken reference</div>
 
       <SearchInput
@@ -192,27 +213,12 @@ function doConfirm(): void {
         >Remap</Button>
       </div>
     </div>
-  </Teleport>
+  </Popover>
 </template>
 
 <style scoped>
-.wpc-remap__backdrop { position: fixed; inset: 0; background: transparent; z-index: 10000; }
 .wpc-remap {
-  position: fixed;
-  z-index: 10001;
   min-width: 320px;
-  max-width: 480px;
-  /* Never exceed the viewport. Picking a wildcard expands the reconcile
-     section, which can push the popup past the screen on a short viewport —
-     scroll internally instead of overflowing. RichTextInput's ResizeObserver
-     also re-hugs the chip on every growth so the popup stays anchored. */
-  max-height: calc(100vh - 16px);
-  overflow-y: auto;
-  background: var(--wp-bg-2);
-  border: 1px solid var(--wp-accent);
-  border-radius: min(8px, var(--wp-radius-cap, 999px));
-  padding: 12px 14px;
-  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));
   font: 12px var(--wp-font-sans, sans-serif);
   color: var(--wp-text);
 }
@@ -270,5 +276,19 @@ function doConfirm(): void {
   flex: 1;
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-dim);
+}
+</style>
+
+<style>
+/* The Popover panel is the card (not scoped: the panel lives under <body>,
+   outside this component's root). It caps itself at the room beside the chip
+   and scrolls past that; the observer above re-places it as it grows. */
+.wp-popover.wp-remap-pop {
+  z-index: 10021;
+  max-width: 480px;
+  padding: 13px 15px; /* plus the 1px ring */
+  background: var(--wp-bg-2);
+  box-shadow: inset 0 0 0 1px var(--wp-accent), 0 4px 12px rgba(0, 0, 0, 0.4);
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
 }
 </style>

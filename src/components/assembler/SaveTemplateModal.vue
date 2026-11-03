@@ -256,18 +256,8 @@ async function submit(mode: "update" | "new") {
   text-transform: uppercase;
   color: var(--wp-text-dim);
 }
-.wp-stm-input {
-  width: 100%;
-  background: var(--wp-bg-2);
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  border-radius: min(6px, var(--wp-radius-cap, 999px));
-  padding: 6px 8px;
-  font-size: 13px;
-  font-family: inherit;
-}
-.wp-stm-input:focus { outline: 1px solid var(--wp-accent-500, var(--wp-accent)); }
-.wp-stm-input--multi { resize: vertical; overscroll-behavior: contain; min-height: 46px; }
+/* The kit Textarea draws the box; the description box is two lines tall. */
+.wp-stm-input--multi { overscroll-behavior: contain; min-height: 46px; }
 .wp-stm-select { width: 100%; height: 32px; font-size: 13px; }
 
 .wp-stm-preview--neg { border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border)); }
