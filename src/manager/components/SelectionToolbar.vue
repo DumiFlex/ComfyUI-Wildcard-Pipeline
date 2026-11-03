@@ -13,6 +13,7 @@
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
+import ListRow from "@/kit/ListRow.vue";
 import SelectionBar from "@/kit/SelectionBar.vue";
 import { UNGROUPED_HUE } from "../../components/shared/axis-color";
 
@@ -108,11 +109,26 @@ function onDocScroll(e: Event): void {
   if (t instanceof Element && t.closest(".wpc-seltoolbar__menulist")) return;
   close();
 }
+// A press outside the open menu and its trigger closes it (this was a
+// full-page transparent button behind the menu).
+function onDocPointer(e: Event): void {
+  const t = e.target;
+  if (t instanceof Element && t.closest(".wpc-seltoolbar__menuwrap")) return;
+  close();
+}
 watch(openMenu, (open) => {
-  if (open) document.addEventListener("scroll", onDocScroll, true);
-  else document.removeEventListener("scroll", onDocScroll, true);
+  if (open) {
+    document.addEventListener("scroll", onDocScroll, true);
+    document.addEventListener("pointerdown", onDocPointer, true);
+  } else {
+    document.removeEventListener("scroll", onDocScroll, true);
+    document.removeEventListener("pointerdown", onDocPointer, true);
+  }
 });
-onBeforeUnmount(() => document.removeEventListener("scroll", onDocScroll, true));
+onBeforeUnmount(() => {
+  document.removeEventListener("scroll", onDocScroll, true);
+  document.removeEventListener("pointerdown", onDocPointer, true);
+});
 
 // Apply menu: every tag EXCEPT those already on all selected rows, so the
 // list only offers tags that would actually change something. Then narrowed
@@ -183,23 +199,22 @@ function applyWeight() {
             @keydown.enter.prevent="applyNewTag"
             @keydown.esc="close"
           />
-          <button
+          <ListRow
             v-if="newTagIsNovel"
-            type="button"
+            size="sm"
+            icon="pi-plus"
             class="wpc-seltoolbar__menuitem wpc-seltoolbar__menuitem--new"
             @click="applyNewTag"
-          >
-            <i class="pi pi-plus" aria-hidden="true"></i> Create &amp; apply “{{ newTag.trim() }}”
-          </button>
+          >Create &amp; apply “{{ newTag.trim() }}”</ListRow>
           <div class="wpc-seltoolbar__menulist">
-            <button
+            <ListRow
               v-for="t in applyList"
               :key="t"
-              type="button"
+              size="sm"
               class="wpc-seltoolbar__menuitem"
               :style="{ '--chip-hue': hueOf(t) }"
               @click="applyTag(t)"
-            ><span class="wpc-seltoolbar__swatch" aria-hidden="true"></span>{{ t }}</button>
+            ><template #start><span class="wpc-seltoolbar__swatch" aria-hidden="true"></span></template>{{ t }}</ListRow>
             <div v-if="!applyList.length && !newTagIsNovel" class="wpc-seltoolbar__menuempty">Every selected row already has all sub-categories</div>
           </div>
         </div>
@@ -212,14 +227,14 @@ function applyWeight() {
         </Button>
         <div v-if="openMenu === 'remove'" class="wpc-seltoolbar__menu" role="menu">
           <div class="wpc-seltoolbar__menulist">
-            <button
+            <ListRow
               v-for="t in removeList"
               :key="t"
-              type="button"
+              size="sm"
               class="wpc-seltoolbar__menuitem"
               :style="{ '--chip-hue': hueOf(t) }"
               @click="removeTag(t)"
-            ><span class="wpc-seltoolbar__swatch" aria-hidden="true"></span>{{ t }}</button>
+            ><template #start><span class="wpc-seltoolbar__swatch" aria-hidden="true"></span></template>{{ t }}</ListRow>
             <div v-if="!removeList.length" class="wpc-seltoolbar__menuempty">Selection has no sub-categories</div>
           </div>
         </div>
@@ -322,14 +337,6 @@ function applyWeight() {
     <Button variant="danger" size="sm" icon="pi-trash" data-test="sel-delete" @click="emit('delete-selected')">Delete</Button>
   </SelectionBar>
 
-  <!-- click-outside backdrop (button so it's keyboard-dismissable + lint-clean) -->
-  <button
-    v-if="openMenu"
-    type="button"
-    class="wpc-seltoolbar__backdrop"
-    aria-label="Close menu"
-    @click="close"
-  ></button>
 </template>
 
 <style scoped>
@@ -365,17 +372,8 @@ function applyWeight() {
 }
 .wpc-seltoolbar__menuitem {
   --chip-hue: var(--wp-text-dim, var(--wp-text3));
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  text-align: left;
-  padding: 6px 8px;
-  border: none;
-  border-radius: min(6px, var(--wp-radius-cap, 999px));
-  background: transparent;
   color: var(--wp-text);
   font-size: 13px;
-  cursor: pointer;
 }
 /* Colour swatch mirroring the axis hue of the pills / option-row chips so a
  * sub-category reads with the same colour in the menu as everywhere else. */
@@ -423,14 +421,4 @@ function applyWeight() {
 .wpc-seltoolbar__negactions { display: flex; align-items: center; gap: 6px; }
 .wpc-seltoolbar__menunote { margin: 0; font-size: 12px; line-height: 1.4; color: var(--wp-text-muted); }
 .wpc-seltoolbar__menuempty { padding: 6px 8px; font-size: 12px; color: var(--wp-text-muted); }
-.wpc-seltoolbar__backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 19;
-  border: none;
-  padding: 0;
-  margin: 0;
-  background: transparent;
-  cursor: default;
-}
 </style>

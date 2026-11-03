@@ -2659,13 +2659,13 @@ function onHostKeydown(ev: KeyboardEvent): void {
         { 'wp-rt__host--wrap': wrap && !multiline, 'wp-rt__host--empty': isEmpty },
       ]"
       :contenteditable="!disabled"
-      @scroll="updateOverflowHint"
       :aria-label="ariaLabel"
       :data-placeholder="placeholder"
       :data-multiline="multiline"
       role="textbox"
       :aria-multiline="multiline"
       spellcheck="false"
+      @scroll="updateOverflowHint"
       @focus="onHostFocus"
       @blur="onHostBlur"
       @input="onHostInput"
@@ -2806,10 +2806,9 @@ function onHostKeydown(ev: KeyboardEvent): void {
             >
               <i :class="SOURCE_ICON[section.source]" aria-hidden="true" />{{ section.label }}
             </div>
-            <button
+            <div
               v-for="entry in section.rows"
               :key="section.source + ':' + (entry.row.source === 'tag' ? entry.row.tag.matched : entry.row.model.path)"
-              type="button"
               class="wp-rt-suggestions__item wp-rt-tag"
               :data-active="entry.index === acActive ? '' : null"
               role="option"
@@ -2858,7 +2857,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
                 </span>
                 <span class="wp-rt-tag__count">{{ formatTagCount(entry.row.tag.count) }}</span>
               </template>
-            </button>
+            </div>
           </template>
           <div v-if="tagLegend.length" class="wp-rt-tag__legend">
             <span v-for="cat in tagLegend" :key="cat">
@@ -2886,10 +2885,9 @@ function onHostKeydown(ev: KeyboardEvent): void {
                labelled for where it leads. -->
           <span class="wp-rt-suggestions__hint">↑↓ · {{ acTrigger === "@" ? "Enter filter" : "Enter" }} · Esc</span>
         </div>
-        <button
+        <div
           v-for="(row, i) in (acTrigger === 'tag' ? [] : acRows)"
           :key="row.token"
-          type="button"
           class="wp-rt-suggestions__item"
           :class="{ 'wp-rt-suggestions__item--axis': row.isAxis }"
           :data-active="i === acActive ? '' : null"
@@ -2960,12 +2958,11 @@ function onHostKeydown(ev: KeyboardEvent): void {
             class="pi pi-filter wp-rt-suggestions__funnel"
             aria-hidden="true"
           />
-        </button>
+        </div>
         <!-- Reference a module that does not exist yet. Inserts the red broken
              chip under this name; clicking it later repoints it. -->
-        <button
+        <div
           v-if="acPlaceholderName"
-          type="button"
           class="wp-rt-suggestions__item wp-rt-suggestions__item--placeholder"
           :data-active="acActive === acItems.length ? '' : null"
           role="option"
@@ -2985,7 +2982,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
               not in the library yet · repoint it later
             </span>
           </span>
-        </button>
+        </div>
       </div>
     </Teleport>
 
@@ -3519,7 +3516,9 @@ function onHostKeydown(ev: KeyboardEvent): void {
   font-weight: var(--wp-weight-semibold);
 }
 
+/* Listbox options (role="option"): focus stays in the text, arrows move. */
 .wp-rt-suggestions__item {
+  box-sizing: border-box;
   display: flex;
   align-items: flex-start;
   gap: var(--wp-space-4);

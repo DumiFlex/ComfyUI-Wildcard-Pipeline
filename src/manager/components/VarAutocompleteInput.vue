@@ -233,10 +233,12 @@ onBeforeUnmount(() => {
         <span class="wp-rt-suggestions__query">{{ modelValue || "(any)" }}</span>
         <span class="wp-rt-suggestions__hint">↑↓ Enter · Esc</span>
       </div>
-      <button
+      <!-- Listbox options: focus stays in the input and the arrows move the
+           highlight, so an option is never a Tab stop. -->
+      <!-- eslint-disable-next-line vuejs-accessibility/interactive-supports-focus -->
+      <div
         v-for="(label, i) in filtered"
         :key="label"
-        type="button"
         class="wp-rt-suggestions__item"
         :data-active="i === active ? '' : null"
         role="option"
@@ -247,7 +249,7 @@ onBeforeUnmount(() => {
         <span class="wp-rt-suggestions__label">
           <span class="wp-rt-suggestions__trigger">$</span>{{ label }}
         </span>
-      </button>
+      </div>
     </div>
   </Teleport>
 </template>
