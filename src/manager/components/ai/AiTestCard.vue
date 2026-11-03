@@ -40,15 +40,16 @@ function delta(top: { pct: number; was?: number }): string {
         <template v-if="card.compared"> · was → now</template>
       </span>
       <span v-if="card.failed" class="wp-ai-test__bad">{{ card.failed }} failed</span>
-      <button
+      <Button
         v-if="!full"
-        type="button"
-        class="wp-ai-test__zoom"
+        variant="ghost"
+        size="sm"
+        icon="pi-search-plus"
         aria-label="Show the whole test run"
         title="Show the whole test run"
         data-test="ai-test-zoom"
         @click="emit('zoom')"
-      ><i class="pi pi-search-plus" aria-hidden="true" /></button>
+      />
     </header>
 
     <div v-for="v in (expanded ? card.vars : shown)" :key="v.name" class="wp-ai-test__var" data-test="ai-test-var">
@@ -65,12 +66,13 @@ function delta(top: { pct: number; was?: number }): string {
         <span class="wp-ai-test__pct">{{ delta(t) }}{{ t.pct }}%</span>
       </div>
     </div>
-    <button
+    <Button
       v-if="!full && (hidden > 0 || (expanded && card.vars.length > shown.length))"
-      type="button"
+      variant="link"
+      size="sm"
       class="wp-ai-test__more"
       @click="expanded = !expanded"
-    >{{ expanded ? "Show fewer" : `${hidden} more variable${hidden === 1 ? "" : "s"}` }}</button>
+    >{{ expanded ? "Show fewer" : `${hidden} more variable${hidden === 1 ? "" : "s"}` }}</Button>
 
     <p v-for="n in never" :key="n.name" class="wp-ai-test__note" data-test="ai-test-never">
       <i class="pi pi-eye-slash" aria-hidden="true" />
@@ -114,13 +116,11 @@ function delta(top: { pct: number; was?: number }): string {
 .wp-ai-test__bar-was { position: absolute; inset: 0 auto 0 0; background: var(--wp-text-dim); opacity: 0.45; }
 .wp-ai-test__bar-now { position: absolute; inset: 0 auto 0 0; background: var(--wp-accent-500); }
 .wp-ai-test__pct { font-variant-numeric: tabular-nums; color: var(--wp-text-muted); white-space: nowrap; }
-.wp-ai-test__more { align-self: flex-start; background: none; border: 0; padding: 0; color: var(--wp-accent-400, var(--wp-accent-500)); cursor: pointer; font-size: 12px; }
+.wp-ai-test__more { align-self: flex-start; }
 .wp-ai-test__note { margin: 0; display: flex; gap: 6px; align-items: baseline; overflow-wrap: anywhere; }
 .wp-ai-test__warn { color: var(--wp-warn); }
 .wp-ai-test__prompts summary { cursor: pointer; color: var(--wp-text-muted); }
 .wp-ai-test__prompts p { margin: 4px 0 0; overflow-wrap: anywhere; }
 .wp-ai-test__foot { display: flex; justify-content: flex-end; }
-.wp-ai-test__zoom { flex: none; background: none; border: 0; padding: 2px 4px; color: var(--wp-text-muted); cursor: pointer; border-radius: var(--wp-radius-sm); }
-.wp-ai-test__zoom:hover { color: var(--wp-text); background: var(--wp-bg-3); }
 .wp-ai-test__clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 </style>

@@ -7,6 +7,7 @@
  */
 import { computed } from "vue";
 import Button from "@/kit/Button.vue";
+import Chip from "@/kit/Chip.vue";
 import { pickAnswer, usePackBuilder } from "../../composables/usePackBuilder";
 import { autogrow } from "../../utils/autogrow";
 import type { AiPackQuestion } from "../../api/types";
@@ -41,27 +42,26 @@ function isPicked(q: string, c: string): boolean {
         <span v-if="q.binds" class="wp-pack-qs__multi" title="Your answer is applied to the plan right away, with no AI call" data-test="pack-question-code">applied by the code</span>
       </p>
       <p class="wp-pack-qs__text">{{ q.question }}</p>
-      <div class="wp-pack-qs__choices" :role="q.multi ? 'group' : 'radiogroup'" :aria-label="q.question">
-        <button
+      <div class="wp-pack-qs__choices" role="group" :aria-label="q.question">
+        <Chip
           v-for="c in q.choices"
           :key="c"
-          type="button"
-          class="wp-pack-qs__choice"
-          :role="q.multi ? undefined : 'radio'"
-          :aria-pressed="q.multi ? isPicked(q.question, c) : undefined"
-          :aria-checked="q.multi ? undefined : isPicked(q.question, c)"
+          size="md"
+          :icon="q.multi ? (isPicked(q.question, c) ? 'pi-check-square' : 'pi-stop') : undefined"
+          :pressed="isPicked(q.question, c)"
           :disabled="convo.loading.value"
           data-test="pack-choice"
           @click="pb.choose(q, c)"
-        ><i v-if="q.multi" :class="['pi', isPicked(q.question, c) ? 'pi-check-square' : 'pi-stop']" aria-hidden="true" /> {{ c }}</button>
-        <button
-          type="button"
-          class="wp-pack-qs__choice wp-pack-qs__decide"
-          :aria-pressed="pb.pickFor(q.question).decide"
+        >{{ c }}</Chip>
+        <Chip
+          size="md"
+          icon="pi-sparkles"
+          class="wp-pack-qs__decide"
+          :pressed="pb.pickFor(q.question).decide"
           :disabled="convo.loading.value"
           data-test="pack-decide"
           @click="pb.decideFor(q)"
-        ><i class="pi pi-sparkles" aria-hidden="true" /> Decide for me</button>
+        >Decide for me</Chip>
       </div>
       <textarea
         class="wp-textarea wp-pack-qs__other"
@@ -111,17 +111,7 @@ function isPicked(q: string, c: string): boolean {
 .wp-pack-qs__multi { font-size: 11px; color: var(--wp-text-dim); }
 .wp-pack-qs__text { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
 .wp-pack-qs__choices { display: flex; gap: 6px; flex-wrap: wrap; }
-.wp-pack-qs__choice {
-  padding: 5px 11px; border-radius: min(7px, var(--wp-radius-cap, 999px)); font-size: 13px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center;
-  border: 1px solid var(--wp-border); background: var(--wp-bg-2); color: var(--wp-text); max-width: 100%;
-  overflow-wrap: anywhere; text-align: left;
-}
-.wp-pack-qs__choice .pi { font-size: 11px; }
-.wp-pack-qs__choice[aria-pressed="true"], .wp-pack-qs__choice[aria-checked="true"] {
-  border-color: var(--wp-accent-400); color: var(--wp-accent-text);
-  background: color-mix(in oklab, var(--wp-accent-500) 16%, var(--wp-bg-2));
-}
-.wp-pack-qs__decide { border-style: dashed; color: var(--wp-text-muted); }
+.wp-pack-qs__decide:not([aria-pressed="true"]) { border-style: dashed; }
 .wp-pack-qs__other { width: 100%; font-size: 12.5px; min-height: 30px; resize: vertical; line-height: 1.4; }
 .wp-pack-qs__row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .wp-pack-qs__dim { flex: 1; font-size: 12px; color: var(--wp-text-dim); }

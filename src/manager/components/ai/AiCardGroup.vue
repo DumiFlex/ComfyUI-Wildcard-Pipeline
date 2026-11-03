@@ -14,6 +14,7 @@
  */
 import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
+import ListRow from "@/kit/ListRow.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import type { AiChatProposal } from "../../api/types";
 import { useAiChat, type ChatAssistantEntry } from "../../composables/useAiChat";
@@ -123,17 +124,16 @@ const STATE: Record<string, string> = {
     </div>
     <div v-if="pending.length > 1" class="wp-ai-group__bar">
       <span>{{ ticked.length }} of {{ pending.length }} ticked</span>
-      <button type="button" class="wp-ai-group__link" data-test="ai-group-tick-all" @click="tickAll(ticked.length < pending.length)">
+      <Button variant="link" size="sm" data-test="ai-group-tick-all" @click="tickAll(ticked.length < pending.length)">
         {{ ticked.length < pending.length ? "Tick all" : "Untick all" }}
-      </button>
+      </Button>
     </div>
     <ul class="wp-ai-group__rows">
       <li v-for="p in cards" :key="p.pid" class="wp-ai-group__row" :data-state="stateOf(p)" :data-open="open.has(p.pid) || undefined" data-test="ai-group-row">
         <div class="wp-ai-group__line">
           <Checkbox v-if="stateOf(p) === 'pending'" :model-value="!unticked.has(p.pid)" :aria-label="`Include ${p.title}`" data-test="ai-group-tick" @update:model-value="tick(p.pid)" />
           <i v-else :class="['pi', ICON[stateOf(p)] ?? 'pi-circle', 'wp-ai-group__state']" :title="STATE[stateOf(p)]" aria-hidden="true" />
-          <button
-            type="button"
+          <ListRow
             class="wp-ai-group__open"
             :aria-expanded="open.has(p.pid)"
             :title="open.has(p.pid) ? 'Fold it' : 'Show what it makes'"
@@ -142,12 +142,14 @@ const STATE: Record<string, string> = {
           >
             <span class="wp-ai-group__title">{{ p.title }}</span>
             <span class="wp-ai-group__summary">{{ p.summary }}</span>
-            <span v-if="p.warnings.some((w) => !p.notes?.includes(w))" class="wp-ai-group__warn" data-test="ai-group-warn">
-              <i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ p.warnings.filter((w) => !p.notes?.includes(w)).length }}
-            </span>
-            <span v-if="entry.errors[p.pid]" class="wp-ai-group__err" role="alert">{{ entry.errors[p.pid] }}</span>
-            <i :class="['pi', open.has(p.pid) ? 'pi-chevron-up' : 'pi-chevron-down', 'wp-ai-group__chev']" aria-hidden="true" />
-          </button>
+            <template #end>
+              <span v-if="p.warnings.some((w) => !p.notes?.includes(w))" class="wp-ai-group__warn" data-test="ai-group-warn">
+                <i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ p.warnings.filter((w) => !p.notes?.includes(w)).length }}
+              </span>
+              <span v-if="entry.errors[p.pid]" class="wp-ai-group__err" role="alert">{{ entry.errors[p.pid] }}</span>
+              <i :class="['pi', open.has(p.pid) ? 'pi-chevron-up' : 'pi-chevron-down', 'wp-ai-group__chev']" aria-hidden="true" />
+            </template>
+          </ListRow>
         </div>
         <!-- Always there (empty when folded): the drawer's Teleport needs its target to stay put. -->
         <div :id="bodyId(p.pid)" class="wp-ai-group__body" data-test="ai-group-body" />
@@ -171,7 +173,6 @@ const STATE: Record<string, string> = {
 .wp-ai-group__head { display: flex; flex-direction: column; gap: 1px; }
 .wp-ai-group__name { font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
 .wp-ai-group__counts { font-size: 12px; color: var(--wp-text-muted); }
-.wp-ai-group__link { border: 0; background: none; padding: 0; font: inherit; font-size: 11px; color: var(--wp-accent-text); cursor: pointer; text-decoration: underline; }
 .wp-ai-group__actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .wp-ai-group__bar { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--wp-text-muted); padding: 0 2px; }
 .wp-ai-group__rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm); overflow: hidden; }
@@ -185,11 +186,9 @@ const STATE: Record<string, string> = {
 .wp-ai-group__state { flex: none; font-size: 13px; color: var(--wp-text-muted); }
 .wp-ai-group__row[data-state="applied"] .wp-ai-group__state, .wp-ai-group__row[data-state="editor"] .wp-ai-group__state { color: var(--wp-success); }
 .wp-ai-group__row[data-state="failed"] .wp-ai-group__state { color: var(--wp-danger, var(--wp-warn)); }
-.wp-ai-group__open {
-  flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; padding: 2px 0; border: 0;
-  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
-}
-.wp-ai-group__open:hover .wp-ai-group__title { text-decoration: underline; }
+.wp-ai-group__open { flex: 1; min-width: 0; width: auto; min-height: 0; padding: 4px 6px; }
+.wp-ai-group__open :deep(.wp-list-row__label) { display: flex; align-items: baseline; gap: 8px; }
+.wp-ai-group__err { max-width: 12em; }
 .wp-ai-group__title { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .wp-ai-group__summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wp-text-muted); }
 .wp-ai-group__warn { flex: none; color: var(--wp-warn); font-size: 11.5px; }

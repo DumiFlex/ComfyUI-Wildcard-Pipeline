@@ -7,6 +7,7 @@
  * the graph; the server compiles the item from it again.
  */
 import WpNumber from "@/kit/WpNumber.vue";
+import Button from "@/kit/Button.vue";
 import { computed } from "vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import Select from "@/kit/Select.vue";
@@ -166,7 +167,7 @@ function move(v: string, by: number): void {
           <input class="wp-input wp-input--sm wp-pack-graph__axis-name" :value="a.name" :disabled="busy" aria-label="Axis name" data-test="pack-axis-name" @change="setAxisName(n, text($event))">
           <input class="wp-input wp-input--sm" :value="a.values.join(', ')" :disabled="busy" aria-label="Axis values" data-test="pack-axis-values" @change="setAxisValues(n, text($event))">
         </div>
-        <button type="button" class="wp-pack-graph__link" :disabled="busy" data-test="pack-axis-add" @click="addAxis">Add an axis</button>
+        <Button variant="link" size="sm" class="wp-pack-graph__add" :disabled="busy" data-test="pack-axis-add" @click="addAxis">Add an axis</Button>
       </div>
     </template>
 
@@ -189,9 +190,10 @@ function move(v: string, by: number): void {
           <input v-if="r.kind === 'exclude' || r.kind === 'only' || r.kind === 'boost' || r.kind === 'reduce'" class="wp-input wp-input--sm" :value="(r.words ?? []).join(', ')" placeholder="about (sandals, shorts)" :disabled="busy" aria-label="What the rule is about" data-test="pack-relation-words" @change="pb.editRelation(n, { words: words(text($event)) })">
           <WpNumber v-if="r.kind === 'boost' || r.kind === 'reduce'" commit="input" size="sm" class="wp-pack-graph__rel-factor" :model-value="r.factor ?? (r.kind === 'boost' ? 3 : 0.3)" :min="0" :max="100" :step="0.1" :disabled="busy" aria-label="Factor" @update:model-value="(v) => pb.editRelation(n, { factor: Number(v) })" />
         </template>
-        <button type="button" class="wp-pack-graph__icon" :disabled="busy" aria-label="Remove this rule" title="Remove this rule" data-test="pack-relation-remove" @click="pb.removeRelation(n)"><i class="pi pi-times" aria-hidden="true" /></button>
+        <Button variant="ghost" size="sm" icon="pi-times" :disabled="busy" aria-label="Remove this rule" title="Remove this rule" data-test="pack-relation-remove" @click="pb.removeRelation(n)"/>
       </div>
-      <button v-if="!slot" type="button" class="wp-pack-graph__link" :disabled="busy" data-test="pack-relation-add" @click="addRelation">Add a rule</button>
+      <Button v-if="!slot" variant="link" size="sm"
+        class="wp-pack-graph__add" :disabled="busy" data-test="pack-relation-add" @click="addRelation">Add a rule</Button>
     </template>
 
     <template v-if="fixed">
@@ -215,8 +217,8 @@ function move(v: string, by: number): void {
         <ol>
           <li v-for="(v, n) in graph.template.order" :key="v">
             <code>${{ v }}</code>
-            <button type="button" class="wp-pack-graph__icon" :disabled="busy || n === 0" aria-label="Move up" @click="move(v, -1)"><i class="pi pi-chevron-up" aria-hidden="true" /></button>
-            <button type="button" class="wp-pack-graph__icon" :disabled="busy || n === graph.template.order.length - 1" aria-label="Move down" data-test="pack-order-down" @click="move(v, 1)"><i class="pi pi-chevron-down" aria-hidden="true" /></button>
+            <Button variant="ghost" size="sm" icon="pi-chevron-up" :disabled="busy || n === 0" aria-label="Move up" @click="move(v, -1)"/>
+            <Button variant="ghost" size="sm" icon="pi-chevron-down" :disabled="busy || n === graph.template.order.length - 1" aria-label="Move down" data-test="pack-order-down" @click="move(v, 1)"/>
           </li>
         </ol>
       </div>
@@ -248,11 +250,9 @@ function move(v: string, by: number): void {
 .wp-pack-graph__rel-kind { min-width: 130px; }
 .wp-pack-graph__rel-factor { max-width: 70px; min-width: 60px; }
 .wp-pack-graph__rel-var { max-width: 110px; }
-.wp-pack-graph__icon { flex: none; width: 24px; height: 24px; min-width: 24px; border: 0; border-radius: min(6px, var(--wp-radius-cap, 999px)); background: none; color: var(--wp-text-dim); cursor: pointer; }
-.wp-pack-graph__icon:hover:not(:disabled) { color: var(--wp-text); background: var(--wp-bg-2); }
-.wp-pack-graph__icon:disabled { opacity: 0.4; cursor: default; }
-.wp-pack-graph__link { align-self: flex-start; border: 0; background: none; padding: 0; color: var(--wp-accent-text); cursor: pointer; font: inherit; font-size: 12px; text-decoration: underline; }
 .wp-pack-graph__order ol { margin: 2px 0 0; padding-left: 22px; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
 .wp-pack-graph__order li { display: flex; gap: 2px; align-items: center; }
 .wp-pack-graph__order code { color: var(--wp-kind-wildcard); font-size: 12px; margin-right: 4px; }
+/* Its link buttons sit at the start of the line, as text links did. */
+.wp-pack-graph__add { justify-self: start; align-self: flex-start; }
 </style>

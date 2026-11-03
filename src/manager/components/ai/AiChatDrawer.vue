@@ -26,6 +26,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { isNavigationFailure, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import Button from "@/kit/Button.vue";
+import ImageGrid from "@/kit/ImageGrid.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import Chip from "@/kit/Chip.vue";
 import Drawer from "@/kit/Drawer.vue";
@@ -278,7 +279,6 @@ const IMAGE_SUGGESTIONS = [
 const picker = ref<HTMLInputElement | null>(null);
 const dropping = ref(false);
 /** The user-message image shown large, as "entry:index". */
-const bigImage = ref("");
 
 const attachTitle = computed(() => chat.vision.value === false
   ? `${chat.visionModel.value || "This model"} can't see images. Pick a vision model to send one.`
@@ -326,10 +326,6 @@ function onDrop(ev: DragEvent): void {
   void attach(ev.dataTransfer ? [...ev.dataTransfer.files] : null);
 }
 
-function toggleImage(i: number, j: number): void {
-  const k = `${i}:${j}`;
-  bigImage.value = bigImage.value === k ? "" : k;
-}
 
 /** The latest user message, the one the pencil can edit. */
 const lastUserAt = computed(() => {
@@ -904,18 +900,16 @@ onMounted(() => {
 
         <template v-for="(entry, i) in chat.entries.value" :key="i">
           <div v-if="entry.role === 'user'" class="wp-ai-chat__user" data-test="ai-chat-user" :data-reacted="entry.reaction ? 'true' : undefined">
-            <span v-if="entry.images?.length" class="wp-ai-chat__pics">
-              <button
-                v-for="(src, j) in entry.images"
-                :key="j"
-                type="button"
-                class="wp-ai-chat__pic"
-                :data-big="bigImage === `${i}:${j}` || undefined"
-                :aria-label="bigImage === `${i}:${j}` ? 'Show smaller' : 'Show larger'"
-                data-test="ai-chat-user-image"
-                @click="toggleImage(i, j)"
-              ><img :src="src" alt="" /></button>
-            </span>
+            <ImageGrid
+              v-if="entry.images?.length"
+              class="wp-ai-chat__pics"
+              :images="entry.images.map((src, j) => ({ id: `${i}:${j}`, src, alt: `Your image ${j + 1}` }))"
+              :min-size="96"
+              gap="sm"
+              :style="{ width: `${entry.images.length * 104}px` }"
+              aria-label="Your images"
+              data-test="ai-chat-user-image"
+            />
             <AiMessage
               v-if="entry.text && entry.text.includes('[[')"
               class="wp-ai-chat__user-text"
@@ -1608,11 +1602,8 @@ onMounted(() => {
   border: 2px dashed var(--wp-accent-500); border-radius: min(8px, var(--wp-radius-cap, 999px));
 }
 .wp-ai-chat__drop .pi { font-size: 26px; }
-.wp-ai-chat__pics { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-.wp-ai-chat__pic { padding: 0; border: 0; background: none; cursor: zoom-in; border-radius: min(6px, var(--wp-radius-cap, 999px)); overflow: hidden; line-height: 0; }
-.wp-ai-chat__pic img { width: 96px; height: 96px; object-fit: cover; display: block; }
-.wp-ai-chat__pic[data-big] { cursor: zoom-out; }
-.wp-ai-chat__pic[data-big] img { width: auto; height: auto; max-width: 100%; max-height: 60vh; object-fit: contain; }
+/* Your own images: thumbnails that open full screen in the kit Lightbox. */
+.wp-ai-chat__pics { max-width: 100%; margin-bottom: 6px; }
 .wp-ai-chat__attached { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .wp-ai-chat__thumb { position: relative; width: 56px; height: 56px; border-radius: min(6px, var(--wp-radius-cap, 999px)); overflow: hidden; border: 1px solid var(--wp-border); }
 .wp-ai-chat__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }

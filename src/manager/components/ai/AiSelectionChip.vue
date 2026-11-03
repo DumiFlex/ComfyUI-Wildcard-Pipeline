@@ -125,8 +125,10 @@ onBeforeUnmount(() => {
       data-test="ai-selection-chip"
       data-ai-no-explain
     >
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
+        icon="pi-microchip-ai"
         class="wp-ai-sel__btn"
         :disabled="chat.loading.value"
         :title="chat.loading.value ? 'The chat is answering' : `Ask the assistant to explain this (${EXPLAIN_SHORTCUT})`"
@@ -134,19 +136,21 @@ onBeforeUnmount(() => {
         @mousedown.prevent
         @click="onExplain"
       >
-        <i class="pi pi-microchip-ai" aria-hidden="true" /> Explain
-      </button>
+        Explain
+      </Button>
       <span class="wp-ai-sel__sep" aria-hidden="true" />
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
+        icon="pi-comment"
         class="wp-ai-sel__btn"
         title="Quote this in the chat and ask your own question"
         data-test="ai-selection-ask"
         @mousedown.prevent
         @click="onAsk"
       >
-        <i class="pi pi-comment" aria-hidden="true" /> Ask
-      </button>
+        Ask
+      </Button>
     </div>
   </Teleport>
 </template>
@@ -161,15 +165,6 @@ onBeforeUnmount(() => {
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 45%, var(--wp-border));
   box-shadow: var(--wp-shadow-md);
 }
-.wp-ai-sel__btn {
-  display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px;
-  border: 0; border-radius: min(6px, var(--wp-radius-cap, 999px)); background: transparent; color: var(--wp-text);
-  font: inherit; font-size: 12px; cursor: pointer;
-}
-.wp-ai-sel__btn:hover:not(:disabled), .wp-ai-sel__btn:focus-visible {
-  background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent); outline: none;
-}
-.wp-ai-sel__btn:disabled { opacity: 0.5; cursor: default; }
-.wp-ai-sel__btn .pi { font-size: 12px; color: var(--wp-accent-400, var(--wp-accent-500)); }
+.wp-ai-sel__btn :deep(.pi) { color: var(--wp-accent-400, var(--wp-accent-500)); }
 .wp-ai-sel__sep { width: 1px; height: 16px; background: var(--wp-border); margin: 0 2px; }
 </style>

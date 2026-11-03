@@ -8,6 +8,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
 import Checkbox from "@/kit/Checkbox.vue";
+import Chip from "@/kit/Chip.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
 import { api } from "../../api/client";
 import { useAiConversation } from "../../composables/useAiConversation";
@@ -112,25 +113,26 @@ function close(): void {
       </label>
       <div v-if="result.tags.length" class="wp-ai-desc__tags" data-test="ai-desc-tags">
         <span class="wp-ai-desc__label">Tags</span>
-        <button
+        <Chip
           v-for="t in freshTags"
           :key="t.tag"
-          type="button"
+          size="sm"
+          :icon="picked.has(t.tag) ? 'pi-check' : 'pi-plus'"
+          :pressed="picked.has(t.tag)"
           class="wp-ai-desc__tag"
-          :data-on="picked.has(t.tag) ? 'true' : 'false'"
           :data-new="t.new ? 'true' : 'false'"
           :title="t.new ? 'New tag: nothing in your library uses it yet' : 'Used elsewhere in your library'"
-          :aria-pressed="picked.has(t.tag)"
           data-test="ai-desc-tag"
           @click="toggle(t.tag)"
-        ><i :class="['pi', picked.has(t.tag) ? 'pi-check' : 'pi-plus']" aria-hidden="true" /> {{ t.tag }}</button>
-        <span
+        >{{ t.tag }}</Chip>
+        <Chip
           v-for="t in keptTags"
           :key="t.tag"
+          size="sm"
           class="wp-ai-desc__tag"
           data-has="true"
           title="Already on this item"
-        >{{ t.tag }}</span>
+        >{{ t.tag }}</Chip>
       </div>
       <div class="wp-ai-desc__actions">
         <Button variant="ghost" size="sm" data-test="ai-discard" @click="convo.clear">Discard</Button>
@@ -165,27 +167,8 @@ function close(): void {
 .wp-ai-desc__new { color: var(--wp-text); }
 .wp-ai-desc__tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .wp-ai-desc__label { font-size: 12px; color: var(--wp-text-muted); margin-right: 4px; }
-.wp-ai-desc__tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font: inherit;
-  font-size: 12px;
-  padding: 2px 9px;
-  border-radius: min(12px, var(--wp-radius-cap, 999px));
-  border: 1px solid var(--wp-border);
-  background: transparent;
-  color: var(--wp-text-muted);
-  cursor: pointer;
-}
-.wp-ai-desc__tag .pi { font-size: 10px; }
-.wp-ai-desc__tag[data-on="true"] {
-  border-color: color-mix(in oklab, var(--wp-accent-500) 60%, transparent);
-  color: var(--wp-accent-text);
-  background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent);
-}
 .wp-ai-desc__tag[data-new="true"] { border-style: dashed; }
-.wp-ai-desc__tag[data-has="true"] { cursor: default; opacity: 0.6; }
+.wp-ai-desc__tag[data-has="true"] { opacity: 0.6; }
 .wp-ai-desc__actions { display: flex; justify-content: flex-end; gap: 8px; }
 .wp-ai-desc__note { margin: 0; font-size: 12px; color: var(--wp-text-dim); }
 </style>

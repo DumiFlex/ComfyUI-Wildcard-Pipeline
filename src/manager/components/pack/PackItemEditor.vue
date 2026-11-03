@@ -71,7 +71,7 @@ async function send(): Promise<void> {
   <div class="wp-pack-edit" data-test="pack-item-editor">
     <p v-if="i.kind === 'library'" class="wp-pack-edit__note">
       Your {{ i.library_type === 'fixed_values' ? 'fixed values' : 'wildcard' }}, used as it is.
-      <button type="button" class="wp-pack-edit__link" :disabled="busy" @click="makeNew">Write a new one instead</button>
+      <Button variant="link" size="sm" :disabled="busy" @click="makeNew">Write a new one instead</Button>
     </p>
     <div class="wp-pack-edit__grid">
       <label v-if="i.kind !== 'library'" class="wp-pack-edit__field">
@@ -140,7 +140,6 @@ async function send(): Promise<void> {
 .wp-pack-edit__field input, .wp-pack-edit__about { width: 100%; }
 .wp-pack-edit__about { resize: vertical; font-size: 12.5px; }
 .wp-pack-edit__note { margin: 0; font-size: 12.5px; color: var(--wp-text-muted); }
-.wp-pack-edit__link { border: 0; background: none; padding: 0; color: var(--wp-accent-text); cursor: pointer; font: inherit; text-decoration: underline; }
 .wp-pack-edit__ask { display: flex; gap: 6px; align-items: center; }
 .wp-pack-edit__ask input { flex: 1; min-width: 0; }
 </style>
