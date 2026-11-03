@@ -11,6 +11,7 @@
  * auto-create it (in Ungrouped).
  */
 import WpNumber from "@/kit/WpNumber.vue";
+import Input from "@/kit/Input.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
 import ListRow from "@/kit/ListRow.vue";
@@ -191,9 +192,9 @@ function applyWeight() {
           Apply sub-category
         </Button>
         <div v-if="openMenu === 'apply'" class="wpc-seltoolbar__menu" role="menu">
-          <input
+          <Input
             v-model="newTag"
-            class="wp-input wp-input--sm"
+            size="sm"
             placeholder="New or existing tag…"
             aria-label="New sub-category"
             @keydown.enter.prevent="applyNewTag"
@@ -272,9 +273,10 @@ function applyWeight() {
           <div class="wpc-seltoolbar__menuhead">Negative for {{ count }} option{{ count === 1 ? "" : "s" }}</div>
           <div class="wpc-seltoolbar__negrow">
             <span class="wpc-seltoolbar__negtag" aria-hidden="true">NEG</span>
-            <input
+            <Input
               v-model="negWords"
-              class="wp-input wp-input--sm wpc-seltoolbar__neginput"
+              size="sm"
+              class="wpc-seltoolbar__neginput"
               placeholder="words to keep out"
               aria-label="Negative words"
               data-test="sel-negative-input"

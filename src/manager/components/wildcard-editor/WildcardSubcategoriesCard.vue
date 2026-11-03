@@ -17,6 +17,7 @@
  */
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import Button from "@/kit/Button.vue";
+import Input from "@/kit/Input.vue";
 import Card from "@/kit/Card.vue";
 import Chip from "@/kit/Chip.vue";
 import ListRow from "@/kit/ListRow.vue";
@@ -433,14 +434,15 @@ function onGroupDrop(axis: string): void {
             :data-test="`subcat-fold-${group.axis}`"
             @click.stop="toggleAxisCollapsed(group.axis)"
           />
-          <input
+          <Input
             v-if="!group.isOther"
+            size="sm"
             class="subcat-group__name"
-            :value="group.axis"
+            :model-value="group.axis"
             :aria-label="`Rename group ${group.axis}`"
             :data-test="`subcat-group-name-${group.axis}`"
-            @change="(e) => onGroupNameChange(group.axis, e)"
-            @keydown.enter.prevent="(e) => (e.target as HTMLInputElement).blur()"
+            @change="(e: Event) => onGroupNameChange(group.axis, e)"
+            @keydown.enter.prevent="(e: KeyboardEvent) => (e.target as HTMLInputElement).blur()"
           />
           <span v-else class="subcat-group__name subcat-group__name--other">ungrouped</span>
           <!-- What this group MEANS to the engine. classify (the default)
@@ -566,8 +568,9 @@ function onGroupDrop(axis: string): void {
           <!-- Inline "+ tag" for this group. Collapsed to a button;
                expands to a validated input. -->
           <span v-if="addTagAxis === group.axis" class="subcat-addtag">
-            <input
+            <Input
               v-model="addTagDraft"
+              size="sm"
               class="subcat-addtag__input"
               :class="{ 'subcat-addtag__input--invalid': addTagError }"
               :data-test="`group-addtag-input-${group.axis}`"
@@ -693,6 +696,8 @@ function onGroupDrop(axis: string): void {
   padding: 3px 6px;
   min-width: 0;
   max-width: 220px;
+  /* The kit Input fills its row; this one is as wide as a plain input was. */
+  width: auto;
 }
 .subcat-group__name:hover,
 .subcat-group__name:focus-visible {

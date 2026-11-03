@@ -19,6 +19,7 @@
  *     so a brand-new field discloses what's available.
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import Input from "@/kit/Input.vue";
 
 defineOptions({ name: "VarAutocompleteInput" });
 
@@ -42,7 +43,9 @@ const emit = defineEmits<{
   "update:modelValue": [value: string];
 }>();
 
-const inputEl = ref<HTMLInputElement | null>(null);
+/** The kit Input; its root is the `<input>` itself (no prefix / icon). */
+const field = ref<{ $el: HTMLInputElement } | null>(null);
+const inputEl = computed<HTMLInputElement | null>(() => field.value?.$el ?? null);
 const popoverEl = ref<HTMLDivElement | null>(null);
 const open = ref(false);
 const active = ref(0);
@@ -199,12 +202,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <input
-    ref="inputEl"
-    type="text"
+  <Input
+    ref="field"
     class="dvr-var-input"
     :style="inputColor ? { color: inputColor } : undefined"
-    :value="modelValue"
+    :model-value="modelValue"
     :placeholder="placeholder"
     :aria-label="ariaLabel"
     :data-test="dataTest"
@@ -255,14 +257,18 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* The kit Input as a bare field inside the row's own box. */
 .dvr-var-input {
   flex: 1;
+  height: auto;
   background: transparent;
   border: 0;
+  border-radius: 0;
+  box-shadow: none;
   padding: var(--wp-space-3) var(--wp-space-5);
   font: 600 11px var(--wp-font-mono, ui-monospace, monospace); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
   min-width: 0;
   color: var(--wp-kind-derivation);
 }
-.dvr-var-input:focus { outline: none; }
+.dvr-var-input:focus { outline: none; box-shadow: none; background: transparent; }
 </style>

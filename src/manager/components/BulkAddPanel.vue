@@ -16,6 +16,7 @@
  */
 import { computed, ref, watch, onBeforeUnmount } from "vue";
 import Button from "@/kit/Button.vue";
+import Textarea from "@/kit/Textarea.vue";
 import {
   parseBulkOptions,
   summarizeBulkOptions,
@@ -101,13 +102,13 @@ function cancel() {
       </template>
     </div>
 
-    <textarea
+    <Textarea
       v-model="text"
-      class="wp-textarea wpc-bulk-panel__input"
-      rows="6"
+      class="wpc-bulk-panel__input"
+      :rows="6"
       :placeholder="mode === 'options' ? 'serene\nradiant #warm *2\nbrooding #cool -- cheerful' : 'cfg = 4.5\nsteps = 30'"
       aria-label="Bulk paste"
-    ></textarea>
+    />
 
     <!-- live preview -->
     <div class="wpc-bulk-panel__preview" aria-live="polite">

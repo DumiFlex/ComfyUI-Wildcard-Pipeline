@@ -9,6 +9,7 @@
  */
 import { computed, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
+import Input from "@/kit/Input.vue";
 import Modal from "@/kit/Modal.vue";
 import { api, ApiError } from "../api/client";
 import { useAiConfig } from "../composables/useAiConfig";
@@ -131,15 +132,15 @@ function apply(): void {
         of them was, so each part can be reused on its own.
       </p>
       <div v-if="ready" class="wp-split__ai">
-        <input
+        <Input
           v-model="ask"
-          class="wp-input wp-input--sm"
+          size="sm"
           placeholder="How to group them (optional): by body part, character vs. scene…"
           aria-label="How to group the children"
           :disabled="loading"
           data-test="split-ask"
           @keydown.enter.prevent="suggest"
-        >
+        />
         <Button size="sm" icon="pi-microchip-ai" :loading="loading" data-test="split-suggest" @click="suggest">Suggest with AI</Button>
       </div>
       <p v-if="error" class="wp-split__error" role="alert">{{ error }}</p>
@@ -148,16 +149,17 @@ function apply(): void {
           <span class="wp-split__name">{{ childName(c) }}</span>
           <span class="wp-split__type">{{ c.type }}</span>
           <span v-if="c.type === 'bundle'" class="wp-split__dim">already a sub-bundle</span>
-          <input
+          <Input
             v-else
-            class="wp-input wp-input--sm wp-split__label"
-            :value="labels[n]"
+            size="sm"
+            class="wp-split__label"
+            :model-value="labels[n] ?? ''"
             list="wp-split-names"
             placeholder="stays in the bundle"
             :aria-label="`Sub-bundle for ${childName(c)}`"
             data-test="split-label"
-            @input="setLabel(n, ($event.target as HTMLInputElement).value)"
-          >
+            @update:model-value="(v) => setLabel(n, v)"
+          />
         </li>
       </ol>
       <datalist id="wp-split-names">

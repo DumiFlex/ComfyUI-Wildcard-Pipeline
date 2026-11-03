@@ -17,6 +17,7 @@
  *   - `expansion`             — body of the expanded-row drawer
  */
 import SearchInput from "@/kit/SearchInput.vue";
+import Input from "@/kit/Input.vue";
 import Banner from "@/kit/Banner.vue";
 import { computed, defineAsyncComponent, nextTick, ref, watch, useSlots } from "vue";
 import { useRouter } from "vue-router";
@@ -609,7 +610,8 @@ function emitFetch() {
 
 const tagAddOpen = ref(false);
 const tagAddValue = ref("");
-const tagAddInputRef = ref<HTMLInputElement | null>(null);
+/** The kit Input (its root is the `<input>`), focused when the panel opens. */
+const tagAddInputRef = ref<{ $el: HTMLInputElement } | null>(null);
 
 const tagRemoveOpen = ref(false);
 const tagRemoveValue = ref("");
@@ -637,7 +639,7 @@ watch(tagAddOpen, async (open) => {
   if (open) {
     tagAddValue.value = "";
     await nextTick();
-    tagAddInputRef.value?.focus();
+    tagAddInputRef.value?.$el.focus();
   }
 });
 
@@ -885,10 +887,9 @@ defineExpose({
         <h3 :id="titleId" class="wp-modal__title wp-mlv-modal-title">Add tag to {{ selected.size }} items</h3>
       </template>
       <div class="wp-bulk-modal-body">
-        <input
+        <Input
           ref="tagAddInputRef"
           v-model="tagAddValue"
-          class="wp-input"
           data-test="bulk-tag-input"
           placeholder="Type tag name (or pick existing)"
           @keydown.enter="submitTagAdd"
