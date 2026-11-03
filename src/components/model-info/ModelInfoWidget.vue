@@ -15,6 +15,8 @@
  */
 import { computed, nextTick, ref } from "vue";
 import Button from "@/kit/Button.vue";
+import { inputEl } from "@/manager/utils/kit-field-el";
+import Input from "@/kit/Input.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import {
   DEFAULT_VARIANT_RULES,
@@ -197,18 +199,19 @@ function resetRules(): void {
           :data-wp-socket="row.key"
         >
           <span class="wp-mi__var-name" :title="`${row.variable}: ${ROW_TOOLTIPS[row.key]}`">{{ row.label }}</span>
-          <input
+          <Input
             v-if="showsInput(row.key)"
-            :ref="(el) => { pinInputs[row.key] = el as HTMLInputElement | null; }"
+            :ref="(c) => { pinInputs[row.key] = inputEl(c); }"
+            size="sm"
             class="wp-mi__pin-input"
-            :value="modelValue[row.key]"
+            :model-value="modelValue[row.key]"
             :placeholder="row.key === 'name' ? 'checkpoint file name' : row.label"
             :data-test="`mi-pin-input-${row.key}`"
             spellcheck="false"
             @keydown.enter="($event.target as HTMLInputElement).blur()"
             @keydown.stop
             @blur="onPinBlur(row.key, $event)"
-          >
+          />
           <span
             v-else
             class="wp-mi__var-value"
@@ -270,24 +273,26 @@ function resetRules(): void {
           :data-test="`mi-rule-${i}`"
         >
           <span class="wp-mi__rule-dot" aria-hidden="true" />
-          <input
+          <Input
+            size="sm"
             class="wp-mi__rule-variant"
-            :value="rule.variant"
+            :model-value="rule.variant"
             placeholder="variant"
             spellcheck="false"
             aria-label="variant"
             @keydown.stop
             @change="editRule(i, { variant: ($event.target as HTMLInputElement).value })"
-          >
-          <input
+          />
+          <Input
+            size="sm"
             class="wp-mi__rule-pattern"
-            :value="rule.pattern"
+            :model-value="rule.pattern"
             placeholder="pattern, e.g. pony|pdxl"
             spellcheck="false"
             aria-label="pattern"
             @keydown.stop
             @change="editRule(i, { pattern: ($event.target as HTMLInputElement).value })"
-          >
+          />
           <WpIconButton
             icon="pi-trash"
             tone="danger"

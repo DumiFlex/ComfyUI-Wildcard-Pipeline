@@ -25,6 +25,7 @@
  * the inline row controls. Save = close.
  */
 import Kbd from "@/kit/Kbd.vue";
+import Input from "@/kit/Input.vue";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
 import RichTextInput from "../../manager/components/RichTextInput.vue";
@@ -437,11 +438,13 @@ function onKeydown(ev: KeyboardEvent): void {
         </div>
         <div class="ibm__binding-wrap" :class="{ 'ibm__binding-wrap--empty': !draftBinding.trim() }">
           <span class="ibm__binding-prefix">$</span>
-          <input
-            type="text"
+          <Input
+           
+            size="sm"
+           
             class="ibm__binding-input"
             data-test="ibm-binding"
-            :value="draftBinding"
+            :model-value="draftBinding"
             :aria-label="isGeneral ? 'binding for template row' : `binding for ${row.slot_name}`"
             placeholder="variable_name"
             spellcheck="false"

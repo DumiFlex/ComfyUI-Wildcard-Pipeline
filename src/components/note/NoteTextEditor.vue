@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
 import Combobox from "@/kit/Combobox.vue";
+import { textareaEl } from "@/manager/utils/kit-field-el";
+import Textarea from "@/kit/Textarea.vue";
+import Input from "@/kit/Input.vue";
 import ColorField from "@/kit/ColorField.vue";
 import Button from "@/kit/Button.vue";
 import Toolbar from "@/kit/Toolbar.vue";
@@ -207,8 +210,8 @@ function insertIcon(name: string): void {
           @update:model-value="(v: string) => (linkSection = v)"
         />
       </template>
-      <input v-else v-model="linkUrl" class="wp-note-ed__input" aria-label="Web address" placeholder="https://…" data-test="note-link-url" @keydown.enter.prevent="insertLink" />
-      <input v-model="linkText" class="wp-note-ed__input" aria-label="Link text" placeholder="Text (optional)" data-test="note-link-text" @keydown.enter.prevent="insertLink" />
+      <Input v-else v-model="linkUrl" size="sm" class="wp-note-ed__input" aria-label="Web address" placeholder="https://…" data-test="note-link-url" @keydown.enter.prevent="insertLink" />
+      <Input v-model="linkText" size="sm" class="wp-note-ed__input" aria-label="Link text" placeholder="Text (optional)" data-test="note-link-text" @keydown.enter.prevent="insertLink" />
       <div class="wp-note-ed__row">
         <WpSegmented
           :model-value="linkStyle"
@@ -286,12 +289,12 @@ function insertIcon(name: string): void {
       />
     </div>
 
-    <textarea
+    <Textarea
       v-show="mode === 'write'"
-      ref="area"
+      :ref="(c) => (area = textareaEl(c))"
       class="wp-note-ed__text"
-      rows="5"
-      :value="modelValue"
+      :rows="5"
+      :model-value="modelValue"
       :placeholder="hint"
       aria-label="Note text"
       data-test="note-text"
@@ -301,7 +304,8 @@ function insertIcon(name: string): void {
       @mouseup="remember"
       @select="remember"
       @blur="remember"
-    ></textarea>
+
+    />
     <div v-if="mode === 'preview'" class="wp-note-ed__preview" data-test="note-preview">
       <NoteMarkdown v-if="modelValue.trim()" :text="modelValue" />
       <p v-else class="wp-note-ed__hint">Nothing written yet.</p>

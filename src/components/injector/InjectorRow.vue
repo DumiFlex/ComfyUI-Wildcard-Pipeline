@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
 import Checkbox from "@/kit/Checkbox.vue";
+import Input from "@/kit/Input.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import DragHandle from "@/kit/DragHandle.vue";
 
@@ -237,11 +238,13 @@ function onDragEnd(): void {
         draggable="false"
       >
         <span class="wp-vbind-prefix">$</span>
-        <input
-          type="text"
+        <Input
+         
+          size="sm"
+         
           class="wp-vbind-input"
           data-test="inj-row-binding"
-          :value="row.binding"
+          :model-value="row.binding"
           :aria-label="isGeneral ? 'binding for template row' : `binding for ${row.slot_name}`"
           placeholder="variable_name"
           spellcheck="false"
