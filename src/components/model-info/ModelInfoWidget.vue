@@ -15,6 +15,8 @@
  */
 import { computed, nextTick, ref } from "vue";
 import Button from "@/kit/Button.vue";
+import { inputEl } from "@/manager/utils/kit-field-el";
+import Input from "@/kit/Input.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import {
   DEFAULT_VARIANT_RULES,
@@ -197,18 +199,21 @@ function resetRules(): void {
           :data-wp-socket="row.key"
         >
           <span class="wp-mi__var-name" :title="`${row.variable}: ${ROW_TOOLTIPS[row.key]}`">{{ row.label }}</span>
-          <input
+          <Input
             v-if="showsInput(row.key)"
-            :ref="(el) => { pinInputs[row.key] = el as HTMLInputElement | null; }"
+            :ref="(c) => { pinInputs[row.key] = inputEl(c); }"
+            size="sm"
+            mono
+            tone="warn"
             class="wp-mi__pin-input"
-            :value="modelValue[row.key]"
+            :model-value="modelValue[row.key]"
             :placeholder="row.key === 'name' ? 'checkpoint file name' : row.label"
             :data-test="`mi-pin-input-${row.key}`"
             spellcheck="false"
             @keydown.enter="($event.target as HTMLInputElement).blur()"
             @keydown.stop
             @blur="onPinBlur(row.key, $event)"
-          >
+          />
           <span
             v-else
             class="wp-mi__var-value"
@@ -270,24 +275,30 @@ function resetRules(): void {
           :data-test="`mi-rule-${i}`"
         >
           <span class="wp-mi__rule-dot" aria-hidden="true" />
-          <input
+          <Input
+            size="sm"
             class="wp-mi__rule-variant"
-            :value="rule.variant"
+            :tone="!modelValue.variant && matched?.row === i ? 'accent' : undefined"
+            :error="problemByRow.has(i)"
+            :model-value="rule.variant"
             placeholder="variant"
             spellcheck="false"
             aria-label="variant"
             @keydown.stop
             @change="editRule(i, { variant: ($event.target as HTMLInputElement).value })"
-          >
-          <input
+          />
+          <Input
+            size="sm"
+            mono
             class="wp-mi__rule-pattern"
-            :value="rule.pattern"
+            :error="problemByRow.has(i)"
+            :model-value="rule.pattern"
             placeholder="pattern, e.g. pony|pdxl"
             spellcheck="false"
             aria-label="pattern"
             @keydown.stop
             @change="editRule(i, { pattern: ($event.target as HTMLInputElement).value })"
-          >
+          />
           <WpIconButton
             icon="pi-trash"
             tone="danger"
@@ -382,17 +393,8 @@ function resetRules(): void {
   font-style: italic;
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.wp-mi__pin-input {
-  min-width: 0;
-  height: 20px;
-  padding: 0 6px;
-  background: var(--wp-bg);
-  color: var(--wp-text);
-  border: 1px solid var(--wp-amber, var(--wp-warn));
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  font: 11px var(--wp-font-mono, monospace);
-  outline: none;
-}
+/* The kit's sm field, held to the 20px the dense rows are built on. */
+.wp-mi__var .wp-mi__pin-input { min-width: 0; height: 20px; }
 .wp-mi__source {
   font-size: 9px;
   color: var(--wp-text-dim, var(--wp-text3));
@@ -418,24 +420,8 @@ function resetRules(): void {
   background: var(--wp-border2, var(--wp-border-strong));
 }
 .wp-mi__rule.is-match .wp-mi__rule-dot { background: var(--wp-accent); }
-.wp-mi__rule.is-match .wp-mi__rule-variant { color: var(--wp-accent-text, var(--wp-accent)); }
-.wp-mi__rule-variant,
-.wp-mi__rule-pattern {
-  min-width: 0;
-  height: 20px;
-  padding: 0 6px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  font: 11px var(--wp-font-mono, monospace);
-  outline: none;
-}
-.wp-mi__rule-variant { font-family: var(--wp-font-sans, sans-serif); font-weight: 600; }
-.wp-mi__rule-variant:focus,
-.wp-mi__rule-pattern:focus { border-color: var(--wp-accent); }
-.wp-mi__rule.is-problem .wp-mi__rule-variant,
-.wp-mi__rule.is-problem .wp-mi__rule-pattern { border-color: var(--wp-danger); }
+.wp-mi__rule .wp-mi__rule-variant,
+.wp-mi__rule .wp-mi__rule-pattern { min-width: 0; height: 20px; }
 .wp-mi__ghost {
   padding: 6px 4px;
   font-size: 10px;

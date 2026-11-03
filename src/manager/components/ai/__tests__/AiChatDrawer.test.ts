@@ -13,6 +13,9 @@ import {
   _resetOpenEditorForTests, registerOpenEditor, registerPageNote,
 } from "../../../composables/useOpenEditor";
 import { _resetAiActionsForTests, pointers, registerAiAction } from "../../../composables/useAiActions";
+import { inlineDrawer } from "./inline-drawer";
+
+inlineDrawer();
 
 vi.mock("../../../utils/chat-image", async (orig) => ({
   ...(await orig<typeof import("../../../utils/chat-image")>()),
@@ -1067,7 +1070,7 @@ describe("AiChatDrawer", () => {
     await flushPromises();
     expect(vi.mocked(api.ai.chat).mock.calls[0][0]).toMatchObject({
       message: "Make wildcards from this image", images: [{ data: "data:image/jpeg;base64,QUJD" }] });
-    expect(w.findAll('[data-test="ai-chat-user-image"]')).toHaveLength(1);
+    expect(w.get('[data-test="ai-chat-user-image"]').findAll("img")).toHaveLength(1);
     expect(w.find(".wp-ai-chat__thumb").exists()).toBe(false);
     w.unmount();
   });

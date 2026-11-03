@@ -218,12 +218,12 @@ defineExpose({ describe });
       >
         <div class="wp-input-group">
           <span class="wp-input-group__affix wp-input-group__affix--prefix" aria-hidden="true">$</span>
-          <input
-            class="wp-input wp-mono"
-            :value="varBinding ?? ''"
+          <Input
+            class="wp-mono"
+            :model-value="varBinding ?? ''"
             placeholder="hair_color"
             data-test="identity-var-binding"
-            @input="onVarBinding(($event.target as HTMLInputElement).value)"
+            @update:model-value="onVarBinding"
           />
         </div>
       </Field>

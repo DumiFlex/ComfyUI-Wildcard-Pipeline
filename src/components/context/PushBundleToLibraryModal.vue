@@ -14,6 +14,9 @@
  * `buildLibraryChildrenWithIntegrity` so the modal stays free of
  * bundle-walk logic.
  */
+import Input from "@/kit/Input.vue";
+import SearchInput from "@/kit/SearchInput.vue";
+import Textarea from "@/kit/Textarea.vue";
 import { computed, ref, watch } from "vue";
 import { bundleHashes } from "./drift-store";
 import { api } from "../../manager/api/client";
@@ -430,10 +433,10 @@ function pickCopyName(base: string, taken: ReadonlySet<string>): string {
       <div class="wp-ptl__body">
         <div class="wp-ptl-field">
           <label class="wp-ptl-field__label" for="wp-pbtl-name">Name</label>
-          <input
+          <Input
             id="wp-pbtl-name"
             v-model="name"
-            type="text"
+            size="sm"
             class="wp-ptl-input"
             data-test="pbtl-name"
             placeholder="(unnamed)"
@@ -442,21 +445,20 @@ function pickCopyName(base: string, taken: ReadonlySet<string>): string {
 
         <div class="wp-ptl-field">
           <label class="wp-ptl-field__label" for="wp-pbtl-description">Description</label>
-          <textarea
+          <Textarea
             id="wp-pbtl-description"
             v-model="description"
             class="wp-ptl-input wp-ptl-input--multi"
             data-test="pbtl-description"
-            rows="2"
-          />
+            :rows="2"/>
         </div>
 
         <div class="wp-ptl-field">
           <label class="wp-ptl-field__label" for="wp-pbtl-tags">Tags (comma-separated)</label>
-          <input
+          <Input
             id="wp-pbtl-tags"
             v-model="tagsText"
-            type="text"
+            size="sm"
             class="wp-ptl-input"
             data-test="pbtl-tags"
             placeholder="e.g. style, qa"
@@ -545,16 +547,14 @@ function pickCopyName(base: string, taken: ReadonlySet<string>): string {
             This bundle's content matches a library entry under a different id (a re-import
             minted a new one). Re-link to reconnect drift + reset instead of adding a duplicate.
           </p>
-          <input
+          <SearchInput
             v-if="relinkCandidates.length > 1"
             v-model="relinkQuery"
-            type="text"
-            class="wp-ptl-input"
+            size="md"
+            class="wp-ptl-search"
             data-test="pbtl-relink-search"
             placeholder="Search by name or id…"
             aria-label="Search library bundles to re-link"
-            spellcheck="false"
-            autocomplete="off"
           />
           <ul class="wp-ptl-relink__list">
             <li
@@ -654,18 +654,9 @@ function pickCopyName(base: string, taken: ReadonlySet<string>): string {
   font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
   text-transform: uppercase; color: var(--wp-text-dim);
 }
-.wp-ptl-input {
-  width: 100%;
-  background: var(--wp-bg-2);
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  border-radius: min(6px, var(--wp-radius-cap, 999px));
-  padding: 6px 8px;
-  font-size: 13px;
-  font-family: inherit;
-}
-.wp-ptl-input:focus { outline: 1px solid var(--wp-accent-500); }
-.wp-ptl-input--multi { resize: vertical; overscroll-behavior: contain; min-height: 48px; }
+.wp-ptl-search { width: 100%; }
+/* The kit Textarea draws the box; the description box is two lines tall. */
+.wp-ptl-input--multi { overscroll-behavior: contain; min-height: 48px; }
 .wp-ptl-children {
   margin: 0;
   padding: 6px 8px;

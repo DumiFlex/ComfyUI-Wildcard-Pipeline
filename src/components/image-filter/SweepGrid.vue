@@ -8,6 +8,7 @@
 import { computed } from "vue";
 import PickerTile from "./PickerTile.vue";
 import WpSelect from "@/kit/WpSelect.vue";
+import Button from "@/kit/Button.vue";
 import { axisHueAt } from "../shared/axis-color";
 import { moveAxis, type GridLayout, type SweepAxisInfo, type SweepGrid } from "./picker-loop";
 import { pickKey, viewUrl, type ImageRef, type PickEdits } from "./types";
@@ -66,7 +67,7 @@ function isEdited(key: string): boolean {
       <label class="wp-ifg__slot">Rows
         <WpSelect class="wp-ifg__select" :model-value="layout.rows" :options="axisOptions" data-test="image-filter-grid-rows" @update:model-value="(v) => setSlot('rows', v)" />
       </label>
-      <button type="button" class="wp-ifg__swap" title="Swap rows and columns" data-test="image-filter-grid-swap" @click="swap">⇄</button>
+      <Button variant="ghost" size="sm" icon="pi-arrow-right-arrow-left" class="wp-ifg__swap" aria-label="Swap rows and columns" data-test="image-filter-grid-swap" @click="swap" />
       <label class="wp-ifg__slot">Columns
         <WpSelect class="wp-ifg__select" :model-value="layout.cols" :options="axisOptions" data-test="image-filter-grid-cols" @update:model-value="(v) => setSlot('cols', v)" />
       </label>
@@ -85,11 +86,12 @@ function isEdited(key: string): boolean {
         :class="{ 'is-card': split }"
         :data-test="`image-filter-grid-group-${gi}`"
       >
-        <button
+        <Button
           v-if="g.title.length"
-          type="button"
+          variant="ghost"
+          size="sm"
           class="wp-ifg__group-head"
-          title="Pick or clear this whole group"
+          hint="Pick or clear this whole group"
           @click="emit('toggleFrames', g.frames)"
         >
           <template v-for="t in g.title" :key="t.axis">
@@ -97,28 +99,30 @@ function isEdited(key: string): boolean {
             <span class="wp-ifg__chip" :style="hue(t.axis)">{{ t.value }}</span>
           </template>
           <span class="wp-ifg__count">{{ pickedIn(g.frames) }} of {{ g.frames.length }} picked</span>
-        </button>
+        </Button>
         <div class="wp-ifg__table" :style="{ gridTemplateColumns: `auto repeat(${grid.cols.length}, auto)` }">
           <span class="wp-ifg__corner">{{ grid.rowAxis.name }} ╲ {{ grid.colAxis.name }}</span>
-          <button
+          <Button
             v-for="(c, ci) in grid.cols"
             :key="`c${ci}`"
-            type="button"
+            variant="ghost"
+            size="sm"
             class="wp-ifg__chip wp-ifg__col"
             :style="hue(grid.colAxis.axis)"
             :title="`Pick or clear the ${c} column`"
             :data-test="`image-filter-grid-col-${gi}-${ci}`"
             @click="emit('toggleFrames', colFrames(g.cells, ci))"
-          >{{ c }}</button>
+          >{{ c }}</Button>
           <template v-for="(r, ri) in grid.rows" :key="`r${ri}`">
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               class="wp-ifg__chip wp-ifg__row"
               :style="hue(grid.rowAxis.axis)"
               :title="`Pick or clear the ${r} row`"
               :data-test="`image-filter-grid-row-${gi}-${ri}`"
               @click="emit('toggleFrames', rowFrames(g.cells, ri))"
-            >{{ r }}</button>
+            >{{ r }}</Button>
             <div v-for="(f, ci) in g.cells[ri]" :key="`${ri}-${ci}`" class="wp-ifg__cell">
               <div
                 v-if="f >= 0"
@@ -155,7 +159,7 @@ function isEdited(key: string): boolean {
 .wp-ifg__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--wp-border); background: var(--wp-bg-deep, var(--wp-bg)); font: 11px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); flex-shrink: 0; }
 .wp-ifg__slot { display: inline-flex; align-items: center; gap: 6px; }
 .wp-ifg__select { font-family: var(--wp-font-mono, monospace); }
-.wp-ifg__swap { background: transparent; border: 0; padding: 2px 4px; color: var(--wp-accent-text, var(--wp-accent)); font-size: 14px; cursor: pointer; }
+.wp-ifg__swap.wp-btn { color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-ifg__spacer { flex: 1; }
 .wp-ifg__divider { width: 1px; align-self: stretch; background: var(--wp-border); }
 .wp-ifg__hint { font-size: 10.5px; }
@@ -165,15 +169,20 @@ function isEdited(key: string): boolean {
 .wp-ifg__groups { overflow: auto; flex: 1; min-height: 0; padding: 14px; display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; align-content: flex-start; }
 .wp-ifg__group { display: flex; flex-direction: column; gap: 8px; }
 .wp-ifg__group.is-card { padding: 10px 12px; border: 1px solid var(--wp-border); border-radius: min(8px, var(--wp-radius-cap, 999px)); background: var(--wp-bg-deep, var(--wp-bg)); }
-.wp-ifg__group-head { display: flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; cursor: pointer; text-align: left; }
-.wp-ifg__group-head:hover .wp-ifg__chip { filter: brightness(1.2); }
+/* The whole title line picks the group: a ghost Button the width of the card. */
+.wp-ifg__group-head.wp-btn { display: flex; width: 100%; height: auto; min-height: 0; padding: 0; justify-content: flex-start; font-weight: 400; }
+.wp-ifg__group-head :deep(.wp-btn__label) { display: flex; flex: 1; align-items: center; gap: 6px; }
+.wp-ifg__group-head.wp-btn:hover:not(:disabled) { background: transparent; }
+.wp-ifg__group-head.wp-btn:hover .wp-ifg__chip { filter: brightness(1.2); }
 .wp-ifg__count { margin-left: auto; padding-left: 16px; font: 10.5px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
 
 .wp-ifg__table { display: grid; gap: 8px; align-items: center; justify-items: center; width: max-content; margin: 0 auto; }
 .wp-ifg__corner { justify-self: end; font: 10.5px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); white-space: nowrap; }
 .wp-ifg__chip { padding: 2px 8px; border: 0; border-radius: min(4px, var(--wp-radius-cap, 999px)); font: 11px var(--wp-font-mono, monospace); white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; color: color-mix(in srgb, var(--wp-ifg-hue) 85%, white); background: color-mix(in srgb, var(--wp-ifg-hue) 18%, transparent); }
-button.wp-ifg__chip { cursor: pointer; }
-button.wp-ifg__chip:hover { background: color-mix(in srgb, var(--wp-ifg-hue) 32%, transparent); }
+/* Row and column names are kit ghost Buttons wearing the axis tint. */
+.wp-ifg__chip.wp-btn { height: auto; min-height: 0; line-height: normal; padding: 2px 8px; border: 0; border-radius: min(4px, var(--wp-radius-cap, 999px)); font: 11px var(--wp-font-mono, monospace); color: color-mix(in srgb, var(--wp-ifg-hue) 85%, white); background: color-mix(in srgb, var(--wp-ifg-hue) 18%, transparent); }
+.wp-ifg__chip.wp-btn:hover:not(:disabled) { color: color-mix(in srgb, var(--wp-ifg-hue) 85%, white); background: color-mix(in srgb, var(--wp-ifg-hue) 32%, transparent); }
+.wp-ifg__chip.wp-btn:not(.wp-btn--link) :deep(.wp-btn__label) { overflow: hidden; text-overflow: ellipsis; line-height: normal; text-box: normal; }
 .wp-ifg__row { justify-self: end; }
 .wp-ifg__cell { display: flex; justify-content: center; }
 .wp-ifg__tiles { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--wp-border); border-radius: min(5px, var(--wp-radius-cap, 999px)); background: var(--wp-bg-deep, var(--wp-bg)); cursor: zoom-in; }

@@ -192,7 +192,7 @@ const conflictByUid = computed<Record<string, RowConflict>>(() => {
 //   .wp-inj-type-icon       width 16
 //   .wp-inj-slot            max-width 96
 //   .wp-inj-type-chip       ~50 (font 9px × ~7 chars for "boolean")
-//   .wp-vbind-wrap          min-width 80
+//   .wp-inj-bind            min-width 80
 //   .wp-conflict-dot        7
 //   .wp-conflict-badge      max-width 88
 //   .wp-inj-action          width 20 (× 2 in cluster)

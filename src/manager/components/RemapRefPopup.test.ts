@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import RemapRefPopup from "./RemapRefPopup.vue";
+import { rectAnchor } from "@/kit/floating";
 import type { WildcardRefData } from "../utils/library-suggestions";
 
 function refData(): WildcardRefData {
@@ -22,11 +23,11 @@ function mountPopup(overrides = {}) {
       refData: refData(),
       oldExpr: "warm or neon",
       oldExcludeNull: false,
-      anchor: { top: 10, left: 10 },
+      anchor: rectAnchor({ left: 10, top: 10, width: 40, height: 16 }),
       ...overrides,
     },
     attachTo: document.body,
-    // The popup body renders inside `<Teleport to="body">`; stubbing teleport
+    // The popup body renders inside the Popover's `<Teleport to="body">`; stubbing teleport
     // renders the children in place so the wrapper's `find()` reaches them
     // (repo convention — see ModuleEditModal tests).
     global: { stubs: { teleport: true } },
@@ -85,5 +86,21 @@ describe("RemapRefPopup", () => {
     await w.find("[data-test='remap-cancel']").trigger("click");
     expect(w.emitted("cancel")).toBeTruthy();
     expect(w.emitted("confirm")).toBeFalsy();
+  });
+
+  it("a press outside or Escape cancels; a press inside does not", async () => {
+    const w = mountPopup();
+    await w.vm.$nextTick();
+    w.find("[data-test='remap-search']").element.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    expect(w.emitted("cancel")).toBeFalsy();
+    const outside = document.createElement("div");
+    document.body.appendChild(outside);
+    outside.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    expect(w.emitted("cancel")).toHaveLength(1);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(w.emitted("cancel")).toHaveLength(2);
+    expect(w.emitted("confirm")).toBeFalsy();
+    outside.remove();
+    w.unmount();
   });
 });

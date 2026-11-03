@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import Button from "@/kit/Button.vue";
-import SettingGroup from "../SettingGroup.vue";
+import SettingGroup from "@/kit/SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { useUiStore } from "../../../stores/uiStore";
 import { useReleaseCheck } from "../../../composables/useReleaseCheck";

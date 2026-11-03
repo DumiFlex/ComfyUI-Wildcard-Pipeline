@@ -20,7 +20,7 @@ A component anywhere else is a part of one screen, not a control. If a second sc
   - a `KIT_EXAMPLES` line.
 - The demo shows every variant and every state that applies: default, disabled, invalid, loading, empty.
 - wp-kit's `site/src/coverage.test.ts` fails when a piece has no entry, or a demo has no entry.
-- An app piece (built from the kit but wired to the extension's stores, like `RichTextInput` or `SelectionToolbar`) gets the same entry in `src/manager/kit/registry.ts` and its demo in `src/manager/kit/demos/<id>.vue`. They show on the App pieces page (`/wp/kit`). `kit-coverage.test.ts` fails when a component in `src/components/shared/` has no entry.
+- An app piece (built from the kit but wired to the extension's stores, like `RichTextInput`, or `SelectionToolbar`, the kit `SelectionBar` with the wildcard editor's menus) gets the same entry in `src/manager/kit/registry.ts` and its demo in `src/manager/kit/demos/<id>.vue`. They show on the App pieces page (`/wp/kit`). `kit-coverage.test.ts` fails when a component in `src/components/shared/` has no entry.
 
 ## 3. Prop names
 
@@ -165,3 +165,6 @@ Each of these jobs has exactly one component. Don't build a second one, and don'
 | Images in a grid, full screen | `ImageGrid`, `Lightbox` (`zoom` puts each in `WpImageZoom`) | `<img>` wraps with own zoom overlay |
 | Thousands of rows | `VirtualList` | rendering every row |
 | Text for screen readers only | `VisuallyHidden` | another 1 px clip rule |
+| A settings list | `SettingGroup` + `SettingRow` (the manager's `settings/SettingRow.vue` only adds the route-hash flash as `highlighted`) | a bordered card per setting, own narrow-width rules |
+| Rows are ticked | `SelectionBar` (actions in the default slot, `sticky` over a scrolling list; `BulkDeleteToolbar` / `SelectionToolbar` are built on it) | a count, spacer and Clear row per editor |
+| Pick an icon | `IconPicker` (`all` for every glyph with search, `inline` for the list in a panel, `color`, `allow-none`); glyph names in `pi-icons.ts` | a hand-made icon grid (`NoteIconGrid`, removed) |

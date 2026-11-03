@@ -17,12 +17,16 @@
  *   - `expansion`             — body of the expanded-row drawer
  */
 import SearchInput from "@/kit/SearchInput.vue";
+import { inputEl } from "../utils/kit-field-el";
+import Input from "@/kit/Input.vue";
 import Banner from "@/kit/Banner.vue";
 import { computed, defineAsyncComponent, nextTick, ref, watch, useSlots } from "vue";
 import { useRouter } from "vue-router";
 import Button from "@/kit/Button.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import Chip from "@/kit/Chip.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
+import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import Modal from "@/kit/Modal.vue";
 import Select from "@/kit/Select.vue";
 import type { SelectOption } from "@/kit/select-types";
@@ -281,6 +285,7 @@ const activeFilterCount = computed(() => {
   return n;
 });
 
+const TAG_MATCH_OPTIONS: SegmentedOption<TagMatchMode>[] = [{ value: "any", label: "Any tag" }, { value: "all", label: "All tags" }];
 const tagMatchMode = computed<TagMatchMode>(() => (props.filter.tagMode === "all" ? "all" : "any"));
 
 function setTagMatchMode(mode: TagMatchMode) {
@@ -606,6 +611,7 @@ function emitFetch() {
 
 const tagAddOpen = ref(false);
 const tagAddValue = ref("");
+/** The `<input>` inside the kit Input, focused when the panel opens. */
 const tagAddInputRef = ref<HTMLInputElement | null>(null);
 
 const tagRemoveOpen = ref(false);
@@ -882,10 +888,9 @@ defineExpose({
         <h3 :id="titleId" class="wp-modal__title wp-mlv-modal-title">Add tag to {{ selected.size }} items</h3>
       </template>
       <div class="wp-bulk-modal-body">
-        <input
-          ref="tagAddInputRef"
+        <Input
+          :ref="(c) => (tagAddInputRef = inputEl(c))"
           v-model="tagAddValue"
-          class="wp-input"
           data-test="bulk-tag-input"
           placeholder="Type tag name (or pick existing)"
           @keydown.enter="submitTagAdd"
@@ -1010,19 +1015,17 @@ defineExpose({
       <div
         v-if="(filter.tags?.length ?? 0) >= 2"
         class="wp-tag-match"
-        role="group"
-        aria-label="Match tags"
         data-test="tag-match"
       >
         <span class="wp-tag-match__label">Match</span>
-        <button
-          v-for="m in (['any', 'all'] as const)" :key="m"
-          type="button"
-          class="wp-tag-match__btn"
-          :aria-pressed="tagMatchMode === m"
-          :data-test="`tag-match-${m}`"
-          @click="setTagMatchMode(m)"
-        >{{ m === "any" ? "Any tag" : "All tags" }}</button>
+        <WpSegmented
+          size="sm"
+          :model-value="tagMatchMode"
+          :options="TAG_MATCH_OPTIONS"
+          aria-label="Match tags"
+          test-prefix="tag-match"
+          @update:model-value="setTagMatchMode"
+        />
       </div>
       <Chip
         v-for="ef in activeExtras" :key="ef.key"
@@ -1117,15 +1120,14 @@ defineExpose({
                 />
               </td>
               <td>
-                <button
-                  type="button"
+                <WpIconButton
                   class="wp-row-expand-btn"
+                  variant="bare"
+                  :icon="isExpanded(row.id) ? 'pi-chevron-down' : 'pi-chevron-right'"
+                  label="Toggle row"
                   :aria-expanded="isExpanded(row.id)"
-                  aria-label="Toggle row"
                   @click="toggleExpand(row.id)"
-                >
-                  <i :class="isExpanded(row.id) ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" />
-                </button>
+                />
               </td>
               <td v-if="showFavorite">
                 <slot name="favorite" :row="row" />
@@ -1160,15 +1162,15 @@ defineExpose({
                   <!-- Update-available indicator. Distinct pill so the
                        user can tell which rows are behind, not just
                        which rows came from community. -->
-                  <button
+                  <Chip
                     v-if="communityUpdates.entryFor(row.id)"
-                    type="button"
-                    class="wp-row-community-pill wp-row-community-pill--update wp-row-community-pill--button"
+                    as="button"
+                    tone="warn"
+                    icon="pi-arrow-up"
+                    class="wp-row-update-pill"
                     :title="updatePillTitle(row.id)"
                     @click.stop="openUpdateDialog(row.id)"
-                  >
-                    <i class="pi pi-arrow-up" />v{{ updatePillLatest(row.id) }}
-                  </button>
+                  >v{{ updatePillLatest(row.id) }}</Chip>
                   <!-- NSFW pill (engine migration 015). Stamped by the
                        IdentityCard NSFW toggle or auto-stamped at
                        community install time from `opts.origin.content_rating`. -->
@@ -1182,14 +1184,13 @@ defineExpose({
               <slot name="columns" :row="row" />
               <td v-if="showTags" @click.stop>
                 <div v-if="(row.tags ?? []).length" class="wp-row-tags">
-                  <button
+                  <Chip
                     v-for="(t, i) in (row.tags ?? []).slice(0, 3)" :key="i"
-                    type="button"
                     class="wp-row-tag-btn"
-                    :data-active="isTagActive(t) || undefined"
+                    :pressed="isTagActive(t)"
                     :title="isTagActive(t) ? `Remove tag filter '${t}'` : `Filter by tag '${t}'`"
                     @click.stop="toggleTagFilter(t)"
-                  >{{ t }}</button>
+                  >{{ t }}</Chip>
                   <span v-if="(row.tags ?? []).length > 3" class="wp-row-tag-more">+{{ (row.tags ?? []).length - 3 }}</span>
                 </div>
                 <span v-else class="wp-dim">—</span>
@@ -1400,34 +1401,11 @@ defineExpose({
 }
 
 /* Any / All switch for multi-tag filters. Sits inline with the chips. */
-.wp-tag-match {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  background: var(--wp-bg-2);
-}
+.wp-tag-match { display: inline-flex; align-items: center; gap: var(--wp-space-2); }
 .wp-tag-match__label {
   font-size: var(--wp-text-xs);
   color: var(--wp-text-dim);
   padding: 0 var(--wp-space-2);
-}
-.wp-tag-match__btn {
-  font: inherit;
-  font-size: var(--wp-text-xs);
-  color: var(--wp-text-dim);
-  background: transparent;
-  border: none;
-  border-radius: var(--wp-radius-sm);
-  padding: 2px var(--wp-space-3);
-  cursor: pointer;
-}
-.wp-tag-match__btn:hover { color: var(--wp-text); }
-.wp-tag-match__btn[aria-pressed="true"] {
-  color: var(--wp-text);
-  background: var(--wp-bg-3);
 }
 
 .wp-table__select { width: 32px; padding-right: 0; }
@@ -1456,18 +1434,6 @@ defineExpose({
   vertical-align: middle;
 }
 
-.wp-row-expand-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: var(--wp-space-2);
-  color: var(--wp-text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.wp-row-expand-btn:hover { color: var(--wp-text); }
-.wp-row-expand-btn .pi { font-size: var(--wp-text-xs); }
 
 .wp-row-fav-btn {
   background: transparent;
@@ -1530,15 +1496,7 @@ defineExpose({
   border-color: color-mix(in oklab, var(--wp-warn) 30%, transparent);
   color: var(--wp-warn);
 }
-.wp-row-community-pill--button {
-  font: inherit;
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
-}
-.wp-row-community-pill--button:hover {
-  background: color-mix(in oklab, var(--wp-warn) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-warn) 40%, transparent);
-}
+.wp-row-update-pill { align-self: center; height: 18px; }
 .wp-row-community-pill--nsfw {
   background: color-mix(in oklab, var(--wp-danger) 14%, transparent);
   border-color: color-mix(in oklab, var(--wp-danger) 28%, transparent);
@@ -1561,35 +1519,8 @@ defineExpose({
  * users can toggle a tag into the active filter set without opening
  * the filter panel. Active state mirrors the chip selection in the
  * filter-panel's tag row. */
-.wp-row-tag-btn {
-  /* One line, cut with "…" when the column is narrow (a long tag wrapped
-   * into three lines inside its 20px chip with the chat open); the full
-   * tag is in the title. */
-  display: inline-block;
-  height: 20px;
-  line-height: 18px;
-  max-width: 10em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 0 var(--wp-space-4);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-cap, 999px);
-  background: var(--wp-bg-2);
-  color: var(--wp-text);
-  font-size: var(--wp-text-xs);
-  cursor: pointer;
-  transition: border-color 0.12s ease, background-color 0.12s ease, color 0.12s ease;
-}
-.wp-row-tag-btn:hover {
-  border-color: var(--wp-border-strong, var(--wp-border));
-  color: var(--wp-text);
-}
-.wp-row-tag-btn[data-active] {
-  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
-  color: var(--wp-accent-text);
-}
+/* One line, cut with "…" when the column is narrow; the full tag is in the title. */
+.wp-row-tag-btn { display: inline-block; max-width: 10em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 18px; }
 
 .wp-row-actions {
   display: inline-flex;

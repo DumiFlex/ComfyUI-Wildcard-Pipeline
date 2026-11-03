@@ -4,7 +4,8 @@ import Select from "@/kit/Select.vue";
 import Icon from "@/kit/Icon.vue";
 import type { SelectOption } from "@/kit/select-types";
 import HsvPicker from "@/kit/HsvPicker.vue";
-import SettingGroup from "../SettingGroup.vue";
+import RadioGroup from "@/kit/RadioGroup.vue";
+import SettingGroup from "@/kit/SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import ThemeChoices from "../ThemeChoices.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
@@ -95,33 +96,26 @@ function setSidebar(v: SidebarChoice): void {
       setting-key="accent"
       :stacked="tweaks.accent === 'custom' && !tweaks.accentLocked"
     >
-      <div
+      <RadioGroup
         class="wp-set-swatches"
-        role="radiogroup"
-        aria-label="Accent color"
-        :aria-disabled="tweaks.accentLocked || undefined"
         :class="{ 'is-locked': tweaks.accentLocked }"
+        :model-value="tweaks.accentLocked ? 'theme' : tweaks.accent"
+        :options="SWATCHES.map((name) => ({ value: name, label: ACCENT_LABELS[name] }))"
+        variant="swatch"
+        named
+        :disabled="tweaks.accentLocked"
+        aria-label="Accent color"
+        test-prefix="settings-accent"
+        @update:model-value="(name) => tweaks.setAccent(name)"
       >
-        <button
-          v-for="name in SWATCHES"
-          :key="name"
-          type="button"
-          role="radio"
-          class="wp-set-accent"
-          :aria-checked="name === 'theme' ? tweaks.accent === 'theme' || tweaks.accentLocked : tweaks.accent === name"
-          :data-test="`settings-accent-${name}`"
-          :disabled="tweaks.accentLocked"
-          @click="tweaks.setAccent(name)"
-        >
+        <template #swatch="{ option }">
           <span
             class="wp-set-swatch"
-            :class="{ 'wp-set-swatch--theme': name === 'theme', 'wp-set-swatch--custom': name === 'custom' }"
-            :style="swatchStyle(name)"
-            aria-hidden="true"
+            :class="{ 'wp-set-swatch--theme': option.value === 'theme', 'wp-set-swatch--custom': option.value === 'custom' }"
+            :style="swatchStyle(option.value)"
           />
-          <span class="wp-set-accent__name">{{ ACCENT_LABELS[name] }}</span>
-        </button>
-      </div>
+        </template>
+      </RadioGroup>
       <div v-if="tweaks.accent === 'custom' && !tweaks.accentLocked" class="wp-set-picker">
         <HsvPicker
           :model-value="tweaks.customHex"
@@ -189,47 +183,18 @@ function setSidebar(v: SidebarChoice): void {
 </template>
 
 <style scoped>
-.wp-set-swatches { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: flex-start; }
-/* Each accent: its swatch with the name under it. */
-.wp-set-accent {
-  appearance: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  min-width: 44px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--wp-text-muted);
-  font: inherit;
-  font-size: var(--wp-text-xs);
-  cursor: pointer;
-}
-.wp-set-accent:hover,
-.wp-set-accent[aria-checked="true"] { color: var(--wp-text); }
-.wp-set-accent:focus-visible { outline: none; }
-.wp-set-swatch {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%; /* round: colour swatch */
-  border: 2px solid transparent;
-}
-.wp-set-accent[aria-checked="true"] .wp-set-swatch { outline: 2px solid var(--wp-text); outline-offset: 2px; }
-.wp-set-accent:focus-visible .wp-set-swatch { outline: 2px solid var(--wp-accent-500); outline-offset: 2px; }
+/* The kit's named swatches; the slot paints each one (a plain colour, the
+ * split "Theme's own", the rainbow "Custom"). */
+.wp-set-swatch { display: block; width: 100%; height: 100%; }
+.wp-set-swatches :deep(.wp-radio-group__swatch) { width: 24px; height: 24px; }
 .wp-set-swatch--custom {
-  background: conic-gradient(hsl(350 89% 60%), hsl(38 92% 50%), hsl(142 71% 45%), hsl(173 80% 40%), hsl(239 84% 67%), hsl(271 91% 65%), hsl(350 89% 60%)) border-box;
+  background: conic-gradient(hsl(350 89% 60%), hsl(38 92% 50%), hsl(142 71% 45%), hsl(173 80% 40%), hsl(239 84% 67%), hsl(271 91% 65%), hsl(350 89% 60%));
 }
 /* "Theme's own": half the live accent, half the page, so it reads as
- * "whatever the colour theme brings". `border-box` sizes the gradient to the
- * whole circle: sized to the padding box it tiles again under the 2px
- * border, and the tile corners showed as a square inside the circle. */
-.wp-set-swatch--theme {
-  background: linear-gradient(135deg, var(--own-accent) 50%, var(--wp-bg-3) 50%) border-box;
-  border-color: var(--wp-border-strong);
-}
-.wp-set-swatches.is-locked .wp-set-accent:not([data-test="settings-accent-theme"]) { opacity: 0.35; }
-.wp-set-accent:disabled { cursor: not-allowed; }
+ * "whatever the colour theme brings". */
+.wp-set-swatch--theme { background: linear-gradient(135deg, var(--own-accent) calc(50% - 0.75px), var(--wp-bg-3) calc(50% + 0.75px)); }
+/* Locked (High contrast): the theme's own stays readable, the rest fade. */
+.wp-set-swatches.is-locked :deep([data-test="settings-accent-theme"]) { opacity: 1; }
 .wp-set-picker { width: 100%; max-width: 360px; }
 .wp-set-link { text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
 </style>

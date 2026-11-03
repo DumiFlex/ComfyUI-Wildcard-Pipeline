@@ -2,7 +2,7 @@
 import WpSwitch from "@/kit/WpSwitch.vue";
 import Select from "@/kit/Select.vue";
 import type { SelectOption } from "@/kit/select-types";
-import SettingGroup from "../SettingGroup.vue";
+import SettingGroup from "@/kit/SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { useUiStore, type SubcatDefault } from "../../../stores/uiStore";
 

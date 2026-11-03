@@ -43,14 +43,14 @@ describe("fixed-values IdentitySection", () => {
     const w = mount(IdentitySection, {
       props: { module: makeModule({ meta: { name: "Custom", library_name: "presets" } }) },
     });
-    expect(w.find('[data-test="id-name"]').classes()).toContain("id__input--mod");
+    expect(w.find('[data-test="id-name"]').attributes("data-tone")).toBe("accent");
   });
 
   it("name input does NOT get --mod class when value equals library_name", () => {
     const w = mount(IdentitySection, {
       props: { module: makeModule({ meta: { name: "presets", library_name: "presets" } }) },
     });
-    expect(w.find('[data-test="id-name"]').classes()).not.toContain("id__input--mod");
+    expect(w.find('[data-test="id-name"]').attributes("data-tone")).toBeUndefined();
   });
 
   it("reset button appears only when name is overridden", () => {

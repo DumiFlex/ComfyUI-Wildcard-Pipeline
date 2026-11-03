@@ -343,10 +343,26 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // with the focus trap, and Checkbox/Popover grew to cover what WpCheck and the
 // canvas popovers did; WpButton, CloseButton, ConfirmDialog and WpCheck went
 // (net ~4.1 KB gzip: dev 607,885 -> 611,998 bytes).
-// RAISED 600 -> 604 KB on 2026-11-03 for the selection-toolbar "?" and
-// pencil: the help dialog chunk (Modal + iframe, ~1.6 KB gzip) and the
-// toolbar commands in the boot chunk (dev 611,998 -> 615,378 bytes).
-const TOTAL_LIMIT = 604 * 1024;     // 604 KB
+// RAISED 600 -> 603 KB on 2026-11-03 for the kit buttons batch A: the
+// sub-category filter picker (shared with the canvas Pool section) now draws
+// its tags, operators and axis rows with Chip and ListRow and its actions
+// with Button, which pulls those pieces and the tooltip into its chunk
+// (dev 613,654 -> 616,336 bytes).
+// RAISED 603 -> 607 KB on 2026-11-03 for the canvas kit buttons (batches A
+// and B): the note editor's toolbar is the kit Toolbar with Buttons, the note
+// and bundle colours RadioGroup swatches (+ ColorField), the Var Picker the kit
+// Combobox with its Popover, the pickers' rows ListRows, and the debug viewer /
+// image filter use Button and WpIconButton, which pull those pieces into the
+// canvas chunks (dev ~616,500 -> 619,558 bytes).
+// RAISED 607 -> 608 KB on 2026-11-03 for the end of the kit migration: every
+// text field (manager and canvas) is the kit Input / Textarea / SearchInput and
+// the last canvas toggles are Chips (kit 0.10.0), which pull those pieces into
+// more chunks (619,558 -> 622,398 bytes).
+// RAISED 608 -> 610 KB on 2026-11-03 for kit 0.11.0: Input and Textarea carry
+// their own scoped styles (so canvas fields look right without local copies)
+// and the editors' menus moved onto Popover / DropdownMenu / Modal
+// (621,933 -> 623,679 bytes). Batch B drops the canvas fields' local copies.
+const TOTAL_LIMIT = 610 * 1024;     // 610 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

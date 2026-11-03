@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import Button from "@/kit/Button.vue";
-import SettingGroup from "../SettingGroup.vue";
+import SettingGroup from "@/kit/SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import BrowserPrefsCard from "../BrowserPrefsCard.vue";
 import { useToast } from "@/kit/useToast";

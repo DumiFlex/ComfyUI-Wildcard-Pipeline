@@ -9,6 +9,8 @@
  * state lives here.
  */
 import { computed } from "vue";
+import DragHandle from "@/kit/DragHandle.vue";
+import Button from "@/kit/Button.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 
 interface Props {
@@ -113,27 +115,21 @@ const badgeAccent = computed(() => isBundleRef.value || props.edited);
     @drop="(e) => emit('drop', e)"
     @dragend="emit('drag-end')"
   >
-    <button
-      type="button"
-      class="wp-bchild__handle"
-      :aria-label="`Drag to reorder ${displayName}`"
-      :title="`Drag to reorder ${displayName}`"
-      :data-test="`bundle-child-handle-${idx}`"
-    >
-      <i class="pi pi-bars" aria-hidden="true" />
-    </button>
+    <!-- The row is the drag source; the grip only shows where to grab. -->
+    <span class="wp-bchild__handle" :data-test="`bundle-child-handle-${idx}`">
+      <DragHandle size="md" :title="`Drag to reorder ${displayName}`" />
+    </span>
 
-    <button
-      type="button"
-      class="wp-bchild__toggle"
+    <Button
+      variant="ghost"
+      size="sm"
+      class="wp-bchild__btn"
+      :icon="enabled ? 'pi-eye' : 'pi-eye-slash'"
       :aria-label="enabled ? `Disable ${displayName}` : `Enable ${displayName}`"
       :title="enabled ? `Disable ${displayName}` : `Enable ${displayName}`"
-      :aria-pressed="enabled"
       data-test="bundle-child-toggle"
       @click="emit('toggle')"
-    >
-      <i :class="enabled ? 'pi pi-eye' : 'pi pi-eye-slash'" />
-    </button>
+    />
 
     <div
       class="wp-bchild__kindicon"
@@ -161,26 +157,8 @@ const badgeAccent = computed(() => isBundleRef.value || props.edited);
     </div>
 
     <div class="wp-bchild__acts">
-      <button
-        type="button"
-        class="wp-bchild__act"
-        aria-label="Duplicate child"
-        title="Duplicate"
-        data-test="bundle-child-duplicate"
-        @click="emit('duplicate')"
-      >
-        <i class="pi pi-clone" />
-      </button>
-      <button
-        type="button"
-        class="wp-bchild__act wp-bchild__act--danger"
-        aria-label="Remove child"
-        title="Remove"
-        data-test="bundle-child-remove"
-        @click="emit('remove')"
-      >
-        <i class="pi pi-times" />
-      </button>
+      <Button variant="ghost" size="sm" class="wp-bchild__btn" icon="pi-clone" aria-label="Duplicate child" title="Duplicate" data-test="bundle-child-duplicate" @click="emit('duplicate')" />
+      <Button variant="ghost" size="sm" class="wp-bchild__btn wp-bchild__btn--danger" icon="pi-times" aria-label="Remove child" title="Remove" data-test="bundle-child-remove" @click="emit('remove')" />
     </div>
   </div>
 </template>
@@ -218,29 +196,10 @@ const badgeAccent = computed(() => isBundleRef.value || props.edited);
 }
 .wp-bchild:hover { background: var(--wp-bg-3); }
 
-.wp-bchild__handle, .wp-bchild__toggle, .wp-bchild__act {
-  display: flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-dim);
-  cursor: pointer;
-  padding: 0;
-  font-size: var(--wp-text-xs);
-}
-.wp-bchild__handle { cursor: grab; }
+.wp-bchild__handle { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; color: var(--wp-text-dim); cursor: grab; }
 .wp-bchild__handle:active { cursor: grabbing; }
-.wp-bchild__toggle:hover, .wp-bchild__act:hover {
-  background: var(--wp-bg-3);
-  color: var(--wp-text);
-  border-color: var(--wp-border);
-}
-.wp-bchild__act--danger:hover {
-  background: color-mix(in oklab, var(--wp-danger) 16%, transparent);
-  color: var(--wp-danger-text);
-  border-color: color-mix(in oklab, var(--wp-danger) 30%, transparent);
-}
+.wp-bchild__btn { color: var(--wp-text-dim); }
+.wp-bchild__btn--danger:hover { color: var(--wp-danger-text, var(--wp-danger)); }
 
 .wp-bchild__kindicon {
   width: 28px; height: 22px;

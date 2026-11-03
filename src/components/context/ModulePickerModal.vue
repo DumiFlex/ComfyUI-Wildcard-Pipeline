@@ -117,15 +117,14 @@
                   <span class="wp-picker__pop-label-hint">click to AND-narrow</span>
                 </div>
                 <div class="wp-picker__filter-tags">
-                  <button
+                  <Chip
                     v-for="tag in availableTags"
                     :key="tag"
-                    type="button"
                     class="wp-picker__tag-chip"
-                    :class="{ 'wp-picker__tag-chip--active': selectedTags.has(tag) }"
+                    :pressed="selectedTags.has(tag)"
                     :data-testid="`picker-tag-${tag}`"
                     @click="toggleTag(tag)"
-                  >{{ tag }}</button>
+                  >{{ tag }}</Chip>
                 </div>
               </div>
 
@@ -217,10 +216,9 @@
               <span class="wp-picker__section-line"></span>
               <span class="wp-picker__section-count">{{ group.items.length }}</span>
             </div>
-            <button
+            <ListRow
               v-for="row in group.items"
               :key="row.id"
-              type="button"
               :class="['wp-picker__row', { 'is-already-added': isAlreadyAdded(row.id) }]"
               :data-kind="row.type"
               :data-checked="selected.has(row.id) ? '' : null"
@@ -231,23 +229,25 @@
               :title="isPickable(row) ? (isAlreadyAdded(row.id) ? 'Already in this Context. Click to add as sibling — binding will be auto-suffixed.' : '') : 'Module has no payload — cannot embed.'"
               @click="isPickable(row) && onRowClick(row)"
             >
-              <span
-                class="wp-picker__check"
-                data-test="picker-checkbox"
-                :class="{ on: selected.has(row.id) }"
-                aria-hidden="true"
-              >
-                <i v-if="selected.has(row.id)" class="pi pi-check"></i>
-              </span>
-              <span class="wp-picker__row-icon" :data-kind="row.type">
-                <i :class="['pi', kindIcon(row.type)]" aria-hidden="true"></i>
-              </span>
+              <template #start>
+                <span
+                  class="wp-picker__check"
+                  data-test="picker-checkbox"
+                  :class="{ on: selected.has(row.id) }"
+                  aria-hidden="true"
+                >
+                  <i v-if="selected.has(row.id)" class="pi pi-check"></i>
+                </span>
+                <span class="wp-picker__row-icon" :data-kind="row.type">
+                  <i :class="['pi', kindIcon(row.type)]" aria-hidden="true"></i>
+                </span>
+              </template>
               <span class="wp-picker__row-main">
                 <span class="wp-picker__row-name">{{ row.name }}</span>
                 <span class="wp-picker__row-var">{{ subtitleFor(row) }}</span>
               </span>
-              <span class="wp-picker__row-uuid">{{ shortUuid(row.id) }}</span>
-            </button>
+              <template #end><span class="wp-picker__row-uuid">{{ shortUuid(row.id) }}</span></template>
+            </ListRow>
           </template>
         </template>
       </div>
@@ -278,14 +278,13 @@
               class="wp-picker__sel-name"
               :title="byId.get(id)?.name ?? id"
             >{{ byId.get(id)?.name ?? id }}</span>
-            <button
-              type="button"
+            <WpIconButton
+              variant="bare"
+              icon="pi-times"
               class="wp-picker__sel-close"
-              :aria-label="`Remove ${byId.get(id)?.name ?? id}`"
+              :label="`Remove ${byId.get(id)?.name ?? id}`"
               @click="selected.delete(id)"
-            >
-              <i class="pi pi-times" aria-hidden="true"></i>
-            </button>
+            />
           </span>
         </div>
       </div>
@@ -339,6 +338,9 @@ import WpSelect from "@/kit/WpSelect.vue";
 import { kindIcon } from "../shared/kind-icons";
 import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
 import Button from "@/kit/Button.vue";
+import Chip from "@/kit/Chip.vue";
+import ListRow from "@/kit/ListRow.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
 
 interface PickerModule {
   id: string;
@@ -1100,25 +1102,16 @@ onBeforeUnmount(detachCaptureListeners);
   text-transform: none;
 }
 
+/* A kit ListRow: checkbox + kind icon in front, name + subtitle, short id at the end. */
 .wp-picker__row {
-  /* Always 4-column grid: checkbox | icon | main | uuid.
-   * Checkbox (18px) is always rendered. */
-  display: grid;
-  grid-template-columns: 18px 24px minmax(0, 1fr) auto;
-  align-items: center;
   gap: 10px;
-  width: 100%;
   height: 36px;
+  min-height: 36px;
   padding: 0 8px;
-  background: transparent;
-  border: none;
   border-radius: min(5px, var(--wp-radius-cap, 999px));
   color: var(--wp-text);
-  cursor: pointer;
-  font-family: inherit;
-  text-align: left;
-  transition: background var(--wp-motion-quick) ease;
 }
+.wp-picker__row :deep(.wp-list-row__start) { gap: 10px; }
 .wp-picker__row:hover { background: var(--wp-bg-3); }
 .wp-picker__row:focus-visible {
   /* Keyboard focus. The SPA's outset accent halo
@@ -1141,7 +1134,8 @@ onBeforeUnmount(detachCaptureListeners);
   background: rgba(99, 102, 241, 0.12);
   box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.42);
 }
-.wp-picker__row[data-disabled] {
+.wp-picker__row[data-disabled],
+.wp-picker__row:disabled {
   cursor: not-allowed;
   opacity: 0.42;
 }
@@ -1276,17 +1270,7 @@ onBeforeUnmount(detachCaptureListeners);
 .wp-picker__sel-chip[data-kind="derivation"]  .wp-picker__sel-dot { background: var(--wp-kind-derivation); }
 .wp-picker__sel-chip[data-kind="constraint"]  .wp-picker__sel-dot { background: var(--wp-kind-constraint); }
 .wp-picker__sel-chip[data-kind="fixed_values"] .wp-picker__sel-dot { background: var(--wp-kind-fixed); }
-.wp-picker__sel-close {
-  width: 16px; height: 16px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: none;
-  background: transparent;
-  color: var(--wp-text-dim);
-  cursor: pointer;
-  border-radius: var(--wp-radius-cap, 999px);
-}
-.wp-picker__sel-close:hover { background: var(--wp-bg-4); color: var(--wp-text); }
-.wp-picker__sel-close .pi { font-size: 8px; }
+.wp-picker__sel-close { flex-shrink: 0; }
 
 /* ── Footer ──────────────────────────────────────────────────────── */
 .wp-picker__footer {
@@ -1408,35 +1392,30 @@ onBeforeUnmount(detachCaptureListeners);
 
 /* Tag chips inside popover (same visual as before, just in a
  * tighter container). */
-.wp-picker__tag-chip {
-  display: inline-flex;
-  align-items: center;
+
+
+/* The kit Chip toggles, in the picker's own outline look: transparent when
+ * off, the accent tint when on. Tags read in mono. */
+.wp-chip.wp-picker__tag-chip {
+  height: auto;
   gap: 4px;
-  background: transparent;
+  padding: 2px 8px;
   border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-cap, 999px);
-  color: var(--wp-text3);
+  border-radius: min(9px, var(--wp-radius-cap, 999px));
+  background: transparent;
+  color: var(--wp-text3, var(--wp-text-dim));
   font-family: var(--wp-font-mono, monospace);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  padding: 2px 8px;
-  cursor: pointer;
-  transition: background var(--wp-motion-quick), color var(--wp-motion-quick), border-color var(--wp-motion-quick);
 }
-.wp-picker__tag-chip:hover {
-  color: var(--wp-text);
-  border-color: var(--wp-border2);
-}
-.wp-picker__tag-chip--active {
+.wp-chip.wp-picker__tag-chip:hover { color: var(--wp-text); border-color: var(--wp-border2, var(--wp-border-strong)); }
+.wp-chip.wp-picker__tag-chip[aria-pressed="true"] {
   background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
   border-color: var(--wp-accent);
   color: var(--wp-accent);
 }
-.wp-picker__tag-chip--active:hover {
-  background: color-mix(in srgb, var(--wp-accent) 28%, transparent);
-  color: var(--wp-accent2, var(--wp-accent));
-}
+.wp-chip.wp-picker__tag-chip[aria-pressed="true"]:hover { background: color-mix(in srgb, var(--wp-accent) 28%, transparent); }
 
 .wp-picker__filter-tags {
   display: flex;

@@ -9,7 +9,7 @@
 import { computed, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
 import Textarea from "@/kit/Textarea.vue";
-import SettingGroup from "./SettingGroup.vue";
+import SettingGroup from "@/kit/SettingGroup.vue";
 import SettingRow from "./SettingRow.vue";
 import { api } from "../../api/client";
 import { useAiConfig } from "../../composables/useAiConfig";

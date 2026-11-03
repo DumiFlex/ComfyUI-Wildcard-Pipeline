@@ -6,9 +6,12 @@
  * first and are never pruned; the rest are grouped by when they were last
  * used. Rename and pin don't move a chat; delete asks inline first.
  */
+import { inputEl } from "../../utils/kit-field-el";
+import Input from "@/kit/Input.vue";
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
+import ListRow from "@/kit/ListRow.vue";
 import Skeleton from "@/kit/Skeleton.vue";
 import { api } from "../../api/client";
 import type { AiChatSummary } from "../../api/types";
@@ -27,7 +30,7 @@ const error = ref("");
 const renaming = ref<string | null>(null);
 const draft = ref("");
 const confirming = ref<string | null>(null);
-const renameBox = ref<HTMLInputElement[] | null>(null);
+const renameBox = ref<HTMLInputElement | null>(null);
 let timer: ReturnType<typeof setTimeout> | undefined;
 let asked = 0;
 
@@ -90,7 +93,7 @@ function startRename(c: AiChatSummary): void {
   confirming.value = null;
   renaming.value = c.id;
   draft.value = plainMentions(c.title);
-  void nextTick(() => renameBox.value?.[0]?.select());
+  void nextTick(() => renameBox.value?.select());
 }
 
 async function saveRename(c: AiChatSummary): Promise<void> {
@@ -161,10 +164,11 @@ function turnsLabel(n: number): string {
             <Button variant="danger" size="sm" data-test="ai-chats-confirm" @click="remove(c)">Delete</Button>
           </template>
           <template v-else-if="renaming === c.id">
-            <input
-              ref="renameBox"
+            <Input
+              :ref="(c) => (renameBox = inputEl(c))"
               v-model="draft"
-              class="wp-input wp-input--sm wp-ai-chats__rename"
+              size="sm"
+              class="wp-ai-chats__rename"
               maxlength="120"
               aria-label="Chat title"
               data-test="ai-chats-rename-input"
@@ -173,22 +177,20 @@ function turnsLabel(n: number): string {
             />
           </template>
           <template v-else>
-            <button type="button" class="wp-ai-chats__open" :title="plainMentions(c.title)" data-test="ai-chats-open" @click="emit('pick', c.id)">
-              <span class="wp-ai-chats__title">{{ plainMentions(c.title) }}</span>
-              <span class="wp-ai-chats__meta">{{ turnsLabel(c.turns) }}</span>
-            </button>
+            <ListRow class="wp-ai-chats__open" :description="turnsLabel(c.turns)" :title="plainMentions(c.title)" data-test="ai-chats-open" @click="emit('pick', c.id)">{{ plainMentions(c.title) }}</ListRow>
             <span class="wp-ai-chats__tools">
-              <button
-                type="button"
-                class="wp-ai-chats__icon"
+              <Button
+                variant="ghost"
+                size="sm"
+                :icon="c.pinned ? 'pi-bookmark-fill' : 'pi-bookmark'"
                 :aria-label="c.pinned ? `Unpin ${c.title}` : `Pin ${c.title}`"
                 :title="c.pinned ? 'Unpin' : 'Pin: kept at the top and never cleaned up'"
                 :data-on="c.pinned || undefined"
                 data-test="ai-chats-pin"
                 @click="pin(c)"
-              ><i :class="['pi', c.pinned ? 'pi-bookmark-fill' : 'pi-bookmark']" aria-hidden="true" /></button>
-              <button type="button" class="wp-ai-chats__icon" :aria-label="`Rename ${c.title}`" title="Rename" data-test="ai-chats-rename" @click="startRename(c)"><i class="pi pi-pencil" aria-hidden="true" /></button>
-              <button type="button" class="wp-ai-chats__icon" :aria-label="`Delete ${c.title}`" title="Delete" data-test="ai-chats-delete" @click="confirming = c.id"><i class="pi pi-trash" aria-hidden="true" /></button>
+              />
+              <Button variant="ghost" size="sm" icon="pi-pencil" :aria-label="`Rename ${c.title}`" title="Rename" data-test="ai-chats-rename" @click="startRename(c)" />
+              <Button variant="ghost" size="sm" icon="pi-trash" :aria-label="`Delete ${c.title}`" title="Delete" data-test="ai-chats-delete" @click="confirming = c.id" />
             </span>
           </template>
         </li>
@@ -214,24 +216,12 @@ function turnsLabel(n: number): string {
 }
 .wp-ai-chats__row:hover, .wp-ai-chats__row:focus-within { background: var(--wp-bg-2); }
 .wp-ai-chats__row[data-current] { background: color-mix(in oklab, var(--wp-accent-500) 14%, var(--wp-bg-2)); }
-.wp-ai-chats__open {
-  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
-  padding: 4px 8px; border: 0; background: none; color: var(--wp-text); cursor: pointer; text-align: left;
-}
-.wp-ai-chats__title { max-width: 100%; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wp-ai-chats__meta { font-size: 11px; color: var(--wp-text-dim); }
+.wp-ai-chats__open { flex: 1; min-width: 0; width: auto; }
 .wp-ai-chats__tools { display: inline-flex; gap: 2px; opacity: 0; }
-.wp-ai-chats__row:hover .wp-ai-chats__tools, .wp-ai-chats__row:focus-within .wp-ai-chats__tools,
-.wp-ai-chats__icon[data-on] { opacity: 1; }
+.wp-ai-chats__row:hover .wp-ai-chats__tools, .wp-ai-chats__row:focus-within .wp-ai-chats__tools { opacity: 1; }
 .wp-ai-chats__tools:has([data-on]) { opacity: 1; }
 @media (hover: none) { .wp-ai-chats__tools { opacity: 1; } }
-.wp-ai-chats__icon {
-  display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
-  border: 0; border-radius: min(6px, var(--wp-radius-cap, 999px)); background: none; color: var(--wp-text-muted); cursor: pointer;
-}
-.wp-ai-chats__icon:hover { color: var(--wp-text); background: var(--wp-bg-3, var(--wp-bg-1)); }
-.wp-ai-chats__icon[data-on] { color: var(--wp-accent-text); }
-.wp-ai-chats__icon .pi { font-size: 12px; }
+.wp-ai-chats__tools [data-on] { color: var(--wp-accent-text); }
 .wp-ai-chats__rename { flex: 1; margin: 4px 0 4px 8px; }
 .wp-ai-chats__ask { flex: 1; min-width: 0; padding-left: 8px; font-size: 12px; overflow-wrap: anywhere; }
 </style>

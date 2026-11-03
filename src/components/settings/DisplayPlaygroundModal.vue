@@ -27,7 +27,7 @@
  * instantly), and emits a toast. No "Apply" button needed; closing
  * the modal just dismisses it, settings persist as you go.
  */
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   playgroundOpen,
   closePlayground,
@@ -40,6 +40,7 @@ import PlaygroundBehaviorPreview from "./PlaygroundBehaviorPreview.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import WpSelect from "@/kit/WpSelect.vue";
 import Button from "@/kit/Button.vue";
+import ModalShell from "@/kit/ModalShell.vue";
 import { useDialogFocus } from "@/kit/useDialogFocus";
 import { useHostDialogGuard } from "@/components/shared/useHostDialogGuard";
 
@@ -255,12 +256,18 @@ function onClose(): void {
 }
 
 // The playground opens from ComfyUI's Settings dialog, which stays open
-// underneath. useDialogFocus moves focus in, keeps Tab inside and closes on
-// Escape; the host guard stops the Settings dialog from swallowing clicks,
-// pulling focus back or closing along with us.
-const overlayEl = ref<HTMLElement | null>(null);
+// underneath. ModalShell gives the overlay, the backdrop and Escape close and
+// the key shield; useDialogFocus moves focus in, keeps Tab inside (run from
+// the shell's keydown, since the shield stops keys before window) and puts
+// focus back; the host guard, bound to the shell's overlay, stops the
+// Settings dialog from swallowing clicks, pulling focus back or closing
+// along with us.
 const panelEl = ref<HTMLElement | null>(null);
-useDialogFocus(panelEl, () => playgroundOpen.value, { onEscape: closePlayground });
+const overlayEl = computed(() => panelEl.value?.closest<HTMLElement>(".wp-modal-overlay") ?? null);
+const focus = useDialogFocus(panelEl, () => playgroundOpen.value, {
+  onEscape: () => undefined,
+  window: false,
+});
 useHostDialogGuard(overlayEl, () => playgroundOpen.value);
 
 function onOpenChange(open: boolean): void {
@@ -293,246 +300,236 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="playgroundOpen"
-      ref="overlayEl"
-      class="wp-pg-overlay"
-      data-test="playground-overlay"
-      @click.self="onClose"
+  <ModalShell :visible="playgroundOpen" labelledby="wp-pg-title" @close="onClose" @keydown="focus.onKeydown">
+    <section
+      ref="panelEl"
+      class="wp-pg"
+      tabindex="-1"
+      data-test="playground-panel"
     >
-      <section
-        ref="panelEl"
-        class="wp-pg"
-        role="dialog"
-        tabindex="-1"
-        aria-modal="true"
-        aria-labelledby="wp-pg-title"
-      >
-        <header class="wp-pg__head">
-          <div class="wp-pg__head-inner">
-            <i class="pi pi-palette wp-pg__head-icon" aria-hidden="true" />
-            <div>
-              <h3 id="wp-pg-title" class="wp-pg__title">Display Playground</h3>
-              <p class="wp-pg__subtitle">
-                Tweak Wildcard Pipeline visuals — changes apply live.
-              </p>
-            </div>
+      <header class="wp-pg__head">
+        <div class="wp-pg__head-inner">
+          <i class="pi pi-palette wp-pg__head-icon" aria-hidden="true" />
+          <div>
+            <h3 id="wp-pg-title" class="wp-pg__title">Display Playground</h3>
+            <p class="wp-pg__subtitle">
+              Tweak Wildcard Pipeline visuals — changes apply live.
+            </p>
           </div>
-          <Button variant="ghost" icon="times" aria-label="Close playground" size="sm" kbd="Esc" @click="onClose" />
-        </header>
-
-        <div class="wp-pg__body">
-          <section class="wp-pg__controls" data-test="playground-controls">
-            <fieldset class="wp-pg__group">
-              <legend class="wp-pg__group-title">Sizing</legend>
-              <label class="wp-pg__row">
-                <span class="wp-pg__row-label">Module density</span>
-                <WpSelect
-                  v-model="density" class="wp-pg__select"
-                  :options="[{ value: 'comfortable', label: 'Comfortable (default)' }, { value: 'compact', label: 'Compact' }, { value: 'minimal', label: 'Minimal' }]"
-                />
-              </label>
-              <label class="wp-pg__row">
-                <span class="wp-pg__row-label">Decoration</span>
-                <WpSelect
-                  v-model="decoration" class="wp-pg__select"
-                  :options="[{ value: 'full', label: 'Full (default)' }, { value: 'minimal', label: 'Minimal' }, { value: 'off', label: 'Off (flat)' }]"
-                />
-              </label>
-              <label class="wp-pg__row">
-                <span class="wp-pg__row-label">Color intensity</span>
-                <WpSelect
-                  v-model="colorIntensity" class="wp-pg__select"
-                  :options="[{ value: 'muted', label: 'Muted (low saturation)' }, { value: 'standard', label: 'Standard (default)' }, { value: 'vivid', label: 'Vivid (high saturation)' }]"
-                />
-              </label>
-            </fieldset>
-
-            <fieldset class="wp-pg__group">
-              <legend class="wp-pg__group-title">Module identity</legend>
-              <label class="wp-pg__row">
-                <span class="wp-pg__row-label">Module type style</span>
-                <WpSelect
-                  v-model="kindStyle" class="wp-pg__select"
-                  :options="[{ value: 'chip', label: 'Chip (default)' }, { value: 'icon', label: 'Icon (compact)' }, { value: 'both', label: 'Both (verbose)' }]"
-                />
-              </label>
-            </fieldset>
-
-            <fieldset class="wp-pg__group">
-              <legend class="wp-pg__group-title">State markers</legend>
-              <label class="wp-pg__row">
-                <span class="wp-pg__row-label">Indicator style</span>
-                <WpSelect
-                  v-model="indicatorStyle" class="wp-pg__select"
-                  :options="[{ value: 'badge', label: 'Badge (default)' }, { value: 'dot', label: 'Dot (compact)' }, { value: 'both', label: 'Both (verbose)' }]"
-                />
-              </label>
-              <div class="wp-pg__row wp-pg__row--switch">
-                <span class="wp-pg__row-label">Border highlights</span>
-                <Checkbox v-model="borderHighlight" aria-label="Border highlights" />
-              </div>
-            </fieldset>
-
-            <fieldset class="wp-pg__group">
-              <legend class="wp-pg__group-title">Collapse &amp; focus</legend>
-              <div class="wp-pg__row wp-pg__row--switch">
-                <span class="wp-pg__row-label">Collapse new modules by default</span>
-                <Checkbox v-model="collapsedByDefault" aria-label="Collapse new modules by default" />
-              </div>
-              <div class="wp-pg__row wp-pg__row--switch">
-                <span class="wp-pg__row-label">Collapse new bundles by default</span>
-                <Checkbox v-model="bundleCollapsedByDefault" aria-label="Collapse new bundles by default" />
-              </div>
-              <label class="wp-pg__row">
-                <span class="wp-pg__row-label">Collapse stack mode</span>
-                <WpSelect
-                  v-model="collapseMode" class="wp-pg__select"
-                  :options="[{ value: 'independent', label: 'Independent (default)' }, { value: 'accordion', label: 'Accordion (one at a time)' }]"
-                />
-              </label>
-              <div class="wp-pg__row wp-pg__row--switch">
-                <span class="wp-pg__row-label">Focus mode (dim non-hovered)</span>
-                <Checkbox v-model="focusMode" aria-label="Focus mode (dim non-hovered)" />
-              </div>
-              <label class="wp-pg__row">
-                <span class="wp-pg__row-label">Row buttons</span>
-                <WpSelect
-                  v-model="rowActions" class="wp-pg__select"
-                  :options="[{ value: 'always', label: 'Always (default)' }, { value: 'hover', label: 'On hover' }]"
-                />
-              </label>
-            </fieldset>
-
-            <fieldset class="wp-pg__group">
-              <legend class="wp-pg__group-title">Accessibility</legend>
-              <label class="wp-pg__row">
-                <span class="wp-pg__row-label">Reduce motion</span>
-                <WpSelect
-                  v-model="reduceMotion" class="wp-pg__select"
-                  :options="[{ value: 'auto', label: 'Match system' }, { value: 'on', label: 'Always reduce' }, { value: 'off', label: 'Always allow' }]"
-                />
-              </label>
-              <label class="wp-pg__row">
-                <span class="wp-pg__row-label">Contrast</span>
-                <WpSelect
-                  v-model="contrast" class="wp-pg__select"
-                  :options="[{ value: 'auto', label: 'Match system' }, { value: 'on', label: 'High contrast' }, { value: 'off', label: 'Standard' }]"
-                />
-              </label>
-            </fieldset>
-
-            <fieldset class="wp-pg__group">
-              <legend class="wp-pg__group-title">Runtime behavior</legend>
-              <!-- Previewed under the module mockup on the right
-                   (PlaygroundBehaviorPreview): toasts, autocomplete and
-                   validation. -->
-              <div class="wp-pg__row wp-pg__row--switch">
-                <span class="wp-pg__row-label">Booru tag autocomplete</span>
-                <Checkbox v-model="tagAutocomplete" aria-label="Booru tag autocomplete" />
-              </div>
-              <!-- Separate switches on purpose: someone writing danbooru
-                   prompts may have no LoRAs at all, and someone with 200 of
-                   them may find the tag list noise. -->
-              <div class="wp-pg__row wp-pg__row--switch">
-                <span class="wp-pg__row-label">LoRA autocomplete</span>
-                <Checkbox v-model="loraAutocomplete" aria-label="LoRA autocomplete" />
-              </div>
-              <div class="wp-pg__row wp-pg__row--switch">
-                <span class="wp-pg__row-label">Embedding autocomplete</span>
-                <Checkbox v-model="embeddingAutocomplete" aria-label="Embedding autocomplete" />
-              </div>
-              <div class="wp-pg__row wp-pg__row--switch">
-                <span class="wp-pg__row-label">Append ", " after a completion</span>
-                <Checkbox v-model="autocompleteSeparator" aria-label="Append a comma and space after a completion" />
-              </div>
-              <div class="wp-pg__row wp-pg__row--switch">
-                <span class="wp-pg__row-label">Write tags with spaces</span>
-                <Checkbox v-model="autocompleteSpaces" aria-label="Write tags with spaces" />
-              </div>
-              <div class="wp-pg__row wp-pg__row--switch">
-                <span class="wp-pg__row-label">Escape brackets in tags</span>
-                <Checkbox v-model="autocompleteEscapeBrackets" aria-label="Escape brackets in tags" />
-              </div>
-              <label class="wp-pg__row">
-                <span class="wp-pg__row-label">Autocomplete: max suggestions</span>
-                <WpSelect
-                  v-model="autocompleteMaxSuggestions" class="wp-pg__select"
-                  :options="[{ value: '5', label: '5' }, { value: '10', label: '10' }, { value: '20', label: '20 (default)' }, { value: '40', label: '40' }]"
-                />
-              </label>
-              <label class="wp-pg__row">
-                <span class="wp-pg__row-label">Autocomplete: minimum characters</span>
-                <WpSelect
-                  v-model="autocompleteMinChars" class="wp-pg__select"
-                  :options="[{ value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3 (default)' }, { value: '4', label: '4' }]"
-                />
-              </label>
-              <label class="wp-pg__row">
-                <span class="wp-pg__row-label">Validation strictness</span>
-                <WpSelect
-                  v-model="validation" class="wp-pg__select"
-                  :options="[{ value: 'strict', label: 'Strict (default)' }, { value: 'relaxed', label: 'Relaxed (hide info)' }, { value: 'permissive', label: 'Permissive (off)' }]"
-                />
-              </label>
-              <label class="wp-pg__row">
-                <span class="wp-pg__row-label">Toast lifetime</span>
-                <WpSelect
-                  v-model="toastLifetime" class="wp-pg__select"
-                  :options="[{ value: 'short', label: 'Short (3 s)' }, { value: 'default', label: 'Default (5 s)' }, { value: 'long', label: 'Long (10 s)' }, { value: 'sticky', label: 'Sticky' }]"
-                />
-              </label>
-              <div class="wp-pg__row wp-pg__row--switch">
-                <span class="wp-pg__row-label">Suppress info toasts</span>
-                <Checkbox v-model="suppressInfoToasts" aria-label="Suppress info toasts" />
-              </div>
-              <div class="wp-pg__row wp-pg__row--switch">
-                <span class="wp-pg__row-label">Image Filter sound</span>
-                <Checkbox v-model="imageFilterSound" aria-label="Image Filter sound" />
-              </div>
-              <div class="wp-pg__row wp-pg__row--switch">
-                <span class="wp-pg__row-label">Image Filter desktop notification</span>
-                <Checkbox v-model="imageFilterNotify" aria-label="Image Filter desktop notification" />
-              </div>
-              <div class="wp-pg__row wp-pg__row--switch">
-                <span class="wp-pg__row-label">New modules start disabled</span>
-                <Checkbox v-model="newModuleDisabled" aria-label="New modules start disabled" />
-              </div>
-              <div class="wp-pg__row wp-pg__row--switch">
-                <span class="wp-pg__row-label">Confirm destructive bundle actions</span>
-                <Checkbox v-model="confirmDestructiveBundle" aria-label="Confirm destructive bundle actions" />
-              </div>
-              <label class="wp-pg__row">
-                <span class="wp-pg__row-label">Bundle master OFF behavior</span>
-                <WpSelect
-                  v-model="bundleMasterOffBehavior" class="wp-pg__select"
-                  :options="[{ value: 'preserve-manual', label: 'Preserve manual (default)' }, { value: 'cascade-all', label: 'Cascade — clear everyone' }]"
-                />
-              </label>
-            </fieldset>
-          </section>
-
-          <aside class="wp-pg__preview" data-test="playground-preview">
-            <PlaygroundMockup />
-            <PlaygroundBehaviorPreview
-              :validation="validation"
-              :max-suggestions="autocompleteMaxSuggestions"
-              :min-chars="autocompleteMinChars"
-              :separator="autocompleteSeparator"
-              :spaces="autocompleteSpaces"
-              :escape="autocompleteEscapeBrackets"
-            />
-          </aside>
         </div>
+        <Button variant="ghost" icon="times" aria-label="Close playground" size="sm" kbd="Esc" @click="onClose" />
+      </header>
 
-        <footer class="wp-pg__foot">
-          <Button size="md" @click="onResetAll">Reset all to defaults</Button>
-          <Button variant="primary" size="md" @click="onClose">Done</Button>
-        </footer>
-      </section>
-    </div>
-  </Teleport>
+      <div class="wp-pg__body">
+        <section class="wp-pg__controls" data-test="playground-controls">
+          <fieldset class="wp-pg__group">
+            <legend class="wp-pg__group-title">Sizing</legend>
+            <label class="wp-pg__row">
+              <span class="wp-pg__row-label">Module density</span>
+              <WpSelect
+                v-model="density" class="wp-pg__select"
+                :options="[{ value: 'comfortable', label: 'Comfortable (default)' }, { value: 'compact', label: 'Compact' }, { value: 'minimal', label: 'Minimal' }]"
+              />
+            </label>
+            <label class="wp-pg__row">
+              <span class="wp-pg__row-label">Decoration</span>
+              <WpSelect
+                v-model="decoration" class="wp-pg__select"
+                :options="[{ value: 'full', label: 'Full (default)' }, { value: 'minimal', label: 'Minimal' }, { value: 'off', label: 'Off (flat)' }]"
+              />
+            </label>
+            <label class="wp-pg__row">
+              <span class="wp-pg__row-label">Color intensity</span>
+              <WpSelect
+                v-model="colorIntensity" class="wp-pg__select"
+                :options="[{ value: 'muted', label: 'Muted (low saturation)' }, { value: 'standard', label: 'Standard (default)' }, { value: 'vivid', label: 'Vivid (high saturation)' }]"
+              />
+            </label>
+          </fieldset>
+
+          <fieldset class="wp-pg__group">
+            <legend class="wp-pg__group-title">Module identity</legend>
+            <label class="wp-pg__row">
+              <span class="wp-pg__row-label">Module type style</span>
+              <WpSelect
+                v-model="kindStyle" class="wp-pg__select"
+                :options="[{ value: 'chip', label: 'Chip (default)' }, { value: 'icon', label: 'Icon (compact)' }, { value: 'both', label: 'Both (verbose)' }]"
+              />
+            </label>
+          </fieldset>
+
+          <fieldset class="wp-pg__group">
+            <legend class="wp-pg__group-title">State markers</legend>
+            <label class="wp-pg__row">
+              <span class="wp-pg__row-label">Indicator style</span>
+              <WpSelect
+                v-model="indicatorStyle" class="wp-pg__select"
+                :options="[{ value: 'badge', label: 'Badge (default)' }, { value: 'dot', label: 'Dot (compact)' }, { value: 'both', label: 'Both (verbose)' }]"
+              />
+            </label>
+            <div class="wp-pg__row wp-pg__row--switch">
+              <span class="wp-pg__row-label">Border highlights</span>
+              <Checkbox v-model="borderHighlight" aria-label="Border highlights" />
+            </div>
+          </fieldset>
+
+          <fieldset class="wp-pg__group">
+            <legend class="wp-pg__group-title">Collapse &amp; focus</legend>
+            <div class="wp-pg__row wp-pg__row--switch">
+              <span class="wp-pg__row-label">Collapse new modules by default</span>
+              <Checkbox v-model="collapsedByDefault" aria-label="Collapse new modules by default" />
+            </div>
+            <div class="wp-pg__row wp-pg__row--switch">
+              <span class="wp-pg__row-label">Collapse new bundles by default</span>
+              <Checkbox v-model="bundleCollapsedByDefault" aria-label="Collapse new bundles by default" />
+            </div>
+            <label class="wp-pg__row">
+              <span class="wp-pg__row-label">Collapse stack mode</span>
+              <WpSelect
+                v-model="collapseMode" class="wp-pg__select"
+                :options="[{ value: 'independent', label: 'Independent (default)' }, { value: 'accordion', label: 'Accordion (one at a time)' }]"
+              />
+            </label>
+            <div class="wp-pg__row wp-pg__row--switch">
+              <span class="wp-pg__row-label">Focus mode (dim non-hovered)</span>
+              <Checkbox v-model="focusMode" aria-label="Focus mode (dim non-hovered)" />
+            </div>
+            <label class="wp-pg__row">
+              <span class="wp-pg__row-label">Row buttons</span>
+              <WpSelect
+                v-model="rowActions" class="wp-pg__select"
+                :options="[{ value: 'always', label: 'Always (default)' }, { value: 'hover', label: 'On hover' }]"
+              />
+            </label>
+          </fieldset>
+
+          <fieldset class="wp-pg__group">
+            <legend class="wp-pg__group-title">Accessibility</legend>
+            <label class="wp-pg__row">
+              <span class="wp-pg__row-label">Reduce motion</span>
+              <WpSelect
+                v-model="reduceMotion" class="wp-pg__select"
+                :options="[{ value: 'auto', label: 'Match system' }, { value: 'on', label: 'Always reduce' }, { value: 'off', label: 'Always allow' }]"
+              />
+            </label>
+            <label class="wp-pg__row">
+              <span class="wp-pg__row-label">Contrast</span>
+              <WpSelect
+                v-model="contrast" class="wp-pg__select"
+                :options="[{ value: 'auto', label: 'Match system' }, { value: 'on', label: 'High contrast' }, { value: 'off', label: 'Standard' }]"
+              />
+            </label>
+          </fieldset>
+
+          <fieldset class="wp-pg__group">
+            <legend class="wp-pg__group-title">Runtime behavior</legend>
+            <!-- Previewed under the module mockup on the right
+                 (PlaygroundBehaviorPreview): toasts, autocomplete and
+                 validation. -->
+            <div class="wp-pg__row wp-pg__row--switch">
+              <span class="wp-pg__row-label">Booru tag autocomplete</span>
+              <Checkbox v-model="tagAutocomplete" aria-label="Booru tag autocomplete" />
+            </div>
+            <!-- Separate switches on purpose: someone writing danbooru
+                 prompts may have no LoRAs at all, and someone with 200 of
+                 them may find the tag list noise. -->
+            <div class="wp-pg__row wp-pg__row--switch">
+              <span class="wp-pg__row-label">LoRA autocomplete</span>
+              <Checkbox v-model="loraAutocomplete" aria-label="LoRA autocomplete" />
+            </div>
+            <div class="wp-pg__row wp-pg__row--switch">
+              <span class="wp-pg__row-label">Embedding autocomplete</span>
+              <Checkbox v-model="embeddingAutocomplete" aria-label="Embedding autocomplete" />
+            </div>
+            <div class="wp-pg__row wp-pg__row--switch">
+              <span class="wp-pg__row-label">Append ", " after a completion</span>
+              <Checkbox v-model="autocompleteSeparator" aria-label="Append a comma and space after a completion" />
+            </div>
+            <div class="wp-pg__row wp-pg__row--switch">
+              <span class="wp-pg__row-label">Write tags with spaces</span>
+              <Checkbox v-model="autocompleteSpaces" aria-label="Write tags with spaces" />
+            </div>
+            <div class="wp-pg__row wp-pg__row--switch">
+              <span class="wp-pg__row-label">Escape brackets in tags</span>
+              <Checkbox v-model="autocompleteEscapeBrackets" aria-label="Escape brackets in tags" />
+            </div>
+            <label class="wp-pg__row">
+              <span class="wp-pg__row-label">Autocomplete: max suggestions</span>
+              <WpSelect
+                v-model="autocompleteMaxSuggestions" class="wp-pg__select"
+                :options="[{ value: '5', label: '5' }, { value: '10', label: '10' }, { value: '20', label: '20 (default)' }, { value: '40', label: '40' }]"
+              />
+            </label>
+            <label class="wp-pg__row">
+              <span class="wp-pg__row-label">Autocomplete: minimum characters</span>
+              <WpSelect
+                v-model="autocompleteMinChars" class="wp-pg__select"
+                :options="[{ value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3 (default)' }, { value: '4', label: '4' }]"
+              />
+            </label>
+            <label class="wp-pg__row">
+              <span class="wp-pg__row-label">Validation strictness</span>
+              <WpSelect
+                v-model="validation" class="wp-pg__select"
+                :options="[{ value: 'strict', label: 'Strict (default)' }, { value: 'relaxed', label: 'Relaxed (hide info)' }, { value: 'permissive', label: 'Permissive (off)' }]"
+              />
+            </label>
+            <label class="wp-pg__row">
+              <span class="wp-pg__row-label">Toast lifetime</span>
+              <WpSelect
+                v-model="toastLifetime" class="wp-pg__select"
+                :options="[{ value: 'short', label: 'Short (3 s)' }, { value: 'default', label: 'Default (5 s)' }, { value: 'long', label: 'Long (10 s)' }, { value: 'sticky', label: 'Sticky' }]"
+              />
+            </label>
+            <div class="wp-pg__row wp-pg__row--switch">
+              <span class="wp-pg__row-label">Suppress info toasts</span>
+              <Checkbox v-model="suppressInfoToasts" aria-label="Suppress info toasts" />
+            </div>
+            <div class="wp-pg__row wp-pg__row--switch">
+              <span class="wp-pg__row-label">Image Filter sound</span>
+              <Checkbox v-model="imageFilterSound" aria-label="Image Filter sound" />
+            </div>
+            <div class="wp-pg__row wp-pg__row--switch">
+              <span class="wp-pg__row-label">Image Filter desktop notification</span>
+              <Checkbox v-model="imageFilterNotify" aria-label="Image Filter desktop notification" />
+            </div>
+            <div class="wp-pg__row wp-pg__row--switch">
+              <span class="wp-pg__row-label">New modules start disabled</span>
+              <Checkbox v-model="newModuleDisabled" aria-label="New modules start disabled" />
+            </div>
+            <div class="wp-pg__row wp-pg__row--switch">
+              <span class="wp-pg__row-label">Confirm destructive bundle actions</span>
+              <Checkbox v-model="confirmDestructiveBundle" aria-label="Confirm destructive bundle actions" />
+            </div>
+            <label class="wp-pg__row">
+              <span class="wp-pg__row-label">Bundle master OFF behavior</span>
+              <WpSelect
+                v-model="bundleMasterOffBehavior" class="wp-pg__select"
+                :options="[{ value: 'preserve-manual', label: 'Preserve manual (default)' }, { value: 'cascade-all', label: 'Cascade — clear everyone' }]"
+              />
+            </label>
+          </fieldset>
+        </section>
+
+        <aside class="wp-pg__preview" data-test="playground-preview">
+          <PlaygroundMockup />
+          <PlaygroundBehaviorPreview
+            :validation="validation"
+            :max-suggestions="autocompleteMaxSuggestions"
+            :min-chars="autocompleteMinChars"
+            :separator="autocompleteSeparator"
+            :spaces="autocompleteSpaces"
+            :escape="autocompleteEscapeBrackets"
+          />
+        </aside>
+      </div>
+
+      <footer class="wp-pg__foot">
+        <Button size="md" @click="onResetAll">Reset all to defaults</Button>
+        <Button variant="primary" size="md" @click="onClose">Done</Button>
+      </footer>
+    </section>
+  </ModalShell>
 </template>
 
 <style>
@@ -541,17 +538,6 @@ onBeforeUnmount(() => {
  * .wp-pg-* selectors, the host wins. Layered author rules are
  * subservient to unlayered ones in the same origin. */
 @layer wp-extension {
-.wp-pg-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--wp-overlay-bg, rgba(0, 0, 0, 0.55));
-  z-index: 10000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-  font-family: var(--wp-font-sans);
-}
 .wp-pg {
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);

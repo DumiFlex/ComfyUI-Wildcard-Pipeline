@@ -12,6 +12,7 @@ import SweepPanel from "./SweepPanel.vue";
 import { liveAxes, sweepTotal, type SweepConfig } from "./types";
 import type { SweepCandidate } from "./sweep-candidates";
 import Button from "@/kit/Button.vue";
+import Icon from "@/kit/Icon.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -65,7 +66,7 @@ const preview = computed(() => {
   <ModalShell :visible="true" @close="emit('close')">
     <div class="wp-swm" data-test="sweep-modal">
       <div class="wp-swm__head">
-        <span class="wp-swm__head-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></svg></span>
+        <span class="wp-swm__head-icon"><Icon name="th-large" :size="15" /></span>
         <div class="wp-swm__title-block">
           <div class="wp-swm__title-row"><span class="wp-swm__name">WP Context Loop</span><span class="wp-swm__chip">Sweep</span></div>
           <div class="wp-swm__sub">Run every combination of the wildcards you pick, one frame each.</div>

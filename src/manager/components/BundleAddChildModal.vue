@@ -1,14 +1,15 @@
 <script setup lang="ts">
 /**
  * BundleAddChildModal — library picker for adding a frozen snapshot of
- * a module to the bundle's children. Teleport-based overlay, kind-filter
- * tabs + search, click a row to pick.
+ * a module to the bundle's children. A kit Modal with kind-filter tabs +
+ * search; click a row to pick.
  *
  * Parent (BundleEditor) takes the emitted ModuleRow, builds a snapshot,
  * and appends to `children[]`.
  */
 import SearchInput from "@/kit/SearchInput.vue";
-import Button from "@/kit/Button.vue";
+import ListRow from "@/kit/ListRow.vue";
+import Modal from "@/kit/Modal.vue";
 import { computed, ref, watch } from "vue";
 import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
@@ -119,150 +120,97 @@ function pickBundle(row: BundleRow) {
 </script>
 
 <template>
-  <Teleport v-if="visible" to="body">
-    <div
-      class="wp-bundle-add__backdrop"
-      data-test="bundle-add-backdrop"
-      @mousedown.self="close"
-    >
-      <div class="wp-bundle-add" @mousedown.stop>
-        <div class="wp-bundle-add__head">
-          <i class="pi pi-plus" aria-hidden="true" />
-          <span class="wp-bundle-add__title">Add child to bundle</span>
-          <Button
-            variant="ghost" icon="times"
-            class="wp-bundle-add__close"
-            aria-label="Close picker"
-            kbd="Esc"
-            data-test="bundle-add-close"
-            @click="close"
-          />
-        </div>
+  <Modal :open="visible" size="lg" @update:open="(v: boolean) => !v && close()">
+    <template #header="{ titleId }">
+      <i class="pi pi-plus wp-bundle-add__icon" aria-hidden="true" />
+      <h3 :id="titleId" class="wp-bundle-add__title">Add child to bundle</h3>
+    </template>
+    <!-- Tabs + search stay at the top of the body while the list scrolls. -->
+    <div class="wp-bundle-add__filters">
+      <WpTabs
+        v-model="activeTab"
+        :tabs="kindTabs"
+        size="sm"
+        aria-label="Module kind"
+        test-prefix="bundle-add-tab"
+      />
 
-        <div class="wp-bundle-add__body">
-          <WpTabs
-            v-model="activeTab"
-            :tabs="kindTabs"
-            size="sm"
-            aria-label="Module kind"
-            test-prefix="bundle-add-tab"
-          />
-
-          <SearchInput
-            v-model="search"
-            placeholder="Search modules…"
-            aria-label="Search modules"
-            data-test="bundle-add-search"
-          />
-
-          <div class="wp-bundle-add__list" data-test="bundle-add-list">
-            <div
-              v-if="!filteredModules.length && !filteredBundles.length"
-              class="wp-bundle-add__empty"
-            >
-              No entries match.
-            </div>
-            <button
-              v-for="m in filteredModules"
-              :key="`mod-${m.id}`"
-              type="button"
-              class="wp-bundle-add__row"
-              :data-kind="m.type"
-              :data-test="`bundle-add-row-${m.id}`"
-              @click="pickModule(m)"
-            >
-              <span class="wp-bundle-add__rowicon" aria-hidden="true">
-                <i :class="kindIcon(m.type)" />
-              </span>
-              <div class="wp-bundle-add__rowmain">
-                <div class="wp-bundle-add__rowname">{{ m.name }}</div>
-                <div class="wp-bundle-add__rowsub">{{ KIND_LABEL[m.type] ?? m.type }} · {{ m.id }}</div>
-              </div>
-              <span class="wp-bundle-add__rowadd" aria-hidden="true">
-                <i class="pi pi-plus" />
-              </span>
-            </button>
-            <button
-              v-for="b in filteredBundles"
-              :key="`bun-${b.id}`"
-              type="button"
-              class="wp-bundle-add__row"
-              data-kind="bundle"
-              :data-test="`bundle-add-bundle-${b.id}`"
-              @click="pickBundle(b)"
-            >
-              <span class="wp-bundle-add__rowicon" aria-hidden="true">
-                <i class="pi pi-box" />
-              </span>
-              <div class="wp-bundle-add__rowmain">
-                <div class="wp-bundle-add__rowname">{{ b.name }}</div>
-                <div class="wp-bundle-add__rowsub">Bundle · {{ b.id }}</div>
-              </div>
-              <span class="wp-bundle-add__rowadd" aria-hidden="true">
-                <i class="pi pi-plus" />
-              </span>
-            </button>
-          </div>
-        </div>
-      </div>
+      <SearchInput
+        v-model="search"
+        placeholder="Search modules…"
+        aria-label="Search modules"
+        data-test="bundle-add-search"
+      />
     </div>
-  </Teleport>
+
+    <div class="wp-bundle-add__list" data-test="bundle-add-list">
+      <div
+        v-if="!filteredModules.length && !filteredBundles.length"
+        class="wp-bundle-add__empty"
+      >
+        No entries match.
+      </div>
+      <ListRow
+        v-for="m in filteredModules"
+        :key="`mod-${m.id}`"
+        class="wp-bundle-add__row"
+        :data-kind="m.type"
+        :data-test="`bundle-add-row-${m.id}`"
+        @click="pickModule(m)"
+      >
+        <template #start>
+          <span class="wp-bundle-add__rowicon" aria-hidden="true"><i :class="kindIcon(m.type)" /></span>
+        </template>
+        <span class="wp-bundle-add__rowname">{{ m.name }}</span>
+        <template #description><span class="wp-bundle-add__rowsub">{{ KIND_LABEL[m.type] ?? m.type }} · {{ m.id }}</span></template>
+        <template #end><i class="pi pi-plus wp-bundle-add__rowadd" aria-hidden="true" /></template>
+      </ListRow>
+      <ListRow
+        v-for="b in filteredBundles"
+        :key="`bun-${b.id}`"
+        class="wp-bundle-add__row"
+        data-kind="bundle"
+        :data-test="`bundle-add-bundle-${b.id}`"
+        @click="pickBundle(b)"
+      >
+        <template #start>
+          <span class="wp-bundle-add__rowicon" aria-hidden="true"><i class="pi pi-box" /></span>
+        </template>
+        <span class="wp-bundle-add__rowname">{{ b.name }}</span>
+        <template #description><span class="wp-bundle-add__rowsub">Bundle · {{ b.id }}</span></template>
+        <template #end><i class="pi pi-plus wp-bundle-add__rowadd" aria-hidden="true" /></template>
+      </ListRow>
+    </div>
+  </Modal>
 </template>
 
 <style scoped>
-.wp-bundle-add__backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
-  background: var(--wp-overlay-bg, rgba(0, 0, 0, 0.6));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--wp-space-7);
-}
-.wp-bundle-add {
-  display: flex;
-  flex-direction: column;
-  width: 640px;
-  max-width: 100%;
-  max-height: 80vh;
-  background: var(--wp-bg-2);
-  border: 1px solid var(--wp-border-strong);
-  border-radius: var(--wp-radius);
-  box-shadow: var(--wp-shadow-lg);
-  overflow: hidden;
-}
-.wp-bundle-add__head {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-5);
-  padding: var(--wp-space-5) var(--wp-space-6);
-  border-bottom: 1px solid var(--wp-border);
-  background: var(--wp-bg-3);
+.wp-bundle-add__icon { color: var(--wp-text-dim); }
+.wp-bundle-add__title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--wp-text-md);
+  font-weight: 600;
   color: var(--wp-text);
 }
-.wp-bundle-add__title {
-  font-weight: 600;
-  font-size: var(--wp-text-base);
-}
-.wp-bundle-add__close { margin-left: auto; }
-
-.wp-bundle-add__body {
+/* The Modal body scrolls; the tabs and search stick to its top (the body's
+   padding above them is covered by the negative offset). */
+.wp-bundle-add__filters {
+  position: sticky;
+  top: calc(-1 * var(--wp-space-5));
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: var(--wp-space-5);
-  padding: var(--wp-space-5) var(--wp-space-6);
-  min-height: 0;
-  flex: 1;
+  margin: calc(-1 * var(--wp-space-5)) calc(-1 * var(--wp-space-5)) 0;
+  padding: var(--wp-space-5);
+  background: var(--wp-bg-2);
 }
-
 
 .wp-bundle-add__list {
   display: flex;
   flex-direction: column;
   gap: 3px; /* audit-exempt: 3px tight list gap keeps items dense */
-  overflow-y: auto;
-  min-height: 0;
 }
 .wp-bundle-add__empty {
   padding: var(--wp-space-6);
@@ -270,10 +218,12 @@ function pickBundle(row: BundleRow) {
   color: var(--wp-text-dim);
   font-size: var(--wp-text-sm);
 }
+/* A kit ListRow drawn as a bordered card row: start icon, name + id, plus. */
 .wp-bundle-add__row {
   display: grid;
   grid-template-columns: 28px 1fr 22px;
   align-items: center;
+  min-height: 0;
   gap: var(--wp-space-5);
   padding: 7px var(--wp-space-5); /* audit-exempt: 7px vertical hairline keeps row compact */
   background: var(--wp-bg);
@@ -302,7 +252,6 @@ function pickBundle(row: BundleRow) {
 .wp-bundle-add__row[data-kind="derivation"]   .wp-bundle-add__rowicon { color: var(--wp-kind-derivation); }
 .wp-bundle-add__row[data-kind="constraint"]   .wp-bundle-add__rowicon { color: var(--wp-kind-constraint); }
 .wp-bundle-add__row[data-kind="bundle"]       .wp-bundle-add__rowicon { color: var(--wp-accent-500); }
-.wp-bundle-add__rowmain { min-width: 0; }
 .wp-bundle-add__rowname {
   font: 500 12.5px/1.2 var(--wp-font-sans); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
   overflow: hidden;

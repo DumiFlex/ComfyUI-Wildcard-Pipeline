@@ -13,7 +13,7 @@
  * consumer; no more duplicating CSS across feature widgets.
  *
  * NOT wrapped in `@layer wp-extension` — same constraint as
- * theme.css and var-binding-input.css: Vue's <style scoped> scoper
+ * theme.css: Vue's <style scoped> scoper
  * can't parse @layer atrules in CSS that gets @imported into a
  * scoped block. The `.wp-*` namespace prefix carries isolation duty
  * for this file.
@@ -174,7 +174,9 @@
   transition: opacity var(--wp-motion-hover), color var(--wp-motion-hover);
 }
 .wp-drag-handle:active { cursor: grabbing; }
-.wp-drag-handle__grip { display: block; }
+/* The grip glyph is the kit's DragHandle; this span keeps the row's own
+ * colour and fade, so the grip inherits instead of using its own. */
+.wp-drag-handle .wp-drag-grip[data-size] { color: inherit; cursor: inherit; }
 
 /* ── Conflict cluster (dot + text badge) ─────────────────────────── */
 

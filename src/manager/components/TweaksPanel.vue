@@ -5,6 +5,7 @@ import Drawer from "@/kit/Drawer.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import HsvPicker from "@/kit/HsvPicker.vue";
+import RadioGroup from "@/kit/RadioGroup.vue";
 import ThemeChoices from "./settings/ThemeChoices.vue";
 import {
   ACCENT_LABELS,
@@ -76,27 +77,25 @@ function onCustomHex(hex: string) {
       <section class="wp-tweaks__section">
         <h3 class="wp-tweaks__section-title">Accent</h3>
         <p v-if="tweaks.accentLocked" class="wp-tweaks__note">High contrast keeps its own accent.</p>
-        <div v-else class="wp-tweaks__swatches" role="radiogroup" aria-label="Accent palette">
-          <button
-            v-for="name in SWATCHES"
-            :key="name"
-            type="button"
-            role="radio"
-            :aria-checked="tweaks.accent === name"
-            class="wp-tweaks__accent"
-            :class="{ 'is-active': tweaks.accent === name }"
-            :data-test="`tweaks-accent-${name}`"
-            @click="onAccent(name)"
-          >
+        <RadioGroup
+          v-else
+          class="wp-tweaks__swatches"
+          :model-value="tweaks.accent"
+          :options="SWATCHES.map((name) => ({ value: name, label: ACCENT_LABELS[name] }))"
+          variant="swatch"
+          named
+          aria-label="Accent palette"
+          test-prefix="tweaks-accent"
+          @update:model-value="onAccent"
+        >
+          <template #swatch="{ option }">
             <span
               class="wp-tweaks__swatch"
-              :class="{ 'wp-tweaks__swatch--theme': name === 'theme' }"
-              :style="swatchStyle(name)"
-              aria-hidden="true"
+              :class="{ 'wp-tweaks__swatch--theme': option.value === 'theme' }"
+              :style="swatchStyle(option.value)"
             />
-            <span class="wp-tweaks__accent-name">{{ ACCENT_LABELS[name] }}</span>
-          </button>
-        </div>
+          </template>
+        </RadioGroup>
         <div v-if="tweaks.accent === 'custom' && !tweaks.accentLocked" class="wp-tweaks__custom-picker">
           <HsvPicker
             :model-value="tweaks.customHex"
@@ -161,43 +160,11 @@ function onCustomHex(hex: string) {
   color: var(--wp-text-dim);
 }
 
-/* Each accent is a swatch with its name under it, four to a row. */
-.wp-tweaks__swatches { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--wp-space-4) var(--wp-space-2); }
-.wp-tweaks__accent {
-  appearance: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--wp-text-muted);
-  font: inherit;
-  font-size: var(--wp-text-xs);
-  cursor: pointer;
-}
-.wp-tweaks__accent:hover,
-.wp-tweaks__accent.is-active { color: var(--wp-text); }
-.wp-tweaks__accent:focus-visible { outline: none; }
-.wp-tweaks__accent:focus-visible .wp-tweaks__swatch { box-shadow: var(--wp-focus-ring); }
-.wp-tweaks__accent-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wp-tweaks__swatch {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--wp-radius-cap, 999px);
-  border: 2px solid var(--wp-border);
-  transition: border-color 120ms ease, transform 120ms ease;
-}
-.wp-tweaks__accent:hover .wp-tweaks__swatch { transform: scale(1.05); }
-.wp-tweaks__accent.is-active .wp-tweaks__swatch {
-  border-color: var(--wp-text);
-  box-shadow: 0 0 0 2px var(--wp-bg-1), 0 0 0 4px var(--wp-accent-500);
-}
-/* `border-box`: see AppearanceSection's .wp-set-swatch--theme. */
-.wp-tweaks__swatch--theme {
-  background: linear-gradient(135deg, var(--own-accent) 50%, var(--wp-bg-3) 50%) border-box;
-}
+/* The kit's named swatches, four to a row; the slot paints each one. */
+.wp-tweaks__swatches.wp-radio-group { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--wp-space-2); }
+.wp-tweaks__swatch { display: block; width: 100%; height: 100%; }
+.wp-tweaks__swatches :deep(.wp-radio-group__name) { white-space: nowrap; }
+.wp-tweaks__swatch--theme { background: linear-gradient(135deg, var(--own-accent) calc(50% - 0.75px), var(--wp-bg-3) calc(50% + 0.75px)); }
 .wp-tweaks__note { margin: 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 .wp-tweaks__custom-picker {
   margin-top: var(--wp-space-4);

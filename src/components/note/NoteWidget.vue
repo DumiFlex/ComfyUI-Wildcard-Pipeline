@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import ColorField from "@/kit/ColorField.vue";
+import Input from "@/kit/Input.vue";
 import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
+import RadioGroup from "@/kit/RadioGroup.vue";
 import NoteMarkdown from "./note-markdown";
 import NoteTextEditor from "./NoteTextEditor.vue";
-import NoteIconGrid from "./NoteIconGrid.vue";
+import IconPicker from "@/kit/IconPicker.vue";
 import { vTooltip } from "@/kit/tooltip";
 import BookmarkFields from "../bookmark/BookmarkFields.vue";
 import type { BookmarkJump, KeyOwner } from "../../extension/bookmarks";
@@ -48,6 +50,8 @@ const emit = defineEmits<{
 const hasTitle = computed(() => props.title.trim() !== "" && props.title !== "WP Note");
 const toneStyle = computed(() => (props.config.color ? { "--wp-note-tone": noteColorCss(props.config.color) } : undefined));
 const isHex = computed(() => props.config.color.startsWith("#"));
+/** The preset swatch that is picked (the accent is `""`); none for a custom hex. */
+const presetPick = computed(() => (isHex.value ? null : props.config.color || "accent"));
 const pickIcon = ref(false);
 
 // The custom colour field starts from the colour on screen: a preset is a
@@ -167,24 +171,28 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
           data-test="note-step-input"
           @update:model-value="(v: number | null) => patch({ step: v ?? 1 })"
         />
-        <button
+        <Button
           v-if="config.tone === 'icon'"
-          v-tooltip="`Icon: ${config.icon.replace(/-/g, ' ')}`"
-          type="button"
+          variant="secondary"
+          size="sm"
           class="wp-note__iconpick"
+          :icon="`pi-${config.icon}`"
+          :hint="`Icon: ${config.icon.replace(/-/g, ' ')}`"
           :aria-label="`Choose the icon (now ${config.icon.replace(/-/g, ' ')})`"
           :aria-expanded="pickIcon"
           data-test="note-icon-choose"
           @click="pickIcon = !pickIcon"
-        >
-          <i class="pi" :class="`pi-${config.icon}`" aria-hidden="true"></i>
-          <i class="pi pi-chevron-down" aria-hidden="true"></i>
-        </button>
+        ><i class="pi pi-chevron-down wp-note__chev" aria-hidden="true"></i></Button>
       </div>
-      <NoteIconGrid
+      <IconPicker
         v-if="config.tone === 'icon' && pickIcon"
-        :selected="config.icon"
-        @pick="(n: string) => { patch({ icon: n }); pickIcon = false; }"
+        class="wp-note__icons"
+        :model-value="config.icon || null"
+        all
+        inline
+        :allow-none="false"
+        data-test="note-icon-grid"
+        @update:model-value="(v: string | null) => { patch({ icon: v ?? '' }); pickIcon = false; }"
       />
       <div class="wp-note__row">
         <span class="wp-note__label">Look</span>
@@ -207,21 +215,15 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
       </div>
       <div class="wp-note__row">
         <span class="wp-note__label">Colour</span>
-        <div class="wp-note__swatches" role="radiogroup" aria-label="Colour">
-          <button
-            v-for="p in NOTE_COLOR_PRESETS"
-            :key="p.id"
-            v-tooltip="p.label"
-            type="button"
-            role="radio"
-            class="wp-note__swatch"
-            :style="{ background: p.css }"
-            :aria-checked="config.color === p.id"
-            :aria-label="p.label"
-            :data-test="`note-color-${p.id || 'accent'}`"
-            @click="patch({ color: p.id })"
-          ></button>
-        </div>
+        <RadioGroup
+          class="wp-note__swatches"
+          :model-value="presetPick"
+          :options="NOTE_COLOR_PRESETS.map((p) => ({ value: p.id || 'accent', label: p.label, color: p.css }))"
+          variant="swatch"
+          aria-label="Colour"
+          test-prefix="note-color"
+          @update:model-value="(v: string) => patch({ color: v === 'accent' ? '' : v })"
+        />
         <ColorField
           :class="{ 'wp-note__custom--on': isHex }"
           :model-value="isHex ? config.color : shownHex"
@@ -233,7 +235,7 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
       </div>
       <label class="wp-note__field">
         <span class="wp-note__label">Title</span>
-        <input class="wp-note__input" :value="title" data-test="note-title" @input="onTitle" />
+        <Input size="sm" :model-value="title" data-test="note-title" @input="onTitle" />
       </label>
       <div class="wp-note__field">
         <span class="wp-note__label">Text <span class="wp-note__hint">{{ config.look === "label" ? "shows when you hover the label" : "Markdown, links and icons" }}</span></span>
@@ -270,6 +272,11 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
 </template>
 
 <style scoped>
+/* The kit picker's list, sized for a node: as wide as the panel, a short
+ * scroll area, cells packed by width instead of a fixed 8 columns. */
+.wp-note__icons :deep(.wp-iconpick__panel) { width: auto; max-height: 184px; }
+.wp-note__icons :deep(.wp-iconpick__grid) { grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); }
+.wp-note__icons :deep(.wp-iconpick__cell) { aspect-ratio: auto; height: 28px; }
 .wp-note {
   --wp-note-tone: var(--wp-accent);
   box-sizing: border-box;
@@ -402,47 +409,15 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
 .wp-note__hint { font-weight: 400; color: var(--wp-text-dim); margin-left: 4px; }
 .wp-note__stepnum { width: 72px; }
 .wp-note__pin { margin-left: auto; }
-.wp-note__swatches { display: inline-flex; gap: 4px; flex-wrap: wrap; }
-.wp-note__swatch {
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 2px solid transparent;
-  border-radius: var(--wp-radius-cap, 999px);
-  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.25);
-  cursor: pointer;
-}
-.wp-note__swatch[aria-checked="true"] { border-color: var(--wp-text); }
+/* The kit's colour swatches, held at the old 18 px. */
+/* Flat circles: no inset outline. The picked one keeps the kit's accent ring
+   (offset by the option's 2px padding) and keyboard focus its focus ring. */
+.wp-note__swatches :deep(.wp-radio-group__swatch) { width: 18px; height: 18px; box-shadow: none; }
+.wp-note__swatches.wp-radio-group[data-variant="swatch"] { gap: 0; }
 /* The custom field is the pick when the colour is a hex, not a preset. */
 .wp-note__custom--on { border-color: var(--wp-text); }
-.wp-note__swatch:focus-visible { outline: 2px solid var(--wp-focus-ring, var(--wp-accent)); outline-offset: 1px; }
-.wp-note__iconpick {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 24px;
-  padding: 0 8px;
-  border: 1px solid var(--wp-border-strong, var(--wp-border));
-  border-radius: min(6px, var(--wp-radius-cap, 999px));
-  background: var(--wp-bg-2);
-  color: var(--wp-text);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-.wp-note__iconpick .pi-chevron-down { font-size: 9px; color: var(--wp-text-dim); }
+.wp-note__chev { font-size: 9px; color: var(--wp-text-dim); }
 .wp-note__field { display: flex; flex-direction: column; gap: 4px; }
-.wp-note__input {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 4px 8px;
-  border: 1px solid var(--wp-border-strong, var(--wp-border));
-  border-radius: min(6px, var(--wp-radius-cap, 999px));
-  background: var(--wp-bg-3, transparent);
-  color: var(--wp-text);
-  font: inherit;
-}
-.wp-note__input:focus-visible { outline: 2px solid var(--wp-focus-ring, var(--wp-accent)); outline-offset: 1px; }
 .wp-note__actions { display: flex; justify-content: flex-end; }
 </style>
 

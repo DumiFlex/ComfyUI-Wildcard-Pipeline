@@ -23,7 +23,7 @@ import Input from "@/kit/Input.vue";
 import Skeleton from "@/kit/Skeleton.vue";
 import type { SelectOption } from "@/kit/select-types";
 import ConfirmModal from "@/kit/ConfirmModal.vue";
-import SettingGroup from "./SettingGroup.vue";
+import SettingGroup from "@/kit/SettingGroup.vue";
 import SettingRow from "./SettingRow.vue";
 import { api } from "../../api/client";
 import type { BackupEntry, BackupList, BackupReason } from "../../api/types";

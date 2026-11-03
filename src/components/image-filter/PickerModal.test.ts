@@ -319,6 +319,14 @@ describe("PickerModal", () => {
     expect(w.find('[data-test="image-filter-compare"]').exists()).toBe(false);
     await root.trigger("keydown", { key: "ArrowRight" });
     expect(w.find('[data-test="image-filter-compare"]').exists()).toBe(true);
+    // The split is the kit Slider: its arrows move the line, not the image.
+    const thumb = w.find('[data-test="image-filter-compare-slider"] [role="slider"]');
+    expect(thumb.attributes("aria-label")).toBe("Compare slider");
+    expect(thumb.attributes("aria-valuenow")).toBe("50");
+    await thumb.trigger("keydown", { key: "ArrowRight" });
+    expect(thumb.attributes("aria-valuenow")).toBe("51");
+    expect(w.find(".wp-ifp__compare-line").attributes("style")).toContain("left: 51%");
+    expect(w.find('[data-test="image-filter-compare"]').exists()).toBe(true);
     await root.trigger("keydown", { key: "c" });
     expect(w.find('[data-test="image-filter-compare"]').exists()).toBe(false);
   });

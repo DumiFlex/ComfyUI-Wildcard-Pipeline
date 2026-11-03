@@ -9,7 +9,7 @@ import { computed, ref, watch } from "vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import Select from "@/kit/Select.vue";
 import type { SelectOption } from "@/kit/select-types";
-import SettingGroup from "../SettingGroup.vue";
+import SettingGroup from "@/kit/SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { CANVAS_SETTINGS, type CanvasSettingGroup, type CanvasSettingMeta } from "../../../../extension/settings-catalog";
 import { canvasKey } from "../settings-index";

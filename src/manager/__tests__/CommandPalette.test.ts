@@ -63,6 +63,23 @@ describe("CommandPalette", () => {
     expect(wrap.emitted("update:open")?.[0]).toEqual([false]);
   });
 
+  it("opens in the kit dialog with focus on the search; closing gives focus back", async () => {
+    const trigger = document.createElement("button");
+    document.body.appendChild(trigger);
+    trigger.focus();
+    wrap = mount(CommandPalette, { props: { open: false, items: [] }, attachTo: document.body });
+    await wrap.setProps({ open: true });
+    await wrap.vm.$nextTick();
+    await wrap.vm.$nextTick();
+    const dialog = document.body.querySelector('[role="dialog"]');
+    expect(dialog?.getAttribute("aria-label")).toBe("Command palette");
+    expect(document.activeElement?.getAttribute("data-test")).toBe("cp-input");
+    await wrap.setProps({ open: false });
+    await wrap.vm.$nextTick();
+    expect(document.activeElement).toBe(trigger);
+    trigger.remove();
+  });
+
   it("ArrowDown moves selection", async () => {
     const items = [
       { id: "a", label: "Alpha", kind: "module" as const, icon: "pi-sparkles", run: vi.fn() },

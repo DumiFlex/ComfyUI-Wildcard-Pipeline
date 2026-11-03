@@ -6,17 +6,24 @@
  * insertion order) plus a trailing "ungrouped" box for registry tags not
  * claimed by any axis (§4.3, H1). Each box owns its pills (⠿ name (count) ⋯),
  * an inline "+ tag", a fold caret, a rename input and a classify/accepts kind
- * toggle. Pills move between boxes by drag-and-drop or the kebab's
- * "Move to group…".
+ * toggle. Pills move between boxes by drag-and-drop or the kebab menu's
+ * "Move to group" section.
  *
  * The registry, groups, kinds and the card's open state are v-models owned by
- * the editor (they are part of its draft + dirty snapshot). Menus, folds,
- * drag state and the inline add-tag draft are transient and live here.
+ * the editor (they are part of its draft + dirty snapshot). Folds, drag state
+ * and the inline add-tag draft are transient and live here; each pill's
+ * kebab is a kit DropdownMenu, which owns its own open state.
  * Rename… and Delete… cascade to other modules, so they are handed back to
  * the editor (`rename-tag` / `delete-tag`), which owns the cascade dialogs.
  */
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, ref } from "vue";
+import Button from "@/kit/Button.vue";
+import Input from "@/kit/Input.vue";
 import Card from "@/kit/Card.vue";
+import Chip from "@/kit/Chip.vue";
+import DropdownMenu from "@/kit/DropdownMenu.vue";
+import type { ContextMenuEntry } from "@/kit/ContextMenu.vue";
+import { vTooltip } from "@/kit/tooltip";
 import { useToast } from "@/kit/useToast";
 import { validateSubcatName } from "@/manager/validation/names";
 import {
@@ -92,15 +99,6 @@ function axisUncoveredCount(axis: string): number {
 const addTagAxis = ref<string | null>(null);
 const addTagDraft = ref("");
 const addTagError = ref("");
-/** Which pill's kebab menu is open, as `<axis>::<tag>` (axis namespaces
- *  the key so the same tag in two boxes doesn't collide). */
-const openKebab = ref<string | null>(null);
-/** The "Move to group…" submenu target — `<axis>::<tag>` of the pill
- *  whose move picker is expanded. */
-const moveMenuFor = ref<string | null>(null);
-/** When a menu opens too close to the viewport bottom we flip it to open
- *  upward so it isn't clipped off the end of the page (bugs #1/#4). */
-const kebabDropUp = ref(false);
 /** Drag-and-drop state: which pill tag is being dragged + which group box
  *  it's currently hovering, for the drop highlight (bug #2). */
 const draggedTag = ref<string | null>(null);
@@ -126,67 +124,6 @@ function toggleAxisCollapsed(axis: string): void {
   else next.add(axis);
   collapsedAxes.value = next;
 }
-
-function kebabKey(axis: string, tag: string): string {
-  return `${axis}::${tag}`;
-}
-
-/** True when the trigger that fired `ev` sits within `menuPx` of the
- *  viewport bottom — i.e. a downward menu would be clipped, so flip up. */
-function shouldDropUp(ev: MouseEvent | undefined, menuPx: number): boolean {
-  const el = ev?.currentTarget as HTMLElement | null;
-  const r = el?.getBoundingClientRect();
-  return !!r && window.innerHeight - r.bottom < menuPx;
-}
-
-function toggleKebab(axis: string, tag: string, ev?: MouseEvent): void {
-  const key = kebabKey(axis, tag);
-  const opening = openKebab.value !== key;
-  openKebab.value = opening ? key : null;
-  moveMenuFor.value = null;
-  if (opening) kebabDropUp.value = shouldDropUp(ev, 200);
-}
-
-function closeMenus(): void {
-  openKebab.value = null;
-  moveMenuFor.value = null;
-}
-
-/** Outside-click: any pointer landing outside an open menu / its trigger
- *  dismisses this card's menus and the inline add-tag input (bug #3). The
- *  exclusion list is the editor's own, so a click on another of its menus
- *  (an option's tag picker, the options filter) leaves these alone exactly as
- *  it leaves those. */
-function onDocPointerDown(e: MouseEvent): void {
-  const t = e.target as HTMLElement | null;
-  if (
-    t?.closest(
-      ".subcat-pill, .subcat-menu, .subcat-addtag, .subcat-addtag__open, .opt-tags,"
-      + " .opt-tags__picker, .wc-optfilter__tagbtn",
-    )
-  ) {
-    return;
-  }
-  closeMenus();
-  cancelAddTag();
-}
-
-function onDocKeydown(e: KeyboardEvent): void {
-  if (e.key === "Escape") {
-    closeMenus();
-    cancelAddTag();
-  }
-}
-
-onMounted(() => {
-  document.addEventListener("click", onDocPointerDown);
-  document.addEventListener("keydown", onDocKeydown);
-});
-
-onUnmounted(() => {
-  document.removeEventListener("click", onDocPointerDown);
-  document.removeEventListener("keydown", onDocKeydown);
-});
 
 /* ── Inline "+ tag" per group ──────────────────────────────────────── */
 
@@ -324,37 +261,33 @@ function moveTargets(fromAxis: string): Array<{ axis: string; label: string }> {
  *  ungroup it). A tag lives in at most one axis (§2.2). */
 function moveTagToGroup(tag: string, targetAxis: string): void {
   tagGroups.value = moveTagToAxis(tagGroups.value, tag, targetAxis);
-  closeMenus();
 }
 
 defineExpose({ renameGroup, ungroupAxis });
 
-/* ── Pill kebab actions (Rename / Move / Delete) ────────────────────── */
+/* ── Pill kebab menu (Rename / Move to group / Delete) ──────────────── */
 
-/** Kebab → Rename… — closes the menu and asks the editor to open the
- *  cascade rename dialog (expression-aware via Chunk E). */
-function onKebabRename(tag: string): void {
-  closeMenus();
-  emit("rename-tag", tag);
-}
-
-/** Kebab → Delete… — closes the menu and asks the editor to run the
- *  cascade delete path (silent when no refs, confirm dialog when refs > 0). */
-function onKebabDelete(tag: string): void {
-  closeMenus();
-  emit("delete-tag", tag);
-}
-
-/** Kebab → Move to group… — open the inline move submenu for this pill. */
-function onKebabMove(axis: string, tag: string): void {
-  moveMenuFor.value = kebabKey(axis, tag);
+/** A pill's kebab menu. Rename… and Delete… hand off to the editor's cascade
+ *  dialogs; the "Move to group" section lists every other box (ungrouped
+ *  included) as its own item, so keyboard users reach them with the arrows. */
+function kebabItems(axis: string, tag: string): ContextMenuEntry[] {
+  const targets = moveTargets(axis);
+  return [
+    { label: "Rename…", icon: "pi-pencil", onSelect: () => emit("rename-tag", tag) },
+    ...(targets.length ? [{ section: "Move to group" }] : []),
+    ...targets.map((dest) => ({
+      label: dest.label,
+      icon: "pi-arrow-right",
+      onSelect: () => moveTagToGroup(tag, dest.axis),
+    })),
+    { label: "Delete…", icon: "pi-trash", danger: true, divider: true, onSelect: () => emit("delete-tag", tag) },
+  ];
 }
 
 /* ── Drag-and-drop pills between group boxes (bug #2) ───────────────── */
 
 function onPillDragStart(tag: string, e: DragEvent): void {
   draggedTag.value = tag;
-  closeMenus();
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", tag);
@@ -375,7 +308,7 @@ function onGroupDragLeave(axis: string): void {
 }
 
 /** Drop a dragged pill into `axis` (OTHER_AXIS box = ungroup). Reuses the
- *  same move routine the kebab "Move to group…" submenu calls. */
+ *  same move routine the kebab menu's "Move to group" items call. */
 function onGroupDrop(axis: string): void {
   const tag = draggedTag.value;
   draggedTag.value = null;
@@ -392,18 +325,17 @@ function onGroupDrop(axis: string): void {
            which pushed the options table — the thing being edited — off
            screen. `+` expands, `×` collapses; the count keeps the section
            informative while shut. -->
-      <button
-        type="button"
+      <Button
+        variant="outline"
+        size="sm"
+        :icon="open ? 'pi-times' : 'pi-plus'"
         class="subcat-collapse"
         :class="{ 'subcat-collapse--nudge': !open }"
         :aria-expanded="open"
         :aria-label="open ? 'Collapse sub-categories' : 'Expand sub-categories'"
-        :title="open ? 'Collapse sub-categories' : 'Expand sub-categories'"
         data-test="subcat-collapse"
         @click="open = !open"
-      >
-        <i :class="open ? 'pi pi-times' : 'pi pi-plus'" aria-hidden="true" />
-      </button>
+      />
     </template>
     <div v-if="!open" class="subcat-collapsed" data-test="subcat-collapsed">
       {{ summary }}
@@ -411,7 +343,7 @@ function onGroupDrop(axis: string): void {
     <!-- Group boxes: one per tag_groups axis + a trailing ungrouped
          box. Each box owns its pills (⠿ name (count) ⋯) + an inline
          "+ tag". Adding is contextual per group — no global add bar. -->
-    <div v-else class="subcat-groups" @click="closeMenus">
+    <div v-else class="subcat-groups">
       <section
         v-for="group in groups"
         :key="group.axis"
@@ -428,8 +360,10 @@ function onGroupDrop(axis: string): void {
                the header also holds a rename input, and making the row
                itself the toggle would fold the group every time you
                clicked into the name to edit it. -->
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
+            :icon="collapsedAxes.has(group.axis) ? 'pi-chevron-right' : 'pi-chevron-down'"
             class="subcat-group__fold"
             :aria-expanded="!collapsedAxes.has(group.axis)"
             :aria-label="collapsedAxes.has(group.axis)
@@ -437,18 +371,16 @@ function onGroupDrop(axis: string): void {
               : `Collapse ${group.isOther ? 'ungrouped' : group.axis}`"
             :data-test="`subcat-fold-${group.axis}`"
             @click.stop="toggleAxisCollapsed(group.axis)"
-          ><i
-            :class="collapsedAxes.has(group.axis) ? 'pi pi-chevron-right' : 'pi pi-chevron-down'"
-            aria-hidden="true"
-          /></button>
-          <input
+          />
+          <Input
             v-if="!group.isOther"
+            size="sm"
             class="subcat-group__name"
-            :value="group.axis"
+            :model-value="group.axis"
             :aria-label="`Rename group ${group.axis}`"
             :data-test="`subcat-group-name-${group.axis}`"
-            @change="(e) => onGroupNameChange(group.axis, e)"
-            @keydown.enter.prevent="(e) => (e.target as HTMLInputElement).blur()"
+            @change="(e: Event) => onGroupNameChange(group.axis, e)"
+            @keydown.enter.prevent="(e: KeyboardEvent) => (e.target as HTMLInputElement).blur()"
           />
           <span v-else class="subcat-group__name subcat-group__name--other">ungrouped</span>
           <!-- What this group MEANS to the engine. classify (the default)
@@ -463,19 +395,18 @@ function onGroupDrop(axis: string): void {
                discoverable by anyone who opens the editor rather than only
                by someone who happens to hover the right spot.
                Ungrouped tags have no kind, so that box gets no control. -->
-          <button
+          <Chip
             v-if="!group.isOther"
-            type="button"
-            class="subcat-group__kind"
-            :class="{ 'subcat-group__kind--accepts': tagGroupKinds[group.axis] === 'accepts' }"
-            :aria-pressed="tagGroupKinds[group.axis] === 'accepts'"
-            :aria-label="`Group ${group.axis} is ${tagGroupKinds[group.axis] === 'accepts' ? 'an accepts axis' : 'descriptive'}`"
-            :data-test="`group-kind-${group.axis}`"
-            :title="tagGroupKinds[group.axis] === 'accepts'
+            v-tooltip="tagGroupKinds[group.axis] === 'accepts'
               ? `Accepts axis — an option's tags here are alternatives it offers, and $${varBinding}.${group.axis} reads the one that was rolled. Click to make it descriptive.`
               : 'Descriptive — these tags say what an option IS, several true at once. Click to make them alternatives it accepts.'"
+            class="subcat-group__kind"
+            :pressed="tagGroupKinds[group.axis] === 'accepts'"
+            :color="axisHue(group.axis)"
+            :aria-label="`Group ${group.axis} is ${tagGroupKinds[group.axis] === 'accepts' ? 'an accepts axis' : 'descriptive'}`"
+            :data-test="`group-kind-${group.axis}`"
             @click.stop="toggleGroupKind(group.axis)"
-          >{{ tagGroupKinds[group.axis] === 'accepts' ? 'accepts' : 'classify' }}</button>
+          >{{ tagGroupKinds[group.axis] === 'accepts' ? 'accepts' : 'classify' }}</Chip>
           <!-- A folded axis still reports how many tags are inside, so
                folding never hides the fact that there is something there. -->
           <span
@@ -483,15 +414,16 @@ function onGroupDrop(axis: string): void {
             class="subcat-group__count"
             :data-test="`subcat-count-${group.axis}`"
           >{{ group.tags.length }}</span>
-          <button
+          <Button
             v-if="!group.isOther"
-            type="button"
-            class="subcat-group__ungroup"
+            variant="ghost"
+            size="sm"
+            icon="pi-link"
             :aria-label="`Disband group ${group.axis}`"
             :data-test="`subcat-ungroup-${group.axis}`"
-            title="Disband group (tags stay, lose their axis)"
+            hint="Disband group (tags stay, lose their axis)"
             @click.stop="ungroupAxis(group.axis)"
-          ><i class="pi pi-link" aria-hidden="true" /></button>
+          />
         </header>
 
         <div v-if="!collapsedAxes.has(group.axis)" class="subcat-group__pills">
@@ -508,69 +440,32 @@ function onGroupDrop(axis: string): void {
             <span class="subcat-pill__grip" aria-hidden="true">⠿</span>
             <span class="subcat-pill__name">{{ tag }}</span>
             <span class="subcat-pill__count" :title="`${tagUsageCount(tag)} option(s) use this tag`">{{ tagUsageCount(tag) }}</span>
-            <button
-              type="button"
-              class="subcat-pill__kebab"
-              :aria-label="`Actions for ${tag}`"
-              :aria-expanded="openKebab === kebabKey(group.axis, tag)"
-              :data-test="`subcat-kebab-${tag}`"
-              @click.stop="toggleKebab(group.axis, tag, $event)"
-            >⋯</button>
-
-            <!-- Kebab menu: Rename / Move to group… / Delete. Rename
+            <!-- Kebab menu: Rename / Move to group / Delete. Rename
                  + Delete route through the existing cascade dialogs. -->
-            <div
-              v-if="openKebab === kebabKey(group.axis, tag)"
-              class="subcat-menu"
-              :class="{ 'subcat-menu--up': kebabDropUp }"
-              role="menu"
-              @click.stop
+            <DropdownMenu
+              :items="kebabItems(group.axis, tag)"
+              :header="{ icon: 'pi-tag', label: tag }"
+              :label="`Actions for ${tag}`"
             >
-              <button
-                type="button"
-                class="subcat-menu__item"
-                role="menuitem"
-                data-test="subcat-rename"
-                @click="onKebabRename(tag)"
-              ><i class="pi pi-pencil" aria-hidden="true" /> Rename…</button>
-              <button
-                type="button"
-                class="subcat-menu__item"
-                role="menuitem"
-                data-test="subcat-move"
-                :aria-expanded="moveMenuFor === kebabKey(group.axis, tag)"
-                @click="onKebabMove(group.axis, tag)"
-              ><i class="pi pi-arrow-right-arrow-left" aria-hidden="true" /> Move to group…</button>
-              <div
-                v-if="moveMenuFor === kebabKey(group.axis, tag)"
-                class="subcat-menu__sub"
-                role="menu"
-              >
-                <button
-                  v-for="dest in moveTargets(group.axis)"
-                  :key="dest.axis"
-                  type="button"
-                  class="subcat-menu__item subcat-menu__item--sub"
-                  role="menuitem"
-                  :data-test="`subcat-move-to-${dest.axis}`"
-                  @click="moveTagToGroup(tag, dest.axis)"
-                >{{ dest.label }}</button>
-              </div>
-              <button
-                type="button"
-                class="subcat-menu__item subcat-menu__item--danger"
-                role="menuitem"
-                data-test="subcat-delete"
-                @click="onKebabDelete(tag)"
-              ><i class="pi pi-trash" aria-hidden="true" /> Delete…</button>
-            </div>
+              <template #trigger="{ props: triggerProps }">
+                <Button
+                  v-bind="triggerProps"
+                  variant="ghost"
+                  size="sm"
+                  icon="pi-ellipsis-h"
+                  class="subcat-pill__kebab"
+                  :data-test="`subcat-kebab-${tag}`"
+                />
+              </template>
+            </DropdownMenu>
           </span>
 
           <!-- Inline "+ tag" for this group. Collapsed to a button;
                expands to a validated input. -->
           <span v-if="addTagAxis === group.axis" class="subcat-addtag">
-            <input
+            <Input
               v-model="addTagDraft"
+              size="sm"
               class="subcat-addtag__input"
               :class="{ 'subcat-addtag__input--invalid': addTagError }"
               :data-test="`group-addtag-input-${group.axis}`"
@@ -583,13 +478,15 @@ function onGroupDrop(axis: string): void {
               @blur="cancelAddTag"
             />
           </span>
-          <button
+          <Button
             v-else
-            type="button"
+            variant="add"
+            size="sm"
+            icon="pi-plus"
             class="subcat-addtag__open"
             :data-test="`group-addtag-${group.axis}`"
             @click.stop="openAddTag(group.axis)"
-          ><i class="pi pi-plus" aria-hidden="true" /> tag</button>
+          >tag</Button>
         </div>
 
         <p
@@ -620,12 +517,14 @@ function onGroupDrop(axis: string): void {
         </p>
       </section>
 
-      <button
-        type="button"
+      <Button
+        variant="add"
+        size="sm"
+        icon="pi-plus"
         class="subcat-add-group"
         data-test="subcat-add-group"
         @click.stop="addGroup"
-      ><i class="pi pi-plus" aria-hidden="true" /> Group</button>
+      >Group</Button>
     </div>
   </Card>
 </template>
@@ -637,26 +536,12 @@ function onGroupDrop(axis: string): void {
   flex-direction: column;
   gap: var(--wp-space-4);
 }
-/* Sub-Categories disclosure — `+` / `×` in the card header. */
-.subcat-collapse {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  margin-left: var(--wp-space-3);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  background: transparent;
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  font-size: 11px;
-}
-.subcat-collapse:hover { color: var(--wp-text); border-color: var(--wp-accent); }
-/* Accented while collapsed so a first-time user reads it as "there is more
-   here, press me" rather than as a dim decoration. Deliberately a static tint,
-   not an animation — this sits on screen for the whole editing session. */
-.subcat-collapse--nudge {
+/* Sub-Categories disclosure — `+` / `×` in the card header. Accented while
+   collapsed so a first-time user reads it as "there is more here, press me"
+   rather than as a dim decoration. Deliberately a static tint, not an
+   animation — this sits on screen for the whole editing session. */
+.subcat-collapse { margin-left: var(--wp-space-3); }
+.subcat-collapse.subcat-collapse--nudge {
   color: var(--wp-accent-text, var(--wp-accent));
   border-color: color-mix(in oklab, var(--wp-accent) 55%, transparent);
   background: color-mix(in oklab, var(--wp-accent) 14%, transparent);
@@ -681,21 +566,7 @@ function onGroupDrop(axis: string): void {
   border-color: var(--wp-accent-500);
   background: color-mix(in srgb, var(--wp-accent-500) 8%, var(--wp-bg-2));
 }
-.subcat-group__fold {
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  background: none;
-  border: none;
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-dim);
-  cursor: pointer;
-}
-.subcat-group__fold:hover { color: var(--wp-text); background: var(--wp-bg-3); }
-.subcat-group__fold .pi { font-size: 9px; }
+.subcat-group__fold { flex-shrink: 0; }
 .subcat-group__count {
   font-family: var(--wp-font-mono);
   font-size: 10px; /* audit-exempt: micro count badge */
@@ -720,6 +591,8 @@ function onGroupDrop(axis: string): void {
   padding: 3px 6px;
   min-width: 0;
   max-width: 220px;
+  /* The kit Input fills its row; this one is as wide as a plain input was. */
+  width: auto;
 }
 .subcat-group__name:hover,
 .subcat-group__name:focus-visible {
@@ -729,74 +602,20 @@ function onGroupDrop(axis: string): void {
   outline: none;
 }
 /* A capsule, not an icon button: the pills this control governs are
-   hue-tinted capsules, so borrowing their grammar makes it read as a property
-   of the axis. The earlier icon button borrowed `__ungroup`'s flat grey
-   square, which is the vocabulary of a utility ACTION, and the hover landed as
-   a hard block unrelated to anything around it. */
-.subcat-group__kind {
-  display: inline-flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 var(--wp-space-4);
-  border: 1px solid transparent;
-  border-radius: var(--wp-radius-cap, 999px);
-  background: transparent;
-  color: var(--wp-text-dim);
-  font-size: var(--wp-text-xs);
+   hue-tinted capsules, so a Chip toggle in the group's hue (lit while the
+   axis accepts) reads as a property of the axis rather than a utility
+   action. Always visible, including the default, so the capability is
+   discoverable. */
+.subcat-group__head .subcat-group__kind {
   font-weight: var(--wp-weight-semibold);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  cursor: pointer;
-  transition:
-    color 120ms ease,
-    background-color 120ms ease,
-    border-color 120ms ease;
-}
-/* Always visible, including the default. An earlier version faded the
-   classify state in on hover to keep the header quiet; that optimised for ink
-   over discovery, and a control you only see by accident is one most people
-   never learn exists — fatal for a capability nobody is looking for yet. The
-   dim weight keeps it from competing with the axis name. */
-.subcat-group__kind:hover {
-  color: var(--wp-text-muted);
-  border-color: var(--wp-border-strong);
-}
-/* Promoted: always visible, in the group's own hue and the pills' exact fill
-   recipe, so the axis reads as one thing. Hover deepens the tint that is
-   already there rather than introducing a second colour. */
-.subcat-group__kind--accepts {
-  opacity: 1;
-  color: color-mix(in srgb, var(--group-hue, var(--wp-accent-400)) 78%, var(--wp-text));
-  border-color: color-mix(in srgb, var(--group-hue, var(--wp-accent-400)) 55%, var(--wp-border));
-  background: color-mix(in srgb, var(--group-hue, var(--wp-accent-400)) 17%, var(--wp-bg-1));
-}
-.subcat-group__kind--accepts:hover {
-  background: color-mix(in srgb, var(--group-hue, var(--wp-accent-400)) 28%, var(--wp-bg-1));
-}
-@media (prefers-reduced-motion: reduce) {
-  .subcat-group__kind { transition: none; }
 }
 
 .subcat-group__name--other {
   font-style: italic;
   padding-left: 0;
   cursor: default;
-}
-.subcat-group__ungroup {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: var(--wp-text-dim);
-  border-radius: var(--wp-radius-sm);
-}
-.subcat-group__ungroup:hover {
-  color: var(--wp-text);
-  background: var(--wp-bg-3);
 }
 .subcat-group__axis-note {
   display: flex;
@@ -862,100 +681,18 @@ function onGroupDrop(axis: string): void {
   font-size: var(--wp-text-xs);
   font-variant-numeric: tabular-nums;
 }
-.subcat-pill__kebab {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.subcat-pill .subcat-pill__kebab {
   width: 20px;
   height: 20px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: var(--wp-text-dim);
   border-radius: var(--wp-radius-cap, 999px);
-  font-size: 14px;
-  line-height: 1;
-}
-.subcat-pill__kebab:hover {
-  color: var(--wp-text);
-  background: var(--wp-bg-3);
-}
-
-/* Kebab dropdown menu. */
-.subcat-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 30;
-  min-width: 180px;
-  display: flex;
-  flex-direction: column;
-  padding: var(--wp-space-2);
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius);
-  box-shadow: var(--wp-shadow-md);
-}
-/* Flip the kebab menu above its trigger near the page bottom (bug #1). */
-.subcat-menu--up {
-  top: auto;
-  bottom: calc(100% + 4px);
-}
-.subcat-menu__item {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-  padding: 6px 8px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: var(--wp-text);
-  font-size: var(--wp-text-sm);
-  text-align: left;
-  border-radius: var(--wp-radius-sm);
-}
-.subcat-menu__item:hover {
-  background: var(--wp-bg-3);
-}
-.subcat-menu__item .pi {
-  font-size: 12px;
-  color: var(--wp-text-dim);
-}
-.subcat-menu__item--sub {
-  padding-left: var(--wp-space-5);
-}
-.subcat-menu__item--danger {
-  color: var(--wp-danger-text, var(--wp-danger));
-}
-.subcat-menu__item--danger .pi {
-  color: inherit;
-}
-.subcat-menu__sub {
-  display: flex;
-  flex-direction: column;
-  margin: 2px 0 2px var(--wp-space-3);
-  padding-left: var(--wp-space-2);
-  border-left: 1px solid var(--wp-border);
 }
 
 /* Inline "+ tag" (per group) + "+ Group". */
-.subcat-addtag__open,
-.subcat-add-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border: 1px dashed var(--wp-border-strong);
+/* The add buttons are pills, like the tags beside them. */
+.subcat-groups .subcat-addtag__open,
+.subcat-groups .subcat-add-group {
   border-radius: var(--wp-radius-cap, 999px);
-  background: transparent;
-  cursor: pointer;
-  color: var(--wp-text-dim);
-  font-size: var(--wp-text-sm);
-}
-.subcat-addtag__open:hover,
-.subcat-add-group:hover {
-  color: var(--wp-text);
-  border-color: var(--wp-accent-500);
+  font-weight: 500;
 }
 .subcat-add-group {
   margin-top: var(--wp-space-3);

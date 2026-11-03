@@ -61,7 +61,7 @@ describe("ContextLoopWidget", () => {
 
   it("emits iteration_var_name update on text input", async () => {
     const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig() } });
-    const input = w.find<HTMLInputElement>('[data-test="loop-iteration-var"]');
+    const input = w.find<HTMLInputElement>('[data-test="loop-iteration-var"] input');
     input.element.value = "idx";
     await input.trigger("input");
     const emitted = w.emitted("update:modelValue")?.[0]?.[0] as { iteration_var_name: string };

@@ -14,6 +14,8 @@
  * schema v8 when a negative is really there.
  */
 import { computed, nextTick, ref } from "vue";
+import Chip from "@/kit/Chip.vue";
+import Button from "@/kit/Button.vue";
 import RichTextInput from "./RichTextInput.vue";
 import { isBlankNegative } from "../utils/negatives";
 
@@ -78,14 +80,14 @@ function clear(): void {
 
 <template>
   <div ref="rootEl" class="wp-negfield" :data-test="testId" @focusout="onFocusOut">
-    <button
+    <Chip
       v-if="!expanded"
-      type="button"
+      as="button"
       class="wp-negfield__add"
       :aria-label="`Add a negative to this ${label}`"
       :data-test="testId ? `${testId}-add` : undefined"
       @click="open"
-    >+ negative</button>
+    >+ negative</Chip>
     <template v-else>
       <div class="wp-negfield__row">
         <span class="wp-negfield__tag" title="Negative — goes to the Assembler's negative output when this is used">NEG</span>
@@ -98,15 +100,17 @@ function clear(): void {
           :aria-label="`Negative for this ${label}`"
           @update:model-value="onInput"
         />
-        <button
+        <Button
           v-if="!alwaysOpen || hasText"
-          type="button"
+          variant="ghost"
+          size="sm"
           class="wp-negfield__clear"
+          icon="pi-times"
           :aria-label="`Remove the negative from this ${label}`"
           title="Remove negative"
           :data-test="testId ? `${testId}-clear` : undefined"
           @click="clear"
-        ><i class="pi pi-times" aria-hidden="true" /></button>
+        />
       </div>
       <div v-if="brokenRefs.length" class="wp-negfield__broken" role="note">
         <i class="pi pi-exclamation-triangle" aria-hidden="true" />
@@ -120,12 +124,9 @@ function clear(): void {
 .wp-negfield {
   margin-top: var(--wp-space-2, 6px);
 }
+/* A kit chip drawn as a quiet dashed "+ negative" until it is wanted. */
 .wp-negfield__add {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border: 1px dashed var(--wp-border);
-  border-radius: var(--wp-radius);
+  border-style: dashed;
   background: transparent;
   color: var(--wp-text-muted);
   font-family: var(--wp-font-mono, monospace);
@@ -165,16 +166,7 @@ function clear(): void {
   border-color: color-mix(in oklab, var(--wp-danger) 45%, transparent);
   background: color-mix(in oklab, var(--wp-danger) 7%, var(--wp-bg-2));
 }
-.wp-negfield__clear {
-  flex: none;
-  margin-top: 4px;
-  padding: 3px 5px;
-  border: none;
-  background: transparent;
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  border-radius: min(4px, var(--wp-radius-cap, 999px));
-}
+.wp-negfield__clear { flex: none; margin-top: 4px; color: var(--wp-text-muted); }
 .wp-negfield__clear:hover { color: var(--wp-danger); }
 .wp-negfield__broken {
   display: flex;

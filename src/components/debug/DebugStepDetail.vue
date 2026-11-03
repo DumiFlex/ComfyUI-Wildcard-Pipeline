@@ -116,13 +116,14 @@ function modeGlyph(mode: string | undefined): string {
       <div v-if="step.appliedBy.length" class="wp-dbg-detail__block">
         <div class="wp-dbg-detail__label">Re-weighted by</div>
         <div v-for="(c, i) in step.appliedBy" :key="i" class="wp-dbg-detail__line" data-test="dbg-applied-constraint">
-          <button
+          <Button
             v-if="c.stepKey"
-            type="button"
+            variant="link"
+            size="sm"
             class="wp-dbg-link"
-            title="Show this constraint in the trace"
+            hint="Show this constraint in the trace"
             @click="emit('goto-step', c.stepKey)"
-          ><span class="wp-dbg-kind-dot" />{{ c.name }}</button>
+          ><span class="wp-dbg-kind-dot" />{{ c.name }}</Button>
           <span v-else class="wp-dbg-link wp-dbg-link--static"><span class="wp-dbg-kind-dot" />{{ c.name }}</span>
           <span class="wp-dbg-dim">because <code>${{ refName(c.source) }}</code> is</span>
           <code>{{ c.sourceValue || '""' }}</code>
@@ -335,18 +336,11 @@ function modeGlyph(mode: string | undefined): string {
 .wp-dbg-detail__line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; }
 .wp-dbg-detail__line code, .wp-dbg-var { font-family: var(--wp-font-mono); color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-dbg-dim { color: var(--wp-text-dim); }
-.wp-dbg-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  font: 600 11px/1.4 var(--wp-font-sans);
-  color: var(--wp-kind-constraint);
-  cursor: pointer;
+/* The plain span and the kit link Button share this look. */
+.wp-dbg-link, .wp-dbg-link.wp-btn {
+  display: inline-flex; align-items: center; gap: 5px; height: auto; min-height: 0; padding: 0;
+  font: 600 11px/1.4 var(--wp-font-sans); color: var(--wp-kind-constraint);
 }
-.wp-dbg-link:hover { text-decoration: underline; }
 .wp-dbg-link--static { cursor: default; }
 .wp-dbg-link--static:hover { text-decoration: none; }
 .wp-dbg-kind-dot { width: 7px; height: 7px; border-radius: min(2px, var(--wp-radius-cap, 999px)); flex: none; background: var(--wp-kind-constraint); }
@@ -433,4 +427,6 @@ function modeGlyph(mode: string | undefined): string {
 }
 .wp-dbg-meta-btn:hover { color: var(--wp-text); border-color: var(--wp-border-strong, var(--wp-border)); }
 .wp-dbg-meta-btn .pi { font-size: 9px; }
+.wp-dbg-link.wp-btn :deep(.wp-btn__label) { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.wp-dbg-link.wp-btn :deep(.wp-btn__label) { line-height: inherit; }
 </style>
