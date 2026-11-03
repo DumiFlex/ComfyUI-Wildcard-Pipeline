@@ -348,7 +348,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // its tags, operators and axis rows with Chip and ListRow and its actions
 // with Button, which pulls those pieces and the tooltip into its chunk
 // (dev 613,654 -> 616,336 bytes).
-const TOTAL_LIMIT = 603 * 1024;     // 603 KB
+// RAISED 603 -> 604 KB on 2026-11-03 for the canvas kit buttons batch B: the
+// Var Picker's hand-made trigger + list became the kit Combobox (with its
+// Popover), the bundle frame colour the kit ColorField + RadioGroup swatches,
+// and the pickers' rows ListRows (dev ~616,500 -> 617,555 bytes).
+const TOTAL_LIMIT = 604 * 1024;     // 604 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

@@ -26,26 +26,8 @@
   align-items: center;
 }
 
-.wp-ibm__menu-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 22px;
-  padding: 0 7px;
-  box-sizing: border-box;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 600 10px var(--wp-font-mono);
-  cursor: pointer;
-  line-height: 1;
-}
-.wp-ibm__menu-btn:hover {
-  border-color: var(--wp-accent);
-  color: var(--wp-text);
-}
-.wp-ibm__menu-btn .pi { font-size: 9px; }
+/* The "+ $slot" trigger is the kit Button (outline, sm); only its mono label is ours. */
+.wp-ibm__menu-btn { font-family: var(--wp-font-mono); }
 
 /* The section reset buttons (`+ $slot` row's ↺, IdentitySection's ↺)
  * are the shared WpButton (outline, icon only), 24 px like the canvas
@@ -81,18 +63,6 @@
 
 .wp-ibm__menu--up { transform: translateY(-100%); }
 
-.wp-ibm__menu-item {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  text-align: left;
-  padding: 4px 8px;
-  background: transparent;
-  border: 0;
-  border-radius: 2px;
-  cursor: pointer;
-  color: var(--wp-text);
-}
-.wp-ibm__menu-item:hover {
-  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
-}
+/* Each item is a kit ListRow (sm): $name, its label, the type at the end. */
+.wp-ibm__menu-item { gap: 6px; padding: 4px 8px; color: var(--wp-text); }
+.wp-ibm__menu-item:hover { background: color-mix(in srgb, var(--wp-accent) 18%, transparent); }

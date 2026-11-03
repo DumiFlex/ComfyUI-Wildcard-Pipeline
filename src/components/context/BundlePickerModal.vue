@@ -7,6 +7,7 @@ import ConfirmModal from "@/kit/ConfirmModal.vue";
 import { api } from "../../manager/api/client";
 import type { BundleRow } from "../../manager/api/types";
 import Button from "@/kit/Button.vue";
+import ListRow from "@/kit/ListRow.vue";
 import Skeleton from "@/kit/Skeleton.vue";
 
 const props = defineProps<{
@@ -225,10 +226,9 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
         </div>
 
         <div v-else class="wp-bp__list">
-          <button
+          <ListRow
             v-for="(b, idx) in filtered"
             :key="b.id"
-            type="button"
             :data-bundle-id="b.id"
             :data-testid="`bundle-picker-row-${b.id}`"
             :class="[
@@ -243,19 +243,23 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
             @click="pickRow(b)"
             @mouseenter="focusedIdx = idx"
           >
-            <span class="wp-bp__row-icon">
-              <i class="pi pi-box" aria-hidden="true"></i>
-            </span>
+            <template #start>
+              <span class="wp-bp__row-icon">
+                <i class="pi pi-box" aria-hidden="true"></i>
+              </span>
+            </template>
             <span class="wp-bp__row-name">{{ b.name }}</span>
-            <span class="wp-bp__row-count">{{ b.children.length }} mods</span>
-            <span class="wp-bp__row-comp">
-              <span
-                v-for="(pill, i) in kindCompositionPills(b)"
-                :key="i"
-                :class="pill.cls"
-              >{{ pill.label }}</span>
-            </span>
-          </button>
+            <template #end>
+              <span class="wp-bp__row-count">{{ b.children.length }} mods</span>
+              <span class="wp-bp__row-comp">
+                <span
+                  v-for="(pill, i) in kindCompositionPills(b)"
+                  :key="i"
+                  :class="pill.cls"
+                >{{ pill.label }}</span>
+              </span>
+            </template>
+          </ListRow>
         </div>
       </div>
 
@@ -379,9 +383,8 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   padding: 6px;
   gap: 2px;
 }
+/* A kit ListRow drawn as a bordered card with the bundle's colour on its left edge. */
 .wp-bp__row {
-  display: flex;
-  align-items: center;
   gap: 10px;
   padding: 8px 10px;
   background: var(--wp-bg);
@@ -416,8 +419,8 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   font-size: 11px;
 }
 .wp-bp__row-name {
-  flex: 1;
-  font: 600 13px/1 var(--wp-font-sans);
+  display: block;
+  font: 600 13px/1.2 var(--wp-font-sans);
   color: var(--wp-text);
   overflow: hidden;
   text-overflow: ellipsis;
