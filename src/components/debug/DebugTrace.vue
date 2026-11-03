@@ -239,7 +239,9 @@ function groupTooltip(g: TraceGroup): string {
 .wp-dbg-group__title--codename {
   font: 600 10.5px/1.5 var(--wp-font-mono);
   padding: 0 7px;
-  border-radius: var(--wp-radius-cap, 999px);
+  /* A finite radius, not 999px: Firefox draws a bordered full pill in pieces
+     that seam at canvas zooms like 0.64 / 0.8 (docs/component-standard.md). */
+  border-radius: min(7px, var(--wp-radius-cap, 999px)); /* ~18px tall */
   border: 1px solid var(--wp-border);
 }
 .wp-dbg-group__focus {

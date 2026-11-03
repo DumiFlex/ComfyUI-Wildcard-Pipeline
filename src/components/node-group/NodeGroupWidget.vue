@@ -119,7 +119,9 @@ function allMode(): string {
   height: 20px;
   padding: 0 8px;
   border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-cap, 999px);
+  /* A finite radius, not 999px: Firefox draws a bordered full pill in pieces
+     that seam at canvas zooms like 0.64 / 0.8 (docs/component-standard.md). */
+  border-radius: min(9px, var(--wp-radius-cap, 999px)); /* 20px tall */
   background: transparent;
   color: var(--wp-text-muted, var(--wp-text2));
   font: 600 10.5px var(--wp-font-sans, sans-serif);
