@@ -97,7 +97,7 @@ function onResetColor(): void {
       </div>
     </div>
 
-    <div class="id__row">
+    <div class="id__row id__row--top">
       <span class="id__key">Frame color</span>
       <div class="id__input-row">
         <div class="bdm-color-wrap" :class="{ 'bdm-color-wrap--mod': colorOverridden }">
@@ -143,6 +143,9 @@ function onResetColor(): void {
 .id__label { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: 0.14em; color: var(--wp-text-dim, var(--wp-text3)); margin-bottom: 8px; }
 .id__row { display: grid; grid-template-columns: 100px 1fr; gap: 10px; align-items: center; margin-bottom: 6px; }
 .id__row:last-child { margin-bottom: 0; }
+/* The colour row is two lines (field, then presets); its label sits by the field. */
+.id__row--top { align-items: start; }
+.id__row--top .id__key { line-height: var(--wp-control-h-sm); }
 .id__key { font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
 .id__input { background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); border-radius: min(3px, var(--wp-radius-cap, 999px)); padding: 5px 8px; font: 11px var(--wp-font-mono); color: var(--wp-text); }
 .id__input:focus { border-color: var(--wp-accent); outline: none; }
