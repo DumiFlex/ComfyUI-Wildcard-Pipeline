@@ -197,12 +197,99 @@ describe("WP Bookmark shortcuts", () => {
 describe("Bookmarks dock prefs", () => {
   it("reads the old side setting as a spot", () => {
     localStorage.setItem("wp.bookmarkDock", JSON.stringify({ open: true, collapsed: false, side: "right", pos: { x: 5, y: 5 } }));
-    expect(readDockPrefs()).toEqual({ open: true, collapsed: false, spot: "tr" });
+    expect(readDockPrefs()).toEqual({ open: true, collapsed: false, spot: "tr", clearDock: true });
     localStorage.setItem("wp.bookmarkDock", JSON.stringify({ spot: "bc" }));
     expect(readDockPrefs().spot).toBe("bc");
     localStorage.setItem("wp.bookmarkDock", JSON.stringify({ spot: "nowhere" }));
     expect(readDockPrefs().spot).toBe("tl");
     localStorage.removeItem("wp.bookmarkDock");
+  });
+
+  it("keeps clear of the dock unless that is switched off", () => {
+    localStorage.removeItem("wp.bookmarkDock");
+    expect(readDockPrefs().clearDock).toBe(true);
+    localStorage.setItem("wp.bookmarkDock", JSON.stringify({ clearDock: false }));
+    expect(readDockPrefs().clearDock).toBe(false);
+    localStorage.removeItem("wp.bookmarkDock");
+  });
+});
+
+describe("Bookmark jumps around the host's floating pieces", () => {
+  const made: Element[] = [];
+  function el<T extends HTMLElement>(tag: string, box: [number, number, number, number], parent: Element = document.body): T {
+    const e = document.createElement(tag) as T;
+    const [left, top, right, bottom] = box;
+    e.getBoundingClientRect = (): DOMRect =>
+      ({ left, top, right, bottom, width: right - left, height: bottom - top, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+    parent.appendChild(e);
+    if (parent === document.body) made.push(e);
+    return e;
+  }
+  let at: () => [number, number];
+  beforeEach(() => {
+    const cv = el<HTMLCanvasElement>("canvas", [0, 0, 1000, 800]);
+    Object.assign(canvas, { canvas: cv });
+    const pane = el("div", [0, 0, 1000, 800]);
+    pane.id = "graph-canvas-panel";
+    at = () => [(1000 + ox()) * 1, (470 + oy()) * 1];
+  });
+  afterEach(() => {
+    for (const e of made.splice(0)) e.remove();
+    localStorage.removeItem("wp.bookmarkDock");
+    Object.assign(canvas, { canvas: undefined });
+  });
+
+  it("lands in the same place on every press while the bookmark is selected", () => {
+    const b = bookmark(1, "B", { anchor: "tl", zoom: 1 }, root);
+    // ComfyUI's selection toolbox floats just above the selected node and
+    // moves with it; it is not a fixed piece to keep clear of.
+    const pane = document.getElementById("graph-canvas-panel") as HTMLElement;
+    const wrap = el("div", [0, 0, 0, 0], pane);
+    wrap.style.pointerEvents = "none";
+    const toolbox = el("div", [24, 0, 224, 32], wrap);
+    toolbox.className = "selection-toolbox";
+    toolbox.style.pointerEvents = "auto";
+    jumpTo(b);
+    expect(at()[0]).toBeCloseTo(24);
+    expect(at()[1]).toBeCloseTo(24);
+    jumpTo(b);
+    jumpTo(b);
+    expect(at()[1]).toBeCloseTo(24);
+  });
+
+  it("is not moved by a toast in the corner", () => {
+    const b = bookmark(1, "B", { anchor: "tr", zoom: 1 }, root);
+    const cv = (canvas as unknown as { canvas: HTMLCanvasElement }).canvas;
+    // ComfyUI's toast viewport, top right, over the canvas.
+    const viewport = el("ol", [1300, 80, 1000, 200]);
+    viewport.dataset.testid = "toast-viewport";
+    const toast = el("li", [1300, 80, 1000, 200], viewport);
+    toast.dataset.testid = "toast";
+    const orig = document.elementsFromPoint;
+    document.elementsFromPoint = (x: number, y: number): Element[] =>
+      x > 600 && y > 60 && y < 200 ? [toast, viewport, cv] : [cv];
+    try {
+      jumpTo(b);
+    } finally {
+      document.elementsFromPoint = orig;
+    }
+    // Top right: the bookmark's top-right corner 24 px in from the top
+    // right of the canvas, as with no toast.
+    expect((1000 + 300 + ox())).toBeCloseTo(1000 - 24);
+    expect(at()[1]).toBeCloseTo(24);
+  });
+
+  it("moves out from under the dock, or lands behind it when that is off", () => {
+    const b = bookmark(1, "B", { anchor: "tl", zoom: 1 }, root);
+    const dock = el("section", [0, 0, 300, 400]);
+    dock.dataset.test = "bm-dock";
+    jumpTo(b);
+    const [x, y] = at();
+    expect(x >= 300 || y >= 400).toBe(true);
+    localStorage.setItem("wp.bookmarkDock", JSON.stringify({ clearDock: false }));
+    jumpTo(b);
+    expect(at()[0]).toBeCloseTo(24);
+    expect(at()[1]).toBeCloseTo(24);
   });
 });
 
