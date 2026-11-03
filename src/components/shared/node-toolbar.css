@@ -1,0 +1,29 @@
+/*
+ * Our buttons in ComfyUI's selection toolbar (`extension/node-toolbar.ts`):
+ * ComfyUI draws the button and puts our icon classes on its <i>. The glyph
+ * sits on a filled accent dot so the buttons read as Wildcard Pipeline's,
+ * not ComfyUI's.
+ *
+ * NOT in `@layer wp-extension`, unlike the other standalone sheets: the <i>
+ * also carries PrimeIcons' unlayered `.pi` rule (display, line-height),
+ * which would beat a layered rule on those same properties. The selectors
+ * are our own `.wp-tb-icon*` classes, so nothing of the host's can match.
+ */
+.wp-tb-icon.pi {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%; /* round: matches ComfyUI's own toolbar, outside our looks */
+  background: var(--wp-accent);
+  color: white; /* text on the accent, both themes */
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 700;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--wp-accent) 40%, transparent);
+  transition: filter 120ms ease;
+}
+.wp-tb-icon.pi::before { line-height: 1; }
+.wp-tb-icon--edit.pi { font-size: 10px; }
+button:hover > .wp-tb-icon.pi { filter: brightness(1.12); }

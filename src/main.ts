@@ -45,6 +45,8 @@ const {
   loadSubgraphBadge,
   loadImageFilterPicker,
   loadBookmarkDock,
+  loadNodeHelp,
+  nodeToolbarMod,
 } = await import("./boot");
 
 // Singleton toast container — one Vue app mounted to a body-level div renders
@@ -85,6 +87,20 @@ watch(playgroundStoreMod.playgroundOpen, (open) => {
     playgroundRoot.id = "wp-playground-root";
     document.body.appendChild(playgroundRoot);
     createApp(m.default).mount(playgroundRoot);
+  });
+});
+
+// Node help dialog ("?" in the selection toolbar): one body-level app, mounted
+// the first time help opens, like the playground above.
+let helpMounted = false;
+watch(nodeToolbarMod.helpTarget, (target) => {
+  if (helpMounted || !target) return;
+  helpMounted = true;
+  void loadNodeHelp().then((m) => {
+    const root = document.createElement("div");
+    root.id = "wp-node-help-root";
+    document.body.appendChild(root);
+    createApp(m.default).mount(root);
   });
 });
 
@@ -234,7 +250,17 @@ app.registerExtension({
   // is reachable on builds where neither toolbar path works.
   // The bookmark commands ship without keys: bind them in ComfyUI's
   // Settings › Keybinding, where its own dialog flags clashes.
-  commands: [...topbarMod.TOPBAR_COMMANDS, ...BOOKMARK_COMMANDS],
+  commands: [
+    ...topbarMod.TOPBAR_COMMANDS,
+    ...BOOKMARK_COMMANDS,
+    ...nodeToolbarMod.toolbarCommands(() => (app as unknown as { canvas?: Parameters<typeof nodeToolbarMod.selectedItems>[0] }).canvas),
+  ],
+
+  // Our "?" (help) and pencil (edit) in ComfyUI's selection toolbar, drawn
+  // on an accent dot so they read as ours (extension/node-toolbar.ts).
+  getSelectionToolboxCommands(item: unknown) {
+    return nodeToolbarMod.toolboxCommandsFor(item);
+  },
   menuCommands: [
     ...topbarMod.TOPBAR_MENU_COMMANDS,
     { path: ["Extensions", "Wildcard Pipeline", "Bookmarks"], commands: BOOKMARK_COMMANDS.map((c) => c.id) },

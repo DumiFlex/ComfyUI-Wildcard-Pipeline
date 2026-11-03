@@ -8,8 +8,8 @@
  * at the row's right edge. A folded label gathers its toggles' dots.
  *
  * Two views: the clean view shows only the rows and their controls; the
- * pencil at the top opens the edit view (mode, grips, row editors, add
- * buttons) and Done closes it. A node with no toggles opens in the edit view.
+ * pencil in ComfyUI's selection toolbar (`editRequest`) opens the edit view
+ * (mode, grips, row editors, add buttons) and Done closes it. A node with no toggles opens in the edit view.
  * The view is per session, never saved.
  *
  * Toggles belong to the label above them. Labels move with their toggles
@@ -19,7 +19,7 @@
  * Value contract: `modelValue` is a `TogglesConfig`; every edit emits the
  * whole next config (`src/widgets/toggles.ts` fits the outputs to it).
  */
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
 import Input from "@/kit/Input.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
@@ -60,8 +60,11 @@ const props = withDefaults(
     controls?: Record<string, ControlState>;
     /** Canvas group titles, for the control's group picker. */
     canvasGroups?: string[];
+    /** Bumped by the pencil in ComfyUI's selection toolbar: flips the
+     *  edit view (extension/node-toolbar.ts). */
+    editRequest?: number;
   }>(),
-  { nodeMode: 0, controls: () => ({}), canvasGroups: () => [] },
+  { nodeMode: 0, controls: () => ({}), canvasGroups: () => [], editRequest: 0 },
 );
 const emit = defineEmits<{ "update:modelValue": [next: TogglesConfig] }>();
 
@@ -145,6 +148,13 @@ function closeEdit(): void {
   editMode.value = false;
   editing.value = null;
 }
+watch(
+  () => props.editRequest,
+  () => {
+    if (editMode.value) closeEdit();
+    else openEdit();
+  },
+);
 
 async function focusEditor(): Promise<void> {
   await nextTick();
@@ -304,15 +314,8 @@ function foldedOuts(g: ToggleGroup): string | undefined {
       <span v-else class="wp-tg__spacer" />
       <Button variant="primary" size="sm" icon="pi-check" data-test="tg-edit-done" @click="closeEdit">Done</Button>
     </div>
-    <div v-else class="wp-tg__bar wp-tg__bar--clean">
-      <span class="wp-tg__mode-cap">{{ isOne ? "Pick one" : "" }}</span>
-      <WpIconButton
-        icon="pi-pencil"
-        label="Edit toggles"
-        hint="Edit toggles: add, rename, reorder, outputs"
-        data-test="tg-edit-open"
-        @click="openEdit"
-      />
+    <div v-else-if="isOne" class="wp-tg__bar wp-tg__bar--clean">
+      <span class="wp-tg__mode-cap">Pick one</span>
     </div>
     <div v-if="editMode && isOne" class="wp-tg__pickopts">
       <span v-tooltip="'Print the picked variable in the prompt (else it is for rules only)'" v-toggle-row class="wp-tg__check">
@@ -482,7 +485,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
         <Button size="sm" variant="add" icon="pi-tag" data-test="tg-add-label" @click="addLabel">Add label</Button>
       </div>
     </template>
-    <div v-else-if="!toggles.length" class="wp-tg__ghost">No toggles yet: click the pencil to add some.</div>
+    <div v-else-if="!toggles.length" class="wp-tg__ghost">No toggles yet: select the node and press the pencil above it.</div>
   </div>
 </template>
 
@@ -498,7 +501,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
 }
 .wp-tg--skipped { opacity: 0.45; }
 .wp-tg__bar { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.wp-tg__bar--clean { justify-content: space-between; min-height: 20px; margin-bottom: -2px; }
+.wp-tg__bar--clean { min-height: 16px; margin-bottom: -2px; }
 .wp-tg__spacer { flex: 1; }
 .wp-tg__pickopts { display: flex; gap: 12px; padding: 0 2px; }
 .wp-tg__check { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }

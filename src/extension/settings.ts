@@ -17,6 +17,7 @@ import { reactive } from "vue";
 // chunk, 15 copies in all). Comes first so the sheets below can override it.
 import "../components/shared/theme.css";
 import "../components/shared/a11y.css";
+import "../components/shared/node-toolbar.css";
 import "../components/shared/display-prefs.css";
 import "../components/shared/vue-nodes.css";
 // Rich-text inline-syntax colours for canvas-mounted RichTextInput/Preview

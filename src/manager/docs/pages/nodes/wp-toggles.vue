@@ -10,7 +10,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
 
 const controls = [
   { term: "upstream (in)", desc: "Optional Context to extend. Only nodes after this one see the toggle variables. It can also set toggles (see below)." },
-  { term: "Pencil (top)", desc: "Opens the edit view: the mode, the grips to reorder, a pencil per row, Add toggle and Add label. Done goes back to the clean view, which shows only the switches." },
+  { term: "Pencil (toolbar)", desc: "Select the node and the indigo pencil in ComfyUI's selection toolbar opens the edit view: the mode, the grips to reorder, a pencil per row, Add toggle and Add label. Done goes back to the clean view, which shows only the switches." },
   { term: "Any on / Pick one", desc: "Any on: every toggle is on or off by itself. Pick one: exactly one is on, like radio buttons." },
   { term: "writes (Pick one)", desc: "Optional variable that also gets the picked toggle's value (or its name), so one rule can branch on it." },
   { term: "Pencil (row)", desc: "Opens the toggle's edit panel: name, variable, style, needs, what off mutes or bypasses, group and its output." },
