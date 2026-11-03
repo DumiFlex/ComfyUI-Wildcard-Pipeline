@@ -6,7 +6,7 @@
  */
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, ref, watch } from "vue";
-import Toggle from "@/kit/Toggle.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
 import Select from "@/kit/Select.vue";
 import type { SelectOption } from "@/kit/select-types";
 import SettingGroup from "../SettingGroup.vue";
@@ -99,8 +99,9 @@ async function commitDepth(): Promise<void> {
       :hint="s.tooltip"
       :setting-key="canvasKey(s.id)"
     >
-      <Toggle
+      <WpSwitch
         v-if="s.type === 'boolean'"
+        size="md"
         :model-value="canvas.values.value[s.id] === true"
         :aria-label="s.name"
         :disabled="!canvas.loaded.value"

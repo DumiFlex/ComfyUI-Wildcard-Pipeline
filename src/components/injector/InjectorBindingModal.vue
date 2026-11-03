@@ -28,8 +28,7 @@ import Kbd from "@/kit/Kbd.vue";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
 import RichTextInput from "../../manager/components/RichTextInput.vue";
-import WpButton from "@/kit/WpButton.vue";
-import CloseButton from "@/kit/CloseButton.vue";
+import Button from "@/kit/Button.vue";
 import ModalShell from "@/kit/ModalShell.vue";
 
 const props = withDefaults(
@@ -426,7 +425,7 @@ function onKeydown(ev: KeyboardEvent): void {
           </div>
           <div class="ibm__sub">Injector binding · ctx[$<wbr>{{ draftBinding || "…" }}] ← {{ templateValue ? "template" : isGeneral ? "no template yet" : "socket value" }}</div>
         </div>
-        <CloseButton size="sm" kbd="Esc" data-test="ibm-close" @click="onCancel" />
+        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="ibm-close" @click="onCancel" />
       </header>
 
       <section class="ibm__section">
@@ -493,8 +492,9 @@ function onKeydown(ev: KeyboardEvent): void {
                 </div>
               </Teleport>
             </div>
-            <WpButton
+            <Button
               v-if="templateValue"
+              size="sm"
               variant="outline"
               icon="pi-replay"
               data-test="ibm-template-reset"
@@ -620,8 +620,8 @@ function onKeydown(ev: KeyboardEvent): void {
         <span class="ibm__hint">
           <Kbd keys="Esc" size="sm" /> cancel · <Kbd keys="Mod+Enter" size="sm" /> save
         </span>
-        <WpButton data-test="ibm-cancel" @click="onCancel">Cancel</WpButton>
-        <WpButton variant="primary" :disabled="!isDirty" data-test="ibm-save" @click="onSave">Save</WpButton>
+        <Button size="sm" data-test="ibm-cancel" @click="onCancel">Cancel</Button>
+        <Button size="sm" variant="primary" :disabled="!isDirty" data-test="ibm-save" @click="onSave">Save</Button>
       </footer>
     </div>
   </ModalShell>

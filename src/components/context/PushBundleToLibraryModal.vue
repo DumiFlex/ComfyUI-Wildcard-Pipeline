@@ -24,10 +24,9 @@ import {
 } from "../../manager/import-export/relink-match";
 import { bundleContentKey } from "./bundles/bundle-fingerprint";
 import type { BundleInstance } from "../../widgets/_shared";
-import WpCheck from "@/kit/WpCheck.vue";
-import CloseButton from "@/kit/CloseButton.vue";
+import Checkbox from "@/kit/Checkbox.vue";
+import Button from "@/kit/Button.vue";
 import ModalShell from "@/kit/ModalShell.vue";
-import WpButton from "@/kit/WpButton.vue";
 
 interface ChildPreview {
   name: string;
@@ -425,7 +424,7 @@ function pickCopyName(base: string, taken: ReadonlySet<string>): string {
     >
       <header class="wp-ptl__head">
         <h3 id="wp-pbtl-title" class="wp-ptl__title">Push bundle to library</h3>
-        <CloseButton size="sm" kbd="Esc" data-test="pbtl-close" @click="close" />
+        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="pbtl-close" @click="close" />
       </header>
 
       <div class="wp-ptl__body">
@@ -493,7 +492,7 @@ function pickCopyName(base: string, taken: ReadonlySet<string>): string {
           data-test="pbtl-cascade"
         >
           <span class="wp-ptl-cascade__toggle">
-            <WpCheck
+            <Checkbox
               v-model="cascadeEnabled"
               data-test="pbtl-cascade-toggle"
               aria-label="Restore missing references first"
@@ -574,12 +573,13 @@ function pickCopyName(base: string, taken: ReadonlySet<string>): string {
               >{{ c.contentIdentical ? "identical" : "content differs" }}</span>
             </li>
           </ul>
-          <WpButton
+          <Button
+            size="sm"
             variant="primary"
             data-test="pbtl-relink-confirm"
             :disabled="!relinkTarget || undefined"
             @click="doRelink"
-          >Re-link<template v-if="relinkTarget"> to “{{ relinkTarget.name || relinkTarget.uuid }}”</template></WpButton>
+          >Re-link<template v-if="relinkTarget"> to “{{ relinkTarget.name || relinkTarget.uuid }}”</template></Button>
         </div>
 
         <!-- States the observable fact, not a guessed cause — see the
@@ -605,20 +605,22 @@ function pickCopyName(base: string, taken: ReadonlySet<string>): string {
       </div>
 
       <footer class="wp-ptl__foot">
-        <WpButton data-test="pbtl-cancel" :disabled="busy" @click="close">Cancel</WpButton>
+        <Button size="sm" data-test="pbtl-cancel" :disabled="busy" @click="close">Cancel</Button>
         <span class="wp-ptl-spacer" />
-        <WpButton
+        <Button
+          size="sm"
           data-test="pbtl-save-new"
           :disabled="busy"
           @click="doSaveAsNew"
-        >Save as new entry</WpButton>
-        <WpButton
+        >Save as new entry</Button>
+        <Button
+          size="sm"
           variant="primary"
           data-test="pbtl-update"
           :disabled="busy || !canUpdateExisting"
           :hint="!isLibraryTracked ? 'No existing library entry to update' : isLibraryMissing ? 'Library entry has been deleted — save as new entry instead' : undefined"
           @click="doUpdate"
-        >Update existing</WpButton>
+        >Update existing</Button>
       </footer>
     </div>
   </ModalShell>

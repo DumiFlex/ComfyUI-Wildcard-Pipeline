@@ -7,7 +7,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Banner from "@/kit/Banner.vue";
 import Kbd from "@/kit/Kbd.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
@@ -156,14 +156,14 @@ function suggest(): void {
       <div class="wp-bmf__anchor-note">
         <span class="wp-bmf__anchor-name" data-test="bm-anchor-name">{{ anchorLabel }}</span>
         <span class="wp-bmf__hint">{{ value.anchor === "custom" ? "the view you set, at its zoom" : `of the screen, ${BOOKMARK_MARGIN} px in` }}</span>
-        <WpButton
+        <Button
           size="sm"
           icon="pi-camera"
           :pressed="value.anchor === 'custom'"
           hint="Land on the view on screen now, at this zoom"
           data-test="bm-use-view"
           @click="useThisView"
-        >Use this view</WpButton>
+        >Use this view</Button>
       </div>
     </div>
 
@@ -201,7 +201,7 @@ function suggest(): void {
 
     <div class="wp-bmf__row">
       <span class="wp-bmf__label">Shortcut</span>
-      <WpButton
+      <Button
         size="sm"
         :pressed="recording"
         class="wp-bmf__record"
@@ -213,7 +213,7 @@ function suggest(): void {
         <template v-if="recording">Press keys…</template>
         <Kbd v-else-if="value.shortcut" :keys="value.shortcut" size="sm" />
         <template v-else>Record</template>
-      </WpButton>
+      </Button>
       <WpIconButton icon="pi-bolt" label="Suggest a free shortcut" data-test="bm-suggest" @click="suggest" />
       <WpIconButton
         v-if="value.shortcut"

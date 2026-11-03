@@ -3,7 +3,7 @@
  *  JSON failed to parse. Styles live in `context-widget.css`. */
 /** `showRaw` ("View raw") is owned by the widget so it survives the panel
  *  unmounting and coming back. */
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import CodeBlock from "@/kit/CodeBlock.vue";
 
 defineProps<{ error: string; raw: string; showRaw: boolean }>();
@@ -22,8 +22,8 @@ defineEmits<{ reset: []; toggleRaw: [] }>();
       </div>
     </div>
     <div class="wp-recovery__actions">
-      <WpButton :icon="showRaw ? 'pi-eye-slash' : 'pi-eye'" @click="$emit('toggleRaw')">{{ showRaw ? "Hide raw" : "View raw" }}</WpButton>
-      <WpButton variant="danger" icon="pi-refresh" @click="$emit('reset')">Reset to empty</WpButton>
+      <Button size="sm" :icon="showRaw ? 'pi-eye-slash' : 'pi-eye'" @click="$emit('toggleRaw')">{{ showRaw ? "Hide raw" : "View raw" }}</Button>
+      <Button size="sm" variant="danger" icon="pi-refresh" @click="$emit('reset')">Reset to empty</Button>
     </div>
     <CodeBlock v-if="showRaw" class="wp-recovery__raw" :code="raw" title="Saved data" size="sm" default-wrap max-height="160px" />
   </div>

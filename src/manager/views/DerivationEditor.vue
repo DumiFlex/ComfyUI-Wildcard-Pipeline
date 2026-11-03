@@ -777,21 +777,14 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
           class="rule-row"
           :class="{ 'rule-row--selected': ruleBulkActive && ruleBulkIsSelected(rule.id) }"
         >
-          <button
+          <Checkbox
             v-if="ruleBulkActive"
-            type="button"
-            class="wp-check rule-row__check"
-            role="checkbox"
-            :aria-checked="ruleBulkIsSelected(rule.id)"
-            :data-checked="ruleBulkIsSelected(rule.id) ? 'true' : 'false'"
+            :model-value="ruleBulkIsSelected(rule.id)"
+            class="rule-row__check"
             :aria-label="`Select rule ${idx + 1}`"
             :data-test="`drv-check-${idx}`"
-            @click="ruleBulkToggle(rule.id)"
-          >
-            <svg v-if="ruleBulkIsSelected(rule.id)" viewBox="0 0 12 12" fill="none">
-              <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </button>
+            @update:model-value="ruleBulkToggle(rule.id)"
+          />
           <DerivationRuleCard
             class="rule-row__card"
             :model-value="rule"

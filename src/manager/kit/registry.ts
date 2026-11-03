@@ -44,7 +44,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "ai-working", name: "AiWorking", group: "feedback", file: "src/manager/components/ai/AiWorking.vue", surfaces: ["manager"],
-    use: "The \"the AI is working\" line: one of four animated sparkle marks (typing, shuffle, orbit, burst), a changing word and the time so far. Pass text for your own status, or leave it out to follow the AI request in flight.",
+    use: "The \"the AI is working\" line, drawn by the kit's WorkingLine: one of four animated sparkle marks (typing, shuffle, orbit, burst), a changing word and the time so far. AiWorking decides the words, the tempo and the time; pass text for your own status, or leave it out to follow the AI request in flight.",
   },
   // App pieces
   {

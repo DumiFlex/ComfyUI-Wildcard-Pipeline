@@ -14,7 +14,7 @@
  * whole next config (`src/widgets/model_info.ts` serializes it).
  */
 import { computed, nextTick, ref } from "vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import {
   DEFAULT_VARIANT_RULES,
@@ -247,7 +247,7 @@ function resetRules(): void {
       <div class="wp-mi__head">
         <span class="wp-mi__label">VARIANT RULES</span>
         <span class="wp-mi__head-note">first match in the file name wins</span>
-        <WpButton v-if="!isDefaultRules"
+        <Button v-if="!isDefaultRules" size="sm"
          
           hint="Put the shipped rules back"
           variant="ghost"
@@ -255,7 +255,7 @@ function resetRules(): void {
           class="wp-mi__reset"
           data-test="mi-reset-rules"
           @click="resetRules"
-        >Reset</WpButton>
+        >Reset</Button>
       </div>
       <div ref="ruleList" class="wp-mi__rules">
         <div
@@ -300,14 +300,15 @@ function resetRules(): void {
           No rules, so $model_variant stays empty unless pinned.
         </div>
       </div>
-      <WpButton
+      <Button
+        size="sm"
         variant="add"
         icon="pi-plus"
         block
         class="wp-mi__add"
         data-test="mi-add-rule"
         @click="addRule"
-      >Add rule</WpButton>
+      >Add rule</Button>
     </section>
   </div>
 </template>

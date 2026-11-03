@@ -6,7 +6,7 @@ Every custom control in the extension follows these rules. The [wp-kit site](htt
 
 | Folder | What goes there |
 |---|---|
-| `@/kit/` | The shared kit, the npm package [`@dumiflex/wp-kit`](https://www.npmjs.com/package/@dumiflex/wp-kit) from [DumiFlex/wp-kit](https://github.com/DumiFlex/wp-kit) (the community site uses it too). `@/kit/<file>` points into the package's source. To change a piece, change it in wp-kit, release it, then bump the dependency here. It holds the pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`), controls (`SearchInput`, `WpNumber`, `WpCheck`, `WpSelect`, `WpButton`, `WpIconButton`, `WpSwitch`, `WpTabs`, `WpSegmented`, `Disclosure`, `Banner`, `CopyButton`, `CloseButton`, `Slider`, `TagInput`, `InlineEdit`, `DropZone`, `Toolbar`, `Combobox`, `DatePicker`, `RangeSlider`, `RadioGroup`), display and layout pieces (`Badge`, `Kbd`, `DescriptionList`, `CodeBlock`, `Separator`, `Stepper`, `Pagination`, `ResizeHandle`, `SplitPane`, `SortableList`, `Avatar`, `Timeline`, `DiffView`, `ImageGrid`, `VirtualList`, `VisuallyHidden`), the `Lightbox` overlay, feedback (`ProgressBar`, `Skeleton`) and the toast look (`ToastCard`). It also holds the manager controls (`Button`, `Input`, `Select`, `Modal`, `ConfirmModal`, `Drawer`, `DataTable`, `ChoiceCards`, `Toggle`, `useToast` + `ToastHost` and the rest) and the theme sheets in `theme/`. Kit pieces style themselves with scoped `wp-*` CSS, never Tailwind classes. |
+| `@/kit/` | The shared kit, the npm package [`@dumiflex/wp-kit`](https://www.npmjs.com/package/@dumiflex/wp-kit) from [DumiFlex/wp-kit](https://github.com/DumiFlex/wp-kit) (the community site uses it too). `@/kit/<file>` points into the package's source. To change a piece, change it in wp-kit, release it, then bump the dependency here. It holds the pieces both the canvas and the manager use: overlays (`Popover`, `DropdownMenu`, `ContextMenu`, `tooltip.ts`, `ModalShell`, `Modal`, `ConfirmModal`), controls (`SearchInput`, `WpNumber`, `Checkbox`, `WpSelect`, `Button`, `WpIconButton`, `WpSwitch`, `WpTabs`, `WpSegmented`, `Disclosure`, `Banner`, `CopyButton`, `Slider`, `ColorField`, `TagInput`, `InlineEdit`, `DropZone`, `Toolbar`, `Combobox`, `DatePicker`, `RadioGroup`), display and layout pieces (`Badge`, `Kbd`, `DescriptionList`, `CodeBlock`, `Separator`, `Stepper`, `Pagination`, `ResizeHandle`, `SplitPane`, `SortableList`, `Avatar`, `Timeline`, `DiffView`, `ImageGrid`, `VirtualList`, `VisuallyHidden`), the `Lightbox` overlay, feedback (`ProgressBar`, `Skeleton`, `WorkingLine`, the `motion.css` entrances) and the toast look (`ToastCard`). It also holds the manager controls (`Input`, `Select`, `Drawer`, `DataTable`, `ChoiceCards`, `useToast` + `ToastHost` and the rest) and the theme sheets in `theme/`. Kit pieces style themselves with scoped `wp-*` CSS, never Tailwind classes. |
 | `src/components/shared/` | Canvas pieces that are not shared with other apps: the seed list, frame chips, the toast stack, `useHostDialogGuard`, and the canvas colour sheet `theme.css`. |
 
 A component anywhere else is a part of one screen, not a control. If a second screen needs it, move it into wp-kit first. Only a piece that calls the app's API, store or router stays in the app, built from kit pieces.
@@ -67,7 +67,7 @@ Don't add synonyms such as `kind`, `small`, `busy` or `visible` for these meanin
   - dialogs keep Tab inside (use `useDialogFocus`).
   - an overlay that can open on top of a ComfyUI dialog (the Display playground opens from Settings) also uses `useHostDialogGuard`: ComfyUI's reka dialogs turn off clicks outside themselves, trap focus and close on an outside click or Escape.
 - Hints use `v-tooltip`, not `title=`.
-- Icon-only buttons have an `aria-label`. The × that closes something is `CloseButton`; a copy is `CopyButton` (or `copyText` from `kit/clipboard.ts` behind a menu item), never `navigator.clipboard` directly, which is missing over plain http.
+- Icon-only buttons have an `aria-label`. The × that closes something is `Button variant="ghost" icon="times" aria-label="Close"`; the `aria-label` is its tooltip (Button never sets `title`); a copy is `CopyButton` (or `copyText` from `kit/clipboard.ts` behind a menu item), never `navigator.clipboard` directly, which is missing over plain http.
 - Shared pieces style themselves in `<style scoped>`, not in `@layer wp-extension`: the manager's Tailwind reset is unlayered and would beat a layered rule on `<button>`.
 - Motion respects `prefers-reduced-motion`.
 
@@ -82,7 +82,7 @@ Anything that floats goes through the kit's overlays and positions with `floatin
 | Menu at the pointer | `ContextMenu` |
 | Hint | `v-tooltip` |
 | Side panel | `Drawer` |
-| Dialog | `Modal` / `ConfirmModal` (manager), `ModalShell` / `ConfirmDialog` (canvas) |
+| Dialog | `Modal` / `ConfirmModal` (both sides), `ModalShell` for a panel of its own |
 
 Anything that floats next to a trigger follows it when the page scrolls or resizes; a menu opened at the pointer closes on scroll. Never write another Teleport with its own placement maths, scroll handling or outside-click handler.
 
@@ -99,15 +99,15 @@ A panel closes once its trigger has scrolled out of view. A scroll inside the pa
 
 When the canvas needs its own version of a manager control (Button, Switch, Select, Number), both versions use the same stylesheet in the kit (`button.css`, `WpSwitch.vue`). A change to one then changes both. The kit shows each shared piece in both looks (`kit/KitLooks.vue` draws a demo twice, at the canvas size `sm` and the manager size `md`; the manager never loads the canvas colours, so both wear the manager's).
 
-Better still is one component for both sides, with only `size` changing. `WpSwitch` is the on/off switch everywhere (the manager's `Toggle` is `WpSwitch` at `md`), and `WpTabs` and `WpSegmented` are the tabs and value pickers everywhere. A canvas widget never draws its own `role="switch"`, tab strip or joined-button group.
+Better still is one component for both sides, with only `size` changing. `WpSwitch` is the on/off switch everywhere (`size="md"` in the manager), and `WpTabs` and `WpSegmented` are the tabs and value pickers everywhere. A canvas widget never draws its own `role="switch"`, tab strip or joined-button group.
 
-`WpButton` is the canvas Button: the manager `Button`'s variants, sizes and `button.css`, pulled in scoped, with a PrimeIcons `icon` and `sm` by default. Every canvas dialog footer, toolbar, reset, retry and launcher button is a `WpButton`; never another `__btn` class with its own colours. Both buttons also have:
+`Button` is the one button on both sides: variants, sizes and `button.css` pulled in scoped, with a PrimeIcons `icon` (with or without `pi-`) and `iconRight`. It is `md` by default, so canvas buttons pass `size="sm"`. Every canvas dialog footer, toolbar, reset, retry and launcher button is a `Button`; never another `__btn` class with its own colours. It also has:
 
 - `variant="add"`: the dashed "Add a row" button at the end of a list, with `block` for full width.
 - `pressed`: a toggle (`aria-pressed`), such as "favourites only" or a filter panel trigger.
-- `hint` (WpButton, WpIconButton): a tooltip, `kbd` (WpButton) its key chip. Don't put `v-tooltip` on the component, which would fight the button's own.
+- `hint` (Button, WpIconButton): a tooltip, `kbd` (Button) its key chip. Don't put `v-tooltip` on the component, which would fight the button's own.
 
-Inside a row (module, injector, bundle and Model Info rows, the Context toolbar), the icon actions are `WpIconButton`: 20 px, a `tone` that tints the icon on hover and the box while `pressed`, `pressed="mixed"` for a bundle's "some children" state, and `variant="bare"` for the fold caret. Every × that closes a canvas dialog is `CloseButton size="sm"`. Every checkmark box is `WpCheck`, including the 12 px on/off box of module, bundle and injector rows (`size="sm"`). The Settings live preview (`components/settings/`) uses the same pieces as the nodes it previews.
+Inside a row (module, injector, bundle and Model Info rows, the Context toolbar), the icon actions are `WpIconButton`: 20 px, a `tone` that tints the icon on hover and the box while `pressed`, `pressed="mixed"` for a bundle's "some children" state, and `variant="bare"` for the fold caret. Every × that closes a canvas dialog is `Button variant="ghost" icon="times" size="sm"`. Every checkmark box is `Checkbox`, including the 12 px on/off box of module, bundle and injector rows (`size="sm"`). The Settings live preview (`components/settings/`) uses the same pieces as the nodes it previews.
 
 ## 9. Isolation
 
@@ -137,7 +137,7 @@ Each of these jobs has exactly one component. Don't build a second one, and don'
 | A tag, status or category | `Chip` (`tone` for meaning, `color` + `icon` for a category) | `CategoryChip` (merged), a pill `span` |
 | A toast | `useToast()` (manager) or `pushToast()` (canvas); both draw `ToastCard` | a toast styled per surface |
 | Look at a picture closely | `WpImageZoom` (`v-model:zoom`, Fit / 100% / 200%, wheel, drag) | an `<img>` with `max-width: 100%` called a zoom, a hand-made transform with its own wheel and drag code |
-| Ask before acting | `ConfirmModal` (manager), `ConfirmDialog` (canvas) | `window.confirm()`, `ConfirmDialog` in the manager |
+| Ask before acting | `ConfirmModal` (both sides; `tone="danger"` for what can't be undone) | `window.confirm()` |
 | How far a job is | `ProgressBar` (no `value` while unknown) | a div with a width set by hand |
 | Content about to land | `Skeleton`; a whole page or panel: `LoadingMark block` | `wp-skel` classes, a "Loading…" flash |
 | A count or a status dot | `Badge` (`dot` + `text` or `label`) | a coloured span, a count pill |
@@ -156,7 +156,7 @@ Each of these jobs has exactly one component. Don't build a second one, and don'
 | A row of tool buttons | `Toolbar` (`attached` for a button group) | a flex row with a Tab stop per button |
 | Pick from a long list | `Combobox` (`multiple` for several) | a search box over a hand-made list |
 | A calendar day | `DatePicker` | `<input type="date">` |
-| A low and high number | `RangeSlider` | two Sliders that can cross |
+| A low and high number | `Slider` with a `[low, high]` v-model | two Sliders that can cross |
 | One of a few explained options | `RadioGroup` (`cards` for big choices) | `.wp-radio` inputs with own hint text |
 | One of a few options that need a picture | `ChoiceCards` (`compact` for a side panel) | a grid of `role="radio"` buttons with their own selected border |
 | A person or bot | `Avatar` | an initials circle per screen |

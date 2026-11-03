@@ -14,8 +14,8 @@ import {
   type Ast,
 } from "@/manager/parsing/subcatFilter";
 import OptionRow from "./OptionRow.vue";
-import WpCheck from "@/kit/WpCheck.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Checkbox from "@/kit/Checkbox.vue";
+import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import { axisHueAt, UNGROUPED_HUE } from "../../../../shared/axis-color";
 
@@ -366,13 +366,14 @@ const skewedTowards = computed(() => {
       <span v-if="!poolOpen && tickedCount > 0" class="pool__collapsed-count" data-test="pool-collapsed-count">
         {{ tickedCount }} selected
       </span>
-      <WpButton
+      <Button
+        size="sm"
         variant="outline"
         class="pool__adv-toggle"
         data-test="pool-advanced"
         :pressed="advanced"
         @click="toggleAdvanced"
-      >ƒ(x) Advanced</WpButton>
+      >ƒ(x) Advanced</Button>
     </div>
 
     <!-- Quick mode — grouped pills. OR within an axis, AND across axes. -->
@@ -515,7 +516,7 @@ const skewedTowards = computed(() => {
       class="pool__allow-repeats"
       data-test="pool-allow-repeats"
     >
-      <WpCheck
+      <Checkbox
         :model-value="pickIndependent"
         aria-label="Allow repeats"
         @update:model-value="setPickIndependent"
@@ -535,7 +536,7 @@ const skewedTowards = computed(() => {
       :class="{ 'pool__exclude-null--off': multiActive }"
       data-test="pool-exclude-null"
     >
-      <WpCheck
+      <Checkbox
         :model-value="excludeNull"
         :disabled="multiActive"
         aria-label="Exclude null option"

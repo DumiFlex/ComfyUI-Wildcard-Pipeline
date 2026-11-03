@@ -291,7 +291,7 @@ const state = reactive<{
   collapseMode: CollapseMode;
   colorIntensity: ColorIntensity;
   /** When true, destructive bundle ops (remove / reset-to-library /
-   *  save-to-library) prompt via the themed ConfirmDialog before
+   *  save-to-library) prompt via the themed ConfirmModal before
    *  committing. When false, the op runs immediately and falls back
    *  to the toast Undo for recovery. */
   confirmDestructiveBundle: boolean;

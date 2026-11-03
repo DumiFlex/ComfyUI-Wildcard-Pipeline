@@ -2,7 +2,7 @@
 import { computed, nextTick, ref } from "vue";
 import Combobox from "@/kit/Combobox.vue";
 import ColorField from "@/kit/ColorField.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import WpSelect from "@/kit/WpSelect.vue";
 import { vTooltip } from "@/kit/tooltip";
@@ -245,8 +245,8 @@ function insertIcon(name: string): void {
         @pick="(n: string) => { linkIcon = n; pickIcon = false; }"
       />
       <div class="wp-note-ed__actions">
-        <WpButton size="sm" variant="ghost" data-test="note-link-cancel" @click="panel = ''">Cancel</WpButton>
-        <WpButton size="sm" variant="primary" :disabled="!linkReady" data-test="note-link-insert" @click="insertLink">Insert link</WpButton>
+        <Button size="sm" variant="ghost" data-test="note-link-cancel" @click="panel = ''">Cancel</Button>
+        <Button size="sm" variant="primary" :disabled="!linkReady" data-test="note-link-insert" @click="insertLink">Insert link</Button>
       </div>
     </div>
 

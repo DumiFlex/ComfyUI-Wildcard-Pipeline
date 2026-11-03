@@ -21,7 +21,7 @@ import { applyVarAccessor, type ResolvedValue } from "../../../../../widgets/ric
 // asset and only pulled in when the combine instance modal opens. Bundle
 // budget is tight — eager import pushes total over.
 import type { VarProducerLike } from "../../../../../manager/components/RefChip.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 const RichTextInput = defineAsyncComponent(
   () => import("../../../../../manager/components/RichTextInput.vue"),
 );
@@ -302,8 +302,9 @@ function onResetNegative(): void {
       <span class="wp-tpl__label">Template</span>
       <span class="wp-tpl__hint">$name refs · $$ for literal $ · {a|b|c} inline choice</span>
       <div class="wp-tpl__head-actions">
-        <WpButton
+        <Button
           v-if="templateOverridden"
+          size="sm"
           variant="outline"
           icon="pi-replay"
           data-test="tpl-reset"
@@ -398,8 +399,9 @@ function onResetNegative(): void {
       <span class="wp-tpl__label">Negative</span>
       <span class="wp-tpl__hint">goes to the Assembler's negative when its template uses ${{ outputVar || "output" }}</span>
       <div class="wp-tpl__head-actions">
-        <WpButton
+        <Button
           v-if="negativeOverridden"
+          size="sm"
           variant="outline"
           icon="pi-replay"
           data-test="tpl-neg-reset"

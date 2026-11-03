@@ -9,7 +9,7 @@
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { aiDebugEnabled, setAiDebug } from "../../../api/ai-debug";
-import Toggle from "@/kit/Toggle.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
 import Select from "@/kit/Select.vue";
 import Input from "@/kit/Input.vue";
 import Button from "@/kit/Button.vue";
@@ -699,7 +699,8 @@ const off = computed(() => !config.value?.enabled);
             hint="Adds the AI tools: drafting and editing in the module editors, Describe, Organize, the chat and the Pack builder. They use a model you already have: Claude, OpenAI, or a server on your machine. Off by default, and nothing is sent anywhere until you turn it on."
             setting-key="ai-enabled"
           >
-            <Toggle
+            <WpSwitch
+              size="md"
               :model-value="config.enabled"
               aria-label="Turn on the AI assistant"
               data-test="ai-enabled"
@@ -1119,7 +1120,8 @@ const off = computed(() => !config.value?.enabled);
             hint="Select text anywhere in the manager (docs, replies, warnings) and a small Explain / Ask bar appears above it. Ctrl+Shift+X explains the selection without it. The browser's right-click menu is left alone. Saved in this browser."
             setting-key="ai-explain-chip"
           >
-            <Toggle
+            <WpSwitch
+              size="md"
               :model-value="ui.explainChip"
               aria-label="Show Explain on selected text"
               data-test="ai-explain-chip"
@@ -1132,7 +1134,8 @@ const off = computed(() => !config.value?.enabled);
             hint="A folded Thinking line with what a thinking model reasoned before each step. Off hides it; the model still thinks as Thinking above says. Saved in this browser."
             setting-key="ai-chat-show-thinking"
           >
-            <Toggle
+            <WpSwitch
+              size="md"
               :model-value="ui.chatThinking"
               aria-label="Show thinking"
               data-test="ai-chat-show-thinking"
@@ -1145,7 +1148,8 @@ const off = computed(() => !config.value?.enabled);
             hint="Text the model wrote between steps (“Let me check the docs first”), folded above the reply. Saved in this browser."
             setting-key="ai-chat-show-notes"
           >
-            <Toggle
+            <WpSwitch
+              size="md"
               :model-value="ui.chatNotes"
               aria-label="Show working notes"
               data-test="ai-chat-show-notes"
@@ -1158,7 +1162,8 @@ const off = computed(() => !config.value?.enabled);
             hint="The lines above a reply that list what the assistant read, searched and ran (“Read the docs: What the assistant can do”). Off shows only the reply and its cards. Saved in this browser."
             setting-key="ai-chat-show-steps"
           >
-            <Toggle
+            <WpSwitch
+              size="md"
               :model-value="ui.chatSteps"
               aria-label="Show what it did"
               data-test="ai-chat-show-steps"
@@ -1171,7 +1176,8 @@ const off = computed(() => !config.value?.enabled);
             hint="The reply appears word by word as the model writes it, instead of all at once when it is done, and with Show thinking on, the Thinking box fills as the model thinks. Works with every provider that streams, local ones included. Saved in this browser."
             setting-key="ai-chat-type-out"
           >
-            <Toggle
+            <WpSwitch
+              size="md"
               :model-value="ui.chatTyping"
               aria-label="Type out replies"
               data-test="ai-chat-type-out"
@@ -1187,7 +1193,8 @@ const off = computed(() => !config.value?.enabled);
             hint="The chat can propose deleting modules, bundles, templates, categories and tags. Each delete card still asks you to confirm, and Undo brings everything back. Off by default."
             setting-key="ai-allow-delete"
           >
-            <Toggle
+            <WpSwitch
+              size="md"
               :model-value="config.allow_delete"
               aria-label="Let the assistant delete items"
               data-test="ai-allow-delete"
@@ -1200,7 +1207,8 @@ const off = computed(() => !config.value?.enabled);
             hint="New descriptions, tags and categories from the chat are applied without a click. Each card says it was applied and keeps its Undo. Ratings, content, renames and deletes always wait for you. Off by default."
             setting-key="ai-auto-apply"
           >
-            <Toggle
+            <WpSwitch
+              size="md"
               :model-value="config.auto_apply"
               aria-label="Apply small changes automatically"
               data-test="ai-auto-apply"
@@ -1334,7 +1342,8 @@ const off = computed(() => !config.value?.enabled);
             hint="Lets the chat look a tag up on danbooru.donmai.us: what it means (wiki), its aliases, what it implies and the tags used with it most. Read only, tags and wiki only, never posts or images, one request a second. Each lookup asks you first. For spellings and post counts the downloaded tag list is enough and stays offline."
             setting-key="ai-danbooru"
           >
-            <Toggle
+            <WpSwitch
+              size="md"
               :model-value="config.danbooru_lookup"
               aria-label="Danbooru tag lookup"
               data-test="ai-danbooru"
@@ -1348,7 +1357,8 @@ const off = computed(() => !config.value?.enabled);
             hint="Web searches, page reads and Danbooru lookups run without the Allow card. The chat then decides what leaves your machine; you still see each one in its steps."
             setting-key="ai-web-always"
           >
-            <Toggle
+            <WpSwitch
+              size="md"
               :model-value="config.web_always_allow"
               aria-label="Don't ask before web calls"
               data-test="ai-web-always"
@@ -1437,7 +1447,8 @@ const off = computed(() => !config.value?.enabled);
             hint="Small and medium models on a local server, in JSON steps: each step first names the tool to call, then writes only that tool's arguments. Can help a model that picks the wrong tool; it costs a little time per step. Off by default."
             setting-key="ai-choose-first"
           >
-            <Toggle
+            <WpSwitch
+              size="md"
               :model-value="!!config.choose_first"
               aria-label="Choose the tool first"
               data-test="ai-choose-first"
@@ -1450,7 +1461,8 @@ const off = computed(() => !config.value?.enabled);
             hint="Small models on a local server, in JSON steps: the instructions name each tool in one line, and a tool's full description comes the first time a step offers it. About 2,000 fewer tokens per step. New chats only. Off by default."
             setting-key="ai-lean-prompt"
           >
-            <Toggle
+            <WpSwitch
+              size="md"
               :model-value="!!config.lean_prompt"
               aria-label="Short tool list"
               data-test="ai-lean-prompt"
@@ -1463,7 +1475,8 @@ const off = computed(() => !config.value?.enabled);
             hint="Records every AI request with each model call it made: the prompt as sent, the reply, thinking, tool calls, tokens and errors. A button in the top bar then lists the last 30, each with Copy debug. Also saved as files in the ai-debug folder next to your library (the newest 300). Holds your library's text, so look before you share a copy. Saved in this browser."
             setting-key="ai-debug-log"
           >
-            <Toggle
+            <WpSwitch
+              size="md"
               :model-value="aiDebugEnabled"
               aria-label="Debug log"
               data-test="ai-debug-log"

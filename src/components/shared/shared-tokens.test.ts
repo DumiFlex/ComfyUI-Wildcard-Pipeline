@@ -34,7 +34,7 @@ describe("shared token names", () => {
   it("are the only --wp names the shared pieces left here read", () => {
     const shared = new Set<string>(SHARED_TOKENS);
     // Kit pieces are held to the list by wp-kit's tokens.test.ts.
-    const files = [resolve(KIT, "ConfirmDialog.vue")];
+    const files = ["ConfirmModal.vue", "Modal.vue", "ModalShell.vue"].map((f) => resolve(KIT, f));
     const stray = files.flatMap((f) =>
       [...read(f).matchAll(/var\((--wp-[a-z0-9-]+)/g)].map((m) => m[1]).filter((n) => !shared.has(n)).map((n) => `${f}: ${n}`),
     );

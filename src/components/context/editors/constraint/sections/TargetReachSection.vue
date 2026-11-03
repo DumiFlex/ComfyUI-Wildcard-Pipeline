@@ -27,7 +27,7 @@ import {
   type ChainModule,
   type TargetSelect,
 } from "../../../../../extension/constraint-pairs";
-import WpCheck from "@/kit/WpCheck.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import { clauseActions } from "../../../../../extension/derivation-conditions";
@@ -253,7 +253,7 @@ function togglePick(entry: PickEntry): void {
 }
 
 /** Pointer clicks anywhere on a pick row toggle it. Clicks that started
- *  inside the WpCheck (or any future interactive descendant) are ignored —
+ *  inside the Checkbox (or any future interactive descendant) are ignored —
  *  the control already emitted its own toggle, and handling it twice would
  *  cancel the change out. */
 function onPickRowClick(ev: MouseEvent, entry: PickEntry): void {
@@ -319,7 +319,7 @@ const hint = computed<string>(() => {
         class="rh-pick__empty"
         data-test="reach-pick-empty"
       >No reachable target instances — use first / next / all.</div>
-      <!-- WpCheck remains the single FOCUS target (it owns role + keyboard
+      <!-- Checkbox remains the single FOCUS target (it owns role + keyboard
            + aria-label), so keyboard and screen-reader users get exactly one
            stop per row. The row additionally takes POINTER clicks: hitting a
            14px checkbox for every pick was needless precision work. The two
@@ -332,7 +332,7 @@ const hint = computed<string>(() => {
         :data-test="`reach-pick-${row.key}`"
         @click="onPickRowClick($event, row.entry)"
       >
-        <WpCheck
+        <Checkbox
           :model-value="isPicked(row.entry)"
           :aria-label="`Cover ${row.name}`"
           @update:model-value="togglePick(row.entry)"

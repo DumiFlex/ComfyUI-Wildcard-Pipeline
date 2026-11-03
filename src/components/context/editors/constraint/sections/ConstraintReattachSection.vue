@@ -24,7 +24,7 @@
  */
 import { ref } from "vue";
 import type { WildcardRefData } from "../../../../../manager/utils/library-suggestions";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 
 const props = withDefaults(defineProps<{
   danglingSource: boolean;
@@ -149,14 +149,15 @@ function confirm(side: Side): void {
         <span v-if="sourceCachedName"> (was “{{ sourceCachedName }}”)</span>
         is not in your library.
       </span>
-      <WpButton data-test="reattach-btn-source" @click="openDropdown('source')">Reattach</WpButton>
-      <WpButton
+      <Button size="sm" data-test="reattach-btn-source" @click="openDropdown('source')">Reattach</Button>
+      <Button
         v-if="downloadableSides.source"
+        size="sm"
         variant="outline"
         icon="pi-cloud-download"
         data-test="reattach-download-source"
         @click="emit('downloadreattach', { side: 'source' })"
-      >Download from community</WpButton>
+      >Download from community</Button>
 
       <div v-if="openSide === 'source'" class="rb__picker">
         <input v-model="query" type="text" class="rb__search" placeholder="Search wildcards…" spellcheck="false" aria-label="Search wildcards to reattach source" />
@@ -185,12 +186,13 @@ function confirm(side: Side): void {
           This changes the constraint everywhere it's used.
         </p>
         <p class="rb__note">Cancel is the only undo — confirm is final.</p>
-        <WpButton
+        <Button
+          size="sm"
           variant="primary"
           data-test="reattach-confirm-source"
           :disabled="!picked || undefined"
           @click="confirm('source')"
-        >Confirm reattach</WpButton>
+        >Confirm reattach</Button>
       </div>
     </div>
 
@@ -201,14 +203,15 @@ function confirm(side: Side): void {
         <span v-if="targetCachedName"> (was “{{ targetCachedName }}”)</span>
         is not in your library.
       </span>
-      <WpButton data-test="reattach-btn-target" @click="openDropdown('target')">Reattach</WpButton>
-      <WpButton
+      <Button size="sm" data-test="reattach-btn-target" @click="openDropdown('target')">Reattach</Button>
+      <Button
         v-if="downloadableSides.target"
+        size="sm"
         variant="outline"
         icon="pi-cloud-download"
         data-test="reattach-download-target"
         @click="emit('downloadreattach', { side: 'target' })"
-      >Download from community</WpButton>
+      >Download from community</Button>
 
       <div v-if="openSide === 'target'" class="rb__picker">
         <input v-model="query" type="text" class="rb__search" placeholder="Search wildcards…" spellcheck="false" aria-label="Search wildcards to reattach target" />
@@ -237,12 +240,13 @@ function confirm(side: Side): void {
           This changes the constraint everywhere it's used.
         </p>
         <p class="rb__note">Cancel is the only undo — confirm is final.</p>
-        <WpButton
+        <Button
+          size="sm"
           variant="primary"
           data-test="reattach-confirm-target"
           :disabled="!picked || undefined"
           @click="confirm('target')"
-        >Confirm reattach</WpButton>
+        >Confirm reattach</Button>
       </div>
     </div>
   </section>

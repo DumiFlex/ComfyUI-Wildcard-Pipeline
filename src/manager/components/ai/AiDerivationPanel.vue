@@ -137,7 +137,7 @@ function close(): void {
           data-test="ai-rule"
         >
           <label class="wp-ai-rules__head">
-            <Checkbox class="wp-checkbox--inline wp-ai-rules__check" :model-value="!unticked.has(i)" @update:model-value="toggle(i)" />
+            <Checkbox class="wp-ai-rules__check" :model-value="!unticked.has(i)" @update:model-value="toggle(i)" />
             <span class="wp-ai-rules__summary">{{ r.summary }}</span>
             <span v-if="changes[i]" class="wp-ai-rules__changes" data-test="ai-rule-changes">Changes rule {{ changes[i]?.at }}</span>
           </label>

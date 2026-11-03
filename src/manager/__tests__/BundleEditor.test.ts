@@ -147,7 +147,7 @@ describe("BundleEditor.vue", () => {
     });
     const wrap = mountEditor({ id: "bn_x" });
     await flushPromises();
-    // The ColorPicker swatch has its background set from the color ref.
+    // The ColorField swatch has its background set from the color ref.
     // Easiest reliable assertion: the editor doesn't crash, child count
     // surfaces zero, and the empty-children message renders.
     expect(wrap.text()).toContain("This bundle has no children yet");

@@ -164,7 +164,7 @@ describe("TargetReachSection — pick checklist", () => {
   });
 
   it("a checkbox click toggles exactly once (row handler must not double-fire)", async () => {
-    // The row handler and WpCheck both see the click as it bubbles. If the
+    // The row handler and Checkbox both see the click as it bubbles. If the
     // row didn't bail on interactive descendants the second toggle would
     // undo the first and ticking would appear to do nothing.
     const { w, updates } = mountSection({ mode: "pick", picks: [] });

@@ -3,11 +3,10 @@ import Kbd from "@/kit/Kbd.vue";
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, ref, watch } from "vue";
 import ModalShell from "@/kit/ModalShell.vue";
-import ConfirmDialog from "@/kit/ConfirmDialog.vue";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
 import { api } from "../../manager/api/client";
 import type { BundleRow } from "../../manager/api/types";
-import WpButton from "@/kit/WpButton.vue";
-import CloseButton from "@/kit/CloseButton.vue";
+import Button from "@/kit/Button.vue";
 import Skeleton from "@/kit/Skeleton.vue";
 
 const props = defineProps<{
@@ -100,7 +99,7 @@ function kindCompositionPills(b: BundleRow): Array<{ label: string; cls: string 
 }
 
 // Pending re-insert confirmation. Set when the user clicks a row
-// that's already in this Context — opens the themed ConfirmDialog
+// that's already in this Context — opens the themed ConfirmModal
 // and parks the row here until the dialog resolves. Cleared on both
 // confirm + cancel. Replaces a synchronous window.confirm which
 // ComfyUI hosts can suppress AND looked out-of-place against the WP
@@ -188,7 +187,7 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
             <span class="wp-bp__title-detail">· {{ filtered.length }} {{ filtered.length === 1 ? "bundle" : "bundles" }}</span>
           </div>
         </div>
-        <CloseButton size="sm" kbd="Esc" @click="emit('close')" />
+        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" @click="emit('close')" />
       </header>
 
       <div class="wp-bp__toolbar">
@@ -218,7 +217,7 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
         <div v-else-if="loadError" class="wp-bp__state wp-bp__state--err">
           <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>
           {{ loadError }}
-          <WpButton @click="reload">Retry</WpButton>
+          <Button size="sm" @click="reload">Retry</Button>
         </div>
         <div v-else-if="filtered.length === 0" class="wp-bp__state">
           <i class="pi pi-inbox" aria-hidden="true"></i>
@@ -275,18 +274,19 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
           <Kbd keys="Esc" size="sm" />
           <span class="wp-bp__hint-label">cancel</span>
         </div>
-        <WpButton @click="emit('close')">Cancel</WpButton>
-        <WpButton
+        <Button size="sm" @click="emit('close')">Cancel</Button>
+        <Button
+          size="sm"
           variant="primary"
           icon="pi-plus"
           data-testid="bundle-picker-create"
           @click="emit('create')"
-        >Create Bundle</WpButton>
+        >Create Bundle</Button>
       </div>
     </div>
   </ModalShell>
-    <ConfirmDialog
-      :visible="pendingReinsert !== null"
+    <ConfirmModal
+      :open="pendingReinsert !== null"
       :title="confirmTitle"
       :body="confirmBody"
       confirm-label="Insert"

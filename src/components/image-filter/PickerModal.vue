@@ -37,7 +37,7 @@ import {
 } from "./picker-state";
 import { axisHueAt } from "../shared/axis-color";
 import { frameValues, promptRuns, valuesText } from "./picker-details";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
 import { vTooltip } from "@/kit/tooltip";
 
@@ -558,7 +558,7 @@ const subLine = computed(() => {
           :disabled="!total"
           @update:model-value="(m) => setMode(m)"
         />
-        <WpButton variant="ghost" icon="pi-minus" aria-label="Hide for now (the run keeps waiting)" data-test="image-filter-minimize" @click="emit('minimize')" />
+        <Button size="sm" variant="ghost" icon="pi-minus" aria-label="Hide for now (the run keeps waiting)" data-test="image-filter-minimize" @click="emit('minimize')" />
       </div>
 
       <!-- Grid -->
@@ -615,13 +615,13 @@ const subLine = computed(() => {
               </span>
               <template v-if="imgs.length > 1">
                 <span v-if="pickedIn(f)" class="wp-ifp__frame-count">{{ pickedIn(f) }} of {{ imgs.length }}</span>
-                <WpButton
+                <Button
                   variant="ghost"
                   size="sm"
                   :hint="pickedIn(f) === imgs.length ? 'Leave out every image of this frame' : 'Pick every image of this frame'"
                   :data-test="`image-filter-pick-frame-${f}`"
                   @click.stop="toggleFrames([f])"
-                >{{ pickedIn(f) === imgs.length ? "Clear frame" : "Pick frame" }}</WpButton>
+                >{{ pickedIn(f) === imgs.length ? "Clear frame" : "Pick frame" }}</Button>
               </template>
             </div>
             <div class="wp-ifp__tiles">
@@ -658,7 +658,7 @@ const subLine = computed(() => {
       <div v-else-if="mode === 'detail' && cell" class="wp-ifp__detail" data-test="image-filter-detail">
         <div class="wp-ifp__stage">
           <div class="wp-ifp__view">
-            <WpButton variant="ghost" icon="pi-chevron-left" aria-label="Previous image" kbd="←" data-test="image-filter-prev" @click="step(-1)" />
+            <Button size="sm" variant="ghost" icon="pi-chevron-left" aria-label="Previous image" kbd="←" data-test="image-filter-prev" @click="step(-1)" />
             <figure class="wp-ifp__fig">
               <MaskPainter
                 v-if="painting"
@@ -698,7 +698,7 @@ const subLine = computed(() => {
                 @dblclick="setMode('zoom')"
               >
             </figure>
-            <WpButton variant="ghost" icon="pi-chevron-right" aria-label="Next image" kbd="→" data-test="image-filter-next" @click="step(1)" />
+            <Button size="sm" variant="ghost" icon="pi-chevron-right" aria-label="Next image" kbd="→" data-test="image-filter-next" @click="step(1)" />
           </div>
           <div v-if="total > 1" class="wp-ifp__strip" :class="{ 'is-grouped': multiFrame }" role="list" aria-label="All images" data-test="image-filter-strip">
             <div
@@ -754,7 +754,8 @@ const subLine = computed(() => {
             </div>
           </div>
           <div class="wp-ifp__side-actions">
-            <WpButton
+            <Button
+              size="sm"
               :variant="isPicked ? 'primary' : 'secondary'"
               :icon="isPicked ? 'pi-check' : 'pi-circle'"
               kbd="P"
@@ -762,9 +763,10 @@ const subLine = computed(() => {
               :aria-pressed="isPicked"
               data-test="image-filter-pick"
               @click="pickCurrent"
-            >{{ isPicked ? "Picked" : "Pick" }}</WpButton>
-            <WpButton
+            >{{ isPicked ? "Picked" : "Pick" }}</Button>
+            <Button
               v-if="total > 1"
+              size="sm"
               :variant="comparePin !== null ? 'secondary' : 'ghost'"
               icon="pi-clone"
               kbd="C"
@@ -772,8 +774,8 @@ const subLine = computed(() => {
               :aria-pressed="comparePin !== null"
               data-test="image-filter-compare-pin"
               @click="togglePin"
-            >{{ comparePin === null ? "Compare" : compareCell ? "Stop comparing" : "Pinned, pick another" }}</WpButton>
-            <WpButton v-if="multiFrame && frameSize > 1" variant="ghost" icon="pi-th-large" hint="Pick or leave out every image of this frame" data-test="image-filter-details-frame" @click="toggleFrames([cell.frame])">Pick frame ({{ frameSize }})</WpButton>
+            >{{ comparePin === null ? "Compare" : compareCell ? "Stop comparing" : "Pinned, pick another" }}</Button>
+            <Button v-if="multiFrame && frameSize > 1" size="sm" variant="ghost" icon="pi-th-large" hint="Pick or leave out every image of this frame" data-test="image-filter-details-frame" @click="toggleFrames([cell.frame])">Pick frame ({{ frameSize }})</Button>
           </div>
           <WpTabs v-model="sideTab" :tabs="sideTabs" size="sm" aria-label="Image details" test-prefix="image-filter-tab" />
 
@@ -811,7 +813,7 @@ const subLine = computed(() => {
                   tabindex="0"
                   data-test="image-filter-no-clip"
                 >text only</span>
-                <WpButton v-if="isEdited(field)" variant="link" @click="resetText(field)">Reset</WpButton>
+                <Button v-if="isEdited(field)" size="sm" variant="link" @click="resetText(field)">Reset</Button>
                 <CopyButton
                   :text="textValue(field)"
                   :label="field === 'positive' ? 'Copy prompt' : 'Copy negative'"
@@ -853,7 +855,8 @@ const subLine = computed(() => {
               <span>Mask</span>
               <span v-if="maskValue" class="wp-ifp__badge">painted</span>
               <span class="wp-ifp__spacer" />
-              <WpButton
+              <Button
+                size="sm"
                 :variant="painting ? 'secondary' : 'ghost'"
                 icon="pi-pencil"
                 kbd="M"
@@ -861,7 +864,7 @@ const subLine = computed(() => {
                 :aria-pressed="painting"
                 data-test="image-filter-paint"
                 @click="togglePaint"
-              >{{ painting ? "Done" : "Paint" }}</WpButton>
+              >{{ painting ? "Done" : "Paint" }}</Button>
             </div>
             <template v-if="painting">
               <WpSegmented v-model="tool" :options="TOOL_OPTIONS" size="sm" block aria-label="Tool" test-prefix="image-filter-tool" />
@@ -875,10 +878,10 @@ const subLine = computed(() => {
                 <Slider v-model="strength" :min="5" :max="100" :step="5" size="sm" aria-label="Strength" :format="pct" show-value data-test="image-filter-brush-strength" />
               </div>
               <div class="wp-ifp__row">
-                <WpButton variant="ghost" icon="pi-undo" kbd="Ctrl Z" hint="Undo" aria-label="Undo" :disabled="!painter?.canUndo" data-test="image-filter-mask-undo" @click="painter?.undo()" />
-                <WpButton variant="ghost" icon="pi-refresh" kbd="Ctrl Shift Z" hint="Redo" aria-label="Redo" :disabled="!painter?.canRedo" data-test="image-filter-mask-redo" @click="painter?.redo()" />
-                <WpButton variant="ghost" @click="painter?.invert()">Invert</WpButton>
-                <WpButton variant="ghost" data-test="image-filter-mask-clear" @click="painter?.clear()">Clear</WpButton>
+                <Button size="sm" variant="ghost" icon="pi-undo" kbd="Ctrl Z" hint="Undo" aria-label="Undo" :disabled="!painter?.canUndo" data-test="image-filter-mask-undo" @click="painter?.undo()" />
+                <Button size="sm" variant="ghost" icon="pi-refresh" kbd="Ctrl Shift Z" hint="Redo" aria-label="Redo" :disabled="!painter?.canRedo" data-test="image-filter-mask-redo" @click="painter?.redo()" />
+                <Button size="sm" variant="ghost" @click="painter?.invert()">Invert</Button>
+                <Button size="sm" variant="ghost" data-test="image-filter-mask-clear" @click="painter?.clear()">Clear</Button>
               </div>
               <p class="wp-ifp__hint">Hardness softens the edge of the brush, lasso and fill; Strength masks part-way (inpainting changes those parts less). [ ] change the size. Images you don't paint keep the incoming mask.</p>
             </template>
@@ -913,10 +916,11 @@ const subLine = computed(() => {
           autohide
         >
           <template #bar-start>
-            <WpButton variant="ghost" icon="pi-chevron-left" aria-label="Previous image" kbd="←" data-test="image-filter-prev" @click="step(-1)" />
+            <Button size="sm" variant="ghost" icon="pi-chevron-left" aria-label="Previous image" kbd="←" data-test="image-filter-prev" @click="step(-1)" />
           </template>
           <template #bar-end>
-            <WpButton
+            <Button
+              size="sm"
               :variant="comparePin !== null ? 'secondary' : 'ghost'"
               icon="pi-clone"
               kbd="C"
@@ -924,16 +928,17 @@ const subLine = computed(() => {
               :aria-pressed="comparePin !== null"
               data-test="image-filter-zoom-compare"
               @click="togglePin"
-            >{{ comparePin === null ? "Compare" : compareCell ? "Comparing" : "Pinned" }}</WpButton>
-            <WpButton
+            >{{ comparePin === null ? "Compare" : compareCell ? "Comparing" : "Pinned" }}</Button>
+            <Button
+              size="sm"
               :variant="isPicked ? 'primary' : 'secondary'"
               :icon="isPicked ? 'pi-check' : 'pi-circle'"
               kbd="P"
               :aria-pressed="isPicked"
               data-test="image-filter-pick"
               @click="pickCurrent"
-            >{{ isPicked ? "Picked" : "Pick" }}</WpButton>
-            <WpButton variant="ghost" icon="pi-chevron-right" aria-label="Next image" kbd="→" data-test="image-filter-next" @click="step(1)" />
+            >{{ isPicked ? "Picked" : "Pick" }}</Button>
+            <Button size="sm" variant="ghost" icon="pi-chevron-right" aria-label="Next image" kbd="→" data-test="image-filter-next" @click="step(1)" />
           </template>
           <template #first>
             <span class="wp-ifp__zoom-cap" data-test="image-filter-zoom-cap">
@@ -970,7 +975,7 @@ const subLine = computed(() => {
               <span class="wp-ifp__full-sep" aria-hidden="true" />
             </template>
             <span class="wp-ifp__full-count"><strong>{{ pickedList.length }}</strong> of {{ total }} picked</span>
-            <WpButton variant="primary" kbd="Enter" :disabled="pickedList.length === 0" data-test="image-filter-full-keep" @click="keepPicked">{{ pickedList.length ? `Keep ${pickedList.length} picked` : "Keep picked" }}</WpButton>
+            <Button size="sm" variant="primary" kbd="Enter" :disabled="pickedList.length === 0" data-test="image-filter-full-keep" @click="keepPicked">{{ pickedList.length ? `Keep ${pickedList.length} picked` : "Keep picked" }}</Button>
           </template>
         </WpImageZoom>
       </div>
@@ -982,10 +987,10 @@ const subLine = computed(() => {
           <span v-if="leftLabel" class="wp-ifp__left" :class="{ 'is-low': (left ?? 99) <= 30 }">{{ leftLabel }}</span>
         </div>
         <span class="wp-ifp__spacer" />
-        <WpButton v-if="canSendToLoop" :disabled="pickedFrames === 0" hint="Lock the picked frames' seeds in the Context Loop and bypass the rest, so the next run repeats only your picks" data-test="image-filter-send-loop" @click="sendToLoop">Send to Loop</WpButton>
-        <WpButton variant="danger" hint="Skip everything after this node for this run" data-test="image-filter-stop" @click="stop">Stop branch</WpButton>
-        <WpButton data-test="image-filter-keep-all" @click="keepAll">Keep all {{ total }}</WpButton>
-        <WpButton variant="primary" kbd="Enter" :disabled="pickedList.length === 0" data-test="image-filter-keep-picked" @click="keepPicked">{{ pickedList.length ? `Keep ${pickedList.length} picked` : "Keep picked" }}</WpButton>
+        <Button v-if="canSendToLoop" size="sm" :disabled="pickedFrames === 0" hint="Lock the picked frames' seeds in the Context Loop and bypass the rest, so the next run repeats only your picks" data-test="image-filter-send-loop" @click="sendToLoop">Send to Loop</Button>
+        <Button size="sm" variant="danger" hint="Skip everything after this node for this run" data-test="image-filter-stop" @click="stop">Stop branch</Button>
+        <Button size="sm" data-test="image-filter-keep-all" @click="keepAll">Keep all {{ total }}</Button>
+        <Button size="sm" variant="primary" kbd="Enter" :disabled="pickedList.length === 0" data-test="image-filter-keep-picked" @click="keepPicked">{{ pickedList.length ? `Keep ${pickedList.length} picked` : "Keep picked" }}</Button>
       </div>
     </div>
   </ModalShell>

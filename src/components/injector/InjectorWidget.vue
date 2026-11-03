@@ -15,7 +15,7 @@ import { applyFlip, captureRects, MOTION_FLIP_MS } from "@/kit/flip";
 import InjectorRowComp from "./InjectorRow.vue";
 import ContextMenu, { type ContextMenuItem } from "@/kit/ContextMenu.vue";
 import InjectorBindingModal from "./InjectorBindingModal.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 
 // NOTE: when we wire enter/leave animations (row added on connect,
@@ -188,7 +188,7 @@ const conflictByUid = computed<Record<string, RowConflict>>(() => {
 // via host.requestRelayout when this value changes.
 //
 // CSS source-of-truth dependencies (keep in lockstep):
-//   WpCheck size sm         width 12 (the on/off box)
+//   Checkbox size sm         width 12 (the on/off box)
 //   .wp-inj-type-icon       width 16
 //   .wp-inj-slot            max-width 96
 //   .wp-inj-type-chip       ~50 (font 9px × ~7 chars for "boolean")
@@ -850,7 +850,8 @@ defineExpose({ addRow, addGeneralRow, removeRow });
       />
       <span data-test="inj-toolbar-label" class="wp-inj-header-label">injected variables</span>
       <span data-test="inj-toolbar-count" class="wp-inj-header-count">{{ enabledCount }} / {{ value.rows.length }}</span>
-      <WpButton
+      <Button
+        size="sm"
         variant="ghost"
         class="wp-inj-collapse-conns"
         :icon="connectionsCollapsed ? 'pi-arrows-alt' : 'pi-arrows-v'"
@@ -858,7 +859,7 @@ defineExpose({ addRow, addGeneralRow, removeRow });
         :hint="connectionsCollapsed ? 'Show all input wires individually' : 'Merge all input wires onto a single pin'"
         data-test="inj-toolbar-collapse-conns"
         @click="emit('toggle-connections-collapse')"
-      >{{ connectionsCollapsed ? "expand wires" : "merge wires" }}</WpButton>
+      >{{ connectionsCollapsed ? "expand wires" : "merge wires" }}</Button>
     </div>
 
     <div
@@ -897,7 +898,8 @@ defineExpose({ addRow, addGeneralRow, removeRow });
       >
         ↓ Wire an upstream node's output into this node's input pin — a variable row appears here.
       </div>
-      <WpButton
+      <Button
+        size="sm"
         variant="add"
         icon="pi-plus"
         block
@@ -905,7 +907,7 @@ defineExpose({ addRow, addGeneralRow, removeRow });
         :disabled="atGeneralRowCap"
         :hint="atGeneralRowCap ? undefined : 'Add a template row — composes a variable from sockets and other rows, runs after them, and survives disconnects'"
         @click="addGeneralRow"
-      >{{ atGeneralRowCap ? `Template rows full (${MAX_GENERAL_INJECTOR_ROWS} max)` : "Add template row" }}</WpButton>
+      >{{ atGeneralRowCap ? `Template rows full (${MAX_GENERAL_INJECTOR_ROWS} max)` : "Add template row" }}</Button>
     </div>
     </div>
     <ContextMenu

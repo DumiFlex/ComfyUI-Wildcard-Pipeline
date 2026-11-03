@@ -15,7 +15,7 @@
  * here at once, before ComfyUI's store has fired its onChange.
  */
 import { computed, nextTick, ref } from "vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import { pushToast } from "@/components/shared/toast-store";
 import { filterForValidation, type ValidationMode } from "@/extension/settings";
 import { committedSuffixFor, tagInsertText } from "@/manager/components/rich-text/word-rows";
@@ -106,7 +106,7 @@ const shownConflicts = computed(() => filterForValidation(props.validation, [...
 
     <section class="wp-pg-behave__card">
       <div class="wp-pg-behave__title">Toasts</div>
-      <WpButton size="sm" data-test="pg-sample-toasts" @click="showToasts">Show sample toasts</WpButton>
+      <Button size="sm" data-test="pg-sample-toasts" @click="showToasts">Show sample toasts</Button>
     </section>
 
     <section class="wp-pg-behave__card">

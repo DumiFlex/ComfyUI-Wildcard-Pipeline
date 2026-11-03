@@ -8,6 +8,8 @@
  * pick in the focused question, Enter sends. Once answered it folds to one
  * line ("Style: Anime · Negatives: you decide").
  *
+ * It drops in with a soft accent pulse (motion.css), as it waits on the user.
+ *
  * Only question and choice numbers go back (`AiAskAnswer`); the server
  * reads the labels from the call it stored.
  */
@@ -145,7 +147,7 @@ function setRef(i: number, el: unknown): void {
   <p v-if="answered" class="wp-ai-ask__done" data-test="ai-ask-done">
     <i class="pi pi-check" aria-hidden="true" /> <span>{{ summary }}</span>
   </p>
-  <section v-else class="wp-ai-ask" :aria-busy="disabled || undefined" data-test="ai-ask">
+  <section v-else class="wp-ai-ask wp-enter-drop wp-attention" :aria-busy="disabled || undefined" data-test="ai-ask">
     <div
       v-for="(q, i) in questions"
       :key="i"

@@ -23,7 +23,6 @@
  * Images can be attached (button, paste or drop) when the model sees them;
  * they are shrunk in the browser first (`utils/chat-image.ts`).
  */
-import CloseButton from "@/kit/CloseButton.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { isNavigationFailure, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import Button from "@/kit/Button.vue";
@@ -866,9 +865,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
         title="Start a new chat"
         @click="newChat"
       ><span class="wp-ai-chat__btn-label">New chat</span></Button>
-      <CloseButton
+      <Button
+        variant="ghost" icon="times"
         class="wp-ai-chat__close"
-        label="Close the assistant"
+        aria-label="Close the assistant"
         data-test="ai-chat-close"
         @click="chat.open.value = false"
       />
@@ -923,7 +923,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
           ><i class="pi pi-pencil" aria-hidden="true" /></button>
           <span
             v-if="entry.reaction"
-            class="wp-ai-chat__reaction"
+            class="wp-ai-chat__reaction wp-enter-pop"
             role="img"
             :aria-label="`Reacted ${entry.reaction}`"
             :title="entry.aside ? 'Reacted instead of answering' : 'Reacted to your message'"
@@ -1100,7 +1100,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
               <ul>
                 <li v-for="o in shownOptions(i, p)" :key="o.id" :data-off="isSkipped(entry, p, o.id) || undefined">
                   <label>
-                    <Checkbox class="wp-checkbox--inline" :model-value="!isSkipped(entry, p, o.id)" :disabled="!!entry.status[p.pid]" :aria-label="`Keep ${o.empty ? 'the empty option' : o.text}`" data-test="ai-chat-card-option" @update:model-value="chat.toggleOption(entry, p, o.id)" />
+                    <Checkbox :model-value="!isSkipped(entry, p, o.id)" :disabled="!!entry.status[p.pid]" :aria-label="`Keep ${o.empty ? 'the empty option' : o.text}`" data-test="ai-chat-card-option" @update:model-value="chat.toggleOption(entry, p, o.id)" />
                     <span class="wp-ai-chat__opt-text wp-ai-chat__clamp" :title="o.empty ? undefined : o.text"><template v-if="o.empty">∅ nothing</template><AiSyntax v-else :text="o.text" /></span>
                     <span v-if="o.weight !== 1" class="wp-ai-chat__opt-weight">×{{ o.weight }}</span>
                     <span v-if="o.fallback" class="wp-ai-chat__chip" data-tone="accent">fallback</span>
@@ -1507,20 +1507,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onGlobalKey));
   display: inline-flex; align-items: center; justify-content: center; border-radius: min(11px, var(--wp-radius-cap, 999px));
   font-size: 13px; line-height: 1; background: var(--wp-bg-1);
   border: 1px solid var(--wp-border); box-shadow: var(--wp-shadow-sm);
-  transform: scale(var(--wp-ai-react-s)); opacity: var(--wp-ai-react-o);
-  animation: wp-ai-chat-react 0.32s cubic-bezier(0.3, 1.6, 0.5, 1) both;
 }
-/* Animated through a registered custom property, not `opacity` / `transform`
- * directly: those go to the compositor, which lifts the element onto its own
- * layer while it moves and drops it after, so the text went soft during the
- * motion and snapped by half a pixel at its end. */
-@property --wp-ai-react-s { syntax: "<number>"; inherits: false; initial-value: 1; }
-@property --wp-ai-react-o { syntax: "<number>"; inherits: false; initial-value: 1; }
-@keyframes wp-ai-chat-react {
-  from { --wp-ai-react-s: 0.3; --wp-ai-react-o: 0; }
-  to { --wp-ai-react-s: 1; --wp-ai-react-o: 1; }
-}
-@media (prefers-reduced-motion: reduce) { .wp-ai-chat__reaction { animation: none; } }
 .wp-ai-chat__reply { display: flex; flex-direction: column; gap: 8px; }
 .wp-ai-chat__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .wp-ai-chat__steps li { font-size: 11px; color: var(--wp-text-dim); display: flex; gap: 6px; align-items: baseline; overflow-wrap: anywhere; }

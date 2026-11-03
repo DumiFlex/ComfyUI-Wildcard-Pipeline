@@ -107,14 +107,14 @@ describe("OptionRow", () => {
     const w = mount(OptionRow, {
       props: { option: baseOption, allOptions, instance: {} },
     });
-    expect(w.find('[data-test="opt-check"]').classes()).toContain("opt__check--on");
+    expect(w.find('[data-test="opt-check"]').attributes("aria-checked")).toBe("true");
   });
 
   it("checkbox is unchecked when option id is NOT in enabled_options", () => {
     const w = mount(OptionRow, {
       props: { option: baseOption, allOptions, instance: { enabled_options: ["o2"] } },
     });
-    expect(w.find('[data-test="opt-check"]').classes()).not.toContain("opt__check--on");
+    expect(w.find('[data-test="opt-check"]').attributes("aria-checked")).toBe("false");
   });
 
   it("emits toggle event with option id when checkbox clicked", async () => {
@@ -409,15 +409,15 @@ describe("OptionRow", () => {
       // The checkbox must not READ as checked — the bug was the glyph + tick
       // bound to `enabled` alone, leaving a filled blue box on the disabled
       // null row in multi-pick.
-      expect(w.find('[data-test="opt-check"]').classes()).not.toContain("opt__check--on");
-      expect(w.find(".opt__check-tick").exists()).toBe(false);
+      expect(w.find('[data-test="opt-check"]').attributes("aria-checked")).toBe("false");
+      expect(w.find('[data-test="opt-check"] svg').exists()).toBe(false);
     });
 
     it("null row stays interactive when not multiActive", () => {
       const w = mount(OptionRow, {
         props: { option: nullOpt, allOptions: [nullOpt], instance: {} },
       });
-      expect(w.find('[data-test="opt-check"]').attributes("aria-disabled")).toBe("false");
+      expect(w.find('[data-test="opt-check"]').attributes("aria-disabled")).toBeUndefined();
     });
   });
 
@@ -425,10 +425,10 @@ describe("OptionRow", () => {
     const w = mount(OptionRow, {
       props: { option: baseOption, allOptions, instance: {}, multiActive: true },
     });
-    expect(w.find('[data-test="opt-check"]').attributes("aria-disabled")).toBe("false");
+    expect(w.find('[data-test="opt-check"]').attributes("aria-disabled")).toBeUndefined();
     // Not over-gated: a real (enabled, non-null) option keeps its checked
     // glyph even while a sibling null row is locked out of the multi pool.
-    expect(w.find('[data-test="opt-check"]').classes()).toContain("opt__check--on");
+    expect(w.find('[data-test="opt-check"]').attributes("aria-checked")).toBe("true");
   });
 });
 

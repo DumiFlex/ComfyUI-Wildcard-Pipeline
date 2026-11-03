@@ -265,7 +265,7 @@ function close(): void {
           data-test="ai-organize-item"
         >
           <label class="wp-ai-org__head">
-            <Checkbox class="wp-checkbox--inline wp-ai-org__check" :model-value="itemOn(c, i)" @update:model-value="toggleItem(c, i)" />
+            <Checkbox class="wp-ai-org__check" :model-value="itemOn(c, i)" @update:model-value="toggleItem(c, i)" />
             <span class="wp-ai-org__name">{{ c.name }}</span>
             <span class="wp-ai-org__type">{{ c.type.replace("_", " ") }}</span>
             <span v-if="c.reason" class="wp-ai-org__reason">{{ c.reason }}</span>

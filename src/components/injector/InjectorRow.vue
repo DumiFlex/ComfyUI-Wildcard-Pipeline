@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
-import WpCheck from "@/kit/WpCheck.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 
 const props = defineProps<{
@@ -202,7 +202,7 @@ function onDragEnd(): void {
         :hint="row._collapsed ? 'Expand' : 'Collapse'"
         @click.stop="emit('update', { _collapsed: !row._collapsed })"
       />
-      <WpCheck
+      <Checkbox
         size="sm"
         :title="row.enabled ? 'Disable' : 'Enable'"
         draggable="false"

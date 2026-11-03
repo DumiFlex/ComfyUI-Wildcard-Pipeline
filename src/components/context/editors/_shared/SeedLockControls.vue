@@ -26,7 +26,7 @@ import type { ModuleEntry } from "../../../../widgets/_shared";
 import { LockSeedKey } from "../../lock-seed-ctx";
 import WpNumber from "@/kit/WpNumber.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -127,7 +127,8 @@ function onRollClick(): void {
       aria-label="Locked seed" up-label="Increase seed" down-label="Decrease seed"
       data-test="runtime-seed" @update:model-value="onSeedInput"
     />
-    <WpButton
+    <Button
+      size="sm"
       variant="ghost"
       icon="pi-refresh"
       data-test="runtime-roll"

@@ -27,7 +27,7 @@ const AssemblerHelper = defineAsyncComponent(() => import("../components/assembl
 // keeping them out of the assembler critical chunk (bundle-size gate).
 const SaveTemplateModal = defineAsyncComponent(() => import("../components/assembler/SaveTemplateModal.vue"));
 const LoadTemplateModal = defineAsyncComponent(() => import("../components/assembler/LoadTemplateModal.vue"));
-const ConfirmDialog = defineAsyncComponent(() => import("@/kit/ConfirmDialog.vue"));
+const ConfirmModal = defineAsyncComponent(() => import("@/kit/ConfirmModal.vue"));
 
 interface AssemblerNode extends LiteNodeLike, MountTargetNode {
   widgets?: { name: string; value: unknown }[];
@@ -649,11 +649,11 @@ export function mountHelper(node: AssemblerNode) {
               }
             },
           }),
-          h(ConfirmDialog, {
-            visible: confirmState.value.open,
+          h(ConfirmModal, {
+            open: confirmState.value.open,
             title: confirmState.value.title,
             body: confirmState.value.body,
-            variant: confirmState.value.variant,
+            tone: confirmState.value.variant === "danger" ? "danger" : "accent",
             confirmLabel: confirmState.value.confirmLabel,
             onConfirm: () => {
               confirmState.value.action();

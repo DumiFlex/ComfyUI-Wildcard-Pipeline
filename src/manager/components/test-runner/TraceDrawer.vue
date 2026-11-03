@@ -4,7 +4,6 @@
  * what it wrote. The seed is a real chain seed, so pasting it into a canvas
  * Context holding the same modules reproduces these values.
  */
-import CloseButton from "@/kit/CloseButton.vue";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import Button from "@/kit/Button.vue";
 import type { ScenarioSample } from "../../api/types";
@@ -48,7 +47,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
         <h3>Seed <span class="wp-trd__seed">{{ sample.seed }}</span></h3>
         <span class="wp-trd__sp" />
         <Button variant="ghost" size="sm" icon="pi-copy" data-test="copy-seed" @click="copySeed">{{ copied ? "Copied" : "Copy seed" }}</Button>
-        <CloseButton size="sm" label="Close trace" data-test="close-trace" @click="emit('close')" />
+        <Button variant="ghost" icon="times" size="sm" aria-label="Close trace" data-test="close-trace" @click="emit('close')" />
       </header>
       <p class="wp-trd__note">Same seed on a canvas Context with these modules gives these values.</p>
       <p v-if="sample.error" class="wp-trd__err">{{ sample.error }}</p>

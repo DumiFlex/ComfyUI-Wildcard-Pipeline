@@ -6,9 +6,8 @@
  * the grip reorders, which is also the order Previous / Next walk.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import CloseButton from "@/kit/CloseButton.vue";
+import Button from "@/kit/Button.vue";
 import SortableList from "@/kit/SortableList.vue";
-import WpButton from "@/kit/WpButton.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import DockRow from "./DockRow.vue";
 import {
@@ -222,9 +221,9 @@ function close(): void {
         <WpIconButton icon="pi-pencil" label="Edit the bookmarks" data-test="bm-dock-edit" @click="editing = true; savePrefs({ collapsed: false })" />
       </template>
       <template v-else>
-        <WpButton variant="primary" size="sm" data-test="bm-dock-done" @click="editing = false">Done</WpButton>
+        <Button variant="primary" size="sm" data-test="bm-dock-done" @click="editing = false">Done</Button>
       </template>
-      <CloseButton size="sm" label="Close the dock" data-test="bm-dock-close" @click="close" />
+      <Button variant="ghost" icon="times" size="sm" aria-label="Close the dock" data-test="bm-dock-close" @click="close" />
     </header>
 
     <div v-if="!prefs.collapsed" class="wp-bmdock__body">
@@ -256,7 +255,7 @@ function close(): void {
       <p v-else class="wp-bmdock__empty" data-test="bm-dock-empty">
         No bookmarks in this workflow yet.
       </p>
-      <WpButton
+      <Button
         v-if="editing || !shown"
         variant="add"
         size="sm"
@@ -266,7 +265,7 @@ function close(): void {
         @click="addBookmarkHere()"
       >
         Bookmark this view
-      </WpButton>
+      </Button>
     </div>
   </section>
   <div

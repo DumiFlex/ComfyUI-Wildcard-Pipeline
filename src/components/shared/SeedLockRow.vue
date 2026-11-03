@@ -4,7 +4,7 @@
  *  captures it; locked exposes a seed input + ±spinners + roll. */
 import WpNumber from "@/kit/WpNumber.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import { vTooltip } from "@/kit/tooltip";
 
 const props = defineProps<{
@@ -57,15 +57,16 @@ function onSeed(n: number | null) {
       @update:model-value="emit('bypass', { index, bypassed: !bypassed })" />
     <WpSwitch variant="chip" :icon="locked ? 'pi-lock' : 'pi-lock-open'" :label="locked ? 'Locked' : 'Lock'"
       data-test="seedrow-lock" :model-value="locked" @update:model-value="onLock" />
-    <WpButton
+    <Button
       v-tooltip="previous == null
         ? 'No previous run captured for this frame'
         : `Lock the seed this frame used last run (${previous})`"
+      size="sm"
       variant="outline" icon="pi-history" data-test="seedrow-lockprev"
       :disabled="previous == null"
       @click="lockPrevious">
       Prev
-    </WpButton>
+    </Button>
     <span class="srow__fill" />
     <span v-if="!locked" class="derived">
       <span class="derived__val" data-test="seedrow-derived">{{ derived }}</span>
@@ -76,7 +77,8 @@ function onSeed(n: number | null) {
         class="seed-input-wrap" :model-value="seed" :min="0" :max="SEED_MAX" commit="input"
         aria-label="Locked seed" data-test="seedrow-input" @update:model-value="onSeed"
       />
-      <WpButton
+      <Button
+        size="sm"
         variant="ghost"
         icon="pi-refresh"
         data-test="seedrow-roll"

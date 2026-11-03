@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import Toggle from "@/kit/Toggle.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
 import Button from "@/kit/Button.vue";
 import SettingGroup from "../SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
@@ -36,7 +36,8 @@ const lastCheckedLabel = computed(() => {
       hint="Look for a newer release when the manager opens. Turn off to check only manually."
       setting-key="check-on-launch"
     >
-      <Toggle
+      <WpSwitch
+        size="md"
         :model-value="ui.checkOnLaunch"
         aria-label="Check for updates on launch"
         data-test="settings-check-on-launch"
@@ -55,7 +56,8 @@ const lastCheckedLabel = computed(() => {
       hint="The first time the manager opens on a new version, show what changed. Once per version."
       setting-key="whats-new"
     >
-      <Toggle
+      <WpSwitch
+        size="md"
         :model-value="ui.whatsNewAfterUpdate"
         aria-label="Open What's new after an update"
         data-test="settings-whats-new"
@@ -70,7 +72,8 @@ const lastCheckedLabel = computed(() => {
       hint="The Community tab tells the community site which pages you open and when you install, publish or sign in. No cookies, no account details. Do Not Track also turns it off."
       setting-key="usage-stats"
     >
-      <Toggle
+      <WpSwitch
+        size="md"
         :model-value="ui.usageStats"
         aria-label="Share anonymous usage stats"
         data-test="settings-usage-stats"

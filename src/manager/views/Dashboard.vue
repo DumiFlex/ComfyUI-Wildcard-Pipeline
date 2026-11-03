@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
-import CloseButton from "@/kit/CloseButton.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { libraryVersion } from "../composables/useLibraryChanged";
 import { useRouter } from "vue-router";
@@ -541,9 +540,10 @@ onMounted(async () => {
             <h3 class="dashboard__start-title">New here?</h3>
             <p class="dashboard__start-sub">Start with the introduction — it shows how the pieces fit together. From there, the Quick start gets you a runnable graph in a couple of minutes.</p>
           </div>
-          <CloseButton
+          <Button
+            variant="ghost" icon="times"
             class="dashboard__start-dismiss"
-            label="Dismiss: the docs stay in the sidebar"
+            aria-label="Dismiss: the docs stay in the sidebar"
             data-test="dashboard-getting-started-dismiss"
             @click="dismissOnboarding"
           />

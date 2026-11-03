@@ -79,8 +79,7 @@ describe("LocationSection", () => {
     store.config = { ...baseConfig };
     store.info = { ...sampleInfo };
     await wrapper.vm.$nextTick();
-    const userRadio = wrapper.find("[data-test='location-option-user'] input[type='radio']");
-    await userRadio.setValue();
+    await wrapper.find("[data-test='location-option-user']").trigger("click");
     await wrapper.vm.$nextTick();
     const btn = wrapper.find("[data-test='location-apply']");
     expect(btn.attributes("disabled")).toBeUndefined();
@@ -136,7 +135,7 @@ describe("LocationSection", () => {
     };
     store.info = { ...sampleInfo };
     await wrapper.vm.$nextTick();
-    await wrapper.find("[data-test='location-option-root'] input[type='radio']").setValue();
+    await wrapper.find("[data-test='location-option-root']").trigger("click");
     await wrapper.vm.$nextTick();
     await wrapper.find("[data-test='location-apply']").trigger("click");
     await wrapper.vm.$nextTick();
@@ -159,7 +158,7 @@ describe("LocationSection", () => {
     };
     store.info = { ...sampleInfo };
     await wrapper.vm.$nextTick();
-    await wrapper.find("[data-test='location-option-user'] input[type='radio']").setValue();
+    await wrapper.find("[data-test='location-option-user']").trigger("click");
     await wrapper.vm.$nextTick();
     await wrapper.find("[data-test='location-apply']").trigger("click");
     await wrapper.vm.$nextTick();

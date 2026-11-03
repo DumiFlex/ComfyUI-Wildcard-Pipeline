@@ -13,7 +13,7 @@ import {
   type ResolvedValue,
   type RolledAxes,
 } from "../../widgets/richTokenize";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 
 const props = defineProps<{
   /** Flat array of upstream variable names. Primary prop shape. */
@@ -464,8 +464,9 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
       <div class="wp-asm-section wp-asm-section--vars">
         <span>variables</span>
         <div class="wp-asm-toolbtns">
-          <WpButton
+          <Button
             v-if="onLoadTemplate"
+            size="sm"
             variant="outline"
             icon="pi-folder-open"
             data-test="asm-load-template"
@@ -473,8 +474,9 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             aria-label="Load template"
             @click="onLoadTemplate"
           />
-          <WpButton
+          <Button
             v-if="onSaveTemplate"
+            size="sm"
             variant="outline"
             icon="pi-save"
             :disabled="!props.template"
@@ -483,8 +485,9 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             aria-label="Save template"
             @click="onSaveTemplate"
           />
-          <WpButton
+          <Button
             v-if="onClearTemplate"
+            size="sm"
             variant="danger"
             icon="pi-trash"
             :disabled="!props.template && !props.negativeTemplate"

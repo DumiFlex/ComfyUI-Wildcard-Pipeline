@@ -84,7 +84,7 @@ import {
   isMissingFromLibrary,
   isTypeConflict,
 } from "./library-status";
-import ConfirmDialog from "@/kit/ConfirmDialog.vue";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
 import ContextRecoveryPanel from "./ContextRecoveryPanel.vue";
 import ContextToolbar from "./ContextToolbar.vue";
 import ContextAddActions from "./ContextAddActions.vue";
@@ -943,12 +943,12 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
          setting enabled; resolves the awaited Promise via the
          onConfirm / onCancel callbacks the helper stamped on the
          state object. -->
-    <ConfirmDialog
+    <ConfirmModal
       v-if="pendingConfirm"
-      :visible="true"
+      :open="true"
       :title="pendingConfirm.title"
       :body="pendingConfirm.body"
-      :variant="pendingConfirm.variant"
+      :tone="pendingConfirm.variant === 'danger' ? 'danger' : 'accent'"
       :confirm-label="pendingConfirm.confirmLabel"
       :cancel-label="pendingConfirm.cancelLabel"
       @confirm="pendingConfirm.onConfirm"

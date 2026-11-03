@@ -177,6 +177,9 @@ function close(): void {
     :answered="!!result"
     :error="error"
     :steps="convo.steps.value"
+    :research="convo.research.value"
+    :searching="convo.searching.value"
+    :found="convo.web"
     @run="convo.ask"
     @refine="convo.refine"
     @retry="convo.retry"
@@ -185,9 +188,6 @@ function close(): void {
     @flip="convo.flip"
     @stop="convo.stop"
     @close="close"
-    :research="convo.research.value"
-    :searching="convo.searching.value"
-    :found="convo.web"
     @allow-research="convo.allowResearch"
     @skip-research="convo.skipResearch"
     @use-found="convo.useFound"
@@ -204,7 +204,7 @@ function close(): void {
           data-test="ai-fixed-row"
         >
           <label class="wp-ai-fv__name">
-            <Checkbox class="wp-checkbox--inline" :model-value="!unticked.has(r.id)" @update:model-value="toggle(r.id)" />
+            <Checkbox :model-value="!unticked.has(r.id)" @update:model-value="toggle(r.id)" />
             <code class="wp-ai-fv__var">${{ r.name }}</code>
             <span class="wp-ai-fv__badge">{{ r.status === "new" ? "New" : "Changed" }}</span>
           </label>
@@ -234,7 +234,6 @@ function close(): void {
           <label class="wp-ai-txt__head">
             <Checkbox
               v-if="textChanged"
-              class="wp-checkbox--inline"
               :model-value="!unticked.has('prompt')"
               @update:model-value="toggle('prompt')"
             />
@@ -266,7 +265,6 @@ function close(): void {
           <label class="wp-ai-txt__head">
             <Checkbox
               v-if="negChanged"
-              class="wp-checkbox--inline"
               :model-value="!unticked.has('negative')"
               @update:model-value="toggle('negative')"
             />

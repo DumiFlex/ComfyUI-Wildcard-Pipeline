@@ -2,18 +2,18 @@
 /** The Context node's two add buttons, shared by the list footer and the
  *  empty hero. The caller's class (`wp-w-footer` /
  *  `wp-empty-hero-actions`) lands on the wrapper. */
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 
 defineEmits<{ module: []; bundle: [] }>();
 </script>
 
 <template>
   <div>
-    <WpButton variant="primary" icon="pi-plus" data-testid="open-picker" @click="$emit('module')">
+    <Button size="sm" variant="primary" icon="pi-plus" data-testid="open-picker" @click="$emit('module')">
       Add module
-    </WpButton>
-    <WpButton icon="pi-plus" data-testid="open-bundle-picker" @click="$emit('bundle')">
+    </Button>
+    <Button size="sm" icon="pi-plus" data-testid="open-bundle-picker" @click="$emit('bundle')">
       Add Bundle
-    </WpButton>
+    </Button>
   </div>
 </template>

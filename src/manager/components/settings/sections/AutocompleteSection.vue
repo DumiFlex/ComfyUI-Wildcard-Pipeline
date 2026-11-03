@@ -20,7 +20,7 @@
  * ComfyUI's panel both ways.
  */
 import { computed, onMounted, ref } from "vue";
-import Toggle from "@/kit/Toggle.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
 import Button from "@/kit/Button.vue";
 import Select from "@/kit/Select.vue";
 import type { SelectOption } from "@/kit/select-types";
@@ -269,7 +269,8 @@ onMounted(() => {
       <span class="wp-set-pill" :data-tone="tagPill.tone" data-test="tagac-status">{{ tagPill.text }}</span>
       <span class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Manager</span>
-        <Toggle
+        <WpSwitch
+          size="md"
           :model-value="ui.tagAutocomplete"
           aria-label="Suggest booru tags"
           data-test="settings-tag-autocomplete"
@@ -278,7 +279,8 @@ onMounted(() => {
       </span>
       <span class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Canvas</span>
-        <Toggle
+        <WpSwitch
+          size="md"
           :model-value="canvasOn(SETTING_ID_AC_TAGS)"
           aria-label="Suggest booru tags on the canvas"
           data-test="canvas-ac-tags"
@@ -290,7 +292,8 @@ onMounted(() => {
       <span class="wp-set-pill" :data-tone="modelPill('lora').tone" data-test="lora-count">{{ modelPill("lora").text }}</span>
       <span class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Manager</span>
-        <Toggle
+        <WpSwitch
+          size="md"
           :model-value="ui.loraAutocomplete"
           aria-label="Suggest LoRAs"
           data-test="settings-lora-autocomplete"
@@ -299,7 +302,8 @@ onMounted(() => {
       </span>
       <span class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Canvas</span>
-        <Toggle
+        <WpSwitch
+          size="md"
           :model-value="canvasOn(SETTING_ID_AC_LORA)"
           aria-label="Suggest LoRAs on the canvas"
           data-test="canvas-ac-lora"
@@ -311,7 +315,8 @@ onMounted(() => {
       <span class="wp-set-pill" :data-tone="modelPill('embedding').tone" data-test="embedding-count">{{ modelPill("embedding").text }}</span>
       <span class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Manager</span>
-        <Toggle
+        <WpSwitch
+          size="md"
           :model-value="ui.embeddingAutocomplete"
           aria-label="Suggest embeddings"
           data-test="settings-embedding-autocomplete"
@@ -320,7 +325,8 @@ onMounted(() => {
       </span>
       <span class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Canvas</span>
-        <Toggle
+        <WpSwitch
+          size="md"
           :model-value="canvasOn(SETTING_ID_AC_EMBEDDING)"
           aria-label="Suggest embeddings on the canvas"
           data-test="canvas-ac-embedding"
@@ -346,7 +352,8 @@ onMounted(() => {
     >
       <span class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Manager</span>
-        <Toggle
+        <WpSwitch
+          size="md"
           :model-value="ui.autocompleteSeparator"
           aria-label="Append a separator after a pick"
           data-test="settings-autocomplete-separator"
@@ -355,7 +362,8 @@ onMounted(() => {
       </span>
       <span class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Canvas</span>
-        <Toggle
+        <WpSwitch
+          size="md"
           :model-value="canvasOn(SETTING_ID_AC_SEPARATOR)"
           aria-label="Append a separator after a pick on the canvas"
           data-test="canvas-ac-separator"
@@ -370,7 +378,8 @@ onMounted(() => {
     >
       <span class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Manager</span>
-        <Toggle
+        <WpSwitch
+          size="md"
           :model-value="ui.autocompleteSpaces"
           aria-label="Write tags with spaces"
           data-test="settings-autocomplete-spaces"
@@ -379,7 +388,8 @@ onMounted(() => {
       </span>
       <span class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Canvas</span>
-        <Toggle
+        <WpSwitch
+          size="md"
           :model-value="canvasOn(SETTING_ID_AC_SPACES)"
           aria-label="Write tags with spaces on the canvas"
           data-test="canvas-ac-spaces"
@@ -394,7 +404,8 @@ onMounted(() => {
     >
       <span class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Manager</span>
-        <Toggle
+        <WpSwitch
+          size="md"
           :model-value="ui.autocompleteEscapeBrackets"
           aria-label="Escape brackets in tags"
           data-test="settings-autocomplete-escape"
@@ -403,7 +414,8 @@ onMounted(() => {
       </span>
       <span class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Canvas</span>
-        <Toggle
+        <WpSwitch
+          size="md"
           :model-value="canvasOn(SETTING_ID_AC_ESCAPE)"
           aria-label="Escape brackets in tags on the canvas"
           data-test="canvas-ac-escape"

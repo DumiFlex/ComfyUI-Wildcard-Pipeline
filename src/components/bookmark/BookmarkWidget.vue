@@ -8,7 +8,7 @@ import { computed, ref, watch } from "vue";
 import Banner from "@/kit/Banner.vue";
 import ColorField from "@/kit/ColorField.vue";
 import Kbd from "@/kit/Kbd.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import BookmarkFields from "./BookmarkFields.vue";
@@ -146,7 +146,7 @@ function done(): void {
       @keypress.stop
     >
       <div class="wp-bm__head">
-        <WpButton
+        <Button
           size="sm"
           :icon="`pi-${config.icon}`"
           :pressed="pickIcon"
@@ -211,8 +211,8 @@ function done(): void {
       <div class="wp-bm__actions">
         <span v-if="nested" class="wp-bm__hint">In a subgraph: the jump opens it.</span>
         <span class="wp-bm__spacer"></span>
-        <WpButton size="sm" icon="pi-directions" hint="Try the jump" data-test="bm-go" @click="emit('jump')">Go</WpButton>
-        <WpButton variant="primary" size="sm" type="submit" data-test="bm-done">Done</WpButton>
+        <Button size="sm" icon="pi-directions" hint="Try the jump" data-test="bm-go" @click="emit('jump')">Go</Button>
+        <Button variant="primary" size="sm" type="submit" data-test="bm-done">Done</Button>
       </div>
     </form>
   </div>

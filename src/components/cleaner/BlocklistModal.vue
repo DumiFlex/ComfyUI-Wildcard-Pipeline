@@ -10,7 +10,7 @@
 import { ref, watch, computed } from "vue";
 import ModalShell from "@/kit/ModalShell.vue";
 import type { BlocklistKind } from "./types";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 
 const props = defineProps<{
@@ -80,8 +80,8 @@ function onCancel(): void {
         <label for="blocklist-textarea" class="wp-blocklist__textarea-label">Entries</label>
         <textarea
           id="blocklist-textarea"
-          data-test="blocklist-textarea"
           v-model="draftText"
+          data-test="blocklist-textarea"
           class="wp-blocklist__textarea"
           spellcheck="false"
         />
@@ -93,8 +93,8 @@ function onCancel(): void {
         </div>
       </div>
       <footer class="wp-blocklist__foot">
-        <WpButton data-test="blocklist-cancel" @click="onCancel">Cancel</WpButton>
-        <WpButton variant="primary" data-test="blocklist-save" @click="onSave">Save</WpButton>
+        <Button size="sm" data-test="blocklist-cancel" @click="onCancel">Cancel</Button>
+        <Button size="sm" variant="primary" data-test="blocklist-save" @click="onSave">Save</Button>
       </footer>
     </div>
   </ModalShell>

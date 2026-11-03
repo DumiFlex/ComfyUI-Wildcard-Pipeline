@@ -337,7 +337,13 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // dev at 606,638 bytes) and the loading shapes that replace empty states and
 // spinners in the list pages, editors, pickers and settings (~1.2 KB, mostly
 // in lazy manager chunks); the branch sat at 607,885 bytes.
-const TOTAL_LIMIT = 596 * 1024;     // 596 KB
+// RAISED 596 -> 600 KB on 2026-11-02 for kit 0.6.0: one Button, Modal,
+// Checkbox, switch and colour field for both sides. Button now carries its
+// stylesheet scoped plus the tooltip, ConfirmModal runs on Modal + ModalShell
+// with the focus trap, and Checkbox/Popover grew to cover what WpCheck and the
+// canvas popovers did; WpButton, CloseButton, ConfirmDialog and WpCheck went
+// (net ~4.1 KB gzip: dev 607,885 -> 611,998 bytes).
+const TOTAL_LIMIT = 600 * 1024;     // 600 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

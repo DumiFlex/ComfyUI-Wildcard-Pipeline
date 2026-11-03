@@ -20,7 +20,7 @@ import type { SeedListConfig, SeedListStrategy } from "./types";
 import SeedListModal from "../shared/SeedListModal.vue";
 import FrameChips from "../shared/FrameChips.vue";
 import { deriveLoopSeeds } from "../shared/seed-derive";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -196,7 +196,8 @@ function toggleOverrideStrategy(): void {
       />
     </div>
 
-    <WpButton
+    <Button
+      size="sm"
       block
       icon="pi-list"
       class="wp-seedlist__seedbtn"
@@ -208,15 +209,15 @@ function toggleOverrideStrategy(): void {
       <span v-if="lockedCount" class="wp-seedlist__seedbtn-badge" data-test="seedlist-seeds-badge">{{ lockedCount }} locked</span>
       <span v-if="bypassedCount" class="wp-seedlist__seedbtn-badge" data-test="seedlist-seeds-bypass-badge">{{ bypassedCount }} bypassed</span>
       <i class="pi pi-chevron-right wp-seedlist__seedbtn-chev" aria-hidden="true" />
-    </WpButton>
+    </Button>
 
     <!-- Directly under the seeds button it belongs to: the chips are the
          inline view of what that modal lists, so they read as its expansion
          rather than as another unrelated section. -->
     <FrameChips
+      v-model:collapsed="chipsCollapsed"
       label="seeds"
       test-id="seedlist-frame"
-      v-model:collapsed="chipsCollapsed"
       :count="Math.max(1, count ?? 1)"
       :locked="[...lockSet]"
       :bypassed="bypassedFrames"
@@ -224,7 +225,7 @@ function toggleOverrideStrategy(): void {
       @toggle-lock="toggleFrameLock"
     />
 
-    <div class="wp-seedlist__row" v-tooltip="OVERRIDE_SEED_TOOLTIP">
+    <div v-tooltip="OVERRIDE_SEED_TOOLTIP" class="wp-seedlist__row">
       <span class="wp-seedlist__row-label">Override base seed from loop</span>
       <WpSwitch
         data-test="seedlist-override-seed-toggle"
@@ -234,7 +235,7 @@ function toggleOverrideStrategy(): void {
       />
     </div>
 
-    <div class="wp-seedlist__row" v-tooltip="OVERRIDE_COUNT_TOOLTIP">
+    <div v-tooltip="OVERRIDE_COUNT_TOOLTIP" class="wp-seedlist__row">
       <span class="wp-seedlist__row-label">Override count from loop</span>
       <WpSwitch
         data-test="seedlist-override-count-toggle"
@@ -244,7 +245,7 @@ function toggleOverrideStrategy(): void {
       />
     </div>
 
-    <div class="wp-seedlist__row" v-tooltip="OVERRIDE_STRATEGY_TOOLTIP">
+    <div v-tooltip="OVERRIDE_STRATEGY_TOOLTIP" class="wp-seedlist__row">
       <span class="wp-seedlist__row-label">Override strategy from loop</span>
       <WpSwitch
         data-test="seedlist-override-strategy-toggle"

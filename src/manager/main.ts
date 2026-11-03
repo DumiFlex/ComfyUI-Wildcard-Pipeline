@@ -5,6 +5,8 @@ import "@/kit/theme/tokens.css";
 import "@/kit/button.css";
 import "@/kit/theme/palettes.css";
 import "@/kit/theme/looks.css";
+// Entrances for the AI screens (streamed text, reactions, the selection chip, asks).
+import "@/kit/motion.css";
 import "./styles/rich-text.css";
 import "./styles/tailwind.css";
 import App from "./App.vue";

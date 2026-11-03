@@ -85,7 +85,7 @@ watch(
   <Modal :open="open" size="lg" @update:open="emit('update:open', $event)">
     <template #header="{ titleId }">
       <div>
-        <h3 :id="titleId" class="wp-modal__title">Version history</h3>
+        <h3 :id="titleId" class="wp-modal__title wp-history-panel__title">Version history</h3>
         <p class="wp-history-panel__sub">
           Last {{ entries.length }} save{{ entries.length === 1 ? "" : "s" }} ·
           oldest is overwritten on save
@@ -304,4 +304,5 @@ watch(
   font-size: var(--wp-text-sm);
   color: var(--wp-text-dim);
 }
+.wp-history-panel__title { margin: 0; font-size: var(--wp-text-md); font-weight: 600; color: var(--wp-text); }
 </style>

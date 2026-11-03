@@ -4,9 +4,8 @@ import { api } from "../../manager/api/client";
 import ModalShell from "@/kit/ModalShell.vue";
 import WpSelect from "@/kit/WpSelect.vue";
 import { pushToast } from "../shared/toast-store";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import CodeBlock from "@/kit/CodeBlock.vue";
-import CloseButton from "@/kit/CloseButton.vue";
 
 const props = defineProps<{
   open: boolean;
@@ -103,7 +102,7 @@ async function submit(mode: "update" | "new") {
     <div class="wp-stm" @click.stop>
       <header class="wp-stm__head">
         <h3 id="wp-stm-title" class="wp-stm__title">Save template</h3>
-        <CloseButton size="sm" kbd="Esc" data-test="save-tpl-close" @click="emit('close')" />
+        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="save-tpl-close" @click="emit('close')" />
       </header>
 
       <div class="wp-stm__body">
@@ -180,20 +179,22 @@ async function submit(mode: "update" | "new") {
       </div>
 
       <footer class="wp-stm__foot">
-        <WpButton data-test="save-tpl-cancel" @click="emit('close')">Cancel</WpButton>
+        <Button size="sm" data-test="save-tpl-cancel" @click="emit('close')">Cancel</Button>
         <span class="wp-stm-spacer" />
-        <WpButton
+        <Button
           v-if="updateTargetId"
+          size="sm"
           :disabled="!canSubmit"
           data-test="save-tpl-save-new"
           @click="submit('new')"
-        >Save as new entry</WpButton>
-        <WpButton
+        >Save as new entry</Button>
+        <Button
+          size="sm"
           variant="primary"
           :disabled="!canSubmit"
           data-test="save-tpl-submit"
           @click="submit(updateTargetId ? 'update' : 'new')"
-        >{{ updateTargetId ? "Update existing" : "Save" }}</WpButton>
+        >{{ updateTargetId ? "Update existing" : "Save" }}</Button>
       </footer>
     </div>
   </ModalShell>

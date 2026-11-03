@@ -37,10 +37,9 @@ import {
 } from "./playground-store";
 import PlaygroundMockup from "./PlaygroundMockup.vue";
 import PlaygroundBehaviorPreview from "./PlaygroundBehaviorPreview.vue";
-import WpCheck from "@/kit/WpCheck.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import WpSelect from "@/kit/WpSelect.vue";
-import WpButton from "@/kit/WpButton.vue";
-import CloseButton from "@/kit/CloseButton.vue";
+import Button from "@/kit/Button.vue";
 import { useDialogFocus } from "@/kit/useDialogFocus";
 import { useHostDialogGuard } from "@/components/shared/useHostDialogGuard";
 
@@ -320,7 +319,7 @@ onBeforeUnmount(() => {
               </p>
             </div>
           </div>
-          <CloseButton label="Close playground" size="sm" kbd="Esc" @click="onClose" />
+          <Button variant="ghost" icon="times" aria-label="Close playground" size="sm" kbd="Esc" @click="onClose" />
         </header>
 
         <div class="wp-pg__body">
@@ -372,7 +371,7 @@ onBeforeUnmount(() => {
               </label>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Border highlights</span>
-                <WpCheck v-model="borderHighlight" aria-label="Border highlights" />
+                <Checkbox v-model="borderHighlight" aria-label="Border highlights" />
               </div>
             </fieldset>
 
@@ -380,11 +379,11 @@ onBeforeUnmount(() => {
               <legend class="wp-pg__group-title">Collapse &amp; focus</legend>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Collapse new modules by default</span>
-                <WpCheck v-model="collapsedByDefault" aria-label="Collapse new modules by default" />
+                <Checkbox v-model="collapsedByDefault" aria-label="Collapse new modules by default" />
               </div>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Collapse new bundles by default</span>
-                <WpCheck v-model="bundleCollapsedByDefault" aria-label="Collapse new bundles by default" />
+                <Checkbox v-model="bundleCollapsedByDefault" aria-label="Collapse new bundles by default" />
               </div>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Collapse stack mode</span>
@@ -395,7 +394,7 @@ onBeforeUnmount(() => {
               </label>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Focus mode (dim non-hovered)</span>
-                <WpCheck v-model="focusMode" aria-label="Focus mode (dim non-hovered)" />
+                <Checkbox v-model="focusMode" aria-label="Focus mode (dim non-hovered)" />
               </div>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Row buttons</span>
@@ -431,30 +430,30 @@ onBeforeUnmount(() => {
                    validation. -->
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Booru tag autocomplete</span>
-                <WpCheck v-model="tagAutocomplete" aria-label="Booru tag autocomplete" />
+                <Checkbox v-model="tagAutocomplete" aria-label="Booru tag autocomplete" />
               </div>
               <!-- Separate switches on purpose: someone writing danbooru
                    prompts may have no LoRAs at all, and someone with 200 of
                    them may find the tag list noise. -->
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">LoRA autocomplete</span>
-                <WpCheck v-model="loraAutocomplete" aria-label="LoRA autocomplete" />
+                <Checkbox v-model="loraAutocomplete" aria-label="LoRA autocomplete" />
               </div>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Embedding autocomplete</span>
-                <WpCheck v-model="embeddingAutocomplete" aria-label="Embedding autocomplete" />
+                <Checkbox v-model="embeddingAutocomplete" aria-label="Embedding autocomplete" />
               </div>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Append ", " after a completion</span>
-                <WpCheck v-model="autocompleteSeparator" aria-label="Append a comma and space after a completion" />
+                <Checkbox v-model="autocompleteSeparator" aria-label="Append a comma and space after a completion" />
               </div>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Write tags with spaces</span>
-                <WpCheck v-model="autocompleteSpaces" aria-label="Write tags with spaces" />
+                <Checkbox v-model="autocompleteSpaces" aria-label="Write tags with spaces" />
               </div>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Escape brackets in tags</span>
-                <WpCheck v-model="autocompleteEscapeBrackets" aria-label="Escape brackets in tags" />
+                <Checkbox v-model="autocompleteEscapeBrackets" aria-label="Escape brackets in tags" />
               </div>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Autocomplete: max suggestions</span>
@@ -486,23 +485,23 @@ onBeforeUnmount(() => {
               </label>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Suppress info toasts</span>
-                <WpCheck v-model="suppressInfoToasts" aria-label="Suppress info toasts" />
+                <Checkbox v-model="suppressInfoToasts" aria-label="Suppress info toasts" />
               </div>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Image Filter sound</span>
-                <WpCheck v-model="imageFilterSound" aria-label="Image Filter sound" />
+                <Checkbox v-model="imageFilterSound" aria-label="Image Filter sound" />
               </div>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Image Filter desktop notification</span>
-                <WpCheck v-model="imageFilterNotify" aria-label="Image Filter desktop notification" />
+                <Checkbox v-model="imageFilterNotify" aria-label="Image Filter desktop notification" />
               </div>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">New modules start disabled</span>
-                <WpCheck v-model="newModuleDisabled" aria-label="New modules start disabled" />
+                <Checkbox v-model="newModuleDisabled" aria-label="New modules start disabled" />
               </div>
               <div class="wp-pg__row wp-pg__row--switch">
                 <span class="wp-pg__row-label">Confirm destructive bundle actions</span>
-                <WpCheck v-model="confirmDestructiveBundle" aria-label="Confirm destructive bundle actions" />
+                <Checkbox v-model="confirmDestructiveBundle" aria-label="Confirm destructive bundle actions" />
               </div>
               <label class="wp-pg__row">
                 <span class="wp-pg__row-label">Bundle master OFF behavior</span>
@@ -528,8 +527,8 @@ onBeforeUnmount(() => {
         </div>
 
         <footer class="wp-pg__foot">
-          <WpButton size="md" @click="onResetAll">Reset all to defaults</WpButton>
-          <WpButton variant="primary" size="md" @click="onClose">Done</WpButton>
+          <Button size="md" @click="onResetAll">Reset all to defaults</Button>
+          <Button variant="primary" size="md" @click="onClose">Done</Button>
         </footer>
       </section>
     </div>

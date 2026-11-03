@@ -68,7 +68,7 @@ function childRow(
  * delta-Undo toast), reset to the library snapshot (whole bundle or one
  * child), wrap a row into a new library bundle — plus the themed confirm
  * gate the destructive ones go through (`pendingConfirm` drives the
- * widget's ConfirmDialog).
+ * widget's ConfirmModal).
  *
  * `holdSuppressMove` comes from the drag composable: it snaps the list's
  * FLIP/leave transitions off while a bundle frame vanishes.
@@ -888,7 +888,7 @@ export function createBundleOps(state: WidgetState, holdSuppressMove: () => void
     cancelLabel?: string;
   }
 
-  /** Show the themed ConfirmDialog if the user has the
+  /** Show the themed ConfirmModal if the user has the
    *  "Confirm destructive bundle actions" setting enabled, otherwise
    *  resolve immediately to `true`. Returned Promise resolves to the
    *  user's choice (true = proceed, false = cancel). Call sites pattern:

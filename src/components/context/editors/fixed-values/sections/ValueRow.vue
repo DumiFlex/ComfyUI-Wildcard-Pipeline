@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Checkbox from "@/kit/Checkbox.vue";
 import { computed } from "vue";
 import RichTextInput from "../../../../../manager/components/RichTextInput.vue";
 import NegativeField from "../../../../../manager/components/NegativeField.vue";
@@ -10,7 +11,7 @@ import {
 } from "../defaults";
 import { tokenize, type PreviewToken } from "../../_shared/preview-tokens";
 import { stripNonIdentifierChars } from "../../../../../manager/utils/slug";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 
 const props = defineProps<{
   row: DraftRow;
@@ -119,28 +120,14 @@ function onDelete(): void {
       'row--added': isAdded,
     }"
   >
-    <span
+    <Checkbox
       class="row__check"
-      :class="{ 'row__check--on': row.enabled }"
+      size="sm"
+      :model-value="row.enabled"
+      aria-label="Enabled"
       data-test="row-check"
-      role="checkbox"
-      :aria-checked="row.enabled"
-      tabindex="0"
-      @click="onToggle"
-      @keydown.space.prevent="onToggle"
-    >
-      <svg
-        v-if="row.enabled"
-        width="8"
-        height="8"
-        viewBox="0 0 12 12"
-        aria-hidden="true"
-      >
-        <path d="M2.5 6.5 L5 9 L9.5 3.5"
-              fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
-    </span>
+      @update:model-value="onToggle"
+    />
 
     <span
       class="row__name-wrap"
@@ -237,8 +224,9 @@ function onDelete(): void {
       </span>
     </span>
 
-    <WpButton
+    <Button
       v-if="showReset"
+      size="sm"
       variant="outline"
       icon="pi-replay"
       data-test="row-reset"
@@ -248,8 +236,9 @@ function onDelete(): void {
     />
     <span v-else></span>
 
-    <WpButton
+    <Button
       v-if="isAdded"
+      size="sm"
       variant="outline"
       icon="pi-times"
       data-test="row-delete"
@@ -274,20 +263,7 @@ function onDelete(): void {
 }
 .row:last-child { border-bottom: none; }
 .row:hover { background: var(--wp-row-hover, rgba(255, 255, 255, 0.02)); }
-.row__check {
-  width: 14px;
-  height: 14px;
-  border: 1.5px solid var(--wp-border-soft, var(--wp-border));
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  background: var(--wp-bg);
-  cursor: pointer;
-}
-.row__check--on { background: var(--wp-accent); border-color: var(--wp-accent); }
-.row__check svg { display: block; }
+.row__check { flex-shrink: 0; }
 
 .row__name-wrap, .row__value-wrap {
   display: flex;

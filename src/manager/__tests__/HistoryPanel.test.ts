@@ -75,7 +75,7 @@ describe("HistoryPanel.vue", () => {
       attachTo: document.body,
     });
     const closeBtn = document.body.querySelector(
-      ".wp-modal__head .wp-close-btn",
+      "[data-test=\"modal-close\"]",
     ) as HTMLElement | null;
     closeBtn?.click();
     expect(wrap.emitted("update:open")?.[0]).toEqual([false]);

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import WpCheck from "@/kit/WpCheck.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Checkbox from "@/kit/Checkbox.vue";
+import Button from "@/kit/Button.vue";
 
 const props = defineProps<{
   library: boolean;
@@ -30,17 +30,18 @@ function onClickReset(): void {
     <div class="wp-instance-section-head">
       <span class="wp-instance-section-title">Internal flag</span>
       <span v-if="hasOverride" class="wp-instance-section-modified">modified</span>
-      <WpButton
+      <Button
         v-if="hasOverride"
+        size="sm"
         variant="ghost"
         icon="pi-replay"
         data-test="if-reset"
         @click="onClickReset"
-      >Reset</WpButton>
+      >Reset</Button>
     </div>
     <div class="wp-instance-section-body">
       <div class="wp-instance-toggle">
-        <WpCheck
+        <Checkbox
           data-test="if-toggle"
           :model-value="effective"
           aria-label="Internal binding (engine-only)"

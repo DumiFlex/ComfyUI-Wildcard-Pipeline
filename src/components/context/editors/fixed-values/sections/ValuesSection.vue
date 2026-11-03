@@ -13,7 +13,7 @@ import {
   type LibraryRow,
 } from "../defaults";
 import ValueRow from "./ValueRow.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 
 const props = defineProps<{ module: ModuleEntry }>();
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
@@ -151,13 +151,14 @@ const addedCount = computed(() => draftRows.value.filter((r) => r.libraryId === 
         @reset="onReset"
         @delete="onDelete"
       />
-      <WpButton
+      <Button
+        size="sm"
         variant="add"
         icon="pi-plus"
         block
         data-test="vals-add"
         @click="onAddRow"
-      >Add new $var for this instance</WpButton>
+      >Add new $var for this instance</Button>
     </div>
 
     <div class="vals__summary" data-test="vals-summary">

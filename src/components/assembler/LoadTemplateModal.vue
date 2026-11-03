@@ -15,8 +15,7 @@ import { api } from "../../manager/api/client";
 import type { TemplateRow } from "../../manager/api/types";
 import ModalShell from "@/kit/ModalShell.vue";
 import Skeleton from "@/kit/Skeleton.vue";
-import CloseButton from "@/kit/CloseButton.vue";
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: []; pick: [TemplateRow] }>();
@@ -137,7 +136,7 @@ function pick(row: TemplateRow) {
             <span class="wp-ltm__title-detail">· {{ rows.length }} {{ rows.length === 1 ? "template" : "templates" }}</span>
           </div>
         </div>
-        <CloseButton size="sm" kbd="Esc" data-test="load-tpl-close" @click="emit('close')" />
+        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="load-tpl-close" @click="emit('close')" />
       </header>
 
       <div class="wp-ltm__toolbar">
@@ -151,7 +150,8 @@ function pick(row: TemplateRow) {
           data-test="load-tpl-search"
         />
 
-        <WpButton
+        <Button
+          size="sm"
           variant="outline"
           :icon="favoritesOnly ? 'pi-star-fill' : 'pi-star'"
           :pressed="favoritesOnly"
@@ -161,7 +161,8 @@ function pick(row: TemplateRow) {
         />
 
         <div class="wp-ltm__filters-pop">
-          <WpButton
+          <Button
+            size="sm"
             variant="outline"
             icon="pi-filter"
             :pressed="activePopoverCount > 0 || filtersOpen"
@@ -202,12 +203,13 @@ function pick(row: TemplateRow) {
                   >{{ tag }}</button>
                 </div>
               </div>
-              <WpButton
+              <Button
                 v-if="hasActiveFilter"
+                size="sm"
                 variant="ghost"
                 icon="pi-filter-slash"
                 @click="clearAllFilters"
-              >Clear all filters</WpButton>
+              >Clear all filters</Button>
             </div>
           </Transition>
         </div>
@@ -229,7 +231,7 @@ function pick(row: TemplateRow) {
         <div v-else-if="loadError" class="wp-ltm__state wp-ltm__state--error">
           <i class="pi pi-exclamation-triangle" aria-hidden="true" />
           {{ loadError }}
-          <WpButton @click="reload">Retry</WpButton>
+          <Button size="sm" @click="reload">Retry</Button>
         </div>
         <div v-else-if="filtered.length === 0" class="wp-ltm__state">
           <i class="pi pi-inbox" aria-hidden="true" />
@@ -270,7 +272,7 @@ function pick(row: TemplateRow) {
       <footer class="wp-ltm__foot">
         <span class="wp-ltm__hint">Click a template to load it into the assembler.</span>
         <span class="wp-ltm__foot-spacer" />
-        <WpButton data-test="load-tpl-cancel" @click="emit('close')">Cancel</WpButton>
+        <Button size="sm" data-test="load-tpl-cancel" @click="emit('close')">Cancel</Button>
       </footer>
     </div>
   </ModalShell>

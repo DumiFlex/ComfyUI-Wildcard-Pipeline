@@ -35,11 +35,10 @@ import {
 import { localPayloadFingerprint } from "../../manager/import-export/fingerprint";
 import { app } from "#comfyui/app";
 import type { ModuleEntry } from "../../widgets/_shared";
-import WpCheck from "@/kit/WpCheck.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import LoadingMark from "@/kit/LoadingMark.vue";
-import CloseButton from "@/kit/CloseButton.vue";
+import Button from "@/kit/Button.vue";
 import ModalShell from "@/kit/ModalShell.vue";
-import WpButton from "@/kit/WpButton.vue";
 import CodeBlock from "@/kit/CodeBlock.vue";
 
 interface Bundle {
@@ -447,7 +446,7 @@ async function doSaveAsNew(): Promise<void> {
     >
       <header class="wp-ptl__head">
         <h3 id="wp-ptl-title" class="wp-ptl__title">Push to library</h3>
-        <CloseButton size="sm" kbd="Esc" data-test="ptl-close" @click="close" />
+        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="ptl-close" @click="close" />
       </header>
 
       <div class="wp-ptl__body">
@@ -506,7 +505,7 @@ async function doSaveAsNew(): Promise<void> {
             <li v-for="b in bundles" :key="b.id">{{ b.name }}</li>
           </ul>
           <span class="wp-ptl-checkbox">
-            <WpCheck
+            <Checkbox
               v-model="propagate"
               data-test="ptl-propagate"
               aria-label="Propagate update to those bundles"
@@ -568,12 +567,13 @@ async function doSaveAsNew(): Promise<void> {
                 : "content differs" }}</span>
             </li>
           </ul>
-          <WpButton
+          <Button
+            size="sm"
             variant="primary"
             data-test="ptl-relink-confirm"
             :disabled="!relinkTarget || undefined"
             @click="doRelink"
-          >Re-link<template v-if="relinkTarget"> to “{{ relinkTarget.name || relinkTarget.uuid }}”</template></WpButton>
+          >Re-link<template v-if="relinkTarget"> to “{{ relinkTarget.name || relinkTarget.uuid }}”</template></Button>
         </div>
 
         <!-- States the OBSERVABLE fact and points at Re-link first when a
@@ -603,20 +603,22 @@ async function doSaveAsNew(): Promise<void> {
       </div>
 
       <footer class="wp-ptl__foot">
-        <WpButton data-test="ptl-cancel" :disabled="busy" @click="close">Cancel</WpButton>
+        <Button size="sm" data-test="ptl-cancel" :disabled="busy" @click="close">Cancel</Button>
         <span class="wp-ptl-spacer" />
-        <WpButton
+        <Button
+          size="sm"
           data-test="ptl-save-new"
           :disabled="busy"
           @click="doSaveAsNew"
-        >Save as new entry</WpButton>
-        <WpButton
+        >Save as new entry</Button>
+        <Button
+          size="sm"
           variant="primary"
           data-test="ptl-update"
           :disabled="busy || !canUpdateExisting"
           :hint="!isLibraryTracked ? 'No existing library entry to update' : isLibraryMissing ? 'Library entry has been deleted — save as new entry instead' : undefined"
           @click="doUpdate"
-        >Update existing</WpButton>
+        >Update existing</Button>
       </footer>
     </div>
   </ModalShell>

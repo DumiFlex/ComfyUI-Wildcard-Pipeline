@@ -33,7 +33,7 @@ export const RULES = [
     id: "native-checkbox",
     pattern: /type="checkbox"/g,
     allow: [],
-    fix: "Use Checkbox or Toggle (manager) or WpCheck (canvas).",
+    fix: "Use Checkbox (or WpSwitch for a setting that takes effect at once).",
   },
   {
     id: "native-range",
@@ -51,7 +51,7 @@ export const RULES = [
     id: "hand-dialog",
     pattern: /role="dialog"/g,
     allow: [],
-    fix: "Use Modal (manager), or ModalShell / ConfirmDialog (canvas).",
+    fix: "Use Modal or ConfirmModal (ModalShell for a custom panel).",
   },
   {
     id: "manager-raw-button",

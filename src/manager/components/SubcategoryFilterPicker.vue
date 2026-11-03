@@ -16,7 +16,7 @@ import {
 } from "@/manager/parsing/subcatTermState";
 import { highlightExpression } from "@/manager/parsing/exprHighlight";
 import { useGrowableField } from "@/kit/useGrowableField";
-import WpCheck from "@/kit/WpCheck.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 
 interface Props {
   /** Sub-categories declared by the picked wildcard's payload. Used as
@@ -329,7 +329,7 @@ function applySuggestion(): void {
 /**
  * Toggle from anywhere on the row.
  *
- * Clicks that land on `WpCheck` itself are left alone: it already toggles on
+ * Clicks that land on `Checkbox` itself are left alone: it already toggles on
  * its own click, and that event bubbles up here too, so handling both would
  * flip the flag twice and appear to do nothing. Keyboard users keep reaching
  * the real control, which is why it stays focusable rather than becoming
@@ -380,7 +380,7 @@ function onApply(): void {
         Esc {{ mode === "insert" ? "back" : "cancel" }}
       </span>
     </div>
-    <!-- The whole row toggles, not just the 13px box. `WpCheck` is a
+    <!-- The whole row toggles, not just the 13px box. `Checkbox` is a
          `role="checkbox"` span rather than a native input, so wrapping it in a
          <label> associates nothing — the row needs its own handler. -->
     <div
@@ -389,7 +389,7 @@ function onApply(): void {
       data-test="subcat-exclude-null"
       @click="onNullRowClick"
     >
-      <WpCheck v-model="excludeNull" aria-label="Exclude null" />
+      <Checkbox v-model="excludeNull" aria-label="Exclude null" />
       <i class="pi pi-ban" aria-hidden="true" />
       <span>Exclude null</span>
       <!-- Null is a FLAG on the ref, not a term inside the expression — the

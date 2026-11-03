@@ -11,7 +11,7 @@
 import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
 import Icon, { ICON_SM } from "@/kit/Icon.vue";
-import Toggle from "@/kit/Toggle.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
 import Popover from "@/kit/Popover.vue";
 import ModulePicker from "./ModulePicker.vue";
 import { KIND_META } from "./kinds";
@@ -150,7 +150,7 @@ function removePin(name: string): void {
         <div class="wp-trs__top">
           <span class="wp-trs__step">{{ i + 1 }}</span>
           <span class="wp-trs__kind">{{ KIND_META[v.kind].label }}</span>
-          <Toggle
+          <WpSwitch
             class="wp-trs__switch"
             size="sm"
             :model-value="v.enabled"

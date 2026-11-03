@@ -25,6 +25,7 @@ import { computed, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
 import Icon from "@/kit/Icon.vue";
 import Modal from "@/kit/Modal.vue";
+import RadioGroup from "@/kit/RadioGroup.vue";
 import { useDatabaseStore } from "../../stores/databaseStore";
 import { useSystemStore } from "../../stores/systemStore";
 import { useToast } from "@/kit/useToast";
@@ -56,6 +57,17 @@ const LOCATIONS: LocationOption[] = [
     label: "Root (not recommended)",
     description: "Inside this plugin's directory. Survives ComfyUI reinstalls.",
   },
+];
+
+const locationOptions = LOCATIONS.map((o) => ({ value: o.key, label: o.label }));
+function descriptionOf(key: DatabasePreference): string {
+  return LOCATIONS.find((o) => o.key === key)?.description ?? "";
+}
+
+const TRANSFER_OPTIONS: { value: MoveMode | "none"; label: string; hint: string }[] = [
+  { value: "copy", label: "Copy", hint: "Duplicate to new location, keep current as backup" },
+  { value: "move", label: "Move", hint: "Relocate file, source removed" },
+  { value: "none", label: "Don't transfer", hint: "Point at new location, start fresh" },
 ];
 
 // Current effective preference: explicit pref, or "user" as default.
@@ -209,43 +221,36 @@ function fmtBytes(n: number | null): string {
     </div>
 
     <!-- Radio group -->
-    <fieldset class="wp-loc__group" :disabled="envLocked || store.savingConfig">
-      <label
-        v-for="opt in LOCATIONS"
-        :key="opt.key"
-        class="wp-loc__option"
-        :class="{ 'wp-loc__option--selected': selected === opt.key }"
-        :data-test="`location-option-${opt.key}`"
-      >
-        <input
-          type="radio"
-          name="db-location"
-          :value="opt.key"
-          v-model="selected"
-          class="wp-radio wp-loc__radio"
-        />
-        <div class="wp-loc__option-body">
-          <div class="wp-loc__option-head">
-            <span class="wp-loc__option-label">{{ opt.label }}</span>
-            <span
-              v-if="currentPref === opt.key"
-              class="wp-loc__chip wp-loc__chip--current"
-            >current</span>
-          </div>
-          <p class="wp-loc__option-desc">{{ opt.description }}</p>
-          <p v-if="store.config?.locations[opt.key].path" class="wp-loc__option-path wp-mono">
-            {{ store.config.locations[opt.key].path }}
-            <span
-              v-if="store.config.locations[opt.key].exists"
-              class="wp-loc__chip wp-loc__chip--exists"
-            >has data {{ fmtBytes(store.config.locations[opt.key].size_bytes) }}</span>
-          </p>
-          <p v-else class="wp-loc__option-path wp-loc__option-path--missing">
-            Path unavailable (ComfyUI user dir not detected)
-          </p>
-        </div>
-      </label>
-    </fieldset>
+    <RadioGroup
+      v-model="selected"
+      :options="locationOptions"
+      cards
+      class="wp-loc__group"
+      aria-label="Database location"
+      test-prefix="location-option"
+      :disabled="envLocked || store.savingConfig"
+    >
+      <template #label="{ option }">
+        <span class="wp-loc__option-head">
+          <span class="wp-loc__option-label">{{ option.label }}</span>
+          <span
+            v-if="currentPref === option.value"
+            class="wp-loc__chip wp-loc__chip--current"
+          >current</span>
+        </span>
+        <span class="wp-loc__option-desc">{{ descriptionOf(option.value) }}</span>
+        <span v-if="store.config?.locations[option.value].path" class="wp-loc__option-path wp-mono">
+          {{ store.config.locations[option.value].path }}
+          <span
+            v-if="store.config.locations[option.value].exists"
+            class="wp-loc__chip wp-loc__chip--exists"
+          >has data {{ fmtBytes(store.config.locations[option.value].size_bytes) }}</span>
+        </span>
+        <span v-else class="wp-loc__option-path wp-loc__option-path--missing">
+          Path unavailable (ComfyUI user dir not detected)
+        </span>
+      </template>
+    </RadioGroup>
 
     <div class="wp-loc__actions">
       <Button
@@ -269,20 +274,13 @@ function fmtBytes(n: number | null): string {
           The current database at <span class="wp-mono">{{ currentSourcePath }}</span>
           will be transferred to the new location.
         </p>
-        <div class="wp-loc__modal-choice">
-          <label>
-            <input type="radio" class="wp-radio" v-model="transferMode" value="copy" />
-            <strong>Copy</strong> &mdash; duplicate to new location, keep current as backup
-          </label>
-          <label>
-            <input type="radio" class="wp-radio" v-model="transferMode" value="move" />
-            <strong>Move</strong> &mdash; relocate file, source removed
-          </label>
-          <label>
-            <input type="radio" class="wp-radio" v-model="transferMode" value="none" />
-            <strong>Don't transfer</strong> &mdash; point at new location, start fresh
-          </label>
-        </div>
+        <RadioGroup
+          v-model="transferMode"
+          :options="TRANSFER_OPTIONS"
+          class="wp-loc__modal-choice"
+          aria-label="Transfer mode"
+          test-prefix="location-transfer"
+        />
       </div>
       <template #footer>
         <Button variant="ghost" @click="closeModal">Cancel</Button>
@@ -349,32 +347,14 @@ function fmtBytes(n: number | null): string {
   font-size: var(--wp-text-sm);
   margin-bottom: var(--wp-space-4);
 }
-.wp-loc__group {
-  border: none; padding: 0; margin: 0 0 var(--wp-space-4);
-  display: flex; flex-direction: column; gap: var(--wp-space-3);
-}
-.wp-loc__option {
-  display: flex; align-items: flex-start; gap: var(--wp-space-4);
-  padding: var(--wp-space-4);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  background: var(--wp-bg-2);
-  cursor: pointer;
-}
-.wp-loc__option:hover { border-color: var(--wp-border-strong); }
-.wp-loc__option--selected {
-  border-color: var(--wp-accent-500);
-  background: color-mix(in oklab, var(--wp-accent-500) 8%, transparent);
-}
-.wp-loc__radio { margin-top: 3px; }
-.wp-loc__option-body { flex: 1; min-width: 0; }
+.wp-loc__group { margin: 0 0 var(--wp-space-4); }
 .wp-loc__option-head {
   display: flex; align-items: center; gap: var(--wp-space-3);
   margin-bottom: var(--wp-space-1);
 }
 .wp-loc__option-label { font-weight: 500; font-size: var(--wp-text-md); color: var(--wp-text); }
-.wp-loc__option-desc { font-size: var(--wp-text-sm); color: var(--wp-text-dim); margin: 0 0 var(--wp-space-2); }
-.wp-loc__option-path { font-size: var(--wp-text-xs); color: var(--wp-text-muted); margin: 0; word-break: break-all; }
+.wp-loc__option-desc { display: block; font-weight: 400; font-size: var(--wp-text-sm); color: var(--wp-text-dim); margin: 0 0 var(--wp-space-2); }
+.wp-loc__option-path { display: block; font-weight: 400; font-size: var(--wp-text-xs); color: var(--wp-text-muted); margin: 0; word-break: break-all; }
 .wp-loc__option-path--missing { font-style: italic; }
 .wp-loc__chip {
   display: inline-block; padding: 1px 8px;
@@ -397,7 +377,5 @@ function fmtBytes(n: number | null): string {
 .wp-loc__actions { display: flex; justify-content: flex-end; }
 .wp-loc__modal-body { font-size: var(--wp-text-sm); color: var(--wp-text); line-height: 1.6; }
 .wp-loc__modal-body p { margin: 0 0 var(--wp-space-3); }
-.wp-loc__modal-choice { display: flex; flex-direction: column; gap: var(--wp-space-3); margin-top: var(--wp-space-3); }
-.wp-loc__modal-choice label { display: flex; gap: var(--wp-space-3); align-items: flex-start; cursor: pointer; }
-.wp-loc__modal-choice .wp-radio { margin-top: 3px; }
+.wp-loc__modal-choice { margin-top: var(--wp-space-3); }
 </style>

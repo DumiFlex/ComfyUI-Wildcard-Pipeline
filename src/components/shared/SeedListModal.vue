@@ -6,9 +6,8 @@ import Kbd from "@/kit/Kbd.vue";
 import { computed, onBeforeUnmount, ref } from "vue";
 import { deriveLoopSeeds, parseSeedLocks, type SeedStrategy } from "./seed-derive";
 import SeedLockRow from "./SeedLockRow.vue";
-import CloseButton from "@/kit/CloseButton.vue";
+import Button from "@/kit/Button.vue";
 import ModalShell from "@/kit/ModalShell.vue";
-import WpButton from "@/kit/WpButton.vue";
 
 const props = defineProps<{
   nodeName: string;
@@ -150,7 +149,7 @@ onBeforeUnmount(() => {
             <div class="sm__title-row"><span class="sm__name">{{ nodeName }}</span><span class="sm__chip">Iteration Seeds</span></div>
             <div class="sm__sub">base {{ baseSeed }} · {{ strategy }} · {{ Math.max(1, count) }} iterations</div>
           </div>
-          <CloseButton size="sm" kbd="Esc" data-test="seed-modal-close" @click="emit('close')" />
+          <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="seed-modal-close" @click="emit('close')" />
         </div>
 
         <div class="sm__bar">
@@ -159,12 +158,13 @@ onBeforeUnmount(() => {
           <span v-if="lockedCount" class="sm__lockcount" data-test="mx-seed-lockcount">{{ lockedCount }} locked</span>
           <span v-if="bypassEnabled && bypassCount" class="sm__lockcount" data-test="mx-bypass-count">{{ bypassCount }} bypassed</span>
           <span class="sm__bar-spacer" />
-          <WpButton variant="outline" data-test="mx-seed-lockall" @click="lockAll">Lock all</WpButton>
-          <WpButton variant="outline" data-test="mx-seed-unlockall" @click="unlockAll">Unlock all</WpButton>
-          <WpButton
+          <Button size="sm" variant="outline" data-test="mx-seed-lockall" @click="lockAll">Lock all</Button>
+          <Button size="sm" variant="outline" data-test="mx-seed-unlockall" @click="unlockAll">Unlock all</Button>
+          <Button
+            size="sm"
             variant="outline" :class="{ 'sm__done': copied }" :icon="copied ? 'pi-check' : 'pi-copy'"
             data-test="mx-seed-copy" hint="Copy all seeds · Alt-click to copy only the locked ones" @click="copyAll"
-          >{{ copied ? "Copied" : "Copy" }}</WpButton>
+          >{{ copied ? "Copied" : "Copy" }}</Button>
         </div>
 
         <div v-if="overrideHint" class="sm__hint" data-test="mx-seed-hint">
@@ -203,11 +203,12 @@ onBeforeUnmount(() => {
         <div class="sm__foot">
           <span class="sm__foot-hint"><Kbd keys="Esc" size="sm" /> to close · locks save with the node</span>
           <span class="sm__foot-spacer" />
-          <WpButton
+          <Button
+            size="sm"
             variant="outline" :class="{ 'sm__done': pasted }" :icon="pasted ? 'pi-check' : 'pi-clipboard'"
             data-test="mx-seed-paste" hint="Replace all locks from copied text" @click="pasteAll"
-          >{{ pasted ? "Pasted" : "Paste" }}</WpButton>
-          <WpButton variant="primary" data-test="seed-modal-done" @click="emit('close')">Done</WpButton>
+          >{{ pasted ? "Pasted" : "Paste" }}</Button>
+          <Button size="sm" variant="primary" data-test="seed-modal-done" @click="emit('close')">Done</Button>
         </div>
       </div>
   </ModalShell>

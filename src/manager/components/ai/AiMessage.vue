@@ -20,7 +20,7 @@
  * end are closed first (`closeOpen`), and the words added since the last
  * update fade in (never inside code; off with reduced motion).
  */
-import { computed, h, ref, watch, type VNode } from "vue";
+import { cloneVNode, computed, h, ref, watch, type VNode } from "vue";
 import { useRouter } from "vue-router";
 import { deletedIds } from "../../composables/useLibraryChanged";
 import { useCardViewContext } from "../../composables/card-views/context";
@@ -90,7 +90,7 @@ let fadeAt = -1;
 
 function fade(parts: Array<VNode | string>): Array<VNode | string> {
   if (!parts.length) return parts;
-  return [h("span", { class: "wp-ai-msg__new", key: `n${fadeAt}.${fadeKey++}` }, parts)];
+  return [h("span", { class: "wp-ai-msg__new wp-enter-fade", key: `n${fadeAt}.${fadeKey++}` }, parts)];
 }
 
 /** Text with the marker taken out; what follows it fades. */
@@ -364,7 +364,12 @@ const Body = () => {
   fading = false;
   fadeKey = 0;
   fadeAt = parsed.value.at;
-  return parsed.value.blocks.map(block);
+  const blocks = parsed.value.blocks;
+  // While it streams, the newest block fades in too (not a code block).
+  return blocks.map((b, i) => {
+    const v = block(b);
+    return props.live && i === blocks.length - 1 && b.t !== "pre" ? cloneVNode(v, { class: "wp-enter-fade" }) : v;
+  });
 };
 </script>
 
@@ -459,17 +464,7 @@ const Body = () => {
 }
 .wp-ai-msg :deep(.wp-ai-msg__fold:hover) { color: var(--wp-text); background: var(--wp-bg-2); }
 .wp-ai-msg :deep(.wp-ai-msg__fold:focus-visible) { outline: 2px solid var(--wp-accent-500); outline-offset: -2px; }
-/* Animated through a registered custom property, not `opacity` / `transform`
- * directly: those go to the compositor, which lifts the element onto its own
- * layer while it moves and drops it after, so the text went soft during the
- * motion and snapped by half a pixel at its end. */
-@property --wp-ai-msg-o { syntax: "<number>"; inherits: false; initial-value: 1; }
-.wp-ai-msg--live :deep(.wp-ai-msg__new) { opacity: var(--wp-ai-msg-o); animation: wp-ai-msg-fade 150ms ease-out; }
-.wp-ai-msg--live > :deep(:last-child:not(.wp-ai-msg__codeblock)) { opacity: var(--wp-ai-msg-o); animation: wp-ai-msg-fade 150ms ease-out; }
-@keyframes wp-ai-msg-fade { from { --wp-ai-msg-o: 0; } to { --wp-ai-msg-o: 1; } }
-@media (prefers-reduced-motion: reduce) {
-  .wp-ai-msg--live :deep(.wp-ai-msg__new), .wp-ai-msg--live > :deep(:last-child:not(.wp-ai-msg__codeblock)) { animation: none; }
-}
+/* New words and the newest block fade in with the kit's `.wp-enter-fade` (motion.css). */
 .wp-ai-msg :deep(.wp-ai-msg__items) {
   list-style: none; padding: 4px; gap: 0; border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm);
 }

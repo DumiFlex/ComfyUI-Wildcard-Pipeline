@@ -5,6 +5,7 @@ import { activeAiRequests, endAiRequest, startAiRequest, watchesProgress } from 
 import { api } from "../../../api/client";
 
 describe("AiWorking", () => {
+  // Drawn by the kit's WorkingLine (its own tests cover the word box and the marks).
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
@@ -13,21 +14,20 @@ describe("AiWorking", () => {
 
   it("shows a finished line and the phase's tempo", () => {
     const w = mount(AiWorking, { props: { text: "Writing…", phase: "writing" } });
-    expect(w.get('[data-test="ai-working-detail"]').text()).toBe("Writing…");
     // One line: what is happening first, then the time.
-    expect(w.get('[data-test="ai-working-word"]').text()).toBe("Writing…");
-    expect(w.get('[data-test="ai-working-time"]').text()).toBe("0s");
+    expect(w.get('[data-test="working-line-word"]').text()).toBe("Writing…");
+    expect(w.get('[data-test="working-line-time"]').text()).toBe("0s");
     expect(w.attributes("data-tempo")).toBe("fast");
     expect(w.attributes("aria-label")).toBe("Writing…");
     // The logo's sparkles are drawn, not a spinner icon.
-    expect(w.findAll(".wp-aiw__star")).toHaveLength(3);
+    expect(w.findAll(".wp-wl__star")).toHaveLength(3);
     w.unmount();
   });
 
   it("mixes playful words with what is really happening", async () => {
     vi.useFakeTimers();
     const w = mount(AiWorking, { props: { text: "Searching the library…", phase: "thinking", variant: "orbit" } });
-    const word = () => w.get('[data-test="ai-working-word"]').text();
+    const word = () => w.get('[data-test="working-line-word"]').text();
     expect(word()).toBe("Searching the library…");
     vi.advanceTimersByTime(3500);
     await flushPromises();
@@ -39,7 +39,7 @@ describe("AiWorking", () => {
     vi.advanceTimersByTime(3500);
     await w.setProps({ text: "Writing…", phase: "writing" });
     expect(word()).toBe("Writing…");
-    expect(w.findAll(".wp-aiw__dot")).toHaveLength(4);
+    expect(w.findAll(".wp-wl__dot")).toHaveLength(4);
     w.unmount();
   });
 
@@ -47,7 +47,7 @@ describe("AiWorking", () => {
     expect([0, 0.39, 0.45, 0.65, 0.95].map(pickVariant)).toEqual(["typing", "typing", "shuffle", "orbit", "burst"]);
     for (const v of ["typing", "shuffle", "orbit", "burst"] as const) {
       const m = mount(AiWorking, { props: { text: "x", variant: v } });
-      expect(m.findAll(".wp-aiw__star")).toHaveLength(3);
+      expect(m.findAll(".wp-wl__star")).toHaveLength(3);
       m.unmount();
     }
   });
@@ -61,12 +61,12 @@ describe("AiWorking", () => {
     const w = mount(AiWorking, { props: { label: "Planning" } });
     await flushPromises();
     expect(fetchMock).toHaveBeenCalledWith(`/wp/api/ai/progress/${id}`);
-    expect(w.get('[data-test="ai-working-detail"]').text()).toBe("Planning: request 2, writing, about 420 tokens");
-    expect(w.get('[data-test="ai-working-word"]').text()).toBe("Writing · 420 tokens…");
+    expect(w.attributes("aria-label")).toBe("Planning: request 2, writing, about 420 tokens");
+    expect(w.get('[data-test="working-line-word"]').text()).toBe("Writing · 420 tokens…");
     expect(w.attributes("data-tempo")).toBe("fast");
     vi.advanceTimersByTime(2100);
     await flushPromises();
-    expect(w.get('[data-test="ai-working-time"]').text()).toBe("2s");
+    expect(w.get('[data-test="working-line-time"]').text()).toBe("2s");
     endAiRequest(id);
     w.unmount();
   });
@@ -78,42 +78,17 @@ describe("AiWorking", () => {
     const id = startAiRequest("/wp/api/ai/wildcard/draft");
     const w = mount(AiWorking, { props: { label: "Drafting" } });
     await flushPromises();
-    expect(w.get('[data-test="ai-working-detail"]').text()).toBe("Drafting: thinking, about 900 tokens");
-    expect(w.get('[data-test="ai-working-word"]').text()).toBe("Thinking · 900 tokens…");
+    expect(w.attributes("aria-label")).toBe("Drafting: thinking, about 900 tokens");
+    expect(w.get('[data-test="working-line-word"]').text()).toBe("Thinking · 900 tokens…");
     endAiRequest(id);
     w.unmount();
   });
 
-  it("never makes the words box narrower than its word", async () => {
-    vi.useFakeTimers();
-    // jsdom lays nothing out: each word is 9.3px a letter.
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-      return { width: (this.textContent ?? "").length * 9.3 } as DOMRect;
-    });
-    const w = mount(AiWorking, { props: { text: "Mixing…", variant: "typing" } });
-    await flushPromises();
-    const box = () => w.get(".wp-aiw__words");
-    // Rounded up with a pixel to spare, so the last letters are never lost.
-    expect(box().attributes("style")).toContain("width: 67px");
-    // A longer word widens the box at once ...
-    await w.setProps({ text: "Searching the library…" });
-    await flushPromises();
-    expect(box().attributes("style")).toContain("width: 206px");
-    expect(box().attributes("data-grow")).toBe("true");
-    // ... a shorter one narrows it smoothly.
-    await w.setProps({ text: "Thinking…" });
-    await flushPromises();
-    expect(box().attributes("style")).toContain("width: 85px");
-    expect(box().attributes("data-grow")).toBeUndefined();
-    w.unmount();
-    vi.restoreAllMocks();
-  });
-
   it("does not crossfade a number ticking up in the chat's status", async () => {
     const w = mount(AiWorking, { props: { text: "Writing · 38 tokens…", variant: "typing" } });
-    const first = w.get('[data-test="ai-working-word"]').element;
+    const first = w.get('[data-test="working-line-word"]').element;
     await w.setProps({ text: "Writing · 1,204 tokens…" });
-    const word = w.get('[data-test="ai-working-word"]');
+    const word = w.get('[data-test="working-line-word"]');
     expect(word.element).toBe(first);
     expect(word.text()).toBe("Writing · 1,204 tokens…");
     w.unmount();
@@ -151,19 +126,19 @@ describe("AiWorking lines showing together", () => {
     vi.useFakeTimers();
     const top = mount(AiWorking, { props: { label: "Planning", inline: true } });
     const page = mount(AiWorking, { props: { label: "Planning", size: 34 } });
-    const word = (w: typeof top) => w.get('[data-test="ai-working-word"]').text();
+    const word = (w: typeof top) => w.get('[data-test="working-line-word"]').text();
     expect(top.attributes("data-variant")).toBe(page.attributes("data-variant"));
     for (let i = 0; i < 4; i++) {
       vi.advanceTimersByTime(3500);
       await flushPromises();
       expect(word(top)).toBe(word(page));
     }
-    expect(top.get('[data-test="ai-working-time"]').text()).toBe(page.get('[data-test="ai-working-time"]').text());
+    expect(top.get('[data-test="working-line-time"]').text()).toBe(page.get('[data-test="working-line-time"]').text());
     // A line that joins later shows the same word and counts from the same start.
     const late = mount(AiWorking, { props: { label: "Planning" } });
     await flushPromises();
     expect(word(late)).toBe(word(page));
-    expect(late.get('[data-test="ai-working-time"]').text()).toBe("14s");
+    expect(late.get('[data-test="working-line-time"]').text()).toBe("14s");
     expect(late.attributes("data-variant")).toBe(page.attributes("data-variant"));
     // A fixed drawing still wins for that line.
     const fixed = mount(AiWorking, { props: { label: "Planning", variant: "burst" } });
@@ -172,7 +147,7 @@ describe("AiWorking lines showing together", () => {
     // Once every line is gone the next job starts afresh.
     const next = mount(AiWorking, { props: { label: "Drafting" } });
     await flushPromises();
-    expect(next.get('[data-test="ai-working-time"]').text()).toBe("0s");
+    expect(next.get('[data-test="working-line-time"]').text()).toBe("0s");
     next.unmount();
   });
 });

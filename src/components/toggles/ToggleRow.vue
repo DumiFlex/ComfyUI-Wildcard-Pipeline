@@ -7,13 +7,12 @@
  * The row carries `data-wp-out="toggle_<out>"` while it has an output, so
  * `extension/row-outputs.ts` puts that BOOLEAN dot at the row's right edge.
  */
-import WpButton from "@/kit/WpButton.vue";
+import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
-import WpCheck from "@/kit/WpCheck.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import WpSelect from "@/kit/WpSelect.vue";
-import CloseButton from "@/kit/CloseButton.vue";
 import Combobox from "@/kit/Combobox.vue";
 import { vTooltip } from "@/kit/tooltip";
 import { varColorClass } from "../shared/var-color";
@@ -180,7 +179,7 @@ function flip(): void {
         />
       </template>
       <span v-else-if="t.style === 'checkbox'" v-tooltip="blockedHint()" class="wp-tgr__ctl">
-        <WpCheck
+        <Checkbox
           :model-value="t.on"
           :disabled="blocked"
           :aria-label="t.name"
@@ -214,7 +213,7 @@ function flip(): void {
     <div v-if="editable && editing" class="wp-tgr__edit" :data-test="`tg-editor-${t.id}`">
       <div class="wp-tgr__edit-head">
         <span class="wp-tgr__cap">EDIT TOGGLE</span>
-        <CloseButton size="sm" label="Done" @click="emit('edit')" />
+        <Button variant="ghost" icon="times" size="sm" aria-label="Done" @click="emit('edit')" />
       </div>
       <label class="wp-tgr__field">
         <span>Name <em>on the row and its output</em></span>
@@ -237,7 +236,7 @@ function flip(): void {
           >
         </span>
         <span v-tooltip="'Show the $variable under the name in the clean view'" class="wp-tgr__check">
-          <WpCheck
+          <Checkbox
             :model-value="!t.hide_var"
             size="sm"
             aria-label="Show in clean view"
@@ -305,7 +304,7 @@ function flip(): void {
         />
       </div>
       <span v-if="t.control" v-tooltip="'Mute or bypass while the toggle is ON instead, for a node used only as a switchboard'" class="wp-tgr__check">
-        <WpCheck
+        <Checkbox
           :model-value="!!t.invert"
           size="sm"
           aria-label="Invert"
@@ -328,7 +327,7 @@ function flip(): void {
         />
       </div>
       <span v-tooltip="'When the upstream Context holds this variable as a yes/no word (true, on, 1, no …), it sets the switch'" class="wp-tgr__check">
-        <WpCheck
+        <Checkbox
           :model-value="!!t.upstream"
           size="sm"
           aria-label="Upstream can set it"
@@ -349,7 +348,7 @@ function flip(): void {
       </div>
       <div class="wp-tgr__edit-foot">
         <span v-tooltip="!t.pin && outputsFull ? 'All 16 outputs are in use' : 'Show a BOOLEAN output for switch nodes'" class="wp-tgr__check">
-          <WpCheck
+          <Checkbox
             :model-value="t.pin"
             size="sm"
             :disabled="!t.pin && outputsFull"
@@ -360,8 +359,8 @@ function flip(): void {
           <span aria-hidden="true">BOOLEAN output</span>
         </span>
         <span class="wp-tgr__foot-btns">
-          <WpButton variant="ghost" size="sm" icon="pi-trash" data-test="tg-delete" @click="emit('remove')">Remove</WpButton>
-          <WpButton variant="primary" size="sm" icon="pi-check" data-test="tg-done" @click="emit('edit')">Done</WpButton>
+          <Button variant="ghost" size="sm" icon="pi-trash" data-test="tg-delete" @click="emit('remove')">Remove</Button>
+          <Button variant="primary" size="sm" icon="pi-check" data-test="tg-done" @click="emit('edit')">Done</Button>
         </span>
       </div>
     </div>

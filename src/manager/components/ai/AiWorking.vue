@@ -80,6 +80,7 @@ export function formatElapsed(s: number): string {
 /**
  * The "the model is working" line, one line like Claude Code's: a small
  * animated mark, a word that changes every few seconds and the time so far.
+ * The kit's WorkingLine draws it; this component only decides what it says.
  * Most words are playful ("Shuffling…"); every third one, and right away
  * whenever it changes, is what is really happening ("Reading the prompt…",
  * "Thinking…", "Writing · 420 tokens…", or the chat's own status). The full
@@ -91,14 +92,15 @@ export function formatElapsed(s: number): string {
  * stars swap places round the big one), orbit (the logo's four nodes circle
  * the stars) or burst (the small stars fly out of the big one and back).
  * Its tempo follows the phase: slow while the model reads the prompt,
- * quicker while it thinks, quickest while it writes.
+ * quicker while it thinks, quickest while it writes. The whole status is the
+ * line's accessible name and tooltip.
  *
  * Without `text` it shows the newest AI request in flight
  * (`api/ai-progress.ts`), polling the server for its phase. The chat passes
  * its own `text` and `phase` from its stream.
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, watch } from "vue";
-import { BRAND_COLOURS, STAR_A, STAR_B, STAR_BIG } from "@/kit/logo-paths";
+import { computed, onBeforeUnmount, onMounted, watch } from "vue";
+import WorkingLine from "@/kit/WorkingLine.vue";
 import { activeAiRequests, fetchAiProgress, type AiPhase, type AiProgress } from "../../api/ai-progress";
 
 const props = withDefaults(defineProps<{
@@ -183,41 +185,10 @@ const wordKey = computed(() => {
   return props.text !== undefined ? `r:${real.value.replace(/\d[\d,.]*/g, "#")}` : `r:${shownPhase.value}`;
 });
 
-/** The words box is never narrower than its word, or the word's end is
- *  cut off ("Writing · 38 token"): it widens at once for a longer word and
- *  narrows smoothly, a moment later, for a shorter one, once the old word
- *  has mostly faded out over the new (a crossfade in place, nothing goes
- *  blank). The word may still end in "…" where the line really is too long
- *  for its place. */
-const measure = ref<HTMLElement | null>(null);
-const boxWidth = ref<number | null>(null);
-const growing = ref(false);
-async function fit(): Promise<void> {
-  await nextTick();
-  // Rounded up, plus a pixel to spare: offsetWidth rounds a 186.6px word
-  // down to 186px, and one pixel short is enough for the browser to drop
-  // "s…" for its own "…", which Firefox draws invisibly on this gradient
-  // text, so the line read "Writing · 3 token" for good.
-  const raw = measure.value?.getBoundingClientRect().width ?? 0;
-  const w = raw ? Math.ceil(raw) + 1 : 0;
-  if (!w || w === boxWidth.value) return;
-  growing.value = boxWidth.value === null || w > boxWidth.value;
-  boxWidth.value = w;
-}
-watch(shown, () => { void fit(); });
-
 // A new phase (or chat status) is said straight away, on every line.
 watch(() => [shownPhase.value, props.text], () => { step.value = 0; });
 
-// The word's width can also change on its own, when the font loads late.
-let resized: ResizeObserver | null = null;
-
 onMounted(() => {
-  void fit();
-  if (typeof ResizeObserver !== "undefined" && measure.value) {
-    resized = new ResizeObserver(() => { void fit(); });
-    resized.observe(measure.value);
-  }
   const count = (): void => { elapsed.value = Math.floor((Date.now() - shared.startedAt) / 1000); };
   count();
   tick = setInterval(count, 1000);
@@ -229,7 +200,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (poll) clearInterval(poll);
   if (tick) clearInterval(tick);
-  resized?.disconnect();
   leave();
 });
 
@@ -238,248 +208,20 @@ const slow = computed(() => watching.value && elapsed.value >= 15
   && (shownPhase.value === "starting" || shownPhase.value === "reading"));
 const title = computed(() => (slow.value
   ? `${detail.value}. Local models can take a minute to read a long prompt.` : detail.value));
-const tempo = computed(() => (shownPhase.value === "writing" ? "fast"
+const tempo = computed<"slow" | "mid" | "fast">(() => (shownPhase.value === "writing" ? "fast"
   : shownPhase.value === "thinking" ? "mid" : "slow"));
-
-/** The logo's colours: big star, first small star, second small star. */
-const [BIG, A, B] = BRAND_COLOURS.extension;
-/** Steps between them, for the orbit's in-between nodes. */
-const AB = `color-mix(in srgb, ${B} 70%, ${A})`;
-const BA = `color-mix(in srgb, ${BIG} 60%, ${A})`;
-/** The logo's four nodes, for the orbit. */
-const NODES = [[911, 512, B], [512, 911, AB], [113, 512, BA], [512, 113, A]] as const;
-/** Typing stars: the big sparkle drawn small three times in a row. */
-const TYPING = [[250, A], [512, BIG], [774, B]] as const;
 </script>
 
 <template>
-  <div
-    class="wp-aiw"
-    :data-tempo="tempo"
-    :data-variant="mark"
-    :data-inline="inline ? 'true' : undefined"
-    role="status"
-    :aria-label="title"
-    :title="title"
+  <WorkingLine
+    :word="shown"
+    :word-key="wordKey"
+    :time="time"
+    :variant="mark"
+    :tempo="tempo"
+    :size="size"
+    :inline="inline"
+    :label="title"
     data-test="ai-working"
-    :style="{ '--wp-aiw-big': BIG, '--wp-aiw-a': A, '--wp-aiw-b': B }"
-  >
-    <svg class="wp-aiw__logo" viewBox="0 0 1024 1024" :width="size" :height="size" aria-hidden="true">
-      <template v-if="mark === 'typing'">
-        <g v-for="([x, c], i) in TYPING" :key="i" class="wp-aiw__hop" :style="{ '--wp-aiw-k': i }">
-          <path class="wp-aiw__star" :style="{ fill: c }" :transform="`translate(${x - 256} 256) scale(.5)`" :d="STAR_BIG" />
-        </g>
-      </template>
-      <g v-else-if="mark === 'shuffle'" transform="translate(512 512) scale(1.45) translate(-512 -512)">
-        <path class="wp-aiw__star wp-aiw__star--big wp-aiw__dip" :style="{ fill: BIG }" :d="STAR_BIG" />
-        <g class="wp-aiw__vb wp-aiw__swap">
-          <path class="wp-aiw__star" :style="{ fill: A }" :d="STAR_A" />
-          <path class="wp-aiw__star" :style="{ fill: B }" :d="STAR_B" />
-        </g>
-      </g>
-      <template v-else-if="mark === 'orbit'">
-        <g class="wp-aiw__vb wp-aiw__spin">
-          <circle
-            v-for="([x, y, c], i) in NODES" :key="i" class="wp-aiw__dot"
-            :style="{ '--wp-aiw-k': i, fill: c }" :cx="x" :cy="y" r="70"
-          />
-        </g>
-        <path class="wp-aiw__star wp-aiw__star--big wp-aiw__breathe" :style="{ fill: BIG }" :d="STAR_BIG" />
-        <path class="wp-aiw__star" :style="{ fill: A }" :d="STAR_A" />
-        <path class="wp-aiw__star" :style="{ fill: B }" :d="STAR_B" />
-      </template>
-      <g v-else transform="translate(512 512) scale(1.3) translate(-512 -512)">
-        <path class="wp-aiw__star wp-aiw__star--big wp-aiw__pop" :style="{ fill: BIG }" :d="STAR_BIG" />
-        <path class="wp-aiw__star wp-aiw__burst" :style="{ fill: A, '--wp-aiw-dx': '152px', '--wp-aiw-dy': '-152px' }" :d="STAR_A" />
-        <path class="wp-aiw__star wp-aiw__burst" :style="{ fill: B, '--wp-aiw-dx': '-152px', '--wp-aiw-dy': '152px' }" :d="STAR_B" />
-      </g>
-    </svg>
-    <span
-      class="wp-aiw__words"
-      :data-grow="growing ? 'true' : undefined"
-      :style="boxWidth ? { width: `${boxWidth}px` } : undefined"
-    >
-      <Transition name="wp-aiw-word" type="transition">
-        <span :key="wordKey" class="wp-aiw__word" data-test="ai-working-word">{{ shown }}…</span>
-      </Transition>
-      <span ref="measure" class="wp-aiw__word wp-aiw__measure" aria-hidden="true">{{ shown }}…</span>
-    </span>
-    <span class="wp-aiw__time" data-test="ai-working-time">{{ time }}</span>
-    <span class="wp-aiw__sr" data-test="ai-working-detail">{{ detail }}</span>
-  </div>
+  />
 </template>
-
-<style scoped>
-.wp-aiw {
-  --wp-aiw-t: 2.8s;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  color: var(--wp-text-muted);
-  font-size: 13px;
-  white-space: nowrap;
-}
-.wp-aiw[data-tempo="mid"] { --wp-aiw-t: 2.2s; }
-.wp-aiw[data-tempo="fast"] { --wp-aiw-t: 1.5s; }
-.wp-aiw__logo { flex-shrink: 0; overflow: visible; }
-.wp-aiw__words {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  /* Narrows once the old word has mostly faded; widens at once. */
-  transition: width 0.35s cubic-bezier(0.25, 0.8, 0.25, 1) 0.3s;
-}
-.wp-aiw__words[data-grow="true"] { transition: none; }
-.wp-aiw__word {
-  display: inline-block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 500;
-  /* A light band sweeps over the gradient text, like Claude's own line. */
-  background:
-    linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.75) 50%, transparent 65%) no-repeat,
-    linear-gradient(90deg, var(--wp-aiw-big), var(--wp-aiw-a) 45%, var(--wp-aiw-b));
-  background-size: 250% 100%, 100% 100%;
-  background-position: 150% 0, 0 0;
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-  animation: wp-aiw-shimmer 2.6s linear infinite;
-}
-@keyframes wp-aiw-shimmer {
-  0% { background-position: 150% 0, 0 0; }
-  70%, 100% { background-position: -50% 0, 0 0; }
-}
-/* Sized like the word, never seen: what the box grows or shrinks to. */
-.wp-aiw__measure {
-  position: absolute; left: 0; top: 0;
-  visibility: hidden; pointer-events: none; animation: none;
-  max-width: none; overflow: visible;
-}
-.wp-aiw__time { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--wp-text-dim); }
-.wp-aiw[data-inline="true"] { font-size: 12px; }
-.wp-aiw[data-inline="true"] .wp-aiw__words { max-width: 240px; }
-.wp-aiw__sr {
-  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
-  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-}
-/* Crossfade in place: the old word fades out on top of the new one. The
- * fade and blur run through registered custom properties (see the marks
- * below for why): an `opacity` / `filter` transition lifts the word onto a
- * compositor layer, which re-rasterises the text and snaps it to whole
- * pixels as the fade begins. The leaving word keeps its exact spot (top 0,
- * the box is one word tall), with no -50% translate to land between pixels. */
-.wp-aiw-word-enter-active, .wp-aiw-word-leave-active {
-  opacity: var(--wp-aiw-wo);
-  filter: blur(var(--wp-aiw-wb));
-  transition: --wp-aiw-wo 0.45s ease, --wp-aiw-wb 0.45s ease;
-}
-.wp-aiw-word-leave-active { position: absolute; left: 0; top: 0; }
-.wp-aiw-word-enter-from, .wp-aiw-word-leave-to { --wp-aiw-wo: 0; --wp-aiw-wb: 2px; }
-@media (prefers-reduced-motion: reduce) {
-  .wp-aiw__word { animation: none; }
-  .wp-aiw__words { transition: none; }
-  .wp-aiw-word-enter-from, .wp-aiw-word-leave-to { --wp-aiw-wb: 0px; }
-}
-
-/* Every mark animates registered custom properties, never `transform` or
- * `opacity` themselves. A `transform` / `opacity` animation goes to the
- * compositor, which lifts each path onto its own layer as it starts:
- * rasterised once at a fixed scale and snapped to whole pixels, so the sharp
- * mark went soft and jumped half a pixel the moment it began to move. A
- * custom property animates on the main thread and each frame repaints the
- * vector paths in place, as sharp as at rest. */
-@property --wp-aiw-x { syntax: "<length>"; inherits: false; initial-value: 0px; }
-@property --wp-aiw-f { syntax: "<number>"; inherits: false; initial-value: 0; }
-@property --wp-aiw-r { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
-@property --wp-aiw-s { syntax: "<number>"; inherits: false; initial-value: 1; }
-@property --wp-aiw-o { syntax: "<number>"; inherits: false; initial-value: 1; }
-@property --wp-aiw-wo { syntax: "<number>"; inherits: false; initial-value: 1; }
-@property --wp-aiw-wb { syntax: "<length>"; inherits: false; initial-value: 0px; }
-
-.wp-aiw__star, .wp-aiw__dot, .wp-aiw__hop { transform-box: fill-box; transform-origin: center; }
-.wp-aiw__vb { transform-box: view-box; transform-origin: 512px 512px; }
-
-/* Typing stars: each hops in turn. */
-.wp-aiw__hop {
-  transform: translateY(var(--wp-aiw-x)) scale(var(--wp-aiw-s));
-  animation: wp-aiw-hop var(--wp-aiw-t) ease-in-out infinite;
-  animation-delay: calc(var(--wp-aiw-t) * var(--wp-aiw-k) * 0.15);
-}
-@keyframes wp-aiw-hop {
-  0%, 40%, 100% { --wp-aiw-x: 0px; --wp-aiw-s: 1; }
-  20% { --wp-aiw-x: -110px; --wp-aiw-s: 1.12; }
-}
-
-/* Shuffle: the small stars swap places, the big one dips and turns. */
-.wp-aiw__swap {
-  transform: rotate(var(--wp-aiw-r));
-  animation: wp-aiw-swap calc(var(--wp-aiw-t) * 2) cubic-bezier(0.65, 0, 0.35, 1) infinite;
-}
-.wp-aiw__dip {
-  transform: rotate(var(--wp-aiw-r)) scale(var(--wp-aiw-s));
-  animation: wp-aiw-dip var(--wp-aiw-t) cubic-bezier(0.65, 0, 0.35, 1) infinite;
-}
-@keyframes wp-aiw-swap {
-  0%, 15% { --wp-aiw-r: 0deg; }
-  50%, 65% { --wp-aiw-r: 180deg; }
-  100% { --wp-aiw-r: 360deg; }
-}
-@keyframes wp-aiw-dip {
-  0%, 15% { --wp-aiw-s: 1; --wp-aiw-r: 0deg; }
-  32% { --wp-aiw-s: 0.7; --wp-aiw-r: 45deg; }
-  50%, 100% { --wp-aiw-s: 1; --wp-aiw-r: 90deg; }
-}
-
-/* Orbit: the four nodes circle the stars and twinkle in turn. */
-.wp-aiw__spin {
-  transform: rotate(var(--wp-aiw-r));
-  animation: wp-aiw-spin calc(var(--wp-aiw-t) * 2) cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite;
-}
-.wp-aiw__dot {
-  opacity: var(--wp-aiw-o);
-  transform: scale(var(--wp-aiw-s));
-  animation: wp-aiw-twinkle var(--wp-aiw-t) ease-in-out infinite;
-  animation-delay: calc(var(--wp-aiw-t) * var(--wp-aiw-k) * -0.25);
-}
-.wp-aiw__breathe {
-  transform: scale(var(--wp-aiw-s));
-  animation: wp-aiw-breathe var(--wp-aiw-t) ease-in-out infinite;
-}
-@keyframes wp-aiw-spin { from { --wp-aiw-r: 0deg; } to { --wp-aiw-r: 360deg; } }
-@keyframes wp-aiw-twinkle {
-  0%, 100% { --wp-aiw-o: 1; --wp-aiw-s: 1; }
-  50% { --wp-aiw-o: 0.35; --wp-aiw-s: 0.6; }
-}
-@keyframes wp-aiw-breathe { 0%, 100% { --wp-aiw-s: 1; } 50% { --wp-aiw-s: 0.86; } }
-
-/* Burst: the small stars fly out of the big one and back. `--wp-aiw-f` is
- * how far out they are (1 = at --wp-aiw-dx/dy, 0 = home). */
-.wp-aiw__burst {
-  opacity: var(--wp-aiw-o);
-  transform:
-    translate(calc(var(--wp-aiw-dx) * var(--wp-aiw-f)), calc(var(--wp-aiw-dy) * var(--wp-aiw-f)))
-    scale(var(--wp-aiw-s));
-  animation: wp-aiw-burst var(--wp-aiw-t) cubic-bezier(0.3, 0, 0.2, 1) infinite;
-}
-.wp-aiw__pop {
-  transform: scale(var(--wp-aiw-s));
-  animation: wp-aiw-pop var(--wp-aiw-t) ease-in-out infinite;
-}
-@keyframes wp-aiw-burst {
-  0% { --wp-aiw-f: 1; --wp-aiw-s: 0; --wp-aiw-o: 0; }
-  15% { --wp-aiw-o: 1; }
-  45%, 75% { --wp-aiw-f: 0; --wp-aiw-s: 1.15; --wp-aiw-o: 1; }
-  100% { --wp-aiw-f: 1; --wp-aiw-s: 0; --wp-aiw-o: 0; }
-}
-@keyframes wp-aiw-pop { 0%, 100% { --wp-aiw-s: 1.1; } 40% { --wp-aiw-s: 0.8; } }
-
-@media (prefers-reduced-motion: reduce) {
-  .wp-aiw__logo * { animation: none !important; }
-  .wp-aiw__logo { opacity: var(--wp-aiw-o); animation: wp-aiw-fade 2.4s ease-in-out infinite; }
-  @keyframes wp-aiw-fade { 0%, 100% { --wp-aiw-o: 1; } 50% { --wp-aiw-o: 0.55; } }
-}
-</style>
