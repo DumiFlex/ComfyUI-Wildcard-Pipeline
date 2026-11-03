@@ -17,7 +17,7 @@ import Skeleton from "@/kit/Skeleton.vue";
 import RadioGroup, { type RadioOption } from "@/kit/RadioGroup.vue";
 import { vTooltip } from "@/kit/tooltip";
 import type { SelectOption } from "@/kit/select-types";
-import SettingGroup from "../SettingGroup.vue";
+import SettingGroup from "@/kit/SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import LibraryNoteGroup from "../LibraryNoteGroup.vue";
 import { api } from "../../../api/client";

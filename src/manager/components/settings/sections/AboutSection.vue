@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Icon from "@/kit/Icon.vue";
 import SupportLinks from "@/kit/SupportLinks.vue";
-import SettingGroup from "../SettingGroup.vue";
+import SettingGroup from "@/kit/SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { DISCORD_INVITE, GITHUB_REPO, KIT_SITE, SUPPORT_LINKS, WPC_API_URL, kitVersion } from "../../../config/links";
 

@@ -35,6 +35,18 @@ const key = (init: KeyboardEventInit): void => {
 };
 
 describe("BookmarkWidget", () => {
+  it("picks an icon from the kit picker, tinted with the bookmark's colour", async () => {
+    const w = make({ color: "#e11d48" });
+    await w.get('[data-test="bm-icon"]').trigger("click");
+    const grid = w.get('[data-test="bm-icon-grid"]');
+    expect(grid.find('[data-test="icon-picker-none"]').exists()).toBe(false);
+    expect(grid.get('[data-test="icon-picker-star"] i').attributes("style")).toContain("color");
+    await grid.get('[data-test="icon-picker-star"]').trigger("click");
+    expect(lastConfig(w)?.icon).toBe("star");
+    expect(w.find('[data-test="bm-icon-grid"]').exists()).toBe(false);
+    w.unmount();
+  });
+
   it("records a shortcut, skipping lone modifiers", async () => {
     const w = make();
     await w.get('[data-test="bm-record"]').trigger("click");

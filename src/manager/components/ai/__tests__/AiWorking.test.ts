@@ -20,7 +20,7 @@ describe("AiWorking", () => {
     expect(w.attributes("data-tempo")).toBe("fast");
     expect(w.attributes("aria-label")).toBe("Writing…");
     // The logo's sparkles are drawn, not a spinner icon.
-    expect(w.findAll(".wp-wl__star")).toHaveLength(3);
+    expect(w.findAll(".wp-wl__logo path")).toHaveLength(3);
     w.unmount();
   });
 
@@ -39,7 +39,7 @@ describe("AiWorking", () => {
     vi.advanceTimersByTime(3500);
     await w.setProps({ text: "Writing…", phase: "writing" });
     expect(word()).toBe("Writing…");
-    expect(w.findAll(".wp-wl__dot")).toHaveLength(4);
+    expect(w.findAll(".wp-wl__logo circle")).toHaveLength(4);
     w.unmount();
   });
 
@@ -47,7 +47,7 @@ describe("AiWorking", () => {
     expect([0, 0.39, 0.45, 0.65, 0.95].map(pickVariant)).toEqual(["typing", "typing", "shuffle", "orbit", "burst"]);
     for (const v of ["typing", "shuffle", "orbit", "burst"] as const) {
       const m = mount(AiWorking, { props: { text: "x", variant: v } });
-      expect(m.findAll(".wp-wl__star")).toHaveLength(3);
+      expect(m.findAll(".wp-wl__logo path")).toHaveLength(3);
       m.unmount();
     }
   });

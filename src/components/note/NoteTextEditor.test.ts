@@ -36,9 +36,32 @@ describe("NoteTextEditor inserts", () => {
     await w.get('[data-test="note-fmt-icon"]').trigger("click");
     area.setSelectionRange(1, 1);
     await w.get('[data-test="note-text"]').trigger("blur");
-    await w.findAll('[data-test="note-icon-panel"] button')[2]?.trigger("click");
-    expect(lastText(w)?.startsWith("a:pi-")).toBe(true);
-    expect(lastText(w)?.endsWith(":bc")).toBe(true);
+    await w.get('[data-test="icon-picker-cog"]').trigger("click");
+    expect(lastText(w)).toBe("a:pi-cog:bc");
+    w.unmount();
+  });
+
+  it("offers every glyph with a search box and no None when inserting an icon", async () => {
+    const w = make("");
+    await w.get('[data-test="note-fmt-icon"]').trigger("click");
+    const panel = w.get('[data-test="note-icon-panel"]');
+    expect(panel.find('[data-test="icon-picker-none"]').exists()).toBe(false);
+    const before = panel.findAll('[data-test^="icon-picker-"][role="option"]').length;
+    expect(before).toBeGreaterThan(200);
+    await panel.get('input[aria-label="Search icons"]').setValue("arrow right");
+    const shown = panel.findAll('[role="option"]').map((b) => b.attributes("data-test"));
+    expect(shown).toContain("icon-picker-arrow-right");
+    expect(shown.length).toBeLessThan(before);
+    w.unmount();
+  });
+
+  it("lets a link button go without an icon (None)", async () => {
+    const w = make("");
+    await w.get('[data-test="note-fmt-link"]').trigger("click");
+    await w.get('[data-test="note-link-icon"]').trigger("click");
+    await w.get('[data-test="note-link-icons"] [data-test="icon-picker-none"]').trigger("click");
+    expect(w.find('[data-test="note-link-icons"]').exists()).toBe(false);
+    expect(w.get('[data-test="note-link-icon"]').text()).toContain("No icon");
     w.unmount();
   });
 });

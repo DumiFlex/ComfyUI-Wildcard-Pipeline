@@ -66,7 +66,7 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   {
     id: "selection-toolbar", name: "SelectionToolbar", group: "pieces", file: "src/manager/components/SelectionToolbar.vue", surfaces: ["manager"],
-    use: "The bar that appears when rows are selected: tag, weight, negative, move and delete them together.",
+    use: "The wildcard editor's bar while rows are selected: the kit SelectionBar with its tag, weight, negative and move menus. Other lists use SelectionBar itself.",
   },
   {
     id: "validity-icon", name: "ValidityIcon", group: "pieces", file: "src/manager/components/ValidityIcon.vue", surfaces: ["manager"],
