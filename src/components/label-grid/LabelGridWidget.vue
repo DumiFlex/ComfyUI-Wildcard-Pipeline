@@ -42,6 +42,7 @@ import {
   suggestPreset,
   type PresetId,
 } from "./presets";
+import { vToggleRow } from "@/kit/toggle-row";
 
 const props = withDefaults(
   defineProps<{
@@ -321,7 +322,7 @@ function text(ev: Event): string {
 
     <!-- GRID ────────────────────────────────────────────────────────── -->
     <section class="wp-lg__section">
-      <div class="wp-lg__head">
+      <div v-toggle-row class="wp-lg__head">
         <span class="wp-lg__label">GRID</span>
         <span class="wp-lg__head-note">{{ cfg.grid ? 'one image of every image' : 'off: only the labelled images' }}</span>
         <WpSwitch

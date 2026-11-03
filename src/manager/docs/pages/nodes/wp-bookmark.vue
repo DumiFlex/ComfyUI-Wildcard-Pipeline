@@ -67,7 +67,7 @@ const dock = [
       <p>
         A bookmark has no node frame and can't be resized: it is a small pill with its icon, name and shortcut (a warning
         mark when something else uses the key, a pin when it is pinned). Hover it for where it lands.
-        Select it to show its pencil; the pencil or a double-click opens the editor, and <b>Done</b>
+        A double-click, or the indigo pencil in ComfyUI's selection toolbar while it is selected, opens the editor, and <b>Done</b>
         closes it. A new bookmark opens in the editor.
       </p>
     </DocSection>

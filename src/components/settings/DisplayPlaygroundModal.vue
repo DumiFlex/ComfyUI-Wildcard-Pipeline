@@ -43,6 +43,7 @@ import Button from "@/kit/Button.vue";
 import ModalShell from "@/kit/ModalShell.vue";
 import { useDialogFocus } from "@/kit/useDialogFocus";
 import { useHostDialogGuard } from "@/components/shared/useHostDialogGuard";
+import { vToggleRow } from "@/kit/toggle-row";
 
 type Density = "comfortable" | "compact" | "minimal";
 type Decoration = "full" | "minimal" | "off";
@@ -367,7 +368,7 @@ onBeforeUnmount(() => {
                 :options="[{ value: 'badge', label: 'Badge (default)' }, { value: 'dot', label: 'Dot (compact)' }, { value: 'both', label: 'Both (verbose)' }]"
               />
             </label>
-            <div class="wp-pg__row wp-pg__row--switch">
+            <div v-toggle-row class="wp-pg__row wp-pg__row--switch">
               <span class="wp-pg__row-label">Border highlights</span>
               <Checkbox v-model="borderHighlight" aria-label="Border highlights" />
             </div>
@@ -375,11 +376,11 @@ onBeforeUnmount(() => {
 
           <fieldset class="wp-pg__group">
             <legend class="wp-pg__group-title">Collapse &amp; focus</legend>
-            <div class="wp-pg__row wp-pg__row--switch">
+            <div v-toggle-row class="wp-pg__row wp-pg__row--switch">
               <span class="wp-pg__row-label">Collapse new modules by default</span>
               <Checkbox v-model="collapsedByDefault" aria-label="Collapse new modules by default" />
             </div>
-            <div class="wp-pg__row wp-pg__row--switch">
+            <div v-toggle-row class="wp-pg__row wp-pg__row--switch">
               <span class="wp-pg__row-label">Collapse new bundles by default</span>
               <Checkbox v-model="bundleCollapsedByDefault" aria-label="Collapse new bundles by default" />
             </div>
@@ -390,7 +391,7 @@ onBeforeUnmount(() => {
                 :options="[{ value: 'independent', label: 'Independent (default)' }, { value: 'accordion', label: 'Accordion (one at a time)' }]"
               />
             </label>
-            <div class="wp-pg__row wp-pg__row--switch">
+            <div v-toggle-row class="wp-pg__row wp-pg__row--switch">
               <span class="wp-pg__row-label">Focus mode (dim non-hovered)</span>
               <Checkbox v-model="focusMode" aria-label="Focus mode (dim non-hovered)" />
             </div>
@@ -426,30 +427,30 @@ onBeforeUnmount(() => {
             <!-- Previewed under the module mockup on the right
                  (PlaygroundBehaviorPreview): toasts, autocomplete and
                  validation. -->
-            <div class="wp-pg__row wp-pg__row--switch">
+            <div v-toggle-row class="wp-pg__row wp-pg__row--switch">
               <span class="wp-pg__row-label">Booru tag autocomplete</span>
               <Checkbox v-model="tagAutocomplete" aria-label="Booru tag autocomplete" />
             </div>
             <!-- Separate switches on purpose: someone writing danbooru
                  prompts may have no LoRAs at all, and someone with 200 of
                  them may find the tag list noise. -->
-            <div class="wp-pg__row wp-pg__row--switch">
+            <div v-toggle-row class="wp-pg__row wp-pg__row--switch">
               <span class="wp-pg__row-label">LoRA autocomplete</span>
               <Checkbox v-model="loraAutocomplete" aria-label="LoRA autocomplete" />
             </div>
-            <div class="wp-pg__row wp-pg__row--switch">
+            <div v-toggle-row class="wp-pg__row wp-pg__row--switch">
               <span class="wp-pg__row-label">Embedding autocomplete</span>
               <Checkbox v-model="embeddingAutocomplete" aria-label="Embedding autocomplete" />
             </div>
-            <div class="wp-pg__row wp-pg__row--switch">
+            <div v-toggle-row class="wp-pg__row wp-pg__row--switch">
               <span class="wp-pg__row-label">Append ", " after a completion</span>
               <Checkbox v-model="autocompleteSeparator" aria-label="Append a comma and space after a completion" />
             </div>
-            <div class="wp-pg__row wp-pg__row--switch">
+            <div v-toggle-row class="wp-pg__row wp-pg__row--switch">
               <span class="wp-pg__row-label">Write tags with spaces</span>
               <Checkbox v-model="autocompleteSpaces" aria-label="Write tags with spaces" />
             </div>
-            <div class="wp-pg__row wp-pg__row--switch">
+            <div v-toggle-row class="wp-pg__row wp-pg__row--switch">
               <span class="wp-pg__row-label">Escape brackets in tags</span>
               <Checkbox v-model="autocompleteEscapeBrackets" aria-label="Escape brackets in tags" />
             </div>
@@ -481,23 +482,23 @@ onBeforeUnmount(() => {
                 :options="[{ value: 'short', label: 'Short (3 s)' }, { value: 'default', label: 'Default (5 s)' }, { value: 'long', label: 'Long (10 s)' }, { value: 'sticky', label: 'Sticky' }]"
               />
             </label>
-            <div class="wp-pg__row wp-pg__row--switch">
+            <div v-toggle-row class="wp-pg__row wp-pg__row--switch">
               <span class="wp-pg__row-label">Suppress info toasts</span>
               <Checkbox v-model="suppressInfoToasts" aria-label="Suppress info toasts" />
             </div>
-            <div class="wp-pg__row wp-pg__row--switch">
+            <div v-toggle-row class="wp-pg__row wp-pg__row--switch">
               <span class="wp-pg__row-label">Image Filter sound</span>
               <Checkbox v-model="imageFilterSound" aria-label="Image Filter sound" />
             </div>
-            <div class="wp-pg__row wp-pg__row--switch">
+            <div v-toggle-row class="wp-pg__row wp-pg__row--switch">
               <span class="wp-pg__row-label">Image Filter desktop notification</span>
               <Checkbox v-model="imageFilterNotify" aria-label="Image Filter desktop notification" />
             </div>
-            <div class="wp-pg__row wp-pg__row--switch">
+            <div v-toggle-row class="wp-pg__row wp-pg__row--switch">
               <span class="wp-pg__row-label">New modules start disabled</span>
               <Checkbox v-model="newModuleDisabled" aria-label="New modules start disabled" />
             </div>
-            <div class="wp-pg__row wp-pg__row--switch">
+            <div v-toggle-row class="wp-pg__row wp-pg__row--switch">
               <span class="wp-pg__row-label">Confirm destructive bundle actions</span>
               <Checkbox v-model="confirmDestructiveBundle" aria-label="Confirm destructive bundle actions" />
             </div>

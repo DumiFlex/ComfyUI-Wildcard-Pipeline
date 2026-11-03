@@ -3,7 +3,6 @@ import { computed, onMounted, ref, watch } from "vue";
 import ColorField from "@/kit/ColorField.vue";
 import Input from "@/kit/Input.vue";
 import Button from "@/kit/Button.vue";
-import WpIconButton from "@/kit/WpIconButton.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
@@ -123,14 +122,6 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
           :aria-label="bookmarkHint"
           data-test="note-bookmark-mark"
         ></i>
-        <WpIconButton
-          class="wp-note__edit"
-          icon="pi-pencil"
-          label="Edit note"
-          variant="bare"
-          data-test="note-edit"
-          @click="emit('update:editing', true)"
-        />
       </div>
       <div v-if="config.look !== 'label'" class="wp-note__body">
         <NoteMarkdown v-if="config.text.trim()" :text="config.text" />
@@ -367,16 +358,6 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
 .wp-note--label .wp-note__title { font-size: 14px; flex: 0 1 auto; }
 .wp-note__marks { display: inline-flex; gap: 4px; flex: none; opacity: 0.8; }
 .wp-note__marks .pi { font-size: 11px; }
-.wp-note__edit {
-  flex: none;
-  margin-left: auto;
-  pointer-events: auto;
-  opacity: 0.35;
-  transition: opacity 150ms;
-}
-.wp-note__edit:hover,
-.wp-note__edit:focus-visible { opacity: 1; }
-.wp-note--label .wp-note__edit { display: none; }
 /* Also a bookmark: a small mark in the head (its tooltip names the key). */
 .wp-note__bm {
   flex: none;
@@ -385,8 +366,7 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
   color: var(--wp-note-tone);
   pointer-events: auto;
 }
-.wp-note__bm + .wp-note__bm,
-.wp-note__bm + .wp-note__edit { margin-left: 2px; }
+.wp-note__bm + .wp-note__bm { margin-left: 2px; }
 .wp-note__pinmark { color: var(--wp-text-dim); font-size: 11px; }
 .wp-note--label .wp-note__bm { color: inherit; opacity: 0.85; }
 
@@ -469,7 +449,6 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
   .lg-node:has(.wp-note) .lg-node-widgets * { pointer-events: none !important; }
   .lg-node:has(.wp-note) .wp-note__form,
   .lg-node:has(.wp-note) .wp-note__form *,
-  .lg-node:has(.wp-note) .wp-note__edit,
   .lg-node:has(.wp-note) .wp-note-md a { pointer-events: auto !important; }
 
   .wp-note-md p { margin: 0 0 6px; }

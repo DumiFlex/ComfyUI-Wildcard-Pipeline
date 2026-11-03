@@ -43,6 +43,7 @@ import LoadingMark from "@/kit/LoadingMark.vue";
 import Button from "@/kit/Button.vue";
 import ModalShell from "@/kit/ModalShell.vue";
 import CodeBlock from "@/kit/CodeBlock.vue";
+import { vToggleRow } from "@/kit/toggle-row";
 
 interface Bundle {
   id: string;
@@ -506,7 +507,7 @@ async function doSaveAsNew(): Promise<void> {
           <ul class="wp-ptl-bundles__list">
             <li v-for="b in bundles" :key="b.id">{{ b.name }}</li>
           </ul>
-          <span class="wp-ptl-checkbox">
+          <span v-toggle-row class="wp-ptl-checkbox">
             <Checkbox
               v-model="propagate"
               data-test="ptl-propagate"
