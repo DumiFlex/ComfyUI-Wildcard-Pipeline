@@ -4,6 +4,7 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
@@ -23,10 +24,10 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         Wire a Context's output into a <b>WP Debug</b>. After each Generate it shows everything
         that reached that point. It has no output and changes nothing.
       </p>
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-debug-viewer.png"
-        ratio="2 / 1"
-        caption="A WP Context with the Starter set bundle and Hair, feeding WP Debug. The Variables tab lists each variable, its value, its tags and which module set it."
+        ratio="1720 / 860"
+        caption="The Scene Context feeding WP Debug after a run. The Variables tab lists each variable, its value, its tags and which module set it."
       />
     </DocSection>
 

@@ -1,0 +1,48 @@
+{
+  "node": "WP_Bookmark",
+  "image": "images/docs/wp-bookmark.png",
+  "pins": [
+    {
+      "group": "controls",
+      "term": "Lands at",
+      "x": 0.5302,
+      "y": 0.4016
+    },
+    {
+      "group": "controls",
+      "term": "Use this view",
+      "x": 0.6907,
+      "y": 0.4441
+    },
+    {
+      "group": "controls",
+      "term": "Zoom",
+      "x": 0.5302,
+      "y": 0.5559
+    },
+    {
+      "group": "controls",
+      "term": "Shortcut",
+      "x": 0.7159,
+      "y": 0.6512
+    },
+    {
+      "group": "controls",
+      "term": "Show on canvas",
+      "x": 0.5302,
+      "y": 0.7367
+    },
+    {
+      "group": "controls",
+      "term": "Pinned",
+      "x": 0.6945,
+      "y": 0.7367
+    },
+    {
+      "group": "controls",
+      "term": "Go",
+      "x": 0.8579,
+      "y": 0.8218
+    }
+  ]
+}

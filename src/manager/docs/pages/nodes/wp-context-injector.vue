@@ -3,7 +3,7 @@ import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
-import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocFields from "../../../components/docs/DocFields.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
@@ -28,10 +28,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <VarToken>$place</VarToken>, and a template of <VarToken>a woman wearing $outfit,
         $place</VarToken> prints "a woman wearing red hoodie, ripped jeans, rooftop at night".
       </p>
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-context-injector.png"
-        ratio="16 / 7"
-        caption="Two text boxes wired into a WP Context Injector, named $outfit and $place, used in the Assembler's template."
+        ratio="1720 / 752"
+        caption="Three text boxes (the LoRA trigger words) wired into a WP Context Injector, each becoming a variable; WP Debug after the run lists them with the picks from the Contexts above."
       />
       <DocUseWhen
         :good="[

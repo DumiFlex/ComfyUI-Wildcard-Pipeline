@@ -3,7 +3,7 @@ import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
-import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocFields from "../../../components/docs/DocFields.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
@@ -36,10 +36,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
           'Text typed onto the canvas or an LLM caption: use WP Context Injector',
         ]"
       />
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-context.png"
-        ratio="16 / 7"
-        caption="A WP Context with a few modules, wired into the next node."
+        ratio="1720 / 752"
+        caption="Two WP Contexts from the One image example: Character (its bundles open, each row with its lock, globe and bin) feeds Scene."
       />
     </DocSection>
 

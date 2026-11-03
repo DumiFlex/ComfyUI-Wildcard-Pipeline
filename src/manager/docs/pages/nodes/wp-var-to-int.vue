@@ -3,7 +3,7 @@ import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
-import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
@@ -26,10 +26,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         the number out and gives it to any node that wants a whole number. If there's no number,
         it gives your default.
       </p>
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-var-to-int.png"
-        ratio="16 / 6"
-        caption="WP Var → Int reads $resolution (1024) and sends it to Empty Latent Image's width."
+        ratio="1720 / 644"
+        caption="WP Var → Int reads $size ('832x1216', the Render Context's pick for an sdxl model) at index 0 and sends 832 to Empty Latent Image's width."
       />
     </DocSection>
 

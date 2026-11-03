@@ -3,7 +3,7 @@ import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
-import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
@@ -25,10 +25,10 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         a sampler can bypass its whole save branch, or bypassing one LoRA can let a different one run.
         It never runs and is left out of the prompt.
       </p>
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-mode-relay.png"
         ratio="1720 / 752"
-        caption="The watched node is muted, so the relay mutes the node in its WP Node Group."
+        caption="WP Model Info is muted, so the relay watching it sends Mute and its WP Node Group mutes the Render settings nodes."
       />
     </DocSection>
 

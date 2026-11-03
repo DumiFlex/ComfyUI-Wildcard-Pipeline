@@ -67,20 +67,23 @@ function openLightbox(): void {
 
 <template>
   <figure class="wp-doc-img">
-    <ImageGrid
-      v-if="props.src && !failed"
-      ref="gridEl"
-      class="wp-doc-img__grid"
-      :images="[{ id: props.src, src: fullSrc, alt: alt ?? caption }]"
-      aspect="auto"
-      :columns="1"
-      hint
-      :lightbox="false"
-      :aria-label="`Open ${alt ?? caption} at full size`"
-      data-test="doc-image-open"
-      @open="openLightbox"
-      @error="failed = true"
-    />
+    <div v-if="props.src && !failed" class="wp-doc-img__frame">
+      <ImageGrid
+        ref="gridEl"
+        class="wp-doc-img__grid"
+        :images="[{ id: props.src, src: fullSrc, alt: alt ?? caption }]"
+        aspect="auto"
+        :columns="1"
+        hint
+        :lightbox="false"
+        :aria-label="`Open ${alt ?? caption} at full size`"
+        data-test="doc-image-open"
+        @open="openLightbox"
+        @error="failed = true"
+      />
+      <!-- Drawn over the picture, in its own box (DocAnnotated's pins). -->
+      <slot name="overlay" />
+    </div>
     <div v-else class="wp-doc-img__ph" :style="{ aspectRatio: ratio }" role="img" :aria-label="`Placeholder: ${caption}`">
       <i class="pi pi-image wp-doc-img__ph-icon" aria-hidden="true" />
       <span class="wp-doc-img__ph-tag">Example image</span>
@@ -96,6 +99,7 @@ function openLightbox(): void {
 /* The picture is the kit ImageGrid at its own shape: one tile, full width,
  * a magnifier on hover, and a click opens the page's gallery. */
 .wp-doc-img__grid :deep(.wp-image-grid__open) { border-radius: var(--wp-radius-lg); }
+.wp-doc-img__frame { position: relative; }
 /* The docs prose indents every list; the grid's own list must not be. */
 .wp-doc-img__grid :deep(.wp-image-grid__list) { margin: 0; padding: 0; }
 .wp-doc-img__ph {

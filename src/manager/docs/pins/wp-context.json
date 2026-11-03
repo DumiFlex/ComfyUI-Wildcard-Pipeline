@@ -1,0 +1,30 @@
+{
+  "node": "WP_Context",
+  "image": "images/docs/wp-context.png",
+  "pins": [
+    {
+      "group": "ports",
+      "term": "upstream (in)",
+      "x": 0.1716,
+      "y": 0.1543
+    },
+    {
+      "group": "ports",
+      "term": "seed",
+      "x": 0.1716,
+      "y": 0.1905
+    },
+    {
+      "group": "ports",
+      "term": "context (out)",
+      "x": 0.4993,
+      "y": 0.1543
+    },
+    {
+      "group": "markers",
+      "term": "Lock / globe / bin",
+      "x": 0.4293,
+      "y": 0.3525
+    }
+  ]
+}

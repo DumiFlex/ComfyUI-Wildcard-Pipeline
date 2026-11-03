@@ -4,6 +4,7 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
@@ -26,10 +27,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         can branch on it without a Context Injector, and can show a BOOLEAN output at the right of its
         row for a switch node.
       </p>
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-toggles.png"
-        ratio="1720 / 752"
-        caption="LoRA character is off, so the LoRA wired into its dot is bypassed and Use its own clothes (which needs it) is off too."
+        ratio="1720 / 860"
+        caption="Hires fix is on and Quick preview off: their BOOLEAN outputs feed ComfyUI's If/Else Switch and two Preview as Text nodes, which print what the run sent (True, False, and the switch's pick). Detailer is off, so the text node wired into its dot is muted."
       />
     </DocSection>
 
@@ -70,7 +71,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
       <DocImage
         src="images/docs/wp-node-group.png"
         ratio="1720 / 752"
-        caption="Detailer is off, so the two nodes in its WP Node Group are muted."
+        caption="Two nodes in a group, wired into Detailer's dot. Detailer is off, so both are muted."
       />
       <Banner tone="info" note>
         This happens on the canvas, the moment the toggle flips, so the saved workflow keeps the

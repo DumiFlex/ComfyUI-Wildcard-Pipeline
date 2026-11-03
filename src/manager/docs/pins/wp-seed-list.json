@@ -1,0 +1,48 @@
+{
+  "node": "WP_SeedList",
+  "image": "images/docs/wp-seed-list.png",
+  "pins": [
+    {
+      "group": "controls",
+      "term": "base_seed",
+      "x": 0.3827,
+      "y": 0.2061
+    },
+    {
+      "group": "controls",
+      "term": "count",
+      "x": 0.3827,
+      "y": 0.2516
+    },
+    {
+      "group": "controls",
+      "term": "Strategy",
+      "x": 0.394,
+      "y": 0.3279
+    },
+    {
+      "group": "controls",
+      "term": "Per-iteration seeds",
+      "x": 0.394,
+      "y": 0.3831
+    },
+    {
+      "group": "controls",
+      "term": "Override … from loop",
+      "x": 0.6354,
+      "y": 0.5552
+    },
+    {
+      "group": "controls",
+      "term": "loop_config (in)",
+      "x": 0.3827,
+      "y": 0.1639
+    },
+    {
+      "group": "controls",
+      "term": "seed (out)",
+      "x": 0.7025,
+      "y": 0.1639
+    }
+  ]
+}

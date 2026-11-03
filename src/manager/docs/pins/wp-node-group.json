@@ -1,0 +1,30 @@
+{
+  "node": "WP_NodeGroup",
+  "image": "images/docs/wp-node-group.png",
+  "pins": [
+    {
+      "group": "controls",
+      "term": "node dots (in)",
+      "x": 0.3002,
+      "y": 0.3703
+    },
+    {
+      "group": "controls",
+      "term": "nodes (out)",
+      "x": 0.6416,
+      "y": 0.3703
+    },
+    {
+      "group": "controls",
+      "term": "Run / Mute / Bypass",
+      "x": 0.63,
+      "y": 0.4867
+    },
+    {
+      "group": "controls",
+      "term": "Mode chip",
+      "x": 0.6271,
+      "y": 0.5366
+    }
+  ]
+}

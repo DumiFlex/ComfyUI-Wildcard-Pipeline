@@ -1,0 +1,84 @@
+{
+  "node": "WP_LabelGrid",
+  "image": "images/docs/wp-label-grid.png",
+  "pins": [
+    {
+      "group": "ports",
+      "term": "images",
+      "x": 0.4548,
+      "y": 0.1306
+    },
+    {
+      "group": "ports",
+      "term": "labels",
+      "x": 0.4548,
+      "y": 0.1529
+    },
+    {
+      "group": "ports",
+      "term": "label_text",
+      "x": 0.4548,
+      "y": 0.2511
+    },
+    {
+      "group": "ports",
+      "term": "title",
+      "x": 0.4548,
+      "y": 0.5212
+    },
+    {
+      "group": "ports",
+      "term": "row_headers, column_headers",
+      "x": 0.4548,
+      "y": 0.4542
+    },
+    {
+      "group": "ports",
+      "term": "images (out)",
+      "x": 0.7461,
+      "y": 0.1306
+    },
+    {
+      "group": "ports",
+      "term": "grid (out)",
+      "x": 0.7461,
+      "y": 0.1529
+    },
+    {
+      "group": "label",
+      "term": "Text",
+      "x": 0.4637,
+      "y": 0.2511
+    },
+    {
+      "group": "label",
+      "term": "Place",
+      "x": 0.4938,
+      "y": 0.2846
+    },
+    {
+      "group": "grid",
+      "term": "Layout",
+      "x": 0.4637,
+      "y": 0.3717
+    },
+    {
+      "group": "grid",
+      "term": "Rows, Columns",
+      "x": 0.4938,
+      "y": 0.4542
+    },
+    {
+      "group": "grid",
+      "term": "Title, Spacing",
+      "x": 0.4938,
+      "y": 0.5212
+    },
+    {
+      "group": "grid",
+      "term": "Colours",
+      "x": 0.4938,
+      "y": 0.5882
+    }
+  ]
+}

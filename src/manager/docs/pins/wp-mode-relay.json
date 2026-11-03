@@ -1,0 +1,36 @@
+{
+  "node": "WP_ModeRelay",
+  "image": "images/docs/wp-mode-relay.png",
+  "pins": [
+    {
+      "group": "controls",
+      "term": "watch dots (in)",
+      "x": 0.2516,
+      "y": 0.3023
+    },
+    {
+      "group": "controls",
+      "term": "drives (out)",
+      "x": 0.6083,
+      "y": 0.3023
+    },
+    {
+      "group": "controls",
+      "term": "All muted",
+      "x": 0.4252,
+      "y": 0.3975
+    },
+    {
+      "group": "controls",
+      "term": "All bypassed",
+      "x": 0.4251,
+      "y": 0.4561
+    },
+    {
+      "group": "controls",
+      "term": "Any runs",
+      "x": 0.4253,
+      "y": 0.5146
+    }
+  ]
+}

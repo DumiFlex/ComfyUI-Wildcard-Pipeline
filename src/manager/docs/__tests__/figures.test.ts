@@ -17,7 +17,7 @@ describe("docs figure descriptions", () => {
     const keys = new Set<string>();
     for (const f of files(PAGES)) {
       const src = readFileSync(f, "utf8");
-      for (const m of src.matchAll(/<DocImage[^>]*?\ssrc="([^"]+)"/g)) keys.add(m[1]!);
+      for (const m of src.matchAll(/<Doc(?:Image|Annotated)[^>]*?\ssrc="([^"]+)"/g)) keys.add(m[1]!);
       for (const m of src.matchAll(/<Doc(?:Flow|Figure|FigureText)[^>]*?\sfigure="([^"]+)"/g)) keys.add(m[1]!);
       for (const m of src.matchAll(/<(?:DocFlow|DocFigure)(?=[\s>])([^>]*)>/g)) {
         expect(m[1], `${f}: a DocFlow / DocFigure without a figure id`).toMatch(/\sfigure="/);

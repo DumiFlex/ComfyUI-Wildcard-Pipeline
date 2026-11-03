@@ -3,7 +3,7 @@ import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
-import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
@@ -24,7 +24,7 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         and its output into a toggle's dot: when the toggle is off, every node in the group is muted
         or bypassed. Groups can go into groups. It never runs and is left out of the prompt.
       </p>
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-node-group.png"
         ratio="1720 / 752"
         caption="Two nodes in a group, wired into Detailer's dot. Detailer is off, so both are muted."
