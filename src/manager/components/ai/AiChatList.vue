@@ -6,6 +6,8 @@
  * first and are never pruned; the rest are grouped by when they were last
  * used. Rename and pin don't move a chat; delete asks inline first.
  */
+import { inputEl } from "../../utils/kit-field-el";
+import Input from "@/kit/Input.vue";
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
@@ -28,7 +30,7 @@ const error = ref("");
 const renaming = ref<string | null>(null);
 const draft = ref("");
 const confirming = ref<string | null>(null);
-const renameBox = ref<HTMLInputElement[] | null>(null);
+const renameBox = ref<HTMLInputElement | null>(null);
 let timer: ReturnType<typeof setTimeout> | undefined;
 let asked = 0;
 
@@ -91,7 +93,7 @@ function startRename(c: AiChatSummary): void {
   confirming.value = null;
   renaming.value = c.id;
   draft.value = plainMentions(c.title);
-  void nextTick(() => renameBox.value?.[0]?.select());
+  void nextTick(() => renameBox.value?.select());
 }
 
 async function saveRename(c: AiChatSummary): Promise<void> {
@@ -162,10 +164,11 @@ function turnsLabel(n: number): string {
             <Button variant="danger" size="sm" data-test="ai-chats-confirm" @click="remove(c)">Delete</Button>
           </template>
           <template v-else-if="renaming === c.id">
-            <input
-              ref="renameBox"
+            <Input
+              :ref="(c) => (renameBox = inputEl(c))"
               v-model="draft"
-              class="wp-input wp-input--sm wp-ai-chats__rename"
+              size="sm"
+              class="wp-ai-chats__rename"
               maxlength="120"
               aria-label="Chat title"
               data-test="ai-chats-rename-input"

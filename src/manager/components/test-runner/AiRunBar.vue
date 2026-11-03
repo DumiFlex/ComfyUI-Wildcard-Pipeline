@@ -6,6 +6,7 @@
  * any changes it proposes) before answering. Changes come back as proposal
  * cards, so nothing is saved until the user applies them.
  */
+import Input from "@/kit/Input.vue";
 import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
 import { useAiChat } from "../../composables/useAiChat";
@@ -40,13 +41,13 @@ function why(): void {
     <Button size="sm" variant="ghost" data-test="tr-ai-explain" :disabled="chat.loading.value" @click="explain">Explain this run</Button>
     <Button v-if="hasWarnings" size="sm" variant="ghost" data-test="tr-ai-fix" :disabled="chat.loading.value" @click="fix">Fix the warnings</Button>
     <form class="wp-tr-ai__why" @submit.prevent="why">
-      <input
+      <Input
         v-model="missing"
-        class="wp-input wp-tr-ai__input"
+        class="wp-tr-ai__input"
         placeholder="Why do I never get…"
         aria-label="An option or value you never get"
         data-test="tr-ai-why"
-      />
+/>
       <Button size="sm" variant="ghost" type="submit" :disabled="!missing.trim() || chat.loading.value" data-test="tr-ai-why-ask">Ask</Button>
     </form>
   </div>
