@@ -83,8 +83,8 @@ const syntax = [
     <DocSection title="Moving, sizing and editing">
       <p>
         Unpin a note to drag it like any node. A Card or Sticky resizes from its corner: the width is yours
-        and the height follows the text. A Label sizes itself to its title. Double-click a note, press its
-        pencil or press <b>Edit</b> on a label's hover card to open the editor; <b>Done</b> goes back to
+        and the height follows the text. A Label sizes itself to its title. Double-click a note, press the
+        indigo pencil in ComfyUI's selection toolbar while it is selected, or press <b>Edit</b> on a label's hover card to open the editor; <b>Done</b> goes back to
         reading.
       </p>
       <DocKeyList :items="edit" />

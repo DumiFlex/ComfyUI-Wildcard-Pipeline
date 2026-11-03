@@ -6,7 +6,7 @@ import { panelAt } from "./note-peek";
 import { isVueNodes } from "../extension/renderer";
 import { reactiveFromGraph } from "../extension/reactive";
 import { walkAllNodes, type LiteGraphLike } from "../extension/graph";
-import { bookmarkCells } from "../extension/_stashes";
+import { bookmarkCells, nodeEditors } from "../extension/_stashes";
 import { liveKeymap, type KeymapAppLike } from "../extension/bookmark-keymap";
 import { MODE_BYPASS, MODE_NEVER } from "../extension/toggle-control";
 import { pushToast } from "../components/shared/toast-store";
@@ -773,6 +773,8 @@ export function mountBookmark(node: BookmarkNode & FramelessNode) {
   const editing = ref(false);
   let restored = false;
   bookmarkEditors.set(node, (on) => setEditing(on));
+  // The pencil in ComfyUI's selection toolbar (extension/node-toolbar.ts).
+  nodeEditors.set(node, () => setEditing(!editing.value));
 
   function apply(next: BookmarkConfig): void {
     config.value = next;

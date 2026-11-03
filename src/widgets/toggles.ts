@@ -13,6 +13,7 @@ import {
   type CtlNode,
 } from "../extension/toggle-control";
 import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
+import { nodeEditors } from "../extension/_stashes";
 import { reactiveFromGraph } from "../extension/reactive";
 import {
   effectiveToggles,
@@ -110,6 +111,12 @@ export function create(node: TogglesHostNode, inputName: string) {
   /** `ctl_*` input names, shared with `attachFieldSockets`. */
   const ctlNames: string[] = [];
   const ctlNode = node as unknown as CtlNode;
+  /** Bumped by the pencil in ComfyUI's selection toolbar
+   *  (extension/node-toolbar.ts); the widget flips its edit view. */
+  const editRequest = ref(0);
+  nodeEditors.set(node, () => {
+    editRequest.value += 1;
+  });
 
   function store(next: TogglesConfig): void {
     config.value = next;
@@ -198,6 +205,7 @@ export function create(node: TogglesHostNode, inputName: string) {
           nodeMode: nodeMode.value,
           controls,
           canvasGroups: canvasGroups.value,
+          editRequest: editRequest.value,
           "onUpdate:modelValue": onUpdate,
         });
       };

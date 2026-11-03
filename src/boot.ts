@@ -46,6 +46,7 @@ export * as noteMod from "./widgets/note";
 export * as nodeGroupMod from "./widgets/node-group";
 export * as modeRelayMod from "./widgets/mode-relay";
 export * as bookmarkMod from "./widgets/bookmark";
+export * as nodeToolbarMod from "./extension/node-toolbar";
 export { stripControlInputs } from "./extension/toggle-control";
 export * as imageFilterMod from "./extension/image-filter";
 export * as graphEventsMod from "./extension/graph-events";
@@ -70,3 +71,4 @@ export const loadPlayground = () => import("./components/settings/DisplayPlaygro
 export const loadSubgraphBadge = () => import("./extension/subgraph-badge");
 export const loadImageFilterPicker = () => import("./components/image-filter/PickerHost.vue");
 export const loadBookmarkDock = () => import("./components/bookmark/dock-mount");
+export const loadNodeHelp = () => import("./components/shared/NodeHelpDialog.vue");

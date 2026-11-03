@@ -31,6 +31,9 @@ declare module "#comfyui/app" {
       getCustomWidgets?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
       /** Extra right-click menu entries for a node (`null` is a separator). */
       getNodeMenuItems?: (node: unknown) => Array<{ content: string; callback: () => void } | null>;
+      /** Command ids shown as buttons in the selection toolbar (the bar
+       *  over selected nodes), asked once per selected item. */
+      getSelectionToolboxCommands?: (item: unknown) => string[];
       /** Extra right-click menu entries for the empty canvas. */
       getCanvasMenuItems?: (canvas: unknown) => Array<{ content: string; callback: () => void } | null>;
       /** Register frontend-only node types (LiteGraph.registerNodeType). */
@@ -93,6 +96,8 @@ declare module "#comfyui/app" {
       commands?: Array<{
         id: string;
         label: string;
+        /** Icon classes (PrimeIcons), shown on toolbar buttons. */
+        icon?: string;
         function: (...args: unknown[]) => unknown;
       }>;
       /** Maps command ids into the topbar dropdown menu hierarchy. */

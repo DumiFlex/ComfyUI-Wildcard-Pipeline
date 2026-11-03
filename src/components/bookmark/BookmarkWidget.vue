@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * WP Bookmark's panel. The node has no frame (like WP Note): read, it is a
- * small pill (icon, name, shortcut, and a pencil that shows when the node is
- * selected); double-click or the pencil opens the editor card.
+ * small pill (icon, name, shortcut); double-click or the pencil in ComfyUI's
+ * selection toolbar opens the editor card.
  */
 import { computed, ref, watch } from "vue";
 import Banner from "@/kit/Banner.vue";
@@ -10,7 +10,6 @@ import Input from "@/kit/Input.vue";
 import ColorField from "@/kit/ColorField.vue";
 import Kbd from "@/kit/Kbd.vue";
 import Button from "@/kit/Button.vue";
-import WpIconButton from "@/kit/WpIconButton.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import BookmarkFields from "./BookmarkFields.vue";
 import IconPicker from "@/kit/IconPicker.vue";
@@ -32,7 +31,7 @@ const props = defineProps<{
   nested: boolean;
   /** ComfyUI's pin. */
   pinned: boolean;
-  /** The node is selected: the pill shows its pencil. */
+  /** The node is selected (`wp-bm--selected`). */
   selected: boolean;
   /** Everyone else's keys, read fresh on each call. */
   getKeymap: () => KeyOwner[];
@@ -110,7 +109,8 @@ function done(): void {
     data-test="wp-bookmark"
   >
     <!-- Read view: a small pill. It lets clicks through to the canvas
-         (drag, select, double-click to edit); only the pencil takes them. -->
+         (drag, select, double-click to edit). The pencil in ComfyUI's
+         selection toolbar opens the editor too. -->
     <div v-if="!editing" class="wp-bm__pill" :title="summary" data-test="bm-view">
       <i class="pi wp-bm__glyph" :class="`pi-${config.icon}`" aria-hidden="true"></i>
       <span class="wp-bm__name-text" data-test="bm-name">{{ title }}</span>
@@ -126,14 +126,6 @@ function done(): void {
         ></i>
         <Kbd :keys="config.shortcut" size="sm" />
       </template>
-      <WpIconButton
-        class="wp-bm__edit"
-        icon="pi-pencil"
-        label="Edit bookmark"
-        variant="bare"
-        data-test="bm-edit"
-        @click="emit('update:editing', true)"
-      />
     </div>
 
     <!-- Keys typed here never reach ComfyUI's keybindings. -->
@@ -273,15 +265,6 @@ function done(): void {
 .wp-bm__mark { color: var(--wp-text-dim); font-size: 11px; }
 .wp-bm__clash { color: var(--wp-warn); font-size: 12px; }
 .wp-bm__offtag { color: var(--wp-text-dim); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
-/* The pencil shows when the node is selected, or under the pointer. */
-.wp-bm__edit {
-  pointer-events: auto;
-  opacity: 0;
-  transition: opacity 120ms;
-}
-.wp-bm--selected .wp-bm__edit,
-.wp-bm__edit:hover,
-.wp-bm__edit:focus-visible { opacity: 1; }
 
 /* ── editor card ────────────────────────────────────────────────────── */
 .wp-bm__form {
@@ -321,12 +304,11 @@ function done(): void {
 
 @layer wp-extension {
   /* Nodes 2.0: the widget wrappers take pointer events and would eat the
-     press that drags the node; the canvas handles it instead. The pencil
-     and the editor take events back. */
+     press that drags the node; the canvas handles it instead. The editor
+     takes events back. */
   .lg-node:has(.wp-bm) .lg-node-widgets,
   .lg-node:has(.wp-bm) .lg-node-widgets * { pointer-events: none !important; }
   .lg-node:has(.wp-bm) .wp-bm__form,
-  .lg-node:has(.wp-bm) .wp-bm__form *,
-  .lg-node:has(.wp-bm) .wp-bm__edit { pointer-events: auto !important; }
+  .lg-node:has(.wp-bm) .wp-bm__form * { pointer-events: auto !important; }
 }
 </style>

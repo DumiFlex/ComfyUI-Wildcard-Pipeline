@@ -1,11 +1,14 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
 import AppLayout from "../layout/AppLayout.vue";
+import FrameLayout from "../layout/FrameLayout.vue";
 import { startPagePath } from "./start-page";
+import { FRAMED, staysInFrame } from "./frame-mode";
 
 const routes: RouteRecordRaw[] = [
   {
     path: "/",
-    component: AppLayout,
+    // Inside the canvas help dialog the docs show alone (router/frame-mode.ts).
+    component: FRAMED ? FrameLayout : AppLayout,
     children: [
       { path: "", redirect: () => startPagePath() },
       { path: "dashboard", name: "dashboard", component: () => import("../views/Dashboard.vue") },
@@ -71,4 +74,16 @@ const routes: RouteRecordRaw[] = [
   { path: "/:pathMatch(.*)*", name: "not-found", component: () => import("../views/NotFound.vue") },
 ];
 
-export default createRouter({ history: createWebHistory("/wp/"), routes });
+const router = createRouter({ history: createWebHistory("/wp/"), routes });
+
+// In the help frame, a link that leaves the docs (an editor, Settings, the
+// library) opens the full manager in a new tab and the frame stays put.
+if (FRAMED) {
+  router.beforeEach((to) => {
+    if (staysInFrame(to.path)) return true;
+    window.open(`${window.location.origin}/wp${to.fullPath}`, "_blank", "noopener");
+    return false;
+  });
+}
+
+export default router;
