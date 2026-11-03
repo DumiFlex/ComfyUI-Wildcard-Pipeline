@@ -1,7 +1,9 @@
 <script setup lang="ts">
 /**
  * SelectionToolbar — bulk-action bar shown in the wildcard editor's bulk mode
- * when ≥1 option row is checked. Acts on ALL checked rows at once.
+ * when ≥1 option row is checked. Acts on ALL checked rows at once. The bar
+ * itself (count, sticky shell, Clear, Escape) is the kit SelectionBar; this
+ * adds the sub-category / weight / negative menus and the reorder group.
  *
  * Presentational: emits intents (apply-tag / remove-tag / set-weight /
  * negative-add / negative-replace / negative-clear / delete / clear); the host editor mutates + tracks dirty. Applying a tag that isn't in
@@ -11,6 +13,7 @@
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
+import SelectionBar from "@/kit/SelectionBar.vue";
 import { UNGROUPED_HUE } from "../../components/shared/axis-color";
 
 interface Props {
@@ -87,6 +90,14 @@ function toggle(menu: Exclude<Menu, null>) {
 }
 function close() { openMenu.value = null; }
 
+// The bar clears the selection on Escape; with a menu open, Escape closes
+// the menu instead (caught on the way down, before the bar sees it).
+function onBarKeydown(e: KeyboardEvent): void {
+  if (e.key !== "Escape" || !openMenu.value) return;
+  e.stopPropagation();
+  close();
+}
+
 // Close the menu when the page scrolls behind it. The toolbar lives in a
 // sticky header, so an open menu would otherwise hover in place while the
 // option list scrolls under it — the "can't scroll the page" trap. Scrolls
@@ -155,9 +166,8 @@ function applyWeight() {
 </script>
 
 <template>
-  <div class="wpc-seltoolbar">
-    <span class="wpc-seltoolbar__count">{{ count }} selected</span>
-
+  <SelectionBar class="wpc-seltoolbar" :count="count" sticky @clear="emit('clear')" @keydown.capture="onBarKeydown">
+    <template #start>
     <div class="wpc-seltoolbar__group">
       <!-- Apply sub-category -->
       <div class="wpc-seltoolbar__menuwrap">
@@ -307,12 +317,10 @@ function applyWeight() {
         @click="emit('move-here')"
       >{{ moveArmed ? "Pick a spot…" : "Move here…" }}</Button>
     </div>
+    </template>
 
-    <div class="wpc-seltoolbar__spacer"></div>
-
-    <Button variant="danger" size="sm" icon="pi-trash" @click="emit('delete-selected')">Delete</Button>
-    <Button variant="ghost" size="sm" @click="emit('clear')">Clear</Button>
-  </div>
+    <Button variant="danger" size="sm" icon="pi-trash" data-test="sel-delete" @click="emit('delete-selected')">Delete</Button>
+  </SelectionBar>
 
   <!-- click-outside backdrop (button so it's keyboard-dismissable + lint-clean) -->
   <button
@@ -325,25 +333,6 @@ function applyWeight() {
 </template>
 
 <style scoped>
-.wpc-seltoolbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border: 1px solid color-mix(in oklab, var(--wp-accent) 40%, transparent);
-  border-radius: min(8px, var(--wp-radius-cap, 999px));
-  background: color-mix(in oklab, var(--wp-accent) 12%, var(--wp-bg-2));
-  flex-wrap: wrap;
-}
-.wpc-seltoolbar__count {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--wp-text);
-  white-space: nowrap;
-}
 .wpc-seltoolbar__group { display: flex; gap: 6px; flex-wrap: wrap; }
 .wpc-seltoolbar__spacer { flex: 1; }
 .wpc-seltoolbar__menuwrap { position: relative; }

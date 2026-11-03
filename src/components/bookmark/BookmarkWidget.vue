@@ -12,7 +12,7 @@ import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import BookmarkFields from "./BookmarkFields.vue";
-import NoteIconGrid from "../note/NoteIconGrid.vue";
+import IconPicker from "@/kit/IconPicker.vue";
 import { pushToast } from "../shared/toast-store";
 import {
   BOOKMARK_ANCHORS,
@@ -170,12 +170,16 @@ function done(): void {
           @input="onTitle"
         />
       </div>
-      <NoteIconGrid
+      <IconPicker
         v-if="pickIcon"
-        :selected="config.icon"
-        :color="config.color"
+        class="wp-bm__icons"
+        :model-value="config.icon || null"
+        all
+        inline
+        :color="config.color || undefined"
+        :allow-none="false"
         data-test="bm-icon-grid"
-        @pick="(n: string) => { patch({ icon: n || 'bookmark' }); pickIcon = false; }"
+        @update:model-value="(v: string | null) => { patch({ icon: v || 'bookmark' }); pickIcon = false; }"
       />
 
       <Banner v-if="disabled" tone="info" size="sm" data-test="bm-off">
@@ -219,6 +223,11 @@ function done(): void {
 </template>
 
 <style scoped>
+/* The kit picker's list, sized for a node: as wide as the panel, a short
+ * scroll area, cells packed by width instead of a fixed 8 columns. */
+.wp-bm__icons :deep(.wp-iconpick__panel) { width: auto; max-height: 184px; }
+.wp-bm__icons :deep(.wp-iconpick__grid) { grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); }
+.wp-bm__icons :deep(.wp-iconpick__cell) { aspect-ratio: auto; height: 28px; }
 .wp-bm {
   --wp-bm-color: var(--wp-accent);
   box-sizing: border-box;

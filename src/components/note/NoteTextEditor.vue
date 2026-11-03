@@ -7,7 +7,7 @@ import WpSegmented from "@/kit/WpSegmented.vue";
 import WpSelect from "@/kit/WpSelect.vue";
 import { vTooltip } from "@/kit/tooltip";
 import CATALOG from "../../extension/docs-catalog.json";
-import NoteIconGrid from "./NoteIconGrid.vue";
+import IconPicker from "@/kit/IconPicker.vue";
 import NoteMarkdown from "./note-markdown";
 import {
   docsTarget, iconMarkdown, insert, linkMarkdown, prefixLines, wrap, type Edit,
@@ -238,11 +238,14 @@ function insertIcon(name: string): void {
         />
         <span class="wp-note-ed__hint">None follows the note.</span>
       </div>
-      <NoteIconGrid
+      <IconPicker
         v-if="linkStyle === 'button' && pickIcon"
-        :selected="linkIcon"
-        allow-none
-        @pick="(n: string) => { linkIcon = n; pickIcon = false; }"
+        class="wp-note-ed__icons"
+        :model-value="linkIcon || null"
+        all
+        inline
+        data-test="note-link-icons"
+        @update:model-value="(v: string | null) => { linkIcon = v ?? ''; pickIcon = false; }"
       />
       <div class="wp-note-ed__actions">
         <Button size="sm" variant="ghost" data-test="note-link-cancel" @click="panel = ''">Cancel</Button>
@@ -264,7 +267,16 @@ function insertIcon(name: string): void {
         />
         <span class="wp-note-ed__hint">None follows the text.</span>
       </div>
-      <NoteIconGrid :color="iconColor === 'none' ? '' : iconColor" @pick="insertIcon" />
+      <IconPicker
+        class="wp-note-ed__icons"
+        :model-value="null"
+        all
+        inline
+        :color="iconColor === 'none' || !iconColor ? undefined : iconColor"
+        :allow-none="false"
+        data-test="note-insert-icons"
+        @update:model-value="(v: string | null) => insertIcon(v ?? '')"
+      />
     </div>
 
     <textarea
@@ -291,6 +303,11 @@ function insertIcon(name: string): void {
 </template>
 
 <style scoped>
+/* The kit picker's list, sized for a node: as wide as the panel, a short
+ * scroll area, cells packed by width instead of a fixed 8 columns. */
+.wp-note-ed__icons :deep(.wp-iconpick__panel) { width: auto; max-height: 184px; }
+.wp-note-ed__icons :deep(.wp-iconpick__grid) { grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); }
+.wp-note-ed__icons :deep(.wp-iconpick__cell) { aspect-ratio: auto; height: 28px; }
 .wp-note-ed { display: flex; flex-direction: column; gap: 6px; }
 /* One row at the editor's narrowest (340 px): 24 px buttons, the preview
    toggle pushed to the end. */

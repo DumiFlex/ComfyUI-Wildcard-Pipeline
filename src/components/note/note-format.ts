@@ -12,7 +12,7 @@
  * The `{…}` blocks follow the attribute lists of MkDocs Material and Pandoc.
  * Pure functions: the renderer (note-markdown.ts) and the editor share them.
  */
-import { PI_ICON_SET } from "./pi-icons";
+import { PI_ICON_SET } from "@/kit/pi-icons";
 
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 

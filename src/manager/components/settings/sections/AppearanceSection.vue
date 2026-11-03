@@ -4,7 +4,7 @@ import Select from "@/kit/Select.vue";
 import Icon from "@/kit/Icon.vue";
 import type { SelectOption } from "@/kit/select-types";
 import HsvPicker from "@/kit/HsvPicker.vue";
-import SettingGroup from "../SettingGroup.vue";
+import SettingGroup from "@/kit/SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import ThemeChoices from "../ThemeChoices.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";

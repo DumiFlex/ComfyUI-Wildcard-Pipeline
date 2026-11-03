@@ -139,4 +139,27 @@ describe("SelectionToolbar.vue", () => {
       .find((b) => b.text() === "warm");
     expect(item!.attributes("style")).toContain("--chip-hue: hsl(1 2% 3%)");
   });
+
+  it("Clear and Escape on the bar emit clear (the kit SelectionBar)", async () => {
+    const wrap = mount(SelectionToolbar, { props: { count: 3, tags: [] }, attachTo: document.body });
+    await wrap.get('[data-test="selection-clear"]').trigger("click");
+    await wrap.get('[data-test="sel-delete"]').trigger("keydown", { key: "Escape" });
+    expect(wrap.emitted("clear")).toHaveLength(2);
+    wrap.unmount();
+  });
+
+  it("Escape inside an open menu closes the menu, not the selection", async () => {
+    const wrap = mount(SelectionToolbar, { props: { count: 3, tags: ["warm"] }, attachTo: document.body });
+    await clickBar(wrap, "Apply sub-category");
+    await wrap.get(".wpc-seltoolbar__menu input.wp-input").trigger("keydown", { key: "Escape" });
+    expect(wrap.find(".wpc-seltoolbar__menu").exists()).toBe(false);
+    expect(wrap.emitted("clear")).toBeUndefined();
+    // Focus still on the menu's trigger: Escape closes the menu first.
+    await clickBar(wrap, "Remove sub-category");
+    const trigger = wrap.findAll("button.wp-btn").find((b) => b.text().includes("Remove sub-category"));
+    await trigger?.trigger("keydown", { key: "Escape" });
+    expect(wrap.find(".wpc-seltoolbar__menu").exists()).toBe(false);
+    expect(wrap.emitted("clear")).toBeUndefined();
+    wrap.unmount();
+  });
 });

@@ -8,7 +8,7 @@ import WpSegmented from "@/kit/WpSegmented.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import NoteMarkdown from "./note-markdown";
 import NoteTextEditor from "./NoteTextEditor.vue";
-import NoteIconGrid from "./NoteIconGrid.vue";
+import IconPicker from "@/kit/IconPicker.vue";
 import { vTooltip } from "@/kit/tooltip";
 import BookmarkFields from "../bookmark/BookmarkFields.vue";
 import type { BookmarkJump, KeyOwner } from "../../extension/bookmarks";
@@ -181,10 +181,15 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
           <i class="pi pi-chevron-down" aria-hidden="true"></i>
         </button>
       </div>
-      <NoteIconGrid
+      <IconPicker
         v-if="config.tone === 'icon' && pickIcon"
-        :selected="config.icon"
-        @pick="(n: string) => { patch({ icon: n }); pickIcon = false; }"
+        class="wp-note__icons"
+        :model-value="config.icon || null"
+        all
+        inline
+        :allow-none="false"
+        data-test="note-icon-grid"
+        @update:model-value="(v: string | null) => { patch({ icon: v ?? '' }); pickIcon = false; }"
       />
       <div class="wp-note__row">
         <span class="wp-note__label">Look</span>
@@ -270,6 +275,11 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
 </template>
 
 <style scoped>
+/* The kit picker's list, sized for a node: as wide as the panel, a short
+ * scroll area, cells packed by width instead of a fixed 8 columns. */
+.wp-note__icons :deep(.wp-iconpick__panel) { width: auto; max-height: 184px; }
+.wp-note__icons :deep(.wp-iconpick__grid) { grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); }
+.wp-note__icons :deep(.wp-iconpick__cell) { aspect-ratio: auto; height: 28px; }
 .wp-note {
   --wp-note-tone: var(--wp-accent);
   box-sizing: border-box;
