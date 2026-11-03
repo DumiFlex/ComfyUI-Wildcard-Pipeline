@@ -728,11 +728,11 @@ const PAGE = 150;
                 <div v-if="item.tag_groups?.length" class="wp-pack__axes" data-test="pack-axes">
                   <span class="wp-pack__label">Tag groups (rename to suit)</span>
                   <label v-for="g in item.tag_groups" :key="g.name" class="wp-pack__axis">
-                    <input
-                      class="wp-input wp-input--sm wp-pack__axis-input" :value="g.name" :disabled="busy"
+                    <Input size="sm"
+                      class="wp-pack__axis-input" :model-value="g.name" :disabled="busy"
                       :aria-label="`Rename tag group ${g.name}`" data-test="pack-axis-name"
                       @change="renameGroup(item, g.name, $event)"
-                    />
+/>
                     <span class="wp-pack__axis-n">{{ plural(g.tags, "tag", "tags") }}</span>
                   </label>
                 </div>

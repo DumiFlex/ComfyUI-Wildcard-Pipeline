@@ -5,6 +5,7 @@
  * chips. Click a row to edit it by hand or ask the AI to change just that
  * item; remove and restore stay one click.
  */
+import Input from "@/kit/Input.vue";
 import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
 import Chip from "@/kit/Chip.vue";
@@ -189,15 +190,15 @@ async function addWithAi(): Promise<void> {
       <Button v-if="!adding" size="sm" variant="ghost" icon="pi-plus" :disabled="pb.convo.loading.value" data-test="pack-add" @click="adding = true">Add an item</Button>
       <div v-else class="wp-pack-list__adder" data-test="pack-adder">
         <div class="wp-pack-list__ask">
-          <input
-            v-model="addAsk"
-            class="wp-input wp-input--sm"
+          <Input v-model="addAsk"
+            size="sm"
+           
             placeholder="Describe what to add and the AI plans it…"
             aria-label="Describe items to add"
             :disabled="!!pb.changing.value"
             data-test="pack-add-ask"
             @keydown.enter.prevent="addWithAi"
-          >
+/>
           <Button size="sm" icon="pi-microchip-ai" :disabled="!addAsk.trim() || !!pb.changing.value" :loading="pb.changing.value === '+'" data-test="pack-add-ai" @click="addWithAi">Plan it</Button>
         </div>
         <div class="wp-pack-list__kinds">
