@@ -15,7 +15,7 @@
  */
 import { computed, nextTick, ref } from "vue";
 import Button from "@/kit/Button.vue";
-import ListRow from "@/kit/ListRow.vue";
+import Chip from "@/kit/Chip.vue";
 import type { AiAskAnswer, AiAskAnswered, AiAskQuestion } from "../../api/types";
 
 const props = defineProps<{
@@ -159,11 +159,12 @@ function setRef(i: number, el: unknown): void {
     >
       <span class="wp-ai-ask__header">{{ q.header }}</span>
       <p :id="`wp-ai-ask-${i}`" class="wp-ai-ask__text">{{ q.question }}</p>
-      <div class="wp-ai-ask__chips" data-wp-rows>
-        <ListRow
+      <div class="wp-ai-ask__chips">
+        <Chip
           v-for="(c, j) in q.choices"
           :key="j"
-          size="sm"
+          size="md"
+          as="button"
           class="wp-ai-ask__chip"
           :role="q.multi ? 'checkbox' : 'radio'"
           :aria-checked="picks[i].picked.includes(j)"
@@ -173,33 +174,33 @@ function setRef(i: number, el: unknown): void {
           @click="choose(i, j)"
           @keydown="onKey(i, $event)"
         >
-          <template #start><kbd class="wp-ai-ask__key">{{ j < 9 ? j + 1 : "" }}</kbd></template>
-          {{ c.label }}<span v-if="c.hint" class="wp-ai-ask__hint"> · {{ c.hint }}</span>
-        </ListRow>
-        <ListRow
-          size="sm"
+          <span class="wp-ai-ask__body">
+            <span class="wp-ai-ask__label"><kbd v-if="j < 9" class="wp-ai-ask__key">{{ j + 1 }}</kbd>{{ c.label }}</span>
+            <span v-if="c.hint" class="wp-ai-ask__hint">{{ c.hint }}</span>
+          </span>
+        </Chip>
+        <Chip
+          size="md"
           class="wp-ai-ask__chip"
           data-kind="other"
           icon="pi-pencil"
-          toggle
-          :selected="picks[i].other !== null"
+          :pressed="picks[i].other !== null"
           :disabled="disabled"
           data-test="ai-ask-other"
           @click="openOther(i)"
           @keydown="onKey(i, $event)"
-        >Other…</ListRow>
-        <ListRow
-          size="sm"
+        >Other…</Chip>
+        <Chip
+          size="md"
           class="wp-ai-ask__chip"
           data-kind="decide"
           icon="pi-sparkles"
-          toggle
-          :selected="picks[i].decide"
+          :pressed="picks[i].decide"
           :disabled="disabled"
           data-test="ai-ask-decide"
           @click="decide(i)"
           @keydown="onKey(i, $event)"
-        >Decide for me</ListRow>
+        >Decide for me</Chip>
       </div>
       <input
         v-if="picks[i].other !== null"
@@ -237,21 +238,24 @@ function setRef(i: number, el: unknown): void {
   color: var(--wp-accent-text); text-transform: uppercase;
 }
 .wp-ai-ask__text { margin: 0; font-size: 13px; color: var(--wp-text); overflow-wrap: anywhere; }
-.wp-ai-ask__chips { display: flex; flex-direction: column; gap: 1px; margin-top: 2px; }
-.wp-ai-ask__chip :deep(.wp-list-row__label) { white-space: normal; overflow-wrap: anywhere; }
-/* A chosen answer reads like a selected row (role radio / checkbox). */
+.wp-ai-ask__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+/* The kit's toggle chip, grown to two lines when an answer has a hint. */
+.wp-ai-ask__chip { height: auto; min-height: var(--wp-control-h-md); max-width: 100%; padding-top: 4px; padding-bottom: 4px; text-align: left; white-space: normal; }
+/* Picked: the kit toggle chip's "on" look (these keep radio / checkbox roles). */
 .wp-ai-ask__chip[aria-checked="true"] {
-  background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent);
-  box-shadow: inset 2px 0 var(--wp-accent-500);
+  border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
+  background: color-mix(in oklab, var(--wp-accent-500) 16%, transparent);
   color: var(--wp-accent-text-strong);
 }
-.wp-ai-ask__chip[data-kind="other"]:not([data-selected]), .wp-ai-ask__chip[data-kind="decide"]:not([data-selected]) { color: var(--wp-text-muted); }
-.wp-ai-ask__hint { color: var(--wp-text-dim); }
+.wp-ai-ask__chip[data-kind="other"]:not([aria-pressed="true"]),
+.wp-ai-ask__chip[data-kind="decide"]:not([aria-pressed="true"]) { border-style: dashed; color: var(--wp-text-muted); background: none; }
+.wp-ai-ask__body { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; }
+.wp-ai-ask__label { display: inline-flex; gap: 6px; align-items: baseline; overflow-wrap: anywhere; }
 .wp-ai-ask__key {
-  display: inline-block; width: 1.1em; text-align: center;
   font-family: var(--wp-font-mono, monospace); font-size: 10px; color: var(--wp-text-dim);
   border: 0; background: none; padding: 0;
 }
+.wp-ai-ask__hint { font-size: 11px; line-height: 15px; color: var(--wp-text-muted); overflow-wrap: anywhere; }
 /* A narrow drawer keeps hints in the tooltip only. */
 @container (max-width: 380px) {
   .wp-ai-ask__hint { display: none; }
