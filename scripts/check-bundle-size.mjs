@@ -354,7 +354,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // Combobox with its Popover, the pickers' rows ListRows, and the debug viewer /
 // image filter use Button and WpIconButton, which pull those pieces into the
 // canvas chunks (dev ~616,500 -> 619,558 bytes).
-const TOTAL_LIMIT = 607 * 1024;     // 607 KB
+// RAISED 607 -> 608 KB on 2026-11-03 for the end of the kit migration: every
+// text field (manager and canvas) is the kit Input / Textarea / SearchInput and
+// the last canvas toggles are Chips (kit 0.10.0), which pull those pieces into
+// more chunks (619,558 -> 622,398 bytes).
+const TOTAL_LIMIT = 608 * 1024;     // 608 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

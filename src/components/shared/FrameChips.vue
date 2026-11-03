@@ -23,6 +23,7 @@
 import { computed } from "vue";
 import Icon from "@/kit/Icon.vue";
 import ListRow from "@/kit/ListRow.vue";
+import Chip from "@/kit/Chip.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -207,9 +208,9 @@ const hint = computed(() => {
         :aria-label="label"
         :data-test="`${uiId}-grid`"
       >
-        <button
+        <Chip
           v-if="showBase"
-          type="button"
+          as="button"
           class="wp-fchips__chip"
           :class="{ 'wp-fchips__chip--active': current === null }"
           :data-test="`${testId}-base`"
@@ -217,12 +218,12 @@ const hint = computed(() => {
           :aria-checked="current === null"
           title="Edit the values every frame inherits"
           @click="emit('select', null)"
-        >base</button>
+        >base</Chip>
 
-        <button
+        <Chip
           v-for="i in frames"
           :key="i"
-          type="button"
+          as="button"
           class="wp-fchips__chip"
           :class="{
             'wp-fchips__chip--active': selectable && current === i,
@@ -237,7 +238,7 @@ const hint = computed(() => {
           :data-bypassed="bypassedSet.has(i) ? 'true' : undefined"
           :title="chipTitle(i)"
           @click="onChipClick(i, $event)"
-        >#{{ i + 1 }}</button>
+        >#{{ i + 1 }}</Chip>
       </div>
       <p class="wp-fchips__hint" :data-test="`${uiId}-hint`">{{ hint }}</p>
     </template>
@@ -296,7 +297,10 @@ const hint = computed(() => {
   border-radius: var(--wp-radius-cap, 999px);
 }
 
-.wp-fchips__chip {
+/* Kit Chips (as buttons) drawn as the grid's small square cells. */
+.wp-chip.wp-fchips__chip {
+  justify-content: center;
+  height: auto;
   /* Not `flex: 1` — the grid owns the track sizing, and a flex hint here
    * fights it. */
   position: relative;
@@ -309,20 +313,20 @@ const hint = computed(() => {
   font: 600 10px var(--wp-font-sans, sans-serif);
   cursor: pointer;
 }
-.wp-fchips__chip:hover { color: var(--wp-text); border-color: var(--wp-border-strong); }
-.wp-fchips__chip--active {
+.wp-chip.wp-fchips__chip:hover { color: var(--wp-text); border-color: var(--wp-border-strong); }
+.wp-chip.wp-fchips__chip--active {
   background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
   border-color: var(--wp-accent);
   color: var(--wp-accent);
 }
 /* Bypassed — interrupted (dashed) border + dimmed, so it reads at a glance.
  * Composes with --active (dashed overrides the solid). */
-.wp-fchips__chip--bypassed {
+.wp-chip.wp-fchips__chip--bypassed {
   border-style: dashed;
   border-color: var(--wp-border-strong);
   opacity: 0.5;
 }
-.wp-fchips__chip--bypassed:hover { opacity: 0.8; }
+.wp-chip.wp-fchips__chip--bypassed:hover { opacity: 0.8; }
 /* Locked — a corner dot. At ~20px tall a padlock glyph would be mud; the dot
  * only has to say "something is pinned here" and the tooltip carries the
  * value. Every chip is position:relative, so toggling never reflows the grid. */

@@ -54,13 +54,25 @@ export const RULES = [
     fix: "Use Modal or ConfirmModal (ModalShell for a custom panel).",
   },
   {
-    id: "manager-raw-button",
+    // The manager and the canvas widgets alike (it was manager-only until the
+    // canvas moved onto the kit).
+    id: "raw-button",
     pattern: /<button\b/g,
-    only: "src/manager/",
-    // DataTable's sort control is the header text itself, not a Button;
-    // ChoiceCards' cards are radios holding a picture, not Buttons.
     allow: [],
-    fix: "Use Button. A raw <button> needs a reason the kit can't cover.",
+    fix: "Use Button (or Chip / ListRow / WpIconButton for those jobs).",
+  },
+  {
+    // A text field; a file picker (type="file") stays native.
+    id: "raw-input",
+    pattern: /<input\b(?![^>]*\btype="file")/g,
+    allow: [],
+    fix: "Use Input, SearchInput, WpNumber, InlineEdit or TagInput; kit-field-el.ts reaches the element.",
+  },
+  {
+    id: "raw-textarea",
+    pattern: /<textarea\b/g,
+    allow: [],
+    fix: "Use Textarea; kit-field-el.ts reaches the element.",
   },
   {
     id: "raw-hex",
@@ -83,9 +95,13 @@ function walk(dir, out) {
   return out;
 }
 
-/** Strip HTML comments so a commented-out <select> doesn't count. */
+/** Strip comments (HTML, block and line) so a <button> named in one doesn't
+ *  count. A line comment starts at `//` not after `:` (so URLs stay). */
 function stripComments(text) {
-  return text.replace(/<!--[\s\S]*?-->/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  return text
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1");
 }
 
 /** `{ ruleId: { "src/x.vue": count } }`, only non-zero counts. */

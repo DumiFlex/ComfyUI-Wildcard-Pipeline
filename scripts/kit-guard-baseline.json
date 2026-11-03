@@ -6,7 +6,9 @@
     "native-range": 0,
     "inline-svg": 0,
     "hand-dialog": 0,
-    "manager-raw-button": 0,
+    "raw-button": 0,
+    "raw-input": 0,
+    "raw-textarea": 0,
     "raw-hex": 0
   },
   "native-select": {},
@@ -15,6 +17,8 @@
   "native-range": {},
   "inline-svg": {},
   "hand-dialog": {},
-  "manager-raw-button": {},
+  "raw-button": {},
+  "raw-input": {},
+  "raw-textarea": {},
   "raw-hex": {}
 }

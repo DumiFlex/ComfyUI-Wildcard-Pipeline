@@ -19,6 +19,8 @@
  *     so a brand-new field discloses what's available.
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import Input from "@/kit/Input.vue";
+import { inputEl as kitInputEl } from "../utils/kit-field-el";
 
 defineOptions({ name: "VarAutocompleteInput" });
 
@@ -42,6 +44,7 @@ const emit = defineEmits<{
   "update:modelValue": [value: string];
 }>();
 
+/** The `<input>` inside the kit Input (set from its template ref). */
 const inputEl = ref<HTMLInputElement | null>(null);
 const popoverEl = ref<HTMLDivElement | null>(null);
 const open = ref(false);
@@ -199,12 +202,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <input
-    ref="inputEl"
-    type="text"
+  <Input
+    :ref="(c) => (inputEl = kitInputEl(c))"
     class="dvr-var-input"
     :style="inputColor ? { color: inputColor } : undefined"
-    :value="modelValue"
+    :model-value="modelValue"
     :placeholder="placeholder"
     :aria-label="ariaLabel"
     :data-test="dataTest"
@@ -255,14 +257,18 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* The kit Input as a bare field inside the row's own box. */
 .dvr-var-input {
   flex: 1;
+  height: auto;
   background: transparent;
   border: 0;
+  border-radius: 0;
+  box-shadow: none;
   padding: var(--wp-space-3) var(--wp-space-5);
   font: 600 11px var(--wp-font-mono, ui-monospace, monospace); /* audit-exempt: font-shorthand — out of audit scope; awaiting font-shorthand parser */
   min-width: 0;
   color: var(--wp-kind-derivation);
 }
-.dvr-var-input:focus { outline: none; }
+.dvr-var-input:focus { outline: none; box-shadow: none; background: transparent; }
 </style>

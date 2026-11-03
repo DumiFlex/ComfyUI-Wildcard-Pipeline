@@ -18,6 +18,7 @@ import {
 import OptionRow from "./OptionRow.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import Button from "@/kit/Button.vue";
+import Chip from "@/kit/Chip.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import { axisHueAt, UNGROUPED_HUE } from "../../../../shared/axis-color";
 
@@ -388,10 +389,10 @@ const skewedTowards = computed(() => {
       >
         <span class="pool__group-name" :style="{ color: axisHue(group.axis) }">{{ group.axis }}</span>
         <div class="pool__chips">
-          <button
+          <Chip
             v-for="cat in group.tags"
             :key="cat"
-            type="button"
+            as="button"
             class="cat-chip"
             :class="{ 'cat-chip--on': isTagTicked(cat) }"
             :style="{ '--chip-hue': axisHue(group.axis) }"
@@ -403,7 +404,7 @@ const skewedTowards = computed(() => {
             <span v-if="isTagTicked(cat)" class="cat-chip__check" aria-hidden="true">✓</span>
             {{ cat }}
             <span class="cat-chip__count">{{ categoryOptionCount(cat) }}</span>
-          </button>
+          </Chip>
         </div>
       </div>
       <div v-if="filterExpr" class="pool__effective" data-test="pool-effective">
@@ -449,24 +450,24 @@ const skewedTowards = computed(() => {
           class="pool__palette-group"
         >
           <span class="pool__palette-axis" :style="{ color: axisHue(group.axis) }">{{ group.axis }}</span>
-          <button
+          <Chip
             v-for="cat in group.tags"
             :key="cat"
-            type="button"
+            as="button"
             class="pool__ins-chip"
             :style="{ '--chip-hue': axisHue(group.axis) }"
             :data-test="`pool-ins-${cat}`"
             @click="insertToken(cat)"
-          >{{ cat }}</button>
+          >{{ cat }}</Chip>
         </div>
         <div class="pool__palette-ops">
-          <button
+          <Chip
             v-for="op in OPERATORS"
             :key="op"
-            type="button"
+            as="button"
             class="pool__ins-chip pool__ins-chip--op"
             @click="insertToken(op)"
-          >{{ op }}</button>
+          >{{ op }}</Chip>
         </div>
       </div>
     </div>
@@ -678,7 +679,9 @@ const skewedTowards = computed(() => {
   flex-wrap: wrap;
   gap: 6px;
 }
-.cat-chip {
+/* Kit Chips (as buttons) wearing the axis hue: a faint hue border, filled when on. */
+.wp-chip.cat-chip {
+  height: auto;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -686,17 +689,17 @@ const skewedTowards = computed(() => {
   /* Faint axis-hue border so a group's chips read as a coloured cluster
    * even when unselected (#9). */
   border: 1px solid color-mix(in srgb, var(--chip-hue, var(--wp-border)) 30%, var(--wp-border));
-  border-radius: var(--wp-radius-cap, 999px);
+  border-radius: min(10px, var(--wp-radius-cap, 999px));
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
   cursor: pointer;
   background: var(--wp-bg-deep, var(--wp-bg));
 }
-.cat-chip:hover { border-color: var(--chip-hue, var(--wp-border-soft, var(--wp-border))); }
+.wp-chip.cat-chip:hover { border-color: var(--chip-hue, var(--wp-border-soft, var(--wp-border))); }
 /* Selected: a solid hue border + 30% fill + bold + leading ✓ so "on" reads
  * at a glance for ANY hue — the old 14% tint vanished against the grey
  * ungrouped hue, which read as a dim, not a selection (#6). */
-.cat-chip--on {
+.wp-chip.cat-chip--on {
   border-color: var(--chip-hue, var(--wp-accent));
   color: var(--wp-text);
   background: color-mix(in srgb, var(--chip-hue, var(--wp-accent)) 30%, transparent);
@@ -809,20 +812,21 @@ const skewedTowards = computed(() => {
   padding-top: 4px;
   border-top: 1px dashed var(--wp-border-soft, var(--wp-border));
 }
-.pool__ins-chip {
+.wp-chip.pool__ins-chip {
+  height: auto;
   padding: 2px 8px;
   border: 1px solid color-mix(in srgb, var(--chip-hue, var(--wp-border)) 35%, var(--wp-border));
-  border-radius: var(--wp-radius-cap, 999px);
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   background: transparent;
   color: var(--wp-text-muted, var(--wp-text2));
   font: 10px var(--wp-font-sans);
   cursor: pointer;
 }
-.pool__ins-chip:hover {
+.wp-chip.pool__ins-chip:hover {
   border-color: var(--chip-hue, var(--wp-accent));
   color: var(--wp-text);
 }
-.pool__ins-chip--op {
+.wp-chip.pool__ins-chip--op {
   font-family: var(--wp-font-mono);
   color: var(--wp-text-dim, var(--wp-text3));
 }

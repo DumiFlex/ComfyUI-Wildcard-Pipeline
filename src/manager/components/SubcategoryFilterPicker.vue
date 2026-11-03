@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import SearchInput from "@/kit/SearchInput.vue";
+import { textareaEl } from "../utils/kit-field-el";
 import Button from "@/kit/Button.vue";
 import Chip from "@/kit/Chip.vue";
 import ListRow from "@/kit/ListRow.vue";
+import Textarea from "@/kit/Textarea.vue";
 import { vTooltip } from "@/kit/tooltip";
 import { computed, onMounted, ref, watch } from "vue";
 import {
@@ -85,6 +87,7 @@ const excludeNull = ref<boolean>(props.initialExcludeNull);
  *  (`(warm or cool) and not vivid and (hair-natural or eye-vivid)` is 56
  *  characters) and a single-line field clipped everything past ~40, so the
  *  thing being authored was the thing you could not see. */
+/** The `<textarea>` inside the kit Textarea, drawn over the mirror. */
 const inputEl = ref<HTMLTextAreaElement | null>(null);
 const growable = useGrowableField(() => inputEl.value, { minHeight: 44 });
 const { hasMoreBelow, startResize } = growable;
@@ -421,11 +424,11 @@ function onApply(): void {
                line short of the textarea mid-edit. -->
           <span>&#8203;</span>
         </div>
-        <textarea
+        <Textarea
           id="wp-subcat-expr"
-          ref="inputEl"
+          :ref="(c) => (inputEl = textareaEl(c))"
           v-model="expr"
-          rows="1"
+          :rows="1"
           aria-label="Sub-category filter expression"
           class="wp-subcat-picker__input"
           :class="{ 'wp-subcat-picker__input--invalid': error !== null }"
@@ -435,7 +438,7 @@ function onApply(): void {
           autocomplete="off"
           @scroll="growable.updateOverflowHint(); syncMirrorScroll();"
           @input="syncMirrorScroll"
-        ></textarea>
+        />
         <span v-if="hasMoreBelow" class="wp-subcat-picker__more" aria-hidden="true" />
         <!-- Triangle grip, matching every other resizable field in the app.
              Native `resize` is used nowhere here: it accumulates travel past
@@ -696,6 +699,8 @@ function onApply(): void {
 }
 .wp-subcat-picker__input:focus {
   outline: none;
+  /* The mirror shows through: the kit field's focus fill must not cover it. */
+  background: transparent;
   border-color: var(--wp-accent-500);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
 }
