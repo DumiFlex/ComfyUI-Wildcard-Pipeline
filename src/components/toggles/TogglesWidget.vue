@@ -21,6 +21,7 @@
  */
 import { computed, nextTick, ref } from "vue";
 import Button from "@/kit/Button.vue";
+import Input from "@/kit/Input.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import SortableList from "@/kit/SortableList.vue";
@@ -284,10 +285,11 @@ function foldedOuts(g: ToggleGroup): string | undefined {
         <span class="wp-tg__group-cap">writes</span>
         <span class="wp-vbind-wrap" :class="{ 'wp-vbind-wrap--collision-warn': problems.has('group') }">
           <span class="wp-vbind-prefix">$</span>
-          <input
+          <Input
+            size="sm"
             class="wp-vbind-input"
             :class="cfg.group_var ? varColorClass(cfg.group_var) : undefined"
-            :value="cfg.group_var"
+            :model-value="cfg.group_var"
             placeholder="picked (optional)"
             spellcheck="false"
             aria-label="Variable for the picked toggle's value"
@@ -295,7 +297,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
             data-test="tg-group-var"
             @keydown.stop
             @change="setGroupVar"
-          >
+          />
         </span>
       </label>
       <span v-else class="wp-tg__spacer" />
@@ -416,15 +418,16 @@ function foldedOuts(g: ToggleGroup): string | undefined {
                 :data-test="`tg-fold-${g.label.id}`"
                 @click="patchLabel(g.label.id, { collapsed: !g.label.collapsed })"
               />
-              <input
+              <Input
+                size="sm"
                 class="wp-tg__label-name"
-                :value="g.label.name"
+                :model-value="g.label.name"
                 placeholder="Group name"
                 spellcheck="false"
                 aria-label="Group name"
                 @keydown.stop
                 @change="patchLabel(g.label.id, { name: ($event.target as HTMLInputElement).value.trim() })"
-              >
+              />
               <span class="wp-tg__rule" />
               <span class="wp-tg__count">{{ g.toggles.length }}<template v-if="g.label.collapsed"> · {{ onCount(g) }} on</template></span>
               <WpIconButton

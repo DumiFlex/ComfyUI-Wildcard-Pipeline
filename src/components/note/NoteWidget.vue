@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import ColorField from "@/kit/ColorField.vue";
+import Input from "@/kit/Input.vue";
 import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpNumber from "@/kit/WpNumber.vue";
@@ -234,7 +235,7 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
       </div>
       <label class="wp-note__field">
         <span class="wp-note__label">Title</span>
-        <input class="wp-note__input" :value="title" data-test="note-title" @input="onTitle" />
+        <Input size="sm" class="wp-note__input" :model-value="title" data-test="note-title" @input="onTitle" />
       </label>
       <div class="wp-note__field">
         <span class="wp-note__label">Text <span class="wp-note__hint">{{ config.look === "label" ? "shows when you hover the label" : "Markdown, links and icons" }}</span></span>

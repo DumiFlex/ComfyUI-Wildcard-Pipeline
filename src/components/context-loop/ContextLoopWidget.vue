@@ -14,6 +14,7 @@
  */
 import { computed, ref, watch } from "vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
+import Input from "@/kit/Input.vue";
 import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
@@ -296,10 +297,12 @@ function toggleTotalInternal(): void {
       <div class="wp-loop__label">iteration var</div>
       <div class="wp-loop__var-input" :data-wp-socket="valuesWired ? undefined : 'values'">
         <span class="wp-loop__var-prefix">$</span>
-        <input
-          type="text"
+        <Input
+         
+          size="sm"
+         
           class="wp-loop__var-text"
-          :value="modelValue.iteration_var_name"
+          :model-value="modelValue.iteration_var_name"
           data-test="loop-iteration-var"
           aria-label="iteration variable name"
           @input="onIterationVarInput"
