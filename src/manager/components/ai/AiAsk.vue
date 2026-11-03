@@ -163,7 +163,7 @@ function setRef(i: number, el: unknown): void {
         <Chip
           v-for="(c, j) in q.choices"
           :key="j"
-          size="md"
+          size="sm"
           as="button"
           class="wp-ai-ask__chip"
           :role="q.multi ? 'checkbox' : 'radio'"
@@ -180,7 +180,7 @@ function setRef(i: number, el: unknown): void {
           </span>
         </Chip>
         <Chip
-          size="md"
+          size="sm"
           class="wp-ai-ask__chip"
           data-kind="other"
           icon="pi-pencil"
@@ -191,7 +191,7 @@ function setRef(i: number, el: unknown): void {
           @keydown="onKey(i, $event)"
         >Other…</Chip>
         <Chip
-          size="md"
+          size="sm"
           class="wp-ai-ask__chip"
           data-kind="decide"
           icon="pi-sparkles"
@@ -238,9 +238,11 @@ function setRef(i: number, el: unknown): void {
   color: var(--wp-accent-text); text-transform: uppercase;
 }
 .wp-ai-ask__text { margin: 0; font-size: 13px; color: var(--wp-text); overflow-wrap: anywhere; }
-.wp-ai-ask__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.wp-ai-ask__chips { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 2px; }
 /* The kit's toggle chip, grown to two lines when an answer has a hint. */
-.wp-ai-ask__chip { height: auto; min-height: var(--wp-control-h-md); max-width: 100%; padding-top: 4px; padding-bottom: 4px; text-align: left; white-space: normal; }
+.wp-ai-ask__chip { height: auto; min-height: var(--wp-control-h-sm); max-width: 100%; padding: 2px 10px; font-size: 12px; line-height: 16px; text-align: left; white-space: normal; }
+/* A pill with a hint under its label gets softer corners instead of a full round. */
+.wp-ai-ask__chip:has(.wp-ai-ask__hint) { border-radius: min(10px, var(--wp-radius-cap, 999px)); padding-top: 3px; padding-bottom: 3px; }
 /* Picked: the kit toggle chip's "on" look (these keep radio / checkbox roles). */
 .wp-ai-ask__chip[aria-checked="true"] {
   border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
@@ -249,13 +251,13 @@ function setRef(i: number, el: unknown): void {
 }
 .wp-ai-ask__chip[data-kind="other"]:not([aria-pressed="true"]),
 .wp-ai-ask__chip[data-kind="decide"]:not([aria-pressed="true"]) { border-style: dashed; color: var(--wp-text-muted); background: none; }
-.wp-ai-ask__body { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; }
-.wp-ai-ask__label { display: inline-flex; gap: 6px; align-items: baseline; overflow-wrap: anywhere; }
+.wp-ai-ask__body { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 0; min-width: 0; }
+.wp-ai-ask__label { display: inline-flex; gap: 5px; align-items: baseline; overflow-wrap: anywhere; }
 .wp-ai-ask__key {
   font-family: var(--wp-font-mono, monospace); font-size: 10px; color: var(--wp-text-dim);
   border: 0; background: none; padding: 0;
 }
-.wp-ai-ask__hint { font-size: 11px; line-height: 15px; color: var(--wp-text-muted); overflow-wrap: anywhere; }
+.wp-ai-ask__hint { font-size: 10.5px; line-height: 13px; color: var(--wp-text-dim); overflow-wrap: anywhere; }
 /* A narrow drawer keeps hints in the tooltip only. */
 @container (max-width: 380px) {
   .wp-ai-ask__hint { display: none; }
