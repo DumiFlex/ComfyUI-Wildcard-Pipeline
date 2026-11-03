@@ -21,6 +21,7 @@ import { axisStatus, type SweepCandidate } from "./sweep-candidates";
 import WpNumber from "@/kit/WpNumber.vue";
 import WpSelect from "@/kit/WpSelect.vue";
 import Button from "@/kit/Button.vue";
+import ListRow from "@/kit/ListRow.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 
 const props = withDefaults(
@@ -175,8 +176,8 @@ function moveAxis(uid: string, dir: -1 | 1): void {
         :data-test="`sweep-axis-${row.axis.uid}`"
       >
         <div class="wp-sweep__axis-head">
-          <button
-            type="button"
+          <ListRow
+            size="sm"
             class="wp-sweep__axis-name"
             :disabled="row.missing"
             :aria-expanded="openUid === row.axis.uid"
@@ -186,7 +187,7 @@ function moveAxis(uid: string, dir: -1 | 1): void {
             <span class="wp-sweep__axis-var">{{ axisName(row) }}</span>
             <span v-if="row.candidate" class="wp-sweep__axis-node">{{ row.candidate.nodeLabel }}</span>
             <span v-if="row.missing" class="wp-sweep__axis-node">missing</span>
-          </button>
+          </ListRow>
           <span class="wp-sweep__axis-count" :title="row.staleIds.length ? `${row.staleIds.length} picked option(s) no longer exist; those frames roll normally` : ''">
             {{ row.axis.option_ids.length }}<template v-if="row.candidate">/{{ row.candidate.options.length }}</template>
             <i v-if="row.staleIds.length" class="pi pi-exclamation-triangle wp-sweep__warn-ico" aria-hidden="true" />
@@ -293,11 +294,9 @@ function moveAxis(uid: string, dir: -1 | 1): void {
 }
 .wp-sweep__axis--missing { border-style: dashed; opacity: .75; }
 .wp-sweep__axis-head { display: flex; align-items: center; gap: 4px; padding: 3px 4px 3px 6px; }
-.wp-sweep__axis-name {
-  flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px;
-  background: none; border: 0; padding: 0; cursor: pointer; text-align: left; color: var(--wp-text);
-}
-.wp-sweep__axis-name:disabled { cursor: default; }
+/* A kit ListRow (sm): the $var, then the node it lives in. */
+.wp-sweep__axis-name { flex: 1; width: auto; min-width: 0; min-height: 0; padding: 0 2px; color: var(--wp-text); }
+.wp-sweep__axis-name :deep(.wp-list-row__label) { display: flex; align-items: baseline; gap: 6px; }
 .wp-sweep__axis-var { font: 600 11px var(--wp-font-mono, monospace); color: var(--wp-accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wp-sweep__axis-node { font: 9.5px var(--wp-font-sans, sans-serif); color: var(--wp-text-dim); white-space: nowrap; }
 .wp-sweep__axis--missing .wp-sweep__axis-node { color: var(--wp-warn); }
@@ -317,6 +316,7 @@ function moveAxis(uid: string, dir: -1 | 1): void {
   border-color: var(--wp-accent);
   color: var(--wp-text);
 }
+
 
 .wp-sweep__add { width: 100%; height: 22px; }
 .wp-sweep__limit-wrap { width: 64px; height: 20px; }

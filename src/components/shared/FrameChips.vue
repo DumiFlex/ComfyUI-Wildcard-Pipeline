@@ -22,6 +22,7 @@
  */
 import { computed } from "vue";
 import Icon from "@/kit/Icon.vue";
+import ListRow from "@/kit/ListRow.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -174,27 +175,27 @@ const hint = computed(() => {
 
 <template>
   <div class="wp-fchips">
-    <button
-      type="button"
+    <ListRow
+      size="sm"
       class="wp-fchips__head"
       :aria-expanded="!collapsed"
       :data-test="`${uiId}-toggle`"
       :title="collapsed ? 'Show frames' : 'Hide frames'"
       @click="collapsed = !collapsed"
     >
-      <Icon
-        name="chevron-down"
-        :size="9"
-        class="wp-fchips__caret"
-        :class="{ 'wp-fchips__caret--collapsed': collapsed }"
-      />
+      <template #start>
+        <Icon
+          name="chevron-down"
+          :size="9"
+          class="wp-fchips__caret"
+          :class="{ 'wp-fchips__caret--collapsed': collapsed }"
+        />
+      </template>
       <span class="wp-fchips__label">{{ label }}</span>
-      <span
-        v-if="summary"
-        class="wp-fchips__summary"
-        :data-test="`${uiId}-summary`"
-      >{{ summary }}</span>
-    </button>
+      <template v-if="summary" #end>
+        <span class="wp-fchips__summary" :data-test="`${uiId}-summary`">{{ summary }}</span>
+      </template>
+    </ListRow>
 
     <template v-if="!collapsed">
       <!-- `overflow-y: auto` + a bounded height is what makes a 100-frame loop
@@ -250,19 +251,9 @@ const hint = computed(() => {
 
 .wp-fchips { display: flex; flex-direction: column; gap: 4px; }
 
-.wp-fchips__head {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  width: 100%;
-  padding: 0;
-  background: none;
-  border: 0;
-  cursor: pointer;
-  text-align: left;
-  color: var(--wp-text-dim, var(--wp-text-muted));
-}
-.wp-fchips__head:hover { color: var(--wp-text-muted); }
+/* A kit ListRow (sm): caret, the label, the summary at the end. */
+.wp-fchips__head { gap: 5px; min-height: 0; padding: 0; color: var(--wp-text-dim, var(--wp-text-muted)); }
+.wp-fchips__head:hover:not(:disabled) { background: none; color: var(--wp-text-muted); }
 .wp-fchips__caret { flex: none; transition: transform var(--wp-motion-hover, 120ms) ease; }
 .wp-fchips__caret--collapsed { transform: rotate(-90deg); }
 .wp-fchips__label {
@@ -273,7 +264,6 @@ const hint = computed(() => {
 /* Kept visible while collapsed — hiding the grid must not also hide the fact
  * that frames are locked or bypassed. */
 .wp-fchips__summary {
-  margin-left: auto;
   font: 600 8px var(--wp-font-sans, sans-serif);
   text-transform: uppercase;
   letter-spacing: 0.05em;

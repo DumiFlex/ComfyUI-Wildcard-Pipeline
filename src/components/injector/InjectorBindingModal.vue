@@ -29,6 +29,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
 import RichTextInput from "../../manager/components/RichTextInput.vue";
 import Button from "@/kit/Button.vue";
+import ListRow from "@/kit/ListRow.vue";
 import ModalShell from "@/kit/ModalShell.vue";
 
 const props = withDefaults(
@@ -310,10 +311,11 @@ const unknownRefCount = computed(() => previewTokens.value.filter((t) => t.kind 
 // `position: fixed` viewport coords (the same strategy RichTextInput's
 // autocomplete popover uses) and flips above the button when there's no
 // room below.
-const menuBtnEl = ref<HTMLButtonElement | null>(null);
-const negMenuBtnEl = ref<HTMLButtonElement | null>(null);
-const activeMenuBtn = (): HTMLButtonElement | null =>
-  menuTarget.value === "negative" ? negMenuBtnEl.value : menuBtnEl.value;
+/** The two "+ $slot" kit Buttons; their root element places the menu. */
+const menuBtnEl = ref<{ $el: HTMLElement } | null>(null);
+const negMenuBtnEl = ref<{ $el: HTMLElement } | null>(null);
+const activeMenuBtn = (): HTMLElement | null =>
+  (menuTarget.value === "negative" ? negMenuBtnEl.value : menuBtnEl.value)?.$el ?? null;
 const menuEl = ref<HTMLDivElement | null>(null);
 const menuPos = ref<{ top: number; left: number; flipped: boolean }>({
   top: 0, left: 0, flipped: false,
@@ -386,7 +388,7 @@ onBeforeUnmount(closeInsertMenu);
  *  default dark palette inside a light-themed canvas. Same helper shape as
  *  RichTextInput's `teleportThemeClass`. */
 function menuThemeClass(): string {
-  const el = menuBtnEl.value;
+  const el = menuBtnEl.value?.$el;
   if (!el || typeof el.closest !== "function") return "";
   const themed = el.closest(".wp-theme-light, .wp-theme-dark");
   if (!themed) return "";
@@ -454,17 +456,19 @@ function onKeydown(ev: KeyboardEvent): void {
           <span class="ibm__section-hint">{{ isGeneral ? "$ref names · $$ for literal $ · composed after socket rows" : "$slot_name refs · $$ for literal $ · empty = pass-through" }}</span>
           <div class="ibm__head-actions">
             <div class="wp-ibm__menu-wrap">
-              <button
+              <Button
                 v-if="insertOptions.length > 0"
                 ref="menuBtnEl"
-                type="button"
+                size="sm"
+                variant="outline"
+                icon="pi-plus"
                 class="wp-ibm__menu-btn"
                 data-test="ibm-insert-slot"
                 :title="`Insert a reference (${insertOptions.length} available)`"
                 aria-label="Insert reference"
                 :aria-expanded="showInsertMenu"
                 @click="toggleInsertMenu('template')"
-              ><i class="pi pi-plus" aria-hidden="true" /> {{ isGeneral ? "$ref" : "$slot" }}</button>
+              >{{ isGeneral ? "$ref" : "$slot" }}</Button>
               <Teleport to="body">
                 <div
                   v-if="showInsertMenu"
@@ -475,10 +479,10 @@ function onKeydown(ev: KeyboardEvent): void {
                   data-test="ibm-slot-menu"
                   role="listbox"
                 >
-                  <button
+                  <ListRow
                     v-for="opt in insertOptions"
                     :key="opt.slotName"
-                    type="button"
+                    size="sm"
                     class="wp-ibm__menu-item"
                     :data-test="`ibm-slot-item-${opt.slotName}`"
                     role="option"
@@ -487,8 +491,8 @@ function onKeydown(ev: KeyboardEvent): void {
                   >
                     <span class="ibm__menu-name">${{ opt.slotName }}</span>
                     <span v-if="opt.label !== opt.slotName" class="ibm__menu-label">{{ opt.label }}</span>
-                    <span v-if="opt.typeKey" class="ibm__menu-type">{{ opt.typeKey }}</span>
-                  </button>
+                    <template v-if="opt.typeKey" #end><span class="ibm__menu-type">{{ opt.typeKey }}</span></template>
+                  </ListRow>
                 </div>
               </Teleport>
             </div>
@@ -541,17 +545,19 @@ function onKeydown(ev: KeyboardEvent): void {
           <span class="ibm__section-label ibm__section-label--neg">Negative</span>
           <span class="ibm__section-hint">same {{ isGeneral ? "$ref" : "$slot" }} refs · replaces the variable's negatives</span>
           <div class="ibm__head-actions">
-            <button
+            <Button
               v-if="insertOptions.length > 0"
               ref="negMenuBtnEl"
-              type="button"
+              size="sm"
+              variant="outline"
+              icon="pi-plus"
               class="wp-ibm__menu-btn"
               data-test="ibm-neg-insert-slot"
               :title="`Insert a reference into the negative (${insertOptions.length} available)`"
               aria-label="Insert reference into the negative"
               :aria-expanded="showInsertMenu && menuTarget === 'negative'"
               @click="toggleInsertMenu('negative')"
-            ><i class="pi pi-plus" aria-hidden="true" /> {{ isGeneral ? "$ref" : "$slot" }}</button>
+            >{{ isGeneral ? "$ref" : "$slot" }}</Button>
           </div>
         </div>
         <RichTextInput

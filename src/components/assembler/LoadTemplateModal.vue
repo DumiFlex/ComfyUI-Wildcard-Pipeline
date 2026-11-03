@@ -16,6 +16,7 @@ import type { TemplateRow } from "../../manager/api/types";
 import ModalShell from "@/kit/ModalShell.vue";
 import Skeleton from "@/kit/Skeleton.vue";
 import Button from "@/kit/Button.vue";
+import ListRow from "@/kit/ListRow.vue";
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: []; pick: [TemplateRow] }>();
@@ -239,16 +240,15 @@ function pick(row: TemplateRow) {
         </div>
 
         <template v-else>
-          <button
+          <ListRow
             v-for="row in filtered"
             :key="row.id"
-            type="button"
             class="wp-ltm__row"
             data-test="load-tpl-row"
             :data-testid="`load-tpl-row-${row.id}`"
             @click="pick(row)"
           >
-            <span class="wp-ltm__row-icon"><i class="pi pi-file-edit" aria-hidden="true" /></span>
+            <template #start><span class="wp-ltm__row-icon"><i class="pi pi-file-edit" aria-hidden="true" /></span></template>
             <span class="wp-ltm__row-main">
               <span class="wp-ltm__row-name">
                 {{ row.name }}
@@ -262,10 +262,10 @@ function pick(row: TemplateRow) {
                 :title="row.negative_template"
               >neg: {{ row.negative_template }}</span>
             </span>
-            <span v-if="row.category_id && categoryNameById.get(row.category_id)" class="wp-ltm__row-cat">
-              {{ categoryNameById.get(row.category_id) }}
-            </span>
-          </button>
+            <template v-if="row.category_id && categoryNameById.get(row.category_id)" #end>
+              <span class="wp-ltm__row-cat">{{ categoryNameById.get(row.category_id) }}</span>
+            </template>
+          </ListRow>
         </template>
       </div>
 
@@ -397,19 +397,13 @@ function pick(row: TemplateRow) {
 .wp-ltm__state .pi { font-size: 18px; color: var(--wp-text-dim); }
 .wp-ltm__state--error { color: var(--wp-danger); }
 
+/* A kit ListRow: the template icon in front, name + previews, category at the end. */
 .wp-ltm__row {
-  display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) auto;
-  align-items: center;
   gap: 10px;
-  width: 100%;
   padding: 8px;
-  background: transparent;
   border: 1px solid transparent;
   border-radius: min(6px, var(--wp-radius-cap, 999px));
   color: var(--wp-text);
-  cursor: pointer;
-  text-align: left;
   transition: background var(--wp-motion-quick) ease, border-color var(--wp-motion-quick) ease;
 }
 .wp-ltm__row:hover { background: var(--wp-bg-3); border-color: var(--wp-border); }

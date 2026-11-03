@@ -1,91 +1,80 @@
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import VarPicker from "./VarPicker.vue";
 
 describe("VarPicker", () => {
-  it("renders the placeholder when modelValue is empty", () => {
+  // The picker is the kit Combobox: its list floats in a Popover teleported to
+  // <body>, so these tests mount attached and read the options from document.
+  const opts = () => [...document.querySelectorAll<HTMLElement>(".wp-combo__opt")];
+  const field = (w: ReturnType<typeof mount>) => w.get<HTMLInputElement>('[data-test="var-picker-trigger"] input, input.wp-combo__field');
+  async function typeIn(w: ReturnType<typeof mount>, text: string) {
+    const f = field(w);
+    await f.trigger("focus");
+    await f.setValue(text);
+    await flushPromises();
+  }
+
+  it("shows the placeholder when modelValue is empty", () => {
     const w = mount(VarPicker, {
       props: { modelValue: "", upstreamVars: [], previewSource: "", previewParsed: null, previewDefault: "0" },
     });
-    expect(w.find('[data-test="var-picker-trigger"]').text()).toContain("(no var selected)");
+    expect(field(w).attributes("placeholder")).toBe("(no var selected)");
+    w.unmount();
   });
 
-  it("opens the menu on trigger click + shows upstream vars", async () => {
+  it("lists the upstream vars when opened", async () => {
     const w = mount(VarPicker, {
+      attachTo: document.body,
       props: { modelValue: "$seed", upstreamVars: ["$seed", "$mood"], previewSource: "1920", previewParsed: "1920", previewDefault: "0" },
     });
-    await w.find('[data-test="var-picker-trigger"]').trigger("click");
-    const menu = w.find('[data-test="var-picker-menu"]');
-    expect(menu.exists()).toBe(true);
-    expect(menu.text()).toContain("$seed");
-    expect(menu.text()).toContain("$mood");
+    await typeIn(w, "");
+    expect(opts().map((o) => o.textContent?.trim())).toEqual(["$seed", "$mood"]);
+    w.unmount();
   });
 
   it("emits update:modelValue with the picked var", async () => {
     const w = mount(VarPicker, {
+      attachTo: document.body,
       props: { modelValue: "", upstreamVars: ["$seed", "$mood"], previewSource: "", previewParsed: null, previewDefault: "0" },
     });
-    await w.find('[data-test="var-picker-trigger"]').trigger("click");
-    await w.find('[data-test="var-picker-opt-$mood"]').trigger("click");
+    await typeIn(w, "");
+    opts()[1]?.click();
+    await flushPromises();
     expect(w.emitted("update:modelValue")?.[0]).toEqual(["$mood"]);
+    w.unmount();
   });
 
-  it("filters the option list as you type", async () => {
-    // A long chain produces dozens of upstream vars; the menu was an
-    // unfiltered scroll.
+  it("filters the list as you type, with or without the leading $", async () => {
     const w = mount(VarPicker, {
-      props: {
-        modelValue: "",
-        upstreamVars: ["$seed", "$mood", "$outfit_color"],
-        previewSource: "", previewParsed: null, previewDefault: "0",
-      },
+      attachTo: document.body,
+      props: { modelValue: "", upstreamVars: ["$seed", "$mood", "$outfit_color"], previewSource: "", previewParsed: null, previewDefault: "0" },
     });
-    await w.find('[data-test="var-picker-trigger"]').trigger("click");
-    await w.find('[data-test="var-picker-search"]').setValue("moo");
-    expect(w.find('[data-test="var-picker-opt-$mood"]').exists()).toBe(true);
-    expect(w.find('[data-test="var-picker-opt-$seed"]').exists()).toBe(false);
+    await typeIn(w, "moo");
+    expect(opts().map((o) => o.textContent?.trim())).toEqual(["$mood"]);
+    await typeIn(w, "$see");
+    expect(opts().map((o) => o.textContent?.trim())).toEqual(["$seed"]);
+    w.unmount();
   });
 
-  it("matches with or without the leading $", async () => {
+  it("says so when nothing matches", async () => {
     const w = mount(VarPicker, {
-      props: {
-        modelValue: "",
-        upstreamVars: ["$seed"],
-        previewSource: "", previewParsed: null, previewDefault: "0",
-      },
+      attachTo: document.body,
+      props: { modelValue: "", upstreamVars: ["$seed"], previewSource: "", previewParsed: null, previewDefault: "0" },
     });
-    await w.find('[data-test="var-picker-trigger"]').trigger("click");
-    await w.find('[data-test="var-picker-search"]').setValue("see");
-    expect(w.find('[data-test="var-picker-opt-$seed"]').exists()).toBe(true);
-    await w.find('[data-test="var-picker-search"]').setValue("$see");
-    expect(w.find('[data-test="var-picker-opt-$seed"]').exists()).toBe(true);
+    await typeIn(w, "zzz");
+    expect(document.querySelector(".wp-combo__empty")?.textContent).toContain("No variable matches");
+    w.unmount();
   });
 
-  it("says so when nothing matches, instead of rendering an empty menu", async () => {
+  it("Enter picks the first match", async () => {
     const w = mount(VarPicker, {
-      props: {
-        modelValue: "",
-        upstreamVars: ["$seed"],
-        previewSource: "", previewParsed: null, previewDefault: "0",
-      },
+      attachTo: document.body,
+      props: { modelValue: "", upstreamVars: ["$seed", "$mood"], previewSource: "", previewParsed: null, previewDefault: "0" },
     });
-    await w.find('[data-test="var-picker-trigger"]').trigger("click");
-    await w.find('[data-test="var-picker-search"]').setValue("zzz");
-    expect(w.find('[data-test="var-picker-no-match"]').exists()).toBe(true);
-  });
-
-  it("Enter picks the sole remaining match", async () => {
-    const w = mount(VarPicker, {
-      props: {
-        modelValue: "",
-        upstreamVars: ["$seed", "$mood"],
-        previewSource: "", previewParsed: null, previewDefault: "0",
-      },
-    });
-    await w.find('[data-test="var-picker-trigger"]').trigger("click");
-    await w.find('[data-test="var-picker-search"]').setValue("moo");
-    await w.find('[data-test="var-picker-search"]').trigger("keydown", { key: "Enter" });
+    await typeIn(w, "moo");
+    await field(w).trigger("keydown", { key: "Enter" });
     expect(w.emitted("update:modelValue")?.[0]).toEqual(["$mood"]);
+    w.unmount();
   });
 
   it("shows the parsed preview in teal", () => {
@@ -118,10 +107,12 @@ describe("VarPicker", () => {
 
   it("shows the empty-state message when no upstream vars exist", async () => {
     const w = mount(VarPicker, {
+      attachTo: document.body,
       props: { modelValue: "", upstreamVars: [], previewSource: "", previewParsed: null, previewDefault: "0" },
     });
-    await w.find('[data-test="var-picker-trigger"]').trigger("click");
-    expect(w.find('[data-test="var-picker-menu"]').text()).toContain("No upstream variables");
+    await typeIn(w, "");
+    expect(document.querySelector(".wp-combo__empty")?.textContent).toContain("No upstream variables");
+    w.unmount();
   });
   it("shows what a Var → Choice output feeds and how the run matched", () => {
     const w = mount(VarPicker, {

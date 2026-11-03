@@ -27,7 +27,8 @@
  * Emits:
  *  - `update:modelValue(next: string)` — fires when user picks a new var.
  */
-import { computed, nextTick, ref } from "vue";
+import { computed } from "vue";
+import Combobox from "@/kit/Combobox.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -47,117 +48,35 @@ const props = withDefaults(
 
 const emit = defineEmits<{ "update:modelValue": [next: string] }>();
 
-const open = ref<boolean>(false);
+/** The upstream vars as kit Combobox options (the list filters as you type,
+ *  with or without the leading `$`, since every name carries it). */
+const options = computed(() => props.upstreamVars.map((name) => ({ value: name, label: name })));
+const picked = computed<string | null>(() => (props.modelValue?.trim() ? props.modelValue : null));
 
-/** Type-to-filter query. A long chain produces dozens of upstream vars and
- *  the menu was an unfiltered scroll — this mirrors the SPA `Select`'s
- *  behaviour so both dropdowns filter the same way. */
-const query = ref<string>("");
-const searchEl = ref<HTMLInputElement | null>(null);
-
-const filteredVars = computed<readonly string[]>(() => {
-  const q = query.value.trim().toLowerCase();
-  if (!q) return props.upstreamVars;
-  // Match with and without the leading `$` so typing `see` finds `$seed`.
-  return props.upstreamVars.filter((n) => n.toLowerCase().replace(/^\$/, "").includes(q.replace(/^\$/, "")));
-});
-
-const displayValue = computed<string>(() => {
-  const v = props.modelValue?.trim();
-  return v && v.length > 0 ? v : "(no var selected)";
-});
+function onPick(next: string | string[] | null): void {
+  if (typeof next === "string" && next) emit("update:modelValue", next);
+}
 
 const hasExecuted = computed<boolean>(() => Boolean(props.previewSource || props.choiceNote));
 const usedDefault = computed<boolean>(() => props.previewParsed === null);
 const isMuted = computed<boolean>(() => props.nodeMode === 2);
 const isBypassed = computed<boolean>(() => props.nodeMode === 4);
 
-function toggleOpen(): void {
-  open.value = !open.value;
-  if (open.value) {
-    query.value = "";
-    void nextTick(() => searchEl.value?.focus());
-  }
-}
-
-function pick(name: string): void {
-  emit("update:modelValue", name);
-  open.value = false;
-}
-
-/** Enter picks the sole remaining match — the common case after typing a few
- *  characters. Escape closes without changing the selection. */
-function onSearchKeydown(ev: KeyboardEvent): void {
-  if (ev.key === "Escape") {
-    ev.preventDefault();
-    open.value = false;
-    return;
-  }
-  if (ev.key === "Enter" && filteredVars.value.length === 1) {
-    ev.preventDefault();
-    pick(filteredVars.value[0]);
-  }
-}
 </script>
 
 <template>
   <div class="wp-var-picker" :class="{ 'wp-var-picker--muted': isMuted, 'wp-var-picker--bypassed': isBypassed }">
-    <button
-      type="button"
-      class="wp-var-picker__trigger"
-      :class="{ 'wp-var-picker__trigger--open': open }"
-      :aria-expanded="open"
-      aria-haspopup="listbox"
+    <Combobox
+      class="wp-var-picker__field"
+      :model-value="picked"
+      :options="options"
+      size="sm"
+      placeholder="(no var selected)"
+      :empty-text="upstreamVars.length ? 'No variable matches' : 'No upstream variables: connect a WP Context node first.'"
+      aria-label="Variable"
       data-test="var-picker-trigger"
-      @click="toggleOpen"
-    >
-      <span class="wp-var-picker__value">{{ displayValue }}</span>
-      <span class="wp-var-picker__caret" aria-hidden="true">▾</span>
-    </button>
-
-    <ul
-      v-if="open"
-      role="listbox"
-      class="wp-var-picker__menu"
-      data-test="var-picker-menu"
-    >
-      <li v-if="upstreamVars.length > 0" class="wp-var-picker__search">
-        <input
-          ref="searchEl"
-          v-model="query"
-          type="text"
-          class="wp-var-picker__search-field"
-          placeholder="Filter variables…"
-          aria-label="Filter variables"
-          spellcheck="false"
-          autocomplete="off"
-          data-test="var-picker-search"
-          @keydown="onSearchKeydown"
-        />
-      </li>
-      <li v-if="upstreamVars.length === 0" class="wp-var-picker__empty">
-        No upstream variables — connect a WP Context node first.
-      </li>
-      <li
-        v-else-if="filteredVars.length === 0"
-        class="wp-var-picker__empty"
-        data-test="var-picker-no-match"
-      >
-        No variable matches "{{ query }}".
-      </li>
-      <li
-        v-for="name in filteredVars"
-        :key="name"
-        role="option"
-        :aria-selected="modelValue === name"
-        class="wp-var-picker__opt"
-        :class="{ 'wp-var-picker__opt--active': modelValue === name }"
-        :data-test="`var-picker-opt-${name}`"
-        @click="pick(name)"
-      >
-        {{ name }}
-      </li>
-    </ul>
+      @update:model-value="onPick"
+    />
 
     <div
       class="wp-var-picker__preview"
@@ -195,74 +114,8 @@ function onSearchKeydown(ev: KeyboardEvent): void {
   font: 11px var(--wp-font-mono, monospace);
   color: var(--wp-text);
 }
-.wp-var-picker__trigger {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 8px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  color: var(--wp-text);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 11px;
-}
-.wp-var-picker__trigger--open {
-  border-color: var(--wp-accent);
-}
-.wp-var-picker__value { color: var(--wp-accent); }
-.wp-var-picker__caret { color: var(--wp-text-dim); }
-
-.wp-var-picker__menu {
-  list-style: none;
-  margin: 0;
-  padding: 4px 0;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  max-height: 180px;
-  overflow-y: auto;
-}
-.wp-var-picker__opt {
-  padding: 4px 8px;
-  cursor: pointer;
-  color: var(--wp-text-muted);
-}
-.wp-var-picker__opt:hover { background: rgba(196, 181, 253, 0.1); color: var(--wp-text); }
-.wp-var-picker__opt--active { background: color-mix(in srgb, var(--wp-accent) 18%, transparent); color: var(--wp-accent-text); }
-.wp-var-picker__empty {
-  padding: 6px 8px;
-  font-style: italic;
-  color: var(--wp-text-dim);
-  font-size: 10px;
-}
-
-/* Filter field pinned above the options. `position: sticky` keeps it in view
- * while the (scrollable) option list moves under it. */
-.wp-var-picker__search {
-  position: sticky;
-  top: -4px; /* cancels the menu's 4px top padding */
-  background: var(--wp-bg-deep, var(--wp-bg));
-  padding: 4px 6px;
-  border-bottom: 1px solid var(--wp-border);
-}
-.wp-var-picker__search-field {
-  width: 100%;
-  box-sizing: border-box;
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  padding: 3px 6px;
-  color: var(--wp-text);
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 10px;
-}
-.wp-var-picker__search-field:focus {
-  outline: none;
-  border-color: var(--wp-accent);
-}
-
+/* The kit Combobox; the picked $var reads in the accent like the old trigger. */
+.wp-var-picker__field :deep(.wp-combo__field) { font-family: var(--wp-font-mono, monospace); color: var(--wp-accent); }
 .wp-var-picker__preview {
   display: flex;
   justify-content: space-between;
