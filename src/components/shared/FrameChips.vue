@@ -253,12 +253,13 @@ const hint = computed(() => {
 .wp-fchips { display: flex; flex-direction: column; gap: 4px; }
 
 /* A kit ListRow (sm): caret, the label, the summary at the end. */
-.wp-fchips__head { gap: 5px; min-height: 0; padding: 0; color: var(--wp-text-dim, var(--wp-text-muted)); }
+/* 20 px tall so the fold is easy to hit (it was 15). */
+.wp-fchips__head { gap: 5px; min-height: 20px; padding: 0; color: var(--wp-text-dim, var(--wp-text-muted)); }
 .wp-fchips__head:hover:not(:disabled) { background: none; color: var(--wp-text-muted); }
 .wp-fchips__caret { flex: none; transition: transform var(--wp-motion-hover, 120ms) ease; }
 .wp-fchips__caret--collapsed { transform: rotate(-90deg); }
 .wp-fchips__label {
-  font: 600 9px var(--wp-font-sans, sans-serif);
+  font: 600 10px var(--wp-font-sans, sans-serif);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }

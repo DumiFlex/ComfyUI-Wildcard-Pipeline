@@ -362,7 +362,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // their own scoped styles (so canvas fields look right without local copies)
 // and the editors' menus moved onto Popover / DropdownMenu / Modal
 // (621,933 -> 623,679 bytes). Batch B drops the canvas fields' local copies.
-const TOTAL_LIMIT = 610 * 1024;     // 610 KB
+// RAISED 610 -> 614 KB on 2026-11-03 for the selection-toolbar "?" and pencil
+// (#225: the help dialog chunk and the toolbar commands in the boot chunk),
+// the labels-toggle fix (#249) and kit 0.14's bigger canvas controls
+// (623,679 -> 626,405 bytes).
+const TOTAL_LIMIT = 614 * 1024;     // 614 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

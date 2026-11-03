@@ -443,19 +443,21 @@ function flip(): void {
 .wp-tgr__radio {
   flex: none;
   position: relative;
-  width: 16px;
-  height: 16px;
-  margin: 0 2px;
+  width: 18px;
+  height: 18px;
+  margin: 0 3px;
   border-radius: 50%;
   box-sizing: border-box;
   border: 2px solid var(--wp-text-dim, var(--wp-text3));
   cursor: pointer;
 }
+/* The click reaches 24 x 24, like ComfyUI's row controls (::after is the dot). */
+.wp-tgr__radio::before { content: ""; position: absolute; inset: -5px; }
 .wp-tgr__radio.is-on { border-color: var(--wp-accent); }
 .wp-tgr__radio.is-on::after {
   content: "";
   position: absolute;
-  inset: 2px;
+  inset: 3px;
   border-radius: 50%;
   background: var(--wp-accent);
 }
