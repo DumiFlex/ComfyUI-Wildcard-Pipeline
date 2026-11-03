@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
 import Checkbox from "@/kit/Checkbox.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
+import DragHandle from "@/kit/DragHandle.vue";
 
 const props = defineProps<{
   row: InjectorRow;
@@ -182,15 +183,8 @@ function onDragEnd(): void {
     @contextmenu="onContextMenu"
   >
     <div class="wp-inj-row-header">
-      <span class="wp-drag-handle" aria-hidden="true" title="Drag to reorder">
-        <svg class="wp-drag-handle__grip" viewBox="0 0 6 12" width="6" height="12" fill="currentColor" aria-hidden="true" focusable="false">
-          <circle cx="1.5" cy="2" r="1" />
-          <circle cx="4.5" cy="2" r="1" />
-          <circle cx="1.5" cy="6" r="1" />
-          <circle cx="4.5" cy="6" r="1" />
-          <circle cx="1.5" cy="10" r="1" />
-          <circle cx="4.5" cy="10" r="1" />
-        </svg>
+      <span class="wp-drag-handle" aria-hidden="true">
+        <DragHandle title="Drag to reorder" />
       </span>
       <WpIconButton
         variant="bare"

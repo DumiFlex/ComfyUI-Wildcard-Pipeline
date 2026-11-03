@@ -684,7 +684,7 @@ const subLine = computed(() => {
                 <span class="wp-ifp__compare-line" :style="{ left: `${comparePos}%` }" aria-hidden="true" />
                 <span class="wp-ifp__compare-tag is-left">{{ cellName(compareCell) }}</span>
                 <span class="wp-ifp__compare-tag is-right">{{ cellName(cell) }}</span>
-                <input v-model.number="comparePos" type="range" min="0" max="100" class="wp-ifp__compare-range" aria-label="Compare slider">
+                <Slider v-model="comparePos" :min="0" :max="100" class="wp-ifp__compare-range" aria-label="Compare slider" data-test="image-filter-compare-slider" />
               </div>
               <img
                 v-else
@@ -1063,7 +1063,12 @@ const subLine = computed(() => {
 .wp-ifp__compare-tag { position: absolute; top: 8px; padding: 2px 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); background: rgb(0 0 0 / 0.6); color: white; font: 11px/1.4 var(--wp-font-sans); pointer-events: none; }
 .wp-ifp__compare-tag.is-left { left: 8px; }
 .wp-ifp__compare-tag.is-right { right: 8px; }
-.wp-ifp__compare-range { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
+/* The kit Slider, invisible over the pair so a drag anywhere on the picture
+ * moves the split. Its track sits half a thumb (8px at md) in from each side,
+ * so the slider reaches that far past the picture and the track spans it
+ * exactly; `--wp-control-h-md` stretches the track to the picture's height. */
+.wp-ifp__compare > .wp-ifp__compare-range { position: absolute; top: 0; bottom: 0; left: -8px; width: calc(100% + 16px); --wp-control-h-md: 100%; opacity: 0; }
+.wp-ifp__compare-range :deep(.wp-slider__track) { cursor: ew-resize; }
 
 .wp-ifp__side { width: 300px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px; border-left: 1px solid var(--wp-border); background: var(--wp-bg-deep, var(--wp-bg)); }
 .wp-ifp__side > * { flex-shrink: 0; }

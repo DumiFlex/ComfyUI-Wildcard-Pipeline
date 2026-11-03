@@ -2,6 +2,8 @@
 import Kbd from "@/kit/Kbd.vue";
 import { computed, nextTick, ref, watch } from "vue";
 import Icon from "@/kit/Icon.vue";
+import ModalShell from "@/kit/ModalShell.vue";
+import { useDialogFocus } from "@/kit/useDialogFocus";
 import type { CommandItem } from "./CommandPalette.types";
 import { rankCommands } from "../utils/commandRank";
 
@@ -58,6 +60,7 @@ const query = ref("");
 const selectedIndex = ref(0);
 const inputRef = ref<HTMLInputElement | null>(null);
 const listRef = ref<HTMLElement | null>(null);
+const panelRef = ref<HTMLElement | null>(null);
 
 /** What was run from the palette lately, newest first. */
 const ran = ref<string[]>(readRan());
@@ -102,14 +105,21 @@ const starts = computed(() => {
   return sections.value.map((sec) => { const at = n; n += sec.items.length; return at; });
 });
 
-watch(() => props.open, async (open) => {
+watch(() => props.open, (open) => {
   if (open) {
     query.value = "";
     selectedIndex.value = 0;
     ran.value = readRan();
-    await nextTick();
-    inputRef.value?.focus();
   }
+});
+
+// ModalShell closes on Escape and its key shield stops keys at the overlay,
+// so Tab is trapped from the shell's keydown; focus goes to the search box on
+// open and back to whatever had it on close.
+const focus = useDialogFocus(panelRef, () => props.open, {
+  onEscape: () => undefined,
+  window: false,
+  initial: () => inputRef.value,
 });
 
 watch(ranked, () => { selectedIndex.value = 0; });
@@ -129,11 +139,6 @@ function run(item: CommandItem) {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === "Escape") {
-    e.preventDefault();
-    emit("update:open", false);
-    return;
-  }
   if (e.key === "ArrowDown") {
     e.preventDefault();
     selectedIndex.value = Math.min(selectedIndex.value + 1, ranked.value.length - 1);
@@ -155,80 +160,77 @@ function onClickItem(item: CommandItem) {
   run(item);
 }
 
-function onBackdropClick() {
+function close() {
   emit("update:open", false);
 }
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="wp-modal" appear>
-      <div
-        v-if="open"
-        class="wp-cp-overlay"
-        role="presentation"
-        @click="onBackdropClick"
-        @keydown.esc="onBackdropClick"
-      >
-        <div class="wp-cp" role="dialog" aria-modal="true" @click.stop>
-          <input
-            ref="inputRef"
-            v-model="query"
-            data-test="cp-input"
-            class="wp-cp__input"
-            type="text"
-            aria-label="Command search"
-            placeholder="Search modules, routes, or run a command…"
-            @keydown="onKeydown"
-          />
-          <div ref="listRef" class="wp-cp__results" role="listbox" aria-label="Commands">
+  <ModalShell :visible="open" label="Command palette" @close="close" @keydown="focus.onKeydown">
+    <!-- The frame fills the overlay so the palette sits near the top; it lets
+         clicks through to the backdrop, the palette takes them back. -->
+    <div class="wp-cp-frame">
+      <div ref="panelRef" class="wp-cp" tabindex="-1" data-test="cp-panel">
+        <input
+          ref="inputRef"
+          v-model="query"
+          data-test="cp-input"
+          class="wp-cp__input"
+          type="text"
+          aria-label="Command search"
+          placeholder="Search modules, routes, or run a command…"
+          @keydown="onKeydown"
+        />
+        <div ref="listRef" class="wp-cp__results" role="listbox" aria-label="Commands">
+          <div
+            v-for="(sec, si) in sections"
+            :key="sec.title || 'results'"
+            role="group"
+            :aria-labelledby="sec.title ? `wp-cp-group-${si}` : undefined"
+            :aria-label="sec.title ? undefined : 'Results'"
+          >
+            <div v-if="sec.title" :id="`wp-cp-group-${si}`" class="wp-cp__group" data-test="cp-group">{{ sec.title }}</div>
             <div
-              v-for="(sec, si) in sections"
-              :key="sec.title || 'results'"
-              role="group"
-              :aria-labelledby="sec.title ? `wp-cp-group-${si}` : undefined"
-              :aria-label="sec.title ? undefined : 'Results'"
+              v-for="(item, i) in sec.items"
+              :key="item.id"
+              data-test="cp-result"
+              role="option"
+              tabindex="-1"
+              :class="['wp-cp__row', { 'wp-cp__row--active': starts[si] + i === selectedIndex }]"
+              :aria-selected="starts[si] + i === selectedIndex"
+              @click="onClickItem(item)"
+              @keydown.enter="onClickItem(item)"
+              @mouseenter="selectedIndex = starts[si] + i"
+              @focusin="selectedIndex = starts[si] + i"
             >
-              <div v-if="sec.title" :id="`wp-cp-group-${si}`" class="wp-cp__group" data-test="cp-group">{{ sec.title }}</div>
-              <div
-                v-for="(item, i) in sec.items"
-                :key="item.id"
-                data-test="cp-result"
-                role="option"
-                tabindex="-1"
-                :class="['wp-cp__row', { 'wp-cp__row--active': starts[si] + i === selectedIndex }]"
-                :aria-selected="starts[si] + i === selectedIndex"
-                @click="onClickItem(item)"
-                @keydown.enter="onClickItem(item)"
-                @mouseenter="selectedIndex = starts[si] + i"
-                @focusin="selectedIndex = starts[si] + i"
-              >
-                <Icon :name="item.icon" :size="14" class="wp-cp__row-icon" />
-                <span class="wp-cp__row-label">{{ item.label }}</span>
-                <span v-if="item.subtitle" class="wp-cp__row-subtitle">{{ item.subtitle }}</span>
-              </div>
+              <Icon :name="item.icon" :size="14" class="wp-cp__row-icon" />
+              <span class="wp-cp__row-label">{{ item.label }}</span>
+              <span v-if="item.subtitle" class="wp-cp__row-subtitle">{{ item.subtitle }}</span>
             </div>
-            <div v-if="!ranked.length" class="wp-cp__empty">No matches.</div>
           </div>
-          <div class="wp-cp__hint">
-            <Kbd keys="↑" size="sm" /><Kbd keys="↓" size="sm" /> navigate · <Kbd keys="Enter" size="sm" /> open · <Kbd keys="Esc" size="sm" /> close
-          </div>
+          <div v-if="!ranked.length" class="wp-cp__empty">No matches.</div>
+        </div>
+        <div class="wp-cp__hint">
+          <Kbd keys="↑" size="sm" /><Kbd keys="↓" size="sm" /> navigate · <Kbd keys="Enter" size="sm" /> open · <Kbd keys="Esc" size="sm" /> close
         </div>
       </div>
-    </Transition>
-  </Teleport>
+    </div>
+  </ModalShell>
 </template>
 
 <style scoped>
-@import "@/kit/_modal-motion.css";
-
-.wp-cp-overlay {
-  position: fixed; inset: 0; z-index: 10000;
+/* ModalShell centres its panel with 20px of padding; this frame takes the
+ * overlay's full height so the palette sits 10vh from the top as before. */
+.wp-cp-frame {
   display: flex; align-items: flex-start; justify-content: center;
-  padding-top: 10vh;
-  background: var(--wp-overlay-bg, rgba(0, 0, 0, 0.62));
+  width: 100%;
+  height: calc(100vh - 40px);
+  padding-top: calc(10vh - 20px);
+  pointer-events: none;
 }
 .wp-cp {
+  pointer-events: auto;
+  outline: none;
   width: 640px; max-width: 92vw; max-height: 70vh;
   display: flex; flex-direction: column;
   background: var(--wp-bg-2);
@@ -239,6 +241,8 @@ function onBackdropClick() {
 }
 .wp-cp__input {
   width: 100%;
+  /* A long list must not squeeze the search bar (the panel caps its height). */
+  flex-shrink: 0;
   /* Taller search bar — the palette is the app's "I forgot where X is"
    * tool, so giving the input some breathing room makes it feel more
    * like a hero affordance and less like a side input. */

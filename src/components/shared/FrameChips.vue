@@ -21,6 +21,7 @@
  * actually good at (lock all, paste a series, out-of-range locks).
  */
 import { computed } from "vue";
+import Icon from "@/kit/Icon.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -181,13 +182,12 @@ const hint = computed(() => {
       :title="collapsed ? 'Show frames' : 'Hide frames'"
       @click="collapsed = !collapsed"
     >
-      <svg
+      <Icon
+        name="chevron-down"
+        :size="9"
         class="wp-fchips__caret"
         :class="{ 'wp-fchips__caret--collapsed': collapsed }"
-        width="9" height="9" viewBox="0 0 24 24"
-        fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
-        aria-hidden="true"
-      ><path d="M6 9l6 6 6-6" /></svg>
+      />
       <span class="wp-fchips__label">{{ label }}</span>
       <span
         v-if="summary"
