@@ -12,6 +12,8 @@
  * between its tries (Try again) and between different refines of the same
  * answer, and clicking a step shows its answer.
  */
+import { textareaEl } from "../../utils/kit-field-el";
+import Textarea from "@/kit/Textarea.vue";
 import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
 import ListRow from "@/kit/ListRow.vue";
@@ -193,10 +195,10 @@ function onKeydown(ev: KeyboardEvent): void {
         </span>
       </li>
     </ol>
-    <textarea
-      ref="box"
+    <Textarea
+      :ref="(c) => (box = textareaEl(c))"
       v-model="instruction"
-      class="wp-textarea wp-ai-frame__input"
+      class="wp-ai-frame__input"
       :rows="answered || optional ? 1 : 2"
       :placeholder="answered ? 'Refine it: e.g. fewer, shorter, more like the second one, keep what I ticked…' : placeholder"
       :aria-label="answered ? 'Follow-up for the AI' : 'What should the AI do?'"
@@ -204,7 +206,7 @@ function onKeydown(ev: KeyboardEvent): void {
       :disabled="loading"
       @keydown="onKeydown"
       @paste="onPaste"
-    ></textarea>
+    />
     <ChatInputMarks :target="box" :text="instruction" />
     <ChatCompletions :target="box" />
     <AiImagePicker v-if="images" :images="images" :disabled="loading" compact />
