@@ -21,6 +21,7 @@ import { api } from "../api/client";
 import Button from "@/kit/Button.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import Chip from "@/kit/Chip.vue";
+import DataTable, { type DataColumn } from "@/kit/DataTable.vue";
 import ListRow from "@/kit/ListRow.vue";
 import { vTooltip } from "@/kit/tooltip";
 import Field from "@/kit/Field.vue";
@@ -194,6 +195,13 @@ const query = ref("");
 const mergedOnly = ref(false);
 const shown = ref(PAGE);
 const openRow = ref<string | null>(null);
+const PLAN_COLUMNS: DataColumn<PlanItem>[] = [
+  { key: "name", label: "Wildcard" },
+  { key: "role", label: "Role", width: "110px" },
+  { key: "options", label: "Options", align: "right", mono: true, width: "72px" },
+  { key: "referenced_by", label: "Used by", align: "right", mono: true, width: "72px" },
+  { key: "fidelity", label: "Carries over", width: "130px" },
+];
 
 function resetFilters(): void {
   domain.value = null;
@@ -565,20 +573,19 @@ const PAGE = 150;
       </header>
 
       <div class="wp-pack__stats" role="group" aria-label="Filter by role">
-        <button
+        <Chip
           v-for="role in statRoles"
           :key="role"
-          type="button"
+          variant="stat"
           class="wp-pack__stat"
           :data-role="role"
-          :aria-pressed="roles.has(role)"
+          color="var(--role)"
+          :count="summary.roles[role].toLocaleString()"
+          :pressed="roles.has(role)"
           :title="ROLE_HINT[role]"
           :data-test="`pack-stat-${role}`"
           @click="toggleRole(role)"
-        >
-          <span class="wp-pack__stat-n">{{ summary.roles[role].toLocaleString() }}</span>
-          <span class="wp-pack__stat-label">{{ ROLE_LABEL[role] }}</span>
-        </button>
+        >{{ ROLE_LABEL[role] }}</Chip>
         <div class="wp-pack__fidelity">
           <span class="wp-pack__fidelity-label">How it carries over</span>
           <div class="wp-pack__meter" aria-hidden="true">
@@ -637,134 +644,137 @@ const PAGE = 150;
             >Merged only</Chip>
             <span class="wp-pack__count">{{ plural(rows.length, "wildcard", "wildcards") }}</span>
           </div>
-          <div class="wp-pack__table" role="table" aria-label="Wildcards in the plan" data-test="pack-plan">
-            <div class="wp-pack__tr wp-pack__tr--head" role="row">
-              <span role="columnheader">Wildcard</span>
-              <span role="columnheader">Role</span>
-              <span role="columnheader" class="wp-pack__num">Options</span>
-              <span role="columnheader" class="wp-pack__num">Used by</span>
-              <span role="columnheader">Carries over</span>
-            </div>
-            <template v-for="item in visibleRows" :key="item.id">
-              <button
-                type="button" class="wp-pack__tr" role="row"
-                :aria-expanded="openRow === item.id"
-                data-test="pack-row"
-                @click="openRow = openRow === item.id ? null : item.id"
-              >
-                <span role="cell" class="wp-pack__name" :title="item.name">
-                  <span class="wp-pack__name-text">{{ item.name }}</span>
-                  <span
-                    v-if="item.merged_from && item.structure === 'table'" class="wp-pack__merged"
-                    data-test="pack-table-chip" title="The same list name in many folders, as one wildcard"
-                  >table of {{ item.merged_from.length }}</span>
-                  <span v-else-if="item.merged_from" class="wp-pack__merged" data-test="pack-merged-chip">
-                    {{ item.merged_from.length }} lists
-                  </span>
-                  <span v-if="item.children" class="wp-pack__merged" data-test="pack-stack-chip">
-                    {{ item.children.length }} modules
-                  </span>
+          <DataTable
+            class="wp-pack__table"
+            :columns="PLAN_COLUMNS"
+            :rows="visibleRows"
+            row-key="id"
+            size="sm"
+            row-clickable
+            :active-key="openRow"
+            :sticky-head="false"
+            :row-attrs="() => ({ 'data-test': 'pack-row' })"
+            empty-text="No wildcards match."
+            aria-label="Wildcards in the plan"
+            data-test="pack-plan"
+            @row-click="(item) => (openRow = openRow === item.id ? null : item.id)"
+          >
+            <template #cell-name="{ row: item }">
+              <span class="wp-pack__name" :title="item.name">
+                <span class="wp-pack__name-text">{{ item.name }}</span>
+                <span
+                  v-if="item.merged_from && item.structure === 'table'" class="wp-pack__merged"
+                  data-test="pack-table-chip" title="The same list name in many folders, as one wildcard"
+                >table of {{ item.merged_from.length }}</span>
+                <span v-else-if="item.merged_from" class="wp-pack__merged" data-test="pack-merged-chip">
+                  {{ item.merged_from.length }} lists
                 </span>
-                <span role="cell"><span class="wp-pack__role" :data-role="item.role">{{ ROLE_LABEL[item.role] }}</span></span>
-                <span role="cell" class="wp-pack__num">{{ item.options.toLocaleString() }}</span>
-                <span role="cell" class="wp-pack__num">{{ item.referenced_by || "" }}</span>
-                <span role="cell" class="wp-pack__fid">
-                  <span class="wp-pack__dot" :data-fidelity="item.fidelity" aria-hidden="true" />
-                  {{ FIDELITY_LABEL[item.fidelity] }}
+                <span v-if="item.children" class="wp-pack__merged" data-test="pack-stack-chip">
+                  {{ item.children.length }} modules
                 </span>
-              </button>
-              <div v-if="openRow === item.id" class="wp-pack__detail" role="row">
+              </span>
+            </template>
+            <template #cell-role="{ row: item }"><span class="wp-pack__role" :data-role="item.role">{{ ROLE_LABEL[item.role] }}</span></template>
+            <template #cell-options="{ row: item }">{{ item.options.toLocaleString() }}</template>
+            <template #cell-referenced_by="{ row: item }">{{ item.referenced_by || "" }}</template>
+            <template #cell-fidelity="{ row: item }">
+              <span class="wp-pack__fid">
+                <span class="wp-pack__dot" :data-fidelity="item.fidelity" aria-hidden="true" />
+                {{ FIDELITY_LABEL[item.fidelity] }}
+              </span>
+            </template>
+            <template #detail="{ row: item }">
+            <div class="wp-pack__detail">
+              <p class="wp-pack__detail-line">
+                {{ ROLE_HINT[item.role] }}
+                <template v-if="item.source">From <code>{{ item.source }}</code>.</template>
+              </p>
+              <div v-if="item.children" class="wp-pack__merge" data-test="pack-stack-detail">
                 <p class="wp-pack__detail-line">
-                  {{ ROLE_HINT[item.role] }}
-                  <template v-if="item.source">From <code>{{ item.source }}</code>.</template>
+                  <template v-if="item.stack_kind === 'model'">
+                    Put this bundle after a WP Model Info node: its wildcard takes the loaded model and its
+                    constraints leave out what the pack's model checks rule out.
+                  </template>
+                  <template v-else-if="item.stack_kind === 'copies'">
+                    One wildcard in place of lists that differed by one tag; the choice picks the tag. Pin
+                    the choice to get one of the original lists back.
+                  </template>
+                  <template v-else>
+                    Rolls the line's variables once, then renders it
+                    <template v-if="item.output">into <code>${{ item.output }}</code></template>.
+                  </template>
                 </p>
-                <div v-if="item.children" class="wp-pack__merge" data-test="pack-stack-detail">
-                  <p class="wp-pack__detail-line">
-                    <template v-if="item.stack_kind === 'model'">
-                      Put this bundle after a WP Model Info node: its wildcard takes the loaded model and its
-                      constraints leave out what the pack's model checks rule out.
-                    </template>
-                    <template v-else-if="item.stack_kind === 'copies'">
-                      One wildcard in place of lists that differed by one tag; the choice picks the tag. Pin
-                      the choice to get one of the original lists back.
-                    </template>
-                    <template v-else>
-                      Rolls the line's variables once, then renders it
-                      <template v-if="item.output">into <code>${{ item.output }}</code></template>.
-                    </template>
-                  </p>
-                  <ol class="wp-pack__stack">
-                    <li v-for="c in item.children" :key="c.id" class="wp-pack__stack-item">
-                      <i :class="['pi', TYPE_ICON[c.type] ?? 'pi-box']" aria-hidden="true" />
-                      <span class="wp-pack__member-name" :title="c.name">{{ c.name }}</span>
-                      <span class="wp-pack__stack-type">{{ c.type.replace("_", " ") }}</span>
-                      <span v-if="childNote(c)" class="wp-pack__stack-note">{{ childNote(c) }}</span>
-                    </li>
-                  </ol>
-                </div>
-                <div v-if="item.merged_from && item.merge_root" class="wp-pack__merge" data-test="pack-merge-detail">
-                  <p v-if="item.structure === 'table'" class="wp-pack__detail-line">
-                    The list <code>{{ item.name.split("/").pop() }}</code> of
-                    {{ plural(item.merged_from.length, "folder", "folders") }} under
-                    <code>{{ item.merge_root }}/</code>, as one wildcard. Each option is tagged with the
-                    folders it came from, so a reference to one folder's list became a filter on its tags.
-                  </p>
-                  <p v-else class="wp-pack__detail-line">
-                    One wildcard made from {{ plural(item.merged_from.length, "list", "lists") }} under
-                    <code>{{ item.merge_root }}/</code>. Each option is tagged with the folders and list it
-                    came from, so a reference to one list became a filter on its tags.
-                  </p>
-                  <div v-if="item.tag_groups?.length" class="wp-pack__axes" data-test="pack-axes">
-                    <span class="wp-pack__label">Tag groups (rename to suit)</span>
-                    <label v-for="g in item.tag_groups" :key="g.name" class="wp-pack__axis">
-                      <input
-                        class="wp-input wp-input--sm wp-pack__axis-input" :value="g.name" :disabled="busy"
-                        :aria-label="`Rename tag group ${g.name}`" data-test="pack-axis-name"
-                        @change="renameGroup(item, g.name, $event)"
-                      />
-                      <span class="wp-pack__axis-n">{{ plural(g.tags, "tag", "tags") }}</span>
-                    </label>
-                  </div>
-                  <ul class="wp-pack__members">
-                    <li v-for="m in item.merged_from.slice(0, MEMBER_PREVIEW)" :key="m.name" class="wp-pack__member">
-                      <span class="wp-pack__member-tag">{{ m.tag.split(" and ").join(" + ") }}</span>
-                      <span class="wp-pack__member-name" :title="m.name">{{ m.name }}</span>
-                      <span class="wp-pack__member-n">{{ m.options }}</span>
-                    </li>
-                    <li v-if="item.merged_from.length > MEMBER_PREVIEW" class="wp-pack__member wp-pack__member--more">
-                      and {{ item.merged_from.length - MEMBER_PREVIEW }} more
-                    </li>
-                  </ul>
-                  <Button
-                    size="sm" icon="clone" :disabled="busy"
-                    data-test="pack-keep-separate"
-                    @click="setSeparate(item.separate_key ?? item.merge_root, true)"
-                  >Keep these lists separate</Button>
-                </div>
-                <div v-if="item.samples?.length" class="wp-pack__samples" data-test="pack-samples">
-                  <span class="wp-pack__label">Sample rolls</span>
-                  <ul>
-                    <li v-for="(t, i) in item.samples" :key="i"><code>{{ t || "(empty)" }}</code></li>
-                  </ul>
-                  <p v-for="(w, i) in item.roll_warnings ?? []" :key="`w${i}`" class="wp-pack__detail-line wp-pack__warn">
-                    <i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ w.message }}
-                  </p>
-                </div>
-                <ul v-if="item.notes.length" class="wp-pack__detail-notes">
-                  <li v-for="(n, i) in item.notes" :key="i">
-                    <i
-                      :class="['pi', noteNeedsAttention(n.kind) ? 'pi-exclamation-triangle wp-pack__warn' : 'pi-info-circle wp-pack__info']"
-                      aria-hidden="true"
+                <ol class="wp-pack__stack">
+                  <li v-for="c in item.children" :key="c.id" class="wp-pack__stack-item">
+                    <i :class="['pi', TYPE_ICON[c.type] ?? 'pi-box']" aria-hidden="true" />
+                    <span class="wp-pack__member-name" :title="c.name">{{ c.name }}</span>
+                    <span class="wp-pack__stack-type">{{ c.type.replace("_", " ") }}</span>
+                    <span v-if="childNote(c)" class="wp-pack__stack-note">{{ childNote(c) }}</span>
+                  </li>
+                </ol>
+              </div>
+              <div v-if="item.merged_from && item.merge_root" class="wp-pack__merge" data-test="pack-merge-detail">
+                <p v-if="item.structure === 'table'" class="wp-pack__detail-line">
+                  The list <code>{{ item.name.split("/").pop() }}</code> of
+                  {{ plural(item.merged_from.length, "folder", "folders") }} under
+                  <code>{{ item.merge_root }}/</code>, as one wildcard. Each option is tagged with the
+                  folders it came from, so a reference to one folder's list became a filter on its tags.
+                </p>
+                <p v-else class="wp-pack__detail-line">
+                  One wildcard made from {{ plural(item.merged_from.length, "list", "lists") }} under
+                  <code>{{ item.merge_root }}/</code>. Each option is tagged with the folders and list it
+                  came from, so a reference to one list became a filter on its tags.
+                </p>
+                <div v-if="item.tag_groups?.length" class="wp-pack__axes" data-test="pack-axes">
+                  <span class="wp-pack__label">Tag groups (rename to suit)</span>
+                  <label v-for="g in item.tag_groups" :key="g.name" class="wp-pack__axis">
+                    <input
+                      class="wp-input wp-input--sm wp-pack__axis-input" :value="g.name" :disabled="busy"
+                      :aria-label="`Rename tag group ${g.name}`" data-test="pack-axis-name"
+                      @change="renameGroup(item, g.name, $event)"
                     />
-                    <span>{{ describeNote(n.kind) }}</span>
-                    <code>{{ n.detail }}</code>
+                    <span class="wp-pack__axis-n">{{ plural(g.tags, "tag", "tags") }}</span>
+                  </label>
+                </div>
+                <ul class="wp-pack__members">
+                  <li v-for="m in item.merged_from.slice(0, MEMBER_PREVIEW)" :key="m.name" class="wp-pack__member">
+                    <span class="wp-pack__member-tag">{{ m.tag.split(" and ").join(" + ") }}</span>
+                    <span class="wp-pack__member-name" :title="m.name">{{ m.name }}</span>
+                    <span class="wp-pack__member-n">{{ m.options }}</span>
+                  </li>
+                  <li v-if="item.merged_from.length > MEMBER_PREVIEW" class="wp-pack__member wp-pack__member--more">
+                    and {{ item.merged_from.length - MEMBER_PREVIEW }} more
                   </li>
                 </ul>
-                <p v-else-if="!item.merged_from && !item.children" class="wp-pack__detail-line">Converted exactly.</p>
+                <Button
+                  size="sm" icon="clone" :disabled="busy"
+                  data-test="pack-keep-separate"
+                  @click="setSeparate(item.separate_key ?? item.merge_root, true)"
+                >Keep these lists separate</Button>
               </div>
+              <div v-if="item.samples?.length" class="wp-pack__samples" data-test="pack-samples">
+                <span class="wp-pack__label">Sample rolls</span>
+                <ul>
+                  <li v-for="(t, i) in item.samples" :key="i"><code>{{ t || "(empty)" }}</code></li>
+                </ul>
+                <p v-for="(w, i) in item.roll_warnings ?? []" :key="`w${i}`" class="wp-pack__detail-line wp-pack__warn">
+                  <i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ w.message }}
+                </p>
+              </div>
+              <ul v-if="item.notes.length" class="wp-pack__detail-notes">
+                <li v-for="(n, i) in item.notes" :key="i">
+                  <i
+                    :class="['pi', noteNeedsAttention(n.kind) ? 'pi-exclamation-triangle wp-pack__warn' : 'pi-info-circle wp-pack__info']"
+                    aria-hidden="true"
+                  />
+                  <span>{{ describeNote(n.kind) }}</span>
+                  <code>{{ n.detail }}</code>
+                </li>
+              </ul>
+              <p v-else-if="!item.merged_from && !item.children" class="wp-pack__detail-line">Converted exactly.</p>
+            </div>
             </template>
-            <p v-if="rows.length === 0" class="wp-pack__empty">No wildcards match.</p>
-          </div>
+          </DataTable>
           <Button
             v-if="rows.length > shown" class="wp-pack__more"
             @click="shown += PAGE"
@@ -980,17 +990,9 @@ const PAGE = 150;
 .wp-pack__sub { margin: var(--wp-space-1) 0 0; color: var(--wp-text-muted); }
 /* Flex, not a fixed grid: the role cards come and go (stacks, copies). */
 .wp-pack__stats { display: flex; flex-wrap: wrap; gap: var(--wp-space-4); }
+/* The role cards are the kit's stat chips; --role (from data-role) is their colour. */
 .wp-pack__stats > .wp-pack__stat { flex: 1 1 100px; }
 .wp-pack__stats > .wp-pack__fidelity { flex: 2 1 260px; }
-.wp-pack__stat {
-  display: flex; flex-direction: column; align-items: flex-start; gap: var(--wp-space-1);
-  padding: var(--wp-space-4) var(--wp-space-5); border: 1px solid var(--wp-border); border-radius: var(--wp-radius-md);
-  background: var(--wp-bg-2); color: var(--wp-text); font: inherit; cursor: pointer; text-align: left;
-  border-top: 3px solid var(--role);
-}
-.wp-pack__stat[aria-pressed="true"] { background: color-mix(in oklab, var(--role) 12%, var(--wp-bg-2)); border-color: var(--role); }
-.wp-pack__stat-n { font-size: var(--wp-text-xl); font-weight: var(--wp-weight-semibold); font-variant-numeric: tabular-nums; }
-.wp-pack__stat-label { color: var(--wp-text-muted); font-size: var(--wp-text-xs); }
 .wp-pack__fidelity {
   display: flex; flex-direction: column; gap: var(--wp-space-3); justify-content: center;
   padding: var(--wp-space-4) var(--wp-space-5); border: 1px solid var(--wp-border); border-radius: var(--wp-radius-md); background: var(--wp-bg-2);
@@ -1013,16 +1015,7 @@ const PAGE = 150;
 .wp-pack__toolbar { display: flex; align-items: center; gap: var(--wp-space-4); }
 .wp-pack__search { flex: 1; }
 .wp-pack__count { color: var(--wp-text-muted); font-size: var(--wp-text-xs); white-space: nowrap; }
-.wp-pack__table { border: 1px solid var(--wp-border); border-radius: var(--wp-radius-md); background: var(--wp-bg-1); overflow: hidden; }
-.wp-pack__tr {
-  display: grid; grid-template-columns: minmax(0, 1fr) 110px 64px 64px 120px; gap: var(--wp-space-4); align-items: center;
-  width: 100%; padding: var(--wp-space-2) var(--wp-space-4); border: 0; border-bottom: 1px solid var(--wp-border);
-  background: none; color: var(--wp-text); font: inherit; text-align: left; cursor: pointer;
-}
-.wp-pack__tr:hover { background: var(--wp-bg-hover); }
-.wp-pack__tr--head { cursor: default; color: var(--wp-text-muted); font-size: var(--wp-text-xs); font-weight: var(--wp-weight-semibold); background: var(--wp-bg-2); }
-.wp-pack__tr--head:hover { background: var(--wp-bg-2); }
-.wp-pack__tr[aria-expanded="true"] { background: var(--wp-bg-2); }
+.wp-pack__table { border: 1px solid var(--wp-border); border-radius: var(--wp-radius-md); background: var(--wp-bg-1); }
 .wp-pack__name { display: flex; align-items: center; gap: var(--wp-space-2); min-width: 0; font-family: var(--wp-font-mono); font-size: var(--wp-text-xs); }
 .wp-pack__name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wp-pack__merged {
@@ -1045,14 +1038,12 @@ const PAGE = 150;
 .wp-pack__kept { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wp-space-1); font-size: var(--wp-text-xs); }
 .wp-pack__kept li { display: flex; align-items: center; justify-content: space-between; gap: var(--wp-space-2); }
 .wp-pack__kept code { font-family: var(--wp-font-mono); }
-.wp-pack__num { text-align: right; font-variant-numeric: tabular-nums; color: var(--wp-text-muted); }
 .wp-pack__fid { display: inline-flex; align-items: center; gap: var(--wp-space-2); font-size: var(--wp-text-xs); }
-.wp-pack__detail { display: flex; flex-direction: column; gap: var(--wp-space-2); padding: var(--wp-space-3) var(--wp-space-5) var(--wp-space-4); border-bottom: 1px solid var(--wp-border); background: var(--wp-bg-2); }
+.wp-pack__detail { display: flex; flex-direction: column; gap: var(--wp-space-2); padding: var(--wp-space-2) var(--wp-space-2) var(--wp-space-3); }
 .wp-pack__detail-line { margin: 0; color: var(--wp-text-muted); }
 .wp-pack__detail-notes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wp-space-2); }
 .wp-pack__detail-notes li { display: flex; align-items: baseline; gap: var(--wp-space-3); flex-wrap: wrap; }
 .wp-pack__detail-notes code, .wp-pack__examples code { font-family: var(--wp-font-mono); font-size: var(--wp-text-xs); overflow-wrap: anywhere; color: var(--wp-text); }
-.wp-pack__empty { margin: 0; padding: var(--wp-space-5); color: var(--wp-text-muted); text-align: center; }
 .wp-pack__more { align-self: center; }
 
 /* Side column */
