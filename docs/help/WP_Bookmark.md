@@ -19,7 +19,7 @@ A bookmark has no node frame and can't be resized: it is a small pill with its i
 | Setting | Notes |
 |---|---|
 | Icon, colour, name | The icon opens the full icon list. The colour marks the pill and its dock row. |
-| Lands at | A 3×3 grid: the corner, edge or centre of the free part of the screen the bookmark goes to, 24 px in. The free part is what ComfyUI's toolbar, the open side panel and the bottom panel (console, shortcuts) leave, and it follows them as they open and close; a jump that would land under the dock, the minimap or the zoom controls moves just enough to clear them all. |
+| Lands at | A 3×3 grid: the corner, edge or centre of the free part of the screen the bookmark goes to, 24 px in. The free part is what ComfyUI's toolbar, the open side panel and the bottom panel (console, shortcuts) leave, and it follows them as they open and close; a jump that would land under the dock, the minimap or the zoom controls moves just enough to clear them all (the dock only while **Land clear of the dock** is on). It lands in the same place however often you press the key, selected or not. |
 | Use this view | Lands on the view on screen now, at its zoom, instead of a grid spot. |
 | Zoom | **Set** jumps to that zoom (0.1–10×; the magnifier takes the zoom you're at). **Keep current** leaves the zoom alone. |
 | Shortcut | Click **Record**, then press the keys. Esc cancels, Backspace clears. The bolt picks a free one (a new one on each press), checked against the page too (see below). |
@@ -46,7 +46,7 @@ If an extension still takes the key first when you press it, the bookmark doesn'
 The bookmark button in the top bar shows or hides it; it also opens by itself in a workflow with bookmarks (unless you closed it). It sits in the free part of the canvas, clear of the side panel, the bottom panel, the minimap and the zoom controls, and moves when they open or close. It is see-through until you point at it (more so when folded), so what is under it still shows. It has two modes:
 
 - **View**: each row shows its number (a Step note's number in its circle), icon, name and shortcut (a mark for one hidden on the canvas or in a subgraph, OFF for a muted one). **Click** a row to jump. **Back** returns to where you were before the last jump; **↑ / ↓** step through the bookmarks in dock order.
-- **Edit** (the pencil): drag the dock by its header and it snaps to the nearest spot of a 3×3 grid on the free canvas (a dashed outline shows where); drag the grips to reorder, the **eye** shows or hides a bookmark on the canvas, and **Bookmark this view** adds one. **Done** goes back to view.
+- **Edit** (the pencil): drag the dock by its header and it snaps to the nearest spot of a 3×3 grid on the free canvas (a dashed outline shows where); drag the grips to reorder, the **eye** shows or hides a bookmark on the canvas, and **Bookmark this view** adds one. **Land clear of the dock** (on by default) moves a jump out from under the dock; turn it off and bookmarks land where they would without the dock, behind it (it is see-through). **Done** goes back to view.
 
 The caret folds the dock. Bookmarks inside a subgraph are listed too; jumping opens the subgraph.
 
