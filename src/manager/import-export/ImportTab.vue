@@ -293,12 +293,12 @@ function handleParse(raw: string, source: "file" | "paste"): void {
       <p class="wp-import-tab__lead">
         Import a Wildcard Pipeline export file or paste an export payload below.
         For Dynamic Prompts, Prompt-PostProcessor, Impact Pack or Umi AI wildcards, use
-        <button
-          type="button"
+        <Button
+          variant="link"
           class="wp-import-tab__link"
           data-test="import-open-packs"
           @click="emit('wildcard-files', [])"
-        >Wildcard packs</button>.
+        >Wildcard packs</Button>.
       </p>
 
       <div
@@ -402,15 +402,8 @@ function handleParse(raw: string, source: "file" | "paste"): void {
   color: var(--wp-text-muted);
   font-size: var(--wp-text-sm);
 }
-.wp-import-tab__link {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--wp-accent-text);
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-}
+/* The kit link Button, inline in the sentence. */
+.wp-import-tab__link { font-size: inherit; text-decoration: underline; vertical-align: baseline; }
 
 /* Drag-and-drop target wrapping the pick/paste buttons. The whole area
  * accepts a dropped .json export file; the dashed frame + hint advertise it,

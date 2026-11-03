@@ -6,7 +6,7 @@
     "native-range": 0,
     "inline-svg": 0,
     "hand-dialog": 0,
-    "manager-raw-button": 77,
+    "manager-raw-button": 47,
     "raw-hex": 0
   },
   "native-select": {},
@@ -35,22 +35,9 @@
     "src/manager/components/VarAutocompleteInput.vue": 1,
     "src/manager/components/docs/DocImage.vue": 1,
     "src/manager/components/settings/sections/AppearanceSection.vue": 1,
-    "src/manager/components/test-runner/ComparePanel.vue": 1,
-    "src/manager/components/test-runner/OutputsPanel.vue": 2,
-    "src/manager/components/test-runner/ScenarioRail.vue": 6,
-    "src/manager/components/test-runner/StackBuilder.vue": 3,
-    "src/manager/components/test-runner/VariablesPanel.vue": 2,
-    "src/manager/components/test-runner/WarningsPanel.vue": 1,
     "src/manager/components/wildcard-editor/OptionFilterBar.vue": 2,
     "src/manager/components/wildcard-editor/OptionProbabilityCell.vue": 1,
-    "src/manager/components/wildcard-editor/OptionTagsCell.vue": 3,
-    "src/manager/import-export/ConflictModal.vue": 2,
-    "src/manager/import-export/ExportDepWarningModal.vue": 3,
-    "src/manager/import-export/ExportTab.vue": 3,
-    "src/manager/import-export/ImportPicker.vue": 2,
-    "src/manager/import-export/ImportTab.vue": 1,
-    "src/manager/import-export/PickerRow.vue": 3,
-    "src/manager/import-export/conflict-rows/Tier3ChainViz.vue": 1
+    "src/manager/components/wildcard-editor/OptionTagsCell.vue": 3
   },
   "raw-hex": {}
 }
