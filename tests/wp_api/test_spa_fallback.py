@@ -80,3 +80,29 @@ async def test_unknown_api_path_returns_json_404(wp_client):
     assert resp.headers.get("Content-Type", "").startswith("application/json")
     body = await resp.json()
     assert "error" in body
+
+
+async def test_shell_is_revalidated(wp_client, stub_web_dir):
+    """The shell must not be cached heuristically: a tab woken after a
+    server restart or rebuild has to fetch the current chunk names."""
+    for url in ("/wp", "/wp/settings/library", "/wp/index.html"):
+        resp = await wp_client.get(url)
+        assert resp.status == 200
+        assert resp.headers.get("Cache-Control") == "no-cache"
+
+
+async def test_hashed_asset_is_immutable(wp_client, stub_web_dir):
+    assets = stub_web_dir / "assets"
+    assets.mkdir()
+    (assets / "index-abc123.js").write_text("export {}", encoding="utf-8")
+    resp = await wp_client.get("/wp/assets/index-abc123.js")
+    assert resp.status == 200
+    assert "immutable" in resp.headers.get("Cache-Control", "")
+
+
+async def test_missing_hashed_asset_is_404_not_shell(wp_client, stub_web_dir):
+    """A chunk from an older build must 404, not come back as the HTML
+    shell (which the browser rejects as a MIME mismatch)."""
+    resp = await wp_client.get("/wp/assets/index-old999.js")
+    assert resp.status == 404
+    assert "<html" not in (await resp.text()).lower()

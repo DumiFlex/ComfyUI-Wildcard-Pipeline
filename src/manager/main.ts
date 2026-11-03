@@ -12,6 +12,7 @@ import "./styles/tailwind.css";
 import App from "./App.vue";
 import router from "./router";
 import { installStartPage } from "./router/start-page";
+import { installChunkRecovery } from "./utils/chunk-reload";
 import { useUiStore } from "./stores/uiStore";
 import { useTweaksStore } from "./stores/tweaksStore";
 
@@ -31,4 +32,6 @@ useUiStore(pinia).initializeTheme();
 // CSS-var overrides land before the first paint and we don't flash defaults.
 useTweaksStore(pinia).initialize();
 installStartPage(router, __APP_VERSION__);
+// A tab woken after a server restart or rebuild may ask for chunks that are gone.
+installChunkRecovery(router);
 app.mount("#app");
