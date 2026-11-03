@@ -75,6 +75,20 @@ export const RULES = [
     fix: "Use Textarea; kit-field-el.ts reaches the element.",
   },
   {
+    // A floating layer places itself through the kit overlays. Only a host
+    // overlay teleports itself: the toast host (mirrors ComfyUI's toast
+    // anchor), the AI pointer (a full-screen overlay) and the chat drawer's
+    // `defer` Teleport into its own element (not floating).
+    id: "raw-teleport",
+    pattern: /<Teleport\b/g,
+    allow: [
+      "src/components/shared/Toast.vue",
+      "src/manager/components/ai/AiPointer.vue",
+      "src/manager/components/ai/AiChatDrawer.vue",
+    ],
+    fix: "Use Popover / DropdownMenu / Modal / Drawer; only a host overlay may teleport itself.",
+  },
+  {
     id: "raw-hex",
     // Not after `&` (an HTML entity such as `&#123;`) or a word character.
     pattern: /(?<![&\w])#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3}(?:[0-9a-fA-F]{2})?)?\b/g,

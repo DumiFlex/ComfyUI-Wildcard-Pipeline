@@ -358,7 +358,12 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // text field (manager and canvas) is the kit Input / Textarea / SearchInput and
 // the last canvas toggles are Chips (kit 0.10.0), which pull those pieces into
 // more chunks (619,558 -> 622,398 bytes).
-const TOTAL_LIMIT = 608 * 1024;     // 608 KB
+// RAISED 608 -> 609 KB on 2026-11-03 for the floating layers on the kit
+// Popover (batch B: RichTextInput's suggestion list, filter picker and remap
+// popup, the var fields' list, the reference chip and pair badge hover cards),
+// which pulls Popover into the canvas chunks that drew their own Teleport
+// (622,398 -> 623,280 bytes).
+const TOTAL_LIMIT = 609 * 1024;     // 609 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
