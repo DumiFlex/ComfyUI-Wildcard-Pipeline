@@ -13,6 +13,9 @@ import {
   _resetOpenEditorForTests, registerOpenEditor, registerPageNote,
 } from "../../../composables/useOpenEditor";
 import { _resetAiActionsForTests, pointers, registerAiAction } from "../../../composables/useAiActions";
+import { inlineDrawer } from "./inline-drawer";
+
+inlineDrawer();
 
 vi.mock("../../../utils/chat-image", async (orig) => ({
   ...(await orig<typeof import("../../../utils/chat-image")>()),

@@ -20,6 +20,9 @@ import { computed, onMounted, ref, watch } from "vue";
 import { api } from "../api/client";
 import Button from "@/kit/Button.vue";
 import Checkbox from "@/kit/Checkbox.vue";
+import Chip from "@/kit/Chip.vue";
+import ListRow from "@/kit/ListRow.vue";
+import { vTooltip } from "@/kit/tooltip";
 import Field from "@/kit/Field.vue";
 import Input from "@/kit/Input.vue";
 import Select from "@/kit/Select.vue";
@@ -586,16 +589,17 @@ const PAGE = 150;
             />
           </div>
           <div class="wp-pack__fidelity-keys" role="group" aria-label="Filter by fidelity">
-            <button
+            <Chip
               v-for="f in PLAN_FIDELITIES" :key="f"
-              type="button" class="wp-pack__key" :data-fidelity="f"
-              :aria-pressed="fidelities.has(f)"
+              size="sm" class="wp-pack__key" :data-fidelity="f"
+              :pressed="fidelities.has(f)"
+              :count="summary.fidelity[f].toLocaleString()"
               :data-test="`pack-fidelity-${f}`"
               @click="toggleFidelity(f)"
             >
               <span class="wp-pack__dot" :data-fidelity="f" aria-hidden="true" />
-              {{ FIDELITY_LABEL[f] }} {{ summary.fidelity[f].toLocaleString() }}
-            </button>
+              {{ FIDELITY_LABEL[f] }}
+            </Chip>
           </div>
         </div>
       </div>
@@ -603,23 +607,21 @@ const PAGE = 150;
       <div class="wp-pack__grid">
         <nav class="wp-pack__domains" aria-label="Domains" data-test="pack-domains">
           <p class="wp-pack__col-title">Domains</p>
-          <button
-            type="button" class="wp-pack__domain" :aria-pressed="domain === null"
+          <ListRow
+            size="sm" toggle class="wp-pack__domain" :selected="domain === null"
+            :count="plan.length.toLocaleString()"
             @click="domain = null"
-          >
-            <span class="wp-pack__domain-name">All</span>
-            <span class="wp-pack__domain-n">{{ plan.length.toLocaleString() }}</span>
-          </button>
-          <button
+          >All</ListRow>
+          <ListRow
             v-for="d in summary.domains" :key="d.name"
-            type="button" class="wp-pack__domain" :aria-pressed="domain === d.name"
-            :title="`${d.entries} entry points, ${d.lossy} need a look`"
+            v-tooltip="`${d.entries} entry points, ${d.lossy} need a look`"
+            size="sm" toggle class="wp-pack__domain" :selected="domain === d.name"
+            :count="d.count.toLocaleString()"
             @click="domain = d.name"
           >
-            <span class="wp-pack__domain-name">{{ domainLabel(d.name) }}</span>
-            <span v-if="d.lossy" class="wp-pack__dot" data-fidelity="lossy" aria-hidden="true" />
-            <span class="wp-pack__domain-n">{{ d.count.toLocaleString() }}</span>
-          </button>
+            {{ domainLabel(d.name) }}
+            <template v-if="d.lossy" #end><span class="wp-pack__dot" data-fidelity="lossy" aria-hidden="true" /></template>
+          </ListRow>
         </nav>
 
         <section class="wp-pack__list" aria-label="Plan">
@@ -628,11 +630,11 @@ const PAGE = 150;
               v-model="query" class="wp-pack__search"
               placeholder="Search wildcards" aria-label="Search wildcards" data-test="pack-search"
             />
-            <button
-              v-if="report.merged" type="button" class="wp-pack__key"
-              :aria-pressed="mergedOnly" data-test="pack-merged-only"
+            <Chip
+              v-if="report.merged" size="sm" icon="pi-objects-column" class="wp-pack__key"
+              :pressed="mergedOnly" data-test="pack-merged-only"
               @click="mergedOnly = !mergedOnly"
-            ><i class="pi pi-objects-column" aria-hidden="true" /> Merged only</button>
+            >Merged only</Chip>
             <span class="wp-pack__count">{{ plural(rows.length, "wildcard", "wildcards") }}</span>
           </div>
           <div class="wp-pack__table" role="table" aria-label="Wildcards in the plan" data-test="pack-plan">
@@ -815,14 +817,14 @@ const PAGE = 150;
           </section>
 
           <section class="wp-pack__card">
-            <button
-              type="button" class="wp-pack__fold" :aria-expanded="filesOpen"
+            <Button
+              variant="ghost" size="sm" class="wp-pack__fold"
+              :icon="filesOpen ? 'pi-chevron-down' : 'pi-chevron-right'" :aria-expanded="filesOpen"
               data-test="pack-files-toggle" @click="filesOpen = !filesOpen"
             >
-              <i :class="['pi', filesOpen ? 'pi-chevron-down' : 'pi-chevron-right']" aria-hidden="true" />
               Files ({{ report.files.length }})
               <span v-if="problemFiles" class="wp-pack__dot" data-fidelity="close" aria-hidden="true" />
-            </button>
+            </Button>
             <ul v-if="filesOpen" class="wp-pack__files" data-test="pack-files">
               <li
                 v-for="f in report.files" :key="f.path" class="wp-pack__file"
@@ -848,17 +850,13 @@ const PAGE = 150;
             <p class="wp-pack__col-title">Conversion notes</p>
             <ul class="wp-pack__notes">
               <li v-for="n in notes" :key="n.kind">
-                <button
-                  type="button" class="wp-pack__note" :aria-expanded="openNote === n.kind"
+                <ListRow
+                  size="sm" class="wp-pack__note" :aria-expanded="openNote === n.kind"
+                  :icon="noteNeedsAttention(n.kind) ? 'pi-exclamation-triangle' : 'pi-info-circle'"
+                  :icon-color="noteNeedsAttention(n.kind) ? 'var(--wp-warn)' : 'var(--wp-text-dim)'"
+                  :count="n.count"
                   @click="openNote = openNote === n.kind ? null : n.kind"
-                >
-                  <i
-                    :class="['pi', noteNeedsAttention(n.kind) ? 'pi-exclamation-triangle wp-pack__warn' : 'pi-info-circle wp-pack__info']"
-                    aria-hidden="true"
-                  />
-                  <span class="wp-pack__note-text">{{ describeNote(n.kind) }}</span>
-                  <span class="wp-pack__note-n">{{ n.count }}</span>
-                </button>
+                >{{ describeNote(n.kind) }}</ListRow>
                 <ul v-if="openNote === n.kind" class="wp-pack__examples">
                   <li v-for="(ex, i) in n.examples" :key="i">
                     <span class="wp-pack__ex-name">{{ ex.wildcard }}</span>
@@ -1001,25 +999,15 @@ const PAGE = 150;
 .wp-pack__meter { display: flex; gap: 2px; height: 8px; border-radius: var(--wp-radius-cap, 999px); overflow: hidden; background: var(--wp-bg-3); }
 .wp-pack__meter-seg { height: 100%; }
 .wp-pack__fidelity-keys { display: flex; flex-wrap: wrap; gap: var(--wp-space-2); }
-.wp-pack__key {
-  display: inline-flex; align-items: center; gap: var(--wp-space-2); padding: var(--wp-space-1) var(--wp-space-3);
-  border: 1px solid transparent; border-radius: var(--wp-radius-sm); background: none; color: var(--wp-text); font: inherit;
-  font-size: var(--wp-text-xs); cursor: pointer; font-variant-numeric: tabular-nums;
-}
-.wp-pack__key[aria-pressed="true"] { border-color: var(--wp-border); background: var(--wp-bg-3); }
+.wp-pack__key :deep(.wp-chip__count) { font-variant-numeric: tabular-nums; }
 
 /* Step 2 grid */
 .wp-pack__grid { display: grid; grid-template-columns: 200px minmax(0, 1fr) 280px; gap: var(--wp-space-5); align-items: start; }
 .wp-pack__col-title { margin: 0 0 var(--wp-space-2); color: var(--wp-text-muted); font-size: var(--wp-text-xs); font-weight: var(--wp-weight-semibold); text-transform: uppercase; letter-spacing: 0.04em; }
 .wp-pack__domains { display: flex; flex-direction: column; gap: var(--wp-space-1); position: sticky; top: var(--wp-space-4); max-height: 70vh; overflow: auto; }
-.wp-pack__domain {
-  display: flex; align-items: center; gap: var(--wp-space-3); padding: var(--wp-space-2) var(--wp-space-3);
-  border: 0; border-radius: var(--wp-radius-sm); background: none; color: var(--wp-text); font: inherit; cursor: pointer; text-align: left;
-}
-.wp-pack__domain:hover { background: var(--wp-bg-hover); }
-.wp-pack__domain[aria-pressed="true"] { background: var(--wp-bg-3); font-weight: var(--wp-weight-semibold); }
-.wp-pack__domain-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wp-pack__domain-n { color: var(--wp-text-muted); font-size: var(--wp-text-xs); font-variant-numeric: tabular-nums; }
+.wp-pack__domains .wp-pack__domain { font-size: var(--wp-text-sm); color: var(--wp-text); }
+.wp-pack__domains .wp-pack__domain[data-selected] { font-weight: var(--wp-weight-semibold); }
+.wp-pack__domain :deep(.wp-list-row__count) { color: var(--wp-text-muted); }
 
 .wp-pack__list { display: flex; flex-direction: column; gap: var(--wp-space-3); min-width: 0; }
 .wp-pack__toolbar { display: flex; align-items: center; gap: var(--wp-space-4); }
@@ -1072,10 +1060,7 @@ const PAGE = 150;
 .wp-pack__card { display: flex; flex-direction: column; gap: var(--wp-space-3); padding: var(--wp-space-4) var(--wp-space-5); border: 1px solid var(--wp-border); border-radius: var(--wp-radius-md); background: var(--wp-bg-2); }
 .wp-pack__label { color: var(--wp-text-muted); font-size: var(--wp-text-xs); }
 .wp-pack__hint { margin: 0; color: var(--wp-text-muted); font-size: var(--wp-text-xs); }
-.wp-pack__fold {
-  display: inline-flex; align-items: center; gap: var(--wp-space-3); padding: 0; border: 0; background: none;
-  color: var(--wp-text); font: inherit; font-weight: var(--wp-weight-semibold); cursor: pointer;
-}
+.wp-pack__card .wp-pack__fold { align-self: flex-start; margin-left: -8px; color: var(--wp-text); font-weight: var(--wp-weight-semibold); }
 .wp-pack__files { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm); background: var(--wp-bg-1); }
 .wp-pack__file { display: flex; flex-direction: column; gap: var(--wp-space-1); padding: var(--wp-space-2) var(--wp-space-3); border-bottom: 1px solid var(--wp-border); }
 .wp-pack__file:last-child { border-bottom: 0; }
@@ -1087,12 +1072,9 @@ const PAGE = 150;
 .wp-pack__file--error .wp-pack__file-status { color: var(--wp-danger); }
 .wp-pack__file--dup .wp-pack__file-status { color: var(--wp-warn); }
 .wp-pack__notes, .wp-pack__examples { list-style: none; margin: 0; padding: 0; }
-.wp-pack__note {
-  display: flex; align-items: flex-start; gap: var(--wp-space-3); width: 100%; padding: var(--wp-space-2) 0;
-  border: 0; background: none; color: var(--wp-text); font: inherit; text-align: left; cursor: pointer;
-}
-.wp-pack__note-text { flex: 1; }
-.wp-pack__note-n { font-family: var(--wp-font-mono); font-size: var(--wp-text-xs); color: var(--wp-text-muted); }
+/* A note row wraps its sentence instead of cutting it short. */
+.wp-pack__notes .wp-pack__note { padding-left: 0; padding-right: 0; color: var(--wp-text); font-size: var(--wp-text-sm); }
+.wp-pack__note :deep(.wp-list-row__label) { white-space: normal; }
 .wp-pack__examples { display: flex; flex-direction: column; gap: var(--wp-space-2); margin: 0 0 var(--wp-space-3) var(--wp-space-6); }
 .wp-pack__examples li { display: flex; flex-direction: column; gap: var(--wp-space-1); }
 .wp-pack__ex-name { color: var(--wp-text-muted); font-size: var(--wp-text-xs); }

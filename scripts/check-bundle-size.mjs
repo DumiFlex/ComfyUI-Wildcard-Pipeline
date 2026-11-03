@@ -343,7 +343,12 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // with the focus trap, and Checkbox/Popover grew to cover what WpCheck and the
 // canvas popovers did; WpButton, CloseButton, ConfirmDialog and WpCheck went
 // (net ~4.1 KB gzip: dev 607,885 -> 611,998 bytes).
-const TOTAL_LIMIT = 600 * 1024;     // 600 KB
+// RAISED 600 -> 603 KB on 2026-11-03 for the kit buttons batch A: the
+// sub-category filter picker (shared with the canvas Pool section) now draws
+// its tags, operators and axis rows with Chip and ListRow and its actions
+// with Button, which pulls those pieces and the tooltip into its chunk
+// (dev 613,654 -> 616,336 bytes).
+const TOTAL_LIMIT = 603 * 1024;     // 603 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
