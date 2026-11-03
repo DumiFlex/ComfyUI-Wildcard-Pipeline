@@ -164,7 +164,7 @@ function onCustomHex(hex: string) {
 .wp-tweaks__swatches.wp-radio-group { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--wp-space-2); }
 .wp-tweaks__swatch { display: block; width: 100%; height: 100%; }
 .wp-tweaks__swatches :deep(.wp-radio-group__name) { white-space: nowrap; }
-.wp-tweaks__swatch--theme { background: linear-gradient(135deg, var(--own-accent) 50%, var(--wp-bg-3) 50%); }
+.wp-tweaks__swatch--theme { background: linear-gradient(135deg, var(--own-accent) calc(50% - 0.75px), var(--wp-bg-3) calc(50% + 0.75px)); }
 .wp-tweaks__note { margin: 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 .wp-tweaks__custom-picker {
   margin-top: var(--wp-space-4);

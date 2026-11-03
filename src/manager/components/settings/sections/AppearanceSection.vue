@@ -192,7 +192,7 @@ function setSidebar(v: SidebarChoice): void {
 }
 /* "Theme's own": half the live accent, half the page, so it reads as
  * "whatever the colour theme brings". */
-.wp-set-swatch--theme { background: linear-gradient(135deg, var(--own-accent) 50%, var(--wp-bg-3) 50%); }
+.wp-set-swatch--theme { background: linear-gradient(135deg, var(--own-accent) calc(50% - 0.75px), var(--wp-bg-3) calc(50% + 0.75px)); }
 /* Locked (High contrast): the theme's own stays readable, the rest fade. */
 .wp-set-swatches.is-locked :deep([data-test="settings-accent-theme"]) { opacity: 1; }
 .wp-set-picker { width: 100%; max-width: 360px; }
