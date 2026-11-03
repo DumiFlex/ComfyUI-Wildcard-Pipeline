@@ -14,6 +14,7 @@
  * Lightbox of its own. Placeholders stay non-clickable.
  */
 import { computed, inject, onBeforeUnmount, ref, watch } from "vue";
+import ImageGrid from "@/kit/ImageGrid.vue";
 import Lightbox from "@/kit/Lightbox.vue";
 import DocFigureText from "./DocFigureText.vue";
 import { DOC_GALLERY, type DocShot } from "../../docs/gallery";
@@ -33,7 +34,9 @@ const props = withDefaults(
 );
 
 const failed = ref(false);
-const btnEl = ref<HTMLElement | null>(null);
+const gridEl = ref<{ $el: HTMLElement } | null>(null);
+/** The picture's own button inside the grid, where focus goes back after the gallery. */
+const btnEl = (): HTMLElement | null => gridEl.value?.$el.querySelector<HTMLElement>("button") ?? null;
 
 const fullSrc = computed(() =>
   props.src ? `${import.meta.env.BASE_URL}${props.src.replace(/^\/+/, "")}` : "",
@@ -41,7 +44,7 @@ const fullSrc = computed(() =>
 
 const shot = computed<DocShot>(() => ({
   image: { src: fullSrc.value, alt: props.alt ?? props.caption, caption: props.caption },
-  el: () => btnEl.value,
+  el: btnEl,
 }));
 
 const gallery = inject(DOC_GALLERY, null);
@@ -64,25 +67,20 @@ function openLightbox(): void {
 
 <template>
   <figure class="wp-doc-img">
-    <button
+    <ImageGrid
       v-if="props.src && !failed"
-      ref="btnEl"
-      type="button"
-      class="wp-doc-img__btn"
+      ref="gridEl"
+      class="wp-doc-img__grid"
+      :images="[{ id: props.src, src: fullSrc, alt: alt ?? caption }]"
+      aspect="auto"
+      :columns="1"
+      hint
+      :lightbox="false"
       :aria-label="`Open ${alt ?? caption} at full size`"
       data-test="doc-image-open"
-      @click="openLightbox"
-    >
-      <img
-        :src="fullSrc"
-        :alt="alt ?? caption"
-        class="wp-doc-img__real"
-        @error="failed = true"
-      />
-      <span class="wp-doc-img__zoom-hint" aria-hidden="true">
-        <i class="pi pi-search-plus" />
-      </span>
-    </button>
+      @open="openLightbox"
+      @error="failed = true"
+    />
     <div v-else class="wp-doc-img__ph" :style="{ aspectRatio: ratio }" role="img" :aria-label="`Placeholder: ${caption}`">
       <i class="pi pi-image wp-doc-img__ph-icon" aria-hidden="true" />
       <span class="wp-doc-img__ph-tag">Example image</span>
@@ -95,62 +93,11 @@ function openLightbox(): void {
 
 <style scoped>
 .wp-doc-img { margin: 0; display: flex; flex-direction: column; gap: 8px; }
-/* The image is wrapped in a button so the whole canvas is keyboard-
- * focusable + click-activated. Reset native button chrome so the wrap
- * doesn't add background/border around the screenshot. */
-.wp-doc-img__btn {
-  position: relative;
-  display: block;
-  width: 100%;
-  padding: 0;
-  margin: 0;
-  background: transparent;
-  border: none;
-  cursor: zoom-in;
-  border-radius: var(--wp-radius-lg);
-  /* Keep keyboard focus visible without obscuring the image edge — the
-   * outline sits OUTSIDE the bounding box. */
-}
-.wp-doc-img__btn:focus-visible {
-  outline: 2px solid var(--wp-accent-500);
-  outline-offset: 2px;
-}
-.wp-doc-img__real {
-  width: 100%;
-  border-radius: var(--wp-radius-lg);
-  border: 1px solid var(--wp-border);
-  display: block;
-  transition: filter 120ms ease;
-}
-.wp-doc-img__btn:hover .wp-doc-img__real {
-  filter: brightness(1.05);
-}
-/* Floating zoom-in glyph — surfaces the click affordance without
- * cluttering the screenshot. Becomes more opaque on hover so the
- * "you can click this" hint is obvious. */
-.wp-doc-img__zoom-hint {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--wp-radius-cap, 999px);
-  background: color-mix(in srgb, var(--wp-bg-1) 70%, transparent);
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  opacity: 0.55;
-  transition: opacity 120ms ease, background 120ms ease;
-  pointer-events: none;
-  font-size: 12px;
-}
-.wp-doc-img__btn:hover .wp-doc-img__zoom-hint,
-.wp-doc-img__btn:focus-visible .wp-doc-img__zoom-hint {
-  opacity: 1;
-  background: var(--wp-bg-1);
-}
+/* The picture is the kit ImageGrid at its own shape: one tile, full width,
+ * a magnifier on hover, and a click opens the page's gallery. */
+.wp-doc-img__grid :deep(.wp-image-grid__open) { border-radius: var(--wp-radius-lg); }
+/* The docs prose indents every list; the grid's own list must not be. */
+.wp-doc-img__grid :deep(.wp-image-grid__list) { margin: 0; padding: 0; }
 .wp-doc-img__ph {
   width: 100%;
   display: flex;
