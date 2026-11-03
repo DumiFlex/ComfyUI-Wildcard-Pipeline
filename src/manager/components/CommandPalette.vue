@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import Kbd from "@/kit/Kbd.vue";
+import { inputEl } from "../utils/kit-field-el";
 import { computed, nextTick, ref, watch } from "vue";
 import Icon from "@/kit/Icon.vue";
+import Input from "@/kit/Input.vue";
 import ModalShell from "@/kit/ModalShell.vue";
 import { useDialogFocus } from "@/kit/useDialogFocus";
 import type { CommandItem } from "./CommandPalette.types";
@@ -58,6 +60,7 @@ const emit = defineEmits<{
 
 const query = ref("");
 const selectedIndex = ref(0);
+/** The `<input>` inside the kit Input, focused when the palette opens. */
 const inputRef = ref<HTMLInputElement | null>(null);
 const listRef = ref<HTMLElement | null>(null);
 const panelRef = ref<HTMLElement | null>(null);
@@ -171,12 +174,11 @@ function close() {
          clicks through to the backdrop, the palette takes them back. -->
     <div class="wp-cp-frame">
       <div ref="panelRef" class="wp-cp" tabindex="-1" data-test="cp-panel">
-        <input
-          ref="inputRef"
+        <Input
+          :ref="(c) => (inputRef = inputEl(c))"
           v-model="query"
           data-test="cp-input"
           class="wp-cp__input"
-          type="text"
           aria-label="Command search"
           placeholder="Search modules, routes, or run a command…"
           @keydown="onKeydown"
@@ -249,6 +251,7 @@ function close() {
   height: calc(var(--wp-control-h-lg) + 12px);
   padding: 0 var(--wp-space-6);
   border: none;
+  border-radius: 0;
   /* Accent-tinted underline so the input visually anchors the palette
    * (matches the focus ring color, hints the palette is interactive). */
   border-bottom: 2px solid color-mix(in oklab, var(--wp-accent-500) 60%, var(--wp-border));
@@ -265,6 +268,8 @@ function close() {
 .wp-cp__input:focus {
   background: color-mix(in oklab, var(--wp-accent-500) 9%, transparent);
   border-bottom-color: var(--wp-accent-500);
+  /* The underline is the palette's focus mark; no kit ring around the bar. */
+  box-shadow: none;
 }
 .wp-cp__results {
   margin: 0; padding: var(--wp-space-2) 0;

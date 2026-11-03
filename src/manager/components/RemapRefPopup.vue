@@ -16,6 +16,7 @@
  */
 import { computed, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import { reconcileSubcatExpr } from "../cascade/reconcile-subcat";
 import type { WildcardRefData } from "../utils/library-suggestions";
@@ -122,9 +123,9 @@ function doConfirm(): void {
     >
       <div class="wpc-remap__head">Remap broken reference</div>
 
-      <input
+      <SearchInput
         v-model="query"
-        type="text"
+        size="sm"
         class="wpc-remap__search"
         data-test="remap-search"
         aria-label="Search wildcards"
@@ -222,18 +223,7 @@ function doConfirm(): void {
   color: var(--wp-text-dim);
   margin-bottom: 8px;
 }
-.wpc-remap__search {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 7px 10px;
-  border-radius: min(5px, var(--wp-radius-cap, 999px));
-  border: 1px solid var(--wp-border, rgba(255,255,255,0.12));
-  background: var(--wp-bg);
-  color: var(--wp-text);
-  font: 13px var(--wp-font-mono, monospace);
-  outline: none;
-}
-.wpc-remap__search:focus { border-color: var(--wp-accent); }
+.wpc-remap__search { width: 100%; }
 .wpc-remap__list {
   list-style: none;
   margin: 8px 0;

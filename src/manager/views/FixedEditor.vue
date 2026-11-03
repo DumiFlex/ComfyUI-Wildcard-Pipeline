@@ -17,6 +17,7 @@ import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
 import { usePanelAction, viaPanel } from "../composables/usePanelAction";
 import Card from "@/kit/Card.vue";
+import Input from "@/kit/Input.vue";
 import Button from "@/kit/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
@@ -782,13 +783,12 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
             <td>
               <div class="wp-input-group">
                 <span class="wp-input-group__affix wp-input-group__affix--prefix" aria-hidden="true">$</span>
-                <input
-                  class="wp-input"
-                  :value="v.name"
+                <Input
+                  :model-value="v.name"
                   placeholder="varname"
                   aria-label="Variable name"
                   :data-test="`fv-row-${idx}-name`"
-                  @input="onVarInput(idx, ($event.target as HTMLInputElement).value)"
+                  @update:model-value="(val) => onVarInput(idx, val)"
                 />
               </div>
               <p

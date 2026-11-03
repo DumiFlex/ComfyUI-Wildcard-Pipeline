@@ -10,6 +10,7 @@
  */
 import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
+import Input from "@/kit/Input.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import Popover from "@/kit/Popover.vue";
 import ModulePicker from "./ModulePicker.vue";
@@ -214,9 +215,9 @@ function removePin(name: string): void {
         Stand in for a value an upstream node would pass in, e.g. <code>$subject</code>.
       </span>
       <form v-if="pinFormOpen" class="wp-trs__pin-form" @submit.prevent="addPin">
-        <input id="wp-tr-pin-name" v-model="pinName" placeholder="$name" aria-label="Variable name" data-test="pin-name">
+        <Input id="wp-tr-pin-name" v-model="pinName" size="sm" placeholder="$name" aria-label="Variable name" data-test="pin-name" />
         <span>=</span>
-        <input id="wp-tr-pin-value" v-model="pinValue" placeholder="value" aria-label="Pinned value" data-test="pin-value">
+        <Input id="wp-tr-pin-value" v-model="pinValue" size="sm" placeholder="value" aria-label="Pinned value" data-test="pin-value" />
         <Button size="sm" type="submit" :disabled="!pinNameValid" data-test="pin-add">Pin</Button>
         <Button size="sm" variant="ghost" @click="pinFormOpen = false">Cancel</Button>
       </form>

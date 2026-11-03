@@ -17,6 +17,7 @@
  */
 import { ref } from "vue";
 import Button from "@/kit/Button.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 
 interface DanglingChild {
   childId: string;
@@ -129,9 +130,9 @@ function confirm(childId: string): void {
       >Download from community</Button>
 
       <div v-if="openChildId === child.childId" class="rb__picker">
-        <input
+        <SearchInput
           v-model="query"
-          type="text"
+          size="sm"
           class="rb__search"
           :placeholder="child.type === 'bundle' ? 'Search bundles…' : 'Search modules…'"
           spellcheck="false"
@@ -196,17 +197,7 @@ function confirm(childId: string): void {
   border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg);
 }
-.rb__search {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 6px 9px;
-  border-radius: min(4px, var(--wp-radius-cap, 999px));
-  border: 1px solid var(--wp-border, rgba(255,255,255,0.12));
-  background: var(--wp-bg-2);
-  color: var(--wp-text);
-  font: 12px var(--wp-font-mono, monospace);
-  outline: none;
-}
+.rb__search { width: 100%; }
 .rb__list { list-style: none; margin: 6px 0; padding: 0; max-height: 150px; overflow-y: auto; }
 .rb__cand { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 5px 8px; border-radius: min(4px, var(--wp-radius-cap, 999px)); cursor: pointer; color: var(--wp-text); }
 .rb__cand-name { font: 11px var(--wp-font-sans); }
