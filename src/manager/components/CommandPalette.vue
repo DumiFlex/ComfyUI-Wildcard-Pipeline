@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Kbd from "@/kit/Kbd.vue";
+import { inputEl } from "../utils/kit-field-el";
 import { computed, nextTick, ref, watch } from "vue";
 import Icon from "@/kit/Icon.vue";
 import Input from "@/kit/Input.vue";
@@ -59,8 +60,8 @@ const emit = defineEmits<{
 
 const query = ref("");
 const selectedIndex = ref(0);
-/** The kit Input; its root is the `<input>` the palette focuses on open. */
-const inputRef = ref<{ $el: HTMLInputElement } | null>(null);
+/** The `<input>` inside the kit Input, focused when the palette opens. */
+const inputRef = ref<HTMLInputElement | null>(null);
 const listRef = ref<HTMLElement | null>(null);
 const panelRef = ref<HTMLElement | null>(null);
 
@@ -121,7 +122,7 @@ watch(() => props.open, (open) => {
 const focus = useDialogFocus(panelRef, () => props.open, {
   onEscape: () => undefined,
   window: false,
-  initial: () => inputRef.value?.$el ?? null,
+  initial: () => inputRef.value,
 });
 
 watch(ranked, () => { selectedIndex.value = 0; });
@@ -174,7 +175,7 @@ function close() {
     <div class="wp-cp-frame">
       <div ref="panelRef" class="wp-cp" tabindex="-1" data-test="cp-panel">
         <Input
-          ref="inputRef"
+          :ref="(c) => (inputRef = inputEl(c))"
           v-model="query"
           data-test="cp-input"
           class="wp-cp__input"

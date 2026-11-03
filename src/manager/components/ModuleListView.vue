@@ -17,6 +17,7 @@
  *   - `expansion`             — body of the expanded-row drawer
  */
 import SearchInput from "@/kit/SearchInput.vue";
+import { inputEl } from "../utils/kit-field-el";
 import Input from "@/kit/Input.vue";
 import Banner from "@/kit/Banner.vue";
 import { computed, defineAsyncComponent, nextTick, ref, watch, useSlots } from "vue";
@@ -610,8 +611,8 @@ function emitFetch() {
 
 const tagAddOpen = ref(false);
 const tagAddValue = ref("");
-/** The kit Input (its root is the `<input>`), focused when the panel opens. */
-const tagAddInputRef = ref<{ $el: HTMLInputElement } | null>(null);
+/** The `<input>` inside the kit Input, focused when the panel opens. */
+const tagAddInputRef = ref<HTMLInputElement | null>(null);
 
 const tagRemoveOpen = ref(false);
 const tagRemoveValue = ref("");
@@ -639,7 +640,7 @@ watch(tagAddOpen, async (open) => {
   if (open) {
     tagAddValue.value = "";
     await nextTick();
-    tagAddInputRef.value?.$el.focus();
+    tagAddInputRef.value?.focus();
   }
 });
 
@@ -888,7 +889,7 @@ defineExpose({
       </template>
       <div class="wp-bulk-modal-body">
         <Input
-          ref="tagAddInputRef"
+          :ref="(c) => (tagAddInputRef = inputEl(c))"
           v-model="tagAddValue"
           data-test="bulk-tag-input"
           placeholder="Type tag name (or pick existing)"

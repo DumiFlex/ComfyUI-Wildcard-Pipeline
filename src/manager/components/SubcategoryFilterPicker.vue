@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import SearchInput from "@/kit/SearchInput.vue";
+import { textareaEl } from "../utils/kit-field-el";
 import Button from "@/kit/Button.vue";
 import Chip from "@/kit/Chip.vue";
 import ListRow from "@/kit/ListRow.vue";
@@ -86,9 +87,8 @@ const excludeNull = ref<boolean>(props.initialExcludeNull);
  *  (`(warm or cool) and not vivid and (hair-natural or eye-vivid)` is 56
  *  characters) and a single-line field clipped everything past ~40, so the
  *  thing being authored was the thing you could not see. */
-/** The kit Textarea; its root is the `<textarea>` drawn over the mirror. */
-const field = ref<{ $el: HTMLTextAreaElement } | null>(null);
-const inputEl = computed<HTMLTextAreaElement | null>(() => field.value?.$el ?? null);
+/** The `<textarea>` inside the kit Textarea, drawn over the mirror. */
+const inputEl = ref<HTMLTextAreaElement | null>(null);
 const growable = useGrowableField(() => inputEl.value, { minHeight: 44 });
 const { hasMoreBelow, startResize } = growable;
 onMounted(() => {
@@ -426,7 +426,7 @@ function onApply(): void {
         </div>
         <Textarea
           id="wp-subcat-expr"
-          ref="field"
+          :ref="(c) => (inputEl = textareaEl(c))"
           v-model="expr"
           :rows="1"
           aria-label="Sub-category filter expression"

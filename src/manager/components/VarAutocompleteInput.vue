@@ -20,6 +20,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import Input from "@/kit/Input.vue";
+import { inputEl as kitInputEl } from "../utils/kit-field-el";
 
 defineOptions({ name: "VarAutocompleteInput" });
 
@@ -43,9 +44,8 @@ const emit = defineEmits<{
   "update:modelValue": [value: string];
 }>();
 
-/** The kit Input; its root is the `<input>` itself (no prefix / icon). */
-const field = ref<{ $el: HTMLInputElement } | null>(null);
-const inputEl = computed<HTMLInputElement | null>(() => field.value?.$el ?? null);
+/** The `<input>` inside the kit Input (set from its template ref). */
+const inputEl = ref<HTMLInputElement | null>(null);
 const popoverEl = ref<HTMLDivElement | null>(null);
 const open = ref(false);
 const active = ref(0);
@@ -203,7 +203,7 @@ onBeforeUnmount(() => {
 
 <template>
   <Input
-    ref="field"
+    :ref="(c) => (inputEl = kitInputEl(c))"
     class="dvr-var-input"
     :style="inputColor ? { color: inputColor } : undefined"
     :model-value="modelValue"
