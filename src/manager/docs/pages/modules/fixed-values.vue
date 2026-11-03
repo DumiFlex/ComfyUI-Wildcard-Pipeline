@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -59,10 +59,10 @@ const instanceOptions = [
           'Text built from other picks: use a Combine',
         ]"
       />
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         Don't let a fixed value and a wildcard write the same variable: whichever runs later wins,
         without a warning.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Row fields">
@@ -71,10 +71,10 @@ const instanceOptions = [
 
     <DocSection title="Change it for one node">
       <DocKeyList :items="instanceOptions" />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         A fixed value can't read <VarToken>$variables</VarToken> other modules set. To build a value
         from earlier picks, use a Combine.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Try it">

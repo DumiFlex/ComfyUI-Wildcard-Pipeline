@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -88,10 +88,10 @@ const syntax = [
         reading.
       </p>
       <DocKeyList :items="edit" />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Keys you type in the editor stay in the editor: Delete, Ctrl+Z and ComfyUI's other shortcuts don't
         reach the canvas.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="The formatting bar">
@@ -124,10 +124,10 @@ const syntax = [
         ratio="1720 / 860"
         caption="A note open in its editor with Also a bookmark on, a note card with its bookmark mark, and the dock listing both next to a WP Bookmark."
       />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Unlike a WP Bookmark, a note can't be hidden on the canvas (it is there to be read), and muting
         it turns its shortcut off without fading it.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

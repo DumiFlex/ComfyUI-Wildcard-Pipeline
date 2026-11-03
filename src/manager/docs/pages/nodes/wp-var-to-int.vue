@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -49,9 +49,9 @@ const controls = [
           'Text that should stay in the prompt',
         ]"
       />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Hide the variable it reads (the globe on its row), so the value doesn't print in the prompt. The node re-runs only when that value changes.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Controls">
@@ -74,10 +74,10 @@ const controls = [
           <VarToken>hello</VarToken>: no number, so the default
         </li>
       </ul>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         For width and height from one <VarToken>$resolution</VarToken>, use two WP Var → Int
         nodes on the same variable: index 0 for width, index 1 for height.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

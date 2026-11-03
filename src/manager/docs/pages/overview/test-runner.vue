@@ -3,7 +3,7 @@ import Kbd from "@/kit/Kbd.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -117,10 +117,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         baseline in one go, and each row then reads <em>matches</em> or <em>N changed</em>. When the
         result is the new normal, <b>Use this run as baseline</b> replaces it.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Compare needs the same seeds on both sides. A Range scenario always has them; for a Random
         one, <b>Run the baseline's seeds</b> reruns exactly the seeds the baseline used.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

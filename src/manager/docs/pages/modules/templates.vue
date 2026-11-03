@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
@@ -45,11 +45,11 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
         The Assembler's toolbar has <b>Save</b> and <b>Load</b>. Save puts its template in your
         library; Load replaces the template with one from the library.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         A variable in the template needs a module before the Assembler that sets it. If none
         does, it prints nothing and is underlined in the preview; add the module or fix the
         name.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Try it">

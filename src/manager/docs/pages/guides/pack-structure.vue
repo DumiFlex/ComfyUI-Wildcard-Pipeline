@@ -2,7 +2,7 @@
 import CodeBlock from "@/kit/CodeBlock.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
@@ -488,12 +488,12 @@ const antiPatterns: string[] = [
         into one of these roles and the right module follows from the role:
       </p>
       <DocKeyList :items="roles" />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Two rules explain most surprises. <VarToken>$var</VarToken> is the same value everywhere
         you read it. An <VarToken kind="ref">@{ref}</VarToken> is a fresh, independent pick every
         time it appears. So "$color jacket and $color jeans" always match, and "@{Colors} jacket
         and @{Colors} jeans" match only by chance.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="How a stack runs">
@@ -557,12 +557,12 @@ const antiPatterns: string[] = [
         grammar is on <DocRef id="variable-pipeline" />.
       </p>
       <GuideTable :head="syntaxHead" :rows="syntaxRows" />
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         A wildcard option can't read a variable. "A $color dress" is either a combine
         (<VarToken>$color dress</VarToken>, the same colour as elsewhere) or an option
         <VarToken kind="ref">@{Colors} dress</VarToken> (a new colour). The two escapes
         <code>$$</code> and <code>@@</code> give a literal <code>$</code> and <code>@</code>.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection v-for="b in blueprints" :key="b.title" :title="b.title">

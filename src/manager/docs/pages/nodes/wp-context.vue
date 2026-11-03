@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
@@ -100,9 +100,9 @@ const markers = [
           on someone else's machine too. WP Debug shows where each pick came from.
         </p>
       </DocDetails>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Wire a <b>WP Debug</b> to the output to see exactly what each module picked.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

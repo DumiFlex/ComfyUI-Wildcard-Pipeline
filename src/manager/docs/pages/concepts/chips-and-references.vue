@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -61,14 +61,14 @@ const chipStates = [
 
     <DocSection title="The three states">
       <DocKeyList :items="chipStates" />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         In the library a variable never turns red just because nothing sets it yet: an Injector,
         a loop or an earlier Context may set it when it runs. Its hover says <i>binds at
         runtime</i>. On the canvas, where the wiring is known, a name nothing before it sets gets
         a red wavy underline (hover: <i>no upstream producer</i>). So does
         <VarToken>$outfit.SHOES</VarToken> when SHOES isn't an accepts group, because it would
         print nothing.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Inserting variables and chips (and placeholders)">

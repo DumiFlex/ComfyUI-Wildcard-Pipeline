@@ -149,7 +149,7 @@ import { useRecentStore } from "../stores/recentStore";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
-import PillCountBadge from "../cascade/PillCountBadge.vue";
+import Chip from "@/kit/Chip.vue";
 import type { BundleRow, ModuleRow } from "../api/types";
 import type { ModuleEntry } from "../../widgets/_shared";
 import {
@@ -1159,7 +1159,7 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
   >
     <template v-if="isEdit && cascadeRefs.length > 0" #title-extra>
       <span class="wp-editor-used-by">
-        used by <PillCountBadge :count="cascadeRefs.length" />
+        used by <Chip tone="warn" size="xs">{{ cascadeRefs.length }}</Chip>
       </span>
     </template>
     <template v-if="isEdit" #header-extra>

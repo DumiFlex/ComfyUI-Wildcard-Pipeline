@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 </script>
@@ -49,11 +49,11 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
           { term: 'Off', desc: 'No page reading.' },
         ]"
       />
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         <b>Don't ask before web calls</b> skips the Allow card for searches, page reads and Danbooru
         lookups. You still see each one above the answer, but a web page or an item could then steer
         what the chat sends out.
-      </DocCallout>
+      </Banner>
       <p>
         Turning a web feature on shows a short note of what leaves your machine. <b>Got it</b> hides
         it, and <b>Show dismissed notices again</b> brings it back.

@@ -2,7 +2,7 @@
 import { useRouter } from "vue-router";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
@@ -74,10 +74,10 @@ function createStarterWildcard(): void {
     </DocSection>
 
     <DocSection title="Step 3: See what was picked">
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Wire a <b>WP Debug</b> to the Context's <code>context</code> output to see what
         <VarToken>$subject</VarToken> picked on each run.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="What to try next">

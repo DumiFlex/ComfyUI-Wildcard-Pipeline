@@ -3,7 +3,7 @@ import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -84,11 +84,11 @@ const ports = [
         :arrows="['MODEL', 'context']"
         caption="Model Info heads the chain, so every Context after it can read the model variables."
       />
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         If a node that loads LoRAs from the prompt sits on the model, wire Model Info to the
         MODEL from <b>before</b> that node. Otherwise the prompt needs the model and the model
         needs the prompt, and ComfyUI refuses to run the loop.
-      </DocCallout>
+      </Banner>
       <DocImage
         src="images/docs/wp-model-info.png"
         ratio="16 / 7"
@@ -121,24 +121,24 @@ const ports = [
         the detected variant, and any constraint can use it as its source, for example
         “if Model is pony, exclude photo styles”.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Mark one option of that wildcard as the fallback (for example “other”), so checkpoints
         your rules don't recognise still get a predictable pick. Without a fallback the wildcard
         rolls as usual and WP Debug notes that nothing matched.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Good to know">
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         The canvas previews <VarToken>$model_variant</VarToken> and
         <VarToken>$model_name</VarToken> from the loader's file name straight away.
         <VarToken>$model_family</VarToken> needs the loaded model, so it previews as a placeholder
         until the first run (or pin it).
-      </DocCallout>
-      <DocCallout variant="tip">
+      </Banner>
+      <Banner tone="info" note>
         Model Info lives in the workflow, not your library, so packs that branch on
         <VarToken>$model_variant</VarToken> work on any version that has the node.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

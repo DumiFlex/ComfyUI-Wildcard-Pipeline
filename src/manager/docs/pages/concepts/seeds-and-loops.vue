@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
@@ -47,9 +47,9 @@ const strategies = [
         Open a module's editor (or right-click its row) and use the <b>Runtime</b> buttons:
       </p>
       <DocKeyList :items="keepSteady" />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Lock the style and leave the subject free to see how one style looks across many subjects.
-      </DocCallout>
+      </Banner>
       <DocDetails title="How Hold across run works">
         <p>
           Hold keeps the finished text, not just the seed. A wildcard holds its option even when a
@@ -130,11 +130,11 @@ const strategies = [
         use. Lock a frame's seed to keep it while the rest keep changing. <b>Lock all</b>,
         <b>Copy</b> and <b>Paste</b> (as <code>#N: seed</code> lines) work on the whole list.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         After a run you liked, use <b>Prev</b>. The list shows the seeds for the next run, and with
         randomize on those have already moved. Prev locks the seed the frame used last time. On the
         loop it needs Override Context seed on.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Good to know">

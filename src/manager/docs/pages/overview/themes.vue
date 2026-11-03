@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import { LOOK_OPTIONS, PALETTE_OPTIONS } from "../../../stores/tweaksStore";
 </script>
 
@@ -53,11 +53,11 @@ import { LOOK_OPTIONS, PALETTE_OPTIONS } from "../../../stores/tweaksStore";
         custom accent you pick is kept when you change the colour theme. High contrast keeps its own
         accent so its text stays readable; your pick comes back when you leave it.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Themes change the manager, and the Community tab follows them: it takes the colour theme, the look
         and light or dark, and changes with them. The canvas nodes keep ComfyUI's colours, so they sit well
         next to other nodes.
-      </DocCallout>
+      </Banner>
     </DocSection>
   </DocPage>
 </template>

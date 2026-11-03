@@ -3,7 +3,7 @@ import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -65,12 +65,12 @@ const overridable = [
 
     <DocSection title="What you can change per frame">
       <DocKeyList :items="overridable" />
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         Frame changes live in the workflow. They aren't saved in bundles, and the Test Runner
         doesn't use them. For a frame rule you can share, use a wildcard with Match variable on
         <code>iteration</code> plus a constraint, or a derivation that tests
         <code>$iteration</code>. See <DocRef id="pack-structure" />.
-      </DocCallout>
+      </Banner>
       <DocUseWhen
         :good="[
           'A few named beats on one canvas (frame #1 is the establishing shot)',
@@ -104,10 +104,10 @@ const overridable = [
         still change. Lock it on <code>base</code> to keep it on every frame. Unlocking on one frame
         while the base is locked frees just that frame.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         <b>Hide from prompt</b> and <b>Hold across run</b> apply to every frame, so they're greyed
         out while a frame chip is active. Switch back to <code>base</code> to change them.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

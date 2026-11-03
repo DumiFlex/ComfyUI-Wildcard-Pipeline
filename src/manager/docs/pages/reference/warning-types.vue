@@ -2,7 +2,7 @@
 import Badge from "@/kit/Badge.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
 // Human-readable labels — what the hover message / Warnings-tab line actually
@@ -60,11 +60,11 @@ const scannerRules: WarningRow[] = [
     tone="neutral"
     blurb="What each warning on the canvas and in WP Debug means, and what to do about it."
   >
-    <DocCallout variant="tip">
+    <Banner tone="info" note>
       On the canvas each one shows as a coloured dot and a short label on the node; hover for the
       message. After a run they're listed in WP Debug's <b>Warnings</b> tab. None of them stops a
       run. Blue is for your information, amber is worth a look.
-    </DocCallout>
+    </Banner>
 
     <DocSection title="As you build (canvas)">
       <p>These show on the nodes while you build:</p>

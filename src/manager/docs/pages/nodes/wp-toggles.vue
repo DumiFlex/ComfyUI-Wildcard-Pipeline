@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -76,10 +76,10 @@ const edit = [
 
     <DocSection title="Editing a toggle">
       <DocKeyList :items="edit" />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Drag the grip to reorder. A label moves with its toggles. Moving a row never re-points a wire:
         each output stays with its toggle.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Mute or bypass nodes">
@@ -97,11 +97,11 @@ const edit = [
         ratio="1720 / 752"
         caption="Detailer is off, so the two nodes in its WP Node Group are muted."
       />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         This happens on the canvas, the moment the toggle flips, so the saved workflow keeps the
         modes. The wires to the dots never reach the run. An upstream value that sets a toggle
         changes its variable and output, not the modes.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Pick one">

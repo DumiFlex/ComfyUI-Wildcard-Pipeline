@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
@@ -51,10 +51,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         everything filled in; the Export tab has the same button for a selection. Others find it
         in the <b>Community</b> tab and install it in one click, with the wildcards it needs.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         A pack that uses a newer feature asks people on an older version to update before it
         installs, so nothing gets dropped on the way.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Coming from A1111 or Forge">

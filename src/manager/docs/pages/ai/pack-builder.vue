@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
@@ -42,10 +42,10 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
           the bundle in a WP Context, the template in a WP Prompt Assembler, an Injector row per
           input. <b>Undo</b> removes all of it.</li>
       </ol>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Building takes one request per item, so a local model needs a few minutes. Use a builder
         model. If an item fails, you can retry it, rebuild it or leave it out.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Pack settings">

@@ -4,7 +4,7 @@ import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocFigure from "../../../components/docs/DocFigure.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import PipelineDiagram from "../../../components/docs/PipelineDiagram.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
@@ -78,9 +78,9 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
         <li><DocRef id="derivation" />: if/then rules that change variables based on what was picked.</li>
         <li><DocRef id="constraint" />: makes some options of a later wildcard likelier or rule them out, based on an earlier pick.</li>
       </ul>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Make and edit modules here in the manager, then add them to a WP Context on the canvas.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="A finished graph">
@@ -92,10 +92,10 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
     </DocSection>
 
     <DocSection title="Good to know">
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Try right-clicking. Most WP nodes, and the rows inside them, have a menu: save a row to
         the library, pull in a library change, duplicate, and more.
-      </DocCallout>
+      </Banner>
       <p>
         Finding your way in these docs: <Kbd keys="/" size="sm" /> jumps to the search box, which
         searches the text of every page and opens a result at its section

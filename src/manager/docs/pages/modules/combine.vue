@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -78,10 +78,10 @@ const instanceOptions = [
           and WP Debug notes it. Put a reference in a wildcard option instead.
         </li>
       </ul>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         The variables your template reads show as chips under it. A chip marked missing means no
         module above sets that variable.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Change it for one node">

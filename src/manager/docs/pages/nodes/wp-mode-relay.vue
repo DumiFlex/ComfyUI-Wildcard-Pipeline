@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -53,10 +53,10 @@ const controls = [
 
     <DocSection title="Controls">
       <DocKeyList :items="controls" />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         A mix of muted and bypassed sends nothing. The relay acts at once when the watched nodes
         change and when you change one of its choices, never when a workflow loads.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

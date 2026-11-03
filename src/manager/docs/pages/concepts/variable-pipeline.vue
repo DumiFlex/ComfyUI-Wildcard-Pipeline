@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocFigure from "../../../components/docs/DocFigure.vue";
 import PipelineDiagram from "../../../components/docs/PipelineDiagram.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -86,10 +86,10 @@ import DocRef from "../../../components/docs/DocRef.vue";
           </tr>
         </tbody>
       </table>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         These nest: a part of <VarToken kind="inline">{…}</VarToken> can hold a reference or another
         choice, such as <VarToken kind="inline">{a @{abcd1234} cat|{2$$, $$red|blue|green} sky}</VarToken>.
-      </DocCallout>
+      </Banner>
       <p>
         <b>Naming a variable:</b> letters, digits and underscores, starting with a letter or
         underscore, up to 64 characters. Names starting with two underscores are kept for the
@@ -150,17 +150,17 @@ import DocRef from "../../../components/docs/DocRef.vue";
           </tr>
         </tbody>
       </table>
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         Wildcard options and fixed values can't read a <VarToken>$variable</VarToken>, wherever
         they sit. To build text from earlier picks, use a <b>Combine</b> or a <b>Derivation</b>
         below them.
-      </DocCallout>
-      <DocCallout variant="tip">
+      </Banner>
+      <Banner tone="info" note>
         The Assembler doesn't roll anything, so put choices in a wildcard or combine and print its
         variable. A derivation's "if" compares one variable (<VarToken>$name.0</VarToken>,
         <VarToken>$name.GROUP</VarToken> and <VarToken>$name.neg</VarToken> work too) with plain
         text.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="The flow">

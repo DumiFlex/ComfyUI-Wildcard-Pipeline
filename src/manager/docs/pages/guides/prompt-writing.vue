@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
@@ -429,12 +429,12 @@ const mistakes: string[][] = [
         Most of the work is in three choices: the <b>dialect</b> (tags or sentences), the
         <b>order</b> of the parts, and whether the model uses a <b>negative</b> at all.
       </p>
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         Model popularity below was gathered on 2026-10-15 from ComfyUI's official template usage,
         Civitai ecosystem counts and one Hugging Face download report. Civitai and Hugging Face
         couldn't be read directly, so the numbers are rough. This field moves fast: recheck them
         before you rely on them.
-      </DocCallout>
+      </Banner>
       <GuideTable :head="['Rank', 'Family', 'Why', 'Depth here']" :rows="ranking" />
       <p>
         <b>For your pack:</b> decide your target family before you write options. Tag models want
@@ -461,12 +461,12 @@ const mistakes: string[][] = [
         used at all.
       </p>
       <GuideTable :head="['Family', 'Negative used?', 'Settings', 'Notes']" :rows="cfgRows" />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Negatives work best on a concept the prompt actually invites ("hat" when the outfit tends
         to bring one). A long generic negative dilutes itself and can cancel things you asked for.
         To move the camera, say it in the prompt: a negative is not a composition tool. The
         built-in NAGuidance node brings negatives back on some distilled models.
-      </DocCallout>
+      </Banner>
       <p><b>For your pack:</b></p>
       <ul>
         <li>Every pack feature that relies on negatives (option negatives, <code>$negatives</code>, a safe guard, the negative template) needs CFG above 1. Say so in the pack's description.</li>

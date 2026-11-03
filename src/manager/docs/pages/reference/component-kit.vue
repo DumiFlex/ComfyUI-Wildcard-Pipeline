@@ -2,7 +2,7 @@
 import { useRouter } from "vue-router";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import Button from "@/kit/Button.vue";
 import { KIT_ENTRIES } from "../../../kit/registry";
 import { KIT_SITE } from "../../../config/links";
@@ -60,10 +60,10 @@ const appPieces = KIT_ENTRIES.length;
         colour tokens only, full keyboard use, Escape to close anything that floats, and focus back where
         it was. The full rules are in <code>docs/component-standard.md</code> in the repository.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         <b>Settings › About</b> says which kit version this copy of the extension uses, and
         <b>Settings › Advanced › Component kit</b> opens the kit site or the app pieces.
-      </DocCallout>
+      </Banner>
     </DocSection>
   </DocPage>
 </template>

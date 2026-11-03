@@ -54,7 +54,7 @@ import { useCascadeApply } from "../cascade/useCascadeApply";
 import { tokenizeRefString, resolveWildcardChip } from "../cascade/resolveChip";
 import type { LibraryFixture } from "../cascade/reverse-dep-index";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
-import PillCountBadge from "../cascade/PillCountBadge.vue";
+import Chip from "@/kit/Chip.vue";
 import ConstraintReattachSection from "../../components/context/editors/constraint/sections/ConstraintReattachSection.vue";
 import { walkRemap } from "../../components/context/bundles/uuid-remap";
 import { buildWildcardRefData } from "../utils/library-suggestions";
@@ -1331,7 +1331,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
     <template v-if="isEdit" #header-extra>
       <SendToTestRunner v-if="props.id" :id="props.id" :kind="'constraint'" />
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
-        used by <PillCountBadge :count="cascadeRefs.length" />
+        used by <Chip tone="warn" size="xs">{{ cascadeRefs.length }}</Chip>
       </span>
       <CommunityRowActions
         v-if="currentRow"

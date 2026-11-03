@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -87,9 +87,9 @@ const dock = [
 
     <DocSection title="Settings">
       <DocKeyList :items="controls" />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Muting or bypassing a bookmark turns it off: its shortcut does nothing and the dock greys it.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Shortcut clashes">
@@ -101,12 +101,12 @@ const dock = [
         watches for anything that claims it. A key something answers is listed as taken and the bolt
         skips it. The pretend press stops a handler at the moment it claims the key, so nothing runs.
       </p>
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         A handler that acts without claiming the key can't be seen this way. If an extension still
         takes the key first, the bookmark doesn't jump and a toast names the combo once, so you can
         pick another. The key is remembered: the clash check marks it from then on and the bolt never
         suggests it.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="The Bookmarks dock">
@@ -122,10 +122,10 @@ const dock = [
         caption="The dock in view mode: click a row to jump. Its pencil opens edit mode, where the eye brings back a hidden bookmark."
       />
       <DocKeyList :items="dock" />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Next, Previous, Back, Bookmark this view and the dock toggle are commands without keys: bind
         them in Settings › Keybinding.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

@@ -3,7 +3,7 @@ import CodeBlock from "@/kit/CodeBlock.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -39,12 +39,12 @@ const MODELFILE = "FROM hf.co/<repo>:<quant>\nRENDERER qwen3.5\nPARSER qwen3.5\n
         ratio="2 / 1"
         caption="Settings › AI assistant: the switch that turns it on, the provider buttons, and the server address, model and API key fields."
       />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Load local models with at least 16k of context; that is the minimum. 32k or more is
         recommended for chats that take several steps, which often reach 20k to 26k on a 27B model.
         In LM Studio that's the Context Length in the model's load settings; load the model again
         after you change it.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="The basic settings">
@@ -177,11 +177,11 @@ const MODELFILE = "FROM hf.co/<repo>:<quant>\nRENDERER qwen3.5\nPARSER qwen3.5\n
       <p>
         Search the name in Ollama, LM Studio or Hugging Face and pick a build that fits your GPU.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         With two models, keep a writer selected for drafting and switch to a chat model when you
         organize, chat or build a whole pack.
-      </DocCallout>
-      <DocCallout variant="warn">
+      </Banner>
+      <Banner tone="warn" note>
         In Ollama, a Qwen 3.5 / 3.6 model pulled straight from Hugging Face
         (<code>ollama pull hf.co/…</code>) misses Ollama's tool-call reader, so tool calls can come
         back as plain text. Fix: make a file named <code>Modelfile</code> holding
@@ -189,7 +189,7 @@ const MODELFILE = "FROM hf.co/<repo>:<quant>\nRENDERER qwen3.5\nPARSER qwen3.5\n
         run <code>ollama create my-model -f Modelfile</code> and pick <code>my-model</code>. For Gemma 4 use <code>RENDERER gemma4-large</code> (or
         <code>gemma4-small</code> below 12B) and <code>PARSER gemma4</code>. Ollama's own
         <code>qwen3.5</code> and <code>gemma4</code> models already have it.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

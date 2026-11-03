@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
@@ -60,11 +60,11 @@ const ports = [
         <li><b>Save</b> and <b>Load</b> in the toolbar keep templates in your library (see
           <DocRef id="templates" />).</li>
       </ul>
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         The Assembler doesn't roll. <code>{a|b|c}</code> prints exactly as typed and
         <code>@{…}</code> prints nothing. Put choices in a wildcard or combine and print its
         variable.
-      </DocCallout>
+      </Banner>
       <DocDetails title="How empty variables are tidied">
         <p>
           When a variable comes out empty, the commas around it and a joining word left with nothing
