@@ -6,6 +6,7 @@
  * variable-binding row to override. Library-defining edits (matrix,
  * source/target wildcards, exceptions list shape) live in SPA.
  */
+import Input from "@/kit/Input.vue";
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import Button from "@/kit/Button.vue";
@@ -38,12 +39,12 @@ function onResetName(): void {
     <div class="id__row">
       <span class="id__key">Display name</span>
       <div class="id__input-row">
-        <input
+        <Input
+          size="sm"
           class="id__input"
           :class="{ 'id__input--mod': nameOverridden }"
           data-test="id-name"
-          type="text"
-          :value="nameValue"
+          :model-value="nameValue"
           :placeholder="module.meta?.library_name ?? 'module name'"
           aria-label="Display name"
           @input="onNameInput"

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import Input from "@/kit/Input.vue";
+import { inputEl } from "@/manager/utils/kit-field-el";
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, ref, watch } from "vue";
 import type { VarProducerLike } from "@/manager/components/RefChip.vue";
@@ -412,10 +414,10 @@ const skewedTowards = computed(() => {
 
     <!-- Advanced mode — boolean expression editor (§4.1 grammar). -->
     <div v-else-if="advanced" class="pool__advanced">
-      <input
-        ref="exprInput"
+      <Input
+        :ref="(c) => (exprInput = inputEl(c))"
         v-model="draft"
-        type="text"
+        size="sm"
         aria-label="Sub-category filter expression"
         class="pool__expr-input"
         :class="{ 'pool__expr-input--invalid': draftError }"
@@ -497,11 +499,11 @@ const skewedTowards = computed(() => {
         data-test="pool-pick-max"
         @update:model-value="(n) => n !== null && setPickMax(n)"
       />
-      <input
+      <Input
         v-if="pickMax > 1"
+        size="sm"
         class="pool__pick-sep"
-        type="text"
-        :value="pickSeparator"
+        :model-value="pickSeparator"
         placeholder="separator"
         data-test="pool-pick-sep"
         aria-label="Join separator"
