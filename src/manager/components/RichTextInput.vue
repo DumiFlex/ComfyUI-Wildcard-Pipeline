@@ -641,8 +641,15 @@ function varSpanAttrs(name: string): string {
  *  (weights, escapes) via `textAtomHtml`. Keeping the fast-path escape also
  *  leaves the span's `firstChild` a text node, so caret math stays correct. */
 function renderTextAtom(atom: TextAtom): string {
-  if (atom.blockColor) return atom.text ? escapeHtml(atom.text) : ZWSP;
-  return textAtomHtml(atom.text);
+  if (atom.blockColor) return atom.text ? escapeHtml(atom.text) + lineEndPad(atom.text) : ZWSP;
+  return textAtomHtml(atom.text) + lineEndPad(atom.text);
+}
+
+/** A ZWSP after a text that ends in a newline. `pre-wrap` draws no line box
+ *  after a trailing `\n`, so without it the new line is invisible and the
+ *  caret stays on the line above. Render-only, like every ZWSP pad. */
+function lineEndPad(text: string): string {
+  return text.endsWith("\n") ? ZWSP : "";
 }
 
 watch(() => props.modelValue, (next) => {
@@ -1278,9 +1285,9 @@ function syncTextSpansToAtoms(): void {
       // user-typed text already matches `atom.text` we can skip the
       // innerHTML rewrite and preserve the live caret. When they
       // diverge, force the colored DOM tree to match.
-      const wantText = atom.text || ZWSP;
+      const wantText = (atom.text || ZWSP) + lineEndPad(atom.text);
       if (span.textContent !== wantText) {
-        span.innerHTML = textAtomHtml(atom.text);
+        span.innerHTML = textAtomHtml(atom.text) + lineEndPad(atom.text);
       }
     }
   }
@@ -1342,7 +1349,19 @@ watch(hostEpoch, () => {
 function hostDomIsStale(): boolean {
   const host = hostEl.value;
   if (!host) return false;
-  return host.querySelectorAll("[data-atom-index]").length < atoms.value.length;
+  const marked = host.querySelectorAll("[data-atom-index]");
+  if (marked.length < atoms.value.length) return true;
+  // A SECOND element claiming an atom is just as unpatchable: the browser
+  // cloned it (splitting a span, e.g. on a native line break), Vue never
+  // rendered the copy, and `syncTextSpansToAtoms` would write the atom's
+  // whole text into both, doubling the value on every edit.
+  const seen = new Set<string>();
+  for (const el of marked) {
+    const idx = el.getAttribute("data-atom-index") ?? "";
+    if (seen.has(idx)) return true;
+    seen.add(idx);
+  }
+  return false;
 }
 
 /** True while every Fragment anchor Vue needs is still in the host.
@@ -2059,6 +2078,11 @@ function reconcileOrphanTextNodes(): void {
  *  text gets inserted. */
 function onHostBeforeInput(ev: InputEvent): void {
   if (props.disabled) return;
+  if (ev.inputType === "insertParagraph" || ev.inputType === "insertLineBreak") {
+    ev.preventDefault();
+    if (props.multiline) insertNewlineAtSelection();
+    return;
+  }
   if (ev.inputType !== "insertText" && ev.inputType !== "insertCompositionText") return;
   const host = hostEl.value;
   if (!host) return;
@@ -2310,6 +2334,33 @@ function onHostPaste(ev: ClipboardEvent): void {
   applyAtoms(parseForSurface(newText));
   emitValue(newText);
   void nextTick(() => restoreCursorAtChar(newCaret));
+}
+
+/**
+ * Enter (and Shift+Enter) in a multiline field, as a plain `\n` in the value.
+ *
+ * The browser's own line break is not text: it splits the caret's
+ * `wp-rt__text` span and wraps the second half in a new `<div>` (Chromium and
+ * Firefox both do), cloning the span's `data-atom-index` along with it. Vue
+ * never rendered that clone, so it survives every patch, and from then on two
+ * spans claim one atom. `syncTextSpansToAtoms` writes the atom's whole text
+ * into BOTH, `readHostAsText` reads both back, and the value doubles on every
+ * edit: Backspace seemed to do nothing, Space copied the template again and
+ * again. The line break itself never reached the value either (`$style` then
+ * Enter then `1girl` saved as `$style1girl`).
+ *
+ * So the break goes through the same path as a paste: splice `\n` into the
+ * raw text at the selection and re-apply. `white-space: pre-wrap` on the
+ * host draws it, and the trailing ZWSP pad keeps a caret line after a final
+ * newline.
+ */
+function insertNewlineAtSelection(): void {
+  const { start, end } = currentSelectionRangeRaw();
+  const { text: next, caret } = spliceRange(readHostAsText(), start, end, "\n");
+  acOpen.value = false;
+  applyAtoms(parseForSurface(next));
+  emitValue(next);
+  void nextTick(() => restoreCursorAtChar(caret));
 }
 
 function onHostBlur(): void {

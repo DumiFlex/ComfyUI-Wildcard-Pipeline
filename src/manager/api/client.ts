@@ -7,7 +7,7 @@ import type {
   BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
   CategoryCreateInput, CategoryRow,
   DatabaseConfig, DatabaseConfigUpdate,
-  BackupCreated, BackupEntry, BackupList, ServerSettings, ServerSettingsPatch,
+  BackupCreated, BackupEntry, BackupList, RestoreResult, ServerSettings, ServerSettingsPatch,
   AiConfig, AiConfigPatch, AiTestResult, AiThinkingInfo, AiIndexStatus, AiWildcardDraftRequest, AiWildcardDraftResult,
   AiWildcardEditRequest,
   AiWildcardEditResult,
@@ -485,12 +485,15 @@ export const api = {
     deleteBackup(name: string) {
       return request<void>(`/wp/api/database/backups/${encodeURIComponent(name)}`, { method: "DELETE" });
     },
-    stageRestore(name: string) {
-      return request<{ pending_restore: string }>("/wp/api/database/backups/restore", {
+    /** Restore a backup into the live library now (no restart). The library
+     *  as it was is saved first; `pre_restore` names that backup. */
+    restoreBackup(name: string) {
+      return request<RestoreResult>("/wp/api/database/backups/restore", {
         method: "POST",
         body: JSON.stringify({ name }),
       });
     },
+    /** Cancel a restore an older version staged for the next start. */
     cancelRestore() {
       return request<void>("/wp/api/database/backups/restore", { method: "DELETE" });
     },

@@ -30,6 +30,7 @@ import type { BundleInstance } from "../../widgets/_shared";
 import Checkbox from "@/kit/Checkbox.vue";
 import Button from "@/kit/Button.vue";
 import ModalShell from "@/kit/ModalShell.vue";
+import { vToggleRow } from "@/kit/toggle-row";
 
 interface ChildPreview {
   name: string;
@@ -493,7 +494,7 @@ function pickCopyName(base: string, taken: ReadonlySet<string>): string {
           class="wp-ptl-cascade"
           data-test="pbtl-cascade"
         >
-          <span class="wp-ptl-cascade__toggle">
+          <span v-toggle-row class="wp-ptl-cascade__toggle">
             <Checkbox
               v-model="cascadeEnabled"
               data-test="pbtl-cascade-toggle"

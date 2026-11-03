@@ -1,10 +1,11 @@
 """/wp/api/database/* — read-only info + maintenance dispatch + location config
-+ backups (list / create / delete / staged restore)."""
++ backups (list / create / delete / restore)."""
 from __future__ import annotations
 
 import asyncio
 import json as _json
 import os
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -285,7 +286,10 @@ async def delete_backup(request: web.Request) -> web.Response:
     return web.Response(status=204)
 
 
-async def stage_restore(request: web.Request) -> web.Response:
+async def restore_backup(request: web.Request) -> web.Response:
+    """Restore a backup into the live library now, no restart
+    (``db_backups.restore_now``). 409 when the backup can't be restored
+    here or the library stays locked; nothing is changed then."""
     try:
         body = await request.json()
     except _json.JSONDecodeError:
@@ -293,13 +297,23 @@ async def stage_restore(request: web.Request) -> web.Response:
     if not isinstance(body, dict) or not isinstance(body.get("name"), str):
         return json_error("body must be an object with a string 'name'", status=400)
     try:
-        path = db_backups.stage_restore(_live_db_path(), body["name"])
+        # Copies the whole library; keep it off the event loop.
+        out = await asyncio.to_thread(db_backups.restore_now, _live_db_path(), body["name"])
     except db_backups.BackupNotFound:
         return json_error("backup not found", status=404)
-    return json_ok({"pending_restore": path.name})
+    except db_backups.RestoreRefused as exc:
+        return json_error(str(exc), status=409)
+    except sqlite3.OperationalError as exc:
+        if "locked" in str(exc) or "busy" in str(exc):
+            return json_error(
+                "The library is busy (a run or another change is writing to it). "
+                "Try again in a moment.", status=409)
+        raise
+    return json_ok(out)
 
 
 async def cancel_restore(request: web.Request) -> web.Response:
+    """Cancel a restore an older build staged for the next start."""
     db_backups.cancel_restore()
     return json_ok({"pending_restore": None})
 
@@ -315,7 +329,7 @@ def register(router: web.UrlDispatcher) -> None:
     # The static `/restore` routes go before `/{name}` so DELETE on the
     # restore path cancels the restore rather than looking for a backup
     # called "restore" (which the name pattern would reject anyway).
-    router.add_post("/wp/api/database/backups/restore", stage_restore)
+    router.add_post("/wp/api/database/backups/restore", restore_backup)
     router.add_delete("/wp/api/database/backups/restore", cancel_restore)
     router.add_delete("/wp/api/database/backups/{name}", delete_backup)
     router.add_put("/wp/api/database/backups/{name}/pin", pin_backup)

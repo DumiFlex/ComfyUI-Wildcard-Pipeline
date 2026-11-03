@@ -50,6 +50,7 @@ import {
   SETTING_ID_AC_TAGS,
 } from "../../../../extension/settings-catalog";
 import { useCanvasSettings } from "../../../composables/useCanvasSettings";
+import { vToggleRow } from "@/kit/toggle-row";
 
 const ui = useUiStore();
 const toast = useToast();
@@ -267,7 +268,7 @@ onMounted(() => {
         </p>
       </template>
       <span class="wp-set-pill" :data-tone="tagPill.tone" data-test="tagac-status">{{ tagPill.text }}</span>
-      <span class="wp-set-ac__pair">
+      <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Manager</span>
         <WpSwitch
           size="md"
@@ -277,7 +278,7 @@ onMounted(() => {
           @update:model-value="ui.setTagAutocomplete($event)"
         />
       </span>
-      <span class="wp-set-ac__pair">
+      <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Canvas</span>
         <WpSwitch
           size="md"
@@ -290,7 +291,7 @@ onMounted(() => {
     </SettingRow>
     <SettingRow label="LoRAs" hint="Installed LoRA names, inserted as <lora:name:1.0>." setting-key="ac-lora">
       <span class="wp-set-pill" :data-tone="modelPill('lora').tone" data-test="lora-count">{{ modelPill("lora").text }}</span>
-      <span class="wp-set-ac__pair">
+      <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Manager</span>
         <WpSwitch
           size="md"
@@ -300,7 +301,7 @@ onMounted(() => {
           @update:model-value="ui.setLoraAutocomplete($event)"
         />
       </span>
-      <span class="wp-set-ac__pair">
+      <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Canvas</span>
         <WpSwitch
           size="md"
@@ -313,7 +314,7 @@ onMounted(() => {
     </SettingRow>
     <SettingRow label="Embeddings" hint="Installed embedding names, inserted as embedding:name." setting-key="ac-embedding">
       <span class="wp-set-pill" :data-tone="modelPill('embedding').tone" data-test="embedding-count">{{ modelPill("embedding").text }}</span>
-      <span class="wp-set-ac__pair">
+      <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Manager</span>
         <WpSwitch
           size="md"
@@ -323,7 +324,7 @@ onMounted(() => {
           @update:model-value="ui.setEmbeddingAutocomplete($event)"
         />
       </span>
-      <span class="wp-set-ac__pair">
+      <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Canvas</span>
         <WpSwitch
           size="md"
@@ -350,7 +351,7 @@ onMounted(() => {
       hint="Follow each completion with a comma and a space. Never applied inside a <lora:…> or embedding:… reference."
       setting-key="ac-separator"
     >
-      <span class="wp-set-ac__pair">
+      <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Manager</span>
         <WpSwitch
           size="md"
@@ -360,7 +361,7 @@ onMounted(() => {
           @update:model-value="ui.setAutocompleteSeparator($event)"
         />
       </span>
-      <span class="wp-set-ac__pair">
+      <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Canvas</span>
         <WpSwitch
           size="md"
@@ -376,7 +377,7 @@ onMounted(() => {
       hint="blue_hair goes in as blue hair. Short emoticon tags like ^_^ keep their underscores."
       setting-key="ac-spaces"
     >
-      <span class="wp-set-ac__pair">
+      <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Manager</span>
         <WpSwitch
           size="md"
@@ -386,7 +387,7 @@ onMounted(() => {
           @update:model-value="ui.setAutocompleteSpaces($event)"
         />
       </span>
-      <span class="wp-set-ac__pair">
+      <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Canvas</span>
         <WpSwitch
           size="md"
@@ -402,7 +403,7 @@ onMounted(() => {
       hint="fate_(series) goes in as fate_\(series\), so the brackets are not read as a weight."
       setting-key="ac-escape"
     >
-      <span class="wp-set-ac__pair">
+      <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Manager</span>
         <WpSwitch
           size="md"
@@ -412,7 +413,7 @@ onMounted(() => {
           @update:model-value="ui.setAutocompleteEscapeBrackets($event)"
         />
       </span>
-      <span class="wp-set-ac__pair">
+      <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Canvas</span>
         <WpSwitch
           size="md"
@@ -424,7 +425,7 @@ onMounted(() => {
       </span>
     </SettingRow>
     <SettingRow label="Max suggestions" hint="How many tag suggestions the popup lists at most." setting-key="ac-max">
-      <span class="wp-set-ac__pair">
+      <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Manager</span>
         <Select
           :model-value="String(limits.maxSuggestions)"
@@ -435,7 +436,7 @@ onMounted(() => {
           @update:model-value="(v) => setLimit('maxSuggestions', v)"
         />
       </span>
-      <span class="wp-set-ac__pair">
+      <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Canvas</span>
         <Select
           :model-value="canvasPick(SETTING_ID_AC_MAX_SUGGESTIONS)"
@@ -452,7 +453,7 @@ onMounted(() => {
       hint="Letters typed before tag suggestions appear. Lower shows them sooner, with a popup on almost every keystroke."
       setting-key="ac-min"
     >
-      <span class="wp-set-ac__pair">
+      <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Manager</span>
         <Select
           :model-value="String(limits.minChars)"
@@ -463,7 +464,7 @@ onMounted(() => {
           @update:model-value="(v) => setLimit('minChars', v)"
         />
       </span>
-      <span class="wp-set-ac__pair">
+      <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Canvas</span>
         <Select
           :model-value="canvasPick(SETTING_ID_AC_MIN_CHARS)"

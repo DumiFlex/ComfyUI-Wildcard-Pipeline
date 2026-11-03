@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import Button from "@/kit/Button.vue";
+import { vToggleRow } from "@/kit/toggle-row";
 
 const props = defineProps<{
   library: boolean;
@@ -40,7 +41,7 @@ function onClickReset(): void {
       >Reset</Button>
     </div>
     <div class="wp-instance-section-body">
-      <div class="wp-instance-toggle">
+      <div v-toggle-row class="wp-instance-toggle">
         <Checkbox
           data-test="if-toggle"
           :model-value="effective"
