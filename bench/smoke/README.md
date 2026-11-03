@@ -19,10 +19,11 @@ On a real ComfyUI with a model set up under **Settings › AI assistant**, turn 
 | Setting | What it does |
 |---|---|
 | `fake` | The manager is `bench/dev/serve.py`. Off, the scripted tests skip. |
-| `reset` | Imports `../bench-library.json` into an emptied library (after a backup) before the first test. Fake server only. |
+| `reset` | Loads the bench library (`../bench-library.json`) before the first test. Fake server only. |
+| `putBack` | On by default. Puts the library and AI settings back when the run ends, like the bench ([Putting your library back](../README.md#putting-your-library-back)). |
 | `format` | The chat's tool format: Auto, Native tool calls or JSON steps. Run the chat tests once with each. |
 
-The site key is the bench's, so a smoke run and a bench run never change the library at the same time.
+The site key is the bench's, so a smoke run and a bench run never change the library at the same time. Attempts keep a video only when they fail or break, and the pack has the bench's tasks (**Put my library back**, **Library report** and the rest). The **Dashboard** tab shows pass rate, a test-by-run grid and pass rate per section for each tool format, failures and flaky tests.
 
 ## The tests
 

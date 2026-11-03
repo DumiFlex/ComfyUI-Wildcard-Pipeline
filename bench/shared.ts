@@ -103,10 +103,12 @@ export const failedRequests: Collector = {
 };
 
 /** Empties the library (after a backup) and imports `fixture` (a library export) through the Import page. */
-export async function resetLibrary(h: Helpers, fixture: string): Promise<void> {
-  const backup = await h.api("/wp/api/database/backups", { method: "POST", body: {} });
-  if (backup.status >= 300) throw new StepError(`The backup failed (${backup.status}): ${backup.text.slice(0, 200)}`);
-  h.log(`Backed up the library first: ${backup.json?.name ?? "done"}.`);
+export async function resetLibrary(h: Helpers, fixture: string, { backupFirst = true }: { backupFirst?: boolean } = {}): Promise<void> {
+  if (backupFirst) {
+    const backup = await h.api("/wp/api/database/backups", { method: "POST", body: { note: "Watchwright: before the bench library" } });
+    if (backup.status >= 300) throw new StepError(`The backup failed (${backup.status}): ${backup.text.slice(0, 200)}`);
+    h.log(`Backed up the library first: ${backup.json?.name ?? "done"}.`);
+  }
   const lib = await h.library();
   for (const x of lib.bundles) await h.api(`/wp/api/bundles/${x.id}`, { method: "DELETE" });
   for (const x of lib.templates) await h.api(`/wp/api/templates/${x.id}`, { method: "DELETE" });
