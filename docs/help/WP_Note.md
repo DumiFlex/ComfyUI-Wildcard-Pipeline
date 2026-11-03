@@ -9,7 +9,8 @@ A note that explains a workflow. It looks like a panel, not a node: no title bar
 - **Move** it by dragging like any node (unpin it first).
 - **Resize** a Card or Sticky note from its corner: the width is yours, the height follows the text. A Label sizes itself to its title.
 - **Hover** a Label to see its text and links in a card. Move onto the card to click a link or **Edit**. Marks on the pill show that it has text (lines) or a link (chain).
-- **Links** in a note open in a new tab: a docs link opens that page (and section) of the built-in docs.
+- **Links** in a note open in a new tab: a docs link opens that page (and section) of the built-in docs, a community link opens that pack in the manager's Community tab.
+- **Add to library**: a `wp:library` button puts the workflow's bundles and modules into your library after a review (below).
 
 <!-- fields:start -->
 ## Editing
@@ -26,10 +27,22 @@ A note that explains a workflow. It looks like a panel, not a node: no title bar
 - **Bold, italic, strikethrough** (Ctrl+B / Ctrl+I): Wraps the selection in **, * or ~~.
 - **Code**: Wraps it in backticks, for a $variable.
 - **Lists and quote**: Puts - , 1. or > before each selected line (press again to take it off).
-- **Link** (Ctrl+K): A Docs page (type to find any page of these docs, then pick a section or the whole page) or a Web address, drawn as a Button with an icon or as a Text link, in its own colour or the note's. The selected text becomes the link's text. It goes where the caret is when you press Insert link, so you can click in the text after opening the panel.
+- **Link** (Ctrl+K): A Docs page (type to find any page of these docs, then pick a section or the whole page), a Web address, a Library button (below) or a Community pack (owner/pack, or paste the pack's address), drawn as a Button with an icon or as a Text link, in its own colour or the note's. The selected text becomes the link's text. It goes where the caret is when you press Insert link, so you can click in the text after opening the panel.
 - **Icon**: Any PrimeIcons icon, searchable, in a colour or the text's own, inserted where the caret is.
 - **Preview (eye)**: Shows the note as it will read.
 <!-- fields:end -->
+
+Keys you type in the editor stay in the editor: Delete, Ctrl+Z and the other ComfyUI shortcuts don't reach the canvas.
+
+## Add to library
+
+A `wp:library` button lets someone who opened a shared workflow keep its lists. Its tooltip says what it would add; with everything there already it stays off. Pressing it opens a review listing every item:
+
+- New items go in under their own id.
+- An item your library holds with other content: **Use mine** (default, nothing changes), **Replace**, or **Keep both** (added as a copy; the workflow points at the copy).
+- An id another kind of item holds: **Keep both** or **Leave out**.
+
+**Add** installs it all in one step with the Import tab's checks (one refused item and nothing goes in). EXAMPLE and MISSING marks clear, and the message has **Undo**. Nothing is added before you press Add, and the button only reads the workflow's own rows.
 
 ## Also a bookmark
 
@@ -44,6 +57,9 @@ Turn on **Also a bookmark** at the bottom of the editor and the note joins the *
 | `[The grid](docs:wp-label-grid#s-the-grid)` | A link to a section of it |
 | `[Start here](docs:quick-start){button pi-play}` | The link drawn as a button with an icon (`{button}` for none) |
 | `{button pi-play #22c55e}` / `[Read more](https://example.com){#22c55e}` | A button or a text link in its own colour (without one it takes the note's) |
+| `[Add the pack](wp:library){button pi-download}` | A button that adds this workflow's bundles and modules to your library |
+| `[Add these](wp:library#node-12){button}` | The same for one WP Context (its node id) |
+| `[Get the pack](wp:community/owner/pack)` | That published pack in the Community tab |
 | `:pi-heart:` / `:pi-heart:{#ef4444}` | An icon, optionally coloured |
 
 Any other kind of link shows as plain text.

@@ -195,7 +195,7 @@ export const NODE_FIELDS = {
       { term: "Bold, italic, strikethrough", kbd: "Ctrl+B / Ctrl+I", desc: "Wraps the selection in **, * or ~~." },
       { term: "Code", desc: "Wraps it in backticks, for a $variable." },
       { term: "Lists and quote", desc: "Puts - , 1. or > before each selected line (press again to take it off)." },
-      { term: "Link", kbd: "Ctrl+K", desc: "A Docs page (type to find any page of these docs, then pick a section or the whole page) or a Web address, drawn as a Button with an icon or as a Text link, in its own colour or the note's. The selected text becomes the link's text. It goes where the caret is when you press Insert link, so you can click in the text after opening the panel." },
+      { term: "Link", kbd: "Ctrl+K", desc: "A Docs page (type to find any page of these docs, then pick a section or the whole page), a Web address, a Library button (below) or a Community pack (owner/pack, or paste the pack's address), drawn as a Button with an icon or as a Text link, in its own colour or the note's. The selected text becomes the link's text. It goes where the caret is when you press Insert link, so you can click in the text after opening the panel." },
       { term: "Icon", desc: "Any PrimeIcons icon, searchable, in a colour or the text's own, inserted where the caret is." },
       { term: "Preview (eye)", desc: "Shows the note as it will read." },
     ],

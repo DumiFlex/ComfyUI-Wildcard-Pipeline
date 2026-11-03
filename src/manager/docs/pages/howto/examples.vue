@@ -49,7 +49,12 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <strong>MISSING</strong> badge: nothing is wrong, the bundle just lives only in this workflow.
       </p>
       <p>
-        To keep one, right-click its header and choose <b>Push to library…</b> with <b>Restore
+        To keep them all, press <b>Add this workflow's lists to my library</b> on the
+        <b>Start here</b> note: a review lists every bundle and module, and one press of Add saves them
+        (Undo on the message takes them back out). See <DocRef id="wp-note" />.
+      </p>
+      <p>
+        To keep just one, right-click its header and choose <b>Push to library…</b> with <b>Restore
         missing references</b> ticked. It saves the bundle, its sub-bundles and every row in one
         step, and the chip goes away. See <DocRef id="bundles" />.
       </p>

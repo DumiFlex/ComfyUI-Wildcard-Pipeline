@@ -1841,6 +1841,29 @@ function onAcOpenChange(open: boolean): void {
   if (!open && !pressKeepsList) acOpen.value = false;
 }
 
+/**
+ * Re-probe when the caret moves while the list is open.
+ *
+ * The list was only re-probed on input, so moving the caret without typing
+ * (Home, Ctrl+Home, Left/Right, a click elsewhere in the field) left it open
+ * for the token the caret had just left. Enter then committed that suggestion
+ * wherever the caret now was: `$style` typed at the end, Ctrl+Home, Enter
+ * inserted `$style` at the start of the field.
+ *
+ * `selectionchange` fires for every way the caret can move, keyboard or
+ * pointer, and only after it has settled. A selection outside the field is
+ * left alone: the list's own outside-press and blur paths own that case (and
+ * the ref picker takes focus while the list is still in use).
+ */
+function onSelectionChange(): void {
+  if (!acOpen.value) return;
+  const host = hostEl.value;
+  const sel = window.getSelection();
+  if (!host || !sel || sel.rangeCount === 0) return;
+  if (!host.contains(sel.getRangeAt(0).startContainer)) return;
+  refreshAutocompleteFromHost();
+}
+
 // Listening from the moment the list opens, so these run before the Popover's
 // own outside-press listener (added once it has rows to show).
 watch(acOpen, (open) => {
@@ -1848,15 +1871,18 @@ watch(acOpen, (open) => {
     void nextTick(positionPopup);
     window.addEventListener("pointerdown", onDocumentPressStart, true);
     window.addEventListener("mousedown", onDocumentPressStart, true);
+    document.addEventListener("selectionchange", onSelectionChange);
   } else {
     window.removeEventListener("pointerdown", onDocumentPressStart, true);
     window.removeEventListener("mousedown", onDocumentPressStart, true);
+    document.removeEventListener("selectionchange", onSelectionChange);
   }
 }, { flush: "sync" });
 
 onBeforeUnmount(() => {
   window.removeEventListener("pointerdown", onDocumentPressStart, true);
   window.removeEventListener("mousedown", onDocumentPressStart, true);
+  document.removeEventListener("selectionchange", onSelectionChange);
   window.removeEventListener("keydown", onPickerEscape, true);
 });
 

@@ -1,13 +1,17 @@
-import { defineComponent, h, type VNode } from "vue";
+import { defineComponent, h, inject, type VNode } from "vue";
 import { parseMarkdown, type Align, type Block, type Inline, type ListItem } from "../../manager/utils/chat-markdown";
 import { parseTarget, readLinkAttrs, splitIcons, targetUrl } from "./note-format";
+import { NOTE_ACTIONS, type NoteActions } from "./note-actions";
 
 /**
  * The note body: Markdown through the chat parser, drawn with plain
  * elements (no v-html), plus the note syntax in note-format.ts: web and
  * docs links (opening in a new tab), `{button}` links and `:pi-name:` icons.
- * A link to anything but http(s) or docs: shows its text only.
+ * `wp:community/…` opens a pack in the manager's Community tab; `wp:library`
+ * is a button that runs the note's "add to library" action. A link to
+ * anything else shows its text only.
  */
+let actions: NoteActions | null = null;
 function origin(): string {
   return typeof window === "undefined" ? "" : window.location.origin;
 }
@@ -18,8 +22,33 @@ function text(v: string): (VNode | string)[] {
     : h("i", { class: ["pi", `pi-${p.icon}`, "wp-note-md__icon"], style: p.color ? { color: p.color } : undefined, "aria-hidden": "true" })));
 }
 
+/** A `wp:library` link: always a button (a text link that runs an action
+ *  would read as navigation). Off when there is nothing to add. */
+function libraryButton(n: Extract<Inline, { t: "link" }>, node: string, icon: string, color: string): VNode {
+  const own = actions;
+  const state = own?.library(node) ?? { ready: false, hint: "Open the note to use this button" };
+  const style = color ? { "--wp-note-link": color } : undefined;
+  return h("button", {
+    type: "button",
+    class: ["wp-note-md__btn", "wp-note-md__btn--action"],
+    // aria-disabled rather than disabled: the tooltip still says why.
+    title: state.hint,
+    "aria-disabled": state.ready ? undefined : "true",
+    style,
+    "data-test": "note-library-button",
+    onClick: (e: MouseEvent) => {
+      e.stopPropagation();
+      if (state.ready) own?.runLibrary(node);
+    },
+  }, [
+    h("i", { class: ["pi", `pi-${icon || "download"}`], "aria-hidden": "true" }),
+    h("span", inline(n.c)),
+  ]);
+}
+
 function link(n: Extract<Inline, { t: "link" }>, button: boolean, icon: string, color: string): VNode {
   const target = parseTarget(n.href);
+  if (target.kind === "library") return libraryButton(n, target.node, icon, color);
   const url = targetUrl(target, origin());
   if (!url) return h("span", { class: "wp-note-md__plain" }, inline(n.c));
   // Its own colour, or the note's tone (the CSS falls back to it).
@@ -108,6 +137,15 @@ export default defineComponent({
   name: "NoteMarkdown",
   props: { text: { type: String, required: true } },
   setup(props) {
-    return () => h("div", { class: "wp-note-md" }, parseMarkdown(props.text).map(block));
+    const injected = inject(NOTE_ACTIONS, null);
+    return () => {
+      // The draw functions are plain recursion; they read the actions here.
+      actions = injected;
+      try {
+        return h("div", { class: "wp-note-md" }, parseMarkdown(props.text).map(block));
+      } finally {
+        actions = null;
+      }
+    };
   },
 });
