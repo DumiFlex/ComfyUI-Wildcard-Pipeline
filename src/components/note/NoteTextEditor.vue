@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, ref } from "vue";
+import { computed, inject, nextTick, ref, watch } from "vue";
 import Combobox from "@/kit/Combobox.vue";
 import { textareaEl } from "@/manager/utils/kit-field-el";
 import Textarea from "@/kit/Textarea.vue";
@@ -16,6 +16,7 @@ import {
   communityTarget, docsTarget, iconMarkdown, insert, libraryTarget, linkMarkdown, prefixLines, wrap, type Edit,
 } from "./note-format";
 import { NOTE_CONTEXTS } from "./note-actions";
+import { TextHistory, historyKey, kindOf, type ChangeKind, type Snapshot } from "./note-history";
 
 /**
  * The note's text: Markdown in a textarea with a formatting bar over it.
@@ -37,20 +38,79 @@ function remember(): void {
   if (el) sel = { start: el.selectionStart, end: el.selectionEnd };
 }
 
-function apply(e: Edit): void {
-  // The buttons write into the textarea, so they bring it back from Preview.
+// ── undo / redo ────────────────────────────────────────────────────────
+// Our own stack: the toolbar sets the value from script, which the
+// browser's undo never sees (note-hist.ts).
+const hist = new TextHistory();
+// Bumped on every history change so the buttons re-read it.
+const steps = ref(0);
+const canUndo = computed(() => steps.value >= 0 && hist.canUndo);
+const canRedo = computed(() => steps.value >= 0 && hist.canRedo);
+// The value we last sent up. A different one coming down was changed
+// somewhere else (a loaded workflow), so the steps no longer fit it.
+let sent = props.modelValue;
+watch(() => props.modelValue, (v) => {
+  if (v === sent) return;
+  sent = v;
+  hist.clear();
+  steps.value++;
+});
+function send(value: string): void {
+  sent = value;
+  emit("update:modelValue", value);
+}
+/** The text now: the value last sent and the textarea's selection. */
+function current(): Snapshot {
+  const el = area.value;
+  return { value: sent, start: el?.selectionStart ?? sent.length, end: el?.selectionEnd ?? sent.length };
+}
+/** Puts the text back in Write with this selection. */
+function select(start: number, end: number): void {
   mode.value = "write";
-  emit("update:modelValue", e.value);
   void nextTick(() => {
     const el = area.value;
     if (!el) return;
     el.focus();
-    el.setSelectionRange(e.start, e.end);
+    el.setSelectionRange(start, end);
+    remember();
   });
 }
-function current(): { value: string; start: number; end: number } {
-  const el = area.value;
-  return { value: props.modelValue, start: el?.selectionStart ?? props.modelValue.length, end: el?.selectionEnd ?? props.modelValue.length };
+function step(dir: "undo" | "redo"): void {
+  const s = dir === "undo" ? hist.undo(current()) : hist.redo(current());
+  steps.value++;
+  if (!s) return;
+  send(s.value);
+  select(s.start, s.end);
+}
+function undo(): void { step("undo"); }
+function redo(): void { step("redo"); }
+// Typing: beforeinput sees the text and selection just before the change.
+let pending: { kind: ChangeKind; before: Snapshot } | null = null;
+function onBeforeInput(ev: InputEvent): void {
+  if (ev.inputType === "historyUndo" || ev.inputType === "historyRedo") {
+    // The right-click menu's Undo / Redo.
+    ev.preventDefault();
+    step(ev.inputType === "historyUndo" ? "undo" : "redo");
+    return;
+  }
+  pending = { kind: kindOf(ev.inputType), before: current() };
+}
+function onInput(ev: Event): void {
+  const value = (ev.target as HTMLTextAreaElement).value;
+  hist.record(pending?.before ?? { value: sent, start: sel.start, end: sel.end }, pending?.kind ?? "edit");
+  pending = null;
+  steps.value++;
+  send(value);
+  remember();
+}
+
+/** A toolbar edit: one undo step of its own. */
+function apply(e: Edit, before: Snapshot = current()): void {
+  hist.record(before, "edit");
+  steps.value++;
+  // The buttons write into the textarea, so they bring it back from Preview.
+  send(e.value);
+  select(e.start, e.end);
 }
 function onWrap(mark: string, placeholder: string): void {
   const c = current();
@@ -70,9 +130,18 @@ function openPanel(p: "link" | "icon"): void {
 }
 function insertText(text: string): void {
   panel.value = "";
-  apply(insert(props.modelValue, sel.start, sel.end, text));
+  apply(insert(sent, sel.start, sel.end, text), { value: sent, start: sel.start, end: sel.end });
 }
+// Keys that move the caret end a typing run.
+const MOVES = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 function onKey(ev: KeyboardEvent): void {
+  if (MOVES.has(ev.key)) hist.breakRun();
+  const h = historyKey(ev);
+  if (h) {
+    ev.preventDefault();
+    if (h === "undo") undo(); else redo();
+    return;
+  }
   if (!(ev.ctrlKey || ev.metaKey) || ev.altKey) return;
   const k = ev.key.toLowerCase();
   if (k === "b") { ev.preventDefault(); onWrap("**", "bold"); }
@@ -181,6 +250,9 @@ function insertIcon(name: string): void {
 <template>
   <div class="wp-note-ed" data-test="note-text-editor">
     <Toolbar class="wp-note-ed__bar" label="Formatting" size="sm">
+      <Button variant="ghost" size="sm" class="wp-note-ed__fmt" icon="pi-undo" hint="Undo (Ctrl+Z)" aria-label="Undo" :disabled="!canUndo" data-test="note-undo" @click="undo" />
+      <Button variant="ghost" size="sm" class="wp-note-ed__fmt wp-note-ed__redo" icon="pi-undo" hint="Redo (Ctrl+Y)" aria-label="Redo" :disabled="!canRedo" data-test="note-redo" @click="redo" />
+      <span class="wp-note-ed__sep" aria-hidden="true"></span>
       <Button variant="ghost" size="sm" class="wp-note-ed__fmt" hint="Bold (Ctrl+B)" aria-label="Bold" data-test="note-fmt-bold" @click="onWrap('**', 'bold')"><b>B</b></Button>
       <Button variant="ghost" size="sm" class="wp-note-ed__fmt" hint="Italic (Ctrl+I)" aria-label="Italic" data-test="note-fmt-italic" @click="onWrap('*', 'italic')"><i class="wp-note-ed__glyph-i">I</i></Button>
       <Button variant="ghost" size="sm" class="wp-note-ed__fmt" hint="Strikethrough" aria-label="Strikethrough" data-test="note-fmt-strike" @click="onWrap('~~', 'text')"><s>S</s></Button>
@@ -371,13 +443,13 @@ function insertIcon(name: string): void {
       :placeholder="hint"
       aria-label="Note text"
       data-test="note-text"
-      @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value); remember()"
+      @beforeinput="onBeforeInput"
+      @input="onInput"
       @keydown="onKey"
       @keyup="remember"
-      @mouseup="remember"
+      @mouseup="remember(); hist.breakRun()"
       @select="remember"
       @blur="remember"
-
     />
     <div v-if="mode === 'preview'" class="wp-note-ed__preview" data-test="note-preview">
       <NoteMarkdown v-if="modelValue.trim()" :text="modelValue" />
@@ -411,6 +483,8 @@ function insertIcon(name: string): void {
 .wp-note-ed__glyph-i { font-family: Georgia, serif; font-style: italic; }
 .wp-note-ed__sep { flex: none; width: 1px; height: 16px; margin: 0 2px; background: var(--wp-border-strong, var(--wp-border)); }
 .wp-note-ed__mode { margin-left: auto; }
+/* PrimeIcons has no redo arrow: the undo arrow, mirrored. */
+.wp-note-ed__redo :deep(.pi) { transform: scaleX(-1); }
 .wp-note-ed__panel {
   display: flex;
   flex-direction: column;
