@@ -5,8 +5,11 @@
 import path from "node:path";
 import { pack, StepError } from "watchwright";
 import { benchHelpers } from "../bench.js";
-import { aiDebug, consoleErrors, failedRequests, resetLibrary } from "../shared.js";
+import { aiDebug, consoleErrors, failedRequests } from "../shared.js";
+import { lifecycleAfterTask, lifecycleSetup, lifecycleTasks, lifecycleTeardown } from "../lifecycle.js";
 import { clearScript, fakeQueue, fakeUp } from "./smoke.js";
+
+const fixture = (packDir: string) => path.join(packDir, "..", "bench-library.json");
 
 export default pack({
   name: "Wildcard Pipeline AI smoke",
@@ -27,8 +30,9 @@ export default pack({
     reset: {
       type: "boolean",
       default: true,
-      description: "Import bench-library.json into an emptied library before the first test (after a backup). Only on the fake server: on a real ComfyUI it refuses, so turn it off there.",
+      description: "Load the bench library (bench-library.json) before the first test. Only on the fake server: on a real ComfyUI it refuses, so turn it off there.",
     },
+    putBack: { type: "boolean", default: true, description: "Put the library and AI settings back when the run ends." },
     format: {
       choices: ["auto", "native", "json"],
       default: "auto",
@@ -52,7 +56,15 @@ export default pack({
     "guard-missed": "finding",
     "script-left-over": "info",
   },
-  run: { chapters: true, pauseLimitMinutes: 5, testTimeout: 10 * 60_000 },
+  run: { chapters: true, pauseLimitMinutes: 5, testTimeout: 10 * 60_000, video: "problems" },
+  dashboard: {
+    filters: ["format", "fake"],
+    groups: [
+      { title: "Overview", tiles: [{ latest: true }, { outcome: true, width: 2 }, { stat: "passrate", title: "Pass rate" }, { duration: true, width: 2 }, { metric: "AI s", of: "median", width: 2 }] },
+      { title: "By tool format", tiles: [{ matrix: true, split: "format", width: 4 }, { breakdown: "section", measure: "passrate", split: "format", width: 4 }] },
+      { title: "To look at", tiles: [{ failures: true, width: 2 }, { flaky: true, width: 2 }, { flags: true, kind: "finding", title: "Findings", width: 2 }, { links: [{ compare: "last", label: "Compare with the last run" }], width: 2 }] },
+    ],
+  },
   helpers: benchHelpers,
   idle: (page) =>
     page.evaluate(() => {
@@ -61,7 +73,8 @@ export default pack({
     }),
   collectors: [aiDebug, consoleErrors, failedRequests],
 
-  async setup({ h, context, params, packDir, info }) {
+  async setup(ctx) {
+    const { h, context, params, info } = ctx;
     await context.addInitScript(() => {
       try {
         localStorage.setItem("wp-ai-debug", "1");
@@ -77,13 +90,15 @@ export default pack({
     const fake = await fakeUp(h);
     info("AI model", fake ? "fake (bench/dev/serve.py)" : `${String(cfg.provider ?? "?")} · ${String(cfg.model ?? "?")}`);
     if (params.fake === true && !fake) throw new StepError("fake is on, but the manager isn't bench/dev/serve.py (no /fake/script). Start it, or turn fake off for a real model.");
-    if (params.reset === true) {
-      if (!fake) throw new StepError("reset would empty a real library. Turn reset off on a real ComfyUI.");
-      await resetLibrary(h, path.join(packDir, "..", "bench-library.json"));
-    }
+    // The library and AI settings saved (teardown puts them back), then the bench library.
+    await lifecycleSetup(ctx, { fixture, canReset: fakeUp });
     await h.setAiConfig({ allow_delete: false, auto_apply: false, tool_format: params.format });
     info("Tool format", String(params.format));
   },
+
+  teardown: lifecycleTeardown,
+  afterTask: lifecycleAfterTask,
+  tasks: lifecycleTasks(fixture),
 
   async beforeAttempt({ h, params }) {
     if (params.fake === true) await clearScript(h);

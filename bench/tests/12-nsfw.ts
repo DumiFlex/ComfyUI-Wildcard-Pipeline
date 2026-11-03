@@ -34,18 +34,7 @@ bench(
 bench("Z20", edit("wildcards", "Lingerie", "wc-ai-draft", { mode: "add", images: nsfwImage }));
 bench("Z21", chat({ images: nsfwImage }));
 bench("Z22", pack({ nsfw: true, images: nsfwImage }));
-bench(
-  "Z16",
-  async (t) => {
-    await t.h.setAiConfig({ allow_delete: true });
-    try {
-      await chat({ after: "delete" })(t);
-    } finally {
-      await t.h.setAiConfig({ allow_delete: false });
-    }
-  },
-  { tags: ["changes-library"] },
-);
+bench("Z16", chat({ after: "delete" }), { tags: ["changes-library"] });
 bench("Z17", pack({ nsfw: true }));
 bench("Z18", pack({ nsfw: true }));
 bench("Z19", pack({ nsfw: true, sample: true }));
