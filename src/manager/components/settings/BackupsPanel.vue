@@ -3,11 +3,13 @@
  * Settings › Library & data › Backups.
  *
  * Automatic backups (before each migration and once a day, server side, see
- * `engine/db/backups.py`) plus a manual "Back up now". Restore is staged, not
- * immediate: the database is open while ComfyUI runs, so the swap happens on
- * the next start, before anything opens it — the same path a location move
- * takes. The current database is backed up first, so a restore can itself be
- * undone.
+ * `engine/db/backups.py`) plus a manual "Back up now". Restore runs at once,
+ * no restart: the server copies the backup into the open library through
+ * SQLite's backup API (`restore_now`), after saving the library as it was as
+ * a "Before restore" backup, so the toast's Undo restores that one. Then the
+ * library pages refetch (`markLibraryChanged`); the canvas picks the change
+ * up through its drift poll. A restore an older version staged for the next
+ * start still shows its banner and can be cancelled.
  *
  * "Backups to keep" keeps the newest unpinned backups of every kind, manual
  * included; a pinned one (bookmark button) is never pruned and doesn't count.
@@ -29,10 +31,13 @@ import { api } from "../../api/client";
 import type { BackupEntry, BackupList, BackupReason } from "../../api/types";
 import { useServerSettings } from "../../composables/useServerSettings";
 import { useSystemStore } from "../../stores/systemStore";
+import { useDatabaseStore } from "../../stores/databaseStore";
 import { useToast } from "@/kit/useToast";
+import { markLibraryChanged } from "../../composables/useLibraryChanged";
 
 const server = useServerSettings();
 const system = useSystemStore();
+const database = useDatabaseStore();
 const toast = useToast();
 
 const list = ref<BackupList | null>(null);
@@ -42,6 +47,8 @@ const creating = ref(false);
 const note = ref("");
 const NOTE_MAX = 80;
 const busyName = ref<string | null>(null);
+/** The backup being restored; every Restore button waits for it. */
+const restoring = ref<string | null>(null);
 const pinning = ref<string | null>(null);
 const confirmRestore = ref<BackupEntry | null>(null);
 const confirmDelete = ref<BackupEntry | null>(null);
@@ -124,25 +131,39 @@ async function doRestore(): Promise<void> {
   const target = confirmRestore.value;
   confirmRestore.value = null;
   if (!target) return;
-  busyName.value = target.name;
+  await restore(target.name, `Your library is back to ${formatWhen(target.created_at)}.`);
+}
+
+/** Restore `name` now. The toast's Undo restores the backup the server
+ *  made of the library just before, so an undo can itself be undone. */
+async function restore(name: string, detail: string): Promise<void> {
+  if (restoring.value) return;
+  restoring.value = name;
   try {
-    await api.database.stageRestore(target.name);
+    const out = await api.database.restoreBackup(name);
+    markLibraryChanged();
+    // The Database card above shows the file's size and row counts.
+    void database.fetchInfo();
     await load();
     toast.push({
       severity: "success",
-      summary: "Restore staged",
-      detail: "Restart ComfyUI to swap the database. The current one is backed up first.",
-      life: 6000,
+      summary: "Backup restored",
+      detail: `${detail} The library as it was is saved as a "Before restore" backup.`,
+      life: 8000,
+      action: {
+        label: "Undo",
+        run: () => restore(out.pre_restore, "Your library is back to how it was before the restore."),
+      },
     });
   } catch (err) {
     toast.push({
       severity: "error",
-      summary: "Could not stage the restore",
+      summary: "Could not restore the backup",
       detail: err instanceof Error ? err.message : undefined,
-      life: 5000,
+      life: 8000,
     });
   } finally {
-    busyName.value = null;
+    restoring.value = null;
   }
 }
 
@@ -222,7 +243,7 @@ onMounted(() => {
     <div v-if="list?.pending_restore" class="wp-bk__pending" role="status" data-test="backup-pending-restore">
       <Icon name="pi-history" />
       <span>
-        <strong>{{ list.pending_restore }}</strong> replaces the database on the next ComfyUI start.
+        <strong>{{ list.pending_restore }}</strong> replaces the database on the next ComfyUI start. Cancel it to restore it right away instead.
       </span>
       <Button variant="ghost" size="sm" data-test="backup-cancel-restore" @click="cancelRestore">Cancel</Button>
       <Button
@@ -345,8 +366,8 @@ onMounted(() => {
             <Button
               variant="ghost"
               size="sm"
-              :loading="busyName === b.name"
-              :disabled="list?.pending_restore === b.name"
+              :loading="restoring === b.name"
+              :disabled="(!!restoring && restoring !== b.name) || list?.pending_restore === b.name"
               :data-test="`backup-restore-${b.name}`"
               @click="confirmRestore = b"
             >{{ list?.pending_restore === b.name ? "Staged" : "Restore" }}</Button>
@@ -369,8 +390,8 @@ onMounted(() => {
     <ConfirmModal
       :open="!!confirmRestore"
       title="Restore this backup?"
-      :body="confirmRestore ? `Your library goes back to how it was on ${formatWhen(confirmRestore.created_at)}. This happens the next time ComfyUI starts. The current database is backed up first, so you can undo it the same way.` : ''"
-      confirm-label="Stage restore"
+      :body="confirmRestore ? `Your library goes back to how it was on ${formatWhen(confirmRestore.created_at)}, right away, with no restart. The current library is backed up first, so you can undo it.` : ''"
+      confirm-label="Restore"
       @confirm="doRestore"
       @cancel="confirmRestore = null"
     />
