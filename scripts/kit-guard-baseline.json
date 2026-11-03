@@ -6,7 +6,7 @@
     "native-range": 0,
     "inline-svg": 0,
     "hand-dialog": 0,
-    "manager-raw-button": 3,
+    "manager-raw-button": 0,
     "raw-hex": 0
   },
   "native-select": {},
@@ -15,10 +15,6 @@
   "native-range": {},
   "inline-svg": {},
   "hand-dialog": {},
-  "manager-raw-button": {
-    "src/manager/components/TweaksPanel.vue": 1,
-    "src/manager/components/docs/DocImage.vue": 1,
-    "src/manager/components/settings/sections/AppearanceSection.vue": 1
-  },
+  "manager-raw-button": {},
   "raw-hex": {}
 }

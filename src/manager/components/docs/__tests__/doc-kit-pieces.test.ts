@@ -24,7 +24,7 @@ describe("DocImage on a DocPage", () => {
       { src: "images/b.png", caption: "Second" },
       { src: "images/c.png", caption: "Third" },
     ), { attachTo: document.body });
-    await w.findAll("[data-test=doc-image-open]")[1].trigger("click");
+    await w.findAll("[data-test=doc-image-open] button")[1].trigger("click");
     await flushPromises();
     expect(document.querySelector(".wp-lightbox__count")?.textContent).toBe("2 / 3");
     expect(document.querySelector(".wp-lightbox__caption")?.textContent).toBe("Second");
@@ -36,7 +36,7 @@ describe("DocImage on a DocPage", () => {
 
   it("leaves a placeholder out of the gallery", async () => {
     const w = mount(pageWith({ src: "images/a.png", caption: "Real" }), { attachTo: document.body });
-    await w.get("[data-test=doc-image-open]").trigger("click");
+    await w.get("[data-test=doc-image-open] button").trigger("click");
     await flushPromises();
     expect(document.querySelector(".wp-lightbox__count")).toBeNull();
     expect(document.querySelector(".wp-lightbox__caption")?.textContent).toBe("Real");
@@ -45,7 +45,7 @@ describe("DocImage on a DocPage", () => {
 
   it("opens a Lightbox of its own outside a DocPage", async () => {
     const w = mount(DocImage, { props: { src: "images/a.png", caption: "Alone" }, attachTo: document.body });
-    await w.get("[data-test=doc-image-open]").trigger("click");
+    await w.get("[data-test=doc-image-open] button").trigger("click");
     await flushPromises();
     expect(document.querySelector(".wp-lightbox__caption")?.textContent).toBe("Alone");
     w.unmount();
