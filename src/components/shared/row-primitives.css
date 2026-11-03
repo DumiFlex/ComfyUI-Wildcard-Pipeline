@@ -174,7 +174,9 @@
   transition: opacity var(--wp-motion-hover), color var(--wp-motion-hover);
 }
 .wp-drag-handle:active { cursor: grabbing; }
-.wp-drag-handle__grip { display: block; }
+/* The grip glyph is the kit's DragHandle; this span keeps the row's own
+ * colour and fade, so the grip inherits instead of using its own. */
+.wp-drag-handle .wp-drag-grip[data-size] { color: inherit; cursor: inherit; }
 
 /* ── Conflict cluster (dot + text badge) ─────────────────────────── */
 

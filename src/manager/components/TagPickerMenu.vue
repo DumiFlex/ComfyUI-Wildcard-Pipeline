@@ -13,6 +13,7 @@
  */
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, ref, watch } from "vue";
+import Icon from "@/kit/Icon.vue";
 
 export interface TagGroup {
   axis: string;
@@ -144,12 +145,7 @@ const menuStyle = computed<Record<string, string>>(() => {
             @click.stop="emit('toggle', tag)"
           >
             <span class="opt-tags__toggle-box" aria-hidden="true">
-              <svg v-if="selectedSet.has(tag)" width="8" height="8" viewBox="0 0 12 12">
-                <path
-                  d="M2.5 6.5 L5 9 L9.5 3.5" fill="none" stroke="currentColor"
-                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                />
-              </svg>
+              <Icon v-if="selectedSet.has(tag)" name="check" :size="8" />
             </span>
             {{ tag }}
           </button>
