@@ -44,7 +44,9 @@ const INDEX: AiIndexStatus = { available: true, items: 120, embed_model: null, v
 
 const router = createRouter({ history: createMemoryHistory(), routes: [{ path: "/", component: { template: "<div/>" } }] });
 
-describe("Settings › AI assistant", () => {
+// Each test mounts the whole AI section; the longest ones take ~2.5 s locally
+// and passed 5 s on a busy CI runner, so this file gets more room.
+describe("Settings › AI assistant", { timeout: 20_000 }, () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     _resetAiConfigForTests();
