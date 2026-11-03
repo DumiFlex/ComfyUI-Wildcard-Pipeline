@@ -49,6 +49,7 @@ import {
   type TogglesMode,
 } from "../../extension/toggles";
 import type { ControlState } from "../../extension/toggle-control";
+import { vToggleRow } from "@/kit/toggle-row";
 
 const props = withDefaults(
   defineProps<{
@@ -314,7 +315,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
       />
     </div>
     <div v-if="editMode && isOne" class="wp-tg__pickopts">
-      <span v-tooltip="'Print the picked variable in the prompt (else it is for rules only)'" class="wp-tg__check">
+      <span v-tooltip="'Print the picked variable in the prompt (else it is for rules only)'" v-toggle-row class="wp-tg__check">
         <Checkbox
           :model-value="!!cfg.group_visible"
           size="sm"
@@ -324,7 +325,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
         />
         <span aria-hidden="true">Show in prompt</span>
       </span>
-      <span v-tooltip="'When the upstream Context holds the picked variable naming a toggle (its name or variable), that toggle is picked'" class="wp-tg__check">
+      <span v-tooltip="'When the upstream Context holds the picked variable naming a toggle (its name or variable), that toggle is picked'" v-toggle-row class="wp-tg__check">
         <Checkbox
           :model-value="!!cfg.group_upstream"
           size="sm"

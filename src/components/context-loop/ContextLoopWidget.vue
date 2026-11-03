@@ -27,6 +27,7 @@ import { deriveLoopSeeds } from "../shared/seed-derive";
 import { pushToast } from "../shared/toast-store";
 import { currentFrame, setFrame } from "./frame-cursor";
 import FrameChips from "../shared/FrameChips.vue";
+import { vToggleRow } from "@/kit/toggle-row";
 
 const props = withDefaults(
   defineProps<{
@@ -282,7 +283,7 @@ function toggleTotalInternal(): void {
 
     <div
       v-tooltip="OVERRIDE_SEED_TOOLTIP"
-      class="wp-loop__row"
+      v-toggle-row class="wp-loop__row"
     >
       <span class="wp-loop__row-label">Override Context seed</span>
       <WpSwitch
@@ -340,7 +341,7 @@ function toggleTotalInternal(): void {
       </span>
     </div>
 
-    <div class="wp-loop__row">
+    <div v-toggle-row class="wp-loop__row">
       <span class="wp-loop__row-label">Bypass loop</span>
       <WpSwitch
         data-test="loop-bypass-toggle"

@@ -24,6 +24,7 @@ import Button from "@/kit/Button.vue";
 import Chip from "@/kit/Chip.vue";
 import ListRow from "@/kit/ListRow.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
+import { vToggleRow } from "@/kit/toggle-row";
 
 const props = withDefaults(
   defineProps<{
@@ -141,7 +142,7 @@ function moveAxis(uid: string, dir: -1 | 1): void {
 
 <template>
   <div class="wp-sweep" :class="{ 'wp-sweep--on': modelValue.enabled }">
-    <div class="wp-sweep__row">
+    <div v-toggle-row class="wp-sweep__row">
       <span class="wp-sweep__row-label">Sweep combinations</span>
       <WpSwitch
         v-tooltip="'Run every combination of the wildcards you pick, one frame each.'"
@@ -242,7 +243,7 @@ function moveAxis(uid: string, dir: -1 | 1): void {
         @update:model-value="addAxis"
       />
 
-      <div class="wp-sweep__row">
+      <div v-toggle-row class="wp-sweep__row">
         <span class="wp-sweep__row-label">Limit</span>
         <WpNumber
           class="wp-sweep__limit-wrap"
@@ -256,7 +257,7 @@ function moveAxis(uid: string, dir: -1 | 1): void {
           @update:model-value="(n) => n !== null && setLimit(Math.round(n))"
         />
       </div>
-      <div v-tooltip="HOLD_TOOLTIP" class="wp-sweep__row">
+      <div v-tooltip="HOLD_TOOLTIP" v-toggle-row class="wp-sweep__row">
         <span class="wp-sweep__row-label">Hold other picks</span>
         <WpSwitch
           data-test="sweep-hold-toggle"

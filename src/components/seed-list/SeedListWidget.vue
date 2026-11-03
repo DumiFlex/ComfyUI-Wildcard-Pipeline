@@ -21,6 +21,7 @@ import SeedListModal from "../shared/SeedListModal.vue";
 import FrameChips from "../shared/FrameChips.vue";
 import { deriveLoopSeeds } from "../shared/seed-derive";
 import Button from "@/kit/Button.vue";
+import { vToggleRow } from "@/kit/toggle-row";
 
 const props = withDefaults(
   defineProps<{
@@ -225,7 +226,7 @@ function toggleOverrideStrategy(): void {
       @toggle-lock="toggleFrameLock"
     />
 
-    <div v-tooltip="OVERRIDE_SEED_TOOLTIP" class="wp-seedlist__row">
+    <div v-tooltip="OVERRIDE_SEED_TOOLTIP" v-toggle-row class="wp-seedlist__row">
       <span class="wp-seedlist__row-label">Override base seed from loop</span>
       <WpSwitch
         data-test="seedlist-override-seed-toggle"
@@ -235,7 +236,7 @@ function toggleOverrideStrategy(): void {
       />
     </div>
 
-    <div v-tooltip="OVERRIDE_COUNT_TOOLTIP" class="wp-seedlist__row">
+    <div v-tooltip="OVERRIDE_COUNT_TOOLTIP" v-toggle-row class="wp-seedlist__row">
       <span class="wp-seedlist__row-label">Override count from loop</span>
       <WpSwitch
         data-test="seedlist-override-count-toggle"
@@ -245,7 +246,7 @@ function toggleOverrideStrategy(): void {
       />
     </div>
 
-    <div v-tooltip="OVERRIDE_STRATEGY_TOOLTIP" class="wp-seedlist__row">
+    <div v-tooltip="OVERRIDE_STRATEGY_TOOLTIP" v-toggle-row class="wp-seedlist__row">
       <span class="wp-seedlist__row-label">Override strategy from loop</span>
       <WpSwitch
         data-test="seedlist-override-strategy-toggle"

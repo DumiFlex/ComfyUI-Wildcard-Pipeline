@@ -19,6 +19,7 @@ import { vTooltip } from "@/kit/tooltip";
 import { varColorClass } from "../shared/var-color";
 import type { ToggleControl, ToggleRow, ToggleStyle } from "../../extension/toggles";
 import { ctlInputName, type ControlState } from "../../extension/toggle-control";
+import { vToggleRow } from "@/kit/toggle-row";
 
 interface Choice { value: string; label: string }
 
@@ -237,7 +238,7 @@ function flip(): void {
           @keydown.stop
           @change="emit('set-var', value($event).replace(/^\$/, ''))"
         />
-        <span v-tooltip="'Show the $variable under the name in the clean view'" class="wp-tgr__check">
+        <span v-tooltip="'Show the $variable under the name in the clean view'" v-toggle-row class="wp-tgr__check">
           <Checkbox
             :model-value="!t.hide_var"
             size="sm"
@@ -306,7 +307,7 @@ function flip(): void {
           @update:model-value="setControl"
         />
       </div>
-      <span v-if="t.control" v-tooltip="'Mute or bypass while the toggle is ON instead, for a node used only as a switchboard'" class="wp-tgr__check">
+      <span v-if="t.control" v-tooltip="'Mute or bypass while the toggle is ON instead, for a node used only as a switchboard'" v-toggle-row class="wp-tgr__check">
         <Checkbox
           :model-value="!!t.invert"
           size="sm"
@@ -329,7 +330,7 @@ function flip(): void {
           @update:model-value="setGroups"
         />
       </div>
-      <span v-tooltip="'When the upstream Context holds this variable as a yes/no word (true, on, 1, no …), it sets the switch'" class="wp-tgr__check">
+      <span v-tooltip="'When the upstream Context holds this variable as a yes/no word (true, on, 1, no …), it sets the switch'" v-toggle-row class="wp-tgr__check">
         <Checkbox
           :model-value="!!t.upstream"
           size="sm"
@@ -350,7 +351,7 @@ function flip(): void {
         />
       </div>
       <div class="wp-tgr__edit-foot">
-        <span v-tooltip="!t.pin && outputsFull ? 'All 16 outputs are in use' : 'Show a BOOLEAN output for switch nodes'" class="wp-tgr__check">
+        <span v-tooltip="!t.pin && outputsFull ? 'All 16 outputs are in use' : 'Show a BOOLEAN output for switch nodes'" v-toggle-row class="wp-tgr__check">
           <Checkbox
             :model-value="t.pin"
             size="sm"
