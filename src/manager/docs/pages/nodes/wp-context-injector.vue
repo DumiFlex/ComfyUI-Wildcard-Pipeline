@@ -5,17 +5,11 @@ import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
-import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
-const rowOptions = [
-  { term: "Name", desc: "The $variable the value becomes. Letters, digits and underscores, starting with a letter." },
-  { term: "Template", desc: "Optional. Wrap the value in text, e.g. wearing $input_0. Leave empty to use the value as it is. $$ prints a dollar sign." },
-  { term: "Negative", desc: "Optional negative words for this variable (it can use $input_0 too, so another node can write it). Only reaches an Assembler that prints the variable. Rows with one show a NEG badge." },
-  { term: "Hide from prompt (globe)", desc: "The variable still reaches combines and derivations, but prints nothing in the prompt." },
-];
 </script>
 
 <template>
@@ -69,9 +63,13 @@ const rowOptions = [
       />
     </DocSection>
 
+    <DocSection title="Inputs and outputs">
+      <DocFields node="WP_ContextInjector" group="ports" />
+    </DocSection>
+
     <DocSection title="Row options">
       <p>Right-click a row → <b>Edit</b> for its template and negative.</p>
-      <DocKeyList :items="rowOptions" />
+      <DocFields node="WP_ContextInjector" group="rowOptions" />
     </DocSection>
 
     <DocSection title="Join several inputs">

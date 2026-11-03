@@ -4,15 +4,9 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
-import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
-const controls = [
-  { term: "node dots (in)", desc: "Wire any node's output in. A new free dot appears as you wire; a freed one goes. Each shows its node's title." },
-  { term: "nodes (out)", desc: "Wire it into a WP Toggles control dot: that toggle then mutes or bypasses every node here." },
-  { term: "Run / Mute / Bypass", desc: "Set every node in the group at once." },
-  { term: "Mode chip", desc: "Each row's chip shows its node's mode. Click it to go Runs → Muted → Bypassed." },
-];
 </script>
 
 <template>
@@ -50,7 +44,7 @@ const controls = [
     </DocSection>
 
     <DocSection title="Controls">
-      <DocKeyList :items="controls" />
+      <DocFields node="WP_NodeGroup" group="controls" />
       <Banner tone="info" note>
         Muting or bypassing the group node itself does the same to its nodes, and setting it back
         lets them run.

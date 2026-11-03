@@ -12,16 +12,25 @@ A note that explains a workflow. It looks like a panel, not a node: no title bar
 - **Links** in a note open in a new tab: a docs link opens that page (and section) of the built-in docs, a community link opens that pack in the manager's Community tab.
 - **Add to library**: a `wp:library` button puts the workflow's bundles and modules into your library after a review (below).
 
-## Editor
+<!-- fields:start -->
+## Editing
 
-| Setting | Notes |
-|---|---|
-| Tone | **Step** (a numbered circle), **Icon** (pick any icon from the list next to it) or **Plain** (no badge). |
-| Colour | Presets that follow the theme (Accent, Tip, Info, Warning, Danger, Teal, Violet, Neutral), or any colour from the picker. |
-| Look | **Card**: a panel with a coloured edge. **Sticky**: tinted with the colour. **Label**: a small coloured pill with the title only; hovering it shows the text. |
-| Pinned | ComfyUI's own pin: a pinned note can't be moved or resized by accident. |
-| Title | Shown in bold at the top. |
-| Text | Markdown, with a formatting bar over it: headings (`#` to `####`), bold, italic, strikethrough, `code`, bulleted, numbered and nested lists, task lists (`- [x]` / `- [ ]`), quotes and callouts (`> [!TIP]`, `> [!WARNING]`), tables with column alignment (`:--`, `:-:`, `--:`), rules (`---`) and code blocks. |
+- **Tone**: Step (a numbered circle), Icon (pick any icon from the list next to it) or Plain (no badge).
+- **Colour**: Presets that follow the theme (Accent, Tip, Info, Warning, Danger, Teal, Violet, Neutral), or any colour from the picker.
+- **Look**: Card, Sticky or Label (above).
+- **Pinned**: ComfyUI's own pin: a pinned note can't be moved or resized by accident. New notes start pinned.
+- **Title**: Shown in bold at the top, or on the pill of a Label.
+- **Text**: Markdown, with the formatting bar below over it: headings (# to ####), bold, italic, strikethrough, code, bulleted, numbered and nested lists, task lists (- [x] / - [ ]), quotes and callouts (> [!TIP], > [!WARNING]), tables with column alignment (:--, :-:, --:), rules (---) and code blocks.
+
+## The formatting bar
+
+- **Bold, italic, strikethrough** (Ctrl+B / Ctrl+I): Wraps the selection in **, * or ~~.
+- **Code**: Wraps it in backticks, for a $variable.
+- **Lists and quote**: Puts - , 1. or > before each selected line (press again to take it off).
+- **Link** (Ctrl+K): A Docs page (type to find any page of these docs, then pick a section or the whole page), a Web address, a Library button (below) or a Community pack (owner/pack, or paste the pack's address), drawn as a Button with an icon or as a Text link, in its own colour or the note's. The selected text becomes the link's text. It goes where the caret is when you press Insert link, so you can click in the text after opening the panel.
+- **Icon**: Any PrimeIcons icon, searchable, in a colour or the text's own, inserted where the caret is.
+- **Preview (eye)**: Shows the note as it will read.
+<!-- fields:end -->
 
 Keys you type in the editor stay in the editor: Delete, Ctrl+Z and the other ComfyUI shortcuts don't reach the canvas.
 
@@ -38,17 +47,6 @@ A `wp:library` button lets someone who opened a shared workflow keep its lists. 
 ## Also a bookmark
 
 Turn on **Also a bookmark** at the bottom of the editor and the note joins the **Bookmarks** dock: pick where it lands on screen, its zoom and a shortcut, the same settings and clash check as a WP Bookmark. A new one gets the next free shortcut. The dock shows it in the note's colour and icon, and a small bookmark mark on the note (its tooltip names the key) says it is one; a pinned note shows a pin mark next to it. A note can't be hidden on the canvas, and muting it turns its shortcut off without fading it.
-
-## The formatting bar
-
-| Button | Writes |
-|---|---|
-| **B** / *I* / ~~S~~ | `**bold**`, `*italic*`, `~~strikethrough~~` (Ctrl+B, Ctrl+I) |
-| `<>` | `` `code` ``, for a `$variable` |
-| Lists, quote | `- item`, `1. item`, `> quote` on each selected line |
-| Link (Ctrl+K) | A link to a **Docs page** (type to find any page, then pick a section or the whole page), a **Web** address, a **Library** button (this workflow, or one WP Context) or a **Community** pack (`owner/pack` or the pack's address), as a **Button** (with an icon) or a **Text link**, in its own **Colour** or the note's. It goes where the caret is when you press **Insert link**, so you can click in the text after opening the panel |
-| Icon | Any PrimeIcons icon, in a colour or the text's own, inserted where the caret is |
-| Eye | Preview the note as it will read |
 
 ## Syntax
 

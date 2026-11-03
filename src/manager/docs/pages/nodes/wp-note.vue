@@ -5,30 +5,13 @@ import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
 const looks = [
   { term: "Card", desc: "A panel with a coloured edge on the left. The title and the text show on the canvas." },
   { term: "Sticky", desc: "The same panel, tinted with the colour." },
   { term: "Label", desc: "A small pill with the title only, sized to it. Hover it to see its text and links in a card; move onto the card to click them. Marks on the pill show that it has text (lines) or a link (chain)." },
-];
-
-const edit = [
-  { term: "Tone", desc: "Step (a numbered circle), Icon (pick any icon from the list next to it) or Plain (no badge)." },
-  { term: "Colour", desc: "Presets that follow the theme (Accent, Tip, Info, Warning, Danger, Teal, Violet, Neutral), or any colour from the picker." },
-  { term: "Look", desc: "Card, Sticky or Label (above)." },
-  { term: "Pinned", desc: "ComfyUI's own pin: a pinned note can't be moved or resized by accident. New notes start pinned." },
-  { term: "Title", desc: "Shown in bold at the top, or on the pill of a Label." },
-  { term: "Text", desc: "Markdown, with the formatting bar below over it: headings (# to ####), bold, italic, strikethrough, code, bulleted, numbered and nested lists, task lists (- [x] / - [ ]), quotes and callouts (> [!TIP], > [!WARNING]), tables with column alignment (:--, :-:, --:), rules (---) and code blocks." },
-];
-
-const bar = [
-  { term: "Bold, italic, strikethrough", desc: "Wraps the selection in **, * or ~~.", kbd: "Ctrl+B / Ctrl+I" },
-  { term: "Code", desc: "Wraps it in backticks, for a $variable." },
-  { term: "Lists and quote", desc: "Puts - , 1. or > before each selected line (press again to take it off)." },
-  { term: "Link", desc: "A Docs page (type to find any page of these docs, then pick a section or the whole page), a Web address, a Library button (below) or a Community pack (owner/pack, or paste the pack's address), drawn as a Button with an icon or as a Text link, in its own colour or the note's. The selected text becomes the link's text. It goes where the caret is when you press Insert link, so you can click in the text after opening the panel.", kbd: "Ctrl+K" },
-  { term: "Icon", desc: "Any PrimeIcons icon, searchable, in a colour or the text's own, inserted where the caret is." },
-  { term: "Preview (eye)", desc: "Shows the note as it will read." },
 ];
 
 const syntax = [
@@ -90,7 +73,7 @@ const syntax = [
         indigo pencil in ComfyUI's selection toolbar while it is selected, or press <b>Edit</b> on a label's hover card to open the editor; <b>Done</b> goes back to
         reading.
       </p>
-      <DocKeyList :items="edit" />
+      <DocFields node="WP_Note" group="edit" />
       <Banner tone="info" note>
         Keys you type in the editor stay in the editor: Delete, Ctrl+Z and ComfyUI's other shortcuts don't
         reach the canvas.
@@ -103,7 +86,7 @@ const syntax = [
         ratio="1720 / 860"
         caption="The editor with the link panel open: a docs page found by typing, one of its sections, and a button with an icon."
       />
-      <DocKeyList :items="bar" />
+      <DocFields node="WP_Note" group="bar" />
     </DocSection>
 
     <DocSection title="Links and icons in the text">

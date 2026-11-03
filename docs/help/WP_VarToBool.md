@@ -2,14 +2,15 @@
 
 Reads a `$variable` from the upstream Context and emits a `BOOLEAN`.
 
-## Inputs
+<!-- fields:start -->
+## On the node
 
-| Name | Type | Notes |
-|---|---|---|
-| `context` | context | Required. From a WP Context. |
-| `var_name` | dropdown | Pick from upstream `$vars`. |
-| `index` | `INT` | Which bool token in the var's value. |
-| `default` | `BOOLEAN` | Returned when no Nth match. |
+- **context (in)** `context`: The Context that holds the $variable.
+- **var_name** `variable`: The $variable to read. The list shows every variable the wired Context has.
+- **index** `INT`: Which yes/no word to use when there are several: 0 is the first, 1 the second. Other words don't count.
+- **default** `BOOLEAN`: Used when the variable is missing or has no yes/no word. The node never stops the run; it uses this instead.
+- **value (out)** `BOOLEAN`: True or false, for any BOOLEAN input: a switch node, a toggle and so on.
+<!-- fields:end -->
 
 ## Parsing rule
 

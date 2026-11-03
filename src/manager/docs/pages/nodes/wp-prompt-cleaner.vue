@@ -5,17 +5,9 @@ import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
-
-const ports = [
-  { term: "prompt (in)", desc: "The text to clean, usually from a WP Prompt Assembler. Any text works." },
-  { term: "cleaner widget", desc: "Pick a mode and a preset, switch single rules on or off, and edit the blocklist. After a run it shows how many fixes each rule made." },
-  { term: "negative (in)", desc: "Optional. A negative to clean too: type it or wire in the Assembler's negative. Left empty, the negative output is empty." },
-  { term: "prompt (out)", desc: "The cleaned prompt, for CLIP Text Encode." },
-  { term: "blocklist (in)", desc: "Optional text from another node, such as one shared word list feeding several cleaners. Its entries join the panel's blocklist (comma- or newline-separated in list mode, one per line in regex mode) and turn the blocklist on; the Blocklist button reads + input. Its dot sits beside that button and shows when you hover it or wire it." },
-  { term: "negative (out)", desc: "The cleaned negative, using the negative column's rules. Wire it into your negative CLIP Text Encode." },
-];
 
 const presets = [
   { term: "Gentle", desc: "Only tidies spaces: removes doubled spaces and spaces at the ends. The safest choice." },
@@ -69,7 +61,7 @@ const syntaxRules = [
     </DocSection>
 
     <DocSection title="Inputs and outputs">
-      <DocKeyList :items="ports" />
+      <DocFields node="WP_PromptCleaner" group="ports" />
     </DocSection>
 
     <DocSection title="Mode">

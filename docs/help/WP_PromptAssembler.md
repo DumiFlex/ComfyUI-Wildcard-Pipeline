@@ -2,16 +2,15 @@
 
 Write a prompt with `$variables` in it and get the finished prompt, plus a matching negative.
 
-## Inputs
+<!-- fields:start -->
+## Inputs and outputs
 
-- **context**: the variables, from a WP Context (or any WP node with a context output).
-- **template**: your prompt, such as `A $style portrait of $subject, $lighting`.
-- **negative_template**: optional, in the fold-out section under the preview. Your standing negative, with `$negatives` where the collected negative words go.
-
-## Outputs
-
-- **prompt**: the finished prompt. Wire it into CLIP Text Encode or a WP Prompt Cleaner.
-- **negative**: the negative words of the variables this template printed, plus your negative template. Wire it into your negative CLIP Text Encode.
+- **context (in)** `context`: The variables from a WP Context (or anything that ends in one).
+- **template** `STRING`: Your prompt with $variables in it.
+- **negative_template** `STRING`: Optional, in the collapsible negative section. Your standing negative, with $negatives where the collected negative words go.
+- **prompt (out)** `STRING`: The finished prompt. Wire it into CLIP Text Encode or a WP Prompt Cleaner.
+- **negative (out)** `STRING`: The negative words of the variables this template printed, plus your negative template. Wire it into your negative CLIP Text Encode.
+<!-- fields:end -->
 
 ## How to use
 

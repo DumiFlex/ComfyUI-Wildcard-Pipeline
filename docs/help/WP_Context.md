@@ -2,14 +2,22 @@
 
 The heart of the pipeline. Holds a stack of **modules** (wildcards, fixed values, combines, derivations, constraints and bundles), runs them top to bottom on every queue, and sends the resulting `$variables` downstream.
 
-## Inputs
+<!-- fields:start -->
+## Inputs and outputs
 
-- **upstream** *(optional)*: another WP Context (or Injector, Model Info, Loop). This node starts with its variables; a variable set again here replaces the upstream value.
-- **seed**: drives every random pick. **control after generate** changes it after each queue. A module with **Lock pick** keeps its pick whatever the seed.
+- **upstream (in)** `context`: Optional. Another WP Context, an Injector, Model Info or a Loop. This node starts with their variables and can add to them or replace them.
+- **seed** `INT`: Decides every random pick in this node. See Seeds & loops.
+- **context (out)** `context`: The variables. Wire it into a WP Prompt Assembler, a WP Debug or another WP Context.
 
-## Output
+## Row markers
 
-- **context**: the variables and what happened during the run. Wire it into a WP Prompt Assembler, a WP Debug, or another WP Context.
+- **Coloured dot or label**: Something to look at, such as MISSING VAR or a variable set twice. Blue is for your information, amber is worth a look. Hover for the message. Nothing here stops a run.
+- **drift**: The library entry changed after you added it. Right-click → Refresh from library to take the change. On a bundle it reads library updated; right-click the bundle → Reset to library snapshot.
+- **missing**: The entry isn't in your library (deleted, or the workflow came from someone else). The row still works from its own copy; right-click → Save to library to add it.
+- **mod**: You changed this row on the node, so it differs from the library.
+- **held**: Hold across run is on.
+- **Lock / globe / bin**: The row buttons: lock the pick, hide the variable from the prompt, remove the row. Set Row buttons to On hover (ComfyUI Settings or the Display Playground) to show them only when the pointer is on the row; a pressed lock or globe always shows.
+<!-- fields:end -->
 
 ## How to use
 
@@ -18,15 +26,6 @@ The heart of the pipeline. Holds a stack of **modules** (wildcards, fixed values
 3. Wire **context** into a WP Prompt Assembler and write a template like `a photo of $subject`.
 
 Drag a row by its handle to reorder it, or onto another Context node to move it. Untick a row to switch it off without removing it.
-
-## What the row markers mean
-
-- **Coloured dots and labels** such as `MISSING VAR`: something to look at. Blue is just so you know (for example this row overrides an upstream variable), amber is worth a look (a duplicate or a missing variable). Hover for the message. Nothing here ever stops a run.
-- **drift**: the library entry changed since you added it. Right-click the row → **Refresh from library** to pull the change. On a bundle the label reads **library updated**: right-click the bundle → **Reset to library snapshot**.
-- **missing**: the entry isn't in your library (deleted, or the workflow came from someone else). The row keeps working from its own copy; right-click → **Save to library** to add it.
-- **mod**: you changed this row on the node, so it differs from the library entry.
-- **held**: Hold across run is on.
-- The **lock** button locks the pick, the **globe** button hides the variable from the prompt, the bin removes the row.
 
 ## Tips
 

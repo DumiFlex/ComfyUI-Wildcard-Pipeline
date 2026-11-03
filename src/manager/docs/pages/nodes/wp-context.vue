@@ -4,26 +4,12 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
-import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
-const ports = [
-  { term: "upstream (in)", desc: "Optional. Another WP Context, an Injector, Model Info or a Loop. This node starts with their variables and can add to them or replace them." },
-  { term: "seed", desc: "Decides every random pick in this node. See Seeds & loops." },
-  { term: "context (out)", desc: "The variables. Wire it into a WP Prompt Assembler, a WP Debug or another WP Context." },
-];
-
-const markers = [
-  { term: "Coloured dot or label", desc: "Something to look at, such as MISSING VAR or a variable set twice. Blue is for your information, amber is worth a look. Hover for the message. Nothing here stops a run." },
-  { term: "drift", desc: "The library entry changed after you added it. Right-click → Refresh from library to take the change. On a bundle it reads library updated; right-click the bundle → Reset to library snapshot." },
-  { term: "missing", desc: "The entry isn't in your library (deleted, or the workflow came from someone else). The row still works from its own copy; right-click → Save to library to add it." },
-  { term: "mod", desc: "You changed this row on the node, so it differs from the library." },
-  { term: "held", desc: "Hold across run is on." },
-  { term: "Lock / globe / bin", desc: "The row buttons: lock the pick, hide the variable from the prompt, remove the row. Set Row buttons to On hover (ComfyUI Settings or the Display Playground) to show them only when the pointer is on the row; a pressed lock or globe always shows." },
-];
 </script>
 
 <template>
@@ -74,11 +60,11 @@ const markers = [
     </DocSection>
 
     <DocSection title="Inputs and outputs">
-      <DocKeyList :items="ports" />
+      <DocFields node="WP_Context" group="ports" />
     </DocSection>
 
     <DocSection title="What the row markers mean">
-      <DocKeyList :items="markers" />
+      <DocFields node="WP_Context" group="markers" />
     </DocSection>
 
     <DocSection title="Good to know">
