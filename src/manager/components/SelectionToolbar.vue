@@ -3,7 +3,9 @@
  * SelectionToolbar — bulk-action bar shown in the wildcard editor's bulk mode
  * when ≥1 option row is checked. Acts on ALL checked rows at once. The bar
  * itself (count, sticky shell, Clear, Escape) is the kit SelectionBar; this
- * adds the sub-category / weight / negative menus and the reorder group.
+ * adds the sub-category / weight / negative menus (kit Popovers: they place
+ * and flip themselves, follow their button, and close on Escape or a press
+ * outside, giving focus back to the button) and the reorder group.
  *
  * Presentational: emits intents (apply-tag / remove-tag / set-weight /
  * negative-add / negative-replace / negative-clear / delete / clear); the host editor mutates + tracks dirty. Applying a tag that isn't in
@@ -12,9 +14,10 @@
  */
 import WpNumber from "@/kit/WpNumber.vue";
 import Input from "@/kit/Input.vue";
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
 import ListRow from "@/kit/ListRow.vue";
+import Popover from "@/kit/Popover.vue";
 import SelectionBar from "@/kit/SelectionBar.vue";
 import { UNGROUPED_HUE } from "../../components/shared/axis-color";
 
@@ -84,52 +87,18 @@ const negTargets = computed(() => props.negativeTargets ?? props.count);
 const weight = ref(1);
 const applyFilter = ref("");
 
-function toggle(menu: Exclude<Menu, null>) {
-  openMenu.value = openMenu.value === menu ? null : menu;
+/** One menu at a time; opening one starts it empty. */
+function setMenu(menu: Exclude<Menu, null>, open: boolean): void {
+  if (!open) {
+    if (openMenu.value === menu) openMenu.value = null;
+    return;
+  }
+  openMenu.value = menu;
   newTag.value = "";
   applyFilter.value = "";
   negWords.value = "";
 }
 function close() { openMenu.value = null; }
-
-// The bar clears the selection on Escape; with a menu open, Escape closes
-// the menu instead (caught on the way down, before the bar sees it).
-function onBarKeydown(e: KeyboardEvent): void {
-  if (e.key !== "Escape" || !openMenu.value) return;
-  e.stopPropagation();
-  close();
-}
-
-// Close the menu when the page scrolls behind it. The toolbar lives in a
-// sticky header, so an open menu would otherwise hover in place while the
-// option list scrolls under it — the "can't scroll the page" trap. Scrolls
-// that originate INSIDE the menu's own list are ignored (that's the list
-// scrolling itself; `overscroll-behavior: contain` keeps it from chaining).
-function onDocScroll(e: Event): void {
-  const t = e.target;
-  if (t instanceof Element && t.closest(".wpc-seltoolbar__menulist")) return;
-  close();
-}
-// A press outside the open menu and its trigger closes it (this was a
-// full-page transparent button behind the menu).
-function onDocPointer(e: Event): void {
-  const t = e.target;
-  if (t instanceof Element && t.closest(".wpc-seltoolbar__menuwrap")) return;
-  close();
-}
-watch(openMenu, (open) => {
-  if (open) {
-    document.addEventListener("scroll", onDocScroll, true);
-    document.addEventListener("pointerdown", onDocPointer, true);
-  } else {
-    document.removeEventListener("scroll", onDocScroll, true);
-    document.removeEventListener("pointerdown", onDocPointer, true);
-  }
-});
-onBeforeUnmount(() => {
-  document.removeEventListener("scroll", onDocScroll, true);
-  document.removeEventListener("pointerdown", onDocPointer, true);
-});
 
 // Apply menu: every tag EXCEPT those already on all selected rows, so the
 // list only offers tags that would actually change something. Then narrowed
@@ -183,22 +152,28 @@ function applyWeight() {
 </script>
 
 <template>
-  <SelectionBar class="wpc-seltoolbar" :count="count" sticky @clear="emit('clear')" @keydown.capture="onBarKeydown">
+  <SelectionBar class="wpc-seltoolbar" :count="count" sticky @clear="emit('clear')">
     <template #start>
     <div class="wpc-seltoolbar__group">
       <!-- Apply sub-category -->
-      <div class="wpc-seltoolbar__menuwrap">
-        <Button variant="ghost" size="sm" icon="pi-tag" icon-right="pi-chevron-down" @click="toggle('apply')">
-          Apply sub-category
-        </Button>
-        <div v-if="openMenu === 'apply'" class="wpc-seltoolbar__menu" role="menu">
+      <Popover
+        :open="openMenu === 'apply'"
+        variant="menu"
+        label="Apply sub-category"
+        @update:open="(v: boolean) => setMenu('apply', v)"
+      >
+        <template #trigger="{ props: triggerProps }">
+          <Button v-bind="triggerProps" variant="ghost" size="sm" icon="pi-tag" icon-right="pi-chevron-down">
+            Apply sub-category
+          </Button>
+        </template>
+        <div class="wpc-seltoolbar__menu" data-test="sel-apply-menu">
           <Input
             v-model="newTag"
             size="sm"
             placeholder="New or existing tag…"
             aria-label="New sub-category"
             @keydown.enter.prevent="applyNewTag"
-            @keydown.esc="close"
           />
           <ListRow
             v-if="newTagIsNovel"
@@ -207,7 +182,7 @@ function applyWeight() {
             class="wpc-seltoolbar__menuitem wpc-seltoolbar__menuitem--new"
             @click="applyNewTag"
           >Create &amp; apply “{{ newTag.trim() }}”</ListRow>
-          <div class="wpc-seltoolbar__menulist">
+          <div class="wpc-seltoolbar__menulist" data-wp-rows>
             <ListRow
               v-for="t in applyList"
               :key="t"
@@ -219,15 +194,23 @@ function applyWeight() {
             <div v-if="!applyList.length && !newTagIsNovel" class="wpc-seltoolbar__menuempty">Every selected row already has all sub-categories</div>
           </div>
         </div>
-      </div>
+      </Popover>
 
-      <!-- Remove sub-category -->
-      <div class="wpc-seltoolbar__menuwrap">
-        <Button variant="ghost" size="sm" icon="pi-minus-circle" icon-right="pi-chevron-down" @click="toggle('remove')">
-          Remove sub-category
-        </Button>
-        <div v-if="openMenu === 'remove'" class="wpc-seltoolbar__menu" role="menu">
-          <div class="wpc-seltoolbar__menulist">
+      <!-- Remove sub-category. A Popover rather than a DropdownMenu: each row
+           carries its axis colour swatch, which menu items can't draw. -->
+      <Popover
+        :open="openMenu === 'remove'"
+        variant="menu"
+        label="Remove sub-category"
+        @update:open="(v: boolean) => setMenu('remove', v)"
+      >
+        <template #trigger="{ props: triggerProps }">
+          <Button v-bind="triggerProps" variant="ghost" size="sm" icon="pi-minus-circle" icon-right="pi-chevron-down">
+            Remove sub-category
+          </Button>
+        </template>
+        <div class="wpc-seltoolbar__menu" data-test="sel-remove-menu">
+          <div class="wpc-seltoolbar__menulist" data-wp-rows>
             <ListRow
               v-for="t in removeList"
               :key="t"
@@ -239,14 +222,20 @@ function applyWeight() {
             <div v-if="!removeList.length" class="wpc-seltoolbar__menuempty">Selection has no sub-categories</div>
           </div>
         </div>
-      </div>
+      </Popover>
 
       <!-- Set weight -->
-      <div class="wpc-seltoolbar__menuwrap">
-        <Button variant="ghost" size="sm" icon="pi-sliders-h" icon-right="pi-chevron-down" @click="toggle('weight')">
-          Set weight
-        </Button>
-        <div v-if="openMenu === 'weight'" class="wpc-seltoolbar__menu wpc-seltoolbar__menu--weight" role="menu">
+      <Popover
+        :open="openMenu === 'weight'"
+        label="Set weight"
+        @update:open="(v: boolean) => setMenu('weight', v)"
+      >
+        <template #trigger="{ props: triggerProps }">
+          <Button v-bind="triggerProps" variant="ghost" size="sm" icon="pi-sliders-h" icon-right="pi-chevron-down">
+            Set weight
+          </Button>
+        </template>
+        <div class="wpc-seltoolbar__menu wpc-seltoolbar__menu--weight" data-test="sel-weight-menu">
           <WpNumber v-model="weight"
             commit="input"
             size="sm"
@@ -254,22 +243,28 @@ function applyWeight() {
             :step="0.1"
             aria-label="Weight"
             @keydown.enter.prevent="applyWeight"
-            @keydown.esc="close"
           />
           <Button variant="primary" size="sm" @click="applyWeight">Apply</Button>
         </div>
-      </div>
+      </Popover>
 
       <!-- Negative (send-to-negative): add to / replace / clear the selected
            rows' negatives. The null option is skipped by Add / Replace. -->
-      <div v-if="negatives" class="wpc-seltoolbar__menuwrap">
-        <Button
-          variant="ghost" size="sm" icon="pi-minus" icon-right="pi-chevron-down"
-          class="wpc-seltoolbar__negbtn"
-          data-test="sel-negative"
-          @click="toggle('negative')"
-        >Negative</Button>
-        <div v-if="openMenu === 'negative'" class="wpc-seltoolbar__menu wpc-seltoolbar__menu--neg" role="menu">
+      <Popover
+        v-if="negatives"
+        :open="openMenu === 'negative'"
+        label="Negative"
+        @update:open="(v: boolean) => setMenu('negative', v)"
+      >
+        <template #trigger="{ props: triggerProps }">
+          <Button
+            v-bind="triggerProps"
+            variant="ghost" size="sm" icon="pi-minus" icon-right="pi-chevron-down"
+            class="wpc-seltoolbar__negbtn"
+            data-test="sel-negative"
+          >Negative</Button>
+        </template>
+        <div class="wpc-seltoolbar__menu wpc-seltoolbar__menu--neg" data-test="sel-negative-menu">
           <div class="wpc-seltoolbar__menuhead">Negative for {{ count }} option{{ count === 1 ? "" : "s" }}</div>
           <div class="wpc-seltoolbar__negrow">
             <span class="wpc-seltoolbar__negtag" aria-hidden="true">NEG</span>
@@ -281,7 +276,6 @@ function applyWeight() {
               aria-label="Negative words"
               data-test="sel-negative-input"
               @keydown.enter.prevent="negativeAdd"
-              @keydown.esc="close"
             />
           </div>
           <div class="wpc-seltoolbar__negactions">
@@ -308,7 +302,7 @@ function applyWeight() {
             <template v-if="negTargets < count"> The null option is skipped.</template>
           </p>
         </div>
-      </div>
+      </Popover>
     </div>
 
     <!-- Reordering. Its own group after the tag/weight actions and before the
@@ -344,21 +338,13 @@ function applyWeight() {
 <style scoped>
 .wpc-seltoolbar__group { display: flex; gap: 6px; flex-wrap: wrap; }
 .wpc-seltoolbar__spacer { flex: 1; }
-.wpc-seltoolbar__menuwrap { position: relative; }
+/* The panel (placement, flip, layer, look) is the kit Popover; this is
+   only the layout inside it. */
 .wpc-seltoolbar__menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 30;
   min-width: 220px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px;
-  border: 1px solid var(--wp-border);
-  border-radius: min(8px, var(--wp-radius-cap, 999px));
-  background: var(--wp-bg-1);
-  box-shadow: var(--wp-shadow-md);
 }
 .wpc-seltoolbar__menu--weight { flex-direction: row; align-items: center; min-width: 0; }
 .wpc-seltoolbar__menu--weight :deep(.wp-input-group) { width: 96px; }

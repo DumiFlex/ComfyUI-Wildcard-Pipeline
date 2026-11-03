@@ -9,7 +9,7 @@
     "raw-button": 0,
     "raw-input": 0,
     "raw-textarea": 0,
-    "raw-teleport": 3,
+    "raw-teleport": 0,
     "raw-hex": 0
   },
   "native-select": {},
@@ -21,10 +21,6 @@
   "raw-button": {},
   "raw-input": {},
   "raw-textarea": {},
-  "raw-teleport": {
-    "src/components/injector/InjectorBindingModal.vue": 1,
-    "src/manager/components/BundleAddChildModal.vue": 1,
-    "src/manager/components/TagPickerMenu.vue": 1
-  },
+  "raw-teleport": {},
   "raw-hex": {}
 }

@@ -17,8 +17,6 @@ defineProps<{
   view: VisibleTags;
   expanded: boolean;
   pickerOpen: boolean;
-  anchor: { top: number; left: number; width: number };
-  dropUp: boolean;
   groups: TagGroup[];
   allTags: string[];
   tagStyle: (tag: string) => Record<string, string>;
@@ -27,7 +25,7 @@ defineProps<{
 const emit = defineEmits<{
   "toggle-tag": [tag: string];
   "toggle-expanded": [];
-  "toggle-picker": [ev: MouseEvent];
+  "update:picker-open": [open: boolean];
 }>();
 </script>
 
@@ -67,31 +65,31 @@ const emit = defineEmits<{
         @click.stop="emit('toggle-expanded')"
       >{{ expanded ? "−" : `+${view.hiddenCount}` }}</Chip>
       <span v-if="!tags.length" class="opt-tags__placeholder">(none)</span>
-      <WpIconButton
-        class="opt-tags__chevron"
-        :class="{ 'opt-tags__chevron--open': pickerOpen }"
-        icon="pi-chevron-down"
-        label="Edit sub-categories for option"
-        :aria-expanded="pickerOpen"
-        :data-test="`opt-tags-${optionId}`"
-        @click="(e: MouseEvent) => emit('toggle-picker', e)"
-      />
+      <!-- Grouped checkbox picker: one section per axis + ungrouped.
+           Each toggle gets is-on when selected. -->
+      <TagPickerMenu
+        :open="pickerOpen"
+        :groups="groups"
+        :all-tags="allTags"
+        :selected="tags"
+        :tag-style="tagStyle"
+        :test-prefix="`opt-tag-${optionId}`"
+        empty-text="No sub-categories yet — add some above."
+        @update:open="(v: boolean) => emit('update:picker-open', v)"
+        @toggle="(t: string) => emit('toggle-tag', t)"
+      >
+        <template #trigger="{ props: triggerProps }">
+          <WpIconButton
+            v-bind="triggerProps"
+            class="opt-tags__chevron"
+            :class="{ 'opt-tags__chevron--open': pickerOpen }"
+            icon="pi-chevron-down"
+            label="Edit sub-categories for option"
+            :data-test="`opt-tags-${optionId}`"
+          />
+        </template>
+      </TagPickerMenu>
     </div>
-
-    <!-- Grouped checkbox picker: one section per axis +
-         ungrouped. Each toggle gets is-on when selected. -->
-    <TagPickerMenu
-      :open="pickerOpen"
-      :anchor="anchor"
-      :drop-up="dropUp"
-      :groups="groups"
-      :all-tags="allTags"
-      :selected="tags"
-      :tag-style="tagStyle"
-      :test-prefix="`opt-tag-${optionId}`"
-      empty-text="No sub-categories yet — add some above."
-      @toggle="(t: string) => emit('toggle-tag', t)"
-    />
   </div>
 </template>
 
