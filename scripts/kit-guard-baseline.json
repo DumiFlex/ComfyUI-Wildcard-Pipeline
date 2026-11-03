@@ -6,7 +6,7 @@
     "native-range": 0,
     "inline-svg": 0,
     "hand-dialog": 0,
-    "manager-raw-button": 80,
+    "manager-raw-button": 78,
     "raw-hex": 0
   },
   "native-select": {},
@@ -41,7 +41,6 @@
     "src/manager/components/wildcard-editor/OptionProbabilityCell.vue": 1,
     "src/manager/components/wildcard-editor/OptionTagsCell.vue": 3,
     "src/manager/docs/pages/overview/quick-start.vue": 1,
-    "src/manager/import-export/PackConverter.vue": 2,
     "src/manager/layout/AppSidebar.vue": 3,
     "src/manager/views/AllItems.vue": 2,
     "src/manager/views/BundleEditor.vue": 1,
