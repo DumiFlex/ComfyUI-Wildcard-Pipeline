@@ -129,15 +129,17 @@ function itemCount(row: ScenarioRow): string {
           <ListRow
             class="wp-trr__row"
             :selected="row.id === activeId"
-            :description="`${itemCount(row)} · ${seedLabel(row.seeds)}`"
             :data-active="row.id === activeId ? 'true' : 'false'"
             data-test="scenario-row"
             @click="emit('select', row)"
           >
-            <span class="wp-trr__line">
-              <span class="wp-trr__name">{{ row.name }}</span>
-              <span class="wp-trr__pill" :data-tone="status(row).tone" :title="statusTitle(row)" data-test="scenario-status">{{ status(row).label }}</span>
-            </span>
+            <span class="wp-trr__name">{{ row.name }}</span>
+            <template #description>
+              <span class="wp-trr__meta">
+                <span>{{ itemCount(row) }} · {{ seedLabel(row.seeds) }}</span>
+                <span class="wp-trr__pill" :data-tone="status(row).tone" :title="statusTitle(row)" data-test="scenario-status">{{ status(row).label }}</span>
+              </span>
+            </template>
           </ListRow>
           <span class="wp-trr__acts">
             <Button
@@ -145,7 +147,6 @@ function itemCount(row: ScenarioRow): string {
               size="sm"
               icon="pi-thumbtack"
               class="wp-trr__act"
-              :pressed="row.is_pinned"
               :aria-label="row.is_pinned ? `Unpin ${row.name}` : `Pin ${row.name}`"
               :data-on="row.is_pinned ? 'true' : 'false'"
               data-test="scenario-pin"
@@ -212,7 +213,9 @@ function itemCount(row: ScenarioRow): string {
 .wp-trr__item { position: relative; }
 .wp-trr__row { padding: var(--wp-space-3) var(--wp-space-4); }
 .wp-trr__row :deep(.wp-list-row__label) { overflow: visible; white-space: normal; }
-.wp-trr__line { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--wp-space-3); padding-right: 44px; } /* audit-exempt: 44px reserves room for the two hover actions */
+/* The name keeps clear of the two hover actions; the status sits on the meta line. */
+.wp-trr__item .wp-trr__name { display: block; padding-right: 56px; } /* audit-exempt: 56px reserves room for the two hover actions */
+.wp-trr__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--wp-space-2) var(--wp-space-3); }
 .wp-trr__name { font-weight: var(--wp-weight-medium); font-size: var(--wp-text-base); word-break: break-word; }
 .wp-trr__pill {
   flex-shrink: 0; font: var(--wp-weight-medium) 10px/16px var(--wp-font-mono); /* audit-exempt: 10px pill text */
@@ -227,6 +230,7 @@ function itemCount(row: ScenarioRow): string {
 }
 .wp-trr__item:hover .wp-trr__acts,
 .wp-trr__item:focus-within .wp-trr__acts { opacity: 1; }
-.wp-trr__act:not([aria-pressed="true"]) { background: var(--wp-bg-4); }
+.wp-trr__act { color: var(--wp-text-muted); }
+.wp-trr__act[data-on="true"] { color: var(--wp-accent-text); }
 .wp-trr__empty { padding: var(--wp-space-5) var(--wp-space-4); font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 </style>
