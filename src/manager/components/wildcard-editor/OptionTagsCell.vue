@@ -4,6 +4,8 @@
  * disclosure and the grouped picker. Membership only — the editor owns the
  * option and applies every toggle.
  */
+import Chip from "@/kit/Chip.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
 import TagPickerMenu, { type TagGroup } from "../TagPickerMenu.vue";
 import type { VisibleTags } from "../../utils/option-list-ops";
 
@@ -15,8 +17,6 @@ defineProps<{
   view: VisibleTags;
   expanded: boolean;
   pickerOpen: boolean;
-  anchor: { top: number; left: number; width: number };
-  dropUp: boolean;
   groups: TagGroup[];
   allTags: string[];
   tagStyle: (tag: string) => Record<string, string>;
@@ -25,7 +25,7 @@ defineProps<{
 const emit = defineEmits<{
   "toggle-tag": [tag: string];
   "toggle-expanded": [];
-  "toggle-picker": [ev: MouseEvent];
+  "update:picker-open": [open: boolean];
 }>();
 </script>
 
@@ -43,52 +43,53 @@ const emit = defineEmits<{
         :style="tagStyle(tag)"
       >
         {{ tag }}
-        <button
-          type="button"
+        <WpIconButton
           class="opt-tags__chip-x"
-          :aria-label="`Remove ${tag} from option`"
-          @click.stop="emit('toggle-tag', tag)"
-        >×</button>
+          variant="bare"
+          icon="pi-times"
+          :label="`Remove ${tag} from option`"
+          @click="emit('toggle-tag', tag)"
+        />
       </span>
-      <button
+      <Chip
         v-if="view.hiddenCount > 0 || expanded"
-        type="button"
+        as="button"
         class="opt-tags__more"
         :aria-expanded="expanded"
         :aria-label="expanded
           ? 'Show fewer tags'
           : `Show ${view.hiddenCount} more tags`"
         :data-test="`opt-tags-more-${optionId}`"
-        @click.stop="emit('toggle-expanded')"
         :data-match="!expanded && view.hiddenHasMatch ? '' : null"
         :title="view.hiddenHasMatch ? 'More matching tags are folded in here' : undefined"
-      >{{ expanded ? "−" : `+${view.hiddenCount}` }}</button>
+        @click.stop="emit('toggle-expanded')"
+      >{{ expanded ? "−" : `+${view.hiddenCount}` }}</Chip>
       <span v-if="!tags.length" class="opt-tags__placeholder">(none)</span>
-      <button
-        type="button"
-        class="opt-tags__chevron"
-        :class="{ 'opt-tags__chevron--open': pickerOpen }"
-        :aria-label="`Edit sub-categories for option`"
-        :aria-expanded="pickerOpen"
-        :data-test="`opt-tags-${optionId}`"
-        @click.stop="emit('toggle-picker', $event)"
-      ><i class="pi pi-chevron-down" aria-hidden="true" /></button>
+      <!-- Grouped checkbox picker: one section per axis + ungrouped.
+           Each toggle gets is-on when selected. -->
+      <TagPickerMenu
+        :open="pickerOpen"
+        :groups="groups"
+        :all-tags="allTags"
+        :selected="tags"
+        :tag-style="tagStyle"
+        :test-prefix="`opt-tag-${optionId}`"
+        empty-text="No sub-categories yet — add some above."
+        @update:open="(v: boolean) => emit('update:picker-open', v)"
+        @toggle="(t: string) => emit('toggle-tag', t)"
+      >
+        <template #trigger="{ props: triggerProps }">
+          <WpIconButton
+            v-bind="triggerProps"
+            class="opt-tags__chevron"
+            :class="{ 'opt-tags__chevron--open': pickerOpen }"
+            icon="pi-chevron-down"
+            label="Edit sub-categories for option"
+            :data-test="`opt-tags-${optionId}`"
+          />
+        </template>
+      </TagPickerMenu>
     </div>
-
-    <!-- Grouped checkbox picker: one section per axis +
-         ungrouped. Each toggle gets is-on when selected. -->
-    <TagPickerMenu
-      :open="pickerOpen"
-      :anchor="anchor"
-      :drop-up="dropUp"
-      :groups="groups"
-      :all-tags="allTags"
-      :selected="tags"
-      :tag-style="tagStyle"
-      :test-prefix="`opt-tag-${optionId}`"
-      empty-text="No sub-categories yet — add some above."
-      @toggle="(t: string) => emit('toggle-tag', t)"
-    />
   </div>
 </template>
 
@@ -96,8 +97,6 @@ const emit = defineEmits<{
 /* `+N` / `−` disclosure inside an option's tag cell. Dashed so it reads as
    part of the chip run rather than as another removable tag. */
 .opt-tags__more {
-  display: inline-flex;
-  align-items: center;
   padding: 2px 7px;
   border: 1px dashed color-mix(in srgb, var(--wp-text-dim) 55%, transparent);
   border-radius: var(--wp-radius-cap, 999px);
@@ -130,24 +129,6 @@ const emit = defineEmits<{
   color: var(--wp-text);
   font-size: var(--wp-text-xs);
   line-height: 1.4;
-}
-.opt-tags__chip-x {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 15px;
-  height: 15px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: var(--wp-text-dim);
-  border-radius: var(--wp-radius-cap, 999px);
-  font-size: 12px;
-  line-height: 1;
-}
-.opt-tags__chip-x:hover {
-  color: var(--wp-text);
-  background: var(--wp-bg-3);
 }
 .opt-tags__placeholder {
   color: var(--wp-text-dim);

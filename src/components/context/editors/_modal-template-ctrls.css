@@ -1,5 +1,5 @@
 /* Shared template-section controls — insert-slot dropdown button + reset
- * dropdown panel + dropdown item. Used by InjectorBindingModal
+ * menu list + menu item. Used by InjectorBindingModal
  * (`.ibm__*`), the insert-ref menu.
  *
  * Both modals previously declared their own copies of these rules with
@@ -13,86 +13,22 @@
  * Class names are namespaced (`.wp-tpl__*`, `.ibm__*`) so no leakage
  * concerns. */
 
-/* Wrap div is `inline-flex` (not the default block) so its inner
- * `<button>` (inline-flex, height: 22px) doesn't generate a taller
- * anonymous line-box around it from the parent's inherited
- * line-height. Block-level wrapper + inline-flex child can leave
- * 1-2px of descender space below the button, shifting it down vs
- * the sibling reset button (which is a direct flex child with no
- * wrapping line-box). */
-.wp-ibm__menu-wrap {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-
-.wp-ibm__menu-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 22px;
-  padding: 0 7px;
-  box-sizing: border-box;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 600 10px var(--wp-font-mono);
-  cursor: pointer;
-  line-height: 1;
-}
-.wp-ibm__menu-btn:hover {
-  border-color: var(--wp-accent);
-  color: var(--wp-text);
-}
-.wp-ibm__menu-btn .pi { font-size: 9px; }
+/* The "+ $slot" trigger is the kit Button (outline, sm); only its mono label is ours. */
+.wp-ibm__menu-btn { font-family: var(--wp-font-mono); }
 
 /* The section reset buttons (`+ $slot` row's ↺, IdentitySection's ↺)
  * are the shared WpButton (outline, icon only), 24 px like the canvas
  * control scale. */
 
-/* Teleported to <body>, so `fixed` viewport coords rather than `absolute`
- * inside the modal — as an absolutely-positioned child the menu was CLIPPED
- * by the modal's scroll container and vanished below the fold whenever its
- * trigger sat near the bottom. The owning component measures the button and
- * writes `top` / `left` inline; `--up` flips the box above the trigger when
- * there's no room below.
- *
- * z-index 10020 puts this in the POPOVER tier, above every modal overlay.
- * Modals here range from 9999 (ModalShell) to 10010 (InjectorBindingModal),
- * so the old 9999 rendered this menu BEHIND its own modal — it worked only
- * where the modal was also 9999 and DOM order broke the tie. Any popup that
- * teleports out of a modal has to clear the whole modal tier. */
+/* The insert menu's list. The panel around it (placement, flip, layer, look)
+ * is the kit Popover's menu variant. */
 .wp-ibm__menu {
-  position: fixed;
   min-width: 200px;
-  max-height: 220px;
-  overflow-y: auto;
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  box-shadow: var(--wp-shadow-md);
-  z-index: 10020;
-  padding: 3px;
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
 
-.wp-ibm__menu--up { transform: translateY(-100%); }
-
-.wp-ibm__menu-item {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  text-align: left;
-  padding: 4px 8px;
-  background: transparent;
-  border: 0;
-  border-radius: 2px;
-  cursor: pointer;
-  color: var(--wp-text);
-}
-.wp-ibm__menu-item:hover {
-  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
-}
+/* Each item is a kit ListRow (sm): $name, its label, the type at the end. */
+.wp-ibm__menu-item { gap: 6px; padding: 4px 8px; color: var(--wp-text); }
+.wp-ibm__menu-item:hover { background: color-mix(in srgb, var(--wp-accent) 18%, transparent); }

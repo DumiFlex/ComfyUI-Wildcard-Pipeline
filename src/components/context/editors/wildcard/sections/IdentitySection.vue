@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Input from "@/kit/Input.vue";
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { patchInstance } from "../../instance/patch";
@@ -67,6 +68,14 @@ const collidesWith = computed<"upstream" | "sibling" | null>(() => {
   return null;
 });
 
+/** The binding field's tone: a sibling clash needs a look (warn); an
+ *  upstream shadow or an override of the library default is accent. */
+const bindingTone = computed<"accent" | "warn" | undefined>(() => {
+  if (collidesWith.value === "sibling") return "warn";
+  if (collidesWith.value === "upstream" || bindingOverridden.value) return "accent";
+  return undefined;
+});
+
 const collisionMessage = computed(() => {
   if (collidesWith.value === "sibling") {
     return `$${effectiveBinding.value} is already produced by another module in this Context. ` +
@@ -124,12 +133,13 @@ function onResetBinding(): void {
     <div class="id__row">
       <span class="id__key">Display name</span>
       <div class="id__input-row">
-        <input
+        <Input
+          size="sm"
+          mono
           class="id__input"
-          :class="{ 'id__input--mod': nameOverridden }"
+          :tone="nameOverridden ? 'accent' : undefined"
           data-test="id-name"
-          type="text"
-          :value="nameValue"
+          :model-value="nameValue"
           :placeholder="module.meta?.library_name ?? 'module name'"
           aria-label="Display name"
           @input="onNameInput"
@@ -150,27 +160,19 @@ function onResetBinding(): void {
     <div class="id__row">
       <span class="id__key">Variable binding</span>
       <div class="id__input-row">
-        <div
-          class="wp-vbind-wrap"
-          :class="{
-            'wp-vbind-wrap--mod': bindingOverridden,
-            'wp-vbind-wrap--collision-warn': collidesWith === 'sibling',
-            'wp-vbind-wrap--collision-info': collidesWith === 'upstream',
-          }"
-        >
-          <span class="wp-vbind-prefix" data-test="id-binding-prefix">$</span>
-          <input
-            class="wp-vbind-input"
-            :class="{ 'wp-vbind-input--mod': bindingOverridden }"
-            data-test="id-binding"
-            type="text"
-            :value="bindingValue"
-            :placeholder="libraryBinding"
-            aria-label="Variable binding"
-            :disabled="frameActive || undefined"
-            @input="onBindingInput"
-          />
-        </div>
+        <Input
+          size="sm"
+          mono
+          prefix="$"
+          class="id__input"
+          :tone="bindingTone"
+          data-test="id-binding"
+          :model-value="bindingValue"
+          :placeholder="libraryBinding"
+          aria-label="Variable binding"
+          :disabled="frameActive || undefined"
+          @input="onBindingInput"
+        />
         <Button
           v-if="bindingOverridden"
           size="sm"
@@ -211,8 +213,6 @@ function onResetBinding(): void {
 </template>
 
 <style scoped>
-@import "../../../../shared/var-binding-input.css";
-
 .id {
   padding: 12px 16px;
   background: var(--wp-bg);
@@ -237,28 +237,8 @@ function onResetBinding(): void {
   font: 11px var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.id__input {
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  padding: 5px 8px;
-  font: 11px var(--wp-font-mono);
-  color: var(--wp-text);
-}
-.id__input:focus {
-  border-color: var(--wp-accent);
-  outline: none;
-}
-.id__input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
-/* "Modified" highlight for the display-name field. The binding input
- * migrated to .wp-vbind-* — its --mod rule lives in the shared CSS. */
-.id__input--mod {
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-text));
-}
-
 /* Per-field row: input + optional inline reset button. The reset
- * shows up only when the field is in `--mod` state, giving the user
+ * shows up only while the field is overridden (accent tone), giving the user
  * a precise way to drop one override without sweeping every other
  * instance change via the footer's Reset overrides. */
 .id__input-row {
@@ -267,14 +247,6 @@ function onResetBinding(): void {
   gap: 6px;
 }
 .id__input-row .id__input { flex: 1; min-width: 0; }
-/* `.id__reset` styling lives in src/components/context/editors/
- * _modal-template-ctrls.css (imported by ContextWidget unscoped).
- * Override the shared 22×22 fixed box here so the button stretches
- * to match the row's tallest sibling. The variable-binding input
- * lives inside `wp-vbind-wrap` (input + `$` prefix in flex), which
- * renders ~26px tall — without this override the reset rendered as
- * a stubby 22px square next to the taller wrap. `min-height` keeps
- * the touch target meeting the design floor when the input shrinks. */
 .id__collision {
   margin-top: 6px;
   display: flex;

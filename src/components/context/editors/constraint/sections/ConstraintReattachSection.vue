@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SearchInput from "@/kit/SearchInput.vue";
 /**
  * ConstraintReattachSection — heals a constraint whose source/target
  * wildcard uuid is missing locally (#4). Renders ABOVE Identity in the
@@ -160,7 +161,7 @@ function confirm(side: Side): void {
       >Download from community</Button>
 
       <div v-if="openSide === 'source'" class="rb__picker">
-        <input v-model="query" type="text" class="rb__search" placeholder="Search wildcards…" spellcheck="false" aria-label="Search wildcards to reattach source" />
+        <SearchInput v-model="query" size="md" class="rb__search" placeholder="Search wildcards…" aria-label="Search wildcards to reattach source" />
         <ul class="rb__list">
           <li
             v-for="c in candidates()"
@@ -214,7 +215,7 @@ function confirm(side: Side): void {
       >Download from community</Button>
 
       <div v-if="openSide === 'target'" class="rb__picker">
-        <input v-model="query" type="text" class="rb__search" placeholder="Search wildcards…" spellcheck="false" aria-label="Search wildcards to reattach target" />
+        <SearchInput v-model="query" size="md" class="rb__search" placeholder="Search wildcards…" aria-label="Search wildcards to reattach target" />
         <ul class="rb__list">
           <li
             v-for="c in candidates()"
@@ -277,17 +278,7 @@ function confirm(side: Side): void {
   border-radius: min(6px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg);
 }
-.rb__search {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 6px 9px;
-  border-radius: min(4px, var(--wp-radius-cap, 999px));
-  border: 1px solid var(--wp-border, rgba(255,255,255,0.12));
-  background: var(--wp-bg-2);
-  color: var(--wp-text);
-  font: 12px var(--wp-font-mono, monospace);
-  outline: none;
-}
+.rb__search { width: 100%; }
 .rb__list { list-style: none; margin: 6px 0; padding: 0; max-height: 150px; overflow-y: auto; }
 .rb__cand { display: flex; flex-direction: column; gap: 2px; padding: 5px 8px; border-radius: min(4px, var(--wp-radius-cap, 999px)); cursor: pointer; color: var(--wp-text); }
 .rb__cand:hover { background: color-mix(in oklab, var(--wp-accent) 18%, transparent); }

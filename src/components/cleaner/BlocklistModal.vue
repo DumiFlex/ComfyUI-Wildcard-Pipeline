@@ -9,6 +9,7 @@
  */
 import { ref, watch, computed } from "vue";
 import ModalShell from "@/kit/ModalShell.vue";
+import Textarea from "@/kit/Textarea.vue";
 import type { BlocklistKind } from "./types";
 import Button from "@/kit/Button.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
@@ -78,7 +79,7 @@ function onCancel(): void {
       </div>
       <div class="wp-blocklist__body">
         <label for="blocklist-textarea" class="wp-blocklist__textarea-label">Entries</label>
-        <textarea
+        <Textarea
           id="blocklist-textarea"
           v-model="draftText"
           data-test="blocklist-textarea"
@@ -136,21 +137,13 @@ function onCancel(): void {
   color: var(--wp-text-muted, var(--wp-text2));
   margin-bottom: 6px;
 }
+/* The kit Textarea draws the box; this is a taller, monospace list. */
 .wp-blocklist__textarea {
-  width: 100%;
   height: 130px;
-  background: var(--wp-bg2, var(--wp-bg-2));
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm, 4px);
-  padding: 8px 10px;
   font-family: var(--wp-font-mono, ui-monospace, "JetBrains Mono", monospace);
   font-size: 12px;
-  resize: vertical; overscroll-behavior: contain;
-  box-sizing: border-box;
-  outline: none;
+  overscroll-behavior: contain;
 }
-.wp-blocklist__textarea:focus { border-color: var(--wp-accent); }
 .wp-blocklist__hint {
   font-size: 10px;
   color: var(--wp-text-dim, var(--wp-text3));

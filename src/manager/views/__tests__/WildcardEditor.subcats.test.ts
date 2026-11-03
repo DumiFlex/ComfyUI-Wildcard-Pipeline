@@ -100,9 +100,13 @@ describe("WildcardEditor sub-categories", () => {
   it("kebab menu offers rename/move/delete", async () => {
     const w = await mountSeeded();
     await w.get('[data-test="subcat-kebab-a"]').trigger("click");
-    expect(w.find('[data-test="subcat-rename"]').exists()).toBe(true);
-    expect(w.find('[data-test="subcat-move"]').exists()).toBe(true);
-    expect(w.find('[data-test="subcat-delete"]').exists()).toBe(true);
+    await flushPromises();
+    // The menu is a kit DropdownMenu, teleported to <body>: Rename, a
+    // "Move to group" section naming the other box, then Delete.
+    const items = [...document.querySelectorAll(".wp-ctxmenu__item")].map((el) => el.textContent?.trim());
+    expect(items).toEqual(["Rename…", "ungrouped", "Delete…"]);
+    expect(document.querySelector(".wp-ctxmenu__section")?.textContent?.trim()).toBe("Move to group");
+    w.unmount();
   });
 
   it("rejects an invalid new sub-category name", async () => {
@@ -168,12 +172,13 @@ describe("WildcardEditor sub-categories", () => {
   it("clicking outside closes an open kebab menu", async () => {
     const w = await mountSeeded();
     await w.get('[data-test="subcat-kebab-a"]').trigger("click");
-    expect(w.find(".subcat-menu").exists()).toBe(true);
-    // A click anywhere outside a pill / menu dismisses it (document-level
-    // handler). Dispatch on body — outside the editor's detached subtree.
-    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await flushPromises();
-    expect(w.find(".subcat-menu").exists()).toBe(false);
+    expect(document.querySelector(".wp-ctxmenu")).not.toBeNull();
+    // A press anywhere outside the menu dismisses it. Dispatch on body —
+    // outside the editor's detached subtree.
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    await flushPromises();
+    expect(document.querySelector(".wp-ctxmenu")).toBeNull();
   });
 
   it("dragging a pill onto another box re-homes the tag", async () => {

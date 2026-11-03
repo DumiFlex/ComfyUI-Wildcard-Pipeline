@@ -143,9 +143,9 @@ function fmtPct(n: number): string {
             </component>
           </li>
         </ol>
-        <button v-if="rows.length < diff.changed.length" type="button" class="wp-trc__more" @click="limit += PAGE">
+        <Button v-if="rows.length < diff.changed.length" variant="link" size="sm" class="wp-trc__more" @click="limit += PAGE">
           Show {{ Math.min(PAGE, diff.changed.length - rows.length) }} more
-        </button>
+        </Button>
       </section>
 
       <section v-if="varChanges.length" class="wp-trc__sec" aria-label="Changed variables">
@@ -240,10 +240,7 @@ button.wp-trc__row:hover { border-color: var(--wp-border-strong); }
   border-radius: min(3px, var(--wp-radius-cap, 999px)); /* audit-exempt: inline token */
   background: color-mix(in oklab, var(--wp-danger) 18%, transparent); color: var(--wp-danger-text);
 }
-.wp-trc__more {
-  align-self: flex-start; background: none; border: 0; cursor: pointer; padding: 0;
-  color: var(--wp-accent-text); font-size: var(--wp-text-sm);
-}
+.wp-trc__more { align-self: flex-start; font-size: var(--wp-text-sm); }
 .wp-trc__vars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wp-space-4); font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
 .wp-trc__vars li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--wp-space-2) var(--wp-space-4); }
 .wp-trc__line { display: inline-flex; flex-wrap: wrap; gap: var(--wp-space-2); align-items: baseline; }

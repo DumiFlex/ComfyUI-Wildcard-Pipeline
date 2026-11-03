@@ -6,6 +6,7 @@
  */
 import { computed, ref, watch } from "vue";
 import Banner from "@/kit/Banner.vue";
+import Input from "@/kit/Input.vue";
 import ColorField from "@/kit/ColorField.vue";
 import Kbd from "@/kit/Kbd.vue";
 import Button from "@/kit/Button.vue";
@@ -162,9 +163,10 @@ function done(): void {
           data-test="bm-color"
           @update:model-value="(v: string) => patch({ color: v === 'none' ? '' : v.slice(0, 7) })"
         />
-        <input
+        <Input
+          size="sm"
           class="wp-bm__name"
-          :value="title"
+          :model-value="title"
           aria-label="Bookmark name"
           data-test="bm-title"
           @input="onTitle"
@@ -297,19 +299,7 @@ function done(): void {
   align-items: center;
   gap: 6px;
 }
-.wp-bm__name {
-  flex: 1;
-  min-width: 0;
-  height: var(--wp-control-h-sm, 24px);
-  padding: 0 8px;
-  box-sizing: border-box;
-  color: var(--wp-text);
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border);
-  border-radius: min(4px, var(--wp-radius-cap, 999px));
-  font: 600 12.5px var(--wp-font-sans, sans-serif);
-}
-.wp-bm__name:focus-visible { outline: 2px solid var(--wp-accent); outline-offset: -1px; }
+.wp-bm__name { flex: 1; min-width: 0; }
 .wp-bm__row {
   display: flex;
   align-items: center;

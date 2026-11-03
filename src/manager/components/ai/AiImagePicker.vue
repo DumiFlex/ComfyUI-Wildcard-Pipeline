@@ -9,6 +9,7 @@
 import { onMounted, ref, watch } from "vue";
 import { useAiConfig } from "../../composables/useAiConfig";
 import { checkVision, type AiImages } from "../../composables/useAiImages";
+import Button from "@/kit/Button.vue";
 import LoadingMark from "@/kit/LoadingMark.vue";
 
 const props = withDefaults(defineProps<{
@@ -90,14 +91,16 @@ function onPaste(ev: ClipboardEvent): void {
         >
           <img :src="img.url" :alt="img.name">
           <span v-if="images.images.value.length > 1" class="wp-ai-images__num" :title="`Image ${i + 1}: call it that in your request`" data-test="ai-image-num">{{ i + 1 }}</span>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
+            icon="times"
             class="wp-ai-images__remove"
             :aria-label="`Remove ${img.name}`"
             :disabled="disabled"
             data-test="ai-image-remove"
             @click.stop="images.remove(i)"
-          ><i class="pi pi-times" aria-hidden="true" /></button>
+          />
         </div>
         <span v-if="!images.full.value" class="wp-ai-images__add">
           <LoadingMark v-if="images.busy.value" decorative />
@@ -136,9 +139,10 @@ function onPaste(ev: ClipboardEvent): void {
 .wp-ai-images__thumb { position: relative; width: 56px; height: 56px; border-radius: min(6px, var(--wp-radius-cap, 999px)); overflow: hidden; flex: none; }
 .wp-ai-images[data-compact] .wp-ai-images__thumb { width: 40px; height: 40px; }
 .wp-ai-images__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.wp-ai-images__remove {
-  position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: min(50%, var(--wp-radius-cap, 999px));
-  background: var(--wp-scrim); color: var(--wp-on-media); cursor: pointer; font-size: 9px; display: grid; place-items: center;
+/* The kit's × button, laid over the corner of the picture. */
+.wp-ai-images__remove.wp-btn {
+  position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; min-width: 0; padding: 0;
+  border-radius: min(50%, var(--wp-radius-cap, 999px)); background: var(--wp-scrim); color: var(--wp-on-media);
 }
 .wp-ai-images__num {
   position: absolute; left: 2px; bottom: 2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: min(8px, var(--wp-radius-cap, 999px));

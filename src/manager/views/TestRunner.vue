@@ -13,7 +13,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Button from "@/kit/Button.vue";
-import Icon, { ICON_SM } from "@/kit/Icon.vue";
+import InlineEdit from "@/kit/InlineEdit.vue";
 import Skeleton from "@/kit/Skeleton.vue";
 import ScenarioRail from "../components/test-runner/ScenarioRail.vue";
 import StackBuilder from "../components/test-runner/StackBuilder.vue";
@@ -76,7 +76,6 @@ registerPageNote(() => {
 type Tab = "variables" | "outputs" | "samples" | "warnings" | "compare";
 const tab = ref<Tab>("variables");
 const traceSeed = ref<number | null>(null);
-const editingName = ref(false);
 
 const uuidToName = computed(() => buildUuidToName(wb.modules.value));
 
@@ -331,20 +330,17 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
     <main class="wp-tr__main">
       <div class="wp-tr__bar">
         <div class="wp-tr__title">
-          <input
-            v-if="editingName"
-            id="wp-tr-name"
-            v-model="draft.name"
-            class="wp-tr__name-input"
-            aria-label="Scenario name"
-            data-test="scenario-name-input"
-            @blur="editingName = false"
-            @keydown.enter="editingName = false"
-          >
-          <h1 v-else>
-            <button type="button" class="wp-tr__name" title="Rename" data-test="scenario-name" @click="editingName = true">
-              {{ draft.name || "Untitled scenario" }}<Icon class="wp-tr__pen" name="pi-pencil" :size="ICON_SM" />
-            </button>
+          <!-- The heading's text is the scenario name InlineEdit draws (its read view), which the rule can't see through the component. -->
+          <!-- eslint-disable-next-line vuejs-accessibility/heading-has-content -->
+          <h1>
+            <InlineEdit
+              v-model="draft.name"
+              class="wp-tr__name"
+              label="Scenario name"
+              placeholder="Untitled scenario"
+              :required="false"
+              data-test="scenario-name"
+            />
           </h1>
           <p class="wp-tr__sub">
             {{ draft.stack.length }} item{{ draft.stack.length === 1 ? "" : "s" }}
@@ -506,18 +502,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 }
 .wp-tr__title { min-width: 0; }
 .wp-tr__title h1 { margin: 0; font-size: var(--wp-text-lg); font-weight: var(--wp-weight-semibold); }
-.wp-tr__name {
-  background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: text;
-  display: inline-flex; align-items: center; gap: var(--wp-space-3);
-}
-.wp-tr__pen { color: var(--wp-text-dim); opacity: 0; transition: opacity .12s; }
-.wp-tr__name:hover .wp-tr__pen, .wp-tr__name:focus-visible .wp-tr__pen { opacity: 1; }
-.wp-tr__name:focus-visible { outline: 2px solid var(--wp-border-focus); }
-.wp-tr__name-input {
-  font-size: var(--wp-text-lg); font-weight: var(--wp-weight-semibold); color: var(--wp-text);
-  background: var(--wp-bg-2); border: 1px solid var(--wp-border-focus); border-radius: var(--wp-radius-sm);
-  padding: 0 var(--wp-space-3);
-}
 .wp-tr__sub { margin: var(--wp-space-1) 0 0; font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wp-tr__sub code { color: var(--wp-accent-text); }
 .wp-tr__dirty { color: var(--wp-warn); }

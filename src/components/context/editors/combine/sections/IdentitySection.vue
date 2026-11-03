@@ -7,6 +7,7 @@
  * are verbatim from wildcard. Seed-lock controls live in
  * RuntimeSection (mirroring wildcard's split).
  */
+import Input from "@/kit/Input.vue";
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { patchInstance } from "../../instance/patch";
@@ -73,6 +74,14 @@ const collidesWith = computed<"upstream" | "sibling" | null>(() => {
   return null;
 });
 
+/** The binding field's tone: a sibling clash needs a look (warn); an
+ *  upstream shadow or an override of the library default is accent. */
+const bindingTone = computed<"accent" | "warn" | undefined>(() => {
+  if (collidesWith.value === "sibling") return "warn";
+  if (collidesWith.value === "upstream" || bindingOverridden.value) return "accent";
+  return undefined;
+});
+
 const collisionMessage = computed(() => {
   if (collidesWith.value === "sibling") {
     return `$${effectiveBinding.value} is already produced by another module in this Context. ` +
@@ -118,12 +127,13 @@ function onResetBinding(): void {
     <div class="id__row">
       <span class="id__key">Display name</span>
       <div class="id__input-row">
-        <input
+        <Input
+          size="sm"
+          mono
           class="id__input"
-          :class="{ 'id__input--mod': nameOverridden }"
+          :tone="nameOverridden ? 'accent' : undefined"
           data-test="id-name"
-          type="text"
-          :value="nameValue"
+          :model-value="nameValue"
           :placeholder="module.meta?.library_name ?? 'module name'"
           aria-label="Display name"
           @input="onNameInput"
@@ -144,28 +154,19 @@ function onResetBinding(): void {
     <div class="id__row">
       <span class="id__key">Variable binding</span>
       <div class="id__input-row">
-        <div
-          class="id__input-wrap"
-          :class="{
-            'id__input-wrap--mod': bindingOverridden,
-            'id__input-wrap--collision': collidesWith !== null,
-            'id__input-wrap--collision-warn': collidesWith === 'sibling',
-            'id__input-wrap--collision-info': collidesWith === 'upstream',
-          }"
-        >
-          <span class="id__input-prefix" data-test="id-binding-prefix">$</span>
-          <input
-            class="id__input id__input--prefixed"
-            :class="{ 'id__input--mod': bindingOverridden }"
-            data-test="id-binding"
-            type="text"
-            :value="bindingValue"
-            :placeholder="libraryBinding"
-            aria-label="Variable binding"
-            :disabled="frameActive || undefined"
-            @input="onBindingInput"
-          />
-        </div>
+        <Input
+          size="sm"
+          mono
+          prefix="$"
+          class="id__input"
+          :tone="bindingTone"
+          data-test="id-binding"
+          :model-value="bindingValue"
+          :placeholder="libraryBinding"
+          aria-label="Variable binding"
+          :disabled="frameActive || undefined"
+          @input="onBindingInput"
+        />
         <Button
           v-if="bindingOverridden"
           size="sm"
@@ -230,71 +231,15 @@ function onResetBinding(): void {
   font: 11px var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.id__input {
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  padding: 5px 8px;
-  font: 11px var(--wp-font-mono);
-  color: var(--wp-text);
-}
-.id__input:focus {
-  border-color: var(--wp-accent);
-  outline: none;
-}
-.id__input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
-.id__input--mod {
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-text));
-}
-.id__input-wrap {
-  display: flex;
-  align-items: stretch;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  overflow: hidden;
-  flex: 1;
-}
-.id__input-wrap:focus-within { border-color: var(--wp-accent); }
-.id__input-wrap--mod { border-color: var(--wp-accent); }
-
 .id__input-row {
   display: flex;
   align-items: stretch;
   gap: 6px;
 }
 .id__input-row .id__input { flex: 1; min-width: 0; }
-/* `.id__reset` styling lives in src/components/context/editors/
- * _modal-template-ctrls.css (imported by ContextWidget unscoped). */
-.id__input-prefix {
-  background: var(--wp-bg2);
-  color: var(--wp-text-dim, var(--wp-text3));
-  padding: 5px 9px;
-  border-right: 1px solid var(--wp-border);
-  font: 11px var(--wp-font-mono);
-  display: flex;
-  align-items: center;
-}
-.id__input--prefixed {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  padding: 5px 8px;
-}
-.id__input--prefixed:focus { outline: none; }
-
-/* Binding-collision visual: warn (sibling-same-node) is loud,
- * info (upstream-shadow) is muted. Border tint outranks the
- * `--mod` accent so users see the collision before the modified-
- * indicator. Inline message below the input mirrors the conflict-
- * scanner copy so semantics stay consistent across modal + canvas. */
-.id__input-wrap--collision-warn {
-  border-color: var(--wp-status-modified);
-}
-.id__input-wrap--collision-info {
-  border-color: var(--wp-accent);
-}
+/* Binding-collision message: warn (sibling-same-node) is loud, info
+ * (upstream-shadow) muted. It mirrors the conflict-scanner copy so
+ * semantics stay consistent across modal + canvas. */
 .id__collision {
   margin-top: 6px;
   display: flex;

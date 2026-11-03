@@ -2,16 +2,18 @@
 /**
  * A small toolbar over selected text: Explain (asks the chat straight away)
  * and Ask (quotes it in the chat box for your own question). It never takes
- * over the right-click menu, and stays away from inputs and editors.
+ * over the right-click menu, and stays away from inputs and editors. A kit
+ * Popover over the selection's box (a virtual anchor), that never takes focus.
  */
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
+import Button from "@/kit/Button.vue";
+import Popover from "@/kit/Popover.vue";
+import { rectAnchor, type VirtualAnchor } from "@/kit/floating";
 import { useAiConfig } from "../../composables/useAiConfig";
 import { useAiChat } from "../../composables/useAiChat";
 import { askableSelection, EXPLAIN_SHORTCUT, useSelectionAsk } from "../../composables/useSelectionAsk";
 import { useUiStore } from "../../stores/uiStore";
 
-const GAP = 8;
-const CHIP_H = 30;
 const SETTLE_MS = 150;
 
 const ai = useAiConfig();
@@ -20,16 +22,17 @@ const ui = useUiStore();
 const { explain, askAbout } = useSelectionAsk();
 
 const text = ref("");
-const pos = ref<{ top: number; left: number; below: boolean } | null>(null);
+/** The selection's box when it settled. */
+const at = shallowRef<VirtualAnchor | null>(null);
 const root = ref<HTMLElement | null>(null);
 let pressed = false;
 let timer: ReturnType<typeof setTimeout> | null = null;
 
-const shown = computed(() => ai.ready.value && ui.explainChip && !!text.value && !!pos.value);
+const shown = computed(() => ai.ready.value && ui.explainChip && !!text.value && !!at.value);
 
 function hide(): void {
   text.value = "";
-  pos.value = null;
+  at.value = null;
 }
 
 function place(): void {
@@ -45,11 +48,8 @@ function place(): void {
     hide();
     return;
   }
-  const below = rect.top - CHIP_H - GAP < GAP;
-  const top = below ? rect.bottom + GAP : rect.top - CHIP_H - GAP;
-  const left = Math.min(Math.max(rect.left + rect.width / 2, 90), window.innerWidth - 90);
   text.value = picked;
-  pos.value = { top, left, below };
+  at.value = rectAnchor({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
 }
 
 function settle(): void {
@@ -113,20 +113,33 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <Teleport to="body">
+  <!-- Above the selection, centred, below it when there is no room. Escape or
+       a press elsewhere hides it; scrolling hides it too (the box it was
+       placed at has moved). -->
+  <!-- The kit Popover's own prop, turning its focus move OFF. -->
+  <!-- eslint-disable-next-line vuejs-accessibility/no-autofocus -->
+  <Popover :autofocus="false"
+    :open="shown"
+    :anchor="at"
+    placement="top"
+    role="group"
+    label="Selected text"
+    class="wp-ai-sel-pop"
+    data-ai-no-explain
+    @update:open="(v: boolean) => { if (!v) hide(); }"
+  >
     <div
-      v-if="shown && pos"
       ref="root"
-      class="wp-ai-sel wp-enter-rise"
-      :data-from="pos.below ? 'below' : undefined"
-      :style="{ top: `${pos.top}px`, left: `${pos.left}px` }"
+      class="wp-ai-sel"
       role="toolbar"
       aria-label="Selected text"
       data-test="ai-selection-chip"
       data-ai-no-explain
     >
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
+        icon="pi-microchip-ai"
         class="wp-ai-sel__btn"
         :disabled="chat.loading.value"
         :title="chat.loading.value ? 'The chat is answering' : `Ask the assistant to explain this (${EXPLAIN_SHORTCUT})`"
@@ -134,42 +147,44 @@ onBeforeUnmount(() => {
         @mousedown.prevent
         @click="onExplain"
       >
-        <i class="pi pi-microchip-ai" aria-hidden="true" /> Explain
-      </button>
+        Explain
+      </Button>
       <span class="wp-ai-sel__sep" aria-hidden="true" />
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
+        icon="pi-comment"
         class="wp-ai-sel__btn"
         title="Quote this in the chat and ask your own question"
         data-test="ai-selection-ask"
         @mousedown.prevent
         @click="onAsk"
       >
-        <i class="pi pi-comment" aria-hidden="true" /> Ask
-      </button>
+        Ask
+      </Button>
     </div>
-  </Teleport>
+  </Popover>
 </template>
 
 <style scoped>
 .wp-ai-sel {
-  position: fixed; z-index: 9000;
-  /* Centred on the selection; the kit's .wp-enter-rise moves it into place. */
-  --wp-enter-x: -50%;
   display: inline-flex; align-items: center; height: 30px; padding: 0 3px;
   border-radius: min(8px, var(--wp-radius-cap, 999px)); background: var(--wp-bg-1);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 45%, var(--wp-border));
   box-shadow: var(--wp-shadow-md);
 }
-.wp-ai-sel__btn {
-  display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px;
-  border: 0; border-radius: min(6px, var(--wp-radius-cap, 999px)); background: transparent; color: var(--wp-text);
-  font: inherit; font-size: 12px; cursor: pointer;
-}
-.wp-ai-sel__btn:hover:not(:disabled), .wp-ai-sel__btn:focus-visible {
-  background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent); outline: none;
-}
-.wp-ai-sel__btn:disabled { opacity: 0.5; cursor: default; }
-.wp-ai-sel__btn .pi { font-size: 12px; color: var(--wp-accent-400, var(--wp-accent-500)); }
+.wp-ai-sel__btn :deep(.pi) { color: var(--wp-accent-400, var(--wp-accent-500)); }
 .wp-ai-sel__sep { width: 1px; height: 16px; background: var(--wp-border); margin: 0 2px; }
+</style>
+
+<style>
+/* The Popover panel is bare (not scoped: it lives under <body>); the toolbar
+   inside draws the chip. Under the overlays the app opens on top of a page. */
+.wp-popover.wp-ai-sel-pop {
+  z-index: 9000;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
 </style>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Checkbox from "@/kit/Checkbox.vue";
+import Chip from "@/kit/Chip.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, ref } from "vue";
 import {
@@ -470,9 +471,9 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
         :data-test="`opt-cat-${tag}`"
         :style="chipStyle(tag)"
       >{{ tag }}</span>
-      <button
+      <Chip
         v-if="hiddenTagCount > 0 || catExpanded"
-        type="button"
+        as="button"
         class="opt__cat-more"
         :data-test="`opt-cat-more-${option.id}`"
         :aria-expanded="catExpanded"
@@ -480,7 +481,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
           ? `Collapse tags for ${option.value}`
           : `Show ${hiddenTagCount} more tags for ${option.value}`"
         @click.stop="catExpanded = !catExpanded"
-      >{{ catExpanded ? "−" : `+${hiddenTagCount}` }}</button>
+      >{{ catExpanded ? "−" : `+${hiddenTagCount}` }}</Chip>
     </span>
   </div>
 </template>
@@ -728,11 +729,13 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
 }
 /* `+N` / `−` disclosure for the hidden tags. Styled as a neutral chip so it
  * reads as part of the tag run rather than as a row action. */
-.opt__cat-more {
+/* A kit Chip (as a button) in the old dashed "+N" look. */
+.wp-chip.opt__cat-more {
+  height: auto;
   display: inline-flex;
   align-items: center;
   padding: 1px 5px;
-  border-radius: var(--wp-radius-cap, 999px);
+  border-radius: min(5px, var(--wp-radius-cap, 999px));
   font: 8px var(--wp-font-sans);
   letter-spacing: 0.06em;
   white-space: nowrap;
@@ -741,7 +744,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   border: 1px dashed color-mix(in srgb, var(--wp-text3) 45%, transparent);
   background: transparent;
 }
-.opt__cat-more:hover {
+.wp-chip.opt__cat-more:hover {
   color: var(--wp-text);
   border-color: var(--wp-accent);
 }

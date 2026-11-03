@@ -32,6 +32,7 @@
  * type-export pattern).
  */
 import { ref, useId } from "vue";
+import Button from "@/kit/Button.vue";
 import type { ChainStep } from "./chain-types";
 
 interface Props {
@@ -58,16 +59,16 @@ const bodyId = useId();
     <div class="wp-tier3-row__head">
       <span class="wp-tier3-row__name">{{ bundleName }}</span>
       <span class="wp-tier3-row__badge">Tier-3 rejected</span>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
+        :icon="expanded ? 'pi-chevron-up' : 'pi-chevron-down'"
         class="wp-tier3-row__toggle"
         data-test="chain-toggle"
         :aria-expanded="expanded ? 'true' : 'false'"
         :aria-controls="bodyId"
         @click="expanded = !expanded"
-      >
-        {{ expanded ? "Hide why" : "Why?" }}
-      </button>
+      >{{ expanded ? "Hide why" : "Why?" }}</Button>
     </div>
     <div
       v-if="expanded"
@@ -126,28 +127,7 @@ const bodyId = useId();
   letter-spacing: 0.04em;
 }
 
-.wp-tier3-row__toggle {
-  height: var(--wp-btn-h-sm);
-  padding: 0 var(--wp-space-4);
-  background: transparent;
-  color: var(--wp-text-muted);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  font-family: inherit;
-  font-size: var(--wp-text-sm);
-  cursor: pointer;
-  transition: background .12s, color .12s, border-color .12s;
-  margin-left: auto;
-}
-.wp-tier3-row__toggle:hover {
-  background: var(--wp-bg-3);
-  color: var(--wp-text);
-  border-color: var(--wp-border-strong);
-}
-.wp-tier3-row__toggle:focus-visible {
-  outline: none;
-  box-shadow: var(--wp-focus-ring);
-}
+.wp-tier3-row__toggle { margin-left: auto; }
 
 .wp-tier3-row__chain {
   display: flex;

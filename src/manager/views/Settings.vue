@@ -13,6 +13,7 @@ import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, ref, watch, type Component } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import Icon from "@/kit/Icon.vue";
+import ListRow from "@/kit/ListRow.vue";
 import GeneralSection from "../components/settings/sections/GeneralSection.vue";
 import AppearanceSection from "../components/settings/sections/AppearanceSection.vue";
 import EditingSection from "../components/settings/sections/EditingSection.vue";
@@ -129,11 +130,10 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
         </header>
         <ul v-if="results.length" class="wp-settings__results" data-test="settings-results">
           <li v-for="r in results" :key="r.key">
-            <button type="button" class="wp-settings__result" :data-test="`settings-result-${r.key}`" @click="openResult(r)">
+            <ListRow class="wp-settings__result" :description="r.hint" :data-test="`settings-result-${r.key}`" @click="openResult(r)">
               <span class="wp-settings__result-where">{{ sectionLabel(r.section) }}</span>
               <span class="wp-settings__result-label">{{ r.label }}</span>
-              <span class="wp-settings__result-hint">{{ r.hint }}</span>
-            </button>
+            </ListRow>
           </li>
         </ul>
         <p v-else class="wp-settings__blurb">Nothing matches. Try a shorter word.</p>
@@ -191,23 +191,18 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
 .wp-settings__h2 { font-size: 18px; line-height: 28px; margin: 0; }
 .wp-settings__blurb { margin: 4px 0 0; font-size: var(--wp-text-sm); color: var(--wp-text-dim); }
 .wp-settings__results { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wp-space-3); }
+/* A kit list row drawn as a card: where it lives, its name, then its hint. */
 .wp-settings__result {
-  width: 100%;
-  display: grid;
-  gap: 2px;
-  text-align: left;
   padding: var(--wp-space-4) var(--wp-space-5);
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius-lg, 10px);
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
 }
+.wp-settings__result :deep(.wp-list-row__label) { display: grid; gap: 2px; white-space: normal; }
 .wp-settings__result:hover { border-color: var(--wp-accent-500); }
 .wp-settings__result-where { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--wp-text-dim); }
-.wp-settings__result-label { font-weight: 600; font-size: var(--wp-text-sm); }
-.wp-settings__result-hint { font-size: 12px; color: var(--wp-text-dim); }
+.wp-settings__result-label { font-weight: 600; font-size: var(--wp-text-sm); color: var(--wp-text); }
+.wp-settings__result :deep(.wp-list-row__desc) { font-size: 12px; }
 
 /* Page area narrower than 660px (usePageWidth; the chat can take the rest). */
 .wp-content[data-lt~="660"] .wp-settings { grid-template-columns: minmax(0, 1fr); gap: var(--wp-space-5); }

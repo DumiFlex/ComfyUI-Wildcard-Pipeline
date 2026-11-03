@@ -21,17 +21,17 @@ function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
 describe("combine IdentitySection — frameActive gating on variable binding", () => {
   it("binding input is NOT disabled in base mode (frameActive absent)", () => {
     const w = mount(IdentitySection, { props: { module: makeModule() } });
-    expect(w.find('[data-test="id-binding"]').attributes("disabled")).toBeUndefined();
+    expect(w.find('[data-test="id-binding"] input').attributes("disabled")).toBeUndefined();
   });
 
   it("binding input is NOT disabled when frameActive=false", () => {
     const w = mount(IdentitySection, { props: { module: makeModule(), frameActive: false } });
-    expect(w.find('[data-test="id-binding"]').attributes("disabled")).toBeUndefined();
+    expect(w.find('[data-test="id-binding"] input').attributes("disabled")).toBeUndefined();
   });
 
   it("binding input IS disabled when frameActive=true", () => {
     const w = mount(IdentitySection, { props: { module: makeModule(), frameActive: true } });
-    expect(w.find('[data-test="id-binding"]').attributes("disabled")).toBeDefined();
+    expect(w.find('[data-test="id-binding"] input').attributes("disabled")).toBeDefined();
   });
 
   it("shows binding frame-active hint when frameActive=true", () => {

@@ -17,19 +17,20 @@ function makeRow(over: Partial<RowType> = {}): RowType {
 describe("InjectorRow — binding + type chip", () => {
   it("renders the binding input with the row's binding value", () => {
     const w = mount(InjectorRow, { props: { row: makeRow() } });
-    const input = w.find<HTMLInputElement>('[data-test="inj-row-binding"]');
+    const input = w.find<HTMLInputElement>('[data-test="inj-row-binding"] input');
     expect(input.element.value).toBe("seed_phrase");
   });
 
-  it("shows warn-color placeholder + wrap class when binding is empty", () => {
-    // C.1a: empty state moved from the <input> class to the .wp-vbind-wrap
-    // parent so the border + prefix + placeholder all react. Placeholder
-    // text changed to $variable_name semantics (user types it, system
-    // doesn't generate it).
+  it("tones the binding field warn when the binding is empty", () => {
+    // The empty state sits on the prefixed field's group (kit `tone="warn"`)
+    // so its border and `$` prefix both react. Placeholder text keeps the
+    // $variable_name semantics (user types it, system doesn't generate it).
     const w = mount(InjectorRow, { props: { row: makeRow({ binding: "" }) } });
-    const input = w.find<HTMLInputElement>('[data-test="inj-row-binding"]');
+    const input = w.find<HTMLInputElement>('[data-test="inj-row-binding"] input');
     expect(input.attributes("placeholder")).toBe("variable_name");
-    expect(w.find(".wp-vbind-wrap--empty").exists()).toBe(true);
+    expect(w.find('[data-test="inj-row-binding"]').attributes("data-tone")).toBe("warn");
+    const bound = mount(InjectorRow, { props: { row: makeRow() } });
+    expect(bound.find('[data-test="inj-row-binding"]').attributes("data-tone")).toBeUndefined();
   });
 
   it("shows the type chip from the valueType prop (lowercase)", () => {
@@ -40,7 +41,7 @@ describe("InjectorRow — binding + type chip", () => {
 
   it("emits update with new binding when the input changes", async () => {
     const w = mount(InjectorRow, { props: { row: makeRow() } });
-    const input = w.find<HTMLInputElement>('[data-test="inj-row-binding"]');
+    const input = w.find<HTMLInputElement>('[data-test="inj-row-binding"] input');
     await input.setValue("renamed");
     const updates = w.emitted("update")!;
     const last = updates[updates.length - 1][0] as Partial<RowType>;
@@ -333,7 +334,7 @@ describe("InjectorRow — general (template) row", () => {
 
   it("renders the binding input inline (template moved to the edit modal)", () => {
     const w = mount(InjectorRow, { props: { row: generalRow() } });
-    expect(w.find<HTMLInputElement>('[data-test="inj-row-binding"]').element.value).toBe("combo");
+    expect(w.find<HTMLInputElement>('[data-test="inj-row-binding"] input').element.value).toBe("combo");
   });
 
   it("no longer renders an inline template editor — that lives in the modal", () => {

@@ -1287,15 +1287,14 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
               @drop="(e) => onDrop(idx, e)"
               @drag-end="onDragEnd"
             />
-            <button
-              type="button"
+            <Button
+              variant="add"
+              block
+              icon="pi-plus"
               class="wp-bundle-add-btn"
               data-test="bundle-add-open"
               @click="addModalOpen = true"
-            >
-              <i class="pi pi-plus" aria-hidden="true" />
-              add child from library
-            </button>
+            >Add child from library</Button>
           </div>
           <BundleChildPane
             :child="selectedChild"
@@ -1398,29 +1397,5 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
 .wp-bundle-children-stack__drag-over {
   box-shadow: 0 -2px 0 var(--wp-accent-500);
 }
-.wp-bundle-add-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--wp-space-4);
-  width: 100%;
-  padding: var(--wp-space-4);
-  margin-top: var(--wp-space-2);
-  border: 1px dashed var(--wp-border-strong, var(--wp-border));
-  border-radius: var(--wp-radius, 4px);
-  background: transparent;
-  color: var(--wp-text-dim);
-  font-size: var(--wp-text-xs);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
-}
-.wp-bundle-add-btn:hover {
-  border-style: solid;
-  border-color: var(--wp-accent-500);
-  color: var(--wp-accent-500);
-  background: color-mix(in oklab, var(--wp-accent-500) 7%, transparent);
-}
+.wp-bundle-add-btn { margin-top: var(--wp-space-2); }
 </style>

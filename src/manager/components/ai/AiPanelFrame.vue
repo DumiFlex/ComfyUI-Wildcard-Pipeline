@@ -12,8 +12,11 @@
  * between its tries (Try again) and between different refines of the same
  * answer, and clicking a step shows its answer.
  */
+import { textareaEl } from "../../utils/kit-field-el";
+import Textarea from "@/kit/Textarea.vue";
 import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
+import ListRow from "@/kit/ListRow.vue";
 import AiImagePicker from "./AiImagePicker.vue";
 import AiSearchFound from "./AiSearchFound.vue";
 import AiWorking from "./AiWorking.vue";
@@ -128,40 +131,41 @@ function onKeydown(ev: KeyboardEvent): void {
         :data-after="st.after ? 'true' : 'false'"
         data-test="ai-step"
       >
-        <button
-          type="button"
+        <ListRow
+          size="sm"
           class="wp-ai-frame__step-text"
-          :disabled="loading || st.shown"
+          :icon="k === 0 ? 'pi-comment' : 'pi-reply'"
+          :selected="st.shown"
+          :disabled="loading"
           :title="st.shown ? 'This answer is showing' : 'Show this answer'"
           data-test="ai-asked"
-          @click="emit('show', st.at)"
-        >
-          <i :class="['pi', k === 0 ? 'pi-comment' : 'pi-reply']" aria-hidden="true" />
-          <span>{{ st.text || "Asked without a note" }}</span>
-        </button>
+          @click="!st.shown && emit('show', st.at)"
+        >{{ st.text || "Asked without a note" }}</ListRow>
         <span
           v-if="st.refines > 1"
           class="wp-ai-frame__nav"
           title="Different follow-ups to the same answer"
           data-test="ai-refine-nav"
         >
-          <button
-            type="button"
-            class="wp-ai-frame__nav-btn"
+          <Button
+            variant="outline"
+            size="sm"
+            icon="pi-chevron-left"
             aria-label="Earlier refine"
             data-test="ai-refine-prev"
             :disabled="loading || st.refine <= 0"
             @click="emit('flip', st.at, 'refine', -1)"
-          ><i class="pi pi-chevron-left" aria-hidden="true" /></button>
+          />
           <span class="wp-ai-frame__nav-label">refine {{ st.refine + 1 }} of {{ st.refines }}</span>
-          <button
-            type="button"
-            class="wp-ai-frame__nav-btn"
+          <Button
+            variant="outline"
+            size="sm"
+            icon="pi-chevron-right"
             aria-label="Later refine"
             data-test="ai-refine-next"
             :disabled="loading || st.refine >= st.refines - 1"
             @click="emit('flip', st.at, 'refine', 1)"
-          ><i class="pi pi-chevron-right" aria-hidden="true" /></button>
+          />
         </span>
         <span
           v-if="st.tries > 1"
@@ -169,30 +173,32 @@ function onKeydown(ev: KeyboardEvent): void {
           title="Try again asks the same request fresh; flip between its tries"
           data-test="ai-try-nav"
         >
-          <button
-            type="button"
-            class="wp-ai-frame__nav-btn"
+          <Button
+            variant="outline"
+            size="sm"
+            icon="pi-chevron-left"
             aria-label="Earlier try"
             data-test="ai-try-prev"
             :disabled="loading || st.try <= 0"
             @click="emit('flip', st.at, 'try', -1)"
-          ><i class="pi pi-chevron-left" aria-hidden="true" /></button>
+          />
           <span class="wp-ai-frame__nav-label"><i class="pi pi-refresh" aria-hidden="true" /> try {{ st.try + 1 }} of {{ st.tries }}</span>
-          <button
-            type="button"
-            class="wp-ai-frame__nav-btn"
+          <Button
+            variant="outline"
+            size="sm"
+            icon="pi-chevron-right"
             aria-label="Later try"
             data-test="ai-try-next"
             :disabled="loading || st.try >= st.tries - 1"
             @click="emit('flip', st.at, 'try', 1)"
-          ><i class="pi pi-chevron-right" aria-hidden="true" /></button>
+          />
         </span>
       </li>
     </ol>
-    <textarea
-      ref="box"
+    <Textarea
+      :ref="(c) => (box = textareaEl(c))"
       v-model="instruction"
-      class="wp-textarea wp-ai-frame__input"
+      class="wp-ai-frame__input"
       :rows="answered || optional ? 1 : 2"
       :placeholder="answered ? 'Refine it: e.g. fewer, shorter, more like the second one, keep what I ticked…' : placeholder"
       :aria-label="answered ? 'Follow-up for the AI' : 'What should the AI do?'"
@@ -200,7 +206,7 @@ function onKeydown(ev: KeyboardEvent): void {
       :disabled="loading"
       @keydown="onKeydown"
       @paste="onPaste"
-    ></textarea>
+    />
     <ChatInputMarks :target="box" :text="instruction" />
     <ChatCompletions :target="box" />
     <AiImagePicker v-if="images" :images="images" :disabled="loading" compact />
@@ -289,29 +295,12 @@ function onKeydown(ev: KeyboardEvent): void {
 .wp-ai-frame__model[data-local="true"] { color: var(--wp-success); border-color: color-mix(in oklab, var(--wp-success) 45%, transparent); }
 .wp-ai-frame__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .wp-ai-frame__step { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; padding: 2px 4px; border-radius: min(5px, var(--wp-radius-cap, 999px)); }
-.wp-ai-frame__step[data-shown="true"] { background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent); }
 .wp-ai-frame__step[data-after="true"] { opacity: 0.6; }
-.wp-ai-frame__step-text {
-  flex: 1 1 200px; min-width: 0; display: flex; gap: 8px; align-items: baseline; padding: 2px 0;
-  border: 0; background: none; text-align: left; font-size: 12px; color: var(--wp-text-muted);
-  overflow-wrap: anywhere; cursor: pointer;
-}
-.wp-ai-frame__step-text:hover:not(:disabled) { color: var(--wp-text); }
-.wp-ai-frame__step-text:disabled { cursor: default; }
-.wp-ai-frame__step[data-shown="true"] .wp-ai-frame__step-text { color: var(--wp-text); }
-.wp-ai-frame__step-text .pi { font-size: 11px; color: var(--wp-accent-text); }
+.wp-ai-frame__step-text { flex: 1 1 200px; width: auto; }
+.wp-ai-frame__step-text :deep(.wp-list-row__label) { white-space: normal; overflow-wrap: anywhere; }
 .wp-ai-frame__nav { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--wp-text-muted); white-space: nowrap; }
 .wp-ai-frame__nav-label { font-variant-numeric: tabular-nums; }
 .wp-ai-frame__nav-label .pi { font-size: 10px; color: var(--wp-accent-text); }
-.wp-ai-frame__nav-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px; padding: 0;
-  border: 1px solid var(--wp-border); border-radius: min(5px, var(--wp-radius-cap, 999px));
-  background: var(--wp-bg-1); color: var(--wp-text-muted); cursor: pointer;
-}
-.wp-ai-frame__nav-btn:hover:not(:disabled) { color: var(--wp-text); border-color: var(--wp-accent-400); }
-.wp-ai-frame__nav-btn:disabled { opacity: 0.4; cursor: default; }
-.wp-ai-frame__nav-btn .pi { font-size: 10px; }
 .wp-ai-frame__input { width: 100%; resize: vertical; overscroll-behavior: contain; font-size: 13px; }
 .wp-ai-frame__controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .wp-ai-frame__hint { font-size: 12px; color: var(--wp-text-dim); }

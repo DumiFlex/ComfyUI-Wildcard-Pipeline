@@ -10,6 +10,9 @@ import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
 import { _resetAiChatForTests, useAiChat } from "../../../composables/useAiChat";
 import { _resetOpenEditorForTests } from "../../../composables/useOpenEditor";
 import type { AiChatRequest, AiChatResult, AiConfig, ScenarioRunResponse } from "../../../api/types";
+import { inlineDrawer } from "./inline-drawer";
+
+inlineDrawer();
 
 const CONFIG = {
   enabled: true, provider: "ollama", base_url: "", model: "m", unload_after_s: 60, context_max: 16384, model_size: "auto", model_size_auto: "small",

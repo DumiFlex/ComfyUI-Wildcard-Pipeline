@@ -1067,19 +1067,17 @@ const importItemCount = computed<number>(() => {
         All issues resolved
       </span>
       <span class="wp-conflict-modal__spacer" />
-      <button
-        type="button"
-        class="wp-btn wp-btn--ghost"
+      <Button
+        variant="ghost"
         data-test="cancel-btn"
         @click="onCancel"
-      >Cancel</button>
-      <button
-        type="button"
-        class="wp-btn wp-btn--primary"
+      >Cancel</Button>
+      <Button
+        variant="primary"
         :disabled="unresolvedCount > 0"
         data-test="commit-btn"
         @click="onCommit"
-      >Import {{ importItemCount }} items</button>
+      >Import {{ importItemCount }} items</Button>
     </template>
   </Modal>
 </template>

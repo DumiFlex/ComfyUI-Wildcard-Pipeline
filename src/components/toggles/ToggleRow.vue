@@ -8,6 +8,7 @@
  * `extension/row-outputs.ts` puts that BOOLEAN dot at the row's right edge.
  */
 import Button from "@/kit/Button.vue";
+import Input from "@/kit/Input.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
@@ -217,24 +218,25 @@ function flip(): void {
       </div>
       <label class="wp-tgr__field">
         <span>Name <em>on the row and its output</em></span>
-        <input :value="t.name" spellcheck="false" data-test="tg-name" @keydown.stop @change="emit('rename', value($event))">
+        <Input size="sm" :model-value="t.name" spellcheck="false" data-test="tg-name" @keydown.stop @change="emit('rename', value($event))" />
       </label>
       <label class="wp-tgr__field">
         <span>Variable <em>true or false, for rules only</em></span>
         <span class="wp-tgr__var-row">
-        <span class="wp-vbind-wrap" :class="{ 'wp-vbind-wrap--collision-warn': !!problem }">
-          <span class="wp-vbind-prefix">$</span>
-          <input
-            class="wp-vbind-input"
-            :class="t.var ? varColorClass(t.var) : undefined"
-            :value="t.var"
-            placeholder="variable_name"
-            spellcheck="false"
-            data-test="tg-var"
-            @keydown.stop
-            @change="emit('set-var', value($event).replace(/^\$/, ''))"
-          >
-        </span>
+        <Input
+          size="sm"
+          mono
+          prefix="$"
+          class="wp-tgr__var"
+          :class="t.var ? varColorClass(t.var) : undefined"
+          :tone="problem ? 'warn' : undefined"
+          :model-value="t.var"
+          placeholder="variable_name"
+          spellcheck="false"
+          data-test="tg-var"
+          @keydown.stop
+          @change="emit('set-var', value($event).replace(/^\$/, ''))"
+        />
         <span v-tooltip="'Show the $variable under the name in the clean view'" class="wp-tgr__check">
           <Checkbox
             :model-value="!t.hide_var"
@@ -249,14 +251,15 @@ function flip(): void {
       </label>
       <label v-if="pickOne" class="wp-tgr__field">
         <span>Value <em>picked variable gets this, not the name</em></span>
-        <input
-          :value="t.value ?? ''"
+        <Input
+          size="sm"
+          :model-value="t.value ?? ''"
           :placeholder="t.name"
           spellcheck="false"
           data-test="tg-value"
           @keydown.stop
           @change="emit('patch', { value: ($event.target as HTMLInputElement).value || undefined })"
-        >
+        />
       </label>
       <div class="wp-tgr__field">
         <span>Style</span>
@@ -273,11 +276,11 @@ function flip(): void {
       <div v-if="t.style === 'buttons'" class="wp-tgr__two">
         <label class="wp-tgr__field">
           <span>On word</span>
-          <input :value="t.on_label ?? ''" placeholder="On" data-test="tg-on-label" @keydown.stop @change="emit('patch', { on_label: value($event) || undefined })">
+          <Input size="sm" :model-value="t.on_label ?? ''" placeholder="On" data-test="tg-on-label" @keydown.stop @change="emit('patch', { on_label: value($event) || undefined })" />
         </label>
         <label class="wp-tgr__field">
           <span>Off word</span>
-          <input :value="t.off_label ?? ''" placeholder="Off" data-test="tg-off-label" @keydown.stop @change="emit('patch', { off_label: value($event) || undefined })">
+          <Input size="sm" :model-value="t.off_label ?? ''" placeholder="Off" data-test="tg-off-label" @keydown.stop @change="emit('patch', { off_label: value($event) || undefined })" />
         </label>
       </div>
       <div class="wp-tgr__field">
@@ -368,7 +371,6 @@ function flip(): void {
 </template>
 
 <style scoped>
-@import "../shared/var-binding-input.css";
 .wp-tgr { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .wp-tgr__row {
   display: flex;
@@ -433,6 +435,7 @@ function flip(): void {
 .wp-tgr__ctlicon.is-active.is-bypass { color: var(--wp-violet); }
 .wp-tgr__ctlicon.is-active.is-mute { color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__var-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wp-tgr__var-row .wp-tgr__var { flex: 1 1 0; min-width: 80px; }
 .wp-tgr__up { font-size: 9px; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-tgr__warn { font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__ctl { display: inline-flex; flex: none; }
@@ -476,20 +479,6 @@ function flip(): void {
 .wp-tgr__field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .wp-tgr__field > span { font-size: 10.5px; font-weight: 600; color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-tgr__field em { font-style: normal; font-weight: 400; color: var(--wp-text-dim, var(--wp-text3)); margin-left: 4px; }
-.wp-tgr__field input:not(.wp-vbind-input) {
-  min-width: 0;
-  height: var(--wp-control-h-sm, 24px);
-  padding: 0 8px;
-  box-sizing: border-box;
-  background: var(--wp-bg);
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  font: 12px var(--wp-font-sans, sans-serif);
-  outline: none;
-}
-.wp-tgr__field input:not(.wp-vbind-input):focus { border-color: var(--wp-accent); }
-.wp-tgr__field input:not(.wp-vbind-input).is-problem { border-color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .wp-tgr__edit-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .wp-tgr__foot-btns { display: inline-flex; align-items: center; gap: 6px; }

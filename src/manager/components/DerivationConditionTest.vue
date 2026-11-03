@@ -15,6 +15,7 @@
 import { computed } from "vue";
 import RichTextInput from "./RichTextInput.vue";
 import Select from "@/kit/Select.vue";
+import Button from "@/kit/Button.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import VarAutocompleteInput from "./VarAutocompleteInput.vue";
 import type { VarProducerLike } from "./RefChip.vue";
@@ -146,16 +147,17 @@ function set(patch: Partial<DerivationCondition>): void {
       <span class="dvr-label">is</span>
       <div class="dvr-op-cell">
         <div class="dvr-op-row">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             class="dvr-not"
             :class="{ 'dvr-not--on': partsOf(modelValue.op).not }"
-            :aria-pressed="partsOf(modelValue.op).not"
+            :pressed="partsOf(modelValue.op).not"
             :aria-label="`Negate the test for ${a11yName}`"
             :title="partsOf(modelValue.op).not ? 'NOT: the test holds when this is false. Click to turn off.' : 'Turn the test around: does NOT equal, contain, match or exist'"
             :data-test="`cond-not-${testId}`"
             @click="change({ not: !partsOf(modelValue.op).not })"
-          >NOT</button>
+          >NOT</Button>
           <Select
             :model-value="partsOf(modelValue.op).base"
             :options="OP_OPTIONS"
@@ -229,27 +231,7 @@ function set(patch: Partial<DerivationCondition>): void {
 /* NOT sits flush with the operator Select: same height, radius, surface
  * and border, so the pair reads as one control. On, it takes the accent
  * like the refinement switch's active segment. */
-.dvr-not {
-  flex: none;
-  min-width: 44px;
-  padding: 0 10px;
-  border-radius: var(--wp-radius-sm);
-  border: 1px solid var(--wp-border, rgba(255, 255, 255, 0.08));
-  background: var(--wp-bg-2);
-  color: var(--wp-text-dim);
-  font: 600 11px var(--wp-font-sans, sans-serif);
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-}
-.dvr-not:hover { color: var(--wp-text); background: var(--wp-bg-1); }
-.dvr-not--on,
-.dvr-not--on:hover {
-  border-color: color-mix(in srgb, var(--wp-accent) 60%, transparent);
-  color: var(--wp-text);
-  background: color-mix(in srgb, var(--wp-accent) 30%, var(--wp-bg-2));
-}
-.dvr-not:focus-visible { outline: 2px solid var(--wp-accent-500); outline-offset: 2px; }
+.dvr-not { flex: none; min-width: 44px; font-weight: 600; letter-spacing: 0.05em; }
 .dvr-op-cell {
   /* Wraps the op Select + the optional "must have value" tick. The
    * tick is absolute-positioned below the Select so its presence
