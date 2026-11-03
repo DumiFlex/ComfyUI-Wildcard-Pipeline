@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
@@ -75,11 +75,11 @@ const reweightModes = [
         :arrows="['if it lands on X', 'limits']"
         caption="Order in the stack: source, then constraint, then target."
       />
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         Order matters: the source sits above the constraint, and the target below it. The source
         must be a wildcard in the stack; a pick made only inside a reference sets no variable, so a
         constraint on it never applies.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Rule modes">

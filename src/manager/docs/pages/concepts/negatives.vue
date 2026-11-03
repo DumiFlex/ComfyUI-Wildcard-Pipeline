@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -90,12 +90,12 @@ const rules = [
           </tr>
         </tbody>
       </table>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Negatives never change your picks. Adding or editing one leaves every seed's prompt exactly
         as it was. A reference inside a negative rolls on its own and isn't counted as a pick: it
         doesn't show in the Test Runner, doesn't trigger constraints, and brings no negative of its
         own.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="How they follow the variable">

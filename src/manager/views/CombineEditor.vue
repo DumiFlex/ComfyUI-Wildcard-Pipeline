@@ -60,7 +60,6 @@ import { useCascadeApply } from "../cascade/useCascadeApply";
 import { registerCascadeUndo } from "../cascade/undo-stack-integration";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 import CascadeRenameDialog from "../cascade/CascadeRenameDialog.vue";
-import PillCountBadge from "../cascade/PillCountBadge.vue";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { ResolveWarning } from "../utils/resolveTokens";
 import type {
@@ -647,7 +646,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     <template v-if="isEdit" #header-extra>
       <SendToTestRunner v-if="props.id" :id="props.id" :kind="'combine'" />
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
-        used by <PillCountBadge :count="cascadeRefs.length" />
+        used by <Chip tone="warn" size="xs">{{ cascadeRefs.length }}</Chip>
       </span>
       <CommunityRowActions
         v-if="currentRow"

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -30,10 +30,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         ratio="16 / 7"
         caption="WP Context Loop (count 4) → WP Context → WP Prompt Assembler using $iteration of $iteration_total → one prompt per frame."
       />
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         Skip the Seed List and the sampler uses the same seed for every frame, so two frames with
         the same prompt give the same image.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Every combination of a few options">

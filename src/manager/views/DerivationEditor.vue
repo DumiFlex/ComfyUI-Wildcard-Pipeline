@@ -52,7 +52,7 @@ import { DERIVATION_OPS } from "../../components/context/editors/_shared/derivat
 import { isConditionGroup, isNegativeMode, simplifyCondition } from "../../extension/derivation-conditions";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
-import PillCountBadge from "../cascade/PillCountBadge.vue";
+import Chip from "@/kit/Chip.vue";
 import type {
   DerivationAction,
   DerivationBranch,
@@ -630,7 +630,7 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
     <template v-if="isEdit" #header-extra>
       <SendToTestRunner v-if="props.id" :id="props.id" :kind="'derivation'" />
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
-        used by <PillCountBadge :count="cascadeRefs.length" />
+        used by <Chip tone="warn" size="xs">{{ cascadeRefs.length }}</Chip>
       </span>
       <CommunityRowActions
         v-if="currentRow"

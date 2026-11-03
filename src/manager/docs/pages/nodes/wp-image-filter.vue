@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -80,10 +80,10 @@ const settings = [
         :arrows="['images + prompts', 'picks']"
         caption="Wire the same conditioning and prompt text through the filter that the upscaler would otherwise take from the start."
       />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         With a <b>Context Loop</b>, every iteration is a frame. The picker groups images by frame,
         and the prompt, conditioning and Context of a frame are kept only when one of its images is.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Inputs &amp; outputs">
@@ -114,12 +114,12 @@ const settings = [
         <b>Keep all</b> sends everything on. <b>Stop branch</b> stops the nodes after this one;
         the rest of the run finishes normally. Cancelling the run closes the picker.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         A short chime plays when the picker opens, and the tab title starts with
         <b>● Pick images</b> while something waits, so you notice from another tab. Turn the chime
         off with <b>Image Filter sound</b> in Settings; turn on <b>Image Filter desktop
         notification</b> to also get a system notification while the tab is in the background.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Labels, sweep grid and Send to Loop">

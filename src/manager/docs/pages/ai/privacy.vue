@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -24,10 +24,10 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         <li>Web search, page reading and Danbooru lookups only run after you set them up, and ask
           each time unless you turn that off.</li>
       </ul>
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         ComfyUI has no login, so anyone who can reach its port can use the assistant while it is on,
         which spends your credits on a paid provider. Keep it off on a ComfyUI you share.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="What each feature sends">

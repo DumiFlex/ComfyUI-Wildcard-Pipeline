@@ -3,7 +3,6 @@ import { defineComponent, h } from "vue";
 import { afterEach, describe, expect, it } from "vitest";
 import DocPage from "../DocPage.vue";
 import DocImage from "../DocImage.vue";
-import DocCallout from "../DocCallout.vue";
 import DocDetails from "../DocDetails.vue";
 import DocKeyList from "../DocKeyList.vue";
 import type { DocTone } from "../../../docs/registry";
@@ -54,14 +53,6 @@ describe("DocImage on a DocPage", () => {
 });
 
 describe("docs on kit pieces", () => {
-  it("DocCallout is a Banner that is page text, not a live region", () => {
-    const w = mount(DocCallout, { props: { variant: "danger" }, slots: { default: "Careful" } });
-    expect(w.classes()).toContain("wp-banner");
-    expect(w.classes()).toContain("wp-doc-callout");
-    expect(w.attributes("data-tone")).toBe("danger");
-    expect(w.attributes("role")).toBe("note");
-  });
-
   it("DocDetails folds its body under a Disclosure heading", async () => {
     const w = mount(DocDetails, { slots: { default: "<p>Inside</p>" } });
     const btn = w.get(".wp-disclosure__trigger");

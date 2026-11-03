@@ -2,7 +2,7 @@
 import Kbd from "@/kit/Kbd.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
@@ -256,10 +256,10 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         A thanks or a 👍 gets an emoji reaction straight away, without asking the model. If you
         delete an item the answer mentioned, its chip is struck through.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Chat works best with a model that follows instructions well. A small model may need a
         second try or a more specific request; see <DocRef id="ai-troubleshooting" />.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Good to know">

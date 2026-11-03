@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 </script>
 
@@ -55,10 +55,10 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
           applied without a click; the card says <b>Applied automatically</b> and keeps its Undo.
           Ratings, content changes, renames and deletes always wait for you.</li>
       </ul>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Describe on an item's Identity card writes its description and tags one item at a time. See
         Draft with AI.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

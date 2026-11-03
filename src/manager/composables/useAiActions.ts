@@ -142,7 +142,7 @@ const KINDS: Array<[Kind, string]> = [
   ["field", "input:not([type=hidden]),textarea,select,[role=switch],[role=combobox],[role=slider],[role=checkbox],[contenteditable=true]"],
   ["img", "img,figure,svg[role=img],video,canvas"],
   ["code", "pre"],
-  ["note", "blockquote,[role=note],[role=alert],.wp-callout,.wp-doc-callout"],
+  ["note", "blockquote,[role=note],[role=alert],.wp-callout,.wp-banner[role=note]"],
   ["p", "p,dd,figcaption"],
   ["item", "li"],
 ];

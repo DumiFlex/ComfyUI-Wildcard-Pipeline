@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -40,10 +40,10 @@ const library = [
     tone="neutral"
     blurb="Something prints nothing, never changes, or won't install: the usual causes and fixes."
   >
-    <DocCallout variant="tip">
+    <Banner tone="info" note>
       Start with a <b>WP Debug</b> on the Context's output. Its Variables tab shows every value and
       who set it, and the Warnings tab names most of the problems below.
-    </DocCallout>
+    </Banner>
 
     <DocSection title="Something prints wrong">
       <DocKeyList :items="printing" />

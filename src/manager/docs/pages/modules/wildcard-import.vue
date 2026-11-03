@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
@@ -75,12 +75,12 @@ const importRules = [
         <li><b>Everything gets the pack's tag</b> and a category per top folder, so the pack stays
           together in your library.</li>
       </ul>
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         Rows marked <b>Needs a look</b> list what changed. An <code>if</code> on something the
         pack never rolls once is removed (the choice stays), an <code>if</code> inside a
         <code>{…}</code> choice keeps only its else branch, a variable read inside a <code>{…}</code> choice rolls its own value, and a
         reference to a list the pack doesn't contain stays as text.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="The details">

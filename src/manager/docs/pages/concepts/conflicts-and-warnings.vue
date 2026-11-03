@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -49,10 +49,10 @@ const commonFlags = [
         <li><b>Red:</b> something points nowhere, such as a reference to a deleted wildcard. The run
           still finishes; that piece just does nothing.</li>
       </ul>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         None of these ever stops a run. Setting a variable twice is fine, for example; the later
         one wins and the dot just shows it.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Common things it flags">

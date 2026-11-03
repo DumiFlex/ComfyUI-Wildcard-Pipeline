@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -49,9 +49,9 @@ const controls = [
           'Text that should stay in the prompt',
         ]"
       />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Hide the variable it reads (the globe on its row), so the value doesn't print in the prompt. The node re-runs only when that value changes.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Controls">
@@ -72,10 +72,10 @@ const controls = [
         So <VarToken>true maybe false</VarToken> has two: index 0 is <code>true</code>, index 1 is
         <code>false</code>.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         A wildcard with options <code>on</code> and <code>off</code> through WP Var → Bool switches
         any true/false input at random. Weights set how often.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

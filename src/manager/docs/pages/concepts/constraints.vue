@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
@@ -51,12 +51,12 @@ const reachModes = [
         names each use by its row, or, for a use inside a reference, by the row and option that hold
         the reference.
       </p>
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         If a constraint reaches nothing (its only target sits above it, the count is larger than
         what's below, or a picked row is gone), the canvas flags it so a dead pairing doesn't go
         unnoticed. If it reaches fewer uses than Next N or Pick asked for, WP Debug notes a partial
         reach after the run.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Targets used inside references">

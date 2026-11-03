@@ -49,7 +49,7 @@ import { appendSnapshot, readHistory } from "../utils/history";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
-import PillCountBadge from "../cascade/PillCountBadge.vue";
+import Chip from "@/kit/Chip.vue";
 import type { ModuleHistoryEntry } from "../api/types";
 
 /** `negative` (schema v8, send-to-negative): library content, absent when
@@ -602,7 +602,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     <template v-if="isEdit" #header-extra>
       <SendToTestRunner v-if="props.id" :id="props.id" :kind="'fixed_values'" />
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
-        used by <PillCountBadge :count="cascadeRefs.length" />
+        used by <Chip tone="warn" size="xs">{{ cascadeRefs.length }}</Chip>
       </span>
       <CommunityRowActions
         v-if="currentRow"

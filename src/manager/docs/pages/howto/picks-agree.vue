@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
@@ -45,11 +45,11 @@ const ways = [
         ratio="16 / 6"
         caption="Source wildcard, then the constraint, then the target wildcard. The #1 badges link the constraint to its target."
       />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Give the target a <b>fallback</b> option, so a combination you didn't plan for still
         prints something. The constraint's <b>Preview</b> shows the odds for every pair before you
         run.
-      </DocCallout>
+      </Banner>
       <p>
         For a strict pairing, such as "maid always wears the frilled apron", use an
         <b>Only</b> rule. More on <DocRef id="constraint" />.

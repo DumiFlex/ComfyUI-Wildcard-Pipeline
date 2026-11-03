@@ -2,7 +2,7 @@
 import Kbd from "@/kit/Kbd.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -53,10 +53,10 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         an accepts group (SHOES: loafers, sneakers, boots) and tags each outfit with the shoes that
         suit it. A constraint on that group then makes your Shoes wildcard agree with the outfit.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Drafts can't add broken options. Repeats, options that read a <code>$variable</code>, and
         references to a wildcard or tag you don't have are left out and listed under the result.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Change the options you have">
@@ -91,10 +91,10 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         You see the result first, with a warning for any variable nothing sets. <b>Add</b>,
         <b>Apply</b> or <b>Use</b> puts it in the editor.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Rules need a model that follows instructions well. If the answer comes back unusable,
         switch to a builder model.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Describe and tag">

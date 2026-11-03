@@ -221,7 +221,7 @@ onMounted(() => {
   // user navigates to them. AppLayout mounts once for the entire SPA
   // lifetime, so this is a one-time cost per app load.
   // After all three fetches complete, bootstrap the cascade reverse-dep
-  // index so PillCountBadges in editors show real counts immediately.
+  // index so the "used by" counts in editors show real numbers immediately.
   // Errors on individual fetches are swallowed — the lazy list-view
   // fetches still run on actual usage if a fetch fails here.
   Promise.all([

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 </script>
@@ -36,10 +36,10 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         <li><b>Look things up</b> on the web or on Danbooru, if you set that up. It asks before
           each search.</li>
       </ul>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Every request includes the item's name, description and tags, so a good description
         points the model the right way.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Start here">

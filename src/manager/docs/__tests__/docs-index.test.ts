@@ -56,7 +56,7 @@ export function plainText(root: Element): string {
     // A Disclosure's heading is a button, but its label names the folded part.
     const heading = el.classList.contains("wp-disclosure__trigger");
     if ((SKIP.has(tag) && !heading) || el.getAttribute("aria-hidden") === "true") return;
-    const block = BLOCK.has(tag) || heading || el.classList.contains("wp-doc-callout");
+    const block = BLOCK.has(tag) || heading || el.classList.contains("wp-banner");
     if (block) out.push("\n");
     if (tag === "LI") out.push("- ");
     if (tag === "TD" || tag === "TH") out.push(" | ");

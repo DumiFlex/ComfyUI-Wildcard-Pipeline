@@ -2,7 +2,7 @@
 import CodeBlock from "@/kit/CodeBlock.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
@@ -119,11 +119,11 @@ const checklist: string[] = [
     blurb="How to build a pack for adult characters on models trained for it: a rating driver, a clothing-state ladder, the rules that keep picks coherent, the tag vocabulary per family, and the safeguards we recommend for every adult pack."
   >
     <DocSection title="Safeguards">
-      <DocCallout variant="danger">
+      <Banner tone="danger" note>
         Two rules are enforced: the AI assistant never writes a minor in a sexual context, and
         never sex without consent. The rest of this list is our strong recommendation for any pack that can reach suggestive
         or explicit content. Your own edits are never checked or changed.
-      </DocCallout>
+      </Banner>
       <DocKeyList :items="safeguards" />
       <p>
         The safeguards work in layers, and no single layer is enough: constraints keep youth-coded
@@ -275,12 +275,12 @@ const checklist: string[] = [
         <code>\bschool ?(girl|boy)s?\b</code>, <code>\b(little|young) (girl|boy)s?\b</code>
         and <code>\baged down\b</code>.
       </p>
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         Don't block <code>young</code> on its own in the positive: it would also cut "young
         woman" style wording without making anything safer. Keep it in the negative block. When
         the Cleaner also cleans the negative, leave the blocklist off in its negative column (the
         default there), or it would remove the youth block.
-      </DocCallout>
+      </Banner>
       <p>
         <b>For your pack:</b> the blocklist is the last layer, not the first. If it ever removes
         something, fix the option that produced it.

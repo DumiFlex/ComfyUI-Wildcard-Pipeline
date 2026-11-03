@@ -3,7 +3,7 @@ import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -99,9 +99,9 @@ const grid = [
 
     <DocSection title="Labels">
       <DocKeyList :items="label" />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Without a labels input the template still works: <code>#{index}</code> numbers every image.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Grid presets">

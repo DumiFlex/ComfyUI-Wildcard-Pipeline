@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -94,9 +94,9 @@ const instanceOptions = [
         as it is.
       </p>
       <DocKeyList :items="instanceOptions" />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         To fix one value on a node, untick every other option or use Lock pick.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Pick several at once">
@@ -106,9 +106,9 @@ const instanceOptions = [
         <VarToken>$colors</VarToken> prints them all ("red, blue, green");
         <VarToken>$colors.0</VarToken> is just the first ("red").
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         When picking several, the null option is left out. Set the lower end to 0 for "maybe none".
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Wildcards inside wildcards">
@@ -118,10 +118,10 @@ const instanceOptions = [
         narrow what it draws, such as only the warm colors. See
         <DocRef id="chips-and-references" />.
       </p>
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         Option text can't read a <VarToken>$variable</VarToken>: <code>$mood</code> in an option
         prints as typed. To build text from other picks, use a Combine.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Tags you can read as variables">

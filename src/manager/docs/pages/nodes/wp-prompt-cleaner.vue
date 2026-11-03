@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -55,12 +55,12 @@ const syntaxRules = [
           'Fixing a pack: if it often removes something, fix the option that wrote it',
         ]"
       />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Never blocklist or fuzzy-dedupe a LoRA's trigger words, or the LoRA stops working. The
         blocklist matches whole words, so list every form of a word you block (see
         <DocRef id="adult-packs" />). For prose prompts use text mode on Gentle: tags mode splits on
         commas, so it would split sentences.
-      </DocCallout>
+      </Banner>
       <DocImage
         src="images/docs/wp-prompt-cleaner.png"
         ratio="16 / 7"
@@ -90,11 +90,11 @@ const syntaxRules = [
         first, so anything they leave behind is tidied in the same run.
       </p>
       <DocKeyList :items="syntaxRules" />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Escaped <code>\(</code> <code>\)</code> stay literal, LoRA and embedding names are never
         edited, and if the brackets don't balance the bracket rules leave the prompt exactly as
         written.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Cleaning the negative">
@@ -125,10 +125,10 @@ const syntaxRules = [
           and named in the run stats.
         </li>
       </ul>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Hover a rule for what it does. After a run, the count next to each rule shows what it
         removed.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

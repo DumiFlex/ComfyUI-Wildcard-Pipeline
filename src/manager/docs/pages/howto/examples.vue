@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
@@ -53,10 +53,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         missing references</b> ticked. It saves the bundle, its sub-bundles and every row in one
         step, and the chip goes away. See <DocRef id="bundles" />.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         The <b>Shared lists</b> sub-bundle is switched off on purpose. Other lists read its colours
         through <VarToken kind="ref">@{…}</VarToken> references, so it never adds words of its own.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

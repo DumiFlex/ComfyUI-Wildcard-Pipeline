@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
@@ -63,10 +63,10 @@ const controls = [
         <li>Optional: add a <b>WP Seed List</b> on <code>loop_config</code> so each image also gets
           its own sampler seed.</li>
       </ol>
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         Without a Seed List, a plain KSampler uses one seed for every frame. Two frames that roll the
         same prompt then give the same image.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="The controls">
@@ -94,10 +94,10 @@ const controls = [
           { term: 'Hold other picks', desc: 'On by default: everything you aren\'t sweeping keeps one pick on every frame, so only the swept part changes.' },
         ]"
       />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Keep the sampler on one fixed seed for a clean comparison, so the image only changes where
         the prompt does.
-      </DocCallout>
+      </Banner>
       <DocDetails>
         <p>
           A swept wildcard's pick is set by the sweep, so constraints don't change its odds. That

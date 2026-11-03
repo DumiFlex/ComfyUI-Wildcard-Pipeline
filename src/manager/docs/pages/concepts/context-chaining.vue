@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -42,10 +42,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         ratio="16 / 6"
         caption="Two chained WP Contexts: the first sets $subject and $mood, the second adds $hair and $pose, and one Assembler reads all four."
       />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         To add a single value from the canvas, such as typed text or a caption, a
         <b>WP Context Injector</b> is lighter than a whole Context.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Good to know">

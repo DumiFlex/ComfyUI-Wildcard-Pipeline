@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
@@ -85,10 +85,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         variables its Injectors, Loops and Model Info set, and which <VarToken>$variables</VarToken> its
         Assemblers read, and counts those as used. Ids and names only, never values.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         With no canvas open, the page says so: items you only use on a canvas show under
         <b>Not used</b>. Open your workflow in another tab and press <b>Check again</b>, or Ignore them.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Fix, ignore, filter">

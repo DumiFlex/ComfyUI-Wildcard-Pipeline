@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -26,11 +26,11 @@ const ways = [
   >
     <DocSection title="Choose how long it should stay">
       <DocKeyList :items="ways" />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Found a prompt you like? In WP Debug, note the Context's seed and put it back in the seed
         box later, or lock the rows that matter. The Test Runner's <b>Copy seed</b> does the same
         for a seed you found there.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Good to know">

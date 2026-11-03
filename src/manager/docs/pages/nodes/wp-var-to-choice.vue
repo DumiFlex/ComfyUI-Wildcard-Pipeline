@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -53,11 +53,11 @@ const controls = [
           'A number (steps, size): use WP Var → Int or Float',
         ]"
       />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Hide the variable it reads (the globe on its row), so the model name doesn't print in the
         prompt. Add <b>WP Model Info</b> after the loader and your rules can see which model was
         picked.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Controls">
@@ -80,14 +80,14 @@ const controls = [
         After a run the picker shows what it sent and how it found it. When it used the fallback,
         the line turns amber and a warning pops up.
       </p>
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         Without this node ComfyUI doesn't check text that comes in through a wire: a name that
         isn't in the list only fails inside the loader. WP Var → Choice checks it first.
-      </DocCallout>
-      <DocCallout variant="tip">
+      </Banner>
+      <Banner tone="info" note>
         Wired into a switch or another node without a list, the text passes through unchecked and
         the picker says so.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

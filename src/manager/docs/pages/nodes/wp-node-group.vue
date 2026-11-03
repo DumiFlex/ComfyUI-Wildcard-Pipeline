@@ -2,7 +2,7 @@
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -51,10 +51,10 @@ const controls = [
 
     <DocSection title="Controls">
       <DocKeyList :items="controls" />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Muting or bypassing the group node itself does the same to its nodes, and setting it back
         lets them run.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">
