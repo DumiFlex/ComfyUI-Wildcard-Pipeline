@@ -1,0 +1,42 @@
+{
+  "node": "WP_VarToChoice",
+  "image": "images/docs/wp-var-to-choice.png",
+  "pins": [
+    {
+      "group": "controls",
+      "term": "context (in)",
+      "x": 0.3137,
+      "y": 0.1668
+    },
+    {
+      "group": "controls",
+      "term": "var_name",
+      "x": 0.3166,
+      "y": 0.2691
+    },
+    {
+      "group": "controls",
+      "term": "match",
+      "x": 0.3137,
+      "y": 0.3748
+    },
+    {
+      "group": "controls",
+      "term": "fallback",
+      "x": 0.3137,
+      "y": 0.4222
+    },
+    {
+      "group": "controls",
+      "term": "if_no_match",
+      "x": 0.3137,
+      "y": 0.4696
+    },
+    {
+      "group": "controls",
+      "term": "choice (out)",
+      "x": 0.6309,
+      "y": 0.1668
+    }
+  ]
+}

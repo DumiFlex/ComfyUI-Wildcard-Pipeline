@@ -3,7 +3,7 @@ import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
-import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
@@ -26,10 +26,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <code>false</code>, <code>no</code>, <code>off</code> and <code>0</code> are false. Wire
         it into a switch or toggle, and a wildcard pick decides whether it's on.
       </p>
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-var-to-bool.png"
-        ratio="16 / 6"
-        caption="WP Var → Bool reads $hires ('yes') and outputs True."
+        ratio="1720 / 752"
+        caption="WP Var → Bool reads $quick_preview from a Pick one WP Toggles (Full is picked, so 'false') and outputs False, which an If/Else Switch uses to pick the full-size latent."
       />
     </DocSection>
 

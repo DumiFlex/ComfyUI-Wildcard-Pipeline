@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
@@ -64,10 +64,10 @@ const presets = [
         <li>Run once. The panel says what came in and marks the grid preset that fits it;
           click <b>Use it</b>, or pick another preset.</li>
       </ol>
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-label-grid.png"
         ratio="1720 / 860"
-        caption="A 3 × 3 sweep with the XY plot preset: rows from label part 2, columns from label part 3, the cells keep their #N on a see-through band."
+        caption="A 3 × 3 sweep (three outfits × three times of day) with the XY plot preset: rows from label part 1, columns from label part 2, the title from the run. The stand-in node draws an image per prompt."
       />
     </DocSection>
 

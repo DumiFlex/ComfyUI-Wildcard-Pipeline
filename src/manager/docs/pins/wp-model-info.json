@@ -1,0 +1,54 @@
+{
+  "node": "WP_ModelInfo",
+  "image": "images/docs/wp-model-info.png",
+  "pins": [
+    {
+      "group": "ports",
+      "term": "upstream (in)",
+      "x": 0.2597,
+      "y": 0.256
+    },
+    {
+      "group": "ports",
+      "term": "model (in)",
+      "x": 0.2597,
+      "y": 0.2859
+    },
+    {
+      "group": "ports",
+      "term": "family, variant, name (in)",
+      "x": 0.2597,
+      "y": 0.3593
+    },
+    {
+      "group": "ports",
+      "term": "Detected",
+      "x": 0.3154,
+      "y": 0.3593
+    },
+    {
+      "group": "ports",
+      "term": "Globe",
+      "x": 0.5314,
+      "y": 0.3151
+    },
+    {
+      "group": "ports",
+      "term": "Pin",
+      "x": 0.5668,
+      "y": 0.3593
+    },
+    {
+      "group": "ports",
+      "term": "Variant rules",
+      "x": 0.2702,
+      "y": 0.509
+    },
+    {
+      "group": "ports",
+      "term": "context (out)",
+      "x": 0.5832,
+      "y": 0.256
+    }
+  ]
+}

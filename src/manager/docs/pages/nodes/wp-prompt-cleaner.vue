@@ -3,7 +3,7 @@ import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
-import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -53,10 +53,10 @@ const syntaxRules = [
         <DocRef id="adult-packs" />). For prose prompts use text mode on Gentle: tags mode splits on
         commas, so it would split sentences.
       </Banner>
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-prompt-cleaner.png"
-        ratio="16 / 7"
-        caption="A messy tag list goes into WP Prompt Cleaner and comes out without the doubled tags and stray commas. Each rule shows how many fixes it made."
+        ratio="1720 / 860"
+        caption="A messy tag list and negative go into WP Prompt Cleaner and come out without the doubled tags, empty brackets and stray commas. Each rule counts its fixes, and Last run sums them up."
       />
     </DocSection>
 

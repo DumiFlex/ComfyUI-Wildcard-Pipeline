@@ -4,6 +4,7 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocFields from "../../../components/docs/DocFields.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
@@ -36,10 +37,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
           'Rolling anything: it has no seed. Pick in a wildcard and use its $variable',
         ]"
       />
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-prompt-assembler.png"
-        ratio="16 / 7"
-        caption="The Assembler with a template, its variable chips and the resolved preview. A variable nothing sets is underlined and shown as a dashed chip."
+        ratio="1720 / 860"
+        caption="The Assembler with a template, its variable chips and its preview. The preview inside the node is a sample roll; the two Preview as Text nodes show what the run printed."
       />
     </DocSection>
 

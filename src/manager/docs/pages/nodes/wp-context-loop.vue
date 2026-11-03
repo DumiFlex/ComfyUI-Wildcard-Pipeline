@@ -4,6 +4,7 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocFields from "../../../components/docs/DocFields.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
@@ -37,10 +38,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
           'Just giving the sampler a new seed per frame: add WP Seed List',
         ]"
       />
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-context-loop-graph.png"
-        ratio="16 / 7"
-        caption="WP Context Loop (count 4) → WP Context → WP Prompt Assembler using $iteration of $iteration_total → one prompt per frame."
+        ratio="1720 / 860"
+        caption="WP Context Loop sweeping 9 frames into the Character and Scene Contexts and an Assembler; Preview as Text shows the prompt of the run."
       />
     </DocSection>
 

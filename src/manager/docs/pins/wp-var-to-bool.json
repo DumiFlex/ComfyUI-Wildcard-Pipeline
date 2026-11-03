@@ -1,0 +1,36 @@
+{
+  "node": "WP_VarToBool",
+  "image": "images/docs/wp-var-to-bool.png",
+  "pins": [
+    {
+      "group": "controls",
+      "term": "context (in)",
+      "x": 0.3965,
+      "y": 0.1642
+    },
+    {
+      "group": "controls",
+      "term": "var_name",
+      "x": 0.3994,
+      "y": 0.2473
+    },
+    {
+      "group": "controls",
+      "term": "index",
+      "x": 0.3965,
+      "y": 0.3337
+    },
+    {
+      "group": "controls",
+      "term": "default",
+      "x": 0.3965,
+      "y": 0.3794
+    },
+    {
+      "group": "controls",
+      "term": "value (out)",
+      "x": 0.7033,
+      "y": 0.1642
+    }
+  ]
+}

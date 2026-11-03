@@ -3,7 +3,7 @@ import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
-import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
@@ -27,10 +27,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <code>illustrious/waiNSFW_v14.safetensors</code>. A wildcard of model names can then pick
         the model per image, or per frame in a Context Loop.
       </p>
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-var-to-choice.png"
         ratio="1720 / 752"
-        caption="WP Var → Choice reads $checkpoint and sends the matching file to Load Checkpoint."
+        caption="WP Var → Choice reads $sampler and sends the matching sampler to the KSampler's sampler_name."
       />
     </DocSection>
 

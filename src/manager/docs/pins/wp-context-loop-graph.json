@@ -1,0 +1,78 @@
+{
+  "node": "WP_ContextLoop",
+  "image": "images/docs/wp-context-loop-graph.png",
+  "pins": [
+    {
+      "group": "controls",
+      "term": "seed",
+      "x": 0.0807,
+      "y": 0.1942
+    },
+    {
+      "group": "controls",
+      "term": "count",
+      "x": 0.0807,
+      "y": 0.2293
+    },
+    {
+      "group": "controls",
+      "term": "values",
+      "x": 0.0807,
+      "y": 0.6009
+    },
+    {
+      "group": "controls",
+      "term": "Strategy",
+      "x": 0.0907,
+      "y": 0.2883
+    },
+    {
+      "group": "controls",
+      "term": "Per-iteration seeds",
+      "x": 0.0907,
+      "y": 0.331
+    },
+    {
+      "group": "controls",
+      "term": "Sweep combinations",
+      "x": 0.3695,
+      "y": 0.3737
+    },
+    {
+      "group": "controls",
+      "term": "Edit frame",
+      "x": 0.0907,
+      "y": 0.4138
+    },
+    {
+      "group": "controls",
+      "term": "Override Context seed",
+      "x": 0.3167,
+      "y": 0.5394
+    },
+    {
+      "group": "controls",
+      "term": "Iteration var",
+      "x": 0.0907,
+      "y": 0.6009
+    },
+    {
+      "group": "controls",
+      "term": "Bypass loop",
+      "x": 0.3167,
+      "y": 0.6435
+    },
+    {
+      "group": "controls",
+      "term": "context (out)",
+      "x": 0.3796,
+      "y": 0.1364
+    },
+    {
+      "group": "controls",
+      "term": "loop_config (out)",
+      "x": 0.3796,
+      "y": 0.1615
+    }
+  ]
+}

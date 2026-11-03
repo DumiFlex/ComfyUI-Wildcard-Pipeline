@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
@@ -80,10 +80,10 @@ const caveats = [
         MODEL from <b>before</b> that node. Otherwise the prompt needs the model and the model
         needs the prompt, and ComfyUI refuses to run the loop.
       </Banner>
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-model-info.png"
-        ratio="16 / 7"
-        caption="Load Checkpoint → WP Model Info → WP Context → Assembler. The family is pinned to sdxl, the variant is read from the file name, and the template prints both."
+        ratio="1720 / 752"
+        caption="WP Model Info with the family and the checkpoint file name given as text: the family is sdxl, the name is ponyDiffusionV6XL and the pony rule matches it, so the variant is pony."
       />
     </DocSection>
 

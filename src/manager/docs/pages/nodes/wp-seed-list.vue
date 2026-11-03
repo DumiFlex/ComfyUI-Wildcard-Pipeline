@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocFields from "../../../components/docs/DocFields.vue";
@@ -53,10 +53,10 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
           the sampler and convert seed to an input if needed).</li>
       </ol>
       <p>The count now follows the loop, so the two lists always line up.</p>
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-seed-list.png"
-        ratio="16 / 7"
-        caption="WP Context Loop's loop_config wired into WP Seed List, whose seed output drives the KSampler's seed."
+        ratio="1720 / 752"
+        caption="WP Context Loop's loop_config wired into WP Seed List: the count and strategy follow the loop, and Preview as Text shows the seeds the run gave each frame."
       />
     </DocSection>
 

@@ -1,0 +1,36 @@
+{
+  "node": "WP_Debug",
+  "image": "images/docs/wp-debug-viewer.png",
+  "pins": [
+    {
+      "group": "ports",
+      "term": "context (in)",
+      "x": 0.4744,
+      "y": 0.2299
+    },
+    {
+      "group": "tabs",
+      "term": "Variables",
+      "x": 0.538,
+      "y": 0.2819
+    },
+    {
+      "group": "tabs",
+      "term": "Trace",
+      "x": 0.5992,
+      "y": 0.2819
+    },
+    {
+      "group": "tabs",
+      "term": "Warnings",
+      "x": 0.6529,
+      "y": 0.2819
+    },
+    {
+      "group": "tabs",
+      "term": "Raw",
+      "x": 0.6933,
+      "y": 0.2819
+    }
+  ]
+}

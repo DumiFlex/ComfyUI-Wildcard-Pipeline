@@ -1,0 +1,78 @@
+{
+  "node": "WP_ImageFilter",
+  "image": "images/docs/wp-image-filter.png",
+  "pins": [
+    {
+      "group": "ports",
+      "term": "images",
+      "x": 0.2856,
+      "y": 0.2004
+    },
+    {
+      "group": "ports",
+      "term": "latent, masks",
+      "x": 0.2856,
+      "y": 0.2295
+    },
+    {
+      "group": "ports",
+      "term": "positive, negative",
+      "x": 0.2856,
+      "y": 0.2877
+    },
+    {
+      "group": "ports",
+      "term": "positive_text, negative_text",
+      "x": 0.2856,
+      "y": 0.3458
+    },
+    {
+      "group": "ports",
+      "term": "context",
+      "x": 0.2856,
+      "y": 0.404
+    },
+    {
+      "group": "ports",
+      "term": "clip (in)",
+      "x": 0.2856,
+      "y": 0.4913
+    },
+    {
+      "group": "ports",
+      "term": "extra_1, extra_2",
+      "x": 0.2856,
+      "y": 0.4331
+    },
+    {
+      "group": "ports",
+      "term": "picks (out)",
+      "x": 0.6562,
+      "y": 0.4913
+    },
+    {
+      "group": "ports",
+      "term": "labels (out)",
+      "x": 0.6562,
+      "y": 0.5204
+    },
+    {
+      "group": "settings",
+      "term": "Mode",
+      "x": 0.4284,
+      "y": 0.5931
+    },
+    {
+      "group": "settings",
+      "term": "Send picks as",
+      "x": 0.5263,
+      "y": 0.6309
+    },
+    {
+      "group": "settings",
+      "term": "Timeout",
+      "x": 0.4428,
+      "y": 0.6687
+    }
+  ]
+}

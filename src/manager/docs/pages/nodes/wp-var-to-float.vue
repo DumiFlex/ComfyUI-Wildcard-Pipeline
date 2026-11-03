@@ -3,7 +3,7 @@ import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
-import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
@@ -26,10 +26,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         that wants a decimal. Whole numbers work too. If there's no number, it gives your
         default.
       </p>
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-var-to-float.png"
-        ratio="16 / 6"
-        caption="WP Var → Float reads $cfg (7.5) and sends it to the KSampler's cfg."
+        ratio="1720 / 752"
+        caption="WP Var → Float reads $cfg (6.0) and sends it to the KSampler's cfg."
       />
     </DocSection>
 

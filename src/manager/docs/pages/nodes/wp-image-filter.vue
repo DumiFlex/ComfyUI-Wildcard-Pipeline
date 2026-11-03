@@ -9,6 +9,7 @@ import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import DocFigureText from "../../../components/docs/DocFigureText.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import Kbd from "@/kit/Kbd.vue";
 import picksDiagram from "../../images/how-picks-carry-over.webp";
 
@@ -206,10 +207,10 @@ const keys = [
     </DocSection>
 
     <DocSection title="Settings on the node">
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-image-filter.png"
-        ratio="2 / 1"
-        caption="WP Image Filter after a run, next to a Preview Image of the three images it kept."
+        ratio="1720 / 860"
+        caption="WP Image Filter after a run of four frames with two images each: three were picked, and only those reach the Preview Image."
       />
       <DocFields node="WP_ImageFilter" group="settings" />
       <p>The <b>Last run</b> strip under the settings shows what the last run kept.</p>

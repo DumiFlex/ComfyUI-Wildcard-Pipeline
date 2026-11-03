@@ -4,6 +4,7 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -32,10 +33,10 @@ const clashes = [
         centre of the screen you picked, at the zoom you picked. It never runs and is left out of the
         prompt; its settings are saved with the workflow.
       </p>
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-bookmark.png"
         ratio="1720 / 752"
-        caption="Sampler as a pill on the canvas; Prompts open in its editor, where the clash check flags Ctrl+S."
+        caption="A bookmark open in its edit view (select it and press the pencil in ComfyUI's selection toolbar), next to the KSampler it marks."
       />
     </DocSection>
 

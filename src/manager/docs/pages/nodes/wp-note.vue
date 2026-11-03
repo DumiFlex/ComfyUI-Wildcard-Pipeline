@@ -45,7 +45,7 @@ const syntax = [
       <DocImage
         src="images/docs/wp-note.png"
         ratio="1720 / 752"
-        caption="A Step card with docs buttons, a Warning card with its own icon, a Tip sticky, and a Label showing its hover card."
+        caption="A Step card with docs buttons, a Warning card with its own icon, a Tip sticky, and a Label."
       />
     </DocSection>
 
