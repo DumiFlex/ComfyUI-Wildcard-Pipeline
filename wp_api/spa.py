@@ -19,6 +19,15 @@ from aiohttp import web
 WEB_DIR = Path(__file__).parent.parent / "web"
 
 
+_SHELL_HEADERS = {"Cache-Control": "no-cache"}
+_HASHED_HEADERS = {"Cache-Control": "public, max-age=31536000, immutable"}
+
+
+def _is_hashed_asset(path: str) -> bool:
+    """Vite's content-hashed build output lives under ``assets/``."""
+    return path.startswith("assets/")
+
+
 async def _serve(path: str) -> web.StreamResponse:
     if path:
         candidate = (WEB_DIR / path).resolve()
@@ -27,8 +36,16 @@ async def _serve(path: str) -> web.StreamResponse:
         except ValueError:
             return web.Response(status=403)
         if candidate.is_file():
+            if candidate.name == "index.html":
+                return web.FileResponse(candidate, headers=_SHELL_HEADERS)
+            if _is_hashed_asset(path):
+                return web.FileResponse(candidate, headers=_HASHED_HEADERS)
             return web.FileResponse(candidate)
-    return web.FileResponse(WEB_DIR / "index.html")
+        if _is_hashed_asset(path):
+            # A stale shell asking for a chunk from an older build: answer
+            # 404 (never the shell, which would fail as a MIME mismatch).
+            return web.Response(status=404, headers={"Cache-Control": "no-store"})
+    return web.FileResponse(WEB_DIR / "index.html", headers=_SHELL_HEADERS)
 
 
 async def serve_root(request: web.Request) -> web.StreamResponse:

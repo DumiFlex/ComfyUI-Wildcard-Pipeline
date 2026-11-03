@@ -30,8 +30,74 @@
       @keyframes wp-boot-b { 0%,15%,85%,100% { transform: translate(0,0); } 40%,60% { transform: translate(70px,70px); } }
       @keyframes wp-boot-dip { 0%,15% { transform: scale(1) rotate(0); } 32% { transform: scale(.7) rotate(45deg); } 50%,100% { transform: scale(1) rotate(90deg); } }
       @keyframes wp-boot-tw { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.6); } }
+      .wp-boot { flex-direction: column; gap: 20px; font: 14px/1.5 system-ui, sans-serif; color: #c9c9d6; text-align: center; padding: 16px; }
+      html[data-wp-boot="light"] .wp-boot { color: #3a3a4a; }
+      .wp-boot-msg { margin: 0; max-width: 360px; }
+      .wp-boot-btn { font: inherit; padding: 6px 16px; border-radius: 8px; border: 1px solid #6366f1; background: #6366f1; color: #fff; cursor: pointer; }
+      .wp-boot-btn:focus-visible { outline: 2px solid #33d6c6; outline-offset: 2px; }
       @media (prefers-reduced-motion: reduce) { .wp-boot * { animation: none !important; } }
     </style>
+    <!-- Boot watchdog: a tab woken after a server restart or rebuild can
+         hold a page whose code files are gone (or the server is still
+         starting), which used to leave this splash up forever. On a load
+         error it waits for the server and reloads; a slow start only gets
+         a Reload button. The reload budget is shared with
+         src/manager/utils/chunk-reload.ts (same key), which clears it
+         once the app has routed. -->
+    <script>
+      (function () {
+        var KEY = "wp-boot-reloads", MAX = 3, WINDOW = 60000, shown = false;
+        function splash() { return document.querySelector(".wp-boot"); }
+        function takeSlot() {
+          try {
+            var now = Date.now(), n = 0, seen = JSON.parse(sessionStorage.getItem(KEY) || "null");
+            if (seen && typeof seen.n === "number" && now - seen.t < WINDOW) n = seen.n;
+            if (n >= MAX) return false;
+            sessionStorage.setItem(KEY, JSON.stringify({ n: n + 1, t: now }));
+            return true;
+          } catch (e) { return false; }
+        }
+        function say(text) {
+          var box = splash();
+          if (!box) return;
+          var msg = box.querySelector(".wp-boot-msg");
+          if (!msg) {
+            msg = document.createElement("p");
+            msg.className = "wp-boot-msg";
+            box.appendChild(msg);
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "wp-boot-btn";
+            btn.textContent = "Reload";
+            btn.onclick = function () { location.reload(); };
+            box.appendChild(btn);
+          }
+          msg.textContent = text;
+        }
+        function waitThenReload() {
+          fetch(location.href, { cache: "no-store" }).then(function (r) {
+            if (r.ok) location.reload(); else setTimeout(waitThenReload, 2000);
+          }, function () { setTimeout(waitThenReload, 2000); });
+        }
+        function failed() {
+          if (shown || !splash()) return;
+          shown = true;
+          if (takeSlot()) {
+            say("Waiting for the server to come back\u2026");
+            waitThenReload();
+          } else {
+            say("The manager couldn\u2019t load. If you just updated or restarted ComfyUI, reload once it has finished starting.");
+          }
+        }
+        addEventListener("error", function (e) {
+          var t = e.target;
+          if (t && (t.tagName === "SCRIPT" || (t.tagName === "LINK" && /modulepreload|stylesheet/.test(t.rel)))) failed();
+        }, true);
+        setTimeout(function () {
+          if (!shown && splash()) say("Still loading. If this doesn\u2019t finish, reload the page.");
+        }, 20000);
+      })();
+    </script>
   </head>
   <body>
     <div id="app">

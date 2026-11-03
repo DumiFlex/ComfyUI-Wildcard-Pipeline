@@ -3,6 +3,7 @@
 // declares a test from meta.json with one of them.
 import { existsSync } from "node:fs";
 import path from "node:path";
+import type { Locator } from "playwright";
 import { test, StepError, type Helpers, type TestContext, type TestMeta } from "watchwright";
 import { ModelLoop, PANEL, nothingFlag, panelName, said, sel, type ItemKind } from "./bench.js";
 import { prompt, testMeta } from "./meta.js";
@@ -52,10 +53,15 @@ export interface MakeOptions {
   setup?: (h: Helpers) => Promise<void>;
   apply?: string;
   nsfw?: boolean;
+  /**
+   * Saves a stand-in through the API when the answer gives nothing to apply, so the tests that use
+   * the item still run. The attempt then raises unusable-answer (the model's), not not-saved.
+   */
+  standIn?: (h: Helpers) => Promise<void>;
 }
 
 /** A new item from an editor's AI panel; on the last attempt it is applied and saved. */
-export function make(route: string, button: string, { mode, name, varName, setup, apply = "ai-apply", nsfw = false }: MakeOptions): BenchBody {
+export function make(route: string, button: string, { mode, name, varName, setup, apply = "ai-apply", nsfw = false, standIn }: MakeOptions): BenchBody {
   return async (t) => {
     const { h } = t;
     await h.step(`Open a new ${route.replace(/-/g, " ").replace(/s$/, "")}`, async () => {
@@ -73,6 +79,11 @@ export function make(route: string, button: string, { mode, name, varName, setup
     await h.step(`Apply and save as ${name}`, async () => {
       if (button !== "cn-ai") {
         if (!(await h.shows(apply, 5000))) {
+          if (standIn && nothingFlag("not-saved") === "not-saved") {
+            await standIn(h);
+            h.flag("unusable-answer", `Nothing to apply, so a stand-in ${name} was saved through the API for the tests that use it.`);
+            return;
+          }
           h.flag(nothingFlag("not-saved"), `Nothing to apply, so ${name} wasn't saved (later tests that use it will fail).`);
           return;
         }
@@ -176,8 +187,22 @@ export interface ChatOptions {
   images?: (t: BenchContext) => string[];
 }
 
-/** One chat turn from the top bar's AI drawer. */
-export function chat({ after, from = "wildcards", page = false, decide = false, images }: ChatOptions = {}): BenchBody {
+/** One chat turn from the top bar's AI drawer. A "delete" turn turns deleting on for itself. */
+export function chat(opts: ChatOptions = {}): BenchBody {
+  const turn = chatTurn(opts);
+  if (opts.after !== "delete") return turn;
+  return async (t) => {
+    // Setup turns deleting off for the run (W22 checks the guard); a delete test needs it on.
+    await t.h.setAiConfig({ allow_delete: true });
+    try {
+      await turn(t);
+    } finally {
+      await t.h.setAiConfig({ allow_delete: false });
+    }
+  };
+}
+
+function chatTurn({ after, from = "wildcards", page = false, decide = false, images }: ChatOptions): BenchBody {
   return async (t) => {
     const { h } = t;
     const files = images ? images(t) : [];
@@ -323,6 +348,16 @@ const packFindings = (h: Helpers) =>
     .allInnerTexts()
     .catch(() => [] as string[]);
 
+/** Whether a build problem with this text is still on the page (any item's list). */
+async function stillListed(h: Helpers, text: string): Promise<boolean> {
+  if (!text) return false;
+  const key = text.slice(0, 60);
+  return h.page
+    .locator('[data-test="pack-builder"] li span')
+    .evaluateAll((els, k) => els.some((e) => (e.textContent ?? "").trim().startsWith(k)), key)
+    .catch(() => false);
+}
+
 /** Presses Fix all with AI up to three times; keeps the findings before and after each press. Returns seconds. */
 export async function fixAll(h: Helpers, label: string, allowResearch = false): Promise<number> {
   const rounds = [{ press: 0, findings: await packFindings(h) }];
@@ -455,28 +490,48 @@ export function pack({ sample = false, nsfw = false, images, install = false, ex
       await h.keep("check", '[data-test="pack-builder"]');
       await h.pageScrollShots("built");
     });
-    // The build's own problem list: press each item's Fix (up to three) and keep the list before
-    // and after, to see whether Fix does anything there.
+    // The build's own problem list. An item the code writes from the plan shows "Change the plan"
+    // instead of Fix (a rebuild gives the same): those are noted, not pressed. Every other problem
+    // gets Fix up to three times (six presses in all), with the list kept before and after, and a
+    // problem still there at the end raises one problem-fix-did-nothing with its press count.
     const buildFixes: unknown[] = [];
-    for (let i = 0; i < 3; i++) {
-      const fix = h.page.locator('[data-test="pack-problem-fix"]:visible').first();
-      if (!(await fix.isVisible().catch(() => false))) break;
-      await h.step(`Fix problem ${i + 1} of the build`, async () => {
+    const planOnly = await h.page
+      .locator('[data-test="pack-problem-plan"]:visible')
+      .evaluateAll((bs) => bs.map((b) => b.closest("li")?.querySelector("span")?.textContent?.trim() ?? ""))
+      .catch(() => [] as string[]);
+    if (planOnly.length) h.flag("fix-is-plan-change", `${planOnly.length} problem(s) on items the code writes from the plan: ${planOnly.map((x) => x.slice(0, 80)).join(" · ")}`);
+    const problemText = (fix: Locator) => fix.locator("xpath=ancestor::li[1]/span").first().innerText().then((x) => x.trim()).catch(() => "");
+    const pressed = new Map<string, number>();
+    for (let i = 0; i < 6; i++) {
+      const fixes = h.page.locator('[data-test="pack-problem-fix"]:visible');
+      let fix: Locator | null = null;
+      let which = "";
+      for (let k = 0, n = await fixes.count(); k < n; k++) {
+        const text = await problemText(fixes.nth(k));
+        if ((pressed.get(text) ?? 0) < 3) {
+          fix = fixes.nth(k);
+          which = text;
+          break;
+        }
+      }
+      if (!fix) break;
+      const press = (pressed.get(which) ?? 0) + 1;
+      pressed.set(which, press);
+      const button = fix;
+      await h.step(`Fix problem ${i + 1} of the build${press > 1 ? ` (press ${press} on the same problem)` : ""}`, async () => {
         const before = await h.page.locator('[data-test="pack-problems"] li').allInnerTexts().catch(() => [] as string[]);
-        const which = await fix.locator("xpath=ancestor::li[1]").innerText().catch(() => "");
-        await h.snap(`problem-${i + 1}`, fix.locator("xpath=ancestor::*[@data-test='pack-item' or @data-test='pack-problems'][1]"));
-        await h.tapOn(fix, "pack-fix");
+        await h.snap(`problem-${i + 1}`, button.locator("xpath=ancestor::*[@data-test='pack-item' or @data-test='pack-problems'][1]"));
+        await h.tapOn(button, "pack-fix");
         const sec = await h.aiIdle({ expect: true, timeout: 30 * 60_000 });
         const after = await h.page.locator('[data-test="pack-problems"] li').allInnerTexts().catch(() => [] as string[]);
-        // The Fix button can sit in an item's row rather than the problem list, so its text may
-        // never match a list entry: a problem is gone only when the list got shorter.
-        const gone = after.length < before.length;
-        buildFixes.push({ problem: which, seconds: Math.round(sec), before: before.length, after: after.length, gone });
+        const gone = !(await stillListed(h, which));
+        buildFixes.push({ problem: which, press, seconds: Math.round(sec), before: before.length, after: after.length, gone });
         h.log(`Fix on "${which.slice(0, 70)}": ${gone ? "gone" : "STILL THERE"} (${before.length} → ${after.length} problems).`);
         await h.keep(`check-after-problem-${i + 1}`, '[data-test="pack-builder"]');
-        if (!gone) h.flag("problem-fix-did-nothing", which.slice(0, 120));
       });
     }
+    for (const [which, presses] of pressed)
+      if (await stillListed(h, which)) h.flag("problem-fix-did-nothing", `${which.slice(0, 120)} (still there after ${presses} Fix press${presses === 1 ? "" : "es"})`);
     if (buildFixes.length) {
       await h.pageScrollShots("after-problem-fixes");
       await h.keepText("build-fixes", { text: JSON.stringify(buildFixes, null, 1) });

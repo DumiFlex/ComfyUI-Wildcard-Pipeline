@@ -12,6 +12,7 @@ import "./styles/tailwind.css";
 import App from "./App.vue";
 import router from "./router";
 import { installStartPage } from "./router/start-page";
+import { installChunkRecovery } from "./utils/chunk-reload";
 import { FRAMED } from "./router/frame-mode";
 import { useUiStore } from "./stores/uiStore";
 import { useTweaksStore } from "./stores/tweaksStore";
@@ -33,4 +34,6 @@ useUiStore(pinia).initializeTheme();
 useTweaksStore(pinia).initialize();
 // The help frame never remembers its page as the start page or opens What's new.
 if (!FRAMED) installStartPage(router, __APP_VERSION__);
+// A tab woken after a server restart or rebuild may ask for chunks that are gone.
+installChunkRecovery(router);
 app.mount("#app");

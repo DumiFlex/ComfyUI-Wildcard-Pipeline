@@ -226,10 +226,18 @@ export function benchHelpers(h: Helpers): Record<string, unknown> {
   const enter = () => h.wait(1);
   let clickMark = 0;
   const origin = h.baseURL ? new URL(h.baseURL).origin : null;
+  // The first API call on a blank page (a task starts on one) opens the app; calls made at once
+  // (library() sends three) share that one visit, since a second goto aborts the first.
+  let opening: Promise<void> | null = null;
 
   const self = {
     async api(p: string, opts: { method?: string; body?: unknown } = {}): Promise<ApiAnswer> {
-      if (origin && !page.url().startsWith(origin)) await self.visit("wildcards");
+      if (origin && !page.url().startsWith(origin)) {
+        opening ??= self.visit("wildcards").finally(() => {
+          opening = null;
+        });
+        await opening;
+      }
       return page.evaluate(
         async ([p, method, body]) => {
           const init: RequestInit = { method, headers: { "Content-Type": "application/json" } };
