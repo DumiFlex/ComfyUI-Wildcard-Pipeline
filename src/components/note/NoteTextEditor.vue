@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
+import { computed, inject, nextTick, ref } from "vue";
 import Combobox from "@/kit/Combobox.vue";
 import { textareaEl } from "@/manager/utils/kit-field-el";
 import Textarea from "@/kit/Textarea.vue";
@@ -13,8 +13,9 @@ import CATALOG from "../../extension/docs-catalog.json";
 import IconPicker from "@/kit/IconPicker.vue";
 import NoteMarkdown from "./note-markdown";
 import {
-  docsTarget, iconMarkdown, insert, linkMarkdown, prefixLines, wrap, type Edit,
+  communityTarget, docsTarget, iconMarkdown, insert, libraryTarget, linkMarkdown, prefixLines, wrap, type Edit,
 } from "./note-format";
+import { NOTE_CONTEXTS } from "./note-actions";
 
 /**
  * The note's text: Markdown in a textarea with a formatting bar over it.
@@ -81,7 +82,21 @@ function onKey(ev: KeyboardEvent): void {
 
 // ── link panel ─────────────────────────────────────────────────────────
 const linkText = ref("");
-const linkKind = ref<"web" | "docs">("docs");
+type LinkKind = "web" | "docs" | "library" | "community";
+const linkKind = ref<LinkKind>("docs");
+const KIND_OPTIONS: Array<{ value: LinkKind; label: string }> = [
+  { value: "docs", label: "Docs" },
+  { value: "web", label: "Web" },
+  { value: "library", label: "Library" },
+  { value: "community", label: "Community" },
+];
+// "Library": the whole workflow, or one WP Context on the canvas.
+const contexts = inject(NOTE_CONTEXTS, ref([]));
+const libraryScope = ref<"workflow" | "context">("workflow");
+const libraryNode = ref<string | null>(null);
+const contextOptions = computed(() => contexts.value.map((c) => ({ value: c.value, label: c.label })));
+const pack = ref("");
+const packTarget = computed(() => communityTarget(pack.value));
 const linkUrl = ref("https://");
 const linkPage = ref<string | null>(null);
 const linkSection = ref("");
@@ -97,9 +112,23 @@ const sectionOptions = computed(() => [
   { value: "", label: "Whole page" },
   ...(page.value?.sections ?? []).map((s) => ({ value: s.id, label: s.title })),
 ]);
-const linkReady = computed(() => (linkKind.value === "docs"
-  ? !!page.value
-  : /^https?:\/\/\S+\.\S+/i.test(linkUrl.value.trim())));
+const linkReady = computed(() => {
+  switch (linkKind.value) {
+    case "docs": return !!page.value;
+    case "library": return libraryScope.value === "workflow" || !!libraryNode.value;
+    case "community": return !!packTarget.value;
+    default: return /^https?:\/\/\S+\.\S+/i.test(linkUrl.value.trim());
+  }
+});
+/** Each kind's own default icon and text, used when the user leaves them. */
+function onKind(v: LinkKind): void {
+  const was = linkKind.value;
+  linkKind.value = v;
+  const iconFor = (k: LinkKind): string => (k === "library" ? "download" : k === "community" ? "globe" : "book");
+  if (linkIcon.value === iconFor(was)) linkIcon.value = iconFor(v);
+  // An action runs on a press, so it is always a button.
+  if (v === "library") linkStyle.value = "button";
+}
 
 function resetLink(selected: string): void {
   linkText.value = selected.trim();
@@ -114,13 +143,29 @@ function onPage(v: string | string[] | null): void {
   linkPage.value = typeof v === "string" ? v : null;
   linkSection.value = "";
 }
+function linkTarget(): { target: string; fallback: string } {
+  switch (linkKind.value) {
+    case "docs": {
+      const section = page.value?.sections.find((s) => s.id === linkSection.value);
+      return {
+        target: docsTarget(linkPage.value ?? "", linkSection.value),
+        fallback: section ? `${page.value?.title}: ${section.title}` : `${page.value?.title ?? ""} docs`,
+      };
+    }
+    case "library": {
+      const one = libraryScope.value === "context" ? libraryNode.value ?? "" : "";
+      return { target: libraryTarget(one), fallback: one ? "Add these to my library" : "Add this workflow's lists to my library" };
+    }
+    case "community":
+      return { target: packTarget.value ?? "", fallback: "Get the pack" };
+    default:
+      return { target: linkUrl.value.trim(), fallback: "" };
+  }
+}
 function insertLink(): void {
   if (!linkReady.value) return;
-  const docs = linkKind.value === "docs";
-  const target = docs ? docsTarget(linkPage.value ?? "", linkSection.value) : linkUrl.value.trim();
-  const section = page.value?.sections.find((s) => s.id === linkSection.value);
-  const fallback = docs ? (section ? `${page.value?.title}: ${section.title}` : `${page.value?.title ?? ""} docs`) : "";
-  const button = linkStyle.value === "button";
+  const { target, fallback } = linkTarget();
+  const button = linkStyle.value === "button" || linkKind.value === "library";
   const color = linkColor.value === "none" ? "" : linkColor.value.slice(0, 7);
   insertText(linkMarkdown(linkText.value || fallback, target, { button, icon: button ? linkIcon.value : "", color }));
 }
@@ -184,11 +229,11 @@ function insertIcon(name: string): void {
     <div v-if="panel === 'link'" class="wp-note-ed__panel" data-test="note-link-panel">
       <WpSegmented
         :model-value="linkKind"
-        :options="[{ value: 'docs', label: 'Docs page' }, { value: 'web', label: 'Web address' }]"
+        :options="KIND_OPTIONS"
         size="sm"
         aria-label="Link to"
         test-prefix="note-link-kind"
-        @update:model-value="(v: 'web' | 'docs') => (linkKind = v)"
+        @update:model-value="onKind"
       />
       <template v-if="linkKind === 'docs'">
         <Combobox
@@ -210,10 +255,38 @@ function insertIcon(name: string): void {
           @update:model-value="(v: string) => (linkSection = v)"
         />
       </template>
+      <template v-else-if="linkKind === 'library'">
+        <WpSegmented
+          :model-value="libraryScope"
+          :options="[{ value: 'workflow', label: 'This workflow' }, { value: 'context', label: 'One WP Context' }]"
+          size="sm"
+          aria-label="What it adds"
+          test-prefix="note-link-scope"
+          @update:model-value="(v: 'workflow' | 'context') => (libraryScope = v)"
+        />
+        <WpSelect
+          v-if="libraryScope === 'context'"
+          :model-value="libraryNode ?? ''"
+          :options="contextOptions"
+          :placeholder="contextOptions.length ? 'Pick a WP Context…' : 'No WP Context on the canvas'"
+          aria-label="WP Context"
+          data-test="note-link-context"
+          @update:model-value="(v: string) => (libraryNode = v || null)"
+        />
+        <p class="wp-note-ed__hint">
+          A button that adds the bundles and modules {{ libraryScope === "workflow" ? "of this workflow" : "of that WP Context" }}
+          to the library, after a review. Only what isn't in the library yet.
+        </p>
+      </template>
+      <template v-else-if="linkKind === 'community'">
+        <Input v-model="pack" size="sm" aria-label="Community pack" placeholder="owner/pack, or paste the pack's address" data-test="note-link-pack" @keydown.enter.prevent="insertLink" />
+        <p class="wp-note-ed__hint">Opens the pack in the manager's Community tab, where it installs.</p>
+      </template>
       <Input v-else v-model="linkUrl" size="sm" aria-label="Web address" placeholder="https://…" data-test="note-link-url" @keydown.enter.prevent="insertLink" />
       <Input v-model="linkText" size="sm" aria-label="Link text" placeholder="Text (optional)" data-test="note-link-text" @keydown.enter.prevent="insertLink" />
       <div class="wp-note-ed__row">
         <WpSegmented
+          v-if="linkKind !== 'library'"
           :model-value="linkStyle"
           :options="[{ value: 'button', label: 'Button' }, { value: 'text', label: 'Text link' }]"
           size="sm"

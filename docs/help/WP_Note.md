@@ -9,7 +9,8 @@ A note that explains a workflow. It looks like a panel, not a node: no title bar
 - **Move** it by dragging like any node (unpin it first).
 - **Resize** a Card or Sticky note from its corner: the width is yours, the height follows the text. A Label sizes itself to its title.
 - **Hover** a Label to see its text and links in a card. Move onto the card to click a link or **Edit**. Marks on the pill show that it has text (lines) or a link (chain).
-- **Links** in a note open in a new tab: a docs link opens that page (and section) of the built-in docs.
+- **Links** in a note open in a new tab: a docs link opens that page (and section) of the built-in docs, a community link opens that pack in the manager's Community tab.
+- **Add to library**: a `wp:library` button puts the workflow's bundles and modules into your library after a review (below).
 
 ## Editor
 
@@ -24,6 +25,16 @@ A note that explains a workflow. It looks like a panel, not a node: no title bar
 
 Keys you type in the editor stay in the editor: Delete, Ctrl+Z and the other ComfyUI shortcuts don't reach the canvas.
 
+## Add to library
+
+A `wp:library` button lets someone who opened a shared workflow keep its lists. Its tooltip says what it would add; with everything there already it stays off. Pressing it opens a review listing every item:
+
+- New items go in under their own id.
+- An item your library holds with other content: **Use mine** (default, nothing changes), **Replace**, or **Keep both** (added as a copy; the workflow points at the copy).
+- An id another kind of item holds: **Keep both** or **Leave out**.
+
+**Add** installs it all in one step with the Import tab's checks (one refused item and nothing goes in). EXAMPLE and MISSING marks clear, and the message has **Undo**. Nothing is added before you press Add, and the button only reads the workflow's own rows.
+
 ## Also a bookmark
 
 Turn on **Also a bookmark** at the bottom of the editor and the note joins the **Bookmarks** dock: pick where it lands on screen, its zoom and a shortcut, the same settings and clash check as a WP Bookmark. A new one gets the next free shortcut. The dock shows it in the note's colour and icon, and a small bookmark mark on the note (its tooltip names the key) says it is one; a pinned note shows a pin mark next to it. A note can't be hidden on the canvas, and muting it turns its shortcut off without fading it.
@@ -35,7 +46,7 @@ Turn on **Also a bookmark** at the bottom of the editor and the note joins the *
 | **B** / *I* / ~~S~~ | `**bold**`, `*italic*`, `~~strikethrough~~` (Ctrl+B, Ctrl+I) |
 | `<>` | `` `code` ``, for a `$variable` |
 | Lists, quote | `- item`, `1. item`, `> quote` on each selected line |
-| Link (Ctrl+K) | A link to a **Docs page** (type to find any page, then pick a section or the whole page) or a **Web address**, as a **Button** (with an icon) or a **Text link**, in its own **Colour** or the note's. It goes where the caret is when you press **Insert link**, so you can click in the text after opening the panel |
+| Link (Ctrl+K) | A link to a **Docs page** (type to find any page, then pick a section or the whole page), a **Web** address, a **Library** button (this workflow, or one WP Context) or a **Community** pack (`owner/pack` or the pack's address), as a **Button** (with an icon) or a **Text link**, in its own **Colour** or the note's. It goes where the caret is when you press **Insert link**, so you can click in the text after opening the panel |
 | Icon | Any PrimeIcons icon, in a colour or the text's own, inserted where the caret is |
 | Eye | Preview the note as it will read |
 
@@ -48,6 +59,9 @@ Turn on **Also a bookmark** at the bottom of the editor and the note joins the *
 | `[The grid](docs:wp-label-grid#s-the-grid)` | A link to a section of it |
 | `[Start here](docs:quick-start){button pi-play}` | The link drawn as a button with an icon (`{button}` for none) |
 | `{button pi-play #22c55e}` / `[Read more](https://example.com){#22c55e}` | A button or a text link in its own colour (without one it takes the note's) |
+| `[Add the pack](wp:library){button pi-download}` | A button that adds this workflow's bundles and modules to your library |
+| `[Add these](wp:library#node-12){button}` | The same for one WP Context (its node id) |
+| `[Get the pack](wp:community/owner/pack)` | That published pack in the Community tab |
 | `:pi-heart:` / `:pi-heart:{#ef4444}` | An icon, optionally coloured |
 
 Any other kind of link shows as plain text.
