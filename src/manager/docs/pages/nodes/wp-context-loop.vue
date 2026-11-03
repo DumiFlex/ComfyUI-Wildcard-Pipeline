@@ -5,23 +5,12 @@ import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
-const controls = [
-  { term: "seed", desc: "The loop's own seed. Only used when Override Context seed is on." },
-  { term: "count", desc: "How many frames one Generate makes (1–999). 1 switches looping off without unwiring the node." },
-  { term: "values", desc: "Optional text from another node: one frame per line (or per list entry), each writing its line to $iteration_value. The values set the frame count and count follows the last run; with a sweep on, every value runs every combination. Its dot sits beside the iteration variable (beside the values note once wired) and shows when you hover it." },
-  { term: "Strategy", desc: "hash, sequential or stride: how the frame seeds are worked out when Override Context seed is on. See Seeds & loops." },
-  { term: "Per-iteration seeds", desc: "The seed each frame will use. Lock single frames, Lock all, Copy / Paste, or Prev to keep the seed a frame used last run. Locks need Override Context seed on." },
-  { term: "Sweep combinations", desc: "Run every combination of the options you pick instead of random rolls. See below." },
-  { term: "Edit frame", desc: "The base / #1 #2 … chips. Pick a frame to change just that frame (see Per-iteration overrides). Ctrl-click skips a frame, Alt-click locks its seed." },
-  { term: "Override Context seed", desc: "On: the loop sets every frame's seed from its own seed, so the batch can be repeated. Off (default): each WP Context keeps its own seed and the loop changes it a little per frame." },
-  { term: "Iteration var", desc: "The name of the frame-number variable ($iteration). The globe and Σ buttons hide or show $iteration and $iteration_total in the prompt." },
-  { term: "Bypass loop", desc: "Runs a single frame while the node stays wired." },
-];
 </script>
 
 <template>
@@ -70,7 +59,7 @@ const controls = [
     </DocSection>
 
     <DocSection title="The controls">
-      <DocKeyList :items="controls" />
+      <DocFields node="WP_ContextLoop" group="controls" />
     </DocSection>
 
     <DocSection title="Sweep combinations">

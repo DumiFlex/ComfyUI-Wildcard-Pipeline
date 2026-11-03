@@ -5,23 +5,12 @@ import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import DocFigureText from "../../../components/docs/DocFigureText.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import Kbd from "@/kit/Kbd.vue";
 import picksDiagram from "../../images/how-picks-carry-over.webp";
-
-const ports = [
-  { term: "images", desc: "The images to pick from. Required: this is what the picker shows." },
-  { term: "latent, masks", desc: "Sliced to the picked images. A mask you paint in the picker replaces that image's mask." },
-  { term: "positive, negative", desc: "CONDITIONING. A batched conditioning is sliced with the images; a single one is kept for every frame that keeps an image." },
-  { term: "positive_text, negative_text", desc: "The prompt strings, kept or dropped with their frame." },
-  { term: "context", desc: "Each frame's WP Context, kept or dropped with it." },
-  { term: "clip (in)", desc: "Optional. Re-encodes a prompt you edit in the picker, so the positive/negative conditioning follows the edit. Without it, an edit changes only the text outputs." },
-  { term: "extra_1, extra_2", desc: "Any type. The output takes the type of what you connect. Batched values are sliced, anything else follows its frame." },
-  { term: "picks (out)", desc: "What was kept, as frame:image (1-based), for example 1:2, 3:1." },
-  { term: "labels (out)", desc: "One label per item, in step with images: #3 · red · 2 by default, or the name you gave the image in the picker. An item with several images has one line per image." },
-];
 
 const modes = [
   { term: "Grid", kbd: "G", desc: "Pick fast. Click an image or press Space over it; Ctrl+A picks everything; a frame says how many of its images are picked, and its Pick frame button picks them all. Tile size S, M, L or Fit (F, as big as the picker allows). Double-click an image or click its frame to open it in Detail. Each image's label sits under it; click it to rename." },
@@ -34,11 +23,6 @@ const keys = [
   { term: "Step back", kbd: "Esc", desc: "Step back a mode: Zoom to Detail, Detail to Grid. From Grid it tucks the picker away; a waiting pill at the bottom of the screen opens it again, picks intact." },
 ];
 
-const settings = [
-  { term: "Mode", desc: "Pause & pick asks every run. Reuse last picks keeps the same picks without asking, and asks again when they no longer fit. Pass all lets everything through." },
-  { term: "Send picks as", desc: "Same shape keeps each frame's picks together as one batch. One per image sends every pick as its own item, with its own copy of its frame's prompt, conditioning and Context." },
-  { term: "Timeout", desc: "Seconds to wait; 0 waits until you answer. After a timeout it keeps all, keeps the first image, or stops the branch." },
-];
 </script>
 
 <template>
@@ -88,7 +72,7 @@ const settings = [
 
     <DocSection title="Inputs &amp; outputs">
       <p>Every input has a matching output. Connect only what you need.</p>
-      <DocKeyList :items="ports" />
+      <DocFields node="WP_ImageFilter" group="ports" />
     </DocSection>
 
     <DocSection title="The picker">
@@ -227,7 +211,7 @@ const settings = [
         ratio="2 / 1"
         caption="WP Image Filter after a run, next to a Preview Image of the three images it kept."
       />
-      <DocKeyList :items="settings" />
+      <DocFields node="WP_ImageFilter" group="settings" />
       <p>The <b>Last run</b> strip under the settings shows what the last run kept.</p>
     </DocSection>
 

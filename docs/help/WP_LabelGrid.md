@@ -2,61 +2,31 @@
 
 Draws labels on images and lays them out in one labelled grid: compare runs, show a sweep as an XY plot, or just stamp each image with its seed. Takes one image, a batch, a list, or a list of batches (a Context Loop's frames). Labels are optional.
 
-## Inputs
+<!-- fields:start -->
+## Inputs and outputs
 
-| Name | Type | Notes |
-|---|---|---|
-| `images` | `IMAGE` | One image, a batch, a list, or a list of batches. |
-| `labels` | `STRING` (list) | Optional. One entry per item, one line per image of its batch; one line covers the whole batch, and a single one-line label covers every image of every item. The WP Image Filter's `labels` output fits here. One typed text whose lines match the image count is spread over all images. |
-| `label_text` | `STRING` | Optional. Sets the label Text from another node; the tokens still work. A list gives one text per item, the last covering any item past it. |
-| `title` | `STRING` | Optional. Text from another node for the grid title; beats the panel's Title. |
-| `row_headers`, `column_headers` | `STRING` | Optional. One header per line (a list gives one per entry). Wiring one sets that side to typed headers and replaces its dropdown on the panel. |
-
-Everything else is set in the node's panel. The text inputs have no row of their own: like a built-in widget's, each one's dot sits at the left edge beside the field it feeds (Text, Rows, Columns, Title) and shows when you hover that field or wire it.
+- **images** `IMAGE`: One image, a batch, a list, or a list of batches (a Context Loop's frames). Required.
+- **labels** `STRING`: Optional text, one entry per item and one line per image of its batch. One line covers the whole batch, and a single one-line label covers every image of every item. The Image Filter's labels output fits straight in. One typed text with a line per image works too.
+- **label_text** `STRING`: Optional text from another node for what each image shows; {label}, {index} and the other tokens still work. A list gives one text per item, the last one covering any item past it.
+- **title** `STRING`: Optional text from another node for the grid title. Once wired, the panel's Title box shows that it comes from the wire.
+- **row_headers, column_headers** `STRING`: Optional text from another node, one header per line (a list gives one header per entry). Wiring one sets that side to typed headers and replaces its dropdown on the panel. Like a built-in widget's, each text input's dot sits beside the field it feeds and shows when you hover that field or wire it.
+- **images (out)** `IMAGE`: The labelled images, in the shape they came in. A batch stays a batch.
+- **grid (out)** `IMAGE`: Every image in one labelled grid. The node also shows it on the canvas, so it can end a branch.
 
 ## Label
 
-| Setting | Notes |
-|---|---|
-| Text | What each image shows (hover a token above the box for what it gives). `{label}` = the incoming label (default), `{frame}` and `{image}` count from 1 per input item, `{index}` counts across all images, `{count}` = number of images. `\n` breaks a line. Empty = the incoming label. |
-| Place | Above, below, left or right adds a strip beside the image (the image grows). **Over image** draws a see-through band over the top or bottom instead (same size). The last button draws no label. |
-| Font | The default (Segoe UI / Arial / DejaVu Sans when found, else Pillow's built-in), fonts in the extension's `fonts/` folder, and your system fonts. Type to search. A font this machine lacks falls back to the default. |
-| Size | Pixels. Empty = automatic (4.5% of the image width), so text stays readable at 512 px and at 4K. |
-| Alignment | Left, centre, right. |
-| Colour, strip / band | Click a swatch for the colour square, a hex box and (for the strip or band) an opacity; **None** drops the band. |
+- **Text**: What each image shows. {label} is the incoming label (the default), {frame} and {image} count from 1 per input item, {index} counts across all images, {count} is how many there are. \n breaks a line.
+- **Place**: Above, below, left or right adds a strip beside the image. Over image draws a see-through band over the top or bottom and keeps the size. The last button draws no label.
+- **Font and size**: Your system fonts plus any you drop into the extension's fonts folder; type to search. An empty size is automatic: a share of the image width, so labels read the same at 512 px and at 4K.
+- **Colours**: Click a swatch for the colour square and a hex box. The strip or band also has an opacity, and None drops it.
 
 ## Grid
 
-Switch the grid off to only label the images. With it on, pick a **preset**; each one sets the layout and headers in one click, and you can change any of them after.
-
-| Preset | What it does | Fits |
-|---|---|---|
-| Fit the run | Follows the images that come in: one batch fills a near-square sheet, up to six single images sit in one row, more fill a sheet, a list of batches gets one row per item. | Anything (the default). |
-| Sheet | Every image in turn, filled into a near-square sheet (or the columns you set). | One batch, many single images. |
-| Side by side | Every image in one row. | A few runs to compare. |
-| Frame rows | One row per frame, its batch across. With the Image Filter's labels the rows are headed `#1`, `#2`, …. | A loop of batches. |
-| Frame columns | The same, turned around. | A loop of batches. |
-| XY plot | Rows and columns from two parts of the labels, each part's values as headers. | A sweep's labels. |
-| No grid | Only the labelled images. | A single image. |
-
-After a run the panel says what came in (for example `3 frames × 4 images`) and marks the preset that fits it, with **Use it** to switch.
-
-| Setting | Notes |
-|---|---|
-| Layout | Fit the run, one row per frame, one column per frame, fill rows (with a column count, empty = near square), all in one row, all in one column. Label-part headers set the layout themselves. |
-| Rows, Columns | No headers, typed (one header per line in the box that opens), or a label part. The list shows what each part held on the last run. |
-| Title | Drawn above the grid. |
-| Spacing | Gap between cells, edge around the grid, and cell width: empty keeps each image's size, a number scales every cell to that width (smaller grids, faster saves). |
-| Colour, headers | Grid background, and the colour of headers and title. **Reset** puts spacing and these colours back. |
-
-## Outputs
-
-| Name | Type | Notes |
-|---|---|---|
-| `images` | `IMAGE` (list) | The labelled images in the shape they came in. A batch stays a batch: every image of it gets the same strip size. |
-| `grid` | `IMAGE` | One grid image. A small empty image when the grid is off. |
-
-The node also shows its result (the grid, or the labelled images) on the canvas, like Preview Image, so it can end a branch.
+- **Layout**: Fit the run, one row or column per frame, fill rows (with a column count), all in one row, all in one column. Label-part headers set the layout themselves.
+- **Rows, Columns**: No headers, typed (one header per line in the box that opens), or a label part. The list shows what each part held on the last run.
+- **Title, Spacing**: A line of text above the grid; the gap between cells, the edge around the grid, and the cell width (empty keeps image sizes, a number scales every cell to it).
+- **Colours**: The grid's background and the colour of headers and title. Reset puts spacing and these back.
+<!-- fields:end -->
 
 ## XY plots from labels
 

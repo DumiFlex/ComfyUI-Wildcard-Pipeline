@@ -2,21 +2,25 @@
 
 Pauses the run so you can pick which images go on. Everything that belongs to an image (its latent, masks, conditioning, prompt text and Context) is filtered with it, so the node can sit between the first KSampler and the upscaler and the upscaler only gets the picked images with their own prompts.
 
+<!-- fields:start -->
 ## Inputs and outputs
 
-Every input has a matching output. Connect only what you need.
+- **images** `IMAGE`: The images to pick from. Required: this is what the picker shows.
+- **latent, masks** `LATENT / MASK`: Sliced to the picked images. A mask you paint in the picker replaces that image's mask.
+- **positive, negative** `CONDITIONING`: CONDITIONING. A batched conditioning is sliced with the images; a single one is kept for every frame that keeps an image.
+- **positive_text, negative_text** `STRING`: The prompt strings, kept or dropped with their frame.
+- **context** `context`: Each frame's WP Context, kept or dropped with it.
+- **clip (in)** `CLIP`: Optional. Re-encodes a prompt you edit in the picker, so the positive/negative conditioning follows the edit. Without it, an edit changes only the text outputs.
+- **extra_1, extra_2** `any`: Any type. The output takes the type of what you connect. Batched values are sliced, anything else follows its frame.
+- **picks (out)** `STRING`: What was kept, as frame:image (1-based), for example 1:2, 3:1.
+- **labels (out)** `STRING`: One label per item, in step with images: #3 · red · 2 by default, or the name you gave the image in the picker. An item with several images has one line per image.
 
-- **images**: the images to pick from. Required; this is what the picker shows.
-- **latent**, **masks**: sliced to the picked images. A mask you paint in the picker replaces that image's mask.
-- **positive**, **negative**: CONDITIONING. A batched conditioning is sliced with the images; a single one is kept for each frame that keeps any image.
-- **positive_text**, **negative_text**: the prompt strings, kept or dropped with their frame.
-- **context**: the WP Context of each frame, kept or dropped with it.
-- **clip** (input only, optional): re-encodes a prompt you edit in the picker, so the positive/negative conditioning follows the edit. Without it an edit changes only the text outputs.
-- **extra_1**, **extra_2**: any type. The output takes the type of what you connect. Batched values are sliced; anything else follows its frame.
-- **picks** (output only): what was kept, as `frame:image` (1-based), for example `1:2, 3:1`.
-- **labels** (output only): one label per output item, in step with **images**. Every image has one: `#3 · red · pencil · 2` by default (the frame or loop number, the swept option names, then the image number when the frame has several), or the name you gave it in the picker. An item with several images (Same shape) has one line per image. **Pass all** gives the plain `#3 · 2` form, and **Reuse last picks** keeps the names from the last pause.
+## Settings on the node
 
-A Context Loop (or any list) makes one **frame** per iteration. Lists line up by frame; a shorter list repeats its last item.
+- **Mode**: Pause & pick asks every run. Reuse last picks keeps the same picks without asking, and asks again when they no longer fit. Pass all lets everything through.
+- **Send picks as**: Same shape keeps each frame's picks together as one batch. One per image sends every pick as its own item, with its own copy of its frame's prompt, conditioning and Context.
+- **Timeout**: Seconds to wait; 0 waits until you answer. After a timeout it keeps all, keeps the first image, or stops the branch.
+<!-- fields:end -->
 
 ## The picker
 
@@ -44,12 +48,6 @@ In **Detail**, the side panel edits the frame's prompts and paints a mask for th
 - **M** or **Paint** opens the mask painter. **Brush** paints where you drag, **Lasso** fills the area you drag around, and **Fill** fills the area under a click up to the lines you painted (paint an outline, then fill its inside). **Paint** or **Erase** works with every tool (**X** swaps). **Size** is the brush (**[** and **]**), **Hardness** softens the edge of the brush, lasso and fill, and **Strength** masks part-way, which inpainting changes less; one stroke stays at its strength where it crosses itself. **Undo** and **Redo** (Ctrl+Z, Ctrl+Shift+Z), **Invert** and **Clear**. A ring under the mouse shows the brush (dashed when erasing, a dotted inner ring where a soft edge starts). The mask goes to the **masks** output, resized to the image. Images you don't paint keep the incoming mask, or an empty one when nothing is wired in. Once painted, the **Mask** tab shows a preview: **Over image** tints the masked part, **Mask only** shows it white on black as the **masks** output sends it.
 
 ![How the picks carry over](images/how-picks-carry-over.webp)
-
-## Settings on the node
-
-- **Mode**: **Pause & pick** asks every run. **Reuse last picks** keeps the same picks without asking, and asks again when they no longer fit (for example the batch size changed). **Pass all** lets everything through.
-- **Send picks as**: **Same shape** keeps each frame's picks together as one batch. **One per image** sends every pick as its own item, with its own copy of the frame's prompt, conditioning and Context.
-- **Timeout**: seconds to wait. 0 waits until you answer. After a timeout it keeps all, keeps the first image, or stops the branch.
 
 ## Tips
 

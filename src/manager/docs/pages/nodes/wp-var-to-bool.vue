@@ -4,17 +4,10 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
-import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
-const controls = [
-  { term: "context (in)", desc: "The Context that holds the $variable." },
-  { term: "var_name", desc: "The $variable to read. The list shows every variable the wired Context has." },
-  { term: "index", desc: "Which yes/no word to use when there are several: 0 is the first, 1 the second. Other words don't count." },
-  { term: "default", desc: "Used when the variable is missing or has no yes/no word. The node never stops the run; it uses this instead." },
-  { term: "value (out)", desc: "True or false, for any BOOLEAN input: a switch node, a toggle and so on." },
-];
 </script>
 
 <template>
@@ -55,7 +48,7 @@ const controls = [
     </DocSection>
 
     <DocSection title="Controls">
-      <DocKeyList :items="controls" />
+      <DocFields node="WP_VarToBool" group="controls" />
     </DocSection>
 
     <DocSection title="How it reads the text">

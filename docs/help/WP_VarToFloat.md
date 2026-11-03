@@ -2,14 +2,15 @@
 
 Reads a `$variable` from the upstream Context and emits a `FLOAT`.
 
-## Inputs
+<!-- fields:start -->
+## On the node
 
-| Name | Type | Notes |
-|---|---|---|
-| `context` | context | Required. From a WP Context. |
-| `var_name` | dropdown | Pick from upstream `$vars`. |
-| `index` | `INT` | Which float match in the var's value. |
-| `default` | `FLOAT` | Returned when no Nth match. |
+- **context (in)** `context`: The Context that holds the $variable.
+- **var_name** `variable`: The $variable to read. The list shows every variable the wired Context has.
+- **index** `INT`: Which number to take when there are several: 0 is the first, 1 the second. Usually 0.
+- **default** `FLOAT`: Used when the variable is missing, has no number, or has fewer numbers than the index. The node never stops the run; it uses this instead.
+- **value (out)** `FLOAT`: The number, for any FLOAT input: CFG, denoise, a LoRA strength and so on.
+<!-- fields:end -->
 
 ## Parsing rule
 

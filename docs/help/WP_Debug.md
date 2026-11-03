@@ -2,9 +2,18 @@
 
 See what happened at this point of the chain: every variable, which module set it, and any warnings. It has no output and changes nothing.
 
-## Input
+<!-- fields:start -->
+## Inputs and outputs
 
-- **context**: any WP node's context output.
+- **context (in)** `context`: Any WP node's context output. The node has no output and changes nothing; drag its corner to resize.
+
+## Tabs
+
+- **Variables**: Every $variable and its value at this point, with the module that set it. The quickest way to check what your wildcards picked. Negative words show under the value in red, with the module they came from when it isn't the variable's own.
+- **Trace**: Every module in the order it ran, grouped by Context. Open one to see why it did what it did: a wildcard's odds and the constraints that changed them, which derivation branch ran, and the negative each one left.
+- **Warnings**: What came up during the run, such as missing variables or a constraint that changed nothing. Look here first when something seems off.
+- **Raw**: Everything as JSON, with a download button. Handy for bug reports.
+<!-- fields:end -->
 
 ## How to use
 

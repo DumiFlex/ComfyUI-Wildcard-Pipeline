@@ -4,15 +4,9 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
-import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
-const tabs = [
-  { term: "Variables", desc: "Every $variable and its value at this point, with the module that set it. The quickest way to check what your wildcards picked. Negative words show under the value in red, with the module they came from when it isn't the variable's own." },
-  { term: "Trace", desc: "Every module in the order it ran, grouped by Context. Open one to see why it did what it did: a wildcard's odds and the constraints that changed them, which derivation branch ran, and the negative each one left." },
-  { term: "Warnings", desc: "What came up during the run, such as missing variables or a constraint that changed nothing. Look here first when something seems off." },
-  { term: "Raw", desc: "Everything as JSON, with a download button. Handy for bug reports." },
-];
 </script>
 
 <template>
@@ -47,8 +41,12 @@ const tabs = [
       />
     </DocSection>
 
+    <DocSection title="Input">
+      <DocFields node="WP_Debug" group="ports" />
+    </DocSection>
+
     <DocSection title="The tabs">
-      <DocKeyList :items="tabs" />
+      <DocFields node="WP_Debug" group="tabs" />
       <Banner tone="info" note>
         The filter box at the top of each tab searches by variable name or warning.
       </Banner>

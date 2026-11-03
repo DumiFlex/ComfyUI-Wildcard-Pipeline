@@ -2,21 +2,22 @@
 
 Runs the whole chain N times from one Generate. Put it in front of your WP Context: each pass (a **frame**) rolls your wildcards again, so one click gives N different prompts.
 
-## Controls
+<!-- fields:start -->
+## On the node
 
-- **seed**: the base seed, with the usual control after generate. You can convert it to an input and wire any INT.
-- **count**: how many frames. 1 means no loop.
-- **values** *(optional, text)*: one frame per line (or per list entry) from another node, such as a list of subjects. Each frame writes its line to `$iteration_value`. The values set the frame count, and **count** follows the last run. With a sweep on, every value runs every combination (the value changes slowest).
-- **strategy**: how the frames' seeds are spread from the base. **hash** (default) gives unrelated seeds, **sequential** gives base, base+1, base+2…, **stride** takes large fixed jumps. No strategy makes the images more or less varied.
-- **override seed**: off (default) lets each WP Context keep its own seed, and the loop only varies it per frame. On makes the loop's seed the base for every frame, so the whole batch can be reproduced from that one seed. Per-frame seed locks only apply while it is on.
-- **iteration var**: the name of the frame counter, `iteration` by default.
-- **bypass**: run once without removing the node.
-- **Sweep combinations**: run every combination of chosen wildcard options instead of random rolls (see below).
-
-## Outputs
-
-- **context**: one Context per frame. ComfyUI runs the nodes after it once per frame.
-- **loop_config**: wire it into a **WP Seed List** so each frame also gets its own sampler seed.
+- **seed** `INT`: The loop's own seed. Only used when Override Context seed is on.
+- **count** `INT`: How many frames one Generate makes (1–999). 1 switches looping off without unwiring the node.
+- **values** `STRING`: Optional text from another node: one frame per line (or per list entry), each writing its line to $iteration_value. The values set the frame count and count follows the last run; with a sweep on, every value runs every combination. Its dot sits beside the iteration variable (beside the values note once wired) and shows when you hover it.
+- **Strategy**: hash, sequential or stride: how the frame seeds are worked out when Override Context seed is on. See Seeds & loops.
+- **Per-iteration seeds**: The seed each frame will use. Lock single frames, Lock all, Copy / Paste, or Prev to keep the seed a frame used last run. Locks need Override Context seed on.
+- **Sweep combinations**: Run every combination of the options you pick instead of random rolls. See below.
+- **Edit frame**: The base / #1 #2 … chips. Pick a frame to change just that frame (see Per-iteration overrides). Ctrl-click skips a frame, Alt-click locks its seed.
+- **Override Context seed**: On: the loop sets every frame's seed from its own seed, so the batch can be repeated. Off (default): each WP Context keeps its own seed and the loop changes it a little per frame.
+- **Iteration var**: The name of the frame-number variable ($iteration). The globe and Σ buttons hide or show $iteration and $iteration_total in the prompt.
+- **Bypass loop**: Runs a single frame while the node stays wired.
+- **context (out)** `context`: One Context per frame. ComfyUI runs the nodes after it once per frame.
+- **loop_config (out)** `WP_CONTEXT_LOOP_CONFIG`: Wire it into a WP Seed List so each frame also gets its own sampler seed.
+<!-- fields:end -->
 
 ## Frame variables
 

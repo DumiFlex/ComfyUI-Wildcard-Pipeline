@@ -4,17 +4,10 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
-import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
-const controls = [
-  { term: "context (in)", desc: "The Context that holds the $variable." },
-  { term: "var_name", desc: "The $variable to read. The list shows every variable the wired Context has." },
-  { term: "index", desc: "Which number to take when there are several: 0 is the first, 1 the second. Usually 0." },
-  { term: "default", desc: "The value to use when the variable is missing, has no numbers in it, or the index is beyond what was found. The node never stops the run; it uses this instead." },
-  { term: "value (out)", desc: "The whole number, for any INT input: width, steps, batch size and so on." },
-];
 </script>
 
 <template>
@@ -55,7 +48,7 @@ const controls = [
     </DocSection>
 
     <DocSection title="Controls">
-      <DocKeyList :items="controls" />
+      <DocFields node="WP_VarToInt" group="controls" />
     </DocSection>
 
     <DocSection title="How it finds the number">

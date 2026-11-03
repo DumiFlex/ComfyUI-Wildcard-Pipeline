@@ -1,0 +1,601 @@
+{
+  "WP_Context": {
+    "inputs": [
+      {
+        "name": "upstream",
+        "type": "PIPELINE_CONTEXT",
+        "optional": true
+      },
+      {
+        "name": "seed",
+        "type": "INT",
+        "optional": false
+      },
+      {
+        "name": "wp_modules",
+        "type": "WP_CONTEXT_MODULES",
+        "optional": false
+      }
+    ],
+    "outputs": [
+      {
+        "name": "context",
+        "type": "PIPELINE_CONTEXT"
+      }
+    ]
+  },
+  "WP_ContextInjector": {
+    "inputs": [
+      {
+        "name": "upstream",
+        "type": "PIPELINE_CONTEXT",
+        "optional": true
+      },
+      {
+        "name": "wp_rows",
+        "type": "WP_INJECTOR_ROWS",
+        "optional": false
+      }
+    ],
+    "outputs": [
+      {
+        "name": "context",
+        "type": "PIPELINE_CONTEXT"
+      }
+    ]
+  },
+  "WP_ContextLoop": {
+    "inputs": [
+      {
+        "name": "seed",
+        "type": "INT",
+        "optional": false
+      },
+      {
+        "name": "count",
+        "type": "INT",
+        "optional": false
+      },
+      {
+        "name": "values",
+        "type": "STRING",
+        "optional": true
+      },
+      {
+        "name": "wp_context_loop_config",
+        "type": "WP_CONTEXT_LOOP_WIDGET",
+        "optional": false
+      }
+    ],
+    "outputs": [
+      {
+        "name": "context",
+        "type": "PIPELINE_CONTEXT"
+      },
+      {
+        "name": "loop_config",
+        "type": "WP_CONTEXT_LOOP_CONFIG"
+      }
+    ]
+  },
+  "WP_Debug": {
+    "inputs": [
+      {
+        "name": "context",
+        "type": "PIPELINE_CONTEXT",
+        "optional": false
+      },
+      {
+        "name": "wp_viewer",
+        "type": "WP_DEBUG_VIEWER",
+        "optional": false
+      }
+    ],
+    "outputs": []
+  },
+  "WP_ImageFilter": {
+    "inputs": [
+      {
+        "name": "images",
+        "type": "IMAGE",
+        "optional": false
+      },
+      {
+        "name": "latent",
+        "type": "LATENT",
+        "optional": true
+      },
+      {
+        "name": "masks",
+        "type": "MASK",
+        "optional": true
+      },
+      {
+        "name": "positive",
+        "type": "CONDITIONING",
+        "optional": true
+      },
+      {
+        "name": "negative",
+        "type": "CONDITIONING",
+        "optional": true
+      },
+      {
+        "name": "positive_text",
+        "type": "STRING",
+        "optional": true
+      },
+      {
+        "name": "negative_text",
+        "type": "STRING",
+        "optional": true
+      },
+      {
+        "name": "context",
+        "type": "PIPELINE_CONTEXT",
+        "optional": true
+      },
+      {
+        "name": "extra_1",
+        "type": "*",
+        "optional": true
+      },
+      {
+        "name": "extra_2",
+        "type": "*",
+        "optional": true
+      },
+      {
+        "name": "clip",
+        "type": "CLIP",
+        "optional": true
+      },
+      {
+        "name": "wp_image_filter",
+        "type": "WP_IMAGE_FILTER",
+        "optional": true
+      }
+    ],
+    "outputs": [
+      {
+        "name": "images",
+        "type": "IMAGE"
+      },
+      {
+        "name": "latent",
+        "type": "LATENT"
+      },
+      {
+        "name": "masks",
+        "type": "MASK"
+      },
+      {
+        "name": "positive",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "negative",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "positive_text",
+        "type": "STRING"
+      },
+      {
+        "name": "negative_text",
+        "type": "STRING"
+      },
+      {
+        "name": "context",
+        "type": "PIPELINE_CONTEXT"
+      },
+      {
+        "name": "extra_1",
+        "type": "*"
+      },
+      {
+        "name": "extra_2",
+        "type": "*"
+      },
+      {
+        "name": "picks",
+        "type": "STRING"
+      },
+      {
+        "name": "labels",
+        "type": "STRING"
+      }
+    ]
+  },
+  "WP_LabelGrid": {
+    "inputs": [
+      {
+        "name": "images",
+        "type": "IMAGE",
+        "optional": false
+      },
+      {
+        "name": "labels",
+        "type": "STRING",
+        "optional": true
+      },
+      {
+        "name": "label_text",
+        "type": "STRING",
+        "optional": true
+      },
+      {
+        "name": "title",
+        "type": "STRING",
+        "optional": true
+      },
+      {
+        "name": "row_headers",
+        "type": "STRING",
+        "optional": true
+      },
+      {
+        "name": "column_headers",
+        "type": "STRING",
+        "optional": true
+      },
+      {
+        "name": "wp_label_grid",
+        "type": "WP_LABEL_GRID",
+        "optional": true
+      }
+    ],
+    "outputs": [
+      {
+        "name": "images",
+        "type": "IMAGE"
+      },
+      {
+        "name": "grid",
+        "type": "IMAGE"
+      }
+    ]
+  },
+  "WP_ModelInfo": {
+    "inputs": [
+      {
+        "name": "upstream",
+        "type": "PIPELINE_CONTEXT",
+        "optional": true
+      },
+      {
+        "name": "model",
+        "type": "MODEL",
+        "optional": true
+      },
+      {
+        "name": "family",
+        "type": "STRING",
+        "optional": true
+      },
+      {
+        "name": "variant",
+        "type": "STRING",
+        "optional": true
+      },
+      {
+        "name": "name",
+        "type": "STRING",
+        "optional": true
+      },
+      {
+        "name": "wp_model_info",
+        "type": "WP_MODEL_INFO",
+        "optional": true
+      }
+    ],
+    "outputs": [
+      {
+        "name": "context",
+        "type": "PIPELINE_CONTEXT"
+      }
+    ]
+  },
+  "WP_PromptAssembler": {
+    "inputs": [
+      {
+        "name": "context",
+        "type": "PIPELINE_CONTEXT",
+        "optional": false
+      },
+      {
+        "name": "template",
+        "type": "STRING",
+        "optional": false
+      },
+      {
+        "name": "negative_template",
+        "type": "STRING",
+        "optional": true
+      }
+    ],
+    "outputs": [
+      {
+        "name": "prompt",
+        "type": "STRING"
+      },
+      {
+        "name": "negative",
+        "type": "STRING"
+      }
+    ]
+  },
+  "WP_PromptCleaner": {
+    "inputs": [
+      {
+        "name": "prompt",
+        "type": "STRING",
+        "optional": false
+      },
+      {
+        "name": "negative",
+        "type": "STRING",
+        "optional": true
+      },
+      {
+        "name": "blocklist",
+        "type": "STRING",
+        "optional": true
+      },
+      {
+        "name": "wp_cleaner",
+        "type": "WP_CLEANER",
+        "optional": true
+      }
+    ],
+    "outputs": [
+      {
+        "name": "prompt",
+        "type": "STRING"
+      },
+      {
+        "name": "negative",
+        "type": "STRING"
+      }
+    ]
+  },
+  "WP_SeedList": {
+    "inputs": [
+      {
+        "name": "base_seed",
+        "type": "INT",
+        "optional": false
+      },
+      {
+        "name": "count",
+        "type": "INT",
+        "optional": false
+      },
+      {
+        "name": "wp_seed_list_config",
+        "type": "WP_SEED_LIST_CONFIG",
+        "optional": false
+      },
+      {
+        "name": "loop_config",
+        "type": "WP_CONTEXT_LOOP_CONFIG",
+        "optional": true
+      }
+    ],
+    "outputs": [
+      {
+        "name": "seed",
+        "type": "INT"
+      }
+    ]
+  },
+  "WP_Toggles": {
+    "inputs": [
+      {
+        "name": "upstream",
+        "type": "PIPELINE_CONTEXT",
+        "optional": true
+      },
+      {
+        "name": "wp_toggles",
+        "type": "WP_TOGGLES",
+        "optional": true
+      }
+    ],
+    "outputs": [
+      {
+        "name": "context",
+        "type": "PIPELINE_CONTEXT"
+      },
+      {
+        "name": "toggle_1",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "toggle_2",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "toggle_3",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "toggle_4",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "toggle_5",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "toggle_6",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "toggle_7",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "toggle_8",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "toggle_9",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "toggle_10",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "toggle_11",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "toggle_12",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "toggle_13",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "toggle_14",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "toggle_15",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "toggle_16",
+        "type": "BOOLEAN"
+      }
+    ]
+  },
+  "WP_VarToBool": {
+    "inputs": [
+      {
+        "name": "context",
+        "type": "PIPELINE_CONTEXT",
+        "optional": false
+      },
+      {
+        "name": "wp_var_name",
+        "type": "WP_VAR_PICKER",
+        "optional": false
+      },
+      {
+        "name": "index",
+        "type": "INT",
+        "optional": false
+      },
+      {
+        "name": "default",
+        "type": "BOOLEAN",
+        "optional": false
+      }
+    ],
+    "outputs": [
+      {
+        "name": "value",
+        "type": "BOOLEAN"
+      }
+    ]
+  },
+  "WP_VarToChoice": {
+    "inputs": [
+      {
+        "name": "context",
+        "type": "PIPELINE_CONTEXT",
+        "optional": false
+      },
+      {
+        "name": "wp_var_name",
+        "type": "WP_VAR_PICKER",
+        "optional": false
+      },
+      {
+        "name": "match",
+        "type": "COMBO",
+        "optional": false
+      },
+      {
+        "name": "fallback",
+        "type": "COMBO",
+        "optional": false
+      },
+      {
+        "name": "if_no_match",
+        "type": "COMBO",
+        "optional": false
+      }
+    ],
+    "outputs": [
+      {
+        "name": "choice",
+        "type": "*"
+      }
+    ]
+  },
+  "WP_VarToFloat": {
+    "inputs": [
+      {
+        "name": "context",
+        "type": "PIPELINE_CONTEXT",
+        "optional": false
+      },
+      {
+        "name": "wp_var_name",
+        "type": "WP_VAR_PICKER",
+        "optional": false
+      },
+      {
+        "name": "index",
+        "type": "INT",
+        "optional": false
+      },
+      {
+        "name": "default",
+        "type": "FLOAT",
+        "optional": false
+      }
+    ],
+    "outputs": [
+      {
+        "name": "value",
+        "type": "FLOAT"
+      }
+    ]
+  },
+  "WP_VarToInt": {
+    "inputs": [
+      {
+        "name": "context",
+        "type": "PIPELINE_CONTEXT",
+        "optional": false
+      },
+      {
+        "name": "wp_var_name",
+        "type": "WP_VAR_PICKER",
+        "optional": false
+      },
+      {
+        "name": "index",
+        "type": "INT",
+        "optional": false
+      },
+      {
+        "name": "default",
+        "type": "INT",
+        "optional": false
+      }
+    ],
+    "outputs": [
+      {
+        "name": "value",
+        "type": "INT"
+      }
+    ]
+  }
+}

@@ -4,35 +4,10 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
-import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
-const controls = [
-  { term: "upstream (in)", desc: "Optional Context to extend. Only nodes after this one see the toggle variables. It can also set toggles (see below)." },
-  { term: "Pencil (toolbar)", desc: "Select the node and the indigo pencil in ComfyUI's selection toolbar opens the edit view: the mode, the grips to reorder, a pencil per row, Add toggle and Add label. Done goes back to the clean view, which shows only the switches." },
-  { term: "Any on / Pick one", desc: "Any on: every toggle is on or off by itself. Pick one: exactly one is on, like radio buttons." },
-  { term: "writes (Pick one)", desc: "Optional variable that also gets the picked toggle's value (or its name), so one rule can branch on it." },
-  { term: "Pencil (row)", desc: "Opens the toggle's edit panel: name, variable, style, needs, what off mutes or bypasses, group and its output." },
-  { term: "Add toggle / Add label", desc: "A new toggle, or a label that groups the toggles under it. Click a label's arrow to fold it." },
-  { term: "control dots (in)", desc: "A toggle that mutes or bypasses has a dot at the left of its row: wire the nodes it drives into it." },
-  { term: "context (out)", desc: "The Context with every toggle variable added, all internal." },
-  { term: "toggle outputs", desc: "One BOOLEAN per toggle that has an output, at the right of its row. Up to 16." },
-];
-
-const edit = [
-  { term: "Name", desc: "Shown on the row and on its output." },
-  { term: "Variable", desc: "Gets true or false. It follows the name until you change it. Always internal, so it never prints in the prompt. Show puts it under the name in the clean view." },
-  { term: "Style", desc: "Switch, Check, Buttons (two words of your own, like Day / Night) or Chip (a small chip with the name)." },
-  { term: "Value (Pick one)", desc: "What the picked variable gets when this toggle is picked, instead of its name. It can read $variables from upstream." },
-  { term: "Needs", desc: "Another toggle this one needs. While that one is off, this one is off too; it keeps your choice for when it comes back on." },
-  { term: "When off", desc: "Nothing, Mute or Bypass: what happens to the nodes wired into the row's dot (and to the canvas groups you pick) while the toggle is off. On, they run." },
-  { term: "Invert", desc: "Mute or bypass while the toggle is ON instead, for a node used only as a switchboard." },
-  { term: "Canvas groups", desc: "Groups on the canvas whose nodes When off also covers, by title. No wires needed." },
-  { term: "Upstream can set it", desc: "When the upstream Context holds this toggle's variable as a yes/no word (true, yes, on, 1, false, no, off, 0), that value sets the switch for the run." },
-  { term: "Group", desc: "Which label it sits under." },
-  { term: "BOOLEAN output", desc: "Show an output for switch nodes. Off for a toggle only rules read." },
-];
 </script>
 
 <template>
@@ -71,11 +46,11 @@ const edit = [
     </DocSection>
 
     <DocSection title="Controls">
-      <DocKeyList :items="controls" />
+      <DocFields node="WP_Toggles" group="controls" />
     </DocSection>
 
     <DocSection title="Editing a toggle">
-      <DocKeyList :items="edit" />
+      <DocFields node="WP_Toggles" group="edit" />
       <Banner tone="info" note>
         Drag the grip to reorder. A label moves with its toggles. Moving a row never re-points a wire:
         each output stays with its toggle.

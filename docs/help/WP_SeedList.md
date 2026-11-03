@@ -2,23 +2,17 @@
 
 Emits a list of seeds, one per loop iteration, so a downstream KSampler gets its own seed on every pass. Use it for sampler seeds only: it never changes a prompt.
 
-## Inputs
+<!-- fields:start -->
+## On the node
 
-| Name | Type | Notes |
-|---|---|---|
-| `base_seed` | `INT` | Starting point for the series. Has `control_after_generate`. Change it for a different batch; keep it to reproduce. |
-| `count` | `INT` | How many seeds to emit (1–999). 1 emits a single seed. |
-| `strategy` | chips | How the seeds are spread from the base: `hash_index` (default), `sequential` (`base, base+1, …`) or `prime_stride` (large prime jumps). No strategy makes images more or less varied. |
-| `override base seed` | switch | With `loop_config` wired, take the base seed from the loop. Off by default. |
-| `override count` | switch | With `loop_config` wired, take the count from the loop. Turns on when you connect the wire. |
-| `override strategy` | switch | With `loop_config` wired, take the strategy from the loop. Turns on when you connect the wire. |
-| `loop_config` | `WP_CONTEXT_LOOP_CONFIG` | Optional. The WP Context Loop's side output. |
-
-## Outputs
-
-| Name | Type | Notes |
-|---|---|---|
-| `seed` | `INT` (list) | N seeds. ComfyUI runs the downstream node once per seed. |
+- **base_seed** `INT`: Where the seed list starts. Same base, same seeds.
+- **count** `INT`: How many seeds it gives (1–999). Follows the loop's count while Override count from loop is on.
+- **Strategy**: hash, sequential (base, base+1 …) or stride. It changes which numbers you get, not how varied the images are.
+- **Per-iteration seeds**: Lock single seeds, Lock all, Copy / Paste, or Prev to keep the seed a frame used last run.
+- **Override … from loop**: Three switches: take the base seed, the count and the strategy from the wired loop. Count and strategy switch on by themselves when you connect loop_config; base seed stays yours unless you switch it on.
+- **loop_config (in)** `WP_CONTEXT_LOOP_CONFIG`: Optional. A WP Context Loop's loop_config output, so the seeds follow its frames.
+- **seed (out)** `INT`: The list of seeds, one per frame. ComfyUI runs the node after it once per seed: wire it into a KSampler's seed.
+<!-- fields:end -->
 
 ## How it works
 

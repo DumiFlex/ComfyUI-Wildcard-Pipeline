@@ -2,16 +2,16 @@
 
 Tidy a prompt before the sampler: drop duplicate tags and stray commas, remove empty brackets, merge stacked weights, tidy LoRA tags and block words you never want. It needs no Context.
 
-## Inputs
+<!-- fields:start -->
+## Inputs and outputs
 
-- **prompt**: the text to clean, usually from a WP Prompt Assembler.
-- **negative**: optional, such as the Assembler's negative output.
-- **blocklist**: optional text from another node, such as one shared word list feeding several cleaners. Its entries join the panel's blocklist (comma- or newline-separated in list mode, one per line in regex mode) and turn the blocklist on. The Blocklist button then reads `+ input`. Its dot sits beside that button and shows when you hover it or wire it.
-
-## Outputs
-
-- **prompt**: the cleaned prompt.
-- **negative**: the cleaned negative (empty when nothing is wired in).
+- **prompt (in)** `STRING`: The text to clean, usually from a WP Prompt Assembler. Any text works.
+- **cleaner widget**: Pick a mode and a preset, switch single rules on or off, and edit the blocklist. After a run it shows how many fixes each rule made.
+- **negative (in)** `STRING`: Optional. A negative to clean too: type it or wire in the Assembler's negative. Left empty, the negative output is empty.
+- **prompt (out)** `STRING`: The cleaned prompt, for CLIP Text Encode.
+- **blocklist (in)** `STRING`: Optional text from another node, such as one shared word list feeding several cleaners. Its entries join the panel's blocklist (comma- or newline-separated in list mode, one per line in regex mode) and turn the blocklist on; the Blocklist button reads + input. Its dot sits beside that button and shows when you hover it or wire it.
+- **negative (out)** `STRING`: The cleaned negative, using the negative column's rules. Wire it into your negative CLIP Text Encode.
+<!-- fields:end -->
 
 ## How to use
 

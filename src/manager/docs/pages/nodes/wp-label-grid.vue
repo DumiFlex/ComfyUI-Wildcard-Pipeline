@@ -5,25 +5,9 @@ import DocImage from "../../../components/docs/DocImage.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
-
-const ports = [
-  { term: "images", desc: "One image, a batch, a list, or a list of batches (a Context Loop's frames). Required." },
-  { term: "labels", desc: "Optional text, one entry per item and one line per image of its batch. One line covers the whole batch, and a single one-line label covers every image of every item. The Image Filter's labels output fits straight in. One typed text with a line per image works too." },
-  { term: "label_text", desc: "Optional text from another node for what each image shows; {label}, {index} and the other tokens still work. A list gives one text per item, the last one covering any item past it." },
-  { term: "title", desc: "Optional text from another node for the grid title. Once wired, the panel's Title box shows that it comes from the wire." },
-  { term: "row_headers, column_headers", desc: "Optional text from another node, one header per line (a list gives one header per entry). Wiring one sets that side to typed headers and replaces its dropdown on the panel. Like a built-in widget's, each text input's dot sits beside the field it feeds and shows when you hover that field or wire it." },
-  { term: "images (out)", desc: "The labelled images, in the shape they came in. A batch stays a batch." },
-  { term: "grid (out)", desc: "Every image in one labelled grid. The node also shows it on the canvas, so it can end a branch." },
-];
-
-const label = [
-  { term: "Text", desc: "What each image shows. {label} is the incoming label (the default), {frame} and {image} count from 1 per input item, {index} counts across all images, {count} is how many there are. \\n breaks a line." },
-  { term: "Place", desc: "Above, below, left or right adds a strip beside the image. Over image draws a see-through band over the top or bottom and keeps the size. The last button draws no label." },
-  { term: "Font and size", desc: "Your system fonts plus any you drop into the extension's fonts folder; type to search. An empty size is automatic: a share of the image width, so labels read the same at 512 px and at 4K." },
-  { term: "Colours", desc: "Click a swatch for the colour square and a hex box. The strip or band also has an opacity, and None drops it." },
-];
 
 const presets = [
   { term: "Fit the run", desc: "The default. Follows what comes in: one batch fills a sheet, a few single images sit in one row, a list of batches gets one row per frame." },
@@ -34,12 +18,6 @@ const presets = [
   { term: "No grid", desc: "Only label the images." },
 ];
 
-const grid = [
-  { term: "Layout", desc: "Fit the run, one row or column per frame, fill rows (with a column count), all in one row, all in one column. Label-part headers set the layout themselves." },
-  { term: "Rows, Columns", desc: "No headers, typed (one header per line in the box that opens), or a label part. The list shows what each part held on the last run." },
-  { term: "Title, Spacing", desc: "A line of text above the grid; the gap between cells, the edge around the grid, and the cell width (empty keeps image sizes, a number scales every cell to it)." },
-  { term: "Colours", desc: "The grid's background and the colour of headers and title. Reset puts spacing and these back." },
-];
 </script>
 
 <template>
@@ -94,11 +72,11 @@ const grid = [
     </DocSection>
 
     <DocSection title="Ports">
-      <DocKeyList :items="ports" />
+      <DocFields node="WP_LabelGrid" group="ports" />
     </DocSection>
 
     <DocSection title="Labels">
-      <DocKeyList :items="label" />
+      <DocFields node="WP_LabelGrid" group="label" />
       <Banner tone="info" note>
         Without a labels input the template still works: <code>#{index}</code> numbers every image.
       </Banner>
@@ -113,7 +91,7 @@ const grid = [
     </DocSection>
 
     <DocSection title="The grid">
-      <DocKeyList :items="grid" />
+      <DocFields node="WP_LabelGrid" group="grid" />
       <p>
         A label can hold parts joined by <code> · </code>. The Image Filter writes
         <code>#3 · red · pencil</code>: the frame, then the sweep options in the loop's order, then the

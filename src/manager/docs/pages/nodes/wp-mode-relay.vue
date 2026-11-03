@@ -4,16 +4,9 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
-import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
-const controls = [
-  { term: "watch dots (in)", desc: "Wire the nodes to watch. A new free dot appears as you wire." },
-  { term: "drives (out)", desc: "Wire it into a WP Node Group: the relay sets that group's nodes." },
-  { term: "All muted", desc: "What to send when every watched node is muted: Run, Mute, Bypass or nothing (—)." },
-  { term: "All bypassed", desc: "What to send when every watched node is bypassed." },
-  { term: "Any runs", desc: "What to send when at least one watched node runs." },
-];
 </script>
 
 <template>
@@ -52,7 +45,7 @@ const controls = [
     </DocSection>
 
     <DocSection title="Controls">
-      <DocKeyList :items="controls" />
+      <DocFields node="WP_ModeRelay" group="controls" />
       <Banner tone="info" note>
         A mix of muted and bypassed sends nothing. The relay acts at once when the watched nodes
         change and when you change one of its choices, never when a workflow loads.

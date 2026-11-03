@@ -4,18 +4,10 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
-import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
-const controls = [
-  { term: "context (in)", desc: "The Context that holds the $variable." },
-  { term: "var_name", desc: "The $variable to read. The list shows every variable the wired Context has." },
-  { term: "match", desc: "How close the text must be to an option: exact, loose (the default) or closest. See below." },
-  { term: "fallback", desc: "A dropdown of the options of the input it's wired into, filled when you connect it. Used when nothing matches or the variable is empty. (first option) means the first option in the list." },
-  { term: "if_no_match", desc: "use fallback carries on with the fallback and warns you. stop the run stops here and lists some of the options." },
-  { term: "choice (out)", desc: "Wire it into a dropdown input: ckpt_name, sampler_name, scheduler, vae_name, lora_name and so on. The line under the picker names what it feeds and how many options that has." },
-];
 </script>
 
 <template>
@@ -61,7 +53,7 @@ const controls = [
     </DocSection>
 
     <DocSection title="Controls">
-      <DocKeyList :items="controls" />
+      <DocFields node="WP_VarToChoice" group="controls" />
     </DocSection>
 
     <DocSection title="How it matches">

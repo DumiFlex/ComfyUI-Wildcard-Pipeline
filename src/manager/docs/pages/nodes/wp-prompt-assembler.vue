@@ -4,19 +4,12 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
-import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import DocDetails from "../../../components/docs/DocDetails.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
-const ports = [
-  { term: "context (in)", desc: "The variables from a WP Context (or anything that ends in one)." },
-  { term: "template", desc: "Your prompt with $variables in it." },
-  { term: "negative_template", desc: "Optional, in the collapsible negative section. Your standing negative, with $negatives where the collected negative words go." },
-  { term: "prompt (out)", desc: "The finished prompt. Wire it into CLIP Text Encode or a WP Prompt Cleaner." },
-  { term: "negative (out)", desc: "The negative words of the variables this template printed, plus your negative template. Wire it into your negative CLIP Text Encode." },
-];
 </script>
 
 <template>
@@ -103,7 +96,7 @@ const ports = [
     </DocSection>
 
     <DocSection title="Inputs and outputs">
-      <DocKeyList :items="ports" />
+      <DocFields node="WP_PromptAssembler" group="ports" />
     </DocSection>
 
     <DocSection title="Works with">

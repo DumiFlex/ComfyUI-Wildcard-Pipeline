@@ -5,18 +5,8 @@ import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
-
-const controls = [
-  { term: "Icon, colour, name", desc: "The icon opens the full icon list. The colour marks the pill and its dock row." },
-  { term: "Lands at", desc: "A 3×3 grid: the corner, edge or centre of the free part of the screen (what ComfyUI's toolbar, the open side panel and the bottom panel leave, following them as they open and close), 24 px in. A jump that would land under the dock, the minimap or the zoom controls moves just enough to clear them all (the dock only while its Land clear of the dock switch is on). It lands in the same place however often you press the key, selected or not, and a toast showing at the time doesn't move it." },
-  { term: "Use this view", desc: "Lands on the view on screen now, at its zoom, instead of a grid spot." },
-  { term: "Zoom", desc: "Set jumps to that zoom (0.1–10×; the magnifier takes the zoom you're at). Keep current leaves it alone." },
-  { term: "Shortcut", desc: "Record, then press the keys (Esc cancels, Backspace clears). The bolt picks a free one, a new one on each press." },
-  { term: "Show on canvas", desc: "Off hides the node when you press Done: not drawn, not clickable, not selectable. The dock's eye shows it again." },
-  { term: "Pinned", desc: "ComfyUI's own pin: a pinned bookmark can't be moved by accident." },
-  { term: "Go", desc: "Tries the jump." },
-];
 
 const clashes = [
   { term: "Refused", desc: "Keys the browser keeps: Ctrl+T, Ctrl+W, Ctrl+1–9, F5, F11 and the like." },
@@ -24,12 +14,6 @@ const clashes = [
   { term: "Note", desc: "No Ctrl or Alt: it fires whenever the canvas has focus, never while you type." },
 ];
 
-const dock = [
-  { term: "Row", desc: "Click to jump. Number (a Step note's in its circle), icon, name and shortcut; a mark for one hidden on the canvas or inside a subgraph, OFF for a muted one." },
-  { term: "Back", desc: "Return to where you were before the last jump." },
-  { term: "↑ / ↓", desc: "Step through the bookmarks that are on, in dock order." },
-  { term: "Pencil", desc: "Edit mode: drag the dock by its header and it snaps to the nearest spot of a 3×3 grid on the free canvas (a dashed outline shows where); drag the grips to reorder, the eye shows or hides a bookmark on the canvas, and Bookmark this view adds one. Land clear of the dock (on by default) moves a jump out from under the dock; off, bookmarks land where they would without it, behind the see-through dock. Done goes back." },
-];
 </script>
 
 <template>
@@ -86,7 +70,7 @@ const dock = [
     </DocSection>
 
     <DocSection title="Settings">
-      <DocKeyList :items="controls" />
+      <DocFields node="WP_Bookmark" group="controls" />
       <Banner tone="info" note>
         Muting or bypassing a bookmark turns it off: its shortcut does nothing and the dock greys it.
       </Banner>
@@ -121,7 +105,7 @@ const dock = [
         ratio="1720 / 752"
         caption="The dock in view mode: click a row to jump. Its pencil opens edit mode, where the eye brings back a hidden bookmark."
       />
-      <DocKeyList :items="dock" />
+      <DocFields node="WP_Bookmark" group="dock" />
       <Banner tone="info" note>
         Next, Previous, Back, Bookmark this view and the dock toggle are commands without keys: bind
         them in Settings › Keybinding.

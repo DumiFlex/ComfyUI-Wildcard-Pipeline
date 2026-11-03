@@ -2,19 +2,16 @@
 
 Reads a `$variable` from the upstream Context and sends it into a dropdown input: the checkpoint, sampler, scheduler, VAE or a LoRA name. It matches the text against that dropdown's real list first.
 
-## Inputs
+<!-- fields:start -->
+## On the node
 
-| Name | Type | Notes |
-|---|---|---|
-| `context` | context | Required. From a WP Context. |
-| `var_name` | dropdown | Pick from upstream `$vars`. Stored as `"$checkpoint"`. |
-| `match` | `exact` / `loose` / `closest` | How close the text must be. Default `loose`. |
-| `fallback` | dropdown | The options of the input `choice` is wired into, filled when you connect it. Used when nothing matches or the var is empty. `(first option)` = the first option in the list. |
-| `if_no_match` | `use fallback` / `stop the run` | Carry on with the fallback and warn, or stop with a list of options. |
-
-## Output
-
-`choice`: wire it into any dropdown input (`ckpt_name`, `sampler_name`, `scheduler`, `vae_name`, `lora_name`, …). The line under the picker names what it feeds.
+- **context (in)** `context`: The Context that holds the $variable.
+- **var_name** `variable`: The $variable to read. The list shows every variable the wired Context has.
+- **match** `COMBO`: How close the text must be to an option: exact, loose (the default) or closest. See below.
+- **fallback** `COMBO`: A dropdown of the options of the input it's wired into, filled when you connect it. Used when nothing matches or the variable is empty. (first option) means the first option in the list.
+- **if_no_match** `COMBO`: use fallback carries on with the fallback and warns you. stop the run stops here and lists some of the options.
+- **choice (out)** `any`: Wire it into a dropdown input: ckpt_name, sampler_name, scheduler, vae_name, lora_name and so on. The line under the picker names what it feeds and how many options that has.
+<!-- fields:end -->
 
 ## Matching
 

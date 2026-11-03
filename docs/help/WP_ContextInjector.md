@@ -2,14 +2,20 @@
 
 Turns any ComfyUI output (text, a LoRA name, a number) into a `$variable` the rest of the pipeline can use.
 
-## Inputs
+<!-- fields:start -->
+## Inputs and outputs
 
-- **upstream** *(optional)*: another WP Context or Injector to add to.
-- **slot_0 … slot_9**: wire any ComfyUI output here. Each connected slot becomes a row.
+- **upstream (in)** `context`: Optional. Another WP Context, Injector, Model Info or Loop to add to. Only nodes after the injector see its variables.
+- **input_0 … input_9 (in)**: Wire any ComfyUI output (text, a LoRA name, a number) into the next free input_N. Each wired input becomes a row; a new free one appears as you wire, up to 10.
+- **context (out)** `context`: The variables from before, plus one per row.
 
-## Output
+## Row options
 
-- **context**: the variables from before, plus the ones this node adds.
+- **Name**: The $variable the value becomes. Letters, digits and underscores, starting with a letter.
+- **Template**: Optional. Wrap the value in text, e.g. wearing $input_0. Leave empty to use the value as it is. $$ prints a dollar sign.
+- **Negative**: Optional negative words for this variable (it can use $input_0 too, so another node can write it). Only reaches an Assembler that prints the variable. Rows with one show a NEG badge.
+- **Hide from prompt (globe)**: The variable still reaches combines and derivations, but prints nothing in the prompt.
+<!-- fields:end -->
 
 ## How to use
 

@@ -4,18 +4,11 @@ import DocSection from "../../../components/docs/DocSection.vue";
 import DocImage from "../../../components/docs/DocImage.vue";
 import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
 import Banner from "@/kit/Banner.vue";
-import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
-const controls = [
-  { term: "base_seed", desc: "Where the seed list starts. Same base, same seeds." },
-  { term: "count", desc: "How many seeds it gives (1–999). Follows the loop's count while Override count from loop is on." },
-  { term: "Strategy", desc: "hash, sequential (base, base+1 …) or stride. It changes which numbers you get, not how varied the images are." },
-  { term: "Per-iteration seeds", desc: "Lock single seeds, Lock all, Copy / Paste, or Prev to keep the seed a frame used last run." },
-  { term: "Override … from loop", desc: "Three switches: take the base seed, the count and the strategy from the wired loop. Count and strategy switch on by themselves when you connect loop_config; base seed stays yours unless you switch it on." },
-];
 </script>
 
 <template>
@@ -68,7 +61,7 @@ const controls = [
     </DocSection>
 
     <DocSection title="The controls">
-      <DocKeyList :items="controls" />
+      <DocFields node="WP_SeedList" group="controls" />
       <Banner tone="info" note>
         Prev is the one to use after a run you liked: the list shows the seeds for the next run,
         and Prev locks the seed the frame actually used.
