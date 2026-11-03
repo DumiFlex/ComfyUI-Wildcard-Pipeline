@@ -7,6 +7,7 @@
  * are verbatim from wildcard. Seed-lock controls live in
  * RuntimeSection (mirroring wildcard's split).
  */
+import Input from "@/kit/Input.vue";
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { patchInstance } from "../../instance/patch";
@@ -118,12 +119,12 @@ function onResetBinding(): void {
     <div class="id__row">
       <span class="id__key">Display name</span>
       <div class="id__input-row">
-        <input
+        <Input
+          size="sm"
           class="id__input"
           :class="{ 'id__input--mod': nameOverridden }"
           data-test="id-name"
-          type="text"
-          :value="nameValue"
+          :model-value="nameValue"
           :placeholder="module.meta?.library_name ?? 'module name'"
           aria-label="Display name"
           @input="onNameInput"
@@ -154,12 +155,12 @@ function onResetBinding(): void {
           }"
         >
           <span class="id__input-prefix" data-test="id-binding-prefix">$</span>
-          <input
+          <Input
+            size="sm"
             class="id__input id__input--prefixed"
             :class="{ 'id__input--mod': bindingOverridden }"
             data-test="id-binding"
-            type="text"
-            :value="bindingValue"
+            :model-value="bindingValue"
             :placeholder="libraryBinding"
             aria-label="Variable binding"
             :disabled="frameActive || undefined"
