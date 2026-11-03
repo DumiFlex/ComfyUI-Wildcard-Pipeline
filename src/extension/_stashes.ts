@@ -125,3 +125,8 @@ export const nodePrevSeeds: WeakMap<object, number[]> = new WeakMap();
  *  state the node's widget edits. A WP Note that is also a bookmark has a
  *  cell of kind "note", whose `get` is null while its switch is off. */
 export const bookmarkCells: WeakMap<object, { get(): unknown; set(next: unknown): void; kind?: "note" }> = new WeakMap();
+
+/** Opens a node's edit view (`extension/node-toolbar.ts`): the pencil in
+ *  ComfyUI's selection toolbar calls it. Registered by the widget glue of
+ *  each node with an edit view (WP Toggles, WP Bookmark, WP Note). */
+export const nodeEditors: WeakMap<object, () => void> = new WeakMap();

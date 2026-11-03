@@ -80,6 +80,7 @@ export const KIT_ENTRIES: KitEntry[] = [
  */
 export const KIT_EXEMPT: Record<string, string> = {
   "src/components/shared/Toast.vue": "Mounted once by the canvas toast store; push to toast-store.",
+  "src/components/shared/NodeHelpDialog.vue": "Mounted once by main.ts; the selection toolbar's ? opens it through node-toolbar.ts.",
   "src/components/shared/SeedListModal.vue": "The seed list dialog itself, not a building block.",
   "src/components/shared/SeedLockRow.vue": "One row of the seed list; only the seed widgets use it.",
   "src/components/shared/FrameChips.vue": "Loop frame chips; only the loop and seed widgets use them.",

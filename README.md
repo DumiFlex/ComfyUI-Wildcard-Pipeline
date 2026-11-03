@@ -123,7 +123,10 @@ doesn't exist yet, pick **Placeholder** from the `@` list and connect it later.
 | **WP Var → Choice** | Use a variable to pick from a dropdown, like the checkpoint or sampler. Matches it against the real list. |
 | **WP Note** | A frameless note that explains a workflow: numbered steps, warnings with an icon, or a small label, with links into the built-in docs. Never runs. |
 
-Most nodes have a help page in ComfyUI's node info panel, and the
+Select a WP node and the indigo **?** in ComfyUI's selection toolbar opens
+its page of the built-in docs over the canvas (WP Toggles, WP Note and WP
+Bookmark also get an indigo pencil there that opens their editor). Most
+nodes also have a help page in ComfyUI's node info panel, and the
 [wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki) covers
 [nodes](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Nodes),
 [modules](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Modules) and

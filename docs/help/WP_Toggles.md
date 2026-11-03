@@ -19,7 +19,7 @@ Several on/off switches in one node. Each toggle writes `$its_variable` as `true
 - **Invert**: mute / bypass while the toggle is ON instead. An icon by the name shows a control is wired: coloured while it acts, dim while not; hover for the nodes.
 - **Show** (by the variable): show the `$variable` under the name in the clean view.
 - **Upstream can set it**: an upstream yes/no value for the toggle's variable (`true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0`) sets the switch for the run.
-- **Clean and edit views**: the pencil at the top opens the edit view (mode, grips, row editors, Add toggle / Add label); **Done** goes back to the switches only.
+- **Clean and edit views**: the pencil at the top (or the indigo pencil in the selection toolbar while the node is selected) opens the edit view (mode, grips, row editors, Add toggle / Add label); **Done** goes back to the switches only.
 - **Style**: switch, checkbox, two buttons (your own words, e.g. Day / Night) or chip.
 - **Labels** group the toggles under them; fold one to hide them (their outputs gather on the label).
 

@@ -3,7 +3,7 @@ import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "
 import { reactiveFromGraph } from "../extension/reactive";
 import { defaultNoteConfig, noteColorCss, parseNoteConfig, type NoteConfig } from "../extension/note";
 import { defaultBookmarkConfig, jumpFields, type BookmarkConfig } from "../extension/bookmarks";
-import { bookmarkCells } from "../extension/_stashes";
+import { bookmarkCells, nodeEditors } from "../extension/_stashes";
 import { bookmarksChanged, currentViewPoint, currentZoom, freshJump, keymapFor, noteBookmarkAdded, setRecording, type BookmarkNode } from "./bookmark";
 import { isVueNodes } from "../extension/renderer";
 import { panelAt, trackPeek } from "./note-peek";
@@ -68,6 +68,8 @@ export function mountNote(node: NoteNode) {
   const config = ref<NoteConfig>(defaultNoteConfig());
   // A saved note reads; a brand-new one opens in the editor (below).
   const editing = ref(false);
+  // The pencil in ComfyUI's selection toolbar (extension/node-toolbar.ts).
+  nodeEditors.set(node, () => setEditing(!editing.value));
   let restored = false;
 
   // With its Bookmark switch on the note is also a bookmark: the dock, the

@@ -19,7 +19,7 @@
  * Value contract: `modelValue` is a `TogglesConfig`; every edit emits the
  * whole next config (`src/widgets/toggles.ts` fits the outputs to it).
  */
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
@@ -58,8 +58,11 @@ const props = withDefaults(
     controls?: Record<string, ControlState>;
     /** Canvas group titles, for the control's group picker. */
     canvasGroups?: string[];
+    /** Bumped by the pencil in ComfyUI's selection toolbar: flips the
+     *  edit view (extension/node-toolbar.ts). */
+    editRequest?: number;
   }>(),
-  { nodeMode: 0, controls: () => ({}), canvasGroups: () => [] },
+  { nodeMode: 0, controls: () => ({}), canvasGroups: () => [], editRequest: 0 },
 );
 const emit = defineEmits<{ "update:modelValue": [next: TogglesConfig] }>();
 
@@ -143,6 +146,13 @@ function closeEdit(): void {
   editMode.value = false;
   editing.value = null;
 }
+watch(
+  () => props.editRequest,
+  () => {
+    if (editMode.value) closeEdit();
+    else openEdit();
+  },
+);
 
 async function focusEditor(): Promise<void> {
   await nextTick();

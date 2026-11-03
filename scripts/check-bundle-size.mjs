@@ -343,7 +343,10 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // with the focus trap, and Checkbox/Popover grew to cover what WpCheck and the
 // canvas popovers did; WpButton, CloseButton, ConfirmDialog and WpCheck went
 // (net ~4.1 KB gzip: dev 607,885 -> 611,998 bytes).
-const TOTAL_LIMIT = 600 * 1024;     // 600 KB
+// RAISED 600 -> 604 KB on 2026-11-03 for the selection-toolbar "?" and
+// pencil: the help dialog chunk (Modal + iframe, ~1.6 KB gzip) and the
+// toolbar commands in the boot chunk (dev 611,998 -> 615,378 bytes).
+const TOTAL_LIMIT = 604 * 1024;     // 604 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
