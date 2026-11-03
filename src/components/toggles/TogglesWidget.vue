@@ -283,22 +283,22 @@ function foldedOuts(g: ToggleGroup): string | undefined {
       />
       <label v-if="isOne" class="wp-tg__group">
         <span class="wp-tg__group-cap">writes</span>
-        <span class="wp-vbind-wrap" :class="{ 'wp-vbind-wrap--collision-warn': problems.has('group') }">
-          <span class="wp-vbind-prefix">$</span>
-          <Input
-            size="sm"
-            class="wp-vbind-input"
-            :class="cfg.group_var ? varColorClass(cfg.group_var) : undefined"
-            :model-value="cfg.group_var"
-            placeholder="picked (optional)"
-            spellcheck="false"
-            aria-label="Variable for the picked toggle's value"
-            :title="problems.get('group') ?? 'Also write the picked toggle\'s value (or name) to this variable'"
-            data-test="tg-group-var"
-            @keydown.stop
-            @change="setGroupVar"
-          />
-        </span>
+        <Input
+          size="sm"
+          mono
+          prefix="$"
+          class="wp-tg__group-var"
+          :class="cfg.group_var ? varColorClass(cfg.group_var) : undefined"
+          :tone="problems.has('group') ? 'warn' : undefined"
+          :model-value="cfg.group_var"
+          placeholder="picked (optional)"
+          spellcheck="false"
+          aria-label="Variable for the picked toggle's value"
+          :title="problems.get('group') ?? 'Also write the picked toggle\'s value (or name) to this variable'"
+          data-test="tg-group-var"
+          @keydown.stop
+          @change="setGroupVar"
+        />
       </label>
       <span v-else class="wp-tg__spacer" />
       <Button variant="primary" size="sm" icon="pi-check" data-test="tg-edit-done" @click="closeEdit">Done</Button>
@@ -486,7 +486,6 @@ function foldedOuts(g: ToggleGroup): string | undefined {
 </template>
 
 <style scoped>
-@import "../shared/var-binding-input.css";
 .wp-tg {
   display: flex;
   flex-direction: column;
@@ -511,6 +510,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
   text-overflow: ellipsis;
 }
 .wp-tg__group { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.wp-tg__group .wp-tg__group-var { flex: 1 1 0; min-width: 80px; }
 .wp-tg__group-cap { font-size: 10.5px; color: var(--wp-text-dim, var(--wp-text3)); }
 /* The sortable rows' own background would show behind our row cards. */
 .wp-tg :deep(.wp-sortable__row) { background: transparent; align-items: flex-start; }

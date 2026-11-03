@@ -130,22 +130,18 @@ function onDelete(): void {
       @update:model-value="onToggle"
     />
 
-    <span
-      class="row__name-wrap"
-      :class="{ 'row__name-wrap--mod': nameOverridden }"
-      data-test="row-name-wrap"
-    >
-      <span class="row__name-prefix" data-test="row-name-prefix">$</span>
-      <Input
-        size="sm"
-        class="row__name"
-        data-test="row-name"
-        :model-value="row.name"
-        :disabled="!row.enabled"
-        :aria-label="`Variable name for row ${row.id}`"
-        @input="onNameInput"
-      />
-    </span>
+    <Input
+      size="sm"
+      mono
+      prefix="$"
+      class="row__name"
+      :tone="nameOverridden ? 'accent' : undefined"
+      data-test="row-name"
+      :model-value="row.name"
+      :disabled="!row.enabled"
+      :aria-label="`Variable name for row ${row.id}`"
+      @input="onNameInput"
+    />
 
     <span
       class="row__value-cell"
@@ -266,7 +262,9 @@ function onDelete(): void {
 .row:hover { background: var(--wp-row-hover, rgba(255, 255, 255, 0.02)); }
 .row__check { flex-shrink: 0; }
 
-.row__name-wrap, .row__value-wrap {
+.row__name { min-width: 0; }
+
+.row__value-wrap {
   display: flex;
   align-items: stretch;
   background: var(--wp-bg);
@@ -274,22 +272,11 @@ function onDelete(): void {
   border-radius: min(2px, var(--wp-radius-cap, 999px));
   overflow: hidden;
 }
-.row__name-wrap:focus-within, .row__value-wrap:focus-within { border-color: var(--wp-accent); }
-.row__name-wrap--mod, .row__value-wrap--mod { border-color: var(--wp-accent); }
-.row__name-wrap--mod .row__name,
-.row__name-wrap--mod .row__name-prefix,
+.row__value-wrap:focus-within { border-color: var(--wp-accent); }
+.row__value-wrap--mod { border-color: var(--wp-accent); }
 .row__value-wrap--mod .row__value { color: var(--wp-accent-text, var(--wp-text)); }
 
-.row__name-prefix {
-  background: var(--wp-bg2);
-  color: var(--wp-text-dim, var(--wp-text3));
-  padding: 3px 6px;
-  border-right: 1px solid var(--wp-border);
-  font: 11px var(--wp-font-mono);
-  display: flex;
-  align-items: center;
-}
-.row__name, .row__value {
+.row__value {
   flex: 1;
   background: transparent;
   border: 0;
@@ -298,7 +285,7 @@ function onDelete(): void {
   color: var(--wp-text);
   min-width: 0;
 }
-.row__name:focus, .row__value:focus { outline: none; }
+.row__value:focus { outline: none; }
 
 /* This class sits on the RichTextInput ROOT, and everything it used to declare
  * about scrolling and sizing belonged to the <textarea> that used to be here.
@@ -326,13 +313,16 @@ function onDelete(): void {
 
 
 .row--off { color: var(--wp-text-dim, var(--wp-text3)); }
-.row--off .row__name-wrap, .row--off .row__value-wrap { opacity: 0.5; }
-.row--off .row__name, .row--off .row__value { text-decoration: line-through; }
+/* The name field dims itself while disabled (the kit's disabled state). */
+.row--off .row__value-wrap { opacity: 0.5; }
+.row--off .row__value,
+.row--off .row__name :deep(.wp-input) { text-decoration: line-through; }
 
-.row--added .row__name-wrap, .row--added .row__value-wrap { border-color: var(--wp-green); }
-.row--added .row__name,
+/* A row this instance added: green, on the name field's group too. */
+.row--added .row__name, .row--added .row__value-wrap { border-color: var(--wp-green); }
 .row--added .row__value,
-.row--added .row__name-prefix { color: var(--wp-green); }
+.row--added .row__name :deep(.wp-input),
+.row--added .row__name :deep(.wp-input-group__affix) { color: var(--wp-green); }
 
 
 /* Per-row preview tokens — appears below the input only when the

@@ -235,7 +235,7 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
       </div>
       <label class="wp-note__field">
         <span class="wp-note__label">Title</span>
-        <Input size="sm" class="wp-note__input" :model-value="title" data-test="note-title" @input="onTitle" />
+        <Input size="sm" :model-value="title" data-test="note-title" @input="onTitle" />
       </label>
       <div class="wp-note__field">
         <span class="wp-note__label">Text <span class="wp-note__hint">{{ config.look === "label" ? "shows when you hover the label" : "Markdown, links and icons" }}</span></span>
@@ -272,9 +272,6 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
 </template>
 
 <style scoped>
-/* The kit Input draws the box; border-box so its full width stays in the card
-   (the node has no reset and the kit field doesn't set one). */
-.wp-note__input { box-sizing: border-box; }
 /* The kit picker's list, sized for a node: as wide as the panel, a short
  * scroll area, cells packed by width instead of a fixed 8 columns. */
 .wp-note__icons :deep(.wp-iconpick__panel) { width: auto; max-height: 184px; }
