@@ -6,6 +6,7 @@
  * into a compact "constant" list.
  */
 import { computed, ref } from "vue";
+import Button from "@/kit/Button.vue";
 import type { ScenarioRunResponse } from "../../api/types";
 import { orderByStack, summarizeVariables, type StackItemView } from "../../utils/scenario";
 
@@ -50,9 +51,9 @@ function toggle(name: string): void {
     <p class="wp-trv__note">
       Share of {{ result.runs - result.failed }} runs per value. Values are fully expanded, so
       <code>{a|b}</code> branches and <code>@refs</code> count separately.
-      <button v-if="hiddenOutput" type="button" class="wp-trv__link" @click="showOutput = true">
+      <Button v-if="hiddenOutput" variant="link" size="sm" class="wp-trv__link" @click="showOutput = true">
         Show ${{ outputVar }} too
-      </button>
+      </Button>
     </p>
 
     <p v-if="!varying.length && !summary.constants.length && !hiddenOutput" class="wp-trv__none" data-test="variables-empty">
@@ -76,12 +77,13 @@ function toggle(name: string): void {
           <span class="wp-trv__track"><span class="wp-trv__fill" :style="{ width: `${row.pct}%` }" /></span>
           <span class="wp-trv__pct">{{ row.pct.toFixed(1) }}%</span>
         </div>
-        <button
+        <Button
           v-if="v.rows.length > ROWS"
-          type="button"
+          variant="link"
+          size="sm"
           class="wp-trv__link"
           @click="toggle(v.name)"
-        >{{ expanded.has(v.name) ? "Show fewer" : `Show all ${v.rows.length}` }}</button>
+        >{{ expanded.has(v.name) ? "Show fewer" : `Show all ${v.rows.length}` }}</Button>
         <span v-if="v.other" class="wp-trv__more">+ {{ v.other }} runs across rarer values not listed</span>
       </section>
     </div>
@@ -102,11 +104,7 @@ function toggle(name: string): void {
 .wp-trv { display: flex; flex-direction: column; gap: var(--wp-space-6); }
 .wp-trv__note { margin: 0; font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wp-trv__note code { color: var(--wp-text-muted); }
-.wp-trv__link {
-  background: none; border: 0; padding: 0; cursor: pointer;
-  color: var(--wp-accent-text); font-size: var(--wp-text-xs); margin-left: var(--wp-space-3);
-}
-.wp-trv__link:focus-visible { outline: 2px solid var(--wp-border-focus); }
+.wp-trv__link { font-size: var(--wp-text-xs); margin-left: var(--wp-space-3); }
 .wp-trv__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(400px, 100%), 1fr)); gap: var(--wp-space-6); }
 .wp-trv__var {
   background: var(--wp-bg-1); border: 1px solid var(--wp-border); border-radius: var(--wp-radius);
