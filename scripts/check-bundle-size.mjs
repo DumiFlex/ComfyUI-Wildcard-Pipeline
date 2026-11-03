@@ -366,7 +366,12 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // (#225: the help dialog chunk and the toolbar commands in the boot chunk),
 // the labels-toggle fix (#249) and kit 0.14's bigger canvas controls
 // (623,679 -> 626,405 bytes).
-const TOTAL_LIMIT = 614 * 1024;     // 614 KB
+// RAISED 614 -> 630 KB on 2026-11-03 for the WP Note add-to-library button
+// (#252): pressing it runs the Import tab's install pipeline (shape check
+// with Zod, migrations, commit, reattach) from the canvas, so those land in
+// the extension build as lazy chunks that load on the press only
+// (626,405 -> 636,864 bytes).
+const TOTAL_LIMIT = 630 * 1024;     // 630 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

@@ -3,6 +3,10 @@
  *
  *   [text](https://…)              a link, opens in a new tab
  *   [text](docs:page#s-section)    a link to the built-in docs (section optional)
+ *   [text](wp:library)             a button that adds this workflow's bundles
+ *                                  and modules to your library
+ *   [text](wp:library#node-12)     … only those of one WP Context
+ *   [text](wp:community/owner/pack)  a published pack in the Community tab
  *   [text](target){button}         the link drawn as a button
  *   [text](target){button pi-book} … with an icon
  *   [text](target){button pi-book #e11d48}  … in its own colour
@@ -19,11 +23,27 @@ const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 export type LinkTarget =
   | { kind: "web"; href: string }
   | { kind: "docs"; page: string; section: string }
+  /** Adds the workflow's bundles and modules to the library. `node` is ""
+   *  for the whole workflow, else one WP Context's key (`12`, or
+   *  `<subgraph id>:12` inside a subgraph). */
+  | { kind: "library"; node: string }
+  /** A published pack's page in the manager's Community tab. */
+  | { kind: "community"; owner: string; name: string }
   | { kind: "none" };
 
-/** What a link's target points at. Only http(s) and docs: links are links. */
+// A fixed list of actions with no free arguments: a node key is digits, or a
+// subgraph id (hex and dashes) then `:` and digits.
+const LIBRARY_RE = /^wp:library(?:#node-((?:[0-9a-f-]{1,64}:)?\d{1,9}))?$/i;
+const COMMUNITY_RE = /^wp:community\/([a-z0-9][a-z0-9_.-]{0,63})\/([a-z0-9][a-z0-9_.-]{0,127})$/i;
+
+/** What a link's target points at. Only http(s), docs: and the two wp:
+ *  actions are links; anything else shows as text. */
 export function parseTarget(href: string): LinkTarget {
   const h = href.trim();
+  const lib = LIBRARY_RE.exec(h);
+  if (lib) return { kind: "library", node: (lib[1] ?? "").toLowerCase() };
+  const pack = COMMUNITY_RE.exec(h);
+  if (pack?.[1] && pack[2]) return { kind: "community", owner: pack[1], name: pack[2] };
   const docs = /^docs:([a-z0-9-]+)(?:#([a-z0-9-]+))?$/i.exec(h);
   if (docs?.[1]) return { kind: "docs", page: docs[1].toLowerCase(), section: docs[2]?.toLowerCase() ?? "" };
   if (/^https?:\/\/[^\s]+$/i.test(h)) return { kind: "web", href: h };
@@ -34,7 +54,25 @@ export function parseTarget(href: string): LinkTarget {
 export function targetUrl(t: LinkTarget, origin: string): string | null {
   if (t.kind === "web") return t.href;
   if (t.kind === "docs") return `${origin}/wp/docs/${encodeURIComponent(t.page)}${t.section ? `#${t.section}` : ""}`;
+  if (t.kind === "community") return `${origin}/wp/community/p/${encodeURIComponent(t.owner)}/${encodeURIComponent(t.name)}`;
   return null;
+}
+
+/** The target for an "add to library" button: the whole workflow, or one
+ *  WP Context by its key. */
+export function libraryTarget(node = ""): string {
+  return `wp:library${node ? `#node-${node}` : ""}`;
+}
+
+/** The target for a community pack, from `owner/name` or a pasted page
+ *  address (`…/p/owner/name`, `…/community/p/owner/name`). Null when it
+ *  names no pack. */
+export function communityTarget(input: string): string | null {
+  const v = input.trim().replace(/[?#].*$/, "").replace(/\/+$/, "");
+  const m = /(?:^|\/p\/)([^/\s]+)\/([^/\s]+)$/.exec(v);
+  if (!m?.[1] || !m[2]) return null;
+  const target = `wp:community/${m[1]}/${m[2]}`;
+  return parseTarget(target).kind === "community" ? target : null;
 }
 
 export interface LinkAttrs { button: boolean; icon: string; color: string }

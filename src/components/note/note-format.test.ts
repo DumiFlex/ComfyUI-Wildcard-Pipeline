@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  communityTarget, libraryTarget,
   docsTarget, iconMarkdown, insert, linkMarkdown, parseTarget, prefixLines, readLinkAttrs, splitIcons, targetUrl, wrap,
 } from "./note-format";
 
@@ -39,6 +40,35 @@ describe("note links", () => {
     expect(linkMarkdown("Go", "https://x.y", { color: "#e11d48", icon: "play" })).toBe("[Go](https://x.y){#e11d48}");
     expect(linkMarkdown("Go", "https://x.y", { color: "none" })).toBe("[Go](https://x.y)");
     expect(linkMarkdown("", "https://x.y")).toBe("[https://x.y](https://x.y)");
+  });
+});
+
+describe("note actions", () => {
+  it("reads the library action, whole workflow or one Context, and nothing looser", () => {
+    expect(parseTarget("wp:library")).toEqual({ kind: "library", node: "" });
+    expect(parseTarget("wp:library#node-12")).toEqual({ kind: "library", node: "12" });
+    expect(parseTarget("wp:library#node-4b1c-a9:7")).toEqual({ kind: "library", node: "4b1c-a9:7" });
+    expect(parseTarget("wp:library?x=1")).toEqual({ kind: "none" });
+    expect(parseTarget("wp:library#node-12;rm")).toEqual({ kind: "none" });
+    expect(parseTarget("wp:delete")).toEqual({ kind: "none" });
+    expect(targetUrl(parseTarget("wp:library"), "http://x")).toBeNull();
+    expect(libraryTarget()).toBe("wp:library");
+    expect(libraryTarget("3")).toBe("wp:library#node-3");
+  });
+
+  it("reads a community pack and opens it in the Community tab", () => {
+    expect(parseTarget("wp:community/dumi/fantasy-pack")).toEqual({ kind: "community", owner: "dumi", name: "fantasy-pack" });
+    expect(targetUrl(parseTarget("wp:community/dumi/fantasy-pack"), "http://x:8188")).toBe("http://x:8188/wp/community/p/dumi/fantasy-pack");
+    expect(parseTarget("wp:community/dumi")).toEqual({ kind: "none" });
+    expect(parseTarget("wp:community/../x/y")).toEqual({ kind: "none" });
+  });
+
+  it("makes a pack target from owner/name or a pasted address", () => {
+    expect(communityTarget("dumi/fantasy-pack")).toBe("wp:community/dumi/fantasy-pack");
+    expect(communityTarget("https://wp.dumiflex.dev/p/dumi/fantasy-pack?tab=files")).toBe("wp:community/dumi/fantasy-pack");
+    expect(communityTarget("http://127.0.0.1:8188/wp/community/p/dumi/fantasy-pack/")).toBe("wp:community/dumi/fantasy-pack");
+    expect(communityTarget("just words")).toBeNull();
+    expect(communityTarget("")).toBeNull();
   });
 });
 

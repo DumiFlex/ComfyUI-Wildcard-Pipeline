@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, provide, ref, watch } from "vue";
 import ColorField from "@/kit/ColorField.vue";
 import Input from "@/kit/Input.vue";
 import Button from "@/kit/Button.vue";
@@ -9,6 +9,8 @@ import WpSwitch from "@/kit/WpSwitch.vue";
 import RadioGroup from "@/kit/RadioGroup.vue";
 import NoteMarkdown from "./note-markdown";
 import NoteTextEditor from "./NoteTextEditor.vue";
+import { NOTE_ACTIONS, NOTE_CONTEXTS } from "./note-actions";
+import { useNoteLibrary } from "./note-library-state";
 import IconPicker from "@/kit/IconPicker.vue";
 import { vTooltip } from "@/kit/tooltip";
 import BookmarkFields from "../bookmark/BookmarkFields.vue";
@@ -45,6 +47,11 @@ const emit = defineEmits<{
   (e: "update:editing", next: boolean): void;
   (e: "recording", on: boolean): void;
 }>();
+
+// The note's action buttons (`wp:library`) and the editor's Context picker.
+const library = useNoteLibrary(() => props.config.text, () => props.editing);
+provide(NOTE_ACTIONS, library.actions);
+provide(NOTE_CONTEXTS, library.contexts);
 
 const hasTitle = computed(() => props.title.trim() !== "" && props.title !== "WP Note");
 const toneStyle = computed(() => (props.config.color ? { "--wp-note-tone": noteColorCss(props.config.color) } : undefined));
@@ -84,7 +91,7 @@ const bookmarkHint = computed(() => {
 });
 
 /** Any link in the text: a label shows a mark for it. */
-const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.text));
+const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.config.text));
 </script>
 
 <template>
@@ -449,7 +456,8 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
   .lg-node:has(.wp-note) .lg-node-widgets * { pointer-events: none !important; }
   .lg-node:has(.wp-note) .wp-note__form,
   .lg-node:has(.wp-note) .wp-note__form *,
-  .lg-node:has(.wp-note) .wp-note-md a { pointer-events: auto !important; }
+  .lg-node:has(.wp-note) .wp-note-md a,
+  .lg-node:has(.wp-note) .wp-note-md button { pointer-events: auto !important; }
 
   .wp-note-md p { margin: 0 0 6px; }
   .wp-note-md p:last-child { margin-bottom: 0; }
@@ -513,7 +521,7 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
   .wp-note-md .wp-note-md__callout--warn { --wp-note-callout: var(--wp-warn); }
   .wp-note-md .wp-note-md__callout-icon { color: var(--wp-note-callout); margin-top: 2px; }
   /* Links take the pointer; the rest of the note lets it through to the canvas. */
-  .wp-note-md a { pointer-events: auto; cursor: pointer; }
+  .wp-note-md a, .wp-note-md button { pointer-events: auto; cursor: pointer; }
   .wp-note-md .wp-note-md__link { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
   .wp-note-md .wp-note-md__link:hover { color: var(--wp-text); text-decoration-color: var(--wp-note-link, var(--wp-note-tone, var(--wp-accent))); }
   .wp-note-md .wp-note-md__link--color { color: var(--wp-note-link); text-decoration-color: var(--wp-note-link); }
@@ -537,6 +545,13 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:)/i.test(props.config.te
   }
   .wp-note-md .wp-note-md__btn .pi { font-size: 11px; color: var(--wp-note-link, var(--wp-note-tone, var(--wp-accent))); }
   .wp-note-md .wp-note-md__btn:hover { background: color-mix(in srgb, var(--wp-note-link, var(--wp-note-tone, var(--wp-accent))) 24%, transparent); }
+  /* An action button (wp:library): the same pill, as a real <button>. */
+  .wp-note-md .wp-note-md__btn--action { font: inherit; font-size: 12px; line-height: 18px; }
+  .wp-note-md .wp-note-md__btn--action[aria-disabled="true"] { cursor: default; opacity: 0.55; }
+  .wp-note-md .wp-note-md__btn--action[aria-disabled="true"]:hover {
+    background: color-mix(in srgb, var(--wp-note-link, var(--wp-note-tone, var(--wp-accent))) 12%, transparent);
+  }
+  .wp-note-md button:focus-visible,
   .wp-note-md a:focus-visible { outline: 2px solid var(--wp-focus-ring, var(--wp-accent)); outline-offset: 2px; }
 }
 </style>
